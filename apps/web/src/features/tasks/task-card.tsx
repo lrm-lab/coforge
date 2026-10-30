@@ -1,5 +1,5 @@
 import type { TaskView } from "@lrm/coforge-sdk/internal";
-import type { ReactNode } from "react";
+import type { PointerEvent, ReactNode } from "react";
 
 import { ProjectImage } from "#src/features/projects/project-image";
 import { cn } from "#src/lib/utils";
@@ -80,6 +80,7 @@ export function TaskCard({
   controls,
   menu,
   list,
+  onReach,
 }: {
   task: TaskView;
   /** Wraps the title text in the surface's link or button. */
@@ -92,7 +93,12 @@ export function TaskCard({
   controls: TaskControls;
   menu?: ReactNode;
   list: boolean;
+  /** Someone is reaching for the card: a mouse came over it. Not a touch or a pen, which can
+   * come down on a button with no hover first, and whose press must land on what it started on. */
+  onReach?: () => void;
 }) {
+  const onPointerEnter =
+    onReach && ((event: PointerEvent) => event.pointerType === "mouse" && onReach());
   const tools = (controls.handle || menu) && (
     <div className="flex shrink-0 items-center">
       {controls.handle}
@@ -102,7 +108,10 @@ export function TaskCard({
   if (list) {
     // One line: number, status, title, then the pills, the owner and the row's own controls.
     return (
-      <article className="relative flex min-h-10 items-center gap-3 px-4 py-1.5 transition-colors hover:bg-primary_hover">
+      <article
+        onPointerEnter={onPointerEnter}
+        className="relative flex min-h-10 items-center gap-3 px-4 py-1.5 transition-colors hover:bg-primary_hover"
+      >
         <span
           className={cn("w-9 shrink-0 text-xs text-tertiary tabular-nums", HIDDEN_ON_BOARD.number)}
         >
@@ -131,7 +140,10 @@ export function TaskCard({
     );
   }
   return (
-    <article className="group relative rounded-lg border border-secondary bg-primary p-3 shadow-xs transition-colors hover:border-primary">
+    <article
+      onPointerEnter={onPointerEnter}
+      className="group relative rounded-lg border border-secondary bg-primary p-3 shadow-xs transition-colors hover:border-primary"
+    >
       <div
         className={cn(
           "flex h-6 items-center justify-between gap-2 text-xs text-tertiary tabular-nums",

@@ -1,9 +1,10 @@
 import { TASK_STATUSES, type TaskView } from "@lrm/coforge-sdk/internal";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type FocusEvent, type ReactNode } from "react";
 import { Button as AriaButton } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
+import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { PageHeader } from "#src/components/layout/page-header";
 import { DeletedAgentBadge } from "#src/features/agents/deleted-agent";
 import type { Mentionable } from "#src/features/conversations/mention-text";
@@ -13,7 +14,7 @@ import { m } from "#src/paraglide/messages";
 import { CreateTaskDialog } from "./create-task-dialog";
 import { isFinishedStatus, type FinishedStatus } from "./finished-tasks";
 import { TASK_TITLE_CLASS, TaskCard } from "./task-card";
-import { TaskDetailMenu } from "./task-detail-dialog";
+import { TaskDetailMenu, taskMenuButton } from "./task-detail-dialog";
 import { taskMatches, type FilterableTask } from "./task-filters";
 import type { TaskBoardView } from "./task-board-search";
 import type { OverviewTaskCommand } from "./task-overview-collection";
@@ -273,10 +274,18 @@ function BoardTaskCard<T extends BoardTask>({
   onCommand?: (command: OverviewTaskCommand) => Promise<void>;
   conversation?: ConversationBoard;
 }) {
+  // The menu, with its tooltip, is built once someone reaches for this card (a mouse over it), or
+  // tabs to or presses the plain button standing in for it; building every card's up front was
+  // about a quarter of the Tasks page's script time. `start` carries what the stand-in was doing
+  // over to the real button, once.
+  const [menu, setMenu] = useState<{ start?: "focus" | "open" }>();
+  const reach = () => setMenu((current) => current ?? {});
+  const { label: menuLabel, ...menuButton } = taskMenuButton(task);
   return (
     <TaskCard
       task={task}
       list={list}
+      onReach={onCommand && reach}
       renderTitle={(title) =>
         renderTitle ? (
           renderTitle(task, title)
@@ -291,8 +300,11 @@ function BoardTaskCard<T extends BoardTask>({
       project={conversation ? undefined : task.project}
       controls={controls}
       menu={
-        onCommand && (
+        onCommand &&
+        (menu ? (
           <TaskDetailMenu
+            start={menu.start}
+            onStarted={() => setMenu({})}
             task={task}
             moves={controls.moves}
             onOpenDetails={onOpenDetails}
@@ -301,7 +313,18 @@ function BoardTaskCard<T extends BoardTask>({
             members={conversation?.members}
             currentMemberId={task.currentMemberId ?? null}
           />
-        )
+        ) : (
+          <ButtonUtility
+            aria-label={menuLabel}
+            aria-haspopup="menu"
+            {...menuButton}
+            // Keyboard focus only: a tap focuses it too, and must land on it to open the menu.
+            onFocus={(event: FocusEvent<HTMLElement>) =>
+              event.currentTarget.matches(":focus-visible") && setMenu({ start: "focus" })
+            }
+            onClick={() => setMenu({ start: "open" })}
+          />
+        ))
       }
     />
   );

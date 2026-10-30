@@ -12,7 +12,7 @@ import {
   DotsHorizontal as MoreHorizontal,
   XClose,
 } from "@untitledui/icons";
-import { useState, type ComponentProps, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { Heading } from "react-aria-components";
 
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
@@ -34,12 +34,31 @@ import { statusLabel, TASK_STATUS_COLOR, type TaskControls } from "./task-workfl
 
 type DetailCommand = Omit<TaskCommand, "idempotencyKey" | "conversationId"> & { number: number };
 
+/** A Task card's "More actions" button, as the menu shows it and as the card's stand-in for the
+ * menu does until someone reaches for it (`BoardTaskCard`). */
+export function taskMenuButton(task: Pick<TaskView, "number">) {
+  return {
+    label: m.tasks_more_actions({ number: String(task.number) }),
+    icon: MoreHorizontal,
+    size: "xs",
+    color: "tertiary",
+  } as const;
+}
+
 export function TaskDetailMenu({
   task,
   moves = [],
   onOpenDetails,
+  start,
+  onStarted,
   ...dialog
 }: Omit<TaskDetailDialogProps, "open" | "onOpenChange" | "thread"> & {
+  /** What the stand-in this replaces was doing: tabbed to (`focus`) or pressed (`open`). The
+   * button takes the focus first, so the menu gives it back there when it closes; then, if the
+   * stand-in was pressed, the menu opens. `onStarted` says it is done, so a later mount (another
+   * layout) does neither. */
+  start?: "focus" | "open";
+  onStarted?: () => void;
   /** Board and list moves, listed under "Move to". */
   moves?: TaskControls["moves"];
   /** Opens the caller's own Task popup for "View details" — the conversation's, which also
@@ -48,16 +67,20 @@ export function TaskDetailMenu({
 }) {
   const [open, setOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
   const canDelete = useCanDeleteTask(task, dialog.currentMemberId);
+  useEffect(() => {
+    if (!start) return;
+    trigger.current?.focus();
+    if (start === "open") setMenuOpen(true);
+    onStarted?.();
+  }, [start, onStarted]);
+  const { label, ...button } = taskMenuButton(task);
   return (
     <>
-      <Dropdown.Root>
-        <ButtonUtility
-          tooltip={m.tasks_more_actions({ number: String(task.number) })}
-          icon={MoreHorizontal}
-          size="xs"
-          color="tertiary"
-        />
+      <Dropdown.Root isOpen={menuOpen} onOpenChange={setMenuOpen}>
+        <ButtonUtility ref={trigger} tooltip={label} {...button} />
         <Dropdown.Popover placement="bottom end" className="w-48">
           <Dropdown.Menu
             onAction={(key) => {

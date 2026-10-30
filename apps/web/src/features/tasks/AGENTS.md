@@ -29,6 +29,10 @@ These rules apply to `src/features/tasks/`.
   render a whole status at once. A paged group (Done and Closed on either
   board) renders every card it has read, since each read is at most 50, and
   keeps its own footer instead.
+- A card's menu (dropdown, tooltip, delete confirmation) is built only when
+  a mouse comes over the card or its stand-in button is tabbed to or pressed
+  (`BoardTaskCard`); building one per card was about a quarter of the
+  Tasks page's script time.
 - Done and Closed come from `useFinishedTasks`, scoped to the Workspace page
   or one conversation: exact server counts for the `completed` window (`week`
   when absent, `month`, `all`) under the owner and Project picks, and
