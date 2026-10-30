@@ -56,10 +56,9 @@
 /* Inter has no CJK glyphs: Chinese uses the system's UI font (PingFang SC, Microsoft YaHei,
    Noto Sans CJK SC), so it downloads nothing (docs/design/typography.md). PingFang SC is named
    because macOS's own fallback can pick a Japanese font for Chinese on an English page.
-   Inter and JetBrains Mono are self-hosted via @fontsource, so there are no external font
-   requests. */
+   Inter is self-hosted via @fontsource, so there are no external font requests. Code uses
+   theme.css's system monospace stack, which downloads nothing. */
 @import "@fontsource-variable/inter";
-@import "@fontsource-variable/jetbrains-mono"; /* --font-mono */
 
 @theme {
   --font-body:
@@ -67,7 +66,6 @@
     "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans", Arial, sans-serif, "Apple Color Emoji",
     "Segoe UI Emoji", "Noto Color Emoji";
   --font-display: var(--font-body);
-  --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /* An indeterminate progress bar's segment (a third of its track) sweeping across it. The
      official Untitled UI progress bar only shows a known value. */

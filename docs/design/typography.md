@@ -8,12 +8,12 @@
 | --- | --- | --- |
 | 英文 / 数字 | Inter | 系统无衬线 |
 | 中文 | 系统中文字体 | 见下方字体栈 |
-| 代码 | JetBrains Mono | 系统等宽 |
+| 代码 | 系统等宽字体：macOS 上 Chrome 通常为 Menlo、Safari 为 SF Mono，Windows 为 Consolas | 见 `theme.css` 的 `--font-mono` |
 
 - 字体栈：`Inter Variable` → 苹方 → 微软雅黑 → Noto Sans CJK SC。Inter 由 `@fontsource-variable` 自托管；中文不下载网页字体，用系统 UI 字体，消息流里汉字再多也不产生字体流量。苹方要写明：英文页面上 macOS 自己的回退可能给中文挑日文字形的字体。各平台中文字形不同（Mac 苹方、Windows 微软雅黑）是产品决定，不是偏差；微软雅黑只有常规和粗体，中文的 500 显示为常规、600 显示为粗体。
-- 定义在 `apps/web/src/styles.css`（`--font-body`、`--font-display`、`--font-mono`），不要在组件里写 `font-family`；代码和标识符用 `font-mono`，另外 Activity 行的相对时间按 Raft 设计稿也用 `font-mono`。`theme.css` 里的同名变量被它覆盖，不手改。
+- `--font-body`、`--font-display` 定义在 `apps/web/src/styles.css`，覆盖 `theme.css` 的同名变量；`--font-mono` 直接用 Untitled UI `theme.css` 的系统等宽栈，不下载字体。`theme.css` 不手改，不要在组件里写 `font-family`；代码和标识符用 `font-mono`，另外 Activity 行的相对时间按 Raft 设计稿也用 `font-mono`。
 - 落地页同样用这套栈（`font-display`）；仓库里没有 Geist，也没有单独的展示字体。
-- Inter 和 JetBrains Mono 的许可是 OFL-1.1，随 npm 包分发；不要把字体文件拷进仓库。
+- Inter 的许可是 OFL-1.1，随 npm 包分发；不要把字体文件拷进仓库。
 
 ## 字号与行高
 
