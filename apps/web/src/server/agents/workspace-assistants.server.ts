@@ -123,6 +123,21 @@ export class WorkspaceAssistants {
     return session;
   }
 
+  /**
+   * Where a deployment with no cloud cluster runs the assistant: the oldest Computer the user
+   * added that is connected to this Workspace (a v7 id sorts by creation, so the choice never
+   * flips between sends). Another member's Computer is never considered, an administrator's
+   * included. An offline one still counts; the send says so as it does for any Agent.
+   */
+  async #ownComputerId(workspaceId: string, userId: string): Promise<string | undefined> {
+    const computer = await this.db.computer.findFirst({
+      where: { ownerId: userId, deletedAt: null, workspaces: { some: { workspaceId } } },
+      orderBy: { id: "asc" },
+      select: { id: true },
+    });
+    return computer?.id;
+  }
+
   /** Called only for an authorized browser send. Normal DMs never provision a Computer. */
   async prepareConversation(
     workspaceId: string,
@@ -150,7 +165,8 @@ export class WorkspaceAssistants {
       userId,
       now: new Date(),
     });
-    const computerId = defaultCloudComputerId(started);
+    const computerId =
+      defaultCloudComputerId(started) ?? (await this.#ownComputerId(workspaceId, userId));
     if (!computerId)
       throw new AppError("TEMPORARILY_UNAVAILABLE", {
         errorId: "workspace-assistant-computer-required",
