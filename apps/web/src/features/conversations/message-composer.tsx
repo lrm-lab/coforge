@@ -16,7 +16,7 @@ import {
 } from "./composer-behavior";
 import { ComposerField, focusDraftEnd } from "./composer-field";
 import { COMPOSER_FOCUS_CLASS, COMPOSER_FRAME_CLASS } from "./composer-frame";
-import { AttachmentTile } from "./composer-attachments";
+import { ComposerAttachmentTray } from "./composer-attachment-tray";
 import { MAX_ATTACHMENTS, useComposerAttachments } from "./use-composer-attachments";
 import { ensureInlineImage, imageFileFromUrl, imageUrlsFromPaste } from "./paste-image";
 import { draftWithUnsentMessage, type OutgoingMessage, type SendOptions } from "./composer-outbox";
@@ -492,30 +492,11 @@ export function MessageComposer({
         onPaste={paste}
         below={
           attachments.length > 0 && (
-            <div className="col-span-full row-start-2 flex flex-col gap-1">
-              <ul
-                aria-label={m.conversation_attachment_tray()}
-                className="flex flex-wrap gap-2 px-3 pt-1 pb-1"
-              >
-                {attachments.map((item) => (
-                  <AttachmentTile
-                    key={item.localId}
-                    attachment={item}
-                    onRemove={() =>
-                      setAttachments((current) =>
-                        current.filter((other) => other.localId !== item.localId),
-                      )
-                    }
-                    onRetry={() => void uploadOne(item)}
-                  />
-                ))}
-              </ul>
-              {attachments.length > MAX_ATTACHMENTS && (
-                <p className="px-2 text-sm text-error-primary">
-                  {m.conversation_attachment_limit({ max: MAX_ATTACHMENTS })}
-                </p>
-              )}
-            </div>
+            <ComposerAttachmentTray
+              attachments={attachments}
+              setAttachments={setAttachments}
+              onRetry={(item) => void uploadOne(item)}
+            />
           )
         }
         leading={(className) => (
