@@ -14,7 +14,7 @@ describe("feature flags in the deployed Compose files", () => {
     const content = compose.configs?.coforge_feature_flags?.content;
     expect(typeof content).toBe("string");
     const definitions = JSON.parse(content as string) as FlagDefinitions;
-    expect(definitions.flags).toEqual({});
+    expect(Object.keys(definitions.flags)).toEqual(["task-conversations"]);
   });
 
   test("production turns no flag on", async () => {
