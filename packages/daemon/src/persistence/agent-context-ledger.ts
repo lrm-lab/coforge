@@ -44,7 +44,7 @@ export class AgentContextLedger {
    * context already showed that revision.
    */
   claim(kind: ContextObservationKind, id: string, text: string): boolean {
-    const rev = createHash("sha256").update(text).digest("base64url");
+    const rev = revisionOf(text);
     const result = this.#db
       .prepare(
         `INSERT INTO context_observations (kind, id, rev, generation) VALUES (?, ?, ?, ?)
@@ -54,4 +54,17 @@ export class AgentContextLedger {
       .run(kind, id, rev, this.generation());
     return result.changes === 1;
   }
+
+  /** Takes a claim back when what it was made for never reached the Agent, so the next read shows
+   * it. Only a row still at that text in this context goes. */
+  release(kind: ContextObservationKind, id: string, text: string): void {
+    this.#db
+      .prepare(
+        `DELETE FROM context_observations
+         WHERE kind = ? AND id = ? AND rev = ? AND generation = ?`,
+      )
+      .run(kind, id, revisionOf(text), this.generation());
+  }
 }
+
+const revisionOf = (text: string) => createHash("sha256").update(text).digest("base64url");

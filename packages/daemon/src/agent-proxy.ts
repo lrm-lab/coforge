@@ -1,3 +1,11 @@
+import {
+  badRequest,
+  contentLengthRejected,
+  MAX_BODY_BYTES,
+  payloadTooLarge,
+  readJsonBody,
+} from "./agent-proxy-body";
+import { guardDelivery } from "./agent-proxy-delivery";
 import { randomBytes } from "node:crypto";
 import { exactPath, pathParam } from "./agent-proxy-paths";
 import {
@@ -11,7 +19,6 @@ import {
   MESSAGE_ANCHOR_SOURCE,
   UUID_LIKE_SOURCE,
   isRecord,
-  utf8Encoder,
 } from "@lrm/coforge-sdk/internal";
 import {
   agentApiRoutes,
@@ -80,7 +87,6 @@ const APP_CONFIG_SUFFIX = "/config";
 const LOCAL_APP_CONFIG_ROUTE_PREFIX = LOCAL_PROXY_ROUTES.appConfig.get
   .path("")
   .slice(0, -APP_CONFIG_SUFFIX.length);
-const MAX_BODY_BYTES = 64 * 1024;
 /** Covers `WEEKLY_REPORT_MARKDOWN_MAX_CHARS` plus JSON framing. A byte budget, so it is not the
  * same number as that character cap — see `internal/weekly-report-limits.ts`. */
 const WEEKLY_REPORT_COLLECT_MAX_BODY_BYTES = 512 * 1024;
@@ -144,36 +150,6 @@ type ProxyRoute<K extends HandlerName = HandlerName> = {
 /** Type-checks one route entry against its own runtime method while keeping the table homogeneous. */
 function defineRoute<K extends HandlerName>(route: ProxyRoute<K>): ProxyRoute {
   return route as unknown as ProxyRoute;
-}
-
-const badRequest = () => new Response("bad request", { status: 400 });
-const payloadTooLarge = () => new Response("payload too large", { status: 413 });
-
-/** A declared `content-length` that is malformed or over `maxBytes` (or absent, when required). */
-function contentLengthRejected(request: Request, maxBytes: number, required: boolean): boolean {
-  const contentLength = request.headers.get("content-length");
-  if (!contentLength) return required;
-  return !/^\d+$/.test(contentLength) || Number(contentLength) > maxBytes;
-}
-
-/**
- * The shared size-limited JSON body read: an oversized or malformed `content-length` is `413` up
- * front; otherwise the body is read and re-measured (a caller can omit or lie about
- * `content-length`), and malformed JSON is a `400` — this is the one place a `SyntaxError` becomes
- * a bare `400`; one thrown later, by a route's `parse` or by the runtime, is classified.
- */
-async function readJsonBody(
-  request: Request,
-  maxBytes = MAX_BODY_BYTES,
-): Promise<{ payload: unknown } | Response> {
-  if (contentLengthRejected(request, maxBytes, false)) return payloadTooLarge();
-  const raw = await request.text();
-  if (utf8Encoder.encode(raw).byteLength > maxBytes) return payloadTooLarge();
-  try {
-    return { payload: JSON.parse(raw) };
-  } catch {
-    return badRequest();
-  }
 }
 
 /** A family that names the payload's `operation`, e.g. `agent-api/channel-info`. */
@@ -662,7 +638,11 @@ export function startAgentProxy(input: {
           parsed,
           binding.agentApiKey,
         );
-        return route.respond ? route.respond(result as never) : Response.json(result);
+        return guardDelivery(
+          route.respond ? route.respond(result as never) : Response.json(result),
+          result,
+          request.signal,
+        );
       } catch (error) {
         const domainFailure = route.domainFailure?.(error);
         if (domainFailure) return domainFailure;

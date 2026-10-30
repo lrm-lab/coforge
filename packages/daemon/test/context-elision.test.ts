@@ -38,7 +38,7 @@ async function withLedger(run: (ledger: AgentContextLedger) => void) {
 
 test("the second message of a sender and of a channel loses the repeated text", () =>
   withLedger((ledger) => {
-    const messages = elideSeenInContext(
+    const { messages } = elideSeenInContext(
       [message(), message(), message({ target: "#other" })],
       ledger,
     );
@@ -49,7 +49,7 @@ test("the second message of a sender and of a channel loses the repeated text", 
 test("a thread shares its channel's role line, and the next output shows nothing new", () =>
   withLedger((ledger) => {
     elideSeenInContext([message()], ledger);
-    const messages = elideSeenInContext([message({ target: "#team:abcd1234" })], ledger);
+    const { messages } = elideSeenInContext([message({ target: "#team:abcd1234" })], ledger);
     expect(messages[0]).not.toHaveProperty("channelCoordination");
     expect(messages[0]!.senderDescription).toBe("");
   }));
@@ -57,7 +57,7 @@ test("a thread shares its channel's role line, and the next output shows nothing
 test("a changed description or role line is shown again", () =>
   withLedger((ledger) => {
     elideSeenInContext([message()], ledger);
-    const messages = elideSeenInContext(
+    const { messages } = elideSeenInContext(
       [
         message({
           senderDescription: "Principal engineer",
@@ -81,7 +81,7 @@ test("a system message, a DM and a sender without a description are left alone",
       }),
       message({ target: "@ada", channelCoordination: undefined, senderDescription: "" }),
     ];
-    expect(elideSeenInContext(input, ledger)).toEqual(input);
+    expect(elideSeenInContext(input, ledger).messages).toEqual(input);
   }));
 
 test("the input is never changed", () =>
@@ -95,10 +95,19 @@ test("a new context introduces everything again", () =>
   withLedger((ledger) => {
     elideSeenInContext([message()], ledger);
     ledger.advance();
-    expect(elideSeenInContext([message()], ledger)[0]!.channelCoordination).toBe(ROLE);
+    expect(elideSeenInContext([message()], ledger).messages[0]!.channelCoordination).toBe(ROLE);
   }));
 
 test("only runtimes that report a finished compaction are eligible", () => {
   expect(reportsCompaction("claude-code")).toBe(true);
   expect(reportsCompaction("devin")).toBe(false);
 });
+
+test("giving the claims back shows the same text on the next read", () =>
+  withLedger((ledger) => {
+    const first = elideSeenInContext([message(), message()], ledger);
+    first.release();
+    const again = elideSeenInContext([message()], ledger).messages[0]!;
+    expect(again.senderDescription).toBe("Staff engineer");
+    expect(again.channelCoordination).toBe(ROLE);
+  }));

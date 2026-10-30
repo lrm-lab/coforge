@@ -73,7 +73,7 @@ function setup(stateDb = (root: string, agentId: string) => AgentStateDb.open(ro
   return { contexts, check, search };
 }
 
-test("a runtime that reports compaction is told a sender and a role line once per context", async () => {
+test("`message check` on a runtime that reports compaction tells a sender and a role line once per context", async () => {
   const { contexts, check } = setup();
   contexts.newContext("agent-a", "claude-code");
   const first = (await check()).messages;

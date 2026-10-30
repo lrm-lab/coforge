@@ -4,7 +4,11 @@ import {
   type RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
 import type { AgentContexts } from "./agent-contexts";
-import type { AgentContextLedger } from "#src/persistence/agent-context-ledger";
+import type {
+  AgentContextLedger,
+  ContextObservationKind,
+} from "#src/persistence/agent-context-ledger";
+import { holdClaims } from "./response-claims";
 
 /** The runtimes whose adapters report a finished compaction. For any other the daemon cannot tell
  * when the Agent's context was cut, so it never leaves anything out. */
@@ -31,36 +35,41 @@ function channelOf(target: string): string | undefined {
  * kept only on the first message of that sender (and revision of the description) the context has
  * shown, and a channel's role line only on the first message of that channel. The input is not
  * changed. Raft's `elideSeenSenders`, with the channel role line in the place of its channel card.
- * The claims stand once this returns: the CLI prints the response right away, so there is no later
- * delivery to wait for (Raft releases a claim when its output was not delivered).
+ * `release` gives the claims back when the messages never reached the Agent.
  */
 export function elideSeenInContext(
   messages: readonly AgentMessageRecord[],
   ledger: AgentContextLedger,
-): AgentMessageRecord[] {
-  return messages.map((message) => {
+): { messages: AgentMessageRecord[]; release: () => void } {
+  const claimed: Array<[ContextObservationKind, string, string]> = [];
+  const claim = (kind: ContextObservationKind, id: string, text: string) => {
+    const first = ledger.claim(kind, id, text);
+    if (first) claimed.push([kind, id, text]);
+    return first;
+  };
+  const elided = messages.map((message) => {
     let next = message;
     if (
       message.senderDescription &&
       message.senderKind !== "system" &&
-      !ledger.claim(
-        "sender",
-        `${message.senderKind}:${message.senderHandle}`,
-        message.senderDescription,
-      )
+      !claim("sender", `${message.senderKind}:${message.senderHandle}`, message.senderDescription)
     )
       next = { ...next, senderDescription: "" };
     const channel = channelOf(message.target);
     if (
       message.channelCoordination &&
       channel &&
-      !ledger.claim("channel", channel, message.channelCoordination)
+      !claim("channel", channel, message.channelCoordination)
     ) {
       const { channelCoordination: _shown, ...rest } = next;
       next = rest;
     }
     return next;
   });
+  return {
+    messages: elided,
+    release: () => claimed.forEach(([kind, id, text]) => ledger.release(kind, id, text)),
+  };
 }
 
 /** `elideSeenInContext` for one Agent's read, or the messages as they are when the Agent's runtime
@@ -75,7 +84,10 @@ export function elideForAgent(
   if (messages.length === 0 || operation === "search") return messages;
   try {
     const ledger = contexts?.ledger(agentId);
-    return ledger ? elideSeenInContext(messages, ledger) : messages;
+    if (!ledger) return messages;
+    const elision = elideSeenInContext(messages, ledger);
+    holdClaims(elision.messages, elision.release);
+    return elision.messages;
   } catch {
     // A ledger that cannot be read must never cost the Agent a message's text.
     return messages;
