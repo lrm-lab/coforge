@@ -116,9 +116,9 @@ export const onNameStep = (origin: string) =>
 
 /** The password form's fields, as the selector `click` and `setInput` take and as the page
  * expression `evaluate` reads. */
-export const emailFieldSelector = 'main input[name="email"]';
+export const accountFieldSelector = 'main input[name="account"]';
 export const passwordFieldSelector = 'main input[name="password"]';
-export const emailField = `document.querySelector(${JSON.stringify(emailFieldSelector)})`;
+export const accountField = `document.querySelector(${JSON.stringify(accountFieldSelector)})`;
 /** The code form's fields: one for the phone number or email, one for the code. */
 export const destinationFieldSelector = 'main input[name="destination"]';
 export const codeFieldSelector = 'main input[name="code"]';
@@ -346,10 +346,10 @@ export function openBrowser(session: string) {
   }
   /** Opens the password tab, which waits for its form, and fills it and presses its button
    * (`Sign In`, or `登录`). */
-  async function submitSignIn(email: string, password: string, label = "Sign In") {
+  async function submitSignIn(account: string, password: string, label = "Sign In") {
     await browser("eval", `${passwordTab}.click()`);
-    await waitFor(hydrated(emailField));
-    await setInput(emailFieldSelector, email);
+    await waitFor(hydrated(accountField));
+    await setInput(accountFieldSelector, account);
     await setInput(passwordFieldSelector, password);
     await browser("eval", `${button(label)}.click()`);
   }

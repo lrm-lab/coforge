@@ -39,7 +39,7 @@ async function refused(providerError: string) {
   } as unknown as AuthingAuthentication;
   return signInThroughAuthing({
     stage: "password_sign_in",
-    authenticate: () => authing.signInWithPassword({ email: "a@b.c", password: "x" }),
+    authenticate: () => authing.signInWithPassword({ account: "a@b.c", password: "x" }),
     authing,
     sessionSecret: "test-session-secret-at-least-32-characters",
     secure: false,

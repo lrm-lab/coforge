@@ -7,7 +7,7 @@ import { HintText } from "#src/components/base/input/hint-text";
 import { Input } from "#src/components/base/input/input";
 import { STAY_PENDING, useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { m } from "#src/paraglide/messages";
-import { signInWithEmailPassword } from "./sign-in.functions";
+import { signInWithAccountPassword } from "./sign-in.functions";
 
 type Problem =
   | "invalid_credentials"
@@ -29,26 +29,26 @@ const problemText: Record<Problem, () => string> = {
 };
 
 /**
- * Sign-in with an email and a password, checked by Authing on the server. A refusal stays under
+ * Sign-in with an account (email or username) and a password, checked by Authing on the server. A refusal stays under
  * the form; success is a full navigation to where the server says to go (the name step, or
  * `returnTo`), so the next page loads with the new session.
  */
 export function PasswordSignInForm({
   returnTo,
   prompt,
-  initialEmail = "",
+  initialAccount = "",
   onCreateAccount,
 }: {
   returnTo?: string | undefined;
   /** `"login"` when the page was asked to sign the person in afresh; the reset page keeps it. */
   prompt?: "login" | undefined;
-  /** What the email field starts with. */
-  initialEmail?: string | undefined;
+  /** What the account field starts with. */
+  initialAccount?: string | undefined;
   /** Takes someone without an account to the code sign-in, which creates one. */
   onCreateAccount: () => void;
 }) {
-  const submit = useServerFn(signInWithEmailPassword);
-  const [email, setEmail] = useState(initialEmail);
+  const submit = useServerFn(signInWithAccountPassword);
+  const [account, setAccount] = useState(initialAccount);
   const [password, setPassword] = useState("");
   const [problem, setProblem] = useState<Problem | null>(null);
   const [submitting, guard] = useSubmitGuard();
@@ -63,10 +63,10 @@ export function PasswordSignInForm({
     event.preventDefault();
     await guard(async () => {
       // The server judges them again; asking here first only spares a round trip.
-      if (!email.trim() || !password) return setProblem("invalid_credentials");
+      if (!account.trim() || !password) return setProblem("invalid_credentials");
       setProblem(null);
       try {
-        const result = await submit({ data: { email, password, returnTo } });
+        const result = await submit({ data: { account, password, returnTo } });
         if (result.ok) {
           // Stay busy through the navigation: the page is replaced, not returned to.
           window.location.assign(result.next);
@@ -83,13 +83,12 @@ export function PasswordSignInForm({
     <form noValidate onSubmit={onSubmit}>
       <div className="flex flex-col gap-6">
         <Input
-          label={m.login_email_label()}
-          name="email"
-          type="email"
+          label={m.login_account_label()}
+          name="account"
           autoComplete="username"
           autoFocus
-          value={email}
-          onChange={edit(setEmail)}
+          value={account}
+          onChange={edit(setAccount)}
           isInvalid={problem === "invalid_credentials"}
         />
         <Input

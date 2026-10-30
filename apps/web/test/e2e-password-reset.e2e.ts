@@ -7,7 +7,7 @@ import { CODE_SEND_DESTINATION_LIMIT } from "#src/server/auth/sign-in-rate-limit
 import {
   codeTab,
   destinationField,
-  emailField,
+  accountField,
   hydrated,
   nameField,
   onNameStep,
@@ -119,7 +119,7 @@ test("setting a new password with a code sent by SMS or email", async () => {
     await browser("open", `${origin}/login?returnTo=${encodeURIComponent(returnTo)}`);
     await waitFor(onSignInHere);
     await browser("eval", `${passwordTab}.click()`);
-    await waitFor(hydrated(emailField));
+    await waitFor(hydrated(accountField));
     await browser("screenshot", join(artifacts, "0-password-tab.png"));
     await browser("eval", `${button("Create one with a code")}.click()`);
     await waitFor(`!!${destinationField}`);
@@ -128,7 +128,7 @@ test("setting a new password with a code sent by SMS or email", async () => {
     // The password tab's "Forgot password?" opens the reset page, which asks for the destination
     // first: no code or password field yet.
     await browser("eval", `${passwordTab}.click()`);
-    await waitFor(hydrated(emailField));
+    await waitFor(hydrated(accountField));
     await browser("eval", `${button("Forgot password?")}.click()`);
     await waitFor(onResetPage);
     expect(await evaluate<boolean>(`!!${resetCodeField}`)).toBe(false);
@@ -167,7 +167,7 @@ test("setting a new password with a code sent by SMS or email", async () => {
     await waitFor(`${onSignInHere} && ${notice} === "Password updated."`);
     expect(fake.resets).toEqual([{ sub: people.alice.sub }]);
     expect(await evaluate<string>(`${passwordTab}.getAttribute("aria-selected")`)).toBe("true");
-    expect(await evaluate<string>(`${emailField}.value`)).toBe(people.alice.email);
+    expect(await evaluate<string>(`${accountField}.value`)).toBe(people.alice.email);
     expect(await evaluate<string>(`location.search`)).toContain(encodeURIComponent(returnTo));
     expect(await evaluate<string>(`location.href`)).not.toContain("coforge.test");
     expect(fake.signIns).toEqual([]);
@@ -176,7 +176,7 @@ test("setting a new password with a code sent by SMS or email", async () => {
     // The old password no longer signs in; the new one does, to the name step of a first sign-in.
     await setInput(passwordFieldSelector, personPassword);
     await browser("eval", `${button("Sign In")}.click()`);
-    await waitFor(`${formError} === "Email or password is incorrect."`);
+    await waitFor(`${formError} === "Account or password is incorrect."`);
     await setInput(passwordFieldSelector, newPassword);
     await browser("eval", `${button("Sign In")}.click()`);
     await waitFor(onNameStepHere);
@@ -193,7 +193,7 @@ test("setting a new password with a code sent by SMS or email", async () => {
     await browser("open", `${origin}/login?prompt=login&returnTo=${encodeURIComponent(returnTo)}`);
     await waitFor(onSignInHere);
     await browser("eval", `${passwordTab}.click()`);
-    await waitFor(hydrated(emailField));
+    await waitFor(hydrated(accountField));
     await browser("eval", `${button("Forgot password?")}.click()`);
     await waitFor(onResetPage);
     stillAsking(await evaluate<string>(`location.search`));

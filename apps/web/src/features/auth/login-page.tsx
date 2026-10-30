@@ -66,7 +66,7 @@ export function LoginPage({
             <PasswordSignInForm
               returnTo={returnTo}
               prompt={prompt}
-              initialEmail={byPassword ? passwordUpdated?.destination : undefined}
+              initialAccount={byPassword ? passwordUpdated?.destination : undefined}
               onCreateAccount={() => setTab("code")}
             />
           </TabPanel>

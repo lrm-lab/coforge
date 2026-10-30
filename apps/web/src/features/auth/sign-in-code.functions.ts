@@ -42,7 +42,7 @@ export const requestSignInCode = createServerFn({ method: "POST" })
 
 /**
  * Signs in with the code sent to the phone number or email typed on `/login`; the first code
- * sign-in for a destination makes the account. Like `signInWithEmailPassword`, on success the
+ * sign-in for a destination makes the account. Like `signInWithAccountPassword`, on success the
  * session cookie is on the response and `next` says where to go. `problem` is `invalid_destination`
  * or `invalid_code` when what was typed cannot be a destination or a code, or Authing refused the
  * code, `rate_limited` when too many attempts came from the client's address or for the

@@ -9,18 +9,17 @@ import { signInWithPassword } from "#src/server/auth/password-sign-in.server";
 import { signInRequestContext } from "#src/server/auth/sign-in-request.server";
 
 /**
- * Signs in with the email and password typed on `/login`. A POST like every server function, so
- * `createCsrfMiddleware` (`start.ts`) refuses a call from another origin before this runs. On
- * success the session cookie is on the response and `next` says where to go: the name step for a
+ * Signs in with the account (email or username) and password typed on `/login`. A POST like every
+ * server function, so `createCsrfMiddleware` (`start.ts`) refuses a call from another origin
+ * before this runs. On success the session cookie is on the response and `next` says where to go: the name step for a
  * first sign-in, else `returnTo` (only ever a page of this site) or the start page. `problem`
- * is `invalid_credentials` when Authing refused the email and password, `rate_limited` when too
- * many attempts came from the client's address or for the email (Authing was not called), `failed`
- * for anything else, which is logged.
+ * is `invalid_credentials` when Authing refused the account and password (or one of the reasons
+ * `AuthingSignInResult` names), `failed` for anything else, which is logged.
  */
-export const signInWithEmailPassword = createServerFn({ method: "POST" })
+export const signInWithAccountPassword = createServerFn({ method: "POST" })
   .validator(
     z.object({
-      email: z.string().trim().min(1).max(320),
+      account: z.string().trim().min(1).max(320),
       password: z.string().min(1).max(1_024),
       returnTo: z.string().max(2_048).optional(),
     }),
@@ -32,7 +31,7 @@ export const signInWithEmailPassword = createServerFn({ method: "POST" })
     const result = await signInWithPassword({
       ...signIn,
       secure,
-      credentials: { email: data.email, password: data.password },
+      credentials: { account: data.account, password: data.password },
       clientAddress,
     });
     if (result.status !== "signed_in") return { ok: false, problem: result.status } as const;

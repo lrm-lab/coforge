@@ -11,6 +11,9 @@ export type Person = {
   /** The email the person types to sign in, when it is not the `email` the profile reports (an
    * account made with a phone number can sign in with an email its profile does not report). */
   signInEmail?: string;
+  /** The username the person can type instead of an email on the password tab, as an account
+   * registered by username in Authing's own pages can. */
+  username?: string;
   /** The mainland China mobile number (eleven digits, no country code) the person signs in with
    * by code, and the profile reports. */
   phone?: string;
@@ -238,7 +241,7 @@ export function startFakeAuthing<Key extends string>(input: {
       if (url.pathname === "/api/v3/signin" && request.method === "POST") {
         const body = (await request.json().catch(() => null)) as {
           connection?: string;
-          passwordPayload?: { email?: string; password?: string };
+          passwordPayload?: { account?: string; password?: string };
           passCodePayload?: {
             email?: string;
             phone?: string;
@@ -260,18 +263,17 @@ export function startFakeAuthing<Key extends string>(input: {
         let key: Key | undefined;
         let profile: Person | undefined;
         if (body.connection === "PASSWORD") {
+          // Authing's `account` names the account by its email, username or phone alike; the Web
+          // sends only `account`, so a payload naming it any other way finds no one.
+          const account = body.passwordPayload?.account?.trim().toLowerCase();
           key = (Object.keys(people) as Key[]).find(
             (candidate) =>
-              signInEmailOf(people[candidate]) ===
-              body.passwordPayload?.email?.trim().toLowerCase(),
+              signInEmailOf(people[candidate]) === account ||
+              people[candidate].username === account,
           );
           profile = key
             ? people[key]
-            : registered.find(
-                (person) =>
-                  person.email === body.passwordPayload?.email?.trim().toLowerCase() &&
-                  passwords.has(person.sub),
-              );
+            : registered.find((person) => person.email === account && passwords.has(person.sub));
         }
         const signIn: (typeof signIns)[number] = {
           person: key ?? null,

@@ -90,7 +90,7 @@ async function attempt(options: Attempt = {}) {
       config: options.config ?? baseConfig,
       sessionSecret,
       secure: false,
-      credentials: { email, password },
+      credentials: { account: email, password },
       ...(options.persisted
         ? {}
         : {

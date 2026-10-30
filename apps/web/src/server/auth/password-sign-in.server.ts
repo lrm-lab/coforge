@@ -6,15 +6,15 @@ import {
 } from "./authing-sign-in.server";
 
 /**
- * Signs a person in with the email and password they typed, through the sign-in every way of
+ * Signs a person in with the account (email or username) and password they typed, through the sign-in every way of
  * signing in shares (`signInThroughAuthing`): counted against the limits first, checked by Authing,
  * then the session and the person's account.
- * `invalid_credentials` is Authing refusing the email and password.
+ * `invalid_credentials` is Authing refusing the account and password.
  */
 export async function signInWithPassword(
   input: SignInUseCaseInput & {
     config: AuthingConfig;
-    credentials: { email: string; password: string };
+    credentials: { account: string; password: string };
   },
 ): Promise<AuthingSignInResult> {
   const authing = input.authing ?? createAuthingAuthentication(input.config);

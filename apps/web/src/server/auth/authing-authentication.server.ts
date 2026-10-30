@@ -37,7 +37,7 @@ export type AuthingProfile = {
 };
 
 const REFUSAL_REASONS = {
-  password_sign_in: "Authing refused the email and password",
+  password_sign_in: "Authing refused the account and password",
   passcode_sign_in: "Authing refused the verification code",
   github_sign_in: "Authing refused the GitHub authorization code",
 } as const;
@@ -141,7 +141,9 @@ export type AuthingAuthentication = {
   /** Throws `InvalidCredentialsError` when Authing refused the credentials, `SignInFailure` when
    * the sign-in could not be completed for any other reason. */
   signInWithPassword(input: {
-    email: string;
+    /** What the person typed to name their account: an email, a username or a phone number, which
+     * Authing's `passwordPayload.account` takes alike. */
+    account: string;
     password: string;
     /** The person's own address, which Authing's risk checks would otherwise take to be ours. */
     clientIp?: string;
@@ -317,7 +319,7 @@ export function createAuthingAuthentication(config: AuthingConfig): AuthingAuthe
     signInWithPassword(input) {
       return requestSignIn(config, "password_sign_in", {
         connection: "PASSWORD",
-        payload: { passwordPayload: { email: input.email, password: input.password } },
+        payload: { passwordPayload: { account: input.account, password: input.password } },
         clientIp: input.clientIp,
       });
     },

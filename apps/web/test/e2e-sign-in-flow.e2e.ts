@@ -3,7 +3,6 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
-import { SIGN_IN_ACCOUNT_ADDRESS_LIMIT } from "#src/server/auth/sign-in-rate-limits.server";
 import { PrismaWorkspaceCatalogStore } from "#src/server/workspaces/catalog.server";
 import { workspaceJoinLinks } from "#src/server/workspaces/join-links-store.server";
 import {
@@ -22,14 +21,15 @@ import {
 } from "./e2e-sign-in-harness";
 
 /**
- * Signing in with an email and password on CoForge's own page, end to end, from a Workspace invite
- * link. A signed-out visitor signs in, gives the display name a first sign-in asks for, and comes
- * back to the link to join; a wrong password says so under the form, stays on the page and keeps
- * the link; a sign-in Authing accepts but the profile read refuses says it failed; "Use another
- * account" and "Sign Out" end the session, revoke Authing's token and land on the sign-in page; an
- * account with no email address (a phone-number sign-up) signs in like any other; the hosted
- * sign-in and its callback are gone; the client address the proxy reports reaches Authing, and a
- * tenth attempt on one email is the last Authing hears: the eleventh is refused on the page.
+ * Signing in with an email or username and a password on CoForge's own page, end to end, from a
+ * Workspace invite link. A signed-out visitor signs in, gives the display name a first sign-in
+ * asks for, and comes back to the link to join; a wrong password says so under the form, stays on
+ * the page and keeps the link; a username signs in like an email; a sign-in Authing accepts but
+ * the profile read refuses says it failed; "Use another account" and "Sign Out" end the session,
+ * revoke Authing's token and land on the sign-in page; an account with no email address (a
+ * phone-number sign-up) signs in like any other; the hosted sign-in and its callback are gone; the
+ * client address the proxy reports reaches Authing, and repeated wrong passwords never lock an
+ * account out.
  *
  * Opt-in like the other browser E2Es, but it brings its own servers (`e2e-sign-in-harness.ts`): a
  * stand-in for Authing's v3 sign-in API and a Web dev server with real sign-in pointed at it. It
@@ -44,7 +44,13 @@ const artifacts = join(import.meta.dir, "../../../.amp/e2e/sign-in-flow");
 
 const people = {
   alice: { sub: "e2e-sign-in-alice", email: "e2e-alice@coforge.test", name: "Alice E2E" },
-  bob: { sub: "e2e-sign-in-bob", email: "e2e-bob@coforge.test", name: "Bob E2E" },
+  // Signs in with the username of an account made by username, not its email.
+  bob: {
+    sub: "e2e-sign-in-bob",
+    email: "e2e-bob@coforge.test",
+    username: "e2e-bob",
+    name: "Bob E2E",
+  },
   // A phone-number sign-up: Authing reports no email.
   "phone-only": {
     sub: "e2e-sign-in-phone-only",
@@ -158,7 +164,7 @@ test("signing in with an email and password, from a Workspace invite link", asyn
 
     // A wrong password says so under the form, stays on the page with the link, and signs nobody in.
     await submitSignIn(people.alice.email, "not-the-password");
-    await waitFor(`${formError} === "Email or password is incorrect."`);
+    await waitFor(`${formError} === "Account or password is incorrect."`);
     expect(await evaluate<string>(`new URL(location.href).searchParams.get("returnTo")`)).toBe(
       joinPath,
     );
@@ -224,7 +230,7 @@ test("signing in with an email and password, from a Workspace invite link", asyn
     expect(await evaluate<string>(`new URL(location.href).searchParams.get("returnTo")`)).toBe(
       joinPath,
     );
-    await submitSignIn(people.bob.email, personPassword);
+    await submitSignIn(people.bob.username, personPassword);
     await waitFor(onNameStepHere);
     await answerNameStep("Bob E2E", people.bob.name);
     await waitFor(onJoinPageAs(people.bob.email));
@@ -280,42 +286,28 @@ test("signing in with an email and password, from a Workspace invite link", asyn
     expect(phoneUser.username).toMatch(/^phone-only-e2e(-\d+)?$/);
     await browser("screenshot", join(artifacts, "7-signed-in-without-email.png"));
 
-    // SIGN_IN_ACCOUNT_ADDRESS_LIMIT attempts on one email from one address reach Authing, whatever
-    // the email's letter case or padding; the next is refused on the page, and Authing is not
-    // called. A new address keeps the per-address limit out of it: this is the account's from one
-    // address.
+    // Signing in has no attempt limit (f4afc04b5): wrong passwords past what the removed limit
+    // allowed (ten on one account from one address) each still reach Authing, and the right one
+    // then signs in, whatever the account's letter case or padding.
     await browser("cookies", "clear");
     await browser("set", "headers", JSON.stringify({ "X-Forwarded-For": "198.51.100.24" }));
     await browser("open", `${origin}/login`);
     await waitFor(onSignInHere);
     const attemptsBefore = fake.signIns.length;
-    const submitted = (count: number) =>
-      waitFor(
-        `${formError} === "Email or password is incorrect." && !document.querySelector("main form button[data-loading]")`,
-      ).then(() => expect(fake.signIns.length).toBe(attemptsBefore + count));
-    for (let attempt = 1; attempt <= SIGN_IN_ACCOUNT_ADDRESS_LIMIT; attempt++) {
+    for (let attempt = 1; attempt <= 11; attempt++) {
       await submitSignIn(
-        attempt % 2 ? " E2E-Limited@Coforge.test " : "e2e-limited@coforge.test",
+        attempt % 2 ? " E2E-Alice@Coforge.test " : "e2e-alice@coforge.test",
         "not-the-password",
       );
       while (fake.signIns.length < attemptsBefore + attempt) await Bun.sleep(50);
-      await submitted(attempt);
+      await waitFor(
+        `${formError} === "Account or password is incorrect." && !document.querySelector("main form button[data-loading]")`,
+      );
     }
-    await submitSignIn("e2e-limited@coforge.test", personPassword);
-    await waitFor(`${formError} === "Too many attempts. Try again in a few minutes."`);
-    expect(fake.signIns.length).toBe(attemptsBefore + SIGN_IN_ACCOUNT_ADDRESS_LIMIT);
+    await submitSignIn(people.alice.email, personPassword);
+    await waitFor(`!location.pathname.endsWith("/login")`);
+    expect(fake.signIns.length).toBe(attemptsBefore + 12);
     expect(fake.signIns.at(-1)?.clientIp).toBe("198.51.100.24");
-    await browser("screenshot", join(artifacts, "8-rate-limited.png"));
-
-    // One address cannot lock an account out: the owner, from another address, still reaches
-    // Authing for the same email.
-    await browser("cookies", "clear");
-    await browser("set", "headers", JSON.stringify({ "X-Forwarded-For": "198.51.100.25" }));
-    await browser("open", `${origin}/login`);
-    await waitFor(onSignInHere);
-    await submitSignIn("e2e-limited@coforge.test", "not-the-password");
-    await submitted(SIGN_IN_ACCOUNT_ADDRESS_LIMIT + 1);
-    expect(fake.signIns.at(-1)?.clientIp).toBe("198.51.100.25");
   } finally {
     await browser("close").catch(() => undefined);
     await stack?.stop();
