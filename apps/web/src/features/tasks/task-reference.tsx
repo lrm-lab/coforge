@@ -14,14 +14,14 @@ type TaskReferenceProps = ComponentPropsWithoutRef<"span"> & {
 
 /**
  * A task reference in a message body. Inside a conversation it reads its own Task, so a Task's
- * change repaints its references alone; outside one, or for a number the conversation has no Task
- * for, it stays the words `task #N` (`children`). A number the conversation does not hold yet
+ * change repaints its references alone; outside one it is the unread chip, not a control; for a
+ * number the conversation has no Task for, it stays the words `task #N` (`children`). A number the conversation does not hold yet
  * already opens the Task while its read is under way, as Raft's does; only a number known to name
  * no Task is plain words.
  */
 export function TaskReference({ number, onOpenTask, children, ...props }: TaskReferenceProps) {
   const conversationId = useConversationId();
-  if (!conversationId) return <span {...props}>{children}</span>;
+  if (!conversationId) return <StaticTaskReference {...props} number={number} />;
   return (
     <ConversationTaskReference
       {...props}
@@ -62,12 +62,37 @@ function ConversationTaskReference({
       {task ? (
         <TaskNumberBadge number={number} status={task.status} />
       ) : (
-        // Not read yet: a plain block as wide as the badge (whose status icon and gap the even
-        // padding stands in for), as Raft's, so the badge replaces it without moving the line.
-        <span className="inline-flex items-center rounded-md px-3.5 py-0.5 text-xs font-semibold text-secondary ring-1 ring-secondary ring-inset">
-          #{number}
-        </span>
+        <TaskNumberPlaceholder number={number} />
       )}
+    </span>
+  );
+}
+
+/**
+ * A task reference outside any conversation (a forwarded card quotes another one's message): the
+ * chip of a Task not read yet, which names no status and opens nothing.
+ */
+function StaticTaskReference({
+  number,
+  ...props
+}: Omit<TaskReferenceProps, "onOpenTask" | "children">) {
+  return (
+    <span
+      {...props}
+      aria-label={`task #${number}`}
+      className="inline-block rounded-md align-middle"
+    >
+      <TaskNumberPlaceholder number={number} />
+    </span>
+  );
+}
+
+/** A plain block as wide as the badge (whose status icon and gap the even padding stands in for),
+ * as Raft's, so the badge replaces it without moving the line. */
+function TaskNumberPlaceholder({ number }: { number: number }) {
+  return (
+    <span className="inline-flex items-center rounded-md px-3.5 py-0.5 text-xs font-semibold text-secondary ring-1 ring-secondary ring-inset">
+      #{number}
     </span>
   );
 }
