@@ -1,4 +1,8 @@
-import type { AgentMessageRecord } from "@lrm/coforge-sdk/internal";
+import {
+  RUNTIME_PROVIDER,
+  type AgentMessageRecord,
+  type RuntimeProvider,
+} from "@lrm/coforge-sdk/internal";
 import type { AgentContexts } from "./agent-contexts";
 import type {
   AgentContextLedger,
@@ -18,13 +22,13 @@ export type ContextElision = {
 
 /** The runtimes whose adapters report a finished compaction. For any other the daemon cannot tell
  * when the Agent's context was cut, so it never leaves anything out. */
-const COMPACTION_REPORTING_RUNTIMES: ReadonlySet<string> = new Set([
-  "claude-code",
-  "codex",
-  "cursor",
-  "grok",
-  "kiro",
-  "pi",
+const COMPACTION_REPORTING_RUNTIMES: ReadonlySet<string> = new Set<RuntimeProvider>([
+  RUNTIME_PROVIDER.CLAUDE_CODE,
+  RUNTIME_PROVIDER.CODEX,
+  RUNTIME_PROVIDER.CURSOR,
+  RUNTIME_PROVIDER.GROK,
+  RUNTIME_PROVIDER.KIRO,
+  RUNTIME_PROVIDER.PI,
 ]);
 
 export function reportsCompaction(runtime: string): boolean {

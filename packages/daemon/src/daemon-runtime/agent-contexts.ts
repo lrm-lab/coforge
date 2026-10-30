@@ -8,7 +8,6 @@ import { reportsCompaction } from "./context-elision";
  * other runtime `ledger` is undefined and nothing is ever left out of a read.
  */
 export class AgentContexts {
-  readonly #ledgers = new Map<string, AgentContextLedger>();
   readonly #runtimes = new Map<string, string>();
 
   constructor(private readonly stateDb: (agentId: string) => AgentStateDb) {}
@@ -16,12 +15,8 @@ export class AgentContexts {
   ledger(agentId: string): AgentContextLedger | undefined {
     const runtime = this.#runtimes.get(agentId);
     if (!runtime || !reportsCompaction(runtime)) return undefined;
-    let ledger = this.#ledgers.get(agentId);
-    if (!ledger) {
-      ledger = new AgentContextLedger(this.stateDb(agentId).database);
-      this.#ledgers.set(agentId, ledger);
-    }
-    return ledger;
+    // Not kept: the database handle is closed when the Agent stops or is forgotten.
+    return new AgentContextLedger(this.stateDb(agentId).database);
   }
 
   /** The Agent's context starts over: a launch, whose `runtime` is then the one in use (its
