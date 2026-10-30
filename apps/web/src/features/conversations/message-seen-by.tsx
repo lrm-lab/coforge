@@ -2,10 +2,9 @@ import { createContext, useContext, useMemo, useState, type ReactNode } from "re
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { SubmenuTrigger } from "react-aria-components";
-import { Check, ChevronDown, ChevronUp, DotsHorizontal } from "@untitledui/icons";
+import { Check, ChevronDown, ChevronUp } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
-import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
@@ -120,66 +119,50 @@ const seenLabel = (count: number | undefined) =>
       : m.conversation_seen_count({ count: String(count) });
 
 /**
- * The hover toolbar's "…" on an own message: a menu with one entry, "N seen", which opens the list
- * of readers. Read when the menu opens.
+ * The "N seen" entry of the hover toolbar's "…" menu on an own message, which opens the list of
+ * readers. Read when the menu opens.
  */
-export function MessageSeenByMenu({
+export function MessageSeenByMenuEntry({
   conversationId,
   messageId,
+  menuOpen,
 }: {
   conversationId: string;
   messageId: string;
+  menuOpen: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-  const seen = useSeenBy(conversationId, messageId, open);
+  const seen = useSeenBy(conversationId, messageId, menuOpen);
   const readers = seen?.readers;
   const seenAt = useSeenAtLabel(seen?.seenAt);
-  return (
-    <Dropdown.Root isOpen={open} onOpenChange={setOpen}>
-      <ButtonUtility
-        size="xs"
-        color="tertiary"
-        icon={DotsHorizontal}
-        tooltip={m.conversation_more_actions()}
-        aria-label={m.conversation_more_actions()}
-        className="p-1 *:data-icon:size-3.5"
-      />
-      {/* A read time is one line, as wide as it needs. */}
-      <Dropdown.Popover placement="bottom end" className="w-max min-w-56">
-        <Dropdown.Menu aria-label={m.conversation_more_actions()}>
-          {seenAt ? (
-            <Dropdown.Item icon={SeenIcon} label={seenAt} />
-          ) : readers?.length ? (
-            <SubmenuTrigger>
-              <Dropdown.Item textValue={seenLabel(seen?.count)} icon={SeenIcon}>
-                <span className="flex items-center">
-                  <span className="grow truncate">{seenLabel(seen?.count)}</span>
-                  <ReaderFaces readers={readers} />
-                </span>
-              </Dropdown.Item>
-              <Dropdown.Popover placement="end top" className="w-56">
-                <Dropdown.Menu aria-label={m.conversation_seen_by()} className="max-h-80">
-                  {readers.map((reader) => (
-                    <Dropdown.Item
-                      key={mentionKey(reader)}
-                      id={mentionKey(reader)}
-                      textValue={reader.label}
-                    >
-                      <span className="flex items-center gap-2">
-                        <ReaderAvatar reader={reader} />
-                        <span className="truncate">{reader.label}</span>
-                      </span>
-                    </Dropdown.Item>
-                  ))}
-                </Dropdown.Menu>
-              </Dropdown.Popover>
-            </SubmenuTrigger>
-          ) : (
-            <Dropdown.Item isDisabled icon={SeenIcon} label={seenLabel(seen?.count)} />
-          )}
+  return seenAt ? (
+    <Dropdown.Item icon={SeenIcon} label={seenAt} />
+  ) : readers?.length ? (
+    <SubmenuTrigger>
+      <Dropdown.Item textValue={seenLabel(seen?.count)} icon={SeenIcon}>
+        <span className="flex items-center">
+          <span className="grow truncate">{seenLabel(seen?.count)}</span>
+          <ReaderFaces readers={readers} />
+        </span>
+      </Dropdown.Item>
+      <Dropdown.Popover placement="end top" className="w-56">
+        <Dropdown.Menu aria-label={m.conversation_seen_by()} className="max-h-80">
+          {readers.map((reader) => (
+            <Dropdown.Item
+              key={mentionKey(reader)}
+              id={mentionKey(reader)}
+              textValue={reader.label}
+            >
+              <span className="flex items-center gap-2">
+                <ReaderAvatar reader={reader} />
+                <span className="truncate">{reader.label}</span>
+              </span>
+            </Dropdown.Item>
+          ))}
         </Dropdown.Menu>
       </Dropdown.Popover>
-    </Dropdown.Root>
+    </SubmenuTrigger>
+  ) : (
+    <Dropdown.Item isDisabled icon={SeenIcon} label={seenLabel(seen?.count)} />
   );
 }
 

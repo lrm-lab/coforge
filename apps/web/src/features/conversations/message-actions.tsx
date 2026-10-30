@@ -1,15 +1,16 @@
-import type { ReactNode } from "react";
-import { Bookmark, BookmarkCheck, Copy01, FlipForward } from "@untitledui/icons";
+import { useState, type ReactNode } from "react";
+import { Bookmark, BookmarkCheck, Copy01, DotsHorizontal, FlipForward } from "@untitledui/icons";
 import { Modal as AriaModal, ModalOverlay as AriaModalOverlay } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dialog } from "#src/components/application/modals/modal";
+import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { MessageReactionPicker, QUICK_REACTION_EMOJIS } from "./message-reaction-picker";
 import { ThreadSheetEntry, ThreadToolbarEntry } from "./thread-summary";
-import { MessageSeenByMenu, MessageSeenBySheetEntry } from "./message-seen-by";
+import { MessageSeenByMenuEntry, MessageSeenBySheetEntry } from "./message-seen-by";
 
 /** What a message's actions do, bound to that message by its row. */
 type MessageActions = {
@@ -34,8 +35,9 @@ type MessageActions = {
  * stick `:hover` onto a tapped row (it has a click handler); and some touch devices
  * (iOS Safari) report `hover: hover` anyway — any missing gate would leave the bar
  * visible after the sheet closes. Hidden also means `pointer-events-none` — an
- * invisible bar must not swallow taps aimed at the message under it. Order is thread,
- * reactions, forward, save, then whole-message copy last — the IM-standard order (#546).
+ * invisible bar must not swallow taps aimed at the message under it. The bar keeps the
+ * frequent actions — thread, reactions, whole-message copy — and "…" holds the rarer ones
+ * (forward, save, "N seen"), as Slack's bar does.
  */
 export function MessageActionToolbar({
   messageId,
@@ -60,28 +62,6 @@ export function MessageActionToolbar({
     >
       {onOpenThread && <ThreadToolbarEntry rootId={messageId} onOpen={onOpenThread} />}
       {onToggleReaction && <MessageReactionPicker onPick={(emoji) => onToggleReaction(emoji)} />}
-      {onForward && (
-        <ButtonUtility
-          size="xs"
-          color="tertiary"
-          icon={FlipForward}
-          tooltip={m.message_forward_action()}
-          aria-label={m.message_forward_action()}
-          onClick={onForward}
-          className="p-1 *:data-icon:size-3.5"
-        />
-      )}
-      {onToggleSave && (
-        <ButtonUtility
-          size="xs"
-          color="tertiary"
-          icon={saveSaved ? BookmarkCheck : Bookmark}
-          tooltip={saveSaved ? m.conversation_unsave() : m.conversation_save()}
-          aria-label={saveSaved ? m.conversation_unsave() : m.conversation_save()}
-          onClick={onToggleSave}
-          className="p-1 *:data-icon:size-3.5"
-        />
-      )}
       <ButtonUtility
         size="xs"
         color="tertiary"
@@ -90,8 +70,66 @@ export function MessageActionToolbar({
         onClick={onCopy}
         className="p-1 *:data-icon:size-3.5"
       />
-      {seenBy && <MessageSeenByMenu conversationId={seenBy.conversationId} messageId={messageId} />}
+      {(onForward || onToggleSave || seenBy) && (
+        <MessageMoreMenu
+          messageId={messageId}
+          onForward={onForward}
+          onToggleSave={onToggleSave}
+          saveSaved={saveSaved}
+          seenBy={seenBy}
+        />
+      )}
     </div>
+  );
+}
+
+/** The hover toolbar's "…": forward and save, then on an own message "N seen". */
+function MessageMoreMenu({
+  messageId,
+  onForward,
+  onToggleSave,
+  saveSaved,
+  seenBy,
+}: Pick<MessageActions, "messageId" | "onForward" | "onToggleSave" | "saveSaved" | "seenBy">) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Dropdown.Root isOpen={open} onOpenChange={setOpen}>
+      <ButtonUtility
+        size="xs"
+        color="tertiary"
+        icon={DotsHorizontal}
+        tooltip={m.conversation_more_actions()}
+        aria-label={m.conversation_more_actions()}
+        className="p-1 *:data-icon:size-3.5"
+      />
+      {/* A read time is one line, as wide as it needs. */}
+      <Dropdown.Popover placement="bottom end" className="w-max min-w-56">
+        <Dropdown.Menu aria-label={m.conversation_more_actions()}>
+          {onForward && (
+            <Dropdown.Item
+              icon={FlipForward}
+              label={m.message_forward_action()}
+              onAction={onForward}
+            />
+          )}
+          {onToggleSave && (
+            <Dropdown.Item
+              icon={saveSaved ? BookmarkCheck : Bookmark}
+              label={saveSaved ? m.conversation_unsave() : m.conversation_save()}
+              onAction={onToggleSave}
+            />
+          )}
+          {(onForward || onToggleSave) && seenBy && <Dropdown.Separator />}
+          {seenBy && (
+            <MessageSeenByMenuEntry
+              conversationId={seenBy.conversationId}
+              messageId={messageId}
+              menuOpen={open}
+            />
+          )}
+        </Dropdown.Menu>
+      </Dropdown.Popover>
+    </Dropdown.Root>
   );
 }
 

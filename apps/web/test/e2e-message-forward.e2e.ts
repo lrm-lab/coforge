@@ -56,7 +56,8 @@ async function openForwardDialog(conversationId: string) {
   await browser("open", pageUrl(`channel/${conversationId}`));
   await waitFor(`document.querySelector('li[data-message-id="${ids.source}"]') !== null`);
   await browser("hover", `li[data-message-id="${ids.source}"]`);
-  await click('button[aria-label="Forward"]');
+  await click(`li[data-message-id="${ids.source}"] button[aria-label="More"]`);
+  await clickNamed("menuitem", "Forward");
   await waitFor(
     `document.querySelector('[role="dialog"] input[placeholder="Search targets"]') !== null`,
   );

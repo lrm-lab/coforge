@@ -268,22 +268,38 @@ test("a result previews beside the list and opens on a double click", async () =
       );
     // The preview and Chat share one Saved list: saved in the preview, Chat shows it saved at once,
     // and removing it there shows in the preview again.
-    const saveButton = (scope: string, label: string) =>
-      `document.querySelector('${scope} li[data-message-id="${inB.id}"] [aria-label="${label}"]')`;
+    // Save sits in the row's "…" menu: open it, find the entry by its label.
+    const saveEntry = (label: string) =>
+      `[...document.querySelectorAll('[role="menu"] [role="menuitem"]')].find((item) => item.textContent.trim() === "${label}")`;
+    const openMore = (scope: string) =>
+      browser(
+        "eval",
+        `document.querySelector('${scope} li[data-message-id="${inB.id}"] [aria-label="More"]').click()`,
+      );
+    const toggleSave = async (scope: string, label: string) => {
+      await openMore(scope);
+      await waitFor(`${saveEntry(label)} !== undefined`);
+      await browser("eval", `${saveEntry(label)}.click()`);
+      await waitFor(`!document.querySelector('[role="menu"]')`);
+    };
+    const expectSave = async (scope: string, label: string) => {
+      await openMore(scope);
+      await waitFor(`${saveEntry(label)} !== undefined`);
+      await browser("press", "Escape");
+      await waitFor(`!document.querySelector('[role="menu"]')`);
+    };
     await browser("click", row(inB.id));
-    await waitFor(`${saveButton(PREVIEW, "Save Message")} !== null`);
-    await browser("eval", `${saveButton(PREVIEW, "Save Message")}.click()`);
-    await waitFor(`${saveButton(PREVIEW, "Remove from Saved")} !== null`);
+    await toggleSave(PREVIEW, "Save Message");
+    await expectSave(PREVIEW, "Remove from Saved");
     const opensBefore = await opensOfB();
     await browser("dblclick", row(inB.id));
     await waitFor(`location.pathname === "${workspacePath}/channel/${channelB}"`);
     // A double click is one open, not two.
     expect(await opensOfB()).toBe(opensBefore + 1);
-    await waitFor(`${saveButton("main", "Remove from Saved")} !== null`);
-    await browser("eval", `${saveButton("main", "Remove from Saved")}.click()`);
-    await waitFor(`${saveButton("main", "Save Message")} !== null`);
+    await toggleSave("main", "Remove from Saved");
+    await expectSave("main", "Save Message");
     await browser("back");
-    await waitFor(`${saveButton(PREVIEW, "Save Message")} !== null`);
+    await expectSave(PREVIEW, "Save Message");
 
     // A message saved elsewhere meanwhile (another tab) shows saved when Chat is opened again: each
     // visit reads the Saved list afresh.
@@ -301,9 +317,8 @@ test("a result previews beside the list and opens on a double click", async () =
       `document.querySelector('a[href="${workspacePath}/channel/${channelB}"]').click()`,
     );
     await waitFor(`location.pathname === "${workspacePath}/channel/${channelB}"`);
-    await waitFor(`${saveButton("main", "Remove from Saved")} !== null`);
-    await browser("eval", `${saveButton("main", "Remove from Saved")}.click()`);
-    await waitFor(`${saveButton("main", "Save Message")} !== null`);
+    await toggleSave("main", "Remove from Saved");
+    await expectSave("main", "Save Message");
     await browser("back");
     await browser("back");
     await browser("back");
