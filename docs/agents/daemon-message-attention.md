@@ -120,3 +120,11 @@ Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
   as unknown before the relaunch reports its session; refuse one arriving meanwhile.
 - Thread follow state is cloud-persisted. The Daemon only forwards the Agent's
   explicit unfollow operation.
+- What an Agent has already been shown lives in `AgentContextLedger` (`state.db`,
+  `context_observations`), kept per context: a sender's description and a
+  channel's role line (`channelCoordination`) reach the Agent once, and
+  `AgentMessageOperations` leaves repeats out of `check` and the reads. A launch
+  or a finished compaction starts a new context, and only runtimes that report
+  a finished compaction (`reportsCompaction`) are elided, so a runtime that
+  cannot say when its context was cut is never left short. The context number is
+  stored, never counted from zero again after a restart.

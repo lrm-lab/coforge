@@ -20,6 +20,7 @@ import { TURN_ACTIVITY_EVENT_TYPES } from "#src/agent-runtime/runtime-phases";
 import { AgentInputDrain } from "./agent-input-drain";
 import { rebindAgent } from "./agent-rebind";
 import { AgentLaunchCustody } from "./agent-launch-custody";
+import { AgentContexts } from "./agent-contexts";
 import { PhaseBookkeeping } from "./phase-bookkeeping";
 import {
   observeRuntimeEvent,
@@ -224,10 +225,6 @@ export const USAGE_SCAN_READ_TIMEOUT_MS = 10_000;
 
 const NOT_RUNNING = "daemon runtime is not running";
 
-function generateRuntimeInstanceId(): string {
-  return crypto.randomUUID();
-}
-
 /** A daemon-owned resident runtime for one supervised Workspace. */
 export class DaemonRuntime {
   readonly #connection: DaemonConfig;
@@ -397,7 +394,7 @@ export class DaemonRuntime {
   /** Per-Agent MEMORY.md and disk hints. Inert until a cloud config for an Agent is applied to
    * it (`applyConfig`/`replaceOwnerSnapshot`). */
   readonly systemCleaner: SystemCleaner;
-  readonly #runtimeInstanceId = generateRuntimeInstanceId();
+  readonly #runtimeInstanceId = crypto.randomUUID();
   /** The consumed cursor and draft ledger; its store says why it is durable. */
   readonly #consumedSeqs: AgentConsumedSeqStore;
   readonly #startedAt = Date.now();
@@ -501,7 +498,9 @@ export class DaemonRuntime {
    * Deliberately in-memory only, so a restarted daemon is never born held. */
   #runnerHold: RunnerHold | undefined;
   /** Each phase's open state and stale watchdog — see `phase-bookkeeping.ts`. */
+  readonly #contexts = new AgentContexts((agentId) => this.#consumedSeqs.stateDb(agentId));
   readonly #phaseBookkeeping = new PhaseBookkeeping({
+    contexts: this.#contexts,
     launchFor: (agentId) => this.#currentActivityLaunches.get(agentId),
     publish: (agentId, launch, draft) => this.#activityPublisher.publish(agentId, launch, draft),
     activityDraft: (agentId, detailKind, detail) =>
@@ -684,6 +683,7 @@ export class DaemonRuntime {
       connection,
       attention: this.#messageAttention,
       isMemoryAgent: (agentId) => Boolean(this.memoryFence(agentId)),
+      contexts: this.#contexts,
       inbox: (agentId) => this.#agentInbox(agentId),
       appItemsPending: async (agentId) => (await this.#appInbox(agentId)).list().length,
       get transport() {
@@ -1590,6 +1590,7 @@ export class DaemonRuntime {
     this.#currentActivityLaunches.set(agentId, launch);
     this.#activityPublisher.forgetBusy(agentId);
     this.#phaseBookkeeping.dispose(agentId);
+    this.#contexts.newContext(agentId, config.provider);
     // This launch's delivery mode, read by AgentMessageAttentionIndex.receive via
     // #deliveryQueue.shouldHold on every delivery for this Agent from now on.
     this.#deliveryQueue.setProvider(agentId, config.provider);
@@ -1600,20 +1601,16 @@ export class DaemonRuntime {
     // start here, where the real launch's ActivityLaunch now exists. `invalidateReason` is
     // threaded explicitly through this one launch's request (see `LaunchRequest`), never a
     // side channel: it can neither outlive this launch nor attach to a later unrelated one.
-    if (request.replacedSessionId && request.invalidateReason) {
-      const { detail, entryText } = sessionInvalidateActivityText(
-        runtimeDisplayName(config.provider),
-        request.replacedSessionId,
-        request.invalidateReason,
-      );
-      this.#activityPublisher.publish(
+    if (request.replacedSessionId && request.invalidateReason)
+      this.#narrateUnavailable(
         agentId,
         launch,
-        this.#activity(agentId, AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_UNAVAILABLE, "info", detail, {
-          entries: [{ kind: "text", text: entryText }],
-        }),
+        sessionInvalidateActivityText(
+          runtimeDisplayName(config.provider),
+          request.replacedSessionId,
+          request.invalidateReason,
+        ),
       );
-    }
     const current = () => this.#currentActivityLaunches.get(agentId) === launch && !launch.stopping;
     let agentApiKey: string | undefined;
     try {
@@ -1657,17 +1654,7 @@ export class DaemonRuntime {
           });
       // `reference.sessionId` is overwritten by the next report.
       const recycledSessionId = recycled ? reference.sessionId : undefined;
-      if (recycled)
-        this.#activityPublisher.publish(
-          agentId,
-          launch,
-          this.#activity(
-            agentId,
-            AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_UNAVAILABLE,
-            "info",
-            recycled.activityText,
-          ),
-        );
+      if (recycled) this.#narrateUnavailable(agentId, launch, { detail: recycled.activityText });
       const runtime = await this.#agentProcessManager.start(
         agentId,
         {
@@ -1745,26 +1732,16 @@ export class DaemonRuntime {
                 reference.sessionId = reportedSessionId;
                 reference.sessionMode = "resume";
                 reference.launchId = launch.launchId;
-                if (driverReplacedSessionId) {
-                  const { detail, entryText } = sessionInvalidateActivityText(
-                    runtimeDisplayName(config.provider),
-                    driverReplacedSessionId,
-                    "missing",
-                  );
-                  this.#activityPublisher.publish(
+                if (driverReplacedSessionId)
+                  this.#narrateUnavailable(
                     agentId,
                     launch,
-                    this.#activity(
-                      agentId,
-                      AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_UNAVAILABLE,
-                      "info",
-                      detail,
-                      {
-                        entries: [{ kind: "text", text: entryText }],
-                      },
+                    sessionInvalidateActivityText(
+                      runtimeDisplayName(config.provider),
+                      driverReplacedSessionId,
+                      "missing",
                     ),
                   );
-                }
               }
             : undefined,
           sessionMode: recycled ? "create" : reference.sessionMode,
@@ -2564,6 +2541,25 @@ export class DaemonRuntime {
     extra: Partial<ActivityDraft> = {},
   ): ActivityDraft {
     return activityDraft(this.#connection.workspaceId, agentId, detailKind, level, detail, extra);
+  }
+
+  /** Narrates a daemon-initiated cold start: a stored session found unusable, or one recycled. */
+  #narrateUnavailable(
+    agentId: string,
+    launch: ActivityLaunch,
+    { detail, entryText }: { detail: string; entryText?: string },
+  ): void {
+    this.#activityPublisher.publish(
+      agentId,
+      launch,
+      this.#activity(
+        agentId,
+        AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_UNAVAILABLE,
+        "info",
+        detail,
+        entryText ? { entries: [{ kind: "text", text: entryText }] } : {},
+      ),
+    );
   }
 
   #sessionInvalidateMessage(

@@ -99,6 +99,13 @@ export class AgentStateDb {
         expires_at INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS continuations_target ON continuations (target);
+      CREATE TABLE IF NOT EXISTS context_observations (
+        kind TEXT NOT NULL,
+        id TEXT NOT NULL,
+        rev TEXT NOT NULL,
+        generation INTEGER NOT NULL,
+        PRIMARY KEY (kind, id)
+      );
     `);
     if (version === undefined) writeMeta(db, "version", String(SCHEMA_VERSION));
     const handle = new AgentStateDb(db);
@@ -242,14 +249,14 @@ function unsafeLegacyPath(path: string): string | undefined {
   return undefined;
 }
 
-function readMeta(db: Database, key: string): string | undefined {
+export function readMeta(db: Database, key: string): string | undefined {
   const row = db.prepare(`SELECT value FROM meta WHERE key = ?`).get(key) as {
     value: string;
   } | null;
   return row?.value;
 }
 
-function writeMeta(db: Database, key: string, value: string): void {
+export function writeMeta(db: Database, key: string, value: string): void {
   db.prepare(
     `INSERT INTO meta (key, value) VALUES (?, ?)
      ON CONFLICT(key) DO UPDATE SET value = excluded.value`,

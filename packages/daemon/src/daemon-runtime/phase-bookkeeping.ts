@@ -9,6 +9,7 @@ import {
   type RuntimePhase,
 } from "#src/agent-runtime/runtime-phases";
 import type { ActivityLaunch } from "./activity-launch";
+import type { AgentContexts } from "./agent-contexts";
 import type { ActivityDraft, PublishedActivityLaunch } from "./agent-activity-publisher";
 
 /** The runtime supplies only where Activity goes: the current launch, its draft builder, and the
@@ -22,6 +23,8 @@ export type PhaseBookkeepingPorts = Readonly<{
     detailKind: AgentActivity["detailKind"],
     detail: string,
   ): ActivityDraft;
+  /** A finished compaction starts the Agent's context over. */
+  contexts: Pick<AgentContexts, "newContext">;
 }>;
 
 /**
@@ -71,6 +74,7 @@ export class PhaseBookkeeping {
   ): void {
     if (this.#phases[phase].finish(agentId) !== "finished") return;
     this.#publish(agentId, launch, RUNTIME_PHASES[phase].finished, conversation);
+    if (phase === "compaction") this.ports.contexts.newContext(agentId);
   }
 
   /** Ends an open compaction once, before the Activity that established its completion. */
@@ -82,6 +86,7 @@ export class PhaseBookkeeping {
   ): void {
     if (this.#phases.compaction.finish(agentId) !== "finished") return;
     this.#publish(agentId, launch, inferredCompactionFinish(inferredFrom), conversation);
+    this.ports.contexts.newContext(agentId);
   }
 
   /** Ends an open phase once as interrupted, for a phase that reports interruptions. */
