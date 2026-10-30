@@ -26,6 +26,7 @@ import {
   type AgentReplyIntent,
 } from "@lrm/coforge-sdk/internal/reply-intent";
 import { ListenerSlot } from "./listener-slot";
+import { DaemonNoticePublications } from "./daemon-notice-publications";
 import { DaemonProviderPublications } from "./daemon-provider-publications";
 import { rpcData } from "./rpc-data";
 import { DaemonQueries } from "./daemon-queries";
@@ -96,12 +97,6 @@ import {
   COMPUTER_UPGRADE_RESULT_METHOD,
   encodeAgentActivity,
   encodeAgentStatus,
-  encodeAgentMessageDeliveryAck,
-  encodeAgentMessageDeliveryRejection,
-  encodeAgentMentionDeliveryTransition,
-  encodeAgentMentionDeliveryTerminalError,
-  AGENT_MENTION_DELIVERY_TRANSITION_METHOD,
-  AGENT_MENTION_DELIVERY_TERMINAL_ERROR_METHOD,
   type AgentMentionDeliveryTransition,
   type AgentMentionDeliveryTerminalError,
   encodeDaemonRuntimeReadyRequest,
@@ -115,8 +110,6 @@ import {
   type DaemonRuntimeShutdown,
   DAEMON_CONNECTION_STATUS_METHOD,
   DAEMON_RUNTIME_CODE_AGENTS_UPDATE_METHOD,
-  AGENT_MESSAGE_ACK_METHOD,
-  AGENT_MESSAGE_REJECT_METHOD,
   AGENT_STATUS_METHOD,
   type DaemonRuntimeReadyRequest,
   type DaemonRuntimeCodeAgentsUpdateRequest,
@@ -277,6 +270,7 @@ export class DaemonConnection implements DaemonConnectionClient {
   readonly #providerPublications = new DaemonProviderPublications((method, bytes) =>
     this.#rpc(method, bytes),
   );
+  readonly #notices = new DaemonNoticePublications((method, bytes) => this.#rpc(method, bytes));
   readonly #reconnect = new ListenerSlot<() => void>();
   readonly #connectionRefused = new ListenerSlot<(reason: DaemonConnectRejectionReason) => void>();
   /** Set only while `start` waits for the first connection; rejecting it ends that `start`. */
@@ -886,28 +880,20 @@ export class DaemonConnection implements DaemonConnectionClient {
     return `${new URL(this.#serverHttpUrl).origin}${path}`;
   }
 
-  async sendAgentDeliveryAck(ack: AgentMessageDeliveryAck): Promise<void> {
-    await this.#rpc(AGENT_MESSAGE_ACK_METHOD, encodeAgentMessageDeliveryAck(ack));
+  sendAgentDeliveryAck(ack: AgentMessageDeliveryAck): Promise<void> {
+    return this.#notices.sendDeliveryAck(ack);
   }
 
-  async sendAgentDeliveryRejection(rejection: AgentMessageDeliveryRejection): Promise<void> {
-    await this.#rpc(AGENT_MESSAGE_REJECT_METHOD, encodeAgentMessageDeliveryRejection(rejection));
+  sendAgentDeliveryRejection(rejection: AgentMessageDeliveryRejection): Promise<void> {
+    return this.#notices.sendDeliveryRejection(rejection);
   }
 
-  async sendAgentMentionDeliveryTransition(report: AgentMentionDeliveryTransition): Promise<void> {
-    await this.#rpc(
-      AGENT_MENTION_DELIVERY_TRANSITION_METHOD,
-      encodeAgentMentionDeliveryTransition(report),
-    );
+  sendAgentMentionDeliveryTransition(report: AgentMentionDeliveryTransition): Promise<void> {
+    return this.#notices.sendMentionDeliveryTransition(report);
   }
 
-  async sendAgentMentionDeliveryTerminalError(
-    report: AgentMentionDeliveryTerminalError,
-  ): Promise<void> {
-    await this.#rpc(
-      AGENT_MENTION_DELIVERY_TERMINAL_ERROR_METHOD,
-      encodeAgentMentionDeliveryTerminalError(report),
-    );
+  sendAgentMentionDeliveryTerminalError(report: AgentMentionDeliveryTerminalError): Promise<void> {
+    return this.#notices.sendMentionDeliveryTerminalError(report);
   }
 
   /** The server's Agent migration route, over HTTPS with this daemon's API key. */
