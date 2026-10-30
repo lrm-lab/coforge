@@ -31,6 +31,8 @@ coforge.cn {
 	# route above stays unencoded.
 	handle {
 		encode
-		reverse_proxy web:3000
+		reverse_proxy web:3000 {
+			header_up X-Request-Id {http.request.uuid}
+		}
 	}
 }
