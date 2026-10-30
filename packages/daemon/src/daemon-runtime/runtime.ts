@@ -4,7 +4,6 @@ import type { RuntimeAuthController } from "./runtime-auth-controller";
 import { createRuntimeAuthAdapter } from "#src/code-agent/registry";
 import type { RuntimeAuthAdapter, RuntimeAuthProvider } from "@lrm/coforge-anvil";
 import {
-  AGENT_RUNTIME_EVENT_TYPE,
   AgentProcessCleanupError,
   type AgentRuntimeConfig,
   type AgentRuntimeEvent,
@@ -17,7 +16,8 @@ import { readOperatingSystem } from "#src/platform/operating-system";
 import { FileConversationSessionStore } from "#src/persistence/conversation-session-store";
 import { escapePathIdentity } from "#src/persistence/path-scope";
 import { ActivityTrajectory } from "#src/agent-runtime/activity-trajectory";
-import { TURN_ACTIVITY_EVENT_TYPES, PHASE_EDGES } from "#src/agent-runtime/runtime-phases";
+import { TURN_ACTIVITY_EVENT_TYPES } from "#src/agent-runtime/runtime-phases";
+import { AgentInputDrain } from "./agent-input-drain";
 import { PhaseBookkeeping } from "./phase-bookkeeping";
 import {
   observeRuntimeEvent,
@@ -26,7 +26,6 @@ import {
 import { runtimeErrorRecoverySignal } from "#src/agent-runtime/runtime-error-recovery";
 import { ToolCallLedger } from "#src/agent-runtime/tool-call-ledger";
 import {
-  endsStalledTurn,
   StalledTurnTracker,
   stalledTurnNotice,
   stalledTurnObservation,
@@ -35,17 +34,8 @@ import {
 import { interruptAgentTurn } from "./turn-interrupt";
 import { heldTaskResult } from "./held-task-result";
 import type { AgentProxy, LaunchRequest, SessionMode } from "./runtime-launch-types";
-import {
-  OutstandingBackgroundTasks,
-  subagentProgressDetail,
-} from "#src/agent-runtime/subagent-progress-activity";
-import {
-  buildRuntimeErrorFenceActivity,
-  buildRuntimeCrashedActivity,
-  buildRuntimeReconnectingActivity,
-} from "#src/agent-runtime/runtime-error-activity";
-import { scrubRuntimeErrorText } from "@lrm/coforge-anvil";
-import { classifyRuntimeError } from "#src/agent-runtime/runtime-error-classification";
+import { OutstandingBackgroundTasks } from "#src/agent-runtime/subagent-progress-activity";
+import { buildRuntimeCrashedActivity } from "#src/agent-runtime/runtime-error-activity";
 import {
   AgentProcessManager,
   type CodeAgentProviderFactory,
@@ -68,10 +58,8 @@ import {
   startingActivityDraft,
   stoppedActivityDraft,
 } from "./activity-draft";
-import { fastModeUnavailableDetail } from "./fast-mode-activity";
 import {
   recoveryHasContent,
-  queueHasInputContent,
   recoveryOf,
   runtimeConfigOf,
   type AgentInput,
@@ -79,11 +67,7 @@ import {
   type AgentInputQueue,
   type AgentRecoveryContext,
 } from "./runtime-launch-intent";
-import {
-  runtimeFailureDiagnostic,
-  safeRuntimeActivityMessage,
-  validUsageWindow,
-} from "./runtime-activity-text";
+import { validUsageWindow } from "./runtime-activity-text";
 import { parseAssignedSkillPacks } from "#src/code-agent/assigned-skills";
 import { AgentAuthorizationError, launchFailureLogFields } from "#src/agent-runtime/launch-failure";
 import { LaunchFailureBackoff } from "#src/agent-runtime/launch-failure-backoff";
@@ -94,7 +78,6 @@ import {
 } from "#src/agent-runtime/agent-startup";
 import { agentRuntimeContextEnvironment } from "#src/code-agent/environment";
 import { createAgentDesktopHolds } from "#src/agent-runtime/agent-desktop";
-import { toolStartActivity } from "#src/code-agent/tool-activity";
 export type DaemonConfig = {
   workspaceId: string;
   computerId: string;
@@ -138,7 +121,6 @@ import {
   type LocalAgentMessageRequest,
   type LocalInboxRequest,
   type RuntimeProvider,
-  AGENT_SERVICE_TIER_OBSERVED,
   RUNTIME_PROVIDER_USES_EXTERNAL_CLI,
   type UsageScanResponse,
   CLEANER_APP_ID,
@@ -301,11 +283,11 @@ export class DaemonRuntime {
       restate: (agentId) => this.#offlineResidency.restate(agentId),
     },
     queuedInputDeliveries: (agentId) =>
-      this.#agentInputQueues
+      this.#inputDrain
         .get(agentId)
         ?.items.flatMap((item) => (item.kind === "delivery" ? [item.message] : [])) ?? [],
     drainInputDeliveries: (agentId) => {
-      const queue = this.#agentInputQueues.get(agentId);
+      const queue = this.#inputDrain.get(agentId);
       const kept: AgentMessageDelivery[] = [];
       if (queue)
         queue.items = queue.items.filter((item) => {
@@ -316,7 +298,7 @@ export class DaemonRuntime {
         });
       return kept;
     },
-    closeAgentInputQueue: (agentId, error) => this.#closeAgentInputQueue(agentId, error),
+    closeAgentInputQueue: (agentId, error) => this.#inputDrain.close(agentId, error),
     dropMentionAsUnknown: (message) =>
       this.#mentionDeliveries.drop(message, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN),
     sendAgentStatus: (agentId, status) => this.#sendAgentStatus(agentId, status),
@@ -352,7 +334,7 @@ export class DaemonRuntime {
     sessionId: (agentId) => this.#sessionReferences.get(agentId)?.sessionId,
     isStopping: (agentId) => this.#stoppingAgents.has(agentId),
     daemonIdleFacts: (agentId) => {
-      const queue = this.#agentInputQueues.get(agentId);
+      const queue = this.#inputDrain.get(agentId);
       return {
         working: this.#isWorking(agentId),
         deliveriesQueued: this.#deliveryQueue.hasQueued(agentId),
@@ -397,7 +379,7 @@ export class DaemonRuntime {
   });
   readonly #wakeRecycle = new WakeRecycle({
     provider: (provider) => this.#createProvider(provider),
-    inputQueue: (agentId) => this.#agentInputQueues.get(agentId),
+    inputQueue: (agentId) => this.#inputDrain.get(agentId),
     hasQueuedDeliveries: (agentId) => this.#deliveryQueue.hasQueued(agentId),
   });
   /** Per-Agent delivery hold after retryable runtime errors: backoff, fingerprint fence, and the
@@ -428,7 +410,34 @@ export class DaemonRuntime {
   readonly #collectSkillAgents = new Set<string>();
   readonly #agentLaunches = new Map<string, Promise<AgentRuntime>>();
   readonly #sessionReferences = new Map<string, SessionReference>();
-  readonly #agentInputQueues = new Map<string, AgentInputQueue>();
+  readonly #inputDrain = new AgentInputDrain({
+    runnerHeld: () => this.#runnerHold !== undefined,
+    sessionFor: (agentId) => this.#agentProcessManager.session(agentId),
+    launchFor: (agentId) => this.#currentActivityLaunches.get(agentId),
+    hasQueuedDeliveries: (agentId) => this.#deliveryQueue.hasQueued(agentId),
+    isLaunching: (agentId) => this.#agentLaunches.has(agentId),
+    isStopping: (agentId) => this.#stoppingAgents.has(agentId),
+    deliverMessage: (agentId, message) =>
+      isTrackedMention(message)
+        ? this.#mentionDeliveries.deliver(message)
+        : this.#messageAttention.receive(message),
+    runStartup: async (agentId, session, launch, text) => {
+      this.#noteTurnStarted(agentId);
+      await launch.startup?.run(session.sendMessage(text));
+    },
+    runPrompt: (agentId, text, introduction) => this.#runPromptTurn(agentId, text, introduction),
+    recoverAttention: (agentId, context) => this.#recoverAttention(agentId, context),
+    abandonLaunch: (agentId, error) => this.#abandonLaunch(agentId, error),
+    publishStartupError: (agentId, launch, message) =>
+      this.#activityPublisher.publish(
+        agentId,
+        launch,
+        this.#runtimeErrorActivity(agentId, message),
+      ),
+    forgetIntroduced: (agentId) => this.#introducedAgents.delete(agentId),
+    dropMention: (message) =>
+      this.#mentionDeliveries.drop(message, MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED),
+  });
   /** Agents whose current process was already handed its introduction turn: one per process,
    * however many Starts carry `introductionPrompt`. Set only when a live session takes the turn;
    * a Start also queues none while one waits unsent, so one a crashed process left queued goes to
@@ -446,7 +455,7 @@ export class DaemonRuntime {
     forgetRuntimeErrorHold: (agentId) => this.#runtimeErrorHold.forget(agentId),
     keepInputDeliveriesForNextLaunch: (agentId, error) =>
       this.#exitedDelivery.keepInputDeliveriesForNextLaunch(agentId, error),
-    closeAgentInputQueue: (agentId, error) => this.#closeAgentInputQueue(agentId, error),
+    closeAgentInputQueue: (agentId, error) => this.#inputDrain.close(agentId, error),
     buildDraft: (agentId, built) =>
       this.#activity(agentId, built.detailKind, built.level, built.detail, {
         entries: built.entries,
@@ -1352,9 +1361,13 @@ export class DaemonRuntime {
     }
     this.#requestAppConfigSnapshot(agentId);
     const enqueueRecovery = (context: AgentRecoveryContext) =>
-      this.#enqueueAgentInput(agentId, (completion) => ({ kind: "recovery", context, completion }));
+      this.#inputDrain.enqueue(agentId, (completion) => ({
+        kind: "recovery",
+        context,
+        completion,
+      }));
     const enqueueTurn = (text: string, introduction?: true) =>
-      this.#enqueueAgentInput(agentId, (completion) => ({
+      this.#inputDrain.enqueue(agentId, (completion) => ({
         kind: "prompt",
         text,
         introduction,
@@ -1365,7 +1378,7 @@ export class DaemonRuntime {
     const introduction =
       introductionPrompt !== undefined &&
       !this.#introducedAgents.has(agentId) &&
-      !this.#agentInputQueues
+      !this.#inputDrain
         .get(agentId)
         ?.items.some((item) => item.kind === "prompt" && item.introduction)
         ? introductionPrompt
@@ -1386,7 +1399,7 @@ export class DaemonRuntime {
     const existingLaunch = this.#agentLaunches.get(agentId);
     if (existingLaunch) {
       if (carriesPrompt || recoveryHasContent(recovery)) {
-        const queue = this.#agentInputQueues.get(agentId);
+        const queue = this.#inputDrain.get(agentId);
         if (queue)
           queue.items = queue.items.filter((item) => {
             if (item.kind !== "startup") return true;
@@ -1423,7 +1436,7 @@ export class DaemonRuntime {
         recovery?.wakeMessage ? { wakeMessage: recovery.wakeMessage } : undefined,
       );
       if (!inputs.length) return Promise.resolve(activeRuntime);
-      this.#ensureAgentInputDrain(agentId);
+      this.#inputDrain.ensure(agentId);
       return Promise.all(inputs).then(() => activeRuntime);
     }
 
@@ -1445,7 +1458,7 @@ export class DaemonRuntime {
     // A Start carrying a prompt never gets the starter, even when it queued none of its own.
     const startupCompletion =
       !carriesPrompt && !recoveryHasContent(recovery)
-        ? this.#enqueueAgentInput(agentId, (completion) => ({
+        ? this.#inputDrain.enqueue(agentId, (completion) => ({
             kind: "startup",
             text: agentStartupInput(
               request.sessionMode !== "create" &&
@@ -1461,7 +1474,7 @@ export class DaemonRuntime {
         async (runtime) => {
           // Any successful launch, a managed Start included, ends a wake cooldown.
           this.#wakeLaunchFailures.reset(agentId);
-          this.#ensureAgentInputDrain(agentId);
+          this.#inputDrain.ensure(agentId);
           if (recoveryCompletion) await recoveryCompletion;
           // No recovery item was enqueued for this launch at all (so
           // `#recoverAttention` never ran), yet the session is ready — flush anything
@@ -1473,7 +1486,7 @@ export class DaemonRuntime {
         },
         (error: unknown) => {
           this.#exitedDelivery.keepInputDeliveriesForNextLaunch(agentId, error);
-          this.#closeAgentInputQueue(agentId, error);
+          this.#inputDrain.close(agentId, error);
           throw error;
         },
       )
@@ -1482,135 +1495,6 @@ export class DaemonRuntime {
       });
     this.#agentLaunches.set(agentId, launch);
     return launch;
-  }
-
-  #enqueueAgentInput(
-    agentId: string,
-    create: (completion: AgentInputCompletion) => AgentInput,
-  ): Promise<void> {
-    const queue = this.#agentInputQueues.get(agentId) ?? { items: [], closed: false };
-    if (queue.closed) return Promise.reject(new Error(`Agent runtime is stopping: ${agentId}`));
-    const completion = new Promise<void>((resolve, reject) => {
-      queue.items.push(create({ resolve, reject }));
-    });
-    this.#agentInputQueues.set(agentId, queue);
-    return completion;
-  }
-
-  #ensureAgentInputDrain(agentId: string): void {
-    const queue = this.#agentInputQueues.get(agentId);
-    // The runner hold is enforced here as well as at handleAgentMessage: draining is what calls
-    // AgentMessageAttentionIndex.receive, which notifies the session and then sends the
-    // `agent:deliver:ack`. Not draining is therefore exactly "accepted locally, never acked", so
-    // the server's AgentMessageDelivery.receivedAt stays null and it republishes after restart.
-    if (
-      !queue ||
-      queue.closed ||
-      queue.drain ||
-      this.#runnerHold !== undefined ||
-      !this.#agentProcessManager.session(agentId)
-    )
-      return;
-    queue.drain = this.#drainAgentInputs(agentId, queue).finally(() => {
-      queue.drain = undefined;
-      if (queue.closed || !queue.items.length) {
-        if (this.#agentInputQueues.get(agentId) === queue) this.#agentInputQueues.delete(agentId);
-        return;
-      }
-      this.#ensureAgentInputDrain(agentId);
-    });
-  }
-
-  async #drainAgentInputs(agentId: string, queue: AgentInputQueue): Promise<void> {
-    while (!queue.closed) {
-      const item = queue.items.shift();
-      if (!item) return;
-      const responses = this.#currentActivityLaunches.get(agentId)?.startup?.responses ?? 0;
-      try {
-        if (
-          item.kind === "startup" &&
-          (queueHasInputContent(queue.items) ||
-            this.#deliveryQueue.hasQueued(agentId) ||
-            this.#agentProcessManager.session(agentId)?.hasLiveTurn === true)
-        ) {
-          item.completion.resolve();
-          continue;
-        }
-        if (item.kind === "delivery") {
-          await (isTrackedMention(item.message)
-            ? this.#mentionDeliveries.deliver(item.message)
-            : this.#messageAttention.receive(item.message));
-          logger.info("Agent delivery indexed", {
-            event: "agent.message.delivery_indexed",
-            agent_id: agentId,
-            delivery_id: item.message.deliveryId,
-            message_id: item.message.messageId,
-            target: item.message.target,
-            sequence: item.message.sequence,
-          });
-        } else if (item.kind === "startup") {
-          const session = this.#agentProcessManager.session(agentId);
-          const launch = this.#currentActivityLaunches.get(agentId);
-          // Release the queue at real readiness if this provider awaits the whole turn.
-          if (session && launch) {
-            this.#noteTurnStarted(agentId);
-            await launch.startup?.run(session.sendMessage(item.text));
-          }
-        } else if (item.kind === "prompt") {
-          await this.#runPromptTurn(agentId, item.text, item.introduction);
-        } else await this.#recoverAttention(agentId, item.context);
-      } catch (error) {
-        if (
-          (item.kind === "recovery" || item.kind === "startup") &&
-          this.#agentLaunches.has(agentId)
-        ) {
-          if (this.#stoppingAgents.has(agentId)) {
-            item.completion.reject(error);
-            return;
-          }
-          const launch = this.#currentActivityLaunches.get(agentId);
-          if (launch?.startup && !launch.startup.endsLaunch(error, responses)) {
-            // The model already answered this input: the launch stands, like a refused prompt.
-            logger.warn("Agent startup input was not accepted", {
-              event: "agent.startup_input.rejected",
-              agent_id: agentId,
-              input_kind: item.kind,
-              error_code: diagnosticErrorCode(error),
-            });
-            item.completion.resolve();
-            continue;
-          }
-          if (item.kind === "startup" && launch && !launch.startup?.errorObserved)
-            this.#activityPublisher.publish(
-              agentId,
-              launch,
-              this.#runtimeErrorActivity(
-                agentId,
-                scrubRuntimeErrorText(
-                  error instanceof Error ? error.message : "Agent startup input was rejected",
-                ),
-              ),
-            );
-          item.completion.reject(await this.#abandonLaunch(agentId, error));
-          return;
-        }
-        if (item.kind === "delivery") {
-          item.completion.reject(error);
-          continue;
-        }
-        if (item.kind === "prompt") {
-          // The launch stands: a provider that refuses input handles it as any refused input.
-          logger.warn("Agent prompt turn was not accepted", {
-            event: "agent.prompt_turn.rejected",
-            agent_id: agentId,
-            error_code: diagnosticErrorCode(error),
-          });
-          item.completion.reject(error);
-          continue;
-        }
-      }
-      item.completion.resolve();
-    }
   }
 
   async #recoverAttention(agentId: string, context: AgentRecoveryContext): Promise<void> {
@@ -1674,7 +1558,7 @@ export class DaemonRuntime {
 
   /** Queues a delivery as the Agent's next input; settles once the input drain handled it. */
   #enqueueDelivery(agentId: string, message: AgentMessageDelivery): Promise<void> {
-    return this.#enqueueAgentInput(agentId, (completion) => ({
+    return this.#inputDrain.enqueue(agentId, (completion) => ({
       kind: "delivery",
       message,
       completion,
@@ -1732,7 +1616,7 @@ export class DaemonRuntime {
   /** Tears down a launch whose recovery notice was rejected; returns the error to surface. */
   async #abandonLaunch(agentId: string, error: unknown): Promise<unknown> {
     this.#stoppingAgents.add(agentId);
-    this.#closeAgentInputQueue(agentId, error);
+    this.#inputDrain.close(agentId, error);
     const activityLaunch = this.#currentActivityLaunches.get(agentId);
     activityLaunch?.startup?.dispose();
     if (activityLaunch) activityLaunch.stopping = true;
@@ -1751,22 +1635,6 @@ export class DaemonRuntime {
     } catch (cleanupError) {
       return cleanupError;
     }
-  }
-
-  #closeAgentInputQueue(agentId: string, error: unknown): void {
-    this.#introducedAgents.delete(agentId);
-    const queue = this.#agentInputQueues.get(agentId);
-    if (!queue) return;
-    queue.closed = true;
-    for (const item of queue.items.splice(0)) {
-      if (item.kind === "delivery")
-        this.#mentionDeliveries.drop(
-          item.message,
-          MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED,
-        );
-      item.completion.reject(error);
-    }
-    if (!queue.drain) this.#agentInputQueues.delete(agentId);
   }
 
   async #requestLaunchConfig(
@@ -2616,7 +2484,7 @@ export class DaemonRuntime {
       return;
     }
     if (this.#agentProcessManager.session(message.agentId))
-      this.#ensureAgentInputDrain(message.agentId);
+      this.#inputDrain.ensure(message.agentId);
     // Otherwise a launch is in flight, and it drains the queue once its session is up.
     return delivery;
   }
@@ -2648,7 +2516,7 @@ export class DaemonRuntime {
       void delivery.catch(() => {});
       return Promise.resolve();
     }
-    this.#ensureAgentInputDrain(agentId);
+    this.#inputDrain.ensure(agentId);
     return delivery;
   }
 
@@ -2702,7 +2570,7 @@ export class DaemonRuntime {
         });
       });
     let dropped = 0;
-    const queue = this.#agentInputQueues.get(purge.agentId);
+    const queue = this.#inputDrain.get(purge.agentId);
     if (queue)
       queue.items = queue.items.filter((item) => {
         if (item.kind !== "delivery" || !conversations.has(item.message.conversationId))
@@ -2737,7 +2605,7 @@ export class DaemonRuntime {
     // Close this Agent's launch gate and local capabilities before the first await.
     this.#stoppingAgents.add(agentId);
     this.#sessionReferences.delete(agentId);
-    this.#closeAgentInputQueue(agentId, new Error(`Agent runtime is stopping: ${agentId}`));
+    this.#inputDrain.close(agentId, new Error(`Agent runtime is stopping: ${agentId}`));
     // Invalidate acceptance before disposal: a late native reply cannot acknowledge a cancelled
     // delivery or attach its attention to the replacement session.
     this.#messageAttention.clearAgent(agentId, { cancelNotices: true });
@@ -2774,7 +2642,7 @@ export class DaemonRuntime {
   async #stopAgent(agentId: string): Promise<void> {
     const launch = this.#agentLaunches.get(agentId);
     const activityLaunch = this.#currentActivityLaunches.get(agentId);
-    const inputDrain = this.#agentInputQueues.get(agentId)?.drain;
+    const inputDrain = this.#inputDrain.get(agentId)?.drain;
     // Disposal rejects input waiting for a native turn boundary. Waiting for that input (or
     // launch recovery using it) first would prevent the very disposal that releases it.
     await this.#releaseAgentRuntime(agentId, { retainLaunch: true });
@@ -3398,16 +3266,16 @@ export class DaemonRuntime {
       });
     this.#runnerHold = undefined;
     this.#dropHeldMentionsWithoutSession();
-    // Copied deliberately: #ensureAgentInputDrain deletes drained queues from this very map.
-    const queued = Array.from(this.#agentInputQueues.keys());
-    for (const agentId of queued) this.#ensureAgentInputDrain(agentId);
+    // Copied deliberately: a finishing drain deletes its own entry mid-iteration.
+    const queued = [...this.#inputDrain.entries()].map(([agentId]) => agentId);
+    for (const agentId of queued) this.#inputDrain.ensure(agentId);
     return this.busyAgents();
   }
 
   /** The tracked mentions a runner hold kept for an Agent that has no session and no launch in
    * flight: they name a launch that is gone, so each is settled now rather than left queued. */
   #dropHeldMentionsWithoutSession(): void {
-    for (const [agentId, queue] of this.#agentInputQueues) {
+    for (const [agentId, queue] of this.#inputDrain.entries()) {
       if (this.#agentProcessManager.session(agentId) || this.#agentLaunches.has(agentId)) continue;
       queue.items = queue.items.filter((item) => {
         if (
@@ -3464,12 +3332,12 @@ export class DaemonRuntime {
     this.#usageReport.clear();
     this.#fastModeWarned.clear();
     for (const agentId of new Set([
-      ...this.#agentInputQueues.keys(),
+      ...[...this.#inputDrain.entries()].map(([agentId]) => agentId),
       ...this.#agentLaunches.keys(),
       ...this.#agentProcessManager.activeAgentIds(),
     ])) {
       this.#stoppingAgents.add(agentId);
-      this.#closeAgentInputQueue(agentId, new Error("daemon runtime is stopping"));
+      this.#inputDrain.close(agentId, new Error("daemon runtime is stopping"));
       this.#messageAttention.clearAgent(agentId, { cancelNotices: true });
       void this.#mentionDeliveries.cancelAgent(agentId);
       this.#agentProcessManager.session(agentId)?.cancelPendingNotices?.();
@@ -3572,9 +3440,7 @@ export class DaemonRuntime {
     }
     if (this.#startPromise) await Promise.allSettled([this.#startPromise]);
     await Promise.allSettled(this.#agentLaunches.values());
-    await Promise.allSettled(
-      [...this.#agentInputQueues.values()].flatMap((queue) => (queue.drain ? [queue.drain] : [])),
-    );
+    await Promise.allSettled(this.#inputDrain.drains());
     try {
       // Reconcile sessions whose creation finished during shutdown, including failed cleanup.
       for (const agentId of this.#stoppingAgents)
