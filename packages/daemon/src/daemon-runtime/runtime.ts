@@ -153,6 +153,7 @@ import {
   stopFailureMessage,
 } from "./agent-failure-presentation";
 import { RuntimeRelease } from "./runtime-release";
+import { AgentFeatureSync } from "./agent-feature-sync";
 import { WakeRecycle } from "./wake-recycle";
 import { AgentMessageOperations } from "./agent-message-operations";
 import { AgentRequestForwarder } from "./agent-request-forwarder";
@@ -315,6 +316,13 @@ export class DaemonRuntime {
   readonly #wakeLaunches = new Set<string>();
   /** Ends a live process without a stopped/crashed Activity, for a stalled provider's restart or
    * a cold idle stop; the Agent stays active and wakeable. */
+  readonly #features = new AgentFeatureSync({
+    live: (agentId) =>
+      this.#agentProcessManager.session(agentId) !== undefined &&
+      this.#currentActivityLaunches.has(agentId),
+    keep: (m) => this.#exitedDelivery.keepForNextLaunch(m.agentId, m),
+    restart: (agentId) => this.#runtimeRelease.restartForFreshConfig(agentId),
+  });
   readonly #runtimeRelease = new RuntimeRelease<ActivityLaunch>({
     launch: (agentId) => this.#currentActivityLaunches.get(agentId),
     runtime: (agentId) => this.#agentProcessManager.runtime(agentId),
@@ -673,6 +681,7 @@ export class DaemonRuntime {
           if (launch) this.#reconcileIdleTurn(agentId, launch);
         },
         consumedSeqs: this.#consumedSeqs,
+        noticePrefix: (agentId) => this.#features.noticePrefix(agentId),
       },
     );
     this.agentRequests = new AgentRequestForwarder({
@@ -1628,6 +1637,7 @@ export class DaemonRuntime {
         },
       );
       agentApiKey = launchConfig.agentApiKey;
+      this.#features.launched(agentId, launchConfig.identity);
       this.#assertRunning();
       this.#assertAgentNotStopping(agentId);
       // Skipped at spawn, never deleted: report each reserved stored variable by name.
@@ -1698,18 +1708,11 @@ export class DaemonRuntime {
                 const replaced =
                   driverReplacedSessionId ?? recycledSessionId ?? request.replacedSessionId;
                 if (driverReplacedSessionId) {
-                  // Claude Code/Codex replace a missing native session inside the driver, with
-                  // no separate "before the fresh launch" moment; this callback IS the point the
-                  // daemon learns of it. Only a driver-reported replacement (this callback's own
-                  // argument, never AgentControl's carried-over `request.replacedSessionId`,
-                  // which was already reported once by `invalidateSession` before this launch)
-                  // emits here — fixes a prior bug that re-sent a second invalidate/Activity for
-                  // AgentControl's own retry, including harmlessly for `session_in_use`, which
-                  // never sets `request.replacedSessionId` together with a reason to begin with.
-                  // Sent BEFORE the session report below — fire-and-forget, never awaited, never
-                  // delays or fails the report — so the server's exact match against the still-
-                  // current stale session can still succeed; once the report lands below the
-                  // server has already moved to the new id and this would always be a no-op.
+                  // Claude Code/Codex replace a missing native session inside the driver: only a
+                  // driver-reported replacement (not AgentControl's carried-over
+                  // `request.replacedSessionId`, already reported once) emits here. Sent BEFORE
+                  // the session report below, fire-and-forget, so the server can still match the
+                  // stale session; after the report lands this would be a no-op.
                   this.#transport.sendSessionInvalidate?.(
                     connectionSessionInvalidate(this.#connection, this.#runtimeInstanceId, {
                       agentId,
@@ -2263,6 +2266,7 @@ export class DaemonRuntime {
         return;
       }
     }
+    if (this.#runnerHold === undefined && (await this.#features.restartIfChanged(message))) return;
     const exited =
       this.#runnerHold === undefined &&
       !this.#agentProcessManager.session(message.agentId) &&

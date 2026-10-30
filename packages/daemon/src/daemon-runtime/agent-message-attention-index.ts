@@ -204,6 +204,8 @@ export class AgentMessageAttentionIndex {
       /** The Agent's durable consumed cursor (its state database). Without it the index is
        * exactly as volatile as it was: the cursor then only lives as long as this process. */
       consumedSeqs?: AgentConsumedSeqPort;
+      /** A line owed before the next notice, with its newline; empty when none. */
+      noticePrefix?(agentId: string): string;
     } = { shouldHold: () => false, enqueue: () => {}, busy: () => {} },
     updateOptions: { schedule?: MemoryChannelUpdateSchedule } = {},
   ) {
@@ -644,23 +646,17 @@ export class AgentMessageAttentionIndex {
     // "not busy yet" state.
     this.hold.busy(message.agentId);
     void attention;
-    // One source of truth. Every number here is a fact the daemon owns right now — the messages
-    // it is announcing, plus the ones still queued for this Agent — never a per-target total
-    // accumulated across earlier notices, because such a total outlived what the server would
-    // hand over and made an already-read message look lost.
-    //
-    // The wording is bounded by what the daemon can actually establish. It knows what it
-    // delivered and what it holds; it does not know the server's read cursor, so it must not say
-    // these messages are unread — a delivery notice can race a `check` or `read` that already
-    // advanced that cursor. Only those commands answer what is left, and either may answer
-    // "nothing".
+    // Every number here is a fact the daemon owns right now (the messages it announces plus those
+    // queued for this Agent), never a total accumulated across earlier notices. The wording must
+    // not say messages are unread: the daemon does not know the server's read cursor, and a
+    // notice can race a `check` or `read` that already advanced it.
     const queued = (this.hold.queued?.(message.agentId) ?? []).filter(
       (delivery) =>
         !this.#isMemory(message.agentId) || delivery.conversationId === message.conversationId,
     );
     const rows = this.#renderLocalViewRows(this.#localViewRows(announced, queued));
     const totalCount = countDistinctMessages([...announced, ...queued]);
-    const notice = inboxNoticeText(rows);
+    const notice = (this.hold.noticePrefix?.(message.agentId) ?? "") + inboxNoticeText(rows);
     // The session names these back if the notice never reaches the model (`notice-undelivered`).
     const trackedIds = announced.filter(isTrackedMention).map((delivery) => delivery.deliveryId);
     const conversation = this.#isMemory(message.agentId)

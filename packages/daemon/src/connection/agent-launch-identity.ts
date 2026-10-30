@@ -49,6 +49,14 @@ function parseIdentityApps(value: unknown): AgentLaunchApp[] | undefined {
   return apps.length > 0 ? apps : undefined;
 }
 
+/** Only an explicit `taskConversations: true` turns the feature on; anything else is off. */
+function parseIdentityFeatures(value: unknown): AgentLaunchIdentity["features"] | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  return (value as Record<string, unknown>).taskConversations === true
+    ? { taskConversations: true }
+    : undefined;
+}
+
 /**
  * Decode optional launch identity fields defensively for older/newer Web compatibility.
  * Invalid shapes drop the identity or sub-field instead of failing launch; only identity-derived
@@ -66,6 +74,7 @@ export function parseAgentLaunchIdentity(value: unknown): AgentLaunchIdentity | 
     description: parseIdentityString(record.description, IDENTITY_DESCRIPTION_MAX_LENGTH),
     runtimeContext: parseIdentityRuntimeContext(record.runtimeContext),
     apps: parseIdentityApps(record.apps),
+    features: parseIdentityFeatures(record.features),
   };
   const present = Object.fromEntries(
     Object.entries(identity).filter(([, entry]) => entry !== undefined),

@@ -153,6 +153,17 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
     );
   }
 
+  /** Restarts a live runtime so its next launch reads fresh launch config (a feature changed).
+   * Whatever waits for the launch, the delivery that revealed the change included, is presented
+   * by it. */
+  async restartForFreshConfig(agentId: string): Promise<void> {
+    const launch = this.#ports.launch(agentId);
+    const session = this.#ports.runtime(agentId)?.session;
+    const restart = this.#ports.restartConfig(agentId);
+    if (!launch || !session || !restart) return;
+    await this.#endAndWake(agentId, launch, session, freshConfigRuntimePlan(restart));
+  }
+
   /** The Agent as the cold idle sweep judges it: the daemon's own evidence that it is idle. */
   coldIdleAgent(agentId: string): ColdIdleAgent | undefined {
     const runtime = this.#ports.runtime(agentId);
@@ -297,6 +308,30 @@ function stalledRuntimePlan(
       failure: {
         message: "Agent stalled-runtime relaunch failed",
         event: "agent.runtime.stalled_recovery_failed",
+      },
+    },
+  };
+}
+
+function freshConfigRuntimePlan(restart: AgentRestartConfig): RuntimeReleasePlan {
+  const runtimeName = runtimeDisplayName(restart.config.provider);
+  return {
+    announce: {
+      detailKind: AGENT_ACTIVITY_DETAIL_KIND.IDLE,
+      text: `Restarting ${runtimeName} runtime: this Workspace's features changed`,
+    },
+    log: () => logger.info("Agent runtime restarted for changed features"),
+    failure: {
+      text: `Restarting the ${runtimeName} runtime failed`,
+      message: "Agent feature-change restart failed",
+      event: "agent.runtime.feature_restart_failed",
+    },
+    wake: {
+      onlyIfParked: false,
+      awaited: true,
+      failure: {
+        message: "Agent feature-change relaunch failed",
+        event: "agent.runtime.feature_restart_failed",
       },
     },
   };

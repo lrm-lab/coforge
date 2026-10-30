@@ -12,6 +12,7 @@ import {
 } from "@lrm/coforge-sdk/internal/agent-launch-apps";
 import { WORKSPACE_ASSISTANT_INSTRUCTIONS } from "./workspace-assistant-instructions";
 import { MEMORY_AGENT_RETRIEVAL_GUIDANCE } from "./memory-agent-guidance";
+import { TASK_CONVERSATIONS_SECTION } from "./task-conversations-guidance";
 
 /** Set only by the collaboration evaluation's daemon assembly. */
 export const EVAL_MEMORY_OFFER_ONLY = "COFORGE_EVAL_MEMORY_OFFER_ONLY";
@@ -39,6 +40,8 @@ export type AgentLaunchIdentity = {
   /** The Workspace's installed apps as of this launch, already normalised by the launch-config
    * parser (`normalizeAgentLaunchApps`); built-in Agent Apps are not among them. */
   apps?: AgentLaunchApp[];
+  /** Workspace features as of this launch; absent or off keeps the prompt as it was. */
+  features?: { taskConversations?: boolean };
 };
 
 /**
@@ -176,6 +179,7 @@ export function buildCoforgeAgentInstructions(context: CoforgeAgentPromptContext
     );
   } else {
     sections.push(...Object.values(guide));
+    if (context.identity?.features?.taskConversations) sections.push(TASK_CONVERSATIONS_SECTION);
     const apps = buildAppsSection(context.identity?.apps ?? []);
     if (apps) sections.push(apps);
     if (context.identity?.systemKind === "workspace-assistant")
