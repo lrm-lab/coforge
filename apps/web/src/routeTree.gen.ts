@@ -122,6 +122,11 @@ import { Route as ApiAgentV1ManualSearchRouteImport } from './routes/api/agent/v
 import { Route as ApiAgentV1MentionActionsExecuteRouteImport } from './routes/api/agent/v1/mention-actions_.execute'
 import { Route as ApiAgentV1MentionActionsPendingRouteImport } from './routes/api/agent/v1/mention-actions_.pending'
 import { Route as ApiAgentV1MessagesSearchRouteImport } from './routes/api/agent/v1/messages_.search'
+import { Route as ApiAgentV1TasksFollowRouteImport } from './routes/api/agent/v1/tasks_.follow'
+import { Route as ApiAgentV1TasksFollowingRouteImport } from './routes/api/agent/v1/tasks_.following'
+import { Route as ApiAgentV1TasksReplyRouteImport } from './routes/api/agent/v1/tasks_.reply'
+import { Route as ApiAgentV1TasksUnfollowRouteImport } from './routes/api/agent/v1/tasks_.unfollow'
+import { Route as ApiAgentV1TasksViewRouteImport } from './routes/api/agent/v1/tasks_.view'
 import { Route as ApiAgentV1UsersNameRouteImport } from './routes/api/agent/v1/users/$name'
 import { Route as ApiAppsShareTokenLogoRouteImport } from './routes/api/apps/share/$token/logo'
 import { Route as ApiHostsJobsJobIdReportRouteImport } from './routes/api/hosts/jobs/$jobId/report'
@@ -776,6 +781,32 @@ const ApiAgentV1MessagesSearchRoute =
     path: '/api/agent/v1/messages/search',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiAgentV1TasksFollowRoute = ApiAgentV1TasksFollowRouteImport.update({
+  id: '/api/agent/v1/tasks_/follow',
+  path: '/api/agent/v1/tasks/follow',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAgentV1TasksFollowingRoute =
+  ApiAgentV1TasksFollowingRouteImport.update({
+    id: '/api/agent/v1/tasks_/following',
+    path: '/api/agent/v1/tasks/following',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiAgentV1TasksReplyRoute = ApiAgentV1TasksReplyRouteImport.update({
+  id: '/api/agent/v1/tasks_/reply',
+  path: '/api/agent/v1/tasks/reply',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAgentV1TasksUnfollowRoute = ApiAgentV1TasksUnfollowRouteImport.update({
+  id: '/api/agent/v1/tasks_/unfollow',
+  path: '/api/agent/v1/tasks/unfollow',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAgentV1TasksViewRoute = ApiAgentV1TasksViewRouteImport.update({
+  id: '/api/agent/v1/tasks_/view',
+  path: '/api/agent/v1/tasks/view',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAgentV1UsersNameRoute = ApiAgentV1UsersNameRouteImport.update({
   id: '/api/agent/v1/users/$name',
   path: '/api/agent/v1/users/$name',
@@ -1119,6 +1150,11 @@ export interface FileRoutesByFullPath {
   '/api/agent/v1/mention-actions/execute': typeof ApiAgentV1MentionActionsExecuteRoute
   '/api/agent/v1/mention-actions/pending': typeof ApiAgentV1MentionActionsPendingRoute
   '/api/agent/v1/messages/search': typeof ApiAgentV1MessagesSearchRoute
+  '/api/agent/v1/tasks/follow': typeof ApiAgentV1TasksFollowRoute
+  '/api/agent/v1/tasks/following': typeof ApiAgentV1TasksFollowingRoute
+  '/api/agent/v1/tasks/reply': typeof ApiAgentV1TasksReplyRoute
+  '/api/agent/v1/tasks/unfollow': typeof ApiAgentV1TasksUnfollowRoute
+  '/api/agent/v1/tasks/view': typeof ApiAgentV1TasksViewRoute
   '/api/agent/v1/users/$name': typeof ApiAgentV1UsersNameRoute
   '/api/apps/share/$token/logo': typeof ApiAppsShareTokenLogoRoute
   '/api/hosts/jobs/$jobId/report': typeof ApiHostsJobsJobIdReportRoute
@@ -1269,6 +1305,11 @@ export interface FileRoutesByTo {
   '/api/agent/v1/mention-actions/execute': typeof ApiAgentV1MentionActionsExecuteRoute
   '/api/agent/v1/mention-actions/pending': typeof ApiAgentV1MentionActionsPendingRoute
   '/api/agent/v1/messages/search': typeof ApiAgentV1MessagesSearchRoute
+  '/api/agent/v1/tasks/follow': typeof ApiAgentV1TasksFollowRoute
+  '/api/agent/v1/tasks/following': typeof ApiAgentV1TasksFollowingRoute
+  '/api/agent/v1/tasks/reply': typeof ApiAgentV1TasksReplyRoute
+  '/api/agent/v1/tasks/unfollow': typeof ApiAgentV1TasksUnfollowRoute
+  '/api/agent/v1/tasks/view': typeof ApiAgentV1TasksViewRoute
   '/api/agent/v1/users/$name': typeof ApiAgentV1UsersNameRoute
   '/api/apps/share/$token/logo': typeof ApiAppsShareTokenLogoRoute
   '/api/hosts/jobs/$jobId/report': typeof ApiHostsJobsJobIdReportRoute
@@ -1424,6 +1465,11 @@ export interface FileRoutesById {
   '/api/agent/v1/mention-actions_/execute': typeof ApiAgentV1MentionActionsExecuteRoute
   '/api/agent/v1/mention-actions_/pending': typeof ApiAgentV1MentionActionsPendingRoute
   '/api/agent/v1/messages_/search': typeof ApiAgentV1MessagesSearchRoute
+  '/api/agent/v1/tasks_/follow': typeof ApiAgentV1TasksFollowRoute
+  '/api/agent/v1/tasks_/following': typeof ApiAgentV1TasksFollowingRoute
+  '/api/agent/v1/tasks_/reply': typeof ApiAgentV1TasksReplyRoute
+  '/api/agent/v1/tasks_/unfollow': typeof ApiAgentV1TasksUnfollowRoute
+  '/api/agent/v1/tasks_/view': typeof ApiAgentV1TasksViewRoute
   '/api/agent/v1/users/$name': typeof ApiAgentV1UsersNameRoute
   '/api/apps/share/$token/logo': typeof ApiAppsShareTokenLogoRoute
   '/api/hosts/jobs/$jobId/report': typeof ApiHostsJobsJobIdReportRoute
@@ -1578,6 +1624,11 @@ export interface FileRouteTypes {
     | '/api/agent/v1/mention-actions/execute'
     | '/api/agent/v1/mention-actions/pending'
     | '/api/agent/v1/messages/search'
+    | '/api/agent/v1/tasks/follow'
+    | '/api/agent/v1/tasks/following'
+    | '/api/agent/v1/tasks/reply'
+    | '/api/agent/v1/tasks/unfollow'
+    | '/api/agent/v1/tasks/view'
     | '/api/agent/v1/users/$name'
     | '/api/apps/share/$token/logo'
     | '/api/hosts/jobs/$jobId/report'
@@ -1728,6 +1779,11 @@ export interface FileRouteTypes {
     | '/api/agent/v1/mention-actions/execute'
     | '/api/agent/v1/mention-actions/pending'
     | '/api/agent/v1/messages/search'
+    | '/api/agent/v1/tasks/follow'
+    | '/api/agent/v1/tasks/following'
+    | '/api/agent/v1/tasks/reply'
+    | '/api/agent/v1/tasks/unfollow'
+    | '/api/agent/v1/tasks/view'
     | '/api/agent/v1/users/$name'
     | '/api/apps/share/$token/logo'
     | '/api/hosts/jobs/$jobId/report'
@@ -1882,6 +1938,11 @@ export interface FileRouteTypes {
     | '/api/agent/v1/mention-actions_/execute'
     | '/api/agent/v1/mention-actions_/pending'
     | '/api/agent/v1/messages_/search'
+    | '/api/agent/v1/tasks_/follow'
+    | '/api/agent/v1/tasks_/following'
+    | '/api/agent/v1/tasks_/reply'
+    | '/api/agent/v1/tasks_/unfollow'
+    | '/api/agent/v1/tasks_/view'
     | '/api/agent/v1/users/$name'
     | '/api/apps/share/$token/logo'
     | '/api/hosts/jobs/$jobId/report'
@@ -2012,6 +2073,11 @@ export interface RootRouteChildren {
   ApiAgentV1MentionActionsExecuteRoute: typeof ApiAgentV1MentionActionsExecuteRoute
   ApiAgentV1MentionActionsPendingRoute: typeof ApiAgentV1MentionActionsPendingRoute
   ApiAgentV1MessagesSearchRoute: typeof ApiAgentV1MessagesSearchRoute
+  ApiAgentV1TasksFollowRoute: typeof ApiAgentV1TasksFollowRoute
+  ApiAgentV1TasksFollowingRoute: typeof ApiAgentV1TasksFollowingRoute
+  ApiAgentV1TasksReplyRoute: typeof ApiAgentV1TasksReplyRoute
+  ApiAgentV1TasksUnfollowRoute: typeof ApiAgentV1TasksUnfollowRoute
+  ApiAgentV1TasksViewRoute: typeof ApiAgentV1TasksViewRoute
   ApiAgentV1UsersNameRoute: typeof ApiAgentV1UsersNameRoute
   ApiAppsShareTokenLogoRoute: typeof ApiAppsShareTokenLogoRoute
   ApiHostsJobsJobIdReportRoute: typeof ApiHostsJobsJobIdReportRoute
@@ -2834,6 +2900,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentV1MessagesSearchRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/agent/v1/tasks_/follow': {
+      id: '/api/agent/v1/tasks_/follow'
+      path: '/api/agent/v1/tasks/follow'
+      fullPath: '/api/agent/v1/tasks/follow'
+      preLoaderRoute: typeof ApiAgentV1TasksFollowRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agent/v1/tasks_/following': {
+      id: '/api/agent/v1/tasks_/following'
+      path: '/api/agent/v1/tasks/following'
+      fullPath: '/api/agent/v1/tasks/following'
+      preLoaderRoute: typeof ApiAgentV1TasksFollowingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agent/v1/tasks_/reply': {
+      id: '/api/agent/v1/tasks_/reply'
+      path: '/api/agent/v1/tasks/reply'
+      fullPath: '/api/agent/v1/tasks/reply'
+      preLoaderRoute: typeof ApiAgentV1TasksReplyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agent/v1/tasks_/unfollow': {
+      id: '/api/agent/v1/tasks_/unfollow'
+      path: '/api/agent/v1/tasks/unfollow'
+      fullPath: '/api/agent/v1/tasks/unfollow'
+      preLoaderRoute: typeof ApiAgentV1TasksUnfollowRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agent/v1/tasks_/view': {
+      id: '/api/agent/v1/tasks_/view'
+      path: '/api/agent/v1/tasks/view'
+      fullPath: '/api/agent/v1/tasks/view'
+      preLoaderRoute: typeof ApiAgentV1TasksViewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/agent/v1/users/$name': {
       id: '/api/agent/v1/users/$name'
       path: '/api/agent/v1/users/$name'
@@ -3418,6 +3519,11 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAgentV1MentionActionsExecuteRoute: ApiAgentV1MentionActionsExecuteRoute,
   ApiAgentV1MentionActionsPendingRoute: ApiAgentV1MentionActionsPendingRoute,
   ApiAgentV1MessagesSearchRoute: ApiAgentV1MessagesSearchRoute,
+  ApiAgentV1TasksFollowRoute: ApiAgentV1TasksFollowRoute,
+  ApiAgentV1TasksFollowingRoute: ApiAgentV1TasksFollowingRoute,
+  ApiAgentV1TasksReplyRoute: ApiAgentV1TasksReplyRoute,
+  ApiAgentV1TasksUnfollowRoute: ApiAgentV1TasksUnfollowRoute,
+  ApiAgentV1TasksViewRoute: ApiAgentV1TasksViewRoute,
   ApiAgentV1UsersNameRoute: ApiAgentV1UsersNameRoute,
   ApiAppsShareTokenLogoRoute: ApiAppsShareTokenLogoRoute,
   ApiHostsJobsJobIdReportRoute: ApiHostsJobsJobIdReportRoute,

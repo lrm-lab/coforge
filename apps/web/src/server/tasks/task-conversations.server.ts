@@ -1,0 +1,298 @@
+import type { TaskPrincipal } from "@lrm/coforge-sdk/internal";
+
+import { AppError } from "#src/lib/app-error";
+import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
+import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
+import { lockConversation } from "#src/server/conversations/conversation-lock.server";
+import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
+import type { Transaction, TaskBoardPorts } from "./task-board-ports.server";
+import { resolveTaskScope } from "./task-scope.server";
+
+/** Names a task by the board it is on (`target`, an Agent's `#channel`, or `conversationId`, a
+ * person's page) and its number. */
+export type TaskConversationRef = { target?: string; conversationId?: string; number: number };
+
+export const TASK_FOLLOW_REASONS = [
+  "created",
+  "claimed",
+  "assigned",
+  "replied",
+  "mentioned",
+  "manual",
+] as const;
+export type TaskFollowReason = (typeof TASK_FOLLOW_REASONS)[number];
+
+const MAX_VIEW_MESSAGES = 20;
+
+/**
+ * A task's own conversation (`Conversation.kind` "task_thread"), made by its first reply, and who
+ * follows the task. A task is read through the board's conversation: the reader must see the
+ * channel it is on, and the conversation row itself says nothing of that channel.
+ */
+export class TaskConversations {
+  constructor(private readonly ports: TaskBoardPorts) {}
+
+  async view(principal: TaskPrincipal, ref: TaskConversationRef, options: { limit?: number }) {
+    const { task, member, boardName } = await this.resolve(principal, ref);
+    const limit = Math.min(Math.max(options.limit ?? 5, 1), MAX_VIEW_MESSAGES);
+    const [follow, discussion] = await Promise.all([
+      member
+        ? this.ports.db.taskFollow.findUnique({
+            where: { memberId_taskId: { memberId: member.id, taskId: task.id } },
+            select: { reason: true },
+          })
+        : null,
+      task.discussionConversationId
+        ? this.discussionPage(task.discussionConversationId, limit)
+        : null,
+    ]);
+    return {
+      taskRef: `${boardName}:#${task.number}`,
+      task: { id: task.id, number: task.number, title: task.title, status: task.status },
+      following: follow !== null,
+      followReason: follow?.reason ?? null,
+      conversation: { exists: discussion !== null, replyCount: discussion?.total ?? 0 },
+      recentMessages: discussion?.messages ?? [],
+      hasOlder: discussion ? discussion.total > discussion.messages.length : false,
+    };
+  }
+
+  /**
+   * Posts a reply, making the conversation if this is the first. The replier follows the task; the
+   * task's other followers' Agents are delivered the reply.
+   */
+  async reply(principal: TaskPrincipal, ref: TaskConversationRef, input: { body: string }) {
+    const body = input.body.trim();
+    if (!body) throw new AppError("INVALID_INPUT");
+    const { task, member, scope } = await this.resolve(principal, ref, { member: true });
+    return this.ports.db.$transaction(async (tx) => {
+      await lockConversation(tx, scope.conversationId);
+      const conversationId = await this.discussionOf(tx, task, scope.workspaceId);
+      await lockConversation(tx, conversationId);
+      const seat = await joinDiscussion(tx, scope.workspaceId, conversationId, member!);
+      const sequence = await allocateSequence(tx, conversationId);
+      await tx.taskFollow.createMany({
+        data: [
+          {
+            taskId: task.id,
+            memberId: member!.id,
+            conversationId: scope.conversationId,
+            workspaceId: scope.workspaceId,
+            reason: "replied",
+          },
+        ],
+        skipDuplicates: true,
+      });
+      const recipients = await tx.taskFollow.findMany({
+        where: {
+          taskId: task.id,
+          memberId: { not: member!.id },
+          member: { agentId: { not: null }, ...ACTIVE_MEMBER_WHERE, agent: ACTIVE_AGENT_WHERE },
+        },
+        select: { member: { select: { agentId: true } } },
+      });
+      const message = await tx.message.create({
+        data: {
+          workspaceId: scope.workspaceId,
+          conversationId,
+          senderMemberId: seat.id,
+          body,
+          sequence,
+          deliveries: {
+            create: recipients.map(({ member: follower }) => ({
+              workspaceId: scope.workspaceId,
+              conversationId,
+              agentId: follower.agentId!,
+              sequence,
+            })),
+          },
+        },
+        select: { id: true, sequence: true },
+      });
+      return { messageId: message.id, sequence: message.sequence, conversationId };
+    });
+  }
+
+  async follow(principal: TaskPrincipal, ref: TaskConversationRef) {
+    const { task, member, scope, boardName } = await this.resolve(principal, ref, { member: true });
+    const created = await this.ports.db.taskFollow.createMany({
+      data: [
+        {
+          taskId: task.id,
+          memberId: member!.id,
+          conversationId: scope.conversationId,
+          workspaceId: scope.workspaceId,
+          reason: "manual",
+        },
+      ],
+      skipDuplicates: true,
+    });
+    return { taskRef: `${boardName}:#${task.number}`, following: true, changed: created.count > 0 };
+  }
+
+  /** `reason` is for the notice in the conversation that someone stopped following (not yet shown). */
+  async unfollow(principal: TaskPrincipal, ref: TaskConversationRef, _reason?: string) {
+    const { task, member, boardName } = await this.resolve(principal, ref, { member: true });
+    const removed = await this.ports.db.taskFollow.deleteMany({
+      where: { taskId: task.id, memberId: member!.id },
+    });
+    return {
+      taskRef: `${boardName}:#${task.number}`,
+      following: false,
+      changed: removed.count > 0,
+    };
+  }
+
+  /** The task conversations the principal follows, newest follow first. */
+  async following(principal: TaskPrincipal) {
+    const seat = principal.agentId ? { agentId: principal.agentId } : { userId: principal.userId };
+    const rows = await this.ports.db.taskFollow.findMany({
+      where: {
+        workspaceId: principal.workspaceId,
+        member: { ...seat, ...ACTIVE_MEMBER_WHERE },
+      },
+      orderBy: { createdAt: "desc" },
+      select: {
+        reason: true,
+        createdAt: true,
+        task: {
+          select: {
+            number: true,
+            title: true,
+            status: true,
+            conversation: { select: { channelName: true, directKey: true } },
+          },
+        },
+      },
+    });
+    return rows.map((row) => ({
+      taskRef: `${boardLabel(row.task.conversation)}:#${row.task.number}`,
+      taskNumber: row.task.number,
+      title: row.task.title,
+      status: row.task.status,
+      followedAt: row.createdAt.toISOString(),
+      reason: row.reason as TaskFollowReason,
+    }));
+  }
+
+  private async resolve(
+    principal: TaskPrincipal,
+    ref: TaskConversationRef,
+    require: { member?: boolean } = {},
+  ) {
+    const scope = await resolveTaskScope(this.ports, principal, {
+      operation: "list",
+      idempotencyKey: crypto.randomUUID(),
+      ...(ref.target ? { target: ref.target } : { conversationId: ref.conversationId }),
+    });
+    if (!scope.member && !(scope.channel && !require.member)) throw new AppError("NOT_FOUND");
+    const task = await this.ports.db.task.findUnique({
+      where: {
+        conversationId_number: { conversationId: scope.conversationId, number: ref.number },
+      },
+      select: {
+        id: true,
+        number: true,
+        title: true,
+        status: true,
+        discussionConversationId: true,
+      },
+    });
+    if (!task) throw new AppError("NOT_FOUND");
+    const board = await this.ports.db.conversation.findUniqueOrThrow({
+      where: { id: scope.conversationId },
+      select: { channelName: true, directKey: true },
+    });
+    return {
+      task,
+      scope,
+      member: scope.member,
+      boardName: boardLabel(board, ref.target),
+    };
+  }
+
+  /** The task's conversation, made now if the task has none. */
+  private async discussionOf(
+    tx: Transaction,
+    task: { id: string; discussionConversationId: string | null },
+    workspaceId: string,
+  ) {
+    if (task.discussionConversationId) return task.discussionConversationId;
+    const fresh = await tx.task.findUniqueOrThrow({
+      where: { id: task.id },
+      select: { discussionConversationId: true },
+    });
+    if (fresh.discussionConversationId) return fresh.discussionConversationId;
+    const conversation = await tx.conversation.create({
+      data: { workspaceId, kind: "task_thread" },
+      select: { id: true },
+    });
+    await tx.task.update({
+      where: { id: task.id },
+      data: { discussionConversationId: conversation.id },
+    });
+    return conversation.id;
+  }
+
+  private async discussionPage(conversationId: string, limit: number) {
+    const [total, rows] = await Promise.all([
+      this.ports.db.message.count({ where: { conversationId } }),
+      this.ports.db.message.findMany({
+        where: { conversationId },
+        orderBy: { sequence: "desc" },
+        take: limit,
+        select: {
+          id: true,
+          sequence: true,
+          body: true,
+          createdAt: true,
+          sender: {
+            select: {
+              user: { select: { username: true } },
+              agent: { select: { name: true } },
+            },
+          },
+        },
+      }),
+    ]);
+    return {
+      total,
+      messages: rows.reverse().map((row) => ({
+        id: row.id,
+        sequence: row.sequence,
+        body: row.body,
+        createdAt: row.createdAt.toISOString(),
+        sender: row.sender?.agent?.name ?? row.sender?.user?.username ?? null,
+      })),
+    };
+  }
+}
+
+/** `#channel`, or `dm:@peer`'s stand-in for a direct board: the caller's own `target` names it. */
+function boardLabel(
+  board: { channelName: string | null; directKey: string | null },
+  target?: string,
+) {
+  if (board.channelName) return `#${board.channelName}`;
+  return target ?? "dm";
+}
+
+/** The member's seat in the task's conversation, taken (or taken back) by speaking in it. */
+function joinDiscussion(
+  tx: Transaction,
+  workspaceId: string,
+  conversationId: string,
+  member: { userId: string | null; agentId: string | null },
+) {
+  return member.userId
+    ? tx.conversationMember.upsert({
+        where: { conversationId_userId: { conversationId, userId: member.userId } },
+        create: { workspaceId, conversationId, userId: member.userId },
+        update: { leftAt: null },
+      })
+    : tx.conversationMember.upsert({
+        where: { conversationId_agentId: { conversationId, agentId: member.agentId! } },
+        create: { workspaceId, conversationId, agentId: member.agentId! },
+        update: { leftAt: null },
+      });
+}
