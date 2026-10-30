@@ -1,11 +1,18 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
-  "cloud_agent_create_title": "Create Cloud Bot",
-  "cloud_agent_create_description": "A private Bot using Pi and your cloud computer’s default model. Your default computer is reused automatically.",
-  "cloud_agent_create_name": "Bot name",
-  "cloud_agent_create_submit": "Create and Chat",
+  "cloud_agent_create_title": "New Cloud Agent",
+  "cloud_agent_create_description": "Runs on Pi with your cloud computer’s default model, ready to chat as soon as it’s made. An existing default cloud computer is reused.",
+  "cloud_agent_create_name": "Cloud agent name",
   "cloud_agent_create_preparing": "Preparing your cloud computer and starting your Bot…",
   "cloud_agent_create_timeout": "Your cloud computer is still getting ready. Try again to continue.",
   "cloud_agent_create_start_deferred": "Your Bot was created, but could not start. Try again to start the same Bot.",
-  "cloud_agent_create_refresh_error": "Your Bot was created, but the lists could not refresh. Try again to open the same Bot."
+  "cloud_agent_create_refresh_error": "Your Bot was created, but the lists could not refresh. Try again to open the same Bot.",
+  "agent_create_submit_chat": "Create and Chat",
+  "agent_create_switch_local": "New Local Agent",
+  "agent_create_switch_cloud": "New Cloud Agent",
+  "agent_create_local_title": "New Local Agent",
+  "agent_create_local_description": "Runs on your own computer, ready to chat as soon as it’s made. Keep the computer online to use it.",
+  "agent_create_local_name": "Local agent name",
+  "agent_create_computer": "Computer",
+  "agent_create_description": "Description"
 }

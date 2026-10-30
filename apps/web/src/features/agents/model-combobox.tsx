@@ -1,5 +1,5 @@
 import { useContext, useEffect, useMemo, useRef, useState, type Key } from "react";
-import { SearchLg } from "@untitledui/icons";
+import { ChevronDown } from "@untitledui/icons";
 import { ComboBoxStateContext } from "react-aria-components";
 
 import { ComboBox } from "#src/components/base/select/combobox";
@@ -10,13 +10,13 @@ import { searchModelChoices, type ModelChoice } from "./model-search";
 const showEverything = () => true;
 
 /**
- * The field's search icon, which also lets a press on the field toggle its list as a select's
- * does: the combobox opens only when the field gains focus, so a press on the field that already
+ * The field's chevron, drawn at its end so the field reads as the dropdowns beside it (typing in
+ * it still searches). It also lets a press on the field toggle its list as a select's does: the combobox opens only when the field gains focus, so a press on the field that already
  * has it (after choosing a model) would otherwise do nothing. While the viewer is searching, a press
  * only opens the list, so placing the caret mid-search keeps the results. Rendered in the combobox's
  * icon slot, the one place inside it a caller can reach its state.
  */
-function SearchIconToggle({ searching }: { searching: boolean }) {
+function ListToggle({ searching }: { searching: boolean }) {
   const state = useContext(ComboBoxStateContext);
   const latest = useRef({ state, searching });
   latest.current = { state, searching };
@@ -45,7 +45,11 @@ function SearchIconToggle({ searching }: { searching: boolean }) {
   }, []);
   return (
     <>
-      <SearchLg data-icon className="pointer-events-none" aria-hidden="true" />
+      <ChevronDown
+        data-icon
+        className="pointer-events-none order-last size-4! stroke-[2.25px]"
+        aria-hidden="true"
+      />
       <span ref={anchor} hidden />
     </>
   );
@@ -88,7 +92,7 @@ export function ModelComboBox({
       label={label}
       size="md"
       shortcut={false}
-      icon={<SearchIconToggle searching={query !== null} />}
+      icon={<ListToggle searching={query !== null} />}
       placeholder={m.agent_form_model_search()}
       className={className}
       popoverClassName={popoverClassName}

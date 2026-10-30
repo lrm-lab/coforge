@@ -4,7 +4,7 @@ import { MessageSmileCircle, PlusSquare, User01, Users01 } from "@untitledui/ico
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
-import { CloudAgentCreateDialog } from "#src/features/agents/cloud-agent-create-dialog";
+import { NewAgentDialog } from "#src/features/agents/new-agent-dialog";
 import { m } from "#src/paraglide/messages";
 import { StartDirectMessagePopover } from "./start-direct-message-popover";
 
@@ -53,7 +53,7 @@ export function NewConversationMenu({ onCreateChannel }: { onCreateChannel: () =
         isOpen={opened === "direct"}
         onOpenChange={openOnly("direct")}
       />
-      <CloudAgentCreateDialog open={opened === "agent"} onOpenChange={openOnly("agent")} />
+      <NewAgentDialog open={opened === "agent"} onOpenChange={openOnly("agent")} />
     </>
   );
 }

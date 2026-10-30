@@ -1,11 +1,18 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
-  "cloud_agent_create_title": "创建云电脑助手",
-  "cloud_agent_create_description": "使用 Pi 和云电脑的默认模型，创建后即可私聊。已有默认云电脑时会自动复用。",
-  "cloud_agent_create_name": "助手名字",
-  "cloud_agent_create_submit": "创建并开始聊天",
+  "cloud_agent_create_title": "新建云端智能体",
+  "cloud_agent_create_description": "使用 Pi 和云电脑的默认模型，新建后即可开始私聊；若已有默认云电脑，系统将自动复用。",
+  "cloud_agent_create_name": "云端智能体名称",
   "cloud_agent_create_preparing": "正在准备云电脑并启动助手…",
   "cloud_agent_create_timeout": "云电脑仍在准备中，请重试以继续创建。",
   "cloud_agent_create_start_deferred": "助手已创建，但暂时无法启动。请重试，将继续启动同一个助手。",
-  "cloud_agent_create_refresh_error": "助手已创建，但列表暂时未能更新。请重试，将打开同一个助手。"
+  "cloud_agent_create_refresh_error": "助手已创建，但列表暂时未能更新。请重试，将打开同一个助手。",
+  "agent_create_submit_chat": "创建并聊天",
+  "agent_create_switch_local": "新建本地智能体",
+  "agent_create_switch_cloud": "新建云端智能体",
+  "agent_create_local_title": "新建本地智能体",
+  "agent_create_local_description": "使用自己的本地电脑运行智能体，新建后即可私聊，使用时需保持电脑在线。",
+  "agent_create_local_name": "本地智能体名称",
+  "agent_create_computer": "选择电脑",
+  "agent_create_description": "智能体描述"
 }

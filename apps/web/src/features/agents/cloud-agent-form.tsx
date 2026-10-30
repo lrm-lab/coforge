@@ -1,10 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQueryClient } from "@tanstack/react-query";
-import { Cloud01 } from "@untitledui/icons";
-import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
-import { DialogHeader } from "#src/components/application/modals/dialog-header";
-import { Button } from "#src/components/base/buttons/button";
+import { Cloud01, RefreshCw01 } from "@untitledui/icons";
+import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { m } from "#src/paraglide/messages";
@@ -15,20 +13,30 @@ import { useCurrentWorkspaceId, useRefreshAgentDirectory } from "./workspace-age
 import { AGENT_DISPLAY_NAME_MAX_LENGTH } from "./agent.schemas";
 import { agentCreateErrorMessage } from "./agent-form";
 import { createCloudAgent } from "./cloud-agents.functions";
+import { AgentCreateFooter, AgentCreateForm, AgentCreateIntro } from "./agent-create-frame";
+import { randomAgentUsername } from "./agent-username";
 
-export function CloudAgentCreateDialog({
+/** The new-Agent dialog's cloud form: a name, then the Agent is made on the Workspace's cloud
+ * Computer and its direct conversation opens. `onBusyChange` keeps the dialog up while it runs. */
+export function CloudAgentForm({
   open,
-  onOpenChange,
+  onClose,
+  onSwitchToLocal,
+  onBusyChange,
 }: {
+  /** False from the moment the dialog closes: a create still waiting stops then, not after the
+   * close animation, so a closed dialog never opens a conversation. */
   open: boolean;
-  onOpenChange(open: boolean): void;
+  onClose: () => void;
+  onSwitchToLocal?: () => void;
+  onBusyChange: (busy: boolean) => void;
 }) {
   const create = useServerFn(createCloudAgent);
   const refreshDirectory = useRefreshAgentDirectory();
   const queryClient = useQueryClient();
   const workspaceId = useCurrentWorkspaceId();
   const refreshSidebar = useRefreshSidebar({ throwOnError: true });
-  const [name, setName] = useState("");
+  const [name, setName] = useState(() => randomAgentUsername());
   const [error, setError] = useState("");
   const [submitting, guard] = useSubmitGuard();
   const request = useRef<{ name: string; requestId: string } | null>(null);
@@ -38,11 +46,18 @@ export function CloudAgentCreateDialog({
   const openDirect = useOpenDirectConversation(() => setError(m.conversation_open_error()));
   const closeList = useCloseConversationList();
   useEffect(() => () => controller.current?.abort(), []);
+  useEffect(() => {
+    if (!open) controller.current?.abort();
+  }, [open]);
+  useEffect(() => {
+    onBusyChange(opening);
+    return () => onBusyChange(false);
+  }, [opening, onBusyChange]);
 
-  function changeOpen(nextOpen: boolean) {
-    if (!nextOpen && openingDirect.current) return;
-    if (!nextOpen) controller.current?.abort();
-    onOpenChange(nextOpen);
+  function close() {
+    if (openingDirect.current) return;
+    controller.current?.abort();
+    onClose();
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -102,9 +117,7 @@ export function CloudAgentCreateDialog({
             }
             if (opened) {
               closeList();
-              changeOpen(false);
-              setName("");
-              request.current = null;
+              close();
             }
             return;
           }
@@ -122,49 +135,67 @@ export function CloudAgentCreateDialog({
   }
 
   return (
-    <ModalOverlay isOpen={open} onOpenChange={changeOpen}>
-      <Modal className="w-[calc(100vw-2rem)] max-w-md rounded-2xl">
-        <Dialog>
-          <form onSubmit={submit}>
-            <DialogHeader
-              title={m.cloud_agent_create_title()}
-              description={m.cloud_agent_create_description()}
-              onClose={opening ? undefined : () => changeOpen(false)}
-              className="px-4 pt-4 sm:px-6 sm:pt-6"
+    <AgentCreateForm
+      onSubmit={submit}
+      switchTo={
+        onSwitchToLocal && {
+          label: m.agent_create_switch_local(),
+          onPress: onSwitchToLocal,
+          isDisabled: submitting,
+        }
+      }
+      intro={
+        <AgentCreateIntro
+          icon={Cloud01}
+          title={m.cloud_agent_create_title()}
+          description={m.cloud_agent_create_description()}
+          onClose={opening ? undefined : close}
+        />
+      }
+      footer={
+        <AgentCreateFooter
+          onCancel={close}
+          cancelDisabled={opening}
+          submitLabel={m.agent_create_submit_chat()}
+          submitting={submitting}
+          submitDisabled={!name.trim()}
+        />
+      }
+    >
+      <div className="flex flex-col gap-3 px-6 pt-5 pb-2">
+        <div className="relative min-w-0">
+          <Input
+            label={m.cloud_agent_create_name()}
+            value={name}
+            onChange={setName}
+            maxLength={AGENT_DISPLAY_NAME_MAX_LENGTH}
+            isRequired
+            hideRequiredIndicator
+            isReadOnly={submitting}
+            autoFocus
+          />
+          <div className="absolute top-0 right-0 flex h-5 items-center">
+            <ButtonUtility
+              icon={RefreshCw01}
+              size="xs"
+              color="tertiary"
+              tooltip={m.agent_form_username_suggest()}
+              isDisabled={submitting}
+              onClick={() => setName((current) => randomAgentUsername(current))}
             />
-            <div className="flex flex-col gap-4 px-4 py-6 sm:px-6">
-              <Cloud01 aria-hidden="true" className="mx-auto size-12 text-quaternary" />
-              <Input
-                label={m.cloud_agent_create_name()}
-                value={name}
-                onChange={setName}
-                maxLength={AGENT_DISPLAY_NAME_MAX_LENGTH}
-                isRequired
-                isDisabled={submitting}
-                autoFocus
-              />
-              {submitting && (
-                <p role="status" className="text-sm text-tertiary">
-                  {m.cloud_agent_create_preparing()}
-                </p>
-              )}
-              {error && (
-                <p role="alert" className="text-sm text-error-primary">
-                  {error}
-                </p>
-              )}
-            </div>
-            <div className="flex justify-end gap-3 border-t border-secondary px-4 py-4 sm:px-6">
-              <Button color="secondary" isDisabled={opening} onPress={() => changeOpen(false)}>
-                {m.controls_cancel()}
-              </Button>
-              <Button type="submit" isDisabled={submitting || !name.trim()} isLoading={submitting}>
-                {m.cloud_agent_create_submit()}
-              </Button>
-            </div>
-          </form>
-        </Dialog>
-      </Modal>
-    </ModalOverlay>
+          </div>
+        </div>
+        {submitting && (
+          <p role="status" className="text-sm text-tertiary">
+            {m.cloud_agent_create_preparing()}
+          </p>
+        )}
+        {error && (
+          <p role="alert" className="text-sm text-error-primary">
+            {error}
+          </p>
+        )}
+      </div>
+    </AgentCreateForm>
   );
 }

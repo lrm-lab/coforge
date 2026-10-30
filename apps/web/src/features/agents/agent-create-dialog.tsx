@@ -1,12 +1,10 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { parseRuntimeProvider, RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { Monitor01 as Monitor } from "@untitledui/icons";
 
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { localizeHref } from "#src/paraglide/runtime";
 import { Button } from "#src/components/base/buttons/button";
-import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
-import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { Select } from "#src/components/base/select/select";
 import { TextArea } from "#src/components/base/textarea/textarea";
 import { StatusDot } from "#src/components/ui/status-dot";
@@ -14,16 +12,22 @@ import { m } from "#src/paraglide/messages";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { AGENT_VISIBILITY } from "./agent-visibility";
 import { agentCreateErrorMessage } from "./agent-form";
-import { AgentOptionCard } from "./agent-option-card";
+import { Checkbox } from "#src/components/base/checkbox/checkbox";
 import { AgentRuntimeFields, type RuntimeCatalog } from "./agent-runtime-fields";
 import { finishedAgentUsername } from "./agent-username";
 import { AgentUsernameField } from "./agent-username-field";
 import type { CreateAgentInput } from "./agent.schemas";
 import { runtimeOptionsFromRuntimes } from "./agent-runtime-options";
+import {
+  AgentCreateFooter,
+  AgentCreateForm,
+  AgentCreateIntro,
+  AgentCreateModal,
+} from "./agent-create-frame";
 import type { RuntimeProvider, RuntimeUnavailableCode } from "@lrm/coforge-sdk/internal";
 import { workspacePath } from "#src/features/workspaces/workspace-url";
 
-export type AgentCreateComputerOption = {
+type AgentCreateComputerOption = {
   id: string;
   name: string;
   displayName: string;
@@ -35,14 +39,23 @@ export type AgentCreateComputerOption = {
   }[];
 };
 
-/** The Agent-create form, shared by the Members page ("New agent") and an `agent:create`
- * action card's commit button. `defaults` prefills the form;
- * `computerLocked` mirrors a card's `requiredComputer` by disabling the Computer selector;
- * `visibilityLocked` keeps the Agent public, for a caller that adds it to a channel, and
- * `joinsChannelName` says which channel that is. `nameNote` explains a prefilled name. */
-export function AgentCreateDialog({
-  open,
-  onOpenChange,
+type LocalAgentFormOptions = {
+  computers: AgentCreateComputerOption[];
+  onLoadRuntimeCatalog: (computerId: string) => Promise<RuntimeCatalog[]>;
+  defaults?: { name?: string; description?: string; computerId?: string };
+  computerLocked?: boolean;
+  visibilityLocked?: boolean;
+  joinsChannelName?: string;
+  nameNote?: string;
+  actionCardMessageId?: string;
+};
+
+/** The Agent-create form for an Agent on a connected Computer, the local half of the new-Agent
+ * dialog. `defaults` prefills it; `computerLocked` mirrors an action card's `requiredComputer` by
+ * disabling the Computer selector; `visibilityLocked` keeps the Agent public, for a caller that
+ * adds it to a channel, and `joinsChannelName` says which channel that is. `nameNote` explains a
+ * prefilled name. `onCreate` resolves once the caller has done what follows a create. */
+export function LocalAgentForm({
   computers,
   onCreate,
   onLoadRuntimeCatalog,
@@ -52,32 +65,31 @@ export function AgentCreateDialog({
   joinsChannelName,
   nameNote,
   actionCardMessageId,
-  onCreated,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  computers: AgentCreateComputerOption[];
-  onCreate: (input: CreateAgentInput) => Promise<{ startPublished: boolean }>;
-  onLoadRuntimeCatalog: (computerId: string) => Promise<RuntimeCatalog[]>;
-  defaults?: { name?: string; description?: string; computerId?: string };
-  computerLocked?: boolean;
-  visibilityLocked?: boolean;
-  joinsChannelName?: string;
-  nameNote?: string;
-  actionCardMessageId?: string;
-  onCreated?: (result: { startPublished: boolean }) => void;
+  submitLabel = m.agent_form_submit(),
+  onClose,
+  onSwitchToCloud,
+  onBusyChange,
+}: LocalAgentFormOptions & {
+  onCreate: (input: CreateAgentInput) => Promise<void>;
+  submitLabel?: string;
+  onClose: () => void;
+  onSwitchToCloud?: () => void;
+  onBusyChange: (busy: boolean) => void;
 }) {
   const [submitting, guard] = useSubmitGuard();
   const workspaceSlug = useWorkspaceSlug();
   const [error, setError] = useState("");
   const [computerId, setComputerId] = useState(defaults?.computerId ?? computers[0]?.id ?? "");
   const [isPrivate, setIsPrivate] = useState(false);
+  useEffect(() => {
+    onBusyChange(submitting);
+    return () => onBusyChange(false);
+  }, [submitting, onBusyChange]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
-    const formElement = event.currentTarget;
-    const form = new FormData(formElement);
+    const form = new FormData(event.currentTarget);
     const name = finishedAgentUsername(String(form.get("name") ?? ""));
     const description = String(form.get("description") ?? "").trim();
     if (!name) {
@@ -86,7 +98,7 @@ export function AgentCreateDialog({
     }
     await guard(async () => {
       try {
-        const result = await onCreate({
+        await onCreate({
           name,
           description,
           provider: parseRuntimeProvider(form.get("provider")) ?? RUNTIME_PROVIDER.COFORGE,
@@ -99,149 +111,174 @@ export function AgentCreateDialog({
           actionCardMessageId,
           visibility: isPrivate ? AGENT_VISIBILITY.PRIVATE : AGENT_VISIBILITY.PUBLIC,
         });
-        formElement.reset();
-        setIsPrivate(false);
-        onOpenChange(false);
-        onCreated?.(result);
       } catch (cause) {
         setError(agentCreateErrorMessage(cause));
       }
     });
   }
 
+  if (!computers.length)
+    return (
+      <>
+        <AgentCreateIntro
+          icon={Monitor}
+          title={m.agent_create_local_title()}
+          description={m.agent_empty_computer_description()}
+          onClose={onClose}
+        />
+        <div className="grid grid-cols-2 gap-3 px-6 pt-8 pb-6">
+          <Button color="secondary" size="lg" onPress={onClose}>
+            {m.controls_cancel()}
+          </Button>
+          <Button
+            size="lg"
+            href={localizeHref(workspacePath(workspaceSlug, "/computers?add=1"))}
+            onPress={onClose}
+          >
+            {m.agent_connect_computer()}
+          </Button>
+        </div>
+        {onSwitchToCloud && (
+          <div className="-mt-2 px-6 pb-6 text-center">
+            <Button color="link-color" size="sm" onPress={onSwitchToCloud}>
+              {m.agent_create_switch_cloud()}
+            </Button>
+          </div>
+        )}
+      </>
+    );
+
   return (
-    <ModalOverlay
-      isOpen={open}
-      onOpenChange={(nextOpen) => {
-        if (!submitting) onOpenChange(nextOpen);
-      }}
+    <AgentCreateForm
+      onSubmit={submit}
+      switchTo={
+        onSwitchToCloud && {
+          label: m.agent_create_switch_cloud(),
+          onPress: onSwitchToCloud,
+          isDisabled: submitting,
+        }
+      }
+      intro={
+        <AgentCreateIntro
+          icon={Monitor}
+          title={m.agent_create_local_title()}
+          description={m.agent_create_local_description()}
+          onClose={submitting ? undefined : onClose}
+        />
+      }
+      footer={
+        <AgentCreateFooter
+          onCancel={onClose}
+          cancelDisabled={submitting}
+          submitLabel={submitLabel}
+          submitting={submitting}
+        />
+      }
     >
-      <Modal className="w-[calc(100vw-2rem)] max-w-lg rounded-2xl">
-        <Dialog>
-          {({ close }) =>
-            computers.length ? (
-              <form onSubmit={submit}>
-                <DialogHeader
-                  title={m.agent_form_title()}
-                  onClose={close}
-                  className="px-4 pt-4 sm:px-6 sm:pt-6"
+      <div className="grid gap-5 px-6 pt-5 pb-4">
+        {joinsChannelName && (
+          <p className="text-sm text-secondary">
+            {m.agent_form_joins_channel({ channel: joinsChannelName })}
+          </p>
+        )}
+        <AgentUsernameField
+          label={m.agent_create_local_name()}
+          defaultValue={defaults?.name}
+          note={nameNote}
+        />
+        <Select
+          name="computerId"
+          isRequired
+          hideRequiredIndicator
+          isDisabled={computerLocked}
+          size="md"
+          label={m.agent_create_computer()}
+          className="min-w-0"
+          selectedKey={computerId}
+          onSelectionChange={(key) => {
+            if (key !== null) setComputerId(String(key));
+          }}
+        >
+          {computers.map((computer) => (
+            <Select.Item
+              key={computer.id}
+              id={computer.id}
+              label={computer.displayName}
+              aria-label={`${computer.displayName}, ${computer.online ? m.computer_status_online() : m.computer_status_offline()}`}
+              icon={
+                <StatusDot
+                  tone={computer.online ? "online" : "offline"}
+                  label={computer.online ? m.computer_status_online() : m.computer_status_offline()}
+                  className="size-2"
                 />
-                <div className="grid gap-3 px-4 py-4 sm:gap-4 sm:px-6 sm:py-6">
-                  {joinsChannelName && (
-                    <p className="text-sm text-secondary">
-                      {m.agent_form_joins_channel({ channel: joinsChannelName })}
-                    </p>
-                  )}
-                  <Select
-                    name="computerId"
-                    isRequired
-                    isDisabled={computerLocked}
-                    size="md"
-                    label={m.agent_form_computer()}
-                    className="min-w-0"
-                    selectedKey={computerId}
-                    onSelectionChange={(key) => {
-                      if (key !== null) setComputerId(String(key));
-                    }}
-                  >
-                    {computers.map((computer) => (
-                      <Select.Item
-                        key={computer.id}
-                        id={computer.id}
-                        label={computer.displayName}
-                        aria-label={`${computer.displayName}, ${computer.online ? m.computer_status_online() : m.computer_status_offline()}`}
-                        icon={
-                          <StatusDot
-                            tone={computer.online ? "online" : "offline"}
-                            label={
-                              computer.online
-                                ? m.computer_status_online()
-                                : m.computer_status_offline()
-                            }
-                            className="size-2"
-                          />
-                        }
-                      />
-                    ))}
-                  </Select>
-                  <AgentUsernameField defaultValue={defaults?.name} note={nameNote} />
-                  <TextArea
-                    label={m.agent_profile_description()}
-                    name="description"
-                    rows={2}
-                    defaultValue={defaults?.description}
-                    placeholder={m.agent_form_description_placeholder()}
-                    className="min-w-0"
-                  />
-                  <AgentRuntimeFields
-                    key={computerId}
-                    open={open}
-                    computerId={computerId}
-                    onLoad={async (id) => ({
-                      ...runtimeOptionsFromRuntimes(
-                        computers.find((computer) => computer.id === id)?.runtimes ?? [],
-                      ),
-                      catalogs: await onLoadRuntimeCatalog(id),
-                    })}
-                  />
-                  <AgentOptionCard
-                    label={m.agent_form_visibility_private()}
-                    hint={m.agent_form_visibility_private_hint()}
-                    isDisabled={visibilityLocked}
-                    isSelected={isPrivate}
-                    onChange={setIsPrivate}
-                  />
-                  {/* A plain alert, not `HintText`: outside a field its "errorMessage" slot is not
-                      one the enclosing Dialog offers, and rendering it crashes the page. */}
-                  {error && (
-                    <p role="alert" className="text-sm text-error-primary">
-                      {error}
-                    </p>
-                  )}
-                </div>
-                <div className="grid grid-cols-2 gap-3 border-t border-secondary px-4 py-3 sm:flex sm:justify-end sm:px-6 sm:py-4">
-                  <Button
-                    type="button"
-                    color="secondary"
-                    isDisabled={submitting}
-                    onPress={() => onOpenChange(false)}
-                  >
-                    {m.controls_cancel()}
-                  </Button>
-                  <Button type="submit" isDisabled={submitting}>
-                    {submitting ? m.agent_form_submitting() : m.agent_form_submit()}
-                  </Button>
-                </div>
-              </form>
-            ) : (
-              <div className="p-6">
-                <div
-                  aria-hidden="true"
-                  className="mb-5 flex size-12 items-center justify-center rounded-xl bg-primary text-tertiary shadow-xs ring-1 ring-secondary ring-inset"
-                >
-                  <Monitor className="size-6" />
-                </div>
-                <DialogHeader
-                  title={m.agent_form_title()}
-                  description={m.agent_empty_computer_description()}
-                  className="px-0 pt-0"
-                />
-                <div className="mt-6 flex flex-wrap justify-end gap-3">
-                  <Button color="secondary" onPress={() => onOpenChange(false)}>
-                    {m.controls_cancel()}
-                  </Button>
-                  <Button
-                    href={localizeHref(workspacePath(workspaceSlug, "/computers?add=1"))}
-                    onPress={() => onOpenChange(false)}
-                  >
-                    {m.agent_connect_computer()}
-                  </Button>
-                </div>
-              </div>
-            )
-          }
-        </Dialog>
-      </Modal>
-    </ModalOverlay>
+              }
+            />
+          ))}
+        </Select>
+        <TextArea
+          label={m.agent_create_description()}
+          name="description"
+          rows={3}
+          defaultValue={defaults?.description}
+          placeholder={m.agent_form_description_placeholder()}
+          className="min-w-0"
+        />
+        <AgentRuntimeFields
+          key={computerId}
+          open
+          computerId={computerId}
+          onLoad={async (id) => ({
+            ...runtimeOptionsFromRuntimes(
+              computers.find((computer) => computer.id === id)?.runtimes ?? [],
+            ),
+            catalogs: await onLoadRuntimeCatalog(id),
+          })}
+        />
+        <Checkbox
+          label={m.agent_form_visibility_private()}
+          isDisabled={visibilityLocked}
+          isSelected={isPrivate}
+          onChange={setIsPrivate}
+        />
+        {/* A plain alert, not `HintText`: outside a field its "errorMessage" slot is not
+            one the enclosing Dialog offers, and rendering it crashes the page. */}
+        {error && (
+          <p role="alert" className="text-sm text-error-primary">
+            {error}
+          </p>
+        )}
+      </div>
+    </AgentCreateForm>
+  );
+}
+
+/** The local Agent-create form on its own, for callers that already know where the Agent goes: a
+ * channel's Add members, a Computer's page, an `agent:create` action card. */
+export function AgentCreateDialog({
+  open,
+  onOpenChange,
+  onCreate,
+  onCreated,
+  ...options
+}: LocalAgentFormOptions & {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onCreate: (input: CreateAgentInput) => Promise<{ startPublished: boolean }>;
+  onCreated?: (result: { startPublished: boolean }) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <AgentCreateModal open={open} onOpenChange={onOpenChange} dismissable={!busy}>
+      <LocalAgentForm
+        {...options}
+        onCreate={async (input) => {
+          const result = await onCreate(input);
+          onOpenChange(false);
+          onCreated?.(result);
+        }}
+        onClose={() => onOpenChange(false)}
+        onBusyChange={setBusy}
+      />
+    </AgentCreateModal>
   );
 }

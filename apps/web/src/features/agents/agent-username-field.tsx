@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AtSign, Dice5 } from "@untitledui/icons";
+import { AtSign, RefreshCw01 } from "@untitledui/icons";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
@@ -12,9 +12,11 @@ import { finishedAgentUsername, randomAgentUsername, typedAgentUsername } from "
  * suggests a fresh name.
  */
 export function AgentUsernameField({
+  label = m.agent_form_username(),
   defaultValue,
   note,
 }: {
+  label?: string;
   defaultValue?: string;
   note?: string;
 }) {
@@ -26,9 +28,10 @@ export function AgentUsernameField({
   return (
     <div className="relative min-w-0">
       <Input
-        label={m.agent_form_username()}
+        label={label}
         name="name"
         isRequired
+        hideRequiredIndicator
         icon={AtSign}
         value={username}
         onChange={(text) => setUsername(typedAgentUsername(text))}
@@ -43,7 +46,7 @@ export function AgentUsernameField({
       />
       <div className="absolute top-0 right-0 flex h-5 items-center">
         <ButtonUtility
-          icon={Dice5}
+          icon={RefreshCw01}
           size="xs"
           color="tertiary"
           tooltip={m.agent_form_username_suggest()}

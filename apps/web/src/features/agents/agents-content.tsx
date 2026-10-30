@@ -27,8 +27,6 @@ import { localLayoutStorage } from "#src/features/conversations/local-layout-sto
 
 import { MemberDialogs, type MemberDialog } from "./member-dialogs";
 import { AgentDeleteDialog } from "./agent-delete-dialog";
-import type { RuntimeCatalog } from "./agent-runtime-fields";
-import type { CreateAgentInput } from "./agent.schemas";
 import type { MemberDirectorySummary } from "#src/features/workspaces/workspaces.functions";
 import { memberAgentsQuery, memberPeopleQuery } from "./member-directory-queries";
 import { AgentProfilePanel } from "#src/features/agents/profile-panel/agent-profile-panel";
@@ -36,19 +34,6 @@ import { useOpenAgentProfile } from "#src/features/agents/profile-panel/open-age
 import type { AgentProfileTab } from "#src/features/agents/profile-panel/profile-panel-search";
 import { PersonProfilePanel } from "./person-profile-panel";
 import { AgentCard, PersonCard } from "./member-cards";
-import type { RuntimeProvider, RuntimeUnavailableCode } from "@lrm/coforge-sdk/internal";
-
-type ComputerOption = {
-  id: string;
-  name: string;
-  displayName: string;
-  online?: boolean;
-  runtimes: {
-    provider: RuntimeProvider;
-    unavailableCode?: RuntimeUnavailableCode | null;
-    diagnostic?: string | null;
-  }[];
-};
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
@@ -60,12 +45,9 @@ export function AgentsContent({
   memberType,
   owner,
   onFiltersChange,
-  computers,
   profileAgentId,
   profilePersonId,
   agentTab,
-  onCreate,
-  onLoadRuntimeCatalog,
   onDeleteAgent,
   dialog,
   onDialogChange,
@@ -74,13 +56,10 @@ export function AgentsContent({
   memberType: MemberTab;
   owner: OwnerFilter;
   onFiltersChange: (filters: { memberType?: MemberTab; owner?: OwnerFilter }) => void;
-  computers: ComputerOption[];
   profileAgentId?: string;
   /** The person whose profile the panel shows (`profile=user:<id>`). */
   profilePersonId?: string;
   agentTab?: AgentProfileTab;
-  onCreate: (input: CreateAgentInput) => Promise<{ startPublished: boolean }>;
-  onLoadRuntimeCatalog: (computerId: string) => Promise<RuntimeCatalog[]>;
   onDeleteAgent: (agentId: string, confirmation: string) => Promise<void>;
   dialog?: MemberDialog;
   onDialogChange: (dialog: MemberDialog | undefined) => void;
@@ -98,7 +77,6 @@ export function AgentsContent({
   // The target outlives `deleteOpen` so the dialog keeps its title through the close animation.
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deferredStart, setDeferredStart] = useState(false);
   const canInviteMember = summary.actorRole === "owner" || summary.actorRole === "admin";
   // Agent creation requires Workspace owner/admin; see ManageAgents.create / assertCanCreateAgents.
   const canCreateAgent = canInviteMember;
@@ -244,14 +222,6 @@ export function AgentsContent({
       {/* `relative` makes the list the containing block of the cards' absolutely positioned
           `sr-only` labels; without it they escape this scroll box and stretch the document. */}
       <TabPanel id={memberType} className="relative min-h-0 flex-1 overflow-y-auto px-page pb-8">
-        {deferredStart && (
-          <p
-            role="status"
-            className="mt-5 rounded-lg border border-secondary bg-secondary px-4 py-3 text-sm text-tertiary"
-          >
-            {m.agent_deferred_start_notice()}
-          </p>
-        )}
         {pages.isError && !pages.data ? (
           <div role="alert" className="mt-8 flex flex-col items-center gap-3 text-center">
             <p className="text-sm text-error-primary">{m.member_directory_load_error()}</p>
@@ -410,15 +380,7 @@ export function AgentsContent({
         directoryPane
       )}
 
-      <MemberDialogs
-        dialog={dialog}
-        onDialogChange={onDialogChange}
-        allowed={canInviteMember}
-        computers={computers}
-        onCreate={onCreate}
-        onLoadRuntimeCatalog={onLoadRuntimeCatalog}
-        onCreated={(result) => setDeferredStart(!result.startPublished)}
-      />
+      <MemberDialogs dialog={dialog} onDialogChange={onDialogChange} allowed={canInviteMember} />
 
       <AgentDeleteDialog
         key={deleteTarget?.id}

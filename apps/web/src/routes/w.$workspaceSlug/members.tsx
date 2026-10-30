@@ -8,15 +8,10 @@ import { PageLoadError } from "#src/features/errors/page-load-error";
 import { AgentsContent } from "#src/features/agents/agents-content";
 import { AgentsPending } from "#src/features/agents/agents-pending";
 import {
-  createAgent,
   deleteAgent,
   ensureWeeklyReportAssistantMember,
 } from "#src/features/agents/agents.functions";
 import { useLiveAgents } from "#src/features/agents/workspace-agents-realtime";
-import {
-  getComputerRuntimeCatalog,
-  listComputers,
-} from "#src/features/computers/computers.functions";
 import { loadMemberDirectorySummary } from "#src/features/workspaces/workspaces.functions";
 import {
   MEMBER_DIRECTORY_KEY,
@@ -48,9 +43,8 @@ export const Route = createFileRoute("/w/$workspaceSlug/members")({
   loader: async ({ context, deps }) => {
     // Members is where Users configure the weekly-report assistant; ensure it exists here
     // (not in the Workspace layout listAgents loader, which must stay failure-isolated).
-    const [assistant, computers, summary] = await Promise.all([
+    const [assistant, summary] = await Promise.all([
       ensureWeeklyReportAssistantMember(),
-      listComputers(),
       loadMemberDirectorySummary(),
     ]);
     await (deps.memberType === "agent"
@@ -61,7 +55,7 @@ export const Route = createFileRoute("/w/$workspaceSlug/members")({
           }),
         )
       : context.queryClient.ensureInfiniteQueryData(memberPeopleQuery(summary.workspaceId, "")));
-    return { computers, summary, weeklyReportAssistantAgentId: assistant.agentId };
+    return { summary, weeklyReportAssistantAgentId: assistant.agentId };
   },
   pendingComponent: AgentsPending,
   errorComponent: PageLoadError,
@@ -69,12 +63,10 @@ export const Route = createFileRoute("/w/$workspaceSlug/members")({
 });
 
 function AgentsPage() {
-  const { computers, summary, weeklyReportAssistantAgentId } = Route.useLoaderData();
+  const { summary, weeklyReportAssistantAgentId } = Route.useLoaderData();
   const { memberType, owner, profile, agentTab, setup } = Route.useSearch();
   const navigate = Route.useNavigate();
   const router = useRouter();
-  const create = useServerFn(createAgent);
-  const loadRuntimeCatalog = useServerFn(getComputerRuntimeCatalog);
   const removeAgent = useServerFn(deleteAgent);
   const visibleAgents = useLiveAgents();
   const queryClient = useQueryClient();
@@ -104,7 +96,6 @@ function AgentsPage() {
           resetScroll: false,
         });
       }}
-      computers={computers}
       profileAgentId={agentIdFromProfileParam(profile)}
       profilePersonId={personIdFromProfileParam(profile)}
       agentTab={agentTab}
@@ -114,12 +105,6 @@ function AgentsPage() {
           search: (previous) => ({ ...previous, setup: dialog }),
           resetScroll: false,
         });
-      }}
-      onLoadRuntimeCatalog={(computerId) => loadRuntimeCatalog({ data: { computerId } })}
-      onCreate={async (data) => {
-        const result = await create({ data });
-        await refreshDirectory();
-        return result;
       }}
       onDeleteAgent={async (agentId, confirmation) => {
         await removeAgent({ data: { agentId, confirmation } });

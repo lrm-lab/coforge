@@ -130,7 +130,7 @@ These rules apply to `src/features/agents/`.
   (`WorkspaceMembers.person` reports which apply); one's own profile is edited
   in Settings → Account.
 - Computer prerequisites appear only after the user requests Agent creation.
-  Runtime management stays in the profile panel. `cloud-agent-create-dialog.tsx`, opened from the DM picker, asks only for a display name, waits for cloud readiness, and opens the created private Agent's DM; it re-reads the Agent roster, picker directory, and DM list after their writes instead of relying on realtime signals. Creation permissions remain server-owned.
+  Runtime management stays in the profile panel. `new-agent-dialog.tsx` (the + menu and Members) opens on `cloud-agent-form.tsx`, which asks only for a display name, waits for cloud readiness and opens the created private Agent's DM; a link swaps in the local form, which also ends in the DM; it re-reads the Agent roster, picker directory, and DM list after their writes instead of relying on realtime signals. Creation permissions remain server-owned.
 - Who sees what on an Agent, as Raft does: Message (profile header, Members
   card, DM picker, search) follows the server's `canMessage` (any member a
   public Agent, only its creator a private one); the Activity, Chat, Reminders and Workspace tabs
