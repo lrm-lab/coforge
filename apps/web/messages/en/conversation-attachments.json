@@ -1,6 +1,5 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
-  "conversation_attachment_limit": "A message can have at most {max} attachments. Remove the extra ones first.",
   "conversation_attachment_label": "Add attachment",
   "conversation_attachment_download": "Download",
   "conversation_attachment_preview_open": "Preview {name}",
@@ -12,8 +11,19 @@
   "conversation_attachment_tray": "Attachments to send",
   "conversation_attachment_uploading": "Uploading {progress}%",
   "conversation_attachment_failed": "Upload failed",
-  "conversation_attachment_too_large": "Over {limit}",
-  "conversation_attachment_signed_out": "Signed out. Reload the page and try again",
-  "conversation_attachment_forbidden": "You can't upload here",
-  "conversation_attachment_offline": "No connection. Try again when online"
+  "conversation_attachment_too_large": "Too large",
+  "conversation_attachment_signed_out": "Signed out",
+  "conversation_attachment_forbidden": "Not allowed",
+  "conversation_attachment_offline": "No connection",
+  "conversation_attachment_failed_detail": "Retry, or remove the file.",
+  "conversation_attachment_too_large_detail": "This file is {size}. Each file can be up to {limit}.",
+  "conversation_attachment_too_many": "Too many",
+  "conversation_attachment_too_many_detail": "A message can have up to {max} attachments.",
+  "conversation_attachment_empty": "Empty",
+  "conversation_attachment_empty_detail": "Empty files can't be attached.",
+  "conversation_attachment_signed_out_detail": "Reload the page to sign in again.",
+  "conversation_attachment_forbidden_detail": "You can't upload files here.",
+  "conversation_attachment_offline_detail": "Check your connection, then retry.",
+  "conversation_attachment_remove_named": "Remove {name}",
+  "conversation_attachment_remove_not_attached": "Remove files that can't be attached"
 }

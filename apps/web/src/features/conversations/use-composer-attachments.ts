@@ -1,12 +1,14 @@
 import { useState } from "react";
 
 import { uploadAttachment, type PendingAttachment } from "./composer-attachments";
-import { oversizedUpload, stillUploading, UploadRefused } from "./upload-failure";
+import {
+  MAX_ATTACHMENTS,
+  notAttachedFailure,
+  pickedFileFailures,
+  stillUploading,
+  UploadRefused,
+} from "./upload-failure";
 import { localId } from "./composer-behavior";
-
-/** At most 10 attachments per send, mirroring the server-side `attachmentIds` bound
- * (`conversation.schemas.ts`'s `attachmentIdsSchema`, the Agent API's `AgentMessagesSendRequest`). */
-export const MAX_ATTACHMENTS = 10;
 
 /**
  * The composer's attachments: the files chosen for the next send, each uploaded as soon as it is
@@ -45,18 +47,19 @@ export function useComposerAttachments(conversationId: string) {
     }
   }
 
-  /** Adds and uploads one or more files, sequentially (one `/api/attachments` request at a
-   * time, never in parallel), stopping at `MAX_ATTACHMENTS`. */
+  /** Adds one or more files and uploads those that can be attached, sequentially (one
+   * `/api/attachments` request at a time, never in parallel). A file that cannot be attached (empty,
+   * past the size limit, past `MAX_ATTACHMENTS`) still takes a tile that says why, as Raft's does,
+   * and is never sent. */
   async function addFiles(files: File[]) {
-    const room = Math.max(0, MAX_ATTACHMENTS - attachments.length);
-    const accepted = files.slice(0, room);
-    if (accepted.length === 0) return;
-    // A file past the limit says so on its tile at once and is never sent.
-    const pendingItems: PendingAttachment[] = accepted.map((file) => ({
+    if (files.length === 0) return;
+    const attached = attachments.filter((item) => !notAttachedFailure(item.failure)).length;
+    const failures = pickedFileFailures(files, MAX_ATTACHMENTS - attached);
+    const pendingItems: PendingAttachment[] = files.map((file, index) => ({
       localId: localId(),
       file,
       progress: 0,
-      failure: oversizedUpload(file),
+      failure: failures[index],
     }));
     setAttachments((current) => [...current, ...pendingItems]);
     for (const pending of pendingItems) {

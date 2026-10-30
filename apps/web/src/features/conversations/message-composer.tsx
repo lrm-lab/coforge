@@ -17,7 +17,8 @@ import {
 import { ComposerField, focusDraftEnd } from "./composer-field";
 import { COMPOSER_FOCUS_CLASS, COMPOSER_FRAME_CLASS } from "./composer-frame";
 import { ComposerAttachmentTray } from "./composer-attachment-tray";
-import { MAX_ATTACHMENTS, useComposerAttachments } from "./use-composer-attachments";
+import { MAX_ATTACHMENTS } from "./upload-failure";
+import { useComposerAttachments } from "./use-composer-attachments";
 import { ensureInlineImage, imageFileFromUrl, imageUrlsFromPaste } from "./paste-image";
 import { draftWithUnsentMessage, type OutgoingMessage, type SendOptions } from "./composer-outbox";
 import { useComposerRequests, useMessageOutbox } from "./use-message-outbox";
@@ -243,11 +244,7 @@ export function MessageComposer({
   const dropDisabled = composerDisabled || uploading;
   const taskMode = !inThread && Boolean(canSendAsTask);
   const sendDisabled =
-    composerDisabled ||
-    uploading ||
-    anyFailed ||
-    attachments.length > MAX_ATTACHMENTS ||
-    (!body.trim() && attachments.length === 0);
+    composerDisabled || uploading || anyFailed || (!body.trim() && attachments.length === 0);
   const placeholder = composerPlaceholder(inThread, target);
 
   function pinMention(mention: Mentionable) {

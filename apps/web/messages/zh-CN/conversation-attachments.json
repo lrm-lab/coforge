@@ -1,6 +1,5 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
-  "conversation_attachment_limit": "一条消息最多 {max} 个附件，请先移除多余的附件。",
   "conversation_attachment_label": "添加附件",
   "conversation_attachment_download": "下载",
   "conversation_attachment_preview_open": "预览 {name}",
@@ -12,8 +11,19 @@
   "conversation_attachment_tray": "待发送的附件",
   "conversation_attachment_uploading": "正在上传 {progress}%",
   "conversation_attachment_failed": "上传失败",
-  "conversation_attachment_too_large": "超过 {limit}",
-  "conversation_attachment_signed_out": "登录已过期，刷新页面后重试",
-  "conversation_attachment_forbidden": "没有权限在这里上传",
-  "conversation_attachment_offline": "网络断开，联网后重试"
+  "conversation_attachment_too_large": "文件过大",
+  "conversation_attachment_signed_out": "登录已过期",
+  "conversation_attachment_forbidden": "没有权限",
+  "conversation_attachment_offline": "网络断开",
+  "conversation_attachment_failed_detail": "可以重试，或者移除这个文件。",
+  "conversation_attachment_too_large_detail": "这个文件 {size}，每个文件最大 {limit}。",
+  "conversation_attachment_too_many": "超出数量",
+  "conversation_attachment_too_many_detail": "一条消息最多 {max} 个附件。",
+  "conversation_attachment_empty": "空文件",
+  "conversation_attachment_empty_detail": "空文件不能作为附件。",
+  "conversation_attachment_signed_out_detail": "刷新页面重新登录。",
+  "conversation_attachment_forbidden_detail": "你不能在这里上传文件。",
+  "conversation_attachment_offline_detail": "检查网络后重试。",
+  "conversation_attachment_remove_named": "移除 {name}",
+  "conversation_attachment_remove_not_attached": "移除无法附加的文件"
 }

@@ -1,11 +1,12 @@
-import { useEffect, useState } from "react";
-import { AlertCircle, Download01, Trash01 } from "@untitledui/icons";
+import { useEffect, useRef, useState } from "react";
+import { Download01, Trash01, XClose } from "@untitledui/icons";
 import { Popover as AriaPopover } from "react-aria-components";
 
 import { getReadableFileSize } from "#src/components/application/file-upload/file-upload-base";
-import { Dialog, DialogTrigger } from "#src/components/application/modals/modal";
+import { Dialog } from "#src/components/application/modals/modal";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import {
   ProgressBar,
   ProgressBarBase,
@@ -15,6 +16,7 @@ import { fileTypeLabel } from "#src/features/files/file-meta";
 import { cx } from "#src/utils/cx";
 import { ATTACHMENT_MAX_BYTES } from "@lrm/coforge-sdk/internal";
 import {
+  MAX_ATTACHMENTS,
   refusedUploadFailure,
   retryableUploadFailure,
   stillUploading,
@@ -37,13 +39,15 @@ export type PendingAttachment = {
   failure?: UploadFailure;
 };
 
-/** What the tile says for a failure. */
+/** The short word a tile says for a failure, as Raft's "Too large". */
 export function uploadFailureLabel(failure: UploadFailure): string {
   switch (failure) {
+    case "empty":
+      return m.conversation_attachment_empty();
     case "too_large":
-      return m.conversation_attachment_too_large({
-        limit: getReadableFileSize(ATTACHMENT_MAX_BYTES),
-      });
+      return m.conversation_attachment_too_large();
+    case "too_many":
+      return m.conversation_attachment_too_many();
     case "signed_out":
       return m.conversation_attachment_signed_out();
     case "forbidden":
@@ -52,6 +56,29 @@ export function uploadFailureLabel(failure: UploadFailure): string {
       return m.conversation_attachment_offline();
     case "failed":
       return m.conversation_attachment_failed();
+  }
+}
+
+/** The sentence behind the short word: why, and what to do about it. */
+export function uploadFailureDetail(failure: UploadFailure, file: Pick<File, "size">): string {
+  switch (failure) {
+    case "empty":
+      return m.conversation_attachment_empty_detail();
+    case "too_large":
+      return m.conversation_attachment_too_large_detail({
+        size: getReadableFileSize(file.size),
+        limit: getReadableFileSize(ATTACHMENT_MAX_BYTES),
+      });
+    case "too_many":
+      return m.conversation_attachment_too_many_detail({ max: MAX_ATTACHMENTS });
+    case "signed_out":
+      return m.conversation_attachment_signed_out_detail();
+    case "forbidden":
+      return m.conversation_attachment_forbidden_detail();
+    case "offline":
+      return m.conversation_attachment_offline_detail();
+    case "failed":
+      return m.conversation_attachment_failed_detail();
   }
 }
 
@@ -85,10 +112,12 @@ export function uploadAttachment(
 }
 
 /**
- * One chosen file in the tray under the text, as Slack shows them: an image
- * is a 4rem thumbnail, any other file a card with its type icon, name and size, so a chosen
- * file is visible at a glance. While it uploads it is dimmed with a progress bar along its
- * foot; a failed upload rings it red. Clicking the tile opens the preview with the file's details, download, remove, and retry for a failed upload.
+ * One chosen file in the tray under the text, as Slack shows them: an image is a 4rem thumbnail,
+ * any other file a card with its type icon, name and size, so a chosen file is visible at a glance.
+ * While it uploads it is dimmed with a progress bar along its foot. A file that failed is drawn as
+ * Raft's composer draws it: ringed red and faded, one short word across it ("Too large"), the
+ * reason on hover, and a retry right on the tile when one may help. Every tile has a remove button
+ * at its corner; clicking the tile opens the preview with the file's details and download.
  */
 export function AttachmentTile({
   attachment,
@@ -99,7 +128,7 @@ export function AttachmentTile({
   onRemove: () => void;
   onRetry: () => void;
 }) {
-  const { file } = attachment;
+  const { file, failure } = attachment;
   const uploading = stillUploading(attachment);
   const isImage = file.type.startsWith("image/");
   const [previewUrl, setPreviewUrl] = useState<string>();
@@ -110,138 +139,158 @@ export function AttachmentTile({
   }, [file]);
   const typeLabel = fileTypeLabel(file.name, file.type);
   const typeAndSize = `${typeLabel ? `${typeLabel} · ` : ""}${getReadableFileSize(file.size)}`;
-  const status = attachment.failure
-    ? uploadFailureLabel(attachment.failure)
-    : uploading
-      ? m.conversation_attachment_uploading({ progress: attachment.progress })
-      : typeAndSize;
+  const failureLabel = failure && uploadFailureLabel(failure);
+  const failureDetail = failure && uploadFailureDetail(failure, file);
+  const status = uploading
+    ? m.conversation_attachment_uploading({ progress: attachment.progress })
+    : typeAndSize;
+  // The preview is anchored to the tile and opened by it directly: a dialog trigger between the
+  // tooltip and the tile would take the tooltip's hover from it.
+  const tileRef = useRef<HTMLLIElement>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
   return (
-    <li className="relative">
-      <DialogTrigger>
+    <li ref={tileRef} className="relative">
+      <Tooltip title={failureDetail} isDisabled={!failure} placement="top start">
         <Button
+          onPress={() => setPreviewOpen(true)}
           color="tertiary"
           size="sm"
           noTextPadding
-          aria-label={`${file.name} · ${status}`}
+          aria-label={`${file.name} · ${failure ? `${failureLabel}. ${failureDetail}` : status}`}
           className={cx(
             "overflow-hidden rounded-lg border border-primary bg-primary p-0 shadow-xs hover:bg-primary_hover",
             isImage ? "size-16" : "h-16 w-[13rem] justify-start px-3",
-            attachment.failure && "border-error",
+            failure && "border-error",
           )}
         >
-          {isImage ? (
-            previewUrl ? (
-              <LoadingImage
-                src={previewUrl}
-                alt=""
-                className="size-full"
-                imgClassName={cx("size-full object-cover", uploading && "opacity-60")}
-                failed={
+          <span className={cx("contents", failure && "*:opacity-20")}>
+            {isImage ? (
+              previewUrl ? (
+                <LoadingImage
+                  src={previewUrl}
+                  alt=""
+                  className="size-full"
+                  imgClassName={cx("size-full object-cover", uploading && "opacity-60")}
+                  failed={
+                    <FileTypeIcon fileName={file.name} contentType={file.type} className="size-8" />
+                  }
+                />
+              ) : (
+                <span className="flex size-full items-center justify-center bg-secondary">
                   <FileTypeIcon fileName={file.name} contentType={file.type} className="size-8" />
-                }
-              />
+                </span>
+              )
             ) : (
-              <span className="flex size-full items-center justify-center bg-secondary">
-                <FileTypeIcon fileName={file.name} contentType={file.type} className="size-8" />
-              </span>
-            )
-          ) : (
-            <span className="flex min-w-0 items-center gap-2.5 text-left">
-              <span className="flex size-9 shrink-0 items-center justify-center">
-                <FileTypeIcon fileName={file.name} contentType={file.type} className="size-9" />
-              </span>
-              <span className="flex min-w-0 flex-col">
-                <span className="truncate text-sm font-medium text-secondary">{file.name}</span>
-                <span
-                  className={cx(
-                    "truncate text-xs",
-                    attachment.failure ? "text-error-primary" : "text-tertiary",
-                  )}
-                >
-                  {status}
+              <span className="flex min-w-0 items-center gap-2.5 text-left">
+                <span className="flex size-9 shrink-0 items-center justify-center">
+                  <FileTypeIcon fileName={file.name} contentType={file.type} className="size-9" />
+                </span>
+                <span className="flex min-w-0 flex-col">
+                  <span className="truncate text-sm font-medium text-secondary">{file.name}</span>
+                  <span className="truncate text-xs text-tertiary">{status}</span>
                 </span>
               </span>
-            </span>
-          )}
+            )}
+          </span>
         </Button>
-        <AriaPopover
-          placement="top start"
-          offset={8}
-          className="w-[min(24rem,calc(100vw-2rem))] rounded-xl bg-primary shadow-lg ring-1 ring-secondary_alt outline-none"
-        >
-          <Dialog className="flex flex-col outline-none">
-            {({ close }) => (
-              <>
-                {isImage && previewUrl && (
-                  <div className="flex justify-center rounded-t-xl bg-secondary p-3">
-                    <LoadingImage
-                      src={previewUrl}
-                      alt=""
-                      className="min-h-24 min-w-24 rounded-md"
-                      imgClassName="max-h-56 max-w-full rounded-md object-contain"
-                    />
-                  </div>
-                )}
-                <div className="flex items-center gap-3 p-3">
-                  {!isImage && (
-                    <span className="flex size-10 shrink-0 items-center justify-center">
-                      <FileTypeIcon
-                        fileName={file.name}
-                        contentType={file.type}
-                        className="size-10"
-                      />
-                    </span>
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-primary">{file.name}</p>
-                    <p className="truncate text-sm text-tertiary">
-                      {uploading
-                        ? `${attachment.progress}% · ${getReadableFileSize(file.size)}`
-                        : typeAndSize}
-                    </p>
-                    {uploading && <ProgressBar value={attachment.progress} className="mt-1.5" />}
-                    {attachment.failure && retryableUploadFailure(attachment.failure) && (
-                      <Button color="link-color" size="sm" onPress={onRetry} className="mt-1">
-                        {m.controls_retry()}
-                      </Button>
-                    )}
-                  </div>
-                  <ButtonUtility
-                    icon={Download01}
-                    size="sm"
-                    color="tertiary"
-                    tooltip={m.conversation_attachment_download()}
-                    href={previewUrl}
-                    download={file.name}
-                  />
-                  <ButtonUtility
-                    icon={Trash01}
-                    size="sm"
-                    color="tertiary"
-                    tooltip={m.conversation_attachment_remove()}
-                    onClick={() => {
-                      close();
-                      onRemove();
-                    }}
+      </Tooltip>
+      <AriaPopover
+        triggerRef={tileRef}
+        isOpen={previewOpen}
+        onOpenChange={setPreviewOpen}
+        placement="top start"
+        offset={8}
+        className="w-[min(24rem,calc(100vw-2rem))] rounded-xl bg-primary shadow-lg ring-1 ring-secondary_alt outline-none"
+      >
+        <Dialog className="flex flex-col outline-none">
+          {({ close }) => (
+            <>
+              {isImage && previewUrl && (
+                <div className="flex justify-center rounded-t-xl bg-secondary p-3">
+                  <LoadingImage
+                    src={previewUrl}
+                    alt=""
+                    className="min-h-24 min-w-24 rounded-md"
+                    imgClassName="max-h-56 max-w-full rounded-md object-contain"
                   />
                 </div>
-              </>
-            )}
-          </Dialog>
-        </AriaPopover>
-      </DialogTrigger>
+              )}
+              <div className="flex items-center gap-3 p-3">
+                {!isImage && (
+                  <span className="flex size-10 shrink-0 items-center justify-center">
+                    <FileTypeIcon
+                      fileName={file.name}
+                      contentType={file.type}
+                      className="size-10"
+                    />
+                  </span>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-primary">{file.name}</p>
+                  <p className="truncate text-sm text-tertiary">
+                    {uploading
+                      ? `${attachment.progress}% · ${getReadableFileSize(file.size)}`
+                      : typeAndSize}
+                  </p>
+                  {uploading && <ProgressBar value={attachment.progress} className="mt-1.5" />}
+                  {failureDetail && (
+                    <p className="mt-0.5 text-sm text-error-primary">{failureDetail}</p>
+                  )}
+                </div>
+                <ButtonUtility
+                  icon={Download01}
+                  size="sm"
+                  color="tertiary"
+                  tooltip={m.conversation_attachment_download()}
+                  href={previewUrl}
+                  download={file.name}
+                />
+                <ButtonUtility
+                  icon={Trash01}
+                  size="sm"
+                  color="tertiary"
+                  tooltip={m.conversation_attachment_remove()}
+                  onClick={() => {
+                    close();
+                    onRemove();
+                  }}
+                />
+              </div>
+            </>
+          )}
+        </Dialog>
+      </AriaPopover>
       {uploading && (
         <ProgressBarBase
           value={attachment.progress}
           className="pointer-events-none absolute inset-x-2 bottom-1.5 h-1 w-auto"
         />
       )}
-      {attachment.failure && isImage && (
-        <AlertCircle
-          aria-hidden="true"
-          className="pointer-events-none absolute top-1/2 left-1/2 size-6 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary text-fg-error-primary"
-        />
+      {failure && (
+        // Across the faded tile, not inside its button, so the retry is a button of its own.
+        <span className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-0.5 text-center">
+          <span className="text-xs font-semibold text-error-primary">{failureLabel}</span>
+          {retryableUploadFailure(failure) && (
+            <Button
+              color="link-color"
+              size="sm"
+              className="pointer-events-auto text-xs"
+              onPress={onRetry}
+              aria-label={`${m.controls_retry()} · ${file.name}`}
+            >
+              {m.controls_retry()}
+            </Button>
+          )}
+        </span>
       )}
+      <ButtonUtility
+        icon={XClose}
+        size="xs"
+        color="secondary"
+        tooltip={m.conversation_attachment_remove_named({ name: file.name })}
+        onClick={onRemove}
+        className="absolute -top-2 -right-2 rounded-full bg-primary p-0.5 shadow-xs ring-1 ring-primary"
+      />
     </li>
   );
 }
