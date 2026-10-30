@@ -57,13 +57,12 @@ describe("getTaskMoveCommand", () => {
 
   test("an owner works their Task forward and back, exactly as the server allows", () => {
     const mine = owner("me");
-    for (const nextStatus of ["in_review", "closed"] as const) {
+    for (const nextStatus of ["todo", "in_review", "closed"] as const) {
       expect(getTaskMoveCommand(task("in_progress", mine), "me", nextStatus)).toEqual(
         update(nextStatus),
       );
     }
-    // In progress does not go back to To do, and does not skip review on the way to Done.
-    expect(getTaskMoveCommand(task("in_progress", mine), "me", "todo")).toBeUndefined();
+    // In progress does not skip review on the way to Done.
     expect(getTaskMoveCommand(task("in_progress", mine), "me", "done")).toBeUndefined();
     for (const nextStatus of ["in_progress", "done", "closed"] as const) {
       expect(getTaskMoveCommand(task("in_review", mine), "me", nextStatus)).toEqual(
@@ -121,6 +120,7 @@ describe("taskStatusOptions", () => {
     expect(taskStatusOptions(task("todo", mine), "me")).toEqual(["todo", "in_progress", "closed"]);
     expect(taskStatusOptions(task("in_progress", mine), "me")).toEqual([
       "in_progress",
+      "todo",
       "in_review",
       "closed",
     ]);
@@ -144,6 +144,7 @@ describe("taskStatusOptions", () => {
     expect(taskStatusOptions(task("in_review"), "me")).toEqual(["in_review", "closed"]);
     expect(taskStatusOptions(task("in_progress", owner("other")), "me")).toEqual([
       "in_progress",
+      "todo",
       "closed",
     ]);
     expect(taskStatusOptions(task("todo"), null)).toEqual(["todo"]);
