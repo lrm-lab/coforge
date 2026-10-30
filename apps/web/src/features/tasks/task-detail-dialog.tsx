@@ -26,6 +26,7 @@ import { StatusBadge, TaskHistory, type TimelineNames } from "./task-history";
 import { TaskPerson } from "./task-owner";
 import { getTaskMoveCommand, taskStatusOptions } from "./task-move";
 import { executeTask } from "./tasks.functions";
+import { TaskDeleteDialog, taskDeleteMenuItem, useCanDeleteTask } from "./task-delete";
 import { useConversationTaskWrites } from "./use-conversation-tasks";
 import { statusLabel, TASK_STATUS_COLOR, type TaskControls } from "./task-workflow";
 
@@ -44,6 +45,8 @@ export function TaskDetailMenu({
   onOpenDetails?: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const canDelete = useCanDeleteTask(task, dialog.currentMemberId);
   return (
     <>
       <Dropdown.Root>
@@ -57,6 +60,7 @@ export function TaskDetailMenu({
           <Dropdown.Menu
             onAction={(key) => {
               if (key === "details") return onOpenDetails ? onOpenDetails() : setOpen(true);
+              if (key === "delete") return setDeleting(true);
               moves.find((move) => move.status === key)?.onMove();
             }}
           >
@@ -81,9 +85,20 @@ export function TaskDetailMenu({
                 ))}
               </Dropdown.Section>
             )}
+            {canDelete && (
+              <Dropdown.Section className="border-t border-secondary pt-1">
+                {taskDeleteMenuItem()}
+              </Dropdown.Section>
+            )}
           </Dropdown.Menu>
         </Dropdown.Popover>
       </Dropdown.Root>
+      <TaskDeleteDialog
+        task={task}
+        open={deleting}
+        onOpenChange={setDeleting}
+        onCommand={dialog.onCommand}
+      />
       {!onOpenDetails && (
         <TaskDetailDialog task={task} open={open} onOpenChange={setOpen} {...dialog} />
       )}
@@ -99,6 +114,8 @@ type TaskDetailDialogProps = {
    * list). Absent where no such owner is threaded in — a task-reference chip inside the message
    * stream, say — and the dialog then runs the command itself and refreshes that list. */
   onCommand?: (command: DetailCommand) => Promise<void>;
+  /** The Task was deleted from the popup's More menu; the popup closes either way. */
+  onDeleted?: () => void;
   /** `#channel` or the direct conversation's name, shown above the task number. */
   conversationName?: string;
   /** The conversation's members, which name people in the history and offer who to assign.
@@ -117,11 +134,14 @@ export function TaskDetailDialog({
   open,
   onOpenChange,
   onCommand,
+  onDeleted,
   conversationName,
   members,
   currentMemberId,
   thread,
 }: TaskDetailDialogProps) {
+  const [deleting, setDeleting] = useState(false);
+  const canDelete = useCanDeleteTask(task, currentMemberId);
   const section = (
     <TaskSection
       task={task}
@@ -131,45 +151,72 @@ export function TaskDetailDialog({
     />
   );
   return (
-    <TaskPopupOverlay isOpen={open} onOpenChange={onOpenChange}>
-      <Modal
-        className={cn(
-          // On a phone the thread scrolls, never the sheet (the shared Modal scrolls there).
-          "flex h-full w-full flex-col overflow-hidden rounded-none max-sm:overflow-hidden max-sm:shadow-none",
-          // With a thread the popup is a workspace; without one it only wraps the task.
-          thread
-            ? "sm:h-[min(92vh,64rem)] sm:w-[min(60rem,calc(100vw-2rem))]"
-            : "sm:h-auto sm:w-[min(40rem,calc(100vw-2rem))]",
-        )}
-      >
-        <Dialog className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="flex shrink-0 items-center gap-3 border-b border-secondary py-3 pr-3 pl-4 sm:pl-6">
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-xs font-medium text-tertiary">{conversationName}</div>
-              <Heading
-                slot="title"
-                level={2}
-                className="truncate text-md font-semibold text-primary"
-              >
-                {m.tasks_details_title({ number: String(task.number) })}
-              </Heading>
-            </div>
-            <ButtonUtility
-              icon={XClose}
-              size="sm"
-              color="tertiary"
-              aria-label={m.tasks_close()}
-              onClick={() => onOpenChange(false)}
-            />
-          </div>
-          {thread ? (
-            <div className="flex min-h-0 flex-1 flex-col">{thread(section)}</div>
-          ) : (
-            <div className="min-h-0 flex-1 overflow-y-auto">{section}</div>
+    <>
+      <TaskPopupOverlay isOpen={open} onOpenChange={onOpenChange}>
+        <Modal
+          className={cn(
+            // On a phone the thread scrolls, never the sheet (the shared Modal scrolls there).
+            "flex h-full w-full flex-col overflow-hidden rounded-none max-sm:overflow-hidden max-sm:shadow-none",
+            // With a thread the popup is a workspace; without one it only wraps the task.
+            thread
+              ? "sm:h-[min(92vh,64rem)] sm:w-[min(60rem,calc(100vw-2rem))]"
+              : "sm:h-auto sm:w-[min(40rem,calc(100vw-2rem))]",
           )}
-        </Dialog>
-      </Modal>
-    </TaskPopupOverlay>
+        >
+          <Dialog className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="flex shrink-0 items-center gap-3 border-b border-secondary py-3 pr-3 pl-4 sm:pl-6">
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-xs font-medium text-tertiary">{conversationName}</div>
+                <Heading
+                  slot="title"
+                  level={2}
+                  className="truncate text-md font-semibold text-primary"
+                >
+                  {m.tasks_details_title({ number: String(task.number) })}
+                </Heading>
+              </div>
+              {canDelete && (
+                <Dropdown.Root>
+                  <ButtonUtility
+                    tooltip={m.tasks_more_actions({ number: String(task.number) })}
+                    icon={MoreHorizontal}
+                    size="sm"
+                    color="tertiary"
+                  />
+                  <Dropdown.Popover placement="bottom end" className="w-48">
+                    <Dropdown.Menu onAction={(key) => key === "delete" && setDeleting(true)}>
+                      {taskDeleteMenuItem()}
+                    </Dropdown.Menu>
+                  </Dropdown.Popover>
+                </Dropdown.Root>
+              )}
+              <ButtonUtility
+                icon={XClose}
+                size="sm"
+                color="tertiary"
+                aria-label={m.tasks_close()}
+                onClick={() => onOpenChange(false)}
+              />
+            </div>
+            {thread ? (
+              <div className="flex min-h-0 flex-1 flex-col">{thread(section)}</div>
+            ) : (
+              <div className="min-h-0 flex-1 overflow-y-auto">{section}</div>
+            )}
+          </Dialog>
+        </Modal>
+      </TaskPopupOverlay>
+      <TaskDeleteDialog
+        task={task}
+        open={deleting}
+        onOpenChange={setDeleting}
+        onCommand={onCommand}
+        onDeleted={() => {
+          onOpenChange(false);
+          onDeleted?.();
+        }}
+      />
+    </>
   );
 }
 

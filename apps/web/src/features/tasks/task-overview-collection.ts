@@ -78,6 +78,10 @@ export function createTaskOverview(
       idempotencyKey: crypto.randomUUID(),
       conversationId: row.conversationId,
     });
+    if (command.operation === "delete") {
+      if (tasks.has(row.messageId)) tasks.utils.writeDelete([row.messageId]);
+      return;
+    }
     // The server's copy of each Task it changed replaces the shown one; the page's own fields
     // (source, Project, the viewer's membership) stay as they are. A finished Task read from a
     // page, which the rows do not hold, joins them once it is unfinished again, with the row's

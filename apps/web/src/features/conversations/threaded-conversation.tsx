@@ -143,6 +143,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
       onOpenChange={(next) => {
         if (!next) closeTaskReference();
       }}
+      onDeleted={taskPopup?.onTaskDeleted}
       conversationName={conversationName}
       members={conversation.mentionables}
       currentMemberId={conversation.senderMemberId || null}

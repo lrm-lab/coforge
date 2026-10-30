@@ -128,6 +128,15 @@ const announced = (tasks: TaskView[], deleted: string[] = []) => ({
   deleted,
 });
 
+test("a deleted Task leaves its row once the server has answered, before any announcement", async () => {
+  const { overview, commands, reads } = await overviewWith(async () => ({ tasks: [] }));
+  await overview.run(overview.tasks.get("message-1")!, { operation: "delete", number: 1 });
+  expect(commands.map((command) => [command.operation, command.number])).toEqual([["delete", 1]]);
+  expect(overview.tasks.has("message-1")).toBe(false);
+  expect(overview.tasks.has("message-2")).toBe(true);
+  expect(reads()).toBe(1);
+});
+
 test("an announced change updates its row in place, without reading the list again", async () => {
   const { overview, reads } = await overviewWith(async () => ({ tasks: [] }));
   const needsRead = overview.apply([

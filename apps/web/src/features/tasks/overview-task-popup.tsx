@@ -19,7 +19,8 @@ type OverviewTaskPopupProps = {
   onClose: () => void;
   /** The overview's own command path, for the popup shown when the conversation cannot load. */
   onCommand: (command: OverviewTaskCommand) => Promise<void>;
-  /** The popup's live copy of a Task is newer than the overview's: re-read the overview. */
+  /** The popup's live copy of a Task is newer than the overview's, or the Task was deleted there:
+   * re-read the overview. */
   onTaskChanged: () => void;
 };
 
@@ -90,8 +91,14 @@ function usePopupState({ task, onOpenTask, onClose, onTaskChanged }: OverviewTas
   const workspaceId = useCurrentWorkspaceId() ?? "";
   const channels = useSuspenseQuery(channelNamesQuery(workspaceId)).data;
   const taskPopup = useMemo<TaskPopupControls>(
-    () => ({ openTaskNumber: task.number, task, openTask: onOpenTask, closeTask: onClose }),
-    [task, onOpenTask, onClose],
+    () => ({
+      openTaskNumber: task.number,
+      task,
+      openTask: onOpenTask,
+      closeTask: onClose,
+      onTaskDeleted: onTaskChanged,
+    }),
+    [task, onOpenTask, onClose, onTaskChanged],
   );
   // The conversation's own copy is the live one; until it holds the open Task (still reading it,
   // or its read failed) the overview's copy keeps the popup up.

@@ -199,4 +199,6 @@ export type TaskPopupControls = {
   task?: TaskView;
   openTask: (number: number) => void;
   closeTask: () => void;
+  /** The open Task was deleted from the popup, which then closes. */
+  onTaskDeleted?: () => void;
 };
