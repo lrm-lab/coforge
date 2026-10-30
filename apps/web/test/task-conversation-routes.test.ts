@@ -45,6 +45,31 @@ test("a task number that is not a positive integer is a 400", async () => {
   expect(response.status).toBe(400);
 });
 
+test("a limit outside 1 to 20, or not a number, is a 400", async () => {
+  for (const limit of ["abc", "0", "21", "2.5"]) {
+    const response = await handleTaskViewGet(
+      new Request(`http://x/?channel=%23c&task_number=7&limit=${limit}`),
+      principal,
+      service as never,
+    );
+    expect(response.status).toBe(400);
+  }
+});
+
+test("a direct board is named dm:@peer and resolved as @peer", async () => {
+  await handleTaskViewGet(
+    new Request("http://x/?channel=dm%3A%40ada&task_number=2"),
+    principal,
+    service as never,
+  );
+  expect(calls.at(-1)).toEqual([
+    "view",
+    principal,
+    { target: "@ada", number: 2 },
+    { limit: undefined },
+  ]);
+});
+
 test("reply carries the body and echoes the idempotency key", async () => {
   const response = await handleTaskReplyPost(
     post({ channel: "#c", task_number: 7, content: "hello", idempotencyKey: "k" }),
@@ -56,7 +81,7 @@ test("reply carries the body and echoes the idempotency key", async () => {
     "reply",
     principal,
     { target: "#c", number: 7 },
-    { body: "hello" },
+    { body: "hello", idempotencyKey: "k" },
   ]);
   expect(
     (

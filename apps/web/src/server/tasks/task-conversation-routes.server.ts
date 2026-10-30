@@ -22,10 +22,12 @@ const replySchema = refSchema.extend({
   content: z.string().min(1).max(50_000),
   idempotencyKey: z.string().min(1),
 });
+const limitSchema = z.coerce.number().int().min(1).max(20).optional();
 const unfollowSchema = refSchema.extend({ reason: z.string().trim().min(1).max(200).optional() });
 
+/** A direct board is named `dm:@peer` on the wire; the board resolves it as `@peer`. */
 const asRef = (body: { channel: string; task_number: number }) => ({
-  target: body.channel,
+  target: body.channel.replace(/^dm:/, ""),
   number: body.task_number,
 });
 
@@ -49,10 +51,8 @@ function queryRef(request: Request) {
 export async function handleTaskViewGet(request: Request, principal: Principal, service: Service) {
   try {
     const ref = queryRef(request);
-    const limit = new URL(request.url).searchParams.get("limit");
-    return Response.json(
-      await service.view(principal, asRef(ref), { limit: limit ? Number(limit) : undefined }),
-    );
+    const limit = limitSchema.parse(new URL(request.url).searchParams.get("limit") ?? undefined);
+    return Response.json(await service.view(principal, asRef(ref), { limit }));
   } catch (error) {
     return failure(error);
   }
@@ -74,7 +74,10 @@ export async function handleTaskReplyPost(
   try {
     const body = replySchema.parse(await readAgentJsonBody(request));
     return Response.json({
-      ...(await service.reply(principal, asRef(body), { body: body.content })),
+      ...(await service.reply(principal, asRef(body), {
+        body: body.content,
+        idempotencyKey: body.idempotencyKey,
+      })),
       idempotencyKey: body.idempotencyKey,
     });
   } catch (error) {

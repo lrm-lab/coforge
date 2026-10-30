@@ -3,10 +3,12 @@ import type { TaskPrincipal } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
+import type { MessageRequestIdempotency } from "#src/server/conversations/message-request-idempotency.server";
 import { lockConversation } from "#src/server/conversations/conversation-lock.server";
 import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
 import type { Transaction, TaskBoardPorts } from "./task-board-ports.server";
 import { resolveTaskScope } from "./task-scope.server";
+import { TASK_SCOPE_WHERE } from "./task-view.server";
 
 /** Names a task by the board it is on (`target`, an Agent's `#channel`, or `conversationId`, a
  * person's page) and its number. */
@@ -30,7 +32,11 @@ const MAX_VIEW_MESSAGES = 20;
  * channel it is on, and the conversation row itself says nothing of that channel.
  */
 export class TaskConversations {
-  constructor(private readonly ports: TaskBoardPorts) {}
+  constructor(
+    private readonly ports: TaskBoardPorts,
+    /** Makes a retried reply (same key) answer the first one's result instead of posting twice. */
+    private readonly idempotency?: MessageRequestIdempotency,
+  ) {}
 
   async view(principal: TaskPrincipal, ref: TaskConversationRef, options: { limit?: number }) {
     const { task, member, boardName } = await this.resolve(principal, ref);
@@ -61,21 +67,73 @@ export class TaskConversations {
    * Posts a reply, making the conversation if this is the first. The replier follows the task; the
    * task's other followers' Agents are delivered the reply.
    */
-  async reply(principal: TaskPrincipal, ref: TaskConversationRef, input: { body: string }) {
+  async reply(
+    principal: TaskPrincipal,
+    ref: TaskConversationRef,
+    input: { body: string; idempotencyKey?: string },
+  ) {
     const body = input.body.trim();
     if (!body) throw new AppError("INVALID_INPUT");
     const { task, member, scope } = await this.resolve(principal, ref, { member: true });
+    const post = async () => {
+      const posted = await this.post(task.id, scope, member!, body);
+      return {
+        id: posted.messageId,
+        sequence: posted.sequence,
+        body,
+        createdAt: posted.createdAt,
+        threadRootId: null,
+        attachments: [],
+        workspaceId: scope.workspaceId,
+      };
+    };
+    const persisted =
+      this.idempotency && input.idempotencyKey
+        ? await this.idempotency.execute(
+            {
+              workspaceId: scope.workspaceId,
+              senderKind: principal.agentId ? "agent" : "user",
+              senderId: (principal.agentId ?? principal.userId)!,
+              idempotencyKey: `task:${task.id}:${input.idempotencyKey}`,
+            },
+            post,
+          )
+        : await post();
+    return { messageId: persisted.id, sequence: persisted.sequence };
+  }
+
+  /**
+   * The write: under the board's lock the replier must still be an active member, so a member who
+   * left a private channel while the request was in flight is refused as if the task were gone.
+   */
+  private async post(
+    taskId: string,
+    scope: { conversationId: string; workspaceId: string },
+    member: { id: string; userId: string | null; agentId: string | null },
+    body: string,
+  ) {
     return this.ports.db.$transaction(async (tx) => {
       await lockConversation(tx, scope.conversationId);
+      const [active, task] = await Promise.all([
+        tx.conversationMember.findFirst({
+          where: { id: member.id, conversationId: scope.conversationId, ...ACTIVE_MEMBER_WHERE },
+          select: { id: true },
+        }),
+        tx.task.findUnique({
+          where: { id: taskId },
+          select: { id: true, discussionConversationId: true },
+        }),
+      ]);
+      if (!active || !task) throw new AppError("NOT_FOUND");
       const conversationId = await this.discussionOf(tx, task, scope.workspaceId);
       await lockConversation(tx, conversationId);
-      const seat = await joinDiscussion(tx, scope.workspaceId, conversationId, member!);
+      const seat = await joinDiscussion(tx, scope.workspaceId, conversationId, member);
       const sequence = await allocateSequence(tx, conversationId);
       await tx.taskFollow.createMany({
         data: [
           {
-            taskId: task.id,
-            memberId: member!.id,
+            taskId,
+            memberId: member.id,
             conversationId: scope.conversationId,
             workspaceId: scope.workspaceId,
             reason: "replied",
@@ -85,8 +143,8 @@ export class TaskConversations {
       });
       const recipients = await tx.taskFollow.findMany({
         where: {
-          taskId: task.id,
-          memberId: { not: member!.id },
+          taskId,
+          memberId: { not: member.id },
           member: { agentId: { not: null }, ...ACTIVE_MEMBER_WHERE, agent: ACTIVE_AGENT_WHERE },
         },
         select: { member: { select: { agentId: true } } },
@@ -107,9 +165,9 @@ export class TaskConversations {
             })),
           },
         },
-        select: { id: true, sequence: true },
+        select: { id: true, sequence: true, createdAt: true },
       });
-      return { messageId: message.id, sequence: message.sequence, conversationId };
+      return { messageId: message.id, sequence: message.sequence, createdAt: message.createdAt };
     });
   }
 
@@ -150,6 +208,8 @@ export class TaskConversations {
       where: {
         workspaceId: principal.workspaceId,
         member: { ...seat, ...ACTIVE_MEMBER_WHERE },
+        // The same scope every other read applies: a hidden channel's tasks are not listed.
+        task: { conversation: TASK_SCOPE_WHERE },
       },
       orderBy: { createdAt: "desc" },
       select: {
@@ -160,13 +220,22 @@ export class TaskConversations {
             number: true,
             title: true,
             status: true,
-            conversation: { select: { channelName: true, directKey: true } },
+            conversation: {
+              select: {
+                channelName: true,
+                members: {
+                  where: { userId: { not: null }, ...ACTIVE_MEMBER_WHERE },
+                  select: { user: { select: { username: true } } },
+                  take: 1,
+                },
+              },
+            },
           },
         },
       },
     });
     return rows.map((row) => ({
-      taskRef: `${boardLabel(row.task.conversation)}:#${row.task.number}`,
+      taskRef: `${boardLabel(row.task.conversation.channelName, row.task.conversation.members[0]?.user?.username)}:#${row.task.number}`,
       taskNumber: row.task.number,
       title: row.task.title,
       status: row.task.status,
@@ -199,15 +268,11 @@ export class TaskConversations {
       },
     });
     if (!task) throw new AppError("NOT_FOUND");
-    const board = await this.ports.db.conversation.findUniqueOrThrow({
-      where: { id: scope.conversationId },
-      select: { channelName: true, directKey: true },
-    });
     return {
       task,
       scope,
       member: scope.member,
-      boardName: boardLabel(board, ref.target),
+      boardName: boardLabel(scope.channelName, ref.target?.replace(/^@/, "")),
     };
   }
 
@@ -218,10 +283,11 @@ export class TaskConversations {
     workspaceId: string,
   ) {
     if (task.discussionConversationId) return task.discussionConversationId;
-    const fresh = await tx.task.findUniqueOrThrow({
+    const fresh = await tx.task.findUnique({
       where: { id: task.id },
       select: { discussionConversationId: true },
     });
+    if (!fresh) throw new AppError("NOT_FOUND");
     if (fresh.discussionConversationId) return fresh.discussionConversationId;
     const conversation = await tx.conversation.create({
       data: { workspaceId, kind: "task_thread" },
@@ -268,13 +334,9 @@ export class TaskConversations {
   }
 }
 
-/** `#channel`, or `dm:@peer`'s stand-in for a direct board: the caller's own `target` names it. */
-function boardLabel(
-  board: { channelName: string | null; directKey: string | null },
-  target?: string,
-) {
-  if (board.channelName) return `#${board.channelName}`;
-  return target ?? "dm";
+/** `#channel`, or `dm:@peer` for a task on a direct board. */
+function boardLabel(channelName: string | null, peer?: string | null) {
+  return channelName ? `#${channelName}` : `dm:@${peer ?? "?"}`;
 }
 
 /** The member's seat in the task's conversation, taken (or taken back) by speaking in it. */

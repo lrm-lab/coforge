@@ -156,3 +156,42 @@ test("a reply to a task that does not exist is NOT_FOUND", async () => {
     conversations.reply(as("worker"), { ...ref, number: 99 }, { body: "hi" }),
   ).rejects.toMatchObject({ code: "NOT_FOUND" });
 });
+
+test("a retried reply with the same key posts once", async () => {
+  const results = new Map<string, unknown>();
+  const idempotent = new TaskConversations(
+    { db, reader: "agent", dependencies: {} },
+    {
+      execute: async (scope, persist) => {
+        const key = scope.idempotencyKey;
+        if (!results.has(key)) results.set(key, await persist());
+        return results.get(key) as Awaited<ReturnType<typeof persist>>;
+      },
+    },
+  );
+  const before = await db.message.count({
+    where: { conversation: { taskDiscussionOf: { id: taskId } } },
+  });
+  const first = await idempotent.reply(as("worker"), ref, { body: "once", idempotencyKey: "k1" });
+  const retry = await idempotent.reply(as("worker"), ref, { body: "once", idempotencyKey: "k1" });
+  expect(retry).toEqual(first);
+  const after = await db.message.count({
+    where: { conversation: { taskDiscussionOf: { id: taskId } } },
+  });
+  expect(after).toBe(before + 1);
+});
+
+test("a member who left the board can no longer reply", async () => {
+  await db.conversationMember.update({
+    where: { id: agents.peer.memberId },
+    data: { leftAt: new Date() },
+  });
+  await expect(conversations.reply(as("peer"), ref, { body: "too late" })).rejects.toMatchObject({
+    code: "NOT_FOUND",
+  });
+  expect(await conversations.following(as("peer"))).toEqual([]);
+  await db.conversationMember.update({
+    where: { id: agents.peer.memberId },
+    data: { leftAt: null },
+  });
+});
