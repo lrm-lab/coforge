@@ -126,6 +126,9 @@ if [ -f "$safety_script" ]; then
 	[ "$allow_breaking" = "true" ] && safety_args+=(--allow-breaking)
 	# Check repository migrations directory if present, else container migrations
 	migrations_dir="$(dirname "$compose_file")/../../apps/web/prisma/migrations"
+	if [ ! -d "$migrations_dir" ] && [ -d "$(dirname "$compose_file")/../../src/apps/web/prisma/migrations" ]; then
+		migrations_dir="$(dirname "$compose_file")/../../src/apps/web/prisma/migrations"
+	fi
 	if [ -d "$migrations_dir" ]; then
 		bash "$safety_script" "${safety_args[@]}" "$migrations_dir"
 	fi
@@ -227,6 +230,9 @@ fi
 
 # 8. Graceful drain of previous slot
 old_container="$(compose ps -q "web_${active_slot}" 2>/dev/null || true)"
+if [ -z "$old_container" ] && [ "$active_slot" = "blue" ]; then
+	old_container="$(compose ps -q web 2>/dev/null || true)"
+fi
 if [ -n "$old_container" ]; then
 	printf 'blue-green-deploy: draining old container %s (slot %s) for %ds...\n' "$old_container" "$active_slot" "$drain_timeout" >&2
 	sleep "$drain_timeout"

@@ -80,6 +80,9 @@ target_container="$(docker ps -a --filter "label=com.docker.compose.project=$pro
 if [ -z "$target_container" ]; then
 	target_container="$(docker ps -a --filter "name=${project}-web_${target_slot}" -q | head -n 1)"
 fi
+if [ -z "$target_container" ] && [ "$target_slot" = "blue" ]; then
+	target_container="$(docker ps -a --filter "name=${project}-web-1" -q | head -n 1)"
+fi
 
 if [ -z "$target_container" ]; then
 	printf 'rollback: target container for slot %s not found on host; cannot rollback\n' "$target_slot" >&2
@@ -130,6 +133,12 @@ fi
 
 # 5. Stop the failed active slot
 current_container="$(docker ps --filter "label=com.docker.compose.project=$project" --filter "label=com.docker.compose.service=web_$active_slot" -q | head -n 1)"
+if [ -z "$current_container" ]; then
+	current_container="$(docker ps --filter "name=${project}-web_${active_slot}" -q | head -n 1)"
+fi
+if [ -z "$current_container" ] && [ "$active_slot" = "blue" ]; then
+	current_container="$(docker ps --filter "name=${project}-web-1" -q | head -n 1)"
+fi
 if [ -n "$current_container" ]; then
 	printf 'rollback: stopping failed container %s (slot %s)...\n' "$current_container" "$active_slot" >&2
 	docker stop -t 15 "$current_container" >/dev/null 2>&1 || true
