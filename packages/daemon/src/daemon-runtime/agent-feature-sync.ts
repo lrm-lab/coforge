@@ -40,15 +40,26 @@ export class AgentFeatureSync {
     else this.#launched.delete(agentId);
   }
 
-  /** Restarts the Agent when `message` shows a changed feature; true when it took the delivery. */
-  async restartIfChanged(message: AgentMessageDelivery): Promise<boolean> {
-    const { agentId } = message;
+  /** Whether `message` shows a feature that changed since the session launched. Synchronous, so a
+   * delivery that shows none is handled with no extra turn of the event loop. */
+  changed(message: AgentMessageDelivery): boolean {
+    const was = this.#launched.get(message.agentId);
     const wire = message.features;
-    const was = this.#launched.get(agentId);
-    if (!wire || was === undefined || !this.ports.live(agentId)) return false;
-    const now = wire.taskConversations === true;
-    if (now === was) return false;
-    this.#notices.set(agentId, now ? FEATURE_NOTICE_ON : FEATURE_NOTICE_OFF);
+    return Boolean(
+      wire &&
+      was !== undefined &&
+      this.ports.live(message.agentId) &&
+      (wire.taskConversations === true) !== was,
+    );
+  }
+
+  /** Restarts the Agent over the change `changed` found; the delivery waits for the new launch. */
+  async restart(message: AgentMessageDelivery): Promise<void> {
+    const { agentId } = message;
+    this.#notices.set(
+      agentId,
+      message.features?.taskConversations === true ? FEATURE_NOTICE_ON : FEATURE_NOTICE_OFF,
+    );
     this.ports.keep(message);
     try {
       await this.ports.restart(agentId);
@@ -57,7 +68,6 @@ export class AgentFeatureSync {
       this.#notices.delete(agentId);
       throw error;
     }
-    return true;
   }
 
   /** The notice line to put before the Agent's next input, once; empty when none is owed. */

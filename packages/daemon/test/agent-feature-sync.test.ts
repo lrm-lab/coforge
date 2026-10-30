@@ -24,8 +24,8 @@ function harness(launchedWith: boolean, serverValue: boolean) {
   });
   sync.launched("a", { features: { taskConversations: launchedWith } });
   const deliver = async (message: Message) => {
-    if (!(await sync.restartIfChanged(message as never)))
-      events.push(`input:${sync.noticePrefix(message.agentId)}${message.text}`);
+    if (sync.changed(message as never)) await sync.restart(message as never);
+    else events.push(`input:${sync.noticePrefix(message.agentId)}${message.text}`);
   };
   return { events, deliver };
 }
@@ -65,9 +65,9 @@ test("a session launched with the current value gets no notice", async () => {
 test("an Agent that is not live is never restarted by a delivery", async () => {
   const sync = new AgentFeatureSync({ live: () => false, keep: () => {}, restart: async () => {} });
   sync.launched("a", { features: { taskConversations: false } });
-  expect(
-    await sync.restartIfChanged({ agentId: "a", features: { taskConversations: true } } as never),
-  ).toBe(false);
+  expect(sync.changed({ agentId: "a", features: { taskConversations: true } } as never)).toBe(
+    false,
+  );
 });
 
 test("a launch config that states no features never restarts the session over a delivery", async () => {
@@ -78,11 +78,9 @@ test("a launch config that states no features never restarts the session over a 
     restart: async (agentId) => void restarts.push(agentId),
   });
   sync.launched("a", {});
-  const taken = await sync.restartIfChanged({
-    agentId: "a",
-    features: { taskConversations: true },
-  } as never);
-  expect(taken).toBe(false);
+  expect(sync.changed({ agentId: "a", features: { taskConversations: true } } as never)).toBe(
+    false,
+  );
   expect(restarts).toEqual([]);
 });
 
@@ -96,7 +94,7 @@ test("a restart that fails leaves no notice for a prompt that did not change", a
   });
   sync.launched("a", { features: { taskConversations: false } });
   await expect(
-    sync.restartIfChanged({ agentId: "a", features: { taskConversations: true } } as never),
+    sync.restart({ agentId: "a", features: { taskConversations: true } } as never),
   ).rejects.toThrow();
   expect(sync.noticePrefix("a")).toBe("");
 });

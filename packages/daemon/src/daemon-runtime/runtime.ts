@@ -314,13 +314,12 @@ export class DaemonRuntime {
   });
   /** Agents whose in-flight launch is a message wake, which presents what waits as one notice. */
   readonly #wakeLaunches = new Set<string>();
-  /** Ends a live process without a stopped/crashed Activity, for a stalled provider's restart or
-   * a cold idle stop; the Agent stays active and wakeable. */
-  readonly #features = new AgentFeatureSync({
+  readonly #sync = new AgentFeatureSync({
     live: (agentId) => this.#runtimeRelease.canRestartForFreshConfig(agentId),
     keep: (m) => this.#exitedDelivery.keepForNextLaunch(m.agentId, m),
     restart: (agentId) => this.#runtimeRelease.restartForFreshConfig(agentId),
   });
+  /** Ends a live process without a stopped/crashed Activity (restart, cold idle stop). */
   readonly #runtimeRelease = new RuntimeRelease<ActivityLaunch>({
     launch: (agentId) => this.#currentActivityLaunches.get(agentId),
     runtime: (agentId) => this.#agentProcessManager.runtime(agentId),
@@ -679,7 +678,7 @@ export class DaemonRuntime {
           if (launch) this.#reconcileIdleTurn(agentId, launch);
         },
         consumedSeqs: this.#consumedSeqs,
-        noticePrefix: (agentId) => this.#features.noticePrefix(agentId),
+        noticePrefix: (agentId) => this.#sync.noticePrefix(agentId),
       },
     );
     this.agentRequests = new AgentRequestForwarder({
@@ -1635,7 +1634,7 @@ export class DaemonRuntime {
         },
       );
       agentApiKey = launchConfig.agentApiKey;
-      this.#features.launched(agentId, launchConfig.identity);
+      this.#sync.launched(agentId, launchConfig.identity);
       this.#assertRunning();
       this.#assertAgentNotStopping(agentId);
       // Skipped at spawn, never deleted: report each reserved stored variable by name.
@@ -2264,7 +2263,8 @@ export class DaemonRuntime {
         return;
       }
     }
-    if (this.#runnerHold === undefined && (await this.#features.restartIfChanged(message))) return;
+    if (this.#runnerHold === undefined && this.#sync.changed(message))
+      return this.#sync.restart(message);
     const exited =
       this.#runnerHold === undefined &&
       !this.#agentProcessManager.session(message.agentId) &&
