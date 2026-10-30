@@ -3,14 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { Dataflow03 as Cable, Laptop01 as LaptopMinimal, Plus } from "@untitledui/icons";
 
 import { PageHeader } from "#src/components/layout/page-header";
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "#src/components/ui/empty";
+import { Empty, EmptyContent, EmptyHeader, EmptyMedia, EmptyTitle } from "#src/components/ui/empty";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
@@ -213,7 +206,6 @@ function NoComputers({ onAdd }: { onAdd: () => void }) {
         <EmptyTitle role="heading" aria-level={2} className="text-lg font-semibold">
           {m.computer_empty_title()}
         </EmptyTitle>
-        <EmptyDescription>{m.computer_empty_description()}</EmptyDescription>
       </EmptyHeader>
       <EmptyContent>
         <Button iconLeading={Plus} onPress={onAdd}>

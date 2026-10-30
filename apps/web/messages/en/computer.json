@@ -9,7 +9,6 @@
   "computer_loading": "Loading computers",
   "computer_detail_load_error": "Computer details could not be loaded.",
   "computer_empty_title": "Connect your first computer",
-  "computer_empty_description": "Connect a computer to run your agents in an environment you control.",
   "computer_connect_command": "Connect command",
   "computer_connect_instructions": "Copy the commands below into your terminal and run them. If sign-in is required, use the device code shown in your terminal to authorize in your browser.",
   "computer_connect_done": "Done",

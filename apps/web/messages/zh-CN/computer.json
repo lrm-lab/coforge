@@ -9,7 +9,6 @@
   "computer_loading": "正在加载电脑",
   "computer_detail_load_error": "无法加载电脑详情。",
   "computer_empty_title": "连接你的第一台电脑",
-  "computer_empty_description": "连接电脑，让智能体在你控制的环境中工作。",
   "computer_connect_command": "连接命令",
   "computer_connect_instructions": "复制以下命令到终端运行。如需登录，请使用终端显示的设备码在浏览器中完成授权。",
   "computer_connect_done": "完成",
