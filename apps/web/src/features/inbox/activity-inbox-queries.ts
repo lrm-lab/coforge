@@ -82,3 +82,21 @@ export const activityNavAttentionQuery = () =>
     queryFn: () => loadActivityNavAttention(),
     staleTime: 30_000,
   });
+
+/**
+ * The nav dot's two realtime reactions. A message the server already filtered to the viewer can
+ * only add attention, so it lights the dot without a read. `activity.changed.v1` is ambiguous —
+ * it announces a Done and a read-all as well as a new mention — and a boolean cannot tell which
+ * way it went locally, so it re-reads.
+ */
+export function activityNavAttentionRealtime(queryClient: QueryClient): {
+  onMessage: () => void;
+  onActivity: () => void;
+} {
+  const queryKey = activityNavAttentionQuery().queryKey;
+  return {
+    onMessage: () =>
+      queryClient.setQueryData<{ hasUnread: boolean }>(queryKey, { hasUnread: true }),
+    onActivity: () => void queryClient.invalidateQueries({ queryKey }),
+  };
+}
