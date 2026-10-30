@@ -1,5 +1,6 @@
 import { hostMessageId } from "./task-view.server";
 import { postTaskNotice } from "./task-conversations.server";
+import { followTask } from "./task-discussion-store.server";
 import { enrollThreadReplyFollowers } from "#src/server/conversations/channel-threads.server";
 import { lockConversation } from "#src/server/conversations/conversation-lock.server";
 import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
@@ -108,18 +109,13 @@ export async function withNotices<T>(
             body: body(quoted!),
             deliverToAgentId: assignee.id === actor.id ? null : assignee.agentId,
           });
-          await tx.taskFollow.createMany({
-            data: [
-              {
-                taskId: task.id,
-                memberId: assignee.id,
-                conversationId: conversation.conversationId,
-                workspaceId: conversation.workspaceId,
-                reason: assignee.id === actor.id ? "claimed" : "assigned",
-              },
-            ],
-            skipDuplicates: true,
-          });
+          await followTask(
+            tx,
+            conversation,
+            task.id,
+            assignee.id,
+            assignee.id === actor.id ? "claimed" : "assigned",
+          );
           return { ...posted, threadRootId: null };
         }
         const notice = await post({

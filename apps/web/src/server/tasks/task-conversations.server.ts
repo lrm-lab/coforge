@@ -5,7 +5,6 @@ import { readAgentMessagePage } from "#src/server/db/repositories/agent-message-
 import type { AgentMessagesPage } from "#src/server/agents/agent-messages.server";
 
 import { AppError } from "#src/lib/app-error";
-import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
 import type { MessageRequestIdempotency } from "#src/server/conversations/message-request-idempotency.server";
 import { lockConversation } from "#src/server/conversations/conversation-lock.server";
@@ -13,7 +12,7 @@ import { allocateSequence } from "#src/server/db/repositories/sequence-allocatio
 import type { Transaction, TaskBoardPorts } from "./task-board-ports.server";
 import { publishTaskConversationMessage } from "./task-publication.server";
 import { postTaskMessage } from "./task-discussion-send.server";
-import { discussionOf, followTask, joinDiscussion } from "./task-discussion-store.server";
+import { followTask, type TaskFollowReason } from "./task-discussion-store.server";
 import { resolveTaskScope } from "./task-scope.server";
 import { TASK_SCOPE_WHERE } from "./task-view.server";
 

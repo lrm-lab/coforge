@@ -14,6 +14,7 @@ import { announceTasks } from "./task-publication.server";
 import { conversationSignalScopes } from "#src/server/conversations/conversation-signal-scope.server";
 import { indexedRequestId } from "./task-request-ids.server";
 import { postTaskNotice } from "./task-conversations.server";
+import { followTask } from "./task-discussion-store.server";
 import {
   taskSelection,
   taskView,
@@ -181,15 +182,9 @@ export async function insertConversationTask(
   await tx.taskHistoryEvent.createMany({
     data: historyRows(task.id, member, creationChanges(task), 0),
   });
-  await tx.taskFollow.createMany({
-    data: [
-      follow(task.id, member.id, scope, "created"),
-      ...(assignee && assignee.id !== member.id
-        ? [follow(task.id, assignee.id, scope, "assigned")]
-        : []),
-    ],
-    skipDuplicates: true,
-  });
+  await followTask(tx, scope, task.id, member.id, "created");
+  if (assignee && assignee.id !== member.id)
+    await followTask(tx, scope, task.id, assignee.id, "assigned");
   if (assignee?.agentId) await ensureTaskExecutionSession(tx, task, assignee.agentId);
   // The assignee's notice makes the task's conversation, so the task is read again to carry it.
   const assigned = assignee && assignee.id !== member.id;
@@ -215,19 +210,6 @@ export async function insertConversationTask(
     notice,
   };
 }
-
-const follow = (
-  taskId: string,
-  memberId: string,
-  scope: { conversationId: string; workspaceId: string },
-  reason: "created" | "assigned",
-) => ({
-  taskId,
-  memberId,
-  conversationId: scope.conversationId,
-  workspaceId: scope.workspaceId,
-  reason,
-});
 
 const actorHandle = (member: Member) =>
   `@${member.agent?.name ?? member.user?.username ?? "someone"}`;
