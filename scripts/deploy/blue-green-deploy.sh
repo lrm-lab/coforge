@@ -160,10 +160,14 @@ if [ -f "$safety_script" ]; then
 fi
 
 # 2. Pull candidate Web image
-printf 'blue-green-deploy: pulling candidate image %s...\n' "$image" >&2
-if ! docker pull --quiet "$image" >/dev/null; then
-	printf 'outcome=failed\nhealth_result=failed: image pull failed\n'
-	exit 1
+if ! docker image inspect "$image" >/dev/null 2>&1; then
+	printf 'blue-green-deploy: pulling candidate image %s...\n' "$image" >&2
+	if ! docker pull --quiet "$image" >/dev/null; then
+		printf 'outcome=failed\nhealth_result=failed: image pull failed\n'
+		exit 1
+	fi
+else
+	printf 'blue-green-deploy: candidate image %s already present locally\n' "$image" >&2
 fi
 
 # 3. Execute database migration deploy
