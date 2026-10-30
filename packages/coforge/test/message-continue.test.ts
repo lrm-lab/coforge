@@ -47,13 +47,9 @@ test("message continue c reports the discarded draft", async () => {
 test("message continue b pipes stdin as the body and reports an already-committed replay", async () => {
   // `Bun.stdin` is the one process-wide stream; mock it so the test neither drains it for other
   // files nor depends on what the harness piped.
-  const bodyStream = new ReadableStream<Uint8Array>({
-    start: (controller) => {
-      controller.enqueue(new TextEncoder().encode("replacement body"));
-      controller.close();
-    },
-  });
-  const stdinSpy = spyOn(Bun.stdin, "stream").mockReturnValue(bodyStream);
+  const stdinSpy = spyOn(Bun.stdin, "stream").mockReturnValue(
+    new Response("replacement body").body!,
+  );
   let call: unknown;
   try {
     const output = await run(["message", "continue", "cont-1", "b"], {

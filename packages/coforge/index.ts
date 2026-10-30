@@ -4,7 +4,6 @@ import { runMessageResolve } from "./src/message-resolve";
 import { formatReaction } from "./src/message-format";
 import { parseChannelManagementArgs, type ChannelManagementInvocation } from "./src/channel-args";
 import { formatReminderResponse as formatAgentReminderResponse } from "./src/reminder-format";
-import { fstatSync } from "node:fs";
 import { weeklyReportWorkflowSchema } from "@lrm/coforge-sdk/internal";
 import {
   DEFAULT_REMINDER_TIMEZONE,
@@ -19,7 +18,6 @@ import {
   parseMentionSelector,
   RFC_UUID_PATTERN,
   type AgentMessageRecord,
-  type AgentMessageResponse,
   type AgentReminderOperationResponse,
   type ChannelCommand,
   type LocalReminderRequest,
@@ -95,7 +93,6 @@ import { formatReadWindow } from "#src/message-read-format";
 import {
   formatAttachmentDownloadSuccess,
   formatAttachmentUploadSuccess,
-  formatHeldSend,
   formatMessageLine,
   formatSendSuccess,
   formatSendCommitted,
@@ -106,7 +103,6 @@ import {
   heldSendCliError,
   isCommittedSend,
   isHeldSend,
-  type CommittedSendResult,
   type HeldSendResult,
 } from "#src/send-held-result";
 import { parseMessageContinueArgs, runMessageContinue } from "#src/message-continue";
@@ -143,7 +139,6 @@ import {
 } from "#src/channel-format";
 import {
   CliError,
-  type CliErrorInit,
   NO_MESSAGE_SENT_NEXT_ACTION,
   unknownDeliveryNextAction,
   withOutputMode,

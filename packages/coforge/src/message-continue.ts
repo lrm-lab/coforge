@@ -1,6 +1,6 @@
-import type { AgentMessageRecord, AgentMessageResponse } from "@lrm/coforge-sdk/internal";
+import type { AgentMessageRecord } from "@lrm/coforge-sdk/internal";
 import { invalidArgument } from "./command-help";
-import { CliError, withOutputMode } from "./cli-error";
+import { withOutputMode } from "./cli-error";
 import { readPipedSendContent, refuseForeignStdinFile } from "./send-stdin";
 import {
   heldSendCliError,

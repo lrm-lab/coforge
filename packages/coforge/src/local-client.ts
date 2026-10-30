@@ -1,6 +1,5 @@
 import {
   AGENT_SEND_LOCAL_DEADLINE_MS,
-  type AgentProxyFailureBody,
   decodeAgentMessageResponse,
   decodeAgentReminderOperationResponse,
   decodeLocalReminderRequest,
