@@ -179,7 +179,7 @@ export class ChatSections {
     beforeConversationId?: string | null,
   ) {
     await this.authorize();
-    const unpinned = await this.db.$transaction(async (tx) => {
+    const { unpinned, reopened } = await this.db.$transaction(async (tx) => {
       await lockMemberPins(tx, this.workspaceId, this.userId);
       if (sectionId) {
         const section = await tx.chatSection.findFirst({
@@ -203,7 +203,7 @@ export class ChatSections {
             ],
           },
         },
-        select: { id: true },
+        select: { id: true, hiddenAt: true, conversation: { select: { channelName: true } } },
       });
       if (!member) throw new AppError("ACCESS_DENIED");
       await tx.conversationMember.update({
@@ -233,9 +233,24 @@ export class ChatSections {
           });
         await tx.chatSection.update({ where: { id: sectionId }, data: { collapsed: false } });
       }
-      return setConversationPin(tx, { ...this.scope, conversationId, memberId: member.id }, false);
+      const unpinned = await setConversationPin(
+        tx,
+        { ...this.scope, conversationId, memberId: member.id },
+        false,
+      );
+      // A closed chat moved into a section is open again in the member's list.
+      const opened =
+        member.conversation.channelName === null
+          ? ("dm.opened.v1" as const)
+          : ("channel.opened.v1" as const);
+      return { unpinned, reopened: member.hiddenAt ? opened : undefined };
     });
     await this.announceChanged();
+    if (reopened)
+      await announceViewerEvent(this.realtime, {
+        userIds: [this.userId],
+        event: { type: reopened, workspaceId: this.workspaceId, conversationId },
+      });
     if (unpinned)
       await announceViewerEvent(this.realtime, {
         userIds: [this.userId],

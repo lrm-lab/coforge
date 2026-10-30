@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
+import type { ViewerEvent } from "#src/features/conversations/conversation-realtime";
 import { ChatSections } from "#src/server/conversations/chat-sections.server";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
 
@@ -276,14 +277,26 @@ test("moving a closed pinned channel into a section keeps it visible and removes
     const channel = await channels.create(workspace.id, user.id, "release");
     await channels.setUserPinned(workspace.id, user.id, channel.id, true);
     await channels.setUserHidden(workspace.id, user.id, channel.id, true);
-    const sections = new ChatSections(db, workspace.id, user.id);
+    const told: ViewerEvent[] = [];
+    const sections = new ChatSections(db, workspace.id, user.id, {
+      viewerChanged: async ({ event }) => void told.push(event),
+    });
     const section = await sections.create({ name: "Release", emoji: null });
+    told.length = 0;
     await sections.move(channel.id, section.id);
     const listed = (await channels.list(workspace.id, user.id)).find(
       (row) => row.id === channel.id,
     );
     expect(listed).toMatchObject({ pinned: false, hidden: false });
     expect((await sections.list())[0]?.conversationIds).toEqual([channel.id]);
+    // The one move changed the sections, opened the channel and took its pin: the member's other
+    // pages hear all three.
+    expect(told.map((event) => event.type)).toEqual([
+      "pref.changed.v1",
+      "channel.opened.v1",
+      "pref.changed.v1",
+    ]);
+    expect(told[1]).toMatchObject({ conversationId: channel.id });
   } finally {
     await db.workspace.delete({ where: { id: workspace.id } });
     await db.user.delete({ where: { id: user.id } });
@@ -311,4 +324,29 @@ test("every saved section change tells the member's pages, and only theirs, to r
     // A refused change is not announced.
     await expect(sections.update(section.id, { collapsed: false })).rejects.toThrow("NOT_FOUND");
     expect(told).toHaveLength(5);
+  }));
+
+test("a closed DM moved into a section is announced as opened, an open one is not", () =>
+  withMember(async (_sections, db, { workspaceId, userId }) => {
+    const told: ViewerEvent[] = [];
+    const sections = new ChatSections(db, workspaceId, userId, {
+      viewerChanged: async ({ event }) => void told.push(event),
+    });
+    const dm = await db.conversation.create({
+      data: {
+        workspaceId,
+        directKey: `user:${userId}|user:${userId}`,
+        members: { create: { userId, hiddenAt: new Date() } },
+      },
+    });
+    const section = await sections.create({ name: "People", emoji: null });
+    told.length = 0;
+    await sections.move(dm.id, section.id);
+    expect(told).toEqual([
+      { type: "pref.changed.v1", workspaceId, name: "sections" },
+      { type: "dm.opened.v1", workspaceId, conversationId: dm.id },
+    ]);
+    told.length = 0;
+    await sections.move(dm.id, null);
+    expect(told.map((event) => event.type)).toEqual(["pref.changed.v1"]);
   }));
