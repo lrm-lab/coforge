@@ -171,7 +171,8 @@ export function ChatSectionCreateMenu({
         onPress={(event) => {
           if (event.pointerType === "keyboard") onCreate();
         }}
-        className="min-h-24 w-full flex-1 rounded-none hover:bg-transparent!"
+        // Blank space, not a button: a plain pointer, as nothing happens on a click.
+        className="min-h-24 w-full flex-1 cursor-default rounded-none hover:bg-transparent! disabled:cursor-default"
       >
         <span className="sr-only">{m.chat_section_create()}</span>
       </Button>
