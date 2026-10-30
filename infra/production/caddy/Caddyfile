@@ -1,11 +1,7 @@
 # Caddy owns the only public entry: trusted HTTPS on 443. Port 80 serves
 # nothing but Caddy's automatic redirect to the same URL over HTTPS.
 {
-	admin localhost:2019
-}
-
-:3000 {
-	import upstream.caddy
+	admin off
 }
 
 coforge.cn {
@@ -35,6 +31,8 @@ coforge.cn {
 	# route above stays unencoded.
 	handle {
 		encode
-		import upstream.caddy
+		reverse_proxy web:3000 {
+			header_up X-Request-Id {http.request.uuid}
+		}
 	}
 }

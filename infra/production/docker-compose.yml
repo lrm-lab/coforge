@@ -38,14 +38,14 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./caddy:/etc/caddy:ro
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     networks:
-      coforge:
-        aliases:
-          - web
+      - coforge
     depends_on:
+      web:
+        condition: service_healthy
       centrifugo:
         condition: service_healthy
     restart: unless-stopped
@@ -186,18 +186,6 @@ services:
     networks:
       - coforge
     restart: unless-stopped
-
-  web_blue:
-    extends:
-      service: web
-    ports:
-      - "127.0.0.1:18080:3000"
-
-  web_green:
-    extends:
-      service: web
-    ports:
-      - "127.0.0.1:18081:3000"
 
   migrate:
     logging: *journald-logging
