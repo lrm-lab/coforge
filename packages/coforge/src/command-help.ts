@@ -4,6 +4,8 @@ import { CliError } from "./cli-error";
 type HelpEntry = {
   syntax: string;
   flags?: readonly string[];
+  /** Prose after the flags: rules that do not fit on a flag's line. */
+  guidance?: string;
   example?: string;
 };
 
@@ -136,6 +138,13 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
   "task create": {
     syntax:
       "coforge task create --target <target> --title <title>... [--assignee @handle] [--creates-resource] [--json]",
+    guidance: [
+      "Atomic assignment:",
+      "  --assignee applies to every --title. Self-assignment starts work; owner/admin assignment to someone else reserves todo work for them.",
+      "  To undo an accidental self-start, run `coforge task update --target <channel> --number <N> --status todo`; the task stays assigned to you.",
+      "  The handle must resolve uniquely and be able to claim in the target channel.",
+      "  If handle resolution or channel authorization fails, no task is created.",
+    ].join("\n"),
     example: "coforge task create --target '#general' --title 'Fix the flaky test'",
   },
   "task claim": {
@@ -366,6 +375,7 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
 function renderHelp(name: string, entry: HelpEntry): string {
   const lines = [`coforge ${name}`, "", `  ${entry.syntax}`];
   if (entry.flags?.length) lines.push("", ...entry.flags.map((flag) => `  ${flag}`));
+  if (entry.guidance) lines.push("", entry.guidance);
   if (entry.example) lines.push("", `Example: ${entry.example}`);
   return lines.join("\n");
 }

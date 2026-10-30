@@ -88,3 +88,17 @@ test("every command the top-level usage lists has its own help entry", async () 
   }
   expect(missing).toEqual([]);
 });
+
+test("task create --help explains atomic assignment and how to undo an accidental self-start", () => {
+  const help = commandHelp(["task", "create", "--help"])!;
+  expect(help).toContain("Atomic assignment:");
+  expect(help).toContain("Self-assignment starts work");
+  expect(help).toContain(
+    "coforge task update --target <channel> --number <N> --status todo`; the task stays assigned to you.",
+  );
+  expect(help).toContain(
+    "If handle resolution or channel authorization fails, no task is created.",
+  );
+  // Guidance sits between the form and the example.
+  expect(help.indexOf("Atomic assignment:")).toBeLessThan(help.indexOf("Example:"));
+});
