@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { updateAgentInputFromForm } from "#src/features/agents/agent-form";
 import {
+  AGENT_PROFILE_DESCRIPTION_MAX_LENGTH,
   changeAgentVisibilityInputSchema,
   createAgentInputSchema,
   updateAgentInputSchema,
@@ -98,7 +99,10 @@ describe("createAgentInputSchema", () => {
       }).success,
     ).toBe(false);
     expect(
-      createAgentInputSchema.safeParse({ ...validInput, description: "x".repeat(501) }).success,
+      createAgentInputSchema.safeParse({
+        ...validInput,
+        description: "x".repeat(AGENT_PROFILE_DESCRIPTION_MAX_LENGTH + 1),
+      }).success,
     ).toBe(false);
     expect(createAgentInputSchema.safeParse({ ...validInput, provider: "unknown" }).success).toBe(
       false,

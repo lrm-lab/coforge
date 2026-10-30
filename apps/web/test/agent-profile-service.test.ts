@@ -1,4 +1,5 @@
 import { afterAll, expect, mock, test } from "bun:test";
+import { AGENT_PROFILE_DESCRIPTION_MAX_LENGTH } from "#src/features/agents/agent.schemas";
 import { mockModuleForFile } from "./helpers/file-module-mock";
 
 const displaySnapshots = new Map<string, string>();
@@ -221,16 +222,16 @@ test("profile update: rejects a displayName over 80 characters", async () => {
   expect(outcome.body.error).toContain("80 characters");
 });
 
-test("profile update: rejects a description over 500 characters", async () => {
+test("profile update: rejects a description over the length limit", async () => {
   const outcome = await resolveAgentProfileUpdate(
     baseDb() as never,
     { workspaceId: WORKSPACE_ID, agentId: CALLER_AGENT_ID },
-    { description: "x".repeat(501) },
+    { description: "x".repeat(AGENT_PROFILE_DESCRIPTION_MAX_LENGTH + 1) },
   );
   expect(outcome.status).toBe(400);
   if (outcome.status !== 400) throw new Error("unreachable");
   expect(outcome.body.errorCode).toBe("profile_invalid");
-  expect(outcome.body.error).toContain("500 characters");
+  expect(outcome.body.error).toContain(`${AGENT_PROFILE_DESCRIPTION_MAX_LENGTH} characters`);
 });
 
 test("profile update: requires at least one field", async () => {
