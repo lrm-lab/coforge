@@ -34,6 +34,7 @@ export type ComputerListItem = ComputerIdentity &
   ComputerPlatformInfo & {
     id: string;
     online: boolean;
+    ownedByCurrentUser: boolean;
     computerVersion?: string | null;
     imageVersion?: string | null;
     imageUpdate?: { version: string } | null;
@@ -177,7 +178,13 @@ export function ComputerLayout({
         )}
       >
         <BackToComputersContext value={() => setShowMobileList(true)}>
-          {children}
+          {selectedComputerId || computers.some((computer) => computer.ownedByCurrentUser) ? (
+            children
+          ) : (
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <NoComputers onAdd={onAdd} />
+            </div>
+          )}
         </BackToComputersContext>
       </section>
     </main>
