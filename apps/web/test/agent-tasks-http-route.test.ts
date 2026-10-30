@@ -157,7 +157,10 @@ test("a board error carrying a domain code is answered 400 with that code, not o
   );
 
   expect(result.status).toBe(400);
-  expect(await result.json()).toEqual({ error: "task request refused", code: "INVALID_INPUT" });
+  expect(await result.json()).toEqual({
+    error: "the request was not valid for this operation",
+    code: "INVALID_INPUT",
+  });
 });
 
 test("an unexpected failure is logged and answered 500 — never blamed on the caller", async () => {
@@ -197,7 +200,10 @@ test("a board refusal names its code and the HTTP status that code means", async
   );
 
   expect(result.status).toBe(409);
-  expect(await result.json()).toEqual({ error: "task request refused", code: "CONFLICT" });
+  expect(await result.json()).toEqual({
+    error: "the task changed since you last read it; read the Task list again",
+    code: "CONFLICT",
+  });
 });
 
 test("a message another task holds is refused with the holder, the task and the ways on", async () => {

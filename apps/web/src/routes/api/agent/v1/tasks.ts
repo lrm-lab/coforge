@@ -44,6 +44,15 @@ const TASK_REFUSAL_STATUS: Record<string, number> = {
   TEMPORARILY_UNAVAILABLE: 503,
 };
 
+/** What a board refusal tells the Agent: the daemon relays it as written. */
+const TASK_REFUSAL_TEXT: Record<string, string> = {
+  INVALID_INPUT: "the request was not valid for this operation",
+  NOT_FOUND: "the referenced task or message does not exist",
+  ACCESS_DENIED: "this agent is not allowed to do that",
+  CONFLICT: "the task changed since you last read it; read the Task list again",
+  TEMPORARILY_UNAVAILABLE: "the server is temporarily unavailable; retry",
+};
+
 const taskRequestSchema = z
   .object({
     operation: z.enum(taskOperations),
@@ -98,7 +107,7 @@ export async function handleAgentTaskPost(
         {
           error:
             "With task conversations a task is made with `coforge task create --message-id <id> --title ...`; a message is not turned into a task or claimed as one.",
-          code: TASK_V2_USE_CREATE,
+          code: "CONFLICT",
         },
         { status: 409 },
       );
@@ -112,7 +121,7 @@ export async function handleAgentTaskPost(
           error:
             error.errorId === TASK_ASSIGNMENT_MANAGER_REQUIRED
               ? "Assigning or unassigning someone else requires a Workspace owner or admin."
-              : "task request refused",
+              : (TASK_REFUSAL_TEXT[error.code] ?? "task request refused"),
           code: error.code,
         },
         { status },

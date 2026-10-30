@@ -1,3 +1,4 @@
+import { taskRefusalError } from "./agent-task-refusal";
 import type { AgentMessageTransportResponse } from "./agent-message-adapters";
 import type {
   AgentHistoryResponse,
@@ -560,18 +561,7 @@ export const createAgentTaskHttpClient = (timeoutMs: number): AgentTaskHttpClien
       headers: agentHeaders(keys, true),
       body: JSON.stringify(request),
     });
-    if (!response.ok) {
-      // The upstream body names *why* the server refused (`{"error":…,"code":…}`). It must not ride
-      // in the caller-facing message — an upstream's internals are not this API's to publish, and a
-      // test pins that — but it is the only record of the cause that exists anywhere, so it is
-      // attached for the daemon's own log (see `classifyAgentProxyFailure`).
-      const upstreamCode = await readUpstreamErrorCode(response);
-      throw new AgentUpstreamRefusalError(
-        `server Agent Task request failed (${response.status})`,
-        upstreamCode,
-        response.status,
-      );
-    }
+    if (!response.ok) throw await taskRefusalError(response);
     const result = (await response.json()) as TaskResponse;
     if (result.idempotencyKey !== request.idempotencyKey)
       throw new Error("Task response idempotency key does not match request");

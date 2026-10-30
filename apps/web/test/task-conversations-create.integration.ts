@@ -265,7 +265,10 @@ test("over the Agent route: claim by message is a 409 pointing at create, never 
   ]) {
     const response = await post(principal, body);
     expect(response.status).toBe(409);
-    expect(await response.json()).toMatchObject({ code: "task_v2_use_create" });
+    expect(await response.json()).toMatchObject({
+      code: "CONFLICT",
+      error: expect.stringContaining("coforge task create --message-id"),
+    });
   }
 });
 

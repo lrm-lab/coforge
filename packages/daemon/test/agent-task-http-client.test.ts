@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { AgentExplainedRefusalError } from "#src/connection/agent-explained-refusal-error";
 import { AgentUpstreamRefusalError } from "#src/connection/agent-upstream-refusal-error";
 import {
   createAgentTaskHttpClient,
@@ -42,7 +43,7 @@ test("Agent Task HTTP client reports an authorization denial without treating it
     hostname: "127.0.0.1",
     port: 0,
     fetch() {
-      return Response.json({ error: "details must not be exposed" }, { status: 403 });
+      return Response.json({ detail: "details must not be exposed" }, { status: 403 });
     },
   });
   try {
@@ -92,10 +93,8 @@ test("Agent Task HTTP client keeps the server's refusal code for the daemon log 
     hostname: "127.0.0.1",
     port: 0,
     fetch() {
-      return Response.json(
-        { error: "invalid task request", code: "ACCESS_DENIED" },
-        { status: 400 },
-      );
+      // Not the Agent API's refusal shape (no `error`, an extra field): an upstream's internals.
+      return Response.json({ code: "ACCESS_DENIED", internal: "row 7" }, { status: 400 });
     },
   });
   try {
@@ -115,6 +114,31 @@ test("Agent Task HTTP client keeps the server's refusal code for the daemon log 
       "server Agent Task request failed (400)",
     );
     expect((error as AgentUpstreamRefusalError).upstreamCode).toBe("ACCESS_DENIED");
+  } finally {
+    await server.stop();
+  }
+});
+
+test("Agent Task HTTP client relays a refusal the server wrote for the Agent", async () => {
+  const reason = "With task conversations a task is made with `coforge task create --message-id`.";
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch() {
+      return Response.json({ error: reason, code: "CONFLICT" }, { status: 409 });
+    },
+  });
+  try {
+    const error = await defaultAgentTaskHttpClient
+      .execute({
+        url: `${server.url}api/agent/v1/tasks`,
+        agentApiKey: "agent-key",
+        daemonApiKey: "daemon-key",
+        request,
+      })
+      .catch((thrown: unknown) => thrown);
+    expect(error).toBeInstanceOf(AgentExplainedRefusalError);
+    expect(error).toMatchObject({ message: reason, status: 409, code: "CONFLICT" });
   } finally {
     await server.stop();
   }
