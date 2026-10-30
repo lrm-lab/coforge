@@ -89,7 +89,7 @@ const DropdownItem = ({ label, children, addon, icon: Icon, avatarUrl, unstyled,
             {(state) => (
                 <div
                     className={cx(
-                        "relative flex items-center rounded-md px-2.5 py-2 outline-focus-ring transition duration-100 ease-linear",
+                        "relative flex items-center rounded-md px-2.5 py-1.5 outline-focus-ring transition duration-100 ease-linear",
                         !state.isDisabled && "group-hover:bg-primary_hover",
                         state.isFocused && "bg-primary_hover",
                         state.isFocusVisible && "outline-2 -outline-offset-2",
@@ -104,9 +104,9 @@ const DropdownItem = ({ label, children, addon, icon: Icon, avatarUrl, unstyled,
                         </div>
                     )}
 
-                    {Icon && <Icon aria-hidden="true" className="mr-2 size-4 shrink-0 stroke-[2.25px] text-fg-quaternary" />}
+                    {Icon && <Icon aria-hidden="true" className="mr-2.5 size-4 shrink-0 stroke-[2.25px] text-fg-quaternary" />}
 
-                    <span className={cx("grow truncate text-sm font-semibold text-secondary", state.isFocused && "text-secondary_hover")}>
+                    <span className={cx("grow truncate text-sm/5.5 font-medium text-secondary", state.isFocused && "text-secondary_hover")}>
                         {label || (typeof children === "function" ? children(state) : children)}
                     </span>
 

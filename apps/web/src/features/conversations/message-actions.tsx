@@ -102,8 +102,8 @@ function MessageMoreMenu({
         aria-label={m.conversation_more_actions()}
         className="p-1 *:data-icon:size-3.5"
       />
-      {/* A read time is one line, as wide as it needs. */}
-      <Dropdown.Popover placement="bottom end" className="w-max min-w-56">
+      {/* As wide as its longest entry (a read time is one line), no wider. */}
+      <Dropdown.Popover placement="bottom end" className="w-max min-w-40">
         <Dropdown.Menu aria-label={m.conversation_more_actions()}>
           {onForward && (
             <Dropdown.Item
