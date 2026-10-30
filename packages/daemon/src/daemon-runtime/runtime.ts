@@ -57,7 +57,21 @@ import {
   type AgentRuntime,
 } from "#src/agent-runtime/agent-process-manager";
 import { resolveLaunchIdentity, type SessionReference } from "./launch-identity";
-import { runtimeDisplayName, sessionInvalidateActivityText } from "./session-invalidate-activity";
+import {
+  runtimeDisplayName,
+  sessionInvalidateActivityText,
+  sessionInvalidateMessage,
+} from "./session-invalidate-activity";
+import { ignoredAgentEnvironmentActivity } from "./agent-environment-activity";
+import {
+  activityDraft,
+  idleActivityDraft,
+  interruptedActivityDraft,
+  quietTurnActivityDraft,
+  runtimeErrorActivityDraft,
+  startingActivityDraft,
+  stoppedActivityDraft,
+} from "./activity-draft";
 import { fastModeUnavailableDetail } from "./fast-mode-activity";
 import {
   recoveryHasContent,
@@ -1802,6 +1816,12 @@ export class DaemonRuntime {
       agentApiKey = launchConfig.agentApiKey;
       this.#assertRunning();
       this.#assertAgentNotStopping(agentId);
+      // Skipped at spawn, never deleted: report each reserved stored variable by name.
+      const skipped = ignoredAgentEnvironmentActivity(
+        { workspaceId: this.#connection.workspaceId, agentId },
+        launchConfig.envVars,
+      );
+      if (skipped) this.#activityPublisher.publish(agentId, launch, skipped);
       this.#agentApiKeys.set(agentId, agentApiKey);
       const proxyToken = this.#agentProxy?.issue(agentId, agentApiKey);
       if (proxyToken) this.#agentProxyTokens.set(agentId, proxyToken);
@@ -3180,24 +3200,9 @@ export class DaemonRuntime {
     detail: string,
     extra: Partial<ActivityDraft> = {},
   ): ActivityDraft {
-    return {
-      protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
-      requestId: crypto.randomUUID(),
-      workspaceId: this.#connection.workspaceId,
-      agentId,
-      detailKind,
-      level,
-      detail,
-      ...extra,
-    };
+    return activityDraft(this.#connection.workspaceId, agentId, detailKind, level, detail, extra);
   }
 
-  /**
-   * Builds the one wire shape both `invalidateSession` emit sites send (previously constructed
-   * twice, field by field). No control-fence fields (no `startRequestId`/`controlEpoch`, unlike
-   * `AgentSessionReport`): `launchId` is always
-   * present at both call sites, so there is no separate gating condition here either.
-   */
   #sessionInvalidateMessage(
     agentId: string,
     provider: RuntimeProvider,
@@ -3205,15 +3210,13 @@ export class DaemonRuntime {
     launchId: string,
     reason: AgentSessionInvalidateReason,
   ): AgentSessionInvalidate {
-    return {
-      ...this.#envelope(),
+    return sessionInvalidateMessage(this.#envelope(), this.#runtimeInstanceId, {
       agentId,
       provider,
       sessionId,
-      daemonInstanceId: this.#runtimeInstanceId,
       launchId,
       reason,
-    };
+    });
   }
 
   #runtimeErrorActivity(
@@ -3221,13 +3224,7 @@ export class DaemonRuntime {
     detail: string,
     runtimeError?: ActivityDraft["runtimeError"],
   ): ActivityDraft {
-    return this.#activity(
-      agentId,
-      AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_ERROR,
-      "error",
-      detail,
-      runtimeError ? { runtimeError } : {},
-    );
+    return runtimeErrorActivityDraft(this.#connection.workspaceId, agentId, detail, runtimeError);
   }
 
   /** Attempts delivery of everything just released from an explicit or busy-gated hold, as one
@@ -3246,25 +3243,20 @@ export class DaemonRuntime {
   }
 
   #startingActivity(agentId: string): ActivityDraft {
-    return this.#activity(agentId, AGENT_ACTIVITY_DETAIL_KIND.STARTING, "info", "Starting…");
+    return startingActivityDraft(this.#connection.workspaceId, agentId);
   }
 
   #idleActivity(agentId: string): ActivityDraft {
-    return this.#activity(agentId, AGENT_ACTIVITY_DETAIL_KIND.IDLE, "info", "Idle");
+    return idleActivityDraft(this.#connection.workspaceId, agentId);
   }
 
   #stoppedActivity(agentId: string): ActivityDraft {
-    return this.#activity(agentId, AGENT_ACTIVITY_DETAIL_KIND.STOPPED, "info", "Stopped");
+    return stoppedActivityDraft(this.#connection.workspaceId, agentId);
   }
 
   /** A running turn was cut by a requested stop/restart. */
   #interruptedActivity(agentId: string): ActivityDraft {
-    return this.#activity(
-      agentId,
-      AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_INTERRUPTED,
-      "info",
-      "Turn stopped",
-    );
+    return interruptedActivityDraft(this.#connection.workspaceId, agentId);
   }
 
   /** Reports runtime_interrupted when a requested stop/restart cuts a busy turn.
@@ -3287,16 +3279,12 @@ export class DaemonRuntime {
     publish: (agentId: string, launch: ActivityLaunch, activity: ActivityDraft) => void,
   ): void {
     const waiting = launch.backgroundTasks?.quietDetail();
-    if (waiting) {
-      publish(
-        agentId,
-        launch,
-        this.#activity(agentId, AGENT_ACTIVITY_DETAIL_KIND.SUBAGENT_ACTIVITY, "info", waiting),
-      );
-      return;
-    }
-    publish(agentId, launch, this.#idleActivity(agentId));
-    this.systemCleaner.onAgentWorkingToIdle(agentId);
+    publish(
+      agentId,
+      launch,
+      quietTurnActivityDraft(this.#connection.workspaceId, agentId, waiting),
+    );
+    if (!waiting) this.systemCleaner.onAgentWorkingToIdle(agentId);
   }
 
   /** Restore observation and delivery gating only; this is no proof of a turn outcome. */

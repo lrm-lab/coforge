@@ -103,7 +103,7 @@
   "agent_edit_description": "更新智能体资料和运行时。Computer 不可更改。",
   "agent_update_error": "无法更新智能体，请重试。",
   "agent_env_invalid_name": "变量名必须以字母或下划线开头，只能包含字母、数字和下划线，且不超过 {max} 个字符。",
-  "agent_env_reserved_name": "PATH 和以 COFORGE_ 开头的变量由 CoForge 设置，请换一个名字。",
+  "agent_env_reserved_name": "这个变量由运行时或 CoForge 使用，不能设置。",
   "agent_env_invalid_value": "有变量值过长或包含无效字符。",
   "agent_env_too_many": "一个智能体最多只能设置 {max} 个环境变量，请删掉一些后再保存。",
   "agent_env_too_large": "环境变量总大小超出上限，请缩短或删掉一些值后再保存。",

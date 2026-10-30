@@ -1,4 +1,4 @@
-import { agentEnvironmentViolation } from "@lrm/coforge-sdk/internal";
+import { agentEnvironmentShapeViolation } from "@lrm/coforge-sdk/internal";
 import { isAgentApiKey } from "#src/credentials/agent-api-key";
 import type { AgentRuntimeProviderConfig } from "@lrm/coforge-anvil";
 
@@ -11,13 +11,16 @@ export function parseAgentApiKey(value: unknown): string {
   return value;
 }
 
+/** The Agent's stored environment. Only its shape has to be usable here: a name the rule reserves
+ * is kept, because the launch skips it and reports it (`code-agent/environment.ts`) — refusing the
+ * map would stop an Agent over a variable the daemon can simply not apply. */
 export function parseAgentEnvironment(value: unknown): Record<string, string> {
   if (value === undefined) return {};
   if (
     !value ||
     typeof value !== "object" ||
     Array.isArray(value) ||
-    agentEnvironmentViolation(value as Record<string, unknown>)
+    agentEnvironmentShapeViolation(value as Record<string, unknown>)
   )
     throw new Error("invalid Agent environment response");
   const envVars: Record<string, string> = Object.create(null);

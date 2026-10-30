@@ -185,7 +185,7 @@ These rules apply to `src/features/agents/`.
 - `agent-visibility.ts` holds the `AgentVisibility` vocabulary outside any
   `.server.ts` file so browser validators can import it, and `normalizeAgentVisibility`: read a
   stored value through it, since anything but exactly `public` is private.
-- The environment editor edits only user-declared Agent environment overrides.
+- The environment editor edits only user-declared Agent environment overrides; a name the SDK's shared rule reserves is refused here, and a stored one is skipped and reported by the daemon.
 - The Apps tab (`agent-apps-tab.tsx`, after Raft's web UI) shows every viewer of a live
   Agent its pending requests and active grants; Approve, Deny, Grant access and Revoke only when
   the read's `canManage` says so (Workspace owner/admin or the Agent's creator). Revoke acts at

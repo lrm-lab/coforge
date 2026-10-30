@@ -11,7 +11,7 @@ import {
   type AgentLaunchIdentity,
 } from "#src/code-agent/agent-instructions";
 import { installAssignedSkills, type AssignedSkillPack } from "#src/code-agent/assigned-skills";
-import { agentEnvironment } from "#src/code-agent/environment";
+import { agentEnvironment, usableAgentEnvironment } from "#src/code-agent/environment";
 import { resolveGitHookInjectionForLaunch } from "#src/code-agent/git-hooks";
 import { seedAgentMemory } from "./agent-memory-seed";
 import { isMemoryAgentToolProfile } from "@lrm/coforge-sdk/agent";
@@ -170,7 +170,12 @@ export class AgentProcessManager {
         sessionId,
         sessionMode,
         onSessionId,
-        runtime: config,
+        // The provider reads this map too (adapter path lookups); it gets the same environment
+        // the process will, without the names the shared rule refuses. An Agent with no stored
+        // environment keeps the configuration it was started with, field for field.
+        runtime: config.envVars
+          ? { ...config, envVars: usableAgentEnvironment(config.envVars) }
+          : config,
         environment,
         gitHooks,
       };

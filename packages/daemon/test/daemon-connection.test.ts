@@ -4047,11 +4047,9 @@ test("validates explicit launch environment and preserves provider keys and empt
   await transport.start("daemon-token", { ...config, serverHttpUrl: "https://server.example" });
   try {
     for (const envVars of [
-      { TOKEN: "secret", HTTPS_PROXY: "https://proxy", EMPTY: "" },
+      { TOKEN: "secret", HTTPS_PROXY: "https://proxy", EMPTY: "", PATH: "secret" },
       null,
       [],
-      { PATH: "secret" },
-      { COFORGE_API_KEY: "secret" },
       { A: "secret\0" },
       { A: 1 },
       { "BAD=NAME": "secret" },

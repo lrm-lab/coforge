@@ -21,7 +21,9 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
 - `code-agent-inventory-sync.ts` owns inventory/catalog reports (including the post-report Devin
   effort republish), liveness checks and
   refresh serialization. `runtime.ts` decides when to report; Agent traffic never waits. Each inventory also feeds `runtime-auth-reporter.ts`, which reports login status, never on a timer (every inventory report or re-discovery, login/logout via `refreshRuntimeAuth()`, every answered usage scan); unchanged provider lists still re-read auth because executable paths or environments may have changed. Scan replies wait for auth collection and reporting, regardless of usage support or result. Refused reports log a credential-redacted reason at info; a scan requiring a fresh snapshot answers error if reporting fails. Background inventory reports remain best-effort.
-- `session-invalidate-activity.ts` narrates the cold-start Activity after a session invalidate. `runtime.ts` only publishes it.
+- `session-invalidate-activity.ts` narrates the cold-start Activity after a session invalidate; `runtime.ts` only publishes it. It also builds that message's wire shape.
+- `activity-draft.ts` builds the Activity envelopes and the launch/stop frames (`starting`, `idle`, `stopped`, `interrupted`, quiet turn, `runtime_error`); `runtime.ts` supplies the workspace and publishes them.
+- `agent-environment-activity.ts` names the Agent environment variables a launch had to skip (`code-agent/environment.ts`), so a stored value the rule refuses is reported rather than deleted.
 - A start that fails stops its transport before replacing it, so a connection
   that came up never keeps reporting the Computer online for a Workspace that
   did not start. `stop` aborts a start still waiting on the cloud (connect or

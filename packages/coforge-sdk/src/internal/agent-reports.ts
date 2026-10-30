@@ -46,6 +46,10 @@ export const AGENT_ACTIVITY_DETAIL_KIND = {
   // This launch asked for the runtime's Fast service tier and the runtime reported it is not
   // applied (off, cooling down, or unreported). Warning level; one row per launch.
   FAST_MODE_UNAVAILABLE: "fast_mode_unavailable",
+  // This launch skipped stored Agent environment variables the shared rule refuses (they could
+  // change how the runtime or its toolchain executes). Warning level; one row per launch, naming
+  // each skipped variable so it can be removed.
+  AGENT_ENVIRONMENT_IGNORED: "agent_environment_ignored",
   // A review pass started and no finish was observed for a long time.
   REVIEW_STALE: "review_stale",
   // The daemon is restarting a provider it found stalled.

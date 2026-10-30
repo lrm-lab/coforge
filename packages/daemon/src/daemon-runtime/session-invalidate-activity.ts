@@ -1,5 +1,6 @@
 import {
   RUNTIME_PROVIDER,
+  type AgentSessionInvalidate,
   type AgentSessionInvalidateReason,
   type RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
@@ -22,6 +23,23 @@ const RUNTIME_DISPLAY_NAME: Record<RuntimeProvider, string> = {
 
 export function runtimeDisplayName(provider: RuntimeProvider): string {
   return RUNTIME_DISPLAY_NAME[provider];
+}
+
+/** The one wire shape both `invalidateSession` emit sites send, built from the report envelope and
+ * the stale session it names. No control-fence fields (no `startRequestId`/`controlEpoch`, unlike
+ * `AgentSessionReport`): `launchId` is always present at both call sites. */
+export function sessionInvalidateMessage(
+  envelope: Pick<
+    AgentSessionInvalidate,
+    "protocolMajor" | "requestId" | "workspaceId" | "computerId"
+  >,
+  daemonInstanceId: string,
+  fields: Pick<
+    AgentSessionInvalidate,
+    "agentId" | "provider" | "sessionId" | "launchId" | "reason"
+  >,
+): AgentSessionInvalidate {
+  return { ...envelope, ...fields, daemonInstanceId };
 }
 
 /** Narration for a daemon-initiated cold start after a session invalidate. */

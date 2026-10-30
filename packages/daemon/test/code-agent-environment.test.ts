@@ -59,6 +59,37 @@ test("makes the Agent-facing coforge binary available without Agent identity", (
   expect(environment).not.toHaveProperty("AGENT_ID");
 });
 
+test("never applies a reserved variable the Agent's stored environment carries", () => {
+  // A stored environment can predate the reserved list, and the daemon must launch the Agent
+  // anyway: the named variables are skipped (the launch reports them) instead of applied.
+  const environment = agentEnvironment(
+    undefined,
+    { PATH: "/usr/bin", HOME: "/Users/agent" },
+    "linux",
+    {
+      envVars: {
+        NODE_OPTIONS: "--require ./x.js",
+        dyld_insert_libraries: "libx.dylib",
+        GIT_CONFIG_KEY_0: "core.hooksPath",
+        MY_VAR: "kept",
+        // A COFORGE_ knob stays the Agent's to override, as documented for wake recycle.
+        COFORGE_WAKE_RECYCLE: "0",
+      },
+    },
+  );
+
+  expect(environment).not.toHaveProperty("NODE_OPTIONS");
+  expect(environment).not.toHaveProperty("dyld_insert_libraries");
+  // The daemon writes its own Git config entries; a stored key never becomes one of them.
+  expect(environment.GIT_CONFIG_KEY_0).toBe("credential.https://github.com.helper");
+  expect(Object.values(environment)).not.toContain("core.hooksPath");
+  expect(environment.MY_VAR).toBe("kept");
+  expect(environment.COFORGE_WAKE_RECYCLE).toBe("0");
+  // Inherited host values are the daemon's own environment, not an Agent override.
+  expect(environment.HOME).toBe("/Users/agent");
+  expect(environment.PATH?.split(":")).toContain("/usr/bin");
+});
+
 test("preserves inherited command-scope Git configuration before the GitHub helper", () => {
   const environment = agentEnvironment(undefined, {
     GIT_CONFIG_COUNT: "1",

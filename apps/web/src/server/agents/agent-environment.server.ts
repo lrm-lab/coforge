@@ -1,4 +1,5 @@
 import {
+  agentEnvironmentShapeViolation,
   agentEnvironmentViolation,
   type AgentStartIntent,
   type AgentStopIntent,
@@ -149,10 +150,23 @@ export async function decryptAgentEnvironment(
       await crypto.subtle.importKey("raw", encryptionKey, "AES-GCM", false, ["decrypt"]),
       Buffer.from(encrypted.ciphertext, "base64"),
     );
-    return validateAgentEnvironment(JSON.parse(utf8Decoder.decode(plaintext)));
+    return storedAgentEnvironment(JSON.parse(utf8Decoder.decode(plaintext)));
   } catch {
     throw new Error("Agent environment could not be decrypted");
   }
+}
+
+/** The environment a launch hands the daemon: the stored map as written, including any name the
+ * rule now reserves. Only its shape is checked — the daemon skips a reserved name at spawn and
+ * reports it as Activity, so a value stored before the rule cannot stop the Agent launching. */
+export function storedAgentEnvironment(input: unknown): Record<string, string> {
+  if (!input || typeof input !== "object" || Array.isArray(input))
+    throw new Error("Agent environment must be a variable map");
+  const violation = agentEnvironmentShapeViolation(input as Record<string, unknown>);
+  if (violation) throw new AppError("INVALID_INPUT", { errorId: `agent-environment-${violation}` });
+  const envVars: Record<string, string> = Object.create(null);
+  for (const [name, value] of Object.entries(input)) envVars[name] = value as string;
+  return envVars;
 }
 
 export function validateAgentEnvironment(input: unknown): Record<string, string> {

@@ -3,6 +3,7 @@ import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import {
   AgentEnvironment,
   decryptAgentEnvironment,
+  storedAgentEnvironment,
   validateAgentEnvironment,
 } from "#src/server/agents/agent-environment.server";
 import { publicAgentRuntimeConfig } from "#src/server/agents/agent-runtime-config.server";
@@ -150,6 +151,7 @@ test("invalid maps fail before stop and never echo values", async () => {
     [],
     "secret",
     { PATH: "secret" },
+    { NODE_OPTIONS: "--require ./x.js" },
     { coforge_API_KEY: "secret" },
     { "BAD=NAME": "secret" },
     { A: "secret\0" },
@@ -187,13 +189,49 @@ test("a refused variable names the rule it broke, so the editor can say why", as
   for (const [input, errorId] of [
     [{ "11": "11" }, "agent-environment-invalid-name"],
     [{ PATH: "secret" }, "agent-environment-reserved-name"],
+    // The reserved list is shared with the daemon's spawn rule; case does not matter.
+    [{ node_options: "secret" }, "agent-environment-reserved-name"],
   ] as const) {
     await expect(f.environment.save(principal, "agent-1", input)).rejects.toMatchObject({
       code: "INVALID_INPUT",
       errorId,
     });
   }
-  expect(f.events).toEqual(["lock", "unlock", "lock", "unlock"]);
+  expect(f.events).toEqual(["lock", "unlock", "lock", "unlock", "lock", "unlock"]);
+});
+
+test("a stored environment the rule now reserves still reaches the launch, and the editor can show it", async () => {
+  const key = new Uint8Array(32).fill(7);
+  const nonce = crypto.getRandomValues(new Uint8Array(12));
+  const stored = { node_options: "--require ./x.js", MY_VAR: "kept" };
+  const ciphertext = await crypto.subtle.encrypt(
+    {
+      name: "AES-GCM",
+      iv: nonce,
+      additionalData: new TextEncoder().encode("coforge.agent-environment.v1\0agent-1"),
+    },
+    await crypto.subtle.importKey("raw", key, "AES-GCM", false, ["encrypt"]),
+    new TextEncoder().encode(JSON.stringify(stored)),
+  );
+  const encrypted = {
+    keyId: "v1",
+    ciphertext: Buffer.from(ciphertext).toString("base64"),
+    nonce: Buffer.from(nonce).toString("base64"),
+  };
+  // Skipped by the daemon at spawn and reported there, never refused here: a value stored before
+  // the rule existed must not stop the Agent from launching, and the editor still shows it.
+  expect(await decryptAgentEnvironment("agent-1", encrypted, key)).toEqual(stored);
+  const f = fixture();
+  f.agent.runtimeConfig = { ...f.agent.runtimeConfig, environment: encrypted };
+  expect(await f.environment.get(principal, "agent-1")).toEqual(stored);
+  expect(
+    await f.environment.launchEnvironment("agent-1", {
+      ...f.agent.runtimeConfig,
+      environment: encrypted,
+    }),
+  ).toEqual(stored);
+  // A malformed stored map is still unusable.
+  expect(() => storedAgentEnvironment({ "BAD=NAME": "x" })).toThrow();
 });
 
 test("a stopped Agent saves the environment without the stop -> ... -> start dance", async () => {

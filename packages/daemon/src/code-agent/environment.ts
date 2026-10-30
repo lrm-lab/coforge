@@ -1,4 +1,5 @@
 import { dirname } from "node:path";
+import { isLaunchUnsafeAgentEnvironmentName } from "@lrm/coforge-sdk/internal";
 import {
   codeAgentExecutableSearchPath,
   executablePathDelimiter,
@@ -98,6 +99,21 @@ export function agentRuntimeContextEnvironment(
   return environment;
 }
 
+/**
+ * The Agent's stored environment without the variables the shared rule refuses. Skipped, never
+ * deleted: the values stay stored, and the launch reports each skipped name so the person can
+ * remove it. A stored environment may predate the rule, so refusing the whole map would strand the
+ * Agent instead of launching it without the variable.
+ */
+export function usableAgentEnvironment(
+  environment: Readonly<Record<string, string>> | undefined,
+): Record<string, string> {
+  if (!environment) return {};
+  return Object.fromEntries(
+    Object.entries(environment).filter(([name]) => !isLaunchUnsafeAgentEnvironmentName(name)),
+  );
+}
+
 export function agentEnvironment(
   declared: Readonly<Record<string, string>> | undefined,
   inherited: Readonly<Record<string, string | undefined>> = Bun.env,
@@ -114,7 +130,7 @@ export function agentEnvironment(
   for (const [name, value] of Object.entries({
     ...inherited,
     FORCE_COLOR: "0",
-    ...options.envVars,
+    ...usableAgentEnvironment(options.envVars),
     ...options.extraEnv,
   })) {
     if (value !== undefined) environment[name] = value;
