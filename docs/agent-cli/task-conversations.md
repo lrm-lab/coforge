@@ -14,6 +14,13 @@ answers 404 with the Workspace's explanation. When the switch changes while a se
 daemon restarts the session first so its standing instructions match, then delivers the input
 behind one line starting `CoForge notice: this workspace's features changed:`.
 
+A task made this way sits on no channel message, which a CLI older than Computer 0.1.19 cannot
+list (it crashes). So the switch refuses to open while any Computer with an Agent in the
+Workspace is older than 0.1.19 or has not reported a version, and names those Computers. While it
+is on, an Agent on such a Computer (one added later) is refused every Task request with `426
+CLIENT_UPGRADE_REQUIRED`; no task data is sent to it. The minimum is
+`TASK_CONVERSATIONS_MIN_COMPUTER_VERSION`.
+
 ## A task's ref
 
 `#channel:#7`, or `dm:@name:#7` on a direct board. Always quote it in a shell: an unquoted `#`

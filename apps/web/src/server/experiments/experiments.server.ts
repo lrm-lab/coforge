@@ -28,6 +28,11 @@ export type ExperimentsRepository = {
 
 export const EXPERIMENT_KEYS = Object.keys(EXPERIMENTS) as [ExperimentKey, ...ExperimentKey[]];
 
+/** What must hold before an experiment is switched on; a refusal is thrown. */
+export type ExperimentPreconditions = Partial<
+  Record<ExperimentKey, (workspaceId: string) => Promise<void>>
+>;
+
 export class Experiments {
   constructor(
     private readonly repository: ExperimentsRepository,
@@ -35,6 +40,7 @@ export class Experiments {
       flag: FeatureFlag,
       context: FeatureFlagContext,
     ) => Promise<boolean>,
+    private readonly beforeEnable: ExperimentPreconditions = {},
   ) {}
 
   /** The experiments this Workspace offers, with its switch for each. */
@@ -69,6 +75,7 @@ export class Experiments {
     assertCanManageWorkspaceSettings(actorRole);
     if (!(await this.flagEnabled(EXPERIMENTS[key].flag, workspace)))
       throw new AppError("NOT_FOUND");
+    if (enabled) await this.beforeEnable[key]?.(workspace.workspaceId);
     await this.repository.write(workspace.workspaceId, key, enabled);
     return { key, enabled, reload: EXPERIMENTS[key].reload };
   }

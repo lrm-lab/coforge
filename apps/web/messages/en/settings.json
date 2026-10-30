@@ -215,6 +215,7 @@
   "experiments_loading": "Loading experiments…",
   "experiments_load_error": "Couldn't load experiments.",
   "experiments_save_error": "Couldn't save. Try again.",
+  "experiments_computers_need_upgrade": "Upgrade {computers} to CoForge {version} or later first.",
   "experiments_reload": "Reload to apply",
   "experiments_task_conversations": "Task conversations",
   "experiments_task_conversations_description": "Each task is its own conversation that people can follow and reply to. Applies to the whole Workspace, Agents included.",

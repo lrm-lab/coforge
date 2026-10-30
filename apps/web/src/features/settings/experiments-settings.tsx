@@ -15,6 +15,7 @@ import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-rea
 import { workspaceConversationChannel } from "#src/features/conversations/conversation-realtime";
 import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime";
 import { decodeWorkspaceFeaturesChangedEvent } from "#src/features/workspaces/workspace-realtime";
+import { isAppError } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import { getExperiments, setExperiment } from "./experiments.functions";
 
@@ -32,6 +33,17 @@ const EXPERIMENT_TEXT: Record<
 
 /** The Workspace's cache is cleared on a Workspace switch, so the key needs no Workspace id. */
 const EXPERIMENTS_QUERY_KEY = ["settings-experiments"];
+
+/** Why a switch did not save: a Computer that must be upgraded first is named, anything else is
+ * the plain failure. */
+function saveErrorText(error: unknown) {
+  if (isAppError(error) && error.errorId === "computers-need-upgrade" && error.details)
+    return m.experiments_computers_need_upgrade({
+      computers: String(error.details.computers),
+      version: String(error.details.version),
+    });
+  return m.experiments_save_error();
+}
 
 type ExperimentsData = Awaited<ReturnType<typeof getExperiments>>;
 
@@ -138,7 +150,7 @@ export function ExperimentsSettings({
                   </SettingsField>
                   {failed && (
                     <p role="alert" className="text-sm text-error-primary">
-                      {m.experiments_save_error()}
+                      {saveErrorText(toggle.error)}
                     </p>
                   )}
                 </div>

@@ -14,6 +14,7 @@ import {
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { TASK_V2_USE_CREATE, TaskBoard } from "#src/server/tasks/task-board.server";
+import { taskComputerRefusal } from "#src/server/tasks/task-computer-gate.server";
 import { SourceMessageTaken } from "#src/server/tasks/task-conversation-creation.server";
 import { TASK_ASSIGNMENT_MANAGER_REQUIRED } from "#src/features/tasks/task-assignment";
 import { readAgentJsonBody } from "#src/server/agents/agent-http-routes.server";
@@ -144,7 +145,8 @@ export const Route = createFileRoute("/api/agent/v1/tasks")({
     handlers: {
       // An Agent's Task writes reach open pages like a person's: their notices and Task changes
       // are signalled (never delivered or pushed from here).
-      POST: ({ request, context: { principal, db } }) =>
+      POST: async ({ request, context: { principal, db } }) =>
+        (await taskComputerRefusal(db, principal)) ??
         handleAgentTaskPost(
           request,
           // Agent Task commands act as the agent, not its owner user.

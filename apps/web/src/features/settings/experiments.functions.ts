@@ -9,6 +9,7 @@ import { canManageWorkspaceSettings } from "#src/features/workspaces/workspace-r
 import { workspaceMemberRole } from "#src/server/workspaces/workspace-membership.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { announceFeaturesChanged } from "#src/server/experiments/features-signal.server";
+import { requireComputersForTaskConversations } from "#src/server/tasks/task-computer-gate.server";
 import { isFeatureEnabled } from "#src/server/feature-flags/feature-flags.server";
 
 const setExperimentInputSchema = z.object({
@@ -23,7 +24,9 @@ async function experimentsFor(db: PrismaClient, workspaceId: string) {
     select: { slug: true },
   });
   return {
-    experiments: new Experiments(new PrismaExperimentsRepository(db), isFeatureEnabled),
+    experiments: new Experiments(new PrismaExperimentsRepository(db), isFeatureEnabled, {
+      taskConversations: (id) => requireComputersForTaskConversations(db, id),
+    }),
     workspace: { workspaceId, workspaceSlug: slug },
   };
 }

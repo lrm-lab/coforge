@@ -215,6 +215,7 @@
   "experiments_loading": "正在读取体验项…",
   "experiments_load_error": "体验项读取失败。",
   "experiments_save_error": "保存失败，请重试。",
+  "experiments_computers_need_upgrade": "请先把 {computers} 升级到 CoForge {version} 或更高版本。",
   "experiments_reload": "刷新页面后生效",
   "experiments_task_conversations": "任务对话",
   "experiments_task_conversations_description": "每个任务是一段独立的对话，可以单独关注和回复。对整个工作区生效，包括所有智能体。",
