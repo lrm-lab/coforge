@@ -46,11 +46,12 @@ test("Chat list avatars: a 48px circle for a DM and a channel, 38px round for th
 });
 
 test("Row wiring: the selected card uses the spec fill/border and pinned rows use the sidebar foreground", async () => {
-  // The row's own treatment lives in `conversation-row.tsx`; its callers are in the directory.
+  // The row's own treatment lives in `conversation-row.tsx`; its callers are the directory's rows.
   const source = (
     await Promise.all(
-      ["conversation-directory.tsx", "conversation-row.tsx"].map((file) =>
-        Bun.file(new URL(`../src/features/conversations/${file}`, import.meta.url)).text(),
+      ["conversation-directory.tsx", "conversation-directory-rows.tsx", "conversation-row.tsx"].map(
+        (file) =>
+          Bun.file(new URL(`../src/features/conversations/${file}`, import.meta.url)).text(),
       ),
     )
   ).join("\n");

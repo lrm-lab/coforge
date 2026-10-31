@@ -1,4 +1,4 @@
-import { Bookmark, Hash01 as Hash, Pin01 } from "@untitledui/icons";
+import { Bookmark, Pin01 } from "@untitledui/icons";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { DndContext } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -6,15 +6,19 @@ import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { Button } from "#src/components/base/buttons/button";
 import { useAppToast } from "#src/components/ui/toast";
 import type { LiveAgent } from "#src/features/agents/workspace-agents-realtime";
-import { MemberAvatar } from "#src/features/workspaces/member-avatar";
 import { cx } from "#src/utils/cx";
 import { m } from "#src/paraglide/messages";
 import { ConversationRow } from "./conversation-row";
-import { DirectAgentAvatar } from "./direct-agent-avatar";
 import { useChannelUnreadCounts } from "./conversation-navigation";
+import {
+  ChannelDirectoryRow,
+  DirectDirectoryRow,
+  type DirectEntry,
+  type DirectoryChannel,
+  type DirectoryRowMenu,
+} from "./conversation-directory-rows";
 import { DIRECTORY_INSET, DirectoryEmptyNote, DirectorySection } from "./directory-section-group";
 import { useSavedEntries } from "./conversation-host";
-import { ConversationRowMenu } from "./conversation-row-menu";
 import { conversationRowMenuEnabled } from "./conversation-row-menu-model";
 import { useChatSections, useSidebarActions } from "./sidebar-lists";
 import { ChatSectionDialog } from "./chat-section-dialog";
@@ -48,39 +52,7 @@ import {
   readHideEmptySidebarSections,
   writeHideEmptySidebarSections,
 } from "#src/features/settings/hide-empty-sidebar-sections";
-import { useTimeFormat } from "#src/lib/time-format-context";
-import { useTimeZone } from "#src/lib/time-zone-context";
 import { getLocale } from "#src/paraglide/runtime";
-import { lastMessageTime } from "./last-message-time";
-import {
-  channelMentionShown,
-  channelPreviewLine,
-  type ChannelPreviewSender,
-} from "./channel-preview-line";
-import { collageLayout } from "./collage-layout";
-import { GroupAvatar, type GroupAvatarMember } from "./group-avatar";
-
-type DirectoryChannel = {
-  id: string;
-  name: string;
-  joined: boolean;
-  /** The member muted this channel; its unread badge degrades to a bare dot. */
-  muted?: boolean;
-  /** The member pinned this row; it moves to the Pinned section and its menu item reads "Unpin". */
-  pinned: boolean;
-  /** Where the row sits in the Pinned section, among the member's pinned channels and DMs. */
-  pinSortOrder: number | null;
-  /** The channel's last message, or `null` while it has none (the row then shows its name only). */
-  lastMessage: { createdAt: string; preview: string; sender: ChannelPreviewSender } | null;
-  /** Up to six members: fetched so the group avatar can tell when to show "…" (it draws at most four). */
-  members: readonly GroupAvatarMember[];
-  /** The viewer is @mentioned in this channel. */
-  mentioned: boolean;
-};
-
-/** A DM row as the directory shows it: its row, the name it goes by, and its live Agent when it is
- * one with an Agent. */
-type DirectEntry = DirectRow & { name: string; agent?: LiveAgent; self: boolean };
 
 /** Channel and direct-message selection within the Chat page. */
 export function ConversationDirectory({
@@ -107,9 +79,6 @@ export function ConversationDirectory({
 }) {
   const unreadCounts = useChannelUnreadCounts();
   const savedCount = useSavedEntries()?.length;
-  const timeZone = useTimeZone();
-  const timeFormat = useTimeFormat();
-  const timeContext = { now: new Date(), locale: getLocale(), timeZone, timeFormat };
   const groups = useChatSections();
   // Derived once per list change, not per render: the drag reads `base` and `natural` on every
   // pointer move.
@@ -277,105 +246,11 @@ export function ConversationDirectory({
       return next;
     });
 
-  const channelRow = (channel: DirectoryChannel) => {
-    const current = channel.id === selectedChannelId;
-    return (
-      <ConversationRowMenu
-        target={{ kind: "channel", ...channel, muted: channel.muted === true }}
-        sections={groups.sections}
-        sectionsReady={groups.status === "ready"}
-        onSectionError={sectionFailed}
-      >
-        <ConversationRow
-          target={{ channelId: channel.id }}
-          current={current}
-          card
-          pinned={channel.pinned}
-          muted={!channel.joined || channel.muted}
-          unreadCount={unreadCounts[channel.id]}
-          label={`#${channel.name}`}
-          lastMessage={{
-            time: channel.lastMessage
-              ? lastMessageTime(channel.lastMessage.createdAt, timeContext)
-              : null,
-            preview: channel.lastMessage
-              ? channelPreviewLine({
-                  sender: channel.lastMessage.sender,
-                  preview: channel.lastMessage.preview,
-                  youLabel: m.conversation_you(),
-                })
-              : null,
-            mentioned: channelMentionShown({
-              mentioned: channel.mentioned,
-              unreadCount: unreadCounts[channel.id],
-            }),
-          }}
-          icon={
-            collageLayout(channel.members.length).length > 0 ? (
-              <GroupAvatar members={channel.members} />
-            ) : (
-              <span className="flex size-5 items-center justify-center">
-                <Hash
-                  aria-hidden="true"
-                  className={cx("size-4", current ? "text-brand-secondary" : "text-tertiary")}
-                />
-              </span>
-            )
-          }
-        >
-          {channel.name}
-        </ConversationRow>
-      </ConversationRowMenu>
-    );
+  const rowMenu: DirectoryRowMenu = {
+    sections: groups.sections,
+    sectionsReady: groups.status === "ready",
+    onSectionError: sectionFailed,
   };
-  const directRow = ({
-    conversationId,
-    peer,
-    pinned,
-    muted,
-    name,
-    agent,
-    self,
-    lastMessageAt,
-    lastMessagePreview,
-  }: DirectEntry) => (
-    <ConversationRowMenu
-      target={{ kind: "direct", conversationId, pinned, muted: muted === true }}
-      sections={groups.sections}
-      sectionsReady={groups.status === "ready"}
-      onSectionError={sectionFailed}
-    >
-      <ConversationRow
-        target={{ dmId: conversationId }}
-        current={conversationId === selectedDmId}
-        card
-        pinned={pinned}
-        muted={muted}
-        unreadCount={unreadCounts[conversationId]}
-        label={self ? m.conversation_dm_self_name({ name }) : name}
-        lastMessage={{
-          time: lastMessageAt ? lastMessageTime(lastMessageAt, timeContext) : null,
-          preview: lastMessagePreview,
-        }}
-        icon={
-          agent ? (
-            <DirectAgentAvatar agent={agent} />
-          ) : peer.kind === "people" ? (
-            <MemberAvatar
-              size="sm"
-              className="avatar-dm"
-              userId={peer.userId}
-              name={name}
-              src={peer.avatarUrl}
-            />
-          ) : null
-        }
-      >
-        {name}
-        {self && <span className="text-quaternary">{m.conversation_dm_self_suffix()}</span>}
-      </ConversationRow>
-    </ConversationRowMenu>
-  );
   /** Every row by key, with whether it can be pinned (only a conversation the member is in). */
   const rows = new Map<string, { node: ReactNode; draggable: boolean; label: string }>([
     ...sortedChannels.map(
@@ -383,7 +258,14 @@ export function ConversationDirectory({
         [
           channelRowKey(channel.id),
           {
-            node: channelRow(channel),
+            node: (
+              <ChannelDirectoryRow
+                channel={channel}
+                current={channel.id === selectedChannelId}
+                unreadCount={unreadCounts[channel.id]}
+                menu={rowMenu}
+              />
+            ),
             draggable: conversationRowMenuEnabled(channel),
             label: channel.name,
           },
@@ -393,7 +275,18 @@ export function ConversationDirectory({
       (row) =>
         [
           directRowKey(row.conversationId),
-          { node: directRow(row), draggable: true, label: row.name },
+          {
+            node: (
+              <DirectDirectoryRow
+                entry={row}
+                current={row.conversationId === selectedDmId}
+                unreadCount={unreadCounts[row.conversationId]}
+                menu={rowMenu}
+              />
+            ),
+            draggable: true,
+            label: row.name,
+          },
         ] as const,
     ),
   ]);
