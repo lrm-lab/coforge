@@ -35,12 +35,8 @@ import {
   withWeekSendDismissed,
   type ReportContent,
 } from "./records-content";
-import {
-  BackToRecords,
-  RecordsKeyPointReturnBack,
-  WeekBadge,
-  useFormatEditHint,
-} from "./records-layout";
+import { BackToRecords, RecordsKeyPointReturnBack, useFormatEditHint } from "./records-layout";
+import { WeekBadge } from "./records-sidebar-parts";
 import { RecordsDeleteConfirmDialog } from "./records-delete-confirm-dialog";
 import { RecordsReadingColumn } from "./records-reading-column";
 import { RecordSidePanel } from "./record-side-panel";

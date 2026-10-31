@@ -33,3 +33,36 @@ export function sidebarPreview<T>(
     hiddenCount: items.length - limit,
   };
 }
+
+export type RecordsTab = "weekly" | "notes";
+
+export function recordsTabSearch(tab: string | undefined): RecordsTab {
+  return tab === "notes" ? "notes" : "weekly";
+}
+
+export function matchesQuery(text: string, query: string) {
+  if (!query) return true;
+  return text.toLowerCase().includes(query.toLowerCase());
+}
+
+/** Member-week rows (keyed `year-week`) whose title or submissions match the search query. */
+export function filterMemberWeeks<
+  S extends { title: string; author: { displayName: string } },
+  W extends { year: number; week: number; title: string; submissions: S[] },
+>(memberWeeks: readonly W[], query: string) {
+  return memberWeeks
+    .map((week) => ({
+      ...week,
+      key: `${week.year}-${week.week}`,
+      submissions: week.submissions.filter(
+        (submission) =>
+          matchesQuery(submission.title, query) ||
+          matchesQuery(submission.author.displayName, query) ||
+          matchesQuery(week.title, query),
+      ),
+    }))
+    .filter((week) => {
+      if (!query) return true;
+      return matchesQuery(week.title, query) || week.submissions.length > 0;
+    });
+}

@@ -7,18 +7,14 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Link, useNavigate, useRouter } from "@tanstack/react-router";
+import { useNavigate, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
-  ChevronDown,
   ChevronLeft,
   Edit01 as Edit,
   File02 as FileText,
-  LineChartUp01 as LineChart,
   Plus,
   SearchLg as Search,
-  Settings01 as Settings,
-  XClose as X,
 } from "@untitledui/icons";
 
 import { UnreadDot } from "#src/components/ui/unread-marker";
@@ -27,36 +23,34 @@ import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { Tab, TabList, TabPanel, Tabs } from "#src/components/application/tabs/tabs";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Input } from "#src/components/base/input/input";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { createRecordNote, type loadRecordsCatalog } from "./records.functions";
 import {
-  defaultMemberWeekExpanded,
   defaultRecordsSectionOpen,
   recallRecordsSidebarExpand,
   rememberRecordsSidebarExpand,
   type RecordsSidebarExpandSnapshot,
   type RecordsSidebarSectionId,
 } from "./records-sidebar-expand";
-import { sidebarPreview } from "./records-sidebar";
+import { FormatChipSlot } from "./records-format-chip";
+import { RecordsToolsFooter } from "./records-tools-footer";
+import { RecordsMemberWeeksSection } from "./records-member-weeks-section";
+import { CollapsibleSection, RecordLink, SidebarMore, WeekBadge } from "./records-sidebar-parts";
 import {
-  formatSendWindowCountdown,
-  isWeeklySendArmed,
-  isWeeklyTemplateChipHighlighted,
-  weeklySendWindow,
-} from "./weekly-send-window";
+  filterMemberWeeks,
+  matchesQuery,
+  recordsTabSearch,
+  sidebarPreview,
+  type RecordsTab,
+} from "./records-sidebar";
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 
-export type RecordsTab = "weekly" | "notes";
+export type { RecordsTab };
 export type RecordsPanel = "settings" | "stats" | "dashboard";
 export type RecordsCatalog = Awaited<ReturnType<typeof loadRecordsCatalog>>;
-
-function recordsTabSearch(tab: string | undefined): RecordsTab {
-  return tab === "notes" ? "notes" : "weekly";
-}
 
 const BackToRecordsContext = createContext<(() => void) | undefined>(undefined);
 
@@ -64,11 +58,6 @@ const FormatEditHintContext = createContext<(editing: boolean) => void>(() => {}
 
 export function useFormatEditHint() {
   return useContext(FormatEditHintContext);
-}
-
-function matchesQuery(text: string, query: string) {
-  if (!query) return true;
-  return text.toLowerCase().includes(query.toLowerCase());
 }
 
 export function RecordsLayout({
@@ -135,18 +124,12 @@ export function RecordsLayout({
   const [favoritesExpanded, setFavoritesExpanded] = useState(false);
   const [membersExpanded, setMembersExpanded] = useState(false);
   const [formatEditing, setFormatEditing] = useState(false);
-  const [settingsHintDismissed, setSettingsHintDismissed] = useState(false);
-  const [settingsHintVisible, setSettingsHintVisible] = useState(false);
   const [myReportsOpen, setMyReportsOpen] = useState(sectionDefaults.myReports);
   const [membersOpen, setMembersOpen] = useState(sectionDefaults.members);
   const [notesOpen, setNotesOpen] = useState(sectionDefaults.notes);
   const [expandedWeeks, setExpandedWeeks] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
   const listHidden = recordOpen && !showMobileList;
-
-  useEffect(() => {
-    if (formatEditing) setSettingsHintVisible(true);
-  }, [formatEditing]);
 
   const applyActiveSection = useCallback((section: RecordsSidebarSectionId) => {
     setActiveSection(section);
@@ -201,27 +184,8 @@ export function RecordsLayout({
   );
   const myReportsUnread = catalog.myReports.some((item) => item.unread);
   const filteredMemberWeeks = useMemo(
-    () =>
-      catalog.memberWeeks
-        .map((week) => ({
-          ...week,
-          key: `${week.year}-${week.week}`,
-          submissions: week.submissions.filter(
-            (submission) =>
-              matchesQuery(submission.title, query) ||
-              matchesQuery(submission.author.displayName, query) ||
-              matchesQuery(week.title, query),
-          ),
-        }))
-        .filter((week) => {
-          if (!query) return true;
-          return matchesQuery(week.title, query) || week.submissions.length > 0;
-        }),
+    () => filterMemberWeeks(catalog.memberWeeks, query),
     [catalog.memberWeeks, query],
-  );
-  const previewMemberWeeks = useMemo(
-    () => sidebarPreview(filteredMemberWeeks, Boolean(query) || membersExpanded),
-    [filteredMemberWeeks, query, membersExpanded],
   );
   const filteredNotes = useMemo(
     () =>
@@ -405,112 +369,29 @@ export function RecordsLayout({
                     )}
                   </CollapsibleSection>
 
-                  <CollapsibleSection
-                    title={m.records_section_members()}
+                  <RecordsMemberWeeksSection
+                    weeks={filteredMemberWeeks}
+                    query={query}
+                    selectedRecordId={selectedRecordId}
+                    selectedWeekKey={selectedWeekKey}
+                    expandedWeeks={expandedWeeks}
+                    onExpandedWeekChange={(weekKey, expanded) => {
+                      const weeks = { ...expandedWeeks, [weekKey]: expanded };
+                      setExpandedWeeks(weeks);
+                      persistExpand({ weeks });
+                    }}
+                    showAll={membersExpanded}
+                    onShowAll={() => setMembersExpanded(true)}
                     open={membersOpen}
                     onOpenChange={(open) => {
                       if (open) enterSection("members");
                       else setMembersOpen(false);
                     }}
-                  >
-                    {filteredMemberWeeks.length === 0 ? null : (
-                      <ul className="space-y-1">
-                        {previewMemberWeeks.visible.map((week) => {
-                          const hasSubmissions = week.submissions.length > 0;
-                          const weekSelected =
-                            selectedWeekKey === week.key ||
-                            week.overviewReportId === selectedRecordId ||
-                            week.submissions.some((item) => item.id === selectedRecordId);
-                          const expanded =
-                            expandedWeeks[week.key] ??
-                            defaultMemberWeekExpanded({
-                              year: week.year,
-                              week: week.week,
-                              weekSelected,
-                              hasSubmissions,
-                              queryActive: Boolean(query),
-                            });
-                          return (
-                            <li key={week.key} className="space-y-0.5">
-                              <div className="flex min-w-0 items-center gap-1 rounded-lg">
-                                {hasSubmissions ? (
-                                  <ButtonUtility
-                                    size="xs"
-                                    color="tertiary"
-                                    icon={
-                                      <ChevronDown
-                                        aria-hidden="true"
-                                        data-icon
-                                        className={cn(
-                                          "size-4 transition-transform",
-                                          expanded && "rotate-180",
-                                        )}
-                                      />
-                                    }
-                                    className="size-7 shrink-0"
-                                    aria-expanded={expanded}
-                                    aria-label={
-                                      expanded
-                                        ? m.records_collapse_week({ week: week.title })
-                                        : m.records_expand_week({ week: week.title })
-                                    }
-                                    onClick={() => {
-                                      const nextOpen = !expanded;
-                                      const weeks = { ...expandedWeeks, [week.key]: nextOpen };
-                                      setExpandedWeeks(weeks);
-                                      persistExpand({ weeks });
-                                    }}
-                                  />
-                                ) : (
-                                  <span className="size-7 shrink-0" aria-hidden="true" />
-                                )}
-                                <RecordLink
-                                  recordId={week.overviewReportId}
-                                  selected={weekSelected}
-                                  onSelect={() => {
-                                    enterSection("members");
-                                    setShowMobileList(false);
-                                  }}
-                                  className="min-w-0 flex-1 font-medium"
-                                >
-                                  <WeekBadge week={week.week} className="size-6" />
-                                  <span className="truncate">{week.title}</span>
-                                </RecordLink>
-                              </div>
-                              {hasSubmissions && expanded ? (
-                                <ul className="ml-7 space-y-0.5">
-                                  {week.submissions.map((submission) => (
-                                    <li key={submission.id}>
-                                      <RecordLink
-                                        recordId={submission.id}
-                                        selected={submission.id === selectedRecordId}
-                                        onSelect={() => {
-                                          enterSection("members");
-                                          setShowMobileList(false);
-                                        }}
-                                      >
-                                        <IdentityAvatar
-                                          size="sm"
-                                          name={submission.author.displayName}
-                                          alt={submission.author.displayName}
-                                          src={submission.author.avatarUrl}
-                                        />
-                                        <span className="truncate">{submission.title}</span>
-                                      </RecordLink>
-                                    </li>
-                                  ))}
-                                </ul>
-                              ) : null}
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    )}
-                    <SidebarMore
-                      hiddenCount={previewMemberWeeks.hiddenCount}
-                      onExpand={() => setMembersExpanded(true)}
-                    />
-                  </CollapsibleSection>
+                    onSelect={() => {
+                      enterSection("members");
+                      setShowMobileList(false);
+                    }}
+                  />
                 </div>
               ) : (
                 <CollapsibleSection
@@ -561,89 +442,11 @@ export function RecordsLayout({
               )}
             </TabPanel>
 
-            <div className="relative border-t border-secondary px-2 py-2">
-              {catalog.canManageWeeklyReports && settingsHintVisible && !settingsHintDismissed ? (
-                <div className="absolute bottom-full left-2 z-20 mb-2 w-60 rounded-xl border border-brand bg-brand-primary px-3 py-2 text-xs text-brand-secondary shadow-sm">
-                  <div className="flex items-start gap-2">
-                    <p className="min-w-0 flex-1">
-                      {m.records_format_settings_hint()}{" "}
-                      <Link
-                        to="/w/$workspaceSlug/records/settings"
-                        params={{ workspaceSlug }}
-                        search={(previous) => ({ tab: recordsTabSearch(previous.tab) })}
-                        className="font-medium underline"
-                      >
-                        {m.records_settings()}
-                      </Link>
-                    </p>
-                    <ButtonUtility
-                      size="xs"
-                      color="tertiary"
-                      icon={X}
-                      tooltip={m.records_format_settings_hint_dismiss()}
-                      aria-label={m.records_format_settings_hint_dismiss()}
-                      onClick={() => setSettingsHintDismissed(true)}
-                      className="size-5 shrink-0"
-                    />
-                  </div>
-                </div>
-              ) : null}
-              <Dropdown.Root>
-                <ButtonUtility
-                  size="sm"
-                  color="tertiary"
-                  icon={Settings}
-                  aria-label={m.records_tools_menu()}
-                />
-                <Dropdown.Popover placement="top start" className="w-52">
-                  <Dropdown.Menu
-                    onAction={(key) => {
-                      if (key === "dashboard") {
-                        setShowMobileList(false);
-                        void navigate({
-                          to: "/w/$workspaceSlug/records/dashboard",
-                          params: { workspaceSlug },
-                          search: (previous) => ({ tab: recordsTabSearch(previous.tab) }),
-                        });
-                      }
-                      if (key === "stats") {
-                        setShowMobileList(false);
-                        const now = new Date();
-                        void navigate({
-                          to: "/w/$workspaceSlug/records/stats",
-                          params: { workspaceSlug },
-                          search: (previous) => ({
-                            tab: recordsTabSearch(previous.tab),
-                            year:
-                              typeof previous.year === "number" ? previous.year : now.getFullYear(),
-                            month:
-                              typeof previous.month === "number"
-                                ? previous.month
-                                : now.getMonth() + 1,
-                          }),
-                        });
-                      }
-                      if (key === "settings" && catalog.canManageWeeklyReports) {
-                        setShowMobileList(false);
-                        void navigate({
-                          to: "/w/$workspaceSlug/records/settings",
-                          params: { workspaceSlug },
-                          search: (previous) => ({
-                            tab: recordsTabSearch(previous.tab),
-                          }),
-                        });
-                      }
-                    }}
-                  >
-                    <Dropdown.Item id="dashboard" icon={LineChart} label={m.records_dashboard()} />
-                    <Dropdown.Item id="stats" icon={LineChart} label={m.records_stats()} />
-                    {catalog.canManageWeeklyReports ? (
-                      <Dropdown.Item id="settings" icon={Settings} label={m.records_settings()} />
-                    ) : null}
-                  </Dropdown.Menu>
-                </Dropdown.Popover>
-              </Dropdown.Root>
-            </div>
+            <RecordsToolsFooter
+              canManageWeeklyReports={catalog.canManageWeeklyReports}
+              formatEditing={formatEditing}
+              onNavigate={() => setShowMobileList(false)}
+            />
           </Tabs>
         </nav>
 
@@ -659,238 +462,6 @@ export function RecordsLayout({
         </section>
       </main>
     </FormatEditHintContext>
-  );
-}
-
-function FormatChipSlot({
-  chip,
-  distinguishSettingsName,
-  selected,
-  onSelect,
-}: {
-  chip: RecordsCatalog["formatChips"][number];
-  distinguishSettingsName: boolean;
-  selected: boolean;
-  onSelect: () => void;
-}) {
-  const workspaceSlug = useWorkspaceSlug();
-  const [now, setNow] = useState(() => new Date());
-  const appliedSchedule = chip.appliedSchedule;
-  const alreadySent = chip.alreadySent;
-
-  useEffect(() => {
-    if (!chip.interactive || !appliedSchedule) return;
-    const timer = window.setInterval(() => {
-      const next = new Date();
-      setNow(next);
-      const windowRange = weeklySendWindow({
-        now: next,
-        sendWeekday: appliedSchedule.sendWeekday,
-        sendTime: appliedSchedule.sendTime,
-        scheduleEnabled: appliedSchedule.scheduleEnabled,
-      });
-      if (windowRange && next.getTime() >= windowRange.end.getTime()) {
-        window.clearInterval(timer);
-      }
-    }, 1000);
-    return () => window.clearInterval(timer);
-  }, [chip.interactive, appliedSchedule]);
-
-  const scheduleInput =
-    chip.interactive && appliedSchedule
-      ? {
-          applied: true as const,
-          alreadySent,
-          sendWeekday: appliedSchedule.sendWeekday,
-          sendTime: appliedSchedule.sendTime,
-          scheduleEnabled: appliedSchedule.scheduleEnabled,
-          autoSendCancelled: chip.autoSendCancelled,
-          now,
-        }
-      : null;
-  const sendArmed = scheduleInput ? isWeeklySendArmed(scheduleInput) : false;
-  const highlighted = scheduleInput ? isWeeklyTemplateChipHighlighted(scheduleInput) : false;
-
-  const windowRange =
-    sendArmed && appliedSchedule
-      ? weeklySendWindow({
-          now,
-          sendWeekday: appliedSchedule.sendWeekday,
-          sendTime: appliedSchedule.sendTime,
-          scheduleEnabled: appliedSchedule.scheduleEnabled,
-        })
-      : null;
-  const remainingMs = windowRange ? Math.max(0, windowRange.end.getTime() - now.getTime()) : 0;
-
-  const weekLabel = m.records_current_week_template({
-    year: chip.year,
-    week: chip.week,
-  });
-  const chipTitle =
-    distinguishSettingsName && chip.name.trim() && chip.name.trim() !== weekLabel
-      ? `${weekLabel} · ${chip.name.trim()}`
-      : weekLabel;
-
-  const label = (
-    <>
-      <span className="truncate">{chipTitle}</span>
-      {alreadySent ? (
-        <span className="ml-auto shrink-0 rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-tertiary">
-          {m.records_report_sent_badge()}
-        </span>
-      ) : sendArmed ? (
-        <span className="shrink-0 tabular-nums">{formatSendWindowCountdown(remainingMs)}</span>
-      ) : null}
-    </>
-  );
-
-  const chipClassName = cn(
-    "flex min-h-9 w-full items-center gap-2 rounded-xl border px-2 py-2 text-sm font-medium transition-colors",
-    highlighted
-      ? "border-transparent bg-brand-primary text-brand-secondary"
-      : "border-transparent text-secondary",
-    chip.interactive && !highlighted && "hover:bg-primary_hover",
-    !chip.interactive && "cursor-not-allowed opacity-60",
-    selected && "border-chat-selected-border bg-chat-selected-bg text-brand-secondary",
-  );
-
-  if (!chip.interactive || !chip.id) {
-    return (
-      <div
-        role="status"
-        aria-disabled="true"
-        aria-label={m.records_current_week_template_disabled()}
-        className={chipClassName}
-      >
-        {label}
-      </div>
-    );
-  }
-
-  return (
-    <Link
-      to="/w/$workspaceSlug/records/$recordId"
-      params={{ workspaceSlug, recordId: chip.id }}
-      search={(previous) => ({ tab: recordsTabSearch(previous.tab) })}
-      aria-current={selected ? "page" : undefined}
-      resetScroll={false}
-      onClick={onSelect}
-      className={cn(
-        chipClassName,
-        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand",
-      )}
-    >
-      {label}
-    </Link>
-  );
-}
-
-function SidebarMore({ hiddenCount, onExpand }: { hiddenCount: number; onExpand: () => void }) {
-  if (hiddenCount <= 0) return null;
-  return (
-    <Button
-      type="button"
-      size="xs"
-      color="tertiary"
-      onPress={onExpand}
-      className="mt-0.5 w-full justify-start px-2.5 text-xs text-tertiary"
-    >
-      {m.records_sidebar_more({ count: hiddenCount })}
-    </Button>
-  );
-}
-
-function CollapsibleSection({
-  title,
-  open,
-  onOpenChange,
-  marker,
-  actions,
-  children,
-}: {
-  title: string;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  /** Stays on the section title when the list is collapsed. */
-  marker?: ReactNode;
-  actions?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <section>
-      <div className="mb-1.5 flex items-center gap-1">
-        <Button
-          type="button"
-          size="sm"
-          color="tertiary"
-          aria-expanded={open}
-          onPress={() => onOpenChange(!open)}
-          iconLeading={
-            <ChevronDown
-              aria-hidden="true"
-              className={cn("size-4 transition-transform", open && "rotate-180")}
-            />
-          }
-          className="min-w-0 flex-1 justify-start px-2 text-left text-sm font-medium text-primary uppercase"
-        >
-          <span className="truncate">{title}</span>
-          {marker ? (
-            <span className="ml-1.5 inline-flex shrink-0 align-middle">{marker}</span>
-          ) : null}
-        </Button>
-        {actions}
-      </div>
-      {open && children}
-    </section>
-  );
-}
-
-function RecordLink({
-  recordId,
-  selected,
-  onSelect,
-  className,
-  children,
-}: {
-  recordId: string;
-  selected: boolean;
-  onSelect: () => void;
-  className?: string;
-  children: ReactNode;
-}) {
-  const workspaceSlug = useWorkspaceSlug();
-  return (
-    <Link
-      to="/w/$workspaceSlug/records/$recordId"
-      params={{ workspaceSlug, recordId }}
-      search={(previous) => ({ tab: recordsTabSearch(previous.tab) })}
-      aria-current={selected ? "page" : undefined}
-      resetScroll={false}
-      onClick={onSelect}
-      className={cn(
-        "flex min-w-0 items-center gap-2 rounded-xl border p-2 text-sm transition duration-100 ease-linear focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand",
-        selected
-          ? "border-chat-selected-border bg-chat-selected-bg font-medium text-brand-secondary"
-          : "border-transparent text-secondary hover:bg-primary_hover",
-        className,
-      )}
-    >
-      {children}
-    </Link>
-  );
-}
-
-export function WeekBadge({ week, className }: { week: number; className?: string }) {
-  return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        "flex size-8 shrink-0 items-center justify-center rounded-full bg-primary-solid text-xs font-semibold text-white",
-        className,
-      )}
-    >
-      {week}
-    </span>
   );
 }
 
