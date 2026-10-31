@@ -73,6 +73,7 @@ export function useSuggestionWrite(
       },
     });
     onBodyApplied?.(suggestion.reportId, written.content, written.bodyRestoreView);
-    return refresh.record;
+    // A format's body edit can cancel this week's automatic send and is its settings' outline.
+    return refresh.records;
   };
 }

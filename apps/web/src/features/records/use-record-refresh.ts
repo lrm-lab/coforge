@@ -27,10 +27,11 @@ export function catalogShouldReload({ cause }: { cause: "preload" | "enter" | "s
  * Reloads what a change in Records touched, and nothing else; each resolves once what it reloads
  * is shown:
  * - `record()`: the record alone, through the route match that shows it (its own page, or the
- *   Records landing that opens on the latest week), for a change only it shows (its body, its key
- *   points);
+ *   Records landing that opens on the latest week), for a change only it shows (a member report's
+ *   body version, key points);
  * - `records()`: the Records pages and the Records rail dot (`recordsNavAttentionQuery`), for a
- *   change anything else in Records may show (a title, a status, a send, a setting), from a Records
+ *   change anything else in Records may show (a title, a status, a send, a setting, a format's
+ *   body: it can cancel the week's automatic send and is its settings' outline), from a Records
  *   page or from a card elsewhere (a Records page held in the router's cache reads again when shown).
  * Neither reloads the Workspace layout. The catalog reloads only when invalidated or entered
  * (`catalogShouldReload`), so `record()` leaves it alone.

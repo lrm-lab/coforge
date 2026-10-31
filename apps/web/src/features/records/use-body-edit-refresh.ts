@@ -5,7 +5,8 @@ import type { WeeklyReportAssistantMessage } from "./weekly-report-assistant-ses
 
 /**
  * The assistant's newest body edit was written to the report before its message arrived: once per
- * such message, read the report again (it alone) so the page shows the edited body.
+ * such message, read Records again so the page shows the edited body (a format's edit can also
+ * cancel this week's automatic send and changes its settings' outline).
  * `appliedMessageId` is the edit the page already shows (its restore view's source), which needs
  * no read.
  */
@@ -22,6 +23,6 @@ export function useBodyEditRefresh(
     if (!latest || latest.id === appliedMessageId) return;
     if (refreshedFor.current === latest.id) return;
     refreshedFor.current = latest.id;
-    void refresh.record();
+    void refresh.records();
   }, [assistantMessages, appliedMessageId, refresh]);
 }

@@ -207,6 +207,8 @@ test("the Workspace layout asks an unnamed person for their name first, and come
   named = false;
   const thrown = await loaded(workspaceLayout.options.loader, {
     location: { href: "/w/acme/channel/general?thread=1" },
+    params: { workspaceSlug: "acme" },
+    context: { queryClient: new QueryClient() },
   });
   expect(nameStepTarget(thrown)).toEqual({
     to: "/welcome",
@@ -218,6 +220,8 @@ test("the Workspace layout loads for a named person", async () => {
   signedIn = true;
   const result = await loaded(workspaceLayout.options.loader, {
     location: { href: "/w/acme/tasks" },
+    params: { workspaceSlug: "acme" },
+    context: { queryClient: new QueryClient() },
   });
   expect(isRedirect(result)).toBe(false);
   expect(result).toMatchObject({ user: { id: "user-1" } });
