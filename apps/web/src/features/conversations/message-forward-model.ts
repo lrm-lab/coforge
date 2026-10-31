@@ -1,3 +1,4 @@
+import { channelLabel } from "./channel-visibility";
 import { FORWARD_DESTINATIONS_MAX } from "./message-forward";
 import type {
   ForwardFailureCode,
@@ -48,9 +49,10 @@ export function forwardTargetKey(target: ForwardTarget): string {
   return target.kind === "person" ? `person:${target.userId}` : `agent:${target.agentId}`;
 }
 
-/** How a target reads in the picker and in a toast: `#channel`, or `@Name` for a person or Agent. */
+/** How a target reads in the picker and in a toast: a channel's `channelLabel`, or `@Name` for a
+ * person or Agent. */
 export function forwardTargetLabel(target: ForwardTarget): string {
-  return target.kind === "channel" ? `#${target.name}` : `@${target.name}`;
+  return target.kind === "channel" ? channelLabel(target) : `@${target.name}`;
 }
 
 /** A public channel the viewer is not in: the forward joins it first, after one confirmation. */

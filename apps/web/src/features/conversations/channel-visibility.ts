@@ -31,6 +31,12 @@ export function isPrivateChannel(channel: { visibility?: ChannelVisibility }) {
   return channel.visibility === CHANNEL_VISIBILITY.PRIVATE;
 }
 
+/** A channel's name where only text fits (a placeholder, a toast, an accessible name): `#name`,
+ * or the bare name for a private channel, whose lock never goes as `#`. */
+export function channelLabel(channel: { name: string; visibility?: ChannelVisibility }) {
+  return isPrivateChannel(channel) ? channel.name : `#${channel.name}`;
+}
+
 /** Whether a request's value names a visibility. */
 export function isChannelVisibility(value: unknown): value is ChannelVisibility {
   return value === CHANNEL_VISIBILITY.PUBLIC || value === CHANNEL_VISIBILITY.PRIVATE;

@@ -9,6 +9,7 @@ import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile
 import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
 import { visibleChannelWhere } from "./channel-read-access.server";
+import { visibilityField } from "#src/features/conversations/channel-visibility";
 
 /** Round-robin over the lists, so a long run of one kind does not crowd the others out. */
 function interleave<T>(lists: readonly (readonly T[])[], limit: number): T[] {
@@ -39,6 +40,7 @@ export async function searchForwardTargets(
   const channelSelect = {
     id: true,
     channelName: true,
+    visibility: true,
     archivedAt: true,
     members: { where: { userId, ...ACTIVE_MEMBER_WHERE }, select: { id: true }, take: 1 },
   } as const;
@@ -98,6 +100,7 @@ export async function searchForwardTargets(
     kind: "channel",
     conversationId: channel.id,
     name: channel.channelName!,
+    ...visibilityField(channel),
     joined: channel.members.length > 0,
     canSend: channel.archivedAt === null,
   }));

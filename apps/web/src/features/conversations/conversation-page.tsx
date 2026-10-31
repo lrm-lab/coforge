@@ -14,6 +14,7 @@ import { markPublicChannelRead } from "./channels.functions";
 import { ChannelConversation, ChannelConversationHeader } from "./channel-conversation";
 import { ConversationFilesPanel } from "./conversation-files";
 import type { HeaderTabs } from "./conversation-header-tabs";
+import { channelLabel } from "./channel-visibility";
 import { useMarkConversationSeen } from "./unread-store";
 import type { ConversationPageTarget } from "./conversation-page-loader";
 import type { ConversationPageSearch } from "./conversation-page-search";
@@ -81,7 +82,7 @@ function ChannelConversationPage({
       // Only a member advances the read cursor, creates Tasks and moves them; anyone else sees the
       // join prompt. The viewer is always a member of their own direct conversation.
       isMember={Boolean(conversation.senderMemberId)}
-      name={`#${conversation.name}`}
+      name={channelLabel(conversation)}
       readCursor={{
         key: `channel:${channelId}`,
         advance: async (throughSequence) => {

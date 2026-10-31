@@ -154,7 +154,6 @@
   "channel_private": "私有",
   "channel_private_name": "{name}，私有群聊",
   "channel_create_private": "设为私有",
-  "channel_settings_private": "私有",
   "channel_settings_make_private": "改为私有群聊",
   "channel_settings_make_public": "改为公开群聊",
   "channel_settings_make_private_title": "将 #{name} 改为私有群聊？",

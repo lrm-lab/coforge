@@ -24,8 +24,8 @@ function ChannelLock({ className }: { className?: string }) {
 
 /**
  * A channel's name as a title shows it: `#name`, or for a private channel a lock before the bare
- * name. `hash={false}` is a list's form, whose public name goes without `#`. Plain-text places (a
- * pane's name, search, chips) keep `#name` for both.
+ * name. `hash={false}` is a list's form, whose public name goes without `#`. Where only text fits,
+ * `channelLabel`.
  */
 export function ChannelTitle({
   name,

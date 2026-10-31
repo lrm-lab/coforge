@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Checkbox as AriaCheckbox, Tag, TagGroup, TagList } from "react-aria-components";
-import { Hash01, SearchLg } from "@untitledui/icons";
+import { SearchLg } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { CheckboxBase } from "#src/components/base/checkbox/checkbox";
@@ -10,6 +10,7 @@ import { TextArea } from "#src/components/base/textarea/textarea";
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
+import { channelGlyph } from "./channel-name";
 import { FORWARD_NOTE_MAX_LENGTH } from "./message-forward";
 import type { ForwardFailureCode, ForwardTarget, ForwardedMessageView } from "./message-forward";
 import { ForwardedMessageCard } from "./message-forward-card";
@@ -41,6 +42,7 @@ function TargetRow({
   onToggle: (target: ForwardTarget, on: boolean) => void;
 }) {
   const label = forwardTargetLabel(target);
+  const ChannelGlyph = channelGlyph(target.kind === "channel" ? target : {});
   const tag = failure
     ? failureLabel(failure)
     : isUnjoinedChannel(target)
@@ -63,7 +65,7 @@ function TargetRow({
                 aria-hidden="true"
                 className="flex size-6 shrink-0 items-center justify-center rounded-md bg-tertiary text-fg-quaternary"
               >
-                <Hash01 className="size-3.5" />
+                <ChannelGlyph className="size-3.5" />
               </span>
             ) : (
               <IdentityAvatar

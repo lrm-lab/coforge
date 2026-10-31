@@ -17,12 +17,18 @@ let bob: { id: string };
 let carol: { id: string };
 let dmWithBob: string;
 
-async function channel(name: string, members: { id: string }[], archivedAt?: Date) {
+async function channel(
+  name: string,
+  members: { id: string }[],
+  archivedAt?: Date,
+  visibility: "public" | "private" = "public",
+) {
   return db.conversation.create({
     data: {
       workspaceId,
       channelName: `${name}-${suffix}`,
       archivedAt,
+      visibility,
       members: {
         create: members.map((user) => ({
           workspace: { connect: { id: workspaceId } },
@@ -69,6 +75,7 @@ test("finds channels, members and Agents with whether each is joined and can tak
   const news = await channel("news", [alice, bob]);
   const archived = await channel("old", [alice, bob], new Date());
   const solo = await channel("solo", [bob]);
+  const vault = await channel("vault", [alice, bob], undefined, "private");
   const agent = await db.agent.create({
     data: {
       workspaceId,
@@ -81,7 +88,13 @@ test("finds channels, members and Agents with whether each is joined and can tak
   const all = await searchForwardTargets(db, { workspaceId, userId: alice.id, q: "", limit: 50 });
   const channelTarget = (conversationId: string) =>
     all.find((target) => target.kind === "channel" && target.conversationId === conversationId);
-  expect(channelTarget(news.id)).toMatchObject({ joined: true, canSend: true });
+  expect(channelTarget(news.id)).toMatchObject({
+    joined: true,
+    canSend: true,
+    visibility: "public",
+  });
+  // A private channel goes with its visibility, so the picker shows its lock, not `#`.
+  expect(channelTarget(vault.id)).toMatchObject({ joined: true, visibility: "private" });
   expect(channelTarget(archived.id)).toMatchObject({ joined: true, canSend: false });
   expect(channelTarget(solo.id)).toMatchObject({ joined: false, canSend: true });
   // Members come with the DM they already have; one without a DM has none to name.

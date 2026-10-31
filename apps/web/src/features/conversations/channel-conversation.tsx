@@ -6,7 +6,7 @@ import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { ChannelTitle, channelGlyph } from "./channel-name";
 import { ChannelSettingsPanel } from "./channel-settings-panel";
-import { isPrivateChannel, type ChannelVisibility } from "./channel-visibility";
+import { channelLabel, isPrivateChannel, type ChannelVisibility } from "./channel-visibility";
 import { ChannelHeaderMemberCluster, ChannelProjectChip } from "./channel-header-people";
 import type { ChannelMembersView } from "./channel-members-page";
 import type { ChannelCapabilities } from "#src/server/conversations/channel-authority.server";
@@ -303,7 +303,7 @@ export function ChannelConversation({
   return (
     <ThreadedConversation
       conversation={conversationWithFreshDirectory}
-      conversationName={`#${conversation.name}`}
+      conversationName={channelLabel(conversation)}
       plainMentions={plainMentions}
       onSend={onSend}
       onLoadOlder={onLoadOlder}
@@ -325,7 +325,7 @@ export function ChannelConversation({
       onJumpMessageConsumed={onJumpMessageConsumed}
       canSendAsTask={Boolean(conversation.senderMemberId) && canSendAsTask}
       onToggleReaction={conversation.senderMemberId ? onToggleReaction : undefined}
-      threadContext={`#${conversation.name}`}
+      threadContext={channelLabel(conversation)}
       threadHeaderAction={(rootMessageId) => (
         <ThreadFollowingAgents
           channelId={conversation.conversationId}
@@ -342,8 +342,7 @@ export function ChannelConversation({
           : undefined
       }
       emptyState={{
-        // A private channel's lock stands where a public one's `#` does.
-        title: priv ? conversation.name : `#${conversation.name}`,
+        title: channelLabel(conversation),
         description: !conversation.senderMemberId
           ? m.channel_empty_preview()
           : priv

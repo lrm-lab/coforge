@@ -65,8 +65,8 @@ export function MembersPageHeading({
   );
 }
 
-/** The settings page's title: the channel's name, whether it is public or private, and its
- * description. */
+/** The settings page's title: the channel's name (a private one's with its lock), a public one's
+ * badge, and its description. */
 export function ChannelSettingsTitle({
   conversation,
 }: {
@@ -78,11 +78,12 @@ export function ChannelSettingsTitle({
         <Heading slot="title" className="truncate text-lg font-semibold text-primary">
           <ChannelTitle name={conversation.name} visibility={conversation.visibility} />
         </Heading>
-        <Badge size="sm" color="gray" className="shrink-0">
-          {isPrivateChannel(conversation)
-            ? m.channel_settings_private()
-            : m.channel_settings_public()}
-        </Badge>
+        {/* A private channel's lock already says it. */}
+        {!isPrivateChannel(conversation) && (
+          <Badge size="sm" color="gray" className="shrink-0">
+            {m.channel_settings_public()}
+          </Badge>
+        )}
       </div>
       {conversation.description && (
         <p className="mt-1 truncate text-sm text-tertiary">{conversation.description}</p>

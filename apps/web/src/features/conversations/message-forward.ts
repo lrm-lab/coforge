@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import type { ChannelVisibility } from "./channel-visibility";
 import type { MentionRef } from "./mention-text";
 
 /** The longest note a forward carries: a message body's browser limit. */
@@ -82,6 +83,7 @@ export type ForwardTarget =
       kind: "channel";
       conversationId: string;
       name: string;
+      visibility?: ChannelVisibility;
       joined: boolean;
       canSend: boolean;
     }

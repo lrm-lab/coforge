@@ -44,6 +44,7 @@ test("targets are keyed and labelled by what they are", () => {
     `channel:${channel.kind === "channel" && channel.conversationId}`,
   );
   expect(forwardTargetLabel(channel)).toBe("#design");
+  expect(forwardTargetLabel({ ...channel, visibility: "private" } as ForwardTarget)).toBe("design");
   const person: ForwardTarget = {
     kind: "person",
     userId: "u1",
