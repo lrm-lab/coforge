@@ -10,7 +10,8 @@ export const DIALOG_BUTTON_SIZE = "md";
 /**
  * A dialog's button row, as on Raft: right-aligned and 8px apart, with no rule above it; Cancel or
  * Close comes first as a borderless button, then the action. Its buttons share one height, so a row
- * never mixes sizes.
+ * never mixes sizes. A row whose only button closes the dialog (OK, Close) shows it outlined, as
+ * its action, and a row keeps one filled button.
  */
 export function DialogActions({
   className,

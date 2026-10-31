@@ -178,7 +178,8 @@ export function UnsavedChangesDialog({
             <DialogCancel isDisabled={saving} onPress={onKeepEditing}>
               {m.channel_settings_keep_editing()}
             </DialogCancel>
-            <DialogAction color="primary-destructive" isDisabled={saving} onPress={onDiscard}>
+            {/* Beside Save, Discard stays outlined: one filled button per row. */}
+            <DialogAction color="secondary-destructive" isDisabled={saving} onPress={onDiscard}>
               {m.channel_settings_discard()}
             </DialogAction>
             <DialogAction

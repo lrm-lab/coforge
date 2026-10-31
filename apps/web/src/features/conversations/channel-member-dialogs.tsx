@@ -31,7 +31,9 @@ export function ServerAdminRoleDialog({
                 {m.channel_members_server_admin_message({ name: member.displayName })}
               </Text>
               <DialogActions className="mt-6 px-6 pb-6">
-                <DialogCancel onPress={close}>{m.channel_members_ok()}</DialogCancel>
+                <DialogAction color="secondary" onPress={close}>
+                  {m.channel_members_ok()}
+                </DialogAction>
               </DialogActions>
             </>
           )}
