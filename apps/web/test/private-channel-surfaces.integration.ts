@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { actionCardViews } from "#src/server/conversations/action-card-views.server";
 import { MessageForwards } from "#src/server/conversations/message-forwards.server";
+import { AgentActivityRepository } from "#src/server/db/repositories/agent-activity.repositories.server";
 import { PrismaWorkspaceMemoryCatalog } from "#src/server/db/repositories/workspace-memory-catalog.repositories.server";
 import { PrismaWebPushSubscriptionStore } from "#src/server/notifications/prisma-web-push-subscriptions.server";
 import {
@@ -19,8 +20,8 @@ import {
 /**
  * Task #302, step 5: the surfaces outside a channel's own pages keep a private channel to its
  * members too: a project's channel list and count, what Workspace memory learns from, a forward's
- * destination, a message notification read by id, and the channel an action card or an Agent's
- * reminder names.
+ * destination, a message notification read by id, the channel an action card or an Agent's
+ * reminder names, and what an Agent's Activity shows of its work there.
  */
 let fixture: PrivateChannelFixture;
 let extra: Awaited<ReturnType<typeof setUp>>;
@@ -83,6 +84,31 @@ async function setUp({
       preparedByAgentId: scout.id,
     },
   });
+  const createMessage = await db.message.create({
+    data: {
+      workspaceId: ws,
+      conversationId: direct.id,
+      senderMemberId: insiderDmSeat.id,
+      sequence: 3,
+      body: "Made the channel",
+    },
+  });
+  await db.actionCard.create({
+    data: {
+      messageId: createMessage.id,
+      conversationId: direct.id,
+      workspaceId: ws,
+      kind: "channel:create",
+      payload: { type: "channel:create", name: closed.name, visibility: "private" },
+      state: "committed",
+      result: { channelId: closed.id },
+      preparedByAgentId: scout.id,
+    },
+  });
+  // The owner was in the private channel once and left it.
+  await db.conversationMember.create({
+    data: { workspaceId: ws, conversationId: closed.id, userId: people.owner, leftAt: new Date() },
+  });
 
   const discussion = await db.conversation.create({
     data: {
@@ -112,7 +138,7 @@ async function setUp({
       update: { browserNotificationsEnabled: true },
     });
   }
-  return { project, computer, scout, cardMessage, discussionMessage };
+  return { project, computer, scout, cardMessage, createMessage, discussionMessage };
 }
 
 beforeAll(async () => {
@@ -226,17 +252,29 @@ test.skipIf(!connectionString)(
 );
 
 test.skipIf(!connectionString)(
-  "an action card names a private channel only to its members",
+  "an action card names, links and acts on a private channel only for its members",
   async () => {
     const { db, ws, people, closed } = fixture;
-    const named = async (userId: string) => {
-      const view = (await actionCardViews(db, ws, userId, [extra.cardMessage.id])).get(
-        extra.cardMessage.id,
-      );
-      return view?.kind === "channel:add_member" ? view.channel.displayName : undefined;
+    const viewsFor = (userId: string) =>
+      actionCardViews(db, ws, userId, [extra.cardMessage.id, extra.createMessage.id]);
+    const add = async (userId: string) => {
+      const view = (await viewsFor(userId)).get(extra.cardMessage.id);
+      return view?.kind === "channel:add_member"
+        ? { channel: view.channel, canCommit: view.canCommit }
+        : undefined;
     };
-    expect(await named(people.owner)).toBe("unknown");
-    expect(await named(people.insider)).toBe(closed.name);
+    const created = async (userId: string) => (await viewsFor(userId)).get(extra.createMessage.id);
+    // The owner left the channel: no name, no id, and no adding anyone to it.
+    expect(await add(people.owner)).toEqual({
+      channel: { id: null, displayName: "unknown" },
+      canCommit: false,
+    });
+    expect(await add(people.insider)).toEqual({
+      channel: { id: closed.id, displayName: closed.name },
+      canCommit: true,
+    });
+    expect(await created(people.owner)).toMatchObject({ result: undefined });
+    expect(await created(people.insider)).toMatchObject({ result: { channelId: closed.id } });
   },
 );
 
@@ -268,5 +306,45 @@ test.skipIf(!connectionString)(
     // The Workspace owner manages the insider's Agent but is not in the private channel.
     expect(await anchored(people.owner)).toEqual([open.id, null].sort());
     expect(await anchored(people.insider)).toEqual([open.id, closed.id].sort());
+  },
+);
+
+test.skipIf(!connectionString)(
+  "an Agent's Activity in a private channel shows only to its members",
+  async () => {
+    const { db, ws, people, open, closed, direct } = fixture;
+    const discussion = extra.discussionMessage.conversationId;
+    // Newest last; more than the Agent card's five, so a slot cannot fall back on a hidden row.
+    const places = [open.id, closed.id, null, discussion, open.id, closed.id, direct.id];
+    places.push(closed.id, open.id, discussion);
+    const repository = new AgentActivityRepository(db);
+    const launchId = crypto.randomUUID();
+    await repository.recordMany(
+      places.map((conversationId, index) => ({
+        protocolMajor: 1,
+        requestId: crypto.randomUUID(),
+        workspaceId: ws,
+        agentId: extra.scout.id,
+        computerId: extra.computer.id,
+        launchId,
+        clientSeq: index + 1,
+        ...(conversationId ? { conversationId, conversationTarget: "#somewhere" } : {}),
+        detailKind: "message_received",
+        level: "info",
+        detail: "Message received",
+        observedAtMs: Date.UTC(2026, 9, 31, 10, 0, index),
+      })),
+    );
+    const card = async (userId: string) =>
+      (await repository.listForManager(ws, userId))
+        .find((agent) => agent.id === extra.scout.id)!
+        .activity.map((row) => row.clientSeq);
+    const feed = async (userId: string) =>
+      (await repository.feedForManager(ws, userId, extra.scout.id))!.map((row) => row.clientSeq);
+    // The Workspace owner manages the insider's Agent but is outside the private channel.
+    expect(await card(people.owner)).toEqual([9, 7, 5, 3, 1]);
+    expect(await feed(people.owner)).toEqual([9, 7, 5, 3, 1]);
+    expect(await card(people.insider)).toEqual([10, 9, 8, 7, 6]);
+    expect(await feed(people.insider)).toEqual([10, 9, 8, 7, 6, 5, 4, 3, 2, 1]);
   },
 );

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { PrismaClient } from "#src/generated/prisma/client";
+import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import { AgentActivityRepository } from "#src/server/db/repositories/agent-activity.repositories.server";
 
 test("chat activity history uses a compact parameterized manager-scoped query", async () => {
@@ -60,8 +60,12 @@ test("chat activity history uses a compact parameterized manager-scoped query", 
     },
     { id: "agent-empty", activity: [] },
   ]);
+  const fragments = query.slice(1).filter((value) => value instanceof Prisma.Sql);
+  // The viewer's readable-Activity rule binds into both reads of a launch's rows (task #302).
+  expect(fragments).toHaveLength(2);
+  expect(fragments.every((fragment) => fragment.values.includes("user-1"))).toBe(true);
   // Every stored kind is a recent row, so no detail kind is bound into the query.
-  expect(query.slice(1)).toEqual([
+  expect(query.slice(1).filter((value) => !(value instanceof Prisma.Sql))).toEqual([
     "workspace-1",
     "user-1",
     ["agent-1", "agent-empty"],

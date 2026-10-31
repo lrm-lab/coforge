@@ -36,9 +36,13 @@ Moved out of [`AGENTS.md`](AGENTS.md) to keep it under 200 lines.
 - Surfaces beyond the channel's own pages keep to the rule as well: a project
   lists and counts only the channels the viewer reads (`projectDetailSelect`,
   `projectListSelect`), a forward to a private channel the forwarder is not in fails
-  as `no_access`, an action card names it `unknown`, an Agent's reminder anchored in
-  it links nowhere, and no App event names it (`recordAppNotifications`, as an App
-  lists public channels only). Workspace memory learns only from public channels
-  (`MEMORY_SOURCE_CHANNEL_WHERE`), since what it learns is offered to everyone. A
+  as `no_access`, an action card neither names nor links it and acts on it only for
+  an active member, an Agent's reminder anchored in it links nowhere, an Agent's
+  Activity there shows only to its members (`readableActivitySql`), and no App event
+  names it (`recordAppNotifications`, as an App lists public channels only).
+  Workspace memory learns only from public channels (`MEMORY_SOURCE_CHANNEL_WHERE`),
+  since what it learns is offered to everyone. Turning a channel private looks
+  forward, not back: what memory learned while it was public stays, as messages
+  people already read do. A
   task's own conversation is never read as a notification by id: its board decides
   who reads it, not the seats it keeps.

@@ -1,10 +1,11 @@
 import { AGENT_ACTIVITY_DETAIL_KIND } from "@lrm/coforge-sdk/internal";
 import { parseActivityEntries, type AgentActivity } from "@lrm/coforge-sdk/internal";
-import type { PrismaClient } from "#src/generated/prisma/client";
+import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import { activityKindForObservation } from "#src/server/agents/agent-activity-kind";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { managedAgentWhere } from "#src/server/agents/agent-visibility.server";
 import { AGENT_ACTIVITY_WINDOW } from "#src/features/agents/agent-activity-window";
+import { readableChannelSql } from "#src/server/conversations/channel-read-access.server";
 
 export type TrustedAgentActivity = AgentActivity & { computerId: string };
 
@@ -40,6 +41,28 @@ function activityKind(activity: { detailKind: string; level: string }) {
   });
 }
 
+/**
+ * An Activity row the viewer may read, over `"agent_activities"` under `alias` (a
+ * repository-owned identifier): one in a channel, or in the Task conversation of a channel's
+ * Task, only when `readableChannelSql` lets the viewer read that channel (task #302: a manager
+ * outside a private channel sees none of what the Agent did there). A row naming no
+ * conversation, a DM or a conversation since deleted is kept.
+ */
+function readableActivitySql(alias: string, workspaceId: string, userId: string) {
+  const activity = Prisma.raw(alias);
+  const reader = { userId };
+  return Prisma.sql`(${activity}."conversationId" IS NULL OR NOT EXISTS (
+    SELECT 1
+    FROM "conversations" AS place
+    LEFT JOIN "tasks" AS task ON task."discussionConversationId" = place."id"
+    LEFT JOIN "conversations" AS board ON board."id" = task."conversationId"
+    WHERE place."id" = ${activity}."conversationId"
+      AND (
+        (place."channelName" IS NOT NULL AND NOT ${readableChannelSql("place", workspaceId, reader)})
+        OR (board."channelName" IS NOT NULL AND NOT ${readableChannelSql("board", workspaceId, reader)})
+      )))`;
+}
+
 export class AgentActivityRepository {
   constructor(private readonly db: PrismaClient) {}
 
@@ -54,6 +77,8 @@ export class AgentActivityRepository {
     });
     const managedAgentIds = managedAgents.map((agent) => agent.id);
     if (managedAgentIds.length === 0) return [];
+    // In both reads of a launch's rows, so a slot's position counts only rows the viewer reads.
+    const readable = readableActivitySql("activity", workspaceId, userId);
     const rows = await this.db.$queryRaw<CompactActivityRow[]>`
       WITH authorized_agents AS (
         SELECT agent."id"
@@ -81,6 +106,7 @@ export class AgentActivityRepository {
           FROM "agent_activities" AS activity
           WHERE activity."workspaceId" = ${workspaceId}::uuid
             AND activity."agentId" = agent."id"
+            AND ${readable}
           ORDER BY activity."occurredAt" DESC, activity."createdAt" DESC, activity."id" DESC
           LIMIT 5
         ) AS recent
@@ -118,6 +144,7 @@ export class AgentActivityRepository {
           WHERE activity."workspaceId" = ${workspaceId}::uuid
             AND activity."agentId" = positioned."agentId"
             AND activity."launchId" = positioned."launchId"
+            AND ${readable}
           ORDER BY activity."clientSeq" DESC
           OFFSET positioned.launch_position - 1
           LIMIT 1
@@ -217,14 +244,23 @@ export class AgentActivityRepository {
       where: { id: agentId, ...managedAgentWhere({ userId, workspaceId }), ...ACTIVE_AGENT_WHERE },
       select: { id: true },
     });
-    return managed ? this.list(workspaceId, agentId) : undefined;
+    return managed ? this.list(workspaceId, agentId, userId) : undefined;
   }
 
-  async list(workspaceId: string, agentId: string) {
+  /** The Agent's newest Activity the viewer `userId` may read (`readableActivitySql`). */
+  async list(workspaceId: string, agentId: string, userId: string) {
+    const readable = await this.db.$queryRaw<{ id: string }[]>`
+      SELECT activity."id"
+      FROM "agent_activities" AS activity
+      WHERE activity."workspaceId" = ${workspaceId}::uuid
+        AND activity."agentId" = ${agentId}::uuid
+        AND ${readableActivitySql("activity", workspaceId, userId)}
+      ORDER BY activity."occurredAt" DESC, activity."clientSeq" DESC, activity."createdAt" DESC
+      LIMIT ${AGENT_ACTIVITY_WINDOW}
+    `;
     const rows = await this.db.agentActivity.findMany({
-      where: { workspaceId, agentId },
+      where: { id: { in: readable.map((row) => row.id) } },
       orderBy: [{ occurredAt: "desc" }, { clientSeq: "desc" }, { createdAt: "desc" }],
-      take: AGENT_ACTIVITY_WINDOW,
     });
     return rows.map(
       ({

@@ -248,7 +248,7 @@ test("one member aggregates persisted activity from independent conversations", 
       });
     }
     expect(
-      (await repository.list(workspace.id, agent.id)).map((r) => r.conversationId).sort(),
+      (await repository.list(workspace.id, agent.id, owner.id)).map((r) => r.conversationId).sort(),
     ).toEqual([groupA, groupB].sort());
     const members = await repository.listForManager(workspace.id, owner.id);
     expect(members).toHaveLength(1);

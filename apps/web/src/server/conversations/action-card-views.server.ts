@@ -76,6 +76,8 @@ export async function actionCardViews(
   for (const card of cards) {
     const payload = card.payload as ResolvedActionCardPayload;
     if (payload.type === "channel:create") {
+      const created = card.result as { channelId?: string } | null;
+      if (created?.channelId) channelIds.add(created.channelId);
       for (const id of payload.initialHumanIds ?? []) userIds.add(id);
       for (const id of payload.initialAgentIds ?? []) agentIds.add(id);
     } else if (payload.type === "agent:create") {
@@ -130,17 +132,18 @@ export async function actionCardViews(
   const viewerInChannel = new Set(
     viewerChannelMemberships.flatMap((m) => (m.leftAt === null ? [m.conversationId] : [])),
   );
-  // A private channel is named only to those in it; to anyone else it is unknown, as a missing
-  // one is (task #302).
+  // A private channel is named, linked and acted on only by those in it; to anyone else it is
+  // unknown, as a missing one is (task #302).
   const channelName = new Map(
     channels
       .filter((c) => canReadChannel(c, viewerInChannel.has(c.id)))
       .map((c) => [c.id, c.channelName ?? "unknown"]),
   );
+  const readableResult = <Result extends { channelId: string }>(result: unknown) =>
+    result && channelName.has((result as Result).channelId) ? (result as Result) : undefined;
   const computerName = new Map(
     computers.map((c) => [c.id, c.displayName?.trim() || c.name || "unknown"]),
   );
-  const viewerChannelIds = new Set(viewerChannelMemberships.map((m) => m.conversationId));
   const isAdminViewer = viewerRole ? isAdminLike(viewerRole) : false;
   const ref = (id: string, names: Map<string, string>): ActionCardRef => ({
     id,
@@ -173,7 +176,7 @@ export async function actionCardViews(
         initialHumans: (payload.initialHumanIds ?? []).map((id) => ref(id, userName)),
         initialAgents: (payload.initialAgentIds ?? []).map((id) => ref(id, agentName)),
         canCommit: pending,
-        result: card.result as { channelId: string } | undefined,
+        result: readableResult<{ channelId: string }>(card.result),
       });
     } else if (payload.type === "agent:create") {
       views.set(card.messageId, {
@@ -228,13 +231,17 @@ export async function actionCardViews(
       views.set(card.messageId, {
         ...base,
         kind: "channel:add_member",
-        channel: ref(payload.channelId, channelName),
+        channel: {
+          id: channelName.has(payload.channelId) ? payload.channelId : null,
+          displayName: channelName.get(payload.channelId) ?? "unknown",
+        },
         humans: (payload.humanIds ?? []).map((id) => ref(id, userName)),
         agents: (payload.agentIds ?? []).map((id) => ref(id, agentName)),
-        canCommit: pending && viewerChannelIds.has(payload.channelId),
-        result: card.result as
-          | { channelId: string; userIds: string[]; agentIds: string[] }
-          | undefined,
+        // Someone who left the channel adds no one to it.
+        canCommit: pending && viewerInChannel.has(payload.channelId),
+        result: readableResult<{ channelId: string; userIds: string[]; agentIds: string[] }>(
+          card.result,
+        ),
       });
     }
   }

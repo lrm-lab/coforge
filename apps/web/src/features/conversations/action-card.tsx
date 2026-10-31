@@ -71,6 +71,8 @@ export function ActionCard({ card }: { card: ActionCardView }) {
   const commitFill = useServerFn(commitPageFillActionCard);
   const [fillValues, setFillValues] = useState<Record<string, string>>({});
   const isPageFill = view.kind === "page:fill";
+  // Known only to someone in the channel, who alone may commit (task #302).
+  const addMemberChannelId = view.kind === "channel:add_member" ? view.channel.id : null;
   const [approving, setApproving] = useState(false);
   const isAppGrant = view.kind === "app:grant_agent";
   const isAppRegister = view.kind === "app:register";
@@ -493,9 +495,9 @@ export function ActionCard({ card }: { card: ActionCardView }) {
           }}
         />
       )}
-      {dialogOpen && view.kind === "channel:add_member" && (
+      {dialogOpen && view.kind === "channel:add_member" && addMemberChannelId && (
         <ChannelAddMembersDialog
-          channelId={view.channel.id}
+          channelId={addMemberChannelId}
           channelName={view.channel.displayName}
           open
           onOpenChange={setDialogOpen}
@@ -503,7 +505,7 @@ export function ActionCard({ card }: { card: ActionCardView }) {
           commit={{
             submit: (input) =>
               commitAddMember({
-                data: { messageId: view.messageId, channelId: view.channel.id, ...input },
+                data: { messageId: view.messageId, channelId: addMemberChannelId, ...input },
               }),
             onCommitted: () => void refetch(),
           }}
