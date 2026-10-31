@@ -12,14 +12,12 @@ import { ACTIVITY_INBOX_QUERY_PREFIX } from "#src/features/inbox/activity-inbox-
 import { ConversationTaskBoard } from "#src/features/tasks/conversation-task-board";
 import { markPublicChannelRead } from "./channels.functions";
 import { ChannelConversation, ChannelConversationHeader } from "./channel-conversation";
-import { CommentMembersProvider } from "./comment-members";
 import { ConversationFilesPanel } from "./conversation-files";
 import type { HeaderTabs } from "./conversation-header-tabs";
 import { useMarkConversationSeen } from "./unread-store";
 import type { ConversationPageTarget } from "./conversation-page-loader";
 import type { ConversationPageSearch } from "./conversation-page-search";
 import type { DirectConversationView } from "./conversation-types";
-import type { Mentionable } from "./mention-text";
 import { directConversationQuery, publicChannelQuery } from "./conversation-queries";
 import { latestTopLevelSequence, persistReadCursor } from "./conversation-unread";
 import { markDirectConversationRead } from "./conversations.functions";
@@ -31,7 +29,6 @@ import {
 } from "./people-direct-conversation";
 import { useReopenClosedOnOpen } from "./sidebar-lists";
 import { useStandaloneThread } from "./standalone-thread";
-import { useChannelMentionables } from "./use-channel-mentionables";
 import { useChannelConversation, useDirectConversation } from "./use-conversation-data";
 import { useConversationView, useShownConversationTab } from "./use-conversation-view";
 import { useAwaitingRestoredWindow } from "./use-conversation-open-boundary";
@@ -75,12 +72,9 @@ function ChannelConversationPage({
   const advanceReadCursor = useServerFn(markPublicChannelRead);
   const queryClient = useQueryClient();
   useReadCursorAdoptedOnLeave("channel", channelId);
-  // A file's comments name this channel's members, as the composer does, kept current alike.
-  const commentMembers = useChannelMentionables(channelId, conversation.mentionables);
   return (
     <ConversationPageBody
       {...props}
-      commentMembers={commentMembers}
       unreadKey={channelId}
       page={page}
       taskView={taskView}
@@ -237,7 +231,6 @@ function DirectConversationPageBody({
   return (
     <ConversationPageBody
       {...props}
-      commentMembers={page.conversation.mentionables}
       unreadKey={conversationId}
       page={page}
       taskView={taskView}
@@ -278,8 +271,6 @@ type ConversationPageData =
 
 /** What a conversation kind gives the shared page. */
 type ConversationPageBodyProps = {
-  /** Whom a comment on a file shown here can name: the conversation's members. */
-  commentMembers: Mentionable[] | undefined;
   /** The key the sidebar's unread badge is kept under: the channel id, or the direct
    * conversation's id. */
   unreadKey: string;
@@ -304,24 +295,12 @@ type ConversationPageBodyProps = {
   ) => ReactNode;
 };
 
-/** Gives the files shown on the page the members their comments can name. */
-function ConversationPageBody({
-  commentMembers,
-  ...props
-}: ConversationPageProps & ConversationPageBodyProps) {
-  return (
-    <CommentMembersProvider members={commentMembers} viewerId={props.page.conversation.viewerId}>
-      <ConversationPageContent {...props} />
-    </CommentMembersProvider>
-  );
-}
-
 /**
  * The page both kinds share: the tab in view, reading the conversation, the Files and Tasks tabs,
  * and the chat with its thread, Task popup and Agent profile. Each kind supplies its data, header,
  * conversation and read cursor.
  */
-function ConversationPageContent({
+function ConversationPageBody({
   search: pageSearch,
   jumpMessage,
   onJumpMessageConsumed,
@@ -333,7 +312,7 @@ function ConversationPageContent({
   readCursor,
   header,
   conversation: renderConversation,
-}: ConversationPageProps & Omit<ConversationPageBodyProps, "commentMembers">) {
+}: ConversationPageProps & ConversationPageBodyProps) {
   const { view: requestedView, profile, agentTab, ...search } = pageSearch;
   const view = useShownConversationTab(requestedView);
   const agentProfile = useConversationAgentProfile({ profile, agentTab });

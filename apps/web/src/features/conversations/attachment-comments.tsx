@@ -13,12 +13,13 @@ import { useServerFn } from "@tanstack/react-start";
 import { MarkerPin01, MessageSquare01, XClose } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { Empty, EmptyDescription, EmptyMedia, EmptyTitle } from "#src/components/ui/empty";
+import { Empty, EmptyMedia, EmptyTitle } from "#src/components/ui/empty";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
+import { getLocale } from "#src/paraglide/runtime";
 import { postAttachmentComment } from "./attachment-comments.functions";
+import { useCommentAudience } from "./attachment-comment-audience";
 import { CommentRow, useCommentDraft, useCommentPages } from "./attachment-comment-thread";
-import { useCommentMembers } from "./comment-members";
 import { dragCarriesFiles } from "./composer-behavior";
 import { ComposerField } from "./composer-field";
 import { COMPOSER_FOCUS_CLASS, COMPOSER_FRAME_CLASS } from "./composer-frame";
@@ -169,12 +170,14 @@ export function AttachmentCommentsPane({
     () => queryClient.invalidateQueries({ queryKey, exact: true }),
     () => completion.textareaRef.current?.focus(),
   );
-  // The thread composer's field: `#` lists the Workspace's channels, `@` the members of the
-  // conversation the file is in (none elsewhere, which keeps `@` closed). Picking one pins them,
-  // so the comment notifies exactly them.
-  const people = useCommentMembers();
+  // The thread composer's field: `#` lists the Workspace's channels, `@` those of the file's own
+  // conversation who would be notified. Picking one pins them, so the comment notifies exactly them.
+  const { audience, mentionables, plainMentions, notifies } = useCommentAudience(
+    attachmentId,
+    all.at(-1)?.id,
+  );
   const completion = useReferenceCompletion({
-    mentionables: useMentionCandidates(people?.members, people?.viewerId, canComment),
+    mentionables: useMentionCandidates(mentionables, audience?.viewerId, canComment),
     channels: useConversationHostChannels(),
     value: draft.body,
     onChange: draft.setBody,
@@ -211,7 +214,15 @@ export function AttachmentCommentsPane({
   }, [focusCommentId, all, query.hasNextPage, query.isFetching]);
   // A read that failed says so; why commenting was off before it is no longer known.
   const disabledReason = query.isError ? undefined : state?.disabledReason;
-  const emptyHint = m.attachment_comments_empty_hint({ name: "{name}" }).split("{name}");
+  const notifyHint = useMemo(() => {
+    if (!notifies) return undefined;
+    const names = notifies(draft.wire.body, draft.wire.mentions);
+    return names.length
+      ? m.attachment_comments_will_notify({
+          names: new Intl.ListFormat(getLocale(), { type: "conjunction" }).format(names),
+        })
+      : m.attachment_comments_will_notify_nobody();
+  }, [notifies, draft.wire]);
   const disabledText =
     disabledReason === "archived"
       ? m.attachment_comments_archived()
@@ -225,8 +236,8 @@ export function AttachmentCommentsPane({
       key={comment.id}
       highlighted={comment.id === jumped}
       comment={comment}
-      plainMentions={people?.plainMentions}
-      viewerId={people?.viewerId}
+      plainMentions={plainMentions}
+      viewerId={audience?.viewerId}
       place={
         comment.anchor && (
           <AnchorPlace
@@ -271,11 +282,6 @@ export function AttachmentCommentsPane({
             <EmptyTitle className="text-sm text-secondary">
               {m.attachment_comments_empty()}
             </EmptyTitle>
-            <EmptyDescription className="mt-1">
-              {emptyHint[0]}
-              <strong>{fileName}</strong>
-              {emptyHint[1]}
-            </EmptyDescription>
           </Empty>
         ) : (
           <div className="flex flex-col">
@@ -320,6 +326,7 @@ export function AttachmentCommentsPane({
             </AnchorChip>
           </div>
         )}
+        {canComment && notifyHint && <p className="text-xs text-tertiary">{notifyHint}</p>}
         {/* The thread composer's box and field, without its margins: the pane pads it. */}
         <div className={cn(COMPOSER_FOCUS_CLASS, COMPOSER_FRAME_CLASS, "m-0 md:mx-0")}>
           <ComposerField

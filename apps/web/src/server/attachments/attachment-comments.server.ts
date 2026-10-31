@@ -5,6 +5,7 @@ import {
   type AttachmentCommentAnchor,
 } from "#src/features/conversations/attachment-comment-anchors";
 import { previewKindFor, takesComments } from "#src/features/conversations/attachment-preview-kind";
+import type { Mentionable } from "#src/features/conversations/mention-text";
 import type { mapBrowserMessage } from "#src/server/conversations/conversation-history.server";
 import type { VersionedReactions } from "#src/server/conversations/reaction-write.server";
 
@@ -32,6 +33,13 @@ export type AttachmentCommentView = ReturnType<typeof mapBrowserMessage> & {
   replyTarget: string;
   /** Replies under a root comment; 0 for a reply. */
   replyCount: number;
+};
+/** Whom the viewer's comment can name, and whom it notifies before naming anyone. */
+export type AttachmentCommentAudience = {
+  viewerId: string;
+  /** Whom a mention resolves among; one who `reads` the comments is notified by it. */
+  members: (Mentionable & { reads: boolean })[];
+  subscribed: { kind: "user" | "agent"; id: string; label: string }[];
 };
 export type AttachmentCommentPageInput = {
   attachmentId: string;
@@ -84,6 +92,10 @@ export interface AttachmentCommentStore {
   list(
     input: AttachmentCommentPageInput,
   ): Promise<{ comments: AttachmentCommentView[]; hasOlder: boolean }>;
+  audience(
+    viewer: { workspaceId: string; userId: string },
+    access: AttachmentCommentAccess,
+  ): Promise<AttachmentCommentAudience>;
   post(
     actor: AttachmentCommentActor,
     input: AttachmentCommentPostInput,
@@ -142,6 +154,11 @@ export class AttachmentComments {
       canReact: disabledReason === null,
       disabledReason,
     };
+  }
+
+  /** Read like the comments themselves: a file the viewer cannot read names no one to them. */
+  async audience(viewer: { workspaceId: string; userId: string }, attachmentId: string) {
+    return this.store.audience(viewer, await this.readAccess(viewer, attachmentId));
   }
 
   async post(

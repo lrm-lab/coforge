@@ -16,7 +16,8 @@ import { inPane, rowItems } from "./helpers/activity-inbox-e2e";
  * Mentioning people in a file's comments, and opening a comment from Activity, in a real browser.
  *
  * - The comment field's `@` lists the members of the conversation the file is in (a channel's
- *   people, never the viewer or someone outside it), choosing one keeps who was meant with the
+ *   people, never the viewer or someone outside it), the line above it says whom the comment
+ *   will notify, choosing one keeps who was meant with the
  *   draft across a reload, and sending stores a real mention of them and notifies them
  *   (`pending_mention_actions`, read back from the database); the comment then shows the person's
  *   name, not its stored token.
@@ -141,10 +142,14 @@ test("a file's comment mentions a member of its conversation, and Activity opens
       );
     };
 
-    // 1. `@` in the comment field lists the channel's other member, and no one else.
+    // 1. `@` in the comment field lists the channel's other member, and no one else. Above the
+    // field, whom the comment will notify: no one yet, as the viewer uploaded the file.
+    const dialogText = `document.querySelector('[role="dialog"]').textContent`;
     await browser("set", "viewport", "1440", "900");
     await browser("open", `${origin}${workspacePath}/channel/${conversationId}`);
     await openComments();
+    await browser("wait", "--fn", `${dialogText}.includes("Won't notify anyone.")`);
+    await browser("screenshot", join(artifacts, "0-no-comments.png"));
     await browser("focus", dialogField);
     await browser("keyboard", "type", "@");
     await browser("keyboard", "inserttext", "Comment");
@@ -154,10 +159,13 @@ test("a file's comment mentions a member of its conversation, and Activity opens
     // Choosing writes the name; the draft keeps who was meant across a reload.
     await browser("press", "Enter");
     await browser("wait", "--fn", `${fieldValue} === "@Comment Peer "`);
+    await browser("wait", "--fn", `${dialogText}.includes("Will notify: Comment Peer")`);
     await browser("keyboard", "inserttext", "please check");
+    await browser("screenshot", join(artifacts, "1-will-notify.png"));
     await browser("reload");
     await openComments();
     await browser("wait", "--fn", `${fieldValue} === "@Comment Peer please check"`);
+    await browser("wait", "--fn", `${dialogText}.includes("Will notify: Comment Peer")`);
 
     // 2. Sending stores a real mention of the person and notifies them.
     await browser("focus", dialogField);

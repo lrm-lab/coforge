@@ -143,7 +143,7 @@ test("commenting on the whole attachment survives refreshing and reopening its p
     // A preview opens on the file alone; its comments are one icon away, as on Raft's page.
     await page.click('[role="dialog"] button[aria-label="Comments"]');
     await page.waitForSelector('[role="dialog"] textarea', { timeout: 8000 });
-    await page.waitForFunction((name) => document.querySelector('[role="dialog"] textarea')?.placeholder === "Add a comment…" && document.body.innerText.includes("No comments yet") && document.body.innerText.includes("Comments here relate only to " + name), ${JSON.stringify(filename)});
+    await page.waitForFunction((name) => document.querySelector('[role="dialog"] textarea')?.placeholder === "Add a comment…" && document.body.innerText.includes("No comments yet") && !document.body.innerText.includes("For general discussion"));
     // The panel is dragged by its left edge; a left arrow widens it, and the width is kept.
     // Widths are layout widths: the dialog may still be scaling in, which skews rendered ones.
     const separator = '[role="dialog"] [role="separator"][aria-label="Resize comments"]';

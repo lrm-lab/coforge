@@ -108,21 +108,29 @@ export async function mentionDirectory(
   userId: string,
   channelId: string,
 ) {
-  const [, viewerRow] = await Promise.all([
-    memberChannel(db, workspaceId, userId, channelId),
+  await memberChannel(db, workspaceId, userId, channelId);
+  return conversationMentionables(db, workspaceId, userId, channelId);
+}
+
+/** Every active member of a conversation as a mention completion, scored by the viewer's recent
+ * mentions there; whether the viewer may read it is the caller's to check. */
+export async function conversationMentionables(
+  db: PrismaClient,
+  workspaceId: string,
+  userId: string,
+  conversationId: string,
+) {
+  const [mentionRows, viewerRow] = await Promise.all([
+    db.conversationMember.findMany({
+      where: { conversationId, ...ACTIVE_MEMBER_WHERE },
+      select: MENTIONABLE_MEMBER_SELECT,
+    }),
     db.conversationMember.findUnique({
-      where: { conversationId_userId: { conversationId: channelId, userId } },
+      where: { conversationId_userId: { conversationId, userId } },
       select: { id: true },
     }),
   ]);
-  const [mentionRows, recentMentions] = await Promise.all([
-    db.conversationMember.findMany({
-      where: { conversationId: channelId, ...ACTIVE_MEMBER_WHERE },
-      select: MENTIONABLE_MEMBER_SELECT,
-    }),
-    viewerRecentMentions(db, viewerRow?.id),
-  ]);
-  const mentionScores = mentionAffinityScores(recentMentions);
+  const mentionScores = mentionAffinityScores(await viewerRecentMentions(db, viewerRow?.id));
   return mentionables(workspaceId, mentionRows, mentionScores);
 }
 

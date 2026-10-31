@@ -27,6 +27,17 @@ export const loadAttachmentComments = createServerFn({ method: "GET" })
     ),
   );
 
+/** Whom a comment on the file can @, and whom it notifies before naming anyone. */
+export const loadAttachmentCommentAudience = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .validator(attachmentIdInput)
+  .handler(({ context, data }) =>
+    new AttachmentComments(new PrismaAttachmentCommentStore(context.db)).audience(
+      { workspaceId: context.workspaceId, userId: context.user.id },
+      data.attachmentId,
+    ),
+  );
+
 export const postAttachmentComment = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(

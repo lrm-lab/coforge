@@ -26,7 +26,11 @@ import { allocateSequence } from "#src/server/db/repositories/sequence-allocatio
 import { writeReaction, type ReactionPort } from "#src/server/conversations/reaction-write.server";
 import { clampPageLimit } from "#src/server/db/page-limit.server";
 import type { DatabaseScope } from "#src/server/db/transaction.server";
-import { commentRecipients, readAccess } from "./attachment-comment-recipients.repositories.server";
+import {
+  commentAudience,
+  commentRecipients,
+  readAccess,
+} from "./attachment-comment-recipients.repositories.server";
 
 /**
  * Comment reactions are announced to no one: no page follows a discussion's realtime channel (the
@@ -40,6 +44,10 @@ export class PrismaAttachmentCommentStore implements AttachmentCommentStore {
 
   access(actor: AttachmentCommentActor, attachmentId: string) {
     return readAccess(this.db, actor, attachmentId);
+  }
+
+  audience(viewer: { workspaceId: string; userId: string }, access: AttachmentCommentAccess) {
+    return commentAudience(this.db, viewer, access);
   }
 
   async list(input: AttachmentCommentPageInput) {

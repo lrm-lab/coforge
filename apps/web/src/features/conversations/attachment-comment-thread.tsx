@@ -103,6 +103,8 @@ export function useCommentDraft(
       body: current.body,
       pins: addMentionPin(current.pins, mentionPinFor(mention)),
     }));
+  // The draft as a send carries it, which is also whom it would notify.
+  const wire = useMemo(() => rewriteMentionPins(body, pins), [body, pins]);
   const [sending, setSending] = useState(false);
   const [sendFailed, setSendFailed] = useState(false);
   // One key per send attempt chain: a retry of the same submit reuses it (the server dedupes on
@@ -113,7 +115,6 @@ export function useCommentDraft(
     setSending(true);
     setSendFailed(false);
     try {
-      const wire = rewriteMentionPins(body, pins);
       await send(wire.body, idempotencyKey.current, wire.mentions);
       setBody("");
       idempotencyKey.current = crypto.randomUUID();
@@ -127,7 +128,7 @@ export function useCommentDraft(
       focus();
     }
   }
-  return { body, setBody, pinMention, sending, sendFailed, submit };
+  return { body, wire, setBody, pinMention, sending, sendFailed, submit };
 }
 
 /**
