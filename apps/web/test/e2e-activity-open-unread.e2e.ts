@@ -6,6 +6,9 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { browserSession, localBrowserE2e, pageHydrated, seededUuid } from "./helpers/browser-e2e";
 import { inPane, rowItems, waitFor } from "./helpers/activity-inbox-e2e";
+import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
+import { announceMessage } from "#src/server/conversations/conversation-activity.server";
+import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 
 /**
  * A channel and a thread opened from Activity land on their first unread message under the "New
@@ -235,15 +238,118 @@ test("a channel with a mention already read opens on its new unread message, not
     });
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1440", "900");
-    await browser("open", `${origin}/en/w/${workspace.slug}/activity`);
+    // On Activity's Unread view, where the card leaves the list once the pane has read it.
+    await browser("open", `${origin}/en/w/${workspace.slug}/activity?filter=unread`);
     await browser("wait", "--fn", `${row("E2E open-mention unread")} !== null && ${pageHydrated}`);
 
     await browser("find", "text", "E2E open-mention unread", "click");
     await browser("wait", "--fn", inPane(unread));
     await browser("wait", "--fn", dividerBetween(channel.ids.at(-2)!, unread));
     await browser("wait", "--fn", inView(unread));
+    // The pane reads the channel; the divider stays, and the card leaves the Unread view.
+    await waitFor(
+      async () =>
+        (await db.conversationMember.findUniqueOrThrow({ where: { id: channel.viewer.id } }))
+          .readThroughSequence ===
+        read.length + 1,
+    );
+    await browser("wait", "1500");
     await browser("screenshot", join(artifacts, "mention-read.png"));
+    await browser("wait", "--fn", dividerBetween(channel.ids.at(-2)!, unread));
     expect(await evaluate<boolean>(inView(mention))).toBe(false);
+  } finally {
+    await browser("close").catch(() => undefined);
+    await db.$disconnect();
+  }
+}, 90_000);
+
+test("a channel opened again from Activity, with a message that came live since, shows its divider", async () => {
+  const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
+  const { browser } = browserSession(browserPath, `activity-open-again-${process.pid}`);
+  const realtime = new CentrifugoConversationRealtime(createCentrifugoServerApi());
+  try {
+    const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
+      where: { userId: DEV_BROWSER_USER.id },
+      include: { workspace: { select: { slug: true } } },
+    });
+    const read = Array.from({ length: 150 }, (_, index) => ({
+      from: "peer" as const,
+      body: `E2E open-again read ${index + 1}`,
+    }));
+    const channel = await seedChannel(db, workspaceId, "e2e-open-unread-again", read.length, [
+      ...read,
+      { from: "peer", body: "E2E open-again first unread" },
+    ]);
+    const other = await seedChannel(db, workspaceId, "e2e-open-unread-elsewhere", 0, [
+      { from: "peer", body: "E2E open-again elsewhere" },
+    ]);
+    await mkdir(artifacts, { recursive: true });
+    await browser("set", "viewport", "1440", "900");
+    await browser("open", `${origin}/en/w/${workspace.slug}/activity`);
+    await browser(
+      "wait",
+      "--fn",
+      `${row("E2E open-again first unread")} !== null && ${pageHydrated}`,
+    );
+
+    // QA's #video-gen (task #358): the viewer reads a channel longer than a page from Activity,
+    // opens another conversation, all within the page, and a message comes into the channel
+    // meanwhile. Reopened, the pane jumps to it while its stale window refetches.
+    await browser("find", "text", "E2E open-again first unread", "click");
+    await browser("wait", "--fn", inPane(channel.ids.at(-1)!));
+    await waitFor(
+      async () =>
+        (await db.conversationMember.findUniqueOrThrow({ where: { id: channel.viewer.id } }))
+          .readThroughSequence ===
+        read.length + 1,
+    );
+    await browser("find", "text", "E2E open-again elsewhere", "click");
+    await browser("wait", "--fn", inPane(other.ids[0]!));
+    const later = seededUuid(`${key}e2e-open-unread-again:later`);
+    await db.message.create({
+      data: {
+        id: later,
+        conversationId: channel.channelId,
+        workspaceId,
+        sequence: read.length + 2,
+        body: "E2E open-again later unread",
+        senderMemberId: (
+          await db.conversationMember.findFirstOrThrow({
+            where: { conversationId: channel.channelId, userId: { not: DEV_BROWSER_USER.id } },
+          })
+        ).id,
+      },
+    });
+    await announceMessage(db, realtime, {
+      conversationId: channel.channelId,
+      messageId: later,
+      sequence: read.length + 2,
+      workspaceId,
+    });
+    // QA's Unread view, read afresh: the card names the new message whether or not the list
+    // heard it live.
+    await browser(
+      "eval",
+      `[...document.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent.startsWith("Unread")).click()`,
+    );
+    await browser("wait", "--fn", `${row("E2E open-again later unread")} !== null`);
+    // Staging's round trips, not a local server's: every read the reopened pane makes is slow.
+    await browser(
+      "eval",
+      `(() => { const f = window.fetch; window.fetch = (...a) => new Promise((r) => setTimeout(r, 700)).then(() => f(...a)); return true; })()`,
+    );
+    await browser("find", "text", "e2e-open-unread-again", "click");
+    await browser("wait", "--fn", inPane(later));
+    // The divider stays over the new message after the pane has read it.
+    await waitFor(
+      async () =>
+        (await db.conversationMember.findUniqueOrThrow({ where: { id: channel.viewer.id } }))
+          .readThroughSequence ===
+        read.length + 2,
+    );
+    await browser("wait", "1000");
+    await browser("screenshot", join(artifacts, "open-again.png"));
+    await browser("wait", "--fn", dividerBetween(channel.ids.at(-1)!, later));
   } finally {
     await browser("close").catch(() => undefined);
     await db.$disconnect();

@@ -35,7 +35,8 @@ export function createConversationReconciler<T extends ConversationMessage>(
   let active: Promise<void> | undefined;
   let reading: AbortController | undefined;
   let failures = 0;
-  let caughtUp = false;
+  /** The newest message the first catch-up of this open found; unset until one has landed. */
+  let caughtUpThrough: number | undefined;
   const listeners = new Set<() => void>();
   const notify = () => listeners.forEach((listener) => listener());
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -62,9 +63,9 @@ export function createConversationReconciler<T extends ConversationMessage>(
       reading = controller;
       try {
         await readToTheEnd(controller.signal);
-        const changed = failures > 0 || !caughtUp;
+        const changed = failures > 0 || caughtUpThrough === undefined;
         failures = 0;
-        caughtUp = true;
+        caughtUpThrough ??= cursor.afterSequence;
         if (changed) notify();
       } catch (error) {
         // Abandoned by a restart, which asked for the read that follows, or by `stop`.
@@ -97,7 +98,14 @@ export function createConversationReconciler<T extends ConversationMessage>(
 
   return {
     /** Whether a read has caught the conversation up since this reconciler started (its open). */
-    caughtUp: () => caughtUp,
+    caughtUp: () => caughtUpThrough !== undefined,
+    /**
+     * The newest message there was when the open was caught up: what arrives past it came while
+     * the conversation was open. A sequence, not the moment `caughtUp` turns: the merge that
+     * brought the messages up to it reaches the window's observers on Query's schedule, which may
+     * be after this is heard.
+     */
+    caughtUpThrough: () => caughtUpThrough,
     /** How many catch-ups failed in a row; 0 once one landed. */
     failures: () => failures,
     /** Called when `caughtUp` or `failures` changes. */
@@ -117,10 +125,12 @@ export function createConversationReconciler<T extends ConversationMessage>(
       if (to.afterSequence > cursor.afterSequence) cursor = to;
     },
     /** Nothing was published since the window was read (the page's first subscribe compared
-     * their stream positions): the page is caught up without a read. One under way still decides. */
-    caughtUpWithoutRead() {
-      if (caughtUp || active) return;
-      caughtUp = true;
+     * their stream positions): the page is caught up without a read, through the newest message
+     * the window holds (`windowThrough`), which a window replaced since the open may have past the
+     * cursor. One under way still decides. */
+    caughtUpWithoutRead(windowThrough = 0) {
+      if (caughtUpThrough !== undefined || active) return;
+      caughtUpThrough = Math.max(cursor.afterSequence, windowThrough);
       notify();
     },
     /**

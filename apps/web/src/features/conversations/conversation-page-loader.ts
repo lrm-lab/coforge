@@ -13,6 +13,7 @@ import {
   publicChannelQuery,
   savedMessagesQuery,
 } from "./conversation-queries";
+import { windowReadSettled } from "./conversation-window-reads";
 import type { conversationPages, ConversationPage, PageMessage } from "./conversation-window-query";
 import { NO_SAVED } from "./saved-messages-collection";
 
@@ -118,9 +119,10 @@ async function readConversationPage(
 
 /**
  * Seed the route's infinite query and, when the URL names a message outside its first page,
- * replace that page with the bounded around-window before the route renders. This keeps a
- * position/thread deep link on the loader path; the browser-only hash fallback remains in
- * `useConversationSync` because SSR has no hash to inspect.
+ * replace that page with the bounded around-window before the route renders, once a read of the
+ * window already in flight has landed: its answer would land over the around-window (task #358).
+ * This keeps a position/thread deep link on the loader path; the browser-only hash fallback
+ * remains in `useConversationSync` because SSR has no hash to inspect.
  */
 async function ensureConversationWindow<M extends PageMessage, T extends ConversationPage<M>>(
   queryClient: QueryClient,
@@ -140,8 +142,14 @@ async function ensureConversationWindow<M extends PageMessage, T extends Convers
     const around = await queryClient.fetchQuery(
       conversationAroundQuery(latest.conversationId, targetMessageId),
     );
+    await windowReadSettled(queryClient, query.queryKey);
     const window: InfiniteData<T, ConversationWindowCursor> = {
-      pages: [{ ...latest, ...aroundWindow(around) }],
+      pages: [
+        {
+          ...(queryClient.getQueryData(query.queryKey)?.pages.at(-1) ?? latest),
+          ...aroundWindow(around),
+        },
+      ],
       pageParams: [undefined],
     };
     queryClient.setQueryData(query.queryKey, window);

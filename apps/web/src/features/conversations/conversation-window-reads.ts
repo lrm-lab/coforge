@@ -19,3 +19,17 @@ export function onNetworkRead<D>(
     listener(event.action.data as D);
   });
 }
+
+/**
+ * Waits until the window `queryKey` has no read of its own in flight. A read lands its answer over
+ * whatever was written meanwhile, and a refetch walks the cursors it started from: a window
+ * replaced with the one around a message while it ran (opening on a message in a stale window,
+ * task #358) went back to the stale pages, without the message.
+ */
+export async function windowReadSettled(queryClient: QueryClient, queryKey: readonly unknown[]) {
+  for (;;) {
+    const query = queryClient.getQueryCache().find({ queryKey, exact: true });
+    if (query?.state.fetchStatus !== "fetching" || !query.promise) return;
+    await query.promise.catch(() => undefined);
+  }
+}

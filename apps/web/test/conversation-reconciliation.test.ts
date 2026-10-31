@@ -215,6 +215,32 @@ test("an open is caught up only once a read has landed, after what it read was m
   expect(heard).toEqual([false, false, true, true]);
 });
 
+test("an open is caught up through the newest message its first catch-up found", async () => {
+  const reconciler = createConversationReconciler(
+    { afterSequence: 5 },
+    async (cursor) => (cursor.afterSequence === 5 ? [{ id: "m7", sequence: 7 }] : []),
+    () => {},
+  );
+  expect(reconciler.caughtUpThrough()).toBeUndefined();
+  await reconciler.reconcile();
+  expect(reconciler.caughtUpThrough()).toBe(7);
+
+  // What arrives later came while the conversation was open (task #358).
+  reconciler.advance({ afterSequence: 9 });
+  await reconciler.reconcile();
+  expect(reconciler.caughtUpThrough()).toBe(7);
+
+  // Caught up without a read: through the newest message the window holds, which a window
+  // replaced since the open (a jump's) may have past the cursor.
+  const idle = createConversationReconciler(
+    { afterSequence: 5 },
+    async () => [],
+    () => {},
+  );
+  idle.caughtUpWithoutRead(8);
+  expect(idle.caughtUpThrough()).toBe(8);
+});
+
 test("failed catch-ups are counted and heard until one lands", async () => {
   let reads = 0;
   let heard = 0;

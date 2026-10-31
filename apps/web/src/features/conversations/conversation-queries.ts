@@ -9,7 +9,7 @@ import {
 
 import { isAppErrorCode } from "#src/lib/app-error";
 import { mergeMessages } from "./conversation-messages";
-import { onNetworkRead } from "./conversation-window-reads";
+import { onNetworkRead, windowReadSettled } from "./conversation-window-reads";
 import {
   createConversationReconciler,
   type ConversationUpdatesCursor,
@@ -262,16 +262,20 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
   );
   useEffect(() => reconciliation.stop, [reconciliation]);
   // Whether this open has read what arrived since the window was last read (the divider waits).
-  const caughtUp = useSyncExternalStore(reconciliation.subscribe, reconciliation.caughtUp);
+  const caughtUpThrough = useSyncExternalStore(
+    reconciliation.subscribe,
+    reconciliation.caughtUpThrough,
+  );
   const catchUpFailures = useSyncExternalStore(reconciliation.subscribe, reconciliation.failures);
   const shown = useMemo(
     () => ({
       ...conversation,
-      caughtUp,
+      caughtUp: caughtUpThrough !== undefined,
+      caughtUpThrough,
       catchUpFailures,
       retryCatchUp: () => void reconciliation.reconcile({ restart: true }),
     }),
-    [conversation, caughtUp, catchUpFailures, reconciliation],
+    [conversation, caughtUpThrough, catchUpFailures, reconciliation],
   );
   // The window's own network read moves the reconciler past what it holds (see `advance`); the
   // page's own writes to the window (a sent message merged in) do not, since messages from others
@@ -366,12 +370,20 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
     (event) => reactionSync.apply(event.messageId, event),
     () => void reactionSync.repair(),
     onRead,
-    { key: query.queryKey, caughtUp: reconciliation.caughtUpWithoutRead },
+    {
+      key: query.queryKey,
+      caughtUp: () =>
+        reconciliation.caughtUpWithoutRead(
+          queryClient.getQueryData<Pages<T>>(query.queryKey)?.pages.at(-1)?.messages.at(-1)
+            ?.sequence,
+        ),
+    },
   );
 
   /** Replace the loaded history with a window around one message. */
   const loadMessageAround = async (messageId: string) => {
     const around = await queryClient.fetchQuery(conversationAroundQuery(conversationId, messageId));
+    await windowReadSettled(queryClient, query.queryKey);
     setPages((pages) => ({
       pages: [{ ...pages.pages.at(-1)!, ...aroundWindow(around) }],
       pageParams: [undefined],

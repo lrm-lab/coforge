@@ -15,10 +15,11 @@ import { isViewerMessage } from "./own-message";
  *
  * The copy a conversation opens on may predate messages that arrived since (task #276). One kept
  * in memory since the reader was last here is caught up by the first read past it after the open
- * (`caughtUp`): until then, with nothing unread yet, the divider goes above the first message past
- * the cursor the conversation opened with. The browser's stored copy (task #253) is not captured
- * at all until its own read has landed, which carries the server's cursor (it may have been read
- * elsewhere since). A divider found late opens the pane on it, as `openKey` changes; a reader who
+ * (`caughtUpThrough`): with nothing unread yet, the divider goes above the first message past the
+ * cursor the conversation opened with, up to the newest message that read found. What came after
+ * it arrived while the conversation was open, and is never the start of what was new. The
+ * browser's stored copy (task #253) is not captured at all until its own read has landed, which
+ * carries the server's cursor (it may have been read elsewhere since). A divider found late opens the pane on it, as `openKey` changes; a reader who
  * has scrolled away from the latest meanwhile stays where they are.
  */
 export function useConversationOpenBoundary(
@@ -28,6 +29,7 @@ export function useConversationOpenBoundary(
     conversationId,
     senderMemberId,
     caughtUp = true,
+    caughtUpThrough,
   }: {
     messages: readonly OpenMessage[];
     readThroughSequence?: number;
@@ -36,6 +38,8 @@ export function useConversationOpenBoundary(
     senderMemberId?: string;
     /** A read has caught this open up with what arrived (`createConversationReconciler`). */
     caughtUp?: boolean;
+    /** The newest message there was when it did. */
+    caughtUpThrough?: number;
   },
   rootId: string | undefined,
   followingLatest: boolean,
@@ -58,7 +62,13 @@ export function useConversationOpenBoundary(
     if (!current) setOpened({ key, waiting: true });
   } else if (!current || "waiting" in current) {
     setOpened(capture(Boolean(current)));
-  } else if (!current.boundary && !caughtUp && !rootId && current.cursor !== undefined) {
+  } else if (
+    !current.boundary &&
+    !current.settled &&
+    (!caughtUp || caughtUpThrough !== undefined) &&
+    !rootId &&
+    current.cursor !== undefined
+  ) {
     // What the viewer sent since the open, they have read up to.
     const ownThrough = Math.max(
       current.cursor,
@@ -66,13 +76,21 @@ export function useConversationOpenBoundary(
         .filter((message) => isViewerMessage(message, senderMemberId))
         .map((message) => message.sequence),
     );
-    const found = unreadBoundary(messages, ownThrough, senderMemberId);
+    const openedThrough = caughtUp ? caughtUpThrough! : Infinity;
+    const found = unreadBoundary(
+      messages.filter((message) => message.sequence <= openedThrough),
+      ownThrough,
+      senderMemberId,
+    );
+    // Once the window holds everything the catch-up found, nothing later can be the divider's.
+    const settled = (messages.at(-1)?.sequence ?? 0) >= openedThrough;
     if (found)
       setOpened({
         ...current,
         boundary: found,
         openKey: followingLatest ? `${conversationId}:found` : current.openKey,
       });
+    else if (settled) setOpened({ ...current, settled });
   }
   const shown = current && !("waiting" in current) ? current : undefined;
   return {
@@ -82,7 +100,14 @@ export function useConversationOpenBoundary(
 }
 
 type OpenMessage = UnreadBoundary & { senderMemberId?: string | null };
-type Opened = { key: string; cursor?: number; boundary?: UnreadBoundary; openKey: string };
+type Opened = {
+  key: string;
+  cursor?: number;
+  boundary?: UnreadBoundary;
+  openKey: string;
+  /** No divider: the window held everything the open was caught up with, none of it unread. */
+  settled?: boolean;
+};
 type Waiting = { key: string; waiting: true };
 
 /**
