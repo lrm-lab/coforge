@@ -6,8 +6,9 @@ const WORKSPACE_COMPUTER_CACHE_MAX_ENTRIES = 512;
  * `check`, remembering each positive answer for a short time, so a daemon's stream of Activity
  * frames does not re-read the same `workspaceComputer` row for every frame. Keyed by Workspace
  * and Computer. Only a Computer that belongs is remembered: a negative or failed check is asked
- * again, so a fresh attach is seen at once. Repeats renew the entry; idle entries expire.
- * Process-local and bounded: the oldest entry goes first.
+ * again, so a fresh attach is seen at once. An answer stands for the TTL from its read and a
+ * repeat never renews it, so however steadily a daemon publishes, a lost forget broadcast is
+ * outlived by the TTL at most. Process-local and bounded: the oldest entry goes first.
  *
  * The TTL is only a backstop: an ownership write drops the entry at once through `forget`
  * (`workspace-computer-invalidation`), here and broadcast to every other web instance. Every
@@ -48,10 +49,7 @@ export function cachedWorkspaceComputerCheck(
     check: async (workspaceId, computerId) => {
       const key = [workspaceId, computerId].join("\u0000");
       const known = entries.get(key);
-      if (known && now() - known.at < ttlMs) {
-        known.at = now();
-        return true;
-      }
+      if (known && now() - known.at < ttlMs) return true;
       const epoch = flushEpoch;
       const gen = generation(computerId);
       if (!(await check(workspaceId, computerId))) return false;

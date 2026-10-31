@@ -24,15 +24,16 @@ describe("cachedWorkspaceComputerCheck", () => {
 
   const scope = { workspaceId: "w", computerId: "c1" } as const;
 
-  test("a daemon's repeats renew the answer and an idle entry expires", async () => {
+  test("an answer stands 30 s from its read, however steadily a daemon repeats it", async () => {
     const { check, reads, advance } = subject();
     expect(await check(scope.workspaceId, scope.computerId)).toBe(true);
-    advance(8_000);
-    expect(await check(scope.workspaceId, scope.computerId)).toBe(true);
-    advance(29_999);
-    await check(scope.workspaceId, scope.computerId);
+    // A frame every second: no repeat renews the answer, so a lost forget is outlived by 30 s.
+    for (let second = 1; second < 30; second += 1) {
+      advance(1_000);
+      expect(await check(scope.workspaceId, scope.computerId)).toBe(true);
+    }
     expect(reads).toHaveLength(1);
-    advance(30_000);
+    advance(1_000);
     await check(scope.workspaceId, scope.computerId);
     expect(reads).toHaveLength(2);
   });
