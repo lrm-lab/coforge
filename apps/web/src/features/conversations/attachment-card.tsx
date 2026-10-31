@@ -83,8 +83,9 @@ function ImageThumbnail({
  * lone one at its own shape and several in a grid, then each video as a player (`InlineVideo`),
  * then a card for each other file. A lone image that cannot be loaded, and a video too large to
  * play without a delivery URL, fall back to their file cards. The images open one lightbox, which
- * pages through all of them, as on Raft. An address naming one of them (a link into its comments)
- * opens it there, at its comments; closing the lightbox takes the address off.
+ * pages through all of them, as on Raft. The image shown is in the address (`file`), so a reload or
+ * a copied address opens it again; a link into its comments opens it there, at its comments.
+ * Closing the lightbox takes the address off.
  */
 export function MessageAttachments({ attachments }: { attachments: readonly Attachment[] }) {
   const [brokenId, setBrokenId] = useState<string>();
@@ -93,8 +94,10 @@ export function MessageAttachments({ attachments }: { attachments: readonly Atta
   const images = attachments.filter(isImage);
   const viewing = images.findIndex((image) => image.id === viewingId);
   const address = useAttachmentReviewAddressAmong(images.map((image) => image.id));
-  // The image the address opened, followed until the address stops naming it.
+  // The image this copy of the message holds the address for, and whether a link opened it at its
+  // comments (an image opened or paged to by hand shows the image alone).
   const [linkedId, setLinkedId] = useState<string>();
+  const [atComments, setAtComments] = useState(false);
   const followAddress = useEffectEvent((fileId: string | undefined) => {
     if (fileId === linkedId) return;
     // Hand back the image followed before; another copy of the message may already follow this one.
@@ -102,8 +105,15 @@ export function MessageAttachments({ attachments }: { attachments: readonly Atta
     const next = fileId && address.follow() ? fileId : undefined;
     if (next === linkedId) return;
     setLinkedId(next);
+    setAtComments(next !== undefined && address.commentId !== undefined);
     setViewingId(next ?? null);
   });
+  const view = (id: string) => {
+    setLinkedId(id);
+    setAtComments(false);
+    setViewingId(id);
+    address.show(id);
+  };
   useEffect(() => followAddress(address.fileId), [address.fileId]);
   const videos = attachments.filter(isVideo);
   const files = attachments.filter(
@@ -123,7 +133,7 @@ export function MessageAttachments({ attachments }: { attachments: readonly Atta
             style={singleImageBox(lone)}
             imgClassName="object-contain"
             onFailed={() => setBrokenId(lone.id)}
-            onOpen={() => setViewingId(lone.id)}
+            onOpen={() => view(lone.id)}
           />
         </div>
       )}
@@ -149,7 +159,7 @@ export function MessageAttachments({ attachments }: { attachments: readonly Atta
                   attachment={images[index]!}
                   className="size-full rounded-lg"
                   imgClassName={fit === "cover" ? "object-cover" : "object-contain"}
-                  onOpen={() => setViewingId(images[index]!.id)}
+                  onOpen={() => view(images[index]!.id)}
                 />
               ))}
             </div>
@@ -160,16 +170,15 @@ export function MessageAttachments({ attachments }: { attachments: readonly Atta
         <ImageLightbox
           images={images}
           index={viewing}
-          onIndexChange={(index) => setViewingId(images[index]!.id)}
+          onIndexChange={(index) => view(images[index]!.id)}
           isOpen
           onOpenChange={(open) => {
             if (open) return;
             setViewingId(null);
-            // Only the copy the link opened takes it off: another copy opened by hand leaves it.
             if (linkedId) address.clear();
           }}
-          commentsOpen={viewingId === linkedId}
-          focusCommentId={viewingId === linkedId ? address.commentId : undefined}
+          commentsOpen={atComments}
+          focusCommentId={atComments ? address.commentId : undefined}
         />
       )}
       {videos.map((attachment) => (

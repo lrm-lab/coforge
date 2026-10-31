@@ -29,6 +29,10 @@ export function useReviewComments(open = false) {
       setExpanded(!shown);
       setOnPhone(!shown);
     },
+    hide: () => {
+      setExpanded(false);
+      setOnPhone(false);
+    },
     /** Back to the file on a phone, as jumping to a comment's place does. */
     showFileOnPhone: () => setOnPhone(false),
   };

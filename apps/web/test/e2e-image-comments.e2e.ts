@@ -110,8 +110,28 @@ test("an image takes comments in its lightbox, and a link into one opens it ther
       "--fn",
       `(() => { const dialog = document.querySelector('[role="dialog"]'); return Boolean(dialog?.querySelector('button[aria-label="Comments"]') && !dialog.closest("[data-entering]")); })()`,
     );
+    // The image shown is in the address, with the message it is in: a reload opens it again, on
+    // the image alone, as the address names no comment.
+    expect(
+      await evaluate<Record<string, string | null>>(`(() => {
+        const search = new URLSearchParams(location.search);
+        return { file: search.get("file"), message: search.get("message") };
+      })()`),
+    ).toEqual({ file: attachment.id, message: message.id });
+    await browser("reload");
+    await browser(
+      "wait",
+      "--fn",
+      `${pageHydrated} && (() => { const dialog = document.querySelector('[role="dialog"]'); return Boolean(dialog?.querySelector('img[alt="${fileName}"]') && !dialog.closest("[data-entering]")); })()`,
+    );
     await browser("click", commentsButton);
     await browser("wait", "--fn", fieldReady);
+    // Beside the comments the image is on the review's own, opaque background.
+    expect(
+      await evaluate<string>(
+        `getComputedStyle(document.querySelector('[role="dialog"] img[alt="${fileName}"]').closest(".bg-secondary")).backgroundColor`,
+      ),
+    ).not.toMatch(/rgba\(.*, 0\)|transparent/);
     await browser("focus", dialogField);
     await browser("keyboard", "inserttext", "The legend is cut off");
     await browser("press", "Enter");

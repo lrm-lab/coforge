@@ -66,7 +66,7 @@ function ArrowKeys({ onStep }: { onStep: (delta: -1 | 1) => void }) {
  * these. An image that fails to load says it has no preview, and Download still fetches it.
  *
  * The bar's comments button shows the image's comments beside it, as a file's review does (on a
- * phone, in its place); stepping to another image shows that one's. `commentsOpen` opens straight
+ * phone, in its place), the image then on the review's opaque background; stepping to another image shows that one's. `commentsOpen` opens straight
  * at them, scrolled to `focusCommentId`: what a link into a comment asks for.
  *
  * Open state comes from the surrounding `DialogTrigger`, or from `isOpen`/`onOpenChange`.
@@ -183,7 +183,8 @@ function LightboxContent({
         />
       </div>
       <div className="flex min-h-0 flex-1">
-        <div className={reviewFileClass(comments)}>
+        {/* Over the dimmed page alone; beside the comments, on the review's own background. */}
+        <div className={cn(reviewFileClass(comments), comments.shown && "bg-secondary")}>
           <div className="relative flex min-h-0 flex-1 items-center justify-center p-4 sm:px-20">
             {failed.has(image.id) ? (
               <Empty className="rounded-xl bg-primary">

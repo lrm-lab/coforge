@@ -161,7 +161,7 @@ test("commenting on the whole attachment survives refreshing and reopening its p
     await page.waitForSelector(${JSON.stringify(`button[aria-label="预览 ${filename}"]`)});
     await page.click(${JSON.stringify(`button[aria-label="预览 ${filename}"]`)});
     await page.click('[role="dialog"] button[aria-label="评论"]');
-    await page.waitForFunction((name) => document.querySelector('[role="dialog"] textarea')?.placeholder === "添加评论…" && document.body.innerText.includes("还没有评论") && document.body.innerText.includes("这里的评论仅关联 " + name), ${JSON.stringify(filename)});
+    await page.waitForFunction((name) => document.querySelector('[role="dialog"] textarea')?.placeholder === "添加评论…" && document.body.innerText.includes("还没有评论") && !document.body.innerText.includes("这里的评论仅关联"));
     await page.click('[role="dialog"] button[aria-label="评论"]');
     await page.waitForFunction(() => document.querySelector('[role="dialog"] textarea')?.getClientRects().length === 0);
     await page.click('[role="dialog"] button[aria-label="评论"]');
@@ -177,9 +177,9 @@ test("commenting on the whole attachment survives refreshing and reopening its p
     await page.fill('[role="dialog"] textarea', ${JSON.stringify(body)});
     await page.click("loc=role:button[name='Send']");
     await page.waitForFunction((body) => document.body.innerText.includes(body), ${JSON.stringify(body)}, { timeout: 10000 });
+    // The address keeps the open review: a reload reopens it.
     await page.reload();
-    await page.waitForSelector(${JSON.stringify(preview)});
-    await page.click(${JSON.stringify(preview)});
+    await page.waitForSelector('[role="dialog"] button[aria-label="Comments"]');
     await page.click('[role="dialog"] button[aria-label="Comments"]');
     await page.waitForFunction((body) => document.body.innerText.includes(body), ${JSON.stringify(body)}, { timeout: 10000 });
     // As in Raft, a comment is avatar, name, time, place and body: no reply or reaction controls.

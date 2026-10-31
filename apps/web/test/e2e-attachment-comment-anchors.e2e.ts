@@ -180,9 +180,8 @@ test("a comment on a Markdown section and on CSV rows is placed, kept and jumped
     await page.click("loc=role:button[name='Send']");
     await page.waitForFunction((body) => document.body.innerText.includes(body), ${JSON.stringify(rowBody)}, { timeout: 10000 });
 
+    // The address keeps the open review: a reload reopens it.
     await page.reload();
-    await page.waitForSelector(${JSON.stringify(open(csvName))});
-    await page.click(${JSON.stringify(open(csvName))});
     await page.waitForSelector('[role="dialog"] [data-anchor-row="60"]');
     await page.click('[role="dialog"] button[aria-label="Comments"]');
     await page.click("loc=role:button[name='Go to Row 45']");

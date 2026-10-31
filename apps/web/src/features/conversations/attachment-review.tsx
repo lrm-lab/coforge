@@ -102,6 +102,16 @@ export function AttachmentReviewDialog({
   const text = typeof read === "object" ? read.text : undefined;
   const reading = useRef<AbortController | null>(null);
   useEffect(() => () => reading.current?.abort(), []);
+  // Whether this card holds the address: it wrote it, opening by hand, or followed a link to it.
+  const holdsAddress = useRef(false);
+  /** Shows the review; opened by hand, it also goes into the address, so a reload reopens it. */
+  const reveal = (viaAddress: boolean) => {
+    if (!viaAddress) {
+      holdsAddress.current = true;
+      address.show(file.id);
+    }
+    setOpen(true);
+  };
   /** `viaAddress`: a link opens the review, and a file without a preview after all only takes the
    * link off the address, never downloads unasked. */
   const onOpenChange = (next: boolean, viaAddress = false) => {
@@ -109,7 +119,10 @@ export function AttachmentReviewDialog({
     if (!next) {
       setOpen(false);
       setPendingAnchor(null);
-      if (address.requested) address.clear();
+      // The next opening by hand starts on the file alone again.
+      comments.hide();
+      // Also when the address has yet to show what opening wrote.
+      if (address.requested || holdsAddress.current) address.clear();
       const place = videoPlace.current ?? videoStart?.place;
       if (place) videoHandoff?.give(place);
       return;
@@ -121,7 +134,7 @@ export function AttachmentReviewDialog({
       // Only an opening preview takes the message's player's place (and pauses it).
       videoPlace.current = undefined;
       setVideoStart(videoHandoff?.take());
-      return setOpen(true);
+      return reveal(viaAddress);
     }
     if (loading) return;
     setLoading(true);
@@ -131,28 +144,25 @@ export function AttachmentReviewDialog({
       (value) => {
         setRead(value);
         setLoading(false);
-        if (typeof value === "object") setOpen(true);
+        if (typeof value === "object") reveal(viaAddress);
         else noPreview();
       },
       // Aborted: the card is gone.
       () => {},
     );
   };
-  // A review the address asks for opens on its comments (on a phone, straight into them); one the
-  // address stops asking for (Back, another link) closes.
-  const openedByAddress = useRef(false);
+  // A review the address asks for opens (at its comments, on a phone straight into them, when it
+  // names one); one the address stops asking for (Back, another link) closes.
   const followAddress = useEffectEvent((requested: boolean) => {
-    if (requested === openedByAddress.current) return;
+    if (requested === holdsAddress.current) return;
     if (requested && !address.follow()) return;
-    openedByAddress.current = requested;
-    if (requested) comments.show();
-    else address.release();
+    holdsAddress.current = requested;
+    // A link into a comment opens at the comments; an address naming the file alone, at the file.
+    if (requested && commentable && address.commentId) comments.show();
+    if (!requested) address.release();
     if (requested !== open) onOpenChange(requested, requested);
   });
-  useEffect(
-    () => followAddress(address.requested && commentable),
-    [address.requested, commentable],
-  );
+  useEffect(() => followAddress(address.requested), [address.requested]);
   const toast = useAppToast();
   const copyLabel =
     kind === "markdown"
@@ -162,15 +172,12 @@ export function AttachmentReviewDialog({
         : null;
   if (file.contentType.startsWith("image/"))
     return (
-      <DialogTrigger
-        isOpen={open}
-        onOpenChange={(next) => (next ? setOpen(true) : onOpenChange(false))}
-      >
+      <DialogTrigger isOpen={open} onOpenChange={(next) => onOpenChange(next)}>
         {children({ loading: false })}
         <ImageLightbox
           images={[file]}
           index={0}
-          commentsOpen={address.requested}
+          commentsOpen={comments.shown}
           focusCommentId={address.commentId}
         />
       </DialogTrigger>

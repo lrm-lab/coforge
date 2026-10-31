@@ -120,13 +120,15 @@ test("a file's comment mentions a member of its conversation, and Activity opens
     });
     await mkdir(artifacts, { recursive: true });
     const preview = `button[aria-label="Preview ${fileName}"]`;
-    const openComments = async () => {
+    /** Opens the file's comments: from its card, or, after a reload, in the review the address
+     * reopened. */
+    const openComments = async (reopened = false) => {
       await browser(
         "wait",
         "--fn",
         `${pageHydrated} && Boolean(document.querySelector('${preview}'))`,
       );
-      await browser("click", preview);
+      if (!reopened) await browser("click", preview);
       // A text preview is read before the dialog opens; a click while it animates in is lost.
       await browser(
         "wait",
@@ -148,6 +150,13 @@ test("a file's comment mentions a member of its conversation, and Activity opens
     await browser("set", "viewport", "1440", "900");
     await browser("open", `${origin}${workspacePath}/channel/${conversationId}`);
     await openComments();
+    // Opening the file by hand puts it, and the message it is in, in the address.
+    expect(
+      await evaluate<Record<string, string | null>>(`(() => {
+        const search = new URLSearchParams(location.search);
+        return { file: search.get("file"), message: search.get("message") };
+      })()`),
+    ).toEqual({ file: attachment.id, message: message.id });
     await browser("wait", "--fn", `${dialogText}.includes("Won't notify anyone.")`);
     await browser("screenshot", join(artifacts, "0-no-comments.png"));
     await browser("focus", dialogField);
@@ -163,7 +172,7 @@ test("a file's comment mentions a member of its conversation, and Activity opens
     await browser("keyboard", "inserttext", "please check");
     await browser("screenshot", join(artifacts, "1-will-notify.png"));
     await browser("reload");
-    await openComments();
+    await openComments(true);
     await browser("wait", "--fn", `${fieldValue} === "@Comment Peer please check"`);
     await browser("wait", "--fn", `${dialogText}.includes("Will notify: Comment Peer")`);
 

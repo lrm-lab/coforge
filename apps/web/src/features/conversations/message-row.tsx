@@ -28,6 +28,7 @@ import { MessageSenderGutter } from "./message-sender-gutter";
 import { MessageActionSheet, MessageActionToolbar } from "./message-actions";
 import { useMessageRowActions } from "./message-row-actions";
 import { ForwardedMessageCard } from "./message-forward-card";
+import { ReviewLanding } from "./attachment-review-address";
 import type { MessageView } from "./message-view";
 import type { ReadState } from "./conversation-pane-layout";
 
@@ -325,26 +326,30 @@ export const MessageRow = memo(function MessageRow({
               )}
             </div>
           ) : null}
-          {message.forwarded && (
-            // The attachments are the card's; the footer below draws none for a forward. A
-            // continuation with no note has no text line to reserve the hover bar's width.
-            <div className={cn(grouped && !showsBody && HOVER_BAR_RESERVE_CLASS)}>
-              <ForwardedMessageCard
-                forwarded={message.forwarded}
-                attachments={message.attachments}
-              />
-            </div>
-          )}
-          <MessageRowFooter
-            message={message.forwarded ? { ...message, attachments: [] } : message}
-            viewerId={viewerId}
-            onToggleReaction={
-              onToggleReaction && ((emoji, active) => onToggleReaction(message.id, emoji, active))
-            }
-            showsTask={showsTask}
-            onOpenThread={onOpenThread}
-            cornerTicks={textTicks ? undefined : readState}
-          />
+          {/* A file's review opened from this message lands here when its address is opened again;
+              a reply's thread is in the address already. */}
+          <ReviewLanding value={message.threadRootId ? undefined : message.id}>
+            {message.forwarded && (
+              // The attachments are the card's; the footer below draws none for a forward. A
+              // continuation with no note has no text line to reserve the hover bar's width.
+              <div className={cn(grouped && !showsBody && HOVER_BAR_RESERVE_CLASS)}>
+                <ForwardedMessageCard
+                  forwarded={message.forwarded}
+                  attachments={message.attachments}
+                />
+              </div>
+            )}
+            <MessageRowFooter
+              message={message.forwarded ? { ...message, attachments: [] } : message}
+              viewerId={viewerId}
+              onToggleReaction={
+                onToggleReaction && ((emoji, active) => onToggleReaction(message.id, emoji, active))
+              }
+              showsTask={showsTask}
+              onOpenThread={onOpenThread}
+              cornerTicks={textTicks ? undefined : readState}
+            />
+          </ReviewLanding>
         </div>
         {hasActions && <MessageActionToolbar {...actions} grouped={grouped} />}
         {sheetActions && hasActions && (
