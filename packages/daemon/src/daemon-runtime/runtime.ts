@@ -86,7 +86,6 @@ import type {
 } from "#src/connection/daemon-connection-client";
 import { DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS } from "#src/connection/shutdown-notice-timeout";
 import { DaemonConnectionStoppedError } from "#src/connection/daemon-connection-stopped-error";
-import { HeldPublications } from "#src/connection/held-publications";
 import {
   type DaemonConnectRejectionReason,
   WORKSPACE_PROTOCOL_MAJOR,
@@ -189,6 +188,7 @@ import { CodeAgentInventorySync, type CodeAgentDiscovery } from "./code-agent-in
 import { RuntimeAuthReporter } from "./runtime-auth-reporter";
 import { subscribeProviderScans } from "./provider-scan-handlers";
 import { subscribeRuntimeReconnect } from "./runtime-reconnect";
+import { RuntimePublicationSubscriptions } from "./runtime-publication-subscriptions";
 import {
   UpgradeResultReporter,
   type RecoveredUpgradeResult,
@@ -204,12 +204,7 @@ import {
 } from "#src/agent-reminder/reminder-scheduler";
 import { FileReminderReceiptStore } from "#src/persistence/reminder-receipt-store";
 import { AgentAppConfigSync } from "#src/agent-app-config/agent-app-config-sync";
-import {
-  logAgentActivityProbeFailure,
-  logAgentApiKeyRevokeFailed,
-  logAgentOperationFailure,
-  logAgentStartFailure,
-} from "./agent-failure-logs";
+import { logAgentApiKeyRevokeFailed, logAgentOperationFailure } from "./agent-failure-logs";
 import { acceptAppRegistrationNotice } from "#src/agent-app-inbox/app-registration-notice";
 import { diagnosticErrorCode, diagnosticErrorName } from "@lrm/coforge-sdk/internal";
 import type { AgentVersionResponse } from "@lrm/coforge-sdk/agent";
@@ -997,36 +992,34 @@ export class DaemonRuntime {
     mkdirSync(connection.workspaceRoot, { recursive: true });
     const token = await this.#credentials.load(connection.workspaceId, connection.computerId);
     if (!token) throw new Error("Workspace credential is missing");
-    // Publications that arrive before the ready handshake completes are replayed afterwards:
-    // control intents first, in arrival order, then Message deliveries. Held the way the
-    // connection holds them (`HeldPublications`): the latest start and stop per Agent, capped
-    // delivery notices.
-    const heldControl = new HeldPublications<() => Promise<void>>();
-    const heldMessages = new HeldPublications<() => Promise<void>>();
-    let buffering = true;
-    type Hold<Value> = (value: Value, run: () => Promise<void>) => void;
-    const receive =
-      <Value>(hold: Hold<Value>, handle: (value: Value) => Promise<void>) =>
-      (value: Value) => {
-        if (buffering) hold(value, () => handle(value));
-        else void handle(value);
-      };
-    const latest =
-      (kind: "start" | "stop" | "probe"): Hold<{ agentId: string }> =>
-      (value, run) =>
-        heldControl.latestFor(value.agentId, kind, run);
-    const control: Hold<unknown> = (_value, run) => heldControl.add(run);
-    const notice: Hold<{ agentId: string }> = (value, run) =>
-      heldMessages.notice(value.agentId, run);
-    const failure =
-      <Request extends AgentStopIntent | AgentWorkspaceResetRequest | AgentMessageDelivery>(
-        operation: "stop" | "workspace_reset" | "message_delivery",
-        handle: (request: Request) => Promise<void>,
-      ) =>
-      (request: Request) =>
-        handle(request).catch((error) =>
-          logAgentOperationFailure(this.#connection.computerId, operation, request, error),
-        );
+    const publications = new RuntimePublicationSubscriptions({
+      transport: this.#transport,
+      workspaceId: connection.workspaceId,
+      computerId: connection.computerId,
+      startAgent: (intent) => this.handleAgentStart(intent),
+      stopAgent: (intent) => this.handleAgentStop(intent),
+      interruptAgent: (intent) => this.handleAgentTurnInterrupt(intent),
+      probeAgent: (probe) => this.handleAgentActivityProbe(probe),
+      purgeAgentInbox: (purge) => this.handleAgentInboxPurge(purge),
+      resetWorkspace: (request) => this.handleAgentWorkspaceReset(request),
+      deliverMessage: (message) => this.handleAgentMessage(message),
+      stopRuntime: () => this.stop(),
+      connectionRefused: (reason) => this.lifecycle.connectionRefused?.(reason),
+      applyReminderSync: (sync) => this.#reminders.apply(sync),
+      applyAppConfigSync: (sync) => this.#appConfigs.apply(sync),
+      acceptAppRegistrationNotice: (notice) =>
+        acceptAppRegistrationNotice(notice, {
+          isRunning: (agentId) => this.#readyRunningAgentIds().includes(agentId),
+          mint: (agentId, item) => this.mintAppItem(agentId, item),
+        }).then(() => {}),
+      migration: this.#migrations
+        ? {
+            pruneLeftovers: () => this.#migrations!.pruneLeftovers(),
+            lease: (lease) => void this.#migrations!.lease(lease),
+            cancel: (cancel) => this.#migrations!.cancel(cancel),
+          }
+        : undefined,
+    });
     try {
       const auth = subscribeRuntimeAuth(this.#transport, {
         owner: {
@@ -1094,132 +1087,9 @@ export class DaemonRuntime {
         inventory: this.#codeAgentInventory,
       }))
         this.#subscribe(unsubscribe);
-      // Register publication listeners before the ready RPC. The server may
-      // recover persisted Agents immediately as part of that RPC.
-      this.#subscribe(
-        this.#transport.onAgentStart?.(
-          receive(latest("start"), (intent: AgentStartIntent) =>
-            this.handleAgentStart(intent).then(
-              () => {},
-              (error) => logAgentStartFailure(intent, error),
-            ),
-          ),
-        ),
-      );
-      this.#subscribe(
-        this.#transport.onAgentStop?.(
-          receive(
-            latest("stop"),
-            failure("stop", (intent: AgentStopIntent) => this.handleAgentStop(intent)),
-          ),
-        ),
-      );
-      this.#subscribe(
-        this.#transport.onAgentTurnInterrupt?.(
-          receive(
-            () => {},
-            (intent: AgentTurnInterruptIntent) =>
-              this.handleAgentTurnInterrupt(intent).catch((error) =>
-                logger.warning("Turn interrupt failed", {
-                  event: "agent_turn_interrupt:failed",
-                  agent_id: intent.agentId,
-                  error: thrownMessage(error),
-                }),
-              ),
-          ),
-        ),
-      );
-      this.#subscribe(
-        this.#transport.onAgentActivityProbe?.(
-          receive(latest("probe"), (probe: AgentActivityProbe) =>
-            this.handleAgentActivityProbe(probe).catch((error) =>
-              logAgentActivityProbeFailure(probe, error),
-            ),
-          ),
-        ),
-      );
-      this.#subscribe(
-        this.#transport.onAgentInboxPurge?.(
-          receive(control, async (purge: AgentInboxPurge) => {
-            try {
-              this.handleAgentInboxPurge(purge);
-            } catch (error) {
-              logger.warn("Agent inbox purge was not applied", {
-                event: "agent.inbox.purge_rejected",
-                agent_id: purge.agentId,
-                error_code: diagnosticErrorName(error),
-              });
-            }
-          }),
-        ),
-      );
-      this.#subscribe(
-        this.#transport.onAgentWorkspaceReset?.(
-          receive(
-            control,
-            failure("workspace_reset", (request: AgentWorkspaceResetRequest) =>
-              this.handleAgentWorkspaceReset(request),
-            ),
-          ),
-        ),
-      );
-      this.#subscribe(
-        this.#transport.onAgentMessage?.(
-          receive(
-            notice,
-            failure("message_delivery", (message: AgentMessageDelivery) =>
-              this.handleAgentMessage(message),
-            ),
-          ),
-        ),
-      );
-      this.#subscribe(
-        this.#transport.onConnectionRefused?.((reason) => {
-          void this.stop()
-            .catch((error) =>
-              logger.warn("Stopping Agents after the cloud refused the connection failed", {
-                event: "daemon_runtime:refused_stop_failed",
-                reason,
-                error_code: diagnosticErrorName(error),
-              }),
-            )
-            .then(() => this.lifecycle.connectionRefused?.(reason));
-        }),
-      );
-      this.#subscribe(
-        this.#transport.onReminderSync?.((sync) => {
-          void this.#reminders.apply(sync).catch(() => {});
-        }),
-      );
-      this.#subscribe(this.#transport.onAppConfigSync?.((sync) => this.#appConfigs.apply(sync)));
-      this.#subscribe(
-        this.#transport.onAppRegistrationNotice?.((notice) => {
-          void acceptAppRegistrationNotice(notice, {
-            isRunning: (agentId) => this.#readyRunningAgentIds().includes(agentId),
-            mint: (agentId, item) => this.mintAppItem(agentId, item),
-          }).catch(() => {});
-        }),
-      );
-      const migrations = this.#migrations;
-      if (migrations) {
-        // Before any lease is taken, so nothing it clears can belong to a run.
-        await migrations.pruneLeftovers().catch((error: unknown) =>
-          logger.warn("Clearing what Agent migrations left behind failed", {
-            event: "agent_migration:prune_failed",
-            error_code: diagnosticErrorName(error),
-          }),
-        );
-        this.#subscribe(
-          this.#transport.onAgentMigrationLease?.((lease) => {
-            void migrations.lease(lease);
-          }),
-        );
-        this.#subscribe(
-          this.#transport.onAgentMigrationCancel?.((cancel) => {
-            void migrations.cancel(cancel).catch(() => {});
-          }),
-        );
-      }
+      // Register publication listeners after the auxiliary query/scanning listeners, matching the
+      // original start order; the server may recover persisted Agents immediately at ready.
+      for (const unsubscribe of await publications.install()) this.#subscribe(unsubscribe);
       await this.#transport.start(token, {
         workspaceId: connection.workspaceId,
         computerId: connection.computerId,
@@ -1259,14 +1129,12 @@ export class DaemonRuntime {
         this.#readyRunningAgentIds().map((agentId) => this.#requestReminderSnapshot(agentId)),
       );
       this.#resyncAppConfigs();
-      const heldNotices = heldMessages.take();
-      if (heldNotices.dropped > 0)
+      const { buffered, dropped } = publications.release();
+      if (dropped > 0)
         logger.warn("Delivery notices held during start were dropped; the cloud resends them", {
           event: "daemon_runtime:notices_dropped",
-          dropped: heldNotices.dropped,
+          dropped,
         });
-      const buffered = [...heldControl.take().items, ...heldNotices.items];
-      buffering = false;
       this.#started = true;
       this.#activityPublisher.enable();
       this.#coldIdleSweep.start();
