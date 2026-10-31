@@ -29,8 +29,15 @@ The commands, output and exit status of `coforge-installer`; what the crate does
   then 6 hours between tries) and settles the journal, exit 0 when it settled and 3 when it did
   not. After 8 failed tries it stops trying until the next operation. What it did goes to `<install root>/recovery-report.json` (`outcome` `recovered` or
   `failed`, the restored version, the attempts, `finishedAt`) for the Computer to report.
-  A journal left by an upgrade, install or recovery arms the trigger in the same step, and any
-  operation that finds no journal disarms it, so a healthy machine has none. `start` settles a
+  A journal left by an upgrade, install or recovery arms the trigger in the same step, and an
+  operation that finds no journal disarms it (`status` reads only and touches neither), so a
+  healthy machine has none. The trigger itself is a `StartInterval` LaunchAgent
+  `cn.coforge.installer.settle` (macOS; it fires every minute and the state file's `notBefore`
+  decides which fire does work), a user timer `coforge-installer-settle.timer` with a oneshot
+  service (Linux; armed for the delay, and again after boot or login), or a scheduled task
+  `CoForge Installer Settle` with a one-time and a logon trigger (Windows); each runs
+  `coforge-installer settle` and `settle` arms the next one itself.
+  `start` settles a
   journal the same way before it starts the service (a refusal inside the service's own unit
   starts as before; a recovery that fails fails the start).
 - `coforge-installer repair [--version <v> | --channel main|latest] [--yes] [--allow-downgrade]

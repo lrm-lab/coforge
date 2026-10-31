@@ -27,6 +27,7 @@ mod definition;
 mod error;
 mod launchd;
 mod port;
+pub(crate) mod retry;
 mod systemd;
 mod windows_task;
 

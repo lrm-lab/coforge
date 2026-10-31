@@ -35,25 +35,21 @@ How it works is in `src/current.rs` and `src/active.rs`; these are the rules.
   a silent stretch (ureq has no per-read timeout).
 - `src/digest.rs`: SHA-256 identities (size and lowercase checksum) of bytes and
   files, and the rule for a valid identity.
-- `src/private_fs.rs`: private files and directories under the install root, and
-  atomic replacement. Recursive directory creation with a mode (an existing
-  directory keeps its own), a new file with an exact mode, a file replaced
-  through a temporary sibling (fsynced, renamed, its directory fsynced), and the
-  unique names of those temporaries. Tests in `src/private_fs/tests.rs` (real
-  files).
-- `src/update_error.rs`: the failures of preparing a version, carrying the
-  product's `UPDATE_FEED_INVALID` (content), `UPDATE_DOWNLOAD_FAILED` (a transfer
-  the feed could not complete: unreachable, reset, idle timeout, non-2xx status),
-  `UPDATE_INTEGRITY_FAILED`, and `UPDATE_UNSUPPORTED_TARGET` codes
-  (`upgrade-error-codes.json`).
+- `src/private_fs.rs`: private files and directories under the install root, and atomic
+  replacement. Recursive directory creation with a mode (an existing directory keeps its own),
+  a new file with an exact mode, a file replaced through a uniquely named temporary sibling
+  (fsynced, renamed, its directory fsynced). Tests in `src/private_fs/tests.rs` (real files).
+- `src/update_error.rs`: the failures of preparing a version, carrying the product's
+  `UPDATE_FEED_INVALID` (content), `UPDATE_DOWNLOAD_FAILED` (a transfer the feed could not
+  complete: unreachable, reset, idle timeout, non-2xx status), `UPDATE_INTEGRITY_FAILED`, and
+  `UPDATE_UNSUPPORTED_TARGET` codes (`upgrade-error-codes.json`).
 - `src/manifest.rs`: what a valid release manifest is. Pure validation of
   `<version>/manifest.json` and the choice of one target's artifact; no I/O.
-- `src/feed.rs`: the release feed client. Resolves `latest`, fetches and
-  validates a manifest, downloads one version's binary and Pi image library
-  into a directory through `fetch`, checked against the manifest, retrying a
-  transient failure of any of these requests on the clock port. The size
-  ceilings and the transfer checks it shares with `release_directory` are
-  `pub(crate)` helpers here. Retry tests in `src/feed/retry_tests.rs`.
+- `src/feed.rs`: the release feed client. Resolves `latest`, fetches and validates a manifest,
+  downloads one version's binary and Pi image library into a directory through `fetch`, checked
+  against the manifest, retrying a transient failure of any request on the clock port. The size
+  ceilings and transfer checks it shares with `release_directory` are `pub(crate)` helpers here.
+  Retry tests in `src/feed/retry_tests.rs`.
 - `src/release_directory.rs`: a release read from a local directory (`--from-directory`), the
   same objects in the flat local-package layout, through the same caps and checks as `feed`.
   Tests in `src/release_directory/tests.rs`.
@@ -67,13 +63,19 @@ How it works is in `src/current.rs` and `src/active.rs`; these are the rules.
   `ReleaseSource` is the seam: `Feed` and `ReleaseDirectory` implement it.
   Tests in `src/prepare/tests.rs` run a loopback release feed and a directory.
 - `src/lock.rs`: the machine mutation lock, an SQLite RESERVED lock on
-  `<install root>/machine-mutation-lock.sqlite` (rusqlite, bundled SQLite)
-  that excludes the Computer's own `acquireProcessLock`. Tests in
-  `src/lock/tests.rs` run that TypeScript function under Bun. A lock knows the
-  install root it covers (`install_root`, `covers`).
+  `<install root>/machine-mutation-lock.sqlite` (rusqlite, bundled SQLite) that excludes the
+  Computer's own `acquireProcessLock`. Tests in `src/lock/tests.rs` run that TypeScript function
+  under Bun. A lock knows the install root it covers (`install_root`, `covers`).
 - `src/journal.rs`: the recovery journal `<install root>/installer-transaction.json`. Written
   before an upgrade stops anything, cleared once the machine runs a known version; a journal
   that is still there is settled first by every operation.
+- `src/auto_recover.rs`: recovery without a person. `settle_first`/`settle_before_start` settle a
+  kept journal ahead of every operation, `recover_auto` is the trigger's one try
+  (`recovery-state.json` backoff, `MAX_ATTEMPTS` cap, `recovery-report.json` the Computer
+  reports), `keep_trigger_in_step` keeps the trigger armed only while a journal is. Tests in
+  `src/auto_recover/`.
+- `src/retry_trigger.rs`: the `RetryTrigger` port (`schedule`/`cancel` the one-shot that runs
+  `settle` again) and `FakeTrigger` for tests. Backends in `src/service/retry/`.
 - `src/receipts.rs`: upgrade requests and receipts under `upgrade-results/`. Decides fresh,
   replay, or conflict for a request id, and commits each receipt write-once under the lock.
 - `src/paths.rs`: install root, supervisor state directory, and shim
@@ -102,13 +104,11 @@ How it works is in `src/current.rs` and `src/active.rs`; these are the rules.
 - `src/contract/machine.rs`: the machine mutation lock, service names, and paths.
 - `src/clock.rs`: the clock and sleep port the bounded waits run through (virtual in tests).
 - `src/service.rs`: OS service control of the Computer supervisor: state (not installed, stopped,
-  running with the manager's pid), stop (waits until the manager has dropped it), install (registers
-  the service definition the Computer reports, without starting it, and says whether it wrote
-  (`Registered::Written`), found the same bytes already in place (`Registered::AlreadyInPlace`,
-  launchd and systemd), or left a running service's registration as it is
-  (`Registered::LeftRunning`, a Windows task only: the backend decides, no caller asks first);
-  `Registered::stage_line` words the result for `start` and `repair`), start (waits for a process).
-  One backend per manager in `src/service/` behind the `CommandRunner` port.
+  running with the manager's pid), stop (waits until the manager has dropped it), install
+  (registers the service definition the Computer reports without starting it;
+  `Registered::Written`/`AlreadyInPlace`/`LeftRunning`, the last a Windows task only the backend
+  decides; `Registered::stage_line` words the result for `start` and `repair`), start (waits for
+  a process). One backend per manager in `src/service/` behind the `CommandRunner` port.
 - `src/service/definition.rs`: what the backends share to register a definition: the manager
   check, the byte comparison with the file already in place, the atomic owner-only write, and the
   UTF-16 temporary file `schtasks` reads.
@@ -124,6 +124,11 @@ How it works is in `src/current.rs` and `src/active.rs`; these are the rules.
 - `src/service/windows_task.rs`: the Windows backend, the scheduled task through `schtasks` and
   `Get-ScheduledTask`; install is `schtasks /Create /XML /F`. Install tests in
   `src/service/windows_task/install_tests.rs`.
+- `src/service/retry.rs`: the real `RetryTrigger` backends in `src/service/retry/`: a
+  LaunchAgent that fires every minute (launchd; `bootout` never arms — it would kill the `settle`
+  that is asking — `recovery-state.json` owns the delay), a user timer plus oneshot service
+  (systemd, with the supervisor's session-bus fill-in), and a `TimeTrigger` + `LogonTrigger`
+  task (Windows). `for_platform` picks one. Tests in `src/service/retry/tests.rs`.
 - `src/service/fakes.rs`: a scripted `CommandRunner` for the backend tests.
 - `src/processes.rs`: the processes of the installed product executable: identity (pid, start
   time, executable), enumeration, and the SIGTERM, SIGKILL, verify-dead escalation after the
@@ -138,15 +143,15 @@ How it works is in `src/current.rs` and `src/active.rs`; these are the rules.
   on the virtual clock.
 - `src/lifecycle.rs`: the `ComputerLifecycle` port (protocol, status, and service-definition
   answers of a Computer executable), `reported_service_definition` (asks for the definition only
-  when `protocol`'s `commands` lists it; `service_definition_if_listed` does so for a protocol
-  already read), and `Lifecycle`, which runs `coforge-computer
-  __lifecycle` bounded and reads its versioned JSON. Tests in `src/lifecycle/tests.rs`.
-- `src/switch.rs`: the switch of the active version, shared by upgrade and recovery: `Ports` (every
-  port a transaction touches), `Target`, `Plan`, and `ActiveSwitch` (stop the supervisor and its
-  processes, activate, register the `Target`'s service definition, restart, probe). It decides
-  nothing about what to switch to and runs no Computer executable to learn a definition: the
-  caller reads it before anything stops.
-  `refusal_inside_service` refuses both operations when the caller runs inside the running service.
+  when `protocol`'s `commands` lists it; `service_definition_if_listed` for a protocol already
+  read), and `Lifecycle`, which runs `coforge-computer __lifecycle` bounded and reads its
+  versioned JSON. Tests in `src/lifecycle/tests.rs`.
+- `src/switch.rs`: the switch of the active version, shared by upgrade and recovery: `Ports`
+  (every port a transaction touches), `Target`, `Plan`, and `ActiveSwitch` (stop the supervisor
+  and its processes, activate, register the `Target`'s service definition, restart, probe). It
+  decides nothing about what to switch to and runs no Computer executable to learn a definition:
+  the caller reads it before anything stops. `refusal_inside_service` refuses both operations
+  when the caller runs inside the running service.
 - `src/upgrade.rs`: the upgrade transaction (lock, journal, receipt, prepare, switch, roll back).
   Tests in `src/upgrade/tests.rs` (scripted lifecycle and service, real files and loopback feed);
   the service definition across upgrade, rollback, and recovery in
@@ -158,21 +163,20 @@ How it works is in `src/current.rs` and `src/active.rs`; these are the rules.
 - `src/upgrade/fakes.rs`: test doubles and fixture for the upgrade and recovery tests: scripted
   lifecycle and service, and an install root with versions `0.1.0` and `0.2.0` served by a
   loopback feed.
-- `src/installation.rs`: the installation a command acts on. `Setup` (install root, release target,
-  compiled feed) and the use cases `transaction`, `settle`, `repair`, `start`, and `status`,
-  which build the real ports (service manager, process table, clock, release source) for this
-  machine. `ReleaseOrigin` picks
-  the release source of a transaction: the feed, or a `--from-directory`.
+- `src/installation.rs`: the installation a command acts on. `Setup` (install root, release
+  target, compiled feed) and the use cases `transaction`, `settle`, `repair`, `start`, `status`,
+  which build the real ports (service manager, retry trigger, process table, clock, release
+  source) for this machine. `ReleaseOrigin` picks a transaction's source: feed or directory.
 - `src/status.rs`: the read-only status report (`status --json` field names) and its human lines.
 - `src/compiled_feed.rs`: the release feed compiled into this build and the rule that accepts it
   (HTTPS, or a loopback `http://` build for end-to-end tests). Tests in `src/compiled_feed/tests.rs`.
 - `src/request_id.rs`: generates the request id of an `install` (RFC 9562 version 4; unique, not
   secret). Tests in `src/request_id/tests.rs`.
-- `src/recover.rs`: settling an unfinished upgrade (no command of its own). Refuses from inside the running service, then
-  settles the journal through `switch`, reading the definition of the version each attempt switches
-  to before that attempt stops anything: keeps a recorded success or an already-active new version
-  that settles, otherwise restores the previous version. Writes a receipt only when none exists;
-  clears the journal only after settling. Tests in `src/recover/tests.rs`.
+- `src/recover.rs`: settling an unfinished upgrade (no command of its own). Refuses from inside
+  the running service, then settles the journal through `switch`, reading each attempt's service
+  definition before it stops anything: keeps a recorded success or an already-active new version,
+  otherwise restores the previous version; clears the journal only after settling. Tests in
+  `src/recover/tests.rs`.
 - `src/repair.rs`: `coforge-installer repair`. Verifies the selected immutable version, repairs
   the activation, and quarantines and redownloads a damaged payload without touching service
   processes; writes a repair receipt. Tests live with the module.
@@ -182,18 +186,14 @@ How it works is in `src/current.rs` and `src/active.rs`; these are the rules.
   decides whether a healthy installation is `REPAIR_NOT_NEEDED` (definition in place, unreported,
   or a running Windows task left alone) or repaired (written). A definition failure is one
   message suffix on whichever receipt applies.
-- `src/start.rs`: `coforge-installer start`, no arguments. Stops nothing, so it has no
-  inside-the-unit refusal: inside a running unit it registers without restarting (launchd writes
-  the file only, systemd reloads, Windows leaves a running task). Takes the machine lock (busy: exit 2), reads `active.json` (nothing installed:
-  exit 1), reads the active version's definition from its stored executable (a Computer that lists
-  no `service-definition`: exit 1, run `coforge-computer upgrade`), registers it (a running
-  service whose manager would replace it is left as it is), starts the service and waits for the
-  manager to report it running (exit 0). It prints `Registered::stage_line` when the registration
-  did something, `==> Starting Computer supervisor <v>`, `==> Computer supervisor <v> started`; a
-  failure is `coforge-installer: <message>` on stderr, no receipt. The recovery journal does not
-  block it, and it does not probe `__lifecycle status`: the Computer does its own handshake. Tests
-  in `src/start/tests.rs`.
-- `src/test_support.rs`: test-only helpers shared by the modules' tests: a
-  scratch directory, a loopback HTTP server (`src/test_support/loopback.rs`,
-  which can script a path's first answers), a tiny release tree, and runners
-  that repeat a test in a child process, killed after `CHILD_DEADLINE` (30 s).
+- `src/start.rs`: `coforge-installer start`, no arguments. Stops nothing, so inside a running
+  unit it registers without restarting (launchd writes the file only, systemd reloads, Windows
+  leaves a running task). Takes the machine lock (busy: exit 2), reads `active.json` (nothing
+  installed: exit 1), registers the active version's definition read from its stored executable
+  (none listed: exit 1, run `coforge-computer upgrade`), starts the service and waits for it
+  running (exit 0). The recovery journal does not block it; no `__lifecycle status` probe — the
+  Computer does its own handshake. Tests in `src/start/tests.rs`.
+- `src/test_support.rs`: test-only helpers shared by the modules' tests: a scratch directory, a
+  loopback HTTP server (`src/test_support/loopback.rs`, which can script a path's first answers),
+  a tiny release tree, and runners that repeat a test in a child process, killed after
+  `CHILD_DEADLINE` (30 s).

@@ -144,8 +144,9 @@ fn write_report(
 }
 
 /// Keeps the trigger in step with the journal after any operation: a journal that is there gets a
-/// trigger (once, when it first appears), and one that is gone loses it. Best effort: a trigger
-/// that cannot be arranged leaves recovery to the next service start or a person.
+/// trigger — asked again for the time that is left while its state lasts, so an arrangement that
+/// was lost is armed again — and one that is gone loses it. Best effort: a trigger that cannot be
+/// arranged leaves recovery to the next service start or a person.
 pub fn keep_trigger_in_step(
     ports: &Ports<'_>,
     trigger: &dyn RetryTrigger,
@@ -163,6 +164,20 @@ pub fn keep_trigger_in_step(
         return;
     }
     if root.join(STATE_FILE).exists() {
+        // The arrangement may have been lost since it was armed (a disabled unit, a pruned
+        // job); asking the trigger again for the time that is left costs little and keeps
+        // recovery moving. Recovery that already gave up stays disarmed.
+        let state = read_state(root);
+        if state.attempts >= MAX_ATTEMPTS {
+            return;
+        }
+        let remaining = state
+            .not_before
+            .saturating_sub(ports.clock.unix_seconds())
+            .max(1);
+        if let Err(error) = trigger.schedule(Duration::from_secs(remaining)) {
+            stage(&format!("Automatic recovery could not be armed: {error}"));
+        }
         return;
     }
     // A new unfinished upgrade: the last one's report is not about it.

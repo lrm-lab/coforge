@@ -195,7 +195,7 @@ fn the_waits_are_one_minute_five_fifteen_one_hour_then_six_hours() {
 }
 
 #[test]
-fn a_journal_gets_a_trigger_once_and_loses_it_with_the_journal() {
+fn a_journal_keeps_a_trigger_while_its_state_lasts_and_loses_it_with_the_journal() {
     let fixture = unrecoverable();
     let clock = VirtualClock::new();
     let table = FakeTable::new(&clock);
@@ -206,18 +206,36 @@ fn a_journal_gets_a_trigger_once_and_loses_it_with_the_journal() {
 
     keep_trigger_in_step(&ports, &trigger, &mut |_| {});
     keep_trigger_in_step(&ports, &trigger, &mut |_| {});
-    assert_eq!(trigger.calls(), ["schedule 60s"]);
+    // While the state lasts the trigger is asked again for the time that is left, so an
+    // arrangement that was lost (a disabled unit, a pruned job) is armed again.
+    assert_eq!(trigger.calls(), ["schedule 60s", "schedule 60s"]);
     assert_eq!(read(&fixture, STATE_FILE).unwrap()["attempts"], 0);
 
     let lock = MachineMutationLock::acquire(fixture.root()).unwrap();
     Journal::new(fixture.root()).clear(&lock).unwrap();
     drop(lock);
     keep_trigger_in_step(&ports, &trigger, &mut |_| {});
-    assert_eq!(trigger.calls(), ["schedule 60s", "cancel"]);
+    assert_eq!(trigger.calls(), ["schedule 60s", "schedule 60s", "cancel"]);
     assert!(read(&fixture, STATE_FILE).is_none());
     // A machine that never had one is not asked to cancel anything.
     keep_trigger_in_step(&ports, &trigger, &mut |_| {});
-    assert_eq!(trigger.calls(), ["schedule 60s", "cancel"]);
+    assert_eq!(trigger.calls(), ["schedule 60s", "schedule 60s", "cancel"]);
+}
+
+#[test]
+fn a_recovery_that_already_gave_up_is_not_rearmed() {
+    let fixture = unrecoverable();
+    write_state(fixture.root(), MAX_ATTEMPTS, WALL_ORIGIN).unwrap();
+    let clock = VirtualClock::new();
+    let table = FakeTable::new(&clock);
+    let service = FakeService::new(ServiceState::Stopped);
+    let lifecycle = FakeLifecycle::default();
+    let ports = fixture.ports(&lifecycle, &service, &table, &clock);
+    let trigger = FakeTrigger::default();
+
+    keep_trigger_in_step(&ports, &trigger, &mut |_| {});
+
+    assert!(trigger.calls().is_empty());
 }
 
 #[test]

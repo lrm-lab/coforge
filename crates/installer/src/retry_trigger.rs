@@ -16,20 +16,6 @@ pub trait RetryTrigger {
     fn cancel(&self) -> Result<(), String>;
 }
 
-/// The trigger of a platform without a backend: arranges nothing, so recovery then waits for the
-/// next start of the service (`coforge-installer start` settles the journal first) or a person.
-pub struct NoTrigger;
-
-impl RetryTrigger for NoTrigger {
-    fn schedule(&self, _delay: Duration) -> Result<(), String> {
-        Ok(())
-    }
-
-    fn cancel(&self) -> Result<(), String> {
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 pub(crate) mod fakes {
     use std::cell::RefCell;
