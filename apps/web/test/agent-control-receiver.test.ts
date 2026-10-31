@@ -36,7 +36,7 @@ const payload = encodeAgentControlResult({
 test("a rejected control result logs a warning with an allowlisted reason and stays a bare 403", async () => {
   const control: Pick<AgentControl, "result"> = {
     result: async () => {
-      throw new Error("Stale Agent scope");
+      throw new Error("Native Session identity changed");
     },
   };
   const method = createAgentControlResultMethod(control);
@@ -58,7 +58,7 @@ test("a rejected control result logs a warning with an allowlisted reason and st
       epoch: 3,
       sequence: 2,
       error_code: "boom",
-      reason: "Stale Agent scope",
+      reason: "Native Session identity changed",
     },
   ]);
 });

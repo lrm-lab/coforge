@@ -13,6 +13,7 @@ const KNOWN_REJECTION_REASONS = new Set([
   "Operation already finished",
   "Reset retained old Session",
   "Native Session identity changed during launch",
+  "Native Session identity changed",
   "Control result lost its fence",
 ]);
 

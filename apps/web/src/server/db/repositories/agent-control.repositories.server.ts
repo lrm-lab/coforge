@@ -253,7 +253,7 @@ export class PrismaAgentControlStore implements AgentControlStore {
         (before.state.provider !== checked.provider ||
           before.state.computerId !== checked.computerId);
       if (clearSession || incompatible) sessionId = null;
-      if (!sessionId && (checked.phase === "starting" || checked.identity)) {
+      if (!stoppingToStopped && !sessionId && (checked.phase === "starting" || checked.identity)) {
         const session = await tx.agentSession.create({
           data: {
             agentId: before.id,
@@ -264,7 +264,7 @@ export class PrismaAgentControlStore implements AgentControlStore {
         });
         sessionId = session.id;
       }
-      if (checked.identity && sessionId) {
+      if (!stoppingToStopped && checked.identity && sessionId) {
         let saved = await tx.agentSession.updateMany({
           where: {
             id: sessionId,
@@ -294,7 +294,7 @@ export class PrismaAgentControlStore implements AgentControlStore {
           saved = { count: 1 };
         }
       }
-      if (sessionId !== before.currentSessionId)
+      if (!stoppingToStopped && sessionId !== before.currentSessionId)
         await tx.agent.update({ where: { id: before.id }, data: { currentSessionId: sessionId } });
       await recordComputerAgentTransition(
         tx,
