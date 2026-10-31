@@ -1,15 +1,16 @@
-import { Lock01 } from "@untitledui/icons";
-import type { ChannelVisibility } from "./channel-visibility";
+import { Hash01, Lock01 } from "@untitledui/icons";
+import { isPrivateChannel, type ChannelVisibility } from "./channel-visibility";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 
-/** Whether a channel is private; absent (a row read before private channels) is public. */
-export function isPrivateChannel(channel: { visibility?: ChannelVisibility }) {
-  return channel.visibility === "private";
+/** The icon a channel goes by where it has one: `#`, or a lock for a private channel, as Slack
+ * marks it. */
+export function channelGlyph(channel: { visibility?: ChannelVisibility }) {
+  return isPrivateChannel(channel) ? Lock01 : Hash01;
 }
 
-/** The lock that marks a private channel where a public one shows `#`, as Slack marks it. */
-export function ChannelLock({ className }: { className?: string }) {
+/** The lock before a private channel's name, read out as "Private". */
+function ChannelLock({ className }: { className?: string }) {
   return (
     <Lock01
       role="img"
@@ -26,7 +27,7 @@ export function ChannelLock({ className }: { className?: string }) {
  * name. `hash={false}` is a list's form, whose public name goes without `#`. Plain-text places (a
  * pane's name, search, chips) keep `#name` for both.
  */
-export function ChannelName({
+export function ChannelTitle({
   name,
   visibility,
   hash = true,
@@ -37,7 +38,7 @@ export function ChannelName({
   hash?: boolean;
   lockClassName?: string;
 }) {
-  if (visibility !== "private") return hash ? `#${name}` : name;
+  if (!isPrivateChannel({ visibility })) return hash ? `#${name}` : name;
   return (
     <span className="inline-flex max-w-full min-w-0 items-center gap-1 align-bottom">
       <ChannelLock className={lockClassName} />

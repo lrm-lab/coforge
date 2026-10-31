@@ -1,3 +1,4 @@
+import { channelVisibilitySchema } from "./channel-visibility";
 import { createServerFn } from "@tanstack/react-start";
 import { channelInput, channelScope } from "./channel-function-scope.server";
 import { z } from "zod";
@@ -72,7 +73,7 @@ export const createPublicChannel = createServerFn({ method: "POST" })
     z.object({
       name: z.string().trim().regex(CHANNEL_NAME_PATTERN),
       projectId: z.uuid().optional(),
-      visibility: z.enum(["public", "private"]).optional(),
+      visibility: channelVisibilitySchema.optional(),
       userIds: z.array(z.uuid()).max(100).default([]),
       agentIds: z.array(z.uuid()).max(100).default([]),
     }),

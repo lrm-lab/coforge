@@ -1,3 +1,4 @@
+import { channelVisibilitySchema } from "./channel-visibility";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import {
@@ -26,7 +27,7 @@ export const setPublicChannelArchived = createServerFn({ method: "POST" })
  * in the channel only. */
 export const setPublicChannelVisibility = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
-  .validator(channelInput.extend({ visibility: z.enum(["public", "private"]) }))
+  .validator(channelInput.extend({ visibility: channelVisibilitySchema }))
   .handler(async ({ data, context }) => {
     const { channels, workspaceId, userId } = channelScope(context);
     return channels.setVisibility(workspaceId, { userId }, data.channelId, data.visibility);

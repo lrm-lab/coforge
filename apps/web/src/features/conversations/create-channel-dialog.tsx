@@ -27,7 +27,7 @@ import {
   type CreatedChannel,
   type CreateChannelOutcome,
 } from "./create-channel-outcome";
-import type { ChannelVisibility } from "./channel-visibility";
+import { CHANNEL_VISIBILITY, type ChannelVisibility } from "./channel-visibility";
 import { useWorkspaceDirectory } from "./workspace-directory-query";
 import { GroupChatPicker } from "./group-chat-picker-list";
 
@@ -206,7 +206,7 @@ function CreateChannelForm({
           projectId || undefined,
           userIds,
           agentIds,
-          makePrivate ? "private" : undefined,
+          makePrivate ? CHANNEL_VISIBILITY.PRIVATE : undefined,
         ),
       );
       if (outcome.kind === "open") {

@@ -156,12 +156,14 @@ function useTaskOverviewRealtime(
   }, [queryClient, workspaceId]);
   const onWorkspacePublication = useCallback(
     (publication: { data: unknown }) => {
+      // Parsed once, for both readings below.
+      const data = publicationDataOrUndefined(publication.data);
       // A channel made public (or new) is announced to everyone: its Tasks are theirs to see now.
-      if (publicationType(publicationDataOrUndefined(publication.data)) === "channel.created.v1") {
-        if (channelSignalOf(publication.data)?.workspaceId === workspaceId) readAgain();
+      if (publicationType(data) === "channel.created.v1") {
+        if (channelSignalOf(data)?.workspaceId === workspaceId) readAgain();
         return;
       }
-      apply(decodeTaskChangedEvent(publication.data));
+      apply(decodeTaskChangedEvent(data));
     },
     [apply, readAgain, workspaceId],
   );
@@ -185,12 +187,7 @@ function useTaskOverviewRealtime(
       // A channel made private that the viewer is not in: its Tasks go with it.
       if (type === "channel.updated.v1") {
         const signal = channelSignalOf(data);
-        if (
-          signal?.type === "channel.updated.v1" &&
-          signal.gone &&
-          signal.workspaceId === workspaceId
-        )
-          readAgain();
+        if (signal?.workspaceId === workspaceId && "gone" in signal && signal.gone) readAgain();
       }
     },
     [apply, readAgain, workspaceId],

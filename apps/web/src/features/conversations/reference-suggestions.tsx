@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef } from "react";
-import { Hash01 as Hash, Lock01 } from "@untitledui/icons";
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { Badge } from "#src/components/base/badges/badges";
 import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
@@ -7,6 +6,7 @@ import { useLiveAgents } from "#src/features/agents/workspace-agents-realtime";
 import { cx } from "#src/utils/cx";
 import { m } from "#src/paraglide/messages";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
+import { channelGlyph } from "./channel-name";
 import { mentionKey, mentionKeysShowingHandle, type Mentionable } from "./mention-text";
 import type { ChannelSuggestion, ReferenceTrigger } from "./reference-completion";
 import type { ReferenceSuggestion } from "./use-reference-completion";
@@ -225,7 +225,7 @@ function MentionRow({
 /** A channel row: `#` icon (a lock for a private channel), name, description, and an "Archived"
  * badge on an archived channel. */
 function ChannelRow({ channel }: { channel: ChannelSuggestion }) {
-  const Glyph = channel.visibility === "private" ? Lock01 : Hash;
+  const Glyph = channelGlyph(channel);
   return (
     <>
       <span aria-hidden="true" className="flex size-6 shrink-0 items-center justify-center">

@@ -1,12 +1,12 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Hash01 as Hash, Lock01, SearchLg, Settings01 as Settings } from "@untitledui/icons";
+import { SearchLg, Settings01 as Settings } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { ChannelName, isPrivateChannel } from "./channel-name";
+import { ChannelTitle, channelGlyph } from "./channel-name";
 import { ChannelSettingsPanel } from "./channel-settings-panel";
-import type { ChannelVisibility } from "./channel-visibility";
+import { isPrivateChannel, type ChannelVisibility } from "./channel-visibility";
 import { ChannelHeaderMemberCluster, ChannelProjectChip } from "./channel-header-people";
 import type { ChannelMembersView } from "./channel-members-page";
 import type { ChannelCapabilities } from "#src/server/conversations/channel-authority.server";
@@ -103,7 +103,7 @@ export function ChannelConversationHeader({
             <ConversationListButton />
             <div className="flex min-w-0 flex-1 items-center gap-2">
               <h1 className="min-w-0 shrink truncate text-md font-semibold">
-                <ChannelName name={conversation.name} visibility={conversation.visibility} />
+                <ChannelTitle name={conversation.name} visibility={conversation.visibility} />
               </h1>
               {conversation.project && (
                 <ChannelProjectChip workspaceSlug={workspaceSlug} project={conversation.project} />
@@ -298,6 +298,8 @@ export function ChannelConversation({
     () => plainMentionsByHandle(conversationWithFreshDirectory.mentionables),
     [conversationWithFreshDirectory.mentionables],
   );
+  const priv = isPrivateChannel(conversation);
+  const Glyph = channelGlyph(conversation);
   return (
     <ThreadedConversation
       conversation={conversationWithFreshDirectory}
@@ -341,17 +343,13 @@ export function ChannelConversation({
       }
       emptyState={{
         // A private channel's lock stands where a public one's `#` does.
-        title: isPrivateChannel(conversation) ? conversation.name : `#${conversation.name}`,
+        title: priv ? conversation.name : `#${conversation.name}`,
         description: !conversation.senderMemberId
           ? m.channel_empty_preview()
-          : isPrivateChannel(conversation)
+          : priv
             ? m.channel_empty_private()
             : m.channel_empty(),
-        media: isPrivateChannel(conversation) ? (
-          <Lock01 aria-hidden="true" className="size-12 text-tertiary" strokeWidth={1.5} />
-        ) : (
-          <Hash aria-hidden="true" className="size-12 text-tertiary" strokeWidth={1.5} />
-        ),
+        media: <Glyph aria-hidden="true" className="size-12 text-tertiary" strokeWidth={1.5} />,
       }}
       header={
         <ChannelConversationHeader

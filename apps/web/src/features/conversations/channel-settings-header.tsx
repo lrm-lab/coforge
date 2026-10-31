@@ -7,7 +7,8 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { m } from "#src/paraglide/messages";
 import type { ChannelConversationView } from "./channel-conversation";
 import type { ChannelMembersView } from "./channel-members-page";
-import { ChannelName, isPrivateChannel } from "./channel-name";
+import { ChannelTitle } from "./channel-name";
+import { isPrivateChannel } from "./channel-visibility";
 import { useChannelMembers } from "./channel-members-query";
 
 /**
@@ -75,7 +76,7 @@ export function ChannelSettingsTitle({
     <>
       <div className="flex min-w-0 items-center gap-2">
         <Heading slot="title" className="truncate text-lg font-semibold text-primary">
-          <ChannelName name={conversation.name} visibility={conversation.visibility} />
+          <ChannelTitle name={conversation.name} visibility={conversation.visibility} />
         </Heading>
         <Badge size="sm" color="gray" className="shrink-0">
           {isPrivateChannel(conversation)

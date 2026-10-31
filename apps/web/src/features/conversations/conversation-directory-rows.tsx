@@ -1,4 +1,3 @@
-import { Hash01 as Hash, Lock01 } from "@untitledui/icons";
 import { memo } from "react";
 
 import type { LiveAgent } from "#src/features/agents/workspace-agents-realtime";
@@ -9,9 +8,9 @@ import { useTimeZone } from "#src/lib/time-zone-context";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import { cx } from "#src/utils/cx";
-import { ChannelName, isPrivateChannel } from "./channel-name";
+import { ChannelTitle, channelGlyph } from "./channel-name";
 import { channelMentionShown, channelPreviewLine } from "./channel-preview-line";
-import type { ChannelVisibility } from "./channel-visibility";
+import { isPrivateChannel, type ChannelVisibility } from "./channel-visibility";
 import type { ChatSection } from "./chat-section.schemas";
 import { collageLayout } from "./collage-layout";
 import { ConversationRow } from "./conversation-row";
@@ -88,7 +87,7 @@ export const ChannelDirectoryRow = memo(function ChannelDirectoryRow({
   // Its members' faces when it has some, else its `#` or, private, its lock; a private channel
   // shown by its faces carries the lock before its name.
   const faces = collageLayout(channel.members.length).length > 0;
-  const Glyph = locked ? Lock01 : Hash;
+  const Glyph = channelGlyph(channel);
   return (
     <ConversationRowMenu
       target={{ kind: "channel", ...channel, muted: channel.muted === true }}
@@ -127,7 +126,7 @@ export const ChannelDirectoryRow = memo(function ChannelDirectoryRow({
         }
       >
         {faces ? (
-          <ChannelName
+          <ChannelTitle
             name={channel.name}
             visibility={channel.visibility}
             hash={false}

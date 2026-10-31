@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 /**
  * Who may read a channel (`Conversation.visibility`). `"public"`: every Workspace member, as every
  * channel always was. `"private"`: only its active members, people and Agents; a Workspace owner or
@@ -16,6 +18,17 @@ export function channelVisibilityOf(channel: { visibility: string }): ChannelVis
   return channel.visibility === CHANNEL_VISIBILITY.PUBLIC
     ? CHANNEL_VISIBILITY.PUBLIC
     : CHANNEL_VISIBILITY.PRIVATE;
+}
+
+/** A visibility as a request or an event carries it. */
+export const channelVisibilitySchema = z.enum([
+  CHANNEL_VISIBILITY.PUBLIC,
+  CHANNEL_VISIBILITY.PRIVATE,
+]);
+
+/** Whether a channel is private; absent (a row read before private channels) is public. */
+export function isPrivateChannel(channel: { visibility?: ChannelVisibility }) {
+  return channel.visibility === CHANNEL_VISIBILITY.PRIVATE;
 }
 
 /** Whether a request's value names a visibility. */

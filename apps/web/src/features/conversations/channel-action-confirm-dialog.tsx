@@ -7,6 +7,7 @@ import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
+import { CHANNEL_VISIBILITY } from "./channel-visibility";
 import { leavePublicChannel } from "./channels.functions";
 import {
   deletePublicChannel,
@@ -23,6 +24,13 @@ export type ConfirmedAction =
   | "delete"
   | "make-private"
   | "make-public";
+
+/** What making a channel private and making it public both say while and after they run. */
+const VISIBILITY_COPY = {
+  pending: m.channel_settings_changing_visibility,
+  error: m.channel_settings_visibility_error,
+  denied: m.channel_settings_visibility_denied,
+};
 
 const CONFIRM_COPY: Record<
   ConfirmedAction,
@@ -75,16 +83,12 @@ const CONFIRM_COPY: Record<
   "make-private": {
     title: (name) => m.channel_settings_make_private_title({ name }),
     confirm: m.channel_settings_make_private_action,
-    pending: m.channel_settings_changing_visibility,
-    error: m.channel_settings_visibility_error,
-    denied: m.channel_settings_visibility_denied,
+    ...VISIBILITY_COPY,
   },
   "make-public": {
     title: (name) => m.channel_settings_make_public_title({ name }),
     confirm: m.channel_settings_make_public_action,
-    pending: m.channel_settings_changing_visibility,
-    error: m.channel_settings_visibility_error,
-    denied: m.channel_settings_visibility_denied,
+    ...VISIBILITY_COPY,
   },
 };
 
@@ -113,8 +117,10 @@ export function ChannelActionConfirmDialog({
     leave: () => leave({ data: { channelId } }),
     "hide-general": () => setGeneralHidden({ data: { hidden: true } }),
     delete: () => deleteChannel({ data: { channelId } }),
-    "make-private": () => setVisibility({ data: { channelId, visibility: "private" } }),
-    "make-public": () => setVisibility({ data: { channelId, visibility: "public" } }),
+    "make-private": () =>
+      setVisibility({ data: { channelId, visibility: CHANNEL_VISIBILITY.PRIVATE } }),
+    "make-public": () =>
+      setVisibility({ data: { channelId, visibility: CHANNEL_VISIBILITY.PUBLIC } }),
   };
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");

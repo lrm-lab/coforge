@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useHydrated, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { Archive, Hash01, Lock01 } from "@untitledui/icons";
+import { Archive } from "@untitledui/icons";
 
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
@@ -15,6 +15,8 @@ import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { loadArchivedChannels, setPublicChannelArchived } from "./channel-lifecycle.functions";
+import { channelGlyph } from "./channel-name";
+import { isPrivateChannel } from "./channel-visibility";
 import { useRefreshSidebarChannels } from "./sidebar-lists";
 
 type ArchivedChannels = Awaited<ReturnType<typeof loadArchivedChannels>>;
@@ -130,12 +132,7 @@ function ArchivedChannelRow({
       <div className="flex min-w-0 flex-1 items-center gap-3">
         {/* The line under the name says whether it is public or private; the icon only echoes it. */}
         <span aria-hidden="true" className="shrink-0">
-          <FeaturedIcon
-            icon={channel.visibility === "private" ? Lock01 : Hash01}
-            color="gray"
-            theme="modern"
-            size="sm"
-          />
+          <FeaturedIcon icon={channelGlyph(channel)} color="gray" theme="modern" size="sm" />
         </span>
         <div className="min-w-0">
           <Link
@@ -147,7 +144,7 @@ function ArchivedChannelRow({
             #{channel.name}
           </Link>
           <p className="text-sm text-tertiary">
-            {channel.visibility === "private"
+            {isPrivateChannel(channel)
               ? m.settings_archived_channels_private()
               : m.settings_archived_channels_public()}
             {hydrated && (
