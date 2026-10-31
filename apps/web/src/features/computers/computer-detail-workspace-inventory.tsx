@@ -7,6 +7,7 @@ import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { formatDateForDisplay } from "#src/lib/dates";
 import { getLocale } from "#src/paraglide/runtime";
 import { m } from "#src/paraglide/messages";
+import { isAppErrorCode } from "#src/lib/app-error";
 import { DetailGroup } from "./computer-detail-rows";
 import { formatWorkspaceSize } from "./workspace-size";
 import type { ComputerAgentWorkspaceScan } from "./computer.schemas";
@@ -153,7 +154,7 @@ export function ComputerDetailWorkspaceInventory({
         title={m.computer_agent_workspace_delete_title({ name: deleteTarget?.displayName ?? "" })}
         description={m.computer_agent_workspace_delete_description()}
         confirmLabel={m.computer_agent_workspace_delete()}
-        errorMessage={m.computer_agent_workspace_delete_error()}
+        errorMessage={deleteErrorMessage}
         onConfirm={async () => {
           if (!deleteTarget) return;
           await onDelete(deleteTarget.agentId);
@@ -162,4 +163,21 @@ export function ComputerDetailWorkspaceInventory({
       />
     </DetailGroup>
   );
+}
+
+/** Why the delete failed, in the words ui settled on; anything unrecognised keeps the old line. */
+function deleteErrorMessage(cause: unknown): string {
+  if (isAppErrorCode(cause, "INVALID_INPUT", "TEMPORARILY_UNAVAILABLE") && cause.errorId) {
+    switch (cause.errorId) {
+      case "agent-workspace-delete-offline":
+        return m.computer_agent_workspace_delete_offline();
+      case "agent-workspace-delete-timeout":
+        return m.computer_agent_workspace_delete_timeout();
+      case "agent-workspace-delete-busy":
+        return m.computer_agent_workspace_delete_busy();
+      case "agent-workspace-delete-denied":
+        return m.computer_agent_workspace_delete_denied();
+    }
+  }
+  return m.computer_agent_workspace_delete_error();
 }

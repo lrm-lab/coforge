@@ -1,3 +1,4 @@
+import { deleteAgentWorkspace } from "#src/features/computers/computer-workspace-delete.functions";
 import { createFileRoute, getRouteApi, notFound, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -22,7 +23,6 @@ import {
 } from "#src/features/computers/computers-pending";
 import {
   scanAgentWorkspaces,
-  deleteAgentWorkspace,
   deleteComputer,
   refreshComputerRuntimeCatalog,
   formatCloudComputer,

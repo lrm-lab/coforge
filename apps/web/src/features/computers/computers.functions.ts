@@ -17,7 +17,6 @@ import {
   readRestartStatusInputSchema,
   upgradeComputerInputSchema,
   scanAgentWorkspacesInputSchema,
-  deleteAgentWorkspaceInputSchema,
   setRuntimeVisibilityInputSchema,
   updateComputerDisplayNameInputSchema,
   formatCloudComputerInputSchema,
@@ -244,22 +243,6 @@ export const scanAgentWorkspaces = createServerFn({ method: "POST" })
 
 /** Computer owners may remove an Agent workspace's local contents. The Agent row is retained;
  * deleted Agents remain eligible so their retained workspaces can be cleaned up. */
-export const deleteAgentWorkspace = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
-  .validator(deleteAgentWorkspaceInputSchema)
-  .handler(async ({ context: { user, db, workspaceId }, data }) => {
-    declareNoStore();
-    const computer = await findOwnedWorkspaceComputer(db, {
-      userId: user.id,
-      workspaceId,
-      computerId: data.computerId,
-    });
-    const query = computerWorkspaceFilesQuery(db, computer.id, { list: false });
-    const response = await query.delete({ userId: user.id, workspaceId }, data.agentId);
-    if (response.status !== "ready") return response;
-    return response.result;
-  });
-
 export const readComputerUpgradeStatus = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .validator(readRestartStatusInputSchema)
