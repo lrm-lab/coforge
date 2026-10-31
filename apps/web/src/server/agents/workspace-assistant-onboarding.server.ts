@@ -38,17 +38,19 @@ export class WorkspaceAssistantOnboarding {
         select: { id: true },
       });
       if (introduced) {
-        await this.db.agent.updateMany({
-          where: { id: agent.id, introductionDueAt: { not: null } },
-          data: { introductionDueAt: null },
-        });
+        if (agent.introductionDueAt !== null)
+          await this.db.agent.updateMany({
+            where: { id: agent.id, introductionDueAt: { not: null } },
+            data: { introductionDueAt: null },
+          });
         return session;
       }
       // Upgrade pre-onboarding bindings too, with a stable time that repeated reads cannot renew.
-      await this.db.agent.updateMany({
-        where: { id: agent.id, introductionDueAt: null },
-        data: { introductionDueAt: agent.createdAt },
-      });
+      if (agent.introductionDueAt === null)
+        await this.db.agent.updateMany({
+          where: { id: agent.id, introductionDueAt: null },
+          data: { introductionDueAt: agent.createdAt },
+        });
       if (!agent.computerId) {
         const started = await startDefaultCloudComputer(this.ports.startCloudComputer, {
           workspaceId,

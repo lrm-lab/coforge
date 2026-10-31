@@ -90,6 +90,33 @@ test("provisioning starts a private Pi assistant on the default cloud computer w
   expect(prompt).toContain("coforge message send");
 });
 
+test("a repeated ensure only reads — the sidebar's steady state writes nothing", async () => {
+  // The first ensure lands the session, the DM and the due state; the second is what a sidebar
+  // load does, and it must not reach the database with a write or a transaction.
+  const first = await onboarding.ensure(workspaceId, userId);
+  const statements: string[] = [];
+  const counting = new PrismaClient({
+    adapter: new PrismaPg({ connectionString }),
+    log: [{ emit: "event", level: "query" }],
+  });
+  counting.$on("query", (event: { query: string }) => statements.push(event.query));
+  try {
+    const again = new WorkspaceAssistantOnboarding(counting, {
+      startCloudComputer: async () => ({ slot: "default", computerId }),
+      startAgent: async () => {},
+    });
+    const result = await again.ensure(workspaceId, userId);
+    expect(result).toEqual(first);
+    // Guard the listener itself: the steady state still reads, so silence means broken capture.
+    expect(statements.length).toBeGreaterThan(0);
+    expect(
+      statements.filter((query) => /^\s*(INSERT|UPDATE|DELETE|BEGIN|COMMIT|ROLLBACK)/i.test(query)),
+    ).toEqual([]);
+  } finally {
+    await counting.$disconnect();
+  }
+});
+
 test("a transport failure leaves the same pending assistant available for retry", async () => {
   const failing = new WorkspaceAssistantOnboarding(db, {
     startCloudComputer: async () => {

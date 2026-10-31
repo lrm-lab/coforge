@@ -34,6 +34,21 @@ export class WorkspaceAssistants {
   }
 
   private async ensureSession(workspaceId: string, userId: string) {
+    // The steady state is a read: the shared row and the member's session already exist, and a
+    // sidebar load must not write. Only a first open, or a session still waiting for its
+    // computer, enters the transaction below (which re-reads everything it decides on).
+    const [membership, existing] = await Promise.all([
+      this.db.workspaceMembership.findUnique({
+        where: { workspaceId_userId: { workspaceId, userId } },
+        select: { role: true },
+      }),
+      this.db.workspaceAssistantSession.findUnique({
+        where: { workspaceId_userId: { workspaceId, userId } },
+        include: { agent: { select: { computerId: true } } },
+      }),
+    ]);
+    if (!membership) throw new AppError("ACCESS_DENIED");
+    if (existing?.agent.computerId) return existing;
     try {
       return await this.db.$transaction(async (tx) => {
         const membership = await tx.workspaceMembership.findUnique({
@@ -41,11 +56,6 @@ export class WorkspaceAssistants {
           select: { role: true },
         });
         if (!membership) throw new AppError("ACCESS_DENIED");
-        const assistant = await tx.workspaceAssistant.upsert({
-          where: { workspaceId },
-          create: { workspaceId },
-          update: { workspaceId },
-        });
         const existing = await tx.workspaceAssistantSession.findUnique({
           where: { workspaceId_userId: { workspaceId, userId } },
           include: { agent: { select: { computerId: true } } },
@@ -70,6 +80,11 @@ export class WorkspaceAssistants {
             });
           return existing;
         }
+        const assistant = await tx.workspaceAssistant.upsert({
+          where: { workspaceId },
+          create: { workspaceId },
+          update: { workspaceId },
+        });
         return tx.workspaceAssistantSession.create({
           data: {
             assistant: { connect: { workspaceId } },
