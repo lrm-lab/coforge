@@ -178,7 +178,15 @@ export function RecordsLayout({
     [catalog.myReports, query],
   );
   const myReportsUnread = catalog.myReports.some((item) => item.unread);
-  const memberWeeks = useRecordsMemberWeeks(catalog, query, tab === "weekly");
+  const memberWeeks = useRecordsMemberWeeks(catalog, query, tab === "weekly", {
+    recordId: selectedRecordId,
+    weekKey: selectedWeekKey,
+  });
+  // A report older than the catalog's page is listed once its week is read: its section opens
+  // then, as it does at once for one in the page (`sectionDefaults`), unless another is open.
+  useEffect(() => {
+    if (memberWeeks.selectionListed && !favoritesOpen && !myReportsOpen) setMembersOpen(true);
+  }, [memberWeeks.selectionListed]);
   const filteredNotes = useMemo(
     () =>
       catalog.notes.filter(

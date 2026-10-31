@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMatch } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
@@ -10,7 +11,7 @@ import {
   loadOlderMemberWeeks,
   searchMemberWeeks,
 } from "./records-member-weeks.functions";
-import { filterMemberWeeks } from "./records-sidebar";
+import { filterMemberWeeks, isSelectedMemberWeek } from "./records-sidebar";
 
 /** How long a search waits for typing to pause before it asks the server. */
 const SEARCH_DELAY_MS = 250;
@@ -32,6 +33,9 @@ export function useRecordsMemberWeeks(
   query: string,
   /** The weekly tab is shown: the Notes tab's search box never searches member weeks. */
   shown: boolean,
+  /** The record or week on screen. A report's week older than the catalog's page is read on its
+   * own and listed until the pages read reach it, so the sidebar shows where the reader is. */
+  selection: { recordId?: string; weekKey?: string },
 ) {
   const workspaceId = useCurrentWorkspaceId();
   const queryClient = useQueryClient();
@@ -64,24 +68,42 @@ export function useRecordsMemberWeeks(
     enabled: shown && settled.length > 0,
   });
 
+  const selectedCycle = useMatch({
+    from: "/w/$workspaceSlug/records/$recordId",
+    shouldThrow: false,
+    select: (match) =>
+      match.loaderData?.type === "report" ? match.loaderData.report.cycle : undefined,
+  });
+  const pinned = useWeekBeyondCatalog(catalog, selectedCycle, shown).read;
+
   const people = useMemo(
     () =>
       Object.assign(
         {},
         catalog.people,
         ...(older.data?.pages.map((page) => page.people) ?? []),
+        pinned?.people,
         found.data?.people,
       ) as RecordsCatalog["people"],
-    [catalog.people, older.data, found.data],
+    [catalog.people, older.data, pinned, found.data],
   );
   const weeks = useMemo(() => {
     if (searched && settled === searched && found.data) return found.data.memberWeeks;
+    // The pinned week is older than every page read, or one of them now holds it: listed last,
+    // once.
+    const listed = new Set<string>();
     const read = [
       ...catalog.memberWeeks,
       ...(older.data?.pages.flatMap((page) => page.memberWeeks) ?? []),
-    ];
+      ...(pinned?.memberWeeks ?? []),
+    ].filter((week) => {
+      const key = `${week.year}-${week.week}`;
+      if (listed.has(key)) return false;
+      listed.add(key);
+      return true;
+    });
     return filterMemberWeeks(read, query, people);
-  }, [searched, settled, found.data, catalog.memberWeeks, older.data, query, people]);
+  }, [searched, settled, found.data, catalog.memberWeeks, older.data, pinned, query, people]);
 
   // Any text filters what is listed (a search reads every week itself), so it pages no further.
   const hasMore = !query && (older.data ? older.hasNextPage : start !== null);
@@ -93,12 +115,37 @@ export function useRecordsMemberWeeks(
   }
   return {
     weeks,
+    /** The record or week on screen is one of `weeks` (or in one). */
+    selectionListed: weeks.some((week) =>
+      isSelectedMemberWeek(week, selection.recordId, selection.weekKey),
+    ),
     people,
     hasMore,
     loadMore,
     loadingMore: older.isFetching,
     loadFailed: older.isError,
   };
+}
+
+/** The member week of `cycle` read on its own, when it is older than the catalog's page. */
+function useWeekBeyondCatalog(
+  catalog: RecordsCatalog,
+  cycle: { year: number; week: number } | undefined,
+  enabled: boolean,
+) {
+  const workspaceId = useCurrentWorkspaceId();
+  const readWeek = useServerFn(loadMemberWeekAt);
+  const start = catalog.memberWeeksBefore;
+  const beyond =
+    cycle !== undefined &&
+    start !== null &&
+    (cycle.year < start.year || (cycle.year === start.year && cycle.week < start.week));
+  const fetched = useQuery({
+    queryKey: [...memberWeeksKey(workspaceId), "at", cycle?.year, cycle?.week],
+    queryFn: () => readWeek({ data: { year: cycle!.year, week: cycle!.week } }),
+    enabled: enabled && beyond,
+  });
+  return { beyond, read: beyond ? fetched.data : undefined };
 }
 
 /**
@@ -110,18 +157,8 @@ export function useMemberWeekAt(
   cycle: { year: number; week: number },
   enabled: boolean,
 ) {
-  const workspaceId = useCurrentWorkspaceId();
-  const read = useServerFn(loadMemberWeekAt);
-  const start = catalog.memberWeeksBefore;
-  const beyondCatalog =
-    start !== null &&
-    (cycle.year < start.year || (cycle.year === start.year && cycle.week < start.week));
-  const fetched = useQuery({
-    queryKey: [...memberWeeksKey(workspaceId), "at", cycle.year, cycle.week],
-    queryFn: () => read({ data: { year: cycle.year, week: cycle.week } }),
-    enabled: enabled && beyondCatalog,
-  });
-  if (!beyondCatalog)
+  const { beyond, read } = useWeekBeyondCatalog(catalog, cycle, enabled);
+  if (!beyond)
     return catalog.memberWeeks.find((week) => week.year === cycle.year && week.week === cycle.week);
-  return fetched.data?.memberWeeks[0];
+  return read?.memberWeeks[0];
 }

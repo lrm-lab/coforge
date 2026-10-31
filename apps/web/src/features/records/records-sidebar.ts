@@ -74,3 +74,22 @@ export function filterMemberWeeks<
       return matchesQuery(week.title, query) || week.submissions.length > 0;
     });
 }
+
+/** Whether the record or week on screen is this member week: its overview, a report in it, or
+ * the week itself. */
+export function isSelectedMemberWeek(
+  week: {
+    year: number;
+    week: number;
+    overviewReportId: string;
+    submissions: readonly { id: string }[];
+  },
+  selectedRecordId: string | undefined,
+  selectedWeekKey: string | undefined,
+) {
+  return (
+    selectedWeekKey === `${week.year}-${week.week}` ||
+    week.overviewReportId === selectedRecordId ||
+    week.submissions.some((item) => item.id === selectedRecordId)
+  );
+}
