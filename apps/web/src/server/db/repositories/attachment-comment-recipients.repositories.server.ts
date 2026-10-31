@@ -1,5 +1,6 @@
 import { canReadChannel } from "#src/server/conversations/channel-read-access.server";
 import { viewerDirectConversationWhere } from "#src/server/conversations/viewer-direct-conversations.server";
+import { commentMigrationAttachmentForeignKey } from "#src/server/db/repositories/attachment-comment-migration-constraints.repositories.server";
 import type { Prisma } from "#src/generated/prisma/client";
 import type {
   AttachmentCommentAccess,
@@ -16,6 +17,27 @@ import type { DatabaseScope } from "#src/server/db/transaction.server";
  * active member. `readOnly` says the source is closed to new comments (an app-events or other
  * non-member kind, or a DM with a deleted Agent).
  */
+const migrationProbe = new WeakMap<DatabaseScope, Promise<boolean>>();
+
+/**
+ * Whether the comment-migration scope key stands: `attachment_comments` rows must live in the
+ * attachment's source Conversation, and no `attachment_comment_threads` row may be created.
+ * Cached per connection scope — the state changes only through the offline migration.
+ */
+export function attachmentCommentsMigrated(db: DatabaseScope) {
+  let probe = migrationProbe.get(db);
+  if (!probe) {
+    probe = db.$queryRaw<{ yes: boolean }[]>`
+        SELECT EXISTS (
+          SELECT 1 FROM pg_constraint
+          WHERE conrelid = 'attachment_comments'::regclass AND contype = 'f'
+            AND conname = ${commentMigrationAttachmentForeignKey}
+        ) AS yes`.then((rows) => rows[0]?.yes ?? false);
+    migrationProbe.set(db, probe);
+  }
+  return probe;
+}
+
 export async function readAccess(
   db: DatabaseScope,
   actor: AttachmentCommentActor,
@@ -34,6 +56,7 @@ export async function readAccess(
       sizeBytes: true,
       conversationId: true,
       messageId: true,
+      message: { select: { id: true, threadRootId: true } },
       commentThread: { select: { conversationId: true } },
       conversation: {
         select: {
@@ -97,7 +120,15 @@ export async function readAccess(
     contentType: attachment.contentType,
     sizeBytes: attachment.sizeBytes,
     sourceConversationId: attachment.conversationId,
-    conversationId: attachment.commentThread?.conversationId ?? null,
+    // Before migration the discussion has its own Conversation; after it, the comments live in
+    // the attachment's source conversation itself.
+    conversationId:
+      attachment.commentThread?.conversationId ??
+      ((await attachmentCommentsMigrated(db)) ? attachment.conversationId : null),
+    commentsRootId:
+      attachment.commentThread === null && (await attachmentCommentsMigrated(db))
+        ? (attachment.message?.threadRootId ?? attachment.message?.id ?? null)
+        : null,
     canRead:
       workspaceMember &&
       directVisible &&
@@ -138,10 +169,17 @@ export async function commentRecipients(
   users: Map<string, { reason: string; handle: string }>;
   agents: Map<string, string>;
 }> {
+  // Every comment message carries this attachment's `attachment_comments` row — the mark that
+  // finds its senders in either shape: the dedicated comment Conversation before migration,
+  // the attachment's source conversation after it.
   const commenterMemberIds = (
     await tx.message.groupBy({
       by: ["senderMemberId"],
-      where: { conversationId: scope.commentConversationId, senderMemberId: { not: null } },
+      where: {
+        conversationId: scope.commentConversationId,
+        senderMemberId: { not: null },
+        attachmentComment: { attachmentId: scope.attachmentId },
+      },
     })
   ).flatMap((row) => (row.senderMemberId ? [row.senderMemberId] : []));
   const commenters = commenterMemberIds.length

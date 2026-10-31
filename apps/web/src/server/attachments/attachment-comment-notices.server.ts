@@ -46,6 +46,9 @@ export function attachmentCommentNotices(
                 body: true,
                 mentions: MESSAGE_MENTIONS_SELECT,
                 attachmentComment: { select: { attachmentId: true } },
+                conversation: {
+                  select: { attachmentCommentThread: { select: { attachmentId: true } } },
+                },
                 sender: {
                   select: {
                     agentId: true,
@@ -76,7 +79,11 @@ export function attachmentCommentNotices(
                 createdAtMs: row.message.createdAt.getTime(),
                 body: row.message.body,
                 mentions: row.message.mentions,
-                target: `attachment:${attachmentId}${row.message.threadRootId ? `:${row.message.threadRootId}` : ""}`,
+                target: `attachment:${attachmentId}${
+                  row.message.threadRootId && row.message.conversation.attachmentCommentThread
+                    ? `:${row.message.threadRootId}`
+                    : ""
+                }`,
                 latestSenderKind: sender.kind,
                 latestSenderHandle: sender.handle,
                 latestSenderDescription: sender.description,

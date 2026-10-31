@@ -71,3 +71,27 @@ export async function attachmentCommentsFixture(existingDb?: PrismaClient) {
     },
   };
 }
+
+import { AttachmentComments } from "#src/server/attachments/attachment-comments.server";
+import { attachmentCommentNotices } from "#src/server/attachments/attachment-comment-notices.server";
+import { PrismaAttachmentCommentStore } from "#src/server/db/repositories/attachment-comments.repositories.server";
+import { recordingDeliveries } from "./fake-centrifugo";
+
+/** A comments store wired to a recording publisher, for notification assertions. */
+export const commentNoticesFor = (f: Awaited<ReturnType<typeof attachmentCommentsFixture>>) => {
+  const { publisher, delivered } = recordingDeliveries();
+  const activityChanged: { workspaceId: string; userId: string }[] = [];
+  const notices = attachmentCommentNotices(f.db, publisher, {
+    activityChanged: async (event) => {
+      activityChanged.push(event);
+    },
+  });
+  const comments = new AttachmentComments(new PrismaAttachmentCommentStore(f.db));
+  return { comments, notices, delivered, activityChanged };
+};
+
+/** The `pending_mention_actions` rows a comment message wrote. */
+export const commentPmaOf = (
+  f: Awaited<ReturnType<typeof attachmentCommentsFixture>>,
+  messageId: string,
+) => f.db.pendingMentionAction.findMany({ where: { messageId } });

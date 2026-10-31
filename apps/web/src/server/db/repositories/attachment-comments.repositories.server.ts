@@ -42,19 +42,22 @@ export class PrismaAttachmentCommentStore implements AttachmentCommentStore {
     return readAccess(this.db, actor, attachmentId);
   }
 
-  async list(input: AttachmentCommentPageInput) {
+  async list(input: AttachmentCommentPageInput, commentsRootId: string | null = null) {
     const limit = clampPageLimit(input.limit ?? 30, 100);
     const rows = await this.db.attachmentComment.findMany({
       where: {
         attachmentId: input.attachmentId,
         message: {
-          threadRootId: input.rootId ?? null,
+          threadRootId: input.rootId ?? commentsRootId,
           ...(input.beforeSequence ? { sequence: { lt: input.beforeSequence } } : {}),
         },
       },
       orderBy: { message: { sequence: "desc" } },
       take: limit + 1,
-      include: { message: { select: browserMessageFields } },
+      include: {
+        message: { select: browserMessageFields },
+        thread: { select: { attachmentId: true } },
+      },
     });
     const page = rows.slice(0, limit).reverse();
     // Counted for root comments only: a reply has none of its own.
@@ -109,13 +112,20 @@ export class PrismaAttachmentCommentStore implements AttachmentCommentStore {
         conversationId = conversation.id;
       }
       await lockConversation(tx, conversationId);
-      const threadRootId = input.rootId ? await rootOf(tx, input.attachmentId, input.rootId) : null;
+      // A top-level comment on a migrated attachment threads under its source message, the
+      // same place the migration parked the comments it moved.
+      const threadRootId = input.rootId
+        ? await rootOf(tx, input.attachmentId, input.rootId)
+        : conversationId === attachment.conversationId
+          ? access.commentsRootId
+          : null;
       const member = await joinDiscussion(tx, actor, conversationId);
       // `@handle`s and `--mention` bindings resolve among the SOURCE conversation's active
       // members: a comment can name whoever could read the file's own place. `storeMessageBody`
-      // also resolves `task #N`/`#channel`/`#channel:anchor` references; the comment
-      // conversation holds no tasks, so those stay as written, and channel and thread
-      // references resolve only where the commenter may read.
+      // also resolves `task #N`/`#channel`/`#channel:anchor` references; channel and thread
+      // references resolve only where the commenter may read, and `task #N` resolves wherever
+      // the comment lands — a comment conversation holds none, a migrated source conversation
+      // resolves its own tasks.
       const stored = await storeMessageBody(
         tx,
         {
@@ -217,7 +227,10 @@ export class PrismaAttachmentCommentStore implements AttachmentCommentStore {
           anchorType: input.anchor?.type,
           anchorData: input.anchor?.data,
         },
-        include: { message: { select: browserMessageFields } },
+        include: {
+          message: { select: browserMessageFields },
+          thread: { select: { attachmentId: true } },
+        },
       });
       return {
         comment: commentView(comment, 0),
@@ -293,7 +306,10 @@ function joinDiscussion(db: DatabaseScope, actor: AttachmentCommentActor, conver
 }
 
 type CommentRow = Prisma.AttachmentCommentGetPayload<{
-  include: { message: { select: typeof browserMessageFields } };
+  include: {
+    message: { select: typeof browserMessageFields };
+    thread: { select: { attachmentId: true } };
+  };
 }>;
 function commentView(row: CommentRow, replyCount: number): AttachmentCommentView {
   const message = mapBrowserMessage(row.message, row.workspaceId);
@@ -303,7 +319,11 @@ function commentView(row: CommentRow, replyCount: number): AttachmentCommentView
       row.anchorType ? { type: row.anchorType, data: row.anchorData } : null,
     ),
     resolved: message.reactions?.some((reaction) => reaction.emoji === "✅") ?? false,
-    replyTarget: `attachment:${row.attachmentId}:${row.message.threadRootId ?? row.messageId}`,
+    // A reply names its thread root while comments have one; after migration the message's own
+    // root is the source message, so the comment anchors by its own id instead.
+    replyTarget: `attachment:${row.attachmentId}:${
+      row.thread ? (row.message.threadRootId ?? row.messageId) : row.messageId
+    }`,
     replyCount,
   };
 }

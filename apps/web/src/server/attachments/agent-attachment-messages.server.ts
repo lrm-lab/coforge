@@ -44,13 +44,15 @@ export function createAgentAttachmentMessages(
       ? { workspaceId: principal.workspaceId, userId: delegate.userId }
       : principal;
     const access = await comments.readAccess(actor, attachmentId);
-    const rootId = parsed[2] ? (await anchor(attachmentId, parsed[2])).id : null;
+    const rootId = parsed[2]
+      ? await anchor(attachmentId, parsed[2]).then((row) => row.threadRootId ?? row.id)
+      : access.commentsRootId;
     return {
       actor,
       access,
       attachmentId,
       rootId,
-      canonicalTarget: `attachment:${attachmentId}${rootId ? `:${rootId}` : ""}`,
+      canonicalTarget: `attachment:${attachmentId}${parsed[2] ? `:${rootId}` : ""}`,
     };
   }
   async function anchor(attachmentId: string, value: string) {
