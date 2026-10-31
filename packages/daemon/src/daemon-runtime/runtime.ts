@@ -133,7 +133,7 @@ import { AgentSessions } from "#src/agent-runtime/agent-session";
 import { AgentRuntimeState } from "#src/agent-runtime/agent-runtime-state";
 import { MemoryAgentRuntimeStateStore } from "#src/persistence/memory-agent-runtime-state-store";
 import { AgentWorkspaceQueries } from "./agent-workspace-queries";
-import { deleteAgentWorkspaceFiles } from "#src/agent-runtime/agent-workspace-files";
+import { deleteAgentWorkspace } from "./delete-agent-workspace";
 import { AgentMessageAttentionIndex } from "./agent-message-attention-index";
 import { forgetLocalAgent } from "./agent-forget";
 import { revokeAgentApiKey } from "./agent-api-key-revoke";
@@ -1331,23 +1331,19 @@ export class DaemonRuntime {
     connection: DaemonConfig,
     request: Pick<AgentWorkspaceDeleteRequest, "agentId">,
   ): Promise<Pick<AgentWorkspaceDeleteResult, "status">> {
-    try {
-      if (
-        this.#agentProcessManager.runtime(request.agentId) ||
-        this.#agentProcessManager.isStopping(request.agentId)
-      )
-        await this.stopAgent(request.agentId);
-      this.#forgetLocalAgent(request.agentId);
-      return await deleteAgentWorkspaceFiles({
-        agentWorkspaceDirectory: agentWorkspaceDirectory(
-          connection.workspaceRoot,
-          connection.workspaceId,
-          request.agentId,
-        ),
-      });
-    } catch {
-      return { status: "error" };
-    }
+    return deleteAgentWorkspace({
+      agentId: request.agentId,
+      agentWorkspaceDirectory: agentWorkspaceDirectory(
+        connection.workspaceRoot,
+        connection.workspaceId,
+        request.agentId,
+      ),
+      isRunning: (agentId) =>
+        Boolean(this.#agentProcessManager.runtime(agentId)) ||
+        this.#agentProcessManager.isStopping(agentId),
+      stopAgent: (agentId) => this.stopAgent(agentId),
+      forget: (agentId) => this.#forgetLocalAgent(agentId),
+    });
   }
 
   startAgent(

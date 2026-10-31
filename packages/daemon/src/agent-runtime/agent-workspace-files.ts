@@ -151,10 +151,13 @@ async function noLinkedAncestors(path: string): Promise<void> {
   }
 }
 
-/** Destructive workspace operation. Removes entries below the root, never the root itself, and
- * unlinks symlinks without following their targets. The caller stops any Agent runtime first. */
+/** Destructive workspace operation. Removes the workspace directory and everything below it —
+ * an Agent that is already gone leaves exactly that directory — and unlinks symlinks without
+ * following their targets. The caller stops any Agent runtime first. */
 export async function deleteAgentWorkspaceFiles(params: {
   agentWorkspaceDirectory: string;
+  /** Named in the failure log, so a person can tell which workspace could not be removed. */
+  agentId?: string;
 }): Promise<AgentWorkspaceFilesDeleteOutcome> {
   try {
     const root = resolve(params.agentWorkspaceDirectory);
@@ -181,9 +184,11 @@ export async function deleteAgentWorkspaceFiles(params: {
       firstError ??= error;
     }
     if (firstError === undefined) return { status: "ok" };
-    return { status: reportDeleteFailure(firstError) };
+    return { status: reportWorkspaceDeleteFailure(firstError, params.agentId) };
   } catch (error) {
-    return { status: isENOENT(error) ? "missing" : reportDeleteFailure(error) };
+    return {
+      status: isENOENT(error) ? "missing" : reportWorkspaceDeleteFailure(error, params.agentId),
+    };
   }
 }
 
@@ -198,13 +203,20 @@ export function classifyDeleteFailure(error: unknown): "busy" | "denied" | "erro
   return "error";
 }
 
-/** The failure, classified and logged once: without it the caller can only say "try again". */
-function reportDeleteFailure(error: unknown): "busy" | "denied" | "unreadable" | "error" {
+/**
+ * The failure, classified and logged once with the Agent it belongs to: without the status the
+ * caller can only say "try again", and without the Agent the log cannot say which workspace failed.
+ */
+export function reportWorkspaceDeleteFailure(
+  error: unknown,
+  agentId?: string,
+): "busy" | "denied" | "unreadable" | "error" {
   const status = classifyDeleteFailure(error);
   const code = (error as { code?: unknown } | undefined)?.code;
   logger.warning("Agent workspace could not be deleted", {
     event: "workspace_delete:failed",
     status,
+    ...(agentId ? { agent_id: agentId } : {}),
     // A symbolic filesystem code only; a message could carry a path.
     error_code: typeof code === "string" && /^[A-Z][A-Z0-9_]{1,63}$/.test(code) ? code : "UNKNOWN",
   });
