@@ -6,6 +6,7 @@ import { userConversationChannel } from "#src/features/conversations/conversatio
 
 import { readAfterStreamPositions } from "#src/server/conversations/chat-stream-positions.server";
 import { recordCatalog } from "#src/server/records/record-catalog.server";
+import { recordStats } from "#src/server/records/record-catalog-stats.server";
 import { normalizeReportContent, type ReportContent } from "./records-content";
 
 export const loadRecordsNavAttention = createServerFn({ method: "GET" })
@@ -441,7 +442,7 @@ export const loadWeeklyReportStats = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .validator(z.object({ year: z.number().int(), month: z.number().int().min(1).max(12) }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).loadStats({
+    return recordStats(db).loadStats({
       workspaceId,
       userId: user.id,
       year: data.year,
@@ -453,7 +454,7 @@ export const loadWeeklyReportDashboard = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .validator(z.object({ limit: z.number().int().min(2).max(12).optional() }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).loadWeeklyReportDashboard({
+    return recordStats(db).loadWeeklyReportDashboard({
       workspaceId,
       userId: user.id,
       limit: data.limit,

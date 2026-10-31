@@ -1,6 +1,5 @@
 import { humanLabel } from "#src/lib/human-label";
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { AppError } from "#src/lib/app-error";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import {
   currentIsoWeek,
@@ -22,21 +21,13 @@ import {
   REPORT_PERSON_SELECT,
   reportPersonView,
 } from "./record-member-weeks.server";
+import { requireMembership } from "./record-catalog-access.server";
 import { zonedCalendarDate } from "#src/features/records/weekly-report-schedule-due";
 
 type Db = PrismaClient;
 
 function asReportContent(value: unknown): ReportContent {
   return normalizeReportContent(value);
-}
-
-async function requireMembership(db: Db, workspaceId: string, userId: string) {
-  const row = await db.workspaceMembership.findUnique({
-    where: { workspaceId_userId: { workspaceId, userId } },
-    select: { role: true },
-  });
-  if (!row) throw new AppError("ACCESS_DENIED");
-  return row;
 }
 
 /** Ensures a live format document for one applied settings row (may write on GET). */

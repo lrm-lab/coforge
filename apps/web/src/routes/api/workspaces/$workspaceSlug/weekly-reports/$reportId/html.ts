@@ -4,7 +4,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { requireBrowserUser } from "#src/server/auth/require-user.server";
 import { getDatabaseClient } from "#src/server/db/client.server";
 import { requireWorkspaceIdForSlug } from "#src/server/workspaces/selection.server";
-import { recordCatalog } from "#src/server/records/record-catalog.server";
+import { recordStats } from "#src/server/records/record-catalog-stats.server";
 
 export const Route = createFileRoute(
   "/api/workspaces/$workspaceSlug/weekly-reports/$reportId/html",
@@ -19,7 +19,7 @@ export const Route = createFileRoute(
           // By its current or a former slug: a link made before the Workspace's URL changed. A
           // Workspace the User is not in throws, which answers 404 below.
           const workspaceId = await requireWorkspaceIdForSlug(db, user.id, params.workspaceSlug);
-          const result = await recordCatalog(db).exportWeeklyReportHtml({
+          const result = await recordStats(db).exportWeeklyReportHtml({
             workspaceId,
             userId: user.id,
             overviewReportId: params.reportId,
