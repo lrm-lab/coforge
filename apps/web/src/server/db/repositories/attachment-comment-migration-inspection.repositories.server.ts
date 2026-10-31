@@ -87,7 +87,20 @@ export async function inspectAttachmentCommentMigration(
     where: referenceScope,
     select: referenceSelection,
   });
-  const references = [...reactions, ...mentions, ...saved];
+  // A comment notification's sender seat moves with its message, like a reaction's actor.
+  const mentionSenders = await tx.pendingMentionAction.findMany({
+    where: referenceScope,
+    select: { senderMemberId: true, conversationId: true },
+  });
+  const references = [
+    ...reactions,
+    ...mentions,
+    ...saved,
+    ...mentionSenders.map((row) => ({
+      memberId: row.senderMemberId,
+      conversationId: row.conversationId,
+    })),
+  ];
   const roots = [
     ...new Set(
       discussions.flatMap((row) =>

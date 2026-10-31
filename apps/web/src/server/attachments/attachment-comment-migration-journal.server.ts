@@ -14,6 +14,8 @@ export const COMMENT_MIGRATION_TABLES = [
   "thread_reads",
   "thread_follows",
   "workspace_assistant_read_cursors",
+  "pending_mention_actions",
+  "agent_message_deliveries",
 ] as const;
 const id = z.uuid();
 const sequence = z.number().int().min(0).max(2_147_483_647);
@@ -61,6 +63,8 @@ const backup = integrity
     reads: rows,
     follows: rows,
     assistantCursors: rows,
+    mentionActions: rows,
+    deliveries: rows,
     sourceMessages: z.array(z.object({ id, hash: z.string().regex(/^[a-f0-9]{64}$/u) }).strict()),
   })
   .strict();

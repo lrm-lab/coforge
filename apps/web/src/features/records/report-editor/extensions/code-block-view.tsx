@@ -366,19 +366,18 @@ function CodeBlockView({ node, updateAttributes, deleteNode, editor, getPos }: N
             <MermaidDiagram ref={mermaidRef} chart={debouncedChart} showToolbar={false} />
           </div>
         )}
-        {isHtml &&
-          showHtmlPreview && (
-            // CSS-hidden when toggled off so the `<pre>` below stays mounted —
-            // unmounting either side would either lose ProseMirror bindings
-            // (source) or thrash iframe.srcDoc (preview).
-            <div contentEditable={false} className="p-3">
-              <CodeBlockIframe
-                html={debouncedHtml}
-                title="HTML preview"
-                heightClassName={HTML_PREVIEW_HEIGHT}
-              />
-            </div>
-          )}
+        {isHtml && showHtmlPreview && (
+          // CSS-hidden when toggled off so the `<pre>` below stays mounted —
+          // unmounting either side would either lose ProseMirror bindings
+          // (source) or thrash iframe.srcDoc (preview).
+          <div contentEditable={false} className="p-3">
+            <CodeBlockIframe
+              html={debouncedHtml}
+              title="HTML preview"
+              heightClassName={HTML_PREVIEW_HEIGHT}
+            />
+          </div>
+        )}
         <div
           contentEditable={false}
           className={cn(

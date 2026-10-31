@@ -93,7 +93,7 @@ These rules apply to `src/features/tasks/`.
   (`task-overview-search.ts`); a conversation route's `task` is the bare
   number. Opening pushes a history entry, closing replaces it.
 - `/tasks` rows are a TanStack DB collection over the `["task", "overview",
-workspaceId]` Query its loader fills (`task-overview-collection.ts`,
+  workspaceId]` Query its loader fills (`task-overview-collection.ts`,
   `use-task-overview.ts`). Commands go through the collection's `run`, which
   shows a move at once and writes back the server's copy; refreshes
   invalidate that Query, never the router. A command with nothing to show

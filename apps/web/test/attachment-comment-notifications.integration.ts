@@ -9,6 +9,7 @@ import { pendingMentionActionsForMessage } from "#src/server/conversations/pendi
 import { claimMentionActions } from "#src/server/conversations/pending-mention-actions.server";
 import { recordingDeliveries } from "./helpers/fake-centrifugo";
 import { attachmentCommentsFixture } from "./helpers/attachment-comments-fixture";
+import { agentAttachmentMessagesFixture } from "./helpers/agent-attachment-messages-fixture";
 
 /**
  * Attachment comment notifications: the uploader, prior commenters and @-mentioned members are
@@ -334,6 +335,31 @@ test("a comment on a DM attachment notifies the peer's inbox and the item opens 
     // And it lights the nav dot for the recipient.
     await expect(inbox.navAttention(f.workspace.id, f.owner.id)).resolves.toEqual({
       hasUnread: true,
+    });
+  } finally {
+    await f.close();
+  }
+});
+
+test("an Agent's comment notifies the human uploader and surfaces in their inbox", async () => {
+  const f = await agentAttachmentMessagesFixture();
+  try {
+    const posted = await f.messages.executeFromAgent({
+      ...f.principal,
+      target: f.target,
+      body: "agent review done",
+      idempotencyKey: crypto.randomUUID(),
+    });
+    // The uploader is a subscribed recipient — the same row a person's comment writes.
+    expect(await pmaOf(f, posted.id)).toMatchObject([
+      { targetUserId: f.owner.id, reason: "subscribed" },
+    ]);
+    // And it surfaces in the uploader's Activity inbox.
+    const inbox = new ActivityInbox(f.db, {});
+    const items = await inbox.list(f.workspace.id, f.owner.id, { filter: "all" });
+    const item = items.items.find((candidate) => candidate.attachmentComment);
+    expect(item).toMatchObject({
+      attachmentComment: { attachmentId: f.attachment.id },
     });
   } finally {
     await f.close();

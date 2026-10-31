@@ -114,6 +114,8 @@ export async function captureCommentMigration(
     reads: await rows("thread_reads", byConversation),
     follows: await rows("thread_follows", byConversation),
     assistantCursors: await rows("workspace_assistant_read_cursors", byConversation),
+    mentionActions: await rows("pending_mention_actions", byConversation),
+    deliveries: await rows("agent_message_deliveries", byConversation),
   };
   // Existing ordinary message bodies are not copied into the journal; their hashes detect edits.
   const sourceMessages = await tx.$queryRaw<CommentMigrationBackup["sourceMessages"]>(Prisma.sql`

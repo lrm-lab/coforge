@@ -74,6 +74,28 @@ export async function restoreCommentMigrationCopy(
       if (changed !== 1) throw new Error("Rollback reference missing");
     }
   }
+  for (const row of before.mentionActions.filter((entry) =>
+    scope.messageIds.includes(migrationText(entry, "messageId")),
+  )) {
+    const currentMember = members.get(migrationText(row, "senderMemberId"));
+    if (!currentMember) throw new Error("Rollback actor mapping missing");
+    const changed =
+      await tx.$executeRaw(Prisma.sql`UPDATE ${migrationRelation(scope.schema, "pending_mention_actions")}
+      SET "conversationId" = ${migrationText(row, "conversationId")}::uuid,
+        "senderMemberId" = ${migrationText(row, "senderMemberId")}::uuid
+      WHERE id = ${migrationText(row, "id")}::uuid AND "senderMemberId" = ${currentMember}::uuid`);
+    if (changed !== 1) throw new Error("Rollback reference missing");
+  }
+  for (const row of before.deliveries.filter((entry) =>
+    scope.messageIds.includes(migrationText(entry, "messageId")),
+  )) {
+    const move = plan.moves.find((entry) => entry.messageId === migrationText(row, "messageId"))!;
+    const changed =
+      await tx.$executeRaw(Prisma.sql`UPDATE ${migrationRelation(scope.schema, "agent_message_deliveries")}
+      SET "conversationId" = ${migrationText(row, "conversationId")}::uuid, "sequence" = ${migrationNumber(row, "sequence")}
+      WHERE "deliveryId" = ${migrationText(row, "deliveryId")}::uuid AND "conversationId" = ${move.conversationId}::uuid`);
+    if (changed !== 1) throw new Error("Rollback reference missing");
+  }
   // Restore old nesting only after every old conversation and message sequence is back.
   for (const row of before.messages) {
     await tx.$executeRaw(Prisma.sql`UPDATE ${migrationRelation(scope.schema, "messages")} SET "threadRootId" = ${migrationNullableText(row, "threadRootId")}::uuid

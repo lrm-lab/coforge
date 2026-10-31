@@ -3,6 +3,8 @@ import { mkdtemp, open, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Prisma } from "#src/generated/prisma/client";
+import { AttachmentComments } from "#src/server/attachments/attachment-comments.server";
+import { PrismaAttachmentCommentStore } from "#src/server/db/repositories/attachment-comments.repositories.server";
 import { attachmentCommentRehearsalFixture } from "./helpers/attachment-comment-rehearsal-fixture";
 import {
   legacyDiscussion,
@@ -430,6 +432,76 @@ test(
           },
         }),
       ).toBeNull();
+      await f.migration.restoreLocalCopy(journal);
+      expect(await f.inventory()).toEqual(before);
+    } finally {
+      await f.close();
+    }
+  },
+  TIMEOUT_MS,
+);
+
+test(
+  "comment notification rows follow their message into the source conversation",
+  async () => {
+    const f = await attachmentCommentRehearsalFixture();
+    try {
+      const comments = new AttachmentComments(new PrismaAttachmentCommentStore(f.db));
+      const agent = await f.db.agent.create({
+        data: {
+          workspaceId: f.workspace.id,
+          ownerId: f.owner.id,
+          name: `watcher-${crypto.randomUUID().slice(0, 8)}`,
+          displayName: "Watcher",
+          runtimeConfig: {},
+        },
+      });
+      await f.db.conversationMember.create({
+        data: {
+          workspaceId: f.workspace.id,
+          conversationId: f.conversation.id,
+          agentId: agent.id,
+        },
+      });
+      const notified = await comments.post(f.actor, {
+        attachmentId: f.second.id,
+        body: `FYI @${agent.name}`,
+      });
+      // The fixture's member reply already notified the uploader as subscribed.
+      const pending = await f.db.pendingMentionAction.findFirstOrThrow({
+        where: { messageId: f.reply.id },
+      });
+      const delivery = await f.db.agentMessageDelivery.findFirstOrThrow({
+        where: { messageId: notified.id, agentId: agent.id },
+      });
+      const before = await f.inventory();
+      const journal = await f.migration.applyToLocalCopy({ persistJournal: async () => {} });
+      const sourceSeat = await f.db.conversationMember.findUniqueOrThrow({
+        where: {
+          conversationId_userId: {
+            conversationId: f.conversation.id,
+            userId: f.member.id,
+          },
+        },
+      });
+      expect(pending.senderMemberId).not.toBe(sourceSeat.id);
+      expect(
+        await f.db.pendingMentionAction.findUniqueOrThrow({ where: { id: pending.id } }),
+      ).toMatchObject({
+        conversationId: f.conversation.id,
+        senderMemberId: sourceSeat.id,
+        targetUserId: f.owner.id,
+        reason: "subscribed",
+      });
+      expect(
+        await f.db.agentMessageDelivery.findUniqueOrThrow({
+          where: { deliveryId: delivery.deliveryId },
+        }),
+      ).toMatchObject({
+        conversationId: f.conversation.id,
+        messageId: notified.id,
+        reason: "mentioned",
+      });
       await f.migration.restoreLocalCopy(journal);
       expect(await f.inventory()).toEqual(before);
     } finally {

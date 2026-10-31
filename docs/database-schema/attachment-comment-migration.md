@@ -61,8 +61,10 @@ issuing SQL. These permission/durability guarantees are for POSIX local rehearsa
 
 Preflight rejects missing or mismatched source messages, nonordinary source
 conversations, hidden conversations with unbound messages, invalid roots or
-actors, cross-Workspace references, sequence overflow, nonzero historical
-Message-delivery dependencies, and unknown foreign-key dependencies.
+actors, cross-Workspace references, sequence overflow, and unknown foreign-key
+dependencies. Comment notification rows are supported dependencies: pending
+mention actions and Agent message deliveries follow their message into the
+source Conversation (a mention action's sender remaps like a reaction's).
 
 The plan keeps Message IDs, content, timestamps, authors, anchor data and every
 reaction. Old roots become replies to their source Message; old nested replies

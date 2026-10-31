@@ -106,6 +106,28 @@ export async function applyCommentMigrationToCopy(
       if (changed !== 1) throw new Error("Historical reference collision");
     }
   }
+  for (const row of before.mentionActions.filter((entry) =>
+    scope.messageIds.includes(migrationText(entry, "messageId")),
+  )) {
+    const move = plan.moves.find((entry) => entry.messageId === migrationText(row, "messageId"))!;
+    const target = members.get(migrationText(row, "senderMemberId"));
+    if (!target) throw new Error("Missing historical reference actor mapping");
+    const changed =
+      await tx.$executeRaw(Prisma.sql`UPDATE ${migrationRelation(scope.schema, "pending_mention_actions")}
+      SET "conversationId" = ${move.conversationId}::uuid, "senderMemberId" = ${target}::uuid
+      WHERE id = ${migrationText(row, "id")}::uuid`);
+    if (changed !== 1) throw new Error("Historical reference collision");
+  }
+  for (const row of before.deliveries.filter((entry) =>
+    scope.messageIds.includes(migrationText(entry, "messageId")),
+  )) {
+    const move = plan.moves.find((entry) => entry.messageId === migrationText(row, "messageId"))!;
+    const changed =
+      await tx.$executeRaw(Prisma.sql`UPDATE ${migrationRelation(scope.schema, "agent_message_deliveries")}
+      SET "conversationId" = ${move.conversationId}::uuid, "sequence" = ${move.sequence}
+      WHERE "deliveryId" = ${migrationText(row, "deliveryId")}::uuid`);
+    if (changed !== 1) throw new Error("Historical reference collision");
+  }
   for (const cursor of plan.threadReadMappings) {
     const workspaceId = snapshot.threads.find(
       (row) => row.sourceConversationId === cursor.conversationId,
@@ -164,6 +186,8 @@ export async function applyCommentMigrationToCopy(
         "thread_reads",
         "thread_follows",
         "workspace_assistant_read_cursors",
+        "pending_mention_actions",
+        "agent_message_deliveries",
       ] as const) {
         const [row] = await tx.$queryRaw<
           { count: bigint }[]
@@ -251,6 +275,42 @@ export function validateAppliedCommentMigration(
         without(old, moved ? ["conversationId", "memberId"] : []),
         without(row, moved ? ["conversationId", "memberId"] : []),
       );
+    }
+  }
+  for (const old of before.mentionActions) {
+    const moved = scope.messageIds.includes(migrationText(old, "messageId"));
+    const row = after.mentionActions.find((entry) => entry.id === old.id);
+    if (!row) throw new Error("Historical notification row changed");
+    if (moved) {
+      const move = plan.moves.find((entry) => entry.messageId === old.messageId);
+      const sender = members.get(migrationText(old, "senderMemberId"));
+      if (row.conversationId !== move?.conversationId || row.senderMemberId !== sender)
+        throw new Error("Historical notification scope changed");
+      equal(
+        without(old, ["conversationId", "senderMemberId"]),
+        without(row, ["conversationId", "senderMemberId"]),
+      );
+    } else {
+      equal(old, row);
+    }
+  }
+  for (const key of ["mentionActions", "deliveries"] as const)
+    if (before[key].length !== after[key].length)
+      throw new Error("Historical metadata count changed");
+  for (const old of before.deliveries) {
+    const moved = scope.messageIds.includes(migrationText(old, "messageId"));
+    const row = after.deliveries.find((entry) => entry.deliveryId === old.deliveryId);
+    if (!row) throw new Error("Historical delivery row changed");
+    if (moved) {
+      const move = plan.moves.find((entry) => entry.messageId === old.messageId);
+      if (row.conversationId !== move?.conversationId || row.sequence !== move?.sequence)
+        throw new Error("Historical delivery scope changed");
+      equal(
+        without(old, ["conversationId", "sequence"]),
+        without(row, ["conversationId", "sequence"]),
+      );
+    } else {
+      equal(old, row);
     }
   }
   const existing = before.members.filter(

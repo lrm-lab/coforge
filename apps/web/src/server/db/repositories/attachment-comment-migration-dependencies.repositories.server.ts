@@ -30,6 +30,10 @@ const supported = new Set([
   "thread_follows:rootMessageId,conversationId->messages:id,conversationId",
   "attachment_comments:messageId,conversationId->messages:id,conversationId",
   "attachment_comments:attachmentId,workspaceId,conversationId->attachment_comment_threads:attachmentId,workspaceId,conversationId",
+  "pending_mention_actions:messageId,conversationId->messages:id,conversationId",
+  "pending_mention_actions:senderMemberId,conversationId,workspaceId->conversation_members:id,conversationId,workspaceId",
+  "agent_message_deliveries:messageId->messages:id",
+  "agent_message_deliveries:conversationId,workspaceId->conversations:id,workspaceId",
 ]);
 
 function identifier(value: string): Prisma.Sql {
