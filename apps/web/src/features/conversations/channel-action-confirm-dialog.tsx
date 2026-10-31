@@ -7,12 +7,12 @@ import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { Button } from "#src/components/base/buttons/button";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
+import { leavePublicChannel } from "./channels.functions";
 import {
   deletePublicChannel,
-  leavePublicChannel,
   setGeneralChannelHidden,
   setPublicChannelArchived,
-} from "./channels.functions";
+} from "./channel-lifecycle.functions";
 
 /** The channel actions that ask for confirmation first. */
 export type ConfirmedAction = "archive" | "leave" | "hide-general" | "delete";

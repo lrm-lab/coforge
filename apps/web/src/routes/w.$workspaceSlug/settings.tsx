@@ -43,7 +43,7 @@ import {
   loadArchivedChannels,
   loadGeneralChannelHidden,
   setGeneralChannelHidden,
-} from "#src/features/conversations/channels.functions";
+} from "#src/features/conversations/channel-lifecycle.functions";
 import { ArchivedChannelsGroup } from "#src/features/conversations/archived-channels-group";
 import { ArchivedAgentsGroup } from "#src/features/agents/archived-agents-group";
 import { loadArchivedAgents } from "#src/features/agents/agents.functions";

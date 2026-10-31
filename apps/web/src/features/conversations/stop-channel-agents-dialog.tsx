@@ -9,7 +9,7 @@ import { TextArea } from "#src/components/base/textarea/textarea";
 import { isAppError } from "#src/lib/app-error";
 import { CHANNEL_AGENT_GUIDANCE_MAX_LENGTH } from "#src/lib/channel-agent-guidance";
 import { m } from "#src/paraglide/messages";
-import { resumeChannelAgents, stopChannelAgents } from "./channels.functions";
+import { resumeChannelAgents, stopChannelAgents } from "./channel-lifecycle.functions";
 
 type Step =
   | { kind: "confirm" }

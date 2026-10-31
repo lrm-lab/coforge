@@ -14,7 +14,7 @@ import { useTimeFormat } from "#src/lib/time-format-context";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
-import { loadArchivedChannels, setPublicChannelArchived } from "./channels.functions";
+import { loadArchivedChannels, setPublicChannelArchived } from "./channel-lifecycle.functions";
 import { useRefreshSidebarChannels } from "./sidebar-lists";
 
 type ArchivedChannels = Awaited<ReturnType<typeof loadArchivedChannels>>;
