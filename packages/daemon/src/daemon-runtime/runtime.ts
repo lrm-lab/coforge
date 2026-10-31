@@ -136,7 +136,7 @@ import { deleteAgentWorkspace } from "./delete-agent-workspace";
 import { AgentMessageAttentionIndex } from "./agent-message-attention-index";
 import { AgentInboxCoordinator } from "./agent-inbox-coordinator";
 import { AgentStopCoordinator } from "./agent-stop-coordinator";
-import { requestAgentLaunchConfig } from "./agent-launch-config";
+import { requestAgentLaunchConfig, wakeReusedAgent } from "./agent-launch-config";
 import { revokeAgentApiKey } from "./agent-api-key-revoke";
 import { ProviderProgress } from "./stalled-recovery";
 import { ColdIdleSweep } from "./cold-idle-sweep";
@@ -1790,11 +1790,10 @@ export class DaemonRuntime {
         if (this.#currentActivityLaunches.get(agentId) === launch)
           this.#currentActivityLaunches.delete(agentId);
       });
-      // The process manager owns the restart identity; control records still belong here.
       if (reused)
-        void Promise.resolve(runtime.session.readSessionIdentity?.())
-          .then((identity) => this.#agentControl.wake(agentId, launch.launchId, identity))
-          .catch(() => {});
+        wakeReusedAgent(runtime.session, (identity) =>
+          this.#agentControl.wake(agentId, launch.launchId, identity),
+        );
       void this.drainAppInboxNotices(agentId).catch(() => {});
       return runtime;
     } catch (error) {

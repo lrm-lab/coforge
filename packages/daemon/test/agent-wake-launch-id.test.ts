@@ -60,6 +60,7 @@ async function harness() {
   // a real provider session supports multiple independent listeners, so this mock must too.
   let exitListeners = new Set<() => void>();
   let sessions = 0;
+  let failNextIdentityRead = false;
   let onSessionId: AgentSessionOptions["onSessionId"];
   const sessionReports: Array<{
     startRequestId: string;
@@ -85,10 +86,16 @@ async function harness() {
         exitListeners = new Set();
         return {
           ...sessionSpy(),
-          readSessionIdentity: async () => ({
-            sessionId: `session-${sessions}`,
-            state: "resumable" as const,
-          }),
+          readSessionIdentity: async () => {
+            if (failNextIdentityRead) {
+              failNextIdentityRead = false;
+              throw new Error("identity unavailable");
+            }
+            return {
+              sessionId: `session-${sessions}`,
+              state: "resumable" as const,
+            };
+          },
           notify: async () => {},
           onExit(listener: () => void) {
             exitListeners.add(listener);
@@ -140,6 +147,9 @@ async function harness() {
     reportSessionIdentity: async () => {
       if (!onSessionId) throw new Error("no session identity callback");
       await onSessionId("session-a");
+    },
+    failNextIdentityRead: () => {
+      failNextIdentityRead = true;
     },
     exitProcess: () => {
       if (exitListeners.size === 0) throw new Error("no process to exit");
@@ -269,6 +279,36 @@ test("a recycled wake records its new identity for the later Stop result", async
       requestId: "stop-recycle",
       epoch: 4,
       identity: { sessionId: "session-2", state: "resumable" },
+    });
+  } finally {
+    await h.runtime.stop();
+    await rm(h.stateDirectory, { recursive: true, force: true });
+  }
+});
+
+test("an identity read failure still wakes the reused control record", async () => {
+  const h = await harness();
+  try {
+    await h.runtime.start(connection);
+    await h.runtime.handleAgentStart(
+      managedStart("wake-identity-failure", "start-failure", 5, "launch-failure"),
+    );
+    h.exitProcess();
+    h.failNextIdentityRead();
+    await deliverMessage(h.runtime, "wake-identity-failure", "delivery-failure");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    h.controlResults.length = 0;
+    await h.runtime.handleAgentStart(
+      managedStart("wake-identity-failure", "start-after-failure", 6, "launch-after-failure"),
+    );
+    expect(h.sessionCount()).toBe(2);
+    expect(h.controlResults.filter((result) => result.phase === "started")).toHaveLength(1);
+    expect(h.controlResults.at(-1)).toMatchObject({
+      phase: "started",
+      requestId: "start-after-failure",
+      epoch: 6,
+      launchId: "launch-after-failure",
     });
   } finally {
     await h.runtime.stop();
