@@ -7,6 +7,7 @@ import { cx } from "#src/utils/cx";
 import type { RecordAssistantPayload } from "./weekly-highlight-extract";
 import { formatWeeklyReportCompletedAt } from "./records-content";
 import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
+import { useSendWindowCountdown } from "./use-send-window";
 
 // The cards the Record side chat shows in its timeline: a week's send offer and its actions.
 
@@ -108,4 +109,21 @@ export function AssistantAttachmentCard({
       </div>
     </Button>
   );
+}
+
+/**
+ * The time left before this week's automatic send, ticking each second in its own component so
+ * the tick re-renders only this line, never the panel's thread (task #366).
+ */
+export function AutoSendCountdown({ until }: { until: Date | null | undefined }) {
+  const countdown = useSendWindowCountdown(until);
+  if (!countdown) return null;
+  return <p className="text-xs text-tertiary">{m.records_assistant_auto_send_in({ countdown })}</p>;
+}
+
+/** The same time left, beside the composer's send button. */
+export function SendCountdownBadge({ until }: { until: Date | null | undefined }) {
+  const countdown = useSendWindowCountdown(until);
+  if (!countdown) return null;
+  return <span className="mr-1 font-mono text-xs text-brand-secondary">{countdown}</span>;
 }

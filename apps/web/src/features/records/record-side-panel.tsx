@@ -27,7 +27,6 @@ import { Spinner } from "#src/components/ui/spinner";
 
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
-import { useSendWindowCountdown } from "./use-send-window";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
@@ -45,8 +44,10 @@ import type {
   ReportContent,
 } from "./records-content";
 import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
-import { AssistantAttachmentCard, FormatSendActions } from "./record-side-panel-cards";
-import { suggestionPreview } from "./record-side-panel-model";
+import { SendCountdownBadge } from "./record-side-panel-cards";
+import { commentThreadStates, sideTimeline } from "./record-side-timeline-model";
+import { RecordSideTimeline, type CommentRow } from "./record-side-timeline";
+import { useLatestCallback } from "#src/hooks/use-latest-callback";
 import { SIDE_PANEL_WIDTH_TRANSITION } from "./record-side-panel-width";
 import { useSidePanelWidth } from "./use-side-panel-width";
 import { isWritingSuggestion, useSuggestionWrite } from "./use-suggestion-write";
@@ -70,13 +71,9 @@ import {
   postWeeklyReportAssistantRequest,
   renameWeeklyReportAssistantChatSessionFn,
 } from "./records-side-chat.functions";
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import {
-  looksLikeMemberGenerateOfferAccept,
   shouldUseMemberReportRulePath,
   looksLikeSynthesizeWeeklyReportRequest,
-  parseRecordAssistantPayload,
-  type RecordAssistantPayload,
 } from "./weekly-highlight-extract";
 import {
   createWeeklyReportAssistantSessionStore,
@@ -91,9 +88,6 @@ import {
 import { useAwaitingAssistant } from "./use-awaiting-assistant";
 import { useBodyEditRefresh } from "./use-body-edit-refresh";
 import { loadWorkspaceMembers } from "#src/features/workspaces/members.functions";
-import { WeeklyReportCollectPlanCard } from "./weekly-report-collect-plan-card";
-import { WeeklyReportMessageCard } from "./weekly-report-message-card";
-import { WeeklyReportCollectRunCard } from "./weekly-report-collect-run-card";
 import {
   WeeklyTemplateDetailDialog,
   type WeeklyTemplateDetail,
@@ -101,16 +95,11 @@ import {
 import type { TemplateMemberOption } from "./weekly-template-members";
 import { useRecordRefresh } from "./use-record-refresh";
 
-type CommentRow = Awaited<ReturnType<typeof ensureRecordAssistantIntro>>[number];
 type ChatSessionRow = Awaited<
   ReturnType<typeof ensureWeeklyReportAssistantChatSessions>
 >["sessions"][number];
 
 export type { RecordSideSurface };
-
-function payloadOf(comment: CommentRow): RecordAssistantPayload | null {
-  return parseRecordAssistantPayload(comment.payload);
-}
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
@@ -169,7 +158,6 @@ export function RecordSidePanel({
   const { user: viewer } = appRoute.useLoaderData();
   // The viewer's name, never their username.
   const viewerName = viewer.name?.trim() || m.records_side_chat_user();
-  const countdown = useSendWindowCountdown(countdownUntil);
   const post = useServerFn(addRecordComment);
   const ensureIntro = useServerFn(ensureRecordAssistantIntro);
   const ensureSessions = useServerFn(ensureWeeklyReportAssistantChatSessions);
@@ -701,40 +689,11 @@ export function RecordSidePanel({
   const activeSession = chatSessions.find((row) => row.id === activeSessionId);
   const sessionTitle = activeSession?.title.trim() || m.records_side_chat_untitled();
 
-  const firstCollectRunCommentIdByRun = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const row of comments) {
-      const payload = payloadOf(row);
-      if (payload?.kind !== "collect-run") continue;
-      if (!map.has(payload.runId)) map.set(payload.runId, row.id);
-    }
-    return map;
-  }, [comments]);
-
-  const timeline = useMemo(() => {
-    type Item =
-      | { source: "comment"; at: number; id: string; comment: CommentRow }
-      | { source: "dm"; at: number; id: string; message: WeeklyReportAssistantMessage };
-    const items: Item[] = [
-      ...comments.map((comment) => ({
-        source: "comment" as const,
-        at: Date.parse(comment.createdAt),
-        id: `comment:${comment.id}`,
-        comment,
-      })),
-      ...assistantMessages.map((message) => ({
-        source: "dm" as const,
-        at: Date.parse(message.createdAt),
-        id: `dm:${message.id}`,
-        message,
-      })),
-    ];
-    items.sort((left, right) => {
-      if (left.at !== right.at) return left.at - right.at;
-      return left.source === right.source ? 0 : left.source === "comment" ? -1 : 1;
-    });
-    return items;
-  }, [assistantMessages, comments]);
+  const threadStates = useMemo(() => commentThreadStates(comments), [comments]);
+  const timeline = useMemo(
+    () => sideTimeline(comments, assistantMessages),
+    [assistantMessages, comments],
+  );
 
   const timelineTailId = timeline.at(-1)?.id ?? "";
   const sendLocked = busy || awaitingSynthesis;
@@ -798,6 +757,35 @@ export function RecordSidePanel({
       }
     };
   }, []);
+
+  // Handlers that keep their identity, so the memoized thread renders only when what it shows
+  // changes.
+  const timelineActions = {
+    openTemplateDetail: useLatestCallback(openTemplateDetail),
+    onRequestSend: useLatestCallback(onRequestSend),
+    onDismissWeekSend: useLatestCallback(onDismissWeekSend),
+    onAcceptGenerateHelp: useLatestCallback(onAcceptGenerateHelp),
+    onConfirmIntent: useLatestCallback(onConfirmIntent),
+    onDeclineIntent: useLatestCallback(onDeclineIntent),
+    onCollectPlanSubmitted: useLatestCallback(() => {
+      if (!activeSessionId) return;
+      void ensureIntro({
+        data: {
+          subjectType,
+          subjectId,
+          assistantSessionId: activeSessionId,
+          surface,
+        },
+      }).then((rows) => setComments(rows));
+    }),
+    onCollectAdvanced: useLatestCallback(() => {
+      if (!activeSessionId) return;
+      void loadThread(activeSessionId, legacySessionId);
+    }),
+    confirmSuggestion: useLatestCallback(confirmSuggestion),
+    onIgnoreSuggestion: useLatestCallback(onIgnoreSuggestion),
+    onSwitchBodyVersion: useLatestCallback(onSwitchBodyVersion),
+  };
 
   return (
     <aside
@@ -996,266 +984,19 @@ export function RecordSidePanel({
           {comments.length === 0 && assistantMessages.length === 0 ? (
             <p className="text-sm text-tertiary">{m.records_side_chat_empty()}</p>
           ) : null}
-          {timeline.map((item) => {
-            if (item.source === "comment") {
-              const comment = item.comment;
-              const authorName =
-                comment.authorType === "assistant"
-                  ? m.records_side_chat_assistant()
-                  : comment.authorType === "system"
-                    ? m.records_side_chat_system()
-                    : comment.author?.displayName?.trim() ||
-                      comment.author?.username?.trim() ||
-                      viewerName;
-              const payload = payloadOf(comment);
-              const generateHelpConsumed = comments.some(
-                (row) => row.authorType === "user" && looksLikeMemberGenerateOfferAccept(row.body),
-              );
-              const commentIndex = comments.findIndex((row) => row.id === comment.id);
-              const intentResolved =
-                commentIndex >= 0 &&
-                comments.slice(commentIndex + 1).some((row) => {
-                  const later = payloadOf(row);
-                  return (
-                    later?.kind === "collect-plan" ||
-                    later?.kind === "intent-declined" ||
-                    (row.authorType === "user" && (row.body === "确认" || row.body === "不是"))
-                  );
-                });
-              const offerResolved =
-                payload?.kind === "offer-send" &&
-                (!sendOfferActive ||
-                  (commentIndex >= 0 &&
-                    comments.slice(commentIndex + 1).some((row) => {
-                      const later = payloadOf(row);
-                      return (
-                        later?.kind === "offer-send" ||
-                        (row.authorType === "assistant" && row.body.includes("已取消本周周报"))
-                      );
-                    })));
-              return (
-                <article key={item.id} className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <IdentityAvatar
-                      size="xs"
-                      name={authorName}
-                      alt={authorName}
-                      src={comment.author?.avatarUrl}
-                    />
-                    <span className="text-sm font-medium text-primary">{authorName}</span>
-                    <span className="ml-auto text-xs text-tertiary">
-                      {new Date(comment.createdAt).toLocaleString()}
-                    </span>
-                  </div>
-                  <p className="whitespace-pre-wrap text-sm text-primary">{comment.body}</p>
-                  {payload?.kind === "offer-send" ? (
-                    <div className="space-y-3">
-                      <AssistantAttachmentCard
-                        payload={payload}
-                        disabled={busy}
-                        onOpen={() => void openTemplateDetail()}
-                      />
-                      <div className={`space-y-2 ${offerResolved ? "opacity-60" : ""}`}>
-                        <FormatSendActions
-                          disabled={busy || offerResolved}
-                          onSend={() => onRequestSend?.()}
-                          onCancel={() => void onDismissWeekSend()}
-                        />
-                        {countdown && !offerResolved ? (
-                          <p className="text-xs text-tertiary">
-                            {m.records_assistant_auto_send_in({ countdown })}
-                          </p>
-                        ) : null}
-                      </div>
-                    </div>
-                  ) : null}
-                  {payload?.kind === "offer-help-generate" && !generateHelpConsumed ? (
-                    <Button
-                      size="sm"
-                      color="primary"
-                      className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
-                      isDisabled={busy}
-                      onPress={() => void onAcceptGenerateHelp()}
-                    >
-                      {m.records_assistant_need_help()}
-                    </Button>
-                  ) : null}
-                  {payload?.kind === "confirm-intent" && !intentResolved ? (
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        size="sm"
-                        color="primary"
-                        className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
-                        isDisabled={busy}
-                        onPress={() => void onConfirmIntent(payload.intent, payload.userGuidance)}
-                      >
-                        {m.records_assistant_confirm_yes()}
-                      </Button>
-                      <Button
-                        size="sm"
-                        color="secondary"
-                        isDisabled={busy}
-                        onPress={() => void onDeclineIntent()}
-                      >
-                        {m.records_assistant_confirm_no()}
-                      </Button>
-                    </div>
-                  ) : null}
-                  {payload?.kind === "collect-plan" ? (
-                    <WeeklyReportCollectPlanCard
-                      storageKey={comment.id}
-                      reportId={payload.reportId}
-                      year={payload.year}
-                      week={payload.week}
-                      disabled={comments
-                        .slice(comments.findIndex((row) => row.id === comment.id) + 1)
-                        .some((row) => payloadOf(row)?.kind === "collect-run")}
-                      onSubmitted={() => {
-                        if (!activeSessionId) return;
-                        void ensureIntro({
-                          data: {
-                            subjectType,
-                            subjectId,
-                            assistantSessionId: activeSessionId,
-                            surface,
-                          },
-                        }).then((rows) => setComments(rows));
-                      }}
-                    />
-                  ) : null}
-                  {payload?.kind === "collect-run" &&
-                  firstCollectRunCommentIdByRun.get(payload.runId) === comment.id ? (
-                    <WeeklyReportCollectRunCard
-                      runId={payload.runId}
-                      onCollectAdvanced={() => {
-                        if (!activeSessionId) return;
-                        void loadThread(activeSessionId, legacySessionId);
-                      }}
-                    />
-                  ) : null}
-                </article>
-              );
-            }
-
-            const message = item.message;
-            const authorName =
-              message.author === "assistant" ? m.records_side_chat_assistant() : viewerName;
-            const suggestion = message.suggestion ?? null;
-            const showSuggestion =
-              suggestion !== null &&
-              (suggestion.type === "body-edit" ||
-                suggestion.type === "key-point-edit" ||
-                suggestion.type === "template-create");
-            const suggestionApplied = appliedSuggestionIds.includes(message.id);
-            const suggestionDismissed = dismissedSuggestionIds.includes(message.id);
-            const writtenByServer =
-              suggestion?.type === "body-edit" && bodyRestoreView?.sourceMessageId === message.id;
-            const suggestionFrozen = suggestionApplied || suggestionDismissed || writtenByServer;
-            const preview = showSuggestion && suggestion ? suggestionPreview(suggestion) : "";
-            return (
-              <article key={item.id} className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <IdentityAvatar
-                    size="xs"
-                    alt={authorName}
-                    name={authorName}
-                    // The assistant has no cartoon person (initial only); the viewer's face is theirs.
-                    src={message.author === "assistant" ? undefined : viewer.avatarUrl}
-                  />
-                  <span className="text-sm font-medium text-primary">{authorName}</span>
-                  <span className="ml-auto text-xs text-tertiary">
-                    {new Date(message.createdAt).toLocaleString()}
-                  </span>
-                </div>
-                <p className="whitespace-pre-wrap text-sm text-primary">{message.body}</p>
-                {suggestion?.type === "collect-plan" ? (
-                  <WeeklyReportMessageCard
-                    messageId={message.id}
-                    suggestion={suggestion}
-                    disabled={suggestionFrozen}
-                  />
-                ) : null}
-                {suggestion?.type === "send-prompt" && !suggestionFrozen ? (
-                  <FormatSendActions
-                    disabled={busy}
-                    onSend={() => void confirmSuggestion(message.id, suggestion)}
-                    onCancel={() => {
-                      void onIgnoreSuggestion(message.id, suggestion);
-                      void onDismissWeekSend();
-                    }}
-                  />
-                ) : null}
-                {showSuggestion && suggestion ? (
-                  <div
-                    className={`space-y-2 rounded-lg border p-3 ${
-                      suggestionFrozen
-                        ? "border-secondary bg-secondary opacity-80"
-                        : "border-secondary bg-secondary"
-                    }`}
-                  >
-                    {suggestionDismissed ? (
-                      <p className="text-sm font-medium text-tertiary">
-                        {m.records_assistant_suggestion_ignored()}
-                      </p>
-                    ) : null}
-                    {(suggestionApplied || writtenByServer) && !suggestionDismissed ? (
-                      <p className="text-sm font-medium text-tertiary">
-                        {m.records_assistant_suggestion_inserted()}
-                      </p>
-                    ) : null}
-                    <p className="text-sm font-medium text-primary">{suggestion.summary}</p>
-                    {preview ? (
-                      <div className="space-y-1">
-                        <p className="text-xs font-medium text-tertiary">
-                          {suggestion.type === "key-point-edit"
-                            ? m.records_key_points_suggestion_preview()
-                            : m.records_assistant_suggestion_preview()}
-                        </p>
-                        <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-md bg-primary p-2 text-xs text-secondary">
-                          {preview}
-                        </pre>
-                      </div>
-                    ) : null}
-                    {writtenByServer && bodyRestoreView && onSwitchBodyVersion ? (
-                      <Button
-                        size="sm"
-                        color="secondary"
-                        isDisabled={busy}
-                        onPress={onSwitchBodyVersion}
-                      >
-                        {bodyRestoreView.showing === "latest"
-                          ? m.records_body_restore_previous()
-                          : m.records_body_restore_latest()}
-                      </Button>
-                    ) : null}
-                    {!suggestionFrozen ? (
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          size="sm"
-                          color="primary"
-                          className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
-                          isDisabled={busy}
-                          onPress={() => void confirmSuggestion(message.id, suggestion)}
-                        >
-                          {suggestion.type === "key-point-edit"
-                            ? m.records_key_points_insert()
-                            : m.records_assistant_confirm_write()}
-                        </Button>
-                        <Button
-                          size="sm"
-                          color="tertiary"
-                          isDisabled={busy}
-                          onPress={() => void onIgnoreSuggestion(message.id, suggestion)}
-                        >
-                          {m.records_assistant_ignore_suggestion()}
-                        </Button>
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-              </article>
-            );
-          })}
+          <RecordSideTimeline
+            timeline={timeline}
+            threadStates={threadStates}
+            viewerName={viewerName}
+            viewerAvatarUrl={viewer.avatarUrl}
+            busy={busy}
+            sendOfferActive={sendOfferActive}
+            countdownUntil={countdownUntil}
+            appliedSuggestionIds={appliedSuggestionIds}
+            dismissedSuggestionIds={dismissedSuggestionIds}
+            bodyRestoreView={bodyRestoreView}
+            {...timelineActions}
+          />
 
           {/* Keep latest bubbles above the composer so they are not flush against the edge. */}
           <div className="h-20 shrink-0" aria-hidden />
@@ -1311,9 +1052,7 @@ export function RecordSidePanel({
               className="min-w-0 flex-1"
             />
             <div className="flex shrink-0 items-center gap-1">
-              {countdown ? (
-                <span className="mr-1 font-mono text-xs text-brand-secondary">{countdown}</span>
-              ) : null}
+              <SendCountdownBadge until={countdownUntil} />
               <ButtonUtility
                 type="button"
                 size="sm"
