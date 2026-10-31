@@ -135,6 +135,7 @@ import { AgentWorkspaceQueries } from "./agent-workspace-queries";
 import { deleteAgentWorkspace } from "./delete-agent-workspace";
 import { AgentMessageAttentionIndex } from "./agent-message-attention-index";
 import { AgentInboxCoordinator } from "./agent-inbox-coordinator";
+import { AgentStopCoordinator } from "./agent-stop-coordinator";
 import { revokeAgentApiKey } from "./agent-api-key-revoke";
 import { ProviderProgress } from "./stalled-recovery";
 import { ColdIdleSweep } from "./cold-idle-sweep";
@@ -397,6 +398,7 @@ export class DaemonRuntime {
   readonly #migrations: AgentMigrationRunner | undefined;
   #migrationsClosed: Promise<void> | undefined;
   readonly #inboxCoordinator: AgentInboxCoordinator;
+  readonly #stopCoordinator: AgentStopCoordinator;
   /** Per-Agent MEMORY.md and disk hints. Inert until a cloud config for an Agent is applied to
    * it (`applyConfig`/`replaceOwnerSnapshot`). */
   readonly systemCleaner: SystemCleaner;
@@ -890,6 +892,23 @@ export class DaemonRuntime {
       introducedAgents: this.#introducedAgents,
       releaseHeldAppItems: (agentId) => this.#inboxCoordinator.releaseHeldAppItems(agentId),
       releaseFallbackNotices: (agentId) => this.#inboxCoordinator.releaseFallbackNotices(agentId),
+    });
+    this.#stopCoordinator = new AgentStopCoordinator({
+      agentLaunches: this.#agentLaunches,
+      currentActivityLaunches: this.#currentActivityLaunches,
+      inputDrain: this.#inputDrain,
+      processManager: this.#agentProcessManager,
+      activityPublisher: this.#activityPublisher,
+      desktops: this.#desktops,
+      agentApiKeys: this.#agentApiKeys,
+      revokeAgentApiKey: (agentId, apiKey) => this.#revokeAgentApiKey(agentId, apiKey),
+      messageAttention: this.#messageAttention,
+      deliveryQueue: this.#deliveryQueue,
+      runtimeErrorHold: this.#runtimeErrorHold,
+      offlineResidency: this.#offlineResidency,
+      sendAgentStatus: (agentId, status) => this.#sendAgentStatus(agentId, status),
+      publishStopped: (agentId, launch) =>
+        this.#activityPublisher.publish(agentId, launch, this.#drafts.stopped(agentId)),
     });
   }
 
@@ -1418,7 +1437,7 @@ export class DaemonRuntime {
     // survive so later deliveries still restate the failure that took the Agent down.
     const offlineError = this.#offlineResidency.record(agentId);
     try {
-      await this.#releaseAgentRuntime(agentId);
+      await this.#stopCoordinator.releaseAgentRuntime(agentId);
       if (offlineError) this.#offlineResidency.remember(agentId, offlineError);
       if (!this.#agentStops.has(agentId)) this.#stoppingAgents.delete(agentId);
       return error;
@@ -1733,7 +1752,7 @@ export class DaemonRuntime {
         this.#messageAttention.clearAgent(agentId);
         // An unexpected exit only clears busy — whatever a queue_until_idle provider
         // was still holding stays queued for the next launch; only explicit Stop discards it
-        // (see #releaseAgentRuntime).
+        // (see AgentStopCoordinator.releaseAgentRuntime).
         this.#deliveryQueue.onProcessExit(agentId);
         this.#revokeLocalLaunch(agentId, localContext, proxyToken);
         void this.#revokeAgentApiKey(agentId, agentApiKey).catch((revokeError) => {
@@ -2307,7 +2326,8 @@ export class DaemonRuntime {
     this.#activityPublisher.forgetBusy(agentId);
     this.#disposeLaunchObservations(agentId);
     this.#revokeLocalLaunch(agentId);
-    const stopping = this.#stopAgent(agentId)
+    const stopping = this.#stopCoordinator
+      .stopAgent(agentId)
       .catch((error) => {
         if (activityLaunch)
           this.#activityPublisher.publish(
@@ -2326,51 +2346,6 @@ export class DaemonRuntime {
       });
     this.#agentStops.set(agentId, stopping);
     return stopping;
-  }
-
-  async #stopAgent(agentId: string): Promise<void> {
-    const launch = this.#agentLaunches.get(agentId);
-    const activityLaunch = this.#currentActivityLaunches.get(agentId);
-    const inputDrain = this.#inputDrain.get(agentId)?.drain;
-    // Disposal rejects input waiting for a native turn boundary. Waiting for that input (or
-    // launch recovery using it) first would prevent the very disposal that releases it.
-    await this.#releaseAgentRuntime(agentId, { retainLaunch: true });
-    if (launch) await Promise.allSettled([launch]);
-    // A provider still creating its session at Stop may register and fail cleanup afterwards.
-    if (this.#agentProcessManager.isStopping(agentId)) throw new AgentProcessCleanupError();
-    await this.#agentProcessManager.stop(agentId);
-    if (inputDrain) await Promise.allSettled([inputDrain]);
-    if (activityLaunch)
-      this.#activityPublisher.publish(agentId, activityLaunch, this.#drafts.stopped(agentId));
-    this.#currentActivityLaunches.delete(agentId);
-  }
-
-  /**
-   * Stop's outcome depends only on the local process exiting: revoking the
-   * Agent API key is fire-and-forget alongside it, so a failed or slow revoke never fails or
-   * delays the Stop. A failed revoke is logged and not retried.
-   */
-  async #releaseAgentRuntime(
-    agentId: string,
-    { retainLaunch = false }: { retainLaunch?: boolean } = {},
-  ): Promise<void> {
-    this.#desktops.end(agentId);
-    const activityLaunch = this.#currentActivityLaunches.get(agentId);
-    activityLaunch?.startup?.dispose();
-    void this.#revokeAgentApiKey(agentId, this.#agentApiKeys.get(agentId)).catch((error) => {
-      logAgentApiKeyRevokeFailed(agentId, error);
-    });
-    await this.#agentProcessManager.stop(agentId);
-    this.#messageAttention.clearAgent(agentId);
-    // Explicit Stop discards anything a queue_until_idle provider was holding.
-    this.#deliveryQueue.clearAgent(agentId);
-    // An explicit Stop discards the runtime-error recovery streaks the same way — a
-    // fresh start should not inherit a backoff/fence from a process that no longer exists.
-    this.#runtimeErrorHold.forget(agentId);
-    this.#offlineResidency.forget(agentId);
-    this.#sendAgentStatus(agentId, "inactive");
-    this.#activityPublisher.forgetBusy(agentId);
-    if (!retainLaunch) this.#currentActivityLaunches.delete(agentId);
   }
 
   /** Forgets one ended launch's observation state without affecting another Agent. */
