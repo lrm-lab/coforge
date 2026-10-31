@@ -66,8 +66,9 @@ function ArrowKeys({ onStep }: { onStep: (delta: -1 | 1) => void }) {
  * these. An image that fails to load says it has no preview, and Download still fetches it.
  *
  * The bar's comments button shows the image's comments beside it, as a file's review does (on a
- * phone, in its place), the image then on the review's opaque background; stepping to another image shows that one's. `commentsOpen` opens straight
- * at them, scrolled to `focusCommentId`: what a link into a comment asks for.
+ * phone, in its place), the image then on the review's opaque background; stepping to another
+ * image shows that one's. `commentsOpen` opens straight at them, scrolled to `focusCommentId`:
+ * what a link into a comment asks for.
  *
  * Open state comes from the surrounding `DialogTrigger`, or from `isOpen`/`onOpenChange`.
  */
