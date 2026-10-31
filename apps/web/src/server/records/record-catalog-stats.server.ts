@@ -14,10 +14,6 @@ import { requireMembership, requireWeeklyReportLeader } from "./record-catalog-a
 
 type Db = PrismaClient;
 
-function asReportContent(value: unknown) {
-  return normalizeReportContent(value);
-}
-
 /** ISO (year, week) pairs that intersect the given calendar month. */
 function isoWeeksTouchingMonth(year: number, month: number): Array<{ year: number; week: number }> {
   const result: Array<{ year: number; week: number }> = [];
@@ -133,7 +129,7 @@ export function recordStats(db: Db) {
       total: members.length,
       reports: cycle.reports.map((report) => {
         const author = members.find((member) => member.user.id === report.authorId)?.user;
-        const content = reportContentForRecipient(asReportContent(report.content));
+        const content = reportContentForRecipient(normalizeReportContent(report.content));
         const summary = Object.values(content.tabs ?? {})
           .map((tab) => tab.markdown.trim())
           .find(Boolean);
@@ -187,9 +183,9 @@ export function recordStats(db: Db) {
     return {
       title: overview.title,
       period: `${overview.cycle.year} W${overview.cycle.week}`,
-      summary: asReportContent(overview.content).keyPointExtraction?.markdown,
+      summary: normalizeReportContent(overview.content).keyPointExtraction?.markdown,
       members: overview.submissions.map((submission) => {
-        const content = reportContentForRecipient(asReportContent(submission.content));
+        const content = reportContentForRecipient(normalizeReportContent(submission.content));
         return {
           displayName: humanLabel(submission.author),
           sections: Object.fromEntries(
@@ -200,6 +196,7 @@ export function recordStats(db: Db) {
     };
   }
 
+  /** Builds the checked-in Foundation Models weekly PPT for one Leader overview. */
   async function exportWeeklyReportPresentation(input: {
     workspaceId: string;
     userId: string;
@@ -213,6 +210,7 @@ export function recordStats(db: Db) {
     };
   }
 
+  /** Builds a self-contained HTML version of the same Leader overview. */
   async function exportWeeklyReportHtml(input: {
     workspaceId: string;
     userId: string;
