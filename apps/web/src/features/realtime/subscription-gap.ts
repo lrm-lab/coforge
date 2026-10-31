@@ -1,7 +1,14 @@
 import type { SubscribedContext } from "centrifuge/build/protobuf";
+import { z } from "zod";
 
 /** A place in a channel's stream: its `epoch` and the `offset` of a publication in it. */
 export type StreamPosition = { offset: number; epoch: string };
+
+/** `StreamPosition` as a payload carries it. */
+export const streamPositionSchema = z.object({
+  offset: z.number(),
+  epoch: z.string(),
+}) satisfies z.ZodType<StreamPosition>;
 
 /** Stream positions by channel name. */
 export type StreamPositions = Readonly<Record<string, StreamPosition>>;

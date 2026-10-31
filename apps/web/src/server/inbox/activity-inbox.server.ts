@@ -25,12 +25,9 @@ import { peopleDirectPeerId } from "#src/features/conversations/direct-key";
 import { storedTaskStatus } from "#src/server/tasks/task-view.server";
 import { clampPageLimit } from "#src/server/db/page-limit.server";
 import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
-import { taskCandidatesSql, taskHasUnreadSql } from "./activity-inbox-task-items.server";
-import {
-  conversationCandidatesSql,
-  navHasUnreadSql,
-  threadCandidatesSql,
-} from "./activity-inbox-items-sql.server";
+import { taskCandidatesSql } from "./activity-inbox-task-items.server";
+import { conversationCandidatesSql, threadCandidatesSql } from "./activity-inbox-items-sql.server";
+import { announceActivityAttention, navHasUnread } from "./activity-attention.server";
 
 /**
  * A person's Activity inbox: every joined channel, every direct message of theirs (with their own
@@ -180,14 +177,11 @@ export class ActivityInbox {
     return markActivityDone(this.db, this.realtime, workspaceId, userId, item);
   }
 
-  /** Whether the viewer has any unread activity: all the nav rail's Activity dot shows. Every online
-   * viewer re-reads it on each Workspace message; `navHasUnreadSql` says what it reads. */
+  /** Whether the viewer has any unread activity: all the nav rail's Activity dot shows
+   * (`navHasUnread`). */
   async navAttention(workspaceId: string, userId: string) {
     await this.authorize(workspaceId, userId);
-    const [{ hasUnread }] = await this.db.$queryRaw<[{ hasUnread: boolean }]>(
-      navHasUnreadSql(workspaceId, userId, taskHasUnreadSql(workspaceId, userId)),
-    );
-    return { hasUnread };
+    return { hasUnread: await navHasUnread(this.db, workspaceId, userId) };
   }
 
   /** Reads or unreads a mention the viewer was notified of; it stays listed until Done. */
@@ -197,7 +191,7 @@ export class ActivityInbox {
       where: { id: resolutionId, workspaceId, targetUserId: userId, notifiedAt: { not: null } },
       data: { targetReadAt: read ? new Date() : null },
     });
-    await this.realtime.activityChanged?.({ workspaceId, userId });
+    await announceActivityAttention(this.db, this.realtime, workspaceId, userId);
   }
 
   /**

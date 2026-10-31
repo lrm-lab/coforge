@@ -145,7 +145,8 @@ export function useRealtimeConnection() {
   };
 }
 
-export type RealtimePublication = { channel: string; data: unknown };
+/** One publication; `position` is where it stands in a positioned channel's stream. */
+export type RealtimePublication = { channel: string; data: unknown; position?: StreamPosition };
 
 /** Who joined or left a channel with presence on: the connection's client id and its user. */
 export type RealtimeClient = Pick<ClientInfo, "client" | "user">;
@@ -257,10 +258,13 @@ function acquireSharedSubscription(
       dispatch(channel, subscribedHandlers, recovery);
     });
     subscription.on("publication", (publication) => {
-      const position = created.position;
-      if (position && publication.offset !== undefined && publication.offset > position.offset)
-        created.position = { epoch: position.epoch, offset: publication.offset };
-      dispatch(channel, publicationHandlers, publication);
+      const stream = created.position;
+      const position =
+        stream && publication.offset !== undefined
+          ? { epoch: stream.epoch, offset: publication.offset }
+          : undefined;
+      if (stream && position && position.offset > stream.offset) created.position = position;
+      dispatch(channel, publicationHandlers, { ...publication, position });
     });
     // Delivered only on a channel whose namespace pushes join/leave (`force_push_join_leave`).
     subscription.on("join", ({ info }) => {

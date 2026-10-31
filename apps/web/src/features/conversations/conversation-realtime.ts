@@ -3,6 +3,7 @@ import {
   publicationData,
   publicationDataOrUndefined,
 } from "#src/features/realtime/publication-data";
+import { streamPositionSchema } from "#src/features/realtime/subscription-gap";
 export const conversationRealtimeChannel = (conversationId: string) => `chat:${conversationId}`;
 
 /**
@@ -182,22 +183,41 @@ export function decodeMemberChangedEvent(input: unknown): MemberChangedEvent {
 }
 
 /**
+ * Where one person's Activity stands after a write of theirs that can clear it (a Done, a read-all,
+ * a mention read or unread, a conversation marked unread or read): whether anything is still unread,
+ * and where their own channel's stream stood before that was read. A message published past
+ * `streamPosition` may be missing from `hasUnread`.
+ */
+export type ActivityAttention = z.infer<typeof activityAttention>;
+
+const activityAttention = z.object({
+  hasUnread: z.boolean(),
+  streamPosition: streamPositionSchema.optional(),
+});
+
+/**
  * Something reached one person's Activity inbox that no badge signal announces: a mention from
  * outside the channel they were notified of, or a Task assignment receipt naming them (a notice,
- * which counts no badge). Published on that person's own channel; their Activity page and nav dot
- * re-read what they show.
+ * which counts no badge), or a write of theirs that can clear it, which carries its `attention`.
+ * Published on that person's own channel; their nav dot takes `attention` as it stands, and
+ * otherwise re-reads, as their Activity page always does.
  */
-export type ActivityChangedEvent = { type: "activity.changed.v1"; workspaceId: string };
+export type ActivityChangedEvent = {
+  type: "activity.changed.v1";
+  workspaceId: string;
+  attention?: ActivityAttention;
+};
+
+const activityChangedEvent = z.object({
+  type: z.literal("activity.changed.v1"),
+  workspaceId: z.string().min(1),
+  attention: activityAttention.optional(),
+});
 
 export function decodeActivityChangedEvent(input: unknown): ActivityChangedEvent {
-  const value = publicationData(input);
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Error("invalid conversation event");
-  const type = Reflect.get(value, "type");
-  const workspaceId = Reflect.get(value, "workspaceId");
-  if (type !== "activity.changed.v1" || typeof workspaceId !== "string" || !workspaceId)
-    throw new Error("invalid conversation event");
-  return { type, workspaceId };
+  const event = activityChangedEvent.safeParse(publicationData(input));
+  if (!event.success) throw new Error("invalid conversation event");
+  return event.data;
 }
 
 const channelInfo = z.object({

@@ -21,6 +21,8 @@ const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
 function recordingRealtime() {
   const announced: { userIds: readonly string[]; event: ViewerEvent }[] = [];
   const readChanges: object[] = [];
+  /** Where each person's Activity dot is told it stands, in order. */
+  const attention: [userId: string, hasUnread: boolean | undefined][] = [];
   const realtime: ConversationRealtime = {
     async messageAvailable() {},
     async memberChanged() {},
@@ -31,8 +33,11 @@ function recordingRealtime() {
     async conversationReadChanged(input) {
       readChanges.push(input);
     },
+    async activityChanged(input) {
+      attention.push([input.userId, input.attention?.hasUnread]);
+    },
   };
-  return { realtime, announced, readChanges };
+  return { realtime, announced, readChanges, attention };
 }
 
 async function setup() {
@@ -57,7 +62,7 @@ async function setup() {
     },
   });
   await enrollGeneralChannel(db, workspace.id);
-  const { realtime, announced, readChanges } = recordingRealtime();
+  const { realtime, announced, readChanges, attention } = recordingRealtime();
   const channels = new PublicChannels(db, undefined, undefined, undefined, realtime);
   const team = await channels.create(workspace.id, ada.id, `team-${suffix}`);
   await channels.join(workspace.id, bob.id, team.id);
@@ -98,6 +103,7 @@ async function setup() {
     realtime,
     announced,
     readChanges,
+    attention,
     post,
     teardown,
   };
@@ -170,11 +176,13 @@ test.skipIf(!connectionString)(
 test.skipIf(!connectionString)(
   "marking a channel unread tells the member's pages the badge it opens",
   async () => {
-    const { teardown, workspace, ada, bob, team, channels, announced, post } = await setup();
+    const { teardown, workspace, ada, bob, team, channels, announced, attention, post } =
+      await setup();
     try {
       const last = await post(ada.id);
       await channels.markRead(workspace.id, bob.id, team.id, last.sequence);
       announced.length = 0;
+      attention.length = 0;
 
       await channels.setUserUnread(workspace.id, bob.id, team.id, true);
       expect(announced).toEqual([
@@ -189,6 +197,13 @@ test.skipIf(!connectionString)(
             readThroughSequence: last.sequence,
           },
         },
+      ]);
+      // Bob's Activity dot, in every page of his, lights with it, and clears when he takes it back.
+      expect(attention).toEqual([[bob.id, true]]);
+      await channels.setUserUnread(workspace.id, bob.id, team.id, false);
+      expect(attention).toEqual([
+        [bob.id, true],
+        [bob.id, false],
       ]);
     } finally {
       await teardown();

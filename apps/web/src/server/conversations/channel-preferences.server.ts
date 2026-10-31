@@ -10,7 +10,8 @@ import {
 import { lockConversation } from "./conversation-lock.server";
 import { lockMemberPins, setConversationPin } from "./conversation-pins.server";
 import { announceViewerEvent } from "./conversation-realtime.server";
-import { humanReadState, markUnreadAnchor } from "./human-unread.server";
+import { markUnreadAnchor } from "./human-unread.server";
+import { announceReadMoved } from "#src/server/inbox/activity-attention.server";
 
 /**
  * One member's own settings for a channel: mute, folding long messages, pin, mark unread, and
@@ -167,15 +168,9 @@ export async function setUserUnread(
     return member.unreadFromSequence !== marker;
   });
   if (changed)
-    await announceViewerEvent(realtime, {
-      userIds: [userId],
-      event: {
-        type: "channel.marked.v1",
-        workspaceId,
-        conversationId: channel.id,
-        ...(await humanReadState(db, channel.id, userId)),
-      },
-    });
+    await announceReadMoved(db, realtime, workspaceId, userId, [
+      { conversationId: channel.id, channel: true },
+    ]);
   return { unread: marker !== null };
 }
 

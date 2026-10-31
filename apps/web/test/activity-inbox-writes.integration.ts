@@ -16,11 +16,11 @@ test("Done and read-all tell the person's other pages, so a second tab's dot cle
     const { alice, workspace, channel, post } = await seed(db, suffix);
     const general = await channel("general");
     await post(general.conversation.id, general.bobMember.id, "hello");
-    const announced: { workspaceId: string; userId: string }[] = [];
+    const announced: { workspaceId: string; userId: string; hasUnread?: boolean }[] = [];
     const inbox = new ActivityInbox(db, {
       viewerChanged: async () => {},
-      activityChanged: async (input) => {
-        announced.push(input);
+      activityChanged: async ({ attention, ...input }) => {
+        announced.push({ ...input, hasUnread: attention?.hasUnread });
       },
     });
 
@@ -34,11 +34,12 @@ test("Done and read-all tell the person's other pages, so a second tab's dot cle
       conversationId: item.place.conversationId,
       throughSequence: item.latestSequence,
     });
-    expect(announced).toEqual([{ workspaceId: workspace.id, userId: alice.id }]);
+    // With where the inbox now stands, so the other tab's dot needs no read of its own.
+    expect(announced).toEqual([{ workspaceId: workspace.id, userId: alice.id, hasUnread: false }]);
 
     announced.length = 0;
     await inbox.markAllRead(workspace.id, alice.id, { before: new Date() });
-    expect(announced).toEqual([{ workspaceId: workspace.id, userId: alice.id }]);
+    expect(announced).toEqual([{ workspaceId: workspace.id, userId: alice.id, hasUnread: false }]);
   } finally {
     await cleanup(db, suffix);
   }
@@ -62,7 +63,11 @@ test("the inbox a person's pages write through publishes to their channel", asyn
     await inbox.markAllRead(workspace.id, alice.id, { before: new Date() });
     expect(published).toContainEqual({
       channel: userConversationChannel(alice.id),
-      data: { type: "activity.changed.v1", workspaceId: workspace.id },
+      data: {
+        type: "activity.changed.v1",
+        workspaceId: workspace.id,
+        attention: expect.objectContaining({ hasUnread: false }),
+      },
     });
   } finally {
     await cleanup(db, suffix);

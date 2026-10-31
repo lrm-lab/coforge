@@ -2,22 +2,19 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
 import type { ActivityItemDone } from "#src/features/inbox/activity-inbox.schemas";
-import {
-  announceViewerEvent,
-  type ConversationRealtime,
-} from "#src/server/conversations/conversation-realtime.server";
+import type { ConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
 import {
   directThreadsSql,
   followedChannelThreadsSql,
-  humanReadStates,
   markConversationDoneSql,
   markConversationsReadSql,
   markThreadDoneSql,
   markThreadsReadSql,
 } from "#src/server/conversations/human-unread.server";
+import { announceActivityAttention, announceReadMoved } from "./activity-attention.server";
 
-/** What the Activity inbox's writes may announce: a moved read cursor, and an inbox that changed. */
+/** What the Activity inbox's writes may announce: a moved read cursor, and where the inbox stands. */
 export type ActivityInboxRealtime = Pick<ConversationRealtime, "viewerChanged" | "activityChanged">;
 
 /**
@@ -45,7 +42,7 @@ export async function markActivityDone(
       where: { id: item.resolutionId, workspaceId, targetUserId: userId, dismissedAt: null },
       data: { dismissedAt: new Date() },
     });
-    await announceActivityChanged(realtime, workspaceId, userId);
+    await announceActivityAttention(db, realtime, workspaceId, userId);
     return;
   }
   const member = await db.conversationMember.findFirst({
@@ -85,40 +82,15 @@ export async function markActivityDone(
     member.readThroughSequence < boundary ||
     (member.unreadFromSequence !== null && member.unreadFromSequence <= boundary);
   // A task's own conversation is hidden: it has no badge to move.
-  if (!rootMessageId && readMoved && member.conversation.kind !== "task_thread")
-    await announceMarked(db, realtime, workspaceId, userId, [
-      { conversationId: item.conversationId, channel: member.conversation.channelName !== null },
-    ]);
-  await announceActivityChanged(realtime, workspaceId, userId);
-}
-
-/** Tells the person's other pages the badge each moved conversation is left with (Slack's
- * `channel_marked` / `im_marked`), as a read inside the conversation does. */
-async function announceMarked(
-  db: PrismaClient,
-  realtime: ActivityInboxRealtime | undefined,
-  workspaceId: string,
-  userId: string,
-  moved: readonly { conversationId: string; channel: boolean }[],
-) {
-  if (moved.length === 0) return;
-  const states = await humanReadStates(
+  const badgeMoved = !rootMessageId && readMoved && member.conversation.kind !== "task_thread";
+  await announceReadMoved(
     db,
+    realtime,
+    workspaceId,
     userId,
-    moved.map((row) => row.conversationId),
-  );
-  await Promise.all(
-    moved.map(({ conversationId, channel }) =>
-      announceViewerEvent(realtime, {
-        userIds: [userId],
-        event: {
-          type: channel ? "channel.marked.v1" : "dm.marked.v1",
-          workspaceId,
-          conversationId,
-          ...(states.get(conversationId) ?? { unreadCount: 0, readThroughSequence: 0 }),
-        },
-      }),
-    ),
+    badgeMoved
+      ? [{ conversationId: item.conversationId, channel: member.conversation.channelName !== null }]
+      : [],
   );
 }
 
@@ -154,26 +126,11 @@ export async function markActivityAllRead(
     ),
     db.$executeRaw(markThreadsReadSql(workspaceId, directThreadsSql(workspaceId, userId), before)),
   ]);
-  await announceMarked(
+  await announceReadMoved(
     db,
     realtime,
     workspaceId,
     userId,
     moved.filter((row) => !row.task),
   );
-  await announceActivityChanged(realtime, workspaceId, userId);
-}
-
-/**
- * Tells the person's other pages that their Activity inbox changed, so the nav rail's dot reads its
- * one boolean again. Done and read-all are the only writes that clear it, and neither moves a read
- * cursor; an ordinary read announces nothing here, because a scroll moves the cursor constantly and
- * the dot counts items past Done, not past a read.
- */
-async function announceActivityChanged(
-  realtime: ActivityInboxRealtime | undefined,
-  workspaceId: string,
-  userId: string,
-) {
-  await realtime?.activityChanged?.({ workspaceId, userId });
 }

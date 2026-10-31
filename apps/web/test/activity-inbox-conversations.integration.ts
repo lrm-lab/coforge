@@ -274,7 +274,7 @@ test("a person notified of a mention outside their channels finds it in Activity
     },
   });
   try {
-    const announced: { workspaceId: string; userId: string }[] = [];
+    const announced: { workspaceId: string; userId: string; attention?: object }[] = [];
     const channels = new PublicChannels(db, undefined, quietCentrifugo(), undefined, {
       messageAvailable: async () => {},
       memberChanged: async () => {},
@@ -333,8 +333,14 @@ test("a person notified of a mention outside their channels finds it in Activity
     // Read and unread like any item: it stays listed either way.
     announced.length = 0;
     await inbox.setMentionRead(workspace.id, bob.id, resolutionId, true);
-    // Reading it in one tab clears the dot in the person's others.
-    expect(announced).toEqual([{ workspaceId: workspace.id, userId: bob.id }]);
+    // Reading it in one tab clears the dot in the person's others, with no read of their own.
+    expect(announced).toEqual([
+      {
+        workspaceId: workspace.id,
+        userId: bob.id,
+        attention: expect.objectContaining({ hasUnread: false }),
+      },
+    ]);
     expect((await mentionsOf()).map((entry) => entry.unreadCount)).toEqual([0]);
     expect((await inbox.navAttention(workspace.id, bob.id)).hasUnread).toBe(false);
     expect(await countsOf()).toEqual({ unreadItemCount: 0, unreadMentionItemCount: 0 });

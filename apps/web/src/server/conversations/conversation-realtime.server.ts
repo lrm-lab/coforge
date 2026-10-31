@@ -2,6 +2,7 @@ import {
   conversationRealtimeChannel,
   userConversationChannel,
   workspaceConversationChannel,
+  type ActivityAttention,
   type ActivityChangedEvent,
   type ChannelCreatedEvent,
   type ChannelUpdatedEvent,
@@ -124,8 +125,13 @@ export type ConversationRealtime = {
    * port without it announces nothing. */
   taskChanged?(input: TaskChangedSignal): Promise<void>;
   /** A push telling one person's Activity inbox that it changed where no badge signal says so
-   * (`ActivityChangedEvent`). Optional: a port without it announces nothing. */
-  activityChanged?(input: { workspaceId: string; userId: string }): Promise<void>;
+   * (`ActivityChangedEvent`), with where it stands after a clearing write of theirs. Optional: a
+   * port without it announces nothing. */
+  activityChanged?(input: {
+    workspaceId: string;
+    userId: string;
+    attention?: ActivityAttention;
+  }): Promise<void>;
   /** A push telling each named person's own pages that their place in a conversation changed
    * (`ViewerEvent`). Optional: a port without it announces nothing. */
   viewerChanged?(input: { userIds: readonly string[]; event: ViewerEvent }): Promise<void>;
@@ -196,10 +202,15 @@ export class CentrifugoConversationRealtime implements ConversationRealtime {
     );
   }
 
-  async activityChanged(input: { workspaceId: string; userId: string }) {
+  async activityChanged(input: {
+    workspaceId: string;
+    userId: string;
+    attention?: ActivityAttention;
+  }) {
     const event: ActivityChangedEvent = {
       type: "activity.changed.v1",
       workspaceId: input.workspaceId,
+      ...(input.attention && { attention: input.attention }),
     };
     await this.centrifugo.publishJson(userConversationChannel(input.userId), event);
   }

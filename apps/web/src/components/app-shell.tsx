@@ -52,18 +52,18 @@ export type AppUser = {
 
 /**
  * Whether the viewer has unread activity anywhere — the nav Activity dot. A message the server sent
- * to this person's own channel lights it with no read at all; anything else that reaches the inbox
- * (`activity.changed.v1`: a mention from outside the channel, a Task assignment, a Done or a
- * read-all done in another tab) re-reads the one boolean — it can remove attention, which a local
- * "lit" flag could never show.
+ * to this person's own channel lights it with no read at all; a Done, read-all or mark-unread in
+ * any of their pages says where the inbox now stands, which the dot takes; anything else that
+ * reaches the inbox (a mention from outside the channel, a Task assignment) re-reads the one
+ * boolean (`activityNavAttentionRealtime`).
  */
 function useActivityAttention(user: AppUser) {
   const queryClient = useQueryClient();
-  const { onMessage, onActivity, onSubscribed } = useMemo(
+  const { onMessage, onActivity, onAttention, onSubscribed } = useMemo(
     () => activityNavAttentionRealtime(queryClient, user.id),
     [queryClient, user.id],
   );
-  useActivityInboxRealtime({ userId: user.id, onMessage, onActivity, onSubscribed });
+  useActivityInboxRealtime({ userId: user.id, onMessage, onActivity, onAttention, onSubscribed });
   const query = useQuery(activityNavAttentionQuery());
   return query.data?.hasUnread ?? false;
 }

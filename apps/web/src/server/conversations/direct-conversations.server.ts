@@ -16,8 +16,8 @@ import {
 import { PrismaDirectConversationPreferences } from "#src/server/db/repositories/direct-conversation-preferences.repositories.server";
 import { announceViewerEvent, type ConversationRealtime } from "./conversation-realtime.server";
 import { announceConversationReadChanged } from "./conversation-read-realtime.server";
+import { announceReadMoved } from "#src/server/inbox/activity-attention.server";
 import { SendDirectMessage } from "./direct-message.server";
-import { humanReadState } from "./human-unread.server";
 import type { MessageRequestIdempotency } from "./message-request-idempotency.server";
 import { toggleUserMessageReaction } from "./user-message-reactions.server";
 import {
@@ -52,7 +52,7 @@ export class DirectConversations {
     private readonly db: PrismaClient,
     private readonly realtime?: Pick<
       ConversationRealtime,
-      "viewerChanged" | "reactionChanged" | "conversationReadChanged"
+      "viewerChanged" | "reactionChanged" | "conversationReadChanged" | "activityChanged"
     >,
   ) {
     this.conversations = new PrismaDirectConversationRepository(db);
@@ -229,15 +229,9 @@ export class DirectConversations {
       unread,
     );
     if (changed)
-      await announceViewerEvent(this.realtime, {
-        userIds: [viewerId],
-        event: {
-          type: "dm.marked.v1",
-          workspaceId,
-          conversationId,
-          ...(await humanReadState(this.db, conversationId, viewerId)),
-        },
-      });
+      await announceReadMoved(this.db, this.realtime, workspaceId, viewerId, [
+        { conversationId, channel: false },
+      ]);
     return result;
   }
 

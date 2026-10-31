@@ -37,6 +37,8 @@ async function setup() {
   });
   const announced: { userIds: readonly string[]; event: ViewerEvent }[] = [];
   const readChanges: object[] = [];
+  /** Where each person's Activity dot is told it stands, in order. */
+  const attention: [userId: string, hasUnread: boolean | undefined][] = [];
   const realtime: ConversationRealtime = {
     async messageAvailable() {},
     async memberChanged() {},
@@ -45,6 +47,9 @@ async function setup() {
     },
     async conversationReadChanged(input) {
       readChanges.push(input);
+    },
+    async activityChanged(input) {
+      attention.push([input.userId, input.attention?.hasUnread]);
     },
   };
   const dms = new DirectConversations(db, realtime);
@@ -72,7 +77,7 @@ async function setup() {
     await db.user.deleteMany({ where: { username: { endsWith: suffix } } }).catch(() => {});
     await db.$disconnect();
   };
-  return { db, workspace, ada, bob, dms, announced, readChanges, post, teardown };
+  return { db, workspace, ada, bob, dms, announced, readChanges, attention, post, teardown };
 }
 
 test.skipIf(!connectionString)(
@@ -124,12 +129,13 @@ test.skipIf(!connectionString)(
 test.skipIf(!connectionString)(
   "marking a DM unread, closing it or bringing it back tells the viewer's pages when it changed",
   async () => {
-    const { workspace, ada, bob, dms, announced, post, teardown } = await setup();
+    const { workspace, ada, bob, dms, announced, attention, post, teardown } = await setup();
     try {
       const { conversationId } = await dms.open(workspace.id, ada.id, { userId: bob.id });
       const last = await post(conversationId, ada.id);
       await dms.markRead(workspace.id, bob.id, conversationId, last.sequence);
       announced.length = 0;
+      attention.length = 0;
       const ids = { workspaceId: workspace.id, conversationId };
 
       await dms.setUnread(workspace.id, bob.id, conversationId, true);
@@ -154,6 +160,9 @@ test.skipIf(!connectionString)(
         { userIds: [bob.id], event: { type: "dm.closed.v1", ...ids } },
         { userIds: [bob.id], event: { type: "dm.opened.v1", ...ids } },
       ]);
+      // Bob's Activity dot, in every page of his, lights with the marker, once: the second
+      // marking changed nothing.
+      expect(attention).toEqual([[bob.id, true]]);
     } finally {
       await teardown();
     }

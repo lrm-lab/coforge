@@ -5,6 +5,7 @@ import { InfiniteQueryObserver, QueryClient } from "@tanstack/react-query";
 import { createConversationReconciler } from "#src/features/conversations/conversation-reconciliation";
 import { onNetworkRead } from "#src/features/conversations/conversation-queries";
 import {
+  decodeActivityChangedEvent,
   decodeChannelCreatedEvent,
   decodeChannelUpdatedEvent,
   decodeConversationReadEvent,
@@ -63,6 +64,26 @@ describe("conversation realtime", () => {
     expect(() =>
       decodeChannelUpdatedEvent({ ...updated, channel: { ...channel, archived: "no" } }),
     ).toThrow();
+  });
+
+  test("decodes an Activity change, with where the inbox stands after a clearing write", () => {
+    const changed = { type: "activity.changed.v1" as const, workspaceId: "workspace-a" };
+    // A mention from outside the channel or a Task assignment says only that something changed.
+    expect(decodeActivityChangedEvent(changed)).toEqual(changed);
+    const cleared = {
+      ...changed,
+      attention: { hasUnread: false, streamPosition: { epoch: "e", offset: 7 } },
+    };
+    expect(decodeActivityChangedEvent(cleared)).toEqual(cleared);
+    // Without Centrifugo's answer a write still says where the inbox stands, from no position.
+    expect(decodeActivityChangedEvent({ ...changed, attention: { hasUnread: true } })).toEqual({
+      ...changed,
+      attention: { hasUnread: true },
+    });
+    expect(() =>
+      decodeActivityChangedEvent({ ...changed, attention: { hasUnread: "no" } }),
+    ).toThrow();
+    expect(() => decodeActivityChangedEvent({ ...changed, workspaceId: "" })).toThrow();
   });
 
   test("decodes the viewer's own channel events, which name only ids, the unread count and the read cursor", () => {
