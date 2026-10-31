@@ -28,6 +28,10 @@ model AgentMessageDelivery {
   /// After this the delivery is stale and no Agent attention read counts it (an app's event past its
   /// expiry); null never expires. Set from the database clock when the delivery is written.
   expiresAt      DateTime?
+  /// Why this delivery reached the Agent on an attachment comment: "mentioned" (the comment
+  /// @-named it, bypassing mute) or "subscribed" (it uploaded the file or commented before).
+  /// Null on every channel, DM and non-member-mention delivery.
+  reason         String?
   createdAt      DateTime     @default(now())
   message        Message      @relation(fields: [messageId], references: [id], onDelete: Cascade)
   workspace      Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)

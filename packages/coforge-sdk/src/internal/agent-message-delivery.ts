@@ -38,6 +38,10 @@ export type AgentMessageDelivery = {
   /** The Workspace's features as of this delivery; absent from an older server. A session
    * launched with another value restarts before it takes the input. */
   features?: { taskConversations: boolean };
+  /** Why this delivery reached the Agent on a target it was not subscribed to: "mentioned" or
+   * "subscribed". Absent on ordinary channel, DM and non-member-mention deliveries and from an
+   * older server. */
+  reason?: string;
 };
 
 export function encodeAgentMessageDelivery(value: AgentMessageDelivery): Uint8Array {
@@ -76,6 +80,7 @@ export function encodeAgentMessageDelivery(value: AgentMessageDelivery): Uint8Ar
       memoryHint: memoryHintMessage(value.memoryHint),
       createdAtMs: value.createdAtMs === undefined ? undefined : BigInt(value.createdAtMs),
       taskConversations: value.features?.taskConversations,
+      reason: value.reason,
     }),
   );
 }
@@ -126,5 +131,6 @@ export function decodeAgentMessageDelivery(bytes: Uint8Array): AgentMessageDeliv
     ...(value.taskConversations !== undefined
       ? { features: { taskConversations: value.taskConversations } }
       : {}),
+    ...(value.reason ? { reason: value.reason } : {}),
   };
 }

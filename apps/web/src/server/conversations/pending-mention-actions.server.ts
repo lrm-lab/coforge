@@ -59,6 +59,9 @@ async function loadActionRows(
       id: { in: [...ids] },
       workspaceId,
       sender: "userId" in sender ? { userId: sender.userId } : { agentId: sender.agentId },
+      // Only sender-actionable rows may be claimed: a comment notification row (reason set) is
+      // the recipient's, not something the sender can still act on.
+      reason: null,
     },
     select: {
       id: true,
@@ -275,7 +278,7 @@ export async function refuseAgentMentionAdds(
 ): Promise<MentionActionResult[]> {
   const ids = [...new Set(resolutionIds)];
   const rows = await db.pendingMentionAction.findMany({
-    where: { id: { in: ids }, workspaceId, sender: { agentId } },
+    where: { id: { in: ids }, workspaceId, sender: { agentId }, reason: null },
     select: { id: true, targetUserId: true, targetAgentId: true, targetHandle: true },
   });
   const byId = new Map(rows.map((row) => [row.id, row]));

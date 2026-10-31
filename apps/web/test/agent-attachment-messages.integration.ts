@@ -73,6 +73,8 @@ test("attachment authority survives no source membership loss, but committed sen
     expect(await f.db.attachmentComment.count({ where: { attachmentId: f.attachment.id } })).toBe(
       1,
     );
+    // A replayed send returns the committed comment without a second round of notifications.
+    expect(await f.db.pendingMentionAction.count({ where: { messageId: first.id } })).toBe(1);
   } finally {
     await f.close();
   }
@@ -352,15 +354,19 @@ test("ambiguous root prefixes and another attachment's root never select a comme
     await expect(f.messages.read(f.principal, "attachment:12345678", {})).rejects.toMatchObject({
       code: "INVALID_INPUT",
     });
-    await expect(
-      f.messages.executeFromAgent({
-        ...f.principal,
-        target: f.target,
-        body: "@someone",
-        mentions: [{ type: "agent", id: f.principal.agentId, name: "someone" }],
-        idempotencyKey: crypto.randomUUID(),
+    // A `--mention` binding names a source-conversation member: it resolves and notifies them.
+    const mentioned = await f.messages.executeFromAgent({
+      ...f.principal,
+      target: f.target,
+      body: `cc @${f.member.username}`,
+      mentions: [{ type: "user", id: f.member.id, name: f.member.username }],
+      idempotencyKey: crypto.randomUUID(),
+    });
+    expect(
+      await f.db.pendingMentionAction.findFirstOrThrow({
+        where: { messageId: mentioned.id, targetUserId: f.member.id },
       }),
-    ).rejects.toMatchObject({ code: "INVALID_INPUT", errorId: "attachment-message-text-only" });
+    ).toMatchObject({ targetUserId: f.member.id, reason: "mentioned" });
   } finally {
     await f.close();
   }

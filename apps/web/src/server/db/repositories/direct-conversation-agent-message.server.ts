@@ -81,6 +81,9 @@ export function conversationTarget(
   // A task's discussion: its board and the task, `#channel:#N` (a task is not a thread root).
   if (conversation.taskDiscussionOf)
     return `${conversationTarget(conversation.taskDiscussionOf.conversation, targetOf)}:#${conversation.taskDiscussionOf.number}`;
+  // An attachment's comment discussion: the file's own target (`attachment:<id>`).
+  if (conversation.attachmentCommentThread)
+    return `attachment:${conversation.attachmentCommentThread.attachmentId}`;
   if (conversation.channelName) return channelTarget(conversation.channelName);
   return targetOf(conversation) ?? `@${undefined}`;
 }
@@ -100,6 +103,7 @@ export const CONVERSATION_TARGET_MEMBERS = {
 export const TARGET_CONVERSATION_SELECT = {
   channelName: true,
   directKey: true,
+  attachmentCommentThread: { select: { attachmentId: true } },
   members: CONVERSATION_TARGET_MEMBERS,
   taskDiscussionOf: {
     select: {

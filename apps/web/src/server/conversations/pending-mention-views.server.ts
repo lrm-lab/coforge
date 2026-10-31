@@ -60,6 +60,9 @@ export async function pendingMentionActionsForMessage(
     where: {
       messageId: message.id,
       senderMemberId: message.senderMemberId,
+      // A comment notification row (reason set) is a recipient's inbox item, never a
+      // sender-actionable mention.
+      reason: null,
       resolvedAt: null,
       expiresAt: { gt: now },
     },
@@ -205,6 +208,7 @@ export async function pendingMentionActionsForActor(
     where: {
       workspaceId,
       sender: "userId" in sender ? { userId: sender.userId } : { agentId: sender.agentId },
+      reason: null,
       resolvedAt: null,
       expiresAt: { gt: now },
     },

@@ -112,6 +112,21 @@ export async function drainAgentEvents(
           select: { id: true, conversationId: true },
         });
         const memberIdByConversation = new Map(members.map((m) => [m.conversationId, m.id]));
+        // A comment notification can reach an Agent that never sat in the comment conversation
+        // (the uploader, say): seat it where it owes a read position so the cursor has a row to
+        // live on. Anything else without a member row fails below, as it always did.
+        for (const row of messageRows) {
+          if (memberIdByConversation.has(row.conversationId)) continue;
+          if (!row.conversation.attachmentCommentThread) continue;
+          const seat = await tx.conversationMember.upsert({
+            where: {
+              conversationId_agentId: { conversationId: row.conversationId, agentId },
+            },
+            create: { workspaceId, conversationId: row.conversationId, agentId },
+            update: { leftAt: null },
+          });
+          memberIdByConversation.set(row.conversationId, seat.id);
+        }
         const changes = await advanceAgentReadGroups({
           db: tx,
           groups: targetGroups.values(),

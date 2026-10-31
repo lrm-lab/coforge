@@ -108,6 +108,11 @@ model PendingMentionAction {
   dismissedAt    DateTime?
   /// When a notified Agent target read the message (`message check`); until then it is unread.
   targetReadAt   DateTime?
+  /// Why this notification reached its target: "mentioned" (the comment @-named them) or
+  /// "subscribed" (they uploaded the attachment or commented before). Null on an ordinary
+  /// sender-actionable row. A comment notification carries notifiedAt but is never actionable:
+  /// sender-side lists filter `reason IS NULL` (the resolved_action CHECK keeps resolvedAt null).
+  reason         String?
   createdAt      DateTime           @default(now())
   message        Message            @relation(fields: [messageId, conversationId], references: [id, conversationId], onDelete: Cascade)
   sender         ConversationMember @relation(fields: [senderMemberId, conversationId, workspaceId], references: [id, conversationId, workspaceId], onDelete: Cascade)

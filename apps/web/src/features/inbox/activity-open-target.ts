@@ -24,8 +24,20 @@ export function activityOpenTarget({
   firstMentionMessageId,
   latest,
   mentionAction,
+  attachmentComment,
 }: ActivityInboxItem): HostedConversationTarget {
   if (task) return { kind: "channel", id: place.conversationId, task: task.number };
+  // A comment notification opens the file's own conversation, at the message the file rides on
+  // (the comment itself lives in a conversation the UI never shows); a file with no message
+  // opens the conversation plainly.
+  if (attachmentComment)
+    return {
+      kind: place.kind === "channel" ? "channel" : "dm",
+      id: place.conversationId,
+      ...(attachmentComment.sourceMessageId
+        ? { messageId: attachmentComment.sourceMessageId }
+        : {}),
+    };
   // A mention item is always a channel's, and never a thread item: its reply's thread is named by
   // the mention itself.
   const kind = mentionAction || place.kind === "channel" ? "channel" : "dm";

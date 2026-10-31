@@ -121,6 +121,39 @@ export async function drainScope(
   agentId: string,
   target: string,
 ) {
+  // An attachment's comment target scopes the check to its discussion (or one comment thread):
+  // the Agent must still be an active member of the file's source conversation, the recheck a
+  // comment read applies.
+  if (target.startsWith("attachment:")) {
+    const parsed = /^attachment:([0-9a-f-]{36})(?::([0-9a-f-]{6,36}))?$/i.exec(target);
+    const thread =
+      parsed &&
+      (await ports.db.attachmentCommentThread.findFirst({
+        where: {
+          attachmentId: parsed[1],
+          workspaceId,
+          attachment: {
+            conversation: {
+              hiddenFromWorkspaceAt: null,
+              members: { some: { agentId, leftAt: null } },
+            },
+          },
+        },
+        select: { conversationId: true },
+      }));
+    if (!thread) throw new AppError("NOT_FOUND");
+    if (!parsed![2]) return { conversationId: thread.conversationId, threadRootId: null };
+    // A root may be the full comment id or its short anchor, exactly as the read resolves it.
+    const root = await ports.db.attachmentComment.findFirst({
+      where: {
+        thread: { attachmentId: parsed![1], workspaceId },
+        message: { id: messageAnchorWhere(parsed![2]) },
+      },
+      select: { message: { select: { threadRootId: true } } },
+    });
+    if (!root) throw new AppError("NOT_FOUND");
+    return { conversationId: thread.conversationId, threadRootId: root.message.threadRootId };
+  }
   try {
     return await ports.resolveAgentTarget(workspaceId, agentId, target);
   } catch (error) {

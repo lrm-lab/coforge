@@ -21,6 +21,7 @@
     }
   ],
   "activity_inbox_mention_badge": "你",
+  "activity_inbox_attachment_comment": "评论了附件 {fileName}",
   "activity_inbox_system_sender": "系统",
   "activity_inbox_empty_title": "动态为空",
   "activity_inbox_empty_description": "群聊、私信和已关注的讨论会一直保留在这里，直到处理完成。",

@@ -58,8 +58,11 @@ These rules apply to `src/server/conversations/`.
   message: a non-member Agent through its own delivery and unread source (never
   channel membership); a person through an Activity item with its own read and
   Done state on the row (`server/inbox/activity-inbox.server.ts`).
-  `PublicChannels.executeMentionActions` carries out a person's `add` through
-  `addMembers`; an Agent's `add` is refused (`add_requires_human_member_authority`).
+  `PublicChannels.executeMentionActions` carries out a person's `add` through `addMembers`; an
+  Agent's `add` is refused (`add_requires_human_member_authority`). An attachment comment's
+  notifications share the table (`server/attachments/`): those rows carry `reason`
+  (`mentioned`/`subscribed`), keep `resolvedAt`/`resolvedAction` null so sender-side lists and
+  claims filter `reason IS NULL`, and are authorized through the attachment's source conversation.
 - `mention-deliveries.server.ts` owns tracked @mention outcomes: issuing and re-issuing
   envelopes, the daemon's reports, when an Agent can be woken, and the sender's read of them.
 - `channel-agent-control.server.ts` (`ChannelAgentControl`) owns a channel's

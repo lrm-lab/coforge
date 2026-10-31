@@ -64,8 +64,13 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
       : place.peer.kind === "people" && place.peer.userId === viewerId
         ? m.conversation_dm_self_name({ name: place.peer.displayName })
         : place.peer.displayName;
-  // Where a thread or a Task is, before its latest reply.
-  const placeLabel = place.kind === "channel" ? `#${title}` : `@${title}`;
+  // Where a thread or a Task is, before its latest reply — a comment notification's names the
+  // file it is about instead.
+  const placeLabel = item.attachmentComment
+    ? m.activity_inbox_attachment_comment({ fileName: item.attachmentComment.fileName })
+    : place.kind === "channel"
+      ? `#${title}`
+      : `@${title}`;
   const sender =
     item.latest.senderKind === "system" ? m.activity_inbox_system_sender() : item.latest.senderName;
 

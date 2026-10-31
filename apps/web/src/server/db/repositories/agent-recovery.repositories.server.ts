@@ -61,6 +61,7 @@ export async function readPendingAgentDeliveries(
       conversationId: true,
       conversation: { select: TARGET_CONVERSATION_SELECT },
       sequence: true,
+      reason: true,
       message: {
         select: {
           body: true,
@@ -114,6 +115,9 @@ export async function readPendingAgentDeliveries(
       latestSenderHandle: sender.handle,
       latestSenderDescription: sender.description,
       ...agentDeliveryView(delivery.message, agentId),
+      // A comment notification's reason rides the envelope on replay exactly as the live push
+      // sent it.
+      ...(delivery.reason ? { reason: delivery.reason } : {}),
       ...(delivery.message.memoryHint?.deliveredAt &&
       delivery.message.memoryHint.targetAgentId === agentId
         ? {
@@ -155,7 +159,7 @@ export async function readAgentRecoveryContext(
     SELECT "id", "sequence", "body", "conversationId", "threadRootId", "senderMemberId", "createdAt",
       "deliveryId", "senderAgentName", "senderAgentDescription", "senderUsername",
       "senderUserDescription", "channelName", "otherUsername", "agentPeer", "unreadCount", "globalRank",
-      "nonMemberMention"
+      "nonMemberMention", "attachmentId"
     FROM ranked
     WHERE "globalRank" <= ${AGENT_RECOVERY_MESSAGE_LIMIT} OR "targetRank" = 1
     ORDER BY "globalRank"`;
@@ -170,10 +174,15 @@ export async function readAgentRecoveryContext(
   );
   const directRefOf = await recoveryRefs(ports.db, workspaceId, agentId, rows);
   for (const row of rows) {
-    if (!row.channelName && !row.otherUsername)
+    if (!row.channelName && !row.otherUsername && !row.attachmentId)
       throw new Error("Agent conversation has no other member to target");
+    // A comment notification names its file (`attachment:<id>`), a reply its comment thread.
     const target = deliveryTarget(
-      row.channelName ? `#${row.channelName}` : directRefOf(row),
+      row.attachmentId
+        ? `attachment:${row.attachmentId}`
+        : row.channelName
+          ? `#${row.channelName}`
+          : directRefOf(row),
       row.threadRootId,
     );
     unreadSummary[target] ??= row.unreadCount;

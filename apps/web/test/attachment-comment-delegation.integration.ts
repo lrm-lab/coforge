@@ -34,16 +34,13 @@ for (const surface of ["attention", "recovery", "pending-deliveries", "app-bot-i
         attachmentId: f.attachment.id,
         body: "Private reply",
       });
-      const message = await f.db.message.findUniqueOrThrow({ where: { id: reply.id } });
-      // Even a stale delivery must never turn a comment into ordinary Agent attention.
-      await f.db.agentMessageDelivery.create({
-        data: {
-          ...scope,
-          conversationId: message.conversationId,
-          messageId: reply.id,
-          sequence: reply.sequence,
-        },
-      });
+      // The reply notified the prior-commenting Agent with a real delivery; even so the comment
+      // must never turn into ordinary Agent attention once its source access is gone.
+      expect(
+        await f.db.agentMessageDelivery.findFirst({
+          where: { messageId: reply.id, agentId: agent.id },
+        }),
+      ).not.toBeNull();
       await f.db.conversationMember.update({
         where: { conversationId_agentId: { conversationId: f.conversation.id, agentId: agent.id } },
         data: { leftAt: new Date() },

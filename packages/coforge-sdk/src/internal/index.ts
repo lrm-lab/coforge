@@ -68,6 +68,12 @@ export const isChannelMessageTarget = (target: string): boolean =>
   new RegExp(
     `^#[a-z0-9][a-z0-9_-]{0,31}(?::(?:${MESSAGE_ANCHOR_SOURCE}|${UUID_LIKE_SOURCE}))?$`,
   ).test(target);
+/** An attachment's comment target: `attachment:<uuid>`, optionally with a comment thread root. */
+export const isAttachmentMessageTarget = (target: string): boolean =>
+  new RegExp(
+    `^attachment:${UUID_LIKE_SOURCE}(?::(?:${MESSAGE_ANCHOR_SOURCE}|${UUID_LIKE_SOURCE}))?$`,
+    "i",
+  ).test(target);
 export { threadParentTarget, threadRootTarget } from "./message-thread-target";
 /** A reaction emoji: trimmed, one to sixteen characters, no whitespace. */
 export const isValidReactionEmoji = (value: string): boolean =>

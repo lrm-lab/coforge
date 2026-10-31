@@ -22,6 +22,7 @@
     }
   ],
   "activity_inbox_mention_badge": "you",
+  "activity_inbox_attachment_comment": "commented on attachment {fileName}",
   "activity_inbox_system_sender": "System",
   "activity_inbox_empty_title": "Activity is empty",
   "activity_inbox_empty_description": "Channels, DMs, and followed threads stay here until they are done.",

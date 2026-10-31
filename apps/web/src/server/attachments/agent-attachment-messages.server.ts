@@ -1,4 +1,8 @@
-import { MESSAGE_ANCHOR_SOURCE, UUID_LIKE_SOURCE } from "@lrm/coforge-sdk/internal";
+import {
+  MESSAGE_ANCHOR_SOURCE,
+  UUID_LIKE_SOURCE,
+  type MentionSelectorInput,
+} from "@lrm/coforge-sdk/internal";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError, isAppError } from "#src/lib/app-error";
 import { workspaceAssistantUser } from "#src/server/agents/workspace-assistant-authority.server";
@@ -10,7 +14,7 @@ import type { MessageRequestIdempotency } from "#src/server/conversations/messag
 import { PrismaAttachmentCommentStore } from "#src/server/db/repositories/attachment-comments.repositories.server";
 import { readAgentMessagePage } from "#src/server/db/repositories/agent-message-history.repositories.server";
 import { messageAnchorWhere } from "#src/server/db/message-anchor.server";
-import { AttachmentComments } from "./attachment-comments.server";
+import { AttachmentComments, type AttachmentCommentNotices } from "./attachment-comments.server";
 
 type Principal = { workspaceId: string; agentId: string };
 const TARGET = new RegExp(
@@ -28,6 +32,7 @@ const emptyPage = () => ({
 export function createAgentAttachmentMessages(
   db: PrismaClient,
   idempotency: MessageRequestIdempotency,
+  notices?: AttachmentCommentNotices,
 ) {
   const comments = new AttachmentComments(new PrismaAttachmentCommentStore(db));
   async function resolve(principal: Principal, target: string) {
@@ -100,7 +105,7 @@ export function createAgentAttachmentMessages(
         body: string;
         idempotencyKey: string;
         attachmentIds?: string[];
-        mentions?: unknown[];
+        mentions?: MentionSelectorInput[];
       },
     ) {
       // Reuse the same scoped receipt as ordinary sends, including replay after authority loss.
@@ -112,7 +117,7 @@ export function createAgentAttachmentMessages(
           idempotencyKey: input.idempotencyKey,
         },
         async () => {
-          if (input.attachmentIds?.length || input.mentions?.length)
+          if (input.attachmentIds?.length)
             throw new AppError("INVALID_INPUT", { errorId: "attachment-message-text-only" });
           const parsedTarget = TARGET.exec(input.target);
           if (!parsedTarget) throw new AppError("INVALID_INPUT");
@@ -120,10 +125,15 @@ export function createAgentAttachmentMessages(
             throw new AppError("INVALID_INPUT", { errorId: "attachment-comments-no-replies" });
           const { actor, attachmentId, canonicalTarget } = await resolve(input, input.target);
           // post re-authorizes in its source/attachment/discussion transaction and validates root ownership.
-          const posted = await comments.post(actor, {
-            attachmentId,
-            body: input.body,
-          });
+          const posted = await comments.post(
+            actor,
+            {
+              attachmentId,
+              body: input.body,
+              mentions: input.mentions,
+            },
+            notices,
+          );
           return {
             id: posted.id,
             body: posted.body,
@@ -159,7 +169,7 @@ export function attachmentMessageRefusal(error: unknown) {
         {
           error:
             error.errorId === "attachment-message-text-only"
-              ? "attachment discussion sends support plain text only; attachments and explicit mentions are unsupported"
+              ? "attachment discussion sends support text and mentions only; attachments are unsupported"
               : error.errorId === "attachment-comments-no-preview"
                 ? "this file has no preview (a type without one, or a text file over 5 MB), so it takes no comments"
                 : error.errorId === "attachment-comments-no-replies"

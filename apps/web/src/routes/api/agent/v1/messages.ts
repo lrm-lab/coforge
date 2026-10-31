@@ -1,4 +1,5 @@
 import { mapSendResult } from "#src/server/agents/agent-message-http-response.server";
+import { attachmentCommentNotices } from "#src/server/attachments/attachment-comment-notices.server";
 import {
   createAgentAttachmentMessages,
   attachmentMessageRefusal,
@@ -351,7 +352,11 @@ export function agentMessagesPostDependencies(db: PrismaClient) {
   return {
     repository,
     requestRecords,
-    attachmentMessages: createAgentAttachmentMessages(db, requestRecords),
+    attachmentMessages: createAgentAttachmentMessages(
+      db,
+      requestRecords,
+      attachmentCommentNotices(db, centrifugo),
+    ),
     memoryOfferRequired: async ({
       workspaceId,
       agentId,

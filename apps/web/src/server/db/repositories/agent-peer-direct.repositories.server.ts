@@ -187,6 +187,8 @@ export async function directRefs(
 export type TargetConversation = {
   channelName: string | null;
   directKey?: string | null;
+  /** Present on an attachment's comment conversation: its file. */
+  attachmentCommentThread?: { attachmentId: string } | null;
   members: { user?: { username: string } | null; agent?: { id: string; name: string } | null }[];
   /** The task this conversation is the discussion of: it is named by its board and the task. */
   taskDiscussionOf?: { number: number; conversation: TargetConversation } | null;

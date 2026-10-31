@@ -144,10 +144,10 @@ export function AttachmentCommentsPane({
   const draft = useCommentDraft(
     attachmentId,
     canComment,
-    async (body) => {
+    async (body, idempotencyKey) => {
       // A place chosen while this posts is the next comment's.
       const anchor = pendingAnchor;
-      await post({ data: { attachmentId, body, anchor: anchor ?? undefined } });
+      await post({ data: { attachmentId, body, anchor: anchor ?? undefined, idempotencyKey } });
       if (anchor) onClearAnchor?.(anchor);
     },
     () => queryClient.invalidateQueries({ queryKey, exact: true }),

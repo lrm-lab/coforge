@@ -175,6 +175,23 @@ export function navHasUnreadSql(workspaceId: string, userId: string, taskTerm: P
         AND pma."notifiedAt" IS NOT NULL AND pma."dismissedAt" IS NULL
         AND pma."targetReadAt" IS NULL
     ) OR EXISTS (
+      -- An attachment-comment notification, authorized like the inbox's comment branch: through
+      -- the file's source conversation (channel by canReadChannel, DM as its active member),
+      -- never the comment conversation's seats.
+      SELECT 1 FROM "pending_mention_actions" pma
+      JOIN "attachment_comments" pac ON pac."messageId" = pma."messageId"
+      JOIN "attachments" att ON att."id" = pac."attachmentId"
+      JOIN "conversations" src ON src."id" = att."conversationId"
+       AND src."hiddenFromWorkspaceAt" IS NULL AND src."archivedAt" IS NULL
+       AND ((src."channelName" IS NOT NULL AND src."visibility" = 'public')
+        OR EXISTS (
+          SELECT 1 FROM "conversation_members" scm
+          WHERE scm."conversationId" = src."id" AND scm."userId" = ${userId}::uuid
+            AND scm."leftAt" IS NULL))
+      WHERE pma."workspaceId" = ${workspaceId}::uuid AND pma."targetUserId" = ${userId}::uuid
+        AND pma."notifiedAt" IS NOT NULL AND pma."dismissedAt" IS NULL
+        AND pma."targetReadAt" IS NULL
+    ) OR EXISTS (
       SELECT 1 FROM ${conversationItemsSql(workspaceId, userId)}
       CROSS JOIN LATERAL (
         SELECT 1 FROM "messages" m WHERE ${conversationUnreadMessageSql}

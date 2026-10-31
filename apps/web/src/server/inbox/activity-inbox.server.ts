@@ -4,7 +4,6 @@ import type {
   ActivityItemDone,
 } from "#src/features/inbox/activity-inbox.schemas";
 import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
-import { visibleChannelWhere } from "#src/server/conversations/channel-read-access.server";
 import { channelListMembers } from "#src/server/conversations/channel-list-preview.server";
 import {
   browserMessageFields,
@@ -26,6 +25,7 @@ import { storedTaskStatus } from "#src/server/tasks/task-view.server";
 import { clampPageLimit } from "#src/server/db/page-limit.server";
 import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
 import { taskCandidatesSql } from "./activity-inbox-task-items.server";
+import { mentionCandidates } from "./activity-inbox-mentions.server";
 import { conversationCandidatesSql, threadCandidatesSql } from "./activity-inbox-items-sql.server";
 import { announceActivityAttention, navHasUnread } from "./activity-attention.server";
 
@@ -47,7 +47,7 @@ import { announceActivityAttention, navHasUnread } from "./activity-attention.se
  */
 
 /** One conversation or thread with activity, as the candidate query returns it. */
-type ActivityCandidate = {
+export type ActivityCandidate = {
   kind: "channel" | "direct";
   memberId: string;
   conversationId: string;
@@ -69,6 +69,15 @@ type ActivityCandidate = {
   firstMentionMessageId: string | null;
   /** A mention the viewer was notified of from outside the channel, until they mark it Done. */
   mentionAction?: { resolutionId: string; threadRootId: string | null };
+  /** An attachment-comment notification: the file the comment is on, the message the file rides
+   * on (`sourceMessageId`, the message the item opens at — null while the file has none), and
+   * the comment's own thread. */
+  attachmentComment?: {
+    attachmentId: string;
+    fileName: string;
+    threadRootId: string | null;
+    sourceMessageId: string | null;
+  };
   /** Whether the item has activity past Done; a pinned conversation is returned without it. */
   pastDone: boolean;
   /** A conversation's own item the viewer pinned: its place among their pins. Null otherwise. */
@@ -231,52 +240,8 @@ export class ActivityInbox {
    * unread until the viewer reads it. Not in a hidden or archived channel.
    */
   private async mentionCandidates(workspaceId: string, userId: string) {
-    const rows = await this.db.pendingMentionAction.findMany({
-      where: {
-        workspaceId,
-        targetUserId: userId,
-        notifiedAt: { not: null },
-        dismissedAt: null,
-        message: {
-          conversation: { archivedAt: null, ...visibleChannelWhere(workspaceId, { userId }) },
-        },
-      },
-      select: {
-        id: true,
-        conversationId: true,
-        messageId: true,
-        notifiedAt: true,
-        targetReadAt: true,
-        message: {
-          select: {
-            sequence: true,
-            threadRootId: true,
-            conversation: { select: { channelName: true } },
-          },
-        },
-      },
-    });
-    return rows.map((row): ActivityCandidate => ({
-      kind: "channel",
-      memberId: "",
-      conversationId: row.conversationId,
-      rootMessageId: null,
-      channelName: row.message.conversation.channelName,
-      directKey: null,
-      agentId: null,
-      latestMessageId: row.messageId,
-      latestSequence: row.message.sequence,
-      latestAt: row.notifiedAt!,
-      unreadCount: row.targetReadAt ? 0 : 1,
-      firstUnreadMessageId: row.targetReadAt ? null : row.messageId,
-      unreadMention: !row.targetReadAt,
-      firstMentionMessageId: row.messageId,
-      mentionAction: { resolutionId: row.id, threadRootId: row.message.threadRootId },
-      pastDone: true,
-      pin: null,
-    }));
+    return mentionCandidates(this.db, workspaceId, userId);
   }
-
   /** Loads the messages, DM peers (Agents and members), channel avatar members and tasks one page
    * of items renders, in a fixed number of queries. */
   private async hydrate(workspaceId: string, userId: string, page: readonly ActivityCandidate[]) {
@@ -405,6 +370,7 @@ export class ActivityInbox {
           unreadMention: candidate.unreadMention,
           firstMentionMessageId: candidate.firstMentionMessageId,
           mentionAction: candidate.mentionAction ?? null,
+          attachmentComment: candidate.attachmentComment ?? null,
           /** The viewer pinned this conversation, in whichever view lists it. */
           pinned: candidate.pin !== null,
         },

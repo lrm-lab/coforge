@@ -10,6 +10,7 @@ import { getLogger } from "@logtape/logtape";
 import {
   AGENT_MESSAGE_ACK_METHOD,
   HELD_CONTEXT_LIMIT,
+  isAttachmentMessageTarget,
   isChannelMessageTarget,
   isValidMessageSender,
   mergeSeenExactSeqs,
@@ -18,7 +19,7 @@ import {
 import type { AgentHistoryConsumptionScope } from "@lrm/coforge-sdk/agent";
 import type { AgentProcessManager } from "#src/agent-runtime/agent-process-manager";
 import { agentStartupCatchupInput } from "#src/agent-runtime/agent-startup";
-import { attentionFlags, latestCreatedAtField } from "./message-attention-fields";
+import { attentionFlags, hasDeliveryScope, latestCreatedAtField } from "./message-attention-fields";
 import { isTrackedMention } from "./mention-delivery-tracker";
 import { inboxNoticeText } from "./inbox-notice-text";
 import { MemoryChannelUpdates, type MemoryChannelUpdateSchedule } from "./memory-channel-updates";
@@ -104,22 +105,6 @@ function printableSender(
  * after the dedupe window is a second delivery of one message. A notice counts messages. */
 function countDistinctMessages(deliveries: readonly AgentMessageDelivery[]): number {
   return new Set(deliveries.map((delivery) => delivery.messageId)).size;
-}
-
-/** The fields every delivery must carry before it can touch attention or be acknowledged. */
-function hasDeliveryScope(
-  message: AgentMessageDelivery,
-): message is AgentMessageDelivery & { target: string } {
-  return Boolean(
-    message.conversationId &&
-    message.agentId &&
-    message.messageId &&
-    message.body &&
-    message.target &&
-    (message.target.startsWith("@") || isChannelMessageTarget(message.target)) &&
-    message.target.length >= 2 &&
-    message.sequence >= 1,
-  );
 }
 
 /** Daemon-owned volatile attention and model-visible sequence index. */
@@ -482,7 +467,9 @@ export class AgentMessageAttentionIndex {
         !message.deliveryId ||
         !message.conversationId ||
         !message.body ||
-        (!message.target.startsWith("@") && !isChannelMessageTarget(message.target)) ||
+        (!message.target.startsWith("@") &&
+          !isChannelMessageTarget(message.target) &&
+          !isAttachmentMessageTarget(message.target)) ||
         message.sequence < 1 ||
         !isValidMessageSender(message.latestSenderKind, message.latestSenderHandle)
       )
@@ -513,7 +500,9 @@ export class AgentMessageAttentionIndex {
     const summaryOnly = Object.entries(unreadSummary).filter(
       ([target, count]) =>
         !suppliedTargets.has(target) &&
-        (target.startsWith("@") || isChannelMessageTarget(target)) &&
+        (target.startsWith("@") ||
+          isChannelMessageTarget(target) ||
+          isAttachmentMessageTarget(target)) &&
         count > 0,
     );
     if (!recoveredTargets.size && !summaryOnly.length) return;

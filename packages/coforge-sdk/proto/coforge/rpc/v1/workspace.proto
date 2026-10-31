@@ -317,6 +317,10 @@ message AgentMessageDelivery {
   // Whether task conversations are on in the Workspace as of this delivery. Unset from a server
   // that predates it: the daemon then keeps what its session was launched with.
   optional bool task_conversations = 21;
+  // Why the delivery reached the Agent, on a target it was not automatically subscribed to:
+  // "mentioned" (the message @-named it) or "subscribed" (it uploaded the attachment or commented
+  // before). Unset on ordinary channel, DM and non-member-mention deliveries.
+  optional string reason = 22;
 }
 
 // The recipient Agent's launch and native session a tracked @mention delivery was issued for.

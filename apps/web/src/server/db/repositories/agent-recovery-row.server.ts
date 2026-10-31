@@ -27,6 +27,8 @@ export type AgentRecoveryRow = {
   globalRank: number;
   /** The Agent is not in the channel: it was notified of this one message by the sender. */
   nonMemberMention: boolean;
+  /** A comment notification's attachment: its conversation's only thread row. */
+  attachmentId: string | null;
 };
 
 /**

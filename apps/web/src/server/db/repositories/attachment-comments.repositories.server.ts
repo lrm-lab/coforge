@@ -1,12 +1,11 @@
 import { hasErrorCode } from "@lrm/coforge-sdk/internal";
-import { canReadChannel } from "#src/server/conversations/channel-read-access.server";
-import { viewerDirectConversationWhere } from "#src/server/conversations/viewer-direct-conversations.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import type {
   AttachmentCommentAccess,
   AttachmentCommentActor,
   AttachmentCommentPageInput,
   AttachmentCommentPostInput,
+  AttachmentCommentPosted,
   AttachmentCommentReactInput,
   AttachmentCommentStore,
   AttachmentCommentView,
@@ -18,10 +17,16 @@ import {
   mapBrowserMessage,
 } from "#src/server/conversations/conversation-history.server";
 import { lockConversation } from "#src/server/conversations/conversation-lock.server";
+import {
+  channelMentionTargets,
+  storeMessageBody,
+} from "#src/server/conversations/message-references.server";
+import { PENDING_MENTION_ACTION_TTL_MS } from "#src/server/conversations/pending-mention-action-recording.server";
 import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
 import { writeReaction, type ReactionPort } from "#src/server/conversations/reaction-write.server";
 import { clampPageLimit } from "#src/server/db/page-limit.server";
 import type { DatabaseScope } from "#src/server/db/transaction.server";
+import { commentRecipients, readAccess } from "./attachment-comment-recipients.repositories.server";
 
 /**
  * Comment reactions are announced to no one: no page follows a discussion's realtime channel (the
@@ -72,10 +77,10 @@ export class PrismaAttachmentCommentStore implements AttachmentCommentStore {
     actor: AttachmentCommentActor,
     input: AttachmentCommentPostInput,
     authorize: (access: AttachmentCommentAccess | null) => void,
-  ) {
+  ): Promise<AttachmentCommentPosted> {
     const attachment = await this.db.attachment.findUnique({
       where: { id: input.attachmentId, workspaceId: actor.workspaceId },
-      select: { conversationId: true },
+      select: { conversationId: true, uploaderId: true, uploaderAgentId: true },
     });
     if (!attachment) throw new AppError("NOT_FOUND");
     return this.db.$transaction(async (tx) => {
@@ -106,17 +111,103 @@ export class PrismaAttachmentCommentStore implements AttachmentCommentStore {
       await lockConversation(tx, conversationId);
       const threadRootId = input.rootId ? await rootOf(tx, input.attachmentId, input.rootId) : null;
       const member = await joinDiscussion(tx, actor, conversationId);
+      // `@handle`s and `--mention` bindings resolve among the SOURCE conversation's active
+      // members: a comment can name whoever could read the file's own place. `storeMessageBody`
+      // also resolves `task #N`/`#channel`/`#channel:anchor` references; the comment
+      // conversation holds no tasks, so those stay as written, and channel and thread
+      // references resolve only where the commenter may read.
+      const stored = await storeMessageBody(
+        tx,
+        {
+          workspaceId: actor.workspaceId,
+          conversationId,
+          reader:
+            actor.userId !== undefined ? { userId: actor.userId } : { agentId: actor.agentId },
+        },
+        input.body,
+        {
+          targets: (handles) =>
+            channelMentionTargets(
+              tx,
+              { workspaceId: actor.workspaceId, conversationId: attachment.conversationId },
+              handles,
+            ),
+          bindings: input.mentions,
+        },
+      );
+      // A mention's row needs its target seated in the COMMENT conversation. Mentions resolved
+      // against the source's roster, so seat each now; the seat is never authority.
+      const mentionMemberIdByKey = new Map<string, string>();
+      for (const mention of stored.mentions) {
+        const seated = await joinDiscussion(
+          tx,
+          mention.type === "user"
+            ? { workspaceId: actor.workspaceId, userId: mention.id }
+            : { workspaceId: actor.workspaceId, agentId: mention.id },
+          conversationId,
+        );
+        mentionMemberIdByKey.set(mention.key, seated.id);
+      }
+      const recipients = await commentRecipients(tx, {
+        workspaceId: actor.workspaceId,
+        attachmentId: input.attachmentId,
+        sourceConversationId: attachment.conversationId,
+        commentConversationId: conversationId,
+        author: actor,
+        uploaderId: attachment.uploaderId,
+        uploaderAgentId: attachment.uploaderAgentId,
+        mentions: stored.mentions,
+      });
       const sequence = await allocateSequence(tx, conversationId);
       const message = await tx.message.create({
         data: {
           workspaceId: actor.workspaceId,
           conversationId,
           senderMemberId: member.id,
-          body: input.body,
+          body: stored.body,
           threadRootId,
           sequence,
+          mentions: stored.mentions.length
+            ? {
+                create: stored.mentions.map((mention) => ({
+                  memberId: mentionMemberIdByKey.get(mention.key)!,
+                  workspaceId: actor.workspaceId,
+                  kind: mention.type,
+                  actorId: mention.id,
+                  handle: mention.handle,
+                })),
+              }
+            : undefined,
+          deliveries: recipients.agents.size
+            ? {
+                create: [...recipients.agents].map(([agentId, reason]) => ({
+                  workspaceId: actor.workspaceId,
+                  conversationId,
+                  agentId,
+                  sequence,
+                  reason,
+                })),
+              }
+            : undefined,
         },
+        include: { deliveries: { select: { deliveryId: true, agentId: true } } },
       });
+      if (recipients.users.size)
+        await tx.pendingMentionAction.createMany({
+          data: [...recipients.users].map(([userId, recipient]) => ({
+            messageId: message.id,
+            conversationId,
+            workspaceId: actor.workspaceId,
+            senderMemberId: member.id,
+            targetUserId: userId,
+            targetHandle: recipient.handle,
+            expiresAt: new Date(message.createdAt.getTime() + PENDING_MENTION_ACTION_TTL_MS),
+            // Surfaced as an Activity item at once; the resolved-action CHECK keeps resolvedAt
+            // null, and `reason` is what keeps the row out of the sender's actionable lists.
+            notifiedAt: message.createdAt,
+            reason: recipient.reason,
+          })),
+        });
       const comment = await tx.attachmentComment.create({
         data: {
           attachmentId: input.attachmentId,
@@ -128,7 +219,15 @@ export class PrismaAttachmentCommentStore implements AttachmentCommentStore {
         },
         include: { message: { select: browserMessageFields } },
       });
-      return commentView(comment, 0);
+      return {
+        comment: commentView(comment, 0),
+        notified: {
+          workspaceId: actor.workspaceId,
+          attachmentId: input.attachmentId,
+          userIds: [...recipients.users.keys()],
+          deliveries: message.deliveries,
+        },
+      };
     });
   }
 
@@ -191,104 +290,6 @@ function joinDiscussion(db: DatabaseScope, actor: AttachmentCommentActor, conver
         create: { workspaceId: actor.workspaceId, conversationId, agentId: actor.agentId },
         update: { leftAt: null },
       });
-}
-
-async function readAccess(
-  db: DatabaseScope,
-  actor: AttachmentCommentActor,
-  attachmentId: string,
-): Promise<AttachmentCommentAccess | null> {
-  const memberWhere: Prisma.ConversationMemberWhereInput = actor.userId
-    ? { userId: actor.userId }
-    : { agentId: actor.agentId };
-  const attachment = await db.attachment.findUnique({
-    where: { id: attachmentId },
-    select: {
-      id: true,
-      workspaceId: true,
-      fileName: true,
-      contentType: true,
-      sizeBytes: true,
-      conversationId: true,
-      messageId: true,
-      commentThread: { select: { conversationId: true } },
-      conversation: {
-        select: {
-          channelName: true,
-          visibility: true,
-          kind: true,
-          hiddenFromWorkspaceAt: true,
-          archivedAt: true,
-          members: {
-            where: { OR: [memberWhere, { agent: { deletedAt: { not: null } } }] },
-            select: {
-              userId: true,
-              agentId: true,
-              leftAt: true,
-              agent: { select: { deletedAt: true } },
-            },
-          },
-        },
-      },
-    },
-  });
-  if (!attachment || attachment.workspaceId !== actor.workspaceId) return null;
-  const source = attachment.conversation;
-  const member = source.members.find((row) =>
-    actor.userId ? row.userId === actor.userId : row.agentId === actor.agentId,
-  );
-  let workspaceMember = false;
-  if (actor.userId)
-    workspaceMember = Boolean(
-      await db.workspaceMembership.findUnique({
-        where: { workspaceId_userId: { workspaceId: actor.workspaceId, userId: actor.userId } },
-        select: { userId: true },
-      }),
-    );
-  else
-    workspaceMember = Boolean(
-      await db.agent.findFirst({
-        where: {
-          id: actor.agentId,
-          workspaceId: actor.workspaceId,
-          deletedAt: null,
-          owner: { memberships: { some: { workspaceId: actor.workspaceId } } },
-        },
-        select: { id: true },
-      }),
-    );
-  const directVisible =
-    source.channelName !== null ||
-    !actor.userId ||
-    Boolean(
-      await db.conversation.findFirst({
-        where: { id: attachment.conversationId, ...viewerDirectConversationWhere(actor.userId) },
-        select: { id: true },
-      }),
-    );
-  const activeMember = Boolean(member && member.leftAt === null);
-  return {
-    workspaceId: actor.workspaceId,
-    attachmentId,
-    fileName: attachment.fileName,
-    contentType: attachment.contentType,
-    sizeBytes: attachment.sizeBytes,
-    sourceConversationId: attachment.conversationId,
-    conversationId: attachment.commentThread?.conversationId ?? null,
-    canRead:
-      workspaceMember &&
-      directVisible &&
-      source.hiddenFromWorkspaceAt === null &&
-      Boolean(attachment.messageId || attachment.commentThread) &&
-      (actor.userId && source.channelName !== null
-        ? canReadChannel(source, activeMember)
-        : activeMember),
-    activeMember,
-    archived: source.archivedAt !== null,
-    readOnly:
-      source.kind !== null ||
-      (source.channelName === null && source.members.some((row) => row.agent?.deletedAt)),
-  };
 }
 
 type CommentRow = Prisma.AttachmentCommentGetPayload<{

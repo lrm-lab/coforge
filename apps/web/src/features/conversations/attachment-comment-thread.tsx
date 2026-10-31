@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { clockLabel } from "#src/lib/dates";
@@ -44,7 +44,7 @@ export function useCommentPages(attachmentId: string) {
 export function useCommentDraft(
   attachmentId: string,
   canComment: boolean,
-  send: (body: string) => Promise<unknown>,
+  send: (body: string, idempotencyKey: string) => Promise<unknown>,
   refresh: () => Promise<unknown>,
   focus: () => void,
 ) {
@@ -58,13 +58,17 @@ export function useCommentDraft(
   };
   const [sending, setSending] = useState(false);
   const [sendFailed, setSendFailed] = useState(false);
+  // One key per send attempt chain: a retry of the same submit reuses it (the server dedupes on
+  // it), and a successful send mints the next draft's.
+  const idempotencyKey = useRef(crypto.randomUUID());
   async function submit() {
     if (!body.trim() || sending || !canComment) return;
     setSending(true);
     setSendFailed(false);
     try {
-      await send(body);
+      await send(body, idempotencyKey.current);
       setBody("");
+      idempotencyKey.current = crypto.randomUUID();
     } catch {
       setSendFailed(true);
     } finally {

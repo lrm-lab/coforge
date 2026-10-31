@@ -1,4 +1,4 @@
-import { isValidReactionEmoji } from "@lrm/coforge-sdk/internal";
+import { isValidReactionEmoji, type MentionSelectorInput } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
 import {
   anchorTypeForPreview,
@@ -46,6 +46,29 @@ export type AttachmentCommentPostInput = {
   anchor?: AttachmentCommentAnchor;
   /** The comment this replies to; a reply to a reply joins the same root comment's thread. */
   rootId?: string;
+  /** Members the sender named by id, beside the `@handle`s in `body`; resolved among the
+   * source conversation's active members. */
+  mentions?: readonly MentionSelectorInput[];
+};
+
+/** Who a committed comment notified: people to wake on Activity, and the Agent delivery rows
+ * still to push (each `{deliveryId, agentId}`; the push re-reads them, so a replayed send
+ * publishes the same envelopes the first did). */
+export type AttachmentCommentPosted = {
+  comment: AttachmentCommentView;
+  notified: {
+    workspaceId: string;
+    attachmentId: string;
+    userIds: readonly string[];
+    deliveries: readonly { deliveryId: string; agentId: string }[];
+  };
+};
+
+/** Post-commit realtime wake for a posted comment: `activityChanged` for the people, an
+ * AgentMessageDelivery push for the Agents. Best effort — the rows are the record; a missed
+ * push is caught up by the next inbox read or daemon recovery. */
+export type AttachmentCommentNotices = {
+  publish(posted: AttachmentCommentPosted): Promise<void>;
 };
 export type AttachmentCommentReactInput = {
   attachmentId: string;
@@ -65,7 +88,7 @@ export interface AttachmentCommentStore {
     actor: AttachmentCommentActor,
     input: AttachmentCommentPostInput,
     authorize: (access: AttachmentCommentAccess | null) => void,
-  ): Promise<AttachmentCommentView>;
+  ): Promise<AttachmentCommentPosted>;
   react(
     actor: AttachmentCommentActor,
     input: AttachmentCommentReactInput,
@@ -121,12 +144,16 @@ export class AttachmentComments {
     };
   }
 
-  async post(actor: AttachmentCommentActor, input: AttachmentCommentPostInput) {
+  async post(
+    actor: AttachmentCommentActor,
+    input: AttachmentCommentPostInput,
+    notices?: AttachmentCommentNotices,
+  ) {
     const body = input.body.trim();
     if (!body || body.length > 8_000) throw new AppError("INVALID_INPUT");
     // A reply follows its root comment's place rather than having one of its own.
     if (input.rootId && input.anchor) throw new AppError("INVALID_INPUT");
-    return this.store.post(actor, { ...input, body }, (access) => {
+    const posted = await this.store.post(actor, { ...input, body }, (access) => {
       writable(access);
       // A file no one can look at takes no new comments (those it already has stay); one that can
       // takes only the position kind its preview offers. The file's content is never read here.
@@ -135,6 +162,11 @@ export class AttachmentComments {
       if (input.anchor && input.anchor.type !== anchorTypeForPreview(previewKindFor(access)))
         throw new AppError("INVALID_INPUT");
     });
+    // Realtime is best effort only: the notification rows committed with the comment, and a
+    // missed wake is caught up by the next inbox read or daemon recovery.
+    if (notices && (posted.notified.userIds.length || posted.notified.deliveries.length))
+      await notices.publish(posted).catch(() => {});
+    return posted.comment;
   }
 
   /** A reaction on one comment or reply, any emoji; ✅ is what makes a comment resolved. */

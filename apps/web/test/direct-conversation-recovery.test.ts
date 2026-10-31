@@ -83,7 +83,8 @@ describe("PrismaDirectConversationRepository recovery", () => {
     // One statement, bound only to the Workspace, the Agent, and the resume budget: the channel
     // top level and the channel thread replies (each its membership, then deliveries not already
     // read as a non-member), the two direct-message branches, the notified-non-member branch (and
-    // its not-a-member check), the membership join, the delivery join, the budget.
+    // its not-a-member check), the membership join, the delivery join, the comment-delivery
+    // branch, the budget.
     expect(queries[0]).toEqual([
       ...Array.from({ length: 2 }, () => [
         "workspace-1",
@@ -96,6 +97,9 @@ describe("PrismaDirectConversationRepository recovery", () => {
       "public",
       "workspace-1",
       "agent-1",
+      "agent-1",
+      // The attachment-comment delivery branch.
+      "workspace-1",
       "agent-1",
       "workspace-1",
       "agent-1",
