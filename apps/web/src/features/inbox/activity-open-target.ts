@@ -11,10 +11,10 @@ import type { ActivityInboxItem } from "#src/server/inbox/activity-inbox.server"
  * click) the same place opens the thread beside its root.
  *
  * A mention the viewer was notified of opens at that message, in its thread when it is a reply.
- * Any other item that mentions the viewer opens at its first mention, read or not; otherwise a
- * thread opens scrolled to its first unread reply, and a conversation opens at its first unread
- * message, or its newest one when everything is read. A Task's conversation opens as its popup
- * over the board it is on.
+ * Any other item opens at its first unread message (a thread at its first unread reply), where the
+ * pane draws its "New messages" divider (task #358). With nothing unread, an item that mentions the
+ * viewer opens at its first mention, read or not (#1129), and any other at its newest message. A
+ * Task's conversation opens as its popup over the board it is on.
  */
 export function activityOpenTarget({
   place,
@@ -30,7 +30,9 @@ export function activityOpenTarget({
   // the mention itself.
   const kind = mentionAction || place.kind === "channel" ? "channel" : "dm";
   const rootId = mentionAction ? mentionAction.threadRootId : thread?.root.id;
-  const anchor = mentionAction ? latest.id : (firstMentionMessageId ?? firstUnreadMessageId);
+  // A read mention before newer unread messages must not pull the pane back to it, away from
+  // what is new.
+  const anchor = mentionAction ? latest.id : (firstUnreadMessageId ?? firstMentionMessageId);
   return rootId
     ? {
         kind,

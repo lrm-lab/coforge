@@ -64,7 +64,7 @@ type ActivityCandidate = {
   unreadMention: boolean;
   /**
    * The first message past Done that mentions the viewer, read or not: the item is listed under
-   * Mentions and opens there. Null when nothing past Done mentions them.
+   * Mentions, and opens there when it has nothing unread. Null when nothing past Done mentions them.
    */
   firstMentionMessageId: string | null;
   /** A mention the viewer was notified of from outside the channel, until they mark it Done. */

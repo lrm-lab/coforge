@@ -33,6 +33,18 @@ function dividerBetween(before: string, after: string) {
   })()`;
 }
 
+/** Message `id`'s row lies wholly inside the visible part of the conversation's history. */
+function inView(id: string) {
+  return `(() => {
+    const history = document.querySelector('[data-scroll-restoration-id^="conversation-"]');
+    const row = document.getElementById("message-" + ${JSON.stringify(id)});
+    if (!history || !row) return false;
+    const box = history.getBoundingClientRect();
+    const rect = row.getBoundingClientRect();
+    return rect.top >= box.top && rect.bottom <= box.bottom;
+  })()`;
+}
+
 /** The Activity row whose text includes `text`, or null. */
 function row(text: string) {
   return `([...document.querySelectorAll(${rowItems})].find((item) => item.textContent.includes(${JSON.stringify(text)}))?.textContent ?? null)`;
@@ -183,6 +195,55 @@ test("a channel and a thread opened from Activity land on the first message unre
     await browser("wait", "--fn", `${row("E2E open-unread newest")} !== null && ${pageHydrated}`);
     expect(await evaluate<string>(row("E2E open-unread newest"))).not.toMatch(/\d+ new/);
     expect(await evaluate<string>(row("E2E open-unread thread root"))).not.toMatch(/\d+ new/);
+  } finally {
+    await browser("close").catch(() => undefined);
+    await db.$disconnect();
+  }
+}, 90_000);
+
+test("a channel with a mention already read opens on its new unread message, not the mention", async () => {
+  const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
+  const { browser, evaluate } = browserSession(browserPath, `activity-open-mention-${process.pid}`);
+  try {
+    const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
+      where: { userId: DEV_BROWSER_USER.id },
+      include: { workspace: { select: { slug: true } } },
+    });
+    const viewer = await db.user.findUniqueOrThrow({ where: { id: DEV_BROWSER_USER.id } });
+    // A screenful and more of read messages, the second of them mentioning the viewer, then one
+    // unread message (QA's #video-gen, task #358).
+    const read = Array.from({ length: 40 }, (_, index) => ({
+      from: "peer" as const,
+      body: `E2E open-mention read ${index + 1}`,
+    }));
+    const channel = await seedChannel(db, workspaceId, "e2e-open-unread-mention", read.length, [
+      ...read,
+      { from: "peer", body: "E2E open-mention unread" },
+    ]);
+    const mention = channel.ids[1]!;
+    const unread = channel.ids.at(-1)!;
+    await db.messageMention.create({
+      data: {
+        messageId: mention,
+        memberId: channel.viewer.id,
+        conversationId: channel.channelId,
+        workspaceId,
+        kind: "user",
+        actorId: viewer.id,
+        handle: viewer.username,
+      },
+    });
+    await mkdir(artifacts, { recursive: true });
+    await browser("set", "viewport", "1440", "900");
+    await browser("open", `${origin}/en/w/${workspace.slug}/activity`);
+    await browser("wait", "--fn", `${row("E2E open-mention unread")} !== null && ${pageHydrated}`);
+
+    await browser("find", "text", "E2E open-mention unread", "click");
+    await browser("wait", "--fn", inPane(unread));
+    await browser("wait", "--fn", dividerBetween(channel.ids.at(-2)!, unread));
+    await browser("wait", "--fn", inView(unread));
+    await browser("screenshot", join(artifacts, "mention-read.png"));
+    expect(await evaluate<boolean>(inView(mention))).toBe(false);
   } finally {
     await browser("close").catch(() => undefined);
     await db.$disconnect();
