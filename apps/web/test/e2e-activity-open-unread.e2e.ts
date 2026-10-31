@@ -4,10 +4,10 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { browserSession, localBrowserE2e, pageHydrated, seededUuid } from "./helpers/browser-e2e";
-import { inPane, rowItems, waitFor } from "./helpers/activity-inbox-e2e";
+import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import { inPane, waitFor } from "./helpers/activity-inbox-e2e";
+import { dividerBetween, inView, postLive, row, seedChannel } from "./helpers/open-unread-e2e";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
-import { announceMessage } from "#src/server/conversations/conversation-activity.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 
 /**
@@ -23,104 +23,6 @@ import { CentrifugoConversationRealtime } from "#src/server/conversations/conver
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/activity-open-unread");
-const key = "e2e-activity-open-unread:";
-
-/** The divider sits after message `before` and before message `after` in the pane. */
-function dividerBetween(before: string, after: string) {
-  return `(() => {
-    const divider = document.querySelector('[role="separator"][aria-label="New messages"]');
-    const rows = [${JSON.stringify(before)}, ${JSON.stringify(after)}].map((id) => document.getElementById("message-" + id));
-    if (!divider || !rows[0] || !rows[1]) return false;
-    return Boolean(rows[0].compareDocumentPosition(divider) & Node.DOCUMENT_POSITION_FOLLOWING) &&
-      Boolean(divider.compareDocumentPosition(rows[1]) & Node.DOCUMENT_POSITION_FOLLOWING);
-  })()`;
-}
-
-/** Message `id`'s row lies wholly inside the visible part of the conversation's history. */
-function inView(id: string) {
-  return `(() => {
-    const history = document.querySelector('[data-scroll-restoration-id^="conversation-"]');
-    const row = document.getElementById("message-" + ${JSON.stringify(id)});
-    if (!history || !row) return false;
-    const box = history.getBoundingClientRect();
-    const rect = row.getBoundingClientRect();
-    return rect.top >= box.top && rect.bottom <= box.bottom;
-  })()`;
-}
-
-/** The Activity row whose text includes `text`, or null. */
-function row(text: string) {
-  return `([...document.querySelectorAll(${rowItems})].find((item) => item.textContent.includes(${JSON.stringify(text)}))?.textContent ?? null)`;
-}
-
-/**
- * A channel of the viewer and the peer, emptied and filled with `messages` (sequence 1 on), the
- * viewer having read through `readThrough`. A message names its sender, `viewer` or `peer`, and its
- * thread root's index when it is a reply.
- */
-async function seedChannel(
-  db: PrismaClient,
-  workspaceId: string,
-  name: string,
-  readThrough: number,
-  messages: { from: "viewer" | "peer"; body: string; rootIndex?: number }[],
-) {
-  const peer = await db.user.upsert({
-    where: { id: seededUuid(`${key}peer`) },
-    update: {},
-    create: {
-      id: seededUuid(`${key}peer`),
-      username: "e2e-open-unread-peer",
-      displayName: "Open Unread Peer",
-    },
-  });
-  await db.workspaceMembership.upsert({
-    where: { workspaceId_userId: { workspaceId, userId: peer.id } },
-    update: {},
-    create: { workspaceId, userId: peer.id },
-  });
-  const channelId = seededUuid(`${key}${name}`);
-  await db.conversation.upsert({
-    where: { id: channelId },
-    update: { archivedAt: null },
-    create: { id: channelId, workspaceId, channelName: name },
-  });
-  await db.message.deleteMany({ where: { conversationId: channelId } });
-  const [viewer, other] = await Promise.all(
-    [DEV_BROWSER_USER.id, peer.id].map((userId) =>
-      db.conversationMember.upsert({
-        where: { conversationId_userId: { conversationId: channelId, userId } },
-        update: {
-          leftAt: null,
-          hiddenAt: null,
-          readThroughSequence: readThrough,
-          doneThroughSequence: null,
-          unreadFromSequence: null,
-        },
-        create: {
-          conversationId: channelId,
-          workspaceId,
-          userId,
-          readThroughSequence: readThrough,
-        },
-      }),
-    ),
-  );
-  const ids = messages.map((_, index) => seededUuid(`${key}${name}:${index}`));
-  for (const [index, message] of messages.entries())
-    await db.message.create({
-      data: {
-        id: ids[index]!,
-        conversationId: channelId,
-        workspaceId,
-        sequence: index + 1,
-        body: message.body,
-        senderMemberId: (message.from === "viewer" ? viewer : other)!.id,
-        threadRootId: message.rootIndex === undefined ? null : ids[message.rootIndex]!,
-      },
-    });
-  return { channelId, viewer: viewer!, ids };
-}
 
 test("a channel and a thread opened from Activity land on the first message unread for the viewer", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
@@ -305,26 +207,11 @@ test("a channel opened again from Activity, with a message that came live since,
     );
     await browser("find", "text", "E2E open-again elsewhere", "click");
     await browser("wait", "--fn", inPane(other.ids[0]!));
-    const later = seededUuid(`${key}e2e-open-unread-again:later`);
-    await db.message.create({
-      data: {
-        id: later,
-        conversationId: channel.channelId,
-        workspaceId,
-        sequence: read.length + 2,
-        body: "E2E open-again later unread",
-        senderMemberId: (
-          await db.conversationMember.findFirstOrThrow({
-            where: { conversationId: channel.channelId, userId: { not: DEV_BROWSER_USER.id } },
-          })
-        ).id,
-      },
-    });
-    await announceMessage(db, realtime, {
-      conversationId: channel.channelId,
-      messageId: later,
-      sequence: read.length + 2,
+    const later = await postLive(db, realtime, {
+      channelId: channel.channelId,
       workspaceId,
+      sequence: read.length + 2,
+      body: "E2E open-again later unread",
     });
     // QA's Unread view, read afresh: the card names the new message whether or not the list
     // heard it live.
