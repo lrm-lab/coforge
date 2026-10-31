@@ -8,6 +8,7 @@ import {
 } from "#src/server/app-notifications/channel-events.server";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
 import { channelActorMemberWhere, type ChannelActor } from "./channel-actor.server";
+import { channelPeopleChanged } from "./channel-people-invalidation.server";
 
 /**
  * The writes that change an existing channel or its roster, each recording its app notification
@@ -28,16 +29,19 @@ export async function softLeaveMember(
   actor: ChannelActor,
 ): Promise<boolean> {
   const where = { conversationId, ...channelActorMemberWhere(actor), ...ACTIVE_MEMBER_WHERE };
-  if (!appNotificationsPossible()) {
-    const result = await db.conversationMember.updateMany({ where, data: { leftAt: new Date() } });
-    return result.count > 0;
-  }
-  return db.$transaction(async (tx) => {
-    const result = await tx.conversationMember.updateMany({ where, data: { leftAt: new Date() } });
-    if (result.count > 0)
-      await recordChannelMembersRemoved(tx, workspaceId, [conversationId], actor);
-    return result.count > 0;
-  });
+  const left = appNotificationsPossible()
+    ? await db.$transaction(async (tx) => {
+        const result = await tx.conversationMember.updateMany({
+          where,
+          data: { leftAt: new Date() },
+        });
+        if (result.count > 0)
+          await recordChannelMembersRemoved(tx, workspaceId, [conversationId], actor);
+        return result.count > 0;
+      })
+    : (await db.conversationMember.updateMany({ where, data: { leftAt: new Date() } })).count > 0;
+  if (left && "userId" in actor) channelPeopleChanged([conversationId]);
+  return left;
 }
 
 const infoSelect = { id: true, channelName: true, description: true, archivedAt: true } as const;
@@ -118,17 +122,21 @@ export async function upsertChannelMembers(
         }),
       ),
     ]);
-  if (!appNotificationsPossible()) {
-    await write(db);
-    return;
+  const joiningUserIds = input.userIds.filter((userId) => !alreadyUsers.has(userId));
+  try {
+    if (!appNotificationsPossible()) await write(db);
+    else
+      await db.$transaction(async (tx) => {
+        await write(tx);
+        await recordChannelMembersAdded(tx, workspaceId, channelId, [
+          ...joiningUserIds.map((userId) => ({ userId })),
+          ...input.agentIds
+            .filter((agentId) => !alreadyAgents.has(agentId))
+            .map((agentId) => ({ agentId })),
+        ]);
+      });
+  } finally {
+    // Without a transaction, some upserts may land before another fails.
+    if (joiningUserIds.length) channelPeopleChanged([channelId]);
   }
-  await db.$transaction(async (tx) => {
-    await write(tx);
-    await recordChannelMembersAdded(tx, workspaceId, channelId, [
-      ...input.userIds.filter((userId) => !alreadyUsers.has(userId)).map((userId) => ({ userId })),
-      ...input.agentIds
-        .filter((agentId) => !alreadyAgents.has(agentId))
-        .map((agentId) => ({ agentId })),
-    ]);
-  });
 }

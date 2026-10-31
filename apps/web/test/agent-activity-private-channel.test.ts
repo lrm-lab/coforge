@@ -11,7 +11,7 @@ import { PUBLICATION_REROUTED_CODE } from "#src/server/agents/agent-activity-rel
 /**
  * Task #302: an Agent's Activity in a private channel goes live only to the channel's people, each
  * on their own channel, and the status everyone who sees the Agent shows keeps its kind but not
- * its words. What decides the people is `privateActivityAudience` (private-channel-surfaces).
+ * its words. What decides the people is `cachedActivityAudience` (agent-activity-audience-cache).
  */
 const activity = {
   protocolMajor: 1,

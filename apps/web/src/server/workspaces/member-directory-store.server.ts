@@ -1,4 +1,5 @@
 import { withTaskDiscussions } from "#src/server/conversations/task-discussion-revoke.server";
+import { channelPeopleChanged } from "#src/server/conversations/channel-people-invalidation.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import {
@@ -95,7 +96,7 @@ export class PrismaWorkspaceMemberDirectoryStore implements WorkspaceMemberDirec
   }
 
   async removeMember(workspaceId: string, userId: string) {
-    return this.db.$transaction(async (tx) => {
+    const removed = await this.db.$transaction(async (tx) => {
       await tx.workspaceMembership.delete({
         where: { workspaceId_userId: { workspaceId, userId } },
       });
@@ -118,6 +119,8 @@ export class PrismaWorkspaceMemberDirectoryStore implements WorkspaceMemberDirec
         computerIds,
       };
     });
+    channelPeopleChanged(removed.leftChannelIds);
+    return removed;
   }
 }
 

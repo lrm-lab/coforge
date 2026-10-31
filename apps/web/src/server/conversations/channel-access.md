@@ -26,7 +26,7 @@ Moved out of [`AGENTS.md`](AGENTS.md) to keep it under 200 lines.
   private channel's `channel.created.v1`, `channel.updated.v1` and Task changes
   go to its active people's own channels (`channelAudience`,
   `conversationSignalScopes`), never the Workspace channel, as an Agent's live
-  Activity there does (`privateActivityAudience`), and leaving it ends
+  Activity there does (`cachedActivityAudience`), and leaving it ends
   the leaver's subscriptions to it (`announceConversationsRevoked` (`channel-membership-signals.server.ts`)).
 - A person who cannot read a channel gets the `NOT_FOUND` a missing one gets, and
   reading comes before authority: `viewerChannel`, `memberChannel` and
@@ -47,3 +47,6 @@ Moved out of [`AGENTS.md`](AGENTS.md) to keep it under 200 lines.
   people already read do. A
   task's own conversation is never read as a notification by id: its board decides
   who reads it, not the seats it keeps.
+- A write that changes who is in a channel or whether it is private calls
+  `channelPeopleChanged` once it commits: the live Activity audience remembers both
+  per process and forgets them only on that signal (or its 30 s backstop).

@@ -24,6 +24,7 @@ import {
 } from "./channel-authority.server";
 import { softLeaveMember, upsertChannelMembers } from "./channel-changes.server";
 import { announceJoinedOrLeft } from "./channel-membership-signals.server";
+import { channelPeopleChanged } from "./channel-people-invalidation.server";
 
 import {
   announceNotifiedPeople,
@@ -67,13 +68,14 @@ export async function joinChannel(
     if (active === 0) await recordChannelMembersAdded(tx, workspaceId, channelId, [{ userId }]);
     return active > 0;
   });
-  if (!alreadyIn)
-    await announceJoinedOrLeft(realtime, {
-      workspaceId,
-      conversationId: channelId,
-      change: "joined",
-      userIds: [userId],
-    });
+  if (alreadyIn) return;
+  channelPeopleChanged([channelId]);
+  await announceJoinedOrLeft(realtime, {
+    workspaceId,
+    conversationId: channelId,
+    change: "joined",
+    userIds: [userId],
+  });
 }
 
 /**

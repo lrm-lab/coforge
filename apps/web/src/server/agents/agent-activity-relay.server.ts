@@ -25,7 +25,7 @@ export type ActivityRelayDependencies = {
    * channel's history. */
   publish?(channel: string, data: Uint8Array, options?: { skipHistory?: boolean }): Promise<void>;
   /** Who alone sees an Agent's Activity in a conversation live: a private channel's people
-   * (`privateActivityAudience`), `undefined` for any other conversation. */
+   * (`cachedActivityAudience`), `undefined` for any other conversation. */
   privateAudience?(scope: {
     workspaceId: string;
     agentId: string;

@@ -1,7 +1,15 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { actionCardViews } from "#src/server/conversations/action-card-views.server";
 import { MessageForwards } from "#src/server/conversations/message-forwards.server";
-import { privateActivityAudience } from "#src/server/agents/agent-activity-audience.server";
+import {
+  cachedActivityAudience,
+  prismaActivityAudienceReads,
+} from "#src/server/agents/agent-activity-audience.server";
+import {
+  softLeaveMember,
+  upsertChannelMembers,
+} from "#src/server/conversations/channel-changes.server";
+import { forgetChannelPeopleWith } from "#src/server/conversations/channel-people-invalidation.server";
 import { AgentActivityRepository } from "#src/server/db/repositories/agent-activity.repositories.server";
 import { PrismaWorkspaceMemoryCatalog } from "#src/server/db/repositories/workspace-memory-catalog.repositories.server";
 import { PrismaWebPushSubscriptionStore } from "#src/server/notifications/prisma-web-push-subscriptions.server";
@@ -355,8 +363,15 @@ test.skipIf(!connectionString)(
   async () => {
     const { db, ws, people, open, closed, direct } = fixture;
     const discussion = extra.discussionMessage.conversationId;
+    const cache = cachedActivityAudience(prismaActivityAudienceReads(() => db));
+    forgetChannelPeopleWith(cache.forget);
     const audience = (agentId: string, conversationId: string) =>
-      privateActivityAudience(db, { workspaceId: ws, agentId, conversationId });
+      cache.audience({ workspaceId: ws, agentId, conversationId }, async () =>
+        db.agent.findUniqueOrThrow({
+          where: { id: agentId },
+          select: { visibility: true, ownerId: true, systemKind: true },
+        }),
+      );
     // The owner left the private channel; the insider is its one person.
     expect(await audience(extra.scout.id, closed.id)).toEqual([people.insider]);
     expect(await audience(extra.scout.id, discussion)).toEqual([people.insider]);
@@ -376,5 +391,22 @@ test.skipIf(!connectionString)(
       },
     });
     expect(await audience(hidden.id, closed.id)).toEqual([]);
+    // Joining and leaving are seen at the next frame, though the answer is remembered: the writes
+    // drop it (`channelPeopleChanged`).
+    await upsertChannelMembers(
+      db,
+      { workspaceId: ws, channelId: closed.id, readThroughSequence: 0 },
+      {
+        userIds: [people.owner],
+        agentIds: [],
+        alreadyMemberUserIds: [],
+        alreadyMemberAgentIds: [],
+      },
+    );
+    expect([...(await audience(extra.scout.id, discussion))!].sort()).toEqual(
+      [people.insider, people.owner].sort(),
+    );
+    await softLeaveMember(db, ws, closed.id, { userId: people.owner });
+    expect(await audience(extra.scout.id, closed.id)).toEqual([people.insider]);
   },
 );

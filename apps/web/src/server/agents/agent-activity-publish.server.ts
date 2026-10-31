@@ -22,7 +22,12 @@ import {
   relayActivityFrame,
   relayActivityToPeople,
 } from "./agent-activity-relay.server";
-import { privateActivityAudience } from "./agent-activity-audience.server";
+import {
+  cachedActivityAudience,
+  prismaActivityAudienceReads,
+  type AudienceAgent,
+} from "./agent-activity-audience.server";
+import { forgetChannelPeopleWith } from "#src/server/conversations/channel-people-invalidation.server";
 import { userConversationChannel } from "#src/features/conversations/conversation-realtime";
 import {
   handleReplyIntentPublication,
@@ -185,7 +190,10 @@ type AgentActivityWords = {
 type PublicationAgentLookups = Pick<
   AgentActivityPublicationDependencies,
   "agentBelongsToWorkspace" | "agentBelongsToComputer" | "agentVisibility" | "currentRuntimeFence"
->;
+> & {
+  /** What deciding who sees the Agent reads of it (`canSeeAgent`), from the same row. */
+  audienceAgent(workspaceId: string, agentId: string): Promise<AudienceAgent | undefined>;
+};
 
 /**
  * The Agent-side checks of one publication, all answered by a single narrow read of the Agent
@@ -201,6 +209,8 @@ export function publicationAgentLookups(db: PrismaClient): PublicationAgentLooku
       workspaceId: string;
       computerId: string | null;
       visibility: string;
+      ownerId: string;
+      systemKind: string | null;
       runtimeSession: unknown;
     } | null>
   >();
@@ -209,7 +219,14 @@ export function publicationAgentLookups(db: PrismaClient): PublicationAgentLooku
     if (!agent) {
       agent = db.agent.findUnique({
         where: { id: agentId },
-        select: { workspaceId: true, computerId: true, visibility: true, runtimeSession: true },
+        select: {
+          workspaceId: true,
+          computerId: true,
+          visibility: true,
+          ownerId: true,
+          systemKind: true,
+          runtimeSession: true,
+        },
       });
       reads.set(agentId, agent);
     }
@@ -227,6 +244,10 @@ export function publicationAgentLookups(db: PrismaClient): PublicationAgentLooku
       const agent = await read(agentId);
       if (agent?.workspaceId !== workspaceId) return undefined;
       return normalizeAgentVisibility(agent.visibility);
+    },
+    audienceAgent: async (workspaceId, agentId) => {
+      const agent = await read(agentId);
+      return agent?.workspaceId === workspaceId ? agent : undefined;
     },
     currentRuntimeFence: async (workspaceId, computerId, agentId) => {
       const agent = await read(agentId);
@@ -294,9 +315,17 @@ const computerInWorkspace = cachedWorkspaceComputerCheck(async (workspaceId, com
   return workspaceComputerOwned(db, workspaceId, computerId);
 });
 
+/**
+ * Who sees each frame's Activity live (`cachedActivityAudience`), remembered across the process's
+ * frames: a public channel's frame costs no query.
+ */
+const activityAudience = cachedActivityAudience(prismaActivityAudienceReads(getDatabaseClient));
+
 export function createAgentActivityPublicationHandler() {
   // An ownership write drops the cached positive at once, here and on every other instance.
   getWorkspaceComputerInvalidation().forgetWith(computerInWorkspace.forget);
+  // So does a change of a channel's visibility or people.
+  forgetChannelPeopleWith(activityAudience.forget);
   return async (request: Request) => {
     const db = getDatabaseClient();
     if (!db) return unauthorized();
@@ -311,9 +340,10 @@ export function createAgentActivityPublicationHandler() {
     } catch {
       // History acceptance remains independent when the optional display path is unavailable.
     }
+    const lookups = publicationAgentLookups(db);
     return handleAgentActivityPublication(request, {
       proxySecret: process.env.COFORGE_CENTRIFUGO_PROXY_SECRET,
-      ...publicationAgentLookups(db),
+      ...lookups,
       computerBelongsToWorkspace: computerInWorkspace.check,
       observe: (observation) => activity.record(observation),
       resolveReplyTarget: replyTargets,
@@ -324,7 +354,10 @@ export function createAgentActivityPublicationHandler() {
       publishJson: centrifugo
         ? (channel, data) => centrifugo.publishJson(channel, data)
         : undefined,
-      privateAudience: (scope) => privateActivityAudience(db, scope),
+      privateAudience: (scope) =>
+        activityAudience.audience(scope, () =>
+          lookups.audienceAgent(scope.workspaceId, scope.agentId),
+        ),
       publishToPeople: centrifugo
         ? (userIds, frame) =>
             centrifugo.publishBatch(
