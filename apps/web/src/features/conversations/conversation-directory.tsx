@@ -12,17 +12,16 @@ import { ConversationRow } from "./conversation-row";
 import {
   ChannelDirectoryRow,
   DirectDirectoryRow,
-  type DirectEntry,
   type DirectoryChannel,
   type DirectoryRowMenu,
 } from "./conversation-directory-rows";
+import { directoryLayout } from "./directory-layout";
 import { DIRECTORY_INSET, DirectoryEmptyNote, DirectorySection } from "./directory-section-group";
 import { useSavedEntries } from "./conversation-host";
 import { conversationRowMenuEnabled } from "./conversation-row-menu-model";
 import { useChatSections, useSidebarActions } from "./sidebar-lists";
 import { ChatSectionDialog } from "./chat-section-dialog";
 import { ChatSectionCreateMenu, ChatSectionMenu } from "./chat-section-menu";
-import { sortSectionRows, type SortableRow } from "./chat-section-sort";
 import { directorySectionOrder, storedSectionOrder } from "./directory-section-order";
 import type { ChatSection } from "./chat-section.schemas";
 import type { DirectRow } from "./sidebar-rows";
@@ -33,12 +32,7 @@ import {
   DirectorySortableSection,
   useDirectoryDrag,
 } from "./directory-drag";
-import {
-  channelRowKey,
-  directRowKey,
-  splitPinnedConversations,
-  type DirectoryLayout,
-} from "./pinned-conversations";
+import { channelRowKey, directRowKey } from "./pinned-conversations";
 import {
   directorySectionHideable,
   readCollapsedSections,
@@ -78,75 +72,18 @@ export function ConversationDirectory({
 }) {
   const savedCount = useSavedEntries()?.length;
   const groups = useChatSections();
-  // Derived once per list change, not per render: the drag reads `base` and `natural` on every
-  // pointer move.
-  const { sortedChannels, directRows, base, natural } = useMemo(() => {
-    const sortedChannels = [...channels].sort((left, right) =>
-      left.joined === right.joined ? 0 : left.joined ? -1 : 1,
-    );
-    /** One row per existing DM (an Agent or member the viewer never wrote to has none), Agents and
-     * members mixed in the list's order. A DM with an Agent that is gone is left out; a closed one
-     * is left out of its section by the split. */
-    const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
-    const directRows = directRowList.flatMap((row): DirectEntry[] => {
-      if (row.peer.kind === "people")
-        return [{ ...row, name: row.peer.displayName, self: row.peer.userId === viewerId }];
-      const agent = agentsById.get(row.peer.agentId);
-      return agent ? [{ ...row, name: agent.displayName, agent, self: false }] : [];
-    });
-    const sections = splitPinnedConversations(sortedChannels, directRows);
-    const base: DirectoryLayout = {
-      pinned: sections.pinned.map((entry) =>
-        entry.kind === "channel" ? channelRowKey(entry.id) : directRowKey(entry.id),
-      ),
-      channels: sections.channels.map((channel) => channelRowKey(channel.id)),
-      agents: sections.directs.map((direct) => directRowKey(direct.conversationId)),
-    };
-    /** Where a row returns to when it is dragged out of Pinned: its list's own order. A closed DM
-     * that is still pinned is included so it can be seen while it is dragged. */
-    const natural = {
-      channels: sortedChannels.map((channel) => channelRowKey(channel.id)),
-      agents: directRows
-        .filter((direct) => direct.pinned || !direct.hidden)
-        .map((direct) => directRowKey(direct.conversationId)),
-    };
-    const keyById = new Map([
-      ...sortedChannels.map((channel) => [channel.id, channelRowKey(channel.id)] as const),
-      ...directRows.map(
-        (direct) => [direct.conversationId, directRowKey(direct.conversationId)] as const,
-      ),
-    ]);
-    const available = new Set([...base.channels, ...base.agents]);
-    /** What a custom section's sort reads from each row. */
-    const sortable = new Map<string, SortableRow>([
-      ...sortedChannels.map((channel) => {
-        const key = channelRowKey(channel.id);
-        const row = {
-          key,
-          name: channel.name,
-          lastMessageAt: channel.lastMessage?.createdAt ?? null,
-        };
-        return [key, row] as const;
+  const { sortedChannels, directRows, base, natural } = useMemo(
+    () =>
+      directoryLayout({
+        channels,
+        agents,
+        directRows: directRowList,
+        viewerId,
+        sections: groups.sections,
+        locale: getLocale(),
       }),
-      ...directRows.map((direct) => {
-        const key = directRowKey(direct.conversationId);
-        return [key, { key, name: direct.name, lastMessageAt: direct.lastMessageAt }] as const;
-      }),
-    ]);
-    for (const group of groups.sections) {
-      const rows = group.conversationIds.flatMap((id) => {
-        const key = keyById.get(id);
-        const row = key && available.has(key) ? sortable.get(key) : undefined;
-        return row ? [row] : [];
-      });
-      const keys = sortSectionRows(rows, group.sortMode, getLocale());
-      base[`custom:${group.id}`] = keys;
-      const grouped = new Set(keys);
-      base.channels = base.channels.filter((key) => !grouped.has(key));
-      base.agents = base.agents.filter((key) => !grouped.has(key));
-    }
-    return { sortedChannels, directRows, base, natural };
-  }, [channels, agents, directRowList, viewerId, groups.sections]);
+    [channels, agents, directRowList, viewerId, groups.sections],
+  );
   const toast = useAppToast();
   const actions = useSidebarActions();
   const [sectionRetry, setSectionRetry] = useState<{
