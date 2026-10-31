@@ -135,7 +135,7 @@ import { MemoryAgentRuntimeStateStore } from "#src/persistence/memory-agent-runt
 import { AgentWorkspaceQueries } from "./agent-workspace-queries";
 import { deleteAgentWorkspace } from "./delete-agent-workspace";
 import { AgentMessageAttentionIndex } from "./agent-message-attention-index";
-import { forgetLocalAgent } from "./agent-forget";
+import { AgentInboxCoordinator } from "./agent-inbox-coordinator";
 import { revokeAgentApiKey } from "./agent-api-key-revoke";
 import { ProviderProgress } from "./stalled-recovery";
 import { ColdIdleSweep } from "./cold-idle-sweep";
@@ -146,7 +146,7 @@ import { dropHeldMentionsWithoutSession } from "./held-mention-sweep";
 import { runtimeMachineStatus } from "./machine-status-reporter";
 import { agentActivityDrafts } from "./agent-activity-drafts";
 import { sendAgentStatus, type AgentStatusReportPorts } from "./agent-status-report";
-import { agentInbox, appInbox, workspaceEnvelope } from "./agent-inbox-factories";
+import { workspaceEnvelope } from "./agent-inbox-factories";
 import { agentIdForContext, contextFor } from "./agent-context";
 import {
   cleanupUnconfirmed,
@@ -178,9 +178,8 @@ import {
   type RunningMentionIdentity,
   type TrackedMentionDelivery,
 } from "./mention-delivery-tracker";
-import { AgentInboxStateMachine } from "./agent-inbox-state-machine";
 import { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
-import { AgentAppInbox, type MintAppItem } from "#src/agent-app-inbox/agent-app-inbox";
+import type { MintAppItem } from "#src/agent-app-inbox/agent-app-inbox";
 import { reminderDueItemId } from "#src/agent-app-inbox/registry";
 import { SystemCleaner, type SystemCleanerOptions } from "#src/system-cleaner/system-cleaner";
 import { isAgentApiKey } from "#src/credentials/agent-api-key";
@@ -401,9 +400,7 @@ export class DaemonRuntime {
   /** This Computer's Agent migration runs; absent when the transport cannot reach the route. */
   readonly #migrations: AgentMigrationRunner | undefined;
   #migrationsClosed: Promise<void> | undefined;
-  readonly #agentInboxes = new Map<string, AgentInboxStateMachine>();
-  readonly #appInboxes = new Map<string, Promise<AgentAppInbox>>();
-  readonly #notifiedAppItems = new Map<string, Map<string, Promise<boolean>>>();
+  readonly #inboxCoordinator: AgentInboxCoordinator;
   /** Per-Agent MEMORY.md and disk hints. Inert until a cloud config for an Agent is applied to
    * it (`applyConfig`/`replaceOwnerSnapshot`). */
   readonly systemCleaner: SystemCleaner;
@@ -683,6 +680,22 @@ export class DaemonRuntime {
         noticePrefix: (agentId) => this.#sync.noticePrefix(agentId),
       },
     );
+    this.#inboxCoordinator = new AgentInboxCoordinator({
+      workspaceId: connection.workspaceId,
+      stateDirectory,
+      consumedSeqs: this.#consumedSeqs,
+      messageAttention: this.#messageAttention,
+      deliveryQueue: this.#deliveryQueue,
+      runtimeRelease: this.#runtimeRelease,
+      processManager: this.#agentProcessManager,
+      startAgent: (agentId, config, sessionId) =>
+        this.#startAgent(agentId, config, undefined, { sessionId }),
+      currentActivityLaunch: (agentId) => this.#currentActivityLaunches.get(agentId),
+      reconcileIdleTurn: (agentId, launch) => this.#reconcileIdleTurn(agentId, launch),
+      mentionDeliveries: this.#mentionDeliveries,
+      assertRunning: () => this.#assertRunning(),
+      agentIdForContext: (context) => this.#agentIdForContext(context),
+    });
     this.agentRequests = new AgentRequestForwarder({
       get transport() {
         return runtime.#transport;
@@ -695,8 +708,8 @@ export class DaemonRuntime {
       attention: this.#messageAttention,
       isMemoryAgent: (agentId) => Boolean(this.memoryFence(agentId)),
       contexts: this.#contexts,
-      inbox: (agentId) => this.#agentInbox(agentId),
-      appItemsPending: async (agentId) => (await this.#appInbox(agentId)).list().length,
+      inbox: (agentId) => this.#inboxCoordinator.agentInbox(agentId),
+      appItemsPending: (agentId) => this.#inboxCoordinator.appItemsPending(agentId),
       get transport() {
         return runtime.#transport;
       },
@@ -729,13 +742,14 @@ export class DaemonRuntime {
       ...systemCleaner,
       agentsDirectory: agentsDirectory(connection.workspaceRoot, connection.workspaceId),
       inbox: {
-        upsert: async (agentId, item) => (await this.#appInbox(agentId)).upsert(item),
-        remove: (agentId, itemId) => this.#removeAppItem(agentId, itemId),
+        upsert: async (agentId, item) =>
+          (await this.#inboxCoordinator.appInbox(agentId)).upsert(item),
+        remove: (agentId, itemId) => this.#inboxCoordinator.removeAppItem(agentId, itemId),
       },
       wake: async (agentId, itemId) => {
         // A busy Agent sees the item at its next idle drain; a stopped one at its next launch.
         if (this.#isWorking(agentId)) return;
-        await this.#notifyAppItem(agentId, itemId, { startStopped: false });
+        await this.#inboxCoordinator.notifyAppItem(agentId, itemId, { startStopped: false });
       },
     });
     this.#appConfigs = new AgentAppConfigSync({
@@ -867,7 +881,7 @@ export class DaemonRuntime {
       reconcileIdleTurn: (agentId, launch) => this.#reconcileIdleTurn(agentId, launch),
       rememberUsage: (snapshot) => rememberUsage(this.#observedUsage, snapshot),
       releaseTurnEndHolds: (agentId) => this.#releaseTurnEndHolds(agentId),
-      drainAppInboxNotices: (agentId) => this.drainAppInboxNotices(agentId),
+      drainAppInboxNotices: (agentId) => this.#inboxCoordinator.drainAppInboxNotices(agentId),
       failCollectorRunningSlots: (agentId, reason) =>
         this.#failCollectorRunningSlots(agentId, reason),
     };
@@ -878,8 +892,8 @@ export class DaemonRuntime {
       agentProcessManager: this.#agentProcessManager,
       currentActivityLaunches: this.#currentActivityLaunches,
       introducedAgents: this.#introducedAgents,
-      releaseHeldAppItems: (agentId) => this.#releaseHeldAppItems(agentId),
-      releaseFallbackNotices: (agentId) => this.#releaseFallbackNotices(agentId),
+      releaseHeldAppItems: (agentId) => this.#inboxCoordinator.releaseHeldAppItems(agentId),
+      releaseFallbackNotices: (agentId) => this.#inboxCoordinator.releaseFallbackNotices(agentId),
     });
   }
 
@@ -2631,13 +2645,11 @@ export class DaemonRuntime {
 
   /** The Agent no longer lives on this Computer: its workspace was deleted or moved away. */
   #forgetLocalAgent(agentId: string): void {
-    forgetLocalAgent(agentId, {
+    this.#inboxCoordinator.forgetAgent(agentId, {
       systemCleaner: this.systemCleaner,
       offlineResidency: this.#offlineResidency,
-      agentInboxes: this.#agentInboxes,
       messageAttention: this.#messageAttention,
       consumedSeqs: this.#consumedSeqs,
-      appInboxes: this.#appInboxes,
       featureSync: this.#sync,
     });
   }
@@ -2645,8 +2657,8 @@ export class DaemonRuntime {
   /** Presents what was kept across an exit or a runtime's end, as at idle. */
   #releaseSurvivingHolds(agentId: string): void {
     this.#launchCustody.flushSurvivingDeliveryQueue(agentId);
-    this.#releaseHeldAppItems(agentId);
-    this.#releaseFallbackNotices(agentId);
+    this.#inboxCoordinator.releaseHeldAppItems(agentId);
+    this.#inboxCoordinator.releaseFallbackNotices(agentId);
   }
 
   /** Whether the Agent is mid-turn, by its last busy Activity or a notice just written. */
@@ -2661,8 +2673,8 @@ export class DaemonRuntime {
     if (held.length) this.#flushHeldDeliveries(agentId, held);
     // Flush first: notifying marks busy synchronously, so app items re-hold for the next
     // turn rather than racing the notice that just started it.
-    this.#releaseHeldAppItems(agentId);
-    this.#releaseFallbackNotices(agentId);
+    this.#inboxCoordinator.releaseHeldAppItems(agentId);
+    this.#inboxCoordinator.releaseFallbackNotices(agentId);
   }
 
   #sendAgentStatus(agentId: string, status: "active" | "inactive"): void {
@@ -2792,9 +2804,7 @@ export class DaemonRuntime {
   }
 
   async mintAppItem(agentId: string, input: MintAppItem) {
-    const item = await (await this.#appInbox(agentId)).upsert(input);
-    await this.#notifyAppItem(agentId, item.itemId);
-    return item;
+    return this.#inboxCoordinator.mintAppItem(agentId, input);
   }
 
   async reminder(context: string, request: LocalReminderRequest, agentApiKey: string) {
@@ -2805,7 +2815,7 @@ export class DaemonRuntime {
         request.reminderId!,
         request.revision!,
       );
-      const removed = await this.#removeAppItem(
+      const removed = await this.#inboxCoordinator.removeAppItem(
         agentId,
         reminderDueItemId(request.reminderId!, request.revision!),
       );
@@ -2841,7 +2851,7 @@ export class DaemonRuntime {
 
   async #acceptReminderDue(job: ReminderJob, late: boolean): Promise<boolean> {
     const item = await (
-      await this.#appInbox(job.ownerAgentId)
+      await this.#inboxCoordinator.appInbox(job.ownerAgentId)
     ).upsert({
       appId: "system.reminder",
       notificationClass: "due",
@@ -2849,7 +2859,7 @@ export class DaemonRuntime {
       title: reminderAppInboxPreview(job.title),
       summary: reminderAppInboxSummary(job, late),
     });
-    return this.#notifyAppItem(job.ownerAgentId, item.itemId);
+    return this.#inboxCoordinator.notifyAppItem(job.ownerAgentId, item.itemId);
   }
 
   /** A new connection: asks again for every running Agent's App config. */
@@ -2882,142 +2892,11 @@ export class DaemonRuntime {
   }
 
   async inbox(context: string, request: LocalInboxRequest): Promise<InboxResponse> {
-    this.#assertRunning();
-    const agentId = this.#agentIdForContext(context);
-    const inbox = await this.#appInbox(agentId);
-    return {
-      idempotencyKey: request.idempotencyKey,
-      accepted: true,
-      entries: [
-        ...this.#messageAttention.check(agentId).map((messageTarget) => ({
-          kind: "message_target" as const,
-          messageTarget: { ...messageTarget, flags: [...messageTarget.flags] },
-        })),
-        ...(await inbox.read()).map((app) => ({ kind: "app" as const, app })),
-      ],
-    };
+    return this.#inboxCoordinator.inbox(context, request);
   }
 
   async drainAppInboxNotices(agentId: string): Promise<void> {
-    for (const item of (await this.#appInbox(agentId)).list())
-      await this.#notifyAppItem(agentId, item.itemId);
-  }
-
-  /** Removes an App Inbox item and forgets that it was announced, so an item minted again under
-   * the same id is announced again. */
-  async #removeAppItem(agentId: string, itemId: string): Promise<boolean> {
-    const removed = await (await this.#appInbox(agentId)).remove(itemId);
-    this.#notifiedAppItems.get(agentId)?.delete(itemId);
-    return removed;
-  }
-
-  #appInbox(agentId: string): Promise<AgentAppInbox> {
-    return appInbox(this.#appInboxes, this.stateDirectory, this.#connection.workspaceId, agentId);
-  }
-
-  #agentInbox(agentId: string): AgentInboxStateMachine {
-    return agentInbox(this.#agentInboxes, (id) => this.#consumedSeqs.stateDb(id), agentId);
-  }
-
-  async #notifyAppItem(
-    agentId: string,
-    itemId: string,
-    { startStopped = true }: { startStopped?: boolean } = {},
-  ): Promise<boolean> {
-    const notified = this.#notifiedAppItems.get(agentId) ?? new Map<string, Promise<boolean>>();
-    this.#notifiedAppItems.set(agentId, notified);
-    const existing = notified.get(itemId);
-    if (existing) return existing;
-    const pending = Promise.resolve().then(async () => {
-      // An ending runtime takes no notice: it waits for the launch that follows.
-      if (this.#runtimeRelease.isRecovering(agentId)) {
-        this.#deliveryQueue.holdAppItem(agentId, itemId);
-        return false;
-      }
-      let session = this.#agentProcessManager.session(agentId);
-      if (!session) {
-        if (!startStopped) return false;
-        const wakeable = this.#agentProcessManager.restartConfig(agentId);
-        if (!wakeable) return false;
-        session = (
-          await this.#startAgent(agentId, wakeable.config, undefined, {
-            sessionId: wakeable.sessionId,
-          })
-        ).session;
-      }
-      if (!session.notify) return false;
-      // A queue_until_idle provider's session/notify has no safe busy path, same as an
-      // ordinary message delivery — hold this app-item notice instead of sending it now, and
-      // release it (re-attempting this same call) at the next turn end.
-      if (this.#deliveryQueue.shouldHold(agentId)) {
-        this.#deliveryQueue.holdAppItem(agentId, itemId);
-        return false;
-      }
-      this.#deliveryQueue.busy(agentId);
-      const launch = this.#currentActivityLaunches.get(agentId);
-      try {
-        await session.notify("New app item available. Run coforge inbox check.");
-      } finally {
-        if (launch && this.#agentProcessManager.session(agentId) === session)
-          this.#reconcileIdleTurn(agentId, launch);
-      }
-      return true;
-    });
-    notified.set(itemId, pending);
-    try {
-      const accepted = await pending;
-      if (!accepted && notified.get(itemId) === pending) notified.delete(itemId);
-      return accepted;
-    } catch (error) {
-      if (notified.get(itemId) === pending) notified.delete(itemId);
-      throw error;
-    }
-  }
-
-  /** Re-attempts every app-item notice `AgentDeliveryQueue` held for `agentId` — each
-   * one re-checks `shouldHold` itself inside `#notifyAppItem`, so one that is still busy (e.g. a
-   * coalesced delivery flush that just re-armed busy) simply re-holds itself for the next
-   * release rather than being lost or sent too early. */
-  #releaseHeldAppItems(agentId: string): void {
-    for (const itemId of this.#deliveryQueue.releaseAppItems(agentId))
-      void this.#notifyAppItem(agentId, itemId).catch(() => {});
-  }
-
-  /**
-   * Redelivers every fallback notice text `AgentDeliveryQueue` held for `agentId`
-   * (Kiro's `notice-undelivered` event) as a bare `session.notify` call — never through
-   * `AgentMessageAttentionIndex`, since the delivery or App Inbox item this text originally came
-   * from already settled its own ACK (or never had one); this call must never produce a second
-   * one. If the Agent has gone busy again by the time this runs (e.g. its own steer of another
-   * held text just started a fresh turn), `notify` steers this one into that turn instead of
-   * losing it.
-   */
-  #releaseFallbackNotices(agentId: string): void {
-    const notices = this.#deliveryQueue.releaseFallbackNotices(agentId);
-    if (!notices.length) return;
-    const session = this.#agentProcessManager.session(agentId);
-    for (const { text, deliveryIds = [], conversation } of notices) {
-      if (!session?.notify) {
-        void this.#mentionDeliveries.settleRedelivery(agentId, deliveryIds, false);
-        continue;
-      }
-      // The tracked mentions it carries are drained once it is accepted, so it names them again.
-      const redelivery =
-        deliveryIds.length || conversation
-          ? session.notify(text, { deliveryIds, ...(conversation ? { conversation } : {}) })
-          : session.notify(text);
-      void redelivery.then(
-        () => this.#mentionDeliveries.settleRedelivery(agentId, deliveryIds, true),
-        (error: unknown) => {
-          logger.warn("A steered notice could not be redelivered after its turn ended", {
-            event: "agent.delivery_queue.fallback_notice_rejected",
-            agent_id: agentId,
-            error_code: diagnosticErrorName(error),
-          });
-          return this.#mentionDeliveries.settleRedelivery(agentId, deliveryIds, false);
-        },
-      );
-    }
+    return this.#inboxCoordinator.drainAppInboxNotices(agentId);
   }
 
   #agentIdForContext(context: string): string {
