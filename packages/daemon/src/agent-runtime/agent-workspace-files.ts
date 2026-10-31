@@ -210,8 +210,10 @@ export function classifyDeleteFailure(error: unknown): "busy" | "denied" | "erro
 export function reportWorkspaceDeleteFailure(
   error: unknown,
   agentId?: string,
+  /** A cause the caller knows better than the errno: an Agent that will not stop is `busy`. */
+  known?: "busy",
 ): "busy" | "denied" | "unreadable" | "error" {
-  const status = classifyDeleteFailure(error);
+  const status = known ?? classifyDeleteFailure(error);
   const code = (error as { code?: unknown } | undefined)?.code;
   logger.warning("Agent workspace could not be deleted", {
     event: "workspace_delete:failed",

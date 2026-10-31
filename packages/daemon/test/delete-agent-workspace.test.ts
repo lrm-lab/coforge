@@ -46,7 +46,8 @@ test("an Agent that will not stop is busy, and the failure is logged with its id
         agentWorkspaceDirectory: root,
         isRunning: () => true,
         stopAgent: async () => {
-          throw Object.assign(new Error("still running"), { code: "EBUSY" });
+          // A stop that times out carries no errno, and is still busy, not a generic failure.
+          throw new Error("stop timed out");
         },
         forget: () => undefined,
       }),
@@ -56,7 +57,7 @@ test("an Agent that will not stop is busy, and the failure is logged with its id
     expect(await exists(root)).toBe(true);
     const failure = records.find((record) => record.properties.event === "workspace_delete:failed");
     expect(failure?.properties).toMatchObject({ status: "busy", agent_id: "agent-b" });
-    expect(failure?.properties.error_code).toBe("EBUSY");
+    expect(failure?.properties.error_code).toBe("UNKNOWN");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
