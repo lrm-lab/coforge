@@ -440,3 +440,29 @@ testWithDatabase(
     }
   },
 );
+
+testWithDatabase(
+  "nothing is recorded for a private channel: an app lists public ones only",
+  async () => {
+    const env = environment();
+    const fixture = await env.fixture();
+    try {
+      const channel = await channelOf(env, fixture);
+      await env.db.conversation.update({
+        where: { id: channel.id },
+        data: { visibility: "private" },
+      });
+      const user = await personIn(env, fixture);
+      const owner = { userId: fixture.owner.id };
+      await channels(env).addMembers(fixture.workspace.id, owner, channel.id, {
+        userIds: [user.id],
+        agentIds: [],
+      });
+      await channels(env).setArchived(fixture.workspace.id, owner, channel.id, true);
+      for (const type of ["channel.member_added", "channel.archived"] as const)
+        expect(await env.recorded(fixture.workspace.id, type)).toEqual([]);
+    } finally {
+      await fixture.cleanup();
+    }
+  },
+);

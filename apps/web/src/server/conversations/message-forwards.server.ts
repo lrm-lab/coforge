@@ -195,17 +195,17 @@ export class MessageForwards {
     });
     if (!conversation) return { failure: "no_access" };
     const own = conversation.members[0];
+    const inConversation = own !== undefined && own.leftAt === null;
     if (conversation.channelName !== null) {
       // A private channel the forwarder is not in answers as a missing one (task #302): its
       // being archived, or there to join, is its members' to know.
-      if (!canReadChannel(conversation, own !== undefined && own.leftAt === null))
-        return { failure: "no_access" };
+      if (!canReadChannel(conversation, inConversation)) return { failure: "no_access" };
       if (conversation.archivedAt) return { failure: "archived" };
       // Never joined silently: the client asks the person, joins, and sends again.
-      if (!own || own.leftAt) return { failure: "not_joined" };
+      if (!inConversation) return { failure: "not_joined" };
       return { kind: "channel" };
     }
-    if (conversation.directKey === null || !own || own.leftAt) return { failure: "no_access" };
+    if (conversation.directKey === null || !inConversation) return { failure: "no_access" };
     try {
       await new DirectConversations(db).authorize(workspaceId, userId, destination, {
         canSend: true,

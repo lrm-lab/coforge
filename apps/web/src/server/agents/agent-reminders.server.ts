@@ -2,6 +2,7 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import { paginated } from "#src/server/db/pagination.server";
 import { ACTIVE_AGENT_WHERE } from "./active-agent.server";
 import { managedAgentWhere } from "./agent-visibility.server";
+import { canReadChannel } from "#src/server/conversations/channel-read-access.server";
 
 export const AGENT_REMINDER_PAGE_SIZE = 50;
 
@@ -109,8 +110,9 @@ export function prismaAgentReminderReadStore(db: PrismaClient): AgentReminderRea
             select: {
               id: true,
               channelName: true,
+              visibility: true,
               hiddenFromWorkspaceAt: true,
-              members: { select: { userId: true, agentId: true } },
+              members: { select: { userId: true, agentId: true, leftAt: true } },
             },
           },
         },
@@ -119,9 +121,18 @@ export function prismaAgentReminderReadStore(db: PrismaClient): AgentReminderRea
       const reminders = rows.map((row) => {
         const message = messagesById.get(row.messageId);
         const conversation = message?.conversation;
-        // A reminder anchored in a channel hidden from the Workspace links nowhere until restored.
+        // A reminder anchored in a channel hidden from the Workspace links nowhere until restored,
+        // and one in a private channel the viewer is not in names it nowhere (task #302).
         const anchor =
-          message && conversation?.channelName && !conversation.hiddenFromWorkspaceAt
+          message &&
+          conversation?.channelName &&
+          !conversation.hiddenFromWorkspaceAt &&
+          canReadChannel(
+            conversation,
+            conversation.members.some(
+              (member) => member.userId === viewer.userId && member.leftAt === null,
+            ),
+          )
             ? {
                 kind: "channel" as const,
                 channelId: conversation.id,
@@ -130,6 +141,7 @@ export function prismaAgentReminderReadStore(db: PrismaClient): AgentReminderRea
                 threadRootId: message.threadRootId,
               }
             : message &&
+                !conversation?.channelName &&
                 conversation?.members.some((member) => member.userId === viewer.userId) &&
                 conversation.members.some((member) => member.agentId === agentId)
               ? {

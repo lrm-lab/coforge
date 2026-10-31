@@ -58,6 +58,8 @@ A no-op records nothing: a repeat join, add or archive, an edit that changes no 
 version report (no earlier version), an API key or environment change alone. `thread.created` is
 for channels only. Not emitted: channel deletion, unarchiving, a channel coordinator or role change,
 an Agent's visibility or role, because the catalog has no event for them.
+An event naming a private channel is never sent: `recordAppNotifications` drops every event whose
+`channel_id` is a private channel, as an app lists public channels only.
 
 ## Cost and safety of emitting
 

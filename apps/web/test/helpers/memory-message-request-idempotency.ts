@@ -1,5 +1,6 @@
 import type {
   MessageRequestIdempotency,
+  MessageRequestRecord,
   MessageRequestScope,
   PersistedDirectMessage,
 } from "#src/server/conversations/message-request-idempotency.server";
@@ -16,5 +17,10 @@ export class MemoryMessageRequestIdempotency implements MessageRequestIdempotenc
     const message = await persist();
     this.results.set(key, message);
     return message;
+  }
+
+  /** No request is ever left mid-send or kept as a record here: every lookup finds none. */
+  async find(_scope: MessageRequestScope): Promise<MessageRequestRecord | undefined> {
+    return undefined;
   }
 }

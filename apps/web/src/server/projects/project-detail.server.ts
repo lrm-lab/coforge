@@ -25,6 +25,20 @@ export const projectDetailSelect = (workspaceId: string, userId: string) =>
     },
   }) satisfies Prisma.ProjectSelect;
 
+/** What the projects index reads of each Project: its channels counted as its page lists them. */
+export const projectListSelect = (workspaceId: string, userId: string) =>
+  ({
+    id: true,
+    name: true,
+    slug: true,
+    iconObjectKey: true,
+    conversations: {
+      where: visibleChannelWhere(workspaceId, { userId }),
+      select: { id: true },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    },
+  }) satisfies Prisma.ProjectSelect;
+
 const LAST_MESSAGE_SELECT = {
   createdAt: true,
   sender: {

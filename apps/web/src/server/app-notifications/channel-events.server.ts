@@ -3,8 +3,8 @@ import type { AppNotificationEventPayload } from "./app-notification-event";
 import { recordAppNotifications } from "./app-notifications.server";
 
 /**
- * What apps are told about a Workspace's channels (every channel is Workspace-visible) and their
- * threads. Each function runs inside the transaction of the domain write it describes, so the
+ * What apps are told about a Workspace's public channels and their threads (an event naming a
+ * private channel is dropped by `recordAppNotifications`). Each function runs inside the transaction of the domain write it describes, so the
  * event exists only if that write commits; the data is ids and the changed fields, never message
  * content. A caller that changes several memberships builds one list and records it once, so the
  * Workspace is read once.

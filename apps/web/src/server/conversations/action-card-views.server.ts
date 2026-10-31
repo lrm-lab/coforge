@@ -133,9 +133,9 @@ export async function actionCardViews(
   // A private channel is named only to those in it; to anyone else it is unknown, as a missing
   // one is (task #302).
   const channelName = new Map(
-    channels.flatMap((c) =>
-      canReadChannel(c, viewerInChannel.has(c.id)) ? [[c.id, c.channelName ?? "unknown"]] : [],
-    ),
+    channels
+      .filter((c) => canReadChannel(c, viewerInChannel.has(c.id)))
+      .map((c) => [c.id, c.channelName ?? "unknown"]),
   );
   const computerName = new Map(
     computers.map((c) => [c.id, c.displayName?.trim() || c.name || "unknown"]),

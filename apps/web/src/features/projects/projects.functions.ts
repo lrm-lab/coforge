@@ -16,6 +16,7 @@ import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 import {
   projectDetailSelect,
+  projectListSelect,
   readProjectChannelActivity,
 } from "#src/server/projects/project-detail.server";
 
@@ -200,16 +201,7 @@ export const listProjects = createServerFn({ method: "GET" })
     const { db, workspaceId } = context;
     const projects = await db.project.findMany({
       where: { workspaceId },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        iconObjectKey: true,
-        conversations: {
-          select: { id: true },
-          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-        },
-      },
+      select: projectListSelect(workspaceId, context.user.id),
       orderBy: { createdAt: "asc" },
     });
     return projects.map(withProjectIconUrl);

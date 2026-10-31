@@ -9,6 +9,7 @@ import {
 import { APP_NOTIFICATION_EVENT_QUEUE } from "./app-notification-jobs";
 import { startedAppNotificationQueue } from "./app-notification-queue.server";
 import { isFeatureDefined } from "#src/server/feature-flags/feature-flags.server";
+import { CHANNEL_VISIBILITY } from "#src/features/conversations/channel-visibility";
 import { appNotificationsEnabled } from "./subscribers.server";
 
 /**
@@ -150,7 +151,11 @@ export async function recordAppNotifications(
         : { id: workspace.id, slug: workspace.slug };
     if (!known) return;
     if (workspace.slug === undefined && !(await enabledFor(known.id, known.slug))) return;
-    const list = typeof events === "function" ? await events() : events;
+    const list = await withoutPrivateChannels(
+      tx,
+      known.id,
+      typeof events === "function" ? await events() : events,
+    );
     for (const event of list)
       await AppNotifications.record(
         tx,
@@ -158,6 +163,33 @@ export async function recordAppNotifications(
         newAppNotificationEvent({ ...event, workspaceId: known.id }),
       );
   });
+}
+
+/**
+ * The events an app may hear of: one naming a private channel is dropped (task #302). An app
+ * lists public channels only (`PUBLIC_CHANNEL_WHERE`); a private channel's name, members and
+ * threads are its members' alone.
+ */
+async function withoutPrivateChannels(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  events: readonly AppNotificationEventPayload[],
+): Promise<readonly AppNotificationEventPayload[]> {
+  const channelIds = [
+    ...new Set(
+      events.flatMap((event) => ("channel_id" in event.data ? [event.data.channel_id] : [])),
+    ),
+  ];
+  if (channelIds.length === 0) return events;
+  const hidden = await tx.conversation.findMany({
+    where: { workspaceId, id: { in: channelIds }, visibility: CHANNEL_VISIBILITY.PRIVATE },
+    select: { id: true },
+  });
+  if (hidden.length === 0) return events;
+  const privateIds = new Set(hidden.map((channel) => channel.id));
+  return events.filter(
+    (event) => !("channel_id" in event.data && privateIds.has(event.data.channel_id)),
+  );
 }
 
 async function enabledFor(id: string, slug: string): Promise<boolean> {

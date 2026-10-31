@@ -3,7 +3,11 @@ import { actionCardViews } from "#src/server/conversations/action-card-views.ser
 import { MessageForwards } from "#src/server/conversations/message-forwards.server";
 import { PrismaWorkspaceMemoryCatalog } from "#src/server/db/repositories/workspace-memory-catalog.repositories.server";
 import { PrismaWebPushSubscriptionStore } from "#src/server/notifications/prisma-web-push-subscriptions.server";
-import { projectDetailSelect } from "#src/server/projects/project-detail.server";
+import {
+  AgentRemindersQuery,
+  prismaAgentReminderReadStore,
+} from "#src/server/agents/agent-reminders.server";
+import { projectDetailSelect, projectListSelect } from "#src/server/projects/project-detail.server";
 import { quietCentrifugo } from "./helpers/fake-centrifugo";
 import { MemoryMessageRequestIdempotency } from "./helpers/memory-message-request-idempotency";
 import {
@@ -14,8 +18,9 @@ import {
 
 /**
  * Task #302, step 5: the surfaces outside a channel's own pages keep a private channel to its
- * members too: a project's channel list, what Workspace memory learns from, a forward's
- * destination, a message notification read by id, and the channel an action card names.
+ * members too: a project's channel list and count, what Workspace memory learns from, a forward's
+ * destination, a message notification read by id, and the channel an action card or an Agent's
+ * reminder names.
  */
 let fixture: PrivateChannelFixture;
 let extra: Awaited<ReturnType<typeof setUp>>;
@@ -27,6 +32,7 @@ async function setUp({
   db,
   ws,
   suffix,
+  token,
   people,
   open,
   closed,
@@ -44,6 +50,7 @@ async function setUp({
   const computer = await db.computer.create({
     data: { ownerId: people.insider, machineId: crypto.randomUUID() },
   });
+  await db.workspaceComputer.create({ data: { workspaceId: ws, computerId: computer.id } });
   const scout = await db.agent.create({
     data: {
       workspaceId: ws,
@@ -95,7 +102,7 @@ async function setUp({
       conversationId: discussion.id,
       senderMemberId: discussion.members.find((member) => member.userId === people.insider)!.id,
       sequence: 1,
-      body: `${fixture.token} discussed in private`,
+      body: `${token} discussed in private`,
     },
   });
   for (const userId of Object.values(people)) {
@@ -105,7 +112,7 @@ async function setUp({
       update: { browserNotificationsEnabled: true },
     });
   }
-  return { project, computer, cardMessage, discussionMessage };
+  return { project, computer, scout, cardMessage, discussionMessage };
 }
 
 beforeAll(async () => {
@@ -136,6 +143,16 @@ test.skipIf(!connectionString)(
       ).conversations.map((conversation) => conversation.id);
     for (const userId of fixture.outsiders) expect(await listed(userId)).toEqual([open.id]);
     expect(await listed(people.insider)).toEqual([open.id, closed.id, vault.id]);
+    // The projects index counts the same channels.
+    const counted = async (userId: string) =>
+      (
+        await db.project.findUniqueOrThrow({
+          where: { id: extra.project.id },
+          select: projectListSelect(ws, userId),
+        })
+      ).conversations.length;
+    for (const userId of fixture.outsiders) expect(await counted(userId)).toBe(1);
+    expect(await counted(people.insider)).toBe(3);
   },
 );
 
@@ -163,9 +180,7 @@ test.skipIf(!connectionString)(
     const { db, ws, people, open, closed, vault } = fixture;
     const forwards = new MessageForwards({
       db,
-      idempotency: Object.assign(new MemoryMessageRequestIdempotency(), {
-        find: async () => undefined,
-      }),
+      idempotency: new MemoryMessageRequestIdempotency(),
       centrifugo: quietCentrifugo(),
       storage: () => Promise.reject(new Error("a refused forward copies nothing")),
     });
@@ -222,5 +237,36 @@ test.skipIf(!connectionString)(
     };
     expect(await named(people.owner)).toBe("unknown");
     expect(await named(people.insider)).toBe(closed.name);
+  },
+);
+
+test.skipIf(!connectionString)(
+  "an Agent's reminder names a private channel only to its members",
+  async () => {
+    const { db, ws, people, open, closed } = fixture;
+    for (const message of [open.message, closed.message]) {
+      await db.reminder.create({
+        data: {
+          workspaceId: ws,
+          ownerAgentId: extra.scout.id,
+          computerId: extra.computer.id,
+          title: "Follow up",
+          target: "self",
+          messageId: message.id,
+          fireAt: new Date("2026-12-01T09:00:00Z"),
+        },
+      });
+    }
+    const query = new AgentRemindersQuery(prismaAgentReminderReadStore(db));
+    const anchored = async (userId: string) => {
+      const listed = await query.list({ userId, workspaceId: ws }, { agentId: extra.scout.id });
+      if (listed.status !== "ready") throw new Error(listed.status);
+      return listed.reminders
+        .map((reminder) => (reminder.anchor?.kind === "channel" ? reminder.anchor.channelId : null))
+        .sort();
+    };
+    // The Workspace owner manages the insider's Agent but is not in the private channel.
+    expect(await anchored(people.owner)).toEqual([open.id, null].sort());
+    expect(await anchored(people.insider)).toEqual([open.id, closed.id].sort());
   },
 );

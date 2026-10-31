@@ -121,6 +121,7 @@ test("exposes targets and derives readable message anchors from the canonical co
           conversation: {
             id: "channel-1",
             channelName: "general",
+            visibility: "public",
             members: [],
           },
         },
