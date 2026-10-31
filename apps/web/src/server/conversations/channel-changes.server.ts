@@ -44,7 +44,13 @@ export async function softLeaveMember(
   return left;
 }
 
-const infoSelect = { id: true, channelName: true, description: true, archivedAt: true } as const;
+const infoSelect = {
+  id: true,
+  channelName: true,
+  description: true,
+  archivedAt: true,
+  visibility: true,
+} as const;
 
 /** Writes a channel's new name and/or description; `changed` names the ones that differ. */
 export async function updateChannelInfo(
@@ -74,7 +80,7 @@ export async function setChannelArchived(
   const args = {
     where: { id: channelId },
     data: { archivedAt: archived ? new Date() : null },
-    select: { channelName: true, description: true, archivedAt: true },
+    select: { channelName: true, description: true, archivedAt: true, visibility: true },
   };
   if (!archived || !appNotificationsPossible()) return db.conversation.update(args);
   return db.$transaction(async (tx) => {

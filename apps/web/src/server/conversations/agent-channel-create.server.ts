@@ -2,6 +2,11 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { workspaceAssistantUser } from "#src/server/agents/workspace-assistant-authority.server";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
+import {
+  CHANNEL_VISIBILITY,
+  channelVisibilityOf,
+  type ChannelVisibility,
+} from "#src/features/conversations/channel-visibility";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 import { attachDefaultMemoryAgent } from "#src/server/workspace-memory/default-memory-agent.server";
 import { isOpenVikingPrototypeEnabled } from "#src/server/workspace-memory/prototype-gate";
@@ -24,27 +29,31 @@ export type AgentChannelCreatePorts = {
 };
 
 /** `channel create` for an Agent (`AgentChannelManagement.create`): as the person it acts for when
- * it is a Workspace assistant, otherwise as itself, a public Agent of the Workspace. */
+ * it is a Workspace assistant, otherwise as itself, a public Agent of the Workspace. Public unless
+ * `visibility` says private (task #302); the answer names the channel's visibility, so a caller
+ * talking to a server that knows no private channels sees what it got. */
 export async function createAgentChannel(
   { db, channels, realtime }: AgentChannelCreatePorts,
   workspaceId: string,
   agentId: string,
   rawName: string,
-  description: string | undefined,
+  { description, visibility }: { description?: string; visibility?: ChannelVisibility } = {},
 ) {
   const delegated = await workspaceAssistantUser(db, workspaceId, agentId);
   if (delegated) {
     const name = normalizeChannelName(rawName);
-    const created = await channels.create(
-      workspaceId,
-      delegated.userId,
-      name,
-      undefined,
+    const created = await channels.create(workspaceId, delegated.userId, name, {
       description,
-    );
+      visibility,
+    });
     return {
       target: `#${name}`,
-      channel: { id: created.id, name: `#${name}`, description: description ?? "" },
+      channel: {
+        id: created.id,
+        name: `#${name}`,
+        description: description ?? "",
+        visibility: visibility ?? CHANNEL_VISIBILITY.PUBLIC,
+      },
     };
   }
   // Workspace members may create channels without an admin role.
@@ -70,19 +79,22 @@ export async function createAgentChannel(
       name,
       creator: { agentId },
       description: description ?? "",
+      ...(visibility ? { visibility } : {}),
     });
   } catch (error) {
     if (isUniqueViolation(error))
       throw new AgentChannelManagementError(409, "channel name is already in use");
     throw error;
   }
-  await attachDefaultMemoryAgent(db, {
-    workspaceId,
-    conversationId: channel.id,
-    actorUserId: agent.ownerId,
-    now: new Date(),
-    gate: { prototypeEnabled: isOpenVikingPrototypeEnabled(Bun.env) },
-  });
+  // Workspace memory is offered to everyone, so its Agent joins a public channel only.
+  if (channel.visibility === CHANNEL_VISIBILITY.PUBLIC)
+    await attachDefaultMemoryAgent(db, {
+      workspaceId,
+      conversationId: channel.id,
+      actorUserId: agent.ownerId,
+      now: new Date(),
+      gate: { prototypeEnabled: isOpenVikingPrototypeEnabled(Bun.env) },
+    });
   await announceChannelCreated(realtime, {
     workspaceId,
     conversationId: channel.id,
@@ -95,6 +107,7 @@ export async function createAgentChannel(
       id: channel.id,
       name: `#${channel.channelName}`,
       description: channel.description,
+      visibility: channelVisibilityOf(channel),
     },
   };
 }

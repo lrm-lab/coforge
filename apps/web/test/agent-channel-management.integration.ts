@@ -94,10 +94,17 @@ test("Agent channel management: authority, join/leave, archive, and add/remove m
     // Authority (Slack's default): any Agent that belongs to the Workspace may
     // create a channel — including a plain, non-admin Agent — the same as `PublicChannels
     // .create` for humans. The creator becomes a member.
-    const created = await manage.create(workspace.id, member.id, "#eng", "Engineering");
+    const created = await manage.create(workspace.id, member.id, "#eng", {
+      description: "Engineering",
+    });
     expect(created).toEqual({
       target: "#eng",
-      channel: { id: expect.any(String), name: "#eng", description: "Engineering" },
+      channel: {
+        id: expect.any(String),
+        name: "#eng",
+        description: "Engineering",
+        visibility: "public",
+      },
     });
 
     // Any Agent may join a non-archived channel; idempotent. `member` already joined by
@@ -199,7 +206,7 @@ test("Agent channel management: authority, join/leave, archive, and add/remove m
     });
     expect(channelRoleUpdate.description).toBe("Updated via channel_role admin");
     await expect(manage.update(workspace.id, admin.id, "#eng", {})).rejects.toThrow(
-      "update requires --name or --description",
+      "update requires --name, --description, --public or --private",
     );
     await expect(
       manage.update(workspace.id, admin.id, "#eng", { name: "general" }),
@@ -225,7 +232,13 @@ test("Agent channel management: authority, join/leave, archive, and add/remove m
       (await new PublicChannels(db).names(workspace.id, owner.id)).find(
         (channel) => channel.name === "eng",
       ),
-    ).toEqual({ id: expect.any(String), name: "eng", description: "Eng team", archived: true });
+    ).toEqual({
+      id: expect.any(String),
+      name: "eng",
+      description: "Eng team",
+      archived: true,
+      visibility: "public",
+    });
     await expect(manage.join(workspace.id, admin.id, "#eng")).rejects.toThrow(
       "channel is archived",
     );

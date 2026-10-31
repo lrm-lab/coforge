@@ -1,6 +1,10 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError, isAppError } from "#src/lib/app-error";
 import { CHANNEL_NAME_PATTERN } from "@lrm/coforge-sdk/internal";
+import {
+  CHANNEL_VISIBILITY,
+  type ChannelVisibility,
+} from "#src/features/conversations/channel-visibility";
 import { attachmentKeys, removeAttachmentFiles } from "#src/server/attachments/attachment.server";
 import { deleteChannelRows } from "#src/server/db/repositories/channel-deletion.repositories.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
@@ -33,13 +37,20 @@ import { channelAudience } from "./conversation-signal-scope.server";
 /** A channel's life as a whole: creating it, its name, description and member roles, archiving
  * it, hiding `#general` from the Workspace, and deleting a channel for good. */
 
+/** What a new channel may start with besides its name: its project, description and visibility
+ * (public unless given). */
+export type NewChannelOptions = {
+  projectId?: string;
+  description?: string;
+  visibility?: ChannelVisibility;
+};
+
 export async function createUserChannel(
   { db, realtime }: PublicChannelPorts,
   workspaceId: string,
   userId: string,
   name: string,
-  projectId?: string,
-  description?: string,
+  { projectId, description, visibility }: NewChannelOptions = {},
 ) {
   await requireWorkspaceMember(db, workspaceId, userId);
   if (!CHANNEL_NAME_PATTERN.test(name)) throw new AppError("INVALID_INPUT");
@@ -66,18 +77,21 @@ export async function createUserChannel(
       creator: { userId },
       ...(projectId ? { projectId } : {}),
       ...(description !== undefined ? { description } : {}),
+      ...(visibility ? { visibility } : {}),
     });
   } catch (error) {
     if (isUniqueViolation(error)) throw new AppError("CONFLICT");
     throw error;
   }
-  await attachDefaultMemoryAgent(db, {
-    workspaceId,
-    conversationId: created.id,
-    actorUserId: userId,
-    now: new Date(),
-    gate: { prototypeEnabled: isOpenVikingPrototypeEnabled(Bun.env) },
-  });
+  // Workspace memory is offered to everyone, so its Agent joins a public channel only.
+  if (created.visibility === CHANNEL_VISIBILITY.PUBLIC)
+    await attachDefaultMemoryAgent(db, {
+      workspaceId,
+      conversationId: created.id,
+      actorUserId: userId,
+      now: new Date(),
+      gate: { prototypeEnabled: isOpenVikingPrototypeEnabled(Bun.env) },
+    });
   await Promise.all([
     announceChannelCreated(realtime, {
       workspaceId,
@@ -102,9 +116,18 @@ export async function createChannelWithMembers(
   ports: PublicChannelPorts,
   workspaceId: string,
   userId: string,
-  input: { name: string; projectId?: string; userIds: string[]; agentIds: string[] },
+  input: {
+    name: string;
+    projectId?: string;
+    visibility?: ChannelVisibility;
+    userIds: string[];
+    agentIds: string[];
+  },
 ): Promise<{ id: string; membersAddFailed: boolean }> {
-  const { id } = await createUserChannel(ports, workspaceId, userId, input.name, input.projectId);
+  const { id } = await createUserChannel(ports, workspaceId, userId, input.name, {
+    projectId: input.projectId,
+    visibility: input.visibility,
+  });
   if (input.userIds.length === 0 && input.agentIds.length === 0)
     return { id, membersAddFailed: false };
   try {
@@ -206,7 +229,8 @@ export async function changeChannelInfo(
       workspaceId,
       conversationId: channel.id,
       channel: channelInfoOf(updated),
-      ...(await channelAudience(db, channel)),
+      // As the write left it: a visibility change racing this one is announced by its own write.
+      ...(await channelAudience(db, { id: channel.id, visibility: updated.visibility })),
     });
     return { id: updated.id, name: updated.channelName!, description: updated.description };
   } catch (error) {
@@ -246,7 +270,7 @@ export async function setGeneralHidden(
   const restored = await db.conversation.update({
     where: { id: general.id },
     data: { hiddenFromWorkspaceAt: hidden ? new Date() : null },
-    select: { channelName: true, description: true, archivedAt: true },
+    select: { channelName: true, description: true, archivedAt: true, visibility: true },
   });
   await announceChannelUpdated(
     realtime,
@@ -365,7 +389,8 @@ export async function changeChannelArchived(
     workspaceId,
     conversationId: channel.id,
     channel: channelInfoOf(changed),
-    ...(await channelAudience(db, channel)),
+    // As the write left it: a visibility change racing this one is announced by its own write.
+    ...(await channelAudience(db, { id: channel.id, visibility: changed.visibility })),
   });
   return { id: channel.id, archived };
 }

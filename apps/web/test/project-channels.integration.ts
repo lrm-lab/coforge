@@ -48,19 +48,18 @@ test("one project owns multiple discussion channels without crossing Workspace b
     });
     const channels = new PublicChannels(db);
 
-    const created = await channels.create(
-      workspace.id,
-      user.id,
-      `new-${suffix.slice(0, 8)}`,
-      project.id,
-    );
+    const created = await channels.create(workspace.id, user.id, `new-${suffix.slice(0, 8)}`, {
+      projectId: project.id,
+    });
     const listed = await channels.list(workspace.id, user.id);
     expect(listed.map(({ id }) => id)).toEqual(expect.arrayContaining([existing.id, created.id]));
     expect((await channels.open(workspace.id, user.id, existing.id)).project?.id).toBe(project.id);
     expect((await channels.open(workspace.id, user.id, created.id)).project?.id).toBe(project.id);
 
     await expect(
-      channels.create(workspace.id, user.id, `foreign-${suffix.slice(0, 8)}`, foreignProject.id),
+      channels.create(workspace.id, user.id, `foreign-${suffix.slice(0, 8)}`, {
+        projectId: foreignProject.id,
+      }),
     ).rejects.toThrow("INVALID_INPUT");
 
     const settings = new ProjectSettings(db);

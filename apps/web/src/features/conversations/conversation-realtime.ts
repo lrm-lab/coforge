@@ -224,10 +224,12 @@ const channelInfo = z.object({
   name: z.string().min(1),
   description: z.string(),
   archived: z.boolean(),
+  /** Absent from a server that predates private channels (task #302): public. */
+  visibility: z.enum(["public", "private"]).optional(),
 });
 
 /**
- * A channel's name, description and archived state, as every member may see them. A channel
+ * A channel's name, description, archived state and visibility, as every member may see them. A channel
  * event carries it, as Slack's `channel_created` and `channel_rename` carry the channel, so a
  * sidebar updates its row from the event instead of re-reading its list.
  */

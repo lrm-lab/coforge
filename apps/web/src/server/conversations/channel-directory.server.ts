@@ -27,7 +27,7 @@ export async function channelNames(
   await requireWorkspaceMember(db, workspaceId, userId);
   const channels = await db.conversation.findMany({
     where: visibleChannelWhere(workspaceId, { userId }),
-    select: { id: true, channelName: true, description: true, archivedAt: true },
+    select: { id: true, channelName: true, description: true, archivedAt: true, visibility: true },
   });
   return channels.map((channel) => ({ id: channel.id, ...channelInfoOf(channel) }));
 }

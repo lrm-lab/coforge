@@ -96,6 +96,27 @@ const environment = defineEmitterCases([
     refuse: conversationsOf,
   }),
   emitterCase({
+    type: "workspace.public_channel_created",
+    label: "a private channel is made public",
+    setup: async (env, fixture) => {
+      const channel = await channelOf(env, fixture);
+      await env.db.conversation.update({
+        where: { id: channel.id },
+        data: { visibility: "private" },
+      });
+      return channel;
+    },
+    act: (env, fixture, channel) =>
+      channels(env).setVisibility(
+        fixture.workspace.id,
+        { userId: fixture.owner.id },
+        channel.id,
+        "public",
+      ),
+    data: (_fixture, channel) => ({ channel_id: channel.id, name: channel.channelName }),
+    refuse: conversationsOf,
+  }),
+  emitterCase({
     type: "channel.member_added",
     label: "the creator of a new channel",
     // The Workspace Memory Agent joins every new channel, which is told too.
@@ -459,7 +480,17 @@ testWithDatabase(
         agentIds: [],
       });
       await channels(env).setArchived(fixture.workspace.id, owner, channel.id, true);
-      for (const type of ["channel.member_added", "channel.archived"] as const)
+      // Created private, or made private: nothing either.
+      await channels(env).create(fixture.workspace.id, fixture.owner.id, `p-${unique()}`, {
+        visibility: "private",
+      });
+      const open = await channelOf(env, fixture);
+      await channels(env).setVisibility(fixture.workspace.id, owner, open.id, "private");
+      for (const type of [
+        "channel.member_added",
+        "channel.archived",
+        "workspace.public_channel_created",
+      ] as const)
         expect(await env.recorded(fixture.workspace.id, type)).toEqual([]);
     } finally {
       await fixture.cleanup();

@@ -1,5 +1,6 @@
 import { textResponse } from "#src/server/http/text-response.server";
 import { createFileRoute } from "@tanstack/react-router";
+import { isChannelVisibility } from "#src/features/conversations/channel-visibility";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
 import {
   AgentChannelManagement,
@@ -40,10 +41,13 @@ export async function handleAgentChannelPatch(
     return textResponse("name must be a string", { status: 400 });
   if (body?.description !== undefined && typeof body.description !== "string")
     return textResponse("description must be a string", { status: 400 });
+  if (body?.visibility !== undefined && !isChannelVisibility(body.visibility))
+    return textResponse('visibility must be "public" or "private"', { status: 400 });
   try {
     const info = await repository.update(principal.workspaceId, principal.agentId, channel, {
       name: body?.name as string | undefined,
       description: body?.description as string | undefined,
+      visibility: body?.visibility,
     });
     return Response.json({ idempotencyKey, channel: info });
   } catch (error) {

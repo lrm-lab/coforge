@@ -42,6 +42,22 @@ export function recordChannelCreated(
   ]);
 }
 
+/** A private channel made public: from now on apps see it, as a public channel that came to exist
+ * (task #302). Making one private records nothing; the catalog has no such event, and every later
+ * event of the channel is dropped (`recordAppNotifications`). */
+export function recordChannelMadePublic(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  channel: { id: string; name: string },
+) {
+  return recordAppNotifications(tx, { id: workspaceId }, [
+    {
+      type: "workspace.public_channel_created",
+      data: { channel_id: channel.id, name: channel.name },
+    },
+  ]);
+}
+
 export function recordChannelArchived(
   tx: Prisma.TransactionClient,
   workspaceId: string,

@@ -94,6 +94,17 @@ export function canDeleteChannel(channelName: string, serverRole: string | undef
   return channelName !== "general" && roleCan(serverRole, "manageChannels");
 }
 
+/** Only a Workspace owner or admin who is in the channel makes it private or public (task #302): a
+ * channel admin cannot, as in Raft, and one who is not in it cannot see a private one to change.
+ * `#general` is always public. */
+export function canChangeChannelVisibility(
+  channelName: string,
+  serverRole: string | undefined,
+  isActiveMember: boolean,
+) {
+  return channelName !== "general" && isActiveMember && roleCan(serverRole, "manageChannels");
+}
+
 /** Only a Workspace owner or admin sees every archived channel in Workspace settings. That same
  * role is the admin basis granting `unarchive` on every channel but `#general`, so each one listed
  * is one they may unarchive; a channel admin unarchives their own channel from its settings. */

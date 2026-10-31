@@ -53,7 +53,7 @@ test("a closed channel stays closed until someone else posts a top-level message
     // `#` list offers): closing hides it from the list, not from the Workspace.
     expect(
       (await channels.names(workspace.id, alice.id)).find((channel) => channel.id === ops.id),
-    ).toEqual({ id: ops.id, name: "ops", description: "", archived: false });
+    ).toEqual({ id: ops.id, name: "ops", description: "", archived: false, visibility: "public" });
 
     // Alice's own message is not "someone else posting".
     await Bun.sleep(2); // createdAt and hiddenAt are millisecond timestamps

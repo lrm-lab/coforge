@@ -40,7 +40,7 @@ secret. Its keys are snake_case in the stored event and on the wire alike
 | `workspace.member_removed` | `user_id` | `removeMember` of the member directory store (removal and leaving) |
 | `workspace.member_role_changed` | `user_id`, `previous_role`, `role` | `updateRole` of the member directory store |
 | `workspace.config_updated` | `fields` (`name`, `slug`, `icon`), `name`, `slug` for those changed | catalog `rename`, `moveWorkspaceSlug`, `WorkspaceImages.store` |
-| `workspace.public_channel_created` | `channel_id`, `name` | `createChannel` (a person's and an Agent's creation), `enrollGeneralChannel` and `createOwnedWorkspace` (`#general` coming to exist) |
+| `workspace.public_channel_created` | `channel_id`, `name` | `createChannel` (a person's and an Agent's creation), `enrollGeneralChannel` and `createOwnedWorkspace` (`#general` coming to exist), `setChannelVisibility` (a private channel made public) |
 | `workspace.public_channel_archived`, `channel.archived` | `channel_id` | `setChannelArchived` (archiving; unarchiving records nothing) |
 | `channel.member_added` | `channel_id`, and `user_id` or `agent_id` | channel creation (its creator), `join`, `addMembers` (`upsertChannelMembers`), an Agent's `join` (`joinChannelAsAgent`), `#general` enrollment (`enrollGeneralChannel`, `joinGeneralChannel`), the Workspace Memory Agent joining a channel (`addUnmutedMember`) |
 | `channel.member_removed` | `channel_id`, and `user_id` or `agent_id` | `softLeaveMember` in `channel-changes.server.ts` (leave, removal, the Agent CLI), a Workspace member leaving or removed (each channel), an Agent made private or deleted (each channel) |

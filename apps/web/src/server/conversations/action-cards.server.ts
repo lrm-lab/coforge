@@ -49,8 +49,6 @@ export function parseActionCardAction(value: unknown) {
   const action = parsed.data;
   const crossFieldError = validateActionCardAction(action);
   if (crossFieldError) throw new ActionCardError(422, "INVALID_ACTION", crossFieldError);
-  if (action.type === "channel:create" && action.visibility === "private")
-    throw new ActionCardError(422, "INVALID_ACTION", "private channels are not supported yet");
   return action;
 }
 
@@ -160,12 +158,16 @@ export class ActionCards {
     // card's own resolved payload, not a new browser-supplied input: it is the Agent's context,
     // not something the committing human retypes.
     const payload = card.payload as ResolvedActionCardPayload & { type: "channel:create" };
+    // Its visibility too: the person approving it sees whether it is private.
     const created = await channels.create(
       principal.workspaceId,
       principal.actorUserId,
       input.name,
-      input.projectId,
-      payload.description,
+      {
+        projectId: input.projectId,
+        description: payload.description,
+        visibility: payload.visibility,
+      },
     );
     if (input.memberUserIds.length || input.memberAgentIds.length) {
       await channels.addMembers(

@@ -1,5 +1,6 @@
 import { textResponse } from "#src/server/http/text-response.server";
 import { createFileRoute } from "@tanstack/react-router";
+import { isChannelVisibility } from "#src/features/conversations/channel-visibility";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
 import {
   AgentChannelManagement,
@@ -23,13 +24,13 @@ export async function handleAgentChannelsPost(
     return textResponse("name is required", { status: 400 });
   if (body.description !== undefined && typeof body.description !== "string")
     return textResponse("description must be a string", { status: 400 });
+  if (body.visibility !== undefined && !isChannelVisibility(body.visibility))
+    return textResponse('visibility must be "public" or "private"', { status: 400 });
   try {
-    const result = await repository.create(
-      principal.workspaceId,
-      principal.agentId,
-      body.name,
-      body.description as string | undefined,
-    );
+    const result = await repository.create(principal.workspaceId, principal.agentId, body.name, {
+      description: body.description as string | undefined,
+      visibility: body.visibility,
+    });
     return Response.json({ idempotencyKey, ...result });
   } catch (error) {
     return channelManagementErrorResponse(error, "channel create failed");

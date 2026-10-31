@@ -55,16 +55,21 @@ test("POST /channels creates a channel and echoes the caller's idempotencyKey", 
     fakeRepository({
       create: async (...args) => {
         calls.push(args);
-        return { target: "#eng", channel: { id: "id-1", name: "#eng", description: "Eng" } };
+        return {
+          target: "#eng",
+          channel: { id: "id-1", name: "#eng", description: "Eng", visibility: "public" },
+        };
       },
     }),
   );
-  expect(calls).toEqual([["workspace-1", "agent-1", "#eng", "Eng"]]);
+  expect(calls).toEqual([
+    ["workspace-1", "agent-1", "#eng", { description: "Eng", visibility: undefined }],
+  ]);
   expect(result.status).toBe(200);
   expect(await result.json()).toEqual({
     idempotencyKey: "r-1",
     target: "#eng",
-    channel: { id: "id-1", name: "#eng", description: "Eng" },
+    channel: { id: "id-1", name: "#eng", description: "Eng", visibility: "public" },
   });
 });
 
@@ -233,7 +238,12 @@ test("PATCH /channels/:channel forwards name/description and returns the info en
     }),
   );
   expect(calls).toEqual([
-    ["workspace-1", "agent-1", "#eng", { name: undefined, description: "Eng team" }],
+    [
+      "workspace-1",
+      "agent-1",
+      "#eng",
+      { name: undefined, description: "Eng team", visibility: undefined },
+    ],
   ]);
   expect(result.status).toBe(200);
   expect((await result.json()).channel.description).toBe("Eng team");

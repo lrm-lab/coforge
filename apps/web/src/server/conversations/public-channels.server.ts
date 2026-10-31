@@ -1,4 +1,5 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
+import type { ChannelVisibility } from "#src/features/conversations/channel-visibility";
 import { AgentInboxPurgePublisher } from "#src/server/agents/agent-inbox-purge.server";
 import {
   createCentrifugoServerApi,
@@ -17,6 +18,7 @@ import {
   changeChannelInfo,
   createChannelWithMembers,
   createUserChannel,
+  type NewChannelOptions,
   deleteChannel,
   isGeneralHidden,
   setChannelRole,
@@ -50,6 +52,7 @@ import {
 } from "./channel-threads.server";
 import type { ConversationRealtime } from "./conversation-realtime.server";
 import { toggleUserMessageReaction } from "./user-message-reactions.server";
+import { setChannelVisibility } from "./channel-visibility-change.server";
 
 /**
  * Workspace-visible history with per-Agent notification preferences. The facade every caller
@@ -210,20 +213,14 @@ export class PublicChannels {
     return archivedChannels(this.ports, workspaceId, userId);
   }
 
-  create(
-    workspaceId: string,
-    userId: string,
-    name: string,
-    projectId?: string,
-    description?: string,
-  ) {
-    return createUserChannel(this.ports, workspaceId, userId, name, projectId, description);
+  create(workspaceId: string, userId: string, name: string, options?: NewChannelOptions) {
+    return createUserChannel(this.ports, workspaceId, userId, name, options);
   }
 
   createWithMembers(
     workspaceId: string,
     userId: string,
-    input: { name: string; projectId?: string; userIds: string[]; agentIds: string[] },
+    input: Parameters<typeof createChannelWithMembers>[3],
   ) {
     return createChannelWithMembers(this.ports, workspaceId, userId, input);
   }
@@ -266,6 +263,15 @@ export class PublicChannels {
 
   setArchived(workspaceId: string, actor: ChannelActor, channelId: string, archived: boolean) {
     return changeChannelArchived(this.ports, workspaceId, actor, channelId, archived);
+  }
+
+  setVisibility(
+    workspaceId: string,
+    actor: ChannelActor,
+    channelId: string,
+    visibility: ChannelVisibility,
+  ) {
+    return setChannelVisibility(this.ports, workspaceId, actor, channelId, visibility);
   }
 
   join(workspaceId: string, userId: string, channelId: string) {

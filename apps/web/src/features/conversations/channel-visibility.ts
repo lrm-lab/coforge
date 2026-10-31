@@ -17,3 +17,8 @@ export function channelVisibilityOf(channel: { visibility: string }): ChannelVis
     ? CHANNEL_VISIBILITY.PUBLIC
     : CHANNEL_VISIBILITY.PRIVATE;
 }
+
+/** Whether a request's value names a visibility. */
+export function isChannelVisibility(value: unknown): value is ChannelVisibility {
+  return value === CHANNEL_VISIBILITY.PUBLIC || value === CHANNEL_VISIBILITY.PRIVATE;
+}

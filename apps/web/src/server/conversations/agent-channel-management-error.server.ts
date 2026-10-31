@@ -29,3 +29,12 @@ export function channelAuthorityDeniedError(operation: string): AgentChannelMana
     `this Agent's owner lacks admin authority for ${operation}`,
   );
 }
+
+/** Raft's rule (task #302): a channel admin is not enough; the Agent's own Workspace role must
+ * be owner or admin, and the Agent must be in the channel. */
+export function visibilityDeniedError(): AgentChannelManagementError {
+  return new AgentChannelManagementError(
+    403,
+    "changing a channel's visibility needs a Workspace owner or admin who is in the channel",
+  );
+}

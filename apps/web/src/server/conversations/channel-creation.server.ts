@@ -1,4 +1,5 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
+import type { ChannelVisibility } from "#src/features/conversations/channel-visibility";
 import { appNotificationsPossible } from "#src/server/app-notifications/app-notifications.server";
 import {
   recordChannelCreated,
@@ -10,7 +11,8 @@ import {
  * for the apps installed in the Workspace, in one transaction. A person's creation
  * (`PublicChannels.create`) and an Agent's (`AgentChannelManagement.create`) both come here. A taken
  * name is the caller's unique violation to translate. While no app notification can be recorded
- * it is the single write it always was.
+ * it is the single write it always was. A private channel's creation is recorded too and never
+ * sent (`recordAppNotifications` drops it, as an app lists public channels only).
  */
 export function createChannel(
   db: PrismaClient,
@@ -20,6 +22,8 @@ export function createChannel(
     creator: ChannelMember;
     projectId?: string;
     description?: string;
+    /** Public unless given (task #302). */
+    visibility?: ChannelVisibility;
   },
 ) {
   const args = {
@@ -28,6 +32,7 @@ export function createChannel(
       channelName: input.name,
       ...(input.projectId ? { projectId: input.projectId } : {}),
       ...(input.description !== undefined ? { description: input.description } : {}),
+      ...(input.visibility ? { visibility: input.visibility } : {}),
       // The creator becomes the channel's first admin.
       members: { create: { ...input.creator, channelRole: "admin" } },
     },

@@ -315,7 +315,7 @@ test.skipIf(!connectionString)(
       const announcement = (channel: { description: string; archived: boolean }) => ({
         workspaceId: workspace.id,
         conversationId: team.id,
-        channel: { name: `renamed-${suffix}`, ...channel },
+        channel: { name: `renamed-${suffix}`, visibility: "public" as const, ...channel },
         // A public channel's: the whole Workspace hears of it.
         memberUserIds: undefined,
       });
@@ -438,7 +438,12 @@ test.skipIf(!connectionString)(
       await setup();
     try {
       // Setup's own channel was announced when it was made.
-      const info = (name: string) => ({ name, description: "", archived: false });
+      const info = (name: string) => ({
+        name,
+        description: "",
+        archived: false,
+        visibility: "public" as const,
+      });
       expect(created).toEqual([
         {
           workspaceId: workspace.id,

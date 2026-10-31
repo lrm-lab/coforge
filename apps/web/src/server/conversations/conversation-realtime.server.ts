@@ -12,6 +12,7 @@ import {
   type ViewerEvent,
   type ChannelInfo,
 } from "#src/features/conversations/conversation-realtime";
+import { channelVisibilityOf } from "#src/features/conversations/channel-visibility";
 import { type ConversationActivityEvent } from "#src/features/conversations/conversation-activity-event";
 import type { TaskChangedEvent } from "#src/features/tasks/task-realtime";
 import {
@@ -84,11 +85,13 @@ export function channelInfoOf(channel: {
   channelName: string | null;
   description: string;
   archivedAt: Date | null;
+  visibility: string;
 }): ChannelInfo {
   return {
     name: channel.channelName!,
     description: channel.description.trim(),
     archived: channel.archivedAt !== null,
+    visibility: channelVisibilityOf(channel),
   };
 }
 

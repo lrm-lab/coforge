@@ -405,21 +405,6 @@ test("prepare answers a private Agent as channel management does: not visible, o
   }
 });
 
-test("prepare rejects a private channel:create as not-yet-supported", async () => {
-  const ctx = await setup();
-  try {
-    await expectActionCardError(
-      ctx.actionCards.prepare(ctx.principal, {
-        target: `#${ctx.hub.channelName}`,
-        action: { type: "channel:create", name: `secret-${ctx.suffix}`, visibility: "private" },
-      }),
-      { code: "INVALID_ACTION", message: "private channels are not supported yet" },
-    );
-  } finally {
-    await ctx.cleanup();
-  }
-});
-
 test("prepare rejects channel:create for an existing name, including the reserved general channel", async () => {
   const ctx = await setup();
   try {

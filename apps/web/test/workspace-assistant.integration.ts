@@ -212,7 +212,7 @@ test("assistant commands read and post as the questioner without sharing the ass
     workspace.id,
     a.agentId,
     `assistant-${suffix.slice(0, 8)}`,
-    "Created by Alice's assistant",
+    { description: "Created by Alice's assistant" },
   );
   const commands = new WorkspaceAssistantCommands(
     db,
@@ -347,7 +347,7 @@ test("external event drains advance independently for each member and survive re
       workspace.id,
       a!.agentId,
       `drain-${suffix.slice(0, 8)}`,
-      "Drain test",
+      { description: "Drain test" },
     )
   ).target;
   const commands = new WorkspaceAssistantCommands(
@@ -413,7 +413,7 @@ test("assistant uploads can accompany delegated messages, while another member's
       workspace.id,
       a!.agentId,
       `files-${suffix.slice(0, 8)}`,
-      "File test",
+      { description: "File test" },
     )
   ).target;
   const commands = new WorkspaceAssistantCommands(
