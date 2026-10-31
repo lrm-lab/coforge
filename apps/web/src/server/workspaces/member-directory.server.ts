@@ -17,6 +17,7 @@ import {
   reconnectDaemon,
 } from "#src/server/centrifugo/server-api.server";
 import { errorType } from "#src/server/errors/error-type.server";
+import { getWorkspaceComputerInvalidation } from "#src/server/agents/workspace-computer-invalidation.server";
 
 export type WorkspaceMemberRecord = {
   workspaceId: string;
@@ -130,6 +131,9 @@ export class WorkspaceMemberDirectory {
         conversationIds: revokedConversationIds,
       }),
       this.reconnectDaemons(workspaceId, computerIds),
+      ...computerIds.map((computerId) =>
+        Promise.resolve(getWorkspaceComputerInvalidation().notify(computerId)),
+      ),
     ]);
   }
 

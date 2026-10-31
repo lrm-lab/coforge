@@ -12,14 +12,14 @@ describe("cachedWorkspaceComputerCheck", () => {
   function subject(options: { ttlMs?: number; maxEntries?: number } = {}) {
     let now = 0;
     const reads: string[] = [];
-    const check = cachedWorkspaceComputerCheck(
+    const { check, forget } = cachedWorkspaceComputerCheck(
       async (workspaceId, computerId) => {
         reads.push(`${workspaceId}:${computerId}`);
         return computerId !== "nowhere";
       },
       { ttlMs: 30_000, maxEntries: 2, now: () => now, ...options },
     );
-    return { check, reads, advance: (ms: number) => (now += ms) };
+    return { check, forget, reads, advance: (ms: number) => (now += ms) };
   }
 
   const scope = { workspaceId: "w", computerId: "c1" } as const;
@@ -55,7 +55,7 @@ describe("cachedWorkspaceComputerCheck", () => {
     const flaky = cachedWorkspaceComputerCheck(async () => {
       if (++attempts === 1) throw new Error("database unavailable");
       return true;
-    });
+    }).check;
     await expect(flaky("w", "c1")).rejects.toThrow();
     expect(await flaky("w", "c1")).toBe(true);
   });
@@ -69,6 +69,28 @@ describe("cachedWorkspaceComputerCheck", () => {
     expect(reads).toHaveLength(3);
     await check("w", "c1");
     expect(reads).toHaveLength(4);
+  });
+
+  test("forget drops only that Computer's answers, in every Workspace", async () => {
+    const { check, forget, reads } = subject({ maxEntries: 10 });
+    await check("w", "c1");
+    await check("w2", "c1");
+    await check("w", "c2");
+    forget("c1");
+    await check("w", "c1");
+    await check("w2", "c1");
+    await check("w", "c2");
+    expect(reads).toEqual(["w:c1", "w2:c1", "w:c2", "w:c1", "w2:c1"]);
+  });
+
+  test("forget with no id flushes every remembered answer", async () => {
+    const { check, forget, reads } = subject({ maxEntries: 10 });
+    await check("w", "c1");
+    await check("w", "c2");
+    forget();
+    await check("w", "c1");
+    await check("w", "c2");
+    expect(reads).toEqual(["w:c1", "w:c2", "w:c1", "w:c2"]);
   });
 });
 
@@ -144,7 +166,7 @@ describe("publication Computer scope cache", () => {
             select: { id: true },
           }),
         ),
-    );
+    ).check;
 
     for (let frame = 0; frame < 2; frame++) {
       const response = await handleAgentActivityPublication(request(), {
@@ -166,7 +188,7 @@ describe("publication Computer scope cache", () => {
     const computerBelongsToWorkspace = cachedWorkspaceComputerCheck(async () => {
       computerReads.push({});
       return belongs;
-    });
+    }).check;
     const dependencies = {
       proxySecret: "test-secret",
       computerBelongsToWorkspace,

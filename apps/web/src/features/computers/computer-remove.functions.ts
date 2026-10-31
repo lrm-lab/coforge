@@ -7,6 +7,7 @@ import {
   reconnectDaemon,
 } from "#src/server/centrifugo/server-api.server";
 import { removeComputerFromWorkspace } from "#src/server/computers/computer-membership.server";
+import { getWorkspaceComputerInvalidation } from "#src/server/agents/workspace-computer-invalidation.server";
 import { computerIdInputSchema } from "./computer.schemas";
 
 /** Unlinks an owner's local Computer from this Workspace while preserving its identity elsewhere. */
@@ -19,6 +20,7 @@ export const removeComputer = createServerFn({ method: "POST" })
       workspaceId,
       computerId: data.computerId,
     });
+    getWorkspaceComputerInvalidation().notify(data.computerId);
     try {
       await reconnectDaemon(createCentrifugoServerApi(), workspaceId, data.computerId);
     } catch (error) {

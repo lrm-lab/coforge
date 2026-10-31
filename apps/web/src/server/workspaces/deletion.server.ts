@@ -25,6 +25,7 @@ import type { WorkspaceFileCleanup } from "./file-cleanup.server";
 import { assertCanDeleteWorkspace } from "./member-role.server";
 import { workspaceMemberRole } from "./workspace-membership.server";
 import { errorType } from "#src/server/errors/error-type.server";
+import { getWorkspaceComputerInvalidation } from "#src/server/agents/workspace-computer-invalidation.server";
 
 /** Who hears that a Workspace is gone, after the delete commits. */
 export type WorkspaceDeletionSignals = {
@@ -283,6 +284,7 @@ export class WorkspaceDeletion {
 
   /** Pages and daemons hear independently: no page is disconnected. */
   async #announce(workspaceId: string, computerIds: readonly string[]) {
+    for (const computerId of computerIds) getWorkspaceComputerInvalidation().notify(computerId);
     await Promise.all([
       this.#signal("workspace_deleted", workspaceId, () =>
         this.effects.signals.workspaceDeleted(workspaceId),

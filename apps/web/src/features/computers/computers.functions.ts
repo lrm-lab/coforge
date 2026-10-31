@@ -63,6 +63,7 @@ import { getAgentDisplay } from "#src/server/agents/agent-display.server";
 import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { DaemonCredentialRevocations } from "#src/server/db/repositories/daemon-credential-revocation.repositories.server";
+import { getWorkspaceComputerInvalidation } from "#src/server/agents/workspace-computer-invalidation.server";
 
 function runtimeVisibility(db: WorkspaceUserContext["db"]) {
   return new ComputerRuntimeVisibility(new PrismaComputerRuntimeRepository(db));
@@ -433,6 +434,7 @@ export const deleteComputer = createServerFn({ method: "POST" })
       await tx.computer.delete({ where: { id: computer.id } });
     });
     const api = createCentrifugoServerApi();
+    getWorkspaceComputerInvalidation().notify(computer.id);
     await Promise.all(
       computer.workspaces.map(({ workspaceId: boundWorkspaceId }) =>
         reconnectDaemon(api, boundWorkspaceId, computer.id),

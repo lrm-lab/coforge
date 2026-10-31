@@ -27,6 +27,7 @@ import {
 } from "./reply-intent-publish.server";
 import { cachedReplyTargetResolver } from "./reply-target-cache.server";
 import { cachedWorkspaceComputerCheck } from "./workspace-computer-cache.server";
+import { getWorkspaceComputerInvalidation } from "./workspace-computer-invalidation.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import type { AgentActivityKind } from "@lrm/coforge-sdk/internal";
 
@@ -249,6 +250,8 @@ const computerInWorkspace = cachedWorkspaceComputerCheck(async (workspaceId, com
 });
 
 export function createAgentActivityPublicationHandler() {
+  // An ownership write drops the cached positive at once, here and on every other instance.
+  getWorkspaceComputerInvalidation().forgetWith(computerInWorkspace.forget);
   return async (request: Request) => {
     const db = getDatabaseClient();
     if (!db) return unauthorized();
@@ -266,7 +269,7 @@ export function createAgentActivityPublicationHandler() {
     return handleAgentActivityPublication(request, {
       proxySecret: process.env.COFORGE_CENTRIFUGO_PROXY_SECRET,
       ...publicationAgentLookups(db),
-      computerBelongsToWorkspace: computerInWorkspace,
+      computerBelongsToWorkspace: computerInWorkspace.check,
       observe: (observation) => activity.record(observation),
       resolveReplyTarget: replyTargets,
       publish: centrifugo
