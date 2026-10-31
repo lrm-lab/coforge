@@ -11,9 +11,9 @@ import { isAppError } from "#src/lib/app-error";
 import {
   applyConfirmedWeeklyReportBody,
   confirmWeeklyReportSend,
-  dismissWeeklyFormatSend,
   switchWeeklyReportBodyVersion,
 } from "./records.functions";
+import { dismissWeeklyFormatSend } from "./records-side-chat.functions";
 import type { ReportBodyRestoreView } from "./records-content";
 import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
 import { WeeklySendConfirmDialog } from "./weekly-send-confirm-dialog";

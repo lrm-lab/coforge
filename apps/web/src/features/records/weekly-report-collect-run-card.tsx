@@ -4,7 +4,7 @@ import { ChevronDown, ChevronUp } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { m } from "#src/paraglide/messages";
-import { loadWeeklyReportCollectRun } from "./records.functions";
+import { loadWeeklyReportCollectRun } from "./records-collect.functions";
 
 function collectRunStatusLabel(status: string): string {
   switch (status) {

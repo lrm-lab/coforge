@@ -14,10 +14,8 @@ import { useServerFn } from "@tanstack/react-start";
 import {
   ChevronDown,
   ChevronRightDouble,
-  CheckCircle,
   DotsHorizontal,
   Edit01 as Edit,
-  Link01 as LinkIcon,
   Microphone02 as Microphone,
   Paperclip,
   Pin01 as Pin,
@@ -47,29 +45,39 @@ import type {
   ReportBodyRestoreView,
   ReportContent,
 } from "./records-content";
-import { formatWeeklyReportCompletedAt } from "./records-content";
 import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
+import { AssistantAttachmentCard, FormatSendActions } from "./record-side-panel-cards";
+import { suggestionPreview } from "./record-side-panel-model";
 import {
-  addRecordComment,
-  acceptMemberGenerateHelp,
+  DEFAULT_SIDE_PANEL_WIDTH,
+  MIN_SIDE_PANEL_WIDTH,
+  SIDE_PANEL_WIDTH_TRANSITION,
+  readStoredSidePanelWidth,
+  writeStoredSidePanelWidth,
+} from "./record-side-panel-width";
+import {
   applyConfirmedKeyPointMarkdown,
   applyConfirmedWeeklyReportBody,
   dismissKeyPointConfirmDraft,
+  createWeeklyTemplate,
+  loadWeeklyTemplateForReport,
+  loadWeeklyReportAssistantContext,
+} from "./records.functions";
+import {
+  addRecordComment,
+  acceptMemberGenerateHelp,
   archiveWeeklyReportAssistantChatSessionFn,
   confirmMemberReportIntent,
   createWeeklyReportAssistantChatSessionFn,
-  createWeeklyTemplate,
   declineMemberReportIntent,
   ensureRecordAssistantIntro,
   ensureWeeklyReportAssistantChatSessions,
   dismissWeeklyFormatSend,
-  loadWeeklyTemplateForReport,
-  loadWeeklyReportAssistantContext,
   loadWeeklyReportAssistantMessages,
   loadWeeklyReportAssistantStatus,
   postWeeklyReportAssistantRequest,
   renameWeeklyReportAssistantChatSessionFn,
-} from "./records.functions";
+} from "./records-side-chat.functions";
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import {
   looksLikeMemberGenerateOfferAccept,
@@ -110,49 +118,12 @@ function payloadOf(comment: CommentRow): RecordAssistantPayload | null {
   return parseRecordAssistantPayload(comment.payload);
 }
 
-const SIDE_PANEL_WIDTH_STORAGE_KEY = "coforge.records.side-panel-width";
 const appRoute = getRouteApi("/w/$workspaceSlug");
-const DEFAULT_SIDE_PANEL_WIDTH = 384;
-const MIN_SIDE_PANEL_WIDTH = 280;
-const SIDE_PANEL_WIDTH_TRANSITION = "width 220ms cubic-bezier(0.32, 0.72, 0, 1)";
-
-function readStoredSidePanelWidth(): number {
-  if (typeof window === "undefined") return DEFAULT_SIDE_PANEL_WIDTH;
-  const raw = window.localStorage.getItem(SIDE_PANEL_WIDTH_STORAGE_KEY);
-  const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN;
-  if (!Number.isFinite(parsed)) return DEFAULT_SIDE_PANEL_WIDTH;
-  return Math.max(MIN_SIDE_PANEL_WIDTH, parsed);
-}
-
-function writeStoredSidePanelWidth(width: number) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(SIDE_PANEL_WIDTH_STORAGE_KEY, String(Math.round(width)));
-}
 
 function assistantReady(
   status: Awaited<ReturnType<typeof loadWeeklyReportAssistantStatus>> | null,
 ) {
   return Boolean(status?.computerConfigured && status.runtimeConfigured);
-}
-
-function suggestionPreview(suggestion: WeeklyReportAssistantSuggestion): string {
-  if (suggestion.type === "send-prompt") return "";
-  if (suggestion.type === "template-create") {
-    return [
-      `Name: ${suggestion.name}`,
-      `Schedule: weekday ${suggestion.sendWeekday} at ${suggestion.sendTime}`,
-      ...suggestion.sections.map(
-        (section) =>
-          `## ${section.title}\n${section.children.map((child) => `- ${child}`).join("\n")}`,
-      ),
-    ].join("\n");
-  }
-  if (suggestion.type === "key-point-edit") return suggestion.markdown.trim();
-  if (suggestion.type !== "body-edit") return "";
-  const tabs = suggestion.content.tabs ?? {};
-  return Object.entries(tabs)
-    .map(([name, tab]) => `## ${name}\n${tab.markdown.trimEnd()}`)
-    .join("\n\n");
 }
 
 export function RecordSidePanel({
@@ -1641,105 +1612,5 @@ export function RecordSidePanel({
         onClose={() => setTemplateDetail(null)}
       />
     </aside>
-  );
-}
-
-function FormatSendActions({
-  disabled,
-  onSend,
-  onCancel,
-}: {
-  disabled: boolean;
-  onSend: () => void;
-  onCancel: () => void;
-}) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      <Button
-        size="sm"
-        color="primary"
-        className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
-        isDisabled={disabled}
-        onPress={onSend}
-      >
-        {m.records_assistant_confirm_send()}
-      </Button>
-      <Button size="sm" color="secondary" isDisabled={disabled} onPress={onCancel}>
-        {m.records_assistant_cancel_week()}
-      </Button>
-    </div>
-  );
-}
-
-function AssistantAttachmentCard({
-  payload,
-  disabled,
-  onOpen,
-}: {
-  payload: Extract<RecordAssistantPayload, { kind: "offer-send" }>;
-  disabled: boolean;
-  onOpen: () => void;
-}) {
-  const title =
-    payload.weekTitle?.trim() ||
-    (payload.year != null && payload.week != null
-      ? `${payload.year} W${payload.week}`
-      : m.records_assistant_template());
-  const updatedLabel = payload.updatedAt
-    ? m.records_assistant_template_updated({
-        time: formatWeeklyReportCompletedAt(payload.updatedAt).replace(/:\d{2}$/, ""),
-      })
-    : m.records_assistant_template_ready();
-  const recipients = payload.recipients ?? [];
-  const shown = recipients.slice(0, 5);
-  const overflow =
-    typeof payload.recipientTotal === "number"
-      ? Math.max(0, payload.recipientTotal - shown.length)
-      : Math.max(0, recipients.length - shown.length);
-
-  return (
-    <Button
-      size="sm"
-      color="tertiary"
-      noTextPadding
-      isDisabled={disabled}
-      aria-label={`${m.records_template_open_detail()}: ${title}`}
-      onPress={onOpen}
-      className="h-auto w-full items-start justify-start whitespace-normal rounded-xl bg-gradient-to-br from-secondary via-secondary/40 to-primary p-3 text-left font-normal hover:bg-primary_hover"
-    >
-      <div className="flex w-full items-start gap-3">
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-tertiary text-fg-secondary">
-          <LinkIcon className="size-4" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-primary">{title}</p>
-          <p className="text-xs text-tertiary">{m.records_assistant_template()}</p>
-          <p className="mt-1 flex items-center gap-1 text-xs text-tertiary">
-            <CheckCircle className="size-3.5 text-success-primary" />
-            <span>{updatedLabel}</span>
-          </p>
-          {shown.length > 0 ? (
-            <div className="mt-2 flex items-center">
-              {shown.map((person, index) => (
-                <IdentityAvatar
-                  key={`${person.displayName}-${index}`}
-                  size="xs"
-                  name={person.displayName}
-                  alt={person.displayName}
-                  userId={person.userId}
-                  src={person.avatarUrl}
-                  className={cx("ring-2 ring-primary", index > 0 ? "-ml-1.5" : undefined)}
-                />
-              ))}
-              {overflow > 0 ? (
-                <span className="ml-1.5 text-xs font-medium text-tertiary">
-                  {m.records_assistant_recipients_overflow({ count: overflow })}
-                </span>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      </div>
-    </Button>
   );
 }

@@ -30,7 +30,7 @@ import {
   ensureWeeklyReportCollector,
   listWeeklyReportCollectorSlots,
   submitWeeklyReportCollectPlan,
-} from "./records.functions";
+} from "./records-collect.functions";
 import { collectPlanSubmitBlocked } from "./weekly-report-collect-plan";
 import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
 
