@@ -167,21 +167,19 @@ test("maps ACCESS_DENIED and INVALID_INPUT target resolution failures to 403 and
 });
 
 test("maps an unknown @user target and an unauthorized DM scope to 403", async () => {
-  for (const message of ["target user not found", "conversation scope is not authorized"]) {
-    const response = await handleAgentAttachmentUpload(
-      uploadRequest({ file: new Blob(["hello"]), target: "@nobody" }),
-      principal,
-      {
-        resolveTarget: async () => {
-          throw new Error(message);
-        },
-        store: async () => {
-          throw new Error("must not store");
-        },
+  const response = await handleAgentAttachmentUpload(
+    uploadRequest({ file: new Blob(["hello"]), target: "@nobody" }),
+    principal,
+    {
+      resolveTarget: async () => {
+        throw new AppError("TARGET_NOT_ACCESSIBLE");
       },
-    );
-    expect(response.status).toBe(403);
-  }
+      store: async () => {
+        throw new Error("must not store");
+      },
+    },
+  );
+  expect(response.status).toBe(403);
 });
 
 test("maps a malformed @user target grammar to 400", async () => {
@@ -190,7 +188,7 @@ test("maps a malformed @user target grammar to 400", async () => {
     principal,
     {
       resolveTarget: async () => {
-        throw new Error("invalid message target");
+        throw new AppError("INVALID_TARGET");
       },
       store: async () => {
         throw new Error("must not store");

@@ -12,7 +12,7 @@ import type {
 } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import type { MessageRequestIdempotency } from "./message-request-idempotency.server";
 import { announceMemberChanged, type ConversationRealtime } from "./conversation-realtime.server";
-import { isAppErrorCode } from "#src/lib/app-error";
+import { AppError, isAppErrorCode } from "#src/lib/app-error";
 import { deliveryMentionsAgent } from "./mentions.server";
 import { dmParentTarget } from "#src/server/db/repositories/agent-peer-direct.repositories.server";
 import type { MentionDeliveryIssuer } from "./mention-deliveries.server";
@@ -24,7 +24,7 @@ export class ReadDirectMessages {
 
   async execute(input: { workspaceId: string; agentId: string; target: string }) {
     const userId = await this.conversations.userIdForUsername?.(input.target);
-    if (!userId) throw new Error("target user not found");
+    if (!userId) throw new AppError("TARGET_NOT_ACCESSIBLE");
     await this.conversations.getOrCreateUserAgent(input.workspaceId, userId, input.agentId);
     const messages = await this.conversations.readMessages?.(
       input.workspaceId,
@@ -127,7 +127,7 @@ export class SendDirectMessage {
           input.agentId,
           dmParentTarget(input.target),
         );
-    if (!isChannel && !direct) throw new Error("target user not found");
+    if (!isChannel && !direct) throw new AppError("TARGET_NOT_ACCESSIBLE");
     const dmUserId = direct?.peer.kind === "user" ? direct.peer.userId : undefined;
     // The send path's channel: the Agent's own, or one it can still join on the way to posting —
     // the send's transaction writes that membership with the message.

@@ -34,9 +34,9 @@ export async function getOrCreateUserAgentConversation(
       // who is registered elsewhere.
       if (await findUserAgentConversation(db, workspaceId, userId, agentId))
         throw new AppError("DM_PEER_NOT_IN_WORKSPACE");
-      throw new Error("target user not found");
+      throw new AppError("TARGET_NOT_ACCESSIBLE");
     }
-    throw new Error("conversation scope is not authorized");
+    throw new AppError("TARGET_NOT_ACCESSIBLE");
   }
   const where = {
     workspaceId_directKey: { workspaceId, directKey: agentDirectKey(userId, agentId) },

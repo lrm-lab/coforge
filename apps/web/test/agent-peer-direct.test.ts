@@ -41,7 +41,7 @@ describe("parsePeerTarget", () => {
 
   test("refuses anything else as an invalid target", () => {
     for (const target of ["ada", "@", "@~agent", "@ada~bot", "@ada~", "@ada~agent~human", "#ada"])
-      expect(() => parsePeerTarget(target)).toThrow("invalid message target");
+      expect(() => parsePeerTarget(target)).toThrow("INVALID_TARGET");
   });
 });
 
@@ -49,6 +49,6 @@ describe("humanUsernameTarget", () => {
   test("drops ~human and refuses ~agent", () => {
     expect(humanUsernameTarget("@ada")).toBe("@ada");
     expect(humanUsernameTarget("@ada~human")).toBe("@ada");
-    expect(() => humanUsernameTarget("@ada~agent")).toThrow("invalid message target");
+    expect(() => humanUsernameTarget("@ada~agent")).toThrow("INVALID_TARGET");
   });
 });

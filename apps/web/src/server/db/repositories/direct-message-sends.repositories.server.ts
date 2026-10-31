@@ -48,7 +48,7 @@ export async function sendAgentMessage(
     where: { id: conversationId },
     select: { workspaceId: true, channelName: true, archivedAt: true, directKey: true },
   });
-  if (!conversation) throw new Error("conversation scope is not authorized");
+  if (!conversation) throw new AppError("TARGET_NOT_ACCESSIBLE");
   const agentPeer = !conversation.channelName && isAgentPeerDirectKey(conversation.directKey ?? "");
   if (conversation.channelName && conversation.archivedAt) throw new AppError("CONFLICT");
   // A DM's two members; in a channel, not the whole roster (#general holds the whole

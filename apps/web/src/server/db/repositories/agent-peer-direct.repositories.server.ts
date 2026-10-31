@@ -46,7 +46,7 @@ async function resolveDirectPeer(
       : db.user.findUnique({ where: { username: name }, select: { id: true } }),
   ]);
   if (!agent) {
-    if (!user) throw new Error("target user not found");
+    if (!user) throw new AppError("TARGET_NOT_ACCESSIBLE");
     return { kind: "user", userId: user.id };
   }
   if (user) {
@@ -252,7 +252,7 @@ export async function openDirectPeerConversation<Conversation>(
 export function dmParentTarget(target: string) {
   const [parentTarget, root, extra] = target.split(":");
   if (extra !== undefined || (root !== undefined && !MESSAGE_ANCHOR.test(root)))
-    throw new Error("invalid message target");
+    throw new AppError("INVALID_TARGET");
   return parentTarget!;
 }
 

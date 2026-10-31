@@ -108,7 +108,7 @@ test("maps ACCESS_DENIED and an unknown target to 403, and a malformed target gr
     principal,
     {
       resolveTarget: async () => {
-        throw new Error("target user not found");
+        throw new AppError("TARGET_NOT_ACCESSIBLE");
       },
       create: async () => {
         throw new Error("must not create");
@@ -122,7 +122,7 @@ test("maps ACCESS_DENIED and an unknown target to 403, and a malformed target gr
     principal,
     {
       resolveTarget: async () => {
-        throw new Error("invalid message target");
+        throw new AppError("INVALID_TARGET");
       },
       create: async () => {
         throw new Error("must not create");

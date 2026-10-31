@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { AppError } from "#src/lib/app-error";
 import { handleAgentActionPrepare } from "#src/routes/api/agent/v1/actions/prepare";
 import { ActionCardError } from "#src/server/conversations/action-card-error.server";
 
@@ -73,7 +74,7 @@ test("a target user this Agent cannot reach is refused the way message send refu
     principal,
     () => ({
       prepare: async () => {
-        throw new Error("target user not found");
+        throw new AppError("TARGET_NOT_ACCESSIBLE");
       },
     }),
   );
@@ -90,7 +91,7 @@ test("a malformed target is a bad request, the way message send answers it", asy
     principal,
     () => ({
       prepare: async () => {
-        throw new Error("invalid message target");
+        throw new AppError("INVALID_TARGET");
       },
     }),
   );
@@ -107,7 +108,7 @@ test("a direct message scope outside the Workspace is refused like an unknown us
     principal,
     () => ({
       prepare: async () => {
-        throw new Error("conversation scope is not authorized");
+        throw new AppError("TARGET_NOT_ACCESSIBLE");
       },
     }),
   );

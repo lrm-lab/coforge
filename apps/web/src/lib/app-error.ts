@@ -15,6 +15,8 @@ export const APP_ERROR_CODES = [
   "AMBIGUOUS_TARGET",
   "AGENT_DM_CHAIN_LIMIT",
   "AGENT_DM_RATE_LIMIT",
+  "INVALID_TARGET",
+  "TARGET_NOT_ACCESSIBLE",
   "PUSH_SERVICE_UNREACHABLE",
 ] as const;
 
@@ -47,6 +49,12 @@ export const APP_ERROR_HTTP_STATUS: Record<AppErrorCode, number> = {
   AMBIGUOUS_TARGET: 409,
   AGENT_DM_CHAIN_LIMIT: 429,
   AGENT_DM_RATE_LIMIT: 429,
+  // A target that fails the `@name(~human|~agent)` / `#channel` / `attachment:` grammar.
+  INVALID_TARGET: 400,
+  // A well-formed target the caller cannot reach: unknown username, no usable Agent, a
+  // direct-message scope outside the Workspace. Unknown and unreachable read the same
+  // deliberately — the send reveals neither.
+  TARGET_NOT_ACCESSIBLE: 403,
   // The server could not reach this browser's push service: the caller should
   // retry another way, not treat it as a permanent failure.
   PUSH_SERVICE_UNREACHABLE: 503,

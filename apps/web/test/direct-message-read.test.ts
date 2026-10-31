@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { AppError } from "#src/lib/app-error";
 import { ReadDirectMessages } from "#src/server/conversations/direct-message.server";
 import type { DirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { unusedDatabase } from "./helpers/unused-database";
@@ -26,7 +27,7 @@ describe("ReadDirectMessages", () => {
       },
       async openAgentDirect(workspaceId: string, agentId: string, parentTarget: string) {
         const userId = await this.userIdForUsername?.(parentTarget);
-        if (!userId) throw new Error("target user not found");
+        if (!userId) throw new AppError("TARGET_NOT_ACCESSIBLE");
         const conversation = await this.getOrCreateUserAgent(workspaceId, userId, agentId);
         return { conversation, peer: { kind: "user" as const, userId } };
       },

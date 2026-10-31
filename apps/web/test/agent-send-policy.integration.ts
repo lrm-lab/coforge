@@ -102,7 +102,9 @@ test("an Agent send forwards past its seen boundary, holds a newer reply, and re
 
     // An unreachable target is refused while reading its context, before the sender runs.
     await expect(sendTo("#not-joined")).rejects.toMatchObject({ code: "ACCESS_DENIED" });
-    await expect(sendTo("@nobody-with-this-name", 5)).rejects.toThrow("target user not found");
+    await expect(sendTo("@nobody-with-this-name", 5)).rejects.toMatchObject({
+      code: "TARGET_NOT_ACCESSIBLE",
+    });
     expect(sentTargets).toEqual([target]);
   } finally {
     await db.agentMessageDelivery.deleteMany({ where: { workspaceId: workspace.id } });

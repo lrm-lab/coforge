@@ -228,7 +228,8 @@ export async function handleAgentMessagesPost(
     !body ||
     typeof body !== "object" ||
     typeof body.target !== "string" ||
-    typeof body.content !== "string"
+    typeof body.content !== "string" ||
+    !body.content
   )
     return Response.json({ error: "target and content are required" }, { status: 400 });
   const freshnessContextMode = body.freshnessContextMode;

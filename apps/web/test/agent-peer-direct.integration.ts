@@ -173,14 +173,20 @@ test("a bare name shared by a member and an Agent is ambiguous until a suffix pi
 test("a private Agent can be messaged only by its creator's Agents or an Agent with a conversation", async () => {
   // Ada's own Agent reaches her private one; Bob's Agent cannot find it, as for a missing name.
   await send(alpha, `@${hush.name}`, "hello hush");
-  await expect(send(gamma, `@${hush.name}`, "hello?")).rejects.toThrow("target user not found");
-  await expect(send(alpha, `@${vault.name}`, "hello?")).rejects.toThrow("target user not found");
+  await expect(send(gamma, `@${hush.name}`, "hello?")).rejects.toMatchObject({
+    code: "TARGET_NOT_ACCESSIBLE",
+  });
+  await expect(send(alpha, `@${vault.name}`, "hello?")).rejects.toMatchObject({
+    code: "TARGET_NOT_ACCESSIBLE",
+  });
 });
 
 test("visibility gates starting a conversation, and being in one lets an Agent keep answering", async () => {
   // Hush changes hands: Bob's now, and private, so Alpha (Ada's) could no longer start with it.
   await db.agent.update({ where: { id: hush.id }, data: { ownerId: bob.id } });
-  await expect(send(beta, `@${hush.name}`, "new here")).rejects.toThrow("target user not found");
+  await expect(send(beta, `@${hush.name}`, "new here")).rejects.toMatchObject({
+    code: "TARGET_NOT_ACCESSIBLE",
+  });
   // Alpha already has a conversation with it, so both sides still send.
   await send(alpha, `@${hush.name}`, "still talking");
   await send(hush, `@${alpha.name}`, "and answering");
@@ -188,9 +194,15 @@ test("visibility gates starting a conversation, and being in one lets an Agent k
 });
 
 test("an Agent cannot message itself, a deleted Agent, or a name that is nobody", async () => {
-  await expect(send(alpha, `@${alpha.name}`, "me")).rejects.toThrow("target user not found");
-  await expect(send(alpha, `@${deleted.name}`, "hello")).rejects.toThrow("target user not found");
-  await expect(send(alpha, "@no-such-name", "hello")).rejects.toThrow("target user not found");
+  await expect(send(alpha, `@${alpha.name}`, "me")).rejects.toMatchObject({
+    code: "TARGET_NOT_ACCESSIBLE",
+  });
+  await expect(send(alpha, `@${deleted.name}`, "hello")).rejects.toMatchObject({
+    code: "TARGET_NOT_ACCESSIBLE",
+  });
+  await expect(send(alpha, "@no-such-name", "hello")).rejects.toMatchObject({
+    code: "TARGET_NOT_ACCESSIBLE",
+  });
 });
 
 test("a peer with no Computer still gets the delivery row, to read when it starts", async () => {

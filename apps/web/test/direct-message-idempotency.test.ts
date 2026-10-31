@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { decodeAgentMessageDelivery } from "@lrm/coforge-sdk/internal";
+import { AppError } from "#src/lib/app-error";
 import { SendDirectMessage } from "#src/server/conversations/direct-message.server";
 import type { DirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { quietCentrifugo, withPublishBatch } from "./helpers/fake-centrifugo";
@@ -154,7 +155,7 @@ describe("SendDirectMessage request idempotency", () => {
       },
       async openAgentDirect(workspaceId: string, agentId: string, parentTarget: string) {
         const userId = await this.userIdForUsername?.(parentTarget);
-        if (!userId) throw new Error("target user not found");
+        if (!userId) throw new AppError("TARGET_NOT_ACCESSIBLE");
         const conversation = await this.getOrCreateUserAgent(workspaceId, userId, agentId);
         return { conversation, peer: { kind: "user" as const, userId } };
       },

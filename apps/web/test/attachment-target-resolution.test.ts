@@ -79,13 +79,11 @@ const notAccessible = (status: number) => ({
 const refusals: [string, unknown, { status: number; body: unknown }][] = [
   ["a channel the Agent is not a member of", new AppError("ACCESS_DENIED"), notAccessible(403)],
   ["a malformed #channel", new AppError("INVALID_INPUT"), notAccessible(400)],
-  ["a malformed @user grammar", new Error("invalid message target"), notAccessible(400)],
-  ["an unknown @user", new Error("target user not found"), notAccessible(403)],
-  [
-    "a DM scope outside the Workspace",
-    new Error("conversation scope is not authorized"),
-    notAccessible(403),
-  ],
+  ["a malformed @user grammar", new AppError("INVALID_TARGET"), notAccessible(400)],
+  ["an unknown @user", new AppError("TARGET_NOT_ACCESSIBLE"), notAccessible(403)],
+  ["a DM scope outside the Workspace", new AppError("TARGET_NOT_ACCESSIBLE"), notAccessible(403)],
+  // Deliberate: an unclassified failure reads the same as an unreachable target, never a 500.
+  ["an unclassified failure", new Error("resolution failed"), notAccessible(403)],
   [
     "a direct message whose person left the Workspace",
     new AppError("DM_PEER_NOT_IN_WORKSPACE"),
