@@ -10,6 +10,9 @@ test("chat activity history uses a compact parameterized manager-scoped query", 
       // `managedAgentWhere` seam, and passed into the CTE's WHERE — never re-derived in SQL.
       findMany: async () => [{ id: "agent-1" }, { id: "agent-empty" }],
     },
+    // A private channel the viewer is not in, read once (`unreadableConversationIds`).
+    conversation: { findMany: async () => [{ id: "private-1" }] },
+    task: { findMany: async () => [{ discussionConversationId: "discussion-1" }] },
     $queryRaw: async (...input: unknown[]) => {
       query = input;
       return [
@@ -61,9 +64,11 @@ test("chat activity history uses a compact parameterized manager-scoped query", 
     { id: "agent-empty", activity: [] },
   ]);
   const fragments = query.slice(1).filter((value) => value instanceof Prisma.Sql);
-  // The viewer's readable-Activity rule binds into both reads of a launch's rows (task #302).
-  expect(fragments).toHaveLength(2);
-  expect(fragments.every((fragment) => fragment.values.includes("user-1"))).toBe(true);
+  // The viewer's unreadable conversations filter both reads of a launch's rows (task #302).
+  expect(fragments.map((fragment) => fragment.values)).toEqual([
+    [["private-1", "discussion-1"]],
+    [["private-1", "discussion-1"]],
+  ]);
   // Every stored kind is a recent row, so no detail kind is bound into the query.
   expect(query.slice(1).filter((value) => !(value instanceof Prisma.Sql))).toEqual([
     "workspace-1",

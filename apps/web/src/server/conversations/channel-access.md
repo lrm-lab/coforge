@@ -39,7 +39,7 @@ Moved out of [`AGENTS.md`](AGENTS.md) to keep it under 200 lines.
   `projectListSelect`), a forward to a private channel the forwarder is not in fails
   as `no_access`, an action card neither names nor links it and acts on it only for
   an active member, an Agent's reminder anchored in it links nowhere, an Agent's
-  Activity there shows only to its members (`readableActivitySql`), and no App event
+  Activity there shows only to its members (`unreadableConversationIds`), and no App event
   names it (`recordAppNotifications`, as an App lists public channels only).
   Workspace memory learns only from public channels (`MEMORY_SOURCE_CHANNEL_WHERE`),
   since what it learns is offered to everyone. Turning a channel private looks

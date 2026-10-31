@@ -237,8 +237,9 @@ export async function actionCardViews(
         },
         humans: (payload.humanIds ?? []).map((id) => ref(id, userName)),
         agents: (payload.agentIds ?? []).map((id) => ref(id, agentName)),
-        // Someone who left the channel adds no one to it.
-        canCommit: pending && viewerInChannel.has(payload.channelId),
+        // Only an active member of a channel they read adds to it: not someone who left it.
+        canCommit:
+          pending && channelName.has(payload.channelId) && viewerInChannel.has(payload.channelId),
         result: readableResult<{ channelId: string; userIds: string[]; agentIds: string[] }>(
           card.result,
         ),

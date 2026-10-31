@@ -4,14 +4,7 @@ import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.ser
 import { errorType } from "#src/server/errors/error-type.server";
 import { canSeeAgent } from "./agent-visibility.server";
 
-const CHANNEL_PEOPLE_SELECT = {
-  channelName: true,
-  visibility: true,
-  members: {
-    where: { userId: { not: null }, ...ACTIVE_MEMBER_WHERE },
-    select: { userId: true },
-  },
-} as const;
+const CHANNEL_SELECT = { id: true, channelName: true, visibility: true } as const;
 
 /**
  * Who sees an Agent's Activity in one conversation live (task #302). For a private channel, or the
@@ -26,11 +19,12 @@ export async function privateActivityAudience(
   scope: { workspaceId: string; agentId: string; conversationId: string },
 ): Promise<readonly string[] | undefined> {
   try {
+    // Every frame asks, so a public channel costs this one row read and never its member list.
     const conversation = await db.conversation.findFirst({
       where: { id: scope.conversationId, workspaceId: scope.workspaceId },
       select: {
-        ...CHANNEL_PEOPLE_SELECT,
-        taskDiscussionOf: { select: { conversation: { select: CHANNEL_PEOPLE_SELECT } } },
+        ...CHANNEL_SELECT,
+        taskDiscussionOf: { select: { conversation: { select: CHANNEL_SELECT } } },
       },
     });
     const channel =
@@ -39,7 +33,11 @@ export async function privateActivityAudience(
         : conversation;
     if (!channel?.channelName || channel.visibility !== CHANNEL_VISIBILITY.PRIVATE)
       return undefined;
-    const userIds = channel.members.flatMap((member) => (member.userId ? [member.userId] : []));
+    const members = await db.conversationMember.findMany({
+      where: { conversationId: channel.id, userId: { not: null }, ...ACTIVE_MEMBER_WHERE },
+      select: { userId: true },
+    });
+    const userIds = members.flatMap((member) => (member.userId ? [member.userId] : []));
     if (userIds.length === 0) return [];
     const [agent, people] = await Promise.all([
       db.agent.findUnique({
