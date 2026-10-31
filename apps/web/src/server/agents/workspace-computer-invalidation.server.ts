@@ -1,5 +1,10 @@
 import type { RedisClient } from "bun";
-import { openRedisClient, subscribeAcrossReconnects } from "#src/server/redis-client.server";
+import {
+  cacheInvalidation,
+  LocalCacheInvalidation,
+  RedisCacheInvalidation,
+  type CacheInvalidation,
+} from "#src/server/cache-invalidation.server";
 
 const CHANNEL = "coforge:workspace-computer:v1";
 
@@ -8,81 +13,19 @@ const CHANNEL = "coforge:workspace-computer:v1";
  * (`workspace-computer-cache`) must drop at once — on this instance and, through a Redis
  * pub/sub channel, on every other web instance. A Computer detached or deleted must not keep
  * relaying Activity under its old Workspace on a cached positive; the 30 s TTL is only the
- * backstop. Local forgets are registered once by each cache (`forgetWith`); a notify forgets
- * locally and publishes the Computer id, never blocking the caller on Redis.
+ * backstop. The key is the Computer id (`cache-invalidation`).
  */
-export interface WorkspaceComputerInvalidation {
-  /** Forget every remembered answer for this Computer, here and on every other instance. */
-  notify(computerId: string): void;
-  /** Register a local cache's forget; a missing id flushes everything (a lost broadcast). */
-  forgetWith(forget: (computerId?: string) => void): void;
-}
+export type WorkspaceComputerInvalidation = CacheInvalidation;
 
-export class LocalWorkspaceComputerInvalidation implements WorkspaceComputerInvalidation {
-  private readonly forgetters = new Set<(computerId?: string) => void>();
-
-  notify(computerId: string) {
-    this.forget(computerId);
-  }
-
-  forgetWith(forget: (computerId?: string) => void) {
-    this.forgetters.add(forget);
-  }
-
-  forget(computerId?: string) {
-    for (const forget of this.forgetters) forget(computerId);
-  }
-}
+export class LocalWorkspaceComputerInvalidation extends LocalCacheInvalidation {}
 
 /** Cross-instance invalidation: the ownership write may land on a different web instance. */
-export class RedisWorkspaceComputerInvalidation
-  extends LocalWorkspaceComputerInvalidation
-  implements WorkspaceComputerInvalidation
-{
-  private subscription: Promise<void> | undefined;
-
-  constructor(
-    private readonly publisher: RedisClient,
-    private readonly subscriber: () => RedisClient,
-  ) {
-    super();
-  }
-
-  override notify(computerId: string) {
-    this.forget(computerId);
-    // Never block the ownership write on Redis; other instances fall back to their TTL.
-    this.publisher.publish(CHANNEL, computerId).catch(() => {});
-  }
-
-  override forgetWith(forget: (computerId?: string) => void) {
-    super.forgetWith(forget);
-    this.subscribe();
-  }
-
-  private subscribe() {
-    // After a reconnect, a notify published meanwhile is lost: every cache flushes instead.
-    this.subscription ??= subscribeAcrossReconnects(
-      this.subscriber(),
-      CHANNEL,
-      (message) => this.forget(message),
-      () => this.forget(),
-    ).then(
-      () => {},
-      () => {
-        this.subscription = undefined;
-      },
-    );
+export class RedisWorkspaceComputerInvalidation extends RedisCacheInvalidation {
+  constructor(publisher: RedisClient, subscriber: () => RedisClient) {
+    super(CHANNEL, publisher, subscriber);
   }
 }
 
-let singleton: WorkspaceComputerInvalidation | undefined;
-
 export function getWorkspaceComputerInvalidation(): WorkspaceComputerInvalidation {
-  if (singleton) return singleton;
-  const redisUrl = process.env.REDIS_URL;
-  return (singleton = redisUrl
-    ? new RedisWorkspaceComputerInvalidation(openRedisClient(redisUrl), () =>
-        openRedisClient(redisUrl),
-      )
-    : new LocalWorkspaceComputerInvalidation());
+  return cacheInvalidation(CHANNEL);
 }
