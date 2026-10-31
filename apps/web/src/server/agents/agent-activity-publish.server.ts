@@ -26,6 +26,7 @@ import {
   type ReplyIntentPublicationDependencies,
 } from "./reply-intent-publish.server";
 import { cachedReplyTargetResolver } from "./reply-target-cache.server";
+import { cachedWorkspaceComputerCheck } from "./workspace-computer-cache.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import type { AgentActivityKind } from "@lrm/coforge-sdk/internal";
 
@@ -230,6 +231,23 @@ const replyTargets = cachedReplyTargetResolver(async ({ workspaceId, agentId, ta
   return { conversationId, threadRootId, ...(peerUserId ? { peerUserId } : {}) };
 });
 
+/**
+ * Whether the publishing Computer is in the Workspace, remembered briefly
+ * (`workspace-computer-cache`): this handler is built once for the process and every daemon
+ * Activity frame asks the same pair. The stale window is accepted — `agentBelongsToComputer`
+ * still gates each frame's Agent, and the connect proxy re-verifies the pair at connect.
+ */
+const computerInWorkspace = cachedWorkspaceComputerCheck(async (workspaceId, computerId) => {
+  const db = getDatabaseClient();
+  if (!db) return false;
+  return Boolean(
+    await db.workspaceComputer.findUnique({
+      where: { workspaceId_computerId: { workspaceId, computerId } },
+      select: { id: true },
+    }),
+  );
+});
+
 export function createAgentActivityPublicationHandler() {
   return async (request: Request) => {
     const db = getDatabaseClient();
@@ -248,13 +266,7 @@ export function createAgentActivityPublicationHandler() {
     return handleAgentActivityPublication(request, {
       proxySecret: process.env.COFORGE_CENTRIFUGO_PROXY_SECRET,
       ...publicationAgentLookups(db),
-      computerBelongsToWorkspace: async (workspaceId, computerId) =>
-        Boolean(
-          await db.workspaceComputer.findUnique({
-            where: { workspaceId_computerId: { workspaceId, computerId } },
-            select: { id: true },
-          }),
-        ),
+      computerBelongsToWorkspace: computerInWorkspace,
       observe: (observation) => activity.record(observation),
       resolveReplyTarget: replyTargets,
       publish: centrifugo

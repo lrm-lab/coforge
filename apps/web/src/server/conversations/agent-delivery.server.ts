@@ -109,17 +109,17 @@ export class AgentDeliveryPublisher {
   }
 }
 
-/** Pushes a delivery the Agent has not received again, as the repository reads it back. */
-export async function publishPendingDelivery(
-  api: Pick<CentrifugoServerApi, "publish">,
+/** A re-send of a delivery the Agent has not received, encoded for one `publishBatch` with the
+ * Workspace's features the caller read once for the whole re-send, not once per delivery. */
+export function pendingDeliveryPublication(
   scope: { workspaceId: string; computerId: string; agentId: string },
   delivery: PendingAgentDelivery,
+  features: Awaited<ReturnType<typeof deliveryFeatures>>,
   tracked?: { mentionDelivery?: MentionDeliveryEnvelope },
-): Promise<void> {
-  const features = await deliveryFeatures(scope.workspaceId);
-  return api.publish(
-    daemonControlChannel(scope.workspaceId, scope.computerId),
-    encodeAgentDelivery({
+): { channel: string; data: Uint8Array } {
+  return {
+    channel: daemonControlChannel(scope.workspaceId, scope.computerId),
+    data: encodeAgentDelivery({
       requestId: crypto.randomUUID(),
       workspaceId: scope.workspaceId,
       agentId: scope.agentId,
@@ -130,5 +130,5 @@ export async function publishPendingDelivery(
       ...(tracked ? { mentionsAgent: true, mentionDelivery: tracked.mentionDelivery } : {}),
       ...(features ? { features } : {}),
     }),
-  );
+  };
 }

@@ -6,15 +6,13 @@
  * Pending missing/stale envelopes reissue for the current launch on session acceptance or daemon ready,
  * never on a timer.
  */
-import type { AgentMentionDelivery } from "@lrm/coforge-sdk/agent";
 import {
   MENTION_DELIVERY_TERMINAL_CODES,
-  MESSAGE_ANCHOR_SOURCE,
-  UUID_LIKE_SOURCE,
   type AgentMentionDeliveryTerminalError,
   type AgentMentionDeliveryTransition,
   type MentionDeliveryEnvelope,
 } from "@lrm/coforge-sdk/internal";
+import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import type { PendingAgentDelivery } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import type {
   MentionDeliveryReportKey,
@@ -26,7 +24,8 @@ import type {
   PrismaMentionDeliveryRepository,
   TrackedMentionState,
 } from "#src/server/db/repositories/mention-delivery.repositories.server";
-import { publishPendingDelivery } from "./agent-delivery.server";
+import { pendingDeliveryPublication } from "./agent-delivery.server";
+import { deliveryFeatures } from "./agent-delivery-features.server";
 import { currentIdentity, envelopeFor, wakeable } from "./mention-identity.server";
 import { errorType } from "#src/server/errors/error-type.server";
 
@@ -204,8 +203,10 @@ export class MentionDeliveryReports {
       | "reissuePending"
       | "settleStopped"
     >,
-    private readonly publisher: Parameters<typeof publishPendingDelivery>[0],
+    private readonly publisher: Pick<CentrifugoServerApi, "publishBatch">,
     private readonly conversations: DeliveryConversations,
+    /** The Workspace's delivery features, read once per re-send rather than per delivery. */
+    private readonly features: typeof deliveryFeatures = deliveryFeatures,
     private readonly now: () => Date = () => new Date(),
   ) {}
 
@@ -384,18 +385,39 @@ export class MentionDeliveryReports {
     const deliveries = (
       await this.conversations.readPendingAgentDeliveries(scope.workspaceId, scope.agentId, select)
     ).filter((delivery) => !skip.has(delivery.deliveryId));
-    const results = await Promise.allSettled(
-      deliveries.map((delivery) =>
-        publishPendingDelivery(
-          this.publisher,
-          scope,
-          delivery,
-          tracked.has(delivery.deliveryId)
-            ? { mentionDelivery: tracked.get(delivery.deliveryId) }
-            : undefined,
-        ),
-      ),
+    // One features read covers the whole re-send; a per-delivery read asked the same Workspace
+    // the same question N times.
+    const features = deliveries.length ? await this.features(scope.workspaceId) : undefined;
+    // One Centrifugo `batch` call for every delivery. Its parallel publications to one channel
+    // keep no order between them — the per-item `publish` loop it replaces had none either.
+    // A delivery its encoder refuses fails alone, as `AgentDeliveryPublisher` reports it; the
+    // rest still go to Centrifugo in the batch.
+    const entries = deliveries.map(
+      (
+        delivery,
+      ):
+        | { publication: { channel: string; data: Uint8Array }; refused?: never }
+        | { publication?: never; refused: PromiseRejectedResult } => {
+        try {
+          return {
+            publication: pendingDeliveryPublication(
+              scope,
+              delivery,
+              features,
+              tracked.has(delivery.deliveryId)
+                ? { mentionDelivery: tracked.get(delivery.deliveryId) }
+                : undefined,
+            ),
+          };
+        } catch (reason) {
+          return { refused: { status: "rejected", reason } };
+        }
+      },
     );
+    const settled = (
+      await this.publisher.publishBatch(entries.flatMap((entry) => entry.publication ?? []))
+    ).values();
+    const results = entries.map((entry) => entry.refused ?? settled.next().value!);
     const sent = new Set(
       deliveries
         .filter((_, index) => results[index]!.status === "fulfilled")
@@ -419,66 +441,6 @@ export class MentionDeliveryReports {
     if (unsent.length) await this.repository.reissuePending(scope, unsent, undefined);
     const failed = results.find((result) => result.status === "rejected");
     if (failed) throw failed.reason;
-  }
-}
-
-/** A message the sending Agent names by its full id or the eight-hex prefix `message read`
- * shows. */
-const SENDER_MESSAGE_ANCHOR = new RegExp(`^(?:${MESSAGE_ANCHOR_SOURCE}|${UUID_LIKE_SOURCE})$`, "i");
-
-export type SenderMentionDeliveries =
-  | { state: "found"; messageId: string; deliveries: AgentMentionDelivery[] }
-  | { state: "not_found" }
-  | { state: "ambiguous" };
-
-type SenderDeliveryRow = Awaited<
-  ReturnType<PrismaMentionDeliveryRepository["readSenderDeliveries"]>
->[number]["deliveries"][number];
-
-/** One tracked mention as its sender reads it: labelled with the handle the message wrote (a
- * deleted Agent's name may since have been given to another), and marked when that Agent is
- * deleted. */
-function senderDelivery(row: SenderDeliveryRow): AgentMentionDelivery {
-  const handle = row.writtenHandle ?? (row.deleted ? undefined : row.currentName);
-  if (!handle)
-    throw new Error(`tracked mention of deleted Agent ${row.agentId} has no written handle`);
-  const target = {
-    targetHandle: `@${handle}`,
-    ...(row.deleted ? { targetDeleted: true as const } : {}),
-  };
-  if (row.outcome !== "lost") return { ...target, outcome: row.outcome };
-  if (!row.reasonCategory)
-    throw new Error(`lost mention of Agent ${row.agentId} has no reason category`);
-  return { ...target, outcome: "lost", reasonCategory: row.reasonCategory };
-}
-
-/** Mention delivery as the sending Agent reads it: what became of each @mention of an Agent in a
- * message it sent. Any other message is not found, exactly like one that does not exist. */
-export class MentionDeliveryLookup {
-  constructor(
-    private readonly repository: Pick<PrismaMentionDeliveryRepository, "readSenderDeliveries">,
-  ) {}
-
-  async forSender(
-    scope: { workspaceId: string } & ({ agentId: string } | { userId: string }),
-    messageId: string,
-  ): Promise<SenderMentionDeliveries> {
-    if (!SENDER_MESSAGE_ANCHOR.test(messageId)) return { state: "not_found" };
-    const messages =
-      "userId" in scope
-        ? await this.repository.readSenderDeliveries(
-            scope.workspaceId,
-            scope.userId,
-            messageId,
-            "user",
-          )
-        : await this.repository.readSenderDeliveries(scope.workspaceId, scope.agentId, messageId);
-    if (messages.length > 1) return { state: "ambiguous" };
-    const [message] = messages;
-    if (!message) return { state: "not_found" };
-    const deliveries = message.deliveries.map(senderDelivery);
-    deliveries.sort((left, right) => left.targetHandle.localeCompare(right.targetHandle));
-    return { state: "found", messageId: message.messageId, deliveries };
   }
 }
 

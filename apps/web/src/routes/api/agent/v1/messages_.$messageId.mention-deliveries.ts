@@ -8,7 +8,7 @@ import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.se
 import {
   MentionDeliveryLookup,
   type SenderMentionDeliveries,
-} from "#src/server/conversations/mention-deliveries.server";
+} from "#src/server/conversations/mention-delivery-lookup.server";
 import { PrismaMentionDeliveryRepository } from "#src/server/db/repositories/mention-delivery.repositories.server";
 
 type AgentScope = { workspaceId: string; agentId: string };

@@ -55,6 +55,9 @@ export async function readPendingAgentDeliveries(
     // memberships never replay; DMs and notified non-member channel messages still do.
     where: await pendingDeliveryWhere(ports.db, { workspaceId, agentId }, selected),
     orderBy: [{ createdAt: "asc" }, { deliveryId: "asc" }],
+    // Oldest first, so the cap drops the newest backlog: those rows stay `receivedAt: null` and
+    // are replayed by the next accepted session or daemon `ready`.
+    take: AGENT_RECOVERY_MESSAGE_LIMIT,
     select: {
       deliveryId: true,
       messageId: true,

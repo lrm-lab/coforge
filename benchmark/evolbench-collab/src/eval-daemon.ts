@@ -341,17 +341,23 @@ export async function startEvalDaemon(input: {
  * Keep the fence off the stored runtimeConfig and attach it only to the Start the eval publishes. */
 function centrifugoApiWithFence(fence: MemoryAgentToolProfile | undefined) {
   const api = createCentrifugoServerApi();
+  const publish = async (channel: string, data: Uint8Array) => {
+    if (!fence) return api.publish(channel, data);
+    try {
+      const intent = decodeAgentStartIntent(data);
+      return api.publish(channel, encodeAgentStartIntent({ ...intent, toolProfile: fence }));
+    } catch {
+      return api.publish(channel, data);
+    }
+  };
   return {
     publishJson: api.publishJson.bind(api),
-    async publish(channel: string, data: Uint8Array) {
-      if (!fence) return api.publish(channel, data);
-      try {
-        const intent = decodeAgentStartIntent(data);
-        return api.publish(channel, encodeAgentStartIntent({ ...intent, toolProfile: fence }));
-      } catch {
-        return api.publish(channel, data);
-      }
-    },
+    publish,
+    // Batched publications still pass the fence one by one.
+    publishBatch: (publications: readonly { channel: string; data: Uint8Array }[]) =>
+      Promise.allSettled(
+        publications.map((publication) => publish(publication.channel, publication.data)),
+      ),
   };
 }
 

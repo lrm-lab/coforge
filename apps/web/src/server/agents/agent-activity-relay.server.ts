@@ -40,7 +40,9 @@ export const PUBLICATION_REROUTED_CODE = 1000;
 export const publicationRerouted = (where: string) =>
   refusal(PUBLICATION_REROUTED_CODE, `activity re-routed to ${where}`);
 
-/** Whether the Agent belongs to the Workspace and to the Computer whose connection published. */
+/** Whether the Agent belongs to the Workspace and to the Computer whose connection published.
+ * All three checks must pass; they run together, the Computer's check beside the Agent's, which
+ * the Agent-side lookups share as one row read. */
 export async function agentInPublicationScope(
   dependencies: Pick<
     ActivityRelayDependencies,
@@ -49,11 +51,12 @@ export async function agentInPublicationScope(
   scope: { workspaceId: string; computerId: string; agentId: string },
 ): Promise<boolean> {
   const { workspaceId, computerId, agentId } = scope;
-  return (
-    (await dependencies.computerBelongsToWorkspace(workspaceId, computerId)) &&
-    (await dependencies.agentBelongsToWorkspace(workspaceId, agentId)) &&
-    (await dependencies.agentBelongsToComputer(workspaceId, agentId, computerId))
-  );
+  const [computer, inWorkspace, onComputer] = await Promise.all([
+    dependencies.computerBelongsToWorkspace(workspaceId, computerId),
+    dependencies.agentBelongsToWorkspace(workspaceId, agentId),
+    dependencies.agentBelongsToComputer(workspaceId, agentId, computerId),
+  ]);
+  return computer && inWorkspace && onComputer;
 }
 
 /**

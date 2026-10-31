@@ -59,16 +59,16 @@ These rules apply to `src/server/conversations/`.
   channel membership); a person through an Activity item with its own read and
   Done state on the row (`server/inbox/activity-inbox.server.ts`).
   `PublicChannels.executeMentionActions` carries out a person's `add` through `addMembers`; an
-  Agent's `add` is refused (`add_requires_human_member_authority`). An attachment comment's
-  notifications share the table (`server/attachments/`): those rows carry `reason`
-  (`mentioned`/`subscribed`), keep `resolvedAt`/`resolvedAction` null so sender-side lists and
-  claims filter `reason IS NULL`, and are authorized through the attachment's source conversation.
-- `mention-deliveries.server.ts` owns tracked @mention outcomes: issuing and re-issuing
-  envelopes, the daemon's reports, when an Agent can be woken, and the sender's read of them.
-- `channel-agent-control.server.ts` (`ChannelAgentControl`) owns a channel's
-  "Stop all Agents" and "Resume all": which Agents each acts on, who may ask,
-  and the resume prompt built from the member's guidance. The control itself
-  goes through `AgentControl.stopMany` and `startMany`.
+  Agent's `add` is refused (`add_requires_human_member_authority`). Attachment-comment
+  notifications share the table (`server/attachments/`): they carry `reason`
+  (`mentioned`/`subscribed`), keep `resolvedAt`/`resolvedAction` null (sender lists filter
+  `reason IS NULL`), and authorize through the source conversation.
+- `mention-deliveries.server.ts` owns tracked @mention outcomes: issuing and re-issuing envelopes
+  (a re-send batches the backlog oldest-first, capped at `AGENT_RECOVERY_MESSAGE_LIMIT`), daemon
+  reports, and when an Agent can be woken; the sender's read is `mention-delivery-lookup.server.ts`.
+- `channel-agent-control.server.ts` (`ChannelAgentControl`) owns a channel's "Stop all Agents"
+  and "Resume all": which Agents each acts on, who may ask, and the resume prompt built from the
+  member's guidance. The control goes through `AgentControl.stopMany` and `startMany`.
 - `human-unread.server.ts` owns a person's unread rule and their read and Done
   cursor SQL. The sidebar badges and the Activity inbox (`server/inbox/`) both
   use it; do not write another unread predicate or cursor update.

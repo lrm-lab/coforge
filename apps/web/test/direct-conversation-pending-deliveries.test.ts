@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { PrismaClient } from "#src/generated/prisma/client";
+import { AGENT_RECOVERY_MESSAGE_LIMIT } from "#src/server/db/repositories/agent-recovery-row.server";
 import {
   PrismaDirectConversationRepository,
   type PendingAgentDelivery,
@@ -53,8 +54,9 @@ describe("PrismaDirectConversationRepository pending deliveries", () => {
         receivedAt: null,
       },
       orderBy: [{ createdAt: "asc" }, { deliveryId: "asc" }],
+      // The replay is bounded: oldest-first means the newest backlog waits for the next trigger.
+      take: AGENT_RECOVERY_MESSAGE_LIMIT,
     });
-    expect(queries[0]).not.toHaveProperty("take");
     expect(result).toEqual<PendingAgentDelivery[]>([
       {
         messageId: "message-1",
