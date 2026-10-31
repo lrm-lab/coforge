@@ -118,14 +118,26 @@ export const TARGET_CONVERSATION_SELECT = {
 /** `AGENT_MESSAGE_INCLUDE` plus what `messageDeliveryTarget` reads from the conversation. */
 export const AGENT_MESSAGE_WITH_TARGET_INCLUDE = {
   ...AGENT_MESSAGE_INCLUDE,
+  attachmentComment: { select: { attachmentId: true } },
   conversation: { select: TARGET_CONVERSATION_SELECT },
 } satisfies Prisma.MessageInclude;
 
 /** Where a Message is delivered: its conversation's target, with its thread root if it has one. */
 export function messageDeliveryTarget(
-  message: { threadRootId: string | null; conversation: TargetConversation },
+  message: {
+    threadRootId: string | null;
+    attachmentComment?: { attachmentId: string } | null;
+    conversation: TargetConversation;
+  },
   targetOf: DirectTargetOf,
 ) {
+  // A comment names its file whatever conversation holds it: its thread root only while it still
+  // lives in a comment conversation — after migration the message's root is the source message,
+  // which is not a comment id and so never an `attachment:<id>:<anchor>` target.
+  if (message.attachmentComment)
+    return message.conversation.attachmentCommentThread && message.threadRootId
+      ? `attachment:${message.attachmentComment.attachmentId}:${message.threadRootId}`
+      : `attachment:${message.attachmentComment.attachmentId}`;
   return deliveryTarget(conversationTarget(message.conversation, targetOf), message.threadRootId);
 }
 

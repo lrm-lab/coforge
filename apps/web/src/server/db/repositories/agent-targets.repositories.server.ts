@@ -123,36 +123,50 @@ export async function drainScope(
 ) {
   // An attachment's comment target scopes the check to its discussion (or one comment thread):
   // the Agent must still be an active member of the file's source conversation, the recheck a
-  // comment read applies.
+  // comment read applies. Before comment migration the discussion is its own conversation;
+  // after it, the comments are ordinary messages in the source conversation itself.
   if (target.startsWith("attachment:")) {
     const parsed = /^attachment:([0-9a-f-]{36})(?::([0-9a-f-]{6,36}))?$/i.exec(target);
-    const thread =
+    const attachment =
       parsed &&
-      (await ports.db.attachmentCommentThread.findFirst({
+      (await ports.db.attachment.findFirst({
         where: {
-          attachmentId: parsed[1],
+          id: parsed[1],
           workspaceId,
-          attachment: {
-            conversation: {
-              hiddenFromWorkspaceAt: null,
-              members: { some: { agentId, leftAt: null } },
-            },
+          conversation: {
+            hiddenFromWorkspaceAt: null,
+            members: { some: { agentId, leftAt: null } },
           },
         },
-        select: { conversationId: true },
+        select: {
+          conversationId: true,
+          message: { select: { id: true, threadRootId: true } },
+          commentThread: { select: { conversationId: true } },
+        },
       }));
-    if (!thread) throw new AppError("NOT_FOUND");
-    if (!parsed![2]) return { conversationId: thread.conversationId, threadRootId: null };
-    // A root may be the full comment id or its short anchor, exactly as the read resolves it.
+    if (!attachment) throw new AppError("NOT_FOUND");
+    // The comment discussion lives in its own conversation before migration and in the
+    // attachment's source conversation after it. There it threads under the source message, so
+    // the bare target scopes to that root.
+    const conversationId = attachment.commentThread?.conversationId ?? attachment.conversationId;
+    const threadRootId =
+      conversationId === attachment.conversationId
+        ? (attachment.message?.threadRootId ?? attachment.message?.id ?? null)
+        : null;
+    if (!parsed![2]) return { conversationId, threadRootId };
+    // A root may be the full comment id or its short anchor, exactly as the read resolves it;
+    // `attachmentId` sits on the comment row itself, so the thread table is never needed.
     const root = await ports.db.attachmentComment.findFirst({
       where: {
-        thread: { attachmentId: parsed![1], workspaceId },
+        attachmentId: parsed![1],
+        workspaceId,
+        conversationId,
         message: { id: messageAnchorWhere(parsed![2]) },
       },
       select: { message: { select: { threadRootId: true } } },
     });
     if (!root) throw new AppError("NOT_FOUND");
-    return { conversationId: thread.conversationId, threadRootId: root.message.threadRootId };
+    return { conversationId, threadRootId: root.message.threadRootId };
   }
   try {
     return await ports.resolveAgentTarget(workspaceId, agentId, target);

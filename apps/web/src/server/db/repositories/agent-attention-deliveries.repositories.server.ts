@@ -104,18 +104,35 @@ export async function pendingDeliveryWhere(
       },
       // A comment notification: the delivery counts while the Agent is still an active member of
       // the attachment's source conversation, the rule comment reads recheck on every access.
+      // Detection goes through the comment's `attachment_comments` row, the only identity that
+      // survives comment migration; the source membership itself differs per shape — after
+      // migration the comment's own conversation IS the source.
       {
-        conversation: {
-          kind: "attachment_comments",
-          attachmentCommentThread: {
-            attachment: {
-              conversation: {
-                ...VISIBLE_CONVERSATION_WHERE,
-                members: { some: { agentId, ...ACTIVE_MEMBER_WHERE } },
+        message: { attachmentComment: { isNot: null } },
+        OR: [
+          // Post-migration shape: the comment lives in the source conversation — a seat there
+          // is the membership recheck, never a bookkeeping conversation's seat.
+          {
+            conversation: {
+              ...VISIBLE_CONVERSATION_WHERE,
+              OR: [{ kind: null }, { kind: { notIn: ["task_thread", "attachment_comments"] } }],
+              members: { some: { agentId, ...ACTIVE_MEMBER_WHERE } },
+            },
+          },
+          {
+            conversation: {
+              kind: "attachment_comments",
+              attachmentCommentThread: {
+                attachment: {
+                  conversation: {
+                    ...VISIBLE_CONVERSATION_WHERE,
+                    members: { some: { agentId, ...ACTIVE_MEMBER_WHERE } },
+                  },
+                },
               },
             },
           },
-        },
+        ],
       },
       // A message it was notified of from outside the channel, while the channel stays one it may
       // read: never a private one it is not in.
@@ -169,7 +186,7 @@ export function unreadAgentMessagesFragment(
       -- A comment delivery needs no seat to count (the delivery is the entitlement), and its
       -- recipient may reply on the attachment: it is never a non-member mention.
       d."deliveryId",
-      (am."id" IS NULL AND c."kind" IS DISTINCT FROM 'attachment_comments') AS "nonMemberMention",
+      (am."id" IS NULL AND ac."attachmentId" IS NULL) AS "nonMemberMention",
       sa."name" AS "senderAgentName", sa."description" AS "senderAgentDescription",
       su."username" AS "senderUsername", su."description" AS "senderUserDescription",
       c."channelName",
@@ -181,7 +198,7 @@ export function unreadAgentMessagesFragment(
         ORDER BY ou."username" NULLS LAST LIMIT 1) AS "otherUsername",
       -- The other member is an Agent: a conversation between two Agents.
       COALESCE(c."directKey" ~ '^agent:[0-9a-f-]+[|]agent:[0-9a-f-]+$', FALSE) AS "agentPeer",
-      act."attachmentId"
+      ac."attachmentId"
     FROM (
       SELECT cm."id", cm."sequence", cm."body", cm."conversationId", cm."threadRootId",
         cm."senderMemberId", cm."createdAt"
@@ -258,21 +275,33 @@ export function unreadAgentMessagesFragment(
       -- A delivered attachment-comment notification: unread while the Agent's comment read
       -- position is behind it and it stays an active member of the attachment's source
       -- conversation, the recheck a comment read applies. Its comment-conversation seat is not
-      -- required — the delivery row carries the entitlement.
+      -- required — the delivery row carries the entitlement. Detection goes through the
+      -- comment's attachment_comments row, which survives comment migration; a migrated
+      -- comment lives in the source conversation itself, where a member reads it through the
+      -- channel branch above instead.
       SELECT nm."id", nm."sequence", nm."body", nm."conversationId", nm."threadRootId",
         nm."senderMemberId", nm."createdAt"
       FROM "agent_message_deliveries" d
       JOIN "messages" nm ON nm."id" = d."messageId"
+      JOIN "attachment_comments" acm ON acm."messageId" = nm."id"
+        AND acm."conversationId" = nm."conversationId"
       JOIN "conversations" nc ON nc."id" = nm."conversationId"
-        AND nc."kind" = 'attachment_comments' AND nc."hiddenFromWorkspaceAt" IS NULL
-      JOIN "attachment_comment_threads" act ON act."conversationId" = nc."id"
-      JOIN "attachments" att ON att."id" = act."attachmentId"
+        AND nc."hiddenFromWorkspaceAt" IS NULL
+      JOIN "attachments" att ON att."id" = acm."attachmentId"
+        AND att."workspaceId" = acm."workspaceId"
       JOIN "conversations" src ON src."id" = att."conversationId"
         AND src."hiddenFromWorkspaceAt" IS NULL
       JOIN "conversation_members" sm ON sm."conversationId" = src."id"
         AND sm."agentId" = d."agentId" AND sm."leftAt" IS NULL
       WHERE d."workspaceId" = ${workspaceId}::uuid AND d."agentId" = ${agentId}::uuid
         AND ${liveDeliverySql("d")}
+        AND NOT EXISTS (
+          SELECT 1 FROM "conversation_members" scm
+          JOIN "conversations" scc ON scc."id" = scm."conversationId"
+            AND (scc."channelName" IS NOT NULL OR scc."directKey" IS NOT NULL)
+          WHERE scm."conversationId" = nm."conversationId" AND scm."agentId" = d."agentId"
+            AND scm."leftAt" IS NULL
+        )
     ) m
     LEFT JOIN "conversation_members" am ON am."conversationId" = m."conversationId"
       AND am."workspaceId" = ${workspaceId}::uuid AND am."agentId" = ${agentId}::uuid
@@ -280,7 +309,8 @@ export function unreadAgentMessagesFragment(
     JOIN "conversations" c ON c."id" = m."conversationId"
     LEFT JOIN "messages" r ON r."id" = m."threadRootId"
     LEFT JOIN "thread_reads" tr ON tr."memberId" = am."id" AND tr."rootMessageId" = m."threadRootId"
-    LEFT JOIN "attachment_comment_threads" act ON act."conversationId" = c."id"
+    LEFT JOIN "attachment_comments" ac ON ac."messageId" = m."id"
+      AND ac."conversationId" = m."conversationId"
     LEFT JOIN "conversation_members" sm ON sm."id" = m."senderMemberId"
     LEFT JOIN "users" su ON su."id" = sm."userId"
     LEFT JOIN "agents" sa ON sa."id" = sm."agentId"
