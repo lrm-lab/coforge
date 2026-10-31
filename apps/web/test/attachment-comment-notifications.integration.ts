@@ -341,6 +341,65 @@ test("a comment on a DM attachment notifies the peer's inbox and the item opens 
   }
 });
 
+test("a comment living in the migrated source conversation still reads as an attachment comment", async () => {
+  const f = await attachmentCommentsFixture();
+  try {
+    // The post-migration shape: the thread, the comment's Message, its attachmentComment row
+    // and its notification all carry the source channel's id.
+    await f.db.attachmentCommentThread.create({
+      data: {
+        attachmentId: f.attachment.id,
+        workspaceId: f.workspace.id,
+        conversationId: f.conversation.id,
+      },
+    });
+    const sender = await f.db.conversationMember.findFirstOrThrow({
+      where: { conversationId: f.conversation.id, userId: f.member.id },
+    });
+    const comment = await f.db.message.create({
+      data: {
+        conversationId: f.conversation.id,
+        workspaceId: f.workspace.id,
+        senderMemberId: sender.id,
+        sequence: 2,
+        body: "post-migration shape",
+      },
+    });
+    await f.db.attachmentComment.create({
+      data: {
+        attachmentId: f.attachment.id,
+        workspaceId: f.workspace.id,
+        conversationId: f.conversation.id,
+        messageId: comment.id,
+      },
+    });
+    await f.db.pendingMentionAction.create({
+      data: {
+        messageId: comment.id,
+        conversationId: f.conversation.id,
+        workspaceId: f.workspace.id,
+        senderMemberId: sender.id,
+        targetUserId: f.owner.id,
+        targetHandle: f.owner.username,
+        expiresAt: new Date(Date.now() + 86_400_000),
+        notifiedAt: comment.createdAt,
+        reason: "subscribed",
+      },
+    });
+    const inbox = new ActivityInbox(f.db, {});
+    const items = await inbox.list(f.workspace.id, f.owner.id, { filter: "all" });
+    const item = items.items.find((candidate) => candidate.mentionAction);
+    expect(item?.latest.id).toBe(comment.id);
+    expect(item?.attachmentComment).toMatchObject({
+      attachmentId: f.attachment.id,
+      fileName: "review.txt",
+      sourceMessageId: f.message.id,
+    });
+  } finally {
+    await f.close();
+  }
+});
+
 test("an Agent's comment notifies the human uploader and surfaces in their inbox", async () => {
   const f = await agentAttachmentMessagesFixture();
   try {

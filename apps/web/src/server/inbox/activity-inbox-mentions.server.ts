@@ -17,6 +17,10 @@ export async function mentionCandidates(
       where: {
         workspaceId,
         targetUserId: userId,
+        // Sender-actionable rows only: a comment notification (reason set) renders through the
+        // second read — its own key is the same mention:<id>, so admitting it here would
+        // shadow the attachment-comment item whenever the comment lives in a visible channel.
+        reason: null,
         notifiedAt: { not: null },
         dismissedAt: null,
         message: {
@@ -39,44 +43,17 @@ export async function mentionCandidates(
       },
     }),
     // A comment notification names its file's source conversation, not the comment
-    // conversation (a comment conversation is no channel and no DM). The same recheck the
-    // post applied: the viewer still reads the source — a channel by canReadChannel, a DM as
-    // its active member — and neither hidden nor archived.
+    // conversation (a comment conversation is no channel and no DM). The recheck reaches the
+    // source through `attachment_comments.attachmentId → attachments` rather than the comment
+    // thread row — comment migration deletes `attachment_comment_threads`, so the `thread`
+    // relation resolves null on migrated data.
     db.pendingMentionAction.findMany({
       where: {
         workspaceId,
         targetUserId: userId,
         notifiedAt: { not: null },
         dismissedAt: null,
-        message: {
-          attachmentComment: {
-            thread: {
-              attachment: {
-                conversation: {
-                  hiddenFromWorkspaceAt: null,
-                  archivedAt: null,
-                  OR: [
-                    {
-                      channelName: { not: null },
-                      OR: [
-                        { visibility: "public" },
-                        {
-                          members: {
-                            some: { workspaceId, userId, leftAt: null },
-                          },
-                        },
-                      ],
-                    },
-                    {
-                      channelName: null,
-                      members: { some: { workspaceId, userId, leftAt: null } },
-                    },
-                  ],
-                },
-              },
-            },
-          },
-        },
+        message: { attachmentComment: { isNot: null } },
       },
       select: {
         id: true,
@@ -88,38 +65,71 @@ export async function mentionCandidates(
           select: {
             sequence: true,
             threadRootId: true,
-            attachmentComment: {
-              select: {
-                attachmentId: true,
-                thread: {
-                  select: {
-                    attachment: {
-                      select: {
-                        fileName: true,
-                        messageId: true,
-                        conversation: {
-                          select: {
-                            id: true,
-                            channelName: true,
-                            directKey: true,
-                            members: {
-                              where: { agentId: { not: null } },
-                              select: { agentId: true },
-                              take: 1,
-                            },
-                          },
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            },
+            attachmentComment: { select: { attachmentId: true } },
           },
         },
       },
     }),
   ]);
+  // The same recheck the post applied: the viewer still reads the source — a channel by
+  // canReadChannel, a DM as its active member — and neither hidden nor archived.
+  const commentAttachments = commentRows.length
+    ? await db.attachment.findMany({
+        where: {
+          workspaceId,
+          id: {
+            in: [
+              ...new Set(
+                commentRows.flatMap((row) =>
+                  row.message.attachmentComment ? [row.message.attachmentComment.attachmentId] : [],
+                ),
+              ),
+            ],
+          },
+          conversation: {
+            hiddenFromWorkspaceAt: null,
+            archivedAt: null,
+            OR: [
+              {
+                channelName: { not: null },
+                OR: [
+                  { visibility: "public" },
+                  {
+                    members: {
+                      some: { workspaceId, userId, leftAt: null },
+                    },
+                  },
+                ],
+              },
+              {
+                channelName: null,
+                members: { some: { workspaceId, userId, leftAt: null } },
+              },
+            ],
+          },
+        },
+        select: {
+          id: true,
+          fileName: true,
+          messageId: true,
+          conversation: {
+            select: {
+              id: true,
+              channelName: true,
+              directKey: true,
+              members: {
+                where: { agentId: { not: null } },
+                select: { agentId: true },
+                take: 1,
+              },
+            },
+          },
+        },
+      })
+    : [];
+  const attachmentById = new Map(
+    commentAttachments.map((attachment) => [attachment.id, attachment]),
+  );
   return rows
     .map((row): ActivityCandidate => ({
       kind: "channel",
@@ -143,8 +153,9 @@ export async function mentionCandidates(
     .concat(
       commentRows.flatMap((row): ActivityCandidate[] => {
         const comment = row.message.attachmentComment;
-        if (!comment) return [];
-        const source = comment.thread.attachment.conversation;
+        const attachment = comment && attachmentById.get(comment.attachmentId);
+        if (!comment || !attachment) return [];
+        const source = attachment.conversation;
         return [
           {
             kind: source.channelName ? "channel" : "direct",
@@ -164,9 +175,9 @@ export async function mentionCandidates(
             mentionAction: { resolutionId: row.id, threadRootId: null },
             attachmentComment: {
               attachmentId: comment.attachmentId,
-              fileName: comment.thread.attachment.fileName,
+              fileName: attachment.fileName,
               threadRootId: row.message.threadRootId,
-              sourceMessageId: comment.thread.attachment.messageId,
+              sourceMessageId: attachment.messageId,
             },
             pastDone: true,
             pin: null,
