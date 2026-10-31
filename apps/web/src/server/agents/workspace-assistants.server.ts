@@ -49,6 +49,27 @@ export class WorkspaceAssistants {
     ]);
     if (!membership) throw new AppError("ACCESS_DENIED");
     if (existing?.agent.computerId) return existing;
+    if (existing) {
+      // An unbound session rebinds with one conditional update — a compare-and-set that stays
+      // outside the creation transaction so an absent computer keeps the read write-free.
+      const computer = await this.db.computer.findFirst({
+        where: {
+          ownerId: userId,
+          kind: "cloud",
+          cloudSlot: "default",
+          deletedAt: null,
+          workspaces: { some: { workspaceId } },
+        },
+        orderBy: [{ kind: "asc" }, { cloudSlot: "asc" }, { id: "asc" }],
+        select: { id: true },
+      });
+      if (computer)
+        await this.db.agent.updateMany({
+          where: { id: existing.agentId, workspaceId, ownerId: userId, computerId: null },
+          data: { computerId: computer.id },
+        });
+      return existing;
+    }
     try {
       return await this.db.$transaction(async (tx) => {
         const membership = await tx.workspaceMembership.findUnique({

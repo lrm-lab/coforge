@@ -4,7 +4,10 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { WorkspaceAssistants } from "#src/server/agents/workspace-assistants.server";
-import { WorkspaceAssistantOnboarding } from "#src/server/agents/workspace-assistant-onboarding.server";
+import {
+  INTRO_START_THROTTLE_MS,
+  WorkspaceAssistantOnboarding,
+} from "#src/server/agents/workspace-assistant-onboarding.server";
 import { DirectConversations } from "#src/server/conversations/direct-conversations.server";
 import { createAgentIntroduction } from "#src/server/db/repositories/agent-introduction.repositories.server";
 import { PrismaAgentControlStore } from "#src/server/db/repositories/agent-control.repositories.server";
@@ -21,20 +24,25 @@ let conversationId: string;
 const extraUsers: string[] = [];
 let starts = 0;
 let cloudStarts = 0;
-const onboarding = new WorkspaceAssistantOnboarding(db, {
-  startCloudComputer: async () => {
-    cloudStarts++;
-    await db.workspaceComputer.upsert({
-      where: { workspaceId_computerId: { workspaceId, computerId } },
-      create: { workspaceId, computerId },
-      update: {},
-    });
-    return { slot: "default", computerId };
+let now = Date.now();
+const onboarding = new WorkspaceAssistantOnboarding(
+  db,
+  {
+    startCloudComputer: async () => {
+      cloudStarts++;
+      await db.workspaceComputer.upsert({
+        where: { workspaceId_computerId: { workspaceId, computerId } },
+        create: { workspaceId, computerId },
+        update: {},
+      });
+      return { slot: "default", computerId };
+    },
+    startAgent: async () => {
+      starts++;
+    },
   },
-  startAgent: async () => {
-    starts++;
-  },
-});
+  () => now,
+);
 
 beforeAll(async () => {
   const user = await db.user.create({
@@ -117,20 +125,106 @@ test("a repeated ensure only reads — the sidebar's steady state writes nothing
   }
 });
 
-test("a transport failure leaves the same pending assistant available for retry", async () => {
-  const failing = new WorkspaceAssistantOnboarding(db, {
-    startCloudComputer: async () => {
-      throw new Error("unexpected cloud allocation");
-    },
-    startAgent: async () => {
-      throw new Error("transport unavailable");
-    },
+test("a pending introduction retries the Start at the interval, never per read", async () => {
+  const before = starts;
+  now += INTRO_START_THROTTLE_MS + 1;
+  await onboarding.ensure(workspaceId, userId);
+  expect(starts).toBe(before + 1);
+  // Inside the window a read neither calls the port nor reaches the database with a write.
+  const statements: string[] = [];
+  const counting = new PrismaClient({
+    adapter: new PrismaPg({ connectionString }),
+    log: [{ emit: "event", level: "query" }],
   });
+  counting.$on("query", (event: { query: string }) => statements.push(event.query));
+  try {
+    const again = new WorkspaceAssistantOnboarding(
+      counting,
+      {
+        startCloudComputer: async () => ({ slot: "default", computerId }),
+        startAgent: async () => {
+          starts++;
+        },
+      },
+      () => now,
+    );
+    await again.ensure(workspaceId, userId);
+    expect(starts).toBe(before + 1);
+    expect(statements.length).toBeGreaterThan(0);
+    expect(
+      statements.filter((query) => /^\s*(INSERT|UPDATE|DELETE|BEGIN|COMMIT|ROLLBACK)/i.test(query)),
+    ).toEqual([]);
+  } finally {
+    await counting.$disconnect();
+  }
+  // Past the interval the same read retries the Start.
+  now += INTRO_START_THROTTLE_MS + 1;
+  await onboarding.ensure(workspaceId, userId);
+  expect(starts).toBe(before + 2);
+});
+
+test("an unbound assistant inside the retry window still reads write-free", async () => {
+  // A session whose Agent lost its binding and whose member owns no default cloud Computer —
+  // the state that used to re-enter the creation transaction on every sidebar read.
+  await db.agent.update({ where: { id: agentId }, data: { computerId: null } });
+  await db.workspaceComputer.delete({
+    where: { workspaceId_computerId: { workspaceId, computerId } },
+  });
+  const statements: string[] = [];
+  const counting = new PrismaClient({
+    adapter: new PrismaPg({ connectionString }),
+    log: [{ emit: "event", level: "query" }],
+  });
+  counting.$on("query", (event: { query: string }) => statements.push(event.query));
+  try {
+    const again = new WorkspaceAssistantOnboarding(
+      counting,
+      {
+        startCloudComputer: async () => {
+          throw new Error("no cloud cluster");
+        },
+        startAgent: async () => {
+          starts++;
+        },
+      },
+      () => now,
+    );
+    await again.ensure(workspaceId, userId);
+    expect(statements.length).toBeGreaterThan(0);
+    expect(
+      statements.filter((query) => /^\s*(INSERT|UPDATE|DELETE|BEGIN|COMMIT|ROLLBACK)/i.test(query)),
+    ).toEqual([]);
+  } finally {
+    await counting.$disconnect();
+    await db.workspaceComputer.upsert({
+      where: { workspaceId_computerId: { workspaceId, computerId } },
+      create: { workspaceId, computerId },
+      update: {},
+    });
+    await db.agent.update({ where: { id: agentId }, data: { computerId } });
+  }
+});
+
+test("a transport failure leaves the same pending assistant available for retry", async () => {
+  const failing = new WorkspaceAssistantOnboarding(
+    db,
+    {
+      startCloudComputer: async () => {
+        throw new Error("unexpected cloud allocation");
+      },
+      startAgent: async () => {
+        throw new Error("transport unavailable");
+      },
+    },
+    () => now,
+  );
+  now += INTRO_START_THROTTLE_MS + 1;
   expect((await failing.ensure(workspaceId, userId)).agentId).toBe(agentId);
   expect(
     (await db.agent.findUniqueOrThrow({ where: { id: agentId } })).introductionDueAt,
   ).not.toBeNull();
   const before = starts;
+  now += INTRO_START_THROTTLE_MS + 1;
   await onboarding.ensure(workspaceId, userId);
   expect(starts).toBe(before + 1);
 });
@@ -143,7 +237,9 @@ test("old assistants without any reply are enrolled once, even after seven days 
   });
   await onboarding.ensure(workspaceId, userId);
   const agent = await new PrismaAgentControlStore(db).get(agentId);
-  expect(agent?.introductionDueAt).toEqual(old);
+  // A pre-`introductionDueAt` binding stays unset — the read path writes nothing — yet still owes
+  // its welcome through `AgentIntroduction`, settled by any canonical DM reply.
+  expect(agent?.introductionDueAt).toBeNull();
   expect(await createAgentIntroduction(db).promptFor(agent!, new Date())).toContain(
     "CoForge platform assistant",
   );

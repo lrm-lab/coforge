@@ -24,11 +24,13 @@ export type AgentIntroductionFacts = {
  */
 export function introductionPromptFor(facts: AgentIntroductionFacts, now: Date) {
   const { introductionDueAt, deletedAt, ownerUsername: creator } = facts;
-  if (!introductionDueAt || deletedAt || !creator) return undefined;
   const platformAssistant = facts.systemKind === WORKSPACE_ASSISTANT_KIND;
+  if (deletedAt || !creator) return undefined;
+  // A platform assistant provisioned before `introductionDueAt` existed still owes its welcome.
   if (
     !platformAssistant &&
-    now.getTime() - introductionDueAt.getTime() > AGENT_INTRODUCTION_WINDOW_MS
+    (!introductionDueAt ||
+      now.getTime() - introductionDueAt.getTime() > AGENT_INTRODUCTION_WINDOW_MS)
   )
     return undefined;
   if (platformAssistant)
@@ -103,13 +105,19 @@ export class AgentIntroduction {
    */
   async promptFor(agent: AgentIntroductionSubject, now: Date): Promise<string | undefined> {
     const prompt = introductionPromptFor(agent, now);
-    if (!prompt || !agent.introductionDueAt) return prompt;
+    if (!prompt) return prompt;
+    // A platform assistant with no `introductionDueAt` owes its welcome since it was created;
+    // any canonical DM reply of its own settles it and the column stays unset.
+    const since =
+      agent.introductionDueAt ??
+      (agent.systemKind === WORKSPACE_ASSISTANT_KIND ? new Date(0) : undefined);
+    if (!since) return prompt;
     const scope = { workspaceId: agent.workspaceId, agentId: agent.id };
     try {
       const introduced = await this.store.hasAgentMessage({
         ...scope,
         directKey: agentDirectKey(agent.ownerId, agent.id),
-        since: agent.introductionDueAt,
+        since,
       });
       if (!introduced) return prompt;
       await this.store.settle({ ...scope, ownerId: agent.ownerId });

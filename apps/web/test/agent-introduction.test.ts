@@ -9,6 +9,7 @@ import {
   type AgentIntroductionStore,
 } from "#src/server/agents/agent-introduction.server";
 import { agentDirectKey } from "#src/features/conversations/direct-key";
+import { WORKSPACE_ASSISTANT_KIND } from "#src/features/agents/agent-system-kind";
 import { pendingOpStore } from "./helpers/agent-control-store";
 
 const NOW = new Date("2026-10-19T12:00:00Z");
@@ -52,6 +53,38 @@ test.each([
   ],
 ] as const)("an Agent that %s gets a prompt: %p", (_case, facts, prompted) => {
   expect(promptFor(facts) !== undefined).toBe(prompted);
+});
+
+test("a platform assistant with no introductionDueAt still owes its welcome", () => {
+  const prompt = promptFor({
+    systemKind: WORKSPACE_ASSISTANT_KIND,
+    introductionDueAt: null,
+  });
+  expect(prompt).toContain("CoForge platform assistant");
+});
+
+test("a platform assistant's own DM reply settles an unset introductionDueAt", async () => {
+  const scopes: { since: Date }[] = [];
+  const introductions = new AgentIntroduction({
+    hasAgentMessage: async ({ since }) => {
+      scopes.push({ since });
+      return true;
+    },
+    settle: async () => {},
+  });
+  const prompt = await introductions.promptFor(
+    {
+      id: "agent-a",
+      workspaceId: "workspace-a",
+      ownerId: "owner-a",
+      systemKind: WORKSPACE_ASSISTANT_KIND,
+      introductionDueAt: null,
+      ownerUsername: "ada",
+    },
+    NOW,
+  );
+  expect(prompt).toBeUndefined();
+  expect(scopes).toEqual([{ since: new Date(0) }]);
 });
 
 test("an Agent with no description asks its creator what they want help with instead of naming a role", () => {

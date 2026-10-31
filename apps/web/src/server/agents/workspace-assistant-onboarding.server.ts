@@ -20,12 +20,26 @@ type OnboardingPorts = {
   startAgent(input: { workspaceId: string; userId: string; agentId: string }): Promise<void>;
 };
 
+/**
+ * While an assistant owes its welcome, every sidebar read reaches the start attempt, whose
+ * publish is a transaction of writes. The retry is throttled in memory so a read never writes:
+ * `agentControl`'s Start needs one attempt per interval, and the Daemon's ready recovery sends
+ * it too. Process-local only — each instance paces itself, which bounds the rate without a row.
+ */
+export const INTRO_START_THROTTLE_MS = 60_000;
+const introStartAttempts = new Map<string, number>();
+
 /** Provisioning is durable before cloud/transport work; ready recovery retries a missed Start. */
 export class WorkspaceAssistantOnboarding {
   constructor(
     private readonly db: PrismaClient,
     private readonly ports: OnboardingPorts,
+    private readonly now: () => number = Date.now,
   ) {}
+
+  private introStartDue(agentId: string) {
+    return (introStartAttempts.get(agentId) ?? 0) <= this.now();
+  }
 
   async ensure(workspaceId: string, userId: string) {
     const assistants = new WorkspaceAssistants(this.db);
@@ -38,6 +52,7 @@ export class WorkspaceAssistantOnboarding {
         select: { id: true },
       });
       if (introduced) {
+        introStartAttempts.delete(agent.id);
         if (agent.introductionDueAt !== null)
           await this.db.agent.updateMany({
             where: { id: agent.id, introductionDueAt: { not: null } },
@@ -45,12 +60,9 @@ export class WorkspaceAssistantOnboarding {
           });
         return session;
       }
-      // Upgrade pre-onboarding bindings too, with a stable time that repeated reads cannot renew.
-      if (agent.introductionDueAt === null)
-        await this.db.agent.updateMany({
-          where: { id: agent.id, introductionDueAt: null },
-          data: { introductionDueAt: agent.createdAt },
-        });
+      if (!this.introStartDue(agent.id)) return session;
+      // Marked before the attempt: a failed start retries at the interval, not on every read.
+      introStartAttempts.set(agent.id, this.now() + INTRO_START_THROTTLE_MS);
       if (!agent.computerId) {
         const started = await startDefaultCloudComputer(this.ports.startCloudComputer, {
           workspaceId,
