@@ -94,7 +94,7 @@ export async function sendMessage(
     // references are stored as tokens like every other conversation's.
     const stored = await storeMessageBody(
       tx,
-      { workspaceId: conversation.workspaceId, conversationId },
+      { workspaceId: conversation.workspaceId, conversationId, reader: { userId: senderUserId } },
       body,
       { targets: [] },
     );

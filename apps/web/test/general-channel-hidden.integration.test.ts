@@ -158,7 +158,7 @@ test.skipIf(!connectionString)(
         db.$transaction((tx) =>
           storeMessageBody(
             tx,
-            { workspaceId: workspace.id, conversationId: team.id },
+            { workspaceId: workspace.id, conversationId: team.id, reader: { userId: owner.id } },
             "see #general",
             { targets: [] },
           ),

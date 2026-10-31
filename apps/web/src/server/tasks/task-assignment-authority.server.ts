@@ -1,5 +1,6 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
+import { channelActorOf } from "#src/server/conversations/channel-actor.server";
 import { resolveActorServerRole } from "#src/server/conversations/channel-authority.server";
 import { isElevatedServerRole } from "#src/server/workspaces/member-role.server";
 
@@ -19,7 +20,7 @@ export async function assertCanAssignOther(
   workspaceId: string,
   member: { userId: string | null; agentId: string | null },
 ) {
-  const actor = member.userId ? { userId: member.userId } : { agentId: member.agentId! };
+  const actor = channelActorOf(member);
   if (!(await canAssignOther(db, workspaceId, actor)))
     throw new AppError("ACCESS_DENIED", { errorId: TASK_ASSIGNMENT_MANAGER_REQUIRED });
 }

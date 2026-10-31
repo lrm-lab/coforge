@@ -1,5 +1,6 @@
 import { announceMessageBestEffort } from "#src/server/conversations/conversation-activity.server";
 import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
+import { channelActorOf } from "#src/server/conversations/channel-actor.server";
 import { userUploadedAttachmentWhere } from "#src/server/attachments/message-attachments.server";
 import { assertCanAssignOther } from "./task-assignment-authority.server";
 import type { TaskCommand, TaskPrincipal } from "@lrm/coforge-sdk/internal";
@@ -205,7 +206,12 @@ export async function createTasks(
     const sequences: number[] = [];
     for (const [index, title] of titles.entries()) {
       const sequence = firstSequence + index;
-      const stored = await storeMessageBody(tx, scope, title, { targets: mentionTargets });
+      const stored = await storeMessageBody(
+        tx,
+        { ...scope, reader: channelActorOf(member) },
+        title,
+        { targets: mentionTargets },
+      );
       const mentionedAgentIds = new Set(
         stored.mentions.filter((mention) => mention.type === "agent").map((mention) => mention.id),
       );

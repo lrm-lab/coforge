@@ -81,7 +81,7 @@ test("a body's thread references are read in one query per channel, and only the
         } as unknown as Parameters<typeof storeMessageBody>[0];
         const stored = await storeMessageBody(
           counted,
-          { workspaceId: workspace.id, conversationId: general.id },
+          { workspaceId: workspace.id, conversationId: general.id, reader: { userId: user.id } },
           body,
           { targets: [] },
         );

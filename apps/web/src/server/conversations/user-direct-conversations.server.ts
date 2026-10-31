@@ -164,9 +164,12 @@ export class UserDirectConversations {
         { workspaceId, conversationId, uploaderId: senderUserId },
         input.attachmentIds ?? [],
       );
-      const stored = await storeMessageBody(tx, { workspaceId, conversationId }, input.body, {
-        targets: [],
-      });
+      const stored = await storeMessageBody(
+        tx,
+        { workspaceId, conversationId, reader: { userId: senderUserId } },
+        input.body,
+        { targets: [] },
+      );
       const message = await tx.message.create({
         data: {
           conversationId,

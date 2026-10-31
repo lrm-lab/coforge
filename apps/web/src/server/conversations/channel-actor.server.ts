@@ -8,3 +8,11 @@ export type ChannelActor = { userId: string } | { agentId: string };
 export function channelActorMemberWhere(actor: ChannelActor) {
   return "userId" in actor ? { userId: actor.userId } : { agentId: actor.agentId };
 }
+
+/** The actor a member row stands for: its person, or else its Agent. */
+export function channelActorOf(member: {
+  userId: string | null;
+  agentId: string | null;
+}): ChannelActor {
+  return member.userId ? { userId: member.userId } : { agentId: member.agentId! };
+}

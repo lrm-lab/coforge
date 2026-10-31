@@ -2,6 +2,7 @@ import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import type { ForwardedMessageView } from "#src/features/conversations/message-forward";
 import type { MentionRef } from "#src/features/conversations/mention-text";
 import { VISIBLE_CONVERSATION_WHERE } from "./active-member.server";
+import { canReadChannel } from "./channel-read-access.server";
 import type { ForwardSource } from "./message-forward-source.server";
 import type { SentMessageHook } from "./sent-message-hook.server";
 
@@ -49,8 +50,10 @@ export function browserForwarded(row: BrowserForwardRow): ForwardedMessageView {
 /**
  * Settles `sourceAccessible` (and a channel's current name) for the forwards among `messages`, for
  * one viewer, in one lookup of the conversations they came from. The original is open to a viewer
- * who can read its conversation: any channel of the Workspace not hidden from it, a direct
- * conversation only to its members, and only while the original still exists.
+ * who can read its conversation: a channel of the Workspace not hidden from it that
+ * `canReadChannel` lets them read (a private one only from inside it), a direct conversation only
+ * to its members, and only while the original still exists. A channel they cannot read keeps the
+ * name the forward stored, never its current one.
  */
 export async function attachForwardedAccess<T extends { forwarded?: ForwardedMessageView }>(
   db: Pick<PrismaClient, "conversation">,
@@ -68,7 +71,8 @@ export async function attachForwardedAccess<T extends { forwarded?: ForwardedMes
       id: true,
       channelName: true,
       directKey: true,
-      members: { where: { userId: viewerUserId }, select: { id: true }, take: 1 },
+      visibility: true,
+      members: { where: { userId: viewerUserId }, select: { leftAt: true }, take: 1 },
     },
   });
   const byId = new Map(conversations.map((conversation) => [conversation.id, conversation]));
@@ -77,9 +81,14 @@ export async function attachForwardedAccess<T extends { forwarded?: ForwardedMes
     if (!forwarded?.sourceMessageId) return message;
     const conversation = byId.get(forwarded.sourceConversation.id);
     if (!conversation) return message;
+    // A channel by its active members (`canReadChannel`); a DM by any member row, as
+    // `ConversationHistory.authorize` opens it.
+    const [member] = conversation.members;
     const accessible =
-      conversation.channelName !== null ||
-      (conversation.directKey !== null && conversation.members.length > 0);
+      conversation.channelName !== null
+        ? canReadChannel(conversation, member?.leftAt === null)
+        : conversation.directKey !== null && member !== undefined;
+    if (!accessible) return message;
     return {
       ...message,
       forwarded: {
@@ -88,7 +97,7 @@ export async function attachForwardedAccess<T extends { forwarded?: ForwardedMes
           ...forwarded.sourceConversation,
           name: conversation.channelName ?? forwarded.sourceConversation.name,
         },
-        sourceAccessible: accessible,
+        sourceAccessible: true,
       },
     };
   });

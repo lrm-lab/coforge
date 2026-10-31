@@ -167,8 +167,20 @@ test("a viewer opens an original in a channel, or in a DM of theirs, and only wh
       findMany: async (args: unknown) => {
         lookups.push(args);
         return [
-          { id: SOURCE_CHANNEL, channelName: "renamed", directKey: null, members: [] },
-          { id: SOURCE_DM, channelName: null, directKey: "user:a|user:b", members: [] },
+          {
+            id: SOURCE_CHANNEL,
+            channelName: "renamed",
+            directKey: null,
+            visibility: "public",
+            members: [],
+          },
+          {
+            id: SOURCE_DM,
+            channelName: null,
+            directKey: "user:a|user:b",
+            visibility: "public",
+            members: [],
+          },
         ];
       },
     },

@@ -124,7 +124,7 @@ export async function sendChannel(
         // names a real task, channel or thread, and anything else stays ordinary text.
         const stored = await storeMessageBody(
           tx,
-          { workspaceId, conversationId: channelId },
+          { workspaceId, conversationId: channelId, reader: { userId } },
           body,
           {
             targets: (handles) =>

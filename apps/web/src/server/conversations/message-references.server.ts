@@ -1,4 +1,6 @@
-import { ACTIVE_MEMBER_WHERE, VISIBLE_CONVERSATION_WHERE } from "./active-member.server";
+import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
+import type { ChannelActor } from "./channel-actor.server";
+import { visibleChannelWhere } from "./channel-read-access.server";
 import {
   PG_INTEGER_MAX,
   resolveMentionTargets,
@@ -76,9 +78,10 @@ export async function channelMentionTargets(
  *   name (`channelMentionTargets`), so a large channel's roster is never read to resolve a
  *   message that mentions a few members, or none;
  * - `task #N`, or a bare `#N`, names a task of this conversation;
- * - `#name` names a channel of this Workspace; a bare `#N` names one only when no task has that
- *   number (see `readMessageReferences` for the full precedence). Every channel is public and readable by every
- *   Workspace member (archived ones included), so any channel here is one the sender can see;
+ * - `#name` names a channel of this Workspace the sender (`scope.reader`) may read
+ *   (`visibleChannelWhere`, archived ones included): a private channel it is not in stays text, so
+ *   a reference reveals no private channel and no message of one. A bare `#N` names one only when
+ *   no task has that number (see `readMessageReferences` for the full precedence);
  * - `#name:shortid` names a top-level message of that channel, by a 6–8 hex prefix only that
  *   message's id has, or by its whole id (`channelThreadRootsWhere`, the rule an Agent's thread
  *   target is found by). Only the first `MAX_THREAD_REFERENCES` distinct ones are looked up, in one
@@ -92,7 +95,7 @@ export async function channelMentionTargets(
  */
 export async function storeMessageBody(
   tx: Pick<Prisma.TransactionClient, "task" | "conversation" | "message">,
-  scope: { workspaceId: string; conversationId: string },
+  scope: { workspaceId: string; conversationId: string; reader: ChannelActor },
   body: string,
   mentionScope: {
     targets:
@@ -140,9 +143,8 @@ export async function storeMessageBody(
           await tx.conversation.findMany({
             // A channel hidden from the Workspace names nothing: `#general` stays plain text.
             where: {
-              workspaceId: scope.workspaceId,
+              ...visibleChannelWhere(scope.workspaceId, scope.reader),
               channelName: { in: channelNames },
-              ...VISIBLE_CONVERSATION_WHERE,
             },
             select: { id: true, channelName: true },
           })

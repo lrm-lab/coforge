@@ -12,6 +12,7 @@ import { AppError } from "#src/lib/app-error";
 import { workspaceAssistantUser } from "./workspace-assistant-authority.server";
 import { DirectConversations } from "#src/server/conversations/direct-conversations.server";
 import { ConversationHistory } from "#src/server/conversations/conversation-history.server";
+import { visibleChannelWhere } from "#src/server/conversations/channel-read-access.server";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
 import { getMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
 import type { MessageRequestIdempotency } from "#src/server/conversations/message-request-idempotency.server";
@@ -284,7 +285,8 @@ export class WorkspaceAssistantCommands {
         conversation: {
           ...VISIBLE_CONVERSATION_WHERE,
           OR: [
-            { channelName: { not: null } },
+            // A channel its person may read: a private one only from inside it.
+            visibleChannelWhere(principal.workspaceId, { userId: actor.userId }),
             {
               ...DIRECT_CONVERSATION_WHERE,
               members: { some: { userId: actor.userId, ...ACTIVE_MEMBER_WHERE } },

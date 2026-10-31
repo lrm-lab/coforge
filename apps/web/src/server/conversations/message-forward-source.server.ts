@@ -110,8 +110,8 @@ export async function loadForwardSource(
     sourceMessageId = null;
     sourceThreadRootId = null;
   } else {
-    // The conversation's own read rule: any channel of the Workspace, a direct conversation only
-    // its members'. Neither refusal says which it was.
+    // The conversation's own read rule: a channel `canReadChannel` lets them read (a private one
+    // only from inside it), a direct conversation only its members'. Neither refusal says which.
     await new ConversationHistory(db)
       .authorize(workspaceId, userId, message.conversationId)
       .catch((error: unknown) => {

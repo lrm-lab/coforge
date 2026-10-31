@@ -3,6 +3,7 @@ import { AppError } from "#src/lib/app-error";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { userUploadedAttachmentWhere } from "#src/server/attachments/message-attachments.server";
 import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
+import { channelActorOf } from "#src/server/conversations/channel-actor.server";
 import { lockConversation } from "#src/server/conversations/conversation-lock.server";
 import {
   channelMentionTargets,
@@ -69,7 +70,7 @@ export async function postTaskMessage(
 
   const stored = await storeMessageBody(
     tx,
-    { workspaceId, conversationId: scope.conversationId },
+    { workspaceId, conversationId: scope.conversationId, reader: channelActorOf(member) },
     input.body,
     {
       targets: (handles) => channelMentionTargets(tx, scope, handles),

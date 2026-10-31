@@ -6,7 +6,10 @@ import { isAgentPeerDirectKey } from "#src/features/conversations/direct-key";
 import { Prisma } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { allocateSequence } from "./sequence-allocation.server";
+import { WORKSPACE_ASSISTANT_KIND } from "#src/features/agents/agent-system-kind";
 import { canDirectMessageAgent } from "#src/server/agents/agent-visibility.server";
+import { agentChannelReader } from "#src/server/agents/workspace-assistant-authority.server";
+import type { ChannelActor } from "#src/server/conversations/channel-actor.server";
 import { channelAgentRecipients } from "#src/server/conversations/channel-agent-recipients.server";
 import { enrollThreadReplyFollowers } from "#src/server/conversations/channel-threads.server";
 import { AgentSendRejectedError } from "#src/server/conversations/agent-send-rejected-error.server";
@@ -109,16 +112,21 @@ export async function sendAgentMessage(
   // A private Agent's own outbound DM is just as read-only as the human side of it
   // ("neither side can send"). Channels are unaffected — a private Agent is never a channel
   // member in the first place, so this only ever narrows the direct-conversation case.
+  // The channels a `#name` reference may name: the Agent's own, but a Workspace assistant's
+  // person's in the DM it keeps with them (`agentChannelReader`).
+  let reader: ChannelActor = { agentId };
   if (!conversation.channelName && user) {
     const self = await ports.db.agent.findUnique({
       where: { id: agentId },
-      select: { ownerId: true, visibility: true },
+      select: { ownerId: true, visibility: true, systemKind: true },
     });
     if (self && !canDirectMessageAgent(user.userId!, self))
       throw new AgentSendRejectedError(
         403,
         "this Agent is private; the direct message is read-only",
       );
+    if (self?.systemKind === WORKSPACE_ASSISTANT_KIND)
+      reader = await agentChannelReader(ports.db, conversation.workspaceId, agentId);
   }
   const messageSelect = {
     id: true,
@@ -228,7 +236,7 @@ export async function sendAgentMessage(
     // in either conversation kind, rendered as chips without reparsing prose.
     const stored = await storeMessageBody(
       tx,
-      { workspaceId: conversation.workspaceId, conversationId },
+      { workspaceId: conversation.workspaceId, conversationId, reader },
       body,
       {
         targets: conversation.channelName

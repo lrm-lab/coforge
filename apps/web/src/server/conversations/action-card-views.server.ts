@@ -5,7 +5,8 @@ import { canManageAgentAppAccess } from "#src/server/app-agent-access/access-rul
 import { roleCan } from "#src/features/workspaces/workspace-roles";
 import { isAdminLike } from "#src/server/workspaces/member-role.server";
 import { workspaceMemberRole } from "#src/server/workspaces/workspace-membership.server";
-import { VISIBLE_CONVERSATION_WHERE } from "./active-member.server";
+import { ACTIVE_MEMBER_WHERE, VISIBLE_CONVERSATION_WHERE } from "./active-member.server";
+import { readableConversationWhere } from "./channel-read-access.server";
 import { pageFillActionCardView } from "./action-card-page-fill.server";
 import type {
   ActionCardRef,
@@ -28,8 +29,10 @@ export async function safeWorkspaceRole(db: PrismaClient, workspaceId: string, u
 /**
  * Browser-facing views for a page of messages, one batched lookup per page (never per message):
  * every referenced user/Agent/channel/computer, plus the viewer's Workspace role and channel
- * memberships, in one `Promise.all`. Messages without a card are absent from the returned map.
- * Names that no longer resolve (a deleted user, Agent, channel, or computer) render as "unknown".
+ * memberships, in one `Promise.all`. Messages without a card are absent from the returned map,
+ * and so is a card in a conversation the viewer cannot read (a private channel they are not in, a
+ * direct conversation not theirs): the ids come from the browser. Names that no longer resolve (a
+ * deleted user, Agent, channel, or computer) render as "unknown".
  */
 export async function actionCardViews(
   db: PrismaClient,
@@ -40,7 +43,18 @@ export async function actionCardViews(
   const ids = [...new Set(messageIds)];
   if (!ids.length) return new Map();
   const cards = await db.actionCard.findMany({
-    where: { workspaceId, messageId: { in: ids } },
+    where: {
+      workspaceId,
+      messageId: { in: ids },
+      conversation: {
+        ...readableConversationWhere(workspaceId, { userId: viewerUserId }),
+        // A direct conversation only its members read; `readableConversationWhere` leaves that here.
+        OR: [
+          { directKey: null },
+          { members: { some: { userId: viewerUserId, ...ACTIVE_MEMBER_WHERE } } },
+        ],
+      },
+    },
     select: {
       messageId: true,
       kind: true,
