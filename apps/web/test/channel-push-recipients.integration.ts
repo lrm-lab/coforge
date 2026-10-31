@@ -66,3 +66,84 @@ test("a channel member without a browser push subscription is still a notificati
     redis.close();
   }
 });
+
+test("a comment notification follows the file's read access, not the comment seat", async () => {
+  const { attachmentCommentsFixture } = await import("./helpers/attachment-comments-fixture");
+  const f = await attachmentCommentsFixture();
+  try {
+    // The private-channel repro: a commenter keeps their comment-conversation seat after the
+    // source channel removes them (or turns private around them).
+    await f.db.conversation.update({
+      where: { id: f.conversation.id },
+      data: { visibility: "private" },
+    });
+    await f.db.conversationMember.create({
+      data: {
+        conversationId: f.conversation.id,
+        workspaceId: f.workspace.id,
+        userId: f.viewer.id,
+      },
+    });
+    for (const user of [f.member, f.viewer])
+      await f.db.userPreference.upsert({
+        where: { userId: user.id },
+        create: { userId: user.id, browserNotificationsEnabled: true },
+        update: { browserNotificationsEnabled: true },
+      });
+    // The comment conversation, its thread row, the three seats, one comment and its metadata.
+    const discussion = await f.db.conversation.create({
+      data: { workspaceId: f.workspace.id, kind: "attachment_comments" },
+    });
+    await f.db.attachmentCommentThread.create({
+      data: {
+        attachmentId: f.attachment.id,
+        workspaceId: f.workspace.id,
+        conversationId: discussion.id,
+      },
+    });
+    const seat = (userId: string) =>
+      f.db.conversationMember.create({
+        data: { conversationId: discussion.id, workspaceId: f.workspace.id, userId },
+        select: { id: true },
+      });
+    const [ownerSeat] = await Promise.all([seat(f.owner.id), seat(f.member.id), seat(f.viewer.id)]);
+    const comment = await f.db.message.create({
+      data: {
+        conversationId: discussion.id,
+        workspaceId: f.workspace.id,
+        senderMemberId: ownerSeat.id,
+        sequence: 1,
+        body: "looks right",
+      },
+    });
+    await f.db.attachmentComment.create({
+      data: {
+        attachmentId: f.attachment.id,
+        workspaceId: f.workspace.id,
+        conversationId: discussion.id,
+        messageId: comment.id,
+      },
+    });
+    const store = new PrismaWebPushSubscriptionStore(f.db);
+    // Before the move: the seat carries both reads.
+    expect(await store.notificationForRecipient(comment.id, f.member.id)).toMatchObject({
+      conversationPath: `/w/${f.workspace.slug}/dm/${discussion.id}`,
+    });
+    // The file's channel removes the commenter; the seat stays.
+    await f.db.conversationMember.update({
+      where: {
+        conversationId_userId: { conversationId: f.conversation.id, userId: f.member.id },
+      },
+      data: { leftAt: new Date() },
+    });
+    // By-id read: no longer a recipient, even though the seat still qualifies.
+    expect(await store.notificationForRecipient(comment.id, f.member.id)).toBeNull();
+    // The staying commenter still reads it.
+    expect(await store.notificationForRecipient(comment.id, f.viewer.id)).not.toBeNull();
+    // The broadcast to the comment's seats drops the leaver too.
+    const pushed = await store.notificationForMessage(comment.id);
+    expect(pushed?.recipients.map((row) => row.userId)).toEqual([f.viewer.id]);
+  } finally {
+    await f.close();
+  }
+});

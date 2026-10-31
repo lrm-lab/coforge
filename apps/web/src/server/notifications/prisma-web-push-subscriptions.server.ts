@@ -8,6 +8,11 @@ import {
   peopleReadableBody,
 } from "#src/server/conversations/message-preview-line.server";
 import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
+import {
+  keyOf,
+  readAccess,
+  readersAmong,
+} from "#src/server/db/repositories/attachment-comment-recipients.repositories.server";
 import { messageNotificationTag } from "./web-push-notifications.server";
 import type {
   MessageWebPushNotification,
@@ -52,6 +57,20 @@ type MessageContext = {
   /** The un-anchored target: what `notificationForRecipient` hands the browser to compare against
    * the conversation it may already be looking at. */
   conversationPath: string;
+  /** Present only for a comment conversation's messages: who may read the file decides who gets
+   * this message's notification, never the seat its sender or recipients kept in the comment
+   * conversation. */
+  commentSource?: {
+    attachmentId: string;
+    conversation: {
+      id: string;
+      channelName: string | null;
+      visibility: string;
+      archivedAt: Date | null;
+      hiddenFromWorkspaceAt: Date | null;
+      directKey: string | null;
+    };
+  };
 };
 
 export class PrismaWebPushSubscriptionStore implements WebPushSubscriptionStore {
@@ -76,6 +95,7 @@ export class PrismaWebPushSubscriptionStore implements WebPushSubscriptionStore 
         },
         mentions: BROWSER_MESSAGE_MENTIONS_SELECT,
         forward: { select: { sourceBody: true } },
+        attachmentComment: { select: { attachmentId: true } },
         conversation: {
           include: { workspace: { select: { slug: true } } },
         },
@@ -85,6 +105,32 @@ export class PrismaWebPushSubscriptionStore implements WebPushSubscriptionStore 
     // Activity), and its seats are not who may read it: its board decides (`taskDiscussionAccess`).
     // A seat kept after its channel became private must not read a message by id here (task #302).
     if (!message || message.conversation.kind === "task_thread") return null;
+    // A comment conversation's messages decide through the file's read access, not the seat a
+    // commenter kept after leaving its channel or after it turned private.
+    let commentSource: MessageContext["commentSource"];
+    if (message.conversation.kind === "attachment_comments") {
+      if (!message.attachmentComment) return null;
+      const attachment = await this.db.attachment.findUnique({
+        where: { id: message.attachmentComment.attachmentId },
+        select: {
+          conversation: {
+            select: {
+              id: true,
+              channelName: true,
+              visibility: true,
+              archivedAt: true,
+              hiddenFromWorkspaceAt: true,
+              directKey: true,
+            },
+          },
+        },
+      });
+      if (!attachment) return null;
+      commentSource = {
+        attachmentId: message.attachmentComment.attachmentId,
+        conversation: attachment.conversation,
+      };
+    }
     const channelName = message.conversation.channelName;
     // Stored bodies carry mentions as embedded-UUID tokens; the preview reads a person's back as
     // their name, never their username, and an Agent's as its `@handle`. Mention-pierce reads the
@@ -125,6 +171,7 @@ export class PrismaWebPushSubscriptionStore implements WebPushSubscriptionStore 
       body: channelName ? `${sender}: ${preview}` : preview,
       url,
       conversationPath,
+      commentSource,
     };
   }
 
@@ -151,10 +198,26 @@ export class PrismaWebPushSubscriptionStore implements WebPushSubscriptionStore 
     };
   }
 
+  /** Who among a comment conversation's seat recipients may still read the file — the same
+   * `readAccess` check the by-id read applies, batched over every candidate. */
+  private async commentSourceRecipients<T extends { userId: string | null }>(
+    context: MessageContext,
+    rows: T[],
+  ): Promise<T[]> {
+    const readers = await readersAmong(
+      this.db,
+      rows.flatMap((row) =>
+        row.userId ? [{ workspaceId: context.message.workspaceId, userId: row.userId }] : [],
+      ),
+      context.commentSource!.attachmentId,
+    );
+    return rows.filter((row) => row.userId && readers.has(keyOf("user", row.userId)));
+  }
+
   async notificationForMessage(messageId: string): Promise<MessageWebPushNotification | null> {
     const context = await this.loadMessageContext(messageId);
     if (!context) return null;
-    const rows = await this.db.conversationMember.findMany({
+    let rows = await this.db.conversationMember.findMany({
       where: this.recipientWhere(context),
       select: {
         userId: true,
@@ -167,6 +230,7 @@ export class PrismaWebPushSubscriptionStore implements WebPushSubscriptionStore 
         },
       },
     });
+    if (context.commentSource) rows = await this.commentSourceRecipients(context, rows);
     return {
       title: context.title,
       body: context.body,
@@ -190,6 +254,14 @@ export class PrismaWebPushSubscriptionStore implements WebPushSubscriptionStore 
       select: { id: true },
     });
     if (!recipient) return null;
+    if (context.commentSource) {
+      const access = await readAccess(
+        this.db,
+        { workspaceId: context.message.workspaceId, userId },
+        context.commentSource.attachmentId,
+      );
+      if (!access?.canRead || access.conversationId !== context.message.conversationId) return null;
+    }
     return {
       title: context.title,
       body: context.body,

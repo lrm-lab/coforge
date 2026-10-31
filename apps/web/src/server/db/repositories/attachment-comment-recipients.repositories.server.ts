@@ -10,8 +10,8 @@ import type {
 import { conversationMentionables } from "#src/server/conversations/channel-mentionables.server";
 import type { DatabaseScope } from "#src/server/db/transaction.server";
 
-type ActorKey = `user:${string}` | `agent:${string}`;
-const keyOf = (kind: "user" | "agent", id: string): ActorKey => `${kind}:${id}`;
+export type ActorKey = `user:${string}` | `agent:${string}`;
+export const keyOf = (kind: "user" | "agent", id: string): ActorKey => `${kind}:${id}`;
 const actorKey = (actor: AttachmentCommentActor): ActorKey =>
   actor.userId ? keyOf("user", actor.userId) : keyOf("agent", actor.agentId!);
 const actorOf = (
@@ -160,7 +160,7 @@ async function readAccessAmong(
 }
 
 /** Of `actors`, those who may read the attachment's comments (`readAccess`), by `ActorKey`. */
-async function readersAmong(
+export async function readersAmong(
   db: DatabaseScope,
   actors: readonly AttachmentCommentActor[],
   attachmentId: string,
