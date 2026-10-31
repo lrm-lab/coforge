@@ -85,6 +85,11 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
   // The Saved view's `?message=` position jump reads its search state here, next to the
   // thread's — the wrapper owns the router so `ConversationPane` below stays hook-free.
   const { jumpMessageId, clearJumpMessage } = useConversationPositionJump();
+  // The stream's open waits for the window that holds the message it lands on (task #358).
+  const landingConversation = useMemo(
+    () => ({ ...conversation, landing: jumpMessage ?? jumpMessageId }),
+    [conversation, jumpMessage, jumpMessageId],
+  );
   // An open thread keeps its last-seen root. The bounded window drops a root's page when the main
   // stream is scrolled far enough; the thread pane then keeps showing the thread's root as it was
   // (its replies are the thread's own Query, which the window does not bound) rather than going
@@ -313,7 +318,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
           onLoadMessageAround={onLoadMessageAround}
           onReadLatest={onReadLatest}
           header={header}
-          conversation={conversation}
+          conversation={landingConversation}
           composerTarget={threadContext}
           onOpenThread={openThread}
         />

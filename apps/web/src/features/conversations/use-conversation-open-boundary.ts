@@ -19,8 +19,10 @@ import { isViewerMessage } from "./own-message";
  * cursor the conversation opened with, up to the newest message that read found. What came after
  * it arrived while the conversation was open, and is never the start of what was new. The
  * browser's stored copy (task #253) is not captured at all until its own read has landed, which
- * carries the server's cursor (it may have been read elsewhere since). A divider found late opens the pane on it, as `openKey` changes; a reader who
- * has scrolled away from the latest meanwhile stays where they are.
+ * carries the server's cursor (it may have been read elsewhere since), nor is a copy that lacks
+ * the message the open lands on (`landing`) until the window holds it. A divider found late opens
+ * the pane on it, as `openKey` changes; a reader who has scrolled away from the latest meanwhile
+ * stays where they are.
  */
 export function useConversationOpenBoundary(
   {
@@ -30,6 +32,7 @@ export function useConversationOpenBoundary(
     senderMemberId,
     caughtUp = true,
     caughtUpThrough,
+    landing: landingMessage,
   }: {
     messages: readonly OpenMessage[];
     readThroughSequence?: number;
@@ -40,10 +43,13 @@ export function useConversationOpenBoundary(
     caughtUp?: boolean;
     /** The newest message there was when it did. */
     caughtUpThrough?: number;
+    /** The message the conversation opens on, a jump's (Activity's first unread). */
+    landing?: string;
   },
   rootId: string | undefined,
   followingLatest: boolean,
 ) {
+  const landing = rootId ? undefined : landingMessage;
   const restoring = useAwaitingRestoredWindow(conversationId);
   const key = `${conversationId}:${rootId ?? ""}`;
   const capture = (waited: boolean): Opened => ({
@@ -53,13 +59,18 @@ export function useConversationOpenBoundary(
     // After a wait the pane opens again only for a reader still at the latest.
     openKey: waited && !followingLatest ? `${conversationId}:opening` : conversationId,
   });
+  const lacks = (id: string | undefined) =>
+    id !== undefined && !messages.some((message) => message.id === id);
   const [opened, setOpened] = useState<Opened | Waiting>(() =>
-    restoring ? { key, waiting: true } : capture(false),
+    restoring || lacks(landing) ? { key, waiting: true, landing } : capture(false),
   );
   const current = opened.key === key ? opened : undefined;
+  // An open that lands on a message not in the window waits for the window that holds it: the one
+  // it has is a copy kept from an earlier visit, which the jump's read is replacing (task #358).
+  const awaited = current ? ("waiting" in current ? current.landing : undefined) : landing;
   // Set during render, as derived state: the pane's open effect sees it in the same commit.
-  if (restoring) {
-    if (!current) setOpened({ key, waiting: true });
+  if (restoring || lacks(awaited)) {
+    if (!current) setOpened({ key, waiting: true, landing });
   } else if (!current || "waiting" in current) {
     setOpened(capture(Boolean(current)));
   } else if (
@@ -108,7 +119,7 @@ type Opened = {
   /** No divider: the window held everything the open was caught up with, none of it unread. */
   settled?: boolean;
 };
-type Waiting = { key: string; waiting: true };
+type Waiting = { key: string; waiting: true; landing?: string };
 
 /**
  * Whether the conversation's window is the browser's stored copy, still waiting for its own read
