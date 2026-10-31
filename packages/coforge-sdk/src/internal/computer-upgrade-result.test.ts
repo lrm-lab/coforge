@@ -48,55 +48,6 @@ test("the installer's failure codes are known and round-trip on the wire", () =>
   }
 });
 
-test("round-trips a result carrying the automatic recovery report", () => {
-  const value = {
-    ...base,
-    error: "rollback failed",
-    errorCode: UPGRADE_ERROR_CODE.ROLLBACK_FAILED,
-    recovery: {
-      outcome: "recovered" as const,
-      restoredVersion: "0.1.0",
-      attempts: 3,
-      finishedAtMs: 1_700_000_500_000,
-    },
-  };
-  expect(decodeComputerUpgradeResult(encodeComputerUpgradeResult(value))).toEqual(value);
-});
-
-test("round-trips a recovery that gave up, sanitizing its message like the error text", () => {
-  const value = {
-    ...base,
-    recovery: {
-      outcome: "failed" as const,
-      attempts: 8,
-      finishedAtMs: 1_700_000_500_000,
-      message: "could not restore /Users/frank/.coforge/install/versions/0.1.0",
-    },
-  };
-  const decoded = decodeComputerUpgradeResult(encodeComputerUpgradeResult(value));
-  expect(decoded.recovery).toEqual({
-    outcome: "failed",
-    attempts: 8,
-    finishedAtMs: 1_700_000_500_000,
-    message: "could not restore <path>",
-  });
-});
-
-test("rejects a malformed recovery on encode", () => {
-  expect(() =>
-    encodeComputerUpgradeResult({
-      ...base,
-      recovery: { outcome: "exploded" as never, attempts: 1, finishedAtMs: 1 },
-    }),
-  ).toThrow("recovery");
-  expect(() =>
-    encodeComputerUpgradeResult({
-      ...base,
-      recovery: { outcome: "recovered", attempts: 0, finishedAtMs: 1 },
-    }),
-  ).toThrow("recovery");
-});
-
 test("rejects a malformed error code shape on encode and decode", () => {
   expect(() => encodeComputerUpgradeResult({ ...base, errorCode: "not-a-code" })).toThrow(
     "error code",

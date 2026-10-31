@@ -43,10 +43,6 @@ model Computer {
   /// not a Workspace, so it lives here rather than on `computer_runtimes`. Null until a daemon that
   /// reports it connects.
   runtimeAuth       Json?
-  /// The newest automatic-recovery report from this Computer's installer, as its daemon relayed
-  /// it: `{ requestId, outcome, restoredVersion?, attempts, finishedAtMs, message?,
-  /// reportedAtMs }`. Null until a recovery finishes on a daemon new enough to report it.
-  lastRecovery      Json?
   /// What the Agent data directory's filesystem had left, as last reported by this Computer's
   /// daemon: bytes free and the volume's size, and when the daemon measured them.
   diskAvailableBytes BigInt?

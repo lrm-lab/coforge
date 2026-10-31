@@ -22,25 +22,9 @@ The commands, output and exit status of `coforge-installer`; what the crate does
   The flag is not in the request record, so a replay ignores it. Settling an unfinished upgrade and rollback are not gated.
 - There is no `recover` command. `install`, `upgrade`, `repair` and `start` settle an unfinished
   upgrade (the journal) first, with the same caller rules as their own work; one that cannot be
-  settled ends the operation with exit 3, no receipt, and "Run the same command again".
-- `coforge-installer settle [--json]`: one automatic try, for the retry trigger and for nothing
-  else. It takes no caller. With no journal it does nothing (exit 0). Otherwise it waits out its
-  backoff (`recovery-state.json`: attempts and the earliest next try; 1 minute, 5, 15, 1 hour,
-  then 6 hours between tries) and settles the journal, exit 0 when it settled and 3 when it did
-  not. After 8 failed tries it stops trying until the next operation. What it did goes to `<install root>/recovery-report.json` (`outcome` `recovered` or
-  `failed`, the request id of the upgrade it settled, the restored version, the attempts,
-  `finishedAt`) for the Computer to report.
-  A journal left by an upgrade, install or recovery arms the trigger in the same step, and an
-  operation that finds no journal disarms it (`status` reads only and touches neither), so a
-  healthy machine has none. The trigger itself is a `StartInterval` LaunchAgent
-  `cn.coforge.installer.settle` (macOS; it fires every minute and the state file's `notBefore`
-  decides which fire does work), a user timer `coforge-installer-settle.timer` with a oneshot
-  service (Linux; armed for the delay, and again after boot or login), or a scheduled task
-  `CoForge Installer Settle` with a one-time and a logon trigger (Windows); each runs
-  `coforge-installer settle` and `settle` arms the next one itself.
-  `start` settles a
-  journal the same way before it starts the service (a refusal inside the service's own unit
-  starts as before; a recovery that fails fails the start).
+  settled ends the operation with exit 3, no receipt, and "Run the same command again". `start`
+  settles a journal the same way before it starts the service (a refusal inside the service's own
+  unit starts as before; a recovery that fails fails the start).
 - `coforge-installer repair [--version <v> | --channel main|latest] [--yes] [--allow-downgrade]
   [--json]`: under the machine lock, repairs the active installation without stopping the
   service. Healthy payloads only need the activation recreated; a damaged payload is quarantined

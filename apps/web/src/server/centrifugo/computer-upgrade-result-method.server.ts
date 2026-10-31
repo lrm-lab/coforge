@@ -1,5 +1,4 @@
 import { decodeComputerUpgradeResult } from "@lrm/coforge-sdk/internal";
-import type { PrismaComputerRecoveryStore } from "#src/server/computers/computer-recovery.server";
 import {
   getComputerUpgradeStore,
   type RedisComputerUpgradeStore,
@@ -14,7 +13,6 @@ import type { CentrifugoRpcMethod } from "./rpc-handler.server";
  */
 export function createComputerUpgradeResultMethod(
   upgrades?: Pick<RedisComputerUpgradeStore, "reported">,
-  recoveries?: Pick<PrismaComputerRecoveryStore, "record">,
 ): CentrifugoRpcMethod {
   return async (payload, metadata) => {
     let result;
@@ -39,15 +37,6 @@ export function createComputerUpgradeResultMethod(
           ...(result.errorCode ? { errorCode: result.errorCode } : {}),
         },
       );
-      // A recovery report rides on the operation it settled - and may arrive on a second result
-      // after that operation already settled. It is machine state: stored whatever the request
-      // record now says, under the report's own freshness.
-      if (result.recovery)
-        await recoveries?.record(result.computerId, {
-          ...result.recovery,
-          requestId: result.requestId,
-          reportedAtMs: Date.now(),
-        });
       // Acceptance is the acknowledgement: the Daemon drops its local record on this reply.
       return new Uint8Array();
     } catch {

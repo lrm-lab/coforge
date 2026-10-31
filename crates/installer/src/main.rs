@@ -6,7 +6,6 @@
 //!   coforge-installer install --version <latest|X.Y.Z> [--from-directory <dir>] [--allow-downgrade]
 //!   coforge-installer upgrade --request-id <uuid> --version <latest|X.Y.Z> [--caller-pid <pid>]
 //!                             [--from-directory <dir>] [--allow-downgrade]
-//!   coforge-installer settle [--json]
 //!   coforge-installer repair [--version <latest|X.Y.Z> | --channel main|latest] [--yes]
 //!                             [--allow-downgrade] [--json]
 //!   coforge-installer start
@@ -26,7 +25,6 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Instant;
 
-use coforge_installer::auto_recover::AutoOutcome;
 use coforge_installer::compiled_feed;
 use coforge_installer::contract::{EXIT_FAILED, ReceiptStatus, UpgradeReceipt};
 use coforge_installer::installation::{self, ReleaseOrigin, Setup};
@@ -84,7 +82,6 @@ fn main() -> ExitCode {
             allow_downgrade,
             json,
         ),
-        Command::Settle { json } => settle(&setup, json),
         Command::Repair {
             selection,
             allow_downgrade,
@@ -179,40 +176,6 @@ fn report_receipt_mode(receipt: &UpgradeReceipt, json: bool) -> ExitCode {
         ExitCode::from(receipt.exit_code())
     } else {
         report_receipt(receipt)
-    }
-}
-
-fn settle(setup: &Setup, json: bool) -> ExitCode {
-    let mut report_stage = |line: &str| {
-        if json {
-            eprintln!("==> {line}");
-        } else {
-            stage(line);
-        }
-    };
-    match installation::settle(setup, &mut report_stage) {
-        Ok(outcome) => {
-            let exit = outcome.exit_code();
-            if json {
-                println!("{{\"exit_code\":{exit}}}");
-            } else {
-                match outcome {
-                    AutoOutcome::NothingToRecover => println!("nothing to recover"),
-                    AutoOutcome::NotYet => println!("not time to try again yet"),
-                    AutoOutcome::Recovered { version } => {
-                        println!("CoForge Computer {version} is active.");
-                    }
-                    AutoOutcome::Retry { attempts, message }
-                    | AutoOutcome::GaveUp { attempts, message } => {
-                        eprintln!(
-                            "coforge-installer: recovery attempt {attempts} failed: {message}"
-                        );
-                    }
-                }
-            }
-            ExitCode::from(exit)
-        }
-        Err(message) => fail(&message),
     }
 }
 

@@ -9,7 +9,6 @@
 //! is not here yet.
 
 pub mod active;
-pub mod auto_recover;
 pub mod clock;
 pub mod compiled_feed;
 pub mod contract;
@@ -32,8 +31,8 @@ pub mod recover;
 pub mod release_directory;
 pub mod repair;
 pub mod request_id;
-pub mod retry_trigger;
 pub mod service;
+pub mod settle;
 pub mod start;
 pub mod status;
 pub mod store;

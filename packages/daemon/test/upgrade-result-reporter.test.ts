@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { UPGRADE_ERROR_CODE, type ComputerUpgradeResult } from "@lrm/coforge-sdk/internal";
 import {
-  attachRecoveryReport,
   UPGRADE_RESULT_POLL_MS,
   UPGRADE_RESULT_RETRY_BASE_MS,
   UPGRADE_RESULT_RETRY_MAX_MS,
@@ -68,10 +67,9 @@ function fakeTransport() {
           state.failNext -= 1;
           throw new Error("rpc failed");
         }
-        const key = result.recovery ? `${result.requestId}:recovery` : result.requestId;
-        if (reported.has(key)) return false;
+        if (reported.has(result.requestId)) return false;
         wire.push(result);
-        reported.add(key);
+        reported.add(result.requestId);
         return true;
       },
     },
@@ -393,84 +391,6 @@ describe("UpgradeResultReporter", () => {
     expect(clock.pending()).toEqual([]);
   });
 
-  test("a result with a recovery report attached carries it on the wire once", async () => {
-    const recovery = {
-      outcome: "recovered" as const,
-      restoredVersion: "0.1.0",
-      attempts: 3,
-      finishedAtMs: 1_700_000_000_000,
-    };
-    const { clock, transport, acknowledged, reporter } = harness({
-      results: [{ ...failedResult("request-a"), recovery }],
-    });
-    await reporter.report();
-    expect(transport.wire).toEqual([
-      expect.objectContaining({ requestId: "request-a", status: "failed", recovery }),
-    ]);
-    expect(acknowledged).toEqual(["request-a"]);
-    // A stale read that still lists it sends nothing again, and polls stop.
-    await reporter.report();
-    expect(transport.wire).toHaveLength(1);
-    expect(clock.pending()).toEqual([]);
-  });
-
-  test("a recovery-only result is sent once and never acknowledged to the Coordinator", async () => {
-    const { transport, acknowledged, reporter } = harness({
-      results: [
-        {
-          requestId: "request-a",
-          status: "failed",
-          completedAtMs: 1_700_000_000_000,
-          recovery: {
-            outcome: "failed" as const,
-            attempts: 8,
-            finishedAtMs: 1_700_000_000_000,
-            message: "gave up",
-          },
-          recoveryOnly: true,
-        },
-      ],
-    });
-    await reporter.report();
-    expect(transport.wire).toEqual([
-      expect.objectContaining({
-        requestId: "request-a",
-        status: "failed",
-        recovery: expect.objectContaining({ outcome: "failed", attempts: 8 }),
-      }),
-    ]);
-    expect(acknowledged).toEqual([]);
-    // Still listed on the next read: not sent again.
-    await reporter.report();
-    expect(transport.wire).toHaveLength(1);
-  });
-
-  test("an already acknowledged result that gains a recovery is reported a second time", async () => {
-    const results = [failedResult("request-a")];
-    const { transport, acknowledged, reporter } = harness({
-      // A stale read keeps listing the result the Coordinator already acknowledged.
-      readOperations: async () => ({ results, pending: false }),
-    });
-    await reporter.report();
-    expect(transport.wire).toHaveLength(1);
-    expect(acknowledged).toEqual(["request-a"]);
-
-    results[0] = {
-      ...failedResult("request-a"),
-      recovery: { outcome: "recovered" as const, attempts: 1, finishedAtMs: 9_000 },
-    };
-    await reporter.report();
-    expect(transport.wire).toHaveLength(2);
-    expect(transport.wire[1]).toEqual(
-      expect.objectContaining({
-        requestId: "request-a",
-        recovery: { outcome: "recovered", attempts: 1, finishedAtMs: 9_000 },
-      }),
-    );
-    // Not acknowledged again, and the second send went out despite the requestId dedupe.
-    expect(acknowledged).toEqual(["request-a"]);
-  });
-
   test("a transport without upgrade results sends nothing and schedules no retry", async () => {
     const clock = manualClock();
     const acknowledged: string[] = [];
@@ -488,50 +408,5 @@ describe("UpgradeResultReporter", () => {
     await reporter.report();
     expect(acknowledged).toEqual([]);
     expect(clock.pending()).toEqual([]);
-  });
-});
-
-describe("attachRecoveryReport", () => {
-  const report = {
-    schemaVersion: 1 as const,
-    requestId: "request-a",
-    outcome: "recovered" as const,
-    restoredVersion: "0.1.0",
-    attempts: 3,
-    finishedAt: 1_700_000,
-  };
-  const recovery = {
-    outcome: "recovered" as const,
-    restoredVersion: "0.1.0",
-    attempts: 3,
-    finishedAtMs: 1_700_000_000,
-  };
-
-  test("attaches the report to the operation it settled", () => {
-    const reading = attachRecoveryReport(
-      { results: [failedResult("request-a")], pending: false },
-      report,
-    );
-    expect(reading.results).toEqual([{ ...failedResult("request-a"), recovery }]);
-  });
-
-  test("an operation the config no longer lists becomes a recovery-only result", () => {
-    const reading = attachRecoveryReport({ results: [], pending: false }, report);
-    expect(reading.results).toEqual([
-      {
-        requestId: "request-a",
-        status: "failed",
-        completedAtMs: 1_700_000_000,
-        recovery,
-        recoveryOnly: true,
-      },
-    ]);
-  });
-
-  test("a report naming no request, or none at all, changes nothing", () => {
-    const reading = { results: [failedResult("request-a")], pending: true };
-    const { requestId: _id, ...unlinked } = report;
-    expect(attachRecoveryReport(reading, unlinked)).toEqual(reading);
-    expect(attachRecoveryReport(reading, undefined)).toEqual(reading);
   });
 });

@@ -44,9 +44,7 @@ Directories with their own `AGENTS.md` add rules for that directory only.
   `supervisor/`); do not leak them into domain or application modules.
 - `platform/computer-install-directory.ts` is the one Computer install-root resolver, and
   `platform/upgrade-receipt-file.ts` the one reader of `upgrade-results/<id>.result.json`
-  (size cap, accepted shapes, held-to-failed). `platform/recovery-report-file.ts` is the one
-  reader of `<install root>/recovery-report.json`. Receipt, journal, recovery report, and sweep
-  paths go through them.
+  (size cap, accepted shapes, held-to-failed). Receipt, journal, and sweep paths go through them.
 
 - The private notice of a new app's client secret (`AppRegistrationNotice`, capability
   `app-registration-notice:v1`) arrives once over the daemon WSS, best effort, never retried. It

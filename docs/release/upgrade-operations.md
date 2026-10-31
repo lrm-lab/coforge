@@ -41,7 +41,8 @@ for a first install.
 
 In order, with the machine mutation lock held throughout:
 
-- refuses while the recovery journal `installer-transaction.json` exists (exit 3);
+- settles an unfinished upgrade first while the recovery journal `installer-transaction.json`
+  exists, and only fails (exit 3) when it cannot be settled;
   request id replay returns the earlier outcome, and a reused id for another
   operation is refused (exit 2);
 - downloads and verifies the target version, and checks it with
@@ -103,10 +104,9 @@ settles an unfinished upgrade from the journal before its own work. When the jou
 service ran, settling reads the definition of the version it is about to switch to before it stops
 anything (a version that cannot print it fails that attempt, so it falls back to restoring the
 previous version), and registers it before it starts the service. When it cannot settle, the
-operation exits 3 without a receipt and says to run the same command again; meanwhile
-`coforge-installer settle` retries by itself from a one-shot trigger, with a backoff (see
-[Installer commands](installer-commands.md)). An operation inside the service's own unit cannot
-settle (it would stop the caller); `start` goes on without settling there.
+operation exits 3 without a receipt and says to run the same command again. An operation inside
+the service's own unit cannot settle (it would stop the caller); `start` goes on without settling
+there.
 
 ## Repair and start
 

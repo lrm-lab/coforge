@@ -20,7 +20,6 @@ import {
   setRuntimeVisibilityInputSchema,
   updateComputerDisplayNameInputSchema,
   formatCloudComputerInputSchema,
-  computerRecoverySchema,
 } from "./computer.schemas";
 import { declareNoStore } from "#src/features/no-store-response.server";
 import {
@@ -96,7 +95,6 @@ export const listComputers = createServerFn({ method: "GET" })
               platform: true,
               osVersion: true,
               runtimeAuth: true,
-              lastRecovery: true,
               diskAvailableBytes: true,
               diskTotalBytes: true,
               diskReportedAt: true,
@@ -170,7 +168,6 @@ export const listComputers = createServerFn({ method: "GET" })
           imageVersion: images.get(computer.id)?.version ?? null,
           imageUpdate: images.get(computer.id)?.update ?? null,
           upgrade: upgrades[index] ?? null,
-          lastRecovery: computerRecoverySchema.safeParse(computer.lastRecovery).data ?? null,
           computerVersion: computer.computerVersion,
           platform: computer.platform,
           osVersion: computer.osVersion,

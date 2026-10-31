@@ -21,10 +21,6 @@ pub(crate) enum Command {
         allow_downgrade: bool,
         json: bool,
     },
-    /// `settle`: one try for the retry trigger, which waits out its backoff itself.
-    Settle {
-        json: bool,
-    },
     Repair {
         selection: Option<String>,
         allow_downgrade: bool,
@@ -45,7 +41,6 @@ pub(crate) fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Command,
         Some(Value(value)) => match value.string().map_err(|error| error.to_string())?.as_str() {
             "install" => parse_install(parser),
             "upgrade" => parse_upgrade(parser),
-            "settle" => parse_settle(parser),
             "repair" => parse_repair(parser),
             "start" => parse_start(parser),
             "status" => parse_status(parser),
@@ -152,19 +147,6 @@ fn directory_value(parser: &mut lexopt::Parser) -> Result<PathBuf, String> {
         .value()
         .map(PathBuf::from)
         .map_err(|error| error.to_string())
-}
-
-fn parse_settle(mut parser: lexopt::Parser) -> Result<Command, String> {
-    use lexopt::prelude::*;
-
-    let mut json = false;
-    while let Some(arg) = parser.next().map_err(|error| error.to_string())? {
-        match arg {
-            Long("json") => json = true,
-            other => return Err(other.unexpected().to_string()),
-        }
-    }
-    Ok(Command::Settle { json })
 }
 
 fn parse_start(parser: lexopt::Parser) -> Result<Command, String> {
@@ -308,18 +290,11 @@ mod tests {
     }
 
     #[test]
-    fn settle_takes_only_json_and_recover_is_gone() {
-        assert!(matches!(
-            parse(args(&["settle"])),
-            Ok(Command::Settle { json: false })
-        ));
-        assert!(matches!(
-            parse(args(&["settle", "--json"])),
-            Ok(Command::Settle { json: true })
-        ));
-        assert!(parse(args(&["settle", "--caller-pid", "4"])).is_err());
+    fn the_recover_and_settle_commands_are_gone() {
         assert!(parse(args(&["recover"])).is_err());
         assert!(parse(args(&["recover", "--auto"])).is_err());
+        assert!(parse(args(&["settle"])).is_err());
+        assert!(parse(args(&["settle", "--json"])).is_err());
     }
 
     #[test]
@@ -463,7 +438,7 @@ mod tests {
                 ..
             })
         ));
-        assert!(parse(args(&["settle", "--allow-downgrade"])).is_err());
+        assert!(parse(args(&["start", "--allow-downgrade"])).is_err());
         assert!(parse(args(&["status", "--allow-downgrade"])).is_err());
     }
 

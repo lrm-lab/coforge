@@ -36,6 +36,7 @@ import { SystemMessageGroup } from "./system-message-group";
 import { groupSystemMessages } from "./system-message-groups";
 import { usePaneOutbox } from "./use-pane-outbox";
 import { ComposerEdgeOverlay } from "./composer-edge-overlay";
+import { NewerSentinel } from "./conversation-newer-sentinel";
 import { useOwnMessagesIndex } from "./own-messages-menu";
 import { useLoadedOwnMessages } from "./use-loaded-own-messages";
 import { isViewerMessage } from "./own-message";
@@ -864,10 +865,7 @@ export function ConversationPane({
               />
             )}
             {!root && conversation.hasNewer && onLoadNewer && (
-              // An empty sentinel below the newest row: coming into view asks for the page that
-              // restores the evicted tail. Nothing is shown for it — the reader reached the bottom
-              // and the tail is on its way.
-              <div ref={newerSentinelRef} aria-hidden="true" className="h-8" />
+              <NewerSentinel sentinelRef={newerSentinelRef} />
             )}
           </div>
         </div>

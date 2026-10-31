@@ -3,7 +3,7 @@
 //!
 //! Starting the active version switches nothing, so it needs neither a journal check nor a
 //! probe: an unfinished upgrade (the journal) does not block this function. The command settles
-//! the journal first (`auto_recover::settle_before_start`) and does not start the service when
+//! the journal first (`settle::settle_before_start`) and does not start the service when
 //! that fails. The definition is the active version's own,
 //! read from its stored executable (`__lifecycle service-definition`); a Computer that cannot
 //! report one cannot be started this way. The Computer checks that the supervisor answers after

@@ -120,16 +120,6 @@ fn status_json_on_an_empty_home_reports_nothing_installed() {
 }
 
 #[test]
-fn settle_on_an_empty_home_has_nothing_to_recover() {
-    let scratch = Scratch::new("settle");
-
-    let output = installer(&scratch.home(), &["settle"]);
-
-    assert_eq!(exit_code(&output), 0, "{}", text(&output.stderr));
-    assert!(text(&output.stdout).contains("nothing to recover"));
-}
-
-#[test]
 fn an_unfinished_journal_that_cannot_be_settled_stops_upgrade_and_install_before_any_download() {
     let scratch = Scratch::new("journal");
     let install = scratch.home().join(".coforge/computer/install");
@@ -153,8 +143,10 @@ fn an_unfinished_journal_that_cannot_be_settled_stops_upgrade_and_install_before
     let install_output = installer(&scratch.home(), &["install", "--version", "latest"]);
     assert_eq!(exit_code(&install_output), 3);
     assert!(text(&install_output.stderr).contains("Run the same command again"));
-    // The command that was refused is not the one that is asked for: no recover command exists.
+    // The command that was refused is not the one that is asked for: neither a recover nor a
+    // settle command exists.
     assert_eq!(exit_code(&installer(&scratch.home(), &["recover"])), 1);
+    assert_eq!(exit_code(&installer(&scratch.home(), &["settle"])), 1);
     assert!(!install.join("upgrade-results").exists());
 }
 

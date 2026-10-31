@@ -2,11 +2,8 @@ import { getLogger } from "@logtape/logtape";
 import {
   UPGRADE_ERROR_CODE_PATTERN,
   WORKSPACE_PROTOCOL_MAJOR,
-  type ComputerUpgradeRecovery,
   type ComputerUpgradeResult,
 } from "@lrm/coforge-sdk/internal";
-import type { InstallerRecoveryReport } from "@lrm/coforge-sdk/internal/upgrade-receipt";
-import { readRecoveryReport } from "#src/platform/recovery-report-file";
 import { launchFailureCooldownMs } from "#src/agent-runtime/launch-failure-backoff";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
@@ -29,12 +26,6 @@ export type RecoveredUpgradeResult = {
   error?: string;
   /** See `UPGRADE_ERROR_CODE`. */
   errorCode?: string;
-  /** The automatic recovery that settled this operation, from `recovery-report.json`. */
-  recovery?: ComputerUpgradeRecovery;
-  /** Only the recovery is owed - the operation's own result is already settled server-side (or
-   * its record is no longer in this Workspace's config). Sent, but never acknowledged to the
-   * Coordinator: it has no matching record to settle. */
-  recoveryOnly?: true;
 };
 
 /** What this Workspace's local config says about its upgrade operations. */
@@ -69,8 +60,6 @@ export class UpgradeResultReporter {
   readonly #options: UpgradeResultReporterOptions;
   /** Acknowledged by this process: a stale read must not send or acknowledge them again. */
   readonly #acknowledged = new Set<string>();
-  /** Recovery reports this process already put on the wire. */
-  readonly #recoverySent = new Set<string>();
   #open = false;
   /** Bumped by `start` and `stop`, so a pass from before neither continues nor schedules. */
   #generation = 0;
@@ -181,26 +170,15 @@ export class UpgradeResultReporter {
     let failed = false;
     for (const result of reading.results) {
       if (!current()) break;
-      const acknowledged = this.#acknowledged.has(result.requestId);
-      const owesRecovery =
-        result.recovery !== undefined && !this.#recoverySent.has(result.requestId);
-      // A recovery-only result is never acknowledged — once its recovery was sent it is done, or
-      // every pass (and every transport replacement) would offer it to the server again.
-      if (!owesRecovery && (acknowledged || result.recoveryOnly)) continue;
+      if (this.#acknowledged.has(result.requestId)) continue;
       const transport = this.#options.transport();
       if (!transport.sendUpgradeResult) break;
       try {
-        // False is a replay of a result the server already accepted: acknowledge it again. A
-        // recovery-bearing result is a second report for the same requestId, not a replay.
+        // False is a replay of a result the server already accepted: acknowledge it again.
         await transport.sendUpgradeResult(this.#wireResult(result));
         if (!current()) break;
-        if (result.recovery) this.#recoverySent.add(result.requestId);
-        // A recovery-only result settles nothing on the Coordinator's side; an already
-        // acknowledged operation is not acknowledged again.
-        if (!acknowledged && !result.recoveryOnly) {
-          await this.#options.acknowledge?.(result.requestId);
-          this.#acknowledged.add(result.requestId);
-        }
+        await this.#options.acknowledge?.(result.requestId);
+        this.#acknowledged.add(result.requestId);
       } catch (error) {
         failed = true;
         logger.error("Computer upgrade result report failed", {
@@ -226,7 +204,6 @@ export class UpgradeResultReporter {
       ...(result.version ? { version: result.version } : {}),
       ...(result.error ? { error: result.error } : {}),
       ...(result.errorCode ? { errorCode: result.errorCode } : {}),
-      ...(result.recovery ? { recovery: result.recovery } : {}),
     };
   }
 }
@@ -271,62 +248,5 @@ export function upgradeOperationsInConfig(
   return {
     results,
     pending: operations.some((operation) => operation.state === "pending"),
-  };
-}
-
-/**
- * The `readOperations` the runtime wiring supplies: the Workspace config's upgrade operations
- * with the machine's recovery report folded in. A report that cannot be read is no reason to
- * hold the results back.
- */
-export async function readUpgradeOperationsWithRecovery(
-  loadConfig: () => Promise<unknown>,
-): Promise<UpgradeOperationsReading> {
-  return attachRecoveryReport(
-    upgradeOperationsInConfig(await loadConfig()),
-    await readRecoveryReport().catch(() => undefined),
-  );
-}
-
-/**
- * Folds the installer's recovery report into a config reading. The report names the upgrade it
- * settled, so it is attached to that operation's result; when this Workspace's config no longer
- * lists the operation (already acknowledged), a recovery-only result still carries it to the
- * server. A report without a request id - written by an installer from before the linkage - is
- * left unreported.
- */
-export function attachRecoveryReport(
-  reading: UpgradeOperationsReading,
-  report: InstallerRecoveryReport | undefined,
-): UpgradeOperationsReading {
-  if (!report?.requestId) return reading;
-  const recovery: ComputerUpgradeRecovery = {
-    outcome: report.outcome,
-    ...(report.restoredVersion ? { restoredVersion: report.restoredVersion } : {}),
-    attempts: report.attempts,
-    finishedAtMs: report.finishedAt * 1000,
-    ...(report.message ? { message: report.message } : {}),
-  };
-  if (reading.results.some((result) => result.requestId === report.requestId))
-    return {
-      ...reading,
-      results: reading.results.map((result) =>
-        result.requestId === report.requestId ? { ...result, recovery } : result,
-      ),
-    };
-  return {
-    ...reading,
-    results: [
-      ...reading.results,
-      // Recovery means the upgrade it settled did not promote: the standalone result is a failed
-      // one, its recovery field saying how the machine ended.
-      {
-        requestId: report.requestId,
-        status: "failed",
-        completedAtMs: recovery.finishedAtMs,
-        recovery,
-        recoveryOnly: true,
-      },
-    ],
   };
 }

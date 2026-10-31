@@ -3,7 +3,6 @@ import {
   ComputerRestartIntentSchema,
   ComputerUpgradeIntentSchema,
   ComputerUpgradeResultSchema,
-  type ComputerUpgradeRecovery as UpgradeRecoveryProto,
 } from "#src/internal/gen/coforge/rpc/v1/daemon_runtime_pb";
 import { UPGRADE_ERROR_CODE_PATTERN } from "./index";
 import type { ComputerRestartIntent, ComputerUpgradeIntent, ComputerUpgradeResult } from "./index";
@@ -87,24 +86,6 @@ export function sanitizeUpgradeErrorText(value: string): string {
     .slice(0, UPGRADE_ERROR_LIMIT);
 }
 
-function upgradeRecoveryFields(recovery: ComputerUpgradeResult["recovery"]) {
-  if (!recovery) return {};
-  if (recovery.outcome !== "recovered" && recovery.outcome !== "failed")
-    throw new Error("invalid Computer upgrade recovery outcome");
-  if (!Number.isSafeInteger(recovery.attempts) || recovery.attempts <= 0)
-    throw new Error("invalid Computer upgrade recovery attempts");
-  return {
-    recovery: {
-      outcome: recovery.outcome,
-      ...(recovery.restoredVersion ? { restoredVersion: recovery.restoredVersion } : {}),
-      attempts: recovery.attempts,
-      finishedAtMs: BigInt(Math.trunc(recovery.finishedAtMs)),
-      // The same rule as the result's own `error`: recovery text can name local paths.
-      ...(recovery.message ? { message: sanitizeUpgradeErrorText(recovery.message) } : {}),
-    },
-  };
-}
-
 export function encodeComputerUpgradeResult(value: ComputerUpgradeResult): Uint8Array {
   if (value.status !== "succeeded" && value.status !== "failed")
     throw new Error("invalid Computer upgrade result status");
@@ -123,7 +104,6 @@ export function encodeComputerUpgradeResult(value: ComputerUpgradeResult): Uint8
       ...(value.version ? { version: value.version } : {}),
       ...(value.error ? { error: sanitizeUpgradeErrorText(value.error) } : {}),
       ...(value.errorCode ? { errorCode: value.errorCode } : {}),
-      ...upgradeRecoveryFields(value.recovery),
     }),
   );
 }
@@ -156,35 +136,6 @@ export function decodeComputerUpgradeResult(bytes: Uint8Array): ComputerUpgradeR
     ...(value.version ? { version: value.version } : {}),
     ...(value.error ? { error: sanitizeUpgradeErrorText(value.error) } : {}),
     ...(value.errorCode ? { errorCode: value.errorCode } : {}),
-    ...upgradeRecoveryResult(value.recovery),
     messageType: COMPUTER_UPGRADE_RESULT_MESSAGE_TYPE,
-  };
-}
-
-function upgradeRecoveryResult(
-  recovery: UpgradeRecoveryProto | undefined,
-): Pick<ComputerUpgradeResult, "recovery"> {
-  if (!recovery) return {};
-  const outcome =
-    recovery.outcome === "recovered" || recovery.outcome === "failed"
-      ? recovery.outcome
-      : undefined;
-  const finishedAtMs = Number(recovery.finishedAtMs);
-  if (
-    outcome === undefined ||
-    !Number.isSafeInteger(recovery.attempts) ||
-    recovery.attempts <= 0 ||
-    !Number.isSafeInteger(finishedAtMs) ||
-    finishedAtMs < 0
-  )
-    throw new Error("invalid Computer upgrade recovery");
-  return {
-    recovery: {
-      outcome,
-      ...(recovery.restoredVersion ? { restoredVersion: recovery.restoredVersion } : {}),
-      attempts: recovery.attempts,
-      finishedAtMs,
-      ...(recovery.message ? { message: sanitizeUpgradeErrorText(recovery.message) } : {}),
-    },
   };
 }

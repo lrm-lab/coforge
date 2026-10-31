@@ -5,7 +5,6 @@
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use crate::auto_recover::{self, AutoOutcome};
 use crate::clock::SystemClock;
 use crate::compiled_feed::FeedEndpoint;
 use crate::contract::EXIT_FAILED;
@@ -17,8 +16,8 @@ use crate::prepare::ReleaseSource;
 use crate::processes::{OsProcesses, VerifiedCaller};
 use crate::release_directory::ReleaseDirectory;
 use crate::repair::repair as repair_installation;
-use crate::retry_trigger::RetryTrigger;
 use crate::service::{self, SystemRunner};
+use crate::settle;
 use crate::start::{self, start as start_service};
 use crate::status::{self, StatusReport};
 use crate::store::VersionStore;
@@ -71,7 +70,7 @@ impl Setup {
 fn with_ports<T>(
     setup: &Setup,
     origin: &ReleaseOrigin,
-    body: impl FnOnce(&Ports<'_>, &dyn RetryTrigger) -> T,
+    body: impl FnOnce(&Ports<'_>) -> T,
 ) -> Result<T, String> {
     let runner = SystemRunner;
     let clock = SystemClock::new();
@@ -81,16 +80,6 @@ fn with_ports<T>(
         Platform::current(),
         &setup.home,
         service::current_uid(),
-        &runner,
-        &clock,
-    )
-    .map_err(|error| error.to_string())?;
-    let installer = std::env::current_exe().map_err(|error| error.to_string())?;
-    let trigger = service::retry::for_platform(
-        Platform::current(),
-        &setup.home,
-        service::current_uid(),
-        &installer,
         &runner,
         &clock,
     )
@@ -116,7 +105,7 @@ fn with_ports<T>(
         processes: &processes,
         clock: &clock,
     };
-    Ok(body(&ports, trigger.as_ref()))
+    Ok(body(&ports))
 }
 
 /// Runs one upgrade (or install) request. `caller_pid` is the `upgrade` command that launched
@@ -131,7 +120,7 @@ pub fn transaction(
     allow_downgrade: bool,
     stage: &mut dyn FnMut(&str),
 ) -> Result<Outcome, String> {
-    with_ports(setup, origin, |ports, trigger| {
+    with_ports(setup, origin, |ports| {
         let caller = match verify_caller(ports, caller_pid) {
             Ok(caller) => caller,
             Err(message) => {
@@ -147,36 +136,21 @@ pub fn transaction(
             caller,
             allow_downgrade,
         };
-        if let Err(unsettled) = auto_recover::settle_first(ports, caller, stage) {
-            let outcome = Outcome::NoReceipt {
+        if let Err(unsettled) = settle::settle_first(ports, caller, stage) {
+            return Outcome::NoReceipt {
                 exit: unsettled.exit_code(),
                 message: unsettled.message(),
             };
-            auto_recover::keep_trigger_in_step(ports, trigger, stage);
-            return outcome;
         }
-        let outcome = upgrade(ports, &request, stage);
-        auto_recover::keep_trigger_in_step(ports, trigger, stage);
-        outcome
+        upgrade(ports, &request, stage)
     })
 }
 
 /// Registers the active version's service definition and starts the service. Starting stops
 /// nothing, so there is no launching process to spare and no caller pid to verify.
 pub fn start(setup: &Setup, stage: &mut dyn FnMut(&str)) -> Result<start::Outcome, String> {
-    with_ports(setup, &ReleaseOrigin::Feed, |ports, trigger| {
-        let outcome = auto_recover::settle_before_start(ports, stage)
-            .unwrap_or_else(|| start_service(ports, stage));
-        auto_recover::keep_trigger_in_step(ports, trigger, stage);
-        outcome
-    })
-}
-
-/// One automatic try at settling an unfinished upgrade, for the retry trigger: waiting longer
-/// after each failure and giving up after a few.
-pub fn settle(setup: &Setup, stage: &mut dyn FnMut(&str)) -> Result<AutoOutcome, String> {
-    with_ports(setup, &ReleaseOrigin::Feed, |ports, trigger| {
-        auto_recover::recover_auto(ports, trigger, stage)
+    with_ports(setup, &ReleaseOrigin::Feed, |ports| {
+        settle::settle_before_start(ports, stage).unwrap_or_else(|| start_service(ports, stage))
     })
 }
 
@@ -189,18 +163,14 @@ pub fn repair(
     allow_downgrade: bool,
     stage: &mut dyn FnMut(&str),
 ) -> Result<Outcome, String> {
-    with_ports(setup, &ReleaseOrigin::Feed, |ports, trigger| {
-        if let Err(unsettled) = auto_recover::settle_first(ports, None, stage) {
-            let outcome = Outcome::NoReceipt {
+    with_ports(setup, &ReleaseOrigin::Feed, |ports| {
+        if let Err(unsettled) = settle::settle_first(ports, None, stage) {
+            return Outcome::NoReceipt {
                 exit: unsettled.exit_code(),
                 message: unsettled.message(),
             };
-            auto_recover::keep_trigger_in_step(ports, trigger, stage);
-            return outcome;
         }
-        let outcome = repair_installation(ports, request_id, selection, allow_downgrade, stage);
-        auto_recover::keep_trigger_in_step(ports, trigger, stage);
-        outcome
+        repair_installation(ports, request_id, selection, allow_downgrade, stage)
     })
 }
 

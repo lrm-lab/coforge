@@ -76,19 +76,6 @@ message ComputerUpgradeIntent {
   optional string expected_version = 7;
 }
 
-// What the installer's automatic recovery did about one unfinished upgrade, from its
-// `<install root>/recovery-report.json`. Carried on the result of the upgrade operation it
-// settled, possibly on a second result for an already-reported one. Optional: older Daemons and
-// machines that never needed recovery send none.
-message ComputerUpgradeRecovery {
-  // "recovered" (the machine runs a known version again) or "failed" (it gave up).
-  string outcome = 1;
-  optional string restored_version = 2;
-  uint32 attempts = 3;
-  int64 finished_at_ms = 4;
-  optional string message = 5;
-}
-
 // The Daemon's terminal report for one Computer upgrade operation. The server still requires its
 // own identity evidence before calling a reported success complete; a reported failure is
 // authoritative because only the Computer can observe it.
@@ -106,7 +93,8 @@ message ComputerUpgradeResult {
   // (Coordinator refusal, or the upgrade job's own receipt). Additive: an older peer that has
   // never heard of a value here still has `error`, the human sentence. See UPGRADE_ERROR_CODE.
   optional string error_code = 10;
-  optional ComputerUpgradeRecovery recovery = 11;
+  reserved 11;
+  reserved "recovery";
 }
 
 message DaemonRuntimeCodeAgentsUpdateRequest {

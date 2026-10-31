@@ -80,8 +80,6 @@ fn every_golden_is_covered_by_a_test() {
         "receipt.rolled-back.json",
         "receipt.succeeded.json",
         "receipt.unresolved.json",
-        "recovery-report.failed.json",
-        "recovery-report.recovered.json",
         "service-identities.json",
         "supervisor-lock-owner.txt",
         "upgrade-error-codes.json",

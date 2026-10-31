@@ -7,7 +7,7 @@ import type { RuntimeAuthProvider, RuntimeAuthStatus } from "@lrm/coforge-anvil"
 
 import type { ComputerIdentity } from "./computer-identity";
 import type { MachineStatusView } from "./computer-machine-status";
-import type { ComputerRecoveryView, ComputerUpgradeStatus } from "./computer.schemas";
+import type { ComputerUpgradeStatus } from "./computer.schemas";
 
 /** What a rescan the page asked for came back with: the daemon answered, or it did not in time,
  * or it answered with a failure of its own. */
@@ -32,8 +32,6 @@ export type ComputerDetailView = ComputerIdentity & {
   imageUpdate?: { version: string } | null;
   /** This Computer's latest upgrade while the server keeps its record; `null` when none. */
   upgrade?: ComputerUpgradeStatus | null;
-  /** The installer's newest automatic-recovery report; `null` when none was ever reported. */
-  lastRecovery?: ComputerRecoveryView | null;
   platform?: string | null;
   osVersion?: string | null;
   /** What the Computer last reported about its disk and memory; `null` per kind when unknown. */

@@ -27,7 +27,6 @@ import {
 import {
   INSTALLER_EXIT_CODE,
   InstallerReceiptSchema,
-  InstallerRecoveryReportSchema,
   UPGRADE_RECEIPT_MAX_BYTES,
 } from "@lrm/coforge-sdk/internal/upgrade-receipt";
 import { z } from "zod";
@@ -345,31 +344,6 @@ export function renderInstallerContract(): Map<string, string> {
     [
       "installer-codes.json",
       json({ exit_codes: INSTALLER_EXIT_CODE, max_receipt_bytes: UPGRADE_RECEIPT_MAX_BYTES }),
-    ],
-    // The automatic-recovery report (`recovery-report.json`) the Daemon reads and reports
-    // (@lrm/coforge-sdk/internal/upgrade-receipt; crates/installer/src/auto_recover.rs).
-    ["recovery-report.schema.json", jsonSchema(InstallerRecoveryReportSchema)],
-    [
-      "recovery-report.recovered.json",
-      instance(InstallerRecoveryReportSchema, {
-        schemaVersion: 1,
-        requestId: EXAMPLE_REQUEST_ID,
-        outcome: "recovered",
-        restoredVersion: "0.1.0",
-        attempts: 3,
-        finishedAt: 1_759_200_000,
-      }),
-    ],
-    [
-      "recovery-report.failed.json",
-      instance(InstallerRecoveryReportSchema, {
-        schemaVersion: 1,
-        requestId: EXAMPLE_REQUEST_ID,
-        outcome: "failed",
-        attempts: 8,
-        finishedAt: 1_759_200_000,
-        message: "0.1.0 could not be verified",
-      }),
     ],
     // The Coordinator writes supervisor.lock/owner as its bare process ID.
     ["supervisor-lock-owner.txt", "4242"],

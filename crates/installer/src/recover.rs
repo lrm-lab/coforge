@@ -1,5 +1,5 @@
 //! Recovery: settles an upgrade that did not finish. No command asks for it: every operation
-//! does it first (`auto_recover::settle_first`), and `settle` retries it from a trigger.
+//! does it first (`settle::settle_first`).
 //!
 //! The journal (`installer-transaction.json`) is the only thing that says a run ended between
 //! recording the transaction and clearing it. A succeeded receipt commits recovery to the new

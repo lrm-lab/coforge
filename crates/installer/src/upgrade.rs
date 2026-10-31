@@ -7,7 +7,7 @@
 //! Nothing changes until the candidate is verified and the running supervisor is known to be
 //! healthy and under a service manager. The journal is written before the first process stops, and
 //! cleared only once the machine is on a known good version. A failed rollback keeps the journal,
-//! which every operation settles first (`auto_recover.rs`, `recover.rs`). What is checked
+//! which every operation settles first (`settle.rs`, `recover.rs`). What is checked
 //! and installed before the journal is written is `upgrade/preparation.rs`.
 
 use std::cmp::Ordering;
