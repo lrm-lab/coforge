@@ -1,12 +1,4 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useParams, useRouter, useRouterState } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
@@ -45,6 +37,7 @@ import { projectsQuery } from "#src/features/projects/project-tree-queries";
 import { rememberConversation } from "./last-conversation";
 import { unknownAgentOf, unreadIdsToKeep, type SeededList } from "./conversation-unread";
 import { useChannelUnread } from "./use-channel-unread";
+import { UnreadStoreContext } from "./unread-store";
 import {
   useApplyChannelSignal,
   useApplyConversationActivity,
@@ -56,15 +49,6 @@ import {
 import { listedDirectIds } from "./sidebar-rows";
 import { workspacePath } from "#src/features/workspaces/workspace-url";
 
-type UnreadControls = {
-  /** Per-conversation unread counts (channels and DMs), keyed by conversation id. */
-  counts: Readonly<Record<string, number>>;
-  /** Clears one conversation's badge and records the sequence it was read through. */
-  clear: (conversationId: string, readThroughSequence?: number) => void;
-};
-
-const UnreadContext = createContext<UnreadControls>({ counts: {}, clear: () => {} });
-
 export function useConversationDetailVisible() {
   return useContext(ConversationListContext)?.detailVisible ?? true;
 }
@@ -73,19 +57,6 @@ export function useConversationDetailVisible() {
 export function useCloseConversationList(): () => void {
   const navigation = useContext(ConversationListContext);
   return navigation?.closeList ?? (() => {});
-}
-
-/** The sidebar's live unread counts, seeded from the loader and updated by realtime. */
-export function useChannelUnreadCounts(): Readonly<Record<string, number>> {
-  return useContext(UnreadContext).counts;
-}
-
-/** Marks a conversation seen: clears its badge immediately and records the read boundary. */
-export function useMarkConversationSeen(): (
-  conversationId: string,
-  readThroughSequence?: number,
-) => void {
-  return useContext(UnreadContext).clear;
 }
 
 /** Keep both panels mounted so returning to the list preserves scroll and drafts. */
@@ -194,7 +165,6 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
   // keyed by conversation id, the id their realtime signal carries. A re-seed follows each server
   // read (`readAt`) and each change of a count shown (a mark-unread), not a pin, a drag, or a
   // closed row with nothing unread.
-  const { counts } = unread;
   const refresh = unread.replace;
   const seed = useMemo(() => {
     const lists: SeededList[] = [
@@ -224,10 +194,6 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
     refresh(seed.entries, unreadIdsToKeep(seed.lists, lastSeed.current));
     lastSeed.current = seed.lists;
   }, [refresh, seed.key]);
-  const controls = useMemo<UnreadControls>(
-    () => ({ counts, clear: unread.clear }),
-    [counts, unread.clear],
-  );
   // This renders on every live Agent or sidebar change; a new value each time would re-render
   // every reader, the open conversation's panes included.
   const detailVisible = desktop || !showList;
@@ -243,7 +209,7 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
   return (
     <ConversationListContext value={listControls}>
       <ConversationHostProvider channels={channelNames}>
-        <UnreadContext value={controls}>
+        <UnreadStoreContext value={unread.store}>
           <main
             data-panel-cards
             className="flex h-full min-w-0 flex-col bg-primary lg:flex-row lg:gap-2 lg:bg-transparent"
@@ -325,7 +291,7 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
               }
             />
           )}
-        </UnreadContext>
+        </UnreadStoreContext>
       </ConversationHostProvider>
     </ConversationListContext>
   );

@@ -17,29 +17,28 @@ import {
   applyUnreadEvent,
   channelSignalOf,
   closedConversationLists,
-  clearUnread,
   rereadMissedBySubscribe,
   replaceUnreadCounts,
   listsChangedIn,
   storedCursorMove,
   type ChatList,
   type UnreadChannel,
-  type UnreadCounts,
   type UnreadEventInput,
 } from "./conversation-unread";
 import type { ChannelSignal } from "./channel-signals";
+import { UnreadStore } from "./unread-store";
 
 export type UnreadState = {
-  counts: UnreadCounts;
-  clear: (key: string, readThroughSequence?: number) => void;
+  store: UnreadStore;
   replace: (entries: readonly UnreadChannel[], keepIds?: ReadonlySet<string>) => void;
 };
 
 /**
- * The Chat page's two signal subscriptions and its unread-count state. Renders nothing: the
- * directory reads `counts`, the conversation routes call `clear`, and every loader refresh
- * flows through `replace`. Both subscriptions ride the Workspace layout's one Centrifuge
- * connection; neither opens a WebSocket of its own.
+ * The Chat page's two signal subscriptions and its unread counts (`UnreadStore`). Renders nothing,
+ * and a count that moves renders nothing here either: each directory row reads its own count from
+ * the store, the conversation routes clear theirs, and every loader refresh flows through
+ * `replace`. Both subscriptions ride the Workspace layout's one Centrifuge connection; neither
+ * opens a WebSocket of its own.
  */
 export function useChannelUnread({
   workspaceId,
@@ -85,7 +84,8 @@ export function useChannelUnread({
   /** One message in a chat the sidebar lists: write that row from the event, no read. */
   onConversationActivity: (event: ConversationActivityEvent) => void;
 }): UnreadState {
-  const [counts, setCounts] = useState<UnreadCounts>({});
+  // Never replaced, so the callbacks below read it without listing it.
+  const [store] = useState(() => new UnreadStore());
   const refs = useRef({
     workspaceId,
     userId,
@@ -147,7 +147,7 @@ export function useChannelUnread({
     if (event) {
       if ("unreadCount" in event) {
         const open = refs.current.openConversationId;
-        setCounts((current) => applyMarked(current, event, { openConversationId: open }));
+        store.update((current) => applyMarked(current, event, { openConversationId: open }));
         refs.current.onReadCursorMoved(storedCursorMove(event, open));
       }
       const lists = listsChangedIn(refs.current.workspaceId, event);
@@ -188,7 +188,7 @@ export function useChannelUnread({
     // written from the event itself.
     if (stale.length > 0) reopenFromActivity(stale, message);
     else writeRow(activity);
-    setCounts((current) =>
+    store.update((current) =>
       applyUnreadEvent(current, message, {
         conversations,
         openConversationId: open,
@@ -204,18 +204,13 @@ export function useChannelUnread({
     },
   });
 
-  const clear = useCallback(
-    (key: string, readThroughSequence?: number) =>
-      setCounts((current) => clearUnread(current, key, readThroughSequence)),
-    [],
-  );
   const replace = useCallback((next: readonly UnreadChannel[], keepIds?: ReadonlySet<string>) => {
     // The conversation on screen keeps no badge, exactly like a live event for it; leaving the
     // conversation lets the next server read seed it again.
     const open = refs.current.openConversationId;
-    setCounts((current) =>
+    store.update((current) =>
       replaceUnreadCounts(current, next, new Set(open ? [open] : []), keepIds),
     );
   }, []);
-  return { counts, clear, replace };
+  return { store, replace };
 }

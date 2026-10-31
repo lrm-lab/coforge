@@ -14,7 +14,7 @@ import { markPublicChannelRead } from "./channels.functions";
 import { ChannelConversation, ChannelConversationHeader } from "./channel-conversation";
 import { ConversationFilesPanel } from "./conversation-files";
 import type { HeaderTabs } from "./conversation-header-tabs";
-import { useMarkConversationSeen } from "./conversation-navigation";
+import { useMarkConversationSeen } from "./unread-store";
 import type { ConversationPageTarget } from "./conversation-page-loader";
 import type { ConversationPageSearch } from "./conversation-page-search";
 import type { DirectConversationView } from "./conversation-types";

@@ -20,6 +20,7 @@ import { DirectAgentAvatar } from "./direct-agent-avatar";
 import { GroupAvatar, type GroupAvatarMember } from "./group-avatar";
 import { lastMessageTime } from "./last-message-time";
 import type { DirectRow } from "./sidebar-rows";
+import { useUnreadCount } from "./unread-store";
 
 export type DirectoryChannel = {
   id: string;
@@ -51,28 +52,29 @@ export type DirectoryRowMenu = {
   onSectionError: (retry: () => Promise<void>, sectionId?: string) => void;
 };
 
-/** When a row's last message was sent, in the viewer's own clock and time zone. */
-function useLastMessageTime() {
+/** When a row's last message was sent, in the viewer's own clock and time zone; null without one. */
+function useLastMessageTime(createdAt: string | null | undefined) {
   const timeZone = useTimeZone();
   const timeFormat = useTimeFormat();
-  return (createdAt: string) =>
-    lastMessageTime(createdAt, { now: new Date(), locale: getLocale(), timeZone, timeFormat });
+  return createdAt
+    ? lastMessageTime(createdAt, { now: new Date(), locale: getLocale(), timeZone, timeFormat })
+    : null;
 }
 
-/** A channel's row in the Chat directory, inside its menu. */
+/** A channel's row in the Chat directory, inside its menu; it alone renders when its unread count
+ * moves. */
 export function ChannelDirectoryRow({
   channel,
   current,
-  unreadCount,
   menu,
 }: {
   channel: DirectoryChannel;
   current: boolean;
-  unreadCount: number | undefined;
   menu: DirectoryRowMenu;
 }) {
-  const sentAt = useLastMessageTime();
+  const unreadCount = useUnreadCount(channel.id);
   const { lastMessage } = channel;
+  const time = useLastMessageTime(lastMessage?.createdAt);
   return (
     <ConversationRowMenu
       target={{ kind: "channel", ...channel, muted: channel.muted === true }}
@@ -87,7 +89,7 @@ export function ChannelDirectoryRow({
         unreadCount={unreadCount}
         label={`#${channel.name}`}
         lastMessage={{
-          time: lastMessage ? sentAt(lastMessage.createdAt) : null,
+          time,
           preview: lastMessage
             ? channelPreviewLine({
                 sender: lastMessage.sender,
@@ -116,19 +118,19 @@ export function ChannelDirectoryRow({
   );
 }
 
-/** A direct message's row in the Chat directory, inside its menu. */
+/** A direct message's row in the Chat directory, inside its menu; it alone renders when its unread
+ * count moves. */
 export function DirectDirectoryRow({
   entry: { conversationId, peer, pinned, muted, name, agent, self, ...entry },
   current,
-  unreadCount,
   menu,
 }: {
   entry: DirectEntry;
   current: boolean;
-  unreadCount: number | undefined;
   menu: DirectoryRowMenu;
 }) {
-  const sentAt = useLastMessageTime();
+  const unreadCount = useUnreadCount(conversationId);
+  const time = useLastMessageTime(entry.lastMessageAt);
   return (
     <ConversationRowMenu
       target={{ kind: "direct", conversationId, pinned, muted: muted === true }}
@@ -143,7 +145,7 @@ export function DirectDirectoryRow({
         unreadCount={unreadCount}
         label={self ? m.conversation_dm_self_name({ name }) : name}
         lastMessage={{
-          time: entry.lastMessageAt ? sentAt(entry.lastMessageAt) : null,
+          time,
           preview: entry.lastMessagePreview,
         }}
         icon={

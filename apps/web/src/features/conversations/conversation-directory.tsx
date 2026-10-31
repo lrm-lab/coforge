@@ -9,7 +9,6 @@ import type { LiveAgent } from "#src/features/agents/workspace-agents-realtime";
 import { cx } from "#src/utils/cx";
 import { m } from "#src/paraglide/messages";
 import { ConversationRow } from "./conversation-row";
-import { useChannelUnreadCounts } from "./conversation-navigation";
 import {
   ChannelDirectoryRow,
   DirectDirectoryRow,
@@ -77,7 +76,6 @@ export function ConversationDirectory({
   /** The Saved view is open — its sidebar entry renders as the current row. */
   selectedSaved?: boolean;
 }) {
-  const unreadCounts = useChannelUnreadCounts();
   const savedCount = useSavedEntries()?.length;
   const groups = useChatSections();
   // Derived once per list change, not per render: the drag reads `base` and `natural` on every
@@ -262,7 +260,6 @@ export function ConversationDirectory({
               <ChannelDirectoryRow
                 channel={channel}
                 current={channel.id === selectedChannelId}
-                unreadCount={unreadCounts[channel.id]}
                 menu={rowMenu}
               />
             ),
@@ -280,7 +277,6 @@ export function ConversationDirectory({
               <DirectDirectoryRow
                 entry={row}
                 current={row.conversationId === selectedDmId}
-                unreadCount={unreadCounts[row.conversationId]}
                 menu={rowMenu}
               />
             ),
