@@ -96,7 +96,8 @@ import {
   writeSidePanelPinned,
   type RecordSideSurface,
 } from "./record-side-panel-pin";
-import { resolveAwaitingAssistantResume } from "./record-side-panel-awaiting";
+import { useAwaitingAssistant } from "./use-awaiting-assistant";
+import { useBodyEditRefresh } from "./use-body-edit-refresh";
 import { loadWorkspaceMembers } from "#src/features/workspaces/members.functions";
 import { WeeklyReportCollectPlanCard } from "./weekly-report-collect-plan-card";
 import { WeeklyReportMessageCard } from "./weekly-report-message-card";
@@ -225,10 +226,13 @@ export function RecordSidePanel({
   const [appliedSuggestionIds, setAppliedSuggestionIds] = useState<string[]>(
     session.appliedSuggestionIds,
   );
-  const [awaitingSynthesis, setAwaitingSynthesis] = useState(false);
-  const [awaitingLabel, setAwaitingLabel] = useState<string | null>(null);
-  const synthesisStartedAtRef = useRef<number | null>(null);
-  const awaitingLabelRef = useRef<string | null>(null);
+  const {
+    active: awaitingSynthesis,
+    label: awaitingLabel,
+    show: showAwaitingAssistant,
+    hide: hideAwaitingAssistant,
+    resume: maybeResumeAwaitingAssistant,
+  } = useAwaitingAssistant(assistantMessages);
   const [assistantConversationId, setAssistantConversationId] = useState<string | null>(null);
   const activeSessionIdRef = useRef<string | null>(null);
   const legacySessionIdRef = useRef<string | null>(null);
@@ -388,44 +392,7 @@ export function RecordSidePanel({
     stickToBottomRef.current = true;
   }
 
-  function showAwaitingAssistant(pendingAt: number, label: string | null) {
-    synthesisStartedAtRef.current = pendingAt;
-    awaitingLabelRef.current = label;
-    setAwaitingSynthesis(true);
-    setAwaitingLabel(label);
-  }
-
-  function hideAwaitingAssistant() {
-    synthesisStartedAtRef.current = null;
-    awaitingLabelRef.current = null;
-    setAwaitingSynthesis(false);
-    setAwaitingLabel(null);
-  }
-
-  function maybeResumeAwaitingAssistant(
-    rows: CommentRow[],
-    messages: WeeklyReportAssistantMessage[],
-  ) {
-    const pending = resolveAwaitingAssistantResume(rows, messages);
-    if (pending) {
-      showAwaitingAssistant(pending.pendingAt, pending.label);
-      return;
-    }
-    if (synthesisStartedAtRef.current == null) return;
-    const label = awaitingLabelRef.current;
-    if (label != null && /请稍候/.test(label)) hideAwaitingAssistant();
-  }
-
-  const invalidatedBodyEditRef = useRef<string | null>(null);
-  useEffect(() => {
-    const latest = [...assistantMessages]
-      .reverse()
-      .find((message) => message.suggestion?.type === "body-edit");
-    if (!latest || latest.id === bodyRestoreView?.sourceMessageId) return;
-    if (invalidatedBodyEditRef.current === latest.id) return;
-    invalidatedBodyEditRef.current = latest.id;
-    void router.invalidate();
-  }, [assistantMessages, bodyRestoreView?.sourceMessageId, router]);
+  useBodyEditRefresh(assistantMessages, bodyRestoreView?.sourceMessageId);
 
   activeSessionIdRef.current = activeSessionId;
   legacySessionIdRef.current = legacySessionId;
@@ -478,18 +445,6 @@ export function RecordSidePanel({
       window.clearTimeout(timeout);
     };
   }, [awaitingSynthesis, activeSessionId, legacySessionId]);
-
-  useEffect(() => {
-    if (!awaitingSynthesis || synthesisStartedAtRef.current == null) return;
-    const startedAt = synthesisStartedAtRef.current;
-    const hasNewAssistant = assistantMessages.some(
-      (message) => message.author === "assistant" && Date.parse(message.createdAt) > startedAt,
-    );
-    if (hasNewAssistant) {
-      hideAwaitingAssistant();
-      void router.invalidate();
-    }
-  }, [assistantMessages, awaitingSynthesis, router]);
 
   async function onNewChat() {
     if (busy) return;
