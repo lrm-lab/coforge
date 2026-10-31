@@ -168,6 +168,25 @@ describe("ClaudeRateLimitState: usage windows", () => {
     ])
       expect(limits.observe(rateLimitEvent(info), SESSION)).toBeUndefined();
   });
+
+  test("a weekly-only account never fabricates a session window", () => {
+    // Ultra has no 5-hour limit: only weekly events arrive, so the snapshot has `secondary` and
+    // no `primary` at all (never an empty one), and a `five_hour` notice cannot come from them.
+    const limits = state();
+    expect(
+      limits.observe(
+        rateLimitEvent({ status: "allowed", rateLimitType: "seven_day", resetsAt: IN_AN_HOUR_S }),
+        SESSION,
+      ),
+    ).toEqual({
+      provider: "claude-code",
+      secondary: {
+        status: "ok",
+        windowDurationMinutes: 10_080,
+        resetsAt: IN_AN_HOUR_ISO,
+      },
+    });
+  });
 });
 
 test("a Claude usage limit reaches the session as an exhausted quota with its reset", async () => {

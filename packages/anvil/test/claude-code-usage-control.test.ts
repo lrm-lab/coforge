@@ -155,3 +155,19 @@ test("times out and kills the Claude Code child", async () => {
   }
   expect(alive).toBe(false);
 });
+
+test("an account without a 5-hour limit reports only its weekly window", async () => {
+  // The expected Ultra shape (Anthropic's $200 plan): `five_hour` is null, so the snapshot has no
+  // primary window at all rather than an empty one. Constructed, not observed yet.
+  const result = await read("ultra");
+  expect(result).not.toHaveProperty("primary");
+  expect(result?.planType).toBe("ultra");
+  expect(result?.secondary).toEqual({
+    usedPercent: 35,
+    windowDurationMinutes: 10_080,
+    resetsAt: "2026-11-06T06:59:59.000Z",
+  });
+  expect(result?.officialGroups?.[0]?.buckets.map((bucket) => bucket.name)).toEqual([
+    "Current week (all models)",
+  ]);
+});

@@ -85,6 +85,22 @@ for await (const line of console) {
     else if (mode === "usage-401") reply(id, undefined, "API Error: 401 OAuth token expired");
     else if (mode === "no-limits")
       reply(id, usage({ rate_limits_available: false, rate_limits: null }));
+    else if (mode === "ultra")
+      // The expected Ultra shape: Anthropic's $200 plan has no 5-hour limit, only the weekly one.
+      // Constructed, not observed — replace with a real response when one is available.
+      reply(
+        id,
+        usage({
+          subscription_type: "ultra",
+          rate_limits: {
+            model_scoped: [],
+            five_hour: null,
+            seven_day: { utilization: 35, resets_at: "2026-11-06T06:59:59+00:00" },
+            seven_day_opus: null,
+            seven_day_sonnet: null,
+          },
+        }),
+      );
     else if (mode === "all-null")
       reply(id, usage({ rate_limits: { five_hour: null, seven_day: null } }));
     else if (mode === "bad-percent")
