@@ -30,6 +30,7 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
 - `runtime-reconnect.ts` owns reconnect recovery subscriptions; `runtime.ts` supplies inventory, reminder, replay, and upgrade-report callbacks.
 - `runtime-publication-subscriptions.ts` owns pre-ready publication buffering and Agent/control/App/migration event listeners; `runtime.ts` supplies operation handlers and releases buffered work after ready.
 - `agent-stop-coordinator.ts` owns process release/stop ordering after runtime admission closes; `runtime.ts` supplies launch maps and lifecycle collaborators.
+- `agent-launch-config.ts` owns the transport fallback for obtaining an Agent launch credential/config.
 - `agent-rebind.ts` is `AgentControl.start()`'s one seam for rebinding an already-running process to a newer control scope: launch and session references are re-pointed in place and the Session and `agent:status` are re-reported; nothing is spawned or stopped.
 - `agent-environment-activity.ts` names the Agent environment variables a launch had to skip (`code-agent/environment.ts`), so a stored value the rule refuses is reported rather than deleted.
 - A start that fails stops its transport before replacing it, so a connection

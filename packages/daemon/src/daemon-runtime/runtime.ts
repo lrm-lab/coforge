@@ -136,6 +136,7 @@ import { deleteAgentWorkspace } from "./delete-agent-workspace";
 import { AgentMessageAttentionIndex } from "./agent-message-attention-index";
 import { AgentInboxCoordinator } from "./agent-inbox-coordinator";
 import { AgentStopCoordinator } from "./agent-stop-coordinator";
+import { requestAgentLaunchConfig } from "./agent-launch-config";
 import { revokeAgentApiKey } from "./agent-api-key-revoke";
 import { ProviderProgress } from "./stalled-recovery";
 import { ColdIdleSweep } from "./cold-idle-sweep";
@@ -1446,22 +1447,6 @@ export class DaemonRuntime {
     }
   }
 
-  async #requestLaunchConfig(
-    agentId: string,
-    managedScope: { controlEpoch?: number; requestId: string; launchId: string } | undefined,
-  ) {
-    const { workspaceId } = this.#connection;
-    if (this.#transport.requestAgentLaunchConfig)
-      return this.#transport.requestAgentLaunchConfig({
-        agentId,
-        workspaceId,
-        ...(managedScope ? managedScope : {}),
-      });
-    if (this.#transport.requestAgentApiKey)
-      return { agentApiKey: await this.#transport.requestAgentApiKey({ agentId, workspaceId }) };
-    throw new Error("Agent API key endpoint is not configured");
-  }
-
   async #launchAgent(
     agentId: string,
     config: AgentRuntimeConfig,
@@ -1522,11 +1507,14 @@ export class DaemonRuntime {
     const current = () => this.#currentActivityLaunches.get(agentId) === launch && !launch.stopping;
     let agentApiKey: string | undefined;
     try {
-      const launchConfig = await this.#requestLaunchConfig(agentId, managedScope).catch(
-        (error: unknown) => {
-          throw new AgentAuthorizationError(error);
-        },
-      );
+      const launchConfig = await requestAgentLaunchConfig(
+        this.#transport,
+        this.#connection.workspaceId,
+        agentId,
+        managedScope,
+      ).catch((error: unknown) => {
+        throw new AgentAuthorizationError(error);
+      });
       agentApiKey = launchConfig.agentApiKey;
       this.#sync.launched(agentId, launchConfig.identity);
       this.#assertRunning();
@@ -1803,7 +1791,10 @@ export class DaemonRuntime {
           this.#currentActivityLaunches.delete(agentId);
       });
       // The process manager owns the restart identity; control records still belong here.
-      if (reused) void this.#agentControl.wake(agentId, launch.launchId).catch(() => {});
+      if (reused)
+        void Promise.resolve(runtime.session.readSessionIdentity?.())
+          .then((identity) => this.#agentControl.wake(agentId, launch.launchId, identity))
+          .catch(() => {});
       void this.drainAppInboxNotices(agentId).catch(() => {});
       return runtime;
     } catch (error) {
