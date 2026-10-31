@@ -11,7 +11,7 @@ import {
   loadOlderMemberWeeks,
   searchMemberWeeks,
 } from "./records-member-weeks.functions";
-import { filterMemberWeeks, isSelectedMemberWeek } from "./records-sidebar";
+import { filterMemberWeeks, isSelectedMemberWeek, mergeMemberWeeks } from "./records-sidebar";
 
 /** How long a search waits for typing to pause before it asks the server. */
 const SEARCH_DELAY_MS = 250;
@@ -91,17 +91,11 @@ export function useRecordsMemberWeeks(
     if (searched && settled === searched && found.data) return found.data.memberWeeks;
     // The pinned week is older than every page read, or one of them now holds it: listed last,
     // once.
-    const listed = new Set<string>();
-    const read = [
-      ...catalog.memberWeeks,
-      ...(older.data?.pages.flatMap((page) => page.memberWeeks) ?? []),
-      ...(pinned?.memberWeeks ?? []),
-    ].filter((week) => {
-      const key = `${week.year}-${week.week}`;
-      if (listed.has(key)) return false;
-      listed.add(key);
-      return true;
-    });
+    const read = mergeMemberWeeks(
+      catalog.memberWeeks,
+      ...(older.data?.pages.map((page) => page.memberWeeks) ?? []),
+      pinned?.memberWeeks ?? [],
+    );
     return filterMemberWeeks(read, query, people);
   }, [searched, settled, found.data, catalog.memberWeeks, older.data, pinned, query, people]);
 

@@ -14,7 +14,7 @@ import {
   WeekBadge,
 } from "./records-sidebar-parts";
 import { defaultMemberWeekExpanded } from "./records-sidebar-expand";
-import { isSelectedMemberWeek, sidebarPreview } from "./records-sidebar";
+import { isSelectedMemberWeek, memberWeeksPreview } from "./records-sidebar";
 
 type MemberWeek = RecordsCatalog["memberWeeks"][number] & { key: string };
 
@@ -61,14 +61,13 @@ export function RecordsMemberWeeksSection({
 }) {
   // The week on screen is listed even when it falls past the first few, so the reader sees where
   // they are.
-  const preview = useMemo(() => {
-    const shown = sidebarPreview(weeks, Boolean(query) || showAll);
-    const selected = weeks.find((week) =>
-      isSelectedMemberWeek(week, selectedRecordId, selectedWeekKey),
-    );
-    if (!selected || shown.visible.includes(selected)) return shown;
-    return { visible: [...shown.visible, selected], hiddenCount: shown.hiddenCount - 1 };
-  }, [weeks, query, showAll, selectedRecordId, selectedWeekKey]);
+  const preview = useMemo(
+    () =>
+      memberWeeksPreview(weeks, Boolean(query) || showAll, (week) =>
+        isSelectedMemberWeek(week, selectedRecordId, selectedWeekKey),
+      ),
+    [weeks, query, showAll, selectedRecordId, selectedWeekKey],
+  );
 
   return (
     <CollapsibleSection title={m.records_section_members()} open={open} onOpenChange={onOpenChange}>

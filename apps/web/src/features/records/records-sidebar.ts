@@ -93,3 +93,29 @@ export function isSelectedMemberWeek(
     week.submissions.some((item) => item.id === selectedRecordId)
   );
 }
+
+/** Member weeks from several reads, in order, each week once: its first read wins. */
+export function mergeMemberWeeks<W extends { year: number; week: number }>(
+  ...reads: readonly (readonly W[])[]
+): W[] {
+  const listed = new Set<string>();
+  return reads.flat().filter((week) => {
+    const key = `${week.year}-${week.week}`;
+    if (listed.has(key)) return false;
+    listed.add(key);
+    return true;
+  });
+}
+
+/** `sidebarPreview` of member weeks that keeps the one on screen listed even past the first few,
+ * so the reader sees where they are. */
+export function memberWeeksPreview<W>(
+  weeks: readonly W[],
+  expanded: boolean,
+  isSelected: (week: W) => boolean,
+): { visible: W[]; hiddenCount: number } {
+  const shown = sidebarPreview(weeks, expanded);
+  const selected = weeks.find(isSelected);
+  if (selected === undefined || shown.visible.includes(selected)) return shown;
+  return { visible: [...shown.visible, selected], hiddenCount: shown.hiddenCount - 1 };
+}

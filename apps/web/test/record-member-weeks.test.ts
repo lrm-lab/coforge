@@ -1,7 +1,12 @@
 import { expect, test } from "bun:test";
 
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { filterMemberWeeks } from "#src/features/records/records-sidebar";
+import {
+  filterMemberWeeks,
+  isSelectedMemberWeek,
+  memberWeeksPreview,
+  mergeMemberWeeks,
+} from "#src/features/records/records-sidebar";
 import {
   MEMBER_WEEKS_PAGE_SIZE,
   loadMemberWeeksPage,
@@ -128,4 +133,46 @@ test("a search matches a week, a report title or its author's name", () => {
     ["2026-40", ["a", "b"]],
     ["2024-2", ["c"]],
   ]);
+});
+
+const week = (year: number, number: number, ids: string[] = []) => ({
+  year,
+  week: number,
+  overviewReportId: `overview-${year}-${number}`,
+  submissions: ids.map((id) => ({ id })),
+});
+
+test("a week read on its own and again by paging is listed once, where paging put it", () => {
+  const firstPage = [week(2026, 40), week(2026, 39)];
+  const olderPage = [week(2026, 38), week(2024, 10, ["paged"])];
+  const pinned = [week(2024, 10, ["pinned"])];
+  const merged = mergeMemberWeeks(firstPage, olderPage, pinned);
+  expect(merged.map((row) => `${row.year}-${row.week}`)).toEqual([
+    "2026-40",
+    "2026-39",
+    "2026-38",
+    "2024-10",
+  ]);
+  expect(merged.at(-1)!.submissions).toEqual([{ id: "paged" }]);
+  // Before paging reaches it, the pinned week is listed last.
+  expect(mergeMemberWeeks(firstPage, pinned).map((row) => row.week)).toEqual([40, 39, 10]);
+});
+
+test("the week on screen stays listed when only the first few weeks are shown", () => {
+  const weeks = [
+    week(2026, 40),
+    week(2026, 39),
+    week(2026, 38),
+    week(2026, 37),
+    week(2024, 10, ["mine"]),
+  ];
+  const selected = (row: (typeof weeks)[number]) => isSelectedMemberWeek(row, "mine", undefined);
+  const preview = memberWeeksPreview(weeks, false, selected);
+  expect(preview.visible.map((row) => row.week)).toEqual([40, 39, 38, 10]);
+  expect(preview.hiddenCount).toBe(1);
+  // Shown all, or selected among the first few: the plain preview.
+  expect(memberWeeksPreview(weeks, true, selected).visible).toHaveLength(5);
+  expect(
+    memberWeeksPreview(weeks, false, (row) => isSelectedMemberWeek(row, undefined, "2026-39")),
+  ).toEqual({ visible: weeks.slice(0, 3), hiddenCount: 2 });
 });
