@@ -92,15 +92,22 @@ export const loadConversationAround = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .validator(conversationAroundInputSchema)
   .handler(async ({ context: { user, db, workspaceId }, data }) => {
-    const page = await new ConversationHistory(db).loadAround(
-      workspaceId,
-      user.id,
-      data.conversationId,
-      data.messageId,
+    // The window replaces the one a page holds whole (task #358): where it stands in the stream,
+    // read first, and the viewer's cursor come with it, not from an earlier read of the window.
+    const { streamPositions, data: page } = await readAfterStreamPositions(
+      [conversationRealtimeChannel(data.conversationId)],
+      () =>
+        new ConversationHistory(db).loadAround(
+          workspaceId,
+          user.id,
+          data.conversationId,
+          data.messageId,
+        ),
     );
     return {
       viewerId: user.id,
       ...page,
+      streamPositions,
       messages: await attachViewerViews(db, workspaceId, user.id, page.messages),
     };
   });

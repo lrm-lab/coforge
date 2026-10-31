@@ -1,4 +1,4 @@
-import type { InfiniteData, QueryClient } from "@tanstack/react-query";
+import { hashKey, type InfiniteData, type QueryClient } from "@tanstack/react-query";
 import { createIsomorphicFn } from "@tanstack/react-start";
 
 import type { FinishedWindow } from "#src/features/tasks/finished-tasks";
@@ -9,6 +9,7 @@ import {
   aroundWindow,
   channelNamesQuery,
   conversationAroundQuery,
+  conversationWindowKeys,
   directConversationQuery,
   publicChannelQuery,
   savedMessagesQuery,
@@ -117,26 +118,62 @@ async function readConversationPage(
   else await summary;
 }
 
+/** Per Query client, by window Query hash: the reads under way replacing a window that lacks the
+ * message a page opens on, or reading the first (`ensureConversationWindow`). */
+const replacingWindows = new WeakMap<QueryClient, Map<string, Promise<unknown>>>();
+
+/**
+ * The read under way replacing a conversation's window, absent or lacking the message a page opens
+ * on, with the window around that message. A pane opening there waits for it instead of drawing the
+ * window it replaces, without the message it lands on and its "New messages" divider (task #358).
+ */
+export function windowReplacement(queryClient: QueryClient, conversationId: string) {
+  const reads = replacingWindows.get(queryClient);
+  return conversationWindowKeys(conversationId)
+    .map((key) => reads?.get(hashKey(key)))
+    .find(Boolean);
+}
+
+const holds = (window: InfiniteData<ConversationPage<PageMessage>>, messageId: string) =>
+  window.pages.some((page) => page.messages.some((message) => message.id === messageId));
+
 /**
  * Seed the route's infinite query and, when the URL names a message outside its first page,
  * replace that page with the bounded around-window before the route renders, once a read of the
  * window already in flight has landed: its answer would land over the around-window (task #358).
- * This keeps a position/thread deep link on the loader path; the browser-only hash fallback
- * remains in `useConversationSync` because SSR has no hash to inspect.
+ * A window kept from an earlier visit that lacks it is replaced the same way, and a pane opening
+ * meanwhile, on that window or on none yet, waits for the read (`windowReplacement`). This keeps a position/thread deep link on
+ * the loader path; the browser-only hash fallback remains in `useConversationSync` because SSR has
+ * no hash to inspect.
  */
-async function ensureConversationWindow<M extends PageMessage, T extends ConversationPage<M>>(
+function ensureConversationWindow<M extends PageMessage, T extends ConversationPage<M>>(
+  queryClient: QueryClient,
+  query: ReturnType<typeof conversationPages<M, T>>["query"],
+  targetMessageId?: string,
+): Promise<InfiniteData<T, ConversationWindowCursor>> {
+  const read = readConversationWindow(queryClient, query, targetMessageId);
+  const kept = queryClient.getQueryData(query.queryKey);
+  if (!targetMessageId || (kept && holds(kept, targetMessageId))) return read;
+  let reads = replacingWindows.get(queryClient);
+  if (!reads) replacingWindows.set(queryClient, (reads = new Map()));
+  const key = hashKey(query.queryKey);
+  const replacing = read
+    .catch(() => undefined)
+    .finally(() => {
+      if (reads.get(key) === replacing) reads.delete(key);
+    });
+  reads.set(key, replacing);
+  return read;
+}
+
+async function readConversationWindow<M extends PageMessage, T extends ConversationPage<M>>(
   queryClient: QueryClient,
   query: ReturnType<typeof conversationPages<M, T>>["query"],
   targetMessageId?: string,
 ): Promise<InfiniteData<T, ConversationWindowCursor>> {
   const initial = await queryClient.ensureInfiniteQueryData(query);
   const latest = initial.pages.at(-1);
-  if (
-    !targetMessageId ||
-    !latest ||
-    initial.pages.some((page) => page.messages.some((message) => message.id === targetMessageId))
-  )
-    return initial;
+  if (!targetMessageId || !latest || holds(initial, targetMessageId)) return initial;
 
   try {
     const around = await queryClient.fetchQuery(

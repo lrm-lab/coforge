@@ -354,7 +354,7 @@ export class ConversationHistory {
       ...afterRows.slice(0, afterCount),
     ];
     const rootIds = roots.map((message) => message.id);
-    const [{ threads, threadReadThrough }, followed] = await Promise.all([
+    const [{ threads, threadReadThrough }, followed, viewer] = await Promise.all([
       readWindowThreads(this.db, {
         workspaceId,
         conversationId,
@@ -362,9 +362,17 @@ export class ConversationHistory {
         viewerMemberId: activeMemberId,
       }),
       direct ? [] : followedThreadRootIds(this.db, { viewerMemberId: activeMemberId, rootIds }),
+      activeMemberId
+        ? this.db.conversationMember.findUnique({
+            where: { id: activeMemberId },
+            select: { readThroughSequence: true },
+          })
+        : null,
     ]);
     return {
       conversationId,
+      // The viewer's cursor, as the window's first page carries it; none for a non-member.
+      readThroughSequence: viewer?.readThroughSequence,
       hasOlder: beforeRows.length > beforeCount + 1,
       hasNewer: afterRows.length > afterCount,
       anchorThreadRootId: anchor.threadRoot?.id,

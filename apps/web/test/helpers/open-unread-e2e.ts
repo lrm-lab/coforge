@@ -112,7 +112,9 @@ export async function postLive(
   message: { channelId: string; workspaceId: string; sequence: number; body: string },
 ) {
   const { channelId, workspaceId, sequence, body } = message;
-  const id = seededUuid(`${key}${channelId}:${sequence}`);
+  // A new id each run: Centrifugo drops a publication whose idempotency key (the message id) it
+  // saw minutes ago, so a rerun's messages would never reach the stream.
+  const id = crypto.randomUUID();
   const peer = await db.conversationMember.findFirstOrThrow({
     where: { conversationId: channelId, userId: { not: DEV_BROWSER_USER.id } },
   });

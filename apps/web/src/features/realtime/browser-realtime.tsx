@@ -180,7 +180,9 @@ type SharedSubscriptionEntry = {
   subscription: Subscription;
   refCount: number;
   /** Where the stream stands for this subscription (`SubscribedRecovery.position`); undefined on a
-   * namespace without history, whose subscribe reports none. */
+   * namespace without history, whose subscribe reports none. The protobuf client hands offsets
+   * over as `Long`s despite their `number` type, which compare as strings ("100" < "99"): each
+   * is made a number as it comes in (task #358). */
   position?: StreamPosition;
   publicationHandlers: Set<(publication: RealtimePublication) => void>;
   subscribedHandlers: Set<(recovery: SubscribedRecovery) => void>;
@@ -249,7 +251,10 @@ function acquireSharedSubscription(
       errorHandlers,
     };
     subscription.on("subscribed", (context) => {
-      created.position = context.streamPosition;
+      created.position = context.streamPosition && {
+        epoch: context.streamPosition.epoch,
+        offset: Number(context.streamPosition.offset),
+      };
       const recovery = {
         wasRecovering: context.wasRecovering,
         recovered: context.recovered,
@@ -261,7 +266,7 @@ function acquireSharedSubscription(
       const stream = created.position;
       const position =
         stream && publication.offset !== undefined
-          ? { epoch: stream.epoch, offset: publication.offset }
+          ? { epoch: stream.epoch, offset: Number(publication.offset) }
           : undefined;
       if (stream && position && position.offset > stream.offset) created.position = position;
       dispatch(channel, publicationHandlers, { ...publication, position });

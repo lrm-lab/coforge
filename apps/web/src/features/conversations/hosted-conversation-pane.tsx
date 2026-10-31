@@ -1,5 +1,5 @@
 import { memo, Suspense, useContext, useState, type Ref } from "react";
-import { useSuspenseQuery } from "@tanstack/react-query";
+import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { CatchBoundary, ClientOnly } from "@tanstack/react-router";
 
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
@@ -11,6 +11,7 @@ import {
 } from "./conversation-list-button";
 import { ConversationHostProvider } from "./conversation-host";
 import { ConversationPage } from "./conversation-page";
+import { windowReplacement } from "./conversation-page-loader";
 import type { ConversationPageSearch, HostedConversationTarget } from "./conversation-page-search";
 import { ConversationPending } from "./conversation-pending";
 import { channelNamesQuery, savedMessagesQuery } from "./conversation-queries";
@@ -109,6 +110,12 @@ function HostedConversation({
   onJumpMessageConsumed?: () => void;
 }) {
   const workspaceId = useCurrentWorkspaceId() ?? "";
+  // Opened on a message its window lacks, or has yet to read: the pane shows its loading state
+  // until the window around that message is in, so its first picture is where it lands, under the
+  // divider (task #358). Only as it opens: once open, the pane stays on screen.
+  const queryClient = useQueryClient();
+  const [replacing] = useState(() => windowReplacement(queryClient, target.id));
+  if (replacing) throw replacing;
   const channels = useSuspenseQuery(channelNamesQuery(workspaceId)).data;
   // The viewer's Saved stars, as Chat shows them; a failed read leaves none, as in Chat.
   useSuspenseQuery({

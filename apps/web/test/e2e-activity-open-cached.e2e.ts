@@ -1,4 +1,4 @@
-import { test } from "bun:test";
+import { expect, test } from "bun:test";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -7,7 +7,7 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
-import { inPane, waitFor } from "./helpers/activity-inbox-e2e";
+import { inPane, rowItems, waitFor } from "./helpers/activity-inbox-e2e";
 import { dividerBetween, postLive, row, seedChannel } from "./helpers/open-unread-e2e";
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
 
@@ -97,3 +97,101 @@ test("a channel read in Chat and opened from Activity after messages came shows 
     await db.$disconnect();
   }
 }, 90_000);
+
+test("a channel opened from Activity round after round shows each round's divider at once", async () => {
+  const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
+  const { browser, evaluate } = browserSession(browserPath, `activity-open-rounds-${process.pid}`);
+  const realtime = new CentrifugoConversationRealtime(createCentrifugoServerApi());
+  const proxy = sameOriginProxy(webOrigin, centrifugoOrigin);
+  const { origin } = proxy;
+  const tab = (name: string) =>
+    browser(
+      "eval",
+      `[...document.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent.startsWith(${JSON.stringify(name)})).click()`,
+    );
+  try {
+    const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
+      where: { userId: DEV_BROWSER_USER.id },
+      include: { workspace: { select: { slug: true } } },
+    });
+    const read = Array.from({ length: 40 }, (_, index) => ({
+      from: "peer" as const,
+      body: `E2E open-rounds read ${index + 1}`,
+    }));
+    const channel = await seedChannel(db, workspaceId, "e2e-open-rounds", read.length, read);
+    const elsewhere = await seedChannel(db, workspaceId, "e2e-open-rounds-elsewhere", 1, [
+      { from: "peer", body: "E2E open-rounds elsewhere" },
+    ]);
+    await browser("set", "viewport", "1440", "900");
+    await browser("open", `${origin}/en/w/${workspace.slug}/activity`);
+    await browser(
+      "wait",
+      "--fn",
+      `${row("E2E open-rounds elsewhere")} !== null && ${pageHydrated}`,
+    );
+
+    // QA's rounds on staging's #video-gen (task #358): another conversation open beside the
+    // Unread view, three messages into the channel four seconds apart, and the channel opened from
+    // its card; then back to the other conversation. Some rounds come while the window kept from
+    // the last is still fresh, one after it has gone stale.
+    let before = channel.ids.at(-1)!;
+    let sequence = read.length;
+    for (const [round, pause] of [
+      [1, 0],
+      [2, 0],
+      [3, 32_000],
+      [4, 0],
+    ] as const) {
+      await tab("All");
+      await browser("wait", "--fn", `${row("E2E open-rounds elsewhere")} !== null`);
+      // The card's own link: a click the list's re-render after the view switch cannot miss.
+      await browser(
+        "eval",
+        `[...document.querySelectorAll(${rowItems})].find((item) => item.textContent.includes("E2E open-rounds elsewhere")).querySelector("a").click()`,
+      );
+      await browser("wait", "--fn", inPane(elsewhere.ids[0]!));
+      if (pause) await browser("wait", String(pause));
+      await tab("Unread");
+      const burst: string[] = [];
+      for (const n of [1, 2, 3]) {
+        burst.push(
+          await postLive(db, realtime, {
+            channelId: channel.channelId,
+            workspaceId,
+            sequence: ++sequence,
+            body: `E2E open-rounds r${round} b${n}`,
+          }),
+        );
+        // The pointer rests on the channel's card as it comes in, as a reader's does: the router
+        // reads ahead what the card opens (`defaultPreload: "intent"`) while more is still coming.
+        if (n === 1) {
+          await browser("wait", "--fn", `${row(`E2E open-rounds r${round} b1`)} !== null`);
+          await browser("find", "text", `E2E open-rounds r${round} b1`, "hover");
+        }
+        await browser("wait", n === 3 ? "3000" : "4000");
+      }
+      await browser("wait", "--fn", `${row(`E2E open-rounds r${round} b3`)} !== null`);
+      // The pane's first picture of the channel, as the last message read first appears in it:
+      // the burst's first message is already there, under the divider.
+      await browser(
+        "eval",
+        `(() => { window.__firstPicture = undefined; const observer = new MutationObserver(() => { if (!${inPane(before)}) return; window.__firstPicture = ${dividerBetween(before, burst[0]!)}; observer.disconnect(); }); observer.observe(document.body, { childList: true, subtree: true }); return true; })()`,
+      );
+      await browser("find", "text", `E2E open-rounds r${round} b3`, "click");
+      await browser("wait", "--fn", `window.__firstPicture !== undefined`);
+      expect(await evaluate<boolean>(`window.__firstPicture`)).toBe(true);
+      // Every message of the burst is in the window, and the pane reads through it.
+      await waitFor(
+        async () =>
+          (await db.conversationMember.findUniqueOrThrow({ where: { id: channel.viewer.id } }))
+            .readThroughSequence === sequence,
+      );
+      await browser("wait", "--fn", dividerBetween(before, burst[0]!));
+      before = burst.at(-1)!;
+    }
+  } finally {
+    await browser("close").catch(() => undefined);
+    proxy.stop();
+    await db.$disconnect();
+  }
+}, 240_000);
