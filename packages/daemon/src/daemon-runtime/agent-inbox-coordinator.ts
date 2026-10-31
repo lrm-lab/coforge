@@ -64,6 +64,8 @@ export class AgentInboxCoordinator {
     return item;
   }
 
+  /** Removes an App Inbox item and forgets that it was announced, so an item minted again under
+   * the same id is announced again. */
   async removeAppItem(agentId: string, itemId: string): Promise<boolean> {
     const removed = await (await this.appInbox(agentId)).remove(itemId);
     this.#notifiedAppItems.get(agentId)?.delete(itemId);
@@ -144,13 +146,24 @@ export class AgentInboxCoordinator {
     }
   }
 
-  /** Re-attempts every app-item notice held by the delivery queue. */
+  /** Re-attempts every app-item notice `AgentDeliveryQueue` held for `agentId` — each
+   * one re-checks `shouldHold` itself inside `notifyAppItem`, so one that is still busy (e.g. a
+   * coalesced delivery flush that just re-armed busy) simply re-holds itself for the next
+   * release rather than being lost or sent too early. */
   releaseHeldAppItems(agentId: string): void {
     for (const itemId of this.ports.deliveryQueue.releaseAppItems(agentId))
       void this.notifyAppItem(agentId, itemId).catch(() => {});
   }
 
-  /** Redelivers fallback notice text held after a provider accepted but did not show it. */
+  /**
+   * Redelivers every fallback notice text `AgentDeliveryQueue` held for `agentId`
+   * (Kiro's `notice-undelivered` event) as a bare `session.notify` call — never through
+   * `AgentMessageAttentionIndex`, since the delivery or App Inbox item this text originally
+   * came from already settled its own ACK (or never had one); this call must never produce a second
+   * one. If the Agent has gone busy again by the time this runs (e.g. its own steer of another
+   * held text just started a fresh turn), `notify` steers this one into that turn instead of
+   * losing it.
+   */
   releaseFallbackNotices(agentId: string): void {
     const notices = this.ports.deliveryQueue.releaseFallbackNotices(agentId);
     if (!notices.length) return;
@@ -160,6 +173,7 @@ export class AgentInboxCoordinator {
         void this.ports.mentionDeliveries.settleRedelivery(agentId, deliveryIds, false);
         continue;
       }
+      // The tracked mentions it carries are drained once it is accepted, so it names them again.
       const redelivery =
         deliveryIds.length || conversation
           ? session.notify(text, { deliveryIds, ...(conversation ? { conversation } : {}) })
