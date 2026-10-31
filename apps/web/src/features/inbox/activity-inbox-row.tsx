@@ -88,9 +88,11 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
           href={href}
           aria-current={current ? "true" : undefined}
           onPress={(event) => {
-            // A thread opened on the page is read by its pane, after the pane has found where its
-            // unread replies start (task #358): read from here first, it would have none.
-            const readByPane = item.thread && !item.task && !isModified(event);
+            // A conversation or thread opened on the page is read by its pane, after the pane has
+            // found where its unread messages start (task #358): read from here first, it would
+            // have none. A Task's popup, a mention's own read state and the row already open (its
+            // pane does not open again) still read from here.
+            const readByPane = !current && !item.task && !item.mentionAction && !isModified(event);
             if (unread && !readByPane) actions.read(item);
           }}
           render={(props) =>

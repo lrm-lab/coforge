@@ -7,12 +7,17 @@
  * function that the pane, its divider snapshot and the tests all share.
  */
 
+import { isViewerMessage } from "./own-message";
+
 /** The unread boundary: the oldest message the viewer has not read in this pane. */
 export type UnreadBoundary = { id: string; sequence: number };
+type BoundaryMessage = UnreadBoundary & { senderMemberId?: string | null };
 
 /**
- * The oldest message past `readThroughSequence`, or `undefined` when the pane has nothing
- * unread — or no cursor at all.
+ * The oldest message past `readThroughSequence` that is unread by the server's rule
+ * (`HUMAN_UNREAD_MESSAGE_SQL`): someone else's, so neither the viewer's own (`viewerMemberId`) nor
+ * a system notice (no sender member). `undefined` when the pane has nothing unread — or no cursor
+ * at all. Activity opens at the server's first unread, so the divider sits on the same message.
  *
  * A missing cursor reads as "everything here has been seen", never as "everything is unread".
  * A thread the viewer has never opened in the thread pane has no `thread_reads` row, and
@@ -21,11 +26,17 @@ export type UnreadBoundary = { id: string; sequence: number };
  * first time.
  */
 export function unreadBoundary(
-  messages: readonly UnreadBoundary[],
+  messages: readonly BoundaryMessage[],
   readThroughSequence: number | undefined,
+  viewerMemberId: string | undefined,
 ): UnreadBoundary | undefined {
   if (readThroughSequence === undefined) return undefined;
-  return messages.find((message) => message.sequence > readThroughSequence);
+  return messages.find(
+    (message) =>
+      message.sequence > readThroughSequence &&
+      message.senderMemberId !== null &&
+      !isViewerMessage(message, viewerMemberId),
+  );
 }
 
 /** The oldest unread message to open on, or `undefined` to open at the latest. */

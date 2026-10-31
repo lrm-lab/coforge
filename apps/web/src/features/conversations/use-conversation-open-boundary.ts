@@ -45,7 +45,7 @@ export function useConversationOpenBoundary(
   const capture = (waited: boolean): Opened => ({
     key,
     cursor: readThroughSequence,
-    boundary: unreadBoundary(messages, readThroughSequence),
+    boundary: unreadBoundary(messages, readThroughSequence, senderMemberId),
     // After a wait the pane opens again only for a reader still at the latest.
     openKey: waited && !followingLatest ? `${conversationId}:opening` : conversationId,
   });
@@ -66,7 +66,7 @@ export function useConversationOpenBoundary(
         .filter((message) => isViewerMessage(message, senderMemberId))
         .map((message) => message.sequence),
     );
-    const found = unreadBoundary(messages, ownThrough);
+    const found = unreadBoundary(messages, ownThrough, senderMemberId);
     if (found)
       setOpened({
         ...current,

@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useRef, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
@@ -8,6 +8,7 @@ import {
   noteReadThrough,
 } from "#src/features/cache-persistence/browser-query-cache";
 import { useLiveAgent } from "#src/features/agents/workspace-agents-realtime";
+import { ACTIVITY_INBOX_QUERY_PREFIX } from "#src/features/inbox/activity-inbox-queries";
 import { ConversationTaskBoard } from "#src/features/tasks/conversation-task-board";
 import { markPublicChannelRead } from "./channels.functions";
 import { ChannelConversation, ChannelConversationHeader } from "./channel-conversation";
@@ -30,6 +31,7 @@ import { useReopenClosedOnOpen } from "./sidebar-lists";
 import { useStandaloneThread } from "./standalone-thread";
 import { useChannelConversation, useDirectConversation } from "./use-conversation-data";
 import { useConversationView, useShownConversationTab } from "./use-conversation-view";
+import { useAwaitingRestoredWindow } from "./use-conversation-open-boundary";
 
 type ConversationPageProps = {
   search: ConversationPageSearch;
@@ -327,18 +329,32 @@ function ConversationPageBody({
     if (threadAlone) return;
     markSeen(unreadKey, topLevelEnd);
   }, [markSeen, unreadKey, topLevelEnd, threadAlone]);
+  // A conversation opened from Activity is read here, not by its row (task #358), so its first
+  // read in each visit refreshes Activity, and so does reading to the latest. Not every message that
+  // arrives while it is open: that would refetch Activity's whole list per message.
+  const queryClient = useQueryClient();
+  const refreshedActivity = useRef<string | undefined>(undefined);
+  const advance = (throughSequence: number, label: string, refreshActivity: boolean) =>
+    void persistReadCursor(() => readCursor.advance(throughSequence), label).then(() => {
+      if (refreshActivity)
+        void queryClient.invalidateQueries({ queryKey: ACTIVITY_INBOX_QUERY_PREFIX });
+    });
   // The cursor's write is rebuilt each render around the same conversation; the effect reruns only
-  // when what it reads changes.
+  // when what it reads changes. It waits, like the divider, for a stored copy's own read: moving the
+  // server's cursor first would bring that read back with nothing unread.
   const readThrough = useEffectEvent((throughSequence: number) => {
-    void persistReadCursor(() => readCursor.advance(throughSequence), readCursor.key);
+    const first = refreshedActivity.current !== readCursor.key;
+    refreshedActivity.current = readCursor.key;
+    advance(throughSequence, readCursor.key, first);
   });
+  const restoring = useAwaitingRestoredWindow(conversation.conversationId);
   useEffect(() => {
-    if (!topLevelEnd || !isMember || threadAlone) return;
+    if (!topLevelEnd || !isMember || threadAlone || restoring) return;
     readThrough(topLevelEnd);
-  }, [readCursor.key, topLevelEnd, isMember, threadAlone]);
+  }, [readCursor.key, topLevelEnd, isMember, threadAlone, restoring]);
   const readLatest = (throughSequence: number) => {
     if (!isMember) return;
-    void persistReadCursor(() => readCursor.advance(throughSequence), `${readCursor.key}:latest`);
+    advance(throughSequence, `${readCursor.key}:latest`, true);
   };
   const { onOpenAgentProfile } = agentProfile;
 
