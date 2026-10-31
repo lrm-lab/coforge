@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -184,9 +185,12 @@ export function RecordsLayout({
     weekKey: selectedWeekKey,
   });
   // A report older than the catalog's page is listed once its week is read: its section opens
-  // then, as it does at once for one in the page (`sectionDefaults`), unless another is open.
+  // then, as `sectionDefaults` opens it at once for one in the page, unless another is open.
+  const wasListed = useRef(memberWeeks.selectionListed);
   useEffect(() => {
-    if (memberWeeks.selectionListed && !favoritesOpen && !myReportsOpen) setMembersOpen(true);
+    const listedNow = memberWeeks.selectionListed && !wasListed.current;
+    wasListed.current = memberWeeks.selectionListed;
+    if (listedNow && !favoritesOpen && !myReportsOpen) setMembersOpen(true);
   }, [memberWeeks.selectionListed]);
   const filteredNotes = useMemo(
     () =>
