@@ -83,3 +83,37 @@ test("a target user this Agent cannot reach is refused the way message send refu
     body: { error: "target is not accessible", code: "TARGET_NOT_ACCESSIBLE", retryable: false },
   });
 });
+
+test("a malformed target is a bad request, the way message send answers it", async () => {
+  const response = await handleAgentActionPrepare(
+    prepare({ target: "@FrankAn", action: { type: "channel:create", name: "ops" } }),
+    principal,
+    () => ({
+      prepare: async () => {
+        throw new Error("invalid message target");
+      },
+    }),
+  );
+
+  expect(await answer(response)).toEqual({
+    status: 400,
+    body: { error: "invalid message target" },
+  });
+});
+
+test("a direct message scope outside the Workspace is refused like an unknown user", async () => {
+  const response = await handleAgentActionPrepare(
+    prepare({ target: "@outsider", action: { type: "channel:create", name: "ops" } }),
+    principal,
+    () => ({
+      prepare: async () => {
+        throw new Error("conversation scope is not authorized");
+      },
+    }),
+  );
+
+  expect(await answer(response)).toEqual({
+    status: 403,
+    body: { error: "target is not accessible", code: "TARGET_NOT_ACCESSIBLE", retryable: false },
+  });
+});

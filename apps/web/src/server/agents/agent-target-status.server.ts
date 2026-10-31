@@ -31,13 +31,30 @@ function targetNotAccessibleResponse(status: number) {
 }
 
 /**
- * The answer to an Agent posting to an `@user` it cannot reach: a username that does not exist or
- * someone outside the Workspace it never had a direct message with. The message route answers it
- * the way the attachment routes do. Undefined for any other error.
+ * The answer to an Agent posting to an `@user` it cannot reach: a username that does not exist
+ * (`"target user not found"`) or a direct-message scope outside the Workspace
+ * (`"conversation scope is not authorized"`). Both read the same to the caller, so the send
+ * reveals neither, exactly the way `targetResolutionStatus` groups them for the attachment
+ * routes. Undefined for any other error.
  */
-function unknownTargetUserResponse(error: unknown) {
-  if (!(error instanceof Error) || error.message !== "target user not found") return undefined;
+function unreachablePeerResponse(error: unknown) {
+  if (
+    !(error instanceof Error) ||
+    (error.message !== "target user not found" &&
+      error.message !== "conversation scope is not authorized")
+  )
+    return undefined;
   return targetNotAccessibleResponse(403);
+}
+
+/**
+ * The answer to a target that is not even well-formed: `parsePeerTarget`'s `@…` grammar refuses
+ * with `"invalid message target"` — a bad request, the same status `targetResolutionStatus`
+ * gives it for the attachment routes. Undefined for any other error.
+ */
+function invalidMessageTargetResponse(error: unknown) {
+  if (!(error instanceof Error) || error.message !== "invalid message target") return undefined;
+  return Response.json({ error: "invalid message target" }, { status: 400 });
 }
 
 /**
@@ -104,14 +121,16 @@ export async function resolveAttachmentConversation(
 }
 
 /**
- * The answer to an Agent posting a message or an action card to a target it cannot reach: a
- * person who left (`DM_PEER_NOT_IN_WORKSPACE`), or an unknown username and someone outside the
- * Workspace, which read alike (`target is not accessible`). Undefined for any other error.
+ * The answer to an Agent posting a message or an action card to a target it cannot reach or one
+ * that is malformed: a person who left (`DM_PEER_NOT_IN_WORKSPACE`), an unknown username and
+ * someone outside the Workspace, which read alike (`target is not accessible`), or a bad `@…`
+ * grammar (a 400 `invalid message target`). Undefined for any other error.
  */
 export function postingTargetRefusalResponse(error: unknown, target: string) {
   return (
     dmPeerNotInWorkspaceResponse(error, target) ??
     ambiguousTargetResponse(error, target) ??
-    unknownTargetUserResponse(error)
+    unreachablePeerResponse(error) ??
+    invalidMessageTargetResponse(error)
   );
 }
