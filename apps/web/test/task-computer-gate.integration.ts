@@ -143,3 +143,48 @@ test("once every Computer is current the switch opens", async () => {
   const view = await experiments().set(workspace(), "owner", "taskConversations", true);
   expect(view.enabled).toBe(true);
 });
+
+test("Computers that share a name are told apart by their owner", async () => {
+  const other = await db.user.create({
+    data: { username: `tcg-other-${suffix}`, displayName: "Li Jian" },
+  });
+  const twin = await db.computer.create({
+    data: {
+      ownerId: other.id,
+      machineId: crypto.randomUUID(),
+      name: `twin-${suffix}`,
+      displayName: "Cloud",
+      computerVersion: "0.1.18",
+    },
+  });
+  const mine = await db.computer.create({
+    data: {
+      ownerId,
+      machineId: crypto.randomUUID(),
+      name: `twin-b-${suffix}`,
+      displayName: "Cloud",
+      computerVersion: "0.1.18",
+    },
+  });
+  computers.twin = twin.id;
+  computers.mine = mine.id;
+  for (const id of [twin.id, mine.id])
+    await db.agent.create({
+      data: {
+        workspaceId,
+        ownerId,
+        name: `tcg-twin-${id.slice(-8)}-${suffix}`,
+        displayName: "twin",
+        computerId: id,
+        runtimeConfig: {},
+      },
+    });
+  const refused = await requireComputersForTaskConversations(db, workspaceId).catch(
+    (error: unknown) => error,
+  );
+  const names = String((refused as { details: { computers: string } }).details.computers);
+  expect(names).toContain("Cloud (Li Jian)");
+  expect(names).toContain("Cloud (Owner)");
+  await db.computer.deleteMany({ where: { id: { in: [twin.id, mine.id] } } });
+  await db.user.delete({ where: { id: other.id } });
+});

@@ -7,15 +7,30 @@ import {
 } from "#src/server/computers/task-computer-version.server";
 
 /** The Computers hosting this Workspace's live Agents whose release cannot serve task
- * conversations, by the name they are shown under. */
+ * conversations, by the name they are shown under, with the owner's name after any name more than
+ * one Computer has. */
 async function outdatedComputers(db: PrismaClient, workspaceId: string) {
   const computers = await db.computer.findMany({
     where: { agents: { some: { workspaceId, deletedAt: null } } },
-    select: { name: true, displayName: true, computerVersion: true },
+    select: {
+      name: true,
+      displayName: true,
+      computerVersion: true,
+      owner: { select: { displayName: true, username: true } },
+    },
   });
-  return computers
-    .filter((computer) => !computerSupportsTaskConversations(computer.computerVersion))
-    .map((computer) => computer.displayName || computer.name);
+  const outdated = computers.filter(
+    (computer) => !computerSupportsTaskConversations(computer.computerVersion),
+  );
+  const shown = (computer: (typeof outdated)[number]) => computer.displayName || computer.name;
+  const counts = new Map<string, number>();
+  for (const computer of outdated)
+    counts.set(shown(computer), (counts.get(shown(computer)) ?? 0) + 1);
+  return outdated.map((computer) =>
+    counts.get(shown(computer)) === 1
+      ? shown(computer)
+      : `${shown(computer)} (${computer.owner.displayName || computer.owner.username})`,
+  );
 }
 
 /**
