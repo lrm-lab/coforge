@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { Cloud01 as Cloud, Monitor01 as Monitor } from "@untitledui/icons";
 
-import { Button } from "#src/components/base/buttons/button";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { m } from "#src/paraglide/messages";
 import { ComputerInstallCommand } from "./computer-install-command";
 import { CloudComputerStep } from "./cloud-computer-step";
 import { ComputerTypeOption } from "./computer-type-option";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
+import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 
 type ComputerType = "local" | "cloud";
 export function AddComputerDialog({
@@ -96,23 +96,22 @@ export function AddComputerDialog({
               )}
 
               {step !== "cloud" && (
-                <div className="flex items-center justify-end gap-3 border-t border-secondary px-6 py-4 sm:px-8">
-                  <Button
-                    color="secondary"
-                    onPress={step === "choose" ? close : () => setStep("choose")}
-                  >
+                <DialogActions className="px-6 sm:px-8 pt-4 pb-6">
+                  <DialogCancel onPress={step === "choose" ? close : () => setStep("choose")}>
                     {step === "choose" ? m.controls_cancel() : m.controls_back()}
-                  </Button>
+                  </DialogCancel>
                   {step === "choose" ? (
-                    <Button onPress={() => setStep(computerType === "local" ? "install" : "cloud")}>
+                    <DialogAction
+                      onPress={() => setStep(computerType === "local" ? "install" : "cloud")}
+                    >
                       {m.controls_next()}
-                    </Button>
+                    </DialogAction>
                   ) : (
-                    <Button onPress={close} isDisabled={!connectedComputerName}>
+                    <DialogAction onPress={close} isDisabled={!connectedComputerName}>
                       {m.computer_connect_done()}
-                    </Button>
+                    </DialogAction>
                   )}
-                </div>
+                </DialogActions>
               )}
             </>
           )}

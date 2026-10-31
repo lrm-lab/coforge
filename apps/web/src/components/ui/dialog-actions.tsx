@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { Button, type ButtonProps } from "#src/components/base/buttons/button";
+import { Button, type Props as ButtonProps } from "#src/components/base/buttons/button";
 import { cx } from "#src/utils/cx";
 
 /** Every button a dialog shows, in its button row or beside a field: the height of the app's
@@ -24,12 +24,29 @@ export function DialogActions({
   );
 }
 
+/** A button's props without the ones the row sets, kept per variant so a link action (`href`)
+ * stays a link. */
+type RowButtonProps<K extends keyof ButtonProps> = ButtonProps extends infer P
+  ? P extends ButtonProps
+    ? Omit<P, K>
+    : never
+  : never;
+
 /** The row's Cancel or Close: borderless, as Raft's ghost button. */
-export function DialogCancel(props: Omit<ButtonProps, "size" | "color">) {
-  return <Button {...props} size={DIALOG_BUTTON_SIZE} color="tertiary" />;
+export function DialogCancel(props: RowButtonProps<"size" | "color">) {
+  // Narrowed per variant: Button is overloaded for links and buttons, not for their union.
+  return "href" in props ? (
+    <Button {...props} size={DIALOG_BUTTON_SIZE} color="tertiary" />
+  ) : (
+    <Button {...props} size={DIALOG_BUTTON_SIZE} color="tertiary" />
+  );
 }
 
 /** The row's action, primary unless the caller picks another colour. */
-export function DialogAction({ color = "primary", ...props }: Omit<ButtonProps, "size">) {
-  return <Button {...props} size={DIALOG_BUTTON_SIZE} color={color} />;
+export function DialogAction({ color = "primary", ...props }: RowButtonProps<"size">) {
+  return "href" in props ? (
+    <Button {...props} size={DIALOG_BUTTON_SIZE} color={color} />
+  ) : (
+    <Button {...props} size={DIALOG_BUTTON_SIZE} color={color} />
+  );
 }

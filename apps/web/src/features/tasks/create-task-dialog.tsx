@@ -7,6 +7,7 @@ import { Input } from "#src/components/base/input/input";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { m } from "#src/paraglide/messages";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
+import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 
 /**
  * New Tasks in the conversation: one title per row, "Add another" for more, all created together
@@ -120,14 +121,14 @@ export function CreateTaskDialog({
                     {error}
                   </p>
                 )}
-                <div className="mt-2 flex justify-end gap-3">
-                  <Button type="button" color="secondary" isDisabled={saving} onPress={close}>
+                <DialogActions className="mt-2">
+                  <DialogCancel type="button" isDisabled={saving} onPress={close}>
                     {m.tasks_create_cancel()}
-                  </Button>
-                  <Button type="submit" isLoading={saving}>
+                  </DialogCancel>
+                  <DialogAction type="submit" isLoading={saving}>
                     {m.tasks_create_submit({ count })}
-                  </Button>
-                </div>
+                  </DialogAction>
+                </DialogActions>
               </form>
             </>
           )}

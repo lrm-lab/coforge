@@ -13,6 +13,7 @@ import {
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { Button } from "#src/components/base/buttons/button";
+import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 import { m } from "#src/paraglide/messages";
 import type { ChannelConversationView } from "./channel-conversation";
 import type { ConfirmedAction } from "./channel-action-confirm-dialog";
@@ -157,22 +158,22 @@ export function UnsavedChangesDialog({
           <Text slot="description" className="mx-6 mt-4 block text-sm text-secondary">
             {m.channel_settings_unsaved_message()}
           </Text>
-          <div className="mt-6 flex flex-wrap justify-end gap-3 border-t border-secondary px-6 py-4">
-            <Button color="secondary" isDisabled={saving} onPress={onKeepEditing}>
+          <DialogActions className="mt-6 px-6 pb-6">
+            <DialogCancel isDisabled={saving} onPress={onKeepEditing}>
               {m.channel_settings_keep_editing()}
-            </Button>
-            <Button color="secondary-destructive" isDisabled={saving} onPress={onDiscard}>
+            </DialogCancel>
+            <DialogAction color="primary-destructive" isDisabled={saving} onPress={onDiscard}>
               {m.channel_settings_discard()}
-            </Button>
-            <Button
+            </DialogAction>
+            <DialogAction
               isDisabled={saving}
               isLoading={saving}
               showTextWhileLoading
               onPress={() => void onSaveAndClose()}
             >
               {saving ? m.channel_settings_saving() : m.channel_settings_save_and_close()}
-            </Button>
-          </div>
+            </DialogAction>
+          </DialogActions>
         </Dialog>
       </Modal>
     </ModalOverlay>

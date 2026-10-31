@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { AlertCircle, XClose as X } from "@untitledui/icons";
 import { Heading, Text } from "react-aria-components";
-import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { m } from "#src/paraglide/messages";
+import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 
 /** Formats a cloud computer's disk only after the owner types its name. The server checks it again. */
 export function FormatCloudComputerDialog({
@@ -98,11 +98,11 @@ export function FormatCloudComputerDialog({
                   {error}
                 </p>
               )}
-              <div className="mt-6 flex shrink-0 flex-wrap justify-end gap-3 border-t border-secondary px-6 py-4">
-                <Button color="secondary" isDisabled={formatting} onPress={close}>
+              <DialogActions className="mt-6 shrink-0 px-6 pb-6">
+                <DialogCancel isDisabled={formatting} onPress={close}>
                   {m.controls_cancel()}
-                </Button>
-                <Button
+                </DialogCancel>
+                <DialogAction
                   color="primary-destructive"
                   isDisabled={!confirmed || formatting}
                   isLoading={formatting}
@@ -110,8 +110,8 @@ export function FormatCloudComputerDialog({
                   onPress={submit}
                 >
                   {formatting ? m.computer_format_pending() : m.computer_format_submit()}
-                </Button>
-              </div>
+                </DialogAction>
+              </DialogActions>
             </>
           )}
         </Dialog>

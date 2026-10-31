@@ -31,7 +31,8 @@
     "prebuild": "bun run db:generate",
     "dev:hmr": "bun run ./scripts/dev-web-hmr.ts",
     "local-servers": "bun run ./scripts/local-servers.ts",
-    "build:mascots": "bun ./assets/mascots/generate.ts --build"
+    "build:mascots": "bun ./assets/mascots/generate.ts --build",
+    "dialog:sweep": "bun run ./scripts/dialog-sweep.mjs"
   },
   "dependencies": {
     "@alicloud/credentials": "2.4.7",

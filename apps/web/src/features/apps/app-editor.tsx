@@ -40,6 +40,7 @@ import type { AppPermissionGroup } from "./app-permissions";
 import { APP_WHEN_TO_USE_MAX_LENGTH, refusedAppFields } from "./app-registration";
 import { AppSecretPanel, type IssuedSecret } from "./app-secret-panel";
 import type { AppDeclarations, AppSummary } from "./apps.functions";
+import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 
 /**
  * Registers an app (`app` absent) or edits one, in one wide form: a section nav beside Profile,
@@ -440,21 +441,19 @@ function AppEditorForm({
           )}
         </div>
       </div>
-      <div className="flex shrink-0 flex-wrap justify-end gap-3 border-t border-secondary px-6 py-4">
-        <Button type="button" size="sm" color="secondary" isDisabled={saving} onPress={onClose}>
+      <DialogActions className="shrink-0 px-6 pt-4 pb-6">
+        <DialogCancel type="button" isDisabled={saving} onPress={onClose}>
           {m.controls_cancel()}
-        </Button>
-        <Button
+        </DialogCancel>
+        <DialogAction
           type="submit"
-          size="sm"
-          color="primary"
           isDisabled={saving || tooLong}
           isLoading={saving}
           showTextWhileLoading
         >
           {saving ? m.apps_saving() : editing ? m.apps_save() : m.apps_register_submit()}
-        </Button>
-      </div>
+        </DialogAction>
+      </DialogActions>
     </form>
   );
 }

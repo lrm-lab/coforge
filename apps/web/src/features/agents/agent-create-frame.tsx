@@ -5,6 +5,7 @@ import { Plus, XClose as X } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
+import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
@@ -168,28 +169,19 @@ export function AgentCreateFooter({
   submitDisabled?: boolean;
 }) {
   return (
-    <div className="px-6 pt-5 pb-6">
-      <div className="grid grid-cols-2 gap-3">
-        <Button
-          type="button"
-          color="secondary"
-          size="lg"
-          isDisabled={cancelDisabled}
-          onPress={onCancel}
-        >
-          {m.controls_cancel()}
-        </Button>
-        <Button
-          type="submit"
-          size="lg"
-          // Pending, not disabled, while it runs: focus stays on it, so Escape still reaches the dialog.
-          isDisabled={submitDisabled}
-          isLoading={submitting}
-          showTextWhileLoading
-        >
-          {submitLabel}
-        </Button>
-      </div>
-    </div>
+    <DialogActions className="px-6 pt-4 pb-6">
+      <DialogCancel type="button" isDisabled={cancelDisabled} onPress={onCancel}>
+        {m.controls_cancel()}
+      </DialogCancel>
+      <DialogAction
+        type="submit"
+        // Pending, not disabled, while it runs: focus stays on it, so Escape still reaches the dialog.
+        isDisabled={submitDisabled}
+        isLoading={submitting}
+        showTextWhileLoading
+      >
+        {submitLabel}
+      </DialogAction>
+    </DialogActions>
   );
 }

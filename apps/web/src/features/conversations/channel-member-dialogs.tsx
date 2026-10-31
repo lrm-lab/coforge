@@ -5,11 +5,11 @@ import { Text } from "react-aria-components";
 
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
-import { Button } from "#src/components/base/buttons/button";
 import { m } from "#src/paraglide/messages";
 import { removePublicChannelMember } from "./channels.functions";
 import type { RosterMember } from "./channel-members-query";
 import { channelMembersQueryKey } from "./conversation-query-keys";
+import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 
 /** A Workspace owner or admin stays a channel admin everywhere; their row explains that instead
  * of demoting them. */
@@ -30,11 +30,9 @@ export function ServerAdminRoleDialog({
               <Text slot="description" className="mx-6 mt-4 block text-sm text-secondary">
                 {m.channel_members_server_admin_message({ name: member.displayName })}
               </Text>
-              <div className="mt-6 flex justify-end border-t border-secondary px-6 py-4">
-                <Button color="secondary" onPress={close}>
-                  {m.channel_members_ok()}
-                </Button>
-              </div>
+              <DialogActions className="mt-6 px-6 pb-6">
+                <DialogCancel onPress={close}>{m.channel_members_ok()}</DialogCancel>
+              </DialogActions>
             </>
           )}
         </Dialog>
@@ -104,11 +102,11 @@ export function RemoveMemberDialog({
                   {error}
                 </p>
               )}
-              <div className="mt-6 flex justify-end gap-3 border-t border-secondary px-6 py-4">
-                <Button color="secondary" isDisabled={busy} onPress={close}>
+              <DialogActions className="mt-6 px-6 pb-6">
+                <DialogCancel isDisabled={busy} onPress={close}>
                   {m.channel_members_cancel()}
-                </Button>
-                <Button
+                </DialogCancel>
+                <DialogAction
                   color="primary-destructive"
                   isDisabled={busy}
                   isLoading={busy}
@@ -116,8 +114,8 @@ export function RemoveMemberDialog({
                   onPress={() => void confirm()}
                 >
                   {busy ? m.channel_members_removing() : m.channel_members_remove_action()}
-                </Button>
-              </div>
+                </DialogAction>
+              </DialogActions>
             </>
           )}
         </Dialog>

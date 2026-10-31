@@ -10,6 +10,7 @@ import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { m } from "#src/paraglide/messages";
 import { executePiChat } from "./pi-chat.functions";
+import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 
 /** The same discoverable actions work from a session row and its open conversation. */
 export function PiChatSessionActions({
@@ -102,14 +103,18 @@ export function PiChatSessionActions({
                   {m.pi_chat_connection_error()}
                 </p>
               )}
-              <div className="flex justify-end gap-2">
-                <Button color="secondary" isDisabled={pending} onClick={() => setRenaming(false)}>
+              <DialogActions>
+                <DialogCancel isDisabled={pending} onClick={() => setRenaming(false)}>
                   {m.pi_chat_cancel()}
-                </Button>
-                <Button type="submit" isDisabled={pending || !title.trim()} isLoading={pending}>
+                </DialogCancel>
+                <DialogAction
+                  type="submit"
+                  isDisabled={pending || !title.trim()}
+                  isLoading={pending}
+                >
                   {m.pi_chat_save()}
-                </Button>
-              </div>
+                </DialogAction>
+              </DialogActions>
             </form>
           </Dialog>
         </Modal>

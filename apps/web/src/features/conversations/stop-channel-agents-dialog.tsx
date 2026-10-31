@@ -4,7 +4,7 @@ import { Text } from "react-aria-components";
 
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
-import { Button } from "#src/components/base/buttons/button";
+import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 import { TextArea } from "#src/components/base/textarea/textarea";
 import { isAppError } from "#src/lib/app-error";
 import { CHANNEL_AGENT_GUIDANCE_MAX_LENGTH } from "#src/lib/channel-agent-guidance";
@@ -151,55 +151,53 @@ export function StopChannelAgentsDialog({
                   {error}
                 </p>
               )}
-              <div className="mt-6 flex justify-end gap-3 border-t border-secondary px-6 py-4">
+              <DialogActions className="mt-6 px-6 pb-6">
                 {step.kind === "confirm" ? (
                   <>
-                    <Button color="secondary" isDisabled={busy} onPress={close}>
+                    <DialogCancel isDisabled={busy} onPress={close}>
                       {m.channel_settings_cancel()}
-                    </Button>
-                    <Button
+                    </DialogCancel>
+                    <DialogAction
                       isDisabled={busy}
                       isLoading={busy}
                       showTextWhileLoading
                       onPress={() => void stopAll()}
                     >
                       {busy ? m.channel_stop_agents_stopping() : m.channel_stop_agents_action()}
-                    </Button>
+                    </DialogAction>
                   </>
                 ) : allStopped ? (
                   <>
-                    <Button color="secondary" isDisabled={busy} onPress={close}>
+                    <DialogCancel isDisabled={busy} onPress={close}>
                       {m.channel_stop_agents_keep_stopped()}
-                    </Button>
-                    <Button
+                    </DialogCancel>
+                    <DialogAction
                       isDisabled={busy || !guidance.trim()}
                       isLoading={busy}
                       showTextWhileLoading
                       onPress={() => void resumeAll()}
                     >
                       {busy ? m.channel_resume_agents_resuming() : m.channel_resume_agents_action()}
-                    </Button>
+                    </DialogAction>
                   </>
                 ) : step.kind === "stopped" ? (
                   <>
-                    <Button color="secondary" isDisabled={busy} onPress={close}>
+                    <DialogCancel isDisabled={busy} onPress={close}>
                       {m.controls_close()}
-                    </Button>
-                    <Button
+                    </DialogCancel>
+                    <DialogAction
                       isDisabled={busy}
                       isLoading={busy}
                       showTextWhileLoading
                       onPress={() => void stopAll()}
                     >
                       {busy ? m.channel_stop_agents_stopping() : m.channel_stop_agents_retry()}
-                    </Button>
+                    </DialogAction>
                   </>
                 ) : (
-                  <Button color="secondary" onPress={close}>
-                    {m.controls_close()}
-                  </Button>
+                  <DialogCancel onPress={close}>{m.controls_close()}</DialogCancel>
                 )}
-              </div>
+              </DialogActions>
             </>
           )}
         </Dialog>

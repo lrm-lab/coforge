@@ -8,6 +8,7 @@ import { Input } from "#src/components/base/input/input";
 import { Select } from "#src/components/base/select/select";
 import { StatusDot } from "#src/components/ui/status-dot";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
+import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { m } from "#src/paraglide/messages";
 import { agentEnvironmentNameError, agentEnvironmentRowsChanged } from "./agent-form";
@@ -251,19 +252,19 @@ export function AgentRuntimeConfigForm({
           </p>
         )}
       </div>
-      <div className="flex justify-end gap-3 border-t border-secondary px-6 py-4">
-        <Button type="button" color="secondary" isDisabled={saving} onPress={onClose}>
+      <DialogActions className="px-6 pt-4 pb-6">
+        <DialogCancel type="button" isDisabled={saving} onPress={onClose}>
           {m.controls_cancel()}
-        </Button>
-        <Button
+        </DialogCancel>
+        <DialogAction
           type="submit"
           isDisabled={
             saving || !dirty || envPending || envKeyErrors.some(Boolean) || !selectedComputerId
           }
         >
           {saving ? m.agent_profile_saving() : m.agent_profile_save_runtime_config()}
-        </Button>
-      </div>
+        </DialogAction>
+      </DialogActions>
     </form>
   );
 }

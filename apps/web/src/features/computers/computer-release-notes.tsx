@@ -4,6 +4,7 @@ import { Heading } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
+import { DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import type { getComputerReleaseNotes } from "./computer-release.functions";
@@ -60,11 +61,11 @@ export function ComputerReleaseNotesLink({ release }: { release: ComputerRelease
                     <MessageBody body={notesForLocale(release.notes, getLocale())} />
                   </Suspense>
                 </div>
-                <div className="flex justify-end px-6 py-4">
-                  <Button type="button" size="sm" color="secondary" onPress={() => close()}>
+                <DialogActions className="px-6 py-4">
+                  <DialogCancel type="button" onPress={() => close()}>
                     {m.controls_close()}
-                  </Button>
-                </div>
+                  </DialogCancel>
+                </DialogActions>
               </>
             )}
           </Dialog>

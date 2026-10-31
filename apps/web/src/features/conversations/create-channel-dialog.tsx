@@ -3,6 +3,7 @@ import { CHANNEL_NAME_PATTERN } from "@lrm/coforge-sdk/internal";
 import { XClose } from "@untitledui/icons";
 import { Heading, Text } from "react-aria-components";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
+import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -334,11 +335,21 @@ function CreateChannelForm({
   const minMembersHint = !canCreate && (
     <p className="text-sm text-tertiary">{m.channel_group_min_members({ count: minMembers })}</p>
   );
-  const finishButton = (size?: "sm") => (
-    <Button type="submit" form={formId} size={size} isDisabled={locked || !nameValid || !canCreate}>
-      {m.channel_group_finish()}
-    </Button>
-  );
+  const finishButton = (size?: "sm") =>
+    size ? (
+      <Button
+        type="submit"
+        form={formId}
+        size={size}
+        isDisabled={locked || !nameValid || !canCreate}
+      >
+        {m.channel_group_finish()}
+      </Button>
+    ) : (
+      <DialogAction type="submit" form={formId} isDisabled={locked || !nameValid || !canCreate}>
+        {m.channel_group_finish()}
+      </DialogAction>
+    );
   if (!wide) {
     // A phone gets Raft's sheet: close, title and Finish along the top, then one column whose
     // member list takes what the fields leave (task #331).
@@ -435,12 +446,12 @@ function CreateChannelForm({
             </ul>
             {minMembersHint}
             {errorText}
-            <div className="mt-auto flex justify-end gap-3 pt-2">
-              <Button type="button" color="secondary" onPress={close}>
+            <DialogActions className="mt-auto pt-2">
+              <DialogCancel type="button" onPress={close}>
                 {m.channel_members_cancel()}
-              </Button>
+              </DialogCancel>
               {finishButton()}
-            </div>
+            </DialogActions>
           </form>
         )}
       </div>

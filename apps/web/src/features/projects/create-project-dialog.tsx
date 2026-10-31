@@ -19,6 +19,7 @@ import { m } from "#src/paraglide/messages";
 import { parseGitHubRepositoryInput } from "./github-repository-input";
 import { createProject } from "./projects.functions";
 import { isValidProjectSlug, PROJECT_SLUG_MAX_LENGTH } from "./projects.schemas";
+import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 
 type Source = "scratch" | "github";
 type GitHubConnection = Awaited<ReturnType<typeof getGitHubConnection>>;
@@ -252,11 +253,11 @@ export function CreateProjectDialog({
                       onSelect={() => chooseSource("github")}
                     />
                   </div>
-                  <div className="flex items-center justify-end border-t border-secondary px-6 py-4">
-                    <Button type="button" color="secondary" onPress={() => onOpenChange(false)}>
+                  <DialogActions className="px-6 pt-4 pb-6">
+                    <DialogCancel type="button" onPress={() => onOpenChange(false)}>
                       {m.controls_cancel()}
-                    </Button>
-                  </div>
+                    </DialogCancel>
+                  </DialogActions>
                 </>
               ) : (
                 <form onSubmit={submit}>
@@ -339,24 +340,19 @@ export function CreateProjectDialog({
                       </p>
                     )}
                   </div>
-                  <div className="flex items-center justify-end gap-2 border-t border-secondary px-6 py-4">
-                    <Button
-                      type="button"
-                      color="secondary"
-                      onPress={() => setStep("choose")}
-                      isDisabled={busy}
-                    >
+                  <DialogActions className="px-6 pt-4 pb-6">
+                    <DialogCancel type="button" onPress={() => setStep("choose")} isDisabled={busy}>
                       {m.controls_back()}
-                    </Button>
-                    <Button
+                    </DialogCancel>
+                    <DialogAction
                       type="submit"
                       isDisabled={!canSubmit}
                       isLoading={busy}
                       showTextWhileLoading
                     >
                       {m.project_create()}
-                    </Button>
-                  </div>
+                    </DialogAction>
+                  </DialogActions>
                 </form>
               )}
             </>

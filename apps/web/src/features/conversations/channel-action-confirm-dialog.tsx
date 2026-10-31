@@ -4,7 +4,7 @@ import { Text } from "react-aria-components";
 
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
-import { Button } from "#src/components/base/buttons/button";
+import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import { leavePublicChannel } from "./channels.functions";
@@ -136,11 +136,11 @@ export function ChannelActionConfirmDialog({
                   {error}
                 </p>
               )}
-              <div className="mt-6 flex justify-end gap-3 border-t border-secondary px-6 py-4">
-                <Button color="secondary" isDisabled={busy} onPress={close}>
+              <DialogActions className="mt-6 px-6 pb-6">
+                <DialogCancel isDisabled={busy} onPress={close}>
                   {m.channel_settings_cancel()}
-                </Button>
-                <Button
+                </DialogCancel>
+                <DialogAction
                   color={copy.permanent ? "primary-destructive" : "primary"}
                   isDisabled={busy}
                   isLoading={busy}
@@ -148,8 +148,8 @@ export function ChannelActionConfirmDialog({
                   onPress={() => void confirm()}
                 >
                   {busy ? copy.pending() : copy.confirm()}
-                </Button>
-              </div>
+                </DialogAction>
+              </DialogActions>
             </>
           )}
         </Dialog>

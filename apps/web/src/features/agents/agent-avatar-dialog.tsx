@@ -3,7 +3,7 @@ import { XClose as X } from "@untitledui/icons";
 import { Heading, RadioGroup } from "react-aria-components";
 
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
-import { Button } from "#src/components/base/buttons/button";
+import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { m } from "#src/paraglide/messages";
@@ -120,19 +120,19 @@ export function AgentAvatarDialog({
                   {m.agent_avatar_save_error()}
                 </p>
               )}
-              <div className="mt-6 flex shrink-0 items-center justify-end gap-3 border-t border-secondary px-6 py-4">
-                <Button color="secondary" isDisabled={busy} onPress={close}>
+              <DialogActions className="mt-6 shrink-0 px-6 pb-6">
+                <DialogCancel isDisabled={busy} onPress={close}>
                   {m.controls_cancel()}
-                </Button>
-                <Button
+                </DialogCancel>
+                <DialogAction
                   isDisabled={selected === mascot || busy}
                   isLoading={busy}
                   showTextWhileLoading
                   onPress={save}
                 >
                   {m.agent_avatar_save()}
-                </Button>
-              </div>
+                </DialogAction>
+              </DialogActions>
             </>
           )}
         </Dialog>

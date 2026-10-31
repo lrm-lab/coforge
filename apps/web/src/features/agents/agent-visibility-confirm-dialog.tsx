@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { AlertCircle } from "@untitledui/icons";
 import { Text } from "react-aria-components";
 
-import { Button } from "#src/components/base/buttons/button";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
+import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
 import { Skeleton } from "#src/components/ui/skeleton";
@@ -167,11 +167,11 @@ export function AgentVisibilityConfirmDialog({
                   {error}
                 </p>
               )}
-              <div className="mt-6 flex shrink-0 flex-wrap justify-end gap-3 border-t border-secondary px-6 py-4">
-                <Button color="secondary" isDisabled={submitting} onPress={close}>
+              <DialogActions className="mt-6 shrink-0 px-6 pb-6">
+                <DialogCancel isDisabled={submitting} onPress={close}>
                   {m.controls_cancel()}
-                </Button>
-                <Button
+                </DialogCancel>
+                <DialogAction
                   color={goingPrivate ? "primary-destructive" : "primary"}
                   isDisabled={submitting}
                   isLoading={submitting}
@@ -185,8 +185,8 @@ export function AgentVisibilityConfirmDialog({
                     : goingPrivate
                       ? m.agent_visibility_confirm_private_submit()
                       : m.agent_visibility_confirm_public_submit()}
-                </Button>
-              </div>
+                </DialogAction>
+              </DialogActions>
             </>
           )}
         </Dialog>

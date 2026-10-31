@@ -1,12 +1,5 @@
 import { humanLabel } from "#src/lib/human-label";
-import {
-  useEffectEvent,
-  useLayoutEffect,
-  useMemo,
-  useState,
-  type FormEvent,
-  type ReactNode,
-} from "react";
+import { useEffectEvent, useLayoutEffect, useMemo, useState, type FormEvent } from "react";
 import { XClose as X } from "@untitledui/icons";
 import { Heading, type Key } from "react-aria-components";
 
@@ -27,6 +20,8 @@ import {
 import { parseTemplateSections, type TemplateOutlineSection } from "./template-outline-sections";
 import { memberLabel, weekdayLabel, type TemplateMemberOption } from "./weekly-template-members";
 import type { WeeklyTemplateList } from "./weekly-report-settings";
+import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
+import { Field, OutlineRow } from "./weekly-template-fields";
 
 const SEND_TIMES = hourlySendTimes();
 const SEND_WEEKDAYS = [1, 2, 3, 4, 5, 6, 7] as const;
@@ -488,10 +483,9 @@ export function CreateWeeklyTemplateDialog({
                   </Select>
                 </div>
 
-                <div className="flex items-center justify-end gap-3 border-t border-secondary px-6 py-4">
-                  <Button
+                <DialogActions className="px-6 pt-4 pb-6">
+                  <DialogCancel
                     type="button"
-                    color="secondary"
                     isDisabled={saving}
                     onPress={() => {
                       reset();
@@ -499,58 +493,20 @@ export function CreateWeeklyTemplateDialog({
                     }}
                   >
                     {m.records_template_cancel()}
-                  </Button>
-                  <Button
+                  </DialogCancel>
+                  <DialogAction
                     type="submit"
-                    color="primary"
                     className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
                     isDisabled={saving}
                   >
                     {m.records_template_save()}
-                  </Button>
-                </div>
+                  </DialogAction>
+                </DialogActions>
               </form>
             </>
           )}
         </Dialog>
       </Modal>
     </ModalOverlay>
-  );
-}
-
-function OutlineRow({
-  label,
-  value,
-  onChange,
-  onRemove,
-  removeLabel,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  onRemove: () => void;
-  removeLabel: string;
-}) {
-  return (
-    <div className="flex items-center gap-3">
-      <span className="w-16 shrink-0 text-sm text-tertiary">{label}</span>
-      <Input className="min-w-0 flex-1" value={value} onChange={onChange} />
-      <ButtonUtility
-        size="sm"
-        color="tertiary"
-        icon={X}
-        aria-label={removeLabel}
-        onClick={onRemove}
-      />
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-sm font-medium text-secondary">{label}</span>
-      {children}
-    </div>
   );
 }

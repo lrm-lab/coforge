@@ -2,7 +2,6 @@ import { useRef, useState, type FormEvent } from "react";
 import { Heading, Text } from "react-aria-components";
 import { Trash01, XClose } from "@untitledui/icons";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
-import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
 import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
@@ -10,6 +9,7 @@ import { m } from "#src/paraglide/messages";
 import { chatSectionFields, type ChatSection } from "./chat-section.schemas";
 import { useSidebarActions } from "./sidebar-lists";
 import { ChatSectionEmojiPicker, DEFAULT_SECTION_EMOJI } from "./chat-section-emoji-picker";
+import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 
 /** Mounted for each create/edit, preserving input after an unsuccessful save. */
 export function ChatSectionDialog({
@@ -107,13 +107,12 @@ export function ChatSectionDialog({
                 {error}
               </p>
             )}
-            <div className="flex justify-end gap-3">
-              <Button color="secondary" size="sm" onPress={onClose} isDisabled={saving}>
+            <DialogActions>
+              <DialogCancel onPress={onClose} isDisabled={saving}>
                 {m.controls_cancel()}
-              </Button>
-              <Button
+              </DialogCancel>
+              <DialogAction
                 color={deleting ? "primary-destructive" : "primary"}
-                size="sm"
                 type="submit"
                 isDisabled={saving || (!deleting && !parsed.success)}
                 isLoading={saving}
@@ -124,8 +123,8 @@ export function ChatSectionDialog({
                   : section
                     ? m.chat_section_save()
                     : m.chat_section_create_button()}
-              </Button>
-            </div>
+              </DialogAction>
+            </DialogActions>
           </form>
         </Dialog>
       </Modal>

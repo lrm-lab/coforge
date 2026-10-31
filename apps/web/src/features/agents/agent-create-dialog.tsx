@@ -5,6 +5,7 @@ import { Monitor01 as Monitor } from "@untitledui/icons";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { localizeHref } from "#src/paraglide/runtime";
 import { Button } from "#src/components/base/buttons/button";
+import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 import { Select } from "#src/components/base/select/select";
 import { TextArea } from "#src/components/base/textarea/textarea";
 import { StatusDot } from "#src/components/ui/status-dot";
@@ -126,18 +127,15 @@ export function LocalAgentForm({
           description={m.agent_empty_computer_description()}
           onClose={onClose}
         />
-        <div className="grid grid-cols-2 gap-3 px-6 pt-8 pb-6">
-          <Button color="secondary" size="lg" onPress={onClose}>
-            {m.controls_cancel()}
-          </Button>
-          <Button
-            size="lg"
+        <DialogActions className="mt-6 px-6 pb-6">
+          <DialogCancel onPress={onClose}>{m.controls_cancel()}</DialogCancel>
+          <DialogAction
             href={localizeHref(workspacePath(workspaceSlug, "/computers?add=1"))}
             onPress={onClose}
           >
             {m.agent_connect_computer()}
-          </Button>
-        </div>
+          </DialogAction>
+        </DialogActions>
         {onSwitchToCloud && (
           <div className="-mt-2 px-6 pb-6 text-center">
             <Button color="link-color" size="sm" onPress={onSwitchToCloud}>

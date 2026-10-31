@@ -7,7 +7,6 @@ import {
 } from "react-aria-components";
 
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
-import { Button } from "#src/components/base/buttons/button";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { useAppToast } from "#src/components/ui/toast";
 import { m } from "#src/paraglide/messages";
@@ -18,6 +17,7 @@ import {
 import { cx } from "#src/utils/cx";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { WorkspaceIcon } from "#src/features/workspaces/workspace-icon";
+import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 
 export type WorkspaceOption = { id: string; slug: string; name: string; iconUrl: string | null };
 
@@ -182,12 +182,12 @@ function CreateWorkspaceDialog({
             }}
             fieldsClassName="grid gap-4 px-6 py-6"
             actions={(submit) => (
-              <div className="flex justify-end gap-3 border-t border-secondary px-6 py-4">
-                <Button type="button" color="secondary" onPress={close}>
+              <DialogActions className="px-6 pt-4 pb-6">
+                <DialogCancel type="button" onPress={close}>
                   {m.controls_cancel()}
-                </Button>
-                <Button {...submit} />
-              </div>
+                </DialogCancel>
+                <DialogAction {...submit} />
+              </DialogActions>
             )}
           />
         </Dialog>

@@ -13,6 +13,7 @@ import {
 import { Button as AriaButton, Heading, Text } from "react-aria-components";
 
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
+import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Button } from "#src/components/base/buttons/button";
@@ -509,14 +510,14 @@ function RemoveMemberDialog({
                   )}
                 </div>
               </div>
-              <div className="mt-6 flex justify-end gap-3">
-                <Button color="secondary" size="sm" isDisabled={busy} onPress={close}>
+              <DialogActions className="mt-6">
+                <DialogCancel isDisabled={busy} onPress={close}>
                   {m.controls_cancel()}
-                </Button>
-                <Button color="primary-destructive" size="sm" isLoading={busy} onPress={onConfirm}>
+                </DialogCancel>
+                <DialogAction color="primary-destructive" isLoading={busy} onPress={onConfirm}>
                   {m.member_person_remove()}
-                </Button>
-              </div>
+                </DialogAction>
+              </DialogActions>
             </>
           )}
         </Dialog>

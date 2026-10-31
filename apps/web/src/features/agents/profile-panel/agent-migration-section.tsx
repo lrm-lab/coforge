@@ -7,6 +7,7 @@ import { AlertCircle, SwitchHorizontal01 } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { Select } from "#src/components/base/select/select";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
+import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
 import { Alert } from "#src/components/ui/alert";
@@ -388,20 +389,19 @@ export function AgentMigrationSection({
                     {cancelError}
                   </p>
                 )}
-                <div className="mt-6 flex shrink-0 flex-wrap justify-end gap-3 border-t border-secondary px-6 py-4">
-                  <Button color="secondary" isDisabled={canceling} onPress={close}>
+                <DialogActions className="mt-6 shrink-0 px-6 pb-6">
+                  <DialogCancel isDisabled={canceling} onPress={close}>
                     {m.agent_migration_cancel_keep()}
-                  </Button>
-                  <Button
-                    color="primary"
+                  </DialogCancel>
+                  <DialogAction
                     isDisabled={canceling}
                     isLoading={canceling}
                     showTextWhileLoading
                     onPress={cancel}
                   >
                     {m.agent_migration_cancel_confirm()}
-                  </Button>
-                </div>
+                  </DialogAction>
+                </DialogActions>
               </>
             )}
           </Dialog>
@@ -434,12 +434,11 @@ export function AgentMigrationSection({
                     link={refusalLink(refusal.fixAt, refusal.targetComputerId)}
                   />
                 )}
-                <div className="mt-6 flex shrink-0 flex-wrap justify-end gap-3 border-t border-secondary px-6 py-4">
-                  <Button color="secondary" isDisabled={submitting} onPress={close}>
+                <DialogActions className="mt-6 shrink-0 px-6 pb-6">
+                  <DialogCancel isDisabled={submitting} onPress={close}>
                     {m.controls_cancel()}
-                  </Button>
-                  <Button
-                    color="primary"
+                  </DialogCancel>
+                  <DialogAction
                     isDisabled={!selected || submitting}
                     isLoading={submitting}
                     showTextWhileLoading
@@ -450,8 +449,8 @@ export function AgentMigrationSection({
                       : refusal
                         ? m.agent_migration_try_again()
                         : m.agent_migration_submit()}
-                  </Button>
-                </div>
+                  </DialogAction>
+                </DialogActions>
               </>
             )}
           </Dialog>

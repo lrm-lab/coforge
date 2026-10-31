@@ -2,10 +2,10 @@ import { useState } from "react";
 import { AlertCircle, XClose as X } from "@untitledui/icons";
 import { Heading, Text } from "react-aria-components";
 
-import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
+import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
 import { m } from "#src/paraglide/messages";
 import { isAppError, isAppErrorCode } from "#src/lib/app-error";
@@ -109,11 +109,11 @@ export function AgentDeleteDialog({
                   </p>
                 )}
               </div>
-              <div className="flex shrink-0 flex-wrap justify-end gap-3 border-t border-secondary px-6 py-4">
-                <Button color="secondary" isDisabled={deleting} onPress={close}>
+              <DialogActions className="shrink-0 px-6 pt-4 pb-6">
+                <DialogCancel isDisabled={deleting} onPress={close}>
                   {m.controls_cancel()}
-                </Button>
-                <Button
+                </DialogCancel>
+                <DialogAction
                   color="primary-destructive"
                   data-agent-delete-confirm
                   isDisabled={!confirmed || deleting}
@@ -122,8 +122,8 @@ export function AgentDeleteDialog({
                   onPress={submit}
                 >
                   {deleting ? m.agent_delete_pending() : m.agent_delete_submit()}
-                </Button>
-              </div>
+                </DialogAction>
+              </DialogActions>
             </>
           )}
         </Dialog>

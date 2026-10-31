@@ -4,6 +4,7 @@ import { Heading, Text } from "react-aria-components";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
+import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 import { m } from "#src/paraglide/messages";
 import type { AgentRuntimeControls } from "./agent-runtime-controls";
 
@@ -62,23 +63,21 @@ export function AgentControlDialogs({
                     {control.startStopError}
                   </p>
                 )}
-                <div className="mt-6 flex shrink-0 flex-wrap justify-end gap-3">
-                  <Button
+                <DialogActions className="mt-6 shrink-0">
+                  <DialogCancel
                     className="min-w-28"
-                    color="secondary"
                     isDisabled={control.stopPending}
                     onPress={close}
                   >
                     {m.controls_cancel()}
-                  </Button>
-                  {/* No icon: the two buttons answer one question, so they carry the same
-                      weight and the same box (`min-w-28` with the same `sm` size). The confirm
+                  </DialogCancel>
+                  {/* No icon: the two buttons answer one question, so they share one box
+                      (`min-w-28` at the dialog row's one size). The confirm
                       button was two lines tall when an icon was passed as a child — every child
                       lands in the button's one text span, where a block-level `svg` takes a line
                       of its own — and the reference dialog Frank sent keeps the pair plain. */}
-                  <Button
+                  <DialogAction
                     className="min-w-28"
-                    color="primary"
                     data-control-stop-confirm
                     isDisabled={control.stopPending}
                     onPress={control.confirmStop}
@@ -86,8 +85,8 @@ export function AgentControlDialogs({
                     {control.stopPending
                       ? m.agent_control_stop_pending()
                       : m.agent_control_stop_confirm()}
-                  </Button>
-                </div>
+                  </DialogAction>
+                </DialogActions>
               </>
             )}
           </Dialog>
@@ -143,11 +142,11 @@ export function AgentControlDialogs({
                     </p>
                   )}
                 </div>
-                <div className="mt-6 flex shrink-0 flex-wrap justify-end gap-3">
-                  <Button className="min-w-28" color="secondary" onPress={close}>
+                <DialogActions className="mt-6 shrink-0">
+                  <DialogCancel className="min-w-28" onPress={close}>
                     {m.controls_cancel()}
-                  </Button>
-                  <Button
+                  </DialogCancel>
+                  <DialogAction
                     className="min-w-28"
                     color={control.destructive ? "primary-destructive" : "primary"}
                     data-control-submit
@@ -155,8 +154,8 @@ export function AgentControlDialogs({
                     onPress={control.submitRestart}
                   >
                     {control.selected.label}
-                  </Button>
-                </div>
+                  </DialogAction>
+                </DialogActions>
               </>
             )}
           </Dialog>

@@ -26,10 +26,8 @@ import {
 import { Spinner } from "#src/components/ui/spinner";
 
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
-import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { Input } from "#src/components/base/input/input";
 import { TextArea } from "#src/components/base/textarea/textarea";
 import { m } from "#src/paraglide/messages";
 import { formatAgentProfileParam } from "#src/features/agents/profile-panel/profile-panel-search";
@@ -94,6 +92,7 @@ import {
 } from "./weekly-template-detail-dialog";
 import type { TemplateMemberOption } from "./weekly-template-members";
 import { useRecordRefresh } from "./use-record-refresh";
+import { RecordSideRenameDialog } from "./record-side-rename-dialog";
 
 type ChatSessionRow = Awaited<
   ReturnType<typeof ensureWeeklyReportAssistantChatSessions>
@@ -1075,51 +1074,14 @@ export function RecordSidePanel({
         </form>
       </div>
 
-      {renameOpen ? (
-        <ModalOverlay
-          isOpen
-          isDismissable
-          onOpenChange={(next) => {
-            if (!next) setRenameOpen(false);
-          }}
-        >
-          <Modal className="w-full max-w-sm p-5">
-            <Dialog className="outline-none">
-              <h2 className="text-md font-semibold text-primary">
-                {m.records_side_chat_rename_title()}
-              </h2>
-              <div className="mt-3">
-                <Input
-                  value={renameDraft}
-                  onChange={setRenameDraft}
-                  placeholder={m.records_side_chat_rename_placeholder()}
-                  autoFocus
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      void submitRename();
-                    }
-                  }}
-                />
-              </div>
-              <div className="mt-4 flex justify-end gap-2">
-                <Button size="sm" color="secondary" onPress={() => setRenameOpen(false)}>
-                  {m.controls_cancel()}
-                </Button>
-                <Button
-                  size="sm"
-                  color="primary"
-                  className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
-                  isDisabled={!renameDraft.trim() || busy}
-                  onPress={() => void submitRename()}
-                >
-                  {m.records_side_chat_rename_save()}
-                </Button>
-              </div>
-            </Dialog>
-          </Modal>
-        </ModalOverlay>
-      ) : null}
+      <RecordSideRenameDialog
+        open={renameOpen}
+        draft={renameDraft}
+        busy={busy}
+        onDraftChange={setRenameDraft}
+        onClose={() => setRenameOpen(false)}
+        onSubmit={() => void submitRename()}
+      />
 
       <WeeklyTemplateDetailDialog
         template={templateDetail}

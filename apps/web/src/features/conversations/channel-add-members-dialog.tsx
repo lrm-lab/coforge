@@ -5,7 +5,6 @@ import { Plus, SearchLg } from "@untitledui/icons";
 
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
-import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
 import { useOpenAgentProfile } from "#src/features/agents/profile-panel/open-agent-profile";
 import { isAppErrorCode } from "#src/lib/app-error";
@@ -22,6 +21,7 @@ import {
 } from "./channel-member-picker";
 import { useChannelMembers } from "./channel-members-query";
 import { channelMembersQueryKey } from "./conversation-query-keys";
+import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 
 /** One person or Agent an action card proposes adding. */
 type ProposedMember = { id: string; displayName: string };
@@ -255,12 +255,12 @@ export function ChannelAddMembersActions({
           {error}
         </p>
       )}
-      <div className="flex justify-end gap-3">
-        <Button color="secondary" isDisabled={submitting} onPress={onCancel}>
+      <DialogActions>
+        <DialogCancel isDisabled={submitting} onPress={onCancel}>
           {m.channel_members_cancel()}
-        </Button>
+        </DialogCancel>
         {canAdd && (
-          <Button
+          <DialogAction
             iconLeading={Plus}
             isDisabled={submitting || count === 0}
             isLoading={submitting}
@@ -268,9 +268,9 @@ export function ChannelAddMembersActions({
             onPress={onSubmit}
           >
             {submitting ? m.channel_members_adding() : m.channel_members_add_selected({ count })}
-          </Button>
+          </DialogAction>
         )}
-      </div>
+      </DialogActions>
     </div>
   );
 }

@@ -15,6 +15,7 @@ import { m } from "#src/paraglide/messages";
 import { leaveWorkspace } from "./members.functions";
 import { canDeleteWorkspace } from "./workspace-roles";
 import { deleteWorkspace } from "./workspaces.functions";
+import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 
 type DialogProps = { open: boolean; workspaceName: string; onClose: () => void };
 
@@ -278,11 +279,11 @@ function DangerDialog({
                   <SaveErrorMessage error={error} />
                 </div>
               )}
-              <div className="mt-6 flex justify-end gap-3 border-t border-secondary px-6 py-4">
-                <Button color="secondary" isDisabled={busy} onPress={close}>
+              <DialogActions className="mt-6 px-6 pb-6">
+                <DialogCancel isDisabled={busy} onPress={close}>
                   {m.controls_cancel()}
-                </Button>
-                <Button
+                </DialogCancel>
+                <DialogAction
                   type="submit"
                   color="primary-destructive"
                   isDisabled={busy || isConfirmDisabled}
@@ -290,8 +291,8 @@ function DangerDialog({
                   showTextWhileLoading
                 >
                   {confirmLabel}
-                </Button>
-              </div>
+                </DialogAction>
+              </DialogActions>
             </form>
           )}
         </Dialog>

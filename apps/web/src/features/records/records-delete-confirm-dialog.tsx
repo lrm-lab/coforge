@@ -2,10 +2,10 @@ import { AlertCircle, XClose as X } from "@untitledui/icons";
 import { Heading, Text } from "react-aria-components";
 
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
-import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
 import { m } from "#src/paraglide/messages";
+import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 
 /**
  * Confirms an irreversible Records delete (a note, a member weekly report, a week overview,
@@ -70,22 +70,21 @@ export function RecordsDeleteConfirmDialog({
                   )}
                 </div>
               </div>
-              <div className="mt-6 flex justify-end gap-3">
-                <Button type="button" color="secondary" size="sm" isDisabled={busy} onPress={close}>
+              <DialogActions className="mt-6">
+                <DialogCancel type="button" isDisabled={busy} onPress={close}>
                   {m.records_delete_cancel()}
-                </Button>
-                <Button
+                </DialogCancel>
+                <DialogAction
                   type="button"
                   color="primary-destructive"
-                  size="sm"
                   isDisabled={busy}
                   isLoading={busy}
                   showTextWhileLoading
                   onPress={() => void onConfirm()}
                 >
                   {busy ? m.records_delete_pending() : m.records_delete_confirm()}
-                </Button>
-              </div>
+                </DialogAction>
+              </DialogActions>
             </>
           )}
         </Dialog>
