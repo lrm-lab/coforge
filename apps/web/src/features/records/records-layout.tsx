@@ -86,6 +86,10 @@ export function RecordsLayout({
   const recordOpen = detailOpen ?? Boolean(selectedRecordId || selectedPanel || selectedWeekKey);
   const [showMobileList, setShowMobileList] = useState(!recordOpen);
   const [query, setQuery] = useState("");
+  const memberWeeks = useRecordsMemberWeeks(catalog, query, tab === "weekly", {
+    recordId: selectedRecordId,
+    weekKey: selectedWeekKey,
+  });
   const sectionDefaults = useMemo(() => {
     const context = {
       tab,
@@ -93,11 +97,7 @@ export function RecordsLayout({
       selectedWeekKey,
       favoriteIds: catalog.favorites.map((item) => item.id),
       myReportIds: catalog.myReports.map((item) => item.id),
-      memberWeeks: catalog.memberWeeks.map((week) => ({
-        key: `${week.year}-${week.week}`,
-        overviewReportId: week.overviewReportId,
-        submissions: week.submissions.map((item) => ({ id: item.id })),
-      })),
+      memberWeeks: memberWeeks.weeks,
     };
     return {
       favorites: defaultRecordsSectionOpen("favorites", context),
@@ -111,7 +111,7 @@ export function RecordsLayout({
     selectedWeekKey,
     catalog.favorites,
     catalog.myReports,
-    catalog.memberWeeks,
+    memberWeeks.weeks,
   ]);
   /** One entry section at a time; session storage restores the last operated section. */
   const [activeSection, setActiveSection] = useState<RecordsSidebarSectionId | undefined>(
@@ -180,12 +180,8 @@ export function RecordsLayout({
     [catalog.myReports, query],
   );
   const myReportsUnread = catalog.myReports.some((item) => item.unread);
-  const memberWeeks = useRecordsMemberWeeks(catalog, query, tab === "weekly", {
-    recordId: selectedRecordId,
-    weekKey: selectedWeekKey,
-  });
   // A report older than the catalog's page is listed once its week is read: its section opens
-  // then, as `sectionDefaults` opens it at once for one in the page, unless another is open.
+  // then, as `sectionDefaults` opens it at once for one listed already, unless another is open.
   const wasListed = useRef(memberWeeks.selectionListed);
   useEffect(() => {
     const listedNow = memberWeeks.selectionListed && !wasListed.current;

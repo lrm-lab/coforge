@@ -80,7 +80,12 @@ export const Route = createFileRoute("/w/$workspaceSlug")({
         loadWorkspaceAgents(),
         getUserPreferences(),
         getPanelTabOrders(),
-        context.queryClient.ensureQueryData(recordsNavAttentionQuery(params.workspaceSlug)),
+        // Shown at once from the cache, and read again in the background once older than its
+        // staleTime, as each run of this loader read it before (task #366).
+        context.queryClient.ensureQueryData({
+          ...recordsNavAttentionQuery(params.workspaceSlug),
+          revalidateIfStale: true,
+        }),
       ]);
     // A person who has not been asked for a display name is asked once, here for a session that
     // predates the step, and comes back to this page.
