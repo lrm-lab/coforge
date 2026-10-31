@@ -200,6 +200,7 @@ export class RuntimePublicationSubscriptions {
     );
     const migration = this.ports.migration;
     if (migration) {
+      // Before any lease is taken, so nothing it clears can belong to a run.
       await migration.pruneLeftovers().catch((error: unknown) =>
         logger.warn("Clearing what Agent migrations left behind failed", {
           event: "agent_migration:prune_failed",
