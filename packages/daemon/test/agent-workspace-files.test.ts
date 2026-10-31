@@ -1,9 +1,10 @@
 import { expect, test } from "bun:test";
 import { realpathSync } from "node:fs";
-import { mkdtemp, mkdir, readdir, rm, stat, symlink } from "node:fs/promises";
+import { chmod, mkdtemp, mkdir, readdir, rm, stat, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  classifyDeleteFailure,
   deleteAgentWorkspaceFiles,
   listAgentWorkspaceFiles,
   readAgentWorkspaceFile,
@@ -131,7 +132,7 @@ test("Workspace Files listing and reading refuse a symlink that escapes the Agen
   }
 });
 
-test("Workspace Files deletion clears contents, preserves the workspace root, and does not follow symlinks", async () => {
+test("Workspace Files deletion clears contents and the root, and does not follow symlinks", async () => {
   const root = await mkdtemp(join(tempRoot, "workspace-files-delete-"));
   const outside = await mkdtemp(join(tempRoot, "workspace-files-delete-outside-"));
   try {
@@ -142,9 +143,9 @@ test("Workspace Files deletion clears contents, preserves the workspace root, an
 
     const result = await deleteAgentWorkspaceFiles({ agentWorkspaceDirectory: root });
     expect(result.status).toBe("ok");
-    expect(await readdir(root)).toEqual([]);
+    // The workspace directory itself is gone, not just its contents.
+    expect(await Bun.file(root).exists()).toBe(false);
     expect(await Bun.file(join(outside, "keep.txt")).text()).toBe("keep me");
-    expect((await readdir(root)).length).toBe(0);
   } finally {
     await rm(root, { recursive: true, force: true });
     await rm(outside, { recursive: true, force: true });
@@ -361,4 +362,48 @@ test("Workspace File read refuses an image past the publish ceiling", async () =
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("a workspace whose Agent is gone is removed even when only its directory remains", async () => {
+  const parent = await mkdtemp(join(tempRoot, "workspace-files-leftover-"));
+  const root = join(parent, "agent-workspace");
+  try {
+    await mkdir(root);
+    expect(await deleteAgentWorkspaceFiles({ agentWorkspaceDirectory: root })).toEqual({
+      status: "ok",
+    });
+    expect(await Bun.file(root).exists()).toBe(false);
+    // Deleting again is not a failure: the directory a person asked to go is already gone.
+    expect(await deleteAgentWorkspaceFiles({ agentWorkspaceDirectory: root })).toEqual({
+      status: "missing",
+    });
+  } finally {
+    await rm(parent, { recursive: true, force: true });
+  }
+});
+
+test("a workspace this user may not remove reports denied, and a held one reports busy", async () => {
+  // `denied`: a workspace the user may not remove, because its parent allows no writes
+  // (skipped as root, which may always delete).
+  if (process.getuid?.() !== 0) {
+    const parent = await mkdtemp(join(tempRoot, "workspace-files-denied-"));
+    const root = join(parent, "agent-workspace");
+    try {
+      await mkdir(root);
+      await chmod(parent, 0o500);
+      expect((await deleteAgentWorkspaceFiles({ agentWorkspaceDirectory: root })).status).toBe(
+        "denied",
+      );
+    } finally {
+      await chmod(parent, 0o700).catch(() => undefined);
+      await rm(parent, { recursive: true, force: true });
+    }
+  }
+  // `busy`: a file held open by a process cannot be removed on Windows; on POSIX the open file
+  // survives, so the classification is exercised through the error code directly.
+  expect(classifyDeleteFailure(Object.assign(new Error("locked"), { code: "EBUSY" }))).toBe("busy");
+  expect(classifyDeleteFailure(Object.assign(new Error("denied"), { code: "EACCES" }))).toBe(
+    "denied",
+  );
+  expect(classifyDeleteFailure(new Error("other"))).toBe("error");
 });

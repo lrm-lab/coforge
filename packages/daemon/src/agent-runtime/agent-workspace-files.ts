@@ -3,6 +3,9 @@ import { lstat, open, readdir, realpath, rm } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 import { COFORGE_RUNTIME_STORAGE_DIRS } from "@coforge/agent";
 import { RPC_PAYLOAD_MAX_BYTES } from "@lrm/coforge-sdk/internal";
+import { getLogger } from "@logtape/logtape";
+
+const logger = getLogger(["coforge", "daemon", "agent-workspace"]);
 
 export type AgentWorkspaceFileEntry = {
   name: string;
@@ -30,7 +33,7 @@ export type AgentWorkspaceFileReadOutcome = {
 };
 
 export type AgentWorkspaceFilesDeleteOutcome = {
-  status: "ok" | "missing" | "unreadable" | "error";
+  status: "ok" | "missing" | "busy" | "denied" | "unreadable" | "error";
 };
 
 // Must stay under Centrifugo's websocket.message_size_limit (infra/*/centrifugo/config.yaml),
@@ -160,7 +163,7 @@ export async function deleteAgentWorkspaceFiles(params: {
     try {
       entries = await readdir(root);
     } catch (error) {
-      return { status: isENOENT(error) ? "missing" : "unreadable" };
+      return { status: isENOENT(error) ? "missing" : classifyDeleteFailure(error) };
     }
     let firstError: unknown;
     for (const entry of entries) {
@@ -170,10 +173,42 @@ export async function deleteAgentWorkspaceFiles(params: {
         firstError ??= error;
       }
     }
-    return { status: firstError === undefined ? "ok" : "error" };
-  } catch {
-    return { status: "unreadable" };
+    // The directory itself goes too: an Agent that is already gone leaves exactly a directory
+    // with nothing else in it, which is still a workspace a person meant to delete.
+    try {
+      await rm(root, { recursive: true, force: true });
+    } catch (error) {
+      firstError ??= error;
+    }
+    if (firstError === undefined) return { status: "ok" };
+    return { status: reportDeleteFailure(firstError) };
+  } catch (error) {
+    return { status: isENOENT(error) ? "missing" : reportDeleteFailure(error) };
   }
+}
+
+/**
+ * Why a deletion could not finish, in the terms a person can act on: `busy` when something still
+ * holds the workspace open, `denied` when its files belong to another user, `error` otherwise.
+ */
+export function classifyDeleteFailure(error: unknown): "busy" | "denied" | "error" {
+  const code = (error as { code?: unknown } | undefined)?.code;
+  if (code === "EBUSY" || code === "ENOTEMPTY") return "busy";
+  if (code === "EACCES" || code === "EPERM") return "denied";
+  return "error";
+}
+
+/** The failure, classified and logged once: without it the caller can only say "try again". */
+function reportDeleteFailure(error: unknown): "busy" | "denied" | "unreadable" | "error" {
+  const status = classifyDeleteFailure(error);
+  const code = (error as { code?: unknown } | undefined)?.code;
+  logger.warning("Agent workspace could not be deleted", {
+    event: "workspace_delete:failed",
+    status,
+    // A symbolic filesystem code only; a message could carry a path.
+    error_code: typeof code === "string" && /^[A-Z][A-Z0-9_]{1,63}$/.test(code) ? code : "UNKNOWN",
+  });
+  return status;
 }
 
 /** Directory observation only. Never opens, follows a symlink target, or executes anything. */

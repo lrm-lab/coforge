@@ -87,7 +87,9 @@ export type AgentWorkspaceDeleteRequest = {
   agentId: string;
 };
 export type AgentWorkspaceDeleteResult = AgentWorkspaceDeleteRequest & {
-  status: "ok" | "missing" | "unreadable" | "error";
+  /** `busy` and `denied` are the two failures a person can act on: something still holds the
+   * workspace open, or its files belong to another user. */
+  status: "ok" | "missing" | "busy" | "denied" | "unreadable" | "error";
 };
 
 function scopeIds(value: {
@@ -324,8 +326,17 @@ function deleteRequest(value: AgentWorkspaceDeleteRequest): AgentWorkspaceDelete
   };
 }
 
+const DELETE_STATUSES: readonly AgentWorkspaceDeleteResult["status"][] = [
+  "ok",
+  "missing",
+  "busy",
+  "denied",
+  "unreadable",
+  "error",
+];
+
 function deleteStatus(value: string): AgentWorkspaceDeleteResult["status"] {
-  if (!["ok", "missing", "unreadable", "error"].includes(value))
+  if (!DELETE_STATUSES.includes(value as AgentWorkspaceDeleteResult["status"]))
     throw new Error("Invalid Workspace Files delete result");
   return value as AgentWorkspaceDeleteResult["status"];
 }
