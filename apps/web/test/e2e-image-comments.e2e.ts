@@ -179,6 +179,11 @@ test("an image takes comments in its lightbox, and a link into one opens it ther
     const row = `[...document.querySelectorAll(${rowItems})].find((item) => item.textContent.includes("Fixed in the next export ${suffix}"))`;
     await browser("open", `${origin}${workspacePath}/activity`);
     await browser("wait", "--fn", `${pageHydrated} && Boolean(${row})`);
+    // A comment that starts no thread still names the file it is on.
+    expect(await evaluate<string>(`${row}.textContent`)).toContain(
+      `commented on attachment ${fileName}`,
+    );
+    await browser("screenshot", join(artifacts, "2-activity-row.png"));
     // A real click, as a reader's: a scripted one is a virtual press, which defers the dialog's focus.
     await evaluate(`${row}.querySelector("a").setAttribute("data-e2e-open", "") ?? true`);
     await browser("click", "[data-e2e-open]");

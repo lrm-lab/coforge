@@ -21,6 +21,7 @@ import { m } from "#src/paraglide/messages";
 import type { ActivityInboxItem } from "#src/server/inbox/activity-inbox.server";
 import type { ActivityInboxFilter } from "./activity-inbox.schemas";
 import { activityChatLink, activityOpenTarget } from "./activity-open-target";
+import { activityRowPlace } from "./activity-row-place";
 import type { ActivityItemActions } from "./use-activity-item-actions";
 
 /** A message's text rendered as inline Markdown, or its first attachment's name. */
@@ -64,13 +65,11 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
       : place.peer.kind === "people" && place.peer.userId === viewerId
         ? m.conversation_dm_self_name({ name: place.peer.displayName })
         : place.peer.displayName;
-  // Where a thread or a Task is, before its latest reply — a comment notification's names the
-  // file it is about instead.
-  const placeLabel = item.attachmentComment
-    ? m.activity_inbox_attachment_comment({ fileName: item.attachmentComment.fileName })
-    : place.kind === "channel"
-      ? `#${title}`
-      : `@${title}`;
+  const rowPlace = activityRowPlace(item);
+  const placeLabel =
+    rowPlace?.kind === "attachment"
+      ? m.activity_inbox_attachment_comment({ fileName: rowPlace.fileName })
+      : rowPlace && (place.kind === "channel" ? `#${title}` : `@${title}`);
   const sender =
     item.latest.senderKind === "system" ? m.activity_inbox_system_sender() : item.latest.senderName;
 
@@ -150,7 +149,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
               />
             </span>
             <span className="truncate text-sm text-tertiary">
-              {(thread || task) && `${placeLabel} · `}
+              {placeLabel && `${placeLabel} · `}
               <span className="font-semibold text-secondary">{sender}: </span>
               <Preview message={item.latest} />
             </span>
