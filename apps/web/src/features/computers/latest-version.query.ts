@@ -1,6 +1,6 @@
 import { queryOptions } from "@tanstack/react-query";
 
-import { getLatestComputerVersion } from "./computers.functions";
+import { getLatestComputerVersion } from "./computer-release.functions";
 
 /**
  * The newest released Computer version, asked for **after** the page renders.

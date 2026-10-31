@@ -52,3 +52,8 @@ mechanics only; domain rules stay in the owning `src/server/` module.
   Computer, sanitizes every status again with anvil's
   `sanitizeRuntimeAuthStatus`, and keeps the newest report per Computer in
   `computers.runtimeAuth`; an older report is accepted and dropped.
+- The upgrade result method (`computer-upgrade-result-method.server.ts`) treats
+  a reported success only as corroborating evidence - the upgrade store still
+  requires the Computer's own new identity. A recovery report riding on a result
+  is machine state and is recorded under its own `finishedAt` freshness whether
+  or not the request it names is still accepted.

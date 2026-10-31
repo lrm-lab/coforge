@@ -863,14 +863,12 @@ export function ConversationPane({
                 draftKey={outboxDraftKey}
               />
             )}
-            {!root &&
-              conversation.hasNewer &&
-              onLoadNewer && (
-                // An empty sentinel below the newest row: coming into view asks for the page that
-                // restores the evicted tail. Nothing is shown for it — the reader reached the bottom
-                // and the tail is on its way.
-                <div ref={newerSentinelRef} aria-hidden="true" className="h-8" />
-              )}
+            {!root && conversation.hasNewer && onLoadNewer && (
+              // An empty sentinel below the newest row: coming into view asks for the page that
+              // restores the evicted tail. Nothing is shown for it — the reader reached the bottom
+              // and the tail is on its way.
+              <div ref={newerSentinelRef} aria-hidden="true" className="h-8" />
+            )}
           </div>
         </div>
         <ComposerEdgeOverlay

@@ -41,7 +41,6 @@ import {
   createDaemonRuntimeReadyMethod,
   createDaemonRuntimeUsageScanResultMethod,
   createDaemonRuntimeProviderModelRefreshResultMethod,
-  createComputerUpgradeResultMethod,
   createDaemonConnectionStatusMethod,
   createDaemonRuntimeShutdownMethod,
   createAgentStatusMethod,
@@ -63,6 +62,8 @@ import {
 import { WorkspaceQueryUseCase } from "#src/server/workspaces/query.server";
 import { getComputerRestartStore } from "#src/server/computers/computer-restart-store.server";
 import { getComputerUpgradeStore } from "#src/server/computers/computer-upgrade-store.server";
+import { PrismaComputerRecoveryStore } from "#src/server/computers/computer-recovery.server";
+import { createComputerUpgradeResultMethod } from "./computer-upgrade-result-method.server";
 import { recordComputerObservation } from "#src/server/computers/computer-metadata.server";
 import { ComputerLifecycleActivity } from "#src/server/agents/computer-lifecycle-activity.server";
 import { getComputerLifecycleMemory } from "#src/server/computers/computer-lifecycle-memory.server";
@@ -353,8 +354,10 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
           createDaemonRuntimeProviderModelRefreshResultMethod(),
         [DAEMON_RUNTIME_EFFORT_READ_RESULT_METHOD]:
           createDaemonRuntimeCommandCodeEffortReadResultMethod(),
-        [COMPUTER_UPGRADE_RESULT_METHOD]:
-          createComputerUpgradeResultMethod(getComputerUpgradeStore()),
+        [COMPUTER_UPGRADE_RESULT_METHOD]: createComputerUpgradeResultMethod(
+          getComputerUpgradeStore(),
+          db ? new PrismaComputerRecoveryStore(db) : undefined,
+        ),
         [AGENT_SKILLS_LIST_RESULT_METHOD]: createAgentSkillsListResultMethod(),
         [AGENT_WORKSPACE_FILES_LIST_RESULT_METHOD]: createAgentWorkspaceFilesListResultMethod(),
         [AGENT_WORKSPACE_FILE_READ_RESULT_METHOD]: createAgentWorkspaceFileReadResultMethod(),

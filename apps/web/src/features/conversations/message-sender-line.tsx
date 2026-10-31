@@ -47,14 +47,12 @@ export function MessageSenderLine({
             {displayName}
           </span>
         )}
-        {message.senderKind === "agent" &&
-          message.senderAgentId &&
-          !deleted && (
-            // Hidden while the label draws nothing (models off, or none known), so no gap is left.
-            <span className="flex min-w-0 empty:hidden">
-              <AgentModelLabel agentId={message.senderAgentId} seenAt={message.createdAt} />
-            </span>
-          )}
+        {message.senderKind === "agent" && message.senderAgentId && !deleted && (
+          // Hidden while the label draws nothing (models off, or none known), so no gap is left.
+          <span className="flex min-w-0 empty:hidden">
+            <AgentModelLabel agentId={message.senderAgentId} seenAt={message.createdAt} />
+          </span>
+        )}
       </span>
       {/* Outside the box, like the time: a name cut to the box then leaves room for the badge. */}
       {deleted && <DeletedAgentBadge />}

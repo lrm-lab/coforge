@@ -48,6 +48,19 @@ export type ComputerUpgradeStatus =
     }
   | { requestId: string; status: "unknown"; reason: "corrupt" };
 
+/** The newest automatic-recovery report a Computer's installer left, as `computers.lastRecovery`
+ * stores it: the report's own fields plus the operation it settled and when the server saw it. */
+export const computerRecoverySchema = z.object({
+  requestId: z.string().min(1),
+  outcome: z.enum(["recovered", "failed"]),
+  restoredVersion: z.string().optional(),
+  attempts: z.number().int().positive(),
+  finishedAtMs: z.number(),
+  message: z.string().optional(),
+  reportedAtMs: z.number(),
+});
+export type ComputerRecoveryView = z.infer<typeof computerRecoverySchema>;
+
 export type ComputerAgentWorkspaceScan = {
   agentId: string;
   name: string;

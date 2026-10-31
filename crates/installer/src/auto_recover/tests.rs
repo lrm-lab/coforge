@@ -109,6 +109,7 @@ fn a_recovery_that_settles_is_reported_and_the_trigger_is_gone() {
     assert!(read(&fixture, STATE_FILE).is_none());
     let report = read(&fixture, REPORT_FILE).expect("a report");
     assert_eq!(report["outcome"], "recovered");
+    assert_eq!(report["requestId"], REQUEST);
     assert_eq!(report["restoredVersion"], NEW);
     assert_eq!(report["attempts"], 1);
     assert_eq!(report["finishedAt"], WALL_ORIGIN);
@@ -176,6 +177,7 @@ fn the_eighth_failure_gives_up_reports_it_and_arms_nothing() {
     assert_eq!(trigger.calls(), ["cancel"]);
     let report = read(&fixture, REPORT_FILE).expect("a report");
     assert_eq!(report["outcome"], "failed");
+    assert_eq!(report["requestId"], REQUEST);
     assert_eq!(report["attempts"], MAX_ATTEMPTS);
     assert!(report["message"].as_str().unwrap().contains("0.1.0"));
     assert!(report.get("restoredVersion").is_none());

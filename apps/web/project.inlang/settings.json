@@ -29,6 +29,7 @@
       "./messages/{locale}/workspace-assistant.json",
       "./messages/{locale}/settings.json",
       "./messages/{locale}/computer.json",
+      "./messages/{locale}/computer-recovery.json",
       "./messages/{locale}/workspace.json",
       "./messages/{locale}/landing.json",
       "./messages/{locale}/cloud-agents.json",

@@ -1,6 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
 import {
-  COMPUTER_RELEASE_APP,
   encodeDaemonRuntimeProviderModelRefreshRequest,
   requireRuntimeProvider,
   type RuntimeProvider,
@@ -22,7 +21,7 @@ import {
   setRuntimeVisibilityInputSchema,
   updateComputerDisplayNameInputSchema,
   formatCloudComputerInputSchema,
-  computerReleaseNotesInputSchema,
+  computerRecoverySchema,
 } from "./computer.schemas";
 import { declareNoStore } from "#src/features/no-store-response.server";
 import {
@@ -48,10 +47,7 @@ import { ComputerRuntimeVisibility } from "#src/server/computers/computer-runtim
 import { PrismaComputerRuntimeRepository } from "#src/server/db/repositories/computer-runtime.repositories.server";
 import { getComputerUpgradeStore } from "#src/server/computers/computer-upgrade-store.server";
 import { runtimeAuthView } from "#src/server/computers/computer-runtime-auth.server";
-import { readLatestComputerVersion } from "#src/server/computers/latest-computer-version.server";
 import { runUpgradeComputerAction } from "#src/server/computers/upgrade-computer-action.server";
-import { resolveReleaseFeedUrl } from "#src/server/install/install-script.server";
-import { productionReleaseCatalog } from "#src/server/release-catalog/release-catalog-production.server";
 import {
   computerWorkspaceFilesQuery,
   findOwnedWorkspaceComputer,
@@ -101,6 +97,7 @@ export const listComputers = createServerFn({ method: "GET" })
               platform: true,
               osVersion: true,
               runtimeAuth: true,
+              lastRecovery: true,
               diskAvailableBytes: true,
               diskTotalBytes: true,
               diskReportedAt: true,
@@ -174,6 +171,7 @@ export const listComputers = createServerFn({ method: "GET" })
           imageVersion: images.get(computer.id)?.version ?? null,
           imageUpdate: images.get(computer.id)?.update ?? null,
           upgrade: upgrades[index] ?? null,
+          lastRecovery: computerRecoverySchema.safeParse(computer.lastRecovery).data ?? null,
           computerVersion: computer.computerVersion,
           platform: computer.platform,
           osVersion: computer.osVersion,
@@ -278,24 +276,6 @@ export const upgradeComputer = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(upgradeComputerInputSchema)
   .handler(async ({ context, data }) => runUpgradeComputerAction(context, data));
-
-export const getLatestComputerVersion = createServerFn({ method: "GET" }).handler(async () => {
-  const feedUrl = resolveReleaseFeedUrl();
-  if (!feedUrl) return null;
-  return readLatestComputerVersion(feedUrl);
-});
-
-/** One Computer release's notes from the release catalog, or `null` when it has none. */
-export const getComputerReleaseNotes = createServerFn({ method: "GET" })
-  .middleware([workspaceUserMiddleware])
-  .validator(computerReleaseNotesInputSchema)
-  .handler(async ({ data }) => {
-    const release = await productionReleaseCatalog().getReleaseNotes(
-      COMPUTER_RELEASE_APP,
-      data.version,
-    );
-    return release ? { version: release.version, notes: release.notes } : null;
-  });
 
 export const getComputerRuntimeCatalog = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])

@@ -15,6 +15,7 @@ import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { ProgressBarBase } from "#src/components/base/progress-indicators/progress-indicators";
 import { usedPercentText } from "./usage-window";
 import { cn } from "#src/lib/utils";
+import type { ComputerRecoveryView } from "./computer.schemas";
 
 /**
  * What the machine is, as one strip of short facts — Disk, Memory, Version (and a cloud Computer's
@@ -80,6 +81,9 @@ export function ComputerDetailStats({
           </Stat>
         )}
       </dl>
+      {/* How the machine's last automatic recovery ended, while the report lasts: the Version
+       * row's own history line - it outlives the upgrade request's server record. */}
+      {computer.lastRecovery && <RecoveryNote recovery={computer.lastRecovery} />}
       {runtimeSlot && (
         <ComputerUpgradeSlot
           slot={runtimeSlot}
@@ -101,6 +105,26 @@ export function ComputerDetailStats({
         />
       )}
     </div>
+  );
+}
+
+/** The installer's last automatic recovery in one line: the version it restored, or that it
+ * gave up and why. */
+function RecoveryNote({ recovery }: { recovery: ComputerRecoveryView }) {
+  return (
+    <p className="text-sm text-secondary">
+      {recovery.outcome === "recovered"
+        ? m.computer_recovery_restored({
+            version: recovery.restoredVersion ?? "",
+            attempts: recovery.attempts,
+          })
+        : recovery.message
+          ? m.computer_recovery_gave_up_message({
+              attempts: recovery.attempts,
+              message: recovery.message,
+            })
+          : m.computer_recovery_gave_up({ attempts: recovery.attempts })}
+    </p>
   );
 }
 

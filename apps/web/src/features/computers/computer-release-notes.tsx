@@ -6,7 +6,7 @@ import { Button } from "#src/components/base/buttons/button";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
-import type { getComputerReleaseNotes } from "./computers.functions";
+import type { getComputerReleaseNotes } from "./computer-release.functions";
 import { computerReleaseNotesQuery } from "./release-notes.query";
 
 // Notes render the way a chat message does (same Markdown dialect, sanitizing and typography). The

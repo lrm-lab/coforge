@@ -19,6 +19,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
+use crate::contract::{RECOVERY_REPORT_SCHEMA_VERSION, RecoveryOutcome, RecoveryReport};
 use crate::journal::Journal;
 use crate::private_fs::{self, FileMode};
 use crate::recover::{RecoverOutcome, recover};
@@ -78,21 +79,6 @@ struct State {
     not_before: u64,
 }
 
-/// What the last automatic recovery did, for the Computer to report. The shape is the contract's
-/// `InstallerRecoveryReport`.
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct Report<'a> {
-    schema_version: u32,
-    outcome: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    restored_version: Option<&'a str>,
-    attempts: u32,
-    finished_at: u64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    message: Option<&'a str>,
-}
-
 fn read_state(root: &Path) -> State {
     fs::read(root.join(STATE_FILE))
         .ok()
@@ -123,18 +109,20 @@ fn clear_state(root: &Path) {
 
 fn write_report(
     ports: &Ports<'_>,
-    outcome: &str,
+    request_id: Option<&str>,
+    outcome: RecoveryOutcome,
     restored_version: Option<&str>,
     attempts: u32,
     message: Option<&str>,
 ) -> io::Result<()> {
-    let report = Report {
-        schema_version: SCHEMA_VERSION,
+    let report = RecoveryReport {
+        schema_version: RECOVERY_REPORT_SCHEMA_VERSION,
+        request_id: request_id.map(str::to_owned),
         outcome,
-        restored_version,
+        restored_version: restored_version.map(str::to_owned),
         attempts,
         finished_at: ports.clock.unix_seconds(),
-        message,
+        message: message.map(str::to_owned),
     };
     write_json(
         ports.install_root.join(REPORT_FILE),
@@ -267,11 +255,18 @@ pub fn recover_auto(
     stage: &mut dyn FnMut(&str),
 ) -> AutoOutcome {
     let root = ports.install_root;
-    if matches!(Journal::new(root).read(), Ok(None)) {
-        clear_state(root);
-        let _ = trigger.cancel();
-        return AutoOutcome::NothingToRecover;
-    }
+    // The journal names the upgrade this recovery settles; its request id links the report to
+    // the operation the server knows. An unreadable journal still goes to `recover`, which
+    // answers it itself, but its report then names no request.
+    let request_id = match Journal::new(root).read() {
+        Ok(None) => {
+            clear_state(root);
+            let _ = trigger.cancel();
+            return AutoOutcome::NothingToRecover;
+        }
+        Ok(Some(transaction)) => Some(transaction.request_id),
+        Err(_) => None,
+    };
     let state = read_state(root);
     if state.attempts >= MAX_ATTEMPTS {
         let _ = trigger.cancel();
@@ -298,7 +293,14 @@ pub fn recover_auto(
         RecoverOutcome::Recovered { version } => {
             // A report that cannot be written costs the server the news, not the machine.
             let attempts = state.attempts + 1;
-            if let Err(error) = write_report(ports, "recovered", Some(&version), attempts, None) {
+            if let Err(error) = write_report(
+                ports,
+                request_id.as_deref(),
+                RecoveryOutcome::Recovered,
+                Some(&version),
+                attempts,
+                None,
+            ) {
                 stage(&format!(
                     "The recovery report could not be written: {error}"
                 ));
@@ -314,9 +316,16 @@ pub fn recover_auto(
         RecoverOutcome::Refused { message } | RecoverOutcome::Unresolved { message } => {
             let attempts = state.attempts + 1;
             if attempts >= MAX_ATTEMPTS {
-                if let Err(error) = write_state(root, attempts, now)
-                    .and_then(|()| write_report(ports, "failed", None, attempts, Some(&message)))
-                {
+                if let Err(error) = write_state(root, attempts, now).and_then(|()| {
+                    write_report(
+                        ports,
+                        request_id.as_deref(),
+                        RecoveryOutcome::Failed,
+                        None,
+                        attempts,
+                        Some(&message),
+                    )
+                }) {
                     stage(&format!(
                         "The recovery report could not be written: {error}"
                     ));

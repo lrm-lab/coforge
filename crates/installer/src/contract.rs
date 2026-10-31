@@ -8,6 +8,7 @@ mod lifecycle;
 mod machine;
 mod manifests;
 mod receipts;
+mod recovery;
 
 pub use installation::{
     ACTIVE_STATE_SCHEMA_VERSION, ActiveState, INSTALLED_IDENTITY_SCHEMA_VERSION, InstalledIdentity,
@@ -35,6 +36,7 @@ pub use receipts::{
     RECEIPT_SCHEMA_VERSION, ReceiptCases, ReceiptOutcome, ReceiptStatus, RejectedReceipt,
     RuntimeState, UpgradeErrorCodes, UpgradeReceipt, is_request_id,
 };
+pub use recovery::{RECOVERY_REPORT_SCHEMA_VERSION, RecoveryOutcome, RecoveryReport};
 
 /// Byte size and lowercase hex SHA-256 of one file.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

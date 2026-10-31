@@ -100,6 +100,15 @@ export type ComputerUpgradeIntent = {
   expectedVersion?: string;
   messageType?: typeof COMPUTER_UPGRADE_MESSAGE_TYPE;
 };
+/** What the installer's automatic recovery did about one unfinished upgrade; see the proto
+ * `ComputerUpgradeRecovery`. */
+export type ComputerUpgradeRecovery = {
+  outcome: "recovered" | "failed";
+  restoredVersion?: string;
+  attempts: number;
+  finishedAtMs: number;
+  message?: string;
+};
 /** One Computer upgrade operation's terminal report, from the Daemon to the server. */
 export type ComputerUpgradeResult = {
   protocolMajor: number;
@@ -110,6 +119,9 @@ export type ComputerUpgradeResult = {
   completedAtMs: number;
   version?: string;
   error?: string;
+  /** The automatic recovery that settled this operation, when it wrote a report. May arrive on a
+   * second result for a requestId the server already settled. */
+  recovery?: ComputerUpgradeRecovery;
   /** See `UPGRADE_ERROR_CODE`. May be a well-formed code this SDK build does not know the name
    * of yet - the shape is validated, the vocabulary membership is not. */
   errorCode?: string;

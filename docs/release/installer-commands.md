@@ -28,7 +28,8 @@ The commands, output and exit status of `coforge-installer`; what the crate does
   backoff (`recovery-state.json`: attempts and the earliest next try; 1 minute, 5, 15, 1 hour,
   then 6 hours between tries) and settles the journal, exit 0 when it settled and 3 when it did
   not. After 8 failed tries it stops trying until the next operation. What it did goes to `<install root>/recovery-report.json` (`outcome` `recovered` or
-  `failed`, the restored version, the attempts, `finishedAt`) for the Computer to report.
+  `failed`, the request id of the upgrade it settled, the restored version, the attempts,
+  `finishedAt`) for the Computer to report.
   A journal left by an upgrade, install or recovery arms the trigger in the same step, and an
   operation that finds no journal disarms it (`status` reads only and touches neither), so a
   healthy machine has none. The trigger itself is a `StartInterval` LaunchAgent

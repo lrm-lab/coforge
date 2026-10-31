@@ -98,8 +98,6 @@ import {
   decodeAgentMessageDelivery,
   decodeComputerRestartIntent,
   decodeComputerUpgradeIntent,
-  encodeComputerUpgradeResult,
-  COMPUTER_UPGRADE_RESULT_METHOD,
   encodeAgentActivity,
   encodeAgentStatus,
   type AgentMentionDeliveryTransition,
@@ -225,10 +223,10 @@ import {
   readyFailureStage,
   type ConnectOutage,
 } from "./connection-retry";
+import { REMEMBERED_REQUEST_IDS, sendUpgradeResultOnce } from "#src/connection/upgrade-result-send";
 
 const AGENT_STATUS_REFRESH_MS = 30_000;
 export const COMPUTER_STATUS_REFRESH_MS = 30_000;
-const REMEMBERED_REQUEST_IDS = 256;
 const logger = getLogger(["coforge", "daemon", "connection"]);
 
 /** The Daemon's single connection for its configured Workspace. */
@@ -1775,14 +1773,11 @@ export class DaemonConnection implements DaemonConnectionClient {
    * stays replayable, matching the dedupe discipline of the other lifecycle results.
    */
   async sendUpgradeResult(result: ComputerUpgradeResult): Promise<boolean> {
-    if (this.#reportedUpgradeRequestIds.has(result.requestId)) return false;
-    await this.#rpc(COMPUTER_UPGRADE_RESULT_METHOD, encodeComputerUpgradeResult(result));
-    if (this.#reportedUpgradeRequestIds.size >= REMEMBERED_REQUEST_IDS)
-      this.#reportedUpgradeRequestIds.delete(
-        this.#reportedUpgradeRequestIds.values().next().value!,
-      );
-    this.#reportedUpgradeRequestIds.add(result.requestId);
-    return true;
+    return sendUpgradeResultOnce(
+      (method, payload) => this.#rpc(method, payload),
+      this.#reportedUpgradeRequestIds,
+      result,
+    );
   }
 
   /**

@@ -2,12 +2,15 @@ import { expect, test } from "bun:test";
 import { copyFile, mkdir, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readComputerUpgradeReceipt } from "@lrm/coforge-daemon";
+import { readComputerUpgradeReceipt, readRecoveryReport } from "@lrm/coforge-daemon";
 
 import { buildReleaseTree } from "../../../scripts/release/build-release";
 import { CONTRACT_DIRECTORY, renderInstallerContract } from "../scripts/installer-contract";
-import { ALLOWED_RECEIPTS } from "../scripts/installer-receipt-cases";
-import { InstallerReceiptSchema } from "@lrm/coforge-sdk/internal/upgrade-receipt";
+import { ALLOWED_RECEIPTS, EXAMPLE_REQUEST_ID } from "../scripts/installer-receipt-cases";
+import {
+  InstallerReceiptSchema,
+  InstallerRecoveryReportSchema,
+} from "@lrm/coforge-sdk/internal/upgrade-receipt";
 import {
   ActiveStateSchema,
   agentCliLauncher,
@@ -112,6 +115,25 @@ test("the installed versions the installer writes match the product's identity s
     expect(new Bun.CryptoHasher("sha256").update(computer).digest("hex"), target).toBe(
       identity.computer.checksum,
     );
+  }
+});
+
+test("the Daemon reads every recovery report the installer writes", async () => {
+  for (const slug of ["recovered", "failed"] as const) {
+    const report = InstallerRecoveryReportSchema.parse(
+      JSON.parse(await readFile(join(RUST_OUTPUT, `recovery-report.${slug}.json`), "utf8")),
+    );
+    expect(report.requestId).toBe(EXAMPLE_REQUEST_ID);
+    const installRoot = await scratch();
+    try {
+      await copyFile(
+        join(RUST_OUTPUT, `recovery-report.${slug}.json`),
+        join(installRoot, "recovery-report.json"),
+      );
+      expect((await readRecoveryReport(installRoot))?.outcome).toBe(slug);
+    } finally {
+      await rm(installRoot, { recursive: true, force: true });
+    }
   }
 });
 

@@ -1,6 +1,6 @@
 import { queryOptions } from "@tanstack/react-query";
 
-import { getComputerReleaseNotes } from "./computers.functions";
+import { getComputerReleaseNotes } from "./computer-release.functions";
 
 /**
  * A Computer release's notes from the release catalog, asked for only while that release is on

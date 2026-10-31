@@ -17,7 +17,10 @@ import {
   type BusyAgentReport,
   type DaemonConfig,
 } from "#src/daemon-runtime/runtime";
-import { upgradeOperationsInConfig } from "#src/daemon-runtime/upgrade-result-reporter";
+import {
+  readUpgradeOperationsWithRecovery,
+  upgradeOperationsInConfig,
+} from "#src/daemon-runtime/upgrade-result-reporter";
 import { defaultCodeAgentDiscovery } from "#src/daemon-runtime/code-agent-inventory-sync";
 import { FileDaemonCredentialStore } from "#src/credentials/credential-store";
 import { DaemonConfigStore } from "#src/persistence/daemon-config";
@@ -114,6 +117,7 @@ export {
   type LaunchComputerUpgradeOptions,
 } from "#src/platform/computer-upgrade-launcher";
 export { readComputerUpgradeReceipt } from "#src/platform/computer-upgrade-receipts";
+export { readRecoveryReport } from "#src/platform/recovery-report-file";
 export { resolveComputerInstallDirectory } from "#src/platform/computer-install-directory";
 export {
   readUpgradeReceipt,
@@ -314,9 +318,8 @@ export async function runDaemon(args: string[], computerVersion?: string): Promi
             recoveredUpgradeRequestIds:
               (config as { upgradeRequestIds?: string[] } | null)?.upgradeRequestIds ?? [],
             recoveredUpgradeResults: upgradeOperationsInConfig(config).results,
-            // The per-Workspace config file the Coordinator wrote before starting this process and
-            // rewrites while it runs (an upgrade recorded, settled, or acknowledged).
-            readUpgradeOperations: async () => upgradeOperationsInConfig(await configStore.load()),
+            readUpgradeOperations: () =>
+              readUpgradeOperationsWithRecovery(() => configStore.load()),
             acknowledgeUpgradeResult: supervisorSocket
               ? async (requestId: string) => {
                   if (!config) throw new Error("Workspace is not configured");

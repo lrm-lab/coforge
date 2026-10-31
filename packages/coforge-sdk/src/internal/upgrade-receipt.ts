@@ -176,3 +176,36 @@ export const InstallerReceiptSchema = z
     }),
   ])
   .meta({ title: "coforge-installer upgrade receipt" });
+
+/** The most a recovery-report reader will read; a larger file is not a report. */
+export const RECOVERY_REPORT_MAX_BYTES = 16 * 1024;
+
+/**
+ * What the installer's automatic recovery did about one unfinished upgrade, at
+ * `<install root>/recovery-report.json`. Written once when the retry loop ends - `recovered`
+ * when the machine runs a known version again, `failed` when it gave up after the last attempt -
+ * and kept until the next unfinished upgrade replaces it. The Daemon reads it and reports it on
+ * the owning operation's `computer:upgrade_result`.
+ *
+ * `requestId` links the report to the upgrade operation whose journal the recovery settled.
+ * Reports written before the field existed carry none; a reader cannot link those and leaves
+ * them unreported.
+ */
+export const InstallerRecoveryReportSchema = z
+  .looseObject({
+    schemaVersion: z.literal(1),
+    /** The upgrade request whose journal this recovery settled; absent on reports from before
+     * the linkage was recorded. */
+    requestId: z.string().regex(RFC_UUID_PATTERN).optional(),
+    outcome: z.enum(["recovered", "failed"]),
+    /** The version the machine runs again; only ever set on `recovered`. */
+    restoredVersion: z.string().min(1).optional(),
+    /** How many recovery tries ran before this outcome. */
+    attempts: z.number().int().positive(),
+    /** Unix seconds. */
+    finishedAt: z.number().int().nonnegative(),
+    /** Why the recovery failed, when it did. */
+    message: z.string().optional(),
+  })
+  .meta({ title: "coforge-installer recovery report" });
+export type InstallerRecoveryReport = z.infer<typeof InstallerRecoveryReportSchema>;

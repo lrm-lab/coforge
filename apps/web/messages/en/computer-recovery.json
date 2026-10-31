@@ -1,0 +1,40 @@
+{
+  "computer_recovery_gave_up": [
+    {
+      "declarations": ["input attempts", "local attemptsPlural = attempts: plural"],
+      "selectors": ["attemptsPlural"],
+      "match": {
+        "attemptsPlural=one": "Automatic recovery gave up after {attempts} attempt",
+        "attemptsPlural=other": "Automatic recovery gave up after {attempts} attempts"
+      }
+    }
+  ],
+  "computer_recovery_gave_up_message": [
+    {
+      "declarations": [
+        "input attempts",
+        "input message",
+        "local attemptsPlural = attempts: plural"
+      ],
+      "selectors": ["attemptsPlural"],
+      "match": {
+        "attemptsPlural=one": "Automatic recovery gave up after {attempts} attempt: {message}",
+        "attemptsPlural=other": "Automatic recovery gave up after {attempts} attempts: {message}"
+      }
+    }
+  ],
+  "computer_recovery_restored": [
+    {
+      "declarations": [
+        "input version",
+        "input attempts",
+        "local attemptsPlural = attempts: plural"
+      ],
+      "selectors": ["attemptsPlural"],
+      "match": {
+        "attemptsPlural=one": "Automatic recovery restored the Computer to {version} after {attempts} attempt",
+        "attemptsPlural=other": "Automatic recovery restored the Computer to {version} after {attempts} attempts"
+      }
+    }
+  ]
+}
