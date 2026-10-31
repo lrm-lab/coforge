@@ -97,7 +97,7 @@ export function NoteDetail({ note }: { note: NoteSubject["note"] }) {
     try {
       await remove({ data: { noteId: note.id } });
       deleteDialog.close();
-      await router.invalidate({ sync: true });
+      await refresh.records();
       void router.navigate({
         to: "/w/$workspaceSlug/records",
         params: { workspaceSlug },

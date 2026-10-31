@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { useNavigate, useRouter } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
+import { useRecordRefresh } from "./use-record-refresh";
 
 /** State for a `RecordsDeleteConfirmDialog`: closing the dialog also drops a stale error. */
 export function useRecordDeleteDialog() {
@@ -25,11 +26,11 @@ export function useRecordDeleteDialog() {
 
 /** After a report or week is deleted: reload the catalog, then go back to the Records list. */
 export function useLeaveToRecordsList() {
-  const router = useRouter();
+  const refresh = useRecordRefresh();
   const navigate = useNavigate();
   const workspaceSlug = useWorkspaceSlug();
   return async () => {
-    await router.invalidate({ sync: true });
+    await refresh.records();
     void navigate({
       to: "/w/$workspaceSlug/records",
       params: { workspaceSlug },

@@ -9,7 +9,7 @@ import {
   type KeyboardEvent,
   type PointerEvent,
 } from "react";
-import { Link, getRouteApi, useRouter } from "@tanstack/react-router";
+import { Link, getRouteApi } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
   ChevronDown,
@@ -107,6 +107,7 @@ import {
   type WeeklyTemplateDetail,
 } from "./weekly-template-detail-dialog";
 import type { TemplateMemberOption } from "./weekly-template-members";
+import { useRecordRefresh } from "./use-record-refresh";
 
 type CommentRow = Awaited<ReturnType<typeof ensureRecordAssistantIntro>>[number];
 type ChatSessionRow = Awaited<
@@ -171,7 +172,7 @@ export function RecordSidePanel({
   keyPointRestartBusy?: boolean;
   onRestartKeyPointExtraction?: () => void;
 }) {
-  const router = useRouter();
+  const refresh = useRecordRefresh();
   const workspaceSlug = useWorkspaceSlug();
   const { user: viewer } = appRoute.useLoaderData();
   // The viewer's name, never their username.
@@ -593,7 +594,7 @@ export function RecordSidePanel({
     setError(null);
     try {
       await dismissKeyPointsDraft({ data: { reportId: suggestion.reportId } });
-      await router.invalidate({ sync: true });
+      await refresh.record();
     } catch {
       // Card is already frozen locally; keep page refresh best-effort.
     } finally {
@@ -631,7 +632,7 @@ export function RecordSidePanel({
           },
         });
         markSuggestionApplied(messageId);
-        await router.invalidate({ sync: true });
+        await refresh.records();
       } catch {
         const message = m.records_assistant_write_failed();
         session.error = message;
@@ -653,7 +654,7 @@ export function RecordSidePanel({
           },
         });
         markSuggestionApplied(messageId);
-        await router.invalidate({ sync: true });
+        await refresh.record();
       } catch {
         const message = m.records_assistant_write_failed();
         session.error = message;
@@ -680,7 +681,7 @@ export function RecordSidePanel({
       });
       onBodyApplied?.(suggestion.reportId, written.content, written.bodyRestoreView);
       markSuggestionApplied(messageId);
-      await router.invalidate({ sync: true });
+      await refresh.record();
     } catch {
       const message = m.records_assistant_write_failed();
       session.error = message;

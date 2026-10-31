@@ -1,4 +1,5 @@
 import { useCallback, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Outlet, createFileRoute, notFound, redirect, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 
@@ -17,7 +18,7 @@ import { useCreateAndOpenWorkspace } from "#src/features/workspaces/create-works
 import { isAppError } from "#src/lib/app-error";
 import { isValidWorkspaceSlug } from "#src/features/workspaces/workspace-slug";
 import { splitWorkspacePath, workspacePath } from "#src/features/workspaces/workspace-url";
-import { loadRecordsNavAttention } from "#src/features/records/records.functions";
+import { recordsNavAttentionQuery } from "#src/features/records/records-nav-attention";
 import { BrowserRealtimeProvider } from "#src/features/realtime/browser-realtime";
 import { getBrowserRealtimeConnectionToken } from "#src/features/realtime/realtime.functions";
 import { BrowserPushLifecycle } from "#src/features/notifications/browser-push-lifecycle";
@@ -70,8 +71,8 @@ export const Route = createFileRoute("/w/$workspaceSlug")({
         replace: true,
       });
   },
-  loader: async ({ location }) => {
-    const [user, switcher, notifications, workspaceAgents, preferences, tabOrders, recordsNav] =
+  loader: async ({ location, params, context }) => {
+    const [user, switcher, notifications, workspaceAgents, preferences, tabOrders] =
       await Promise.all([
         getUserProfile(),
         loadWorkspaceSwitcher(),
@@ -79,7 +80,7 @@ export const Route = createFileRoute("/w/$workspaceSlug")({
         loadWorkspaceAgents(),
         getUserPreferences(),
         getPanelTabOrders(),
-        loadRecordsNavAttention().catch(() => ({ preview: false })),
+        context.queryClient.ensureQueryData(recordsNavAttentionQuery(params.workspaceSlug)),
       ]);
     // A person who has not been asked for a display name is asked once, here for a session that
     // predates the step, and comes back to this page.
@@ -97,7 +98,6 @@ export const Route = createFileRoute("/w/$workspaceSlug")({
       assumedPhone: loadAssumedPhone(),
       timeFormat: preferences.timeFormat,
       tabOrders,
-      recordsPreview: recordsNav.preview,
     };
   },
   component: AppLayout,
@@ -111,7 +111,6 @@ function AppLayout() {
     agents,
     extraAgents,
     agentStreamPositions,
-    recordsPreview,
     notifications,
     timeZone,
     assumedPhone,
@@ -119,6 +118,8 @@ function AppLayout() {
     tabOrders,
   } = Route.useLoaderData();
   const { queryClient } = Route.useRouteContext();
+  const recordsPreview =
+    useQuery(recordsNavAttentionQuery(currentWorkspace.slug)).data?.preview ?? false;
   // Hydration does not re-run `beforeLoad`, so the browser learns here which Workspace the server
   // rendered; otherwise the first switch away would keep this Workspace's cache.
   useEffect(() => {

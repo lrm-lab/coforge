@@ -42,6 +42,7 @@ import { useRecordsMemberWeeks } from "./use-records-member-weeks";
 import { CollapsibleSection, RecordLink, SidebarMore, WeekBadge } from "./records-sidebar-parts";
 import { matchesQuery, recordsTabSearch, sidebarPreview, type RecordsTab } from "./records-sidebar";
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { useRecordRefresh } from "./use-record-refresh";
 
 export type { RecordsTab };
 export type RecordsPanel = "settings" | "stats" | "dashboard";
@@ -77,7 +78,7 @@ export function RecordsLayout({
   children: ReactNode;
 }) {
   const navigate = useNavigate();
-  const router = useRouter();
+  const refresh = useRecordRefresh();
   const workspaceSlug = useWorkspaceSlug();
   const workspaceId = useCurrentWorkspaceId();
   const createNote = useServerFn(createRecordNote);
@@ -197,7 +198,7 @@ export function RecordsLayout({
 
   async function openCreatedRecord(recordId: string) {
     setShowMobileList(false);
-    await router.invalidate({ sync: true });
+    await refresh.records();
     void navigate({
       to: "/w/$workspaceSlug/records/$recordId",
       params: { workspaceSlug, recordId },

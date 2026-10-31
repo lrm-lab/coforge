@@ -4,7 +4,6 @@ import { Link } from "@tanstack/react-router";
 import { Button } from "#src/components/base/buttons/button";
 import type { OpenAgentProfile } from "#src/features/agents/profile-panel/open-agent-profile";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
-import { useRouter } from "@tanstack/react-router";
 import { m } from "#src/paraglide/messages";
 import type { WeeklyReportAssistantSuggestion } from "#src/server/records/weekly-report-assistant-suggestion.server";
 import { isAppError } from "#src/lib/app-error";
@@ -25,6 +24,7 @@ import {
   readAppliedSuggestionIds,
   writeAppliedSuggestionIds,
 } from "./weekly-report-assistant-session";
+import { useRecordRefresh } from "./use-record-refresh";
 
 export type WeeklyReportMessageSuggestion = Extract<
   WeeklyReportAssistantSuggestion,
@@ -39,7 +39,7 @@ export function WeeklyReportMessageCard(props: {
 }) {
   const { suggestion } = props;
   const workspaceSlug = useWorkspaceSlug();
-  const router = useRouter();
+  const refresh = useRecordRefresh();
   const cardKey = `${workspaceSlug}:${props.messageId}`;
   const applyBody = useServerFn(applyConfirmedWeeklyReportBody);
   const switchBody = useServerFn(switchWeeklyReportBodyVersion);
@@ -80,7 +80,7 @@ export function WeeklyReportMessageCard(props: {
       setRestoreView(written.bodyRestoreView);
       setApplied(true);
       writeAppliedSuggestionIds(cardKey, [props.messageId]);
-      await router.invalidate({ sync: true });
+      await refresh.records();
     } catch {
       setError(m.records_assistant_write_failed());
     } finally {
@@ -95,7 +95,7 @@ export function WeeklyReportMessageCard(props: {
     try {
       const result = await switchBody({ data: { reportId: suggestion.reportId } });
       setRestoreView(result.bodyRestoreView);
-      await router.invalidate({ sync: true });
+      await refresh.records();
     } catch {
       setError(m.records_assistant_write_failed());
     } finally {
@@ -112,7 +112,7 @@ export function WeeklyReportMessageCard(props: {
       setApplied(true);
       writeAppliedSuggestionIds(cardKey, [props.messageId]);
       setConfirmOpen(false);
-      await router.invalidate({ sync: true });
+      await refresh.records();
     } catch (cause) {
       setError(weeklySendError(cause));
       setConfirmOpen(false);
@@ -128,7 +128,7 @@ export function WeeklyReportMessageCard(props: {
     try {
       await dismissWeek({ data: { reportId: suggestion.reportId } });
       setCancelled(true);
-      await router.invalidate({ sync: true });
+      await refresh.records();
     } catch {
       setError(m.records_assistant_write_failed());
     } finally {

@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { DotsHorizontal, MessageChatCircle as Message, Trash01 as Trash } from "@untitledui/icons";
 
@@ -51,6 +50,7 @@ import { useRecordChangedRefresh } from "./use-record-changed-refresh";
 import { useLeaveToRecordsList, useRecordDeleteDialog } from "./use-record-delete";
 import { useReportSidePanelOpen } from "./use-record-side-panel-open";
 import { useReportDraftSave, useSettledReportSave } from "./use-report-save";
+import { useRecordRefresh } from "./use-record-refresh";
 
 export function TemplateReportDetail({
   report,
@@ -61,7 +61,7 @@ export function TemplateReportDetail({
   streamPositions: ReportSubject["streamPositions"];
   returnTo?: string;
 }) {
-  const router = useRouter();
+  const refresh = useRecordRefresh();
   const toast = useAppToast();
   const setFormatEditing = useFormatEditHint();
   const saveDraft = useReportDraftSave();
@@ -175,7 +175,7 @@ export function TemplateReportDetail({
           setSideRefresh((token) => token + 1);
         }
         if (result.autoSendJustCancelled) {
-          await router.invalidate({ sync: true });
+          await refresh.records();
         }
       }
     } finally {
@@ -204,7 +204,7 @@ export function TemplateReportDetail({
             title: nextTitle,
           },
         });
-        await router.invalidate({ sync: true });
+        await refresh.records();
       } finally {
         setSaving(false);
       }
@@ -268,7 +268,7 @@ export function TemplateReportDetail({
       setConfirmOpen(false);
       toast.success(m.records_report_shared_toast(), { durationMs: WEEKLY_SEND_TOAST_MS });
       try {
-        await router.invalidate({ sync: true });
+        await refresh.records();
       } catch {
         // Assignments already persisted; catalog refresh can retry on navigation.
       }
@@ -322,7 +322,7 @@ export function TemplateReportDetail({
         toast.error(m.records_key_points_team_none_submitted());
         return;
       }
-      await router.invalidate({ sync: true });
+      await refresh.record();
     } finally {
       setTeamKeyPointBusy(false);
     }
@@ -489,7 +489,7 @@ export function TemplateReportDetail({
           replaceContent(next);
           writeReportDraft(report.id, next);
           setCanSendAssignments(false);
-          void router.invalidate({ sync: true });
+          void refresh.records();
         }}
       />
 

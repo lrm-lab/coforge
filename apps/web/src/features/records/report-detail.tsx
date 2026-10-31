@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 
 import { m } from "#src/paraglide/messages";
@@ -38,6 +37,7 @@ import { useLeaveToRecordsList, useRecordDeleteDialog } from "./use-record-delet
 import { useReportSidePanelOpen } from "./use-record-side-panel-open";
 import { useReportReadingTurn } from "./use-report-reading-turn";
 import { useReportDraftSave, useSettledReportSave } from "./use-report-save";
+import { useRecordRefresh } from "./use-record-refresh";
 
 export function ReportDetail({
   report,
@@ -48,7 +48,7 @@ export function ReportDetail({
   streamPositions: ReportSubject["streamPositions"];
   returnTo?: string;
 }) {
-  const router = useRouter();
+  const refresh = useRecordRefresh();
   const workspaceSlug = useWorkspaceSlug();
   const saveDraft = useReportDraftSave();
   const leaveToRecordsList = useLeaveToRecordsList();
@@ -138,7 +138,7 @@ export function ReportDetail({
     try {
       const result = await setFavorite({ data: { reportId: report.id, favorited: next } });
       setFavorited(result.favorited);
-      await router.invalidate({ sync: true });
+      await refresh.records();
     } catch {
       setFavorited(!next);
     } finally {
@@ -162,7 +162,7 @@ export function ReportDetail({
       }
       if (nextStatus === "submitted" || nextStatus === "shared") {
         showSendAck();
-        await router.invalidate({ sync: true });
+        await refresh.records();
       }
     } finally {
       if (reportId === reportIdRef.current) setSaving(false);
@@ -290,7 +290,7 @@ export function ReportDetail({
     try {
       const result = await switchBody({ data: { reportId: report.id } });
       applyAssistantBody(report.id, result.content, result.bodyRestoreView);
-      await router.invalidate({ sync: true });
+      await refresh.record();
     } finally {
       setRestoreBusy(false);
     }
@@ -304,12 +304,12 @@ export function ReportDetail({
       const next = withAssignmentUnread(contentRef.current, false);
       replaceContent(next);
       writeReportDraft(report.id, next);
-      void router.invalidate({ sync: true });
+      void refresh.records();
     });
     return () => {
       cancelled = true;
     };
-  }, [editable, isAssignment, markOpened, report.id, report.unread, router]);
+  }, [editable, isAssignment, markOpened, report.id, report.unread, refresh]);
 
   useEffect(() => {
     return () => {
@@ -327,7 +327,7 @@ export function ReportDetail({
     setKeyPointRestartBusy(true);
     try {
       await restartKeyPoints({ data: { reportId: report.id } });
-      await router.invalidate({ sync: true });
+      await refresh.record();
     } finally {
       setKeyPointRestartBusy(false);
     }

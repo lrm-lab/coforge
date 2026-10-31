@@ -32,6 +32,7 @@ import {
   type loadWeeklyTemplates,
 } from "./records.functions";
 import { BackToRecords } from "./records-layout";
+import { useRecordRefresh } from "./use-record-refresh";
 
 export type WeeklyTemplateList = Awaited<ReturnType<typeof loadWeeklyTemplates>>;
 export type KeyPointPromptsSnapshot = Awaited<ReturnType<typeof loadKeyPointPrompts>>;
@@ -65,6 +66,7 @@ export function WeeklyReportSettings({
   returnTo?: string;
 }) {
   const router = useRouter();
+  const refresh = useRecordRefresh();
   const navigate = useNavigate({ from: "/w/$workspaceSlug/records/settings" });
   const create = useServerFn(createWeeklyTemplate);
   const update = useServerFn(updateWeeklyTemplate);
@@ -164,7 +166,7 @@ export function WeeklyReportSettings({
     setBusy(true);
     try {
       await apply({ data: { templateId: template.id } });
-      await router.invalidate({ sync: true });
+      await refresh.records();
     } finally {
       setBusy(false);
     }
@@ -185,7 +187,7 @@ export function WeeklyReportSettings({
         await remove({ data: { templateId: template.id } });
         if (detail?.id === template.id) setDetail(null);
         setTemplateDeleteOpen(false);
-        await router.invalidate({ sync: true });
+        await refresh.records();
       } catch {
         setTemplateDeleteError(m.records_delete_error());
       }
@@ -204,7 +206,7 @@ export function WeeklyReportSettings({
         data: { slot: keyPointSlot, text: textToSave },
       });
       applyServerPrompts(saved, keyPointSlot);
-      await router.invalidate({ sync: true });
+      await refresh.records();
       // Loader may briefly return stale data; pin the just-saved snapshot again.
       applyServerPrompts(saved, keyPointSlot);
     } finally {
@@ -234,7 +236,7 @@ export function WeeklyReportSettings({
         const saved = await deleteHistory({ data: { slot: target.slot, historyIndex } });
         setPrompts(saved);
         setHistoryDeleteOpen(false);
-        await router.invalidate({ sync: true });
+        await refresh.records();
         setPrompts(saved);
       } catch {
         setHistoryDeleteError(m.records_delete_error());
@@ -484,7 +486,7 @@ export function WeeklyReportSettings({
             } else {
               await create({ data: input });
             }
-            await router.invalidate({ sync: true });
+            await refresh.records();
           } finally {
             setBusy(false);
           }

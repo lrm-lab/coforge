@@ -1,5 +1,9 @@
 import { useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, useMatch, useRouter } from "@tanstack/react-router";
+
+import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
+import { recordsNavAttentionQuery } from "./records-nav-attention";
 
 const RECORDS_ROUTE_ID = getRouteApi("/w/$workspaceSlug/records").id;
 
@@ -20,21 +24,33 @@ export function catalogShouldReload({ cause }: { cause: "preload" | "enter" | "s
 }
 
 /**
- * Reloads what a change on a record's page touched, and nothing else:
+ * Reloads what a change in Records touched, and nothing else; each resolves once what it reloads
+ * is shown:
  * - `record()`: the record alone, through the route match that shows it (its own page, or the
- *   Records landing that opens on the latest week);
- * - `records()`: the Records pages, for a change the sidebar shows too (a title, a status).
+ *   Records landing that opens on the latest week), for a change only it shows (its body, its key
+ *   points);
+ * - `records()`: the Records pages and the Records rail dot (`recordsNavAttentionQuery`), for a
+ *   change anything else in Records may show (a title, a status, a send, a setting), from a Records
+ *   page or from a card elsewhere (a Records page held in the router's cache reads again when shown).
  * Neither reloads the Workspace layout. The catalog reloads only when invalidated or entered
  * (`catalogShouldReload`), so `record()` leaves it alone.
  */
 export function useRecordRefresh() {
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const workspaceSlug = useWorkspaceSlug();
   const matchId = useMatch({ strict: false, select: (match) => match.id });
   return useMemo(
     () => ({
-      record: () => router.invalidate({ filter: (match) => match.id === matchId }),
-      records: () => router.invalidate({ filter: isRecordsMatch }),
+      record: () => router.invalidate({ filter: (match) => match.id === matchId, sync: true }),
+      records: () =>
+        Promise.all([
+          router.invalidate({ filter: isRecordsMatch, sync: true }),
+          queryClient.invalidateQueries({
+            queryKey: recordsNavAttentionQuery(workspaceSlug).queryKey,
+          }),
+        ]),
     }),
-    [router, matchId],
+    [router, queryClient, workspaceSlug, matchId],
   );
 }
