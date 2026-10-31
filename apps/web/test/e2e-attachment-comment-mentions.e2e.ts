@@ -161,7 +161,7 @@ test("a file's comment mentions a member of its conversation, and Activity opens
     await browser("screenshot", join(artifacts, "0-no-comments.png"));
     await browser("focus", dialogField);
     await browser("keyboard", "type", "@");
-    await browser("keyboard", "inserttext", "Comment");
+    await browser("keyboard", "type", "Comment");
     await browser("wait", "--fn", `${listText}.includes("Comment Peer")`);
     expect(await evaluate<string>(listText)).not.toContain("Comment Outsider");
     await browser("screenshot", join(artifacts, "1-list-of-members.png"));

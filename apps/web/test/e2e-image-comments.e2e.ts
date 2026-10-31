@@ -132,7 +132,18 @@ test("an image takes comments in its lightbox, and a link into one opens it ther
         `getComputedStyle(document.querySelector('[role="dialog"] img[alt="${fileName}"]').closest(".bg-secondary")).backgroundColor`,
       ),
     ).not.toMatch(/rgba\(.*, 0\)|transparent/);
+    // `@` and the letters after it, typed one key at a time, narrow the list as in the message
+    // composer; letters no one's name has close it.
+    const listText = `(document.querySelector('[role="listbox"]')?.textContent ?? "")`;
     await browser("focus", dialogField);
+    await browser("keyboard", "type", "@");
+    await browser("wait", "--fn", `${listText}.includes("Image Peer")`);
+    await browser("keyboard", "type", "Ima");
+    await browser("wait", "--fn", `${listText}.includes("Image Peer")`);
+    await browser("keyboard", "type", "zq");
+    await browser("wait", "--fn", `!document.querySelector('[role="listbox"]')`);
+    for (let typed = 0; typed < "@Imazq".length; typed++) await browser("press", "Backspace");
+    await browser("wait", "--fn", `document.querySelector('${dialogField}').value === ""`);
     await browser("keyboard", "inserttext", "The legend is cut off");
     await browser("press", "Enter");
     const mine = await until("the viewer's comment", () =>
