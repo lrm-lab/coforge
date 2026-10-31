@@ -24,6 +24,16 @@ export type ActivityRelayDependencies = {
    * a reply intent on its conversation or peer user channel. `skipHistory` keeps a transient frame out of the
    * channel's history. */
   publish?(channel: string, data: Uint8Array, options?: { skipHistory?: boolean }): Promise<void>;
+  /** Who alone sees an Agent's Activity in a conversation live: a private channel's people
+   * (`privateActivityAudience`), `undefined` for any other conversation. */
+  privateAudience?(scope: {
+    workspaceId: string;
+    agentId: string;
+    conversationId: string;
+  }): Promise<readonly string[] | undefined>;
+  /** One binary frame to each person's own channel (`userConversationChannel`), kept out of its
+   * history, as a reply intent to a person is. */
+  publishToPeople?(userIds: readonly string[], frame: Uint8Array): Promise<unknown>;
 };
 
 const bytesToBase64 = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64");
@@ -76,4 +86,18 @@ export async function relayActivityFrame(
     .publish?.(agentActivityChannelFor(agent.workspaceId, agent.agentId, agent.visibility), frame)
     .catch(() => {});
   return publicationRerouted("a private channel");
+}
+
+/**
+ * Delivers an Activity frame from a private channel to its people's own channels only (task
+ * #302), never the shared or the per-Agent channel, which reach people outside it. Best-effort,
+ * like every other Activity delivery.
+ */
+export async function relayActivityToPeople(
+  frame: Uint8Array,
+  userIds: readonly string[],
+  dependencies: Pick<ActivityRelayDependencies, "publishToPeople">,
+): Promise<Response> {
+  if (userIds.length) await dependencies.publishToPeople?.(userIds, frame).catch(() => {});
+  return publicationRerouted("its channel's people");
 }

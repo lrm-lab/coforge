@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { actionCardViews } from "#src/server/conversations/action-card-views.server";
 import { MessageForwards } from "#src/server/conversations/message-forwards.server";
+import { privateActivityAudience } from "#src/server/agents/agent-activity-audience.server";
 import { AgentActivityRepository } from "#src/server/db/repositories/agent-activity.repositories.server";
 import { PrismaWorkspaceMemoryCatalog } from "#src/server/db/repositories/workspace-memory-catalog.repositories.server";
 import { PrismaWebPushSubscriptionStore } from "#src/server/notifications/prisma-web-push-subscriptions.server";
@@ -346,5 +347,34 @@ test.skipIf(!connectionString)(
     expect(await feed(people.owner)).toEqual([9, 7, 5, 3, 1]);
     expect(await card(people.insider)).toEqual([10, 9, 8, 7, 6]);
     expect(await feed(people.insider)).toEqual([10, 9, 8, 7, 6, 5, 4, 3, 2, 1]);
+  },
+);
+
+test.skipIf(!connectionString)(
+  "an Agent's Activity in a private channel goes live to its people who see the Agent",
+  async () => {
+    const { db, ws, people, open, closed, direct } = fixture;
+    const discussion = extra.discussionMessage.conversationId;
+    const audience = (agentId: string, conversationId: string) =>
+      privateActivityAudience(db, { workspaceId: ws, agentId, conversationId });
+    // The owner left the private channel; the insider is its one person.
+    expect(await audience(extra.scout.id, closed.id)).toEqual([people.insider]);
+    expect(await audience(extra.scout.id, discussion)).toEqual([people.insider]);
+    // Elsewhere the Agent's own Activity channel carries it, as before.
+    for (const conversationId of [open.id, direct.id, crypto.randomUUID()])
+      expect(await audience(extra.scout.id, conversationId)).toBeUndefined();
+    // A private Agent of the owner's: the insider cannot see it, so no one hears of it.
+    const hidden = await db.agent.create({
+      data: {
+        workspaceId: ws,
+        ownerId: people.owner,
+        computerId: extra.computer.id,
+        name: `hidden${fixture.suffix}`,
+        displayName: "hidden",
+        visibility: "private",
+        runtimeConfig: {},
+      },
+    });
+    expect(await audience(hidden.id, closed.id)).toEqual([]);
   },
 );

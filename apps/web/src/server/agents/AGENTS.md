@@ -161,6 +161,8 @@ See [sessions.md](./sessions.md).
   and `runtime_progress`. Never blank `detail` before persisting.
 - Publish Activity and `agent:display` through `agentActivityChannelFor` and
   `agentStatusChannelFor`; never choose the shared or per-Agent channel inline.
+  Activity in a private channel goes only to its people's own channels
+  (`privateActivityAudience`), and its `agent:display` keeps no words (task #302).
 - Computer lifecycle rows are the only Activity the server writes itself
   (`computer-lifecycle-activity.server.ts`). A daemon's return row follows
   the server's upgrade and restart records, then the previous version, never

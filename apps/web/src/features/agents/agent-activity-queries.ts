@@ -14,6 +14,7 @@ import {
   useRealtimeSubscription,
   useRealtimeSubscriptions,
 } from "#src/features/realtime/browser-realtime";
+import { userConversationChannel } from "#src/features/conversations/conversation-realtime";
 import type { QueryClient } from "@tanstack/react-query";
 
 export const agentActivityKeys = {
@@ -116,11 +117,13 @@ function applyActivityPublication(
  *
  * `privateAgentIds` are the viewer's own visible private Agents: their Activity no
  * longer arrives on the shared channel at all, so each gets its own per-Agent subscription on
- * the same shared client.
+ * the same shared client. An Agent's work in a private channel arrives only on the viewer's own
+ * channel, which the shell already holds, when they are in that channel (task #302).
  */
 export function useWorkspaceActivityRealtime(
   workspaceId: string | undefined,
   privateAgentIds: readonly string[],
+  viewerId: string | undefined,
 ) {
   const queryClient = useQueryClient();
 
@@ -132,6 +135,13 @@ export function useWorkspaceActivityRealtime(
     onPublication: (publication) => {
       if (!workspaceId) return;
       applyActivityPublication(queryClient, workspaceId, publication.data);
+    },
+  });
+
+  useRealtimeSubscription({
+    channel: workspaceId && viewerId ? userConversationChannel(viewerId) : undefined,
+    onPublication: (publication) => {
+      if (workspaceId) applyActivityPublication(queryClient, workspaceId, publication.data);
     },
   });
 

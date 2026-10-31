@@ -25,7 +25,8 @@ Moved out of [`AGENTS.md`](AGENTS.md) to keep it under 200 lines.
   a channel `canReadChannel` lets them read. Realtime follows the rule too: a
   private channel's `channel.created.v1`, `channel.updated.v1` and Task changes
   go to its active people's own channels (`channelAudience`,
-  `conversationSignalScopes`), never the Workspace channel, and leaving it ends
+  `conversationSignalScopes`), never the Workspace channel, as an Agent's live
+  Activity there does (`privateActivityAudience`), and leaving it ends
   the leaver's subscriptions to it (`announceConversationsRevoked` (`channel-membership-signals.server.ts`)).
 - A person who cannot read a channel gets the `NOT_FOUND` a missing one gets, and
   reading comes before authority: `viewerChannel`, `memberChannel` and

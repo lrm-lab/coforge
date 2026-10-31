@@ -25,7 +25,7 @@ export type CentrifugoServerApi = {
    * order: one failed publication leaves the rest published. A batch Centrifugo did not answer
    * (one deadline covers the whole batch) fails them all. */
   publishBatch(
-    publications: readonly { channel: string; data: Uint8Array }[],
+    publications: readonly { channel: string; data: Uint8Array; skipHistory?: boolean }[],
   ): Promise<PromiseSettledResult<void>[]>;
   /** Ends every subscription each user's clients hold to the paired channel, for people who can
    * no longer read it (https://centrifugal.dev/docs/server/server_api#unsubscribe), in one `batch`
@@ -154,8 +154,12 @@ export function createCentrifugoServerApi(
       let replies: Awaited<ReturnType<typeof batch>>;
       try {
         replies = await batch(
-          publications.map(({ channel, data }) => ({
-            publish: { channel, b64data: base64(data) },
+          publications.map(({ channel, data, skipHistory }) => ({
+            publish: {
+              channel,
+              b64data: base64(data),
+              ...(skipHistory ? { skip_history: true } : {}),
+            },
           })),
         );
       } catch (error) {

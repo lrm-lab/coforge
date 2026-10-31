@@ -212,7 +212,7 @@ export function WorkspaceAgentsProvider({
   // One per Workspace: a switch starts from an empty set, and nothing outlives the shell.
   const replyIntents = useMemo(() => createReplyIntentStore(), [workspaceId]);
   useEffect(() => () => replyIntents.clear(), [replyIntents]);
-  useWorkspaceActivityRealtime(workspaceId, privateAgentIds);
+  useWorkspaceActivityRealtime(workspaceId, privateAgentIds, viewerId);
   useUserChannelReplyIntents(workspaceId, viewerId, replyIntents);
 
   // An Agent no longer visible to this viewer (dropped by `mergeAgentStatusSnapshot`

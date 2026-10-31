@@ -20,7 +20,10 @@ import {
   agentInPublicationScope,
   publicationDenied as unauthorized,
   relayActivityFrame,
+  relayActivityToPeople,
 } from "./agent-activity-relay.server";
+import { privateActivityAudience } from "./agent-activity-audience.server";
+import { userConversationChannel } from "#src/features/conversations/conversation-realtime";
 import {
   handleReplyIntentPublication,
   type ReplyIntentPublicationDependencies,
@@ -118,6 +121,15 @@ export async function handleAgentActivityPublication(
     const visibility = await dependencies.agentVisibility(workspaceId, activity.agentId);
     if (visibility === undefined) return unauthorized();
     const statusChannel = agentStatusChannelFor(workspaceId, activity.agentId, visibility);
+    // Work in a private channel is its people's alone (task #302): the frame goes to their own
+    // channels, and the status everyone who sees the Agent shows keeps its kind, not its words.
+    const audience = activity.conversationId
+      ? await dependencies.privateAudience?.({
+          workspaceId,
+          agentId: activity.agentId,
+          conversationId: activity.conversationId,
+        })
+      : undefined;
     const history = isFillerActivity
       ? Promise.resolve()
       : dependencies.observe({ ...cloudActivity, computerId }).catch(() => {});
@@ -130,7 +142,7 @@ export async function handleAgentActivityPublication(
       );
       if (!fence) return;
       const snapshot = await dependencies.display.observeActivity(
-        { ...cloudActivity, computerId },
+        { ...(audience ? wordless(cloudActivity) : cloudActivity), computerId },
         fence,
       );
       if (snapshot && dependencies.publishJson)
@@ -141,6 +153,8 @@ export async function handleAgentActivityPublication(
     })().catch(() => {});
     await Promise.all([history, reduce]);
 
+    if (audience)
+      return relayActivityToPeople(encodeAgentActivity(cloudActivity), audience, dependencies);
     return relayActivityFrame(
       encodeAgentActivity(cloudActivity),
       { workspaceId, agentId: activity.agentId, visibility },
@@ -150,6 +164,23 @@ export async function handleAgentActivityPublication(
     return unauthorized();
   }
 }
+
+/** An Activity as the Agent's status shows it to everyone who sees the Agent: its kind, without
+ * the conversation it was in or what it said. */
+function wordless<Activity extends AgentActivityWords>({
+  conversationId: _conversation,
+  conversationTarget: _target,
+  entries: _entries,
+  ...activity
+}: Activity) {
+  return { ...activity, detail: "" };
+}
+type AgentActivityWords = {
+  conversationId?: string;
+  conversationTarget?: string;
+  entries?: unknown;
+  detail: string;
+};
 
 type PublicationAgentLookups = Pick<
   AgentActivityPublicationDependencies,
@@ -292,6 +323,17 @@ export function createAgentActivityPublicationHandler() {
       display,
       publishJson: centrifugo
         ? (channel, data) => centrifugo.publishJson(channel, data)
+        : undefined,
+      privateAudience: (scope) => privateActivityAudience(db, scope),
+      publishToPeople: centrifugo
+        ? (userIds, frame) =>
+            centrifugo.publishBatch(
+              userIds.map((userId) => ({
+                channel: userConversationChannel(userId),
+                data: frame,
+                skipHistory: true,
+              })),
+            )
         : undefined,
     });
   };
