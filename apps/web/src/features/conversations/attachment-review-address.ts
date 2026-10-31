@@ -22,7 +22,8 @@ type AttachmentReviewSearch = {
 };
 
 /** The one card that follows the address for each file: the first to ask. A file shown twice at
- * once (a thread root in the stream and in its open thread) opens one review, not two. */
+ * once (a thread root in the stream and in its open thread) opens one review, not two. Keyed by
+ * file, valued by the asking card's token. */
 const following = new Map<string, symbol>();
 
 /**
@@ -34,21 +35,31 @@ const following = new Map<string, symbol>();
  * card.
  */
 export function useAttachmentReviewAddress(attachmentId: string) {
+  return useAttachmentReviewAddressAmong([attachmentId]);
+}
+
+/**
+ * `useAttachmentReviewAddress` for a set of files shown together (a message's images): which of
+ * them the address names (`fileId`), if any, and the same follow, release and clear, by file.
+ */
+export function useAttachmentReviewAddressAmong(attachmentIds: readonly string[]) {
   const router = useRouter();
-  const token = useRef(Symbol(attachmentId));
-  // The comment named, `null` for the file alone, `undefined` when the address names another.
-  const named = useSearch({
+  const token = useRef(Symbol("attachment review"));
+  // Each a string or `undefined`, so an unrelated change re-renders nothing.
+  const fileId = useSearch({
     strict: false,
     select: (search) =>
-      search.file === attachmentId
-        ? typeof search.comment === "string"
-          ? search.comment
-          : null
+      typeof search.file === "string" && attachmentIds.includes(search.file)
+        ? search.file
         : undefined,
   });
+  const commentId = useSearch({
+    strict: false,
+    select: (search) => (fileId && typeof search.comment === "string" ? search.comment : undefined),
+  });
   const release = useCallback(() => {
-    if (following.get(attachmentId) === token.current) following.delete(attachmentId);
-  }, [attachmentId]);
+    for (const [id, owner] of following) if (owner === token.current) following.delete(id);
+  }, []);
   useEffect(() => release, [release]);
   const clear = useCallback(
     () =>
@@ -67,13 +78,15 @@ export function useAttachmentReviewAddress(attachmentId: string) {
     [router],
   );
   return {
-    requested: named !== undefined,
-    commentId: named ?? undefined,
-    /** Takes this file's review for this card, unless another card already follows it. */
+    requested: fileId !== undefined,
+    fileId,
+    commentId,
+    /** Takes the named file's review for this card, unless another card already follows it. */
     follow: () => {
-      const owner = following.get(attachmentId);
+      if (!fileId) return false;
+      const owner = following.get(fileId);
       if (owner && owner !== token.current) return false;
-      following.set(attachmentId, token.current);
+      following.set(fileId, token.current);
       return true;
     },
     release,

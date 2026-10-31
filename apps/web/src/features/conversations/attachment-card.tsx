@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from "react";
+import { useEffect, useEffectEvent, useState, type CSSProperties } from "react";
 import { Download01 } from "@untitledui/icons";
 import { getReadableFileSize } from "#src/components/application/file-upload/file-upload-base";
 import { Button } from "#src/components/base/buttons/button";
@@ -9,6 +9,7 @@ import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { attachmentPreviewKind, previewKindFor } from "./attachment-preview-kind";
 import { AttachmentReviewDialog } from "./attachment-review";
+import { useAttachmentReviewAddressAmong } from "./attachment-review-address";
 import { ImageLightbox } from "./image-lightbox";
 import { InlineVideo } from "./inline-video";
 import { MEDIA_PREVIEW_MAX_BYTES } from "./media-source";
@@ -82,7 +83,8 @@ function ImageThumbnail({
  * lone one at its own shape and several in a grid, then each video as a player (`InlineVideo`),
  * then a card for each other file. A lone image that cannot be loaded, and a video too large to
  * play without a delivery URL, fall back to their file cards. The images open one lightbox, which
- * pages through all of them, as on Raft.
+ * pages through all of them, as on Raft. An address naming one of them (a link into its comments)
+ * opens it there, at its comments; closing the lightbox takes the address off.
  */
 export function MessageAttachments({ attachments }: { attachments: readonly Attachment[] }) {
   const [brokenId, setBrokenId] = useState<string>();
@@ -90,6 +92,19 @@ export function MessageAttachments({ attachments }: { attachments: readonly Atta
   const [viewingId, setViewingId] = useState<string | null>(null);
   const images = attachments.filter(isImage);
   const viewing = images.findIndex((image) => image.id === viewingId);
+  const address = useAttachmentReviewAddressAmong(images.map((image) => image.id));
+  // The image the address opened, followed until the address stops naming it.
+  const [linkedId, setLinkedId] = useState<string>();
+  const followAddress = useEffectEvent((fileId: string | undefined) => {
+    if (fileId === linkedId) return;
+    // Hand back the image followed before; another copy of the message may already follow this one.
+    address.release();
+    const next = fileId && address.follow() ? fileId : undefined;
+    if (next === linkedId) return;
+    setLinkedId(next);
+    setViewingId(next ?? null);
+  });
+  useEffect(() => followAddress(address.fileId), [address.fileId]);
   const videos = attachments.filter(isVideo);
   const files = attachments.filter(
     (attachment) => !isImage(attachment) && !videos.includes(attachment),
@@ -147,7 +162,14 @@ export function MessageAttachments({ attachments }: { attachments: readonly Atta
           index={viewing}
           onIndexChange={(index) => setViewingId(images[index]!.id)}
           isOpen
-          onOpenChange={(open) => !open && setViewingId(null)}
+          onOpenChange={(open) => {
+            if (open) return;
+            setViewingId(null);
+            // Only the copy the link opened takes it off: another copy opened by hand leaves it.
+            if (linkedId) address.clear();
+          }}
+          commentsOpen={viewingId === linkedId}
+          focusCommentId={viewingId === linkedId ? address.commentId : undefined}
         />
       )}
       {videos.map((attachment) => (

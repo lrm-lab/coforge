@@ -1,5 +1,5 @@
 import { useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from "react";
-import { Copy01, Download01, MessageSquare01, XClose } from "@untitledui/icons";
+import { Copy01, Download01, XClose } from "@untitledui/icons";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dialog, DialogTrigger, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { Empty, EmptyTitle } from "#src/components/ui/empty";
@@ -11,8 +11,6 @@ import type { AnchorSurface, Anchoring } from "./attachment-anchoring";
 import type { AttachmentCommentAnchor } from "./attachment-comment-anchors";
 import { AttachmentCommentsPane } from "./attachment-comments";
 import { useAttachmentReviewAddress } from "./attachment-review-address";
-import { ConversationListResizeHandle } from "./conversation-list-resize-handle";
-import { ATTACHMENT_COMMENTS_COLUMN } from "./conversation-list-width";
 import { AttachmentPreview } from "./attachment-preview";
 import type { VideoHandoff, VideoPlace, VideoStart } from "./video-handoff";
 import {
@@ -22,7 +20,14 @@ import {
   takesComments,
 } from "./attachment-preview-kind";
 import { readPreviewText, type PreviewRead } from "./attachment-preview-text";
-import { ImageLightbox, ReviewTitle, TOOLBAR_ICON } from "./image-lightbox";
+import { ImageLightbox } from "./image-lightbox";
+import {
+  ReviewCommentsColumn,
+  ReviewCommentsToggle,
+  reviewFileClass,
+  useReviewComments,
+} from "./review-comments";
+import { ReviewTitle, TOOLBAR_ICON } from "./review-title";
 
 type ReviewFile = {
   id: string;
@@ -63,30 +68,29 @@ export function AttachmentReviewDialog({
   const [videoStart, setVideoStart] = useState<VideoStart>();
   const videoPlace = useRef<VideoPlace | undefined>(undefined);
   // A preview opens on the file alone; on an HTML page showing the comments also marks regions.
-  const [commentsExpanded, setCommentsExpanded] = useState(false);
-  const [commentsOnPhone, setCommentsOnPhone] = useState(false);
+  const comments = useReviewComments();
   const [pendingAnchor, setPendingAnchor] = useState<AttachmentCommentAnchor | null>(null);
   const [surface, setSurface] = useState<AnchorSurface | null>(null);
   const [jumpTo, setJumpTo] = useState<AttachmentCommentAnchor | null>(null);
   const [focusRequest, setFocusRequest] = useState(0);
+  const showComments = useEffectEvent(comments.show);
   const anchoring = useMemo<Anchoring>(
     () => ({
       onSurface: setSurface,
       onComment(anchor) {
         setPendingAnchor(anchor);
         setFocusRequest((count) => count + 1);
-        setCommentsExpanded(true);
-        setCommentsOnPhone(true);
+        showComments();
       },
     }),
     [],
   );
   // Jump once the preview is showing: on a phone it is hidden behind the comments until then.
   useEffect(() => {
-    if (!jumpTo || !surface || commentsOnPhone) return;
+    if (!jumpTo || !surface || comments.onPhone) return;
     surface.jump(jumpTo);
     setJumpTo(null);
-  }, [jumpTo, surface, commentsOnPhone]);
+  }, [jumpTo, surface, comments.onPhone]);
   const href = `/api/attachments/${file.id}`;
   const kind = previewKindFor(file);
   const commentable = takesComments(file);
@@ -141,17 +145,14 @@ export function AttachmentReviewDialog({
     if (requested === openedByAddress.current) return;
     if (requested && !address.follow()) return;
     openedByAddress.current = requested;
-    if (requested) {
-      setCommentsExpanded(true);
-      setCommentsOnPhone(true);
-    } else address.release();
+    if (requested) comments.show();
+    else address.release();
     if (requested !== open) onOpenChange(requested, requested);
   });
   useEffect(
     () => followAddress(address.requested && commentable),
     [address.requested, commentable],
   );
-  const commentsShown = commentsOnPhone || commentsExpanded;
   const toast = useAppToast();
   const copyLabel =
     kind === "markdown"
@@ -166,7 +167,12 @@ export function AttachmentReviewDialog({
         onOpenChange={(next) => (next ? setOpen(true) : onOpenChange(false))}
       >
         {children({ loading: false })}
-        <ImageLightbox images={[file]} index={0} />
+        <ImageLightbox
+          images={[file]}
+          index={0}
+          commentsOpen={address.requested}
+          focusCommentId={address.commentId}
+        />
       </DialogTrigger>
     );
   return (
@@ -182,23 +188,7 @@ export function AttachmentReviewDialog({
               <>
                 <div className="flex h-14 shrink-0 items-center gap-1 border-b border-secondary bg-primary pr-2 pl-4">
                   <ReviewTitle fileName={file.fileName} contentType={file.contentType} />
-                  {commentable && (
-                    <ButtonUtility
-                      icon={MessageSquare01}
-                      size="sm"
-                      color="tertiary"
-                      tooltip={m.attachment_comments_title()}
-                      aria-pressed={commentsShown}
-                      className={cn(
-                        TOOLBAR_ICON,
-                        commentsShown && "bg-brand-primary_alt text-fg-brand-primary",
-                      )}
-                      onClick={() => {
-                        setCommentsOnPhone(!commentsShown);
-                        setCommentsExpanded(!commentsShown);
-                      }}
-                    />
-                  )}
+                  {commentable && <ReviewCommentsToggle comments={comments} />}
                   {copyLabel && text && (
                     <ButtonUtility
                       icon={Copy01}
@@ -231,12 +221,7 @@ export function AttachmentReviewDialog({
                   />
                 </div>
                 <div className="flex min-h-0 flex-1">
-                  <div
-                    className={cn(
-                      "min-h-0 min-w-0 flex-1 flex-col overflow-auto lg:flex",
-                      commentsOnPhone ? "hidden" : "flex",
-                    )}
-                  >
+                  <div className={cn(reviewFileClass(comments), "overflow-auto")}>
                     {kind ? (
                       <AttachmentPreview
                         fileName={file.fileName}
@@ -245,7 +230,7 @@ export function AttachmentReviewDialog({
                         previewUrl={file.previewUrl}
                         text={text}
                         anchoring={anchoring}
-                        commentsOpen={commentsExpanded}
+                        commentsOpen={comments.expanded}
                         pendingAnchor={pendingAnchor}
                         videoStart={videoStart}
                         onVideoPlace={(place) => (videoPlace.current = place)}
@@ -257,17 +242,7 @@ export function AttachmentReviewDialog({
                     )}
                   </div>
                   {commentable && (
-                    <div
-                      className={cn(
-                        "relative min-h-0 min-w-0 flex-1",
-                        // Kept width, set on <html> by the boot script and the handle; never more
-                        // than half the dialog, so the preview keeps the other half.
-                        "lg:w-(--attachment-comments-width,20rem) lg:max-w-1/2 lg:flex-none lg:border-l lg:border-secondary",
-                        commentsExpanded ? "lg:block" : "lg:hidden",
-                        commentsOnPhone ? "block" : "hidden",
-                      )}
-                    >
-                      <ConversationListResizeHandle column={ATTACHMENT_COMMENTS_COLUMN} />
+                    <ReviewCommentsColumn comments={comments}>
                       <AttachmentCommentsPane
                         attachmentId={file.id}
                         fileName={file.fileName}
@@ -279,11 +254,11 @@ export function AttachmentReviewDialog({
                         }
                         surface={surface}
                         onJump={(anchor) => {
-                          setCommentsOnPhone(false);
+                          comments.showFileOnPhone();
                           setJumpTo(anchor);
                         }}
                       />
-                    </div>
+                    </ReviewCommentsColumn>
                   )}
                 </div>
               </>
