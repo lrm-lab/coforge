@@ -10,12 +10,14 @@ import { PageLoadError } from "#src/features/errors/page-load-error";
 import { RecordsLayout, type RecordsTab } from "#src/features/records/records-layout";
 import { loadRecordsCatalog } from "#src/features/records/records.functions";
 import { latestWeeklyLanding } from "#src/features/records/records-sidebar";
+import { catalogShouldReload } from "#src/features/records/use-record-refresh";
 
 export const Route = createFileRoute("/w/$workspaceSlug/records")({
   validateSearch: (search: Record<string, unknown>): { tab: RecordsTab } => ({
     tab: search.tab === "notes" ? "notes" : "weekly",
   }),
   loader: () => loadRecordsCatalog(),
+  shouldReload: catalogShouldReload,
   errorComponent: PageLoadError,
   component: RecordsPage,
 });

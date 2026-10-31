@@ -70,14 +70,21 @@ export async function canReadReport(
   return false;
 }
 
-/** Everyone who may read the report; `"workspace"` when every member may. */
+/** Everyone who may read the report: the people its rule names, or every member of the
+ * Workspace. */
 export async function reportReaders(
   db: PrismaClient,
   workspaceId: string,
   report: ReportAccess,
-): Promise<ReadonlySet<string> | "workspace"> {
+): Promise<ReadonlySet<string>> {
   const rule = readerRule(report);
-  if (rule === "workspace") return rule;
+  if (rule === "workspace") {
+    const members = await db.workspaceMembership.findMany({
+      where: { workspaceId },
+      select: { userId: true },
+    });
+    return new Set(members.map((member) => member.userId));
+  }
   const [assignees, favoriters] = await Promise.all([
     rule.assigneesOf
       ? db.weeklyReport.findMany({

@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "@tanstack/react-router";
 
 import {
   resolveAwaitingAssistantResume,
@@ -7,15 +6,16 @@ import {
   type AwaitingResumeComment,
   type AwaitingResumeMessage,
 } from "./record-side-panel-awaiting";
+import { useRecordRefresh } from "./use-record-refresh";
 
 /**
  * Whether the side panel shows that the assistant is working, and with which label. `show` when a
  * request is sent, `resume` when a load finds one still pending (`resolveAwaitingAssistantResume`).
  * It hides itself once an assistant message newer than the request arrives, and reads the report
- * again then: the reply may have changed it.
+ * pages again then: the reply may have changed the report and what the sidebar shows of it.
  */
 export function useAwaitingAssistant(assistantMessages: readonly AwaitingResumeMessage[]) {
-  const router = useRouter();
+  const refresh = useRecordRefresh();
   const [awaiting, setAwaiting] = useState<AwaitingAssistantResume | null>(null);
   // The same, for the code that reads it in the turn that changed it.
   const awaitingRef = useRef<AwaitingAssistantResume | null>(null);
@@ -44,9 +44,9 @@ export function useAwaitingAssistant(assistantMessages: readonly AwaitingResumeM
     );
     if (hasNewAssistant) {
       hide();
-      void router.invalidate();
+      void refresh.records();
     }
-  }, [assistantMessages, active, router]);
+  }, [assistantMessages, active, refresh]);
 
   return { active, label: awaiting?.label ?? null, show, hide, resume };
 }

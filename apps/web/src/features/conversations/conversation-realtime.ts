@@ -27,7 +27,7 @@ export const workspaceConversationChannel = (workspaceId: string) =>
  * the sidebar tells a DM's event from a channel's. It also carries the viewer's own
  * `ViewerEvent`s (their reads, joins, closes, mutes, pins and saves, wherever they made them), and
  * the channel events and Task changes of the private channels they are in, which never reach the
- * Workspace channel.
+ * Workspace channel, and the changes of the Records reports they may read (`record-realtime.ts`).
  */
 export const userConversationChannel = (userId: string) => `chat:user:${userId}`;
 

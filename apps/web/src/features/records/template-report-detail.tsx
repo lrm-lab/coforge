@@ -51,16 +51,18 @@ import { zonedCalendarDate } from "./weekly-report-schedule-due";
 import { sendWindowEnd, useWeeklySendArmed } from "./use-send-window";
 import { fileToDataUrlUpload } from "./file-data-url-upload";
 import type { ReportSubject } from "./record-subject";
-import { useKeyPointGeneratingRefresh } from "./use-key-point-generating-refresh";
+import { useRecordChangedRefresh } from "./use-record-changed-refresh";
 import { useLeaveToRecordsList, useRecordDeleteDialog } from "./use-record-delete";
 import { useReportSidePanelOpen } from "./use-record-side-panel-open";
 import { useReportDraftSave, useSettledReportSave } from "./use-report-save";
 
 export function TemplateReportDetail({
   report,
+  streamPositions,
   returnTo,
 }: {
   report: ReportSubject["report"];
+  streamPositions: ReportSubject["streamPositions"];
   returnTo?: string;
 }) {
   const router = useRouter();
@@ -279,7 +281,7 @@ export function TemplateReportDetail({
     }
   }
 
-  useSettledReportSave(report.id, () => {
+  useSettledReportSave(report.id, report.content, () => {
     const draft = readReportDraft(report.id);
     if (!draft) return;
     const normalized = normalizeLeaderFormatTabs(draft);
@@ -295,9 +297,7 @@ export function TemplateReportDetail({
     replaceContent(normalizeReportContent(report.content));
   }, [isOverview, report.content, report.id]);
 
-  useKeyPointGeneratingRefresh(
-    isOverviewLeader && content.keyPointExtraction?.status === "generating",
-  );
+  useRecordChangedRefresh(report.id, streamPositions, isOverviewLeader);
 
   async function removeOverviewNode() {
     if (!isOverviewLeader || saving || sending) return;

@@ -2,7 +2,9 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
+import { userConversationChannel } from "#src/features/conversations/conversation-realtime";
 
+import { readAfterStreamPositions } from "#src/server/conversations/chat-stream-positions.server";
 import { recordCatalog } from "#src/server/records/record-catalog.server";
 import { normalizeReportContent, type ReportContent } from "./records-content";
 
@@ -76,11 +78,17 @@ export const deleteMemberWeek = createServerFn({ method: "POST" })
     });
   });
 
+/** One report or note, with where the viewer's own channel stood before it was read: the page
+ * reads it again when a `record.changed.v1` it may have missed came after (`missedBySubscribe`). */
 export const loadRecordSubject = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .validator(z.object({ id: z.uuid() }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).getSubject({ workspaceId, userId: user.id, id: data.id });
+    const { streamPositions, data: subject } = await readAfterStreamPositions(
+      [userConversationChannel(user.id)],
+      () => recordCatalog(db).getSubject({ workspaceId, userId: user.id, id: data.id }),
+    );
+    return { ...subject, streamPositions };
   });
 
 export const loadWeeklyReportAssistantContext = createServerFn({ method: "GET" })

@@ -16,8 +16,20 @@ export function RecordDetail({
   }
   if (subject.report.kind === "template") {
     return (
-      <TemplateReportDetail key={subject.report.id} report={subject.report} returnTo={returnTo} />
+      <TemplateReportDetail
+        key={subject.report.id}
+        report={subject.report}
+        streamPositions={subject.streamPositions}
+        returnTo={returnTo}
+      />
     );
   }
-  return <ReportDetail key={subject.report.id} report={subject.report} returnTo={returnTo} />;
+  return (
+    <ReportDetail
+      key={subject.report.id}
+      report={subject.report}
+      streamPositions={subject.streamPositions}
+      returnTo={returnTo}
+    />
+  );
 }

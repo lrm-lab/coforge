@@ -16,6 +16,7 @@ const assignments = [
   { authorId: "bob", sourceTemplateId: "template" },
 ];
 const favorites = [{ userId: "carol", reportId: "alice-report" }];
+const people = ["leader", "alice", "bob", "carol", "dave"];
 const db = {
   weeklyReport: {
     findFirst: async ({ where }: { where: { sourceTemplateId: string; authorId: string } }) =>
@@ -39,9 +40,9 @@ const db = {
     findMany: async ({ where }: { where: { reportId: string } }) =>
       favorites.filter((row) => row.reportId === where.reportId),
   },
+  workspaceMembership: { findMany: async () => people.map((userId) => ({ userId })) },
 } as unknown as PrismaClient;
 
-const people = ["leader", "alice", "bob", "carol", "dave"];
 async function whoCanRead(report: ReportAccess) {
   const one = await Promise.all(
     people.map(async (person) =>
@@ -49,7 +50,7 @@ async function whoCanRead(report: ReportAccess) {
     ),
   );
   const all = await reportReaders(db, "workspace", report);
-  return { one: one.flat(), all: all === "workspace" ? all : [...all].sort() };
+  return { one: one.flat(), all: [...all].sort() };
 }
 
 test("a Leader's overview is read by the Leader and every member it was assigned to", async () => {
@@ -90,5 +91,5 @@ test("any other report is read by every member", async () => {
     sourceTemplateAuthorId: null,
   });
   expect(one).toEqual(people);
-  expect(all).toBe("workspace");
+  expect(all).toEqual([...people].sort());
 });

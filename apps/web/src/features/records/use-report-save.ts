@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef } from "react";
-import { useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 
 import { saveWeeklyReportContent } from "./records.functions";
 import { normalizeReportContent, type ReportContent } from "./records-content";
 import { trackReportSave, waitForReportSave, writeReportDraft } from "./report-draft-cache";
+import { useRecordRefresh } from "./use-record-refresh";
 
 /**
  * Starts a report save: stores the normalized body as the session draft, sends
@@ -40,10 +40,11 @@ export function useReportDraftSave() {
 /**
  * A save started before this detail mounted (the previous one unmounting
  * flushes its edits) may still be in flight. When it settles, `onSettled`
- * picks up the draft it left behind and the catalog is reloaded.
+ * picks up the draft it left behind and the Records pages are reloaded. It
+ * looks again whenever `watch` changes, for a save started since.
  */
-export function useSettledReportSave(reportId: string, onSettled: () => void) {
-  const router = useRouter();
+export function useSettledReportSave(reportId: string, watch: unknown, onSettled: () => void) {
+  const refresh = useRecordRefresh();
   const onSettledRef = useRef(onSettled);
   onSettledRef.current = onSettled;
   useEffect(() => {
@@ -51,10 +52,10 @@ export function useSettledReportSave(reportId: string, onSettled: () => void) {
     void waitForReportSave(reportId)?.then(() => {
       if (cancelled) return;
       onSettledRef.current();
-      void router.invalidate();
+      void refresh.records();
     });
     return () => {
       cancelled = true;
     };
-  }, [reportId, router]);
+  }, [reportId, watch, refresh]);
 }

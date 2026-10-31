@@ -18,9 +18,11 @@ import { RecordsReadingColumn } from "./records-reading-column";
 import { fileToDataUrlUpload } from "./file-data-url-upload";
 import type { NoteSubject } from "./record-subject";
 import { useRecordDeleteDialog } from "./use-record-delete";
+import { useRecordRefresh } from "./use-record-refresh";
 
 export function NoteDetail({ note }: { note: NoteSubject["note"] }) {
   const router = useRouter();
+  const refresh = useRecordRefresh();
   const workspaceSlug = useWorkspaceSlug();
   const save = useServerFn(saveRecordNote);
   const remove = useServerFn(deleteRecordNote);
@@ -52,7 +54,7 @@ export function NoteDetail({ note }: { note: NoteSubject["note"] }) {
           },
         }),
       );
-      void router.invalidate();
+      void refresh.records();
     } finally {
       setSaving(false);
     }

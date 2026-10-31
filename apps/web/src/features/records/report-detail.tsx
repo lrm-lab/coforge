@@ -33,7 +33,7 @@ import { RecordSidePanel } from "./record-side-panel";
 import { fileToDataUrlUpload } from "./file-data-url-upload";
 import { ReportDetailHeader } from "./report-detail-header";
 import type { ReportSubject } from "./record-subject";
-import { useKeyPointGeneratingRefresh } from "./use-key-point-generating-refresh";
+import { useRecordChangedRefresh } from "./use-record-changed-refresh";
 import { useLeaveToRecordsList, useRecordDeleteDialog } from "./use-record-delete";
 import { useReportSidePanelOpen } from "./use-record-side-panel-open";
 import { useReportReadingTurn } from "./use-report-reading-turn";
@@ -41,9 +41,11 @@ import { useReportDraftSave, useSettledReportSave } from "./use-report-save";
 
 export function ReportDetail({
   report,
+  streamPositions,
   returnTo,
 }: {
   report: ReportSubject["report"];
+  streamPositions: ReportSubject["streamPositions"];
   returnTo?: string;
 }) {
   const router = useRouter();
@@ -226,7 +228,7 @@ export function ReportDetail({
     }
   }
 
-  useSettledReportSave(report.id, () => {
+  useSettledReportSave(report.id, editable, () => {
     if (!editable) return;
     const draft = readReportDraft(report.id);
     if (draft) replaceContent(draft);
@@ -318,9 +320,7 @@ export function ReportDetail({
     };
   }, [editable, report.id, saveDraft]);
 
-  useKeyPointGeneratingRefresh(
-    leaderReading && content.keyPointExtraction?.status === "generating",
-  );
+  useRecordChangedRefresh(report.id, streamPositions, leaderReading);
 
   async function restartPersonalKeyPoints() {
     if (!leaderReading || keyPointRestartBusy) return;

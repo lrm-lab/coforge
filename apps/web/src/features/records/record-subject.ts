@@ -1,3 +1,4 @@
+import type { StreamPositions } from "#src/features/realtime/subscription-gap";
 import type { ReportBodyRestoreView, ReportContent } from "./records-content";
 import type { TemplateChild } from "./template-children-table";
 
@@ -34,6 +35,8 @@ export type ReportSubject = {
     surface?: "format" | "overview";
     children?: TemplateChild[];
   };
+  /** Where the viewer's own channel stood when the report was read (`loadRecordSubject`). */
+  streamPositions?: StreamPositions;
 };
 
 export type NoteSubject = {
