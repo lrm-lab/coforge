@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { NodeViewWrapper, NodeViewContent } from "@tiptap/react";
 import type { NodeViewProps } from "@tiptap/react";
 import { NodeSelection } from "@tiptap/pm/state";
@@ -21,6 +21,7 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { cn } from "#src/lib/utils";
 import { copyText } from "#src/lib/clipboard";
+import { useDebouncedValue } from "#src/lib/use-debounced-value";
 import { useT } from "#src/features/records/report-editor/i18n";
 import {
   INSERTABLE_CODE_BLOCK_LANGUAGES,
@@ -59,15 +60,6 @@ const LANGUAGE_LABELS: Record<CodeLanguage, string> = {
   html: "HTML",
   mermaid: "Mermaid",
 };
-
-function useDebouncedValue<T>(value: T, delayMs: number): T {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const id = setTimeout(() => setDebounced(value), delayMs);
-    return () => clearTimeout(id);
-  }, [value, delayMs]);
-  return debounced;
-}
 
 function normalizeLanguage(language: string): CodeLanguage {
   const parsed = parseCodeFenceInfo(language).language;

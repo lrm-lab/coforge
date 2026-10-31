@@ -102,7 +102,7 @@ export function ReportDetail({
     receivedBaseline != null && reportTabsEqual(content, { tabs: receivedBaseline });
   // Leader reads a submitted assignment; the assignee turns the same pages while filling it in.
   const readingScroll = (leaderReading && sent) || memberAssignee;
-  const readingTurn = useReportReadingTurn(report.id, readingScroll);
+  const readingTurn = useReportReadingTurn(report.id, report.cycle, readingScroll);
 
   useEffect(() => {
     setFavorited(Boolean(report.favorited));

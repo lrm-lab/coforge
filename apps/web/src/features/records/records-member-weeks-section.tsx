@@ -5,18 +5,27 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import type { loadRecordsCatalog } from "./records.functions";
-import { CollapsibleSection, RecordLink, SidebarMore, WeekBadge } from "./records-sidebar-parts";
+import type { RecordsCatalog } from "./records-layout";
+import {
+  CollapsibleSection,
+  RecordLink,
+  SidebarLoadMore,
+  SidebarMore,
+  WeekBadge,
+} from "./records-sidebar-parts";
 import { defaultMemberWeekExpanded } from "./records-sidebar-expand";
 import { sidebarPreview } from "./records-sidebar";
 
-type MemberWeek = Awaited<ReturnType<typeof loadRecordsCatalog>>["memberWeeks"][number] & {
-  key: string;
-};
+type MemberWeek = RecordsCatalog["memberWeeks"][number] & { key: string };
 
 /** "Member weekly reports" sidebar section: week rows with their expandable submissions. */
 export function RecordsMemberWeeksSection({
   weeks,
+  people,
+  hasMore,
+  loadingMore,
+  loadFailed,
+  onLoadMore,
   query,
   selectedRecordId,
   selectedWeekKey,
@@ -30,6 +39,13 @@ export function RecordsMemberWeeksSection({
 }: {
   /** Weeks already filtered by `query`. */
   weeks: MemberWeek[];
+  /** Who the submissions name, by `authorId`. */
+  people: RecordsCatalog["people"];
+  /** Older weeks are still to be read (`onLoadMore`), once every week read so far is listed. */
+  hasMore: boolean;
+  loadingMore: boolean;
+  loadFailed: boolean;
+  onLoadMore: () => void;
   query: string;
   selectedRecordId?: string;
   selectedWeekKey?: string;
@@ -105,23 +121,26 @@ export function RecordsMemberWeeksSection({
                 </div>
                 {hasSubmissions && expanded ? (
                   <ul className="ml-7 space-y-0.5">
-                    {week.submissions.map((submission) => (
-                      <li key={submission.id}>
-                        <RecordLink
-                          recordId={submission.id}
-                          selected={submission.id === selectedRecordId}
-                          onSelect={onSelect}
-                        >
-                          <IdentityAvatar
-                            size="sm"
-                            name={submission.author.displayName}
-                            alt={submission.author.displayName}
-                            src={submission.author.avatarUrl}
-                          />
-                          <span className="truncate">{submission.title}</span>
-                        </RecordLink>
-                      </li>
-                    ))}
+                    {week.submissions.map((submission) => {
+                      const author = people[submission.authorId];
+                      return (
+                        <li key={submission.id}>
+                          <RecordLink
+                            recordId={submission.id}
+                            selected={submission.id === selectedRecordId}
+                            onSelect={onSelect}
+                          >
+                            <IdentityAvatar
+                              size="sm"
+                              name={author?.displayName}
+                              alt={author?.displayName}
+                              src={author?.avatarUrl}
+                            />
+                            <span className="truncate">{submission.title}</span>
+                          </RecordLink>
+                        </li>
+                      );
+                    })}
                   </ul>
                 ) : null}
               </li>
@@ -130,6 +149,12 @@ export function RecordsMemberWeeksSection({
         </ul>
       )}
       <SidebarMore hiddenCount={preview.hiddenCount} onExpand={onShowAll} />
+      <SidebarLoadMore
+        hasMore={hasMore && preview.hiddenCount === 0}
+        loading={loadingMore}
+        failed={loadFailed}
+        onLoadMore={onLoadMore}
+      />
     </CollapsibleSection>
   );
 }

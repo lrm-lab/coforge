@@ -76,9 +76,21 @@ test("loadCatalog lists cycles without report content and marks unread by id onl
       findMany: async () => [],
     },
     weeklyReport: {
-      findMany: async (query: typeof unreadQuery) => {
-        unreadQuery = query;
-        return [{ id: "mine-unread" }];
+      findMany: async (query: NonNullable<typeof unreadQuery>) => {
+        if (query.where?.content) {
+          unreadQuery = query;
+          return [{ id: "mine-unread" }];
+        }
+        if (query.where?.kind === "template") return [];
+        return [
+          {
+            id: "mine-unread",
+            title: "Mine",
+            status: "draft",
+            sourceTemplateId: "format-1",
+            cycle: { year: 2026, week: 38 },
+          },
+        ];
       },
     },
   } as unknown as PrismaClient;
@@ -185,7 +197,19 @@ test("loadCatalog hides other leaders' template parents under 成员周报", asy
       },
     },
     weeklyReport: {
-      findMany: async () => [{ id: "mine" }],
+      findMany: async (query: { where?: { content?: unknown; kind?: string } }) => {
+        if (query.where?.content) return [{ id: "mine" }];
+        if (query.where?.kind === "template") return [];
+        return [
+          {
+            id: "mine",
+            title: "B 2026 W38 工作周报",
+            status: "draft",
+            sourceTemplateId: "leader-a-format",
+            cycle: { year: 2026, week: 38 },
+          },
+        ];
+      },
     },
   } as unknown as PrismaClient;
 
@@ -205,11 +229,16 @@ test("loadCatalog hides other leaders' template parents under 成员周报", asy
         expect.objectContaining({
           id: "submission-under-b",
           title: "Alice 2026 W38 工作周报",
-          author: expect.objectContaining({ displayName: "Alice" }),
+          authorId: "member-a",
         }),
       ],
     },
   ]);
+  // Each person a submission names is listed once, beside the weeks.
+  expect(catalog.people).toEqual({
+    "member-a": expect.objectContaining({ userId: "member-a", displayName: "Alice" }),
+  });
+  expect(catalog.memberWeeksBefore).toBeNull();
   expect(catalog.formatChips).toEqual([
     expect.objectContaining({
       id: null,
@@ -365,7 +394,12 @@ test("loadCatalog exposes one chip per applied settings stream", async () => {
       ],
     },
     weeklyReport: {
-      findMany: async () => [],
+      // This week's templates assigned to members: the algo stream already sent this week.
+      findMany: async (query: { where?: { kind?: string; cycle?: unknown } }) =>
+        query.where?.kind === "template" &&
+        JSON.stringify(query.where.cycle) === JSON.stringify({ year: 2026, week: 38 })
+          ? [{ settingsId: "settings-algo" }]
+          : [],
       findFirst: async (query: { where?: { settingsId?: string | null } }) => {
         if (query.where?.settingsId === "settings-algo") return { id: "format-algo" };
         return null;

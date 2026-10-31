@@ -38,14 +38,9 @@ import {
 import { FormatChipSlot } from "./records-format-chip";
 import { RecordsToolsFooter } from "./records-tools-footer";
 import { RecordsMemberWeeksSection } from "./records-member-weeks-section";
+import { useRecordsMemberWeeks } from "./use-records-member-weeks";
 import { CollapsibleSection, RecordLink, SidebarMore, WeekBadge } from "./records-sidebar-parts";
-import {
-  filterMemberWeeks,
-  matchesQuery,
-  recordsTabSearch,
-  sidebarPreview,
-  type RecordsTab,
-} from "./records-sidebar";
+import { matchesQuery, recordsTabSearch, sidebarPreview, type RecordsTab } from "./records-sidebar";
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 
 export type { RecordsTab };
@@ -183,10 +178,7 @@ export function RecordsLayout({
     [catalog.myReports, query],
   );
   const myReportsUnread = catalog.myReports.some((item) => item.unread);
-  const filteredMemberWeeks = useMemo(
-    () => filterMemberWeeks(catalog.memberWeeks, query),
-    [catalog.memberWeeks, query],
-  );
+  const memberWeeks = useRecordsMemberWeeks(catalog, query, tab === "weekly");
   const filteredNotes = useMemo(
     () =>
       catalog.notes.filter(
@@ -370,7 +362,12 @@ export function RecordsLayout({
                   </CollapsibleSection>
 
                   <RecordsMemberWeeksSection
-                    weeks={filteredMemberWeeks}
+                    weeks={memberWeeks.weeks}
+                    people={memberWeeks.people}
+                    hasMore={memberWeeks.hasMore}
+                    loadingMore={memberWeeks.loadingMore}
+                    loadFailed={memberWeeks.loadFailed}
+                    onLoadMore={memberWeeks.loadMore}
                     query={query}
                     selectedRecordId={selectedRecordId}
                     selectedWeekKey={selectedWeekKey}

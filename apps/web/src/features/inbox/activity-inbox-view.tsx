@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useMemo, useRef, useState } from "react";
 import { getRouteApi } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { keepPreviousData, useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
@@ -13,6 +13,7 @@ import { ConversationListResizeHandle } from "#src/features/conversations/conver
 import { LIST_COLUMN } from "#src/features/conversations/conversation-list-width";
 import { useRefreshSidebarLists } from "#src/features/conversations/sidebar-lists";
 import { cn } from "#src/lib/utils";
+import { useEndOfList } from "#src/lib/use-end-of-list";
 import type { HostedConversationTarget } from "#src/features/conversations/conversation-page-search";
 import { m } from "#src/paraglide/messages";
 import type { ActivityInboxItem } from "#src/server/inbox/activity-inbox.server";
@@ -411,16 +412,7 @@ function ActivityInboxLoadMore({
   fetchNextPage: () => Promise<unknown>;
 }) {
   const sentinel = useRef<HTMLDivElement>(null);
-  const waiting = hasNextPage && !isFetchingNextPage && !failed;
-  useEffect(() => {
-    const element = sentinel.current;
-    if (!element || !waiting) return;
-    const observer = new IntersectionObserver((entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) void fetchNextPage();
-    });
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [waiting, fetchNextPage]);
+  useEndOfList(sentinel, hasNextPage && !isFetchingNextPage && !failed, () => void fetchNextPage());
   if (!hasNextPage) return null;
   return (
     <div ref={sentinel} className="flex items-center justify-center gap-2 py-3 text-xs">

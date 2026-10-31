@@ -8,6 +8,7 @@ import {
   stageReadingEdge,
   type ReadingEdge,
 } from "./weekly-report-reading-turn";
+import { useMemberWeekAt } from "./use-records-member-weeks";
 
 const recordsRoute = getRouteApi("/w/$workspaceSlug/records");
 
@@ -24,14 +25,18 @@ function keepRecordsSearch(previous: { tab?: unknown; returnTo?: unknown }) {
  * of the same template. Returns the `readingTurn` prop for `ReportTabsEditor`,
  * or undefined when this reader does not page through reports.
  */
-export function useReportReadingTurn(reportId: string, enabled: boolean) {
+export function useReportReadingTurn(
+  reportId: string,
+  cycle: { year: number; week: number },
+  enabled: boolean,
+) {
   const router = useRouter();
   const navigate = useNavigate();
   const workspaceSlug = useWorkspaceSlug();
   const catalog = recordsRoute.useLoaderData();
-  const neighbors = enabled
-    ? sameTemplateNeighbors(catalog.memberWeeks, reportId)
-    : { previousId: null, nextId: null };
+  const week = useMemberWeekAt(catalog, cycle, enabled);
+  const neighbors =
+    enabled && week ? sameTemplateNeighbors([week], reportId) : { previousId: null, nextId: null };
 
   useEffect(() => {
     if (!enabled) return;

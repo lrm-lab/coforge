@@ -1,6 +1,7 @@
 import { createFileRoute, notFound, redirect } from "@tanstack/react-router";
 
 import { PageLoadError } from "#src/features/errors/page-load-error";
+import { loadMemberWeekAt } from "#src/features/records/records-member-weeks.functions";
 
 export const Route = createFileRoute("/w/$workspaceSlug/records/weeks/$year/$week")({
   ssr: "data-only",
@@ -10,7 +11,14 @@ export const Route = createFileRoute("/w/$workspaceSlug/records/weeks/$year/$wee
     parse: (raw) => {
       const year = Number(raw.year);
       const week = Number(raw.week);
-      if (!Number.isInteger(year) || !Number.isInteger(week) || week < 1 || week > 53) {
+      if (
+        !Number.isInteger(year) ||
+        year < 1 ||
+        year > 9999 ||
+        !Number.isInteger(week) ||
+        week < 1 ||
+        week > 53
+      ) {
         throw notFound();
       }
       return { year: String(year), week: String(week) };
@@ -21,7 +29,12 @@ export const Route = createFileRoute("/w/$workspaceSlug/records/weeks/$year/$wee
     const week = Number(params.week);
     const parent = await parentMatchPromise;
     const catalog = parent.loaderData;
-    const memberWeek = catalog?.memberWeeks.find((row) => row.year === year && row.week === week);
+    // The catalog holds the newest member weeks; an older one is read on its own.
+    const memberWeek =
+      catalog?.memberWeeks.find((row) => row.year === year && row.week === week) ??
+      (catalog?.memberWeeksBefore
+        ? (await loadMemberWeekAt({ data: { year, week } })).memberWeeks[0]
+        : undefined);
     if (!memberWeek) throw notFound();
     const recordId = memberWeek.submissions[0]?.id ?? memberWeek.overviewReportId;
     if (!recordId) throw notFound();

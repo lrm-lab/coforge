@@ -1,12 +1,48 @@
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { ChevronDown } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
+import { Spinner } from "#src/components/ui/spinner";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
+import { useEndOfList } from "#src/lib/use-end-of-list";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { recordsTabSearch } from "./records-sidebar";
+
+/**
+ * The end of a list that has more to read: reading it starts once this comes into view, and goes
+ * on while it stays there (`useEndOfList`). A failed read stops and offers a retry.
+ */
+export function SidebarLoadMore({
+  hasMore,
+  loading,
+  failed,
+  onLoadMore,
+}: {
+  hasMore: boolean;
+  loading: boolean;
+  failed: boolean;
+  onLoadMore: () => void;
+}) {
+  const end = useRef<HTMLDivElement>(null);
+  useEndOfList(end, hasMore && !loading && !failed, onLoadMore);
+  if (!hasMore) return null;
+  return (
+    <div ref={end} className="flex items-center justify-center gap-2 py-2 text-xs text-tertiary">
+      {failed ? (
+        <>
+          <span className="text-error-primary">{m.records_sidebar_load_more_error()}</span>
+          <Button size="xs" color="link-gray" onPress={onLoadMore}>
+            {m.records_sidebar_retry()}
+          </Button>
+        </>
+      ) : loading ? (
+        <Spinner className="size-4" />
+      ) : null}
+    </div>
+  );
+}
 
 export function SidebarMore({
   hiddenCount,

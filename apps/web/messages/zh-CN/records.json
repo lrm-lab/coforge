@@ -7,6 +7,8 @@
   "records_tab_notes": "笔记",
   "records_section_favorites": "已收藏的周报",
   "records_sidebar_more": "{count} 更多 ...",
+  "records_sidebar_load_more_error": "无法加载更早的周。",
+  "records_sidebar_retry": "重试",
   "records_section_mine": "我的周报",
   "records_section_members": "成员周报",
   "records_week_actions": "周节点操作",

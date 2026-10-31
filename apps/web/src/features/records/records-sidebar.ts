@@ -45,11 +45,19 @@ export function matchesQuery(text: string, query: string) {
   return text.toLowerCase().includes(query.toLowerCase());
 }
 
-/** Member-week rows (keyed `year-week`) whose title or submissions match the search query. */
+/**
+ * Member-week rows (keyed `year-week`) whose title or submissions match the search query; a
+ * submission matches by its title or its author's name (`people[authorId]`). The sidebar filters
+ * the weeks it holds with it, and the server every week (`searchMemberWeeks`), so both agree.
+ */
 export function filterMemberWeeks<
-  S extends { title: string; author: { displayName: string } },
+  S extends { title: string; authorId: string },
   W extends { year: number; week: number; title: string; submissions: S[] },
->(memberWeeks: readonly W[], query: string) {
+>(
+  memberWeeks: readonly W[],
+  query: string,
+  people: Readonly<Record<string, { displayName: string }>>,
+) {
   return memberWeeks
     .map((week) => ({
       ...week,
@@ -57,7 +65,7 @@ export function filterMemberWeeks<
       submissions: week.submissions.filter(
         (submission) =>
           matchesQuery(submission.title, query) ||
-          matchesQuery(submission.author.displayName, query) ||
+          matchesQuery(people[submission.authorId]?.displayName ?? "", query) ||
           matchesQuery(week.title, query),
       ),
     }))
