@@ -342,7 +342,11 @@ export function ChannelConversation({
       emptyState={{
         // A private channel's lock stands where a public one's `#` does.
         title: isPrivateChannel(conversation) ? conversation.name : `#${conversation.name}`,
-        description: conversation.senderMemberId ? m.channel_empty() : m.channel_empty_preview(),
+        description: !conversation.senderMemberId
+          ? m.channel_empty_preview()
+          : isPrivateChannel(conversation)
+            ? m.channel_empty_private()
+            : m.channel_empty(),
         media: isPrivateChannel(conversation) ? (
           <Lock01 aria-hidden="true" className="size-12 text-tertiary" strokeWidth={1.5} />
         ) : (

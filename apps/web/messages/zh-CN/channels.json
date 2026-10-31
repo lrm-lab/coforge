@@ -21,6 +21,7 @@
   "channel_error": "群聊操作失败，请重试。",
   "channel_conflict": "此群聊名称已被使用。",
   "channel_empty": "这里是群聊的起点。发送第一条消息，与工作区成员开始交流。",
+  "channel_empty_private": "这里是群聊的起点。发送第一条消息，与群聊成员开始交流。",
   "channel_empty_preview": "此群聊中的消息将显示在这里。",
   "channel_settings_open": "群聊详情与设置",
   "channel_settings_public": "公开",

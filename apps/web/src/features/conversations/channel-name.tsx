@@ -11,7 +11,13 @@ export function isPrivateChannel(channel: { visibility?: ChannelVisibility }) {
 /** The lock that marks a private channel where a public one shows `#`, as Slack marks it. */
 export function ChannelLock({ className }: { className?: string }) {
   return (
-    <Lock01 role="img" aria-label={m.channel_private()} className={cx("shrink-0", className)} />
+    <Lock01
+      role="img"
+      // The icon set hides its glyphs from assistive tech; this one says the channel is private.
+      aria-hidden={false}
+      aria-label={m.channel_private()}
+      className={cx("shrink-0", className)}
+    />
   );
 }
 

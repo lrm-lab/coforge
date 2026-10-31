@@ -21,6 +21,7 @@
   "channel_error": "Could not update the channel. Try again.",
   "channel_conflict": "That channel name is already in use.",
   "channel_empty": "This is the start of the channel. Send the first message to your Workspace.",
+  "channel_empty_private": "This is the start of the channel. Send the first message to its members.",
   "channel_empty_preview": "Messages shared in this channel will appear here.",
   "channel_settings_open": "Channel Details and Settings",
   "channel_settings_public": "Public",
