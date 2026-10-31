@@ -9,6 +9,7 @@ import {
   type MessageRequestRecords,
   type MessageRequestScope,
 } from "#src/server/conversations/message-request-idempotency.server";
+import { pendingMentionView } from "./helpers/pending-mention-view";
 
 const request = (body: unknown) =>
   new Request("https://server.example/api/agent/v1/messages", {
@@ -72,18 +73,7 @@ test("a sent message reports the mentions it did not reach: pending actions and 
         executeFromAgent: async () => ({
           id: "sent-m",
           pendingMentionActions: [
-            {
-              resolutionId: "22222222-2222-4222-8222-222222222222",
-              messageId: "sent-m",
-              targetType: "user" as const,
-              targetId: "33333333-3333-4333-8333-333333333333",
-              targetHandle: "bob",
-              targetLabel: "Bob",
-              targetAvatarUrl: null,
-              channelName: "triage",
-              availableActions: [],
-              expiresAt: new Date("2026-10-01T00:00:00Z"),
-            },
+            pendingMentionView({ messageId: "sent-m", availableActions: [] }),
           ],
           unresolvedMentionHandles: ["ghost"],
         }),
@@ -822,18 +812,12 @@ test("a replay of a key that already committed is answered from its record, what
           reportedFor.push(input);
           return {
             pendingMentionActions: [
-              {
-                resolutionId: "22222222-2222-4222-8222-222222222222",
+              pendingMentionView({
                 messageId: "message-committed",
-                targetType: "user" as const,
-                targetId: "33333333-3333-4333-8333-333333333333",
                 targetHandle: "carol",
                 targetLabel: "Carol",
-                targetAvatarUrl: null,
-                channelName: "triage",
                 availableActions: [],
-                expiresAt: new Date("2026-10-01T00:00:00Z"),
-              },
+              }),
             ],
             unresolvedMentionHandles: ["ghost"],
           };
