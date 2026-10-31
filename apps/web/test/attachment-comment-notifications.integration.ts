@@ -2,13 +2,13 @@ import { expect, test } from "bun:test";
 import { ActivityInbox } from "#src/server/inbox/activity-inbox.server";
 import { activityOpenTarget } from "#src/features/inbox/activity-open-target";
 import { peopleDirectKey } from "#src/features/conversations/direct-key";
+import { AttachmentComments } from "#src/server/attachments/attachment-comments.server";
+import { attachmentCommentNotices } from "#src/server/attachments/attachment-comment-notices.server";
+import { PrismaAttachmentCommentStore } from "#src/server/db/repositories/attachment-comments.repositories.server";
 import { pendingMentionActionsForMessage } from "#src/server/conversations/pending-mention-views.server";
 import { claimMentionActions } from "#src/server/conversations/pending-mention-actions.server";
-import {
-  attachmentCommentsFixture,
-  commentNoticesFor as noticesFor,
-  commentPmaOf as pmaOf,
-} from "./helpers/attachment-comments-fixture";
+import { recordingDeliveries } from "./helpers/fake-centrifugo";
+import { attachmentCommentsFixture } from "./helpers/attachment-comments-fixture";
 import { agentAttachmentMessagesFixture } from "./helpers/agent-attachment-messages-fixture";
 
 /**
@@ -20,6 +20,21 @@ import { agentAttachmentMessagesFixture } from "./helpers/agent-attachment-messa
  *
  * Skipped unless `CHANNEL_TEST_DATABASE_URL` points at local PostgreSQL.
  */
+
+const noticesFor = (f: Awaited<ReturnType<typeof attachmentCommentsFixture>>) => {
+  const { publisher, delivered } = recordingDeliveries();
+  const activityChanged: { workspaceId: string; userId: string }[] = [];
+  const notices = attachmentCommentNotices(f.db, publisher, {
+    activityChanged: async (event) => {
+      activityChanged.push(event);
+    },
+  });
+  const comments = new AttachmentComments(new PrismaAttachmentCommentStore(f.db));
+  return { comments, notices, delivered, activityChanged };
+};
+
+const pmaOf = (f: Awaited<ReturnType<typeof attachmentCommentsFixture>>, messageId: string) =>
+  f.db.pendingMentionAction.findMany({ where: { messageId } });
 
 test("the uploader and prior commenters are notified as subscribed; the author never is", async () => {
   const f = await attachmentCommentsFixture();
@@ -241,6 +256,8 @@ test("a recipient who lost source access is skipped, and the inbox stops listing
       kind: "channel",
       id: f.conversation.id,
       messageId: f.message.id,
+      attachmentId: f.attachment.id,
+      commentId: first.id,
     });
     // Done clears it through the same row the channel-mention items use.
     await inbox.markDone(f.workspace.id, f.owner.id, {
@@ -316,10 +333,71 @@ test("a comment on a DM attachment notifies the peer's inbox and the item opens 
       kind: "dm",
       id: dm.id,
       messageId: sourceMessage.id,
+      attachmentId: dmAttachment.id,
+      commentId: comment.id,
     });
     // And it lights the nav dot for the recipient.
     await expect(inbox.navAttention(f.workspace.id, f.owner.id)).resolves.toEqual({
       hasUnread: true,
+    });
+  } finally {
+    await f.close();
+  }
+});
+
+test("a comment living in the migrated source conversation still reads as an attachment comment", async () => {
+  const f = await attachmentCommentsFixture();
+  try {
+    // The post-migration shape: the thread, the comment's Message, its attachmentComment row
+    // and its notification all carry the source channel's id.
+    await f.db.attachmentCommentThread.create({
+      data: {
+        attachmentId: f.attachment.id,
+        workspaceId: f.workspace.id,
+        conversationId: f.conversation.id,
+      },
+    });
+    const sender = await f.db.conversationMember.findFirstOrThrow({
+      where: { conversationId: f.conversation.id, userId: f.member.id },
+    });
+    const comment = await f.db.message.create({
+      data: {
+        conversationId: f.conversation.id,
+        workspaceId: f.workspace.id,
+        senderMemberId: sender.id,
+        sequence: 2,
+        body: "post-migration shape",
+      },
+    });
+    await f.db.attachmentComment.create({
+      data: {
+        attachmentId: f.attachment.id,
+        workspaceId: f.workspace.id,
+        conversationId: f.conversation.id,
+        messageId: comment.id,
+      },
+    });
+    await f.db.pendingMentionAction.create({
+      data: {
+        messageId: comment.id,
+        conversationId: f.conversation.id,
+        workspaceId: f.workspace.id,
+        senderMemberId: sender.id,
+        targetUserId: f.owner.id,
+        targetHandle: f.owner.username,
+        expiresAt: new Date(Date.now() + 86_400_000),
+        notifiedAt: comment.createdAt,
+        reason: "subscribed",
+      },
+    });
+    const inbox = new ActivityInbox(f.db, {});
+    const items = await inbox.list(f.workspace.id, f.owner.id, { filter: "all" });
+    const item = items.items.find((candidate) => candidate.mentionAction);
+    expect(item?.latest.id).toBe(comment.id);
+    expect(item?.attachmentComment).toMatchObject({
+      attachmentId: f.attachment.id,
+      fileName: "review.txt",
+      sourceMessageId: f.message.id,
     });
   } finally {
     await f.close();

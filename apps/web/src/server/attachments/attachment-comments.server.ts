@@ -20,9 +20,6 @@ export type AttachmentCommentAccess = {
   sizeBytes: number;
   sourceConversationId: string;
   conversationId: string | null;
-  /** The thread root the comments list under in `conversationId` — null while they have their
-   * own conversation, the source message's root once migration parks them beside the file. */
-  commentsRootId: string | null;
   canRead: boolean;
   activeMember: boolean;
   archived: boolean;
@@ -86,9 +83,6 @@ export interface AttachmentCommentStore {
   ): Promise<AttachmentCommentAccess | null>;
   list(
     input: AttachmentCommentPageInput,
-    /** The thread root the comments page under when they live in the source conversation —
-     * `access.commentsRootId`. */
-    commentsRootId?: string | null,
   ): Promise<{ comments: AttachmentCommentView[]; hasOlder: boolean }>;
   post(
     actor: AttachmentCommentActor,
@@ -136,7 +130,7 @@ export class AttachmentComments {
   async list(actor: AttachmentCommentActor, input: AttachmentCommentPageInput) {
     const access = await this.readAccess(actor, input.attachmentId);
     const disabledReason = attachmentCommentDisabledReason(access);
-    const page = await this.store.list(input, access.commentsRootId);
+    const page = await this.store.list(input);
     return {
       ...page,
       attachmentId: input.attachmentId,
