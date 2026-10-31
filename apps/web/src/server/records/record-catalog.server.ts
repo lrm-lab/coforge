@@ -58,6 +58,8 @@ import { canEditWeeklyReportContent } from "./weekly-report-editability.server";
 import { memoryForPrompt, parseStoredWeeklyReportMemory } from "./weekly-report-memory.server";
 import { buildWeeklyReportHtml } from "./weekly-report-html.server";
 import { buildWeeklyReportPresentation } from "./weekly-report-presentation.server";
+import { canReadReport } from "./report-readers.server";
+import { writeKeyPointExtraction } from "./key-point-extraction-write.server";
 import {
   isWeeklyScheduleDue,
   zonedCalendarDate,
@@ -1444,33 +1446,15 @@ export class RecordCatalog {
       },
     });
     if (report) {
-      if (report.kind === "template") {
-        if (report.author.id !== input.userId) {
-          const assignment = await this.db.weeklyReport.findFirst({
-            where: {
-              workspaceId: input.workspaceId,
-              sourceTemplateId: report.id,
-              kind: "member",
-              authorId: input.userId,
-            },
-            select: { id: true },
-          });
-          if (!assignment) throw new AppError("NOT_FOUND");
-        }
-      } else if (report.kind === "member") {
-        const isAuthor = report.author.id === input.userId;
-        const isTemplateOwner = report.sourceTemplate?.authorId === input.userId;
-        if (report.hiddenFromAuthor && isAuthor) throw new AppError("NOT_FOUND");
-        if (!isAuthor && !isTemplateOwner) {
-          const favorite = await this.db.weeklyReportFavorite.findUnique({
-            where: {
-              userId_reportId: { userId: input.userId, reportId: report.id },
-            },
-            select: { reportId: true },
-          });
-          if (!favorite) throw new AppError("NOT_FOUND");
-        }
-      }
+      const access = {
+        id: report.id,
+        kind: report.kind,
+        authorId: report.author.id,
+        hiddenFromAuthor: report.hiddenFromAuthor,
+        sourceTemplateAuthorId: report.sourceTemplate?.authorId ?? null,
+      };
+      if (!(await canReadReport(this.db, input.workspaceId, access, input.userId)))
+        throw new AppError("NOT_FOUND");
 
       const isTemplateAuthor = report.author.id === input.userId;
       let content =
@@ -2021,11 +2005,8 @@ export class RecordCatalog {
       throw new AppError("ACCESS_DENIED");
     }
 
-    const {
-      writeKeyPointExtraction,
-      loadSubmittedTeamKeyPointSources,
-      linkifyTeamKeyPointMarkdown,
-    } = await import("./weekly-report-key-points.server");
+    const { loadSubmittedTeamKeyPointSources, linkifyTeamKeyPointMarkdown } =
+      await import("./weekly-report-key-points.server");
     const { DEFAULT_PERSONAL_KEY_POINT_PROMPT, DEFAULT_TEAM_KEY_POINT_PROMPT } =
       await import("#src/features/records/records-content");
     const content = asReportContent(report.content);
@@ -2089,7 +2070,6 @@ export class RecordCatalog {
       return { id: report.id, content };
     }
 
-    const { writeKeyPointExtraction } = await import("./weekly-report-key-points.server");
     const { DEFAULT_PERSONAL_KEY_POINT_PROMPT, DEFAULT_TEAM_KEY_POINT_PROMPT } =
       await import("#src/features/records/records-content");
     const promptSnapshot =

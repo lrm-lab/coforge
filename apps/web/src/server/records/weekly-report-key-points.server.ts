@@ -11,7 +11,6 @@ import {
   DEFAULT_PERSONAL_KEY_POINT_PROMPT,
   DEFAULT_TEAM_KEY_POINT_PROMPT,
   normalizeReportContent,
-  withKeyPointExtraction,
   type KeyPointExtractionMeta,
   type KeyPointPromptState,
   type KeyPointPromptsMeta,
@@ -21,6 +20,7 @@ import {
 } from "#src/features/records/records-content";
 import { linkifyKeyPointSourceAttributions } from "#src/features/records/key-point-source-links";
 import { ensureWeeklyReportAssistant } from "./weekly-report-assistant.server";
+import { writeKeyPointExtraction } from "./key-point-extraction-write.server";
 import { ensureWeeklyReportAssistantChatSession } from "./weekly-report-assistant-chat-session.server";
 
 export function isWeeklyReportAssistantReady(agent: {
@@ -112,19 +112,6 @@ export async function resolveTeamPromptFromFormat(
 ): Promise<KeyPointPromptState> {
   const prompts = content.keyPointPrompts ?? emptyKeyPointPrompts();
   return prompts.team;
-}
-
-/** Persist extraction meta onto a report (member personal or overview team). */
-export async function writeKeyPointExtraction(
-  db: PrismaClient,
-  input: { reportId: string; content: ReportContent; extraction: KeyPointExtractionMeta },
-): Promise<ReportContent> {
-  const next = withKeyPointExtraction(input.content, input.extraction);
-  await db.weeklyReport.update({
-    where: { id: input.reportId },
-    data: { content: next as never },
-  });
-  return next;
 }
 
 /**
