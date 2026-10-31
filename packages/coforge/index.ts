@@ -108,6 +108,7 @@ import {
   refuseForeignStdinFile,
   sendDraftStdinHasContent,
 } from "#src/send-stdin";
+import { parseMessageSendArgs } from "#src/send-args";
 import { formatSearchResults } from "#src/search-format";
 import { formatWorkspaceInfo } from "#src/workspace-info-format";
 import {
@@ -504,29 +505,18 @@ export function parseArgs(
       const read = parseMessageReadArgs(args);
       if (read) return { command: "read", ...read };
     } else if (args[1] === "send") {
-      let target: string | undefined;
-      let sendDraft = false;
-      let expectedDraftKey: string | undefined;
-      let continueAnyway = false;
-      let json = false;
-      let reviewerIsolation = reviewerIsolationFromEnvironment();
-      const rawAttachmentIds: string[] = [];
-      const rawMentions: string[] = [];
-      let targetConfirmed = false;
-      for (let index = 2; index < args.length; index++) {
-        if (args[index] === "--target" && args[index + 1]) target = args[++index];
-        else if (args[index] === "--send-draft") sendDraft = true;
-        else if (args[index] === "--expected-draft-key" && args[index + 1])
-          expectedDraftKey = args[++index];
-        else if (args[index] === "--anyway") continueAnyway = true;
-        else if (args[index] === "--reviewer-isolation") reviewerIsolation = true;
-        else if (args[index] === "--json") json = true;
-        else if (args[index] === "--target-confirmed") targetConfirmed = true;
-        else if (args[index] === "--attachment-id" && args[index + 1])
-          rawAttachmentIds.push(args[++index]!);
-        else if (args[index] === "--mention" && args[index + 1]) rawMentions.push(args[++index]!);
-        else throw new Error("Usage:");
-      }
+      const flags = parseMessageSendArgs(args, reviewerIsolationFromEnvironment());
+      const {
+        target,
+        sendDraft,
+        expectedDraftKey,
+        continueAnyway,
+        json,
+        reviewerIsolation,
+        rawAttachmentIds,
+        rawMentions,
+        targetConfirmed,
+      } = flags;
       const outputMode = json ? "json" : "text";
       if (!target?.trim())
         throw withOutputMode(

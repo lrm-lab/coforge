@@ -40,14 +40,18 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
     example: "coforge message search --query 'release plan' --limit 10",
   },
   "message send": {
-    syntax:
-      "coforge message send --target <target> <body...> [--attachment-id <uuid>]... [--mention human:<uuid>:<handle>|agent:<uuid>:<handle>]...",
+    syntax: "coforge message send --target <target> [options] < message body on stdin",
     flags: [
+      "--attachment-id <uuid>  attach an uploaded file (repeatable)",
+      "--mention human:<uuid>:<handle>|agent:<uuid>:<handle>  mention someone (repeatable)",
       "--send-draft  resend the saved draft unchanged",
       "--anyway  force a held draft the server asked about more than once",
       "--reviewer-isolation  withhold newer context from a reviewer",
     ],
-    example: "coforge message send --target '#general' 'Shipped the fix.'",
+    guidance:
+      "The message body is read from stdin, never from arguments. Use a quoted here-document:\n  coforge message send --target '#general' <<'COFORGE_MESSAGE'\n  Shipped the fix.\n  COFORGE_MESSAGE\nA mention that was not delivered still exits 0: do not resend the message.",
+    example:
+      "coforge message send --target '#general' <<'COFORGE_MESSAGE'\nShipped the fix.\nCOFORGE_MESSAGE",
   },
   "message continue": {
     syntax: "coforge message continue <continuation-id> <a|b|c|d>",
