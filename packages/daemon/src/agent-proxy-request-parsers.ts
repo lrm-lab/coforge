@@ -38,13 +38,17 @@ export function parseChannelCommand(payload: JsonObject): ChannelCommand | Respo
     (payload.target !== undefined && typeof payload.target !== "string") ||
     (payload.name !== undefined && typeof payload.name !== "string") ||
     (payload.description !== undefined && typeof payload.description !== "string") ||
+    (payload.visibility !== undefined &&
+      payload.visibility !== "public" &&
+      payload.visibility !== "private") ||
     (payload.user !== undefined && typeof payload.user !== "string") ||
     (payload.agent !== undefined && typeof payload.agent !== "string") ||
     (payload.operation !== "create" && typeof payload.target !== "string") ||
     (payload.operation === "create" && typeof payload.name !== "string") ||
     (payload.operation === "update" &&
       payload.name === undefined &&
-      payload.description === undefined) ||
+      payload.description === undefined &&
+      payload.visibility === undefined) ||
     (["add-member", "remove-member"].includes(payload.operation) &&
       (payload.user === undefined) === (payload.agent === undefined))
   )
@@ -55,6 +59,7 @@ export function parseChannelCommand(payload: JsonObject): ChannelCommand | Respo
     target: payload.target,
     name: payload.name,
     description: payload.description,
+    visibility: payload.visibility,
     user: payload.user,
     agent: payload.agent,
   };

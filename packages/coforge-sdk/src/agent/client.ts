@@ -28,7 +28,9 @@ import type {
   AgentChannelMembersResponse,
   AgentChannelJoinResponse,
   AgentChannelLeaveResponse,
+  AgentChannelCreateRequest,
   AgentChannelCreateResponse,
+  AgentChannelUpdateRequest,
   AgentChannelArchiveResponse,
   AgentChannelAddMemberResponse,
   AgentChannelRemoveMemberResponse,
@@ -255,10 +257,10 @@ export type AgentApiClient = {
     members(channelId: string): Promise<AgentChannelMembersResponse>;
     join(channelId: string): Promise<AgentChannelJoinResponse>;
     leave(channelId: string): Promise<AgentChannelLeaveResponse>;
-    create(request: { name: string; description?: string }): Promise<AgentChannelCreateResponse>;
+    create(request: AgentChannelCreateRequest): Promise<AgentChannelCreateResponse>;
     update(
       channelId: string,
-      request: { name?: string; description?: string },
+      request: AgentChannelUpdateRequest,
     ): Promise<AgentChannelInfoResponse>;
     archive(channelId: string): Promise<AgentChannelArchiveResponse>;
     unarchive(channelId: string): Promise<AgentChannelArchiveResponse>;
@@ -339,13 +341,10 @@ export type RawAgentApiClient = {
     members(channelId: string): Promise<AgentApiResult<AgentChannelMembersResponse>>;
     join(channelId: string): Promise<AgentApiResult<AgentChannelJoinResponse>>;
     leave(channelId: string): Promise<AgentApiResult<AgentChannelLeaveResponse>>;
-    create(request: {
-      name: string;
-      description?: string;
-    }): Promise<AgentApiResult<AgentChannelCreateResponse>>;
+    create(request: AgentChannelCreateRequest): Promise<AgentApiResult<AgentChannelCreateResponse>>;
     update(
       channelId: string,
-      request: { name?: string; description?: string },
+      request: AgentChannelUpdateRequest,
     ): Promise<AgentApiResult<AgentChannelInfoResponse>>;
     archive(channelId: string): Promise<AgentApiResult<AgentChannelArchiveResponse>>;
     unarchive(channelId: string): Promise<AgentApiResult<AgentChannelArchiveResponse>>;

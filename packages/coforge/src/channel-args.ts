@@ -10,14 +10,13 @@ export type ChannelManagementInvocation = {
 
 const CHANNEL_MANAGEMENT_BOOLEAN_FLAGS = new Set(["--private", "--public", "--json"]);
 
-/** Rejects `--private`/`--public`: every channel is public and there is no private/visibility
- * column. */
-function privateChannelsUnsupportedError(): CliError {
-  return new CliError({
-    code: "UNSUPPORTED",
-    message: "private channels are not supported in CoForge; every channel is public.",
-    retryable: false,
-  });
+/** `--public`/`--private` as a visibility, or none; both at once is refused, as Raft does. */
+function visibilityFlag(values: Map<string, string>, command: string) {
+  if (values.has("--public") && values.has("--private"))
+    throw invalidArgument(command, "Use either --public or --private, not both.");
+  if (values.has("--private")) return "private" as const;
+  if (values.has("--public")) return "public" as const;
+  return undefined;
 }
 
 /** Requires a regular channel target for `join`, `leave`, `update`, `lifecycle archive|unarchive`,
@@ -133,12 +132,16 @@ export function parseChannelManagementArgs(args: readonly string[]): ChannelMana
       "--private",
       "--json",
     ]);
-    if (values.has("--private")) throw privateChannelsUnsupportedError();
     const name = values.get("--name");
     if (!name) throw invalidArgument("channel create", "--name is required.");
     return {
       command: "channel-manage",
-      channel: { operation: "create", name, description: values.get("--description") },
+      channel: {
+        operation: "create",
+        name,
+        description: values.get("--description"),
+        ...(values.has("--private") ? { visibility: "private" as const } : {}),
+      },
       json: values.has("--json"),
     };
   }
@@ -151,13 +154,16 @@ export function parseChannelManagementArgs(args: readonly string[]): ChannelMana
       "--private",
       "--json",
     ]);
-    if (values.has("--private") || values.has("--public")) throw privateChannelsUnsupportedError();
+    const visibility = visibilityFlag(values, "channel update");
     const target = values.get("--target");
     if (!target) throw invalidArgument("channel update", "--target is required.");
     const name = values.get("--name");
     const description = values.get("--description");
-    if (name === undefined && description === undefined)
-      throw invalidArgument("channel update", "Give --name, --description, or both.");
+    if (name === undefined && description === undefined && visibility === undefined)
+      throw invalidArgument(
+        "channel update",
+        "Provide at least one of --name, --description, --public, or --private.",
+      );
     return {
       command: "channel-manage",
       channel: {
@@ -165,6 +171,7 @@ export function parseChannelManagementArgs(args: readonly string[]): ChannelMana
         target: requireRegularChannelTarget(target),
         name,
         description,
+        ...(visibility ? { visibility } : {}),
       },
       json: values.has("--json"),
     };

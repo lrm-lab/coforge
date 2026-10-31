@@ -91,12 +91,12 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
     syntax: "coforge channel leave --target '#channel' [--json]",
   },
   "channel create": {
-    syntax: "coforge channel create --name <name> [--description <text>] [--json]",
+    syntax: "coforge channel create --name <name> [--description <text>] [--private] [--json]",
     example: "coforge channel create --name release-notes",
   },
   "channel update": {
     syntax:
-      "coforge channel update --target '#channel' [--name <name>] [--description <text>] [--json]",
+      "coforge channel update --target '#channel' [--name <name>] [--description <text>] [--public|--private] [--json]",
   },
   "channel archive": {
     syntax: "coforge channel archive --target '#channel' [--json]",

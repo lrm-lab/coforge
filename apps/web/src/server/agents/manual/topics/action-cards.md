@@ -13,7 +13,7 @@ COFORGEACTION
 
 Three kinds are supported:
 
-- `channel:create` (`name`, `visibility` public only for now, `description?`, `initialHumans?`,
+- `channel:create` (`name`, `visibility` public or private, `description?`, `initialHumans?`,
   `initialAgents?`, `draftHint?`)
 - `agent:create` (`name`, `description?`, `suggestedComputer?`, `requiredComputer?` — at most one
   of the two, `draftHint?`)
@@ -27,7 +27,7 @@ Never prefill `runtime`, `model`, or `reasoning` on `agent:create`; those remain
 Only set `requiredComputer` when the human explicitly said the new Agent must run on that
 Computer; use `suggestedComputer` for a soft preference.
 
-Private channels are not supported yet; `channel:create` always produces a public channel.
+`"visibility": "private"` on `channel:create` makes a channel only its members can read.
 
 `coforge action prepare` only records the card as a message in the target conversation for a
 human to review; it does not create the channel, Agent, or membership itself. Do not say you

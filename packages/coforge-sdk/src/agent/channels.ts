@@ -115,7 +115,23 @@ export type AgentChannelLeaveResponse = {
 export type AgentChannelCreateResponse = {
   idempotencyKey: string;
   target: string;
-  channel: { id: string; name: string; description: string };
+  /** `visibility` is absent on an older server, which makes every channel public. */
+  channel: { id: string; name: string; description: string; visibility?: "public" | "private" };
+};
+
+/** Body for `channel create`; `visibility` absent makes a public channel. */
+export type AgentChannelCreateRequest = {
+  name: string;
+  description?: string;
+  visibility?: "public" | "private";
+};
+
+/** Body for `channel update`; at least one field. `visibility` needs the caller's own Workspace
+ * role to be owner or admin and an active membership. */
+export type AgentChannelUpdateRequest = {
+  name?: string;
+  description?: string;
+  visibility?: "public" | "private";
 };
 
 /** Response for `channel lifecycle archive|unarchive`. */

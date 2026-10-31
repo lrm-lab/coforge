@@ -211,6 +211,10 @@ test("formatChannelInfo renders channel role, admin basis, and only the callable
 
 test("formatChannelUpdate is its own renderer, distinct from formatChannelInfo: a one-line update confirmation", () => {
   expect(formatChannelUpdate).not.toBe(formatChannelInfo);
+  expect(formatChannelUpdate({ channel: { name: "#engineering", visibility: "private" } })).toBe(
+    "Updated #engineering (private).",
+  );
+  // A server that predates private channels reports no visibility: every channel there is public.
   expect(formatChannelUpdate({ channel: { name: "#engineering" } })).toBe(
     "Updated #engineering (public).",
   );
@@ -360,7 +364,11 @@ test("formatChannelLeave renders the leave confirmation and its not-a-member var
   );
 });
 
-test("formatChannelCreate renders the create confirmation; CoForge channels are always (public)", () => {
+test("formatChannelCreate renders the create confirmation with the visibility the server made", () => {
+  expect(formatChannelCreate({ channel: { name: "#engineering", visibility: "private" } })).toBe(
+    "Created #engineering (private). You are joined and can send messages there.",
+  );
+  // A server that predates private channels made it public, whatever was asked.
   expect(formatChannelCreate({ channel: { name: "#engineering" } })).toBe(
     "Created #engineering (public). You are joined and can send messages there.",
   );

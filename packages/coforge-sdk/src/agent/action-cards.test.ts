@@ -20,7 +20,7 @@ describe("channelCreateActionSchema", () => {
     expect(parsed.name).toBe("design");
   });
 
-  test("accepts private visibility at the schema layer (server rejects it for now)", () => {
+  test("accepts private visibility", () => {
     const parsed = channelCreateActionSchema.parse({
       type: "channel:create",
       name: "design",

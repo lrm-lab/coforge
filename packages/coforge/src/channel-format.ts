@@ -1,6 +1,6 @@
 /** Text renderers for `coforge channel info|members|join|leave|create|update|lifecycle|
- * add-member|remove-member`. CoForge has no private channels and no `attention` block on
- * leave/remove-member, so neither is rendered. Every subcommand's `--json` mode prints the
+ * add-member|remove-member`. CoForge has no `attention` block on leave/remove-member, so none
+ * is rendered. Every subcommand's `--json` mode prints the
  * response object these functions render, unchanged; see `run()` in `../index.ts`. */
 
 export type ChannelAdminBasis = "server_role" | "channel_role";
@@ -196,15 +196,20 @@ export function formatChannelLeave(response: { target: string; wasMember: boolea
   ].join("\n");
 }
 
-/** The `channel create` result; CoForge has no private channels, so visibility is always
- * "(public)". */
-export function formatChannelCreate(response: { channel: { name: string } }): string {
-  return `Created ${response.channel.name} (public). You are joined and can send messages there.`;
+type ChannelResult = { channel: { name: string; visibility?: "public" | "private" } };
+
+/** The visibility the server reports, so an Agent never reads one it did not get: a server that
+ * predates private channels reports none, and made the channel public. */
+const visibilityOf = ({ channel }: ChannelResult) => channel.visibility ?? "public";
+
+/** The `channel create` result. */
+export function formatChannelCreate(response: ChannelResult): string {
+  return `Created ${response.channel.name} (${visibilityOf(response)}). You are joined and can send messages there.`;
 }
 
 /** The `channel update` result: a one-line confirmation, not the info block. */
-export function formatChannelUpdate(response: { channel: { name: string } }): string {
-  return `Updated ${response.channel.name} (public).`;
+export function formatChannelUpdate(response: ChannelResult): string {
+  return `Updated ${response.channel.name} (${visibilityOf(response)}).`;
 }
 
 /** The `channel lifecycle archive|unarchive` result. */

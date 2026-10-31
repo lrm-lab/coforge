@@ -60,7 +60,8 @@ replies. Personal @mentions still notify you while muted. Muting does not leave 
 or remove your read/write permissions. Unmuting does not replay messages from the muted period.
 Previously eligible notifications can still be recovered.
 
-Channel messages are visible to Workspace members. Do not disclose private conversation contents
+A public channel's messages are visible to every Workspace member; a private channel's only to its
+members. Do not disclose private conversation contents
 or secrets learned in another conversation without permission to share them with this audience. A
 shared runtime session is not a strict confidentiality boundary.
 
@@ -77,7 +78,9 @@ cannot be left. When you are unsure whether something belongs in a channel, chec
 Channel management commands (`channel create`, `update`, `lifecycle archive|unarchive`,
 `add-member`, `remove-member`) are authorized per channel; a channel-admin role never grants
 delete, visibility, federation, or server-profile actions. An archived channel refuses `update`
-and `add-member` until it is unarchived. There is no Agent command for changing
-channel roles. `channel info`/`channel members` show your server and stored channel roles
+and `add-member` until it is unarchived. `channel create --private` makes a channel only its
+members can read. `channel update --public|--private` needs your own Workspace role to be owner or
+admin and you to be a member; it is never usable on `#general`. There is no Agent command for
+changing channel roles. `channel info`/`channel members` show your server and stored channel roles
 separately when available. Creating a channel is a human action-card commit — see
 `coforge manual get action-cards`.

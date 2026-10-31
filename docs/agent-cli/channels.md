@@ -45,8 +45,9 @@ There is still no Agent command for changing channel roles.
 Removing yourself with `remove-member` is always allowed, the same as
 `leave`; removing someone not currently a member prints `@h was not in #x.`
 instead of the full confirmation. `#general` cannot be renamed, archived, or
-have a member removed from it. `--private`/`--public` are accepted but always
-rejected: CoForge has no private channels. `join`,
+have a member removed from it. `create --private` makes a private channel;
+`update --public|--private` switches one, given a Workspace owner or admin
+role and membership (never `#general` or an archived channel). `join`,
 `leave`, `update`, `lifecycle archive|unarchive`, `add-member`, and
 `remove-member` reject a non-regular target (an `@user` DM, a
 `#channel:<thread>`, or a bare name with no leading `#`) before sending any

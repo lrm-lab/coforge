@@ -35,8 +35,8 @@ export type * from "./action-card-view.server";
 export type { ActionCardTargetRepository } from "./action-card-target.server";
 
 /**
- * An action card's own validity, which needs nothing but the action: its schema, its cross-field
- * rules, and the kinds not supported yet. Throws `ActionCardError("INVALID_ACTION")`.
+ * An action card's own validity, which needs nothing but the action: its schema and its
+ * cross-field rules. Throws `ActionCardError("INVALID_ACTION")`.
  */
 export function parseActionCardAction(value: unknown) {
   const parsed = actionCardActionSchema.safeParse(value);

@@ -147,7 +147,7 @@ test("channel management commands reject malformed arguments and require exactly
   expect(() => parseArgs(["channel", "join"])).toThrow("--target is required.");
   expect(() => parseArgs(["channel", "create"])).toThrow("--name is required.");
   expect(() => parseArgs(["channel", "update", "--target", "#a"])).toThrow(
-    "Give --name, --description, or both.",
+    "Provide at least one of --name, --description, --public, or --private.",
   );
   expect(() => parseArgs(["channel", "lifecycle", "delete", "--target", "#a"])).toThrow(
     "Name archive or unarchive.",
@@ -163,19 +163,26 @@ test("channel management commands reject malformed arguments and require exactly
   );
 });
 
-test("--private and --public are rejected as unsupported, not silently ignored", () => {
-  expect(() => parseArgs(["channel", "create", "--name", "eng", "--private"])).toThrow(
-    "private channels are not supported in CoForge",
+test("--private makes a channel private; --public or --private changes one, never both at once", () => {
+  expect(parseArgs(["channel", "create", "--name", "eng", "--private"])).toMatchObject({
+    channel: { operation: "create", name: "eng", visibility: "private" },
+  });
+  expect(
+    (parseArgs(["channel", "create", "--name", "eng"]) as { channel: object }).channel,
+  ).not.toHaveProperty("visibility");
+  // As Raft's: a new channel is public unless asked otherwise.
+  expect(() => parseArgs(["channel", "create", "--name", "eng", "--public"])).toThrow(
+    'Unknown argument "--public"',
   );
-  try {
-    parseArgs(["channel", "create", "--name", "eng", "--private"]);
-    throw new Error("expected a CliError");
-  } catch (error) {
-    expect(error).toBeInstanceOf(CliError);
-    expect((error as CliError).code).toBe("UNSUPPORTED");
-  }
-  expect(() => parseArgs(["channel", "update", "--target", "#eng", "--public"])).toThrow(
-    "private channels are not supported in CoForge",
+  for (const visibility of ["public", "private"] as const)
+    expect(parseArgs(["channel", "update", "--target", "#eng", `--${visibility}`])).toMatchObject({
+      channel: { operation: "update", target: "#eng", visibility },
+    });
+  expect(() =>
+    parseArgs(["channel", "update", "--target", "#eng", "--public", "--private"]),
+  ).toThrow("Use either --public or --private, not both.");
+  expect(() => parseArgs(["channel", "update", "--target", "#eng"])).toThrow(
+    "Provide at least one of --name, --description, --public, or --private.",
   );
 });
 

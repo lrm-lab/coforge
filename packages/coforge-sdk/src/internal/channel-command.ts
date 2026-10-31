@@ -24,6 +24,9 @@ export type ChannelCommand = {
   name?: string;
   /** `create`/`update`: the new description. */
   description?: string;
+  /** `create`/`update`: who may read the channel (`--private`/`--public`). Absent: `create` makes
+   * a public channel, `update` leaves it as it is. */
+  visibility?: "public" | "private";
   /** `add-member`/`remove-member`: exactly one of `user`/`agent` is set, as `@handle`. */
   user?: string;
   agent?: string;
