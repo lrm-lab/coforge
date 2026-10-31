@@ -17,7 +17,9 @@ await mockModuleForFile("#src/features/conversations/chat-lists.functions", () =
       channelNames: {
         value: {
           streamPositions: {},
-          names: [{ id: "c2", name: "zeta", description: "", archived: false }],
+          names: [
+            { id: "c2", name: "zeta", description: "", archived: false, visibility: "public" },
+          ],
         },
       },
     };
@@ -42,8 +44,8 @@ test("names channels from the names Chat already holds, in name order", async ()
   queryClient.setQueryData(channelNamesQuery("w1").queryKey, {
     streamPositions: {},
     names: [
-      { id: "c1", name: "general", description: "", archived: false },
-      { id: "c0", name: "alpha", description: "", archived: false },
+      { id: "c1", name: "general", description: "", archived: false, visibility: "public" },
+      { id: "c0", name: "alpha", description: "", archived: false, visibility: "public" },
     ],
   });
   const directory = await queryClient.fetchQuery(searchDirectoryQuery("w1"));

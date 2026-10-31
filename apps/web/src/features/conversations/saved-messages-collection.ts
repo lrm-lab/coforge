@@ -1,3 +1,4 @@
+import { CHANNEL_VISIBILITY } from "./channel-visibility";
 import { collectionOptions, type Collection, type DbClient } from "@tanstack/react-db";
 import { queryCollectionOptions } from "@tanstack/query-db-collection";
 import type { QueryClient } from "@tanstack/react-query";
@@ -223,7 +224,13 @@ type StreamMessage = Pick<
 export function optimisticSavedEntry(message: StreamMessage, conversationId: string): SavedEntry {
   return {
     savedAt: new Date(),
-    conversation: { id: conversationId, channelName: null, directKey: null },
+    // No name yet, so nothing reads the visibility until the server's entry replaces this one.
+    conversation: {
+      id: conversationId,
+      channelName: null,
+      visibility: CHANNEL_VISIBILITY.PUBLIC,
+      directKey: null,
+    },
     message: {
       id: message.id,
       sequence: message.sequence,

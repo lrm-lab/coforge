@@ -13,8 +13,7 @@ export type ChannelName = {
   name: string;
   description: string;
   archived: boolean;
-  /** Absent from a list read before private channels: public. */
-  visibility?: ChannelVisibility;
+  visibility: ChannelVisibility;
 };
 
 /**

@@ -11,8 +11,20 @@ import {
  * and `channel_rename` carry the channel; only an event without the channel's info needs a read.
  */
 const ids = { workspaceId: "w" };
-const lab = { id: "c-lab", name: "lab", description: "", archived: false };
-const general = { id: "c-general", name: "general", description: "Everyone", archived: false };
+const lab = {
+  id: "c-lab",
+  name: "lab",
+  description: "",
+  archived: false,
+  visibility: "public" as const,
+};
+const general = {
+  id: "c-general",
+  name: "general",
+  description: "Everyone",
+  archived: false,
+  visibility: "public" as const,
+};
 
 test("a created channel joins the names, and a changed one takes its new info", () => {
   expect(
@@ -20,7 +32,7 @@ test("a created channel joins the names, and a changed one takes its new info", 
       type: "channel.created.v1",
       ...ids,
       conversationId: "c-lab",
-      channel: { name: "lab", description: "", archived: false },
+      channel: { name: "lab", description: "", archived: false, visibility: "public" as const },
     }),
   ).toEqual([general, lab]);
   expect(
@@ -28,9 +40,23 @@ test("a created channel joins the names, and a changed one takes its new info", 
       type: "channel.updated.v1",
       ...ids,
       conversationId: "c-lab",
-      channel: { name: "lab-2", description: "Tests", archived: true },
+      channel: {
+        name: "lab-2",
+        description: "Tests",
+        archived: true,
+        visibility: "public" as const,
+      },
     }),
-  ).toEqual([general, { id: "c-lab", name: "lab-2", description: "Tests", archived: true }]);
+  ).toEqual([
+    general,
+    {
+      id: "c-lab",
+      name: "lab-2",
+      description: "Tests",
+      archived: true,
+      visibility: "public" as const,
+    },
+  ]);
 });
 
 test("a deleted or hidden channel leaves the names", () => {

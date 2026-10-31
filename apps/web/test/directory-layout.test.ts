@@ -13,6 +13,7 @@ const channel = (id: string): DirectoryChannel => ({
   id,
   name: id,
   joined: true,
+  visibility: "public",
   pinned: false,
   pinSortOrder: null,
   members: [],

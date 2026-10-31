@@ -5,7 +5,7 @@ import { cx } from "#src/utils/cx";
 
 /** The icon a channel goes by where it has one: `#`, or a lock for a private channel, as Slack
  * marks it. */
-export function channelGlyph(channel: { visibility?: ChannelVisibility }) {
+export function channelGlyph(channel: { visibility: ChannelVisibility }) {
   return isPrivateChannel(channel) ? Lock01 : Hash01;
 }
 
@@ -34,7 +34,7 @@ export function ChannelTitle({
   lockClassName = "size-4",
 }: {
   name: string;
-  visibility?: ChannelVisibility;
+  visibility: ChannelVisibility;
   hash?: boolean;
   lockClassName?: string;
 }) {

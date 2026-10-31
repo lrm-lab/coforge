@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { channelVisibilitySchema } from "./channel-visibility";
 import {
   publicationData,
   publicationDataOrUndefined,
@@ -224,8 +225,7 @@ const channelInfo = z.object({
   name: z.string().min(1),
   description: z.string(),
   archived: z.boolean(),
-  /** Absent from a server that predates private channels (task #302): public. */
-  visibility: z.enum(["public", "private"]).optional(),
+  visibility: channelVisibilitySchema,
 });
 
 /**

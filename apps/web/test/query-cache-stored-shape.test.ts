@@ -124,6 +124,7 @@ const fixtures = [
         name: "general",
         description: "",
         archived: false,
+        visibility: "public",
         project: undefined,
         coordinatorAgent: undefined,
         muted: false,
@@ -194,6 +195,7 @@ const fixtures = [
         name: "general",
         joined: true,
         archived: false,
+        visibility: "public",
         muted: false,
         unreadCount: 0,
         hidden: false,
@@ -247,14 +249,14 @@ const fixtures = [
   }),
   fixture("channel names", channelNamesQuery("w1"), {
     streamPositions,
-    names: [{ id: "c1", name: "general", description: "", archived: false }],
+    names: [{ id: "c1", name: "general", description: "", archived: false, visibility: "public" }],
   }),
   fixture("saved messages", savedMessagesQuery("w1"), {
     streamPositions,
     entries: [
       {
         savedAt: new Date("2026-09-30T00:02:00.000Z"),
-        conversation: { id: "c1", channelName: "general", directKey: null },
+        conversation: { id: "c1", channelName: "general", visibility: "public", directKey: null },
         message,
       },
     ],
@@ -450,6 +452,20 @@ const PINNED_SHAPES: Record<number, Record<string, string>> = {
     "sidebar directs": "5205999212e744be",
     "channel names": "331d221481674004",
     "saved messages": "af3437c73adfddaa",
+    "agent workspace scan": "d45d053aa4368e73",
+    "chat sections": "b49b26a074dbffb9",
+    "chat section order": "fc37a20be1db425d",
+  },
+  // A channel's visibility is required wherever a kept kind names a channel (task #376): the
+  // channel window, the sidebar's channels, every channel's name and a saved message's channel.
+  12: {
+    "channel window": "b1d091db9cdd9119",
+    "direct window with an Agent": "cfb56f0008e53e3a",
+    "direct window with a person": "8ffc1a72c5a7dfd6",
+    "sidebar channels": "71e962a71254dad3",
+    "sidebar directs": "5205999212e744be",
+    "channel names": "292a0fa92b3cbad1",
+    "saved messages": "29e083a65a909ec0",
     "agent workspace scan": "d45d053aa4368e73",
     "chat sections": "b49b26a074dbffb9",
     "chat section order": "fc37a20be1db425d",

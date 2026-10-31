@@ -8,7 +8,7 @@ import {
 } from "#src/features/conversations/reference-completion";
 
 function channel(name: string, description = "", archived = false): ChannelSuggestion {
-  return { id: `channel-${name}`, name, description, archived };
+  return { id: `channel-${name}`, name, description, archived, visibility: "public" };
 }
 
 const end = (text: string) => text.length;

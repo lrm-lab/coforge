@@ -67,7 +67,7 @@ test("a created channel is announced to the whole Workspace", async () => {
   await new CentrifugoConversationRealtime(centrifugo).channelCreated({
     workspaceId: "workspace-1",
     conversationId: "conversation-1",
-    channel: { name: "lab", description: "", archived: false },
+    channel: { name: "lab", description: "", archived: false, visibility: "public" as const },
     memberUserIds: undefined,
   });
   expect(published).toEqual([
@@ -77,7 +77,7 @@ test("a created channel is announced to the whole Workspace", async () => {
         type: "channel.created.v1",
         workspaceId: "workspace-1",
         conversationId: "conversation-1",
-        channel: { name: "lab", description: "", archived: false },
+        channel: { name: "lab", description: "", archived: false, visibility: "public" as const },
       },
     },
   ]);
@@ -86,7 +86,12 @@ test("a created channel is announced to the whole Workspace", async () => {
 test("a private channel's creation, change and Tasks reach only its people's own channels", async () => {
   const { centrifugo, published } = recordingCentrifugo();
   const realtime = new CentrifugoConversationRealtime(centrifugo);
-  const channel = { name: "secret", description: "", archived: false };
+  const channel = {
+    name: "secret",
+    description: "",
+    archived: false,
+    visibility: "public" as const,
+  };
   const scope = { workspaceId: "workspace-1", conversationId: "conversation-1" };
   await realtime.channelCreated({ ...scope, channel, memberUserIds: ["ada", "grace"] });
   await realtime.channelUpdated({ ...scope, gone: true, memberUserIds: ["ada"] });
@@ -120,7 +125,7 @@ test("a private channel nobody is in announces its creation to no one", async ()
   await new CentrifugoConversationRealtime(centrifugo).channelCreated({
     workspaceId: "workspace-1",
     conversationId: "conversation-1",
-    channel: { name: "secret", description: "", archived: false },
+    channel: { name: "secret", description: "", archived: false, visibility: "public" as const },
     memberUserIds: [],
   });
   expect(published).toEqual([]);

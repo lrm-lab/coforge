@@ -15,7 +15,12 @@ import {
 function entry(id: string, savedAt = new Date(0)): SavedEntry {
   return {
     savedAt,
-    conversation: { id: "conversation-1", channelName: "general", directKey: null },
+    conversation: {
+      id: "conversation-1",
+      channelName: "general",
+      visibility: "public",
+      directKey: null,
+    },
     message: { id } as SavedEntry["message"],
   };
 }
@@ -182,6 +187,7 @@ describe("saved messages collection", () => {
     expect(saved.conversation).toEqual({
       id: "conversation-1",
       channelName: null,
+      visibility: "public",
       directKey: null,
     });
     expect(saved.message).toMatchObject({

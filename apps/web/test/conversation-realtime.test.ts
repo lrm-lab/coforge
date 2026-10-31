@@ -49,7 +49,12 @@ describe("conversation realtime", () => {
 
   test("a channel event carries the channel's info, or that it is gone, for a sidebar to apply", () => {
     const ids = { workspaceId: "workspace-a", conversationId: "conversation-a" };
-    const channel = { name: "lab", description: "Where we test", archived: false };
+    const channel = {
+      name: "lab",
+      description: "Where we test",
+      archived: false,
+      visibility: "public" as const,
+    };
     const updated = { type: "channel.updated.v1" as const, ...ids, channel };
     const gone = { type: "channel.updated.v1" as const, ...ids, gone: true as const };
     const created = { type: "channel.created.v1" as const, ...ids, channel };
@@ -62,7 +67,10 @@ describe("conversation realtime", () => {
       ...ids,
     });
     expect(() =>
-      decodeChannelUpdatedEvent({ ...updated, channel: { ...channel, archived: "no" } }),
+      decodeChannelUpdatedEvent({
+        ...updated,
+        channel: { ...channel, archived: "no", visibility: "public" as const },
+      }),
     ).toThrow();
   });
 

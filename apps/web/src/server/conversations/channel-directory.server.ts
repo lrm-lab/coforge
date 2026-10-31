@@ -1,8 +1,5 @@
 import { compareChannelNames } from "#src/features/conversations/channel-signals";
-import {
-  channelVisibilityOf,
-  visibilityField,
-} from "#src/features/conversations/channel-visibility";
+import { channelVisibilityOf } from "#src/features/conversations/channel-visibility";
 import { AppError } from "#src/lib/app-error";
 import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
@@ -153,7 +150,7 @@ export async function listChannels(
         name: channel.channelName!,
         joined: Boolean(member),
         archived: channel.archivedAt !== null,
-        ...visibilityField(channel),
+        visibility: channelVisibilityOf(channel),
         muted: member?.channelMuted ?? false,
         unreadCount: member ? (unreadByConversation.get(channel.id) ?? 0) : 0,
         mentioned: member ? mentionedConversations.has(channel.id) : false,

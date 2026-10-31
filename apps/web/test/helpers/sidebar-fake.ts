@@ -16,6 +16,7 @@ const channel = (id: string, fields: Partial<Channel> = {}): Channel => ({
   name: id,
   joined: true,
   archived: false,
+  visibility: "public",
   muted: false,
   unreadCount: 0,
   mentioned: false,

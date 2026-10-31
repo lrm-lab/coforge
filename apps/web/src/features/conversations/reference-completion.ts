@@ -19,7 +19,7 @@ export type ChannelSuggestion = {
   description: string;
   archived: boolean;
   /** Private: the row shows a lock where a public one shows `#`. */
-  visibility?: ChannelVisibility;
+  visibility: ChannelVisibility;
 };
 
 /**

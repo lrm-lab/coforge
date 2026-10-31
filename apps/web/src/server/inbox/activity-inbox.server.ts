@@ -1,4 +1,4 @@
-import { visibilityField } from "#src/features/conversations/channel-visibility";
+import { channelVisibilityOf } from "#src/features/conversations/channel-visibility";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import type {
   ActivityInboxFilter,
@@ -345,7 +345,7 @@ export class ActivityInbox {
               // A task conversation's place is its board; the item's own conversation is the task's.
               conversationId: candidate.task?.boardId ?? candidate.conversationId,
               channelName: candidate.channelName ?? "",
-              ...visibilityField(candidate),
+              visibility: channelVisibilityOf(candidate),
               members:
                 channelMembers.get(candidate.task?.boardId ?? candidate.conversationId) ?? [],
             }

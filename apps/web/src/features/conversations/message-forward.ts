@@ -83,7 +83,7 @@ export type ForwardTarget =
       kind: "channel";
       conversationId: string;
       name: string;
-      visibility?: ChannelVisibility;
+      visibility: ChannelVisibility;
       joined: boolean;
       canSend: boolean;
     }

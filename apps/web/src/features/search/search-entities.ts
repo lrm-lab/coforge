@@ -10,7 +10,7 @@ export type SearchEntity =
       name: string;
       description: string;
       archived: boolean;
-      visibility?: ChannelVisibility;
+      visibility: ChannelVisibility;
     }
   | { kind: "computer"; id: string; name: string; hostname: string; computerKind: string }
   | {

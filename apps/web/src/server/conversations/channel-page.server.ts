@@ -1,6 +1,6 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { windowPageFlags } from "#src/lib/conversation-window";
-import { visibilityField } from "#src/features/conversations/channel-visibility";
+import { channelVisibilityOf } from "#src/features/conversations/channel-visibility";
 import { canCreateAgents } from "#src/server/workspaces/member-role.server";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
 import { memberChannel, viewerChannel, type PublicChannelPorts } from "./channel-access.server";
@@ -128,7 +128,7 @@ export async function openChannel(
     name: channel.channelName!,
     description: channel.description,
     archived: channel.archivedAt !== null,
-    ...visibilityField(channel),
+    visibility: channelVisibilityOf(channel),
     project: channel.project ?? undefined,
     coordinatorAgent: activeCoordinator,
     senderMemberId: member?.id ?? "",

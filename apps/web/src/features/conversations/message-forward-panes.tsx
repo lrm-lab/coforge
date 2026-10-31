@@ -11,6 +11,7 @@ import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { channelGlyph } from "./channel-name";
+import type { ChannelVisibility } from "./channel-visibility";
 import { FORWARD_NOTE_MAX_LENGTH } from "./message-forward";
 import type { ForwardFailureCode, ForwardTarget, ForwardedMessageView } from "./message-forward";
 import { ForwardedMessageCard } from "./message-forward-card";
@@ -42,7 +43,6 @@ function TargetRow({
   onToggle: (target: ForwardTarget, on: boolean) => void;
 }) {
   const label = forwardTargetLabel(target);
-  const ChannelGlyph = channelGlyph(target.kind === "channel" ? target : {});
   const tag = failure
     ? failureLabel(failure)
     : isUnjoinedChannel(target)
@@ -61,12 +61,7 @@ function TargetRow({
           <>
             <CheckboxBase isSelected={on} isDisabled={isDisabled} isFocusVisible={isFocusVisible} />
             {target.kind === "channel" ? (
-              <span
-                aria-hidden="true"
-                className="flex size-6 shrink-0 items-center justify-center rounded-md bg-tertiary text-fg-quaternary"
-              >
-                <ChannelGlyph className="size-3.5" />
-              </span>
+              <ChannelTargetMark visibility={target.visibility} />
             ) : (
               <IdentityAvatar
                 size="xs"
@@ -264,5 +259,18 @@ export function ForwardNotePane({
         </div>
       </div>
     </div>
+  );
+}
+
+/** A channel target's mark: `#`, or a lock for a private channel. */
+function ChannelTargetMark({ visibility }: { visibility: ChannelVisibility }) {
+  const Glyph = channelGlyph({ visibility });
+  return (
+    <span
+      aria-hidden="true"
+      className="flex size-6 shrink-0 items-center justify-center rounded-md bg-tertiary text-fg-quaternary"
+    >
+      <Glyph className="size-3.5" />
+    </span>
   );
 }

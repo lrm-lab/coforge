@@ -21,6 +21,7 @@ const pendingRow = (
   targetLabel: "Bob",
   targetAvatarUrl: null,
   channelName: "triage",
+  visibility: "public" as const,
   availableActions,
   expiresAt: new Date("2026-10-01T00:00:00Z"),
 });
@@ -46,6 +47,7 @@ test("lists the calling Agent's pending mentions with the channel, reason, and I
           targetLabel: "Bob",
           targetAvatarUrl: null,
           channelName: "triage",
+          visibility: "public" as const,
           availableActions: ["notify", "add"],
           expiresAt: new Date("2026-10-01T00:00:00Z"),
         },

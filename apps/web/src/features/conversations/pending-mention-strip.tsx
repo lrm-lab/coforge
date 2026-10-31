@@ -16,7 +16,7 @@ export type PendingMention = {
   targetLabel: string;
   targetAvatarUrl: string | null;
   channelName: string;
-  visibility?: ChannelVisibility;
+  visibility: ChannelVisibility;
   availableActions: readonly ("notify" | "add")[];
   /** What the reader's Notify or Add did: kept by the composer, so it survives leaving the chat. */
   outcome?: MentionOutcome;

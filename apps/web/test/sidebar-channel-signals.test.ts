@@ -35,7 +35,7 @@ test("a channel created elsewhere is listed in name order, not joined, without a
       type: "channel.created.v1",
       ...signalIds,
       conversationId: "lab",
-      channel: { name: "lab", description: "", archived: false },
+      channel: { name: "lab", description: "", archived: false, visibility: "public" as const },
     },
     { known: false },
   );
@@ -45,6 +45,7 @@ test("a channel created elsewhere is listed in name order, not joined, without a
     name: "lab",
     joined: false,
     archived: false,
+    visibility: "public" as const,
     muted: false,
     unreadCount: 0,
     hidden: false,
@@ -61,7 +62,7 @@ test("a channel created by the viewer on another page keeps the row the list alr
       type: "channel.created.v1",
       ...signalIds,
       conversationId: "random",
-      channel: { name: "random", description: "", archived: false },
+      channel: { name: "random", description: "", archived: false, visibility: "public" as const },
     },
     { known: false },
   );
@@ -75,7 +76,7 @@ test("a rename or archive elsewhere changes the row and its place, without a rea
       type: "channel.updated.v1",
       ...signalIds,
       conversationId: "random",
-      channel: { name: "a-team", description: "", archived: true },
+      channel: { name: "a-team", description: "", archived: true, visibility: "public" as const },
     },
     { known: true },
   );
@@ -84,6 +85,7 @@ test("a rename or archive elsewhere changes the row and its place, without a rea
   expect(sidebar.channels.get("random")).toMatchObject({
     name: "a-team",
     archived: true,
+    visibility: "public" as const,
     joined: true,
     unreadCount: 2,
   });
@@ -109,7 +111,7 @@ test("a change to a channel the list leaves out on purpose changes nothing", asy
       type: "channel.updated.v1",
       ...signalIds,
       conversationId: "closed",
-      channel: { name: "closed", description: "", archived: false },
+      channel: { name: "closed", description: "", archived: false, visibility: "public" as const },
     },
     { known: true },
   );
@@ -126,7 +128,7 @@ test("a change the list cannot place asks for a read", async () => {
         type: "channel.updated.v1",
         ...signalIds,
         conversationId: "back",
-        channel: { name: "back", description: "", archived: false },
+        channel: { name: "back", description: "", archived: false, visibility: "public" as const },
       },
       { known: false },
     ),
@@ -153,7 +155,7 @@ test("while a sidebar change is being saved, a channel event asks for a read ins
     type: "channel.updated.v1" as const,
     ...signalIds,
     conversationId: "general",
-    channel: { name: "general", description: "", archived: true },
+    channel: { name: "general", description: "", archived: true, visibility: "public" as const },
   };
   expect(sidebar.applyChannelSignal(archiveGeneral, { known: true })).toBe(false);
   failPin(new Error("offline"));
@@ -172,7 +174,7 @@ test("a channel event before the list has synced asks for a read instead of fail
         type: "channel.created.v1",
         ...signalIds,
         conversationId: "lab",
-        channel: { name: "lab", description: "", archived: false },
+        channel: { name: "lab", description: "", archived: false, visibility: "public" as const },
       },
       { known: false },
     ),
@@ -180,14 +182,22 @@ test("a channel event before the list has synced asks for a read instead of fail
 });
 
 describe("applyChannelSignalToLists", () => {
-  const lab = { name: "lab", description: "", archived: false };
+  const lab = { name: "lab", description: "", archived: false, visibility: "public" as const };
   const streamPositions = { "chat:workspace:w": { offset: 5, epoch: "e1" } };
   type NamesRead = { names: ChannelName[]; streamPositions: typeof streamPositions };
   async function withNames() {
     const setup = await sidebarWith();
     setup.queryClient.setQueryData<NamesRead>(channelNamesQueryKey("w"), {
       streamPositions,
-      names: [{ id: "general", name: "general", description: "", archived: false }],
+      names: [
+        {
+          id: "general",
+          name: "general",
+          description: "",
+          archived: false,
+          visibility: "public" as const,
+        },
+      ],
     });
     return setup;
   }
@@ -205,7 +215,13 @@ describe("applyChannelSignalToLists", () => {
       // A write from an event is not a server read: the positions the names were read at stay.
       streamPositions,
       names: [
-        { id: "general", name: "general", description: "", archived: false },
+        {
+          id: "general",
+          name: "general",
+          description: "",
+          archived: false,
+          visibility: "public" as const,
+        },
         { id: "lab", ...lab },
       ],
     });

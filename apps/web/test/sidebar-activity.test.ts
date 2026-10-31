@@ -20,6 +20,7 @@ const channel = (id: string, fields: Record<string, unknown> = {}) => ({
   name: id,
   joined: true,
   archived: false,
+  visibility: "public" as const,
   muted: false,
   unreadCount: 0,
   mentioned: false,

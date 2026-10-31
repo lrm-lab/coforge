@@ -1,5 +1,5 @@
 import {
-  visibilityField,
+  channelVisibilityOf,
   type ChannelVisibility,
 } from "#src/features/conversations/channel-visibility";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
@@ -37,7 +37,7 @@ export type PendingMentionActionView = {
   targetAvatarUrl: string | null;
   /** The channel the mention was sent in, by name. */
   channelName: string;
-  visibility?: ChannelVisibility;
+  visibility: ChannelVisibility;
   availableActions: MentionActionKind[];
   expiresAt: Date;
 };
@@ -149,7 +149,7 @@ function pendingMentionActionView(
       ? agentAvatarUrl(targetId, agent.avatarMascot)
       : workspaceUserAvatarUrl(workspaceId, targetId, row.targetUser?.avatarObjectKey ?? null),
     channelName: channel.channelName ?? "",
-    ...visibilityField(channel),
+    visibility: channelVisibilityOf(channel),
     // Notify once, add any time: a notified target can still be added. Whether the sender may add
     // is decided when they try.
     availableActions:

@@ -1,5 +1,5 @@
 import {
-  visibilityField,
+  channelVisibilityOf,
   type ChannelVisibility,
 } from "#src/features/conversations/channel-visibility";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
@@ -125,7 +125,7 @@ export type SavedMessageView = {
   conversation: {
     id: string;
     channelName: string | null;
-    visibility?: ChannelVisibility;
+    visibility: ChannelVisibility;
     directKey: string | null;
   };
   message: ReturnType<typeof mapBrowserMessage>;
@@ -138,7 +138,7 @@ export function savedMessageView(row: SavedMessageRow, workspaceId: string): Sav
     conversation: {
       id: row.conversation.id,
       channelName: row.conversation.channelName,
-      ...visibilityField(row.conversation),
+      visibility: channelVisibilityOf(row.conversation),
       directKey: row.conversation.directKey,
     },
     message: mapBrowserMessage(row.message, workspaceId),

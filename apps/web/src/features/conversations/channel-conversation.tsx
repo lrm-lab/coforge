@@ -40,8 +40,7 @@ export type ChannelConversationView = Omit<DirectConversationView, "agent" | "me
   name: string;
   description: string;
   archived: boolean;
-  /** Absent from a page read before private channels (task #302): public. */
-  visibility?: ChannelVisibility;
+  visibility: ChannelVisibility;
   project?: {
     id: string;
     name: string;

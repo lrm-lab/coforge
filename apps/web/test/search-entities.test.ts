@@ -76,7 +76,14 @@ describe("matchSearchEntities", () => {
 
   test("match quality precedes kind, and kinds break exact-name ties", () => {
     const entities: SearchEntity[] = [
-      { kind: "channel", id: "description", name: "Notes", description: "Atlas", archived: false },
+      {
+        kind: "channel",
+        id: "description",
+        name: "Notes",
+        description: "Atlas",
+        archived: false,
+        visibility: "public",
+      },
       { ...agent, id: "prefix", handle: "atlas-helper" },
       { ...dm({ name: "Atlas" }), id: "exact-dm" },
       { ...agent, id: "exact-agent", name: "Atlas" },
@@ -87,7 +94,14 @@ describe("matchSearchEntities", () => {
         hostname: "host",
         computerKind: "personal",
       },
-      { kind: "channel", id: "exact-channel", name: "Atlas", description: "", archived: false },
+      {
+        kind: "channel",
+        id: "exact-channel",
+        name: "Atlas",
+        description: "",
+        archived: false,
+        visibility: "public",
+      },
     ];
     expect(matchSearchEntities(entities, "atlas").map(({ id }) => id)).toEqual([
       "exact-channel",
