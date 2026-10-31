@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { InfiniteQueryObserver, QueryClient } from "@tanstack/react-query";
 
 import { createConversationReconciler } from "#src/features/conversations/conversation-reconciliation";
-import { onNetworkRead } from "#src/features/conversations/conversation-queries";
+import { onNetworkRead } from "#src/features/conversations/conversation-window-reads";
 import {
   decodeActivityChangedEvent,
   decodeChannelCreatedEvent,
