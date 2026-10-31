@@ -2,7 +2,11 @@ import type { QueryClient, QueryKey } from "@tanstack/react-query";
 
 import type { ChatListValue } from "./chat-lists-reader";
 import { channelNamesAfter, type ChannelSignal } from "./channel-signals";
-import { channelNamesQueryKey, sidebarChannelsQueryKey } from "./conversation-query-keys";
+import {
+  channelNamesQueryKey,
+  channelPageQueryKey,
+  sidebarChannelsQueryKey,
+} from "./conversation-query-keys";
 import type { ChatList } from "./conversation-unread";
 import type { Sidebar } from "./sidebar-collections";
 import type { ConversationActivityEvent } from "./conversation-activity-event";
@@ -27,6 +31,14 @@ export function applyChannelSignalToLists(
   const read = queryClient.getQueryData<ChannelNamesRead>(namesKey);
   const known = Boolean(read?.names.some((channel) => channel.id === signal.conversationId));
   const stale: ChatList[] = [];
+  // Gone for the viewer (made private, hidden, deleted): its page, if open, reads again and,
+  // refused, leaves for Chat. Made private, the channel's own event never reaches them: their
+  // subscription to it ended first.
+  if (signal.type === "channel.updated.v1" && signal.gone)
+    void queryClient.invalidateQueries({
+      queryKey: channelPageQueryKey(signal.conversationId),
+      exact: true,
+    });
   if (read) {
     const next = channelNamesAfter(read.names, signal);
     // The positions stay: only a server read changes them.

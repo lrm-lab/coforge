@@ -1,3 +1,4 @@
+import type { ChannelVisibility } from "./channel-visibility";
 import type { ChannelCreatedEvent, ChannelUpdatedEvent } from "./conversation-realtime";
 
 // Applying the Workspace's channel events (`channel.created.v1`, `channel.updated.v1`) to the
@@ -7,7 +8,14 @@ import type { ChannelCreatedEvent, ChannelUpdatedEvent } from "./conversation-re
 export type ChannelSignal = ChannelCreatedEvent | ChannelUpdatedEvent;
 
 /** One channel as every channel's name lists it (`PublicChannels.names`). */
-export type ChannelName = { id: string; name: string; description: string; archived: boolean };
+export type ChannelName = {
+  id: string;
+  name: string;
+  description: string;
+  archived: boolean;
+  /** Absent from a list read before private channels: public. */
+  visibility?: ChannelVisibility;
+};
 
 /**
  * Every channel's name after the signal, or undefined when the signal names only ids (an older

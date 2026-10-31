@@ -1,10 +1,12 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { windowPageFlags } from "#src/lib/conversation-window";
+import { visibilityField } from "#src/features/conversations/channel-visibility";
 import { canCreateAgents } from "#src/server/workspaces/member-role.server";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
 import { memberChannel, viewerChannel, type PublicChannelPorts } from "./channel-access.server";
 import {
   canDeleteChannel,
+  canChangeChannelVisibility,
   canHideGeneralChannel,
   deriveChannelAuthority,
 } from "./channel-authority.server";
@@ -126,6 +128,7 @@ export async function openChannel(
     name: channel.channelName!,
     description: channel.description,
     archived: channel.archivedAt !== null,
+    ...visibilityField(channel),
     project: channel.project ?? undefined,
     coordinatorAgent: activeCoordinator,
     senderMemberId: member?.id ?? "",
@@ -137,6 +140,17 @@ export async function openChannel(
     // Only a Workspace owner or admin hides #general (`setGeneralHidden`), whatever their role in it.
     canHideGeneral: canHideGeneralChannel(channel.channelName!, authority.serverRole),
     canDelete: canDeleteChannel(channel.channelName!, authority.serverRole),
+    // A Workspace owner or admin in a live channel (`setChannelVisibility`'s rule). Optional, as
+    // `visibility`: a page kept from before it still opens.
+    ...({
+      canChangeVisibility:
+        channel.archivedAt === null &&
+        canChangeChannelVisibility(
+          channel.channelName!,
+          authority.serverRole,
+          authority.isActiveMember,
+        ),
+    } as { canChangeVisibility?: boolean }),
     // The add view's "Create Agent" (`ManageAgents.create`'s rule).
     canCreateAgents: canCreateAgents(authority.serverRole),
     // Any member of a live channel stops its Agents (`ChannelAgentControl.stopAll`).

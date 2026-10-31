@@ -170,8 +170,9 @@ export function ProjectDetail({
           open
           onOpenChange={setCreating}
           defaultName={project.slug}
-          onCreate={async (name) => {
-            await create({ data: { name, projectId: project.id } });
+          offersPrivate
+          onCreate={async (name, _projectId, _userIds, _agentIds, visibility) => {
+            await create({ data: { name, projectId: project.id, visibility } });
             await router.invalidate({ sync: true });
           }}
         />

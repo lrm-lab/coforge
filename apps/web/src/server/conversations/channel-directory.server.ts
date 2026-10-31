@@ -1,4 +1,8 @@
 import { compareChannelNames } from "#src/features/conversations/channel-signals";
+import {
+  channelVisibilityOf,
+  visibilityField,
+} from "#src/features/conversations/channel-visibility";
 import { AppError } from "#src/lib/app-error";
 import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
@@ -45,6 +49,7 @@ export async function listChannels(
       id: true,
       channelName: true,
       archivedAt: true,
+      visibility: true,
       members: {
         where: { userId, ...ACTIVE_MEMBER_WHERE },
         select: {
@@ -148,6 +153,7 @@ export async function listChannels(
         name: channel.channelName!,
         joined: Boolean(member),
         archived: channel.archivedAt !== null,
+        ...visibilityField(channel),
         muted: member?.channelMuted ?? false,
         unreadCount: member ? (unreadByConversation.get(channel.id) ?? 0) : 0,
         mentioned: member ? mentionedConversations.has(channel.id) : false,
@@ -188,11 +194,12 @@ export async function archivedChannels(
   const channels = await db.conversation.findMany({
     where: { ...visibleChannelWhere(workspaceId, { userId }), archivedAt: { not: null } },
     orderBy: [{ archivedAt: "desc" }, { channelName: "asc" }],
-    select: { id: true, channelName: true, archivedAt: true },
+    select: { id: true, channelName: true, archivedAt: true, visibility: true },
   });
   return channels.map((channel) => ({
     id: channel.id,
     name: channel.channelName!,
     archivedAt: channel.archivedAt!,
+    visibility: channelVisibilityOf(channel),
   }));
 }

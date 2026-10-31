@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { Heading } from "react-aria-components";
 import { Check, Share04 as Share } from "@untitledui/icons";
 
 import {
@@ -9,7 +8,6 @@ import {
   ModalOverlay as SlideoutOverlay,
   SlideoutMenu,
 } from "#src/components/application/slideout-menus/slideout-menu";
-import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
 import { TextArea } from "#src/components/base/textarea/textarea";
@@ -28,7 +26,11 @@ import {
   type RosterProfile,
 } from "./channel-members-page";
 import { MembersStrip } from "./channel-members-strip";
-import { MembersPageHeading, SettingsPanelHeader } from "./channel-settings-header";
+import {
+  ChannelSettingsTitle,
+  MembersPageHeading,
+  SettingsPanelHeader,
+} from "./channel-settings-header";
 import { PanelSection, PreferenceRow } from "./settings-panel-parts";
 import { useSidebarActions, useSidebarLists } from "./sidebar-lists";
 import {
@@ -174,24 +176,7 @@ export function ChannelSettingsPanel({
                       onBack={() => changeMembersView(membersView === "add" ? "members" : null)}
                     />
                   ) : (
-                    <>
-                      <div className="flex min-w-0 items-center gap-2">
-                        <Heading
-                          slot="title"
-                          className="truncate text-lg font-semibold text-primary"
-                        >
-                          #{conversation.name}
-                        </Heading>
-                        <Badge size="sm" color="gray" className="shrink-0">
-                          {m.channel_settings_public()}
-                        </Badge>
-                      </div>
-                      {conversation.description && (
-                        <p className="mt-1 truncate text-sm text-tertiary">
-                          {conversation.description}
-                        </p>
-                      )}
-                    </>
+                    <ChannelSettingsTitle conversation={conversation} />
                   )}
                 </SettingsPanelHeader>
                 {membersView ? (
@@ -245,6 +230,7 @@ export function ChannelSettingsPanel({
                       capabilities.leave ||
                       conversation.canHideGeneral ||
                       conversation.canStopAgents ||
+                      conversation.canChangeVisibility ||
                       conversation.canDelete) && (
                       <ActionsSection
                         conversation={conversation}

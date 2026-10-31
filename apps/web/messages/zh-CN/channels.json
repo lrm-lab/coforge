@@ -149,5 +149,18 @@
         "countPlural=other": "{channel}，{count} 条未读消息，有人提到了你"
       }
     }
-  ]
+  ],
+  "channel_private": "私有",
+  "channel_private_name": "{name}，私有群聊",
+  "channel_create_private": "设为私有",
+  "channel_settings_private": "私有",
+  "channel_settings_make_private": "改为私有群聊",
+  "channel_settings_make_public": "改为公开群聊",
+  "channel_settings_make_private_title": "将 #{name} 改为私有群聊？",
+  "channel_settings_make_public_title": "将 {name} 改为公开群聊？",
+  "channel_settings_make_private_action": "改为私有",
+  "channel_settings_make_public_action": "改为公开",
+  "channel_settings_changing_visibility": "正在更改…",
+  "channel_settings_visibility_error": "更改失败，请重试。",
+  "channel_settings_visibility_denied": "只有在这个群聊里的工作区所有者和管理员可以更改。"
 }

@@ -1,3 +1,5 @@
+import type { ChannelVisibility } from "./channel-visibility";
+
 /**
  * Pure text logic for the composer's reference completion, free of React and DOM types: which
  * in-progress `@name` or `#channel` token sits at the caret, which channels a `#query` offers,
@@ -16,6 +18,8 @@ export type ChannelSuggestion = {
   name: string;
   description: string;
   archived: boolean;
+  /** Private: the row shows a lock where a public one shows `#`. */
+  visibility?: ChannelVisibility;
 };
 
 /**

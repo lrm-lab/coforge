@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
-import { Hash01 as Hash } from "@untitledui/icons";
+import { Hash01 as Hash, Lock01 } from "@untitledui/icons";
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { Badge } from "#src/components/base/badges/badges";
 import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
@@ -222,12 +222,14 @@ function MentionRow({
   );
 }
 
-/** A channel row: `#` icon, name, description, and an "Archived" badge on an archived channel. */
+/** A channel row: `#` icon (a lock for a private channel), name, description, and an "Archived"
+ * badge on an archived channel. */
 function ChannelRow({ channel }: { channel: ChannelSuggestion }) {
+  const Glyph = channel.visibility === "private" ? Lock01 : Hash;
   return (
     <>
       <span aria-hidden="true" className="flex size-6 shrink-0 items-center justify-center">
-        <Hash className={cx("size-4", channel.archived ? "text-quaternary" : "text-tertiary")} />
+        <Glyph className={cx("size-4", channel.archived ? "text-quaternary" : "text-tertiary")} />
       </span>
       <span className="grid min-w-0 flex-1 grid-cols-[minmax(0,auto)_minmax(0,1fr)] items-center gap-2">
         <span

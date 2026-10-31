@@ -38,6 +38,7 @@
   "settings_system_channels_hide_general_description": "When enabled, #general disappears from channel lists, search, posting, members, and Agent channel surfaces. Existing history is preserved.",
   "settings_archived_channels": "Archived channels",
   "settings_archived_channels_public": "Public channel",
+  "settings_archived_channels_private": "Private channel",
   "settings_archived_channels_archived_at": "Archived {time}",
   "settings_archived_channels_open": "Open #{name}",
   "settings_archived_channels_unarchive_label": "Unarchive #{name}",

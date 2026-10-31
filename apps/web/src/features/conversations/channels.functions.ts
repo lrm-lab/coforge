@@ -63,14 +63,16 @@ export const listChannelNames = createServerFn({ method: "GET" })
     return { streamPositions, names: data };
   });
 
-/** Creates a channel, then adds the people and Agents picked for it (`PublicChannels.createWithMembers`).
- * `membersAddFailed` says the channel exists but the picked members were not added. */
+/** Creates a channel, public unless asked private, then adds the people and Agents picked for it
+ * (`PublicChannels.createWithMembers`). `membersAddFailed` says the channel exists but the picked
+ * members were not added. */
 export const createPublicChannel = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(
     z.object({
       name: z.string().trim().regex(CHANNEL_NAME_PATTERN),
       projectId: z.uuid().optional(),
+      visibility: z.enum(["public", "private"]).optional(),
       userIds: z.array(z.uuid()).max(100).default([]),
       agentIds: z.array(z.uuid()).max(100).default([]),
     }),

@@ -34,7 +34,11 @@ import { loadPublicChannel, loadPublicChannelUpdates } from "./channels.function
 import { refreshPendingActionCards } from "./action-card-refresh";
 import { loadMessageReactions } from "./message-reactions.functions";
 import { createReactionSync } from "./reaction-sync";
-import { channelMembersQueryKey, channelNamesQueryKey } from "./conversation-query-keys";
+import {
+  channelMembersQueryKey,
+  channelNamesQueryKey,
+  channelPageQueryKey,
+} from "./conversation-query-keys";
 import { savedMessagesQueryKey } from "./saved-messages-collection";
 import { readChatList, type ChatListValue } from "./chat-lists-reader";
 import {
@@ -54,7 +58,7 @@ export const directConversationQuery = (conversationId: string) =>
   );
 
 export const publicChannelQuery = (channelId: string) =>
-  conversationPages(["conversation", "channel", channelId], (page, signal) =>
+  conversationPages(channelPageQueryKey(channelId), (page, signal) =>
     loadPublicChannel({ data: { channelId, ...page }, signal }),
   );
 

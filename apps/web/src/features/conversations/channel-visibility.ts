@@ -22,3 +22,11 @@ export function channelVisibilityOf(channel: { visibility: string }): ChannelVis
 export function isChannelVisibility(value: unknown): value is ChannelVisibility {
   return value === CHANNEL_VISIBILITY.PUBLIC || value === CHANNEL_VISIBILITY.PRIVATE;
 }
+
+/** A channel's visibility as a page or list row carries it: optional, so a row kept in the
+ * browser's storage from before private channels still opens, as public (`STORED_SHAPE_VERSION`). */
+export function visibilityField(channel: { visibility: string }): {
+  visibility?: ChannelVisibility;
+} {
+  return { visibility: channelVisibilityOf(channel) };
+}

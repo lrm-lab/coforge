@@ -422,14 +422,16 @@ export function createSidebar(
       return true;
     }
     if (!signal.channel) return false;
-    const { name, archived } = signal.channel;
-    if (channels.has(id)) channels.utils.writeUpdate({ id, name, archived });
+    // An event from before private channels carries no visibility: public.
+    const { name, archived, visibility = "public" } = signal.channel;
+    if (channels.has(id)) channels.utils.writeUpdate({ id, name, archived, visibility });
     else if (signal.type === "channel.created.v1")
       channels.utils.writeInsert({
         id,
         name,
         joined: false,
         archived,
+        visibility,
         muted: false,
         unreadCount: 0,
         mentioned: false,

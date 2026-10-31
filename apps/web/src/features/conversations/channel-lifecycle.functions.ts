@@ -11,7 +11,7 @@ import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.s
 import { userAgentControl } from "#src/server/agents/user-agent-control.server";
 import { channelInput, channelScope } from "./channel-function-scope.server";
 
-/* A channel's life as a whole, for its settings and Settings: archiving, hiding #general,
+/* A channel's life as a whole, for its settings and Settings: archiving, its visibility, hiding #general,
  * stopping and resuming its Agents, deleting it. */
 
 export const setPublicChannelArchived = createServerFn({ method: "POST" })
@@ -20,6 +20,16 @@ export const setPublicChannelArchived = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { channels, workspaceId, userId } = channelScope(context);
     return channels.setArchived(workspaceId, { userId }, data.channelId, data.archived);
+  });
+
+/** Makes a channel private or public (`PublicChannels.setVisibility`): a Workspace owner or admin
+ * in the channel only. */
+export const setPublicChannelVisibility = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(channelInput.extend({ visibility: z.enum(["public", "private"]) }))
+  .handler(async ({ data, context }) => {
+    const { channels, workspaceId, userId } = channelScope(context);
+    return channels.setVisibility(workspaceId, { userId }, data.channelId, data.visibility);
   });
 
 /** Whether `#general` is hidden from the whole Workspace, for the System channels section of

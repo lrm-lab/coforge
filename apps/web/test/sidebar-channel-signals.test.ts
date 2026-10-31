@@ -2,7 +2,10 @@ import { describe, expect, test } from "bun:test";
 
 import { applyChannelSignalToLists } from "#src/features/conversations/sidebar-signals";
 import { compareChannelNames, type ChannelName } from "#src/features/conversations/channel-signals";
-import { channelNamesQueryKey } from "#src/features/conversations/conversation-query-keys";
+import {
+  channelNamesQueryKey,
+  channelPageQueryKey,
+} from "#src/features/conversations/conversation-query-keys";
 import { sidebarWith } from "./helpers/sidebar-fake";
 
 /**
@@ -207,6 +210,32 @@ describe("applyChannelSignalToLists", () => {
       ],
     });
     expect(listed(sidebar)).toEqual(["general", "lab", "random"]);
+  });
+
+  test("a channel made private keeps its row for its members, now marked private (task #302)", async () => {
+    const { sidebar, queryClient } = await withNames();
+    applyChannelSignalToLists(queryClient, "w", sidebar, {
+      type: "channel.updated.v1",
+      ...signalIds,
+      conversationId: "random",
+      channel: { name: "random", description: "", archived: false, visibility: "private" },
+    });
+    expect(sidebar.channels.get("random")?.visibility).toBe("private");
+  });
+
+  test("a channel gone for the viewer leaves the list, and its open page reads again (task #302)", async () => {
+    const { sidebar, queryClient } = await withNames();
+    // Made private, an outsider's subscription to the channel ends before its own event is sent:
+    // only this signal says the page they have open is no longer theirs.
+    queryClient.setQueryData(channelPageQueryKey("random"), { pages: [], pageParams: [] });
+    applyChannelSignalToLists(queryClient, "w", sidebar, {
+      type: "channel.updated.v1",
+      ...signalIds,
+      conversationId: "random",
+      gone: true,
+    });
+    expect(listed(sidebar)).toEqual(["general"]);
+    expect(queryClient.getQueryState(channelPageQueryKey("random"))?.isInvalidated).toBe(true);
   });
 
   test("an ids-only event, a channel coming back, or no hydrated sidebar is re-read", async () => {

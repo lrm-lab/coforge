@@ -12,16 +12,24 @@ import {
   deletePublicChannel,
   setGeneralChannelHidden,
   setPublicChannelArchived,
+  setPublicChannelVisibility,
 } from "./channel-lifecycle.functions";
 
 /** The channel actions that ask for confirmation first. */
-export type ConfirmedAction = "archive" | "leave" | "hide-general" | "delete";
+export type ConfirmedAction =
+  | "archive"
+  | "leave"
+  | "hide-general"
+  | "delete"
+  | "make-private"
+  | "make-public";
 
 const CONFIRM_COPY: Record<
   ConfirmedAction,
   {
-    title: () => string;
-    body: (name: string) => string;
+    title: (name: string) => string;
+    /** What follows from it, when the title alone does not say. */
+    body?: (name: string) => string;
     confirm: () => string;
     pending: () => string;
     error: () => string;
@@ -32,7 +40,7 @@ const CONFIRM_COPY: Record<
   }
 > = {
   archive: {
-    title: m.channel_settings_archive,
+    title: () => m.channel_settings_archive(),
     body: (name) => m.channel_settings_archive_confirm({ name }),
     confirm: m.channel_settings_archive_action,
     pending: m.channel_settings_archiving,
@@ -40,14 +48,14 @@ const CONFIRM_COPY: Record<
     denied: m.channel_settings_access_denied,
   },
   leave: {
-    title: m.channel_settings_leave,
+    title: () => m.channel_settings_leave(),
     body: (name) => m.channel_settings_leave_confirm({ name }),
     confirm: m.channel_settings_leave_action,
     pending: m.channel_settings_leaving,
     error: m.channel_settings_leave_error,
   },
   "hide-general": {
-    title: m.channel_settings_hide_general,
+    title: () => m.channel_settings_hide_general(),
     body: () => m.channel_settings_hide_general_confirm(),
     confirm: m.channel_settings_hide_general,
     pending: m.channel_settings_hiding_general,
@@ -55,7 +63,7 @@ const CONFIRM_COPY: Record<
     denied: m.channel_settings_hide_general_denied,
   },
   delete: {
-    title: m.channel_settings_delete,
+    title: () => m.channel_settings_delete(),
     body: (name) => m.channel_settings_delete_confirm({ name }),
     confirm: m.channel_settings_delete_action,
     pending: m.channel_settings_deleting,
@@ -63,10 +71,25 @@ const CONFIRM_COPY: Record<
     denied: m.channel_settings_delete_denied,
     permanent: true,
   },
+  // As Slack asks: the title and the button say it all.
+  "make-private": {
+    title: (name) => m.channel_settings_make_private_title({ name }),
+    confirm: m.channel_settings_make_private_action,
+    pending: m.channel_settings_changing_visibility,
+    error: m.channel_settings_visibility_error,
+    denied: m.channel_settings_visibility_denied,
+  },
+  "make-public": {
+    title: (name) => m.channel_settings_make_public_title({ name }),
+    confirm: m.channel_settings_make_public_action,
+    pending: m.channel_settings_changing_visibility,
+    error: m.channel_settings_visibility_error,
+    denied: m.channel_settings_visibility_denied,
+  },
 };
 
-/** Confirms archiving, leaving or deleting the channel, or hiding #general; the write runs here
- * so its error stays inline. */
+/** Confirms archiving, leaving or deleting the channel, making it private or public, or hiding
+ * #general; the write runs here so its error stays inline. */
 export function ChannelActionConfirmDialog({
   kind,
   channelId,
@@ -84,11 +107,14 @@ export function ChannelActionConfirmDialog({
   const leave = useServerFn(leavePublicChannel);
   const setGeneralHidden = useServerFn(setGeneralChannelHidden);
   const deleteChannel = useServerFn(deletePublicChannel);
+  const setVisibility = useServerFn(setPublicChannelVisibility);
   const writes: Record<ConfirmedAction, () => Promise<unknown>> = {
     archive: () => setArchived({ data: { channelId, archived: true } }),
     leave: () => leave({ data: { channelId } }),
     "hide-general": () => setGeneralHidden({ data: { hidden: true } }),
     delete: () => deleteChannel({ data: { channelId } }),
+    "make-private": () => setVisibility({ data: { channelId, visibility: "private" } }),
+    "make-public": () => setVisibility({ data: { channelId, visibility: "public" } }),
   };
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -127,10 +153,12 @@ export function ChannelActionConfirmDialog({
         <Dialog className="text-left">
           {({ close }) => (
             <>
-              <DialogHeader title={copy.title()} onClose={busy ? undefined : close} />
-              <Text slot="description" className="mx-6 mt-4 block text-sm text-secondary">
-                {copy.body(channelName)}
-              </Text>
+              <DialogHeader title={copy.title(channelName)} onClose={busy ? undefined : close} />
+              {copy.body && (
+                <Text slot="description" className="mx-6 mt-4 block text-sm text-secondary">
+                  {copy.body(channelName)}
+                </Text>
+              )}
               {error && (
                 <p role="alert" className="px-6 pt-4 text-sm text-error-primary">
                   {error}

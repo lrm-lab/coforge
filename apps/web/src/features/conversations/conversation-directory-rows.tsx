@@ -1,4 +1,4 @@
-import { Hash01 as Hash } from "@untitledui/icons";
+import { Hash01 as Hash, Lock01 } from "@untitledui/icons";
 import { memo } from "react";
 
 import type { LiveAgent } from "#src/features/agents/workspace-agents-realtime";
@@ -9,7 +9,9 @@ import { useTimeZone } from "#src/lib/time-zone-context";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import { cx } from "#src/utils/cx";
+import { ChannelName, isPrivateChannel } from "./channel-name";
 import { channelMentionShown, channelPreviewLine } from "./channel-preview-line";
+import type { ChannelVisibility } from "./channel-visibility";
 import type { ChatSection } from "./chat-section.schemas";
 import { collageLayout } from "./collage-layout";
 import { ConversationRow } from "./conversation-row";
@@ -25,6 +27,8 @@ export type DirectoryChannel = {
   id: string;
   name: string;
   joined: boolean;
+  /** Private: the row shows a lock where a public one shows `#`. */
+  visibility?: ChannelVisibility;
   /** The member muted this channel; its unread badge degrades to a bare dot. */
   muted?: boolean;
   /** The member pinned this row; it moves to the Pinned section and its menu item reads "Unpin". */
@@ -80,6 +84,11 @@ export const ChannelDirectoryRow = memo(function ChannelDirectoryRow({
   // The channel's last message, or none (the row then shows its name only).
   const lastMessage = useLiveChannelRow(channel.id)?.lastMessage;
   const time = useLastMessageTime(lastMessage?.createdAt);
+  const locked = isPrivateChannel(channel);
+  // Its members' faces when it has some, else its `#` or, private, its lock; a private channel
+  // shown by its faces carries the lock before its name.
+  const faces = collageLayout(channel.members.length).length > 0;
+  const Glyph = locked ? Lock01 : Hash;
   return (
     <ConversationRowMenu
       target={{ kind: "channel", ...channel, muted: channel.muted === true }}
@@ -92,7 +101,7 @@ export const ChannelDirectoryRow = memo(function ChannelDirectoryRow({
         pinned={channel.pinned}
         muted={!channel.joined || channel.muted}
         unreadCount={unreadCount}
-        label={`#${channel.name}`}
+        label={locked ? m.channel_private_name({ name: channel.name }) : `#${channel.name}`}
         lastMessage={{
           time,
           preview: lastMessage
@@ -105,11 +114,11 @@ export const ChannelDirectoryRow = memo(function ChannelDirectoryRow({
           mentioned: channelMentionShown({ mentioned: channel.mentioned, unreadCount }),
         }}
         icon={
-          collageLayout(channel.members.length).length > 0 ? (
+          faces ? (
             <GroupAvatar members={channel.members} />
           ) : (
             <span className="flex size-5 items-center justify-center">
-              <Hash
+              <Glyph
                 aria-hidden="true"
                 className={cx("size-4", current ? "text-brand-secondary" : "text-tertiary")}
               />
@@ -117,7 +126,16 @@ export const ChannelDirectoryRow = memo(function ChannelDirectoryRow({
           )
         }
       >
-        {channel.name}
+        {faces ? (
+          <ChannelName
+            name={channel.name}
+            visibility={channel.visibility}
+            hash={false}
+            lockClassName="size-3.5"
+          />
+        ) : (
+          channel.name
+        )}
       </ConversationRow>
     </ConversationRowMenu>
   );

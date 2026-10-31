@@ -4,6 +4,8 @@ import { Text } from "react-aria-components";
 import {
   Archive,
   EyeOff,
+  Lock01,
+  LockUnlocked01,
   LogOut01 as LogOut,
   RefreshCcw01 as Unarchive,
   StopCircle,
@@ -17,6 +19,7 @@ import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/di
 import { m } from "#src/paraglide/messages";
 import type { ChannelConversationView } from "./channel-conversation";
 import type { ConfirmedAction } from "./channel-action-confirm-dialog";
+import { isPrivateChannel } from "./channel-name";
 import { setPublicChannelArchived } from "./channel-lifecycle.functions";
 import { PanelSection } from "./settings-panel-parts";
 
@@ -55,6 +58,28 @@ export function ActionsSection({
   return (
     <PanelSection title={m.channel_settings_actions()}>
       <div className="flex flex-col gap-2">
+        {/* A Workspace owner or admin in the channel makes it private or public, as in Slack's
+            channel settings. */}
+        {conversation.canChangeVisibility &&
+          (isPrivateChannel(conversation) ? (
+            <Button
+              color="secondary"
+              iconLeading={LockUnlocked01}
+              className="w-full"
+              onPress={() => onConfirm("make-public")}
+            >
+              {m.channel_settings_make_public()}
+            </Button>
+          ) : (
+            <Button
+              color="secondary"
+              iconLeading={Lock01}
+              className="w-full"
+              onPress={() => onConfirm("make-private")}
+            >
+              {m.channel_settings_make_private()}
+            </Button>
+          ))}
         {conversation.archived
           ? capabilities.unarchive && (
               <Button

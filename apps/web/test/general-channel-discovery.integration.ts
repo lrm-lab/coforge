@@ -98,6 +98,7 @@ test("Workspace humans enrolled in general see one general channel; outsiders ca
         name: "general",
         joined: true,
         archived: false,
+        visibility: "public",
         muted: false,
         unreadCount: 0,
         mentioned: false,

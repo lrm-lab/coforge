@@ -409,9 +409,9 @@ test.skipIf(!connectionString)(
         await db.conversation.update({ where: { id }, data: { archivedAt } });
 
       const expected = [
-        { id: alpha.id, name: `alpha-${suffix}`, archivedAt: newer },
-        { id: beta.id, name: `beta-${suffix}`, archivedAt: newer },
-        { id: team.id, name: `team-${suffix}`, archivedAt: older },
+        { id: alpha.id, name: `alpha-${suffix}`, archivedAt: newer, visibility: "public" as const },
+        { id: beta.id, name: `beta-${suffix}`, archivedAt: newer, visibility: "public" as const },
+        { id: team.id, name: `team-${suffix}`, archivedAt: older, visibility: "public" as const },
       ];
       expect(await channels.archived(workspace.id, owner.id)).toEqual(expected);
       expect(await channels.archived(workspace.id, admin.id)).toEqual(expected);

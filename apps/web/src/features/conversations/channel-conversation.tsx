@@ -1,10 +1,12 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Hash01 as Hash, SearchLg, Settings01 as Settings } from "@untitledui/icons";
+import { Hash01 as Hash, Lock01, SearchLg, Settings01 as Settings } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { ChannelName, isPrivateChannel } from "./channel-name";
 import { ChannelSettingsPanel } from "./channel-settings-panel";
+import type { ChannelVisibility } from "./channel-visibility";
 import { ChannelHeaderMemberCluster, ChannelProjectChip } from "./channel-header-people";
 import type { ChannelMembersView } from "./channel-members-page";
 import type { ChannelCapabilities } from "#src/server/conversations/channel-authority.server";
@@ -38,6 +40,8 @@ export type ChannelConversationView = Omit<DirectConversationView, "agent" | "me
   name: string;
   description: string;
   archived: boolean;
+  /** Absent from a page read before private channels (task #302): public. */
+  visibility?: ChannelVisibility;
   project?: {
     id: string;
     name: string;
@@ -58,6 +62,9 @@ export type ChannelConversationView = Omit<DirectConversationView, "agent" | "me
   canCreateAgents: boolean;
   /** Whether this viewer, a member of this unarchived channel, may stop every Agent in it. */
   canStopAgents: boolean;
+  /** Whether this viewer, a Workspace owner or admin in this live channel, may make it private
+   * or public (never #general). */
+  canChangeVisibility?: boolean;
   followedThreadRootIds?: string[];
   messages: DirectConversationView["messages"];
 };
@@ -96,7 +103,7 @@ export function ChannelConversationHeader({
             <ConversationListButton />
             <div className="flex min-w-0 flex-1 items-center gap-2">
               <h1 className="min-w-0 shrink truncate text-md font-semibold">
-                #{conversation.name}
+                <ChannelName name={conversation.name} visibility={conversation.visibility} />
               </h1>
               {conversation.project && (
                 <ChannelProjectChip workspaceSlug={workspaceSlug} project={conversation.project} />
@@ -333,9 +340,14 @@ export function ChannelConversation({
           : undefined
       }
       emptyState={{
-        title: `#${conversation.name}`,
+        // A private channel's lock stands where a public one's `#` does.
+        title: isPrivateChannel(conversation) ? conversation.name : `#${conversation.name}`,
         description: conversation.senderMemberId ? m.channel_empty() : m.channel_empty_preview(),
-        media: <Hash aria-hidden="true" className="size-12 text-tertiary" strokeWidth={1.5} />,
+        media: isPrivateChannel(conversation) ? (
+          <Lock01 aria-hidden="true" className="size-12 text-tertiary" strokeWidth={1.5} />
+        ) : (
+          <Hash aria-hidden="true" className="size-12 text-tertiary" strokeWidth={1.5} />
+        ),
       }}
       header={
         <ChannelConversationHeader

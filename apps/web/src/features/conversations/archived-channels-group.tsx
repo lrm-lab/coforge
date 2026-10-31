@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useHydrated, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { Archive, Hash01 } from "@untitledui/icons";
+import { Archive, Hash01, Lock01 } from "@untitledui/icons";
 
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
@@ -128,9 +128,14 @@ function ArchivedChannelRow({
   return (
     <li className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:gap-4 sm:px-5">
       <div className="flex min-w-0 flex-1 items-center gap-3">
-        {/* The line under the name says it is a public channel; the icon only echoes it. */}
+        {/* The line under the name says whether it is public or private; the icon only echoes it. */}
         <span aria-hidden="true" className="shrink-0">
-          <FeaturedIcon icon={Hash01} color="gray" theme="modern" size="sm" />
+          <FeaturedIcon
+            icon={channel.visibility === "private" ? Lock01 : Hash01}
+            color="gray"
+            theme="modern"
+            size="sm"
+          />
         </span>
         <div className="min-w-0">
           <Link
@@ -142,7 +147,9 @@ function ArchivedChannelRow({
             #{channel.name}
           </Link>
           <p className="text-sm text-tertiary">
-            {m.settings_archived_channels_public()}
+            {channel.visibility === "private"
+              ? m.settings_archived_channels_private()
+              : m.settings_archived_channels_public()}
             {hydrated && (
               <>
                 {" · "}

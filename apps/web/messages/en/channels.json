@@ -151,5 +151,18 @@
         "countPlural=other": "{channel}, {count} unread messages, you were mentioned"
       }
     }
-  ]
+  ],
+  "channel_private": "Private",
+  "channel_private_name": "{name}, private channel",
+  "channel_create_private": "Make private",
+  "channel_settings_private": "Private",
+  "channel_settings_make_private": "Change to Private Channel",
+  "channel_settings_make_public": "Change to Public Channel",
+  "channel_settings_make_private_title": "Change #{name} to a private channel?",
+  "channel_settings_make_public_title": "Change {name} to a public channel?",
+  "channel_settings_make_private_action": "Change to Private",
+  "channel_settings_make_public_action": "Change to Public",
+  "channel_settings_changing_visibility": "Changing…",
+  "channel_settings_visibility_error": "Could not change the channel. Try again.",
+  "channel_settings_visibility_denied": "Only Workspace owners and admins in this channel can change this."
 }

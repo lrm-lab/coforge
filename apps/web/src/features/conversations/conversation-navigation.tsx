@@ -266,11 +266,13 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
               projects={projects}
               memberPicker
               minMembers={2}
-              onCreate={async (name, projectId, memberUserIds, memberAgentIds) => {
+              offersPrivate
+              onCreate={async (name, projectId, memberUserIds, memberAgentIds, visibility) => {
                 const created = await create({
                   data: {
                     name,
                     projectId,
+                    visibility,
                     userIds: memberUserIds ?? [],
                     agentIds: memberAgentIds ?? [],
                   },

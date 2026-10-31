@@ -10,6 +10,7 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Checkbox } from "#src/components/base/checkbox/checkbox";
 import { Input } from "#src/components/base/input/input";
 import { Select } from "#src/components/base/select/select";
+import { Toggle } from "#src/components/base/toggle/toggle";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
@@ -26,6 +27,7 @@ import {
   type CreatedChannel,
   type CreateChannelOutcome,
 } from "./create-channel-outcome";
+import type { ChannelVisibility } from "./channel-visibility";
 import { useWorkspaceDirectory } from "./workspace-directory-query";
 import { GroupChatPicker } from "./group-chat-picker-list";
 
@@ -47,6 +49,7 @@ type CreateChannelDialogProps = {
     projectId?: string,
     memberUserIds?: string[],
     memberAgentIds?: string[],
+    visibility?: ChannelVisibility,
   ) => Promise<CreatedChannel | void>;
   /** Opens a channel the dialog created (the picker's result state and success). */
   onOpenChannel?: (channelId: string) => void | Promise<void>;
@@ -65,6 +68,8 @@ type CreateChannelDialogProps = {
   memberPicker?: boolean;
   /** With `memberPicker`, the fewest people (besides the creator) the channel may start with. */
   minMembers?: number;
+  /** Offers making the channel private; an Agent's card has decided that already. */
+  offersPrivate?: boolean;
 };
 
 export function CreateChannelDialog({
@@ -77,6 +82,7 @@ export function CreateChannelDialog({
   initialMembers,
   memberPicker = false,
   minMembers = 0,
+  offersPrivate = false,
 }: CreateChannelDialogProps) {
   const directory = useWorkspaceDirectory({ enabled: memberPicker && open });
   const candidates = useMemo(
@@ -94,6 +100,7 @@ export function CreateChannelDialog({
     defaultName,
     initialMembers,
     minMembers,
+    offersPrivate,
     candidates,
     directory,
     busy,
@@ -135,6 +142,7 @@ type CreateChannelFormProps = Pick<
   | "defaultName"
   | "initialMembers"
   | "minMembers"
+  | "offersPrivate"
 > & {
   memberPicker: boolean;
   candidates: GroupChatCandidate[];
@@ -153,6 +161,7 @@ function CreateChannelForm({
   defaultName = "",
   initialMembers,
   minMembers = 0,
+  offersPrivate = false,
   memberPicker,
   candidates,
   directory,
@@ -161,6 +170,7 @@ function CreateChannelForm({
 }: CreateChannelFormProps) {
   const [name, setName] = useState(defaultName);
   const [projectId, setProjectId] = useState("");
+  const [makePrivate, setMakePrivate] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string>>(() =>
     initialKeys(initialMembers),
   );
@@ -191,7 +201,13 @@ function CreateChannelForm({
     const { userIds, agentIds } = splitGroupChatKeys(selectedKeys);
     try {
       const outcome: CreateChannelOutcome = createChannelOutcome(
-        await onCreate(channelName, projectId || undefined, userIds, agentIds),
+        await onCreate(
+          channelName,
+          projectId || undefined,
+          userIds,
+          agentIds,
+          makePrivate ? "private" : undefined,
+        ),
       );
       if (outcome.kind === "open") {
         await onOpenChannel?.(outcome.channelId);
@@ -235,6 +251,15 @@ function CreateChannelForm({
         <Select.Item key={project.id} id={project.id} label={`${project.name} (${project.slug})`} />
       ))}
     </Select>
+  );
+  // Slack's switch, without a description: the name says what it does.
+  const privateField = offersPrivate && (
+    <Toggle
+      label={m.channel_create_private()}
+      isSelected={makePrivate}
+      onChange={setMakePrivate}
+      isDisabled={locked}
+    />
   );
   const errorText = error && (
     <p role="alert" className="text-sm text-error-primary">
@@ -280,12 +305,16 @@ function CreateChannelForm({
         <Heading slot="title" className="pr-8 text-lg font-semibold text-primary">
           {m.channel_create()}
         </Heading>
-        <Text slot="description" className="mt-2 block text-sm text-tertiary">
-          {m.channel_public_description()}
-        </Text>
+        {/* What a public channel is; a private one is not that. */}
+        {!makePrivate && (
+          <Text slot="description" className="mt-2 block text-sm text-tertiary">
+            {m.channel_public_description()}
+          </Text>
+        )}
         <form onSubmit={(event) => void submit(event)} className="mt-5 flex flex-col gap-2">
           {nameField}
           {projectField}
+          {privateField}
           {initialMembers &&
             (initialMembers.humans.length > 0 || initialMembers.agents.length > 0) && (
               <div className="mt-2 flex flex-col gap-2">
@@ -381,6 +410,7 @@ function CreateChannelForm({
           >
             {nameField}
             {projectField}
+            {privateField}
             {errorText}
             {minMembersHint}
             <div className="flex min-h-48 flex-1 flex-col gap-3">{picker}</div>
@@ -421,6 +451,7 @@ function CreateChannelForm({
           >
             {nameField}
             {projectField}
+            {privateField}
             <ul className="flex flex-col gap-1">
               {selectedGroupChatCandidates(candidates, selectedKeys).map((entry) => (
                 <li key={entry.key} className="flex items-center gap-3 py-1">

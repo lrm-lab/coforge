@@ -10,6 +10,7 @@ import {
   userConversationChannel,
   workspaceConversationChannel,
 } from "#src/features/conversations/conversation-realtime";
+import { channelSignalOf } from "#src/features/conversations/conversation-unread";
 import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime";
 import {
   publicationDataOrUndefined,
@@ -148,9 +149,21 @@ function useTaskOverviewRealtime(
     },
     [overview, workspaceId, queryClient, burst],
   );
+  // Which channels' Tasks the viewer may see changed: only a read of the lists says which.
+  const readAgain = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: taskOverviewQuery(workspaceId).queryKey });
+    void queryClient.invalidateQueries({ queryKey: finishedTasksKey(workspaceId) });
+  }, [queryClient, workspaceId]);
   const onWorkspacePublication = useCallback(
-    (publication: { data: unknown }) => apply(decodeTaskChangedEvent(publication.data)),
-    [apply],
+    (publication: { data: unknown }) => {
+      // A channel made public (or new) is announced to everyone: its Tasks are theirs to see now.
+      if (publicationType(publicationDataOrUndefined(publication.data)) === "channel.created.v1") {
+        if (channelSignalOf(publication.data)?.workspaceId === workspaceId) readAgain();
+        return;
+      }
+      apply(decodeTaskChangedEvent(publication.data));
+    },
+    [apply, readAgain, workspaceId],
   );
   const onUserPublication = useCallback(
     (publication: { data: unknown }) => {
@@ -168,9 +181,19 @@ function useTaskOverviewRealtime(
         (type === "channel.joined.v1" || type === "channel.left.v1") &&
         decodeViewerEvent(data)?.workspaceId === workspaceId
       )
-        void queryClient.invalidateQueries({ queryKey: taskOverviewQuery(workspaceId).queryKey });
+        readAgain();
+      // A channel made private that the viewer is not in: its Tasks go with it.
+      if (type === "channel.updated.v1") {
+        const signal = channelSignalOf(data);
+        if (
+          signal?.type === "channel.updated.v1" &&
+          signal.gone &&
+          signal.workspaceId === workspaceId
+        )
+          readAgain();
+      }
     },
-    [apply, queryClient, workspaceId],
+    [apply, readAgain, workspaceId],
   );
 
   useRealtimeSubscription({

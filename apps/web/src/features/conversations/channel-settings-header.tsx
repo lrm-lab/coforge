@@ -5,7 +5,9 @@ import { ArrowLeft } from "@untitledui/icons";
 import { Badge } from "#src/components/base/badges/badges";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { m } from "#src/paraglide/messages";
+import type { ChannelConversationView } from "./channel-conversation";
 import type { ChannelMembersView } from "./channel-members-page";
+import { ChannelName, isPrivateChannel } from "./channel-name";
 import { useChannelMembers } from "./channel-members-query";
 
 /**
@@ -59,5 +61,31 @@ export function MembersPageHeading({
         </Badge>
       )}
     </div>
+  );
+}
+
+/** The settings page's title: the channel's name, whether it is public or private, and its
+ * description. */
+export function ChannelSettingsTitle({
+  conversation,
+}: {
+  conversation: Pick<ChannelConversationView, "name" | "visibility" | "description">;
+}) {
+  return (
+    <>
+      <div className="flex min-w-0 items-center gap-2">
+        <Heading slot="title" className="truncate text-lg font-semibold text-primary">
+          <ChannelName name={conversation.name} visibility={conversation.visibility} />
+        </Heading>
+        <Badge size="sm" color="gray" className="shrink-0">
+          {isPrivateChannel(conversation)
+            ? m.channel_settings_private()
+            : m.channel_settings_public()}
+        </Badge>
+      </div>
+      {conversation.description && (
+        <p className="mt-1 truncate text-sm text-tertiary">{conversation.description}</p>
+      )}
+    </>
   );
 }
