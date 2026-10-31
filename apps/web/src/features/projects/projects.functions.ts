@@ -15,7 +15,7 @@ import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile
 import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 import {
-  PROJECT_DETAIL_SELECT,
+  projectDetailSelect,
   readProjectChannelActivity,
 } from "#src/server/projects/project-detail.server";
 
@@ -129,7 +129,7 @@ export const getProject = createServerFn({ method: "GET" })
     const { db, workspaceId } = context;
     const project = await db.project.findFirst({
       where: { workspaceId, slug: data.slug },
-      select: PROJECT_DETAIL_SELECT,
+      select: projectDetailSelect(workspaceId, context.user.id),
     });
     if (!project) return null;
     const { conversations, ...view } = project;

@@ -2,7 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import {
-  PROJECT_DETAIL_SELECT,
+  projectDetailSelect,
   readProjectChannelActivity,
 } from "#src/server/projects/project-detail.server";
 
@@ -44,7 +44,7 @@ function rowsTouched(node: PlanNode) {
 test("the project page's query is valid for the migrated schema", async () => {
   const project = await db.project.findFirst({
     where: { workspaceId: crypto.randomUUID(), slug: "no-such-project" },
-    select: PROJECT_DETAIL_SELECT,
+    select: projectDetailSelect(crypto.randomUUID(), crypto.randomUUID()),
   });
   expect(project).toBeNull();
 });
@@ -134,7 +134,7 @@ test("the project page reads only its own channels' rows", async () => {
     recording = true;
     const detail = await db.project.findFirstOrThrow({
       where: { workspaceId: workspace.id, slug: project.slug },
-      select: PROJECT_DETAIL_SELECT,
+      select: projectDetailSelect(workspace.id, owner.id),
     });
     const activity = await readProjectChannelActivity(
       db,

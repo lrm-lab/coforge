@@ -1,25 +1,29 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
+import { visibleChannelWhere } from "#src/server/conversations/channel-read-access.server";
 
 /**
- * What the project page reads of a Project: its own fields and its channels. `satisfies` makes a
- * field removed from the schema a type error here instead of a failure of every project page at
- * run time. Each channel's activity is read by `readProjectChannelActivity`.
+ * What the project page reads of a Project: its own fields and the channels the viewer reads (a
+ * private channel only from inside it, task #302). `satisfies` makes a field removed from the
+ * schema a type error here instead of a failure of every project page at run time. Each channel's
+ * activity is read by `readProjectChannelActivity`.
  */
-export const PROJECT_DETAIL_SELECT = {
-  id: true,
-  name: true,
-  slug: true,
-  description: true,
-  iconObjectKey: true,
-  githubFullName: true,
-  githubHtmlUrl: true,
-  commitCoAuthor: true,
-  conversations: {
-    select: { id: true, channelName: true, createdAt: true },
-    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-  },
-} satisfies Prisma.ProjectSelect;
+export const projectDetailSelect = (workspaceId: string, userId: string) =>
+  ({
+    id: true,
+    name: true,
+    slug: true,
+    description: true,
+    iconObjectKey: true,
+    githubFullName: true,
+    githubHtmlUrl: true,
+    commitCoAuthor: true,
+    conversations: {
+      where: visibleChannelWhere(workspaceId, { userId }),
+      select: { id: true, channelName: true, createdAt: true },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    },
+  }) satisfies Prisma.ProjectSelect;
 
 const LAST_MESSAGE_SELECT = {
   createdAt: true,

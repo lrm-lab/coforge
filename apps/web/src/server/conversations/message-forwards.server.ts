@@ -12,6 +12,7 @@ import type { ManagedFileStorage } from "#src/server/files/file-storage.server";
 import type { MessageNotifier } from "#src/server/notifications/web-push-composition.server";
 import { peopleDirectPeerId } from "#src/features/conversations/direct-key";
 import { VISIBLE_CONVERSATION_WHERE } from "./active-member.server";
+import { canReadChannel } from "./channel-read-access.server";
 import { agentForwarded } from "./agent-message-view.server";
 import { sendChannel } from "./channel-send.server";
 import type { ConversationRealtime } from "./conversation-realtime.server";
@@ -188,12 +189,17 @@ export class MessageForwards {
         channelName: true,
         directKey: true,
         archivedAt: true,
+        visibility: true,
         members: { where: { userId }, select: { id: true, leftAt: true } },
       },
     });
     if (!conversation) return { failure: "no_access" };
     const own = conversation.members[0];
     if (conversation.channelName !== null) {
+      // A private channel the forwarder is not in answers as a missing one (task #302): its
+      // being archived, or there to join, is its members' to know.
+      if (!canReadChannel(conversation, own !== undefined && own.leftAt === null))
+        return { failure: "no_access" };
       if (conversation.archivedAt) return { failure: "archived" };
       // Never joined silently: the client asks the person, joins, and sends again.
       if (!own || own.leftAt) return { failure: "not_joined" };

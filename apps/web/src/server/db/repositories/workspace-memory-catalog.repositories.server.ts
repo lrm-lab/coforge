@@ -1,4 +1,5 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
+import { CHANNEL_VISIBILITY } from "#src/features/conversations/channel-visibility";
 import type { WorkspaceMemoryCatalog } from "#src/server/workspace-memory/catalog";
 import type {
   AdmissionConversation,
@@ -12,6 +13,16 @@ import {
 } from "#src/server/workspace-memory/dispatch";
 import { readMemoryOfferMessageIds } from "./workspace-memory-citation.repositories.server";
 import { WorkspaceMemoryScopeError } from "./workspace-memory-errors.server";
+
+/**
+ * The channels Workspace memory learns from: public ones. What it learns is offered to every
+ * member, so a private channel's messages never reach it (task #302), nor does a segment stored
+ * before its channel became private when its send is retried.
+ */
+const MEMORY_SOURCE_CHANNEL_WHERE = {
+  channelName: { not: null },
+  visibility: CHANNEL_VISIBILITY.PUBLIC,
+} as const;
 
 export class PrismaWorkspaceMemoryCatalog implements WorkspaceMemoryCatalog {
   constructor(private readonly db: PrismaClient) {}
@@ -51,7 +62,7 @@ export class PrismaWorkspaceMemoryCatalog implements WorkspaceMemoryCatalog {
     tasks: AdmissionTask[];
   }> {
     const conversations = await this.db.conversation.findMany({
-      where: { workspaceId, channelName: { not: null } },
+      where: { workspaceId, ...MEMORY_SOURCE_CHANNEL_WHERE },
       select: { id: true, workspaceId: true, channelName: true },
     });
     const conversationIds = conversations.map((row) => row.id);
@@ -99,7 +110,11 @@ export class PrismaWorkspaceMemoryCatalog implements WorkspaceMemoryCatalog {
   ): Promise<AdmissionMessage[]> {
     if (messageIds.length === 0) return [];
     const rows = await this.db.message.findMany({
-      where: { workspaceId, id: { in: [...messageIds] } },
+      where: {
+        workspaceId,
+        id: { in: [...messageIds] },
+        conversation: MEMORY_SOURCE_CHANNEL_WHERE,
+      },
       select: messageSelect,
     });
     return rows.map(toAdmissionMessage);

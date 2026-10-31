@@ -6,7 +6,7 @@ import { roleCan } from "#src/features/workspaces/workspace-roles";
 import { isAdminLike } from "#src/server/workspaces/member-role.server";
 import { workspaceMemberRole } from "#src/server/workspaces/workspace-membership.server";
 import { ACTIVE_MEMBER_WHERE, VISIBLE_CONVERSATION_WHERE } from "./active-member.server";
-import { readableConversationWhere } from "./channel-read-access.server";
+import { canReadChannel, readableConversationWhere } from "./channel-read-access.server";
 import { pageFillActionCardView } from "./action-card-page-fill.server";
 import type {
   ActionCardRef,
@@ -107,7 +107,7 @@ export async function actionCardViews(
         ? db.conversation.findMany({
             // A channel hidden from the Workspace is named on no card.
             where: { id: { in: [...channelIds] }, ...VISIBLE_CONVERSATION_WHERE },
-            select: { id: true, channelName: true },
+            select: { id: true, channelName: true, visibility: true },
           })
         : Promise.resolve([]),
       computerIds.size
@@ -120,14 +120,23 @@ export async function actionCardViews(
       channelIds.size
         ? db.conversationMember.findMany({
             where: { conversationId: { in: [...channelIds] }, userId: viewerUserId },
-            select: { conversationId: true },
+            select: { conversationId: true, leftAt: true },
           })
         : Promise.resolve([]),
     ]);
 
   const userName = new Map(users.map((u) => [u.id, humanLabel(u)]));
   const agentName = new Map(agents.map((a) => [a.id, a.displayName?.trim() || a.name]));
-  const channelName = new Map(channels.map((c) => [c.id, c.channelName ?? "unknown"]));
+  const viewerInChannel = new Set(
+    viewerChannelMemberships.flatMap((m) => (m.leftAt === null ? [m.conversationId] : [])),
+  );
+  // A private channel is named only to those in it; to anyone else it is unknown, as a missing
+  // one is (task #302).
+  const channelName = new Map(
+    channels.flatMap((c) =>
+      canReadChannel(c, viewerInChannel.has(c.id)) ? [[c.id, c.channelName ?? "unknown"]] : [],
+    ),
+  );
   const computerName = new Map(
     computers.map((c) => [c.id, c.displayName?.trim() || c.name || "unknown"]),
   );

@@ -81,7 +81,10 @@ export class PrismaWebPushSubscriptionStore implements WebPushSubscriptionStore 
         },
       },
     });
-    if (!message) return null;
+    // A task's own conversation notifies no one this way (its messages tell followers through
+    // Activity), and its seats are not who may read it: its board decides (`taskDiscussionAccess`).
+    // A seat kept after its channel became private must not read a message by id here (task #302).
+    if (!message || message.conversation.kind === "task_thread") return null;
     const channelName = message.conversation.channelName;
     // Stored bodies carry mentions as embedded-UUID tokens; the preview reads a person's back as
     // their name, never their username, and an Agent's as its `@handle`. Mention-pierce reads the

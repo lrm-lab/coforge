@@ -33,3 +33,10 @@ Moved out of [`AGENTS.md`](AGENTS.md) to keep it under 200 lines.
   channel cannot join, update, archive, delete or list it, nor add or remove its
   members. A write that names a channel by membership alone (pins, chat sections)
   answers a missing channel and a private one alike.
+- Surfaces beyond the channel's own pages keep to the rule as well: a project
+  lists only the channels the viewer reads (`projectDetailSelect`), a forward to a
+  private channel the forwarder is not in fails as `no_access`, and an action card
+  names it `unknown`. Workspace memory learns only from public channels
+  (`MEMORY_SOURCE_CHANNEL_WHERE`), since what it learns is offered to everyone. A
+  task's own conversation is never read as a notification by id: its board decides
+  who reads it, not the seats it keeps.
