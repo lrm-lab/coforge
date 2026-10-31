@@ -1,9 +1,10 @@
-//! Recovery without a person: `coforge-installer recover --auto`.
+//! Recovery without a person: every operation settles an unfinished upgrade first, and
+//! `coforge-installer settle` retries it from a trigger.
 //!
 //! An upgrade that cannot be rolled back leaves its journal, stops the service on purpose, and
-//! exits 3; until someone ran `coforge-computer recover` the machine stayed down. Now the
-//! installer arms a one-shot [`RetryTrigger`] in the same step, and each time it fires this module
-//! tries the same recovery, waiting longer after every failure ([`wait_before`]) and giving up
+//! exits 3; the machine used to stay down until a person asked for recovery. Now the next
+//! operation of any kind settles it first ([`settle_first`]), and the installer arms a one-shot [`RetryTrigger`] in the
+//! same step; each time it fires, this module tries the same recovery, waiting longer after every failure ([`wait_before`]) and giving up
 //! after [`MAX_ATTEMPTS`]. What it did is written to `recovery-report.json`, which the Computer
 //! reads and reports to the server. A machine with no journal has no trigger and no state.
 //!
@@ -54,7 +55,7 @@ pub enum AutoOutcome {
     NotYet,
     /// This attempt failed; the next is armed.
     Retry { attempts: u32, message: String },
-    /// The last attempt failed too. Nothing is armed; a person runs `coforge-computer recover`.
+    /// The last attempt failed too. Nothing is armed until the next operation settles it.
     GaveUp { attempts: u32, message: String },
 }
 
@@ -178,24 +179,69 @@ pub fn keep_trigger_in_step(
     }
 }
 
-/// What `coforge-installer start` does about an unfinished upgrade before it starts the service:
-/// the journal is settled first, so a machine that comes back (a reboot, a person) is not started
-/// from a version nobody confirmed. `None` means go on and start. Inside the service's own unit,
-/// recovery is refused (it would stop the caller), and the start goes on as it always did.
+/// Why an operation may not go on after it tried to settle an unfinished upgrade first.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Unsettled {
+    /// This process runs inside the service's own unit, which settling would stop.
+    Refused { message: String },
+    /// Another operation holds the machine lock.
+    Held { message: String },
+    /// The upgrade could not be settled now; the retry trigger will try again.
+    Unresolved { message: String },
+}
+
+impl Unsettled {
+    pub fn exit_code(&self) -> u8 {
+        match self {
+            Self::Refused { .. } => crate::contract::EXIT_FAILED,
+            Self::Held { .. } => crate::contract::EXIT_HELD,
+            Self::Unresolved { .. } => crate::contract::EXIT_UNRESOLVED,
+        }
+    }
+
+    /// What a person is told: an unsettled upgrade is not their task, so the answer is to run the
+    /// same command again.
+    pub fn message(&self) -> String {
+        match self {
+            Self::Refused { message } | Self::Held { message } => message.clone(),
+            Self::Unresolved { message } => format!(
+                "An earlier upgrade could not be recovered yet: {message}. Run the same command \
+                 again. Nothing was changed."
+            ),
+        }
+    }
+}
+
+/// Every operation settles an unfinished upgrade (the journal) before its own work, instead of
+/// refusing until a person asks for that: `Ok` means there is none left, or none to settle.
+pub fn settle_first(
+    ports: &Ports<'_>,
+    caller: Option<crate::processes::VerifiedCaller>,
+    stage: &mut dyn FnMut(&str),
+) -> Result<(), Unsettled> {
+    if matches!(Journal::new(ports.install_root).read(), Ok(None)) {
+        return Ok(());
+    }
+    stage("An upgrade was left unfinished; settling it first");
+    match recover(ports, caller, stage) {
+        RecoverOutcome::NothingToRecover | RecoverOutcome::Recovered { .. } => Ok(()),
+        RecoverOutcome::Refused { message } => Err(Unsettled::Refused { message }),
+        RecoverOutcome::Held { message } => Err(Unsettled::Held { message }),
+        RecoverOutcome::Unresolved { message } => Err(Unsettled::Unresolved { message }),
+    }
+}
+
+/// What `coforge-installer start` does about an unfinished upgrade before it starts the service.
+/// `None` means go on and start. Inside the service's own unit, settling is refused (it would stop
+/// the caller), and the start goes on as it always did.
 pub fn settle_before_start(
     ports: &Ports<'_>,
     stage: &mut dyn FnMut(&str),
 ) -> Option<crate::start::Outcome> {
-    if matches!(Journal::new(ports.install_root).read(), Ok(None)) {
-        return None;
-    }
-    stage("An upgrade was left unfinished; settling it before the service starts");
-    match recover(ports, None, stage) {
-        RecoverOutcome::NothingToRecover
-        | RecoverOutcome::Recovered { .. }
-        | RecoverOutcome::Refused { .. } => None,
-        RecoverOutcome::Held { message } => Some(crate::start::Outcome::Held { message }),
-        RecoverOutcome::Unresolved { message } => Some(crate::start::Outcome::Failed { message }),
+    match settle_first(ports, None, stage) {
+        Ok(()) | Err(Unsettled::Refused { .. }) => None,
+        Err(Unsettled::Held { message }) => Some(crate::start::Outcome::Held { message }),
+        Err(Unsettled::Unresolved { message }) => Some(crate::start::Outcome::Failed { message }),
     }
 }
 

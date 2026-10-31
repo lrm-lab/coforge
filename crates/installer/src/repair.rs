@@ -55,11 +55,11 @@ pub fn repair(
         Ok(None) => {}
         Ok(Some(_)) => return Outcome::NoReceipt {
             exit: EXIT_UNRESOLVED,
-            message: "an earlier upgrade did not finish. Run `coforge-computer recover` first. Nothing was changed.".to_owned(),
+            message: "an earlier upgrade did not finish. Run the same command again. Nothing was changed.".to_owned(),
         },
         Err(error) => return Outcome::NoReceipt {
             exit: EXIT_UNRESOLVED,
-            message: format!("the recovery journal {} cannot be read: {error}. Nothing was changed; run `coforge-computer recover` once it is readable.", journal.path().display()),
+            message: format!("the recovery journal {} cannot be read: {error}. Nothing was changed; run the same command again once it is readable.", journal.path().display()),
         },
     }
 

@@ -19,16 +19,15 @@ The commands, output and exit status of `coforge-installer`; what the crate does
   (`version.rs`) is a failed receipt, `UPGRADE_DOWNGRADE_REFUSED`, exit 1, decided after the target
   resolves and before anything changes; a version that is not SemVer cannot be ordered and is refused
   the same way. The same or a newer version and a machine with nothing installed are never gated.
-  The flag is not in the request record, so a replay ignores it. `recover` and rollback are not gated.
-- `coforge-installer recover [--caller-pid <pid>]`: settles an unfinished upgrade (the journal).
-  `--caller-pid` is the `coforge-computer recover` process that launched this installer and waits
-  for it, verified and never stopped, as for `upgrade`.
-- `coforge-installer recover --auto`: one automatic try, for the retry trigger and for nothing
+  The flag is not in the request record, so a replay ignores it. Settling an unfinished upgrade and rollback are not gated.
+- There is no `recover` command. `install`, `upgrade`, `repair` and `start` settle an unfinished
+  upgrade (the journal) first, with the same caller rules as their own work; one that cannot be
+  settled ends the operation with exit 3, no receipt, and "Run the same command again".
+- `coforge-installer settle [--json]`: one automatic try, for the retry trigger and for nothing
   else. It takes no caller. With no journal it does nothing (exit 0). Otherwise it waits out its
   backoff (`recovery-state.json`: attempts and the earliest next try; 1 minute, 5, 15, 1 hour,
-  then 6 hours between tries) and runs the same recovery as above, exit 0 when it settled and 3
-  when it did not. After 8 failed tries it stops trying, and a person runs `coforge-computer
-  recover`. What it did goes to `<install root>/recovery-report.json` (`outcome` `recovered` or
+  then 6 hours between tries) and settles the journal, exit 0 when it settled and 3 when it did
+  not. After 8 failed tries it stops trying until the next operation. What it did goes to `<install root>/recovery-report.json` (`outcome` `recovered` or
   `failed`, the restored version, the attempts, `finishedAt`) for the Computer to report.
   A journal left by an upgrade, install or recovery arms the trigger in the same step, and any
   operation that finds no journal disarms it, so a healthy machine has none. `start` settles a
@@ -58,7 +57,7 @@ The commands, output and exit status of `coforge-installer`; what the crate does
   (attempt <k> of 3): <error>` to stderr. A feed request that failed 3 times ends its message with
   `(3 attempts; proxy configured|proxy bypassed|no proxy)`; bypassed: `NO_PROXY` exempts the feed.
   Exit status (`contract.rs`): 0 succeeded, 1 failed, 2 held (lock or request conflict), 3 unresolved
-  (run `coforge-computer recover`, or a rollback failed).
+  (an earlier upgrade could not be settled yet: run the same command again; or a rollback failed).
   The release feed is compiled in (`src/compiled_feed.rs`): production defaults to
   `https://releases.coforge.cn`; plain HTTP is allowed only for loopback end-to-end tests. No command
   takes a feed.

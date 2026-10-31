@@ -150,18 +150,6 @@ export async function runUpgradeOperation(
 }
 
 /**
- * Finishes an upgrade the installer left unresolved, through the installer's own `recover`
- * command, with the terminal attached. Resolves to the installer's exit status.
- */
-export async function runInstallerRecovery(
-  overrides: Partial<UpgradeRunnerOptions> = {},
-): Promise<number> {
-  const options = { ...defaultUpgradeRunnerOptions(), ...overrides };
-  await assertOutsideManagedSupervisor();
-  return runInstallerOnTerminal(options, ["recover", "--caller-pid", String(process.pid)]);
-}
-
-/**
  * Re-registers a missing or stale service definition through the installer's own `repair`
  * command, with the terminal attached, and resolves to its exit status. Repair stops nothing, so
  * it may run from anywhere. The installer names its own receipt, so none is read here.

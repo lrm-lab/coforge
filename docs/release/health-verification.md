@@ -101,6 +101,6 @@ the target version within 60 s. Workspace children are not part of that check.
 A failed candidate is rolled back to the prior immutable installation and probed
 before the operation is recorded as `UPGRADE_ROLLED_BACK`. When the rollback cannot
 be verified, the operation ends unresolved with its recovery journal kept, and
-`coforge-computer recover` settles it. A foreground externally supervised instance
+the next install, upgrade, repair or start settles it, and an automatic retry runs meanwhile. A foreground externally supervised instance
 is refused before anything changes and must be stopped through its external
 supervisor before upgrade. See [Upgrade operations](upgrade-operations.md).

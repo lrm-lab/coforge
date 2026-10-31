@@ -46,7 +46,7 @@ where the directory has the layout above. Local builds may carry a lower version
 installed one, so the developer scripts pass `--allow-downgrade`; without it the installer
 refuses an older version ([Upgrade operations](upgrade-operations.md)).
 
-The POSIX and PowerShell bootstraps accept `install`, `upgrade`, `repair`, `status`, `recover`, and
+The POSIX and PowerShell bootstraps accept `install`, `upgrade`, `repair`, `status`, and
 `help`, and forward the command to the freshly verified installer. `repair` follows the reference
 installer's selection surface: `--version` or `--channel main` may select a target, while an
 omitted selector repairs the active installation. A healthy installation returns a held

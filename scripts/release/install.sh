@@ -5,7 +5,7 @@ feed_url=${COFORGE_RELEASE_FEED_URL:-$default_feed_url}
 feed_url=${feed_url%/}
 command=install
 case "${1:-}" in
-  install|upgrade|repair|status|recover|help)
+  install|upgrade|repair|status|help)
     command=$1
     shift
     ;;
@@ -126,11 +126,6 @@ case "$command" in
   status)
     [ "$version_arg" -eq 0 ] || { echo "install.sh: status does not accept --version" >&2; exit 2; }
     [ -z "$request_id" ] || { echo "install.sh: status does not accept --request-id" >&2; exit 2; }
-    [ -z "$workspace" ] || { echo "install.sh: --workspace needs install" >&2; exit 2; }
-    ;;
-  recover)
-    [ "$version_arg" -eq 0 ] || { echo "install.sh: recover does not accept --version" >&2; exit 2; }
-    [ -z "$request_id" ] || { echo "install.sh: recover does not accept --request-id" >&2; exit 2; }
     [ -z "$workspace" ] || { echo "install.sh: --workspace needs install" >&2; exit 2; }
     ;;
   help)
@@ -389,13 +384,12 @@ run_installer() {
     status)
       if [ "$json" -eq 1 ]; then "$installer_path" status --json; else "$installer_path" status; fi
       ;;
-    recover) if [ "$json" -eq 1 ]; then "$installer_path" recover --json; else "$installer_path" recover; fi ;;
     help) "$installer_path" help ;;
   esac
 }
 installer_status=0
 run_installer || installer_status=$?
-[ "$installer_status" -eq 3 ] && [ "$command" != status ] && [ "$command" != recover ] && [ "$command" != help ] && {
+[ "$installer_status" -eq 3 ] && [ "$command" != status ] && [ "$command" != help ] && {
   echo "install.sh: retrying installer once after exit 3" >&2
   installer_status=0
   run_installer || installer_status=$?

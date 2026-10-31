@@ -21,12 +21,8 @@ pub(crate) enum Command {
         allow_downgrade: bool,
         json: bool,
     },
-    Recover {
-        caller_pid: Option<u32>,
-        json: bool,
-    },
-    /// `recover --auto`: one try for the retry trigger, which waits out its backoff itself.
-    RecoverAuto {
+    /// `settle`: one try for the retry trigger, which waits out its backoff itself.
+    Settle {
         json: bool,
     },
     Repair {
@@ -49,17 +45,16 @@ pub(crate) fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Command,
         Some(Value(value)) => match value.string().map_err(|error| error.to_string())?.as_str() {
             "install" => parse_install(parser),
             "upgrade" => parse_upgrade(parser),
-            "recover" => parse_recover(parser),
+            "settle" => parse_settle(parser),
             "repair" => parse_repair(parser),
             "start" => parse_start(parser),
             "status" => parse_status(parser),
             other => Err(format!("unknown command: {other}")),
         },
         Some(other) => Err(other.unexpected().to_string()),
-        None => Err(
-            "expected a command: install, upgrade, recover, repair, start, status, or --version"
-                .into(),
-        ),
+        None => {
+            Err("expected a command: install, upgrade, repair, start, status, or --version".into())
+        }
     }
 }
 
@@ -159,28 +154,17 @@ fn directory_value(parser: &mut lexopt::Parser) -> Result<PathBuf, String> {
         .map_err(|error| error.to_string())
 }
 
-fn parse_recover(mut parser: lexopt::Parser) -> Result<Command, String> {
+fn parse_settle(mut parser: lexopt::Parser) -> Result<Command, String> {
     use lexopt::prelude::*;
 
-    let mut caller_pid = None;
     let mut json = false;
-    let mut auto = false;
     while let Some(arg) = parser.next().map_err(|error| error.to_string())? {
         match arg {
-            Long("caller-pid") => caller_pid = Some(caller_pid_value(&mut parser)?),
             Long("json") => json = true,
-            Long("auto") => auto = true,
             other => return Err(other.unexpected().to_string()),
         }
     }
-    if auto && caller_pid.is_some() {
-        return Err("--auto runs without a launching process: drop --caller-pid".to_owned());
-    }
-    Ok(if auto {
-        Command::RecoverAuto { json }
-    } else {
-        Command::Recover { caller_pid, json }
-    })
+    Ok(Command::Settle { json })
 }
 
 fn parse_start(parser: lexopt::Parser) -> Result<Command, String> {
@@ -324,35 +308,18 @@ mod tests {
     }
 
     #[test]
-    fn recover_auto_is_its_own_command_and_takes_no_caller() {
+    fn settle_takes_only_json_and_recover_is_gone() {
         assert!(matches!(
-            parse(args(&["recover", "--auto"])),
-            Ok(Command::RecoverAuto { json: false })
+            parse(args(&["settle"])),
+            Ok(Command::Settle { json: false })
         ));
         assert!(matches!(
-            parse(args(&["recover", "--auto", "--json"])),
-            Ok(Command::RecoverAuto { json: true })
+            parse(args(&["settle", "--json"])),
+            Ok(Command::Settle { json: true })
         ));
-        assert!(parse(args(&["recover", "--auto", "--caller-pid", "4"])).is_err());
-    }
-
-    #[test]
-    fn recover_takes_a_caller_pid_like_upgrade() {
-        assert!(matches!(
-            parse(args(&["recover"])),
-            Ok(Command::Recover {
-                caller_pid: None,
-                ..
-            })
-        ));
-        assert!(matches!(
-            parse(args(&["recover", "--caller-pid", "42"])),
-            Ok(Command::Recover {
-                caller_pid: Some(42),
-                ..
-            })
-        ));
-        assert!(parse(args(&["recover", "--caller-pid", "x"])).is_err());
+        assert!(parse(args(&["settle", "--caller-pid", "4"])).is_err());
+        assert!(parse(args(&["recover"])).is_err());
+        assert!(parse(args(&["recover", "--auto"])).is_err());
     }
 
     #[test]
@@ -496,7 +463,7 @@ mod tests {
                 ..
             })
         ));
-        assert!(parse(args(&["recover", "--allow-downgrade"])).is_err());
+        assert!(parse(args(&["settle", "--allow-downgrade"])).is_err());
         assert!(parse(args(&["status", "--allow-downgrade"])).is_err());
     }
 

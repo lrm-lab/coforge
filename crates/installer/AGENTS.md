@@ -1,11 +1,16 @@
 # coforge-installer instructions
+
 These rules extend the repository root `AGENTS.md` for `crates/installer/`, the Rust
 crate that builds `coforge-installer`. The root architecture invariants state the installer's
 ownership; this file holds how it controls a running Computer, its commands,
 toolchain, and gotchas.
+
 ## Module map
+
 The module map and the install-layout rules are in [`src/AGENTS.md`](src/AGENTS.md).
+
 ## Contract with the product
+
 - Every change to an installation belongs to this crate: install, upgrade, repair, status, and
   recover, with the machine mutation lock, download and verification, activation, service control,
   probe, rolling back a failed upgrade, and receipts. The toolchain is pinned in
@@ -39,7 +44,9 @@ The module map and the install-layout rules are in [`src/AGENTS.md`](src/AGENTS.
   never add an installer-only code.
 - `paths.rs` must equal Bun's `node:path` byte for byte; tests compare `to_str()`,
   never `PathBuf`, which equates by component.
+
 ## Command line
+
 Commands, output and exit status: [Installer command line](../../docs/release/installer-commands.md).
 Keep it current with `args.rs` and `main.rs`.
 
@@ -122,7 +129,7 @@ mise exec -- cargo about generate --locked --fail --output-file THIRD_PARTY_NOTI
 - The license allow list in `deny.toml` is the gate. Adding a license to it is a
   licensing decision for Frank, not a CI fix. Keep `about.toml`'s `accepted`
   list in step with it.
-- `install`, `upgrade`, and `recover` refuse to run inside `coforge-daemon.service` while it runs
+- `install`, `upgrade`, and any operation that must settle an unfinished upgrade refuse to run inside `coforge-daemon.service` while it runs
   (the caller's cgroup names the unit): stopping the service would stop the installer. The refusal
   tells the person to run the command from a normal terminal, and changes nothing.
 - `THIRD_PARTY_NOTICES.txt` is generated, never committed. The template must

@@ -73,7 +73,7 @@ How it works is in `src/current.rs` and `src/active.rs`; these are the rules.
   install root it covers (`install_root`, `covers`).
 - `src/journal.rs`: the recovery journal `<install root>/installer-transaction.json`. Written
   before an upgrade stops anything, cleared once the machine runs a known version; a journal
-  that is still there makes every operation but `recover` refuse.
+  that is still there is settled first by every operation.
 - `src/receipts.rs`: upgrade requests and receipts under `upgrade-results/`. Decides fresh,
   replay, or conflict for a request id, and commits each receipt write-once under the lock.
 - `src/paths.rs`: install root, supervisor state directory, and shim
@@ -159,7 +159,7 @@ How it works is in `src/current.rs` and `src/active.rs`; these are the rules.
   lifecycle and service, and an install root with versions `0.1.0` and `0.2.0` served by a
   loopback feed.
 - `src/installation.rs`: the installation a command acts on. `Setup` (install root, release target,
-  compiled feed) and the use cases `transaction`, `recover`, `repair`, `start`, and `status`,
+  compiled feed) and the use cases `transaction`, `settle`, `repair`, `start`, and `status`,
   which build the real ports (service manager, process table, clock, release source) for this
   machine. `ReleaseOrigin` picks
   the release source of a transaction: the feed, or a `--from-directory`.
@@ -168,7 +168,7 @@ How it works is in `src/current.rs` and `src/active.rs`; these are the rules.
   (HTTPS, or a loopback `http://` build for end-to-end tests). Tests in `src/compiled_feed/tests.rs`.
 - `src/request_id.rs`: generates the request id of an `install` (RFC 9562 version 4; unique, not
   secret). Tests in `src/request_id/tests.rs`.
-- `src/recover.rs`: `coforge-computer recover`. Refuses from inside the running service, then
+- `src/recover.rs`: settling an unfinished upgrade (no command of its own). Refuses from inside the running service, then
   settles the journal through `switch`, reading the definition of the version each attempt switches
   to before that attempt stops anything: keeps a recorded success or an already-active new version
   that settles, otherwise restores the previous version. Writes a receipt only when none exists;

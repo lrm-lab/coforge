@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
   [Parameter(Position = 0)]
-  [ValidateSet("install", "upgrade", "repair", "status", "recover", "help")]
+  [ValidateSet("install", "upgrade", "repair", "status", "help")]
   [string]$Command = "install",
   [Parameter()]
   [string]$Version = "latest",
@@ -51,13 +51,13 @@ if ($versionWasBound -and $channelWasBound) {
 if ($Command -eq "upgrade" -and [string]::IsNullOrEmpty($RequestId)) {
   throw "install.ps1: upgrade requires -RequestId"
 }
-if ($Command -in @("install", "status", "recover", "help")) {
+if ($Command -in @("install", "status", "help")) {
   if ($RequestId) { throw "install.ps1: -RequestId is only valid with upgrade" }
 }
-if ($Command -in @("status", "recover", "help") -and $versionWasBound) {
+if ($Command -in @("status", "help") -and $versionWasBound) {
   throw "install.ps1: $Command does not accept -Version"
 }
-if ($Command -in @("status", "recover", "help") -and $channelWasBound) {
+if ($Command -in @("status", "help") -and $channelWasBound) {
   throw "install.ps1: $Command does not accept -Channel"
 }
 if ($Setup -and $Command -notin @("install", "upgrade", "repair")) {
@@ -312,7 +312,6 @@ try {
       if ($versionWasBound) { $installerArguments += @("--version", $Version) }
     }
     "status" { if ($Json) { $installerArguments += "--json" } }
-    "recover" { if ($Json) { $installerArguments += "--json" } }
   }
   if ($channelWasBound) { $installerArguments += @("--channel", $Channel) }
   if ($Yes) { $installerArguments += "--yes" }
@@ -320,7 +319,7 @@ try {
   if ($Json -and $Command -in @("install", "upgrade", "repair")) { $installerArguments += "--json" }
   & $installerPath @installerArguments
   $installerStatus = $LASTEXITCODE
-  if ($installerStatus -eq 3 -and $Command -notin @("status", "recover", "help")) {
+  if ($installerStatus -eq 3 -and $Command -notin @("status", "help")) {
     [Console]::Error.WriteLine("install.ps1: retrying installer once after exit 3")
     & $installerPath @installerArguments
     $installerStatus = $LASTEXITCODE

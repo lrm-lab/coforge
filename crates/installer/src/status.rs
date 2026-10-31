@@ -87,7 +87,7 @@ impl StatusReport {
         }
         if let Some(journal) = &self.journal {
             lines.push(format!(
-                "An upgrade to {} (request {}) did not finish; run `coforge-computer recover`.",
+                "An upgrade to {} (request {}) did not finish; run the same command again, or any upgrade.",
                 journal.to, journal.request_id
             ));
         }

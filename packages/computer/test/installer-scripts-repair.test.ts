@@ -54,7 +54,7 @@ subprocessTest("install.sh retries an installer exit 3 once for repair", async (
   expect(child.stderr).toContain("retrying installer once after exit 3");
 });
 
-for (const command of ["status", "recover"] as const) {
+for (const command of ["status"] as const) {
   test(`install.sh does not retry ${command} after installer exit 3`, async () => {
     const directory = await mkdtemp(join(tmpdir(), `coforge-${command}-script-`));
     temporaryDirectories.push(directory);

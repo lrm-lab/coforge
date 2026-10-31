@@ -50,7 +50,6 @@ export interface UpdateCommand {
   install(version: string, options: UpdateOptions): Promise<void>;
   upgrade(version: string, options: UpdateOptions): Promise<void>;
   /** Resolves to the installer's exit status. */
-  recover(): Promise<number>;
   /** Resolves to the installer's exit status. */
   repair(): Promise<number>;
 }
@@ -201,12 +200,6 @@ export async function runCli(
         return;
       }
       return updater.upgrade(target, { allowDowngrade });
-    });
-  program
-    .command("recover")
-    .description("Finish an upgrade that did not complete.")
-    .action(async () => {
-      exitCode = await requireUpdater(dependencies).recover();
     });
   program
     .command("repair")

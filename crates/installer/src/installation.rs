@@ -15,7 +15,6 @@ use crate::lifecycle::Lifecycle;
 use crate::paths::{self, InstallPaths, Platform};
 use crate::prepare::ReleaseSource;
 use crate::processes::{OsProcesses, VerifiedCaller};
-use crate::recover::{RecoverOutcome, recover as recover_installation};
 use crate::release_directory::ReleaseDirectory;
 use crate::repair::repair as repair_installation;
 use crate::retry_trigger::NoTrigger;
@@ -138,26 +137,18 @@ pub fn transaction(
             caller,
             allow_downgrade,
         };
+        if let Err(unsettled) = auto_recover::settle_first(ports, caller, stage) {
+            let outcome = Outcome::NoReceipt {
+                exit: unsettled.exit_code(),
+                message: unsettled.message(),
+            };
+            auto_recover::keep_trigger_in_step(ports, &NoTrigger, stage);
+            return outcome;
+        }
         let outcome = upgrade(ports, &request, stage);
         auto_recover::keep_trigger_in_step(ports, &NoTrigger, stage);
         outcome
     })
-}
-
-/// Settles an upgrade that did not finish. `caller_pid` is the `coforge-computer recover` process
-/// that launched this installer and waits for it; it is verified and never stopped.
-pub fn recover(
-    setup: &Setup,
-    caller_pid: Option<u32>,
-    stage: &mut dyn FnMut(&str),
-) -> Result<RecoverOutcome, String> {
-    with_ports(setup, &ReleaseOrigin::Feed, |ports| {
-        let outcome = verify_caller(ports, caller_pid)
-            .map(|caller| recover_installation(ports, caller, stage));
-        auto_recover::keep_trigger_in_step(ports, &NoTrigger, stage);
-        outcome
-    })
-    .and_then(std::convert::identity)
 }
 
 /// Registers the active version's service definition and starts the service. Starting stops
@@ -171,9 +162,9 @@ pub fn start(setup: &Setup, stage: &mut dyn FnMut(&str)) -> Result<start::Outcom
     })
 }
 
-/// One automatic recovery run, for the retry trigger: settles the unfinished upgrade like
-/// `recover`, waiting longer after each failure and giving up after a few.
-pub fn recover_auto(setup: &Setup, stage: &mut dyn FnMut(&str)) -> Result<AutoOutcome, String> {
+/// One automatic try at settling an unfinished upgrade, for the retry trigger: waiting longer
+/// after each failure and giving up after a few.
+pub fn settle(setup: &Setup, stage: &mut dyn FnMut(&str)) -> Result<AutoOutcome, String> {
     with_ports(setup, &ReleaseOrigin::Feed, |ports| {
         auto_recover::recover_auto(ports, &NoTrigger, stage)
     })
@@ -189,7 +180,17 @@ pub fn repair(
     stage: &mut dyn FnMut(&str),
 ) -> Result<Outcome, String> {
     with_ports(setup, &ReleaseOrigin::Feed, |ports| {
-        repair_installation(ports, request_id, selection, allow_downgrade, stage)
+        if let Err(unsettled) = auto_recover::settle_first(ports, None, stage) {
+            let outcome = Outcome::NoReceipt {
+                exit: unsettled.exit_code(),
+                message: unsettled.message(),
+            };
+            auto_recover::keep_trigger_in_step(ports, &NoTrigger, stage);
+            return outcome;
+        }
+        let outcome = repair_installation(ports, request_id, selection, allow_downgrade, stage);
+        auto_recover::keep_trigger_in_step(ports, &NoTrigger, stage);
+        outcome
     })
 }
 

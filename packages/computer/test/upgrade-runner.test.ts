@@ -8,7 +8,6 @@ import { UPGRADE_ERROR_CODE } from "@lrm/coforge-sdk/internal";
 import { UpdateError } from "#src/updater";
 import {
   defaultSpawnInstaller,
-  runInstallerRecovery,
   runInstallerRepair,
   runUpgradeOperation,
   type InstallerSpawn,
@@ -308,31 +307,6 @@ test("the receipt directory is created private", async () => {
   await runUpgradeOperation(op, runnerOptions(directory, installer)).catch(() => {});
   const mode = (await stat(join(directory, "upgrade-results"))).mode & 0o777;
   expect(mode).toBe(0o700);
-});
-
-test("recover runs the installer's recover with this process as the caller, stdio attached, and returns its status", async () => {
-  const directory = await scratch();
-  const installer = await fakeInstaller(directory, { exitCode: 2 });
-  const spawned: InstallerSpawn[] = [];
-  const status = await runInstallerRecovery(
-    runnerOptions(directory, installer, {
-      spawnInstaller: async (spawn) => {
-        spawned.push(spawn);
-        return defaultSpawnInstaller(spawn);
-      },
-    }),
-  );
-
-  expect(status).toBe(2);
-  expect(spawned).toEqual([
-    {
-      path: installer,
-      args: ["recover", "--caller-pid", String(process.pid)],
-      stdin: "ignore",
-      stdout: "inherit",
-      stderr: "inherit",
-    },
-  ]);
 });
 
 test("repair runs the installer's repair with stdio attached and returns its status", async () => {

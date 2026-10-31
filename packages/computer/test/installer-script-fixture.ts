@@ -42,7 +42,7 @@ function fakeInstaller(
   options: {
     omitShim?: boolean;
     installerExitStatus?: number;
-    expectedCommand?: "install" | "repair" | "status" | "recover";
+    expectedCommand?: "install" | "repair" | "status";
     appendArgumentLog?: boolean;
     shimArgumentLog?: string;
     shimExitStatus?: number;
@@ -56,7 +56,7 @@ function fakeInstaller(
     `#!/bin/sh\n` +
       `case "$1" in\n` +
       `  install) [ "$#" -eq 3 ] && [ "$2" = --version ] || exit 90 ;;\n` +
-      `  repair|status|recover) [ "$#" -eq 1 ] || exit 90 ;;\n` +
+      `  repair|status) [ "$#" -eq 1 ] || exit 90 ;;\n` +
       `  *) exit 90 ;;\n` +
       `esac\n` +
       `[ "$1" = ${expectedCommand} ] || exit 91\n` +
@@ -90,7 +90,7 @@ export async function serveFixture(
     tamperInstallerChecksum?: boolean;
     installerExitStatus?: number;
     omitShim?: boolean;
-    expectedCommand?: "install" | "repair" | "status" | "recover";
+    expectedCommand?: "install" | "repair" | "status";
     appendArgumentLog?: boolean;
     shimArgumentLog?: string;
     shimExitStatus?: number;

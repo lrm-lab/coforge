@@ -108,10 +108,6 @@ function recordingUpdater(current: string | null, target: string) {
       async upgrade() {
         calls.push("upgrade");
       },
-      async recover() {
-        calls.push("recover");
-        return 0;
-      },
       async repair() {
         calls.push("repair");
         return 0;

@@ -228,7 +228,7 @@ fn an_unfinished_upgrade_blocks_a_new_one_with_exit_3_naming_recover() {
     match &outcome {
         Outcome::NoReceipt { exit, message } => {
             assert_eq!(*exit, 3);
-            assert!(message.contains("coforge-computer recover"));
+            assert!(message.contains("same command again"));
         }
         other => panic!("expected no receipt, got {other:?}"),
     }
@@ -515,7 +515,7 @@ fn a_failed_rollback_keeps_the_journal_and_refuses_the_next_upgrade() {
     match &next {
         Outcome::NoReceipt { exit, message } => {
             assert_eq!(*exit, 3);
-            assert!(message.contains("coforge-computer recover"));
+            assert!(message.contains("same command again"));
         }
         other => panic!("expected no receipt, got {other:?}"),
     }

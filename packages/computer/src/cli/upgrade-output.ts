@@ -41,7 +41,7 @@ export function nextUpgradeCommandHint(error: unknown): string {
     if (error.result.restoredVersion)
       return "The previous version was restored. Check 'coforge-computer logs' for detail, then retry with 'coforge-computer upgrade'.";
     if (error.result.errorCode === UPGRADE_ERROR_CODE.ROLLBACK_FAILED)
-      return "The upgrade did not finish. Run 'coforge-computer recover', then check 'coforge-computer status'.";
+      return "The upgrade did not finish. Run the same command again, then check 'coforge-computer status'.";
     return "Check 'coforge-computer status' and 'coforge-computer logs', then retry with 'coforge-computer upgrade'.";
   }
   return "Check 'coforge-computer status', then retry with 'coforge-computer upgrade'.";

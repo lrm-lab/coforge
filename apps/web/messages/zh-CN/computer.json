@@ -268,7 +268,7 @@
   "computer_upgrade_step_restart_supervisor_retry": "如果一直卡住，重启电脑上的 Supervisor，再重试",
   "computer_upgrade_step_restart_supervisor": "重启电脑上的 Supervisor",
   "computer_upgrade_step_wait_running": "已有一次升级在运行；请等它完成",
-  "computer_upgrade_step_manual_recovery": "这台电脑需要人工介入处理，之后才能进行下一次升级",
+  "computer_upgrade_step_manual_recovery": "这台电脑会自动尝试恢复；如果没有恢复，请再执行一次升级",
   "computer_remove_action": "移除",
   "computer_remove_description": "从当前 Workspace 解绑这台 Computer，同时保留它的本地身份和其他 Workspace 绑定。",
   "computer_remove_dialog_title": "要从当前 Workspace 移除 {name} 吗？",

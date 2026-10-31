@@ -19,7 +19,7 @@
 #   4  upgrade to a broken release rolls back (UPGRADE_ROLLED_BACK) and restores the supervisor
 #      and a downgrade without --allow-downgrade is refused (UPGRADE_DOWNGRADE_REFUSED) with
 #      nothing changed
-#   5  SIGKILL during activation, a refused new upgrade (exit 3), and `coforge-installer recover`
+#   5  SIGKILL during activation, and a `coforge-installer start` that settles the journal
 #   6  `coforge-computer upgrade` obtains the installer and the release from a loopback
 #      http://127.0.0.1 feed compiled into both binaries
 #

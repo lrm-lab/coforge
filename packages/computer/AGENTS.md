@@ -16,8 +16,8 @@ manager. `foreground` is the explicit public mode for containers and other
 external supervisors; no command implicitly detaches an unmanaged fallback.
 Upgrade runs the separately released `coforge-installer` (`release/upgrade-runner.ts`),
 which owns the transaction, the service stop and start, and the receipt. Computer
-launches it and reads the receipt; it does not roll back itself. `recover` and `repair` run the
-installer's command of that name. Only the installer registers the service; hosts run its `start`.
+launches it and reads the receipt; it does not roll back itself. `repair` runs the installer's
+command of that name, and any installer operation settles an unfinished upgrade first. Only the installer registers the service; hosts run its `start`.
 
 ## Module map
 
@@ -54,7 +54,7 @@ relative to `src/`.
 | `doctor/`                                  | Read-only diagnostic checks built from the status report                                            |
 | `logging/`                                 | Computer LogTape configuration and the `logs` follower                                              |
 | `updater.ts`                               | Reads the installed version; zod contract schemas and launcher text shared with the installer       |
-| `release/upgrade-runner.ts`                | Runs the installer for one upgrade, or `recover`/`repair` on the terminal                           |
+| `release/upgrade-runner.ts`                | Runs the installer for one upgrade, or `repair` on the terminal                                     |
 | `release/coordinator-service-registrar.ts` | Runs `coforge-installer start` to register and start the service                                    |
 | `release/remote-upgrade.ts`                | Runs one server-triggered upgrade, records redacted launch output, then removes its finished OS job |
 | `release/upgrade-receipt.ts`               | Writes the fallback failed receipt; `UpgradeFailedError` (the receipt read is the Daemon's)         |

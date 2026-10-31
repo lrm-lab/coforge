@@ -123,7 +123,6 @@ export const COMPUTER_CLI_COMMANDS = [
   "setup",
   "install",
   "upgrade",
-  "recover",
   "repair",
   "start",
   "stop",

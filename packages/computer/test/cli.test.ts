@@ -58,7 +58,7 @@ test("the upgrade CLI's next-command hint names the real commands for each outco
     status: "failed",
     errorCode: "UPGRADE_ROLLBACK_FAILED",
   });
-  expect(nextUpgradeCommandHint(rollbackFailed)).toContain("coforge-computer recover");
+  expect(nextUpgradeCommandHint(rollbackFailed)).toContain("Run the same command again");
   expect(nextUpgradeCommandHint(rollbackFailed)).toContain("coforge-computer status");
 });
 
@@ -84,9 +84,6 @@ test.each(["", "n", "no", "maybe", null])(
           async upgrade() {
             upgrades += 1;
           },
-          async recover() {
-            return 0;
-          },
           async repair() {
             return 0;
           },
@@ -109,7 +106,7 @@ test.each(["", "n", "no", "maybe", null])(
 );
 
 test.each(["y", " YES "])(
-  "install, upgrade, recover, and repair run their own operations; upgrade requires consent: %s",
+  "install, upgrade, and repair run their own operations; upgrade requires consent: %s",
   async (answer) => {
     const calls: Array<{ operation: string; version?: string }> = [];
     const dependencies = {
@@ -128,10 +125,6 @@ test.each(["y", " YES "])(
         },
         async upgrade(version: string) {
           calls.push({ operation: "upgrade", version });
-        },
-        async recover() {
-          calls.push({ operation: "recover" });
-          return 0;
         },
         async repair() {
           calls.push({ operation: "repair" });
@@ -163,7 +156,6 @@ test.each(["y", " YES "])(
         dependencies,
       ),
     ).resolves.toBe(0);
-    await expect(runCli(["recover"], dependencies)).resolves.toBe(0);
     await expect(runCli(["repair"], dependencies)).resolves.toBe(3);
 
     expect(calls).toEqual([
@@ -173,7 +165,6 @@ test.each(["y", " YES "])(
         operation: "install",
         version: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
       },
-      { operation: "recover" },
       { operation: "repair" },
     ]);
   },
@@ -363,9 +354,6 @@ test("status is registered, read-only, and forwards --json without touching life
       upgrade: async () => {
         throw new Error("must not be called by status");
       },
-      recover: async () => {
-        throw new Error("must not be called by status");
-      },
       repair: async () => {
         throw new Error("must not be called by status");
       },
@@ -445,9 +433,6 @@ test("upgrade and install pass --allow-downgrade to the updater only when it is 
     },
     async upgrade(version: string, options: { allowDowngrade: boolean }) {
       calls.push({ operation: "upgrade", version, allowDowngrade: options.allowDowngrade });
-    },
-    async recover() {
-      return 0;
     },
     async repair() {
       return 0;

@@ -72,7 +72,7 @@ In order, with the machine mutation lock held throughout:
 
 Exit codes: 0 succeeded; 1 failed (rolled back, or refused before any change);
 2 held (another run holds the lock, or the request id belongs to something
-else); 3 unresolved, which needs `coforge-computer recover`.
+else); 3 unresolved: an earlier upgrade could not be settled yet, run the same command again.
 
 ## Downgrade and recovery
 
@@ -95,15 +95,18 @@ the same way. The same or a newer version, and a machine with nothing installed,
 no flag. `coforge-computer upgrade` and `install` pass the flag only from the CLI; a
 server-triggered upgrade (`__remote-upgrade`) never does, so it refuses a downgrade.
 
-`recover` and the installer's internal rollback are not gated: they restore a version
-by design.
+Settling an unfinished upgrade and the installer's internal rollback are not gated: they restore a
+version by design.
 
-`coforge-computer recover` runs `coforge-installer recover`, which settles an
-unfinished upgrade from the journal. When the journal says the service ran, it reads the
-definition of the version it is about to switch to before it stops anything (a version that cannot
-print it fails that attempt, so recovery falls back to restoring the previous version), and
-registers it before it starts the service. While the journal exists, every other
-installer operation exits 3 without a receipt and names `coforge-computer recover`.
+There is no `recover` command. Every installer operation (`install`, `upgrade`, `repair`, `start`)
+settles an unfinished upgrade from the journal before its own work. When the journal says the
+service ran, settling reads the definition of the version it is about to switch to before it stops
+anything (a version that cannot print it fails that attempt, so it falls back to restoring the
+previous version), and registers it before it starts the service. When it cannot settle, the
+operation exits 3 without a receipt and says to run the same command again; meanwhile
+`coforge-installer settle` retries by itself from a one-shot trigger, with a backoff (see
+[Installer commands](installer-commands.md)). An operation inside the service's own unit cannot
+settle (it would stop the caller); `start` goes on without settling there.
 
 ## Repair and start
 

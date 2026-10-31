@@ -235,7 +235,7 @@ fn a_start_settles_the_journal_before_it_starts_the_service() {
 
     assert_eq!(stop, None);
     assert_eq!(Journal::new(fixture.root()).read().unwrap(), None);
-    assert!(stages[0].contains("settling it before the service starts"));
+    assert!(stages[0].contains("settling it first"));
 }
 
 #[test]
@@ -320,4 +320,35 @@ fn a_report_of_a_failure_does_not_outlive_a_recovery_a_person_finished() {
     assert!(read(&fixture, REPORT_FILE).is_none());
     assert!(read(&fixture, STATE_FILE).is_none());
     assert_eq!(trigger.calls(), ["cancel"]);
+}
+
+#[test]
+fn an_operation_settles_a_recoverable_journal_and_goes_on() {
+    let fixture = recoverable();
+    let clock = VirtualClock::new();
+    let table = FakeTable::new(&clock);
+    let service = FakeService::new(ServiceState::NotInstalled);
+    let lifecycle = FakeLifecycle::default();
+    fixture.answers_protocol(&lifecycle, NEW);
+    let ports = fixture.ports(&lifecycle, &service, &table, &clock);
+
+    assert_eq!(settle_first(&ports, None, &mut |_| {}), Ok(()));
+    assert_eq!(Journal::new(fixture.root()).read().unwrap(), None);
+}
+
+#[test]
+fn an_operation_that_cannot_settle_the_journal_is_told_to_run_the_same_command_again() {
+    let fixture = unrecoverable();
+    let clock = VirtualClock::new();
+    let table = FakeTable::new(&clock);
+    let service = FakeService::new(ServiceState::Stopped);
+    let lifecycle = FakeLifecycle::default();
+    let ports = fixture.ports(&lifecycle, &service, &table, &clock);
+
+    let stop = settle_first(&ports, None, &mut |_| {}).unwrap_err();
+
+    assert_eq!(stop.exit_code(), 3);
+    assert!(stop.message().contains("Run the same command again"));
+    assert!(stop.message().contains("Nothing was changed"));
+    assert!(Journal::new(fixture.root()).read().unwrap().is_some());
 }

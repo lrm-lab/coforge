@@ -56,8 +56,8 @@ const INSTALLER_RECEIPT_PROTOCOL = "coforge-installer/v1";
  *   another run, or the request id was already used for a different operation or target. Both
  *   exit 2 and write nothing.
  * - `UNRESOLVED` (3): rollback failed, or no previous version existed to roll back to (a
- *   receipt). Also, without a receipt: recovery state exists and the operation is not `recover`
- *   or `repair`; the message names `coforge-installer recover`.
+ *   receipt). Also, without a receipt: an unfinished upgrade could not be settled before the
+ *   operation; the message says to run the same command again.
  */
 export const INSTALLER_EXIT_CODE = {
   SUCCEEDED: 0,

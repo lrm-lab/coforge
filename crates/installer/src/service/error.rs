@@ -119,8 +119,7 @@ impl fmt::Display for ServiceError {
             Self::DefinitionForOtherManager { expected, found } => write!(
                 formatter,
                 "The Computer reported a `{found}` service definition, but this machine's \
-                 service manager is `{expected}`. Run `coforge-computer upgrade` again, or \
-                 `coforge-computer recover` if an upgrade was left unfinished."
+                 service manager is `{expected}`. Run `coforge-computer upgrade` again."
             ),
             Self::DefinitionNotWritten { path, detail } => write!(
                 formatter,

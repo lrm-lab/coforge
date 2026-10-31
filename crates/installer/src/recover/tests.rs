@@ -377,7 +377,7 @@ fn the_verified_caller_is_never_collected_or_signalled_during_recovery() {
     record_journal(&fixture, &journal(Some(OLD), None, true));
     let clock = VirtualClock::new();
     let table = FakeTable::new(&clock);
-    // `coforge-computer recover` (pid 42) runs the active product executable and waits for this
+    // `coforge-computer upgrade` (pid 42) runs the active product executable and waits for this
     // installer (pid 7), which is its child.
     table.spawn(7, 1, "/usr/bin/coforge-installer");
     table.parent(7, 42);
@@ -436,7 +436,7 @@ fn inside_the_supervisor_service_with_it_running_recovery_is_refused_and_keeps_t
         outcome,
         RecoverOutcome::Refused {
             message: "Recovery stops coforge-daemon.service, the service this process runs \
-                      inside, so it would stop itself. Run `coforge-computer recover` from a \
+                      inside, so it would stop itself. Run `coforge-computer upgrade` from a \
                       normal terminal, not from inside the service. Nothing was changed."
                 .to_owned(),
         }

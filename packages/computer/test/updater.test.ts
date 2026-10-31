@@ -88,9 +88,6 @@ test("a self-referencing latest pointer fails before upgrade consent", async () 
         resolveVersion: (selector) => resolve(feedServer.baseUrl, selector),
         getCurrentVersion: async () => null,
         async install() {},
-        async recover() {
-          return 0;
-        },
         async repair() {
           return 0;
         },

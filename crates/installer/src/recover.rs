@@ -1,4 +1,5 @@
-//! Recovery: `coforge-computer recover` settles an upgrade that did not finish.
+//! Recovery: settles an upgrade that did not finish. No command asks for it: every operation
+//! does it first (`auto_recover::settle_first`), and `settle` retries it from a trigger.
 //!
 //! The journal (`installer-transaction.json`) is the only thing that says a run ended between
 //! recording the transaction and clearing it. A succeeded receipt commits recovery to the new
@@ -52,7 +53,7 @@ pub fn recover(
     caller: Option<VerifiedCaller>,
     stage: &mut dyn FnMut(&str),
 ) -> RecoverOutcome {
-    match refusal_inside_service(ports.service, "Recovery", "coforge-computer recover") {
+    match refusal_inside_service(ports.service, "Recovery", "coforge-computer upgrade") {
         Ok(None) => {}
         Ok(Some(message)) | Err(message) => return RecoverOutcome::Refused { message },
     }

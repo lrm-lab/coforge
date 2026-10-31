@@ -3,7 +3,7 @@
 //! An upgrade records it before it stops anything and clears it once the machine is in a known
 //! good state again: the new version running, or the old one restored. A journal that is still
 //! there means a run ended without either, killed or with a rollback that failed, and only
-//! `recover` may run until it is resolved. It holds what recovery needs and nothing else.
+//! settling may run until it is resolved. It holds what recovery needs and nothing else.
 
 use std::fs;
 use std::io;

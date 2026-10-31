@@ -21,8 +21,8 @@ pub const EXIT_FAILED: u8 = 1;
 /// Busy Agents never hold an operation.
 pub const EXIT_HELD: u8 = 2;
 /// Exit status: rollback failed, or no previous version existed to roll back to (a receipt).
-/// Also, without a receipt: recovery state exists and the operation is not `recover` or `repair`;
-/// the message names `coforge-installer recover`.
+/// Also, without a receipt: an unfinished upgrade could not be settled before the operation; the
+/// message says to run the same command again.
 pub const EXIT_UNRESOLVED: u8 = 3;
 /// The largest receipt file a reader accepts; it treats a larger one as no receipt.
 pub const RECEIPT_MAX_BYTES: u64 = 64 * 1024;

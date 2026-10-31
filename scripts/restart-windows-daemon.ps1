@@ -417,7 +417,7 @@ $Name`: Web backend is not reachable at $webUrl
     & $installerBin install --version $version --from-directory $packageDir --allow-downgrade | Out-Host
     if ($LASTEXITCODE -ne 0) {
       throw @"
-$Name`: local install failed (exit $LASTEXITCODE; exit 3 means run 'coforge-computer recover').
+$Name`: local install failed (exit $LASTEXITCODE; exit 3 means an earlier upgrade is not settled yet: run the same command again).
   Common Windows causes (not Web URL):
     - the previous Coordinator did not stop (schtasks /End left its process running)
     - the new Coordinator did not answer its local RPC handshake in time

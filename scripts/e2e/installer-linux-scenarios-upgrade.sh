@@ -57,7 +57,7 @@ cmp -s "$OUT/steps/s4-downgrade-before/active.json" "$ROOT/active.json" && [[ "$
 record S4 "refused downgrade changes nothing: active.json unchanged, supervisor pid unchanged, no journal" "active=$(json_eval "$ROOT/active.json" "d['current']"), pid=$(main_pid), before=$DOWN_PID_BEFORE" "$DOWN_SAME" "steps/s4-downgrade"
 
 # ---------------------------------------------------------------------------------------------
-# Scenario 5: SIGKILL right after "Switching the active executable", then recover
+# Scenario 5: SIGKILL right after "Switching the active executable", then a start settles it
 # ---------------------------------------------------------------------------------------------
 
 snapshot "$OUT/steps/s5-before"
@@ -93,13 +93,12 @@ case "$ACTIVE_AT_KILL" in
 esac
 record S5 "active.json names 0.1.0-e2e.1 (finish on target) or 0.1.0-e2e.2 (roll back)" "active.json=$ACTIVE_AT_KILL, current/version=$CURRENT_AT_KILL" "$([[ "$EXPECT_STATUS" != unexpected ]] && echo 0 || echo 1)" "steps/s5-after-kill/active.json"
 
-RID5B=$(uuid)
-step s5-refused timeout 120 "$INSTALLER" upgrade --request-id "$RID5B" --version 0.1.0-e2e.2 --from-directory "$PKG/0.1.0-e2e.2"
-record S5 "a new upgrade exits 3 and names coforge-computer recover" "exit $STEP_RC: $(clean <"$OUT/steps/s5-refused/stderr" | cut -c1-200)" "$([[ $STEP_RC == 3 ]] && grep -q 'coforge-computer recover' "$OUT/steps/s5-refused/stderr" && echo 0 || echo 1)" "steps/s5-refused"
-record S5 "refused upgrade wrote no receipt" "$([[ -e "$ROOT/upgrade-results/$RID5B.result.json" ]] && echo receipt-present || echo none)" "$([[ -e "$ROOT/upgrade-results/$RID5B.result.json" ]] && echo 1 || echo 0)" "steps/s5-refused"
+step s5-no-recover timeout 30 "$INSTALLER" recover
+record S5 "coforge-installer has no recover command (a usage error, exit 1)" "exit $STEP_RC: $(clean <"$OUT/steps/s5-no-recover/stderr" | cut -c1-200)" "$([[ $STEP_RC == 1 ]] && echo 0 || echo 1)" "steps/s5-no-recover"
 
-step s5-recover timeout 420 "$INSTALLER" recover
-record S5 "coforge-installer recover exits 0" "exit $STEP_RC; last line: $(tail -1 "$OUT/steps/s5-recover/stdout")" "$([[ $STEP_RC == 0 ]] && echo 0 || echo 1)" "steps/s5-recover"
+# Any operation settles the journal first; `start` is the one that needs nothing else.
+step s5-recover timeout 420 "$INSTALLER" start
+record S5 "coforge-installer start settles the journal and exits 0" "exit $STEP_RC; last line: $(tail -1 "$OUT/steps/s5-recover/stdout")" "$([[ $STEP_RC == 0 ]] && echo 0 || echo 1)" "steps/s5-recover"
 snapshot "$OUT/steps/s5-after"
 RES5="$ROOT/upgrade-results/$RID5.result.json"
 RES5_STATUS=$(json_eval "$RES5" "d.get('status')")

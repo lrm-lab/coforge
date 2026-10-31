@@ -1,9 +1,8 @@
-// The install, upgrade, and recover command wiring behind the Computer updater.
+// The install and upgrade command wiring behind the Computer updater.
 
 import { ComputerUpdater } from "#src/updater";
 import {
   resolveUpgradeRunnerPaths,
-  runInstallerRecovery,
   runInstallerRepair,
   runUpgradeOperation,
 } from "#src/release/upgrade-runner";
@@ -86,7 +85,6 @@ export function createUpdateCommand(
       io.stdout(`CoForge Computer ${result.version ?? version} updated successfully.`);
       reportStoppedWorkspaces(io, result);
     },
-    recover: () => runInstallerRecovery(),
     repair: () => runInstallerRepair(),
   };
 }

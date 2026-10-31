@@ -7,7 +7,7 @@
 //! Nothing changes until the candidate is verified and the running supervisor is known to be
 //! healthy and under a service manager. The journal is written before the first process stops, and
 //! cleared only once the machine is on a known good version. A failed rollback keeps the journal,
-//! which refuses every other operation until `recover` settles it (`recover.rs`). What is checked
+//! which every operation settles first (`auto_recover.rs`, `recover.rs`). What is checked
 //! and installed before the journal is written is `upgrade/preparation.rs`.
 
 use std::cmp::Ordering;
@@ -65,8 +65,8 @@ pub fn upgrade(
         Ok(Some(_)) => {
             return NoReceipt {
                 exit: EXIT_UNRESOLVED,
-                message: "an earlier upgrade did not finish. Run `coforge-computer recover` \
-                          first. Nothing was changed."
+                message: "an earlier upgrade did not finish. Run the same command again. \
+                          Nothing was changed."
                     .to_owned(),
             };
         }
@@ -75,7 +75,7 @@ pub fn upgrade(
                 exit: EXIT_UNRESOLVED,
                 message: format!(
                     "the recovery journal {} cannot be read: {error}. Nothing was changed; run \
-                     `coforge-computer recover` once it is readable.",
+                     the same command again once it is readable.",
                     journal.path().display()
                 ),
             };
@@ -291,7 +291,7 @@ impl Run<'_, '_> {
                 exit: EXIT_UNRESOLVED,
                 message: format!(
                     "{} is active, but its receipt could not be written: {detail}. The upgrade \
-                     is not settled: run `coforge-computer recover`, which keeps it when it works.",
+                     is not settled: run the same command again, which keeps it when it works.",
                     prepared.to
                 ),
             },
@@ -338,7 +338,7 @@ impl Run<'_, '_> {
                         exit: EXIT_UNRESOLVED,
                         message: format!(
                             "{} was restored, but its receipt could not be written: {detail}. Run \
-                             `coforge-computer recover`.",
+                             the same command again.",
                             from.version
                         ),
                     },
@@ -366,7 +366,7 @@ impl Run<'_, '_> {
         }
     }
 
-    /// An outcome that leaves the journal in place for `recover`.
+    /// An outcome that leaves the journal in place for the next settling.
     fn unresolved(&mut self, outcome: ReceiptOutcome) -> Outcome {
         match self.record(outcome, None) {
             Ok(receipt) => Outcome::Receipt(Box::new(receipt)),
@@ -374,7 +374,7 @@ impl Run<'_, '_> {
                 exit: EXIT_UNRESOLVED,
                 message: format!(
                     "the upgrade is unresolved and its receipt could not be written: {detail}. \
-                     Run `coforge-computer recover`."
+                     Run the same command again."
                 ),
             },
         }
@@ -402,7 +402,7 @@ impl Run<'_, '_> {
     fn clear_journal(&mut self) {
         if let Err(error) = self.journal.clear(self.lock) {
             self.switch.say(&format!(
-                "warning: the recovery journal could not be removed: {error}; run `coforge-computer recover`"
+                "warning: the recovery journal could not be removed: {error}; run the same command again"
             ));
         }
     }

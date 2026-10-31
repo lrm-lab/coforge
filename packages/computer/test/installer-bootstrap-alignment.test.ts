@@ -224,9 +224,7 @@ test("install.ps1 exposes the same bootstrap command and pin contract", async ()
     resolve(import.meta.dir, "../../../scripts/release/install.ps1"),
     "utf8",
   );
-  expect(script).toContain(
-    '[ValidateSet("install", "upgrade", "repair", "status", "recover", "help")]',
-  );
+  expect(script).toContain('[ValidateSet("install", "upgrade", "repair", "status", "help")]');
   expect(script).toContain("RAFT_COMPUTER_VERSION");
   expect(script).toContain("INSTALL_CHANNEL_DEFAULT");
   expect(script).toContain("$Setup");

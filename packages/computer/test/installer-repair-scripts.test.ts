@@ -25,7 +25,7 @@ function checksum(bytes: Uint8Array): string {
   return new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
 }
 
-function fakeInstaller(log: string, command: "repair" | "status" | "recover", exit = 0) {
+function fakeInstaller(log: string, command: "repair" | "status", exit = 0) {
   return Buffer.from(
     `#!/bin/sh\n` +
       `[ "$#" -eq 1 ] && [ "$1" = ${command} ] || exit 90\n` +
@@ -34,11 +34,7 @@ function fakeInstaller(log: string, command: "repair" | "status" | "recover", ex
   );
 }
 
-async function fixture(options: {
-  command: "repair" | "status" | "recover";
-  exit?: number;
-  log: string;
-}) {
+async function fixture(options: { command: "repair" | "status"; exit?: number; log: string }) {
   const installer = fakeInstaller(options.log, options.command, options.exit);
   const files = new Map<string, Uint8Array<ArrayBuffer>>([
     ["/installer/latest", Buffer.from("0.1.0\n")],
@@ -60,7 +56,7 @@ async function fixture(options: {
   return { baseUrl: `http://127.0.0.1:${server.port}`, requested };
 }
 
-for (const command of ["repair", "status", "recover"] as const) {
+for (const command of ["repair", "status"] as const) {
   test(`install.sh forwards ${command} without install PATH work`, async () => {
     const directory = await mkdtemp(join(tmpdir(), `coforge-${command}-`));
     temporaryDirectories.push(directory);

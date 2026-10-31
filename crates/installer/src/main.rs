@@ -6,7 +6,7 @@
 //!   coforge-installer install --version <latest|X.Y.Z> [--from-directory <dir>] [--allow-downgrade]
 //!   coforge-installer upgrade --request-id <uuid> --version <latest|X.Y.Z> [--caller-pid <pid>]
 //!                             [--from-directory <dir>] [--allow-downgrade]
-//!   coforge-installer recover [--caller-pid <pid>| --auto]
+//!   coforge-installer settle [--json]
 //!   coforge-installer repair [--version <latest|X.Y.Z> | --channel main|latest] [--yes]
 //!                             [--allow-downgrade] [--json]
 //!   coforge-installer start
@@ -30,7 +30,6 @@ use coforge_installer::auto_recover::AutoOutcome;
 use coforge_installer::compiled_feed;
 use coforge_installer::contract::{EXIT_FAILED, ReceiptStatus, UpgradeReceipt};
 use coforge_installer::installation::{self, ReleaseOrigin, Setup};
-use coforge_installer::recover::RecoverOutcome;
 use coforge_installer::request_id::new_request_id;
 use coforge_installer::start::Outcome as StartOutcome;
 use coforge_installer::upgrade::Outcome;
@@ -85,8 +84,7 @@ fn main() -> ExitCode {
             allow_downgrade,
             json,
         ),
-        Command::Recover { caller_pid, json } => recover(&setup, caller_pid, json),
-        Command::RecoverAuto { json } => recover_auto(&setup, json),
+        Command::Settle { json } => settle(&setup, json),
         Command::Repair {
             selection,
             allow_downgrade,
@@ -184,7 +182,7 @@ fn report_receipt_mode(receipt: &UpgradeReceipt, json: bool) -> ExitCode {
     }
 }
 
-fn recover(setup: &Setup, caller_pid: Option<u32>, json: bool) -> ExitCode {
+fn settle(setup: &Setup, json: bool) -> ExitCode {
     let mut report_stage = |line: &str| {
         if json {
             eprintln!("==> {line}");
@@ -192,39 +190,7 @@ fn recover(setup: &Setup, caller_pid: Option<u32>, json: bool) -> ExitCode {
             stage(line);
         }
     };
-    match installation::recover(setup, caller_pid, &mut report_stage) {
-        Ok(outcome) => {
-            let exit = outcome.exit_code();
-            if json {
-                println!("{{\"exit_code\":{exit}}}");
-            } else {
-                match outcome {
-                    RecoverOutcome::NothingToRecover => println!("nothing to recover"),
-                    RecoverOutcome::Recovered { version } => {
-                        println!("CoForge Computer {version} is active.");
-                    }
-                    RecoverOutcome::Held { message }
-                    | RecoverOutcome::Refused { message }
-                    | RecoverOutcome::Unresolved { message } => {
-                        eprintln!("coforge-installer: {message}");
-                    }
-                }
-            }
-            ExitCode::from(exit)
-        }
-        Err(message) => fail(&message),
-    }
-}
-
-fn recover_auto(setup: &Setup, json: bool) -> ExitCode {
-    let mut report_stage = |line: &str| {
-        if json {
-            eprintln!("==> {line}");
-        } else {
-            stage(line);
-        }
-    };
-    match installation::recover_auto(setup, &mut report_stage) {
+    match installation::settle(setup, &mut report_stage) {
         Ok(outcome) => {
             let exit = outcome.exit_code();
             if json {

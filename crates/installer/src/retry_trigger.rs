@@ -1,4 +1,4 @@
-//! The one-shot trigger that runs `coforge-installer recover --auto` again after a delay, when an
+//! The one-shot trigger that runs `coforge-installer settle` again after a delay, when an
 //! upgrade ended with its recovery journal kept and the service stopped. It exists only while a
 //! journal does: [`crate::auto_recover`] arms it when one is written and disarms it when recovery
 //! settles it or gives up, so a healthy machine carries no extra scheduled work.
@@ -8,7 +8,7 @@
 use std::time::Duration;
 
 pub trait RetryTrigger {
-    /// Arranges for `recover --auto` to run once, `delay` from now, replacing any earlier
+    /// Arranges for `settle` to run once, `delay` from now, replacing any earlier
     /// arrangement.
     fn schedule(&self, delay: Duration) -> Result<(), String>;
 
