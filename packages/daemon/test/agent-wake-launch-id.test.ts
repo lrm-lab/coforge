@@ -73,6 +73,7 @@ async function harness() {
     requestId: string;
     launchId?: string;
     epoch: number;
+    identity?: { sessionId: string; state: "empty" | "resumable" | "unknown" };
   }> = [];
   const runtime = new DaemonRuntime(
     connection,
@@ -85,7 +86,7 @@ async function harness() {
         return {
           ...sessionSpy(),
           readSessionIdentity: async () => ({
-            sessionId: "session-a",
+            sessionId: `session-${sessions}`,
             state: "resumable" as const,
           }),
           notify: async () => {},
@@ -115,6 +116,7 @@ async function harness() {
             requestId: result.requestId,
             launchId: result.launchId,
             epoch: result.epoch,
+            ...(result.identity ? { identity: result.identity } : {}),
           });
         },
         async reportAgentSession(report) {
@@ -236,6 +238,38 @@ test("a provider identity report after a wake keeps the server's request and con
         previousLaunchId: undefined,
       },
     ]);
+  } finally {
+    await h.runtime.stop();
+    await rm(h.stateDirectory, { recursive: true, force: true });
+  }
+});
+
+test("a recycled wake records its new identity for the later Stop result", async () => {
+  const h = await harness();
+  try {
+    await h.runtime.start(connection);
+    await h.runtime.handleAgentStart(
+      managedStart("wake-recycle-identity", "start-recycle", 4, "launch-recycle"),
+    );
+    h.exitProcess();
+    await deliverMessage(h.runtime, "wake-recycle-identity", "delivery-recycle");
+    expect(h.sessionCount()).toBe(2);
+
+    await h.runtime.handleAgentStop({
+      protocolMajor: 1,
+      requestId: "stop-recycle",
+      workspaceId: connection.workspaceId,
+      computerId: connection.computerId,
+      agentId: "wake-recycle-identity",
+      provider: "pi",
+      controlEpoch: 4,
+    });
+    expect(h.controlResults.at(-1)).toMatchObject({
+      phase: "stopped",
+      requestId: "stop-recycle",
+      epoch: 4,
+      identity: { sessionId: "session-2", state: "resumable" },
+    });
   } finally {
     await h.runtime.stop();
     await rm(h.stateDirectory, { recursive: true, force: true });
