@@ -70,8 +70,6 @@
   "computer_delete_action": "删除 Computer",
   "computer_delete_description": "请先删除所有 Agent。此操作会永久从工作区移除 Computer。",
   "computer_delete_error": "Computer 删除失败。请先删除所有 Agent，然后重试。",
-  "computer_hostname": "主机名",
-  "computer_system": "系统",
   "computer_disk": "磁盘",
   "computer_memory": "内存",
   "computer_delete_dialog_title": "删除 {name}？",
@@ -104,7 +102,6 @@
   "computer_agent_workspaces": "Agent 工作目录",
   "computer_agent_workspaces_scan": "扫描",
   "computer_agent_workspaces_scanning": "扫描中…",
-  "computer_agent_workspaces_prompt": "扫描此电脑上的 Agent 工作目录。",
   "computer_agent_workspaces_error": "无法完成工作目录扫描，请重试。",
   "computer_agent_workspaces_none": "未找到 Agent 工作目录。",
   "computer_agent_workspaces_scanned_at": "扫描于 {date}",
@@ -273,5 +270,8 @@
   "computer_remove_description": "从当前 Workspace 解绑这台 Computer，同时保留它的本地身份和其他 Workspace 绑定。",
   "computer_remove_dialog_title": "要从当前 Workspace 移除 {name} 吗？",
   "computer_remove_error": "无法从当前 Workspace 移除这台 Computer。",
-  "computer_runtime_auth_upgrade": "升级 Computer 后可以登录或退出"
+  "computer_runtime_auth_upgrade": "升级 Computer 后可以登录或退出",
+  "computer_agents_column_name": "名称",
+  "computer_agents_column_runtime": "运行时",
+  "computer_agents_column_status": "状态"
 }

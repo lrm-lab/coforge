@@ -87,11 +87,21 @@ function reading(
  * "412 GB / 1 TB": used, then total, each in its own unit. Disks count in powers of 1000, as the
  * drive and Finder label them; memory in powers of 1024, so 32 GiB of RAM reads "32 GB".
  */
+
 export function machineUsageLabel(
   reading: { availableBytes: number; totalBytes: number },
   base: 1000 | 1024,
 ): string {
   return `${capacityLabel(reading.totalBytes - reading.availableBytes, base)} / ${capacityLabel(reading.totalBytes, base)}`;
+}
+
+/** How much of a disk or memory is in use, as a whole percent; 0 for a reading with no size. */
+export function machineUsedPercent(reading: {
+  availableBytes: number;
+  totalBytes: number;
+}): number {
+  if (reading.totalBytes <= 0) return 0;
+  return Math.round(((reading.totalBytes - reading.availableBytes) / reading.totalBytes) * 100);
 }
 
 function capacityLabel(bytes: number, base: number): string {

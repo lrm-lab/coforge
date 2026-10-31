@@ -58,8 +58,8 @@ These rules apply to `src/features/agents/`.
 - Render `agent:activity` fields `detail`, `detailKind`, `entries`,
   `observedAtMs`, and the CoForge `level` extension in the Agent-owned timeline
   in this directory.
-- Model-request waiting labels and elapsed-time captions are localized in the timeline,
-  Agent card, and chat header. Other existing Activity labels remain plain English.
+- Localized: model-request waiting labels and elapsed-time captions (timeline, Agent card, chat
+  header) and Online / Offline (`agentDisplay`). Other existing Activity labels remain English.
   Preserve provider content in its original language. Navigation, tabs, and general UI
   remain localized.
 - The model-wait clock uses the retained request observation, never heartbeat time.

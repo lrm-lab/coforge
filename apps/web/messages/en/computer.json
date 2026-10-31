@@ -70,8 +70,6 @@
   "computer_delete_action": "Delete Computer",
   "computer_delete_description": "All Agents must be deleted first. This permanently removes the Computer from the Workspace.",
   "computer_delete_error": "The Computer could not be deleted. Delete all Agents first, then try again.",
-  "computer_hostname": "Hostname",
-  "computer_system": "System",
   "computer_disk": "Disk",
   "computer_memory": "Memory",
   "computer_delete_dialog_title": "Delete {name}?",
@@ -103,7 +101,6 @@
   "computer_agent_workspaces": "Agent workspaces",
   "computer_agent_workspaces_scan": "Scan",
   "computer_agent_workspaces_scanning": "Scanning…",
-  "computer_agent_workspaces_prompt": "Scan this computer for Agent workspace directories.",
   "computer_agent_workspaces_error": "The workspace scan could not be completed. Try again.",
   "computer_agent_workspaces_none": "No Agent workspace directories found.",
   "computer_agent_workspaces_scanned_at": "Scanned {date}",
@@ -272,5 +269,8 @@
   "computer_remove_description": "Unlink this Computer from this Workspace while keeping its local identity and other Workspace bindings.",
   "computer_remove_dialog_title": "Remove {name} from this Workspace?",
   "computer_remove_error": "The Computer could not be removed from this Workspace.",
-  "computer_runtime_auth_upgrade": "Update Computer to sign in or out here"
+  "computer_runtime_auth_upgrade": "Update Computer to sign in or out here",
+  "computer_agents_column_name": "Name",
+  "computer_agents_column_runtime": "Runtime",
+  "computer_agents_column_status": "Status"
 }

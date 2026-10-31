@@ -425,9 +425,9 @@ export function agentDisplay(display?: AgentDisplaySnapshot, options?: { stopped
   const row = presentActivity({ ...display, level: kind === "error" ? "error" : "info" }).at(-1);
   const label =
     kind === "online"
-      ? "Online"
+      ? m.agent_status_online()
       : kind === "offline"
-        ? "Offline"
+        ? m.agent_status_offline()
         : kind === "thinking"
           ? "Thinking…"
           : kind === "error"

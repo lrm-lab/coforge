@@ -52,6 +52,7 @@ function ComputerDetailSkeleton({ announce }: { announce: boolean }) {
     <div aria-busy={announce ? "true" : undefined} className="flex min-h-0 flex-1 flex-col">
       <header className="flex h-12 shrink-0 items-center gap-3 border-b border-secondary px-page">
         <BackToComputers />
+        <Skeleton aria-hidden="true" className="h-5 w-48 motion-safe:animate-pulse" />
         {announce && (
           <p role="status" className="sr-only">
             {m.computer_loading()}
@@ -60,37 +61,26 @@ function ComputerDetailSkeleton({ announce }: { announce: boolean }) {
       </header>
       <div
         aria-hidden="true"
-        className="@container min-h-0 flex-1 overflow-y-auto p-4 motion-safe:animate-pulse sm:p-6 lg:p-8"
+        className="min-h-0 flex-1 overflow-y-auto px-page pt-6 pb-10 motion-safe:animate-pulse"
       >
-        <div className="mx-auto flex w-full max-w-[40rem] flex-col gap-8">
-          <div className="flex flex-col items-center gap-3">
-            <Skeleton className="size-20 shrink-0 rounded-[20px]" />
-            <Skeleton className="h-7 w-40" />
+        <div className="flex w-full flex-col gap-10">
+          <div className="flex flex-wrap gap-x-12 gap-y-5">
+            {["w-20", "w-20", "w-16", "w-36"].map((width, index) => (
+              <div key={index} className="flex flex-col gap-2">
+                <Skeleton className="h-3 w-12" />
+                <Skeleton className={`h-4 ${width}`} />
+              </div>
+            ))}
           </div>
-          <div className="rounded-xl bg-secondary px-4">
-            <div className="divide-y divide-secondary">
-              {["w-32", "w-40", "w-24", "w-36"].map((width) => (
-                <div key={width} className="flex min-h-11 items-center justify-between gap-4 py-3">
-                  <Skeleton className="h-3 w-20" />
+          <div>
+            <Skeleton className="mb-3 h-4 w-40" />
+            <div className="divide-y divide-secondary border-y border-secondary">
+              {["w-36", "w-28"].map((width) => (
+                <div key={width} className="flex items-center gap-3 py-3">
+                  <Skeleton className="size-8 shrink-0 rounded-full" />
                   <Skeleton className={`h-4 ${width}`} />
                 </div>
               ))}
-            </div>
-          </div>
-          <div>
-            <Skeleton className="mb-2 ml-4 h-4 w-32" />
-            <div className="rounded-xl bg-secondary px-4">
-              <div className="divide-y divide-secondary">
-                {["w-36", "w-28"].map((width) => (
-                  <div
-                    key={width}
-                    className="flex min-h-11 items-center justify-between gap-4 py-3"
-                  >
-                    <Skeleton className="h-4 w-24" />
-                    <Skeleton className={`h-8 ${width}`} />
-                  </div>
-                ))}
-              </div>
             </div>
           </div>
         </div>

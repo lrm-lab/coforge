@@ -81,7 +81,7 @@ export function ComputerRuntimeList({
 
   return (
     <>
-      <ul className="mt-2 flex flex-wrap gap-1.5">
+      <ul className="flex flex-wrap gap-1.5">
         {computer.runtimes.map((runtime) => {
           const provider = runtime.provider;
           const login = runtimeLoginChip({

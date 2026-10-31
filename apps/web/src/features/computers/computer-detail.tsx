@@ -1,15 +1,7 @@
 import { useState } from "react";
-import {
-  ChevronRight,
-  Edit01 as Pencil,
-  RefreshCw01 as RotateCw,
-  Terminal,
-  Trash01 as Trash,
-} from "@untitledui/icons";
+import { ChevronRight, RefreshCw01 as RotateCw, Terminal } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
-import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { Input } from "#src/components/base/input/input";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { humanLabel } from "#src/lib/human-label";
@@ -18,8 +10,7 @@ import { TerminalCommand } from "./terminal-command";
 import { FormatCloudComputerDialog } from "./format-cloud-computer-dialog";
 import { ComputerDetailHeader } from "./computer-detail-header";
 import { computerLabel } from "./computer-identity";
-import { DetailGroup } from "./computer-detail-rows";
-import { ComputerTile } from "./computer-tile";
+import { ComputerDetailTitle, ComputerDetailWhere } from "./computer-detail-title";
 import { CloudImageUpdateDialog, ComputerUpgradeConfirmDialog } from "./computer-upgrade-slot";
 import { ComputerRuntimeList } from "./computer-runtimes";
 import { AgentCreateDialog } from "#src/features/agents/agent-create-dialog";
@@ -30,7 +21,7 @@ import type { ComputerRestartStatus, ComputerUpgradeStatus } from "./computer.sc
 import type { AgentWorkspaceScanSnapshot } from "./agent-workspace-scan.query";
 import { ComputerRemoveAction } from "./computer-remove-action";
 import { ComputerDetailAgentRoster } from "./computer-detail-agent-roster";
-import { ComputerDetailIdentityRows } from "./computer-detail-identity";
+import { ComputerDetailStats } from "./computer-detail-stats";
 import {
   RESTART_MAX_POLLS,
   RESTART_POLL_INTERVAL_MS,
@@ -96,10 +87,6 @@ export function ComputerDetail({
   restartPollIntervalMs?: number;
   restartMaxPolls?: number;
 }) {
-  const [editingDisplayName, setEditingDisplayName] = useState(false);
-  const [displayNameDraft, setDisplayNameDraft] = useState(computer.displayName);
-  const [savingDisplayName, setSavingDisplayName] = useState(false);
-  const [displayNameError, setDisplayNameError] = useState(false);
   const [workspaceScanStatus, setWorkspaceScanStatus] = useState<"idle" | "scanning" | "error">(
     "idle",
   );
@@ -152,7 +139,6 @@ export function ComputerDetail({
     restartMaxPolls,
   });
   const canUpgrade = Boolean(onUpgrade) && computer.ownedByCurrentUser;
-  const canEditDisplayName = computer.ownedByCurrentUser && Boolean(onUpdateDisplayName);
   const scanWorkspaces = async () => {
     if (!onScanAgentWorkspaces) return;
     setWorkspaceScanStatus("scanning");
@@ -170,6 +156,14 @@ export function ComputerDetail({
     <>
       <ComputerDetailHeader
         computerId={computer.id}
+        identity={
+          <ComputerDetailTitle
+            key={computer.id}
+            computer={computer}
+            label={label}
+            onUpdateDisplayName={onUpdateDisplayName}
+          />
+        }
         showDesktop={isCloud && computer.ownedByCurrentUser}
         online={computer.online}
         restart={
@@ -189,89 +183,12 @@ export function ComputerDetail({
         }
       />
 
-      <div className="@container min-h-0 flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-        <div className="mx-auto flex w-full max-w-[40rem] flex-col gap-8">
-          <div className="flex flex-col items-center gap-3 text-center">
-            <ComputerTile computer={computer} online={computer.online} size="xl" />
-            {editingDisplayName ? (
-              <form
-                className="w-full max-w-sm"
-                onSubmit={async (event) => {
-                  event.preventDefault();
-                  if (!onUpdateDisplayName) return;
-                  setSavingDisplayName(true);
-                  setDisplayNameError(false);
-                  try {
-                    await onUpdateDisplayName(displayNameDraft);
-                    setEditingDisplayName(false);
-                  } catch {
-                    setDisplayNameError(true);
-                  } finally {
-                    setSavingDisplayName(false);
-                  }
-                }}
-              >
-                <Input
-                  aria-label={m.computer_display_name()}
-                  size="sm"
-                  autoFocus
-                  isRequired
-                  maxLength={200}
-                  value={displayNameDraft}
-                  isDisabled={savingDisplayName}
-                  onChange={setDisplayNameDraft}
-                />
-                <div className="mt-2 flex justify-center gap-2">
-                  <Button type="submit" size="sm" isDisabled={savingDisplayName}>
-                    {savingDisplayName
-                      ? m.computer_display_name_saving()
-                      : m.computer_display_name_save()}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    color="secondary"
-                    isDisabled={savingDisplayName}
-                    onPress={() => {
-                      setDisplayNameDraft(computer.displayName);
-                      setDisplayNameError(false);
-                      setEditingDisplayName(false);
-                    }}
-                  >
-                    {m.computer_display_name_cancel()}
-                  </Button>
-                </div>
-                {displayNameError && (
-                  <p role="alert" className="mt-2 text-sm text-error-primary">
-                    {m.computer_display_name_error()}
-                  </p>
-                )}
-              </form>
-            ) : (
-              // The pencil hangs off the name's right edge so the name itself stays centred.
-              <div className="relative max-w-[calc(100%-5rem)]">
-                <h1 className="truncate text-display-sm font-semibold text-primary">{label}</h1>
-                {canEditDisplayName && (
-                  <ButtonUtility
-                    type="button"
-                    size="sm"
-                    color="tertiary"
-                    icon={Pencil}
-                    className="absolute top-1/2 left-full ml-1 -translate-y-1/2"
-                    aria-label={m.computer_display_name_edit()}
-                    onClick={() => {
-                      setDisplayNameDraft(computer.displayName);
-                      setDisplayNameError(false);
-                      setEditingDisplayName(true);
-                    }}
-                  />
-                )}
-              </div>
-            )}
-          </div>
-
-          <DetailGroup>
-            <ComputerDetailIdentityRows
+      <div className="@container min-h-0 flex-1 overflow-y-auto px-page pt-6 pb-10">
+        <div className="flex w-full flex-col gap-10">
+          <div className="flex flex-col gap-6">
+            {/* The header band has no room for it on a phone. */}
+            <ComputerDetailWhere computer={computer} label={label} className="-mb-2 sm:hidden" />
+            <ComputerDetailStats
               computer={computer}
               label={label}
               timeZone={timeZone}
@@ -285,52 +202,56 @@ export function ComputerDetail({
               onRuntimeUpgrade={() => setUpgradeConfirmOpen(true)}
               onImageUpgrade={() => setImageUpdateOpen(true)}
             />
-            <div className="border-t border-secondary py-3">
-              <div className="flex items-center justify-between gap-3">
-                <h3 className="text-sm font-medium text-primary">{m.computer_runtimes()}</h3>
+            {/* A Computer can carry many runtimes, so they get a line of their own and wrap. */}
+            <section aria-labelledby="computer-runtimes">
+              <h2 id="computer-runtimes" className="text-xs text-tertiary">
+                {m.computer_runtimes()}
+              </h2>
+              <div className="mt-2">
+                {computer.runtimes.length ? (
+                  <ComputerRuntimeList
+                    computer={computer}
+                    timeZone={timeZone}
+                    onSetRuntimePublic={onSetRuntimePublic}
+                  />
+                ) : (
+                  <p className="text-sm text-tertiary">{m.computer_no_code_agents()}</p>
+                )}
+                {(rescanning || computer.runtimeDetecting) && (
+                  <p className="mt-1 text-sm text-tertiary" role="status">
+                    {m.computer_runtime_detection_pending()}
+                  </p>
+                )}
+                {!rescanning && rescanNotice.kind === "timeout" && (
+                  <p className="mt-1 text-sm text-error-primary" role="alert">
+                    {m.computer_runtime_rescan_failed()}
+                  </p>
+                )}
+                {!rescanning && rescanNotice.kind === "error" && (
+                  <p className="mt-1 text-sm text-error-primary" role="alert">
+                    {rescanNotice.message
+                      ? m.computer_runtime_rescan_error({ message: rescanNotice.message })
+                      : m.computer_runtime_rescan_failed()}
+                  </p>
+                )}
                 {onRescanRuntimes && computer.online && (
                   <Button
                     type="button"
                     size="xs"
-                    color="secondary"
+                    color="link-gray"
                     iconLeading={RotateCw}
                     isLoading={rescanning}
                     showTextWhileLoading
                     isDisabled={rescanning}
+                    className="mt-2"
                     onPress={() => void rescan()}
                   >
                     {rescanning ? m.computer_runtime_rescanning() : m.computer_runtime_rescan()}
                   </Button>
                 )}
               </div>
-              {(rescanning || computer.runtimeDetecting) && (
-                <p className="mt-1 text-sm text-tertiary" role="status">
-                  {m.computer_runtime_detection_pending()}
-                </p>
-              )}
-              {!rescanning && rescanNotice.kind === "timeout" && (
-                <p className="mt-1 text-sm text-error-primary" role="alert">
-                  {m.computer_runtime_rescan_failed()}
-                </p>
-              )}
-              {!rescanning && rescanNotice.kind === "error" && (
-                <p className="mt-1 text-sm text-error-primary" role="alert">
-                  {rescanNotice.message
-                    ? m.computer_runtime_rescan_error({ message: rescanNotice.message })
-                    : m.computer_runtime_rescan_failed()}
-                </p>
-              )}
-              {computer.runtimes.length ? (
-                <ComputerRuntimeList
-                  computer={computer}
-                  timeZone={timeZone}
-                  onSetRuntimePublic={onSetRuntimePublic}
-                />
-              ) : (
-                <p className="mt-1 text-sm text-tertiary">{m.computer_no_code_agents()}</p>
-              )}
-            </div>
-          </DetailGroup>
+            </section>
+          </div>
 
           <ComputerDetailAgentRoster
             agents={computer.agents}
@@ -343,81 +264,79 @@ export function ComputerDetail({
             computerOnline={computer.online}
             computerName={label}
           />
-          <ComputerDetailWorkspaceInventory
-            snapshot={onScanAgentWorkspaces ? agentWorkspaceScan : null}
-            status={workspaceScanStatus}
-            timeZone={timeZone}
-            canScan={Boolean(onScanAgentWorkspaces)}
-            onScan={() => void scanWorkspaces()}
-            canDelete={Boolean(onDeleteAgentWorkspace)}
-            onDelete={async (agentId) => {
-              if (!onDeleteAgentWorkspace) return;
-              const result = await onDeleteAgentWorkspace(agentId);
-              if (result.status !== "ok" && result.status !== "missing")
-                throw new Error("Workspace could not be deleted");
-              await scanWorkspaces();
-            }}
-          />
+          {/* Two one-line tools in one box: the workspace scan and terminal troubleshooting. */}
+          <div className="divide-y divide-secondary rounded-xl border border-secondary [&>*]:px-4">
+            <div className="py-2">
+              <ComputerDetailWorkspaceInventory
+                snapshot={onScanAgentWorkspaces ? agentWorkspaceScan : null}
+                status={workspaceScanStatus}
+                timeZone={timeZone}
+                canScan={Boolean(onScanAgentWorkspaces)}
+                onScan={() => void scanWorkspaces()}
+                canDelete={Boolean(onDeleteAgentWorkspace)}
+                onDelete={async (agentId) => {
+                  if (!onDeleteAgentWorkspace) return;
+                  const result = await onDeleteAgentWorkspace(agentId);
+                  if (result.status !== "ok" && result.status !== "missing")
+                    throw new Error("Workspace could not be deleted");
+                  await scanWorkspaces();
+                }}
+              />
+            </div>
 
-          {computer.ownedByCurrentUser && (
-            <details className="group rounded-xl bg-secondary px-4">
-              <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 py-3 text-sm font-semibold text-primary outline-none focus-visible:ring-2 focus-visible:ring-brand [&::-webkit-details-marker]:hidden">
-                <Terminal aria-hidden="true" className="size-4 text-fg-quaternary" />
-                <span className="flex-1">{m.computer_troubleshoot_terminal()}</span>
-                <ChevronRight
-                  aria-hidden="true"
-                  className="size-4 text-fg-quaternary transition-transform group-open:rotate-90"
-                />
-              </summary>
-              <div className="space-y-2 pb-4">
-                <p className="text-sm text-tertiary">{m.computer_verify_terminal_description()}</p>
-                <TerminalCommand command="coforge-computer status" />
-                <TerminalCommand command="coforge-computer logs" />
-                <p className="pt-2 text-sm text-tertiary">{m.computer_restart_from_terminal()}</p>
-                <TerminalCommand
-                  command={`coforge-computer restart --workspace ${workspaceSlug}`}
-                />
-              </div>
-            </details>
-          )}
+            {computer.ownedByCurrentUser && (
+              <details className="group">
+                <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 py-3 text-sm font-semibold text-primary outline-none focus-visible:ring-2 focus-visible:ring-brand [&::-webkit-details-marker]:hidden">
+                  <Terminal aria-hidden="true" className="size-4 text-fg-quaternary" />
+                  <span className="flex-1">{m.computer_troubleshoot_terminal()}</span>
+                  <ChevronRight
+                    aria-hidden="true"
+                    className="size-4 text-fg-quaternary transition-transform group-open:rotate-90"
+                  />
+                </summary>
+                <div className="space-y-2 pb-4">
+                  <p className="text-sm text-tertiary">
+                    {m.computer_verify_terminal_description()}
+                  </p>
+                  <TerminalCommand command="coforge-computer status" />
+                  <TerminalCommand command="coforge-computer logs" />
+                  <p className="pt-2 text-sm text-tertiary">{m.computer_restart_from_terminal()}</p>
+                  <TerminalCommand
+                    command={`coforge-computer restart --workspace ${workspaceSlug}`}
+                  />
+                </div>
+              </details>
+            )}
+          </div>
 
-          {onFormatCloudComputer && (
-            <div className="flex flex-col gap-4 border-t border-secondary pt-6 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0">
-                <h2 className="text-sm font-semibold text-primary">{m.computer_format_action()}</h2>
-                <p className="mt-1 text-sm text-tertiary">{m.computer_format_description()}</p>
-              </div>
-              <Button
-                type="button"
-                size="sm"
-                color="secondary-destructive"
-                className="shrink-0 self-start sm:self-auto"
-                onPress={() => setFormatOpen(true)}
-              >
-                {m.computer_format_action()}
-              </Button>
+          {(onFormatCloudComputer || onDeleteComputer || onRemoveComputer) && (
+            // The page's last row: each action's consequences are spelled out in its confirmation.
+            <div className="flex flex-wrap gap-2">
+              {onFormatCloudComputer && (
+                <Button
+                  type="button"
+                  size="sm"
+                  color="secondary-destructive"
+                  onPress={() => setFormatOpen(true)}
+                >
+                  {m.computer_format_action()}
+                </Button>
+              )}
+              {onDeleteComputer && (
+                <Button
+                  type="button"
+                  size="sm"
+                  color="secondary-destructive"
+                  onPress={() => setDeleteOpen(true)}
+                >
+                  {m.computer_delete_action()}
+                </Button>
+              )}
+              {onRemoveComputer && (
+                <ComputerRemoveAction name={label} onConfirm={onRemoveComputer} />
+              )}
             </div>
           )}
-
-          {onDeleteComputer && (
-            <div className="flex flex-col gap-4 border-t border-secondary pt-6 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0">
-                <h2 className="text-sm font-semibold text-primary">{m.computer_delete_action()}</h2>
-                <p className="mt-1 text-sm text-tertiary">{m.computer_delete_description()}</p>
-              </div>
-              <Button
-                type="button"
-                size="sm"
-                color="secondary-destructive"
-                iconLeading={Trash}
-                className="shrink-0 self-start sm:self-auto"
-                onPress={() => setDeleteOpen(true)}
-              >
-                {m.computer_delete_action()}
-              </Button>
-            </div>
-          )}
-          {onRemoveComputer && <ComputerRemoveAction name={label} onConfirm={onRemoveComputer} />}
         </div>
       </div>
       {onFormatCloudComputer && (

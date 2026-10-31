@@ -9,12 +9,13 @@ These rules apply to `src/features/computers/`.
 - `computer-detail.tsx` — one Computer's panel composition and owner actions
 - `computer-detail-view.ts` — detail panel view type and restart poll constants
 - `use-computer-detail-lifecycle.ts` — upgrade slots and restart polling
-- `computer-detail-identity.tsx` — hostname / Version / Image / added-by rows
-- `computer-detail-agent-roster.tsx` — Agents on this Computer (select + control)
+- `computer-detail-title.tsx` — header band identity: name, hostname · OS, status, in-place rename
+- `computer-detail-stats.tsx` — Disk / Memory / Version / Image / added-by strip, upgrade slots
+- `computer-detail-agent-roster.tsx` — Agents on this Computer, a name / runtime / status table (select + control)
 - `computer-detail-workspace-inventory.tsx` — Agent workspace scan/delete
 - `computer-detail-date.tsx` — connected-at calendar day in the viewer's zone
-- `computer-detail-header.tsx` — detail header actions (desktop / restart)
-- `computer-detail-rows.tsx` — shared DetailGroup / DetailRow
+- `computer-detail-header.tsx` — detail header band: identity, desktop, restart
+- `computer-detail-rows.tsx` — shared DetailGroup
 
 - `computer-layout.tsx` owns Computer list/detail selection, the return
   control, list scroll retention, and the empty state, following the same

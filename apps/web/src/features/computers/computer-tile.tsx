@@ -7,32 +7,18 @@ import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { computerIcon, type ComputerIdentity } from "./computer-identity";
 
-/** Pixel-proportional pieces for each tile size, keyed off the default `md` (36px) shape. */
-const tileSizes = {
-  md: {
-    tile: "size-9",
-    radius: "rounded-[10px]",
-    icon: "size-4",
-    dot: "size-2.5",
-    dotBorder: "border-2",
-    dotOffset: "-right-0.5 -bottom-0.5",
-    badge: "size-4",
-    badgeOffset: "-top-1 -right-1",
-    badgeIcon: "size-[9px]",
-    loading: "size-3",
-  },
-  xl: {
-    tile: "size-20",
-    radius: "rounded-[20px]",
-    icon: "size-10",
-    dot: "size-5",
-    dotBorder: "border-[3px]",
-    dotOffset: "-right-1 -bottom-1",
-    badge: "size-7",
-    badgeOffset: "-top-1.5 -right-1.5",
-    badgeIcon: "size-3.5",
-    loading: "size-6",
-  },
+/** The tile's pieces at its one size, 36px. */
+const dims = {
+  tile: "size-9",
+  radius: "rounded-[10px]",
+  icon: "size-4",
+  dot: "size-2.5",
+  dotBorder: "border-2",
+  dotOffset: "-right-0.5 -bottom-0.5",
+  badge: "size-4",
+  badgeOffset: "-top-1 -right-1",
+  badgeIcon: "size-[9px]",
+  loading: "size-3",
 } as const;
 
 /** The Computer's own face: cloud-hosted or a machine the User controls. */
@@ -41,7 +27,6 @@ export function ComputerTile({
   online,
   updateAvailableVersion,
   upgrading = false,
-  size = "md",
 }: {
   computer: ComputerIdentity;
   /** Presence dot. Omit it where the panel already states the status. */
@@ -50,11 +35,8 @@ export function ComputerTile({
   updateAvailableVersion?: string | null;
   /** An upgrade operation is in flight for this Computer. */
   upgrading?: boolean;
-  /** `md` (36px, default) for lists and bars; `xl` (80px) for a page hero. */
-  size?: "md" | "xl";
 }) {
   const Icon = computerIcon(computer);
-  const dims = tileSizes[size];
 
   return (
     <span className="relative flex shrink-0">
@@ -82,8 +64,8 @@ export function ComputerTile({
           <Spinner className="size-full" />
         </ProgressBar>
       ) : (
-        // A mark, not a control: the row around it opens the Computer, whose Version row offers
-        // the upgrade to whoever may make it.
+        // A mark, not a control: the row around it opens the Computer, whose page offers the
+        // upgrade to whoever may make it.
         updateAvailableVersion && (
           <span className={cn("absolute", dims.badgeOffset)}>
             <span

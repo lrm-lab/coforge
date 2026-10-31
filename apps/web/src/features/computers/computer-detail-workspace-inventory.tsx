@@ -56,8 +56,13 @@ export function ComputerDetailWorkspaceInventory({
         ) : undefined
       }
     >
+      {status === "scanning" && (
+        <p role="status" className="sr-only">
+          {m.computer_agent_workspaces_scanning()}
+        </p>
+      )}
       {status === "error" && (
-        <p role="alert" className="py-4 text-sm text-error-primary">
+        <p role="alert" className="py-2 text-sm text-error-primary">
           {m.computer_agent_workspaces_error()}
         </p>
       )}
@@ -74,77 +79,72 @@ export function ComputerDetailWorkspaceInventory({
           </time>
         </p>
       )}
-      {!snapshot ? (
-        status === "scanning" ? (
-          <p className="py-4 text-sm text-tertiary">{m.computer_agent_workspaces_scanning()}</p>
-        ) : status === "idle" ? (
-          <p className="py-4 text-sm text-tertiary">{m.computer_agent_workspaces_prompt()}</p>
-        ) : null
-      ) : snapshot.workspaces.length ? (
-        <>
-          {deletedCount > 0 && (
-            <p className="py-3 text-sm text-tertiary">
-              {m.computer_agent_workspaces_deleted_summary({ count: String(deletedCount) })}
-            </p>
-          )}
-          <ul className="divide-y divide-secondary">
-            {snapshot.workspaces.map((workspace) => (
-              <li
-                key={workspace.agentId}
-                className="flex min-w-0 items-start justify-between gap-4 py-3 text-sm"
-              >
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="truncate font-medium text-primary">
-                      {workspace.displayName}
-                    </span>
-                    <span className="rounded-full bg-secondary px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-tertiary">
-                      {workspace.state === "deleted"
-                        ? m.computer_agent_workspace_deleted()
-                        : m.computer_agent_workspace_active()}
-                    </span>
-                  </div>
-                  <p className="mt-1 truncate font-mono text-xs text-tertiary">
-                    {workspace.rootPath}
-                  </p>
-                  <p className="mt-1 text-xs text-tertiary">
-                    {workspace.status === "present"
-                      ? m.computer_agent_workspace_stats({
-                          files: String(workspace.fileCount),
-                          size: formatWorkspaceSize(workspace.totalSizeBytes),
-                        })
-                      : workspace.status === "missing"
-                        ? m.computer_agent_workspace_missing()
-                        : workspace.status === "partial"
-                          ? m.computer_agent_workspace_partial()
-                          : m.computer_agent_workspace_unavailable()}
-                  </p>
-                  {workspace.modifiedAtMs > 0 && (
-                    <p className="mt-1 text-xs text-tertiary">
-                      {m.computer_agent_workspace_modified({
-                        date: new Date(workspace.modifiedAtMs).toLocaleString(),
-                      })}
+      {snapshot &&
+        (snapshot.workspaces.length ? (
+          <>
+            {deletedCount > 0 && (
+              <p className="py-3 text-sm text-tertiary">
+                {m.computer_agent_workspaces_deleted_summary({ count: String(deletedCount) })}
+              </p>
+            )}
+            <ul className="divide-y divide-secondary">
+              {snapshot.workspaces.map((workspace) => (
+                <li
+                  key={workspace.agentId}
+                  className="flex min-w-0 items-start justify-between gap-4 py-3 text-sm"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate font-medium text-primary">
+                        {workspace.displayName}
+                      </span>
+                      <span className="rounded-md bg-secondary px-1.5 py-0.5 text-xs font-medium text-tertiary">
+                        {workspace.state === "deleted"
+                          ? m.computer_agent_workspace_deleted()
+                          : m.computer_agent_workspace_active()}
+                      </span>
+                    </div>
+                    <p className="mt-1 truncate font-mono text-xs text-tertiary">
+                      {workspace.rootPath}
                     </p>
+                    <p className="mt-1 text-xs text-tertiary">
+                      {workspace.status === "present"
+                        ? m.computer_agent_workspace_stats({
+                            files: String(workspace.fileCount),
+                            size: formatWorkspaceSize(workspace.totalSizeBytes),
+                          })
+                        : workspace.status === "missing"
+                          ? m.computer_agent_workspace_missing()
+                          : workspace.status === "partial"
+                            ? m.computer_agent_workspace_partial()
+                            : m.computer_agent_workspace_unavailable()}
+                    </p>
+                    {workspace.modifiedAtMs > 0 && (
+                      <p className="mt-1 text-xs text-tertiary">
+                        {m.computer_agent_workspace_modified({
+                          date: new Date(workspace.modifiedAtMs).toLocaleString(),
+                        })}
+                      </p>
+                    )}
+                  </div>
+                  {canDelete && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      color="tertiary-destructive"
+                      isDisabled={workspace.status !== "present" && workspace.status !== "partial"}
+                      onPress={() => setDeleteTarget(workspace)}
+                    >
+                      {m.computer_agent_workspace_delete()}
+                    </Button>
                   )}
-                </div>
-                {canDelete && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    color="tertiary-destructive"
-                    isDisabled={workspace.status !== "present" && workspace.status !== "partial"}
-                    onPress={() => setDeleteTarget(workspace)}
-                  >
-                    {m.computer_agent_workspace_delete()}
-                  </Button>
-                )}
-              </li>
-            ))}
-          </ul>
-        </>
-      ) : (
-        <p className="py-4 text-sm text-tertiary">{m.computer_agent_workspaces_none()}</p>
-      )}
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : (
+          <p className="py-2 text-sm text-tertiary">{m.computer_agent_workspaces_none()}</p>
+        ))}
       <ConfirmDialog
         open={deleteTarget !== undefined}
         onOpenChange={(open) => {
