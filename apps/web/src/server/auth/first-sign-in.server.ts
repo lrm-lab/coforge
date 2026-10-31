@@ -266,7 +266,9 @@ function firstSignIn(db: PrismaClient): FirstSignIn {
         request,
       ),
     async (request) => {
-      await workspaceAssistantOnboarding(db).ensure(request.workspaceId, request.userId);
+      await workspaceAssistantOnboarding(db).ensure(request.workspaceId, request.userId, {
+        startIfOwed: true,
+      });
       return ensureWeeklyReportAssistant(db, request);
     },
     ({ workspaceId, userId }) => provisionWorkspaceEnrollment(db, workspaceId, userId),

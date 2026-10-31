@@ -13,7 +13,9 @@ export async function recoverWorkspaceResourcesOnOpen(
 ) {
   // Existing onboarding first runs WorkspaceAssistants.ensure (Agent, session and DM),
   // even when Memory provisioning already succeeded, then retries cloud/transport work.
-  const session = await workspaceAssistantOnboarding(db).ensure(input.workspaceId, input.userId);
+  const session = await workspaceAssistantOnboarding(db).ensure(input.workspaceId, input.userId, {
+    startIfOwed: true,
+  });
   const state = await workspaceResourceState(db, { ...input, platformAgentId: session.agentId });
   if (!state) throw new AppError("ACCESS_DENIED");
   if (!roleCan(state.role, "recoverWorkspaceResources")) return;

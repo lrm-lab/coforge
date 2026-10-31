@@ -26,14 +26,17 @@ export class WorkspaceAssistants {
   constructor(private readonly db: PrismaClient) {}
 
   async ensure(workspaceId: string, userId: string) {
-    const session = await this.ensureSession(workspaceId, userId);
+    const { session, created } = await this.ensureSession(workspaceId, userId);
     const conversation = await new DirectConversations(this.db).open(workspaceId, userId, {
       agentId: session.agentId,
     });
-    return { agentId: session.agentId, conversationId: conversation.conversationId };
+    return { agentId: session.agentId, conversationId: conversation.conversationId, created };
   }
 
-  private async ensureSession(workspaceId: string, userId: string) {
+  private async ensureSession(
+    workspaceId: string,
+    userId: string,
+  ): Promise<{ session: { agentId: string }; created: boolean }> {
     // The steady state is a read: the shared row and the member's session already exist, and a
     // sidebar load must not write. Only a first open, or a session still waiting for its
     // computer, enters the transaction below (which re-reads everything it decides on).
@@ -48,7 +51,7 @@ export class WorkspaceAssistants {
       }),
     ]);
     if (!membership) throw new AppError("ACCESS_DENIED");
-    if (existing?.agent.computerId) return existing;
+    if (existing?.agent.computerId) return { session: existing, created: false };
     if (existing) {
       // An unbound session rebinds with one conditional update — a compare-and-set that stays
       // outside the creation transaction so an absent computer keeps the read write-free.
@@ -68,10 +71,11 @@ export class WorkspaceAssistants {
           where: { id: existing.agentId, workspaceId, ownerId: userId, computerId: null },
           data: { computerId: computer.id },
         });
-      return existing;
+      return { session: existing, created: false };
     }
     try {
-      return await this.db.$transaction(async (tx) => {
+      let created = false;
+      const session = await this.db.$transaction(async (tx) => {
         const membership = await tx.workspaceMembership.findUnique({
           where: { workspaceId_userId: { workspaceId, userId } },
           select: { role: true },
@@ -106,6 +110,7 @@ export class WorkspaceAssistants {
           create: { workspaceId },
           update: { workspaceId },
         });
+        created = true;
         return tx.workspaceAssistantSession.create({
           data: {
             assistant: { connect: { workspaceId } },
@@ -127,13 +132,14 @@ export class WorkspaceAssistants {
           },
         });
       });
+      return { session, created };
     } catch (error) {
       // Both the Agent and binding are rolled back for a losing first-open transaction.
       if (isUniqueViolation(error)) {
         const existing = await this.db.workspaceAssistantSession.findUnique({
           where: { workspaceId_userId: { workspaceId, userId } },
         });
-        if (existing) return existing;
+        if (existing) return { session: existing, created: false };
       }
       throw error;
     }

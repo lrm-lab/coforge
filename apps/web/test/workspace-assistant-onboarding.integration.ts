@@ -4,10 +4,7 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { WorkspaceAssistants } from "#src/server/agents/workspace-assistants.server";
-import {
-  INTRO_START_THROTTLE_MS,
-  WorkspaceAssistantOnboarding,
-} from "#src/server/agents/workspace-assistant-onboarding.server";
+import { WorkspaceAssistantOnboarding } from "#src/server/agents/workspace-assistant-onboarding.server";
 import { DirectConversations } from "#src/server/conversations/direct-conversations.server";
 import { createAgentIntroduction } from "#src/server/db/repositories/agent-introduction.repositories.server";
 import { PrismaAgentControlStore } from "#src/server/db/repositories/agent-control.repositories.server";
@@ -24,25 +21,20 @@ let conversationId: string;
 const extraUsers: string[] = [];
 let starts = 0;
 let cloudStarts = 0;
-let now = Date.now();
-const onboarding = new WorkspaceAssistantOnboarding(
-  db,
-  {
-    startCloudComputer: async () => {
-      cloudStarts++;
-      await db.workspaceComputer.upsert({
-        where: { workspaceId_computerId: { workspaceId, computerId } },
-        create: { workspaceId, computerId },
-        update: {},
-      });
-      return { slot: "default", computerId };
-    },
-    startAgent: async () => {
-      starts++;
-    },
+const onboarding = new WorkspaceAssistantOnboarding(db, {
+  startCloudComputer: async () => {
+    cloudStarts++;
+    await db.workspaceComputer.upsert({
+      where: { workspaceId_computerId: { workspaceId, computerId } },
+      create: { workspaceId, computerId },
+      update: {},
+    });
+    return { slot: "default", computerId };
   },
-  () => now,
-);
+  startAgent: async () => {
+    starts++;
+  },
+});
 
 beforeAll(async () => {
   const user = await db.user.create({
@@ -125,12 +117,10 @@ test("a repeated ensure only reads — the sidebar's steady state writes nothing
   }
 });
 
-test("a pending introduction retries the Start at the interval, never per read", async () => {
+test("a pending introduction's read is write-free and never re-attempts the Start", async () => {
+  // The Start went out at provisioning; while it has not landed, a sidebar read issues only
+  // SELECTs and calls no port — a missed Start is the Daemon ready recovery's job.
   const before = starts;
-  now += INTRO_START_THROTTLE_MS + 1;
-  await onboarding.ensure(workspaceId, userId);
-  expect(starts).toBe(before + 1);
-  // Inside the window a read neither calls the port nor reaches the database with a write.
   const statements: string[] = [];
   const counting = new PrismaClient({
     adapter: new PrismaPg({ connectionString }),
@@ -138,18 +128,17 @@ test("a pending introduction retries the Start at the interval, never per read",
   });
   counting.$on("query", (event: { query: string }) => statements.push(event.query));
   try {
-    const again = new WorkspaceAssistantOnboarding(
-      counting,
-      {
-        startCloudComputer: async () => ({ slot: "default", computerId }),
-        startAgent: async () => {
-          starts++;
-        },
+    const again = new WorkspaceAssistantOnboarding(counting, {
+      startCloudComputer: async () => {
+        throw new Error("must not run on a read");
       },
-      () => now,
-    );
+      startAgent: async () => {
+        throw new Error("must not run on a read");
+      },
+    });
     await again.ensure(workspaceId, userId);
-    expect(starts).toBe(before + 1);
+    await again.ensure(workspaceId, userId);
+    expect(starts).toBe(before);
     expect(statements.length).toBeGreaterThan(0);
     expect(
       statements.filter((query) => /^\s*(INSERT|UPDATE|DELETE|BEGIN|COMMIT|ROLLBACK)/i.test(query)),
@@ -157,13 +146,9 @@ test("a pending introduction retries the Start at the interval, never per read",
   } finally {
     await counting.$disconnect();
   }
-  // Past the interval the same read retries the Start.
-  now += INTRO_START_THROTTLE_MS + 1;
-  await onboarding.ensure(workspaceId, userId);
-  expect(starts).toBe(before + 2);
 });
 
-test("an unbound assistant inside the retry window still reads write-free", async () => {
+test("an unbound assistant still reads write-free", async () => {
   // A session whose Agent lost its binding and whose member owns no default cloud Computer —
   // the state that used to re-enter the creation transaction on every sidebar read.
   await db.agent.update({ where: { id: agentId }, data: { computerId: null } });
@@ -177,18 +162,14 @@ test("an unbound assistant inside the retry window still reads write-free", asyn
   });
   counting.$on("query", (event: { query: string }) => statements.push(event.query));
   try {
-    const again = new WorkspaceAssistantOnboarding(
-      counting,
-      {
-        startCloudComputer: async () => {
-          throw new Error("no cloud cluster");
-        },
-        startAgent: async () => {
-          starts++;
-        },
+    const again = new WorkspaceAssistantOnboarding(counting, {
+      startCloudComputer: async () => {
+        throw new Error("must not run on a read");
       },
-      () => now,
-    );
+      startAgent: async () => {
+        throw new Error("must not run on a read");
+      },
+    });
     await again.ensure(workspaceId, userId);
     expect(statements.length).toBeGreaterThan(0);
     expect(
@@ -205,28 +186,33 @@ test("an unbound assistant inside the retry window still reads write-free", asyn
   }
 });
 
-test("a transport failure leaves the same pending assistant available for retry", async () => {
-  const failing = new WorkspaceAssistantOnboarding(
-    db,
-    {
-      startCloudComputer: async () => {
-        throw new Error("unexpected cloud allocation");
-      },
-      startAgent: async () => {
-        throw new Error("transport unavailable");
-      },
+test("a failed provisioning Start is not retried by the read path", async () => {
+  const visitor = await db.user.create({
+    data: { username: `failing-${suffix}`, displayName: "Failing" },
+  });
+  extraUsers.push(visitor.id);
+  await db.workspaceMembership.create({
+    data: { workspaceId, userId: visitor.id, role: "member" },
+  });
+  let attempts = 0;
+  const failing = new WorkspaceAssistantOnboarding(db, {
+    startCloudComputer: async () => {
+      attempts++;
+      throw new Error("unexpected cloud allocation");
     },
-    () => now,
-  );
-  now += INTRO_START_THROTTLE_MS + 1;
-  expect((await failing.ensure(workspaceId, userId)).agentId).toBe(agentId);
-  expect(
-    (await db.agent.findUniqueOrThrow({ where: { id: agentId } })).introductionDueAt,
-  ).not.toBeNull();
-  const before = starts;
-  now += INTRO_START_THROTTLE_MS + 1;
-  await onboarding.ensure(workspaceId, userId);
-  expect(starts).toBe(before + 1);
+    startAgent: async () => {
+      throw new Error("transport unavailable");
+    },
+  });
+  // Provisioning creates the session and makes its one start attempt.
+  const session = await failing.ensure(workspaceId, visitor.id);
+  expect(attempts).toBe(1);
+  const agent = await db.agent.findUniqueOrThrow({ where: { id: session.agentId } });
+  expect(agent.introductionDueAt).not.toBeNull();
+  // Later reads make none — a Start that never went out waits for the Daemon's ready recovery.
+  await failing.ensure(workspaceId, visitor.id);
+  await failing.ensure(workspaceId, visitor.id);
+  expect(attempts).toBe(1);
 });
 
 test("old assistants without any reply are enrolled once, even after seven days offline", async () => {
@@ -270,6 +256,10 @@ test("a real canonical welcome settles introduction and enables choices only unt
   await onboarding.ensure(workspaceId, userId);
   await onboarding.ensure(workspaceId, userId);
   expect(starts).toBe(before);
+  // The read path never settles the due state — the next Start's `promptFor` does, suppressing
+  // the prompt and clearing the column in the same write it was allowed to make.
+  const controlAgent = await new PrismaAgentControlStore(db).get(agentId);
+  expect(await createAgentIntroduction(db).promptFor(controlAgent!, new Date())).toBeUndefined();
   expect(
     (await db.agent.findUniqueOrThrow({ where: { id: agentId } })).introductionDueAt,
   ).toBeNull();
@@ -295,6 +285,43 @@ test("a real canonical welcome settles introduction and enables choices only unt
   expect(
     (await db.agent.findUniqueOrThrow({ where: { id: agentId } })).introductionDueAt,
   ).toBeNull();
+});
+
+test("a session provisioned through several calls is started by the write-path caller", async () => {
+  // Workspace creation and sign-in provision the session with a bare `assistants.ensure` and
+  // bind the Computer afterwards: `created` alone cannot reach them, so the write path marks
+  // `startIfOwed` — which also reaches an assistant provisioned earlier and never started.
+  const visitor = await db.user.create({
+    data: { username: `owed-${suffix}`, displayName: "Owed" },
+  });
+  extraUsers.push(visitor.id);
+  await db.workspaceMembership.create({
+    data: { workspaceId, userId: visitor.id, role: "member" },
+  });
+  const created = await new WorkspaceAssistants(db).ensure(workspaceId, visitor.id);
+  expect(created.created).toBe(true);
+  let starts = 0;
+  const owed = new WorkspaceAssistantOnboarding(db, {
+    startCloudComputer: async () => {
+      const computer = await db.computer.create({
+        data: {
+          ownerId: visitor.id,
+          machineId: `owed-${suffix}`,
+          kind: "cloud",
+          cloudSlot: "default",
+          workspaces: { create: { workspaceId } },
+        },
+      });
+      return { slot: "default", computerId: computer.id };
+    },
+    startAgent: async () => {
+      starts++;
+    },
+  });
+  await owed.ensure(workspaceId, visitor.id, { startIfOwed: true });
+  expect(starts).toBe(1);
+  await owed.ensure(workspaceId, visitor.id);
+  expect(starts).toBe(1);
 });
 
 test("joining by link provisions and starts the assistant after membership commits, without loading Chat", async () => {

@@ -152,6 +152,7 @@ export const createWorkspace = createServerFn({ method: "POST" })
           workspaceAssistantOnboarding(requireDatabaseClient()).ensure(
             request.workspaceId,
             request.userId,
+            { startIfOwed: true },
           ),
       },
       { userId: user.id, name: data.name, slug: data.slug, now: new Date() },
