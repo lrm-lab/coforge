@@ -9,6 +9,10 @@ pub trait Clock {
     fn now(&self) -> Duration;
 
     fn sleep(&self, duration: Duration);
+
+    /// Seconds since the Unix epoch: the one reading that means the same in another process, for
+    /// a time kept on disk between runs.
+    fn unix_seconds(&self) -> u64;
 }
 
 /// The wall clock: [`Instant`] and [`std::thread::sleep`].
@@ -39,6 +43,12 @@ impl Clock for SystemClock {
     fn sleep(&self, duration: Duration) {
         std::thread::sleep(duration);
     }
+
+    fn unix_seconds(&self) -> u64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |elapsed| elapsed.as_secs())
+    }
 }
 
 /// Calls `probe` until it yields a value, sleeping `interval` between calls, for at most `bound`.
@@ -63,7 +73,7 @@ pub fn poll_until<T, E>(
 }
 
 #[cfg(test)]
-pub(crate) use virtual_clock::VirtualClock;
+pub(crate) use virtual_clock::{VirtualClock, WALL_ORIGIN};
 
 #[cfg(test)]
 mod virtual_clock {
@@ -102,7 +112,14 @@ mod virtual_clock {
             self.now.set(self.now.get() + duration);
             self.sleeps.borrow_mut().push(duration);
         }
+
+        fn unix_seconds(&self) -> u64 {
+            WALL_ORIGIN + self.now.get().as_secs()
+        }
     }
+
+    /// Where the virtual wall clock starts, in seconds since the epoch.
+    pub(crate) const WALL_ORIGIN: u64 = 1_800_000_000;
 }
 
 #[cfg(test)]

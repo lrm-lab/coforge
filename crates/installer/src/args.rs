@@ -25,6 +25,10 @@ pub(crate) enum Command {
         caller_pid: Option<u32>,
         json: bool,
     },
+    /// `recover --auto`: one try for the retry trigger, which waits out its backoff itself.
+    RecoverAuto {
+        json: bool,
+    },
     Repair {
         selection: Option<String>,
         allow_downgrade: bool,
@@ -160,14 +164,23 @@ fn parse_recover(mut parser: lexopt::Parser) -> Result<Command, String> {
 
     let mut caller_pid = None;
     let mut json = false;
+    let mut auto = false;
     while let Some(arg) = parser.next().map_err(|error| error.to_string())? {
         match arg {
             Long("caller-pid") => caller_pid = Some(caller_pid_value(&mut parser)?),
             Long("json") => json = true,
+            Long("auto") => auto = true,
             other => return Err(other.unexpected().to_string()),
         }
     }
-    Ok(Command::Recover { caller_pid, json })
+    if auto && caller_pid.is_some() {
+        return Err("--auto runs without a launching process: drop --caller-pid".to_owned());
+    }
+    Ok(if auto {
+        Command::RecoverAuto { json }
+    } else {
+        Command::Recover { caller_pid, json }
+    })
 }
 
 fn parse_start(parser: lexopt::Parser) -> Result<Command, String> {
@@ -308,6 +321,19 @@ mod tests {
         assert!(parse(args(&["install", "--version", "0.2.0"])).is_ok());
         assert!(parse(args(&["install", "--version", "../etc"])).is_err());
         assert!(parse(args(&["install", "--version", "0.2 0"])).is_err());
+    }
+
+    #[test]
+    fn recover_auto_is_its_own_command_and_takes_no_caller() {
+        assert!(matches!(
+            parse(args(&["recover", "--auto"])),
+            Ok(Command::RecoverAuto { json: false })
+        ));
+        assert!(matches!(
+            parse(args(&["recover", "--auto", "--json"])),
+            Ok(Command::RecoverAuto { json: true })
+        ));
+        assert!(parse(args(&["recover", "--auto", "--caller-pid", "4"])).is_err());
     }
 
     #[test]

@@ -5,6 +5,7 @@
 use std::path::PathBuf;
 use std::rc::Rc;
 
+use crate::auto_recover::{self, AutoOutcome};
 use crate::clock::SystemClock;
 use crate::compiled_feed::FeedEndpoint;
 use crate::contract::EXIT_FAILED;
@@ -17,6 +18,7 @@ use crate::processes::{OsProcesses, VerifiedCaller};
 use crate::recover::{RecoverOutcome, recover as recover_installation};
 use crate::release_directory::ReleaseDirectory;
 use crate::repair::repair as repair_installation;
+use crate::retry_trigger::NoTrigger;
 use crate::service::{self, SystemRunner};
 use crate::start::{self, start as start_service};
 use crate::status::{self, StatusReport};
@@ -136,7 +138,9 @@ pub fn transaction(
             caller,
             allow_downgrade,
         };
-        upgrade(ports, &request, stage)
+        let outcome = upgrade(ports, &request, stage);
+        auto_recover::keep_trigger_in_step(ports, &NoTrigger, stage);
+        outcome
     })
 }
 
@@ -148,7 +152,10 @@ pub fn recover(
     stage: &mut dyn FnMut(&str),
 ) -> Result<RecoverOutcome, String> {
     with_ports(setup, &ReleaseOrigin::Feed, |ports| {
-        verify_caller(ports, caller_pid).map(|caller| recover_installation(ports, caller, stage))
+        let outcome = verify_caller(ports, caller_pid)
+            .map(|caller| recover_installation(ports, caller, stage));
+        auto_recover::keep_trigger_in_step(ports, &NoTrigger, stage);
+        outcome
     })
     .and_then(std::convert::identity)
 }
@@ -157,7 +164,18 @@ pub fn recover(
 /// nothing, so there is no launching process to spare and no caller pid to verify.
 pub fn start(setup: &Setup, stage: &mut dyn FnMut(&str)) -> Result<start::Outcome, String> {
     with_ports(setup, &ReleaseOrigin::Feed, |ports| {
-        start_service(ports, stage)
+        let outcome = auto_recover::settle_before_start(ports, stage)
+            .unwrap_or_else(|| start_service(ports, stage));
+        auto_recover::keep_trigger_in_step(ports, &NoTrigger, stage);
+        outcome
+    })
+}
+
+/// One automatic recovery run, for the retry trigger: settles the unfinished upgrade like
+/// `recover`, waiting longer after each failure and giving up after a few.
+pub fn recover_auto(setup: &Setup, stage: &mut dyn FnMut(&str)) -> Result<AutoOutcome, String> {
+    with_ports(setup, &ReleaseOrigin::Feed, |ports| {
+        auto_recover::recover_auto(ports, &NoTrigger, stage)
     })
 }
 

@@ -23,6 +23,17 @@ The commands, output and exit status of `coforge-installer`; what the crate does
 - `coforge-installer recover [--caller-pid <pid>]`: settles an unfinished upgrade (the journal).
   `--caller-pid` is the `coforge-computer recover` process that launched this installer and waits
   for it, verified and never stopped, as for `upgrade`.
+- `coforge-installer recover --auto`: one automatic try, for the retry trigger and for nothing
+  else. It takes no caller. With no journal it does nothing (exit 0). Otherwise it waits out its
+  backoff (`recovery-state.json`: attempts and the earliest next try; 1 minute, 5, 15, 1 hour,
+  then 6 hours between tries) and runs the same recovery as above, exit 0 when it settled and 3
+  when it did not. After 8 failed tries it stops trying, and a person runs `coforge-computer
+  recover`. What it did goes to `<install root>/recovery-report.json` (`outcome` `recovered` or
+  `failed`, the restored version, the attempts, `finishedAt`) for the Computer to report.
+  A journal left by an upgrade, install or recovery arms the trigger in the same step, and any
+  operation that finds no journal disarms it, so a healthy machine has none. `start` settles a
+  journal the same way before it starts the service (a refusal inside the service's own unit
+  starts as before; a recovery that fails fails the start).
 - `coforge-installer repair [--version <v> | --channel main|latest] [--yes] [--allow-downgrade]
   [--json]`: under the machine lock, repairs the active installation without stopping the
   service. Healthy payloads only need the activation recreated; a damaged payload is quarantined
@@ -39,15 +50,15 @@ The commands, output and exit status of `coforge-installer`; what the crate does
   [`src/AGENTS.md`](../../crates/installer/src/AGENTS.md).
 - `coforge-installer status [--json]`: read-only, no lock. `--json` field names are documented in
   `src/status.rs`. `--version` prints the crate version.
-Output: each stage line is `==> <stage>` on stdout, flushed as it happens (stderr in JSON mode). A succeeded install,
-upgrade, or repair ends with `CoForge Computer <version> is active.`. A refusal or a failed
-receipt's message goes to stderr as `coforge-installer: <message>`, or
-`coforge-installer: <CODE>: <message>` when the receipt has an `errorCode`. A feed retry first
-prints `coforge-installer: retrying <object> in <n>s
-(attempt <k> of 3): <error>` to stderr. A feed request that failed 3 times ends its message with
-`(3 attempts; proxy configured|proxy bypassed|no proxy)`; bypassed: `NO_PROXY` exempts the feed.
-Exit status (`contract.rs`): 0 succeeded, 1 failed, 2 held (lock or request conflict), 3 unresolved
-(run `coforge-computer recover`, or a rollback failed).
-The release feed is compiled in (`src/compiled_feed.rs`): production defaults to
-`https://releases.coforge.cn`; plain HTTP is allowed only for loopback end-to-end tests. No command
-takes a feed.
+  Output: each stage line is `==> <stage>` on stdout, flushed as it happens (stderr in JSON mode). A succeeded install,
+  upgrade, or repair ends with `CoForge Computer <version> is active.`. A refusal or a failed
+  receipt's message goes to stderr as `coforge-installer: <message>`, or
+  `coforge-installer: <CODE>: <message>` when the receipt has an `errorCode`. A feed retry first
+  prints `coforge-installer: retrying <object> in <n>s
+  (attempt <k> of 3): <error>` to stderr. A feed request that failed 3 times ends its message with
+  `(3 attempts; proxy configured|proxy bypassed|no proxy)`; bypassed: `NO_PROXY` exempts the feed.
+  Exit status (`contract.rs`): 0 succeeded, 1 failed, 2 held (lock or request conflict), 3 unresolved
+  (run `coforge-computer recover`, or a rollback failed).
+  The release feed is compiled in (`src/compiled_feed.rs`): production defaults to
+  `https://releases.coforge.cn`; plain HTTP is allowed only for loopback end-to-end tests. No command
+  takes a feed.
