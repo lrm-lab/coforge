@@ -179,8 +179,59 @@ test("recovery creates a new current AgentSession and preserves the previous nat
         await Promise.allSettled([updating, stale]);
       }
     }
+    const beforeStaleStop = (await store.get(agent.id))!;
+    if (!beforeStaleStop.state) throw new Error("Stopping fixture was not readable");
+    const stopping = {
+      ...beforeStaleStop.state,
+      requestId: `${fixture}-stale-stop`,
+      epoch: beforeStaleStop.state.epoch + 1,
+      action: "reset-session" as const,
+      phase: "stopping" as const,
+      controlSequence: 0,
+      sessionSequence: 0,
+    };
+    await db.agent.update({ where: { id: agent.id }, data: { controlState: stopping } });
+    const beforeStop = (await store.get(agent.id))!;
+    if (!beforeStop.state) throw new Error("Stale-stop fixture was not readable");
+    const replacementSession = await db.agentSession.create({
+      data: {
+        agentId: agent.id,
+        workspaceId: workspace.id,
+        computerId: computer.id,
+        provider: "pi",
+        nativeSessionId: "native-after-recycle",
+        state: "resumable",
+      },
+    });
+    await db.agent.update({
+      where: { id: agent.id },
+      data: {
+        currentSessionId: replacementSession.id,
+        runtimeSession: {
+          provider: "pi",
+          computerId: computer.id,
+          startRequestId: `${fixture}-replacement`,
+          daemonInstanceId: `${fixture}-daemon`,
+        },
+      },
+    });
     expect(
-      await store.replace(rebound, { ...rebound.state, action: "stop", phase: "completed" }),
+      await store.replace(beforeStop, {
+        ...beforeStop.state,
+        phase: "stopped",
+        controlSequence: 1,
+      }),
+    ).toBe(true);
+    const afterStaleStop = await store.get(agent.id);
+    expect(afterStaleStop?.state?.phase).toBe("stopped");
+    expect(afterStaleStop?.identity?.sessionId).toBe("native-after-recycle");
+    expect(afterStaleStop?.currentSessionId).toBe(replacementSession.id);
+    expect(
+      await store.replace(afterStaleStop!, {
+        ...afterStaleStop!.state!,
+        action: "stop",
+        phase: "completed",
+      }),
     ).toBe(true);
     await db.agent.update({
       where: { id: agent.id },

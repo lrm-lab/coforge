@@ -164,12 +164,19 @@ export class PrismaAgentControlStore implements AgentControlStore {
       const scoped =
         session?.provider === (before.state?.provider ?? before.runtimeConfig.runtime) &&
         session.computerId === (before.state?.computerId ?? before.computerId);
+      // A stop result only proves that the process the daemon stopped is gone. A daemon may have
+      // rebound its native Session while that stop was in flight (wake recycle), so the current
+      // Session and runtime fence can legitimately be newer than the control record's identity.
+      // Keep the control/config CAS strict, but let this one transition settle and preserve the
+      // newer Session for the following chain step.
+      const stoppingToStopped = before.state?.phase === "stopping" && checked.phase === "stopped";
       if (
         !locked ||
-        locked.currentSessionId !== (before.currentSessionId ?? null) ||
-        (scoped ? (session.nativeSessionId ?? undefined) : undefined) !==
-          before.identity?.sessionId ||
-        (before.identity && session?.state !== before.identity.state)
+        (!stoppingToStopped && locked.currentSessionId !== (before.currentSessionId ?? null)) ||
+        (!stoppingToStopped &&
+          (scoped ? (session.nativeSessionId ?? undefined) : undefined) !==
+            before.identity?.sessionId) ||
+        (!stoppingToStopped && before.identity && session?.state !== before.identity.state)
       )
         return false;
       const clearSession = options?.clearSession === true;
@@ -180,8 +187,8 @@ export class PrismaAgentControlStore implements AgentControlStore {
           ownerId: before.ownerId,
           workspaceId: before.workspaceId,
           computerId: before.computerId,
-          currentSessionId: before.currentSessionId ?? null,
-          ...(before.identity
+          ...(stoppingToStopped ? {} : { currentSessionId: before.currentSessionId ?? null }),
+          ...(before.identity && !stoppingToStopped
             ? {
                 currentSession: {
                   is: {
@@ -200,12 +207,16 @@ export class PrismaAgentControlStore implements AgentControlStore {
           runtimeConfig: {
             equals: (before.storedRuntimeConfig ?? before.runtimeConfig) as Prisma.InputJsonValue,
           },
-          runtimeSession: {
-            equals:
-              before.storedRuntimeSession == null
-                ? Prisma.DbNull
-                : (before.storedRuntimeSession as Prisma.InputJsonValue),
-          },
+          ...(stoppingToStopped
+            ? {}
+            : {
+                runtimeSession: {
+                  equals:
+                    before.storedRuntimeSession == null
+                      ? Prisma.DbNull
+                      : (before.storedRuntimeSession as Prisma.InputJsonValue),
+                },
+              }),
           // Compare against the raw stored JSON (`storedControlState`), not a value reconstructed
           // from `before.state` (`controlState(before.state)`): a legacy row can still carry an
           // `updatedAtMs` key `before.state` never reflects, and Postgres JSONB `=` is structural
