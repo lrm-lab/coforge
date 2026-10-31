@@ -49,11 +49,9 @@ import { AssistantAttachmentCard, FormatSendActions } from "./record-side-panel-
 import { suggestionPreview } from "./record-side-panel-model";
 import { SIDE_PANEL_WIDTH_TRANSITION } from "./record-side-panel-width";
 import { useSidePanelWidth } from "./use-side-panel-width";
+import { isWritingSuggestion, useSuggestionWrite } from "./use-suggestion-write";
 import {
-  applyConfirmedKeyPointMarkdown,
-  applyConfirmedWeeklyReportBody,
   dismissKeyPointConfirmDraft,
-  createWeeklyTemplate,
   loadWeeklyTemplateForReport,
   loadWeeklyReportAssistantContext,
 } from "./records.functions";
@@ -188,8 +186,7 @@ export function RecordSidePanel({
   const loadAssistantStatus = useServerFn(loadWeeklyReportAssistantStatus);
   const loadAssistantMessages = useServerFn(loadWeeklyReportAssistantMessages);
   const postAssistantRequest = useServerFn(postWeeklyReportAssistantRequest);
-  const applyBody = useServerFn(applyConfirmedWeeklyReportBody);
-  const applyKeyPoints = useServerFn(applyConfirmedKeyPointMarkdown);
+  const writeSuggestion = useSuggestionWrite(onBodyApplied);
   const dismissKeyPointsDraft = useServerFn(dismissKeyPointConfirmDraft);
   const [sessionStore] = useState(createWeeklyReportAssistantSessionStore);
   const sessionKey = weeklyReportAssistantSubjectKey(subjectType, subjectId);
@@ -519,57 +516,7 @@ export function RecordSidePanel({
       onRequestSend?.();
       return;
     }
-    if (suggestion.type === "template-create") {
-      setBusy(true);
-      setError(null);
-      session.error = null;
-      try {
-        await createWeeklyTemplate({
-          data: {
-            name: suggestion.name,
-            frequency: "weekly",
-            sendTime: suggestion.sendTime,
-            sendWeekday: suggestion.sendWeekday,
-            scheduleEnabled: suggestion.scheduleEnabled,
-            sections: suggestion.sections,
-            allMembers: suggestion.allMembers,
-            recipientUserIds: suggestion.recipientUserIds,
-          },
-        });
-        markSuggestionApplied(messageId);
-        await refresh.records();
-      } catch {
-        const message = m.records_assistant_write_failed();
-        session.error = message;
-        setError(message);
-      } finally {
-        setBusy(false);
-      }
-      return;
-    }
-    if (suggestion.type === "key-point-edit") {
-      setBusy(true);
-      setError(null);
-      session.error = null;
-      try {
-        await applyKeyPoints({
-          data: {
-            reportId: suggestion.reportId,
-            markdown: suggestion.markdown,
-          },
-        });
-        markSuggestionApplied(messageId);
-        await refresh.record();
-      } catch {
-        const message = m.records_assistant_write_failed();
-        session.error = message;
-        setError(message);
-      } finally {
-        setBusy(false);
-      }
-      return;
-    }
-    if (suggestion.type !== "body-edit") {
+    if (!isWritingSuggestion(suggestion)) {
       dismissSuggestion(messageId);
       return;
     }
@@ -577,16 +524,9 @@ export function RecordSidePanel({
     setError(null);
     session.error = null;
     try {
-      const written = await applyBody({
-        data: {
-          reportId: suggestion.reportId,
-          content: suggestion.content as ReportContent,
-          sourceMessageId: messageId,
-        },
-      });
-      onBodyApplied?.(suggestion.reportId, written.content, written.bodyRestoreView);
+      const reload = await writeSuggestion(messageId, suggestion);
       markSuggestionApplied(messageId);
-      await refresh.record();
+      await reload();
     } catch {
       const message = m.records_assistant_write_failed();
       session.error = message;
