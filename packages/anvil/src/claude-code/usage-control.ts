@@ -10,6 +10,7 @@ import { withDeadline } from "#src/deadline";
 import { type OwnedChildProcess } from "#src/process-tree";
 import { cleanupOwnedTree } from "#src/process-tree-cleanup";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
+import { canonicalClaudePlan } from "./usage-plan";
 
 export class ClaudeUsageTimeoutError extends Error {
   constructor() {
@@ -142,11 +143,20 @@ async function exchange(
   }
   const body = object(usage.response);
   if (usage.subtype !== "success" || !body) throw new UsageUnavailableError();
-  return toSnapshot(body, account, host);
+  const planTier = await host.readPlanTier?.().catch(() => undefined);
+  return toSnapshot(body, account, host, planTier);
 }
 
-function toSnapshot(body: Json, account: Json, host: ClaudeUsageHost): UsageSnapshot {
-  const planType = nonEmpty(body.subscription_type) ?? nonEmpty(account.subscriptionType);
+function toSnapshot(
+  body: Json,
+  account: Json,
+  host: ClaudeUsageHost,
+  planTier: string | undefined,
+): UsageSnapshot {
+  const planType = canonicalClaudePlan(
+    planTier,
+    nonEmpty(body.subscription_type) ?? nonEmpty(account.subscriptionType),
+  );
   const accountLabel =
     typeof account.email === "string" ? host.maskAccountLabel(account.email) : undefined;
   if (body.rate_limits_available === false) throw new UsageUnsupportedError();

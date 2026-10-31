@@ -16,6 +16,7 @@ import { isShellToolName } from "#src/code-agent/send-command-target";
 import { claudeCliEnvironment, runClaudeCli } from "./process";
 import { createPromptFile } from "./prompt-file";
 import { claudeHistoryHost } from "./history-host";
+import { readClaudePlanTier } from "./plan-tier";
 
 /** A Claude Code Agent's child environment, and the auto-compact window it sets, if usable. */
 function claudeLaunchEnvironment(
@@ -69,4 +70,5 @@ export const claudeRuntimeHost: ClaudeRuntimeHost = {
     new ProcessTreeOwner().spawn(command, cwd, environment),
   withUsageCapabilityCache,
   maskAccountLabel: maskEmail,
+  readPlanTier: () => readClaudePlanTier(),
 };

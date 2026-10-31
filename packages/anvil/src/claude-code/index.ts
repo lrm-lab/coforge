@@ -9,6 +9,7 @@ export * from "./stream-events";
 export * from "./message-events";
 export * from "./observations";
 export * from "./rate-limit";
+export * from "./usage-plan";
 export * from "./subagent-lineage";
 export * from "./task-lifecycle";
 export * from "./session-transcript";

@@ -12,12 +12,20 @@ const directory = async () => {
   scratch.push(created);
   return created;
 };
-const read = async (mode: string, extra: Parameters<typeof readClaudeCodeUsage>[1] = {}) =>
-  readClaudeCodeUsage(await directory(), {
-    command: [process.execPath, fixture, mode],
-    timeoutMs: 5_000,
-    ...extra,
-  });
+const read = async (
+  mode: string,
+  extra: Parameters<typeof readClaudeCodeUsage>[1] = {},
+  planTier?: string,
+) =>
+  readClaudeCodeUsage(
+    await directory(),
+    {
+      command: [process.execPath, fixture, mode],
+      timeoutMs: 5_000,
+      ...extra,
+    },
+    planTier,
+  );
 
 afterEach(async () => {
   await Promise.all(scratch.splice(0).map((path) => rm(path, { recursive: true, force: true })));
@@ -27,7 +35,7 @@ test("maps the structured response to the usage snapshot", async () => {
   const result = await read("ok");
   expect(result).toEqual({
     provider: "claude-code",
-    planType: "max",
+    planType: "Max",
     accountLabel: "fra****n@example.com",
     primary: { usedPercent: 26, windowDurationMinutes: 300, resetsAt: "2026-10-22T18:00:00.381Z" },
     secondary: {
@@ -161,7 +169,7 @@ test("an account without a 5-hour limit reports only its weekly window", async (
   // primary window at all rather than an empty one. Constructed, not observed yet.
   const result = await read("ultra");
   expect(result).not.toHaveProperty("primary");
-  expect(result?.planType).toBe("ultra");
+  expect(result?.planType).toBe("Ultra");
   expect(result?.secondary).toEqual({
     usedPercent: 35,
     windowDurationMinutes: 10_080,
@@ -170,4 +178,13 @@ test("an account without a 5-hour limit reports only its weekly window", async (
   expect(result?.officialGroups?.[0]?.buckets.map((bucket) => bucket.name)).toEqual([
     "Current week (all models)",
   ]);
+});
+
+test("the rate-limit tier names the plan when subscription_type cannot", async () => {
+  // Both paid Max plans answer `subscription_type: "max"`; only the tier tells them apart, and
+  // Anthropic now calls the $200 one Ultra.
+  expect((await read("ok", {}, "default_claude_max_20x"))?.planType).toBe("Ultra");
+  expect((await read("ok", {}, "default_claude_max_5x"))?.planType).toBe("Max");
+  // No tier known: the protocol's own word, capitalised.
+  expect((await read("ok"))?.planType).toBe("Max");
 });

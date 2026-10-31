@@ -66,6 +66,9 @@ export interface ClaudeUsageHost {
     load: (remember: (supported: boolean) => void) => Promise<boolean>,
   ): Promise<boolean>;
   maskAccountLabel(value: string): string | undefined;
+  /** The account's rate-limit tier from Claude Code's own config (`oauthAccount`), which is what
+   * tells the two Max plans apart. Absent or unreadable leaves the plan from `subscription_type`. */
+  readPlanTier?(): Promise<string | undefined>;
 }
 
 export interface ClaudeDirectoryEntry {

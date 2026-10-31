@@ -118,6 +118,10 @@ export function claudeProvider(
 export function readClaudeCodeUsage(
   workingDirectory: string,
   options: Omit<Parameters<typeof readNativeUsage>[1], "host"> = {},
+  planTier?: string,
 ) {
-  return readNativeUsage(workingDirectory, { ...options, host: fixtureClaudeHost });
+  return readNativeUsage(workingDirectory, {
+    ...options,
+    host: { ...fixtureClaudeHost, readPlanTier: async () => planTier },
+  });
 }
