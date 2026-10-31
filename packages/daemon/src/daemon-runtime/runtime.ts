@@ -188,6 +188,7 @@ import { shutdownReasonForHold, type RunnerHold } from "./shutdown-reason";
 import { CodeAgentInventorySync, type CodeAgentDiscovery } from "./code-agent-inventory-sync";
 import { RuntimeAuthReporter } from "./runtime-auth-reporter";
 import { subscribeProviderScans } from "./provider-scan-handlers";
+import { subscribeRuntimeReconnect } from "./runtime-reconnect";
 import {
   UpgradeResultReporter,
   type RecoveredUpgradeResult,
@@ -1042,29 +1043,21 @@ export class DaemonRuntime {
       this.#subscribe(auth?.unsubscribe);
       this.#upgradeResults.start();
       this.#subscribe(
-        this.#transport.onReconnect?.(() => {
-          const transport = this.#transport;
-          void this.#codeAgentInventory
-            .reportRuntimes(transport)
-            .then((report) => this.#codeAgentInventory.refreshStaleCatalogs(report, transport))
-            .catch(() => {});
-          for (const agentId of this.#readyRunningAgentIds())
-            void this.#requestReminderSnapshot(agentId).catch(() => {});
-          this.#resyncAppConfigs();
-          void this.#agentControl
-            .replay()
-            .then(() => this.#agentSessions.replay())
-            .catch((error) => {
-              logger.warning("Agent control recovery replay failed", {
-                event: "agent_control:replay_failed",
-                workspace_id: connection.workspaceId,
-                computer_id: connection.computerId,
-                error_code: diagnosticErrorCode(error),
-                outcome: "failed",
-              });
-            });
-          // A result whose send failed while disconnected, or one settled meanwhile.
-          void this.#upgradeResults.report();
+        subscribeRuntimeReconnect(this.#transport, {
+          workspaceId: connection.workspaceId,
+          computerId: connection.computerId,
+          refreshInventory: (transport) => {
+            void this.#codeAgentInventory
+              .reportRuntimes(transport)
+              .then((report) => this.#codeAgentInventory.refreshStaleCatalogs(report, transport))
+              .catch(() => {});
+          },
+          runningAgentIds: () => this.#readyRunningAgentIds(),
+          requestReminderSnapshot: (agentId) => this.#requestReminderSnapshot(agentId),
+          resyncAppConfigs: () => this.#resyncAppConfigs(),
+          replayAgentControl: () => this.#agentControl.replay(),
+          replayAgentSessions: () => this.#agentSessions.replay(),
+          reportUpgradeResults: () => this.#upgradeResults.report(),
         }),
       );
       const transport = this.#transport;
