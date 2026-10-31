@@ -127,7 +127,7 @@ export {
   PROCESS_LOCK_CONTENTION_CODES,
   PROCESS_LOCK_STATEMENTS,
 } from "#src/platform/process-lock";
-export { readOperatingSystem } from "#src/platform/operating-system";
+export { detectOperatingSystem, OperatingSystemInfo } from "#src/platform/operating-system";
 export { writeLoginShellPathProbe } from "#src/platform/login-shell-path";
 export {
   readLoginShellPath,

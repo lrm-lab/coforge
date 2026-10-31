@@ -2,7 +2,7 @@
 
 import { homedir } from "os";
 import { join } from "path";
-import { resolveComputerInstallDirectory, readOperatingSystem } from "@lrm/coforge-daemon";
+import { detectOperatingSystem, resolveComputerInstallDirectory } from "@lrm/coforge-daemon";
 import { OAuthDeviceClient } from "#src/oauth-device-client";
 import { ComputerLogin } from "#src/login";
 import { loginError, setupError } from "#src/errors";
@@ -102,7 +102,7 @@ export function createSetupCommand(
         return {
           ...computerNames,
           platform: platform.os,
-          osVersion: readOperatingSystem({ platform: platform.os }).osVersion,
+          osVersion: (await detectOperatingSystem({ platform: platform.os })).osVersion,
           computerVersion: VERSION,
           machineId: await resolveMachineId({
             platform: platform.os,

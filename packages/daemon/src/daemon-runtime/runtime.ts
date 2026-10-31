@@ -12,7 +12,7 @@ import {
 } from "@lrm/coforge-anvil";
 import { isMemoryAgentRuntime } from "@coforge/agent";
 import { mkdirSync } from "node:fs";
-import { readOperatingSystem } from "#src/platform/operating-system";
+import { OperatingSystemInfo } from "#src/platform/operating-system";
 import { FileConversationSessionStore } from "#src/persistence/conversation-session-store";
 import { escapePathIdentity } from "#src/persistence/path-scope";
 import { ActivityTrajectory } from "#src/agent-runtime/activity-trajectory";
@@ -142,6 +142,7 @@ import { ColdIdleSweep } from "./cold-idle-sweep";
 import { StalledRecoverySweep } from "./stalled-recovery-sweep";
 import { CatalogFreshnessSweep } from "./catalog-freshness-sweep";
 import { rememberUsage } from "./usage-memory";
+import { dropHeldMentionsWithoutSession } from "./held-mention-sweep";
 import { runtimeMachineStatus } from "./machine-status-reporter";
 import { agentActivityDrafts } from "./agent-activity-drafts";
 import { sendAgentStatus, type AgentStatusReportPorts } from "./agent-status-report";
@@ -376,6 +377,8 @@ export class DaemonRuntime {
     transport: () => (this.#started && !this.#stopping ? this.#transport : undefined),
     recheck: (transport) => this.#codeAgentInventory.recheckCatalogs(transport),
   });
+  /** The OS version the ready report carries; read once, off the ready path. */
+  readonly #operatingSystem = new OperatingSystemInfo();
   /** Reports this machine's disk and memory while the connection is up. */
   readonly #machineStatus = runtimeMachineStatus({
     connection: () => this.#connection,
@@ -1222,6 +1225,8 @@ export class DaemonRuntime {
       });
       await this.#agentControl.replay();
       await this.#agentSessions.replay();
+      // Off the event loop, once: the OS version only changes with an upgrade.
+      await this.#operatingSystem.read();
       await this.#transport.ready(
         () => ({
           protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
@@ -1235,7 +1240,7 @@ export class DaemonRuntime {
           runningAgentIds: this.#readyRunningAgentIds(),
           daemonVersion: COFORGE_DAEMON_VERSION,
           computerVersion: this.computerVersion,
-          ...readOperatingSystem(),
+          ...this.#operatingSystem.current,
           recoveredRestartRequestIds: this.lifecycle.recoveredRestartRequestIds ?? [],
           recoveredUpgradeRequestIds: this.lifecycle.recoveredUpgradeRequestIds ?? [],
           capabilities: readyCapabilities(!!this.#migrations, !!this.#runtimeAuthControl),
@@ -3053,31 +3058,17 @@ export class DaemonRuntime {
         reason: this.#runnerHold.reason,
       });
     this.#runnerHold = undefined;
-    this.#dropHeldMentionsWithoutSession();
+    dropHeldMentionsWithoutSession({
+      inputDrain: this.#inputDrain,
+      hasSession: (agentId) => Boolean(this.#agentProcessManager.session(agentId)),
+      hasLaunch: (agentId) => this.#agentLaunches.has(agentId),
+      dropMention: (message) =>
+        this.#mentionDeliveries.drop(message, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN),
+    });
     // Copied deliberately: a finishing drain deletes its own entry mid-iteration.
     const queued = [...this.#inputDrain.entries()].map(([agentId]) => agentId);
     for (const agentId of queued) this.#inputDrain.ensure(agentId);
     return this.busyAgents();
-  }
-
-  /** The tracked mentions a runner hold kept for an Agent that has no session and no launch in
-   * flight: they name a launch that is gone, so each is settled now rather than left queued. */
-  #dropHeldMentionsWithoutSession(): void {
-    for (const [agentId, queue] of this.#inputDrain.entries()) {
-      if (this.#agentProcessManager.session(agentId) || this.#agentLaunches.has(agentId)) continue;
-      queue.items = queue.items.filter((item) => {
-        if (
-          item.kind !== "delivery" ||
-          !this.#mentionDeliveries.drop(
-            item.message,
-            MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN,
-          )
-        )
-          return true;
-        item.completion.resolve();
-        return false;
-      });
-    }
   }
 
   get runnerHeld(): boolean {

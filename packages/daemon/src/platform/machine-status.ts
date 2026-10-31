@@ -13,23 +13,10 @@ export type MachineStatusIo = {
   /** macOS only: `os.freemem`, used when `vm_stat` cannot be read. */
   freeMemory(): number;
   /** macOS only: the `vm_stat` output, or undefined when it cannot be run. */
-  vmStat(): string | undefined;
+  vmStat(): Promise<string | undefined>;
 };
 
 export function hostMachineStatusIo(): MachineStatusIo {
-  const run = (command: readonly string[]) => {
-    try {
-      const result = Bun.spawnSync({
-        cmd: [...command],
-        stdout: "pipe",
-        stderr: "ignore",
-        timeout: 2_000,
-      });
-      return result.exitCode === 0 ? result.stdout.toString() : undefined;
-    } catch {
-      return undefined;
-    }
-  };
   return {
     readFile: (path) => Bun.file(path).text(),
     // `statfsSync` answers bytes; a runtime without it (some Windows builds) reads as unknown
@@ -47,8 +34,28 @@ export function hostMachineStatusIo(): MachineStatusIo {
     },
     totalMemory: totalmem,
     freeMemory: freemem,
-    vmStat: () => run(["/usr/bin/vm_stat"]),
+    vmStat: () => runAsync(["/usr/bin/vm_stat"]),
   };
+}
+
+/** A command's output, spawned without blocking the event loop: `vm_stat` runs while the daemon
+ * is serving Agents. */
+async function runAsync(command: readonly string[]): Promise<string | undefined> {
+  try {
+    const child = Bun.spawn({ cmd: [...command], stdout: "pipe", stderr: "ignore" });
+    const timer = setTimeout(() => child.kill(), 2_000);
+    try {
+      const [output, exitCode] = await Promise.all([
+        new Response(child.stdout).text(),
+        child.exited,
+      ]);
+      return exitCode === 0 ? output : undefined;
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch {
+    return undefined;
+  }
 }
 
 /** The Agent data directory's filesystem: what is left for Agent workspaces, sessions and state. */
@@ -153,9 +160,9 @@ export function parseVmStat(text: string): { availableBytes: number } | undefine
 }
 
 /** macOS: reclaimable memory from `vm_stat`, total from the kernel. */
-export function readDarwinMemory(io: MachineStatusIo): MachineSample {
+export async function readDarwinMemory(io: MachineStatusIo): Promise<MachineSample> {
   const total = io.totalMemory();
-  const vmStat = io.vmStat();
+  const vmStat = await io.vmStat();
   const parsed = vmStat ? parseVmStat(vmStat) : undefined;
   if (!parsed) return valid({ availableBytes: io.freeMemory(), totalBytes: total });
   return valid({ availableBytes: parsed.availableBytes, totalBytes: total });
@@ -172,7 +179,7 @@ export async function readMachineMemory(
   io: MachineStatusIo,
 ): Promise<MachineSample> {
   if (platform === "linux") return readLinuxMemory(io);
-  if (platform === "darwin") return readDarwinMemory(io);
+  if (platform === "darwin") return await readDarwinMemory(io);
   return readGenericMemory(io);
 }
 

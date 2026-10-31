@@ -18,7 +18,7 @@ function io(overrides: Partial<MachineStatusIo> = {}): MachineStatusIo {
     disk: () => ({ availableBytes: 100 * GIB, totalBytes: 500 * GIB }),
     totalMemory: () => 32 * GIB,
     freeMemory: () => 5 * GIB,
-    vmStat: () => undefined,
+    vmStat: async () => undefined,
     ...overrides,
   };
 }
@@ -37,7 +37,7 @@ Pages purgeable:                                5683.`);
     await readMachineMemory(
       "darwin",
       io({
-        vmStat: () =>
+        vmStat: async () =>
           "Mach Virtual Memory Statistics: (page size of 16384 bytes)\nPages free: 1.\nPages inactive: 1.\nPages speculative: 1.\nPages purgeable: 1.",
       }),
     ),
@@ -146,7 +146,7 @@ test("nothing is sent without a live connection or without a sane sample", async
   expect(offline.memory).toEqual([]);
 
   const blind = reporter({
-    io: io({ disk: () => undefined, vmStat: () => undefined, freeMemory: () => 40 * GIB }),
+    io: io({ disk: () => undefined, vmStat: async () => undefined, freeMemory: () => 40 * GIB }),
   });
   await blind.value.reportDisk();
   await blind.value.reportMemory();
