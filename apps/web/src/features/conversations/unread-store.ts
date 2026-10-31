@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useSyncExternalStore } from "react";
 
 import { clearUnread, type UnreadCounts } from "./conversation-unread";
+import { KeyedListeners } from "./keyed-listeners";
 
 /**
  * The Chat page's unread counts by conversation id (with each one's read boundary, `<id>:seq`),
@@ -11,7 +12,7 @@ import { clearUnread, type UnreadCounts } from "./conversation-unread";
  */
 export class UnreadStore {
   #counts: UnreadCounts = {};
-  readonly #listeners = new Map<string, Set<() => void>>();
+  readonly #listeners = new KeyedListeners();
 
   count(conversationId: string): number | undefined {
     return this.#counts[conversationId];
@@ -23,9 +24,8 @@ export class UnreadStore {
     const next = change(previous);
     if (next === previous) return;
     this.#counts = next;
-    for (const [conversationId, listeners] of this.#listeners)
-      if (previous[conversationId] !== next[conversationId])
-        for (const listener of listeners) listener();
+    for (const conversationId of this.#listeners.keys())
+      if (previous[conversationId] !== next[conversationId]) this.#listeners.notify(conversationId);
   }
 
   /** Clears one conversation's badge and records the sequence it was read through. */
@@ -33,14 +33,7 @@ export class UnreadStore {
     this.update((current) => clearUnread(current, conversationId, readThroughSequence));
 
   subscribe(conversationId: string, listener: () => void) {
-    let listeners = this.#listeners.get(conversationId);
-    if (!listeners) this.#listeners.set(conversationId, (listeners = new Set()));
-    listeners.add(listener);
-    return () => {
-      listeners.delete(listener);
-      if (listeners.size === 0 && this.#listeners.get(conversationId) === listeners)
-        this.#listeners.delete(conversationId);
-    };
+    return this.#listeners.add(conversationId, listener);
   }
 }
 

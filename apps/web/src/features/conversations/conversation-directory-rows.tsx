@@ -1,17 +1,15 @@
 import { Hash01 as Hash } from "@untitledui/icons";
+import { memo } from "react";
 
 import type { LiveAgent } from "#src/features/agents/workspace-agents-realtime";
 import { MemberAvatar } from "#src/features/workspaces/member-avatar";
+import { useStartOfToday } from "#src/lib/start-of-today";
 import { useTimeFormat } from "#src/lib/time-format-context";
 import { useTimeZone } from "#src/lib/time-zone-context";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import { cx } from "#src/utils/cx";
-import {
-  channelMentionShown,
-  channelPreviewLine,
-  type ChannelPreviewSender,
-} from "./channel-preview-line";
+import { channelMentionShown, channelPreviewLine } from "./channel-preview-line";
 import type { ChatSection } from "./chat-section.schemas";
 import { collageLayout } from "./collage-layout";
 import { ConversationRow } from "./conversation-row";
@@ -19,7 +17,8 @@ import { ConversationRowMenu } from "./conversation-row-menu";
 import { DirectAgentAvatar } from "./direct-agent-avatar";
 import { GroupAvatar, type GroupAvatarMember } from "./group-avatar";
 import { lastMessageTime } from "./last-message-time";
-import type { DirectRow } from "./sidebar-rows";
+import type { ListedDirect } from "./sidebar-rows";
+import { useLiveChannelRow, useLiveDirectRow } from "./sidebar-lists";
 import { useUnreadCount } from "./unread-store";
 
 export type DirectoryChannel = {
@@ -32,8 +31,6 @@ export type DirectoryChannel = {
   pinned: boolean;
   /** Where the row sits in the Pinned section, among the member's pinned channels and DMs. */
   pinSortOrder: number | null;
-  /** The channel's last message, or `null` while it has none (the row then shows its name only). */
-  lastMessage: { createdAt: string; preview: string; sender: ChannelPreviewSender } | null;
   /** Up to six members: fetched so the group avatar can tell when to show "…" (it draws at most four). */
   members: readonly GroupAvatarMember[];
   /** The viewer is @mentioned in this channel. */
@@ -42,7 +39,7 @@ export type DirectoryChannel = {
 
 /** A DM row as the directory shows it: its row, the name it goes by, and its live Agent when it is
  * one with an Agent. */
-export type DirectEntry = DirectRow & { name: string; agent?: LiveAgent; self: boolean };
+export type DirectEntry = ListedDirect & { name: string; agent?: LiveAgent; self: boolean };
 
 /** What every row's menu offers beside its own actions: the viewer's Chat sections to move it to,
  * and where a section change that failed goes to be retried. */
@@ -52,18 +49,25 @@ export type DirectoryRowMenu = {
   onSectionError: (retry: () => Promise<void>, sectionId?: string) => void;
 };
 
-/** When a row's last message was sent, in the viewer's own clock and time zone; null without one. */
+/** When a row's last message was sent, in the viewer's own clock and time zone; null without one.
+ * A message sent today shows its time until midnight, then its date. */
 function useLastMessageTime(createdAt: string | null | undefined) {
   const timeZone = useTimeZone();
   const timeFormat = useTimeFormat();
+  const today = useStartOfToday(timeZone);
   return createdAt
-    ? lastMessageTime(createdAt, { now: new Date(), locale: getLocale(), timeZone, timeFormat })
+    ? lastMessageTime(createdAt, {
+        now: new Date(today),
+        locale: getLocale(),
+        timeZone,
+        timeFormat,
+      })
     : null;
 }
 
-/** A channel's row in the Chat directory, inside its menu; it alone renders when its unread count
- * moves. */
-export function ChannelDirectoryRow({
+/** A channel's row in the Chat directory, inside its menu; it alone renders when its last message
+ * or unread count moves. */
+export const ChannelDirectoryRow = memo(function ChannelDirectoryRow({
   channel,
   current,
   menu,
@@ -73,7 +77,8 @@ export function ChannelDirectoryRow({
   menu: DirectoryRowMenu;
 }) {
   const unreadCount = useUnreadCount(channel.id);
-  const { lastMessage } = channel;
+  // The channel's last message, or none (the row then shows its name only).
+  const lastMessage = useLiveChannelRow(channel.id)?.lastMessage;
   const time = useLastMessageTime(lastMessage?.createdAt);
   return (
     <ConversationRowMenu
@@ -116,21 +121,25 @@ export function ChannelDirectoryRow({
       </ConversationRow>
     </ConversationRowMenu>
   );
-}
+});
 
-/** A direct message's row in the Chat directory, inside its menu; it alone renders when its unread
- * count moves. */
-export function DirectDirectoryRow({
-  entry: { conversationId, peer, pinned, muted, name, agent, self, ...entry },
+/** A direct message's row in the Chat directory, inside its menu; it alone renders when its last
+ * message or unread count moves. Its entry comes spread, field by field: the directory builds the
+ * entries again whenever its layout moves, and an unchanged DM must not render for that. */
+export const DirectDirectoryRow = memo(function DirectDirectoryRow({
+  conversationId,
+  peer,
+  pinned,
+  muted,
+  name,
+  agent,
+  self,
   current,
   menu,
-}: {
-  entry: DirectEntry;
-  current: boolean;
-  menu: DirectoryRowMenu;
-}) {
+}: DirectEntry & { current: boolean; menu: DirectoryRowMenu }) {
   const unreadCount = useUnreadCount(conversationId);
-  const time = useLastMessageTime(entry.lastMessageAt);
+  const live = useLiveDirectRow(conversationId);
+  const time = useLastMessageTime(live?.lastMessageAt);
   return (
     <ConversationRowMenu
       target={{ kind: "direct", conversationId, pinned, muted: muted === true }}
@@ -146,7 +155,7 @@ export function DirectDirectoryRow({
         label={self ? m.conversation_dm_self_name({ name }) : name}
         lastMessage={{
           time,
-          preview: entry.lastMessagePreview,
+          preview: live?.lastMessagePreview ?? null,
         }}
         icon={
           agent ? (
@@ -167,4 +176,4 @@ export function DirectDirectoryRow({
       </ConversationRow>
     </ConversationRowMenu>
   );
-}
+});

@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import { useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
-import { useLiveQuery } from "@tanstack/react-db";
+import { inArray, useLiveQuery } from "@tanstack/react-db";
 
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import {
@@ -15,7 +15,8 @@ import {
 } from "./sidebar-collections";
 import type { PinRef } from "./pinned-conversations";
 import { applyChannelSignalToLists, applyConversationActivityToRow } from "./sidebar-signals";
-import { directListsOf, type DirectRow } from "./sidebar-rows";
+import { directListsOf, type DirectRow, type ListedDirect } from "./sidebar-rows";
+import { rowListenersOf, type ChangingRows } from "./sidebar-row-listeners";
 import { sidebarRefreshQueue, type ChatList } from "./conversation-unread";
 import type { ConversationActivityEvent } from "./conversation-activity-event";
 import { compareChannelNames, type ChannelSignal } from "./channel-signals";
@@ -48,38 +49,59 @@ function useSidebar() {
   return sidebarFor(queryClient, workspaceId);
 }
 
+/** A channel row as the lists hold it: without its last message, which moves on every message and
+ * is read per row (`useLiveChannelRow`), so a message does not render the whole list. */
+type ListedChannel = Omit<ChannelRow, "lastMessage">;
+
+const NO_ROWS: readonly never[] = [];
+
+/** The rows of the last server read of each list: what the lists show until their live queries are
+ * ready (the first tick). */
+function cachedChannelRows(queryClient: QueryClient, workspaceId: string): readonly ChannelRow[] {
+  return queryClient.getQueryData(sidebarChannelsQuery(workspaceId).queryKey)?.rows ?? NO_ROWS;
+}
+function cachedDirectRows(queryClient: QueryClient, workspaceId: string): readonly DirectRow[] {
+  return queryClient.getQueryData(sidebarDirectsQuery(workspaceId).queryKey)?.rows ?? NO_ROWS;
+}
+
 /**
  * The sidebar's lists: channels in the server's order (a closed one only while pinned), the DM rows
  * by conversation id, and when the server last sent them (`readAt`, which a saved change does not move).
  * Read from the Query cache the chat loader filled until the live queries are ready, then live
- * from the collections.
+ * from the collections. The rows leave their last message out, so a message renders none of the
+ * lists' readers.
  */
 export function useSidebarLists() {
   const workspaceId = useCurrentWorkspaceId() ?? "";
-  // Only a new read re-renders from these: once the live queries are ready the rows come from the
-  // collections.
-  const channelsCache = useSuspenseQuery({
+  const queryClient = useQueryClient();
+  // Only a new server read re-renders from these: a row written straight into a list (a message's
+  // last message, a pin) moves the cache's `dataUpdatedAt` but not its `fetchedAt`.
+  const channelsReadAt = useSuspenseQuery({
     ...sidebarChannelsQuery(workspaceId),
-    notifyOnChangeProps: ["dataUpdatedAt"],
+    select: (read) => read.fetchedAt,
   }).data;
-  const directsCache = useSuspenseQuery({
+  const directsRead = useSuspenseQuery({
     ...sidebarDirectsQuery(workspaceId),
-    notifyOnChangeProps: ["dataUpdatedAt"],
+    select: ({ fetchedAt, viewerId }) => ({ fetchedAt, viewerId }),
   }).data;
   const sidebar = useSidebar();
+  // A projection is told of a row's change only when what it selects changed.
   const liveChannels = useLiveQuery({
     queryKey: ["sidebar-channels", workspaceId],
-    query: (q) => q.from({ row: sidebar.channels }),
+    query: (q) =>
+      q.from({ row: sidebar.channels }).select(({ row }) => ({ ...row, lastMessage: null })),
   });
   const liveDirects = useLiveQuery({
     queryKey: ["sidebar-directs", workspaceId],
-    query: (q) => q.from({ row: sidebar.directs }),
+    query: (q) =>
+      q
+        .from({ row: sidebar.directs })
+        .select(({ row }) => ({ ...row, lastMessageAt: null, lastMessagePreview: null })),
   });
-  // Until a live query is ready (the first tick) the cache holds the same rows.
-  const channelRows: readonly ChannelRow[] =
-    (liveChannels.isReady && liveChannels.data) || channelsCache.rows;
-  const directRows: readonly DirectRow[] =
-    (liveDirects.isReady && liveDirects.data) || directsCache.rows;
+  const channelRows: readonly ListedChannel[] =
+    (liveChannels.isReady && liveChannels.data) || cachedChannelRows(queryClient, workspaceId);
+  const directRows: readonly ListedDirect[] =
+    (liveDirects.isReady && liveDirects.data) || cachedDirectRows(queryClient, workspaceId);
   const channels = useMemo(
     () =>
       [...channelRows]
@@ -91,9 +113,103 @@ export function useSidebarLists() {
   return {
     channels,
     directs,
-    viewerId: directsCache.viewerId,
-    readAt: { channels: channelsCache.fetchedAt, dms: directsCache.fetchedAt },
+    viewerId: directsRead.viewerId,
+    readAt: { channels: channelsReadAt, dms: directsRead.fetchedAt },
   };
+}
+
+/** The viewer's id, as the DM list's last server read gave it. */
+function useViewerId() {
+  const workspaceId = useCurrentWorkspaceId() ?? "";
+  return useSuspenseQuery({
+    ...sidebarDirectsQuery(workspaceId),
+    select: (read) => read.viewerId,
+  }).data;
+}
+
+type RowSource<Row> = ChangingRows & { isReady(): boolean; get(key: string): Row | undefined };
+
+/** One row of a sidebar collection, rendering its reader only when that row changes; from the
+ * last server read until the collection is ready. */
+function useLiveRow<Row>(
+  rows: RowSource<Row>,
+  key: string,
+  cached: readonly Row[],
+  keyOf: (row: Row) => string,
+): Row | undefined {
+  const listeners = rowListenersOf(rows);
+  const subscribe = useCallback(
+    (listener: () => void) => listeners.subscribe(key, listener),
+    [listeners, key],
+  );
+  const read = () => (rows.isReady() ? rows.get(key) : cached.find((row) => keyOf(row) === key));
+  return useSyncExternalStore(subscribe, read, read);
+}
+
+/** One channel's row with its last message: the row alone renders when a message arrives. */
+export function useLiveChannelRow(channelId: string): ChannelRow | undefined {
+  const queryClient = useQueryClient();
+  const workspaceId = useCurrentWorkspaceId() ?? "";
+  const cached = cachedChannelRows(queryClient, workspaceId);
+  return useLiveRow(useSidebar().channels, channelId, cached, (row) => row.id);
+}
+
+/** One DM's row with its last message: the row alone renders when a message arrives. */
+export function useLiveDirectRow(conversationId: string): DirectRow | undefined {
+  const queryClient = useQueryClient();
+  const workspaceId = useCurrentWorkspaceId() ?? "";
+  const cached = cachedDirectRows(queryClient, workspaceId);
+  return useLiveRow(useSidebar().directs, conversationId, cached, (row) => row.conversationId);
+}
+
+/**
+ * When each of `ids` last had a message, for the sections sorted by Recent: the one read of the
+ * lists that moves with every message, so it reads those rows' times alone, and nothing when no
+ * section sorts that way.
+ */
+export function useLastMessageTimes(ids: readonly string[]): ReadonlyMap<string, string | null> {
+  const sidebar = useSidebar();
+  const queryClient = useQueryClient();
+  const workspaceId = useCurrentWorkspaceId() ?? "";
+  const wanted = [...new Set(ids)].sort();
+  const key = wanted.join(",");
+  const channels = useLiveQuery({
+    queryKey: ["sidebar-channel-times", workspaceId, key],
+    query: (q) =>
+      wanted.length === 0
+        ? undefined
+        : q
+            .from({ row: sidebar.channels })
+            .where(({ row }) => inArray(row.id, wanted))
+            .select(({ row }) => ({ id: row.id, at: row.lastMessage?.createdAt })),
+  });
+  const directs = useLiveQuery({
+    queryKey: ["sidebar-direct-times", workspaceId, key],
+    query: (q) =>
+      wanted.length === 0
+        ? undefined
+        : q
+            .from({ row: sidebar.directs })
+            .where(({ row }) => inArray(row.conversationId, wanted))
+            .select(({ row }) => ({ id: row.conversationId, at: row.lastMessageAt })),
+  });
+  return useMemo(() => {
+    // Until a live query is ready (the first tick) the last server read holds the same times; the
+    // layout looks up only the ids it asked for.
+    const channelTimes = channels.isReady
+      ? (channels.data ?? NO_ROWS)
+      : cachedChannelRows(queryClient, workspaceId).map((row) => ({
+          id: row.id,
+          at: row.lastMessage?.createdAt,
+        }));
+    const directTimes = directs.isReady
+      ? (directs.data ?? NO_ROWS)
+      : cachedDirectRows(queryClient, workspaceId).map((row) => ({
+          id: row.conversationId,
+          at: row.lastMessageAt,
+        }));
+    return new Map([...channelTimes, ...directTimes].map((row) => [row.id, row.at ?? null]));
+  }, [channels.isReady, channels.data, directs.isReady, directs.data, queryClient, workspaceId]);
 }
 
 /** The chat each sidebar last saw opened: a page that mounts again for it (a loader's pending
@@ -190,7 +306,7 @@ export function useApplyChannelSignal() {
 export function useApplyConversationActivity() {
   const sidebar = useSidebar();
   const refresh = useRefreshSidebar();
-  const { viewerId } = useSidebarLists();
+  const viewerId = useViewerId();
   return useMemo(
     () => (event: ConversationActivityEvent) => {
       if (!applyConversationActivityToRow(sidebar, event, viewerId))

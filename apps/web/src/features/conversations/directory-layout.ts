@@ -1,4 +1,7 @@
+import { useMemo } from "react";
+
 import type { LiveAgent } from "#src/features/agents/workspace-agents-realtime";
+import { getLocale } from "#src/paraglide/runtime";
 import type { ChatSection } from "./chat-section.schemas";
 import { sortSectionRows, type SortableRow } from "./chat-section-sort";
 import type { DirectEntry, DirectoryChannel } from "./conversation-directory-rows";
@@ -8,13 +11,45 @@ import {
   splitPinnedConversations,
   type DirectoryLayout,
 } from "./pinned-conversations";
-import type { DirectRow } from "./sidebar-rows";
+import type { ListedDirect } from "./sidebar-rows";
+import { useLastMessageTimes } from "./sidebar-lists";
+
+/** What the directory lays out: its lists, the live Agents its DMs are with, and its sections. */
+type LayoutInput = {
+  channels: readonly DirectoryChannel[];
+  agents: readonly LiveAgent[];
+  directRows: readonly ListedDirect[];
+  viewerId?: string;
+  sections: readonly ChatSection[];
+};
+
+/** The directory's layout, derived again only when its lists, sections or a Recent-sorted row's
+ * last message time change. */
+export function useDirectoryLayout(input: LayoutInput) {
+  const { channels, agents, directRows, viewerId, sections } = input;
+  const lastMessageTimes = useLastMessageTimes(
+    sections.flatMap((section) => (section.sortMode === "recent" ? section.conversationIds : [])),
+  );
+  return useMemo(
+    () =>
+      directoryLayout({
+        channels,
+        agents,
+        directRows,
+        viewerId,
+        sections,
+        lastMessageTimes,
+        locale: getLocale(),
+      }),
+    [channels, agents, directRows, viewerId, sections, lastMessageTimes],
+  );
+}
 
 /**
  * Where every row of the Chat directory goes: the channels (joined first), one entry per DM with
  * its name and live Agent, each section's rows by key (`base`), and the order a row dragged out of
- * Pinned returns to (`natural`). Pure, so the directory derives it once per list change: the drag
- * reads `base` and `natural` on every pointer move.
+ * Pinned returns to (`natural`). Derived once per list change (`useDirectoryLayout`), not per
+ * render: the drag reads `base` and `natural` on every pointer move.
  */
 export function directoryLayout({
   channels,
@@ -22,13 +57,11 @@ export function directoryLayout({
   directRows: directRowList,
   viewerId,
   sections,
+  lastMessageTimes,
   locale,
-}: {
-  channels: readonly DirectoryChannel[];
-  agents: readonly LiveAgent[];
-  directRows: readonly DirectRow[];
-  viewerId?: string;
-  sections: readonly ChatSection[];
+}: LayoutInput & {
+  /** When the rows of the sections sorted by Recent last had a message (`useLastMessageTimes`). */
+  lastMessageTimes: ReadonlyMap<string, string | null>;
   locale?: string;
 }) {
   const sortedChannels = [...channels].sort((left, right) =>
@@ -65,12 +98,13 @@ export function directoryLayout({
   const sortable = new Map<string, SortableRow>();
   for (const channel of sortedChannels) {
     const key = channelRowKey(channel.id);
-    const lastMessageAt = channel.lastMessage?.createdAt ?? null;
+    const lastMessageAt = lastMessageTimes.get(channel.id) ?? null;
     if (available.has(key)) sortable.set(channel.id, { key, name: channel.name, lastMessageAt });
   }
   for (const direct of directRows) {
     const key = directRowKey(direct.conversationId);
-    const { name, lastMessageAt } = direct;
+    const { name } = direct;
+    const lastMessageAt = lastMessageTimes.get(direct.conversationId) ?? null;
     if (available.has(key)) sortable.set(direct.conversationId, { key, name, lastMessageAt });
   }
   for (const section of sections) {

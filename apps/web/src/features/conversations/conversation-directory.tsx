@@ -1,5 +1,5 @@
 import { Bookmark, Pin01 } from "@untitledui/icons";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { DndContext } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 
@@ -15,7 +15,7 @@ import {
   type DirectoryChannel,
   type DirectoryRowMenu,
 } from "./conversation-directory-rows";
-import { directoryLayout } from "./directory-layout";
+import { useDirectoryLayout } from "./directory-layout";
 import { DIRECTORY_INSET, DirectoryEmptyNote, DirectorySection } from "./directory-section-group";
 import { useSavedEntries } from "./conversation-host";
 import { conversationRowMenuEnabled } from "./conversation-row-menu-model";
@@ -24,7 +24,7 @@ import { ChatSectionDialog } from "./chat-section-dialog";
 import { ChatSectionCreateMenu, ChatSectionMenu } from "./chat-section-menu";
 import { directorySectionOrder, storedSectionOrder } from "./directory-section-order";
 import type { ChatSection } from "./chat-section.schemas";
-import type { DirectRow } from "./sidebar-rows";
+import type { ListedDirect } from "./sidebar-rows";
 import {
   DirectoryDragOverlay,
   DirectoryDragRow,
@@ -45,7 +45,6 @@ import {
   readHideEmptySidebarSections,
   writeHideEmptySidebarSections,
 } from "#src/features/settings/hide-empty-sidebar-sections";
-import { getLocale } from "#src/paraglide/runtime";
 
 /** Channel and direct-message selection within the Chat page. */
 export function ConversationDirectory({
@@ -61,7 +60,7 @@ export function ConversationDirectory({
   agents: LiveAgent[];
   /** The viewer's DMs, with their Agents and with members, in the list's order: who each is with,
    * which are pinned (and in what order), and which are closed. */
-  directRows: readonly DirectRow[];
+  directRows: readonly ListedDirect[];
   /** The viewer, whose DM with themself reads "(you)". */
   viewerId?: string;
   selectedChannelId?: string;
@@ -72,18 +71,13 @@ export function ConversationDirectory({
 }) {
   const savedCount = useSavedEntries()?.length;
   const groups = useChatSections();
-  const { sortedChannels, directRows, base, natural } = useMemo(
-    () =>
-      directoryLayout({
-        channels,
-        agents,
-        directRows: directRowList,
-        viewerId,
-        sections: groups.sections,
-        locale: getLocale(),
-      }),
-    [channels, agents, directRowList, viewerId, groups.sections],
-  );
+  const { sortedChannels, directRows, base, natural } = useDirectoryLayout({
+    channels,
+    agents,
+    directRows: directRowList,
+    viewerId,
+    sections: groups.sections,
+  });
   const toast = useAppToast();
   const actions = useSidebarActions();
   const [sectionRetry, setSectionRetry] = useState<{
@@ -100,8 +94,10 @@ export function ConversationDirectory({
     else pendingSaves.current.delete(sectionId);
     setSavingSections(new Set(pendingSaves.current.keys()));
   };
-  const sectionFailed = (save: () => Promise<void>, sectionId?: string) =>
-    setSectionRetry({ save, sectionId });
+  const sectionFailed = useCallback(
+    (save: () => Promise<void>, sectionId?: string) => setSectionRetry({ save, sectionId }),
+    [],
+  );
   const changeSection = (save: () => Promise<void>, sectionId?: string) => {
     if (sectionId) countSave(sectionId, +1);
     setSectionRetry(null);
@@ -181,11 +177,12 @@ export function ConversationDirectory({
       return next;
     });
 
-  const rowMenu: DirectoryRowMenu = {
-    sections: groups.sections,
-    sectionsReady: groups.status === "ready",
-    onSectionError: sectionFailed,
-  };
+  // Kept while the sections stand, so a row renders only for its own changes (`memo`).
+  const sectionsReady = groups.status === "ready";
+  const rowMenu = useMemo<DirectoryRowMenu>(
+    () => ({ sections: groups.sections, sectionsReady, onSectionError: sectionFailed }),
+    [groups.sections, sectionsReady, sectionFailed],
+  );
   /** Every row by key, with whether it can be pinned (only a conversation the member is in). */
   const rows = new Map<string, { node: ReactNode; draggable: boolean; label: string }>([
     ...sortedChannels.map(
@@ -212,7 +209,7 @@ export function ConversationDirectory({
           {
             node: (
               <DirectDirectoryRow
-                entry={row}
+                {...row}
                 current={row.conversationId === selectedDmId}
                 menu={rowMenu}
               />

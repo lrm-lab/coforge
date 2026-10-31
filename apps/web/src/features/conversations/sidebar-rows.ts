@@ -32,6 +32,10 @@ export type DirectRow = {
   lastMessagePreview: string | null;
 };
 
+/** A DM row as the list holds it: without its last message, which moves on every message and is
+ * read per row (`useLiveDirectRow`), so a message does not render the whole list. */
+export type ListedDirect = Omit<DirectRow, "lastMessageAt" | "lastMessagePreview">;
+
 /** One row per DM the preferences list, in their order, with its unread count. */
 export function directRowsOf(
   preferences: DirectPreferences,
@@ -58,7 +62,7 @@ export function directRowsOf(
 /** The rows as the sidebar reads them: all of them in the server's order, the closed ones (a
  * closed DM that is pinned stays listed, in Pinned), and the unread counts, all by conversation
  * id. */
-export function directListsOf(unordered: readonly DirectRow[]) {
+export function directListsOf(unordered: readonly ListedDirect[]) {
   const rows = [...unordered].sort((left, right) => left.position - right.position);
   return {
     rows,
@@ -70,7 +74,7 @@ export function directListsOf(unordered: readonly DirectRow[]) {
 }
 
 /** The rows the sidebar does not close: the one place a closed DM is told from a listed one. */
-function openDirectRows(lists: ReturnType<typeof directListsOf>): DirectRow[] {
+function openDirectRows(lists: ReturnType<typeof directListsOf>): ListedDirect[] {
   const closed = new Set(lists.closedIds);
   return lists.rows.filter((row) => !closed.has(row.conversationId));
 }
