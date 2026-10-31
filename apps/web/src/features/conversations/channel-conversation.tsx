@@ -19,10 +19,8 @@ import {
 import type { SendOptions } from "./composer-outbox";
 import type { Mentionable } from "./mention-text";
 import { plainMentionsByHandle } from "./message-markdown";
-import {
-  loadPublicChannelMentionables,
-  loadPublicChannelMentionOutsiders,
-} from "./channels.functions";
+import { loadPublicChannelMentionOutsiders } from "./channels.functions";
+import { useChannelMentionables } from "./use-channel-mentionables";
 import {
   ThreadedConversation,
   type DirectConversationView,
@@ -249,19 +247,11 @@ export function ChannelConversation({
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  // The @-completion directory stays current while the conversation is open. It starts from the
-  // page payload's copy (no second load on mount) and is refetched when a membership write pushes
-  // `member.changed.v1`, when the subscription could not replay what it missed — including the
-  // first subscribe, which covers changes made while the page loaded (see `useConversationQuery`)
-  // — and when the tab regains focus.
-  const freshMentionables = useQuery({
-    queryKey: ["conversation", "mentionables", conversation.conversationId],
-    queryFn: (): Promise<Mentionable[]> =>
-      loadPublicChannelMentionables({ data: { channelId: conversation.conversationId } }),
-    initialData: conversation.mentionables,
-    staleTime: 15_000,
-    refetchOnWindowFocus: true,
-  });
+  // The @-completion directory stays current while the conversation is open.
+  const freshMentionables = useChannelMentionables(
+    conversation.conversationId,
+    conversation.mentionables,
+  );
   // Who else the viewer may mention on purpose. Read once the page mounts, and refetched with the
   // directory (the key shares its prefix) on `member.changed.v1`, on a resubscribe that lost
   // publications, and on focus — not on the first subscribe, which follows its first read by
@@ -278,10 +268,10 @@ export function ChannelConversation({
   const conversationWithFreshDirectory = useMemo(
     () => ({
       ...conversation,
-      mentionables: freshMentionables.data ?? conversation.mentionables,
+      mentionables: freshMentionables ?? conversation.mentionables,
       mentionOutsiders: mentionOutsiders.data,
     }),
-    [conversation, freshMentionables.data, mentionOutsiders.data],
+    [conversation, freshMentionables, mentionOutsiders.data],
   );
   async function join() {
     setJoining(true);

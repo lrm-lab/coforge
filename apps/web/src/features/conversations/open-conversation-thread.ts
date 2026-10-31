@@ -9,6 +9,7 @@ import {
   conversationSearchWithTask,
   conversationSearchWithThread,
 } from "./conversation-thread-search";
+import { keepsLandingForReview } from "./attachment-review-address";
 import { messageHash } from "./conversation-page-search";
 
 /**
@@ -186,7 +187,11 @@ export function useConversationPositionJump() {
       to: ".",
       replace: true,
       resetScroll: false,
-      search: (previous: { message?: string }) => ({ ...previous, message: undefined }),
+      // A file's review named in the address keeps it, until the review closes.
+      search: (previous: { message?: string; file?: string }) => ({
+        ...previous,
+        message: keepsLandingForReview(previous) ? previous.message : undefined,
+      }),
     });
   }, [router]);
   return { jumpMessageId, clearJumpMessage };

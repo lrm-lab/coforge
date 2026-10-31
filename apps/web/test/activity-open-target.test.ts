@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { activityOpenTarget } from "#src/features/inbox/activity-open-target";
+import { activityChatLink, activityOpenTarget } from "#src/features/inbox/activity-open-target";
 import type { ActivityInboxItem } from "#src/server/inbox/activity-inbox.server";
 
 /** A channel's Activity item: only what `activityOpenTarget` reads. */
@@ -49,5 +49,50 @@ test("a thread opens at its first unread reply, ahead of a mention already read"
     messageId: "root",
     threadRootId: "root",
     threadReplyId: "new-reply",
+  });
+});
+
+test("a comment on a file opens its conversation at the file's message, with the file's review at the comment", () => {
+  const comment = item({
+    latest: { id: "comment" } as ActivityInboxItem["latest"],
+    attachmentComment: {
+      attachmentId: "file",
+      fileName: "review.txt",
+      threadRootId: null,
+      sourceMessageId: "source",
+    },
+  });
+  const target = activityOpenTarget(comment);
+  expect(target).toEqual({
+    kind: "channel",
+    id: "channel",
+    messageId: "source",
+    attachmentId: "file",
+    commentId: "comment",
+  });
+  // Chat's link carries the same review in its address.
+  expect(activityChatLink("acme", target).search).toEqual({
+    message: "source",
+    task: undefined,
+    file: "file",
+    comment: "comment",
+  });
+});
+
+test("a reply to a comment opens at the comment it answers, the one the comments list shows", () => {
+  const reply = item({
+    latest: { id: "reply" } as ActivityInboxItem["latest"],
+    attachmentComment: {
+      attachmentId: "file",
+      fileName: "review.txt",
+      threadRootId: "root-comment",
+      sourceMessageId: null,
+    },
+  });
+  expect(activityOpenTarget(reply)).toEqual({
+    kind: "channel",
+    id: "channel",
+    attachmentId: "file",
+    commentId: "root-comment",
   });
 });

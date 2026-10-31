@@ -10,6 +10,7 @@ import {
   type HostedConversationTarget,
 } from "#src/features/conversations/conversation-page-search";
 import { hostedLandingAfterConsume } from "#src/features/conversations/conversation-thread-search";
+import { keepsLandingForReview } from "#src/features/conversations/attachment-review-address";
 import { HostedConversationPane } from "#src/features/conversations/hosted-conversation-pane";
 import { StandaloneThreadContext } from "#src/features/conversations/standalone-thread";
 import { m } from "#src/paraglide/messages";
@@ -51,7 +52,11 @@ export function ActivityConversationPane({
     void navigate({
       replace: true,
       resetScroll: false,
-      search: (previous) => ({ ...previous, msg: undefined }),
+      // A file's review named in the address keeps it, until the review closes.
+      search: (previous) => ({
+        ...previous,
+        msg: keepsLandingForReview(previous) ? previous.msg : undefined,
+      }),
     });
   }, [navigate]);
   const onJumpMessageConsumed =

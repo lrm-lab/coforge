@@ -7,11 +7,13 @@ import {
 import { conversationTaskBoardSearchShape } from "#src/features/tasks/task-board-search";
 import type { ConversationPageTarget } from "./conversation-page-loader";
 import { CONVERSATION_TABS } from "./conversation-tabs";
+import { attachmentReviewSearchShape } from "./attachment-review-address";
 import { openTaskParamSchema } from "./conversation-thread-search";
 
 /**
  * A conversation page's address state wherever the page is shown: the tab, the Task board's view,
- * and what it has open (a thread, a Task popup, an Agent's or a person's profile).
+ * and what it has open (a thread, a Task popup, a file's review with its comments, an Agent's or a
+ * person's profile).
  * Every host's `validateSearch` spreads it; Chat's routes add `message`, the one-shot jump, and a
  * page hosting a conversation beside its own content adds `hostedConversationSearchShape`.
  */
@@ -20,6 +22,7 @@ export const conversationPageSearchShape = {
   ...conversationTaskBoardSearchShape,
   threadRootId: z.uuid().optional().catch(undefined),
   task: openTaskParamSchema,
+  ...attachmentReviewSearchShape,
   profile: profileParamSchema,
   agentTab: agentProfileTabParamSchema,
 };
@@ -35,6 +38,8 @@ export function pickConversationPageSearch({
   completed,
   threadRootId,
   task,
+  file,
+  comment,
   profile,
   agentTab,
 }: ConversationPageSearch): ConversationPageSearch {
@@ -47,6 +52,8 @@ export function pickConversationPageSearch({
     completed,
     threadRootId,
     task,
+    file,
+    comment,
     profile,
     agentTab,
   } satisfies Record<keyof ConversationPageSearch, unknown>;
@@ -80,6 +87,9 @@ export type HostedConversationTarget = ConversationPageTarget & {
   threadAlone?: boolean;
   /** The Task, by its number, whose popup opens over the conversation. */
   task?: number;
+  /** The file whose review opens over the conversation, with its comments, at one of them. */
+  attachmentId?: string;
+  commentId?: string;
 };
 
 /**

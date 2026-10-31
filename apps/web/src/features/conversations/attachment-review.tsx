@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from "react";
 import { Copy01, Download01, MessageSquare01, XClose } from "@untitledui/icons";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dialog, DialogTrigger, Modal, ModalOverlay } from "#src/components/ui/modal";
@@ -10,6 +10,7 @@ import { m } from "#src/paraglide/messages";
 import type { AnchorSurface, Anchoring } from "./attachment-anchoring";
 import type { AttachmentCommentAnchor } from "./attachment-comment-anchors";
 import { AttachmentCommentsPane } from "./attachment-comments";
+import { useAttachmentReviewAddress } from "./attachment-review-address";
 import { ConversationListResizeHandle } from "./conversation-list-resize-handle";
 import { ATTACHMENT_COMMENTS_COLUMN } from "./conversation-list-width";
 import { AttachmentPreview } from "./attachment-preview";
@@ -42,6 +43,9 @@ type ReviewFile = {
  * A text preview is read before the dialog opens, as in Raft: `children` (the card) shows
  * `loading` meanwhile. A file found to have no preview after all (past `TEXT_PREVIEW_MAX_BYTES`,
  * or no UTF-8 text) downloads instead of opening.
+ *
+ * An address naming the file (`attachment-review-address.ts`) opens it as a card's click does, at
+ * its comments, scrolled to the one the address names; closing it takes the address off.
  */
 export function AttachmentReviewDialog({
   file,
@@ -87,23 +91,28 @@ export function AttachmentReviewDialog({
   const kind = previewKindFor(file);
   const commentable = takesComments(file);
   const [open, setOpen] = useState(false);
+  const address = useAttachmentReviewAddress(file.id);
   const [loading, setLoading] = useState(false);
   // What reading the text preview found, once per card.
   const [read, setRead] = useState<PreviewRead | undefined>(undefined);
   const text = typeof read === "object" ? read.text : undefined;
   const reading = useRef<AbortController | null>(null);
   useEffect(() => () => reading.current?.abort(), []);
-  const onOpenChange = (next: boolean) => {
+  /** `viaAddress`: a link opens the review, and a file without a preview after all only takes the
+   * link off the address, never downloads unasked. */
+  const onOpenChange = (next: boolean, viaAddress = false) => {
+    const noPreview = () => (viaAddress ? address.clear() : download(`${href}?download`));
     if (!next) {
       setOpen(false);
       setPendingAnchor(null);
+      if (address.requested) address.clear();
       const place = videoPlace.current ?? videoStart?.place;
       if (place) videoHandoff?.give(place);
       return;
     }
     // A file found to have no preview after all (past the limit, or no text) downloads instead,
     // as one without a preview does from its card.
-    if (read === "too-large" || read === "unavailable") return download(`${href}?download`);
+    if (read === "too-large" || read === "unavailable") return noPreview();
     if (!isTextPreviewKind(kind) || read !== undefined) {
       // Only an opening preview takes the message's player's place (and pauses it).
       videoPlace.current = undefined;
@@ -119,12 +128,29 @@ export function AttachmentReviewDialog({
         setRead(value);
         setLoading(false);
         if (typeof value === "object") setOpen(true);
-        else download(`${href}?download`);
+        else noPreview();
       },
       // Aborted: the card is gone.
       () => {},
     );
   };
+  // A review the address asks for opens on its comments (on a phone, straight into them); one the
+  // address stops asking for (Back, another link) closes.
+  const openedByAddress = useRef(false);
+  const followAddress = useEffectEvent((requested: boolean) => {
+    if (requested === openedByAddress.current) return;
+    if (requested && !address.follow()) return;
+    openedByAddress.current = requested;
+    if (requested) {
+      setCommentsExpanded(true);
+      setCommentsOnPhone(true);
+    } else address.release();
+    if (requested !== open) onOpenChange(requested, requested);
+  });
+  useEffect(
+    () => followAddress(address.requested && commentable),
+    [address.requested, commentable],
+  );
   const commentsShown = commentsOnPhone || commentsExpanded;
   const toast = useAppToast();
   const copyLabel =
@@ -135,7 +161,10 @@ export function AttachmentReviewDialog({
         : null;
   if (file.contentType.startsWith("image/"))
     return (
-      <DialogTrigger isOpen={open} onOpenChange={setOpen}>
+      <DialogTrigger
+        isOpen={open}
+        onOpenChange={(next) => (next ? setOpen(true) : onOpenChange(false))}
+      >
         {children({ loading: false })}
         <ImageLightbox images={[file]} index={0} />
       </DialogTrigger>
@@ -244,6 +273,7 @@ export function AttachmentReviewDialog({
                         fileName={file.fileName}
                         pendingAnchor={pendingAnchor}
                         focusRequest={focusRequest}
+                        focusCommentId={address.commentId}
                         onClearAnchor={(anchor) =>
                           setPendingAnchor((current) => (current === anchor ? null : current))
                         }

@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type ReactNode,
+} from "react";
 import { Button as AriaButton } from "react-aria-components";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -10,11 +18,13 @@ import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { postAttachmentComment } from "./attachment-comments.functions";
 import { CommentRow, useCommentDraft, useCommentPages } from "./attachment-comment-thread";
+import { useCommentMembers } from "./comment-members";
 import { dragCarriesFiles } from "./composer-behavior";
 import { ComposerField } from "./composer-field";
 import { COMPOSER_FOCUS_CLASS, COMPOSER_FRAME_CLASS } from "./composer-frame";
 import { useConversationHostChannels } from "./conversation-host";
 import { attachmentCommentsQueryKey } from "./conversation-query-keys";
+import { useMentionCandidates } from "./mention-candidates";
 import { useReferenceCompletion } from "./use-reference-completion";
 import { anchorRangeLabel, type AttachmentCommentAnchor } from "./attachment-comment-anchors";
 import { ANCHOR_HIGHLIGHT_MS, type AnchorSurface } from "./attachment-anchoring";
@@ -109,6 +119,7 @@ export function AttachmentCommentsPane({
   fileName,
   pendingAnchor,
   focusRequest,
+  focusCommentId,
   onClearAnchor,
   surface,
   onJump,
@@ -119,6 +130,9 @@ export function AttachmentCommentsPane({
   pendingAnchor?: AttachmentCommentAnchor | null;
   /** Changes each time the preview asks to start a comment, with or without a place. */
   focusRequest?: number;
+  /** A comment to bring into view and mark as a jump does, once: where a link into it opened the
+   * file. */
+  focusCommentId?: string;
   /** Drops `anchor` if it is still the pending one. */
   onClearAnchor?: (anchor: AttachmentCommentAnchor) => void;
   surface?: AnchorSurface | null;
@@ -144,22 +158,27 @@ export function AttachmentCommentsPane({
   const draft = useCommentDraft(
     attachmentId,
     canComment,
-    async (body, idempotencyKey) => {
+    async (body, idempotencyKey, mentions) => {
       // A place chosen while this posts is the next comment's.
       const anchor = pendingAnchor;
-      await post({ data: { attachmentId, body, anchor: anchor ?? undefined, idempotencyKey } });
+      await post({
+        data: { attachmentId, body, anchor: anchor ?? undefined, idempotencyKey, mentions },
+      });
       if (anchor) onClearAnchor?.(anchor);
     },
     () => queryClient.invalidateQueries({ queryKey, exact: true }),
     () => completion.textareaRef.current?.focus(),
   );
-  // The thread composer's field: `#` lists the Workspace's channels; `@` stays closed until a
-  // comment can notify the people it names (task #269).
+  // The thread composer's field: `#` lists the Workspace's channels, `@` the members of the
+  // conversation the file is in (none elsewhere, which keeps `@` closed). Picking one pins them,
+  // so the comment notifies exactly them.
+  const people = useCommentMembers();
   const completion = useReferenceCompletion({
-    mentionables: undefined,
+    mentionables: useMentionCandidates(people?.members, people?.viewerId, canComment),
     channels: useConversationHostChannels(),
     value: draft.body,
     onChange: draft.setBody,
+    onPickMention: draft.pinMention,
   });
   // A place chosen in the preview is what the reader is about to write about.
   useEffect(() => {
@@ -174,6 +193,22 @@ export function AttachmentCommentsPane({
     clearTimeout(clearJumped.current);
     clearJumped.current = window.setTimeout(() => setJumped(null), ANCHOR_HIGHLIGHT_MS);
   };
+  // A comment a link names: its page of comments is read first when it is older than those
+  // loaded, then it is scrolled to and marked, once, not again by each of the pane's rereads.
+  const list = useRef<HTMLDivElement>(null);
+  const reached = useRef<string>(undefined);
+  const reach = useEffectEvent((id: string) => {
+    if (all.some((comment) => comment.id === id)) {
+      reached.current = id;
+      jumpTo(id);
+      list.current?.querySelector(`[data-comment-id="${id}"]`)?.scrollIntoView({ block: "center" });
+      // Older pages only once no read is under way: paging cancels a refetch of the newest page,
+      // which is where a comment just made is.
+    } else if (query.hasNextPage && !query.isFetching) void query.fetchNextPage();
+  });
+  useEffect(() => {
+    if (focusCommentId && reached.current !== focusCommentId) reach(focusCommentId);
+  }, [focusCommentId, all, query.hasNextPage, query.isFetching]);
   // A read that failed says so; why commenting was off before it is no longer known.
   const disabledReason = query.isError ? undefined : state?.disabledReason;
   const emptyHint = m.attachment_comments_empty_hint({ name: "{name}" }).split("{name}");
@@ -190,6 +225,8 @@ export function AttachmentCommentsPane({
       key={comment.id}
       highlighted={comment.id === jumped}
       comment={comment}
+      plainMentions={people?.plainMentions}
+      viewerId={people?.viewerId}
       place={
         comment.anchor && (
           <AnchorPlace
@@ -214,7 +251,7 @@ export function AttachmentCommentsPane({
       <header className="shrink-0 px-4 pt-4 pb-2">
         <h2 className="text-sm font-semibold text-primary">{m.attachment_comments_title()}</h2>
       </header>
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3" aria-live="polite">
+      <div ref={list} className="min-h-0 flex-1 overflow-y-auto px-2 pb-3" aria-live="polite">
         {query.isPending ? (
           <p className="text-sm text-tertiary">{m.attachment_comments_loading()}</p>
         ) : query.isError ? (

@@ -114,6 +114,8 @@ function ActivityPage() {
           msg: next.messageId,
           threadRootId: next.threadRootId,
           task: next.task,
+          file: next.attachmentId,
+          comment: next.commentId,
         }),
         hash: next.threadReplyId ? messageHash(next.threadReplyId) : undefined,
         replace: !listHistory.openOverList(),

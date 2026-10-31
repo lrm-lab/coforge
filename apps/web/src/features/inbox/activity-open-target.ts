@@ -14,7 +14,8 @@ import type { ActivityInboxItem } from "#src/server/inbox/activity-inbox.server"
  * Any other item opens at its first unread message (a thread at its first unread reply), where the
  * pane draws its "New messages" divider (task #358). With nothing unread, an item that mentions the
  * viewer opens at its first mention, read or not (#1129), and any other at its newest message. A
- * Task's conversation opens as its popup over the board it is on.
+ * Task's conversation opens as its popup over the board it is on. A comment on a file opens the
+ * file's conversation at the message it rides on, with the file's review over it at the comment.
  */
 export function activityOpenTarget({
   place,
@@ -28,8 +29,9 @@ export function activityOpenTarget({
 }: ActivityInboxItem): HostedConversationTarget {
   if (task) return { kind: "channel", id: place.conversationId, task: task.number };
   // A comment notification opens the file's own conversation, at the message the file rides on
-  // (the comment itself lives in a conversation the UI never shows); a file with no message
-  // opens the conversation plainly.
+  // (the comment itself lives in a conversation the UI never shows), and the file's review at the
+  // comment: the comments list holds only top-level comments, so a reply is reached through the
+  // comment it answers. A file with no message opens the conversation plainly.
   if (attachmentComment)
     return {
       kind: place.kind === "channel" ? "channel" : "dm",
@@ -37,6 +39,8 @@ export function activityOpenTarget({
       ...(attachmentComment.sourceMessageId
         ? { messageId: attachmentComment.sourceMessageId }
         : {}),
+      attachmentId: attachmentComment.attachmentId,
+      commentId: attachmentComment.threadRootId ?? latest.id,
     };
   // A mention item is always a channel's, and never a thread item: its reply's thread is named by
   // the mention itself.
@@ -61,7 +65,12 @@ export function activityOpenTarget({
 export function activityChatLink(workspaceSlug: string, target: HostedConversationTarget) {
   const search = target.threadRootId
     ? { threadRootId: target.threadRootId, message: target.messageId }
-    : { message: target.messageId, task: target.task };
+    : {
+        message: target.messageId,
+        task: target.task,
+        file: target.attachmentId,
+        comment: target.commentId,
+      };
   const hash = target.threadReplyId ? messageHash(target.threadReplyId) : undefined;
   return target.kind === "channel"
     ? {
