@@ -40,14 +40,7 @@ export function useConversationOpenBoundary(
   rootId: string | undefined,
   followingLatest: boolean,
 ) {
-  const queryClient = useQueryClient();
-  const windowKeys = useMemo(() => conversationWindowKeys(conversationId), [conversationId]);
-  // A thread is read with its conversation: only the conversation's window is restored or caught up.
-  const restoring = useSyncExternalStore(
-    useCallback((listener) => subscribeRestoredReads(queryClient, listener), [queryClient]),
-    () => !rootId && windowKeys.some((key) => awaitingRestoredRead(queryClient, key)),
-    () => false,
-  );
+  const restoring = useAwaitingRestoredWindow(conversationId);
   const key = `${conversationId}:${rootId ?? ""}`;
   const capture = (waited: boolean): Opened => ({
     key,
@@ -91,3 +84,19 @@ export function useConversationOpenBoundary(
 type OpenMessage = UnreadBoundary & { senderMemberId?: string | null };
 type Opened = { key: string; cursor?: number; boundary?: UnreadBoundary; openKey: string };
 type Waiting = { key: string; waiting: true };
+
+/**
+ * Whether the conversation's window is the browser's stored copy, still waiting for its own read
+ * (task #253). Its cursors, the thread cursors with it, may be older than the server's, or missing
+ * for a thread that came since: a divider waits for that read, and so does a thread's mark-read,
+ * which would otherwise move the server's cursor before the divider is found.
+ */
+export function useAwaitingRestoredWindow(conversationId: string) {
+  const queryClient = useQueryClient();
+  const windowKeys = useMemo(() => conversationWindowKeys(conversationId), [conversationId]);
+  return useSyncExternalStore(
+    useCallback((listener) => subscribeRestoredReads(queryClient, listener), [queryClient]),
+    () => windowKeys.some((key) => awaitingRestoredRead(queryClient, key)),
+    () => false,
+  );
+}

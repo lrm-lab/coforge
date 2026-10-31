@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { QueryClient, QueryObserver, onlineManager } from "@tanstack/react-query";
+import { QueryClient, QueryObserver, notifyManager, onlineManager } from "@tanstack/react-query";
 
 import { followRestoredReads } from "#src/features/cache-persistence/restored-reads";
 
@@ -39,6 +39,7 @@ function setup({ failing = 0, visible = true } = {}) {
     paused: () =>
       restoredReads.paused(queryClient.getQueryCache().find({ queryKey: KEY })!.queryHash),
     fire: (type: string, event: object = {}) => listeners.get(type)?.(event as Event),
+    observer,
     unsubscribe,
   };
 }
@@ -49,6 +50,22 @@ test("a restored query is read again, and the newest replaces the stored copy", 
   expect(page.reads()).toBe(1);
   expect(page.data()).toBe("newest");
   expect(page.failures()).toBe(0);
+});
+
+test("a read lands for its subscribers no earlier than the page hears its data", async () => {
+  const page = setup();
+  // As `useQuery` hears it: in TanStack's next batch.
+  let shown: unknown = "stored copy";
+  page.observer.subscribe(
+    notifyManager.batchCalls(() => (shown = page.observer.getCurrentResult().data)),
+  );
+  const { queryHash } = page.queryClient.getQueryCache().find({ queryKey: KEY })!;
+  const shownWhenLanded: unknown[] = [];
+  page.restoredReads.subscribe(() => {
+    if (!page.restoredReads.awaiting(queryHash)) shownWhenLanded.push(shown);
+  });
+  await tick(5);
+  expect(shownWhenLanded).toEqual(["newest"]);
 });
 
 test("a read that fails is tried again with backoff until one lands", async () => {

@@ -66,6 +66,8 @@ describe("a conversation opened offline, after a page load that held nothing of 
       channelKey("c1"),
       (data) => data.pages[0]!.messages[0]!.body === "newest",
     );
+    // The read lands in the batch that hands the page its data.
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(after.persistence.restoredReadPaused(channelKey("c1"))).toBe(false);
     unmount();
     after.queryClient.unmount();

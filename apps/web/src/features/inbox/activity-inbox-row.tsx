@@ -87,8 +87,11 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
         <AriaLink
           href={href}
           aria-current={current ? "true" : undefined}
-          onPress={() => {
-            if (unread) actions.read(item);
+          onPress={(event) => {
+            // A thread opened on the page is read by its pane, after the pane has found where its
+            // unread replies start (task #358): read from here first, it would have none.
+            const readByPane = item.thread && !item.task && !isModified(event);
+            if (unread && !readByPane) actions.read(item);
           }}
           render={(props) =>
             "href" in props ? (
@@ -99,8 +102,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
                   // A plain click (or Enter) opens the row on the page, so neither `Link` nor
                   // React Aria navigates; a modified or middle click still opens Chat. React
                   // Aria's handler still runs: it ends a keyboard press.
-                  const modified = event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
-                  if (event.button === 0 && !modified) {
+                  if (event.button === 0 && !isModified(event)) {
                     event.preventDefault();
                     onOpen(target);
                   }
@@ -274,4 +276,14 @@ function ActivityItemBadges({
       )}
     </span>
   );
+}
+
+/** A click or press with a modifier key, which opens the row in Chat rather than on the page. */
+function isModified(event: {
+  metaKey: boolean;
+  ctrlKey: boolean;
+  shiftKey: boolean;
+  altKey: boolean;
+}) {
+  return event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
 }

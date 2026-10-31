@@ -80,8 +80,13 @@ export function followRestoredReads(
     const { action } = event;
     if (action.type === "success" && !action.manual) {
       if (entry.restoring) return;
-      if (!event.query.state.fetchMeta?.fetchMore) return settle(queryHash);
-      notifyManager.schedule(() => read(event.query.queryKey));
+      // Settled in the batch that hands observers the new data: settled sooner, a render in
+      // between would take the stored copy for the read.
+      const fetchMore = event.query.state.fetchMeta?.fetchMore;
+      notifyManager.schedule(() => {
+        if (fetchMore) read(event.query.queryKey);
+        else if (awaiting.get(queryHash) === entry && !entry.restoring) settle(queryHash);
+      });
     } else if (action.type === "error") {
       entry.failures += 1;
       notify();

@@ -4,10 +4,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { StreamRead } from "./stream-state";
 import { messageIdFromHash, threadRootFromMessageAnchor } from "./conversation-thread-search";
 import { isAppError, isAppErrorCode } from "#src/lib/app-error";
+import { ACTIVITY_INBOX_QUERY_PREFIX } from "#src/features/inbox/activity-inbox-queries";
 import { conversationAroundQuery } from "./conversation-queries";
 import type { ThreadRootLoad } from "./thread-root-state";
 import type { DirectConversationView } from "./conversation-types";
 import { threadReadThrough } from "./thread-summary-model";
+import { useAwaitingRestoredWindow } from "./use-conversation-open-boundary";
 
 type ConversationSyncView = Pick<
   DirectConversationView,
@@ -123,10 +125,12 @@ export function useConversationSync({
   }, [openTaskMessageId, selected, closeThread]);
 
   const reading = useRef(false);
+  const restoring = useAwaitingRestoredWindow(conversation.conversationId);
   useEffect(() => {
     if (
       !threadInView ||
       !threadInViewSequence ||
+      restoring ||
       reading.current ||
       document.visibilityState === "hidden"
     )
@@ -140,6 +144,8 @@ export function useConversationSync({
           ...previous,
           [threadInView]: threadInViewSequence,
         }));
+        // Activity's rows too: a thread opened from there is read here, not by its row.
+        void queryClient.invalidateQueries({ queryKey: ACTIVITY_INBOX_QUERY_PREFIX });
       })
       .catch(() => {
         // Leave unread intact; the next poll can retry the read acknowledgement.
@@ -147,7 +153,16 @@ export function useConversationSync({
       .finally(() => {
         reading.current = false;
       });
-  }, [threadInView, threadInViewSequence, conversation, onReadThread, readThrough, threadCursor]);
+  }, [
+    threadInView,
+    threadInViewSequence,
+    restoring,
+    conversation,
+    queryClient,
+    onReadThread,
+    readThrough,
+    threadCursor,
+  ]);
 
   // Hash-only deep links (notifications) still land on `#message-<id>`. Promote
   // that into `threadRootId` search once, then leave the hash as a scroll target.
