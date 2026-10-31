@@ -92,6 +92,38 @@ describe("cachedWorkspaceComputerCheck", () => {
     await check("w", "c2");
     expect(reads).toEqual(["w:c1", "w:c2", "w:c1", "w:c2"]);
   });
+
+  test("an answer that resolves after forget is not remembered", async () => {
+    // A check issued before the ownership change commits can resolve after `forget` ran: the
+    // stale "belongs" it carries answers this call but never re-enters the cache.
+    const resolvers: ((value: boolean) => void)[] = [];
+    const { check, forget } = cachedWorkspaceComputerCheck(
+      () => new Promise<boolean>((resolve) => resolvers.push(resolve)),
+    );
+    const first = check("w", "c1");
+    forget("c1");
+    resolvers.pop()!(true);
+    expect(await first).toBe(true);
+    const second = check("w", "c1");
+    expect(resolvers).toHaveLength(1);
+    resolvers.pop()!(true);
+    expect(await second).toBe(true);
+  });
+
+  test("an answer that resolves after a flush is not remembered", async () => {
+    const resolvers: ((value: boolean) => void)[] = [];
+    const { check, forget } = cachedWorkspaceComputerCheck(
+      () => new Promise<boolean>((resolve) => resolvers.push(resolve)),
+    );
+    const first = check("w", "c1");
+    forget();
+    resolvers.pop()!(true);
+    expect(await first).toBe(true);
+    const second = check("w", "c1");
+    expect(resolvers).toHaveLength(1);
+    resolvers.pop()!(true);
+    expect(await second).toBe(true);
+  });
 });
 
 /** A second frame on one daemon connection must not re-read the same workspaceComputer row. */

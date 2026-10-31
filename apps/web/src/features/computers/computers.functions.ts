@@ -423,6 +423,9 @@ export const deleteComputer = createServerFn({ method: "POST" })
         }
         throw error;
       }
+      // The delete job and the soft delete committed inside `deleteExtra`: every cached
+      // ownership answer for this Computer is stale now.
+      getWorkspaceComputerInvalidation().notify(computer.id);
       return { deleted: false as const };
     }
     await db.$transaction(async (tx) => {

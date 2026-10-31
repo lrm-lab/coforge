@@ -27,11 +27,19 @@ export function cachedWorkspaceComputerCheck(
   forget: (computerId?: string) => void;
 } {
   const entries = new Map<string, { at: number }>();
+  // A check issued before a `forget` can resolve after it: generation guards keep that stale
+  // answer from re-entering the cache, where only the TTL would expire it.
+  const generations = new Map<string, number>();
+  let flushEpoch = 0;
+  const generation = (computerId: string) => generations.get(computerId) ?? 0;
   const forget = (computerId?: string) => {
     if (computerId === undefined) {
       entries.clear();
+      generations.clear();
+      flushEpoch += 1;
       return;
     }
+    generations.set(computerId, generation(computerId) + 1);
     const suffix = `${"\u0000"}${computerId}`;
     for (const key of entries.keys()) if (key.endsWith(suffix)) entries.delete(key);
   };
@@ -44,7 +52,10 @@ export function cachedWorkspaceComputerCheck(
         known.at = now();
         return true;
       }
+      const epoch = flushEpoch;
+      const gen = generation(computerId);
       if (!(await check(workspaceId, computerId))) return false;
+      if (flushEpoch !== epoch || generation(computerId) !== gen) return true;
       entries.delete(key);
       while (entries.size >= maxEntries) entries.delete(entries.keys().next().value!);
       entries.set(key, { at: now() });

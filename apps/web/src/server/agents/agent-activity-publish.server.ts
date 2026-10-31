@@ -232,6 +232,25 @@ const replyTargets = cachedReplyTargetResolver(async ({ workspaceId, agentId, ta
   return { conversationId, threadRootId, ...(peerUserId ? { peerUserId } : {}) };
 });
 
+/** Whether a live Computer is bound to the Workspace. A soft-deleted cloud Computer keeps its
+ * link row until the cluster's delete job reports, so the check names `deletedAt` like the
+ * workspace roster does. */
+export async function workspaceComputerOwned(
+  db: PrismaClient,
+  workspaceId: string,
+  computerId: string,
+) {
+  return Boolean(
+    await db.workspaceComputer.findUnique({
+      where: {
+        workspaceId_computerId: { workspaceId, computerId },
+        computer: { deletedAt: null },
+      },
+      select: { id: true },
+    }),
+  );
+}
+
 /**
  * Whether the publishing Computer is in the Workspace, remembered briefly
  * (`workspace-computer-cache`): this handler is built once for the process and every daemon
@@ -241,12 +260,7 @@ const replyTargets = cachedReplyTargetResolver(async ({ workspaceId, agentId, ta
 const computerInWorkspace = cachedWorkspaceComputerCheck(async (workspaceId, computerId) => {
   const db = getDatabaseClient();
   if (!db) return false;
-  return Boolean(
-    await db.workspaceComputer.findUnique({
-      where: { workspaceId_computerId: { workspaceId, computerId } },
-      select: { id: true },
-    }),
-  );
+  return workspaceComputerOwned(db, workspaceId, computerId);
 });
 
 export function createAgentActivityPublicationHandler() {

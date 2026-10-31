@@ -98,3 +98,15 @@ test("a cloud computer that starts is preferred over the user's own", async () =
       .computerId,
   ).toBe(cloud.id);
 });
+
+test("a soft-deleted Computer's surviving link does not answer the activity ownership check", async () => {
+  // An extra cloud Computer keeps its workspaceComputer row until the cluster's delete job
+  // reports; the Activity publisher must not keep routing frames to it meanwhile.
+  const user = await member("soft");
+  const computer = await localComputer(user.id, "soft-deleted");
+  const { workspaceComputerOwned } =
+    await import("#src/server/agents/agent-activity-publish.server");
+  expect(await workspaceComputerOwned(db, workspace.id, computer.id)).toBe(true);
+  await db.computer.update({ where: { id: computer.id }, data: { deletedAt: new Date() } });
+  expect(await workspaceComputerOwned(db, workspace.id, computer.id)).toBe(false);
+});
