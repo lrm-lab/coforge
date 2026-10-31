@@ -1,6 +1,7 @@
 import { hashKey, type InfiniteData, type QueryClient } from "@tanstack/react-query";
 import { createIsomorphicFn } from "@tanstack/react-start";
 
+import { noteRestoredCopyReplaced } from "#src/features/cache-persistence/browser-query-cache";
 import type { FinishedWindow } from "#src/features/tasks/finished-tasks";
 import { finishedSummaryQuery } from "#src/features/tasks/use-finished-tasks";
 import type { ConversationTab } from "./conversation-tabs";
@@ -190,6 +191,9 @@ async function readConversationWindow<M extends PageMessage, T extends Conversat
       pageParams: [undefined],
     };
     queryClient.setQueryData(query.queryKey, window);
+    // The window is a read of the server now, with the viewer's cursor: no longer the browser's
+    // stored copy, whose own read the divider and the read cursor would wait for (task #358).
+    noteRestoredCopyReplaced(queryClient, query.queryKey);
     return window;
   } catch {
     // A link can name a deleted or inaccessible message. Leave the normal client-side sync seam

@@ -352,8 +352,9 @@ function ConversationPageBody({
     if (!topLevelEnd || !isMember || threadAlone || restoring) return;
     readThrough(topLevelEnd);
   }, [readCursor.key, topLevelEnd, isMember, threadAlone, restoring]);
+  // Reading to the latest waits for a stored copy's own read too (task #358).
   const readLatest = (throughSequence: number) => {
-    if (!isMember) return;
+    if (!isMember || restoring) return;
     advance(throughSequence, `${readCursor.key}:latest`, true);
   };
   const { onOpenAgentProfile } = agentProfile;

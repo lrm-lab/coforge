@@ -73,6 +73,12 @@ export function awaitingRestoredRead(queryClient: QueryClient, queryKey: readonl
   return installed.get(queryClient)?.awaitingRestoredRead(queryKey) ?? false;
 }
 
+/** The query `queryKey` was given data read from the server by hand: it no longer shows its
+ * restored copy (`followRestoredReads`). A no-op where nothing is kept. */
+export function noteRestoredCopyReplaced(queryClient: QueryClient, queryKey: readonly unknown[]) {
+  installed.get(queryClient)?.restoredCopyReplaced(queryKey);
+}
+
 export function subscribeRestoredReads(queryClient: QueryClient, listener: () => void) {
   return installed.get(queryClient)?.subscribeRestoredReads(listener) ?? (() => {});
 }

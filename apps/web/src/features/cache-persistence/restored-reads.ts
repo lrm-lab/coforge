@@ -128,6 +128,13 @@ export function followRestoredReads(
         read(query.queryKey);
       });
     },
+    /** `query` was given data its caller read from the server (`setQueryData`): it no longer shows
+     * its restored copy, so nothing waits for its own read, which still follows, unretried. */
+    replaced(query: Query) {
+      if (!awaiting.has(query.queryHash)) return;
+      settle(query.queryHash);
+      read(query.queryKey);
+    },
     /** Whether the restored query `queryHash` is still waiting for a read of its own to succeed. */
     awaiting: (queryHash: string) => awaiting.has(queryHash),
     /** How many reads of the restored query `queryHash` failed in a row; 0 once one succeeded, or

@@ -166,3 +166,19 @@ test("offline, the read waits for the network and is told apart until it lands",
     onlineManager.setOnline(true);
   }
 });
+
+test("a restored query given data read from the server is no longer awaited", async () => {
+  // A conversation opened from Activity on its stored copy: the jump's own read of the window
+  // replaces it (`setQueryData`), and the divider and the read cursor must not wait for another
+  // (task #358). Before, only a read of the query itself ended the wait.
+  const page = setup({ failing: 1 });
+  const query = page.queryClient.getQueryCache().find({ queryKey: KEY })!;
+  page.queryClient.setQueryData(KEY, "read around a message");
+  expect(page.restoredReads.awaiting(query.queryHash)).toBe(true);
+  page.restoredReads.replaced(query);
+  expect(page.restoredReads.awaiting(query.queryHash)).toBe(false);
+  // Its own read still follows, for what else the stored copy held.
+  await tick(5);
+  expect(page.data()).toBe("newest");
+  page.unsubscribe();
+});

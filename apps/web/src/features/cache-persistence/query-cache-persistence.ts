@@ -372,6 +372,10 @@ export function installQueryCachePersistence(
     /** Whether the read of the restored query `queryKey` was parked offline and has not landed. */
     restoredReadPaused: (queryKey: QueryKey) => restoredReads.paused(hashKey(queryKey)),
     awaitingRestoredRead: (queryKey: QueryKey) => restoredReads.awaiting(hashKey(queryKey)),
+    restoredCopyReplaced: (queryKey: QueryKey) => {
+      const query = queryClient.getQueryCache().find({ queryKey, exact: true });
+      if (query) restoredReads.replaced(query);
+    },
     subscribeRestoredReads: restoredReads.subscribe,
     /**
      * Stores the kept queries the page already holds: a read that finished while nobody was known
