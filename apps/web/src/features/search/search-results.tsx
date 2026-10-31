@@ -1,3 +1,4 @@
+import { channelLabel } from "#src/features/conversations/channel-visibility";
 import { useMemo } from "react";
 import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -306,7 +307,7 @@ function SearchResultRow({
   const { previewed, preview } = useSearchPreview();
   const workspaceSlug = useWorkspaceSlug();
   const place = conversation.channelName
-    ? `#${conversation.channelName}`
+    ? channelLabel({ name: conversation.channelName, visibility: conversation.visibility })
     : `@${directName(conversation.direct) ?? message.senderName}`;
   const text = message.body
     ? messagePlainText({ body: message.body, mentions: message.mentions })

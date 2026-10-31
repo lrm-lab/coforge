@@ -1,9 +1,17 @@
+import type { ChannelVisibility } from "#src/features/conversations/channel-visibility";
 import { nameMatchTier } from "#src/lib/name-match";
 
 /** A place or participant the search page can open directly: a channel, a Computer, an Agent, or
  * the viewer's direct message with a member (`id` is the conversation's; Frequently used only). */
 export type SearchEntity =
-  | { kind: "channel"; id: string; name: string; description: string; archived: boolean }
+  | {
+      kind: "channel";
+      id: string;
+      name: string;
+      description: string;
+      archived: boolean;
+      visibility?: ChannelVisibility;
+    }
   | { kind: "computer"; id: string; name: string; hostname: string; computerKind: string }
   | {
       kind: "agent";

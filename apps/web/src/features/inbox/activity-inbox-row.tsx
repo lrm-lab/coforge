@@ -1,3 +1,4 @@
+import { channelLabel } from "#src/features/conversations/channel-visibility";
 import { memo } from "react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { BellOff01, Check, Hash01, Mail01 } from "@untitledui/icons";
@@ -69,7 +70,10 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
   const placeLabel =
     rowPlace?.kind === "attachment"
       ? m.activity_inbox_attachment_comment({ fileName: rowPlace.fileName })
-      : rowPlace && (place.kind === "channel" ? `#${title}` : `@${title}`);
+      : rowPlace &&
+        (place.kind === "channel"
+          ? channelLabel({ name: title, visibility: place.visibility })
+          : `@${title}`);
   const sender =
     item.latest.senderKind === "system" ? m.activity_inbox_system_sender() : item.latest.senderName;
 

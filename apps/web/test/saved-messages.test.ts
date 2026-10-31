@@ -18,6 +18,7 @@ function row(overrides: {
     conversation: overrides.conversation ?? {
       id: "22222222-2222-4222-8222-222222222222",
       channelName: "coforge",
+      visibility: "public",
       directKey: null,
     },
     message: {
@@ -51,6 +52,7 @@ describe("savedMessageView", () => {
     expect(view.conversation).toEqual({
       id: "22222222-2222-4222-8222-222222222222",
       channelName: "coforge",
+      visibility: "public",
       directKey: null,
     });
     expect(view.message.id).toBe("33333333-3333-4333-8333-333333333333");
@@ -58,6 +60,21 @@ describe("savedMessageView", () => {
     expect(view.message.createdAt).toBe("2026-09-23T01:00:00.000Z");
     expect(view.message.mentions).toEqual([]);
     expect(view.message.reactions).toBeUndefined();
+  });
+
+  test("a private channel's entry carries its visibility, so the card shows no `#`", () => {
+    const view = savedMessageView(
+      row({
+        conversation: {
+          id: "22222222-2222-4222-8222-222222222222",
+          channelName: "vault",
+          visibility: "private",
+          directKey: null,
+        },
+      }),
+      WORKSPACE_ID,
+    );
+    expect(view.conversation.visibility).toBe("private");
   });
 
   test("maps a human sender with the Workspace avatar route when no CDN applies", () => {

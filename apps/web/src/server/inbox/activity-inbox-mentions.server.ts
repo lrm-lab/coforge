@@ -37,7 +37,7 @@ export async function mentionCandidates(
           select: {
             sequence: true,
             threadRootId: true,
-            conversation: { select: { channelName: true } },
+            conversation: { select: { channelName: true, visibility: true } },
           },
         },
       },
@@ -116,6 +116,7 @@ export async function mentionCandidates(
             select: {
               id: true,
               channelName: true,
+              visibility: true,
               directKey: true,
               members: {
                 where: { agentId: { not: null } },
@@ -137,6 +138,7 @@ export async function mentionCandidates(
       conversationId: row.conversationId,
       rootMessageId: null,
       channelName: row.message.conversation.channelName,
+      visibility: row.message.conversation.visibility,
       directKey: null,
       agentId: null,
       latestMessageId: row.messageId,
@@ -163,6 +165,7 @@ export async function mentionCandidates(
             conversationId: source.id,
             rootMessageId: null,
             channelName: source.channelName,
+            visibility: source.visibility,
             directKey: source.directKey,
             agentId: source.members[0]?.agentId ?? null,
             latestMessageId: row.messageId,

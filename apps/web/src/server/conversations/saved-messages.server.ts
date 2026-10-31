@@ -1,3 +1,7 @@
+import {
+  visibilityField,
+  type ChannelVisibility,
+} from "#src/features/conversations/channel-visibility";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
@@ -106,7 +110,7 @@ export async function unsaveUserMessage(
 
 const savedMessageSelect = {
   createdAt: true,
-  conversation: { select: { id: true, channelName: true, directKey: true } },
+  conversation: { select: { id: true, channelName: true, visibility: true, directKey: true } },
   // The exact row shape the message stream renders with, so the Saved view reuses the same
   // projection (sender, attachments, mentions, reactions) instead of a near-copy.
   message: { select: browserMessageFields },
@@ -118,7 +122,12 @@ export type SavedMessageView = {
   /** When the viewer saved it; the list orders by this, newest first. */
   savedAt: Date;
   /** Enough conversation context to label the card; the jump target is `message.conversationId`. */
-  conversation: { id: string; channelName: string | null; directKey: string | null };
+  conversation: {
+    id: string;
+    channelName: string | null;
+    visibility?: ChannelVisibility;
+    directKey: string | null;
+  };
   message: ReturnType<typeof mapBrowserMessage>;
 };
 
@@ -126,7 +135,12 @@ export type SavedMessageView = {
 export function savedMessageView(row: SavedMessageRow, workspaceId: string): SavedMessageView {
   return {
     savedAt: row.createdAt,
-    conversation: row.conversation,
+    conversation: {
+      id: row.conversation.id,
+      channelName: row.conversation.channelName,
+      ...visibilityField(row.conversation),
+      directKey: row.conversation.directKey,
+    },
     message: mapBrowserMessage(row.message, workspaceId),
   };
 }

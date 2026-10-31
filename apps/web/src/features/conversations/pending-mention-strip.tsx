@@ -1,3 +1,4 @@
+import { channelLabel, type ChannelVisibility } from "./channel-visibility";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Bell01, Check, Plus } from "@untitledui/icons";
@@ -15,6 +16,7 @@ export type PendingMention = {
   targetLabel: string;
   targetAvatarUrl: string | null;
   channelName: string;
+  visibility?: ChannelVisibility;
   availableActions: readonly ("notify" | "add")[];
   /** What the reader's Notify or Add did: kept by the composer, so it survives leaving the chat. */
   outcome?: MentionOutcome;
@@ -131,7 +133,10 @@ export function PendingMentionStrip({
           const busy = adding.has(mention.resolutionId);
           // A person reads by their name, as the sender picked them; an Agent by its handle.
           const target = `@${mention.targetType === "user" ? mention.targetLabel : mention.targetHandle}`;
-          const channel = `#${mention.channelName}`;
+          const channel = channelLabel({
+            name: mention.channelName,
+            visibility: mention.visibility,
+          });
           return (
             <li
               key={mention.resolutionId}

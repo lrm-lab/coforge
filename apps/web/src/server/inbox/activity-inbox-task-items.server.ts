@@ -55,6 +55,7 @@ export function taskCandidatesSql(workspaceId: string, userId: string) {
       cm."conversationId" AS "conversationId",
       NULL::uuid AS "rootMessageId",
       b."channelName" AS "channelName",
+      b."visibility" AS "visibility",
       NULL::text AS "directKey",
       NULL::uuid AS "agentId",
       latest."id" AS "latestMessageId",

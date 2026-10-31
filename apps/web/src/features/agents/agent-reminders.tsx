@@ -1,3 +1,4 @@
+import { channelLabel } from "#src/features/conversations/channel-visibility";
 import { useEffect, useState } from "react";
 import { Clock, Link01 as LinkIcon, Repeat01 as Repeat } from "@untitledui/icons";
 import { Link } from "@tanstack/react-router";
@@ -182,7 +183,9 @@ function Source({ reminder }: { reminder: AgentReminderListItem }) {
   const thread = reminder.anchor?.threadRootId;
   const shortThread = thread?.slice(0, 13);
   const target =
-    reminder.anchor?.kind === "channel" ? `#${reminder.anchor.channelName}` : reminder.target;
+    reminder.anchor?.kind === "channel"
+      ? channelLabel({ name: reminder.anchor.channelName, visibility: reminder.anchor.visibility })
+      : reminder.target;
   const label =
     shortThread && !target.includes(shortThread) ? `${target} · ${shortThread}` : target;
   const content = (

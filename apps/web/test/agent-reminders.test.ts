@@ -146,6 +146,7 @@ test("exposes targets and derives readable message anchors from the canonical co
       kind: "channel",
       channelId: "channel-1",
       channelName: "general",
+      visibility: "public",
       messageId: "message-channel-reply",
       threadRootId: "channel-root",
     },

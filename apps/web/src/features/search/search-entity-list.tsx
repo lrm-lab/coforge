@@ -1,5 +1,6 @@
+import { channelGlyph } from "#src/features/conversations/channel-name";
+import { channelLabel } from "#src/features/conversations/channel-visibility";
 import { Link } from "@tanstack/react-router";
-import { Hash01 as Hash } from "@untitledui/icons";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 
 import { Badge } from "#src/components/base/badges/badges";
@@ -112,7 +113,7 @@ function EntityContent({
     <>
       <EntityMark entity={entity} display={display} />
       <span className="min-w-0 truncate text-sm font-semibold text-primary">
-        {entity.kind === "channel" ? `#${entity.name}` : entity.name}
+        {entity.kind === "channel" ? channelLabel(entity) : entity.name}
       </span>
       <Badge size="sm" color="gray" type="modern" className="shrink-0">
         {KIND_LABEL[entity.kind]()}
@@ -215,7 +216,7 @@ function EntityMark({
     );
   const Icon =
     entity.kind === "channel"
-      ? Hash
+      ? channelGlyph(entity)
       : computerIcon({
           kind: entity.computerKind,
           name: entity.hostname,

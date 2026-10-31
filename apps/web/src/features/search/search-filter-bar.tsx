@@ -1,3 +1,4 @@
+import { channelLabel } from "#src/features/conversations/channel-visibility";
 import { useMemo, useState, type FC, type Key, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, SearchLg } from "@untitledui/icons";
@@ -137,13 +138,13 @@ export function SearchFilterBar({
         </Dropdown.Popover>
       </Dropdown.Root>
       <SearchableChip
-        label={channel ? `#${channel.name}` : m.search_channel()}
+        label={channel ? channelLabel(channel) : m.search_channel()}
         searchLabel={m.search_find_channel()}
         selectedKey={filters.channelId ?? ANY}
         anyLabel={m.search_channel_any()}
         items={(directory?.channels ?? []).map((candidate) => ({
           key: candidate.id,
-          label: `#${candidate.name}`,
+          label: channelLabel(candidate),
           textValue: `${candidate.name} ${candidate.description}`,
           addon: candidate.archived ? m.search_archived() : undefined,
         }))}

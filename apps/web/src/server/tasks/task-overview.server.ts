@@ -1,3 +1,4 @@
+import { channelLabel, visibilityField } from "#src/features/conversations/channel-visibility";
 import type { TaskMember, TaskView } from "@lrm/coforge-sdk/internal";
 import {
   CONVERSATION_TASK_NUMBERS_MAX,
@@ -131,6 +132,7 @@ function overviewSelection(userId: string) {
     conversation: {
       select: {
         channelName: true,
+        visibility: true,
         project: { select: { id: true, name: true, slug: true, iconObjectKey: true } },
         members: {
           where: { OR: [{ userId }, { agentId: { not: null } }] },
@@ -159,7 +161,11 @@ function overviewRow(
     ...taskView(task, "people", counts),
     currentMemberId,
     source: channelName
-      ? { channelName, agentId: null, label: `#${channelName}` }
+      ? {
+          channelName,
+          agentId: null,
+          label: channelLabel({ name: channelName, ...visibilityField(task.conversation) }),
+        }
       : { channelName: null, agentId: agent!.id, label: agent!.displayName || agent!.name },
     project: task.conversation.project && withProjectIconUrl(task.conversation.project),
   };

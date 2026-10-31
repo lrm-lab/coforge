@@ -1,3 +1,4 @@
+import { channelLabel } from "./channel-visibility";
 import { Link, useRouter } from "@tanstack/react-router";
 import { Bookmark, BookmarkCheck, Copy01, Link01, MessageTextSquare01 } from "@untitledui/icons";
 import { Link as AriaLink } from "react-aria-components";
@@ -84,7 +85,7 @@ function SavedMessageCard({
   // The localized URL (`publicHref`), the one the card links to and the address bar shows.
   const href = router.buildLocation(jump).publicHref;
   const place = conversation.channelName
-    ? `#${conversation.channelName}`
+    ? channelLabel({ name: conversation.channelName, visibility: conversation.visibility })
     : `@${message.senderName}`;
   const attachmentName = message.attachments[0]?.fileName;
 

@@ -1,4 +1,8 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
+import {
+  visibilityField,
+  type ChannelVisibility,
+} from "#src/features/conversations/channel-visibility";
 import { peopleDirectPeerId } from "#src/features/conversations/direct-key";
 import { searchTerms } from "#src/lib/search-terms";
 import {
@@ -37,6 +41,7 @@ const searchHitSelect = {
     select: {
       id: true,
       channelName: true,
+      visibility: true,
       directKey: true,
       archivedAt: true,
       // A direct conversation with an Agent names its one Agent member; one between members
@@ -55,6 +60,8 @@ export type MessageSearchHit = {
   conversation: {
     id: string;
     channelName: string | null;
+    /** A channel's visibility; absent reads as public. */
+    visibility?: ChannelVisibility;
     directKey: string | null;
     archived: boolean;
     /** Who a direct conversation is with, from the viewer's seat: its Agent, or the member on the
@@ -137,6 +144,7 @@ export async function searchMessages(
         conversation: {
           id: conversation.id,
           channelName: conversation.channelName,
+          ...visibilityField(conversation),
           directKey: conversation.directKey,
           archived: conversation.archivedAt !== null,
           direct: agent ? { kind: "agent", agent } : peer ? { kind: "people", peer } : null,

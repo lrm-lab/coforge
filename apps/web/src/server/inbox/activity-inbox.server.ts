@@ -1,3 +1,4 @@
+import { visibilityField } from "#src/features/conversations/channel-visibility";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import type {
   ActivityInboxFilter,
@@ -53,6 +54,8 @@ export type ActivityCandidate = {
   conversationId: string;
   rootMessageId: string | null;
   channelName: string | null;
+  /** A channel's `Conversation.visibility`; a direct conversation's is never read. */
+  visibility: string;
   /** A direct message's key, which names the member on the other side of a DM between people. */
   directKey: string | null;
   agentId: string | null;
@@ -342,6 +345,7 @@ export class ActivityInbox {
               // A task conversation's place is its board; the item's own conversation is the task's.
               conversationId: candidate.task?.boardId ?? candidate.conversationId,
               channelName: candidate.channelName ?? "",
+              ...visibilityField(candidate),
               members:
                 channelMembers.get(candidate.task?.boardId ?? candidate.conversationId) ?? [],
             }

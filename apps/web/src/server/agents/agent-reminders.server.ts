@@ -1,3 +1,7 @@
+import {
+  visibilityField,
+  type ChannelVisibility,
+} from "#src/features/conversations/channel-visibility";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { paginated } from "#src/server/db/pagination.server";
 import { ACTIVE_AGENT_WHERE } from "./active-agent.server";
@@ -23,6 +27,7 @@ export type AgentReminderListItem = {
         kind: "channel";
         channelId: string;
         channelName: string;
+        visibility?: ChannelVisibility;
         messageId: string;
         threadRootId: string | null;
       }
@@ -137,6 +142,7 @@ export function prismaAgentReminderReadStore(db: PrismaClient): AgentReminderRea
                 kind: "channel" as const,
                 channelId: conversation.id,
                 channelName: conversation.channelName,
+                ...visibilityField(conversation),
                 messageId: row.messageId,
                 threadRootId: message.threadRootId,
               }
