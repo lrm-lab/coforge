@@ -52,8 +52,9 @@ These rules apply to `src/server/workspaces/`.
 - `resource-recovery.server.ts` repairs post-commit enrollment resources when the
   owner opens a Workspace through `loadWorkspaceSwitcher`; existing Memory Agent
   links, including archived identities, stay intact. A retained Memory Profile
-  prevents reopening from undoing a deliberate Agent deletion. Member opens retain their
-  existing platform-assistant onboarding.
+  prevents reopening from undoing a deliberate Agent deletion. The open also
+  repairs a missing platform-assistant session, but a GET loader never starts
+  the assistant — a missed Start waits for the Daemon's ready recovery.
 - `server-connection.server.ts` builds the cloud computer service page: the
   install command and the system unit, neither of which carries a secret. The
   light is on only while that host's heartbeat is under 90 seconds old.

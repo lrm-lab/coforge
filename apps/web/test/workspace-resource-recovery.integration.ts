@@ -147,3 +147,64 @@ test("opening with a local platform Computer does not retry a refused weekly bin
     await db.$disconnect();
   }
 });
+
+test("a fully provisioned open is read-only while the assistant's introduction is pending", async () => {
+  // `loadWorkspaceSwitcher` runs this on every page open and `router.invalidate`: with every
+  // resource present it may issue only SELECTs, and the pending introduction's missed Start is
+  // the Daemon ready recovery's job — never the loader's.
+  const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
+  if (!connectionString) throw new Error("CHANNEL_TEST_DATABASE_URL is required");
+  const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
+  const suffix = crypto.randomUUID().replaceAll("-", "");
+  const owner = await db.user.create({
+    data: { username: `read-recover-${suffix}`, displayName: "Accepted" },
+  });
+  let workspaceId: string | undefined;
+  try {
+    const workspace = await createOwnedWorkspace(
+      db,
+      { userId: owner.id, name: "Read only", slug: `read-recover-${suffix}` },
+      { id: true },
+    );
+    workspaceId = workspace.id;
+    const input = { workspaceId, userId: owner.id };
+    await provisionWorkspaceEnrollment(db, workspaceId, owner.id);
+    const session = await new WorkspaceAssistants(db).ensure(workspaceId, owner.id);
+    const computer = await db.computer.create({
+      data: {
+        ownerId: owner.id,
+        machineId: suffix,
+        kind: "cloud",
+        cloudSlot: "default",
+        workspaces: { create: { workspaceId } },
+      },
+    });
+    await db.agent.update({ where: { id: session.agentId }, data: { computerId: computer.id } });
+    const weekly = await ensureWeeklyReportAssistant(db, { ...input, computerId: computer.id });
+    await db.agent.update({ where: { id: weekly.agentId }, data: { computerId: computer.id } });
+
+    const statements: string[] = [];
+    const counting = new PrismaClient({
+      adapter: new PrismaPg({ connectionString }),
+      log: [{ emit: "event", level: "query" }],
+    });
+    counting.$on("query", (event: { query: string }) => statements.push(event.query));
+    try {
+      await recoverWorkspaceResourcesOnOpen(counting, input);
+      // Guard the listener itself: the open still reads, so silence means broken capture.
+      expect(statements.length).toBeGreaterThan(0);
+      expect(
+        statements.filter((query) =>
+          /^\s*(INSERT|UPDATE|DELETE|BEGIN|COMMIT|ROLLBACK)/i.test(query),
+        ),
+      ).toEqual([]);
+    } finally {
+      await counting.$disconnect();
+    }
+  } finally {
+    if (workspaceId) await db.workspace.delete({ where: { id: workspaceId } });
+    await db.computer.deleteMany({ where: { ownerId: owner.id } });
+    await db.user.delete({ where: { id: owner.id } });
+    await db.$disconnect();
+  }
+});
