@@ -108,6 +108,7 @@ import { assertOwnIntent } from "./runtime-intent-validation";
 import { currentObservedUsage } from "./runtime-usage-observation";
 import { failCollectorRunningSlots } from "./runtime-collector-failure";
 import { runtimeEnvelope } from "./runtime-envelope";
+import { replaceTransport, subscribe, unsubscribeAll } from "./runtime-transport-lifecycle";
 import { holdRunners, releaseRunners } from "./runtime-runner-hold";
 import { agentTask, acceptReminderDue, mintAppItem, reminder } from "./runtime-agent-api-reminders";
 import {
@@ -1024,32 +1025,27 @@ export class DaemonRuntime {
     return this.#startPromise;
   }
 
-  /**
-   * Stops the current transport and installs a fresh one, so a later start never reuses a
-   * transport that went through `.stop()` and no replaced transport is left connected. Resolves
-   * with the stop failure, if any.
-   *
-   * The fresh transport is installed before the old one is stopped, on purpose: stopping waits
-   * on in-flight status RPCs, and nothing that runs meanwhile may still reach the transport being
-   * torn down (a late `stop()` of it, or a start racing this one, must see the new one).
-   */
   async #replaceTransport(): Promise<unknown> {
-    const replaced = this.#transport;
-    this.#transport = this.#transportFactory.create(this.#connection);
-    try {
-      await replaced.stop();
-      return undefined;
-    } catch (error) {
-      return error;
-    }
+    const runtime = this;
+    return replaceTransport({
+      get transport() {
+        return runtime.#transport;
+      },
+      set transport(value) {
+        runtime.#transport = value;
+      },
+      transportFactory: this.#transportFactory,
+      connection: this.#connection,
+      subscriptions: this.#subscriptions,
+    });
   }
 
   #subscribe(unsubscribe: (() => void) | undefined): void {
-    if (unsubscribe) this.#subscriptions.push(unsubscribe);
+    subscribe(this.#subscriptions, unsubscribe);
   }
 
   #unsubscribeAll(): void {
-    for (const unsubscribe of this.#subscriptions.splice(0)) unsubscribe();
+    unsubscribeAll(this.#subscriptions);
   }
 
   async #start(connection: DaemonConfig, signal: AbortSignal): Promise<void> {
