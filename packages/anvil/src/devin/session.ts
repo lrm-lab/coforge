@@ -9,6 +9,7 @@ import type {
 import { RuntimeModelNotFoundError } from "#src/contract";
 import { asRecord } from "#src/json-record";
 import { AcpSession, type AcpSessionProfile } from "#src/acp/session";
+import type { AcpConnection } from "#src/acp/connection";
 import { devinConnection, DEVIN_ACP_TIMEOUT_MS, devinBounded } from "./connection";
 import { DevinTurnEvents } from "./update-events";
 import type { DevinProviderOptions } from "./host";
@@ -106,7 +107,7 @@ export class DevinSession implements AgentSession {
   }
 
   async #applyRuntimeConfig(
-    transport: ReturnType<AcpSessionProfile["openTransport"]>,
+    transport: AcpConnection,
     sessionId: string,
     initial: SessionConfigOption[],
   ) {

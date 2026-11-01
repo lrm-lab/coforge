@@ -252,7 +252,6 @@ export class AcpSession implements AgentSession {
       !this.#interrupting &&
       !!this.#active &&
       request.sessionId === this.#identity?.sessionId;
-    if (this.profile.permission) return this.profile.permission(request, live);
     const allow = live ? request.options.find((option) => option.kind === "allow_once") : undefined;
     return {
       outcome: allow
