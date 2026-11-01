@@ -2,6 +2,7 @@ import { deleteAgentWorkspace } from "#src/features/computers/computer-workspace
 import { createFileRoute, getRouteApi, notFound, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useRef } from "react";
 
 import { ComputerDetail } from "#src/features/computers/computer-detail";
 import { CloudDesktopOriginProvider } from "#src/features/computers/cloud-desktop-origin";
@@ -95,6 +96,49 @@ function ComputerDetailPage() {
   const loadRuntimeCatalog = useServerFn(getComputerRuntimeCatalog);
   const rescanRuntimes = useServerFn(refreshComputerRuntimeCatalog);
 
+  /** Merges the Daemon's budgeted measurements into the snapshot they were taken for. */
+  const statisticsRequested = useRef<number | null>(null);
+  const refreshWorkspaceStatistics = useCallback(
+    (scannedAt: number) => {
+      if (statisticsRequested.current === scannedAt) return;
+      statisticsRequested.current = scannedAt;
+      const queryKey = agentWorkspaceScanQuery(workspaceId, computerId).queryKey;
+      void scanWorkspaceStats({ data: { computerId } })
+        .catch(() => undefined)
+        .then(async (rows) => {
+          const byAgent = new Map((rows ?? []).map((row) => [row.agentId, row]));
+          queryClient.setQueryData<AgentWorkspaceScanSnapshot | null>(queryKey, (current) => {
+            if (!current || current.scannedAt !== scannedAt) return current;
+            return {
+              ...current,
+              workspaces: current.workspaces.map((row) => {
+                const stats = byAgent.get(row.agentId);
+                return {
+                  ...row,
+                  fileCount: stats?.fileCount ?? 0,
+                  totalSizeBytes: stats?.totalSizeBytes ?? 0,
+                  statisticsStatus: stats?.statisticsStatus ?? "unavailable",
+                };
+              }),
+            };
+          });
+          const merged = queryClient.getQueryData<AgentWorkspaceScanSnapshot | null>(queryKey);
+          if (merged?.scannedAt === scannedAt) await storeQueryNow(queryClient, queryKey);
+        });
+    },
+    [computerId, queryClient, scanWorkspaceStats, workspaceId],
+  );
+  // A snapshot restored from storage can carry rows whose measurements never arrived (the page
+  // was reloaded or closed while they were in flight): ask for them once, so they do not stay
+  // "pending" until the next manual scan.
+  useEffect(() => {
+    if (!lastWorkspaceScan) return;
+    const awaiting = lastWorkspaceScan.workspaces.some(
+      (workspace) => workspace.status === "present" && workspace.statisticsStatus === "pending",
+    );
+    if (awaiting) refreshWorkspaceStatistics(lastWorkspaceScan.scannedAt);
+  }, [lastWorkspaceScan, refreshWorkspaceStatistics]);
+
   return (
     <CloudDesktopOriginProvider origin={desktopOrigin}>
       <ComputerDetail
@@ -115,37 +159,8 @@ function ComputerDetailPage() {
                 // Stored before the scan reads as done, so a reload right after it keeps the result
                 // (a page write otherwise waits a second, and `pagehide` is best effort).
                 await storeQueryNow(queryClient, workspaceScanQuery.queryKey);
-                // The listing is on screen; the Daemon's budgeted measurements arrive after it and
-                // are merged in. They never delay or fail the rows.
-                if (snapshot.workspaces.some((workspace) => workspace.status === "present"))
-                  void scanWorkspaceStats({ data: { computerId } })
-                    .catch(() => undefined)
-                    .then(async (rows) => {
-                      const byAgent = new Map((rows ?? []).map((row) => [row.agentId, row]));
-                      queryClient.setQueryData<AgentWorkspaceScanSnapshot | null>(
-                        workspaceScanQuery.queryKey,
-                        (current) => {
-                          if (!current || current.scannedAt !== snapshot.scannedAt) return current;
-                          return {
-                            ...current,
-                            workspaces: current.workspaces.map((row) => {
-                              const stats = byAgent.get(row.agentId);
-                              return {
-                                ...row,
-                                fileCount: stats?.fileCount ?? 0,
-                                totalSizeBytes: stats?.totalSizeBytes ?? 0,
-                                statisticsStatus: stats?.statisticsStatus ?? "unavailable",
-                              };
-                            }),
-                          };
-                        },
-                      );
-                      const merged = queryClient.getQueryData<AgentWorkspaceScanSnapshot | null>(
-                        workspaceScanQuery.queryKey,
-                      );
-                      if (merged?.scannedAt === snapshot.scannedAt)
-                        await storeQueryNow(queryClient, workspaceScanQuery.queryKey);
-                    });
+                // The listing is on screen; the effect below requests the Daemon's budgeted
+                // measurements for any row still pending — including one restored on a reload.
               }
             : undefined
         }

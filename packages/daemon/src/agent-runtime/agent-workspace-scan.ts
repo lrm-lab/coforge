@@ -35,10 +35,31 @@ export const AGENT_WORKSPACE_STATISTICS_BUDGETS: AgentWorkspaceStatisticsBudgets
 
 /** Keep four Agent workspaces moving without flooding a local disk with stat calls. */
 const WORKSPACE_SCAN_CONCURRENCY = 4;
-const WORKSPACE_SCAN_STAT_CONCURRENCY = 32;
+/** The whole statistics walk shares one budget of file-system calls in flight, so a large tree
+ * cannot queue thousands of `lstat`s ahead of the Daemon's other reads (libuv runs a handful of
+ * them at a time, and everything else would wait behind the queue). Measured on the real agents
+ * directory: 64 in flight still reads ~60-100k files/s, enough for the 500 ms workspace budget. */
+const WORKSPACE_SCAN_FS_CONCURRENCY = 64;
 /** Directories walked together within one workspace: measured ~2x the throughput of one at a
  * time (2 s over the real agents directory: 66k files/s at 64 directories, 30k/s sequentially). */
 const WORKSPACE_SCAN_DIRECTORY_BATCH = 64;
+/** Files stat'd together in one directory; the shared limiter bounds what is actually in flight. */
+const WORKSPACE_SCAN_FILE_BATCH = 64;
+
+function createFsLimiter(capacity: number) {
+  let active = 0;
+  const waiting: Array<() => void> = [];
+  return async function limited<T>(work: () => Promise<T>): Promise<T> {
+    if (active >= capacity) await new Promise<void>((resolve) => waiting.push(resolve));
+    active += 1;
+    try {
+      return await work();
+    } finally {
+      active -= 1;
+      waiting.shift()?.();
+    }
+  };
+}
 
 async function runBounded<T>(
   values: readonly T[],
@@ -97,6 +118,7 @@ export async function summarizeAgentWorkspaceDirectories(params: {
   const budgets = params.budgets ?? AGENT_WORKSPACE_STATISTICS_BUDGETS;
   const now = params.now ?? Date.now;
   const deadline = now() + budgets.totalMs;
+  const limited = createFsLimiter(WORKSPACE_SCAN_FS_CONCURRENCY);
   const listed = await listAgentWorkspaceDirectories(params.agentsDirectory);
   if (listed.status !== "ok") return { status: listed.status, workspaces: [] };
   const workspaces: AgentWorkspaceDirectoriesScanOutcome["workspaces"] = [];
@@ -109,6 +131,7 @@ export async function summarizeAgentWorkspaceDirectories(params: {
               deadline: Math.min(deadline, now() + budgets.workspaceMs),
               fileBudget: budgets.workspaceFiles,
               now,
+              limited,
             })),
             skipped: false,
           };
@@ -170,38 +193,49 @@ async function listAgentWorkspaceDirectories(agentsDirectory: string): Promise<
  * them too. */
 async function measureWorkspaceDirectory(
   rootPath: string,
-  options: { deadline: number; fileBudget: number; now: () => number },
+  options: {
+    deadline: number;
+    fileBudget: number;
+    now: () => number;
+    limited: <T>(work: () => Promise<T>) => Promise<T>;
+  },
 ): Promise<{ fileCount: number; totalSizeBytes: number; truncated: boolean }> {
   const queue = [rootPath];
   let fileCount = 0;
   let totalSizeBytes = 0;
+  /** Set when a budget stops the walk before the tree is exhausted; the counts are then lower
+   * bounds even when the last batch was also the last directory. */
+  let truncated = false;
   const exhausted = () => options.now() >= options.deadline || fileCount >= options.fileBudget;
   while (queue.length > 0) {
-    if (exhausted()) return { fileCount, totalSizeBytes, truncated: true };
+    if (exhausted()) {
+      truncated = true;
+      break;
+    }
     const batch = queue.splice(0, WORKSPACE_SCAN_DIRECTORY_BATCH);
     const nextDirectories: string[] = [];
     await Promise.all(
       batch.map(async (directory) => {
-        let entries: import("node:fs").Dirent[];
-        try {
-          entries = await readdir(directory, { withFileTypes: true });
-        } catch {
-          return;
-        }
+        const entries = await options
+          .limited(() => readdir(directory, { withFileTypes: true }))
+          .catch(() => undefined);
+        if (!entries) return;
         for (const entry of entries)
           if (entry.isDirectory()) nextDirectories.push(join(directory, entry.name));
         const files = entries.filter((entry) => entry.isFile());
-        for (let offset = 0; offset < files.length; offset += WORKSPACE_SCAN_STAT_CONCURRENCY) {
-          if (exhausted()) return;
-          const slice = files.slice(offset, offset + WORKSPACE_SCAN_STAT_CONCURRENCY);
+        for (let offset = 0; offset < files.length; offset += WORKSPACE_SCAN_FILE_BATCH) {
+          if (exhausted()) {
+            truncated = true;
+            return;
+          }
+          const slice = files.slice(offset, offset + WORKSPACE_SCAN_FILE_BATCH);
           const infos = await Promise.all(
             slice.map(async (entry) => {
-              try {
-                return await lstat(join(directory, entry.name));
-              } catch {
-                // A file that changes during a scan is omitted; the next one reconciles it.
-                return undefined;
-              }
+              const info = await options
+                .limited(() => lstat(join(directory, entry.name)))
+                .catch(() => undefined);
+              // A file that changes during a scan is omitted; the next one reconciles it.
+              return info;
             }),
           );
           for (const info of infos) {
@@ -214,5 +248,5 @@ async function measureWorkspaceDirectory(
     );
     queue.push(...nextDirectories);
   }
-  return { fileCount, totalSizeBytes, truncated: false };
+  return { fileCount, totalSizeBytes, truncated };
 }
