@@ -88,6 +88,9 @@ export type AgentActivityPublisherPorts<L extends PublishedActivityLaunch> = Rea
 export class AgentActivityPublisher<L extends PublishedActivityLaunch> {
   readonly #ports: AgentActivityPublisherPorts<L>;
   #enabled = false;
+  /** The newest Activity per Agent published before the runtime was ready, for the flush in
+   * `enable()`. One frame per Agent is enough: an Activity is a state, not a history. */
+  readonly #pending = new Map<string, { launchId: string; activity: ActivityDraft }>();
   readonly #heartbeatTimers = new Map<string, ReturnType<typeof setTimeout>>();
   readonly #lastBusy = new Map<string, BusyActivity<L>>();
 
@@ -95,13 +98,29 @@ export class AgentActivityPublisher<L extends PublishedActivityLaunch> {
     this.#ports = ports;
   }
 
-  /** Activity flows once the runtime has started; until then every publish is dropped. */
+  /** Activity flows once the runtime has started; a launch that published before it keeps its
+   * newest frame, which goes out now — a lost first frame would leave the Agent's status dot
+   * missing until its next turn (task #377). */
   enable(): void {
     this.#enabled = true;
+    const pending = [...this.#pending];
+    this.#pending.clear();
+    for (const [agentId, entry] of pending) {
+      const launch = this.#ports.currentLaunch(agentId);
+      // The launch is not the one that queued it: the frame describes a turn that is over.
+      if (!launch || launch.launchId !== entry.launchId) continue;
+      this.publish(agentId, launch, entry.activity);
+    }
   }
 
   publish(agentId: string, launch: L, activity: ActivityDraft): void {
-    if (!this.#enabled || this.#ports.currentLaunch(agentId) !== launch) return;
+    if (!this.#enabled) {
+      // Keep the newest frame for the launch that is still current; the flush sends it.
+      if (this.#ports.currentLaunch(agentId) === launch)
+        this.#pending.set(agentId, { launchId: launch.launchId, activity });
+      return;
+    }
+    if (this.#ports.currentLaunch(agentId) !== launch) return;
     if (launch.stopping) {
       this.forgetBusy(agentId);
       if (
@@ -170,6 +189,7 @@ export class AgentActivityPublisher<L extends PublishedActivityLaunch> {
   /** The runtime is stopping: nothing more is published and no heartbeat timer survives. */
   disable(): void {
     this.#enabled = false;
+    this.#pending.clear();
     for (const timer of this.#heartbeatTimers.values()) clearTimeout(timer);
     this.#heartbeatTimers.clear();
     this.#lastBusy.clear();
