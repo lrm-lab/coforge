@@ -16,6 +16,8 @@ type HoldState = {
   set hold(value: RunnerHold | undefined);
 };
 
+/** Stops admitting new Agent turns and reports which Agents are still busy. Idempotent: a repeat
+ * call only re-reads the busy set, which is what the restart's quiescence poll relies on. */
 export function holdRunners(
   state: HoldState,
   reason: RunnerHoldReason,
