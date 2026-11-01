@@ -32,8 +32,9 @@ export type AcpConnectionOptions = {
   /** Extra ACP notification methods this runtime publishes, observed like `session/update`. */
   notifications?: readonly string[];
   /** Each observed notification, synchronously, so it keeps its place before the response that
-   * follows it. */
-  onUpdate?(method: string, params: Readonly<Record<string, unknown>>): void;
+   * follows it. Raw params: each adapter validates what its runtime sends, and a runtime that
+   * treats malformed params as a failure says so. */
+  onUpdate?(method: string, params: unknown): void;
   onPermission?(request: RequestPermissionRequest): RequestPermissionResponse;
   /** Runs before a `session/prompt` frame is written, for a runtime that must know a turn
    * began. */
@@ -57,7 +58,7 @@ export function acpProcess(
     /** Identity this runtime's host announces for the connection. */
     clientInfo: Readonly<{ name: string; version: string }>;
     processTreeSpawner: ProcessTreeSpawner;
-    onUpdate?(method: string, params: Readonly<Record<string, unknown>>): void;
+    onUpdate?(method: string, params: unknown): void;
     onPermission?(request: RequestPermissionRequest): RequestPermissionResponse;
     onPromptWrite?(): void;
   },
@@ -110,17 +111,16 @@ export class AcpConnection {
             !options.notifications?.includes(String(record.method))
           )
             return;
+          // Each adapter reads and validates the fields its runtime publishes; the shared tap
+          // only decides which methods are observed and keeps them in arrival order.
           const params = asRecord(record.params);
-          if (!params) return;
-          // Each adapter reads the fields its runtime publishes; the shared tap only decides
-          // which methods are observed and keeps them in arrival order.
-          const update = asRecord(params.update);
+          const update = asRecord(params?.update);
           const config = update ? options.readConfig?.(update) : undefined;
-          if (config && typeof params.sessionId === "string") {
+          if (config && typeof params?.sessionId === "string") {
             this.#config.set(params.sessionId, config);
             for (const listener of this.#configChanged) listener();
           }
-          options.onUpdate?.(String(record.method), params);
+          options.onUpdate?.(String(record.method), record.params);
         }) as ReadableStream<AnyMessage>,
         writable: new WritableStream<AnyMessage>({
           write: (message) => {

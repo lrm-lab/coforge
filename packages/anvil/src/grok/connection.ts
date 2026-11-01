@@ -1,4 +1,5 @@
 import type { RequestPermissionRequest, RequestPermissionResponse } from "@agentclientprotocol/sdk";
+import { asRecord } from "#src/json-record";
 import { acpProcess, type AcpConnection } from "#src/acp/connection";
 import type { AcpRuntimeProfile } from "#src/acp/profile";
 import type { GrokConnectionHost } from "./host";
@@ -32,7 +33,13 @@ export function grokConnection(
     environment,
     clientInfo: host.sessionClientInfo,
     processTreeSpawner: host.processTreeSpawner,
-    onUpdate,
+    // A notification Grok publishes with malformed params is a protocol failure, not a frame to
+    // drop silently.
+    onUpdate: (method, params) => {
+      const parsed = asRecord(params);
+      if (!parsed) throw new Error("Invalid Grok ACP notification");
+      onUpdate(method, parsed);
+    },
     onPermission,
   });
 }

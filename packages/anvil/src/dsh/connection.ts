@@ -1,4 +1,5 @@
 import type { RequestPermissionRequest, RequestPermissionResponse } from "@agentclientprotocol/sdk";
+import { asRecord } from "#src/json-record";
 import { acpBounded, acpProcess, type AcpConnection } from "#src/acp/connection";
 import type { AcpRuntimeProfile } from "#src/acp/profile";
 import type { DshRuntimeHost } from "./host";
@@ -38,9 +39,10 @@ export function dshConnection(
     processTreeSpawner: host.processTreeSpawner,
     onUpdate: (method, params) => {
       if (method !== "session/update") return;
-      const update = params.update;
-      if (typeof params.sessionId === "string" && typeof update === "object" && update !== null)
-        onUpdate(params.sessionId, update as Readonly<Record<string, unknown>>);
+      const parsed = asRecord(params);
+      const update = parsed?.update;
+      if (typeof parsed?.sessionId === "string" && typeof update === "object" && update !== null)
+        onUpdate(parsed.sessionId, update as Readonly<Record<string, unknown>>);
     },
     onPermission,
     onPromptWrite,

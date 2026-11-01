@@ -3,6 +3,7 @@ import type {
   RequestPermissionResponse,
   SessionConfigOption,
 } from "@agentclientprotocol/sdk";
+import { asRecord } from "#src/json-record";
 import { acpBounded, acpProcess, type AcpConnection } from "#src/acp/connection";
 import type { AcpRuntimeProfile } from "#src/acp/profile";
 import type { CommandCodeRuntimeHost } from "./host";
@@ -48,8 +49,9 @@ export function commandCodeConnection(
     processTreeSpawner: host.processTreeSpawner,
     onUpdate: (method, params) => {
       if (method !== "session/update") return;
+      const parsed = asRecord(params);
       const update = asUpdate(params);
-      if (typeof params.sessionId === "string" && update) onUpdate(params.sessionId, update);
+      if (typeof parsed?.sessionId === "string" && update) onUpdate(parsed.sessionId, update);
     },
     onPermission,
     onPromptWrite,
@@ -60,8 +62,8 @@ export function commandCodeBounded<T>(work: Promise<T>, timeoutMs: number): Prom
   return acpBounded(work, timeoutMs, COMMAND_CODE_PROFILE.messages.timedOut);
 }
 
-function asUpdate(params: Readonly<Record<string, unknown>>) {
-  const update = params.update;
+function asUpdate(params: unknown) {
+  const update = asRecord(params)?.update;
   return typeof update === "object" && update !== null
     ? (update as Readonly<Record<string, unknown>>)
     : undefined;

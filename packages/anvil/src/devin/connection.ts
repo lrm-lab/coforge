@@ -42,8 +42,9 @@ export function devinConnection(
     processTreeSpawner: host.processTreeSpawner,
     onUpdate: (method, params) => {
       if (method !== "session/update") return;
+      const parsed = asRecord(params);
       const update = asUpdate(params);
-      if (typeof params.sessionId === "string" && update) onUpdate(params.sessionId, update);
+      if (typeof parsed?.sessionId === "string" && update) onUpdate(parsed.sessionId, update);
     },
     onPermission,
     onPromptWrite,
@@ -54,8 +55,8 @@ export function devinBounded<T>(work: Promise<T>, timeoutMs: number): Promise<T>
   return acpBounded(work, timeoutMs, DEVIN_PROFILE.messages.timedOut);
 }
 
-function asUpdate(params: Readonly<Record<string, unknown>>) {
-  const update = params.update;
+function asUpdate(params: unknown) {
+  const update = asRecord(params)?.update;
   return typeof update === "object" && update !== null
     ? (update as Readonly<Record<string, unknown>>)
     : undefined;
