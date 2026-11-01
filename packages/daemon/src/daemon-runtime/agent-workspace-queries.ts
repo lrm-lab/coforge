@@ -16,7 +16,7 @@ import {
 /** Serialized, safe workspace observations, separate from runtime lifecycle and mutations. */
 export class AgentWorkspaceQueries {
   #skillsScanning = false;
-  #workspaceFilesScanning = false;
+  #workspaceFilesScanning = new Set<string>();
   constructor(private readonly provider: (agentId: string) => RuntimeProvider | undefined) {}
   async listSkills(
     connection: DaemonConfig,
@@ -51,8 +51,8 @@ export class AgentWorkspaceQueries {
     request: Pick<AgentWorkspaceFilesListRequest, "agentId" | "dirPath" | "includeHidden">,
   ): Promise<Pick<AgentWorkspaceFilesListResult, "status" | "rootPath" | "entries">> {
     const unavailable = { status: "error" as const, rootPath: "", entries: [] };
-    if (this.#workspaceFilesScanning) return unavailable;
-    this.#workspaceFilesScanning = true;
+    if (this.#workspaceFilesScanning.has(request.agentId)) return unavailable;
+    this.#workspaceFilesScanning.add(request.agentId);
     try {
       return await listAgentWorkspaceFiles({
         agentWorkspaceDirectory: agentWorkspaceDirectory(
@@ -67,7 +67,7 @@ export class AgentWorkspaceQueries {
       // Return safe diagnostics, never file contents or raw filesystem errors.
       return unavailable;
     } finally {
-      this.#workspaceFilesScanning = false;
+      this.#workspaceFilesScanning.delete(request.agentId);
     }
   }
 
@@ -88,8 +88,8 @@ export class AgentWorkspaceQueries {
       contentType: "",
       contentBase64: "",
     };
-    if (this.#workspaceFilesScanning) return unavailable;
-    this.#workspaceFilesScanning = true;
+    if (this.#workspaceFilesScanning.has(request.agentId)) return unavailable;
+    this.#workspaceFilesScanning.add(request.agentId);
     try {
       return await readAgentWorkspaceFile({
         agentWorkspaceDirectory: agentWorkspaceDirectory(
@@ -103,7 +103,7 @@ export class AgentWorkspaceQueries {
       // Return safe diagnostics, never file contents or raw filesystem errors.
       return unavailable;
     } finally {
-      this.#workspaceFilesScanning = false;
+      this.#workspaceFilesScanning.delete(request.agentId);
     }
   }
 }

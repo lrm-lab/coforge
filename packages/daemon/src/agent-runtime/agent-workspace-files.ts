@@ -86,6 +86,8 @@ function sniffImageContentType(bytes: Uint8Array): string | null {
 // to avoid making the UI wait for one filesystem round-trip per entry, but bounded so a large
 // directory cannot flood the host with stat requests.
 const LIST_STAT_CONCURRENCY = 32;
+/** A bounded delete fan-out keeps recursive removals fast without flooding the disk. */
+const DELETE_CONCURRENCY = 4;
 
 const emptyListEntries: AgentWorkspaceFileEntry[] = [];
 
@@ -169,12 +171,18 @@ export async function deleteAgentWorkspaceFiles(params: {
       return { status: isENOENT(error) ? "missing" : classifyDeleteFailure(error) };
     }
     let firstError: unknown;
-    for (const entry of entries) {
-      try {
-        await rm(join(root, entry), { recursive: true, force: true });
-      } catch (error) {
-        firstError ??= error;
-      }
+    for (let offset = 0; offset < entries.length; offset += DELETE_CONCURRENCY) {
+      const errors = await Promise.all(
+        entries.slice(offset, offset + DELETE_CONCURRENCY).map(async (entry) => {
+          try {
+            await rm(join(root, entry), { recursive: true, force: true });
+            return undefined;
+          } catch (error) {
+            return error;
+          }
+        }),
+      );
+      for (const error of errors) firstError ??= error;
     }
     // The directory itself goes too: an Agent that is already gone leaves exactly a directory
     // with nothing else in it, which is still a workspace a person meant to delete.

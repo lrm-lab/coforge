@@ -23,19 +23,22 @@ function listing(
 }
 
 describe("scanComputerAgentWorkspaces", () => {
-  test("scans Agents sequentially because the Daemon accepts one directory observation at a time", async () => {
-    let pending = false;
+  test("scans Agents with a bounded concurrency", async () => {
+    let active = 0;
+    let maximum = 0;
     const result = await scanComputerAgentWorkspaces(
-      [agent(), agent({ id: "agent-2" })],
+      [agent(), agent({ id: "agent-2" }), agent({ id: "agent-3" })],
       async () => {
-        if (pending) return { status: "error", rootPath: "", entries: [] };
-        pending = true;
+        active += 1;
+        maximum = Math.max(maximum, active);
         await Promise.resolve();
-        pending = false;
+        active -= 1;
         return { status: "ok", rootPath: "", entries: [] };
       },
+      { concurrency: 2 },
     );
-    expect(result.map((workspace) => workspace.status)).toEqual(["present", "present"]);
+    expect(result.map((workspace) => workspace.status)).toEqual(["present", "present", "present"]);
+    expect(maximum).toBeLessThanOrEqual(2);
   });
   test("summarizes active and deleted Agent workspaces recursively", async () => {
     const directories = new Map<string, WorkspaceDirectoryListing>([
@@ -129,7 +132,7 @@ describe("scanComputerAgentWorkspaces", () => {
           { name: "b", type: "dir", sizeBytes: 0, modifiedAtMs: 1 },
         ]);
       },
-      { budgetMs: 1_000, now: () => now },
+      { budgetMs: 1_000, now: () => now, concurrency: 1 },
     );
 
     expect(result.map((workspace) => workspace.status)).toEqual(["partial", "partial", "partial"]);

@@ -153,7 +153,7 @@ test("WSS Workspace File read returns a fixture file's exact content", async () 
   }
 });
 
-// A deterministic concurrency trigger for the shared `#workspaceFilesScanning` guard would need
+// A deterministic concurrency trigger for the per-Agent `#workspaceFilesScanning` guard would need
 // either a runtime test hook or an artificially slow filesystem stand-in; neither exists yet in
 // this harness. The guard's "second caller sees status: error" behavior is left to be exercised
 // once such a hook exists, rather than approximated here with a flaky timing race.
