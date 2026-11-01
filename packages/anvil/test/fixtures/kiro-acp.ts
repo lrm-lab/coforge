@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { readdir } from "node:fs/promises";
+import { steeringOutcomesAfterAnswer, steeringOutcomesBeforeAnswer } from "./kiro-steer-outcomes";
 
 type Message = {
   id?: string | number;
@@ -418,28 +419,14 @@ async function handle(request: Message) {
         result(request, { queued: false, messageId, dropped: "epoch_changed" });
         break;
       }
+      steeringOutcomesBeforeAnswer(params.message, messageId, update);
       result(request, { queued: true, messageId });
       update({
         sessionUpdate: "session_info_update",
         _meta: { kiro: { kind: "steering_queued", messageId, content: params.message } },
       });
-      // A real turn boundary decides whether Kiro gets to inject before its own buffer clears;
-      // these two keywords each drive one side of that outcome deterministically for the test.
-      if (params.message.includes("steer-inject-then-clear")) {
-        update({
-          sessionUpdate: "session_info_update",
-          _meta: { kiro: { kind: "steering_injected", messageId, content: params.message } },
-        });
-        update({
-          sessionUpdate: "session_info_update",
-          _meta: { kiro: { kind: "steering_cleared", messageIds: [messageId] } },
-        });
-      } else if (params.message.includes("steer-clear-without-inject")) {
-        update({
-          sessionUpdate: "session_info_update",
-          _meta: { kiro: { kind: "steering_cleared", messageIds: [messageId] } },
-        });
-      } else if (params.message.includes("steer-outcome-after-turn-end")) {
+      steeringOutcomesAfterAnswer(params.message, messageId, update);
+      if (params.message.includes("steer-outcome-after-turn-end")) {
         // Its outcome is written only when "steer-end-turn" ends the turn, after the response.
         deferredSteer = {
           messageId,

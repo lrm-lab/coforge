@@ -36,13 +36,6 @@ export type AcpConnectionOptions = {
   capabilityCheck?(response: InitializeResponse): void;
   /** A stderr line from the runtime, for a failure it reports only there. */
   onStderr?(line: string): void;
-  /**
-   * How `session/update` reaches `onUpdate`. The default record tap is synchronous, so an update
-   * keeps its place before the response that follows it. A runtime whose session registers state
-   * from a response before its next update means something (Kiro's steering) needs the ACP
-   * client's own dispatch instead, which runs after that response.
-   */
-  updateDispatch?: "tap" | "notification";
   /** Extra ACP notification methods this runtime publishes, observed like `session/update`. */
   notifications?: readonly string[];
   /** Each observed notification, synchronously, so it keeps its place before the response that
@@ -76,7 +69,6 @@ export function acpProcess(
     onPermission?(request: RequestPermissionRequest): RequestPermissionResponse;
     onPromptWrite?(): void;
     onStderr?(line: string): void;
-    updateDispatch?: "tap" | "notification";
   },
 ): AcpConnection {
   return new AcpConnection({
@@ -91,7 +83,6 @@ export function acpProcess(
     onPermission: options.onPermission,
     onPromptWrite: options.onPromptWrite,
     onStderr: options.onStderr,
-    updateDispatch: options.updateDispatch,
     configReady: profile.configReady,
     capabilityCheck: profile.capabilityCheck,
   });
@@ -121,12 +112,7 @@ export class AcpConnection {
     );
     this.process.onStderr((line) => options.onStderr?.(line));
     this.connection = client({ name: host.clientInfo.name })
-      .onNotification("session/update", ({ params }) => {
-        // In `notification` mode the ACP client's own dispatch delivers the update, after the
-        // response it follows; the record tap below still collects configuration.
-        if (this.options.updateDispatch === "notification")
-          this.options.onUpdate?.("session/update", params);
-      })
+      .onNotification("session/update", () => {})
       .onRequest("session/request_permission", ({ params }) => {
         return options.onPermission?.(params) ?? { outcome: { outcome: "cancelled" } };
       })
@@ -146,8 +132,6 @@ export class AcpConnection {
             this.#config.set(params.sessionId, config);
             for (const listener of this.#configChanged) listener();
           }
-          if (record.method === "session/update" && options.updateDispatch === "notification")
-            return;
           options.onUpdate?.(String(record.method), record.params);
         }) as ReadableStream<AnyMessage>,
         writable: new WritableStream<AnyMessage>({

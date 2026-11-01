@@ -38,6 +38,13 @@ export class KiroTurnSteering {
    * `_session/steer` call that returned `queued: true`; drained by the matching
    * `steering_cleared` (Kiro's `steer` delivery mode). */
   readonly #steeredMessages = new Map<string, SteeredMessage>();
+  /**
+   * A steering outcome Kiro wrote before the `_session/steer` answer that names its steer: the
+   * synchronous update tap can deliver `steering_injected`/`steering_cleared` first, and the steer
+   * is registered only when that answer arrives. Kept by message id and merged then; an id no
+   * steer claims by the turn's end is dropped with the turn.
+   */
+  readonly #earlyOutcomes = new Map<string, "injected" | "cleared">();
   /** Wakes `settle` when a steering outcome arrives. */
   #observed: (() => void) | undefined;
 
@@ -65,7 +72,19 @@ export class KiroTurnSteering {
       // Falls through to the shared "not accepted" handling below.
     }
     if (response?.queued && this.ports.hasLiveTurn()) {
-      this.#steeredMessages.set(response.messageId, { text: message, injected: false, options });
+      const early = this.#earlyOutcomes.get(response.messageId);
+      this.#earlyOutcomes.delete(response.messageId);
+      // A clear that arrived first means Kiro discarded it before the model read it: the steer is
+      // still accepted (one ACK), and the notice is redelivered once idle.
+      if (early === "cleared") {
+        this.#emitUndelivered(message, options);
+        return;
+      }
+      this.#steeredMessages.set(response.messageId, {
+        text: message,
+        injected: early === "injected",
+        options,
+      });
       return;
     }
     if (response?.queued)
@@ -84,6 +103,7 @@ export class KiroTurnSteering {
     if (meta?.kind === "steering_injected" && typeof meta.messageId === "string") {
       const entry = this.#steeredMessages.get(meta.messageId);
       if (entry) entry.injected = true;
+      else this.#earlyOutcomes.set(meta.messageId, "injected");
       this.#observed?.();
     }
     if (meta?.kind === "steering_cleared" && Array.isArray(meta.messageIds)) {
@@ -95,7 +115,11 @@ export class KiroTurnSteering {
         if (typeof id !== "string") continue;
         const entry = this.#steeredMessages.get(id);
         this.#steeredMessages.delete(id);
-        if (entry && !entry.injected) this.#emitUndelivered(entry.text, entry.options);
+        if (entry) {
+          if (!entry.injected) this.#emitUndelivered(entry.text, entry.options);
+        } else if (this.#earlyOutcomes.get(id) !== "injected")
+          // The model read it, then Kiro cleared its buffer: the clear says nothing new.
+          this.#earlyOutcomes.set(id, "cleared");
       }
       this.#observed?.();
     }
@@ -133,11 +157,14 @@ export class KiroTurnSteering {
       this.#steeredMessages.delete(id);
       if (entry && !entry.injected) this.#emitUndelivered(entry.text, entry.options);
     }
+    // Outcomes no steer claimed belong to this turn only.
+    this.#earlyOutcomes.clear();
   }
 
   /** Forgets every steer, as a disposed session does. */
   clear(): void {
     this.#steeredMessages.clear();
+    this.#earlyOutcomes.clear();
   }
 
   /** A notice that never reached the model, named with the deliveries `notify` said it carried. */

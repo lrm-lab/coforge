@@ -61,9 +61,9 @@ export const KIRO_PROFILE: AcpRuntimeProfile = {
  * on the request it could not serve, so its handshake operations fail as
  * `RuntimeLoginRequiredError` the moment either says so.
  *
- * Its updates use the ACP client's own dispatch, not the shared synchronous tap: a steer is
- * registered from `_session/steer`'s answer and then reads the `steering_cleared` that follows
- * it, so that clear must not overtake the answer.
+ * Its updates use the shared synchronous tap like every other ACP adapter; a steering outcome
+ * that arrives before the `_session/steer` answer is kept by `KiroTurnSteering` until the steer
+ * registers.
  */
 export class KiroConnection {
   readonly #inner: AcpConnection;
@@ -88,7 +88,6 @@ export class KiroConnection {
       environment,
       clientInfo: host.clientInfo,
       processTreeSpawner: host.processTreeSpawner,
-      updateDispatch: "notification",
       onUpdate: (method, params) => {
         if (method !== "session/update") return;
         const notification = params as SessionNotification;
