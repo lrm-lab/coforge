@@ -1,24 +1,17 @@
-import {
-  RequestError,
-  type RequestPermissionRequest,
-  type SessionConfigOption,
-} from "@agentclientprotocol/sdk";
 import { dirname, join } from "node:path";
+import type { SessionConfigOption } from "@agentclientprotocol/sdk";
 import type {
   AgentNoticeOptions,
   AgentRuntimeEvent,
   AgentSession,
-  AgentSessionIdentity,
   AgentSessionOptions,
 } from "@coforge/agent";
 import { RuntimeModelNotFoundError } from "#src/contract";
-import { asRecord, nonEmptyString } from "#src/json-record";
-import { scrubRuntimeErrorText } from "#src/runtime-error-text";
+import { AcpSession, type AcpSessionProfile } from "#src/acp/session";
 import {
   commandCodeConnection,
   COMMAND_CODE_ACP_TIMEOUT_MS,
   commandCodeBounded,
-  type CommandCodeConnection,
 } from "./connection";
 import { CommandCodeTurnEvents } from "./update-events";
 import type { CommandCodeProviderOptions } from "./host";
@@ -29,31 +22,11 @@ import {
 } from "./instructions-mod";
 import { COMMAND_CODE_MIN_CLI_VERSION } from "./version";
 
-type Input = {
-  text: string;
-  options?: AgentNoticeOptions;
-  admission: ReturnType<typeof Promise.withResolvers<void>>;
-  attempted: boolean;
-  updates: CommandCodeTurnEvents;
-};
-
 /** One native prompt at a time; local queue custody is never native acceptance. */
 export class CommandCodeSession implements AgentSession {
-  #transport: CommandCodeConnection | undefined;
+  readonly #session: AcpSession;
   #mod: CommandCodeInstructionMod | undefined;
-  readonly #listeners = new Set<(event: AgentRuntimeEvent) => void>();
-  readonly #exitListeners = new Set<() => void>();
-  readonly #queue: Input[] = [];
   readonly #timeoutMs: number;
-  #identity: AgentSessionIdentity | undefined;
-  #active: Input | undefined;
-  #turn: Promise<void> | undefined;
-  #disposed = false;
-  #failed = false;
-  #interrupting = false;
-  #exited = false;
-  #dispose: Promise<void> | undefined;
-  #termination: Promise<void> | undefined;
 
   constructor(
     private readonly command: readonly string[],
@@ -61,68 +34,72 @@ export class CommandCodeSession implements AgentSession {
     private readonly providerOptions: CommandCodeProviderOptions,
   ) {
     this.#timeoutMs = providerOptions.acpTimeoutMs ?? COMMAND_CODE_ACP_TIMEOUT_MS;
+    this.#session = new AcpSession(this.#profile(), options, this.#timeoutMs, commandCodeBounded);
   }
 
-  async open() {
-    this.#mod = await createCommandCodeInstructionMod(this.options.instructions);
-    try {
-      const transport = commandCodeConnection(
-        this.command,
-        this.#mod.modPath,
-        this.options.agentWorkspaceDirectory,
-        this.providerOptions.host.buildEnvironment(this.options),
-        this.providerOptions.host,
-        (sessionId, update) => this.#update(sessionId, update),
-        (request) => this.#permission(request),
-        () => {
-          if (this.#active) this.#active.attempted = true;
-        },
-      );
-      this.#transport = transport;
-      transport.process.onClose(() => {
-        this.#failed = true;
-        void this.#terminate().then(() => this.#exitedNow());
-      });
-      const agent = transport.connection.agent;
-      await transport.initialize(this.#timeoutMs);
-      const loaded = join(dirname(this.#mod.modPath), COMMAND_CODE_INSTRUCTION_MOD_LOADED);
-      if (!(await Bun.file(loaded).exists()))
-        throw new Error(
-          `Command Code did not load the instruction mod. A CLI older than ${COMMAND_CODE_MIN_CLI_VERSION} ignores --mod on cmd acp, and a mods.disableAll setting skips --mod, so the standing instructions would be missing.`,
-        );
-      const cwd = this.options.agentWorkspaceDirectory;
-      const resuming =
-        this.options.sessionId !== undefined && this.options.sessionMode !== "create";
-      const state = resuming
-        ? await this.#bounded(
-            agent.request("session/resume", {
-              sessionId: this.options.sessionId!,
-              cwd,
-              mcpServers: [],
-            }),
-          )
-        : await this.#bounded(agent.request("session/new", { cwd, mcpServers: [] }));
-      const sessionId = resuming
-        ? this.options.sessionId!
-        : "sessionId" in state
-          ? state.sessionId
-          : undefined;
-      if (typeof sessionId !== "string" || !sessionId.trim())
-        throw new Error("Command Code did not create a session");
-      this.#identity = { sessionId, state: resuming ? "resumable" : "empty" };
-      await this.#applyRuntimeConfig(sessionId, state.configOptions ?? []);
-      await this.options.onSessionId?.(sessionId);
-    } catch (error) {
-      await this.dispose().catch(() => undefined);
-      throw error;
-    }
+  #profile(): AcpSessionProfile {
+    const { options, providerOptions, command, timeoutMs } = {
+      options: this.options,
+      providerOptions: this.providerOptions,
+      command: this.command,
+      timeoutMs: this.#timeoutMs,
+    };
+    return {
+      label: "Command Code",
+      openTransport: (sink) =>
+        commandCodeConnection(
+          command,
+          this.#mod?.modPath,
+          options.agentWorkspaceDirectory,
+          providerOptions.host.buildEnvironment(options),
+          providerOptions.host,
+          (sessionId, update) => sink.update(sessionId, update),
+          (request) => sink.permission(request),
+          () => sink.promptWritten(),
+        ),
+      openSession: async (transport, sessionId) => {
+        if (!this.#mod) throw new Error("Command Code instruction mod is not prepared");
+        const loaded = join(dirname(this.#mod.modPath), COMMAND_CODE_INSTRUCTION_MOD_LOADED);
+        if (!(await Bun.file(loaded).exists()))
+          throw new Error(
+            `Command Code did not load the instruction mod. A CLI older than ${COMMAND_CODE_MIN_CLI_VERSION} ignores --mod on cmd acp, and a mods.disableAll setting skips --mod, so the standing instructions would be missing.`,
+          );
+        const cwd = options.agentWorkspaceDirectory;
+        const resuming = sessionId !== undefined && options.sessionMode !== "create";
+        const state = resuming
+          ? await commandCodeBounded(
+              transport.connection.agent.request("session/resume", {
+                sessionId: sessionId!,
+                cwd,
+                mcpServers: [],
+              }),
+              timeoutMs,
+            )
+          : await commandCodeBounded(
+              transport.connection.agent.request("session/new", { cwd, mcpServers: [] }),
+              timeoutMs,
+            );
+        const created = resuming ? sessionId! : "sessionId" in state ? state.sessionId : undefined;
+        if (typeof created !== "string" || !created.trim())
+          throw new Error("Command Code did not create a session");
+        await this.#applyRuntimeConfig(transport, created, state.configOptions ?? []);
+        return { sessionId: created, resumable: resuming };
+      },
+      turn: () => new CommandCodeTurnEvents(providerOptions.host),
+      cleanup: async () => {
+        await this.#mod?.remove();
+      },
+    };
   }
 
-  async #applyRuntimeConfig(sessionId: string, initial: SessionConfigOption[]) {
+  async #applyRuntimeConfig(
+    transport: ReturnType<AcpSessionProfile["openTransport"]>,
+    sessionId: string,
+    initial: SessionConfigOption[],
+  ) {
     const model = this.options.runtime?.model;
     const reasoning = this.options.runtime?.reasoning;
     if (!model && !reasoning) return;
-    const transport = this.#requireTransport();
     let config = initial;
     const select = async (id: string, value: string) => {
       const option = config.find((entry) => entry.id === id);
@@ -137,12 +114,13 @@ export class CommandCodeSession implements AgentSession {
         if (id === "model") throw new RuntimeModelNotFoundError(value);
         throw new Error(`Command Code ${id} selection is unavailable`);
       }
-      const configured = await this.#bounded(
+      const configured = await commandCodeBounded(
         transport.connection.agent.request("session/set_config_option", {
           sessionId,
           configId: id,
           value,
         }),
+        this.#timeoutMs,
       );
       config = configured.configOptions;
       if (!config.some((entry) => entry.id === id && entry.currentValue === value))
@@ -158,209 +136,37 @@ export class CommandCodeSession implements AgentSession {
     const effort = config.find((entry) => entry.category === "thought_level");
     if (effort) await select(effort.id, reasoning);
   }
-  #requireTransport() {
-    const transport = this.#transport;
-    if (!transport) throw new Error("Command Code session is not open");
-    return transport;
+
+  async open() {
+    this.#mod = await createCommandCodeInstructionMod(this.options.instructions);
+    await this.#session.open();
   }
 
   get hasLiveTurn() {
-    return !this.#disposed && (!!this.#active || this.#queue.length > 0);
+    return this.#session.hasLiveTurn;
   }
   sendMessage(text: string) {
-    return this.notify(text);
+    return this.#session.sendMessage(text);
   }
-  notify(text: string, options?: AgentNoticeOptions): Promise<void> {
-    if (this.#disposed || this.#failed || this.#interrupting)
-      return Promise.reject(new Error("Command Code cannot accept input before submission"));
-    const admission = Promise.withResolvers<void>();
-    this.#queue.push({
-      text,
-      options,
-      admission,
-      attempted: false,
-      updates: new CommandCodeTurnEvents(this.providerOptions.host),
-    });
-    this.#startNext();
-    return admission.promise;
-  }
-  #startNext() {
-    if (this.#active || this.#disposed || this.#failed || this.#interrupting) return;
-    const input = this.#queue.shift();
-    if (!input) return;
-    this.#active = input;
-    this.#turn = this.#run(input);
-  }
-  async #run(input: Input) {
-    let status: "completed" | "interrupted" | "failed" = "failed";
-    try {
-      const response = await this.#requireTransport().connection.agent.request("session/prompt", {
-        sessionId: this.#identity!.sessionId,
-        prompt: [{ type: "text", text: input.text }],
-      });
-      if (response.stopReason === "end_turn") {
-        this.#accept(input);
-        status = "completed";
-      } else if (response.stopReason === "cancelled") {
-        input.admission.reject(
-          new Error("Command Code input cancelled; delivery outcome is unknown"),
-        );
-        status = "interrupted";
-      } else {
-        this.#accept(input);
-        this.#emit(
-          { type: "error", message: `Command Code prompt stopped: ${response.stopReason}` },
-          input,
-        );
-      }
-    } catch (error) {
-      const rpcFailure = error instanceof RequestError;
-      if (rpcFailure && input.attempted) this.#accept(input);
-      else
-        input.admission.reject(
-          new Error(
-            input.attempted
-              ? "Command Code input delivery outcome is unknown"
-              : "Command Code rejected input before submission",
-          ),
-        );
-      // A terminal RPC failure is an accepted failed turn. Only transport loss leaves delivery
-      // unknown; neither outcome permits automatic resending or notice-undelivered.
-      const data = rpcFailure ? asRecord(error.data) : undefined;
-      const detail =
-        nonEmptyString(data?.detail) ??
-        nonEmptyString(data?.message) ??
-        (rpcFailure ? nonEmptyString(error.data) : undefined) ??
-        (error instanceof Error ? error.message : "Command Code prompt failed");
-      if (!this.#disposed)
-        this.#emit(
-          {
-            type: "error",
-            message: scrubRuntimeErrorText(detail),
-            ...(rpcFailure ? { providerErrorCode: String(error.code) } : {}),
-          },
-          input,
-        );
-      if (!(error instanceof RequestError)) this.#failed = true;
-    } finally {
-      if (this.#active === input) {
-        this.#active = undefined;
-        for (const event of input.updates.end()) this.#emit(event, input);
-        if (!this.#disposed) this.#emit({ type: "completed", status }, input);
-        this.#startNext();
-        if (this.#failed && !this.#disposed) void this.#terminate();
-      }
-    }
-  }
-  #update(sessionId: string, update: Readonly<Record<string, unknown>>) {
-    const input = this.#active;
-    if (this.#disposed || !input || sessionId !== this.#identity?.sessionId) return;
-    const events = input.updates.read(update);
-    if (
-      events.some(
-        (event) =>
-          event.type === "text-delta" ||
-          event.type === "thinking-delta" ||
-          event.type === "tool-start" ||
-          event.type === "tool-output" ||
-          event.type === "tool-end",
-      )
-    ) {
-      this.#accept(input);
-    }
-    for (const event of events) this.#emit(event, input);
-  }
-  #accept(input: Input) {
-    input.admission.resolve();
-    if (this.#identity && this.#identity.state !== "resumable") {
-      this.#identity = { ...this.#identity, state: "resumable" };
-      this.#emit({ type: "session", identity: this.#identity }, input);
-    }
-  }
-  #permission(request: RequestPermissionRequest) {
-    const allow =
-      !this.#disposed &&
-      !this.#interrupting &&
-      !!this.#active &&
-      request.sessionId === this.#identity?.sessionId
-        ? request.options.find((option) => option.kind === "allow_once")
-        : undefined;
-    return {
-      outcome: allow
-        ? { outcome: "selected" as const, optionId: allow.optionId }
-        : { outcome: "cancelled" as const },
-    };
+  notify(text: string, options?: AgentNoticeOptions) {
+    return this.#session.notify(text, options);
   }
   cancelPendingNotices() {
-    for (const input of this.#queue.splice(0))
-      input.admission.reject(new Error("Command Code queued input cancelled before submission"));
-    this.#active?.admission.reject(
-      new Error(
-        this.#active.attempted
-          ? "Command Code input cancelled; delivery outcome is unknown"
-          : "Command Code input cancelled before submission",
-      ),
-    );
+    this.#session.cancelPendingNotices();
   }
-  async interrupt() {
-    if (this.#disposed) return;
-    this.#interrupting = true;
-    this.cancelPendingNotices();
-    try {
-      if (this.#active) {
-        await this.#requireTransport().connection.agent.notify("session/cancel", {
-          sessionId: this.#identity!.sessionId,
-        });
-        if (this.#turn) await this.#bounded(this.#turn);
-      }
-    } catch (error) {
-      await this.dispose();
-      throw error;
-    } finally {
-      this.#interrupting = false;
-    }
+  interrupt() {
+    return this.#session.interrupt();
   }
-  async readSessionIdentity() {
-    return this.#identity;
+  readSessionIdentity() {
+    return this.#session.readSessionIdentity();
   }
   subscribe(listener: (event: AgentRuntimeEvent) => void) {
-    this.#listeners.add(listener);
-    return () => this.#listeners.delete(listener);
+    return this.#session.subscribe(listener);
   }
   onExit(listener: () => void) {
-    if (this.#exited) queueMicrotask(listener);
-    else this.#exitListeners.add(listener);
-    return () => this.#exitListeners.delete(listener);
+    return this.#session.onExit(listener);
   }
-  #emit(event: AgentRuntimeEvent, input?: Input) {
-    const conversation = input?.options?.conversation ?? this.options.conversation;
-    for (const listener of this.#listeners)
-      listener(conversation ? { ...event, conversation } : event);
-  }
-  #terminate() {
-    return (this.#termination ??= this.dispose().catch(() => {
-      this.#emit({ type: "error", message: "Command Code process cleanup failed" });
-    }));
-  }
-  #exitedNow() {
-    this.#exited = true;
-    for (const listener of this.#exitListeners) listener();
-    this.#exitListeners.clear();
-  }
-  #bounded<T>(work: Promise<T>) {
-    return commandCodeBounded(work, this.#timeoutMs);
-  }
-  dispose(options?: Readonly<{ cutoffAtMs?: number }>): Promise<void> {
-    this.#disposed = true;
-    this.cancelPendingNotices();
-    this.#dispose ??= this.#close(options);
-    return this.#dispose;
-  }
-  async #close(options?: Readonly<{ cutoffAtMs?: number }>) {
-    try {
-      await this.#transport?.dispose(options);
-    } finally {
-      await this.#mod?.remove();
-    }
+  dispose(options?: Readonly<{ cutoffAtMs?: number }>) {
+    return this.#session.dispose(options);
   }
 }
