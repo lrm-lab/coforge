@@ -31,7 +31,7 @@ export type AcpSessionProfile = Readonly<{
   openSession(
     transport: AcpConnection,
     sessionId: string | undefined,
-  ): Promise<{ sessionId: string; resumable: boolean }>;
+  ): Promise<{ sessionId: string; resumable: boolean; replacedSessionId?: string }>;
   /** One turn's event projection. */
   turn(): AcpTurnReader;
   /** Anything the runtime owns outside the process: an instruction mod, private files. */
@@ -106,7 +106,7 @@ export class AcpSession implements AgentSession {
         sessionId: opened.sessionId,
         state: opened.resumable ? "resumable" : "empty",
       };
-      await this.options.onSessionId?.(opened.sessionId);
+      await this.options.onSessionId?.(opened.sessionId, opened.replacedSessionId);
     } catch (error) {
       await this.dispose().catch(() => undefined);
       throw error;
