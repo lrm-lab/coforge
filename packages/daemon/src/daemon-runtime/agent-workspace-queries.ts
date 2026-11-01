@@ -13,10 +13,14 @@ import {
   readAgentWorkspaceFile,
 } from "#src/agent-runtime/agent-workspace-files";
 
+/** Total workspace observations this daemon may run at once across all Agents and requests. */
+export const WORKSPACE_FILES_SCAN_CONCURRENCY = 4;
+
 /** Serialized, safe workspace observations, separate from runtime lifecycle and mutations. */
 export class AgentWorkspaceQueries {
   #skillsScanning = false;
   #workspaceFilesScanning = new Set<string>();
+  #workspaceFilesInFlight = 0;
   constructor(private readonly provider: (agentId: string) => RuntimeProvider | undefined) {}
   async listSkills(
     connection: DaemonConfig,
@@ -51,8 +55,13 @@ export class AgentWorkspaceQueries {
     request: Pick<AgentWorkspaceFilesListRequest, "agentId" | "dirPath" | "includeHidden">,
   ): Promise<Pick<AgentWorkspaceFilesListResult, "status" | "rootPath" | "entries">> {
     const unavailable = { status: "error" as const, rootPath: "", entries: [] };
-    if (this.#workspaceFilesScanning.has(request.agentId)) return unavailable;
+    if (
+      this.#workspaceFilesScanning.has(request.agentId) ||
+      this.#workspaceFilesInFlight >= WORKSPACE_FILES_SCAN_CONCURRENCY
+    )
+      return unavailable;
     this.#workspaceFilesScanning.add(request.agentId);
+    this.#workspaceFilesInFlight += 1;
     try {
       return await listAgentWorkspaceFiles({
         agentWorkspaceDirectory: agentWorkspaceDirectory(
@@ -68,6 +77,7 @@ export class AgentWorkspaceQueries {
       return unavailable;
     } finally {
       this.#workspaceFilesScanning.delete(request.agentId);
+      this.#workspaceFilesInFlight -= 1;
     }
   }
 
@@ -88,8 +98,13 @@ export class AgentWorkspaceQueries {
       contentType: "",
       contentBase64: "",
     };
-    if (this.#workspaceFilesScanning.has(request.agentId)) return unavailable;
+    if (
+      this.#workspaceFilesScanning.has(request.agentId) ||
+      this.#workspaceFilesInFlight >= WORKSPACE_FILES_SCAN_CONCURRENCY
+    )
+      return unavailable;
     this.#workspaceFilesScanning.add(request.agentId);
+    this.#workspaceFilesInFlight += 1;
     try {
       return await readAgentWorkspaceFile({
         agentWorkspaceDirectory: agentWorkspaceDirectory(
@@ -104,6 +119,7 @@ export class AgentWorkspaceQueries {
       return unavailable;
     } finally {
       this.#workspaceFilesScanning.delete(request.agentId);
+      this.#workspaceFilesInFlight -= 1;
     }
   }
 }

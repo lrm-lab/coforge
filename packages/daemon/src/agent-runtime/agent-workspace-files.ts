@@ -89,6 +89,23 @@ const LIST_STAT_CONCURRENCY = 32;
 /** A bounded delete fan-out keeps recursive removals fast without flooding the disk. */
 const DELETE_CONCURRENCY = 4;
 
+async function runBounded<T>(
+  values: readonly T[],
+  concurrency: number,
+  work: (value: T) => Promise<void>,
+) {
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, values.length) }, async () => {
+      while (true) {
+        const index = next++;
+        if (index >= values.length) return;
+        await work(values[index]!);
+      }
+    }),
+  );
+}
+
 const emptyListEntries: AgentWorkspaceFileEntry[] = [];
 
 function isENOENT(error: unknown): boolean {
@@ -171,19 +188,13 @@ export async function deleteAgentWorkspaceFiles(params: {
       return { status: isENOENT(error) ? "missing" : classifyDeleteFailure(error) };
     }
     let firstError: unknown;
-    for (let offset = 0; offset < entries.length; offset += DELETE_CONCURRENCY) {
-      const errors = await Promise.all(
-        entries.slice(offset, offset + DELETE_CONCURRENCY).map(async (entry) => {
-          try {
-            await rm(join(root, entry), { recursive: true, force: true });
-            return undefined;
-          } catch (error) {
-            return error;
-          }
-        }),
-      );
-      for (const error of errors) firstError ??= error;
-    }
+    await runBounded(entries, DELETE_CONCURRENCY, async (entry) => {
+      try {
+        await rm(join(root, entry), { recursive: true, force: true });
+      } catch (error) {
+        firstError ??= error;
+      }
+    });
     // The directory itself goes too: an Agent that is already gone leaves exactly a directory
     // with nothing else in it, which is still a workspace a person meant to delete.
     try {
