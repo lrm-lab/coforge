@@ -1,4 +1,5 @@
 import type { AgentRuntimeConfig } from "@lrm/coforge-anvil";
+import type { AgentStopRegistry } from "./agent-stop-registry";
 import type { AgentRuntime } from "#src/agent-runtime/agent-process-manager";
 import type { AgentProcessManager } from "#src/agent-runtime/agent-process-manager";
 import type { AgentInputDrain } from "./agent-input-drain";
@@ -29,7 +30,8 @@ export type AgentStartCoordinatorPorts = {
   launchCoordinator: AgentLaunchCoordinator;
   exitedDelivery: AgentExitedDelivery;
   releaseSurvivingHolds(agentId: string): void;
-  sessionReferences: Map<string, { sessionId?: string }>;
+  /** The Session each launch reported. */
+  sessions: Pick<AgentStopRegistry, "sessionId">;
 };
 
 export function startAgent(
@@ -153,7 +155,7 @@ export function startAgent(
           kind: "startup",
           text: agentStartupInput(
             request.sessionMode !== "create" &&
-              Boolean(request.sessionId ?? ports.sessionReferences.get(agentId)?.sessionId),
+              Boolean(request.sessionId ?? ports.sessions.sessionId(agentId)),
           ),
           completion,
         }))

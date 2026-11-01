@@ -1,4 +1,5 @@
 import { AGENT_STARTUP_TIMEOUT_MS } from "#src/agent-runtime/agent-startup";
+import type { AgentStopRegistry } from "./agent-stop-registry";
 import type { AgentControl } from "#src/agent-runtime/agent-control";
 import type { AgentInputDrain } from "./agent-input-drain";
 import type { AgentStopCoordinator } from "./agent-stop-coordinator";
@@ -15,7 +16,8 @@ const logger = getLogger(["coforge", "daemon", "runtime"]);
 
 type Ports = {
   stopping: boolean;
-  stoppingAgents: Set<string>;
+  /** Which Agents are stopping: a failed startup joins that state. */
+  stops: Pick<AgentStopRegistry, "beginStop" | "pendingStop" | "forgetStopping">;
   inputDrain: AgentInputDrain;
   currentActivityLaunches: Map<string, ActivityLaunch>;
   interruptIfBusy(agentId: string, launch: ActivityLaunch | undefined): void;
@@ -24,7 +26,6 @@ type Ports = {
   revokeLocalLaunch(agentId: string): void;
   offlineResidency: AgentOfflineResidency;
   stopCoordinator: AgentStopCoordinator;
-  agentStops: Map<string, Promise<void>>;
   drafts: AgentActivityDrafts;
   agentControl: AgentControl;
 };
@@ -34,7 +35,7 @@ export async function abandonLaunch(
   agentId: string,
   error: unknown,
 ): Promise<unknown> {
-  ports.stoppingAgents.add(agentId);
+  ports.stops.beginStop(agentId);
   ports.inputDrain.close(agentId, error);
   const activityLaunch = ports.currentActivityLaunches.get(agentId);
   activityLaunch?.startup?.dispose();
@@ -49,7 +50,7 @@ export async function abandonLaunch(
   try {
     await ports.stopCoordinator.releaseAgentRuntime(agentId);
     if (offlineError) ports.offlineResidency.remember(agentId, offlineError);
-    if (!ports.agentStops.has(agentId)) ports.stoppingAgents.delete(agentId);
+    if (!ports.stops.pendingStop(agentId)) ports.stops.forgetStopping(agentId);
     return error;
   } catch (cleanupError) {
     return cleanupError;

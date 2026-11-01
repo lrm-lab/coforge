@@ -1,4 +1,5 @@
 import { createRuntimeAuthAdapter } from "#src/code-agent/registry";
+import { AgentStopRegistry } from "./agent-stop-registry";
 import type { RuntimeAuthAdapter, RuntimeAuthProvider } from "@lrm/coforge-anvil";
 import {
   type AgentRuntimeConfig,
@@ -26,7 +27,6 @@ import {
   type AgentRestartConfig,
   type AgentRuntime,
 } from "#src/agent-runtime/agent-process-manager";
-import { type SessionReference } from "./launch-identity";
 import { activityDraft } from "./activity-draft";
 import { recoveryOf, runtimeConfigOf, type AgentRecoveryContext } from "./runtime-launch-intent";
 import { LaunchFailureBackoff } from "#src/agent-runtime/launch-failure-backoff";
@@ -277,8 +277,8 @@ export class DaemonRuntime {
     restartConfig: (agentId) => this.#agentProcessManager.restartConfig(agentId),
     lastBusyLaunch: (agentId) => this.#activityPublisher.lastBusy(agentId)?.launch,
     resumable: (agentId) => this.#runningMentionIdentity(agentId) !== undefined,
-    sessionId: (agentId) => this.#sessionReferences.get(agentId)?.sessionId,
-    isStopping: (agentId) => this.#stoppingAgents.has(agentId),
+    sessionId: (agentId) => this.#stopState.sessionId(agentId),
+    isStopping: (agentId) => this.#stopState.stopping(agentId),
     daemonIdleFacts: (agentId) => {
       const queue = this.#inputDrain.get(agentId);
       return {
@@ -287,9 +287,7 @@ export class DaemonRuntime {
         inputsQueued: queue !== undefined && (queue.items.length > 0 || queue.drain !== undefined),
         launching: this.#agentLaunches.has(agentId),
         stopping:
-          this.#stoppingAgents.has(agentId) ||
-          this.#agentStops.has(agentId) ||
-          this.#agentProcessManager.isStopping(agentId),
+          this.#stopState.isStopping(agentId) || this.#agentProcessManager.isStopping(agentId),
         runnerHold: this.#runnerHold !== undefined,
         migrating: this.#migrations?.holds(agentId) === true,
       };
@@ -318,7 +316,7 @@ export class DaemonRuntime {
     agentIds: () => this.#agentProcessManager.runningAgentIds(),
     hasQueuedDeliveries: (agentId) => this.#deliveryQueue.hasQueued(agentId),
     runnerHold: () => this.#runnerHold !== undefined,
-    isStopping: (agentId) => this.#stoppingAgents.has(agentId),
+    isStopping: (agentId) => this.#stopState.stopping(agentId),
     isRecovering: (agentId) => this.#runtimeRelease.isRecovering(agentId),
     stalled: (agentId) => this.#runtimeRelease.stalled(agentId),
     recover: (agentId, stalled) => this.#runtimeRelease.recoverStalled(agentId, stalled),
@@ -367,14 +365,13 @@ export class DaemonRuntime {
   /** Agents launched with the weekly-report-collect skill pack. */
   readonly #collectSkillAgents = new Set<string>();
   readonly #agentLaunches = new Map<string, Promise<AgentRuntime>>();
-  readonly #sessionReferences = new Map<string, SessionReference>();
   readonly #inputDrain = new AgentInputDrain({
     runnerHeld: () => this.#runnerHold !== undefined,
     sessionFor: (agentId) => this.#agentProcessManager.session(agentId),
     launchFor: (agentId) => this.#currentActivityLaunches.get(agentId),
     hasQueuedDeliveries: (agentId) => this.#deliveryQueue.hasQueued(agentId),
     isLaunching: (agentId) => this.#agentLaunches.has(agentId),
-    isStopping: (agentId) => this.#stoppingAgents.has(agentId),
+    isStopping: (agentId) => this.#stopState.stopping(agentId),
     deliverMessage: (_agentId, message) =>
       isTrackedMention(message)
         ? this.#mentionDeliveries.deliver(message)
@@ -401,9 +398,9 @@ export class DaemonRuntime {
    * its relaunch. Forgotten when the Agent's input queue closes or its process exits, so a later
    * launch introduces again while the server still asks. */
   readonly #introducedAgents = new Set<string>();
-  readonly #stoppingAgents = new Set<string>();
   readonly #desktops = createAgentDesktopHolds();
-  readonly #agentStops = new Map<string, Promise<void>>();
+  /** Which Agents are stopping and which Session each launch reported. */
+  readonly #stopState = new AgentStopRegistry();
   readonly #currentActivityLaunches = new Map<string, ActivityLaunch>();
   readonly #agentStatusSequences = new Map<string, number>();
   /** The per-Agent offline record a runtime error leaves (`agent-offline-residency.ts`). */
@@ -434,7 +431,7 @@ export class DaemonRuntime {
   readonly #observedUsage = new Map<RuntimeProvider, UsageSnapshot>();
   /** Per-launch context-usage and service-tier readings (`agent-usage-report.ts`). */
   readonly #usageReport = new AgentUsageReport({
-    sessionId: (agentId) => this.#sessionReferences.get(agentId)?.sessionId,
+    sessionId: (agentId) => this.#stopState.sessionId(agentId),
     envelope: () => this.#env(),
     daemonInstanceId: () => this.#runtimeInstanceId,
     recordClientSeq: (agentId, clientSeq) =>
@@ -639,7 +636,7 @@ export class DaemonRuntime {
       startAgent: (agentId, config, recovery, request) =>
         this.#startAgent(agentId, config, recovery, request),
       rebind: (intent, launchId) => this.#rebindAgent(intent, launchId),
-      forgetSessionReference: (agentId) => this.#sessionReferences.delete(agentId),
+      forgetSessionReference: (agentId) => this.#stopState.forgetSession(agentId),
       startSettled: (agentId) => this.#exitedDelivery.releaseStartBuffer(agentId),
       sendSessionInvalidate: (message) => this.#transport.sendSessionInvalidate?.(message),
       reportSession: (report) => this.#reportAgentSession(report),
@@ -706,7 +703,7 @@ export class DaemonRuntime {
       transport: () => this.#transport,
       runtimeInstanceId: this.#runtimeInstanceId,
       agentProcessManager: this.#agentProcessManager,
-      sessionReferences: this.#sessionReferences,
+      sessions: this.#stopState,
       currentActivityLaunches: this.#currentActivityLaunches,
       activityPublisher: this.#activityPublisher,
       phaseBookkeeping: this.#phaseBookkeeping,
@@ -720,7 +717,7 @@ export class DaemonRuntime {
       agentProxyTokens: this.#agentProxyTokens,
       desktops: this.#desktops,
       wakeRecycle: this.#wakeRecycle,
-      stoppingAgents: this.#stoppingAgents,
+      stops: this.#stopState,
       collectSkillAgents: this.#collectSkillAgents,
       introducedAgents: this.#introducedAgents,
       messageAttention: this.#messageAttention,
@@ -731,7 +728,6 @@ export class DaemonRuntime {
       offlineResidency: this.#offlineResidency,
       drafts: this.#drafts,
       systemCleaner: this.systemCleaner,
-      agentStops: this.#agentStops,
       isStopping: () => this.#stopping,
       assertRunning: () => this.#assertRunning(),
       assertAgentNotStopping: (agentId) => this.#assertAgentNotStopping(agentId),
@@ -840,9 +836,7 @@ export class DaemonRuntime {
       mentionDeliveries: this.#mentionDeliveries,
       launchCustody: this.#launchCustody,
       processManager: this.#agentProcessManager,
-      agentStops: this.#agentStops,
-      stoppingAgents: this.#stoppingAgents,
-      sessionReferences: this.#sessionReferences,
+      stops: this.#stopState,
       interruptIfBusy: (agentId, launch) => this.#interruptIfBusy(agentId, launch),
       disposeLaunchObservations: (agentId) => this.#disposeLaunchObservations(agentId),
       revokeLocalLaunch: (agentId) => this.#revokeLocalLaunch(agentId),
@@ -866,7 +860,7 @@ export class DaemonRuntime {
       inputDrain: this.#inputDrain,
       agentLaunches: this.#agentLaunches,
       agentProcessManager: this.#agentProcessManager,
-      stoppingAgents: this.#stoppingAgents,
+      stops: this.#stopState,
       messageAttention: this.#messageAttention,
       mentionDeliveries: this.#mentionDeliveries,
       reminders: this.#reminders,
@@ -899,7 +893,7 @@ export class DaemonRuntime {
   }
 
   #assertAgentNotStopping(agentId: string): void {
-    if (this.#stoppingAgents.has(agentId) || this.#agentProcessManager.isStopping(agentId))
+    if (this.#stopState.stopping(agentId) || this.#agentProcessManager.isStopping(agentId))
       throw new Error(`Agent runtime is stopping: ${agentId}`);
   }
 
@@ -1033,7 +1027,7 @@ export class DaemonRuntime {
         launchCoordinator: this.#launchCoordinator,
         exitedDelivery: this.#exitedDelivery,
         releaseSurvivingHolds: (id) => this.#releaseSurvivingHolds(id),
-        sessionReferences: this.#sessionReferences,
+        sessions: this.#stopState,
       },
       agentId,
       config,
@@ -1071,7 +1065,7 @@ export class DaemonRuntime {
     return {
       assertRunning: () => this.#assertRunning(),
       workspaceId: this.#connection.workspaceId,
-      stoppingAgents: this.#stoppingAgents,
+      stops: this.#stopState,
       runnerHold: this.#runnerHold,
       runtimeRelease: this.#runtimeRelease,
       sync: this.#sync,
@@ -1100,7 +1094,7 @@ export class DaemonRuntime {
   #startupFailurePorts() {
     return {
       stopping: this.#stopping,
-      stoppingAgents: this.#stoppingAgents,
+      stops: this.#stopState,
       inputDrain: this.#inputDrain,
       currentActivityLaunches: this.#currentActivityLaunches,
       interruptIfBusy: (id: string, current: ActivityLaunch | undefined) =>
@@ -1110,7 +1104,6 @@ export class DaemonRuntime {
       revokeLocalLaunch: (id: string) => this.#revokeLocalLaunch(id),
       offlineResidency: this.#offlineResidency,
       stopCoordinator: this.#stopCoordinator,
-      agentStops: this.#agentStops,
       drafts: this.#drafts,
       agentControl: this.#agentControl,
     };
@@ -1125,7 +1118,7 @@ export class DaemonRuntime {
     return rebindAgent(
       {
         currentActivityLaunches: this.#currentActivityLaunches,
-        sessionReferences: this.#sessionReferences,
+        sessions: this.#stopState,
         agentProcessManager: this.#agentProcessManager,
         runtimeInstanceId: this.#runtimeInstanceId,
         envelope: () => this.#env(),
@@ -1185,7 +1178,7 @@ export class DaemonRuntime {
     }
     if (this.#agentControl.managed(intent.agentId))
       throw new Error("Agent requires a fenced Start");
-    const stopping = this.#agentStops.get(intent.agentId);
+    const stopping = this.#stopState.pendingStop(intent.agentId);
     if (stopping) await stopping;
     return this.#startAgent(intent.agentId, runtimeConfigOf(intent), recoveryOf(intent), {
       sessionId: intent.sessionId,
@@ -1323,7 +1316,7 @@ export class DaemonRuntime {
       .filter(
         (agentId) =>
           !this.#agentLaunches.has(agentId) &&
-          !this.#stoppingAgents.has(agentId) &&
+          !this.#stopState.stopping(agentId) &&
           !this.#agentProcessManager.isStopping(agentId),
       );
   }

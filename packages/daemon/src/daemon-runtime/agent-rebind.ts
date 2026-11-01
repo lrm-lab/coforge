@@ -3,15 +3,16 @@ import type {
   AgentSessionReport,
   SessionIdentity,
 } from "@lrm/coforge-sdk/internal";
+import type { AgentStopRegistry } from "./agent-stop-registry";
 import type { AgentProcessManager } from "#src/agent-runtime/agent-process-manager";
 import type { ActivityLaunch } from "./activity-launch";
-import type { SessionReference } from "./launch-identity";
 
 /** The rebind path's reach into the runtime: the launch and session-identity records it
  * re-points in place, the process manager, and the two reports it re-issues under the new scope. */
 export type AgentRebindPorts = Readonly<{
   currentActivityLaunches: Map<string, ActivityLaunch>;
-  sessionReferences: Map<string, SessionReference>;
+  /** The Session each launch reported. */
+  sessions: Pick<AgentStopRegistry, "sessionReference">;
   agentProcessManager: AgentProcessManager;
   runtimeInstanceId: string;
   envelope(): Pick<
@@ -49,7 +50,7 @@ export async function rebindAgent(
 ): Promise<SessionIdentity | undefined> {
   const agentId = intent.agentId;
   const activityLaunch = ports.currentActivityLaunches.get(agentId);
-  const reference = ports.sessionReferences.get(agentId);
+  const reference = ports.sessions.sessionReference(agentId);
   const previousLaunchId = activityLaunch?.launchId ?? reference?.launchId;
   if (activityLaunch) {
     activityLaunch.launchId = launchId;

@@ -3,6 +3,7 @@ import {
   WORKSPACE_PROTOCOL_MAJOR,
   type AgentMessageDelivery,
 } from "@lrm/coforge-sdk/internal";
+import type { AgentStopRegistry } from "./agent-stop-registry";
 import type { AgentProcessManager, AgentRuntime } from "#src/agent-runtime/agent-process-manager";
 import type { AgentDeliveryQueue } from "./agent-delivery-queue";
 import type { AgentExitedDelivery } from "./agent-exited-delivery";
@@ -20,7 +21,8 @@ const logger = getLogger(["coforge", "daemon", "runtime"]);
 export type RuntimeMessageDeliveryPorts = {
   assertRunning(): void;
   workspaceId: string;
-  stoppingAgents: Set<string>;
+  /** Which Agents are stopping. */
+  stops: Pick<AgentStopRegistry, "stopping">;
   runnerHold: { reason: string } | undefined;
   runtimeRelease: RuntimeRelease<ActivityLaunch>;
   sync: AgentFeatureSync;
@@ -44,7 +46,7 @@ export async function handleAgentMessage(
   if (message.workspaceId !== ports.workspaceId)
     throw new Error("agent message targets another Workspace");
   if (isTrackedMention(message)) return handleTrackedMention(ports, message);
-  if (ports.stoppingAgents.has(message.agentId))
+  if (ports.stops.stopping(message.agentId))
     throw new Error(`Agent runtime is stopping: ${message.agentId}`);
   if (ports.runnerHold === undefined) {
     // A stalled provider is restarted for this message; arrivals meanwhile wait for that relaunch.
@@ -111,7 +113,7 @@ export function handleTrackedMention(
   if (refusal) return ports.mentionDeliveries.refuse(message, refusal);
   if (
     ports.runnerHold === undefined &&
-    (ports.stoppingAgents.has(agentId) ||
+    (ports.stops.stopping(agentId) ||
       ports.runtimeRelease.isRecovering(agentId) ||
       !ports.agentProcessManager.session(agentId))
   ) {

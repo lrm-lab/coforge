@@ -20,9 +20,10 @@ import type { AgentMessageAttentionIndex } from "./agent-message-attention-index
 import type { AgentMessageOperations } from "./agent-message-operations";
 import type { AgentStopCoordinator } from "./agent-stop-coordinator";
 import type { ActivityLaunch } from "./activity-launch";
-import type { SessionReference } from "./launch-identity";
 import type { MentionDeliveryTracker } from "./mention-delivery-tracker";
 import type { DaemonConfig } from "./runtime";
+import type { AgentStopRegistry } from "./agent-stop-registry";
+
 import { AgentPreflightError } from "./agent-preflight-error";
 import { isAgentApiKey } from "#src/credentials/agent-api-key";
 import { stopFailureMessage } from "./agent-failure-presentation";
@@ -60,9 +61,8 @@ export type AgentOperationsPorts = {
   mentionDeliveries: MentionDeliveryTracker;
   launchCustody: Pick<AgentLaunchCustody, "acknowledge">;
   processManager: AgentProcessManager;
-  agentStops: Map<string, Promise<void>>;
-  stoppingAgents: Set<string>;
-  sessionReferences: Map<string, SessionReference>;
+  /** Which Agents are stopping and which Session each launch reported. */
+  stops: Pick<AgentStopRegistry, "pendingStop" | "beginStop" | "trackStop" | "settleStop">;
   interruptIfBusy(agentId: string, launch: ActivityLaunch | undefined): void;
   disposeLaunchObservations(agentId: string): void;
   revokeLocalLaunch(agentId: string): void;
@@ -192,11 +192,10 @@ export class AgentOperations {
 
   stopAgent(agentId: string): Promise<void> {
     const { ports } = this;
-    const existingStop = ports.agentStops.get(agentId);
+    const existingStop = ports.stops.pendingStop(agentId);
     if (existingStop) return existingStop;
     // Close this Agent's launch gate and local capabilities before the first await.
-    ports.stoppingAgents.add(agentId);
-    ports.sessionReferences.delete(agentId);
+    ports.stops.beginStop(agentId);
     ports.inputDrain.close(agentId, new Error(`Agent runtime is stopping: ${agentId}`));
     // Invalidate acceptance before disposal: a late native reply cannot acknowledge a cancelled
     // delivery or attach its attention to the replacement session.
@@ -225,10 +224,9 @@ export class AgentOperations {
         throw error;
       })
       .finally(() => {
-        ports.agentStops.delete(agentId);
-        if (!ports.processManager.isStopping(agentId)) ports.stoppingAgents.delete(agentId);
+        ports.stops.settleStop(agentId, ports.processManager.isStopping(agentId));
       });
-    ports.agentStops.set(agentId, stopping);
+    ports.stops.trackStop(agentId, stopping);
     return stopping;
   }
 

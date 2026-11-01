@@ -194,7 +194,7 @@ export async function launchAgentProcess(
     );
     if (parseAssignedSkillPacks(launchConfig.assignedSkillPacks).includes("weekly-report-collect"))
       ports.collectSkillAgents.add(agentId);
-    if (ports.stoppingAgents.has(agentId)) {
+    if (ports.stops.stopping(agentId)) {
       await ports.agentProcessManager.stop(agentId);
       throw new Error(`Agent runtime is stopping: ${agentId}`);
     }
@@ -351,7 +351,7 @@ export async function launchAgentProcess(
         logAgentApiKeyRevokeFailed(agentId, revokeError);
       }
     }
-    if (!ports.isStopping() && !ports.stoppingAgents.has(agentId)) {
+    if (!ports.isStopping() && !ports.stops.stopping(agentId)) {
       // The Activity sends people to the Computer log for the cause; this is that line.
       logger.warning("Agent launch failed", {
         event: "agent_runtime:launch_failed",
@@ -397,7 +397,7 @@ export async function launchAgentProcess(
       ports.activityPublisher.forgetBusy(agentId);
       ports.disposeLaunchObservations(agentId);
       // An explicit Stop still needs this identity to report its final outcome.
-      if (!ports.agentStops.has(agentId)) ports.currentActivityLaunches.delete(agentId);
+      if (!ports.stops.pendingStop(agentId)) ports.currentActivityLaunches.delete(agentId);
     }
     throw error;
   }

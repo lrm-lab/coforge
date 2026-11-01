@@ -1,4 +1,5 @@
 import type { AgentRuntimeConfig, AgentRuntimeEvent } from "@lrm/coforge-anvil";
+import type { AgentStopRegistry } from "./agent-stop-registry";
 import { AgentProcessManager, type AgentRuntime } from "#src/agent-runtime/agent-process-manager";
 import { createAgentDesktopHolds } from "#src/agent-runtime/agent-desktop";
 import { AgentControl } from "#src/agent-runtime/agent-control";
@@ -17,7 +18,7 @@ import { WakeRecycle } from "./wake-recycle";
 import { agentActivityDrafts } from "./agent-activity-drafts";
 import type { ActivityLaunch } from "./activity-launch";
 import type { AgentProxy, LaunchRequest } from "./runtime-launch-types";
-import { resolveLaunchIdentity, type SessionReference } from "./launch-identity";
+import { resolveLaunchIdentity } from "./launch-identity";
 import { runtimeDisplayName, sessionInvalidateActivityText } from "./session-invalidate-activity";
 import { type AgentActivity } from "@lrm/coforge-sdk/internal";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
@@ -37,7 +38,10 @@ export type AgentLaunchCoordinatorPorts = {
   transport: () => DaemonConnectionClient;
   runtimeInstanceId: string;
   agentProcessManager: AgentProcessManager;
-  sessionReferences: Map<string, SessionReference>;
+  /** Which Agents are stopping, and any stop still in flight. */
+  stops: Pick<AgentStopRegistry, "stopping" | "pendingStop">;
+  /** The Session each launch reported. */
+  sessions: Pick<AgentStopRegistry, "sessionReference" | "rememberSession">;
   currentActivityLaunches: Map<string, ActivityLaunch>;
   activityPublisher: AgentActivityPublisher<ActivityLaunch>;
   phaseBookkeeping: PhaseBookkeeping;
@@ -51,7 +55,6 @@ export type AgentLaunchCoordinatorPorts = {
   agentProxyTokens: Map<string, string>;
   desktops: ReturnType<typeof createAgentDesktopHolds>;
   wakeRecycle: WakeRecycle;
-  stoppingAgents: Set<string>;
   collectSkillAgents: Set<string>;
   introducedAgents: Set<string>;
   messageAttention: AgentMessageAttentionIndex;
@@ -62,7 +65,6 @@ export type AgentLaunchCoordinatorPorts = {
   offlineResidency: AgentOfflineResidency;
   drafts: Drafts;
   systemCleaner: SystemCleaner;
-  agentStops: Map<string, Promise<void>>;
   isStopping: () => boolean;
   assertRunning: () => void;
   assertAgentNotStopping: (agentId: string) => void;
@@ -124,10 +126,10 @@ export class AgentLaunchCoordinator {
       resolveLaunchIdentity({
         request,
         provider: config.provider,
-        previous: this.ports.sessionReferences.get(agentId),
+        previous: this.ports.sessions.sessionReference(agentId),
         serverLaunch,
       });
-    this.ports.sessionReferences.set(agentId, reference);
+    this.ports.sessions.rememberSession(agentId, reference);
     const launch: ActivityLaunch = {
       launchId,
       clientSeq: reused ? this.ports.agentProcessManager.lastClientSeq(agentId) : 0,

@@ -1,4 +1,5 @@
 import { getLogger } from "@logtape/logtape";
+import type { AgentStopRegistry } from "./agent-stop-registry";
 import type { DaemonShutdownReason } from "@lrm/coforge-sdk/internal";
 import { AgentProcessCleanupError } from "@lrm/coforge-anvil";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
@@ -44,7 +45,8 @@ export type RuntimeStopPorts = {
   inputDrain: AgentInputDrain;
   agentLaunches: Map<string, Promise<unknown>>;
   agentProcessManager: AgentProcessManager;
-  stoppingAgents: Set<string>;
+  /** Which Agents are stopping: a whole-runtime stop marks them all before it awaits. */
+  stops: Pick<AgentStopRegistry, "beginAll" | "stoppingAgentIds" | "clear">;
   messageAttention: AgentMessageAttentionIndex;
   mentionDeliveries: MentionDeliveryTracker;
   reminders: Pick<ReminderScheduler, "stop" | "awaitIdle">;
@@ -109,7 +111,7 @@ export class RuntimeStop {
       ...ports.agentLaunches.keys(),
       ...ports.agentProcessManager.activeAgentIds(),
     ])) {
-      ports.stoppingAgents.add(agentId);
+      ports.stops.beginAll([agentId]);
       ports.inputDrain.close(agentId, new Error("daemon runtime is stopping"));
       ports.messageAttention.clearAgent(agentId, { cancelNotices: true });
       void ports.mentionDeliveries.cancelAgent(agentId);
@@ -214,10 +216,10 @@ export class RuntimeStop {
     await Promise.allSettled(ports.inputDrain.drains());
     try {
       // Reconcile sessions whose creation finished during shutdown, including failed cleanup.
-      for (const agentId of ports.stoppingAgents)
+      for (const agentId of ports.stops.stoppingAgentIds())
         if (ports.agentProcessManager.isStopping(agentId)) throw new AgentProcessCleanupError();
       await ports.agentProcessManager.shutdown();
-      ports.stoppingAgents.clear();
+      ports.stops.clear();
       for (const { id, session, launchId } of sessions) {
         if (launchId)
           await ports.agentControl.stopped(id, launchId, await session?.readSessionIdentity?.());
