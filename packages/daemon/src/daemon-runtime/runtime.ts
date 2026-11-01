@@ -109,6 +109,7 @@ import { currentObservedUsage } from "./runtime-usage-observation";
 import { failCollectorRunningSlots } from "./runtime-collector-failure";
 import { runtimeEnvelope } from "./runtime-envelope";
 import { holdRunners, releaseRunners } from "./runtime-runner-hold";
+import { agentTask, acceptReminderDue, mintAppItem, reminder } from "./runtime-agent-api-reminders";
 import { handleAgentMessage } from "./runtime-message-delivery";
 import {
   flushHeldDeliveries,
@@ -1306,6 +1307,19 @@ export class DaemonRuntime {
     );
   }
 
+  #agentApiRemindersPorts() {
+    return {
+      assertRunning: () => this.#assertRunning(),
+      agentIdForContext: (context: string) => this.#agentIdForContext(context),
+      transport: () => this.#transport,
+      workspaceId: this.#connection.workspaceId,
+      computerId: this.#connection.computerId,
+      messageAttention: this.#messageAttention,
+      reminders: this.#reminders,
+      inboxCoordinator: this.#inboxCoordinator,
+    };
+  }
+
   #messageDeliveryPorts() {
     return {
       assertRunning: () => this.#assertRunning(),
@@ -1875,30 +1889,9 @@ export class DaemonRuntime {
     );
   }
 
-  /** Dispatches one task command to the cloud task route over its HTTPS path. The body is the
-   * plain command — the route derives its principal from the Agent API key, so no envelope
-   * travels with it. */
+  /** Dispatches one task command to the cloud task route over its HTTPS path. */
   async agentTask(context: string, command: TaskCommand, agentApiKey: string): Promise<TaskResult> {
-    this.#assertRunning();
-    const agentId = this.#agentIdForContext(context);
-    if (!this.#transport.agentTask) throw new Error("daemon connection is not connected");
-    if (!isAgentApiKey(agentApiKey)) throw new Error("Agent API key is missing");
-    const freshnessAction = command.operation === "claim" || command.operation === "update";
-    if (freshnessAction && command.target) {
-      const held = await heldTaskResult(
-        {
-          messageAttention: this.#messageAttention,
-          agentMessage: this.#transport.agentMessage?.bind(this.#transport),
-          workspaceId: this.#connection.workspaceId,
-        },
-        agentId,
-        command,
-        command.target,
-        agentApiKey,
-      );
-      if (held) return held;
-    }
-    return this.#transport.agentTask({ ...command }, agentApiKey);
+    return agentTask(this.#agentApiRemindersPorts(), context, command, agentApiKey);
   }
 
   #canonicalAgentMessageTarget(
@@ -1923,62 +1916,15 @@ export class DaemonRuntime {
   }
 
   async mintAppItem(agentId: string, input: MintAppItem) {
-    return this.#inboxCoordinator.mintAppItem(agentId, input);
+    return mintAppItem(this.#agentApiRemindersPorts(), agentId, input);
   }
 
   async reminder(context: string, request: LocalReminderRequest, agentApiKey: string) {
-    const agentId = this.#authorizedAgent(context, agentApiKey);
-    if (request.operation === "ack" || request.operation === "dismiss") {
-      const accepted = await this.#reminders.acknowledge(
-        agentId,
-        request.reminderId!,
-        request.revision!,
-      );
-      const removed = await this.#inboxCoordinator.removeAppItem(
-        agentId,
-        reminderDueItemId(request.reminderId!, request.revision!),
-      );
-      if (!accepted) {
-        // Neither the receipt file nor this daemon knows the receipt (the file was lost or is
-        // unreadable, and the daemon has restarted since), but the Agent was shown this exact
-        // revision: its inbox item proves the delivery. Clear it rather than leave an item nothing
-        // can ever acknowledge; the cloud already refuses to fire this revision again.
-        if (!removed)
-          return { accepted: false, reason: "reminder receipt not found for exact revision" };
-        logger.info("Reminder acknowledged from its inbox item without a local receipt", {
-          event: "reminder.ack_without_receipt",
-          outcome: "ok",
-          agent_id: agentId,
-          reminder_id: request.reminderId,
-          reminder_version: request.revision,
-        });
-      }
-      return { accepted: true, reminderId: request.reminderId, revision: request.revision };
-    }
-    if (!this.#transport.agentReminder) throw new Error("Agent reminder transport is unavailable");
-    const { context: _context, revision: _revision, ...fields } = request;
-    return this.#transport.agentReminder(
-      {
-        ...fields,
-        workspaceId: this.#connection.workspaceId,
-        computerId: this.#connection.computerId,
-        agentId,
-      } as AgentReminderOperationRequest,
-      agentApiKey,
-    );
+    return reminder(this.#agentApiRemindersPorts(), context, request, agentApiKey);
   }
 
   async #acceptReminderDue(job: ReminderJob, late: boolean): Promise<boolean> {
-    const item = await (
-      await this.#inboxCoordinator.appInbox(job.ownerAgentId)
-    ).upsert({
-      appId: "system.reminder",
-      notificationClass: "due",
-      sourceRef: { kind: "reminder", id: job.reminderId, revision: String(job.version) },
-      title: reminderAppInboxPreview(job.title),
-      summary: reminderAppInboxSummary(job, late),
-    });
-    return this.#inboxCoordinator.notifyAppItem(job.ownerAgentId, item.itemId);
+    return acceptReminderDue(this.#agentApiRemindersPorts(), job, late);
   }
 
   /** A new connection: asks again for every running Agent's App config. */
