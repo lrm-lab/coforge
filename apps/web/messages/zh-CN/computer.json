@@ -101,6 +101,7 @@
   "computer_no_agents_on_computer": "此电脑未关联 Agent",
   "computer_agent_workspaces": "Agent 工作目录",
   "computer_agent_workspaces_scan": "扫描",
+  "computer_agent_workspaces_rescan": "重新扫描",
   "computer_agent_workspaces_scanning": "扫描中…",
   "computer_agent_workspaces_error": "无法完成工作目录扫描，请重试。",
   "computer_agent_workspaces_none": "未找到 Agent 工作目录。",

@@ -55,6 +55,8 @@ export type ComputerAgentWorkspaceScan = {
   state: "active" | "deleted";
   status: "present" | "missing" | "unavailable";
   rootPath: string;
+  fileCount: number;
+  totalSizeBytes: number;
   modifiedAtMs: number;
 };
 

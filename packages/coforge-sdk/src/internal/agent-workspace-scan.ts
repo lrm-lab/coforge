@@ -24,6 +24,8 @@ export type AgentWorkspaceScanEntry = {
   status: "present";
   rootPath: string;
   modifiedAtMs: number;
+  fileCount: number;
+  totalSizeBytes: number;
 };
 export type AgentWorkspaceScanResult = AgentWorkspaceScanRequest & {
   workspaces: AgentWorkspaceScanEntry[];
@@ -84,6 +86,8 @@ export function encodeAgentWorkspaceScanResult(value: AgentWorkspaceScanResult):
           status: workspace.status,
           rootPath: workspace.rootPath,
           modifiedAtMs: BigInt(workspace.modifiedAtMs),
+          fileCount: BigInt(workspace.fileCount),
+          totalSizeBytes: BigInt(workspace.totalSizeBytes),
         }),
       ),
     }),
@@ -102,6 +106,8 @@ export function decodeAgentWorkspaceScanResult(bytes: Uint8Array): AgentWorkspac
       status: workspace.status as AgentWorkspaceScanEntry["status"],
       rootPath: workspace.rootPath,
       modifiedAtMs: Number(workspace.modifiedAtMs),
+      fileCount: Number(workspace.fileCount),
+      totalSizeBytes: Number(workspace.totalSizeBytes),
     })),
   };
   ids(result);

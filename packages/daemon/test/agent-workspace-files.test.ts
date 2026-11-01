@@ -32,6 +32,28 @@ test("workspace scan lists every Agent directory with its directory mtime", asyn
   }
 });
 
+test("workspace scan counts regular files and bytes recursively, including reserved storage", async () => {
+  const root = await mkdtemp(join(tempRoot, "workspace-scan-stats-"));
+  try {
+    await mkdir(join(root, "agent-a", "nested"), { recursive: true });
+    await Bun.write(join(root, "agent-a", "one.txt"), "one");
+    await Bun.write(join(root, "agent-a", "nested", "two.txt"), "twotwo");
+    await mkdir(join(root, "agent-a", ".builtin-runtime"));
+    await Bun.write(join(root, "agent-a", ".builtin-runtime", "internal.json"), "hidden");
+    const result = await scanAgentWorkspaceDirectories({ agentsDirectory: root });
+    expect(result.status).toBe("ok");
+    expect(result.workspaces).toEqual([
+      expect.objectContaining({
+        agentId: "agent-a",
+        fileCount: 3,
+        totalSizeBytes: 15,
+      }),
+    ]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("Workspace Files listing sorts directories before files and hides dotfiles unless asked", async () => {
   const root = await mkdtemp(join(tempRoot, "workspace-files-list-"));
   try {

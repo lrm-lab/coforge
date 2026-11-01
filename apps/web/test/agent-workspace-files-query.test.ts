@@ -205,6 +205,8 @@ test("workspace scan sends one directory request and keeps orphan directories", 
         status: "present",
         rootPath: "/workspaces/orphan-agent",
         modifiedAtMs: 123,
+        fileCount: 2,
+        totalSizeBytes: 456,
       },
     ],
   };

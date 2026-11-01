@@ -270,7 +270,6 @@ export function ComputerDetail({
               <ComputerDetailWorkspaceInventory
                 snapshot={onScanAgentWorkspaces ? agentWorkspaceScan : null}
                 status={workspaceScanStatus}
-                timeZone={timeZone}
                 canScan={Boolean(onScanAgentWorkspaces)}
                 onScan={() => void scanWorkspaces()}
                 canDelete={Boolean(onDeleteAgentWorkspace)}

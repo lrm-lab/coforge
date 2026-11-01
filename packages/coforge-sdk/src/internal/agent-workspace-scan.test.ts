@@ -25,6 +25,8 @@ test("workspace scan request and result round trip directory summaries", () => {
         status: "present" as const,
         rootPath: "/workspaces/agent-a",
         modifiedAtMs: 123,
+        fileCount: 2,
+        totalSizeBytes: 456,
       },
     ],
   };
@@ -41,6 +43,8 @@ test("workspace scan rejects an unsafe directory name", () => {
           status: "present",
           rootPath: "",
           modifiedAtMs: 0,
+          fileCount: 0,
+          totalSizeBytes: 0,
         },
       ],
     }),

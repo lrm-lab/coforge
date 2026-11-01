@@ -43,6 +43,8 @@ export type AgentWorkspaceDirectoriesScanOutcome = {
     status: "present";
     rootPath: string;
     modifiedAtMs: number;
+    fileCount: number;
+    totalSizeBytes: number;
   }>;
 };
 
@@ -96,6 +98,26 @@ function sniffImageContentType(bytes: Uint8Array): string | null {
 // to avoid making the UI wait for one filesystem round-trip per entry, but bounded so a large
 // directory cannot flood the host with stat requests.
 const LIST_STAT_CONCURRENCY = 32;
+/** Keep four Agent workspaces moving without flooding a local disk with stat calls. */
+const WORKSPACE_SCAN_CONCURRENCY = 4;
+const WORKSPACE_SCAN_STAT_CONCURRENCY = 32;
+
+async function runBounded<T>(
+  values: readonly T[],
+  concurrency: number,
+  work: (value: T) => Promise<void>,
+) {
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, values.length) }, async () => {
+      while (true) {
+        const index = next++;
+        if (index >= values.length) return;
+        await work(values[index]!);
+      }
+    }),
+  );
+}
 const emptyListEntries: AgentWorkspaceFileEntry[] = [];
 
 function isENOENT(error: unknown): boolean {
@@ -207,23 +229,62 @@ export async function scanAgentWorkspaceDirectories(params: {
       workspaces: [],
     };
   }
-  const workspaces = [];
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const rootPath = join(params.agentsDirectory, entry.name);
-    try {
-      const info = await lstat(rootPath);
-      workspaces.push({
-        agentId: entry.name,
-        status: "present" as const,
-        rootPath,
-        modifiedAtMs: Math.round(info.mtimeMs),
-      });
-    } catch {
-      // A directory may disappear between readdir and lstat; the next scan will reconcile it.
-    }
-  }
+  const workspaces: AgentWorkspaceDirectoriesScanOutcome["workspaces"] = [];
+  await runBounded(
+    entries.filter((entry) => entry.isDirectory()),
+    WORKSPACE_SCAN_CONCURRENCY,
+    async (entry) => {
+      const rootPath = join(params.agentsDirectory, entry.name);
+      try {
+        const info = await lstat(rootPath);
+        const statistics = await scanWorkspaceStatistics(rootPath);
+        workspaces.push({
+          agentId: entry.name,
+          status: "present" as const,
+          rootPath,
+          modifiedAtMs: Math.round(info.mtimeMs),
+          ...statistics,
+        });
+      } catch {
+        // A directory may disappear between readdir and lstat; the next scan will reconcile it.
+      }
+    },
+  );
+  workspaces.sort((a, b) => a.agentId.localeCompare(b.agentId));
   return { status: "ok", workspaces };
+}
+
+async function scanWorkspaceStatistics(rootPath: string) {
+  let directories = [rootPath];
+  let fileCount = 0;
+  let totalSizeBytes = 0;
+  while (directories.length > 0) {
+    const nextDirectories: string[] = [];
+    for (const directory of directories) {
+      let entries: import("node:fs").Dirent[];
+      try {
+        entries = await readdir(directory, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      const files = entries.filter((entry) => entry.isFile());
+      await runBounded(files, WORKSPACE_SCAN_STAT_CONCURRENCY, async (entry) => {
+        try {
+          const info = await lstat(join(directory, entry.name));
+          if (info.isFile()) {
+            fileCount += 1;
+            totalSizeBytes += info.size;
+          }
+        } catch {
+          // A file that changes during a scan is omitted; the next explicit scan reconciles it.
+        }
+      });
+      for (const entry of entries)
+        if (entry.isDirectory()) nextDirectories.push(join(directory, entry.name));
+    }
+    directories = nextDirectories;
+  }
+  return { fileCount, totalSizeBytes };
 }
 
 /**

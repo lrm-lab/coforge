@@ -100,6 +100,7 @@
   "computer_no_agents_on_computer": "No Agents are assigned to this computer",
   "computer_agent_workspaces": "Agent workspaces",
   "computer_agent_workspaces_scan": "Scan",
+  "computer_agent_workspaces_rescan": "Rescan",
   "computer_agent_workspaces_scanning": "Scanning…",
   "computer_agent_workspaces_error": "The workspace scan could not be completed. Try again.",
   "computer_agent_workspaces_none": "No Agent workspace directories found.",

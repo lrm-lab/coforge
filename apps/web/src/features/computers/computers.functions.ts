@@ -237,6 +237,8 @@ export const scanAgentWorkspaces = createServerFn({ method: "POST" })
         state: agent.deletedAt ? ("deleted" as const) : ("active" as const),
         status: summary?.status ?? (response.status === "ready" ? "missing" : "unavailable"),
         rootPath: summary?.rootPath ?? "",
+        fileCount: summary?.fileCount ?? 0,
+        totalSizeBytes: summary?.totalSizeBytes ?? 0,
         modifiedAtMs: summary?.modifiedAtMs ?? 0,
       };
     });
@@ -249,6 +251,8 @@ export const scanAgentWorkspaces = createServerFn({ method: "POST" })
         state: "deleted" as const,
         status: summary.status,
         rootPath: summary.rootPath,
+        fileCount: summary.fileCount,
+        totalSizeBytes: summary.totalSizeBytes,
         modifiedAtMs: summary.modifiedAtMs,
       }));
     return [...known, ...orphaned];

@@ -1,13 +1,11 @@
 import { useState } from "react";
 import { FolderSearch } from "@untitledui/icons";
-import { useHydrated } from "@tanstack/react-router";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
-import { formatDateForDisplay } from "#src/lib/dates";
-import { getLocale } from "#src/paraglide/runtime";
 import { m } from "#src/paraglide/messages";
 import { isAppErrorCode } from "#src/lib/app-error";
+import { formatWorkspaceSize } from "./workspace-size";
 import { DetailGroup } from "./computer-detail-rows";
 import type { ComputerAgentWorkspaceScan } from "./computer.schemas";
 import type { AgentWorkspaceScanSnapshot } from "./agent-workspace-scan.query";
@@ -15,7 +13,6 @@ import type { AgentWorkspaceScanSnapshot } from "./agent-workspace-scan.query";
 export function ComputerDetailWorkspaceInventory({
   snapshot,
   status,
-  timeZone,
   canScan,
   onScan,
   canDelete,
@@ -23,14 +20,12 @@ export function ComputerDetailWorkspaceInventory({
 }: {
   snapshot: AgentWorkspaceScanSnapshot | null;
   status: "idle" | "scanning" | "error";
-  timeZone: string | null;
   canScan: boolean;
   onScan: () => void;
   canDelete: boolean;
   onDelete: (agentId: string) => Promise<void>;
 }) {
   const [deleteTarget, setDeleteTarget] = useState<ComputerAgentWorkspaceScan | undefined>();
-  const hydrated = useHydrated();
   const deletedCount = snapshot
     ? snapshot.workspaces.filter((item) => item.state === "deleted").length
     : 0;
@@ -51,7 +46,9 @@ export function ComputerDetailWorkspaceInventory({
           >
             {status === "scanning"
               ? m.computer_agent_workspaces_scanning()
-              : m.computer_agent_workspaces_scan()}
+              : snapshot
+                ? m.computer_agent_workspaces_rescan()
+                : m.computer_agent_workspaces_scan()}
           </Button>
         ) : undefined
       }
@@ -64,19 +61,6 @@ export function ComputerDetailWorkspaceInventory({
       {status === "error" && (
         <p role="alert" className="py-2 text-sm text-error-primary">
           {m.computer_agent_workspaces_error()}
-        </p>
-      )}
-      {snapshot && (
-        <p className="pt-3 text-xs text-tertiary">
-          <time dateTime={new Date(snapshot.scannedAt).toISOString()}>
-            {m.computer_agent_workspaces_scanned_at({
-              // The viewer's saved zone and the UI language (`lib/AGENTS.md`); the server render
-              // knows neither, so the time appears once the page is hydrated.
-              date: hydrated
-                ? formatDateForDisplay(new Date(snapshot.scannedAt), timeZone, getLocale())
-                : "",
-            })}
-          </time>
         </p>
       )}
       {snapshot &&
@@ -107,13 +91,16 @@ export function ComputerDetailWorkspaceInventory({
                     <p className="mt-1 truncate font-mono text-xs text-tertiary">
                       {workspace.rootPath}
                     </p>
-                    {workspace.status !== "present" && (
-                      <p className="mt-1 text-xs text-tertiary">
-                        {workspace.status === "missing"
+                    <p className="mt-1 text-xs text-tertiary">
+                      {workspace.status === "present"
+                        ? m.computer_agent_workspace_stats({
+                            files: String(workspace.fileCount),
+                            size: formatWorkspaceSize(workspace.totalSizeBytes),
+                          })
+                        : workspace.status === "missing"
                           ? m.computer_agent_workspace_missing()
                           : m.computer_agent_workspace_unavailable()}
-                      </p>
-                    )}
+                    </p>
                     {workspace.modifiedAtMs > 0 && (
                       <p className="mt-1 text-xs text-tertiary">
                         {m.computer_agent_workspace_modified({

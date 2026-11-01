@@ -40,6 +40,8 @@ message AgentWorkspaceScanEntry {
   string status = 2;
   string root_path = 3;
   uint64 modified_at_ms = 4;
+  uint64 file_count = 5;
+  uint64 total_size_bytes = 6;
 }
 
 message AgentWorkspaceScanResult {
