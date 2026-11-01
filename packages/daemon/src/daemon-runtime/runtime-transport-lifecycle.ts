@@ -11,9 +11,15 @@ export type RuntimeTransportLifecyclePorts = {
   subscriptions: Array<() => void>;
 };
 
-/** Stops the current transport and installs a fresh one, so a later start never reuses a
- * transport that went through `.stop()` and no replaced transport is left connected. The fresh
- * transport is installed before the old one is stopped so racing status RPCs cannot reach it. */
+/**
+ * Stops the current transport and installs a fresh one, so a later start never reuses a
+ * transport that went through `.stop()` and no replaced transport is left connected. Resolves
+ * with the stop failure, if any.
+ *
+ * The fresh transport is installed before the old one is stopped, on purpose: stopping waits
+ * on in-flight status RPCs, and nothing that runs meanwhile may still reach the transport being
+ * torn down (a late `stop()` of it, or a start racing this one, must see the new one).
+ */
 export async function replaceTransport(ports: RuntimeTransportLifecyclePorts): Promise<unknown> {
   const replaced = ports.transport;
   ports.transport = ports.transportFactory.create(ports.connection);
