@@ -8,6 +8,7 @@ import { readAfterStreamPositions } from "#src/server/conversations/chat-stream-
 import { recordCatalog } from "#src/server/records/record-catalog.server";
 import { recordStats } from "#src/server/records/record-catalog-stats.server";
 import { recordTemplates } from "#src/server/records/record-catalog-templates.server";
+import { recordDistribution } from "#src/server/records/record-distribution.server";
 import { normalizeReportContent, type ReportContent } from "./records-content";
 
 export const loadRecordsNavAttention = createServerFn({ method: "GET" })
@@ -220,7 +221,7 @@ export const sendWeeklyReportAssignments = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).sendWeeklyAssignments({
+    return recordDistribution(db).sendWeeklyAssignments({
       workspaceId,
       userId: user.id,
       sourceReportId: data.sourceReportId,

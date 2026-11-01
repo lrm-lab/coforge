@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { WeeklyReportWorkflow } from "#src/server/records/weekly-report-workflow.server";
+import { recordDistribution } from "#src/server/records/record-distribution.server";
 import { quietCentrifugo } from "./helpers/fake-centrifugo";
 
 // Run explicitly against a disposable PostgreSQL database, never production.
@@ -138,7 +139,7 @@ test("template creation reports initialization failures and retries the complete
     });
     const { RecordCatalog } = await import("#src/server/records/record-catalog.server");
     const catalog = new RecordCatalog(db, notifier);
-    const sent = await catalog.runDueScheduledWeeklyAssignments({
+    const sent = await recordDistribution(db, notifier).runDueScheduledWeeklyAssignments({
       now: new Date("2030-01-04T07:00:00Z"),
     });
     expect(sent.sent).toBe(1);
@@ -365,7 +366,6 @@ test("assignment invitations persist once in each recipient's own private assist
 }, 30_000);
 
 test("configured weekly schedule retries failed invitations without creating a second collection", async () => {
-  const { RecordCatalog } = await import("#src/server/records/record-catalog.server");
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const user = await db.user.create({
     data: {
@@ -404,7 +404,7 @@ test("configured weekly schedule retries failed invitations without creating a s
         sendTime: "15:00",
       },
     )) as { id: string };
-    const catalog = new RecordCatalog(db, notifier);
+    const catalog = recordDistribution(db, notifier);
     expect(
       (await catalog.runDueScheduledWeeklyAssignments({ now: new Date("2030-01-04T06:59:00Z") }))
         .sent,

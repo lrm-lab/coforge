@@ -1,7 +1,7 @@
 import { thrownMessage } from "@lrm/coforge-sdk/internal";
 import { getDatabaseClient } from "#src/server/db/client.server";
 import { onServerShutdown } from "#src/server/runtime/server-lifecycle.server";
-import { recordCatalog } from "./record-catalog.server";
+import { recordDistribution } from "./record-distribution.server";
 
 export const WEEKLY_REPORT_SCHEDULE_TICK_ENV = "COFORGE_WEEKLY_REPORT_SCHEDULE_TICK_MS";
 
@@ -86,7 +86,7 @@ export function startWeeklyReportScheduleTickFromEnv(
     runDue: async () => {
       const db = getDatabaseClient();
       if (!db) return { error: "database unavailable" };
-      return recordCatalog(db).runDueScheduledWeeklyAssignments();
+      return recordDistribution(db).runDueScheduledWeeklyAssignments();
     },
   });
   onServerShutdown(tick.stop);

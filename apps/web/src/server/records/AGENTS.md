@@ -7,3 +7,4 @@ Records rules live in [`../../features/records/AGENTS.md`](../../features/record
 - `record-catalog-format.server.ts` owns weekly-report cycles and live format document alignment.
 - `record-catalog-templates.server.ts` owns template settings, key-point prompts, and template CRUD.
 - `record-side-chat.server.ts` owns Records side-chat intents and platform comment read/write operations.
+- `record-distribution.server.ts` owns weekly send-window state, manual distribution, and scheduled sends.

@@ -1,9 +1,5 @@
 import { humanLabel } from "#src/lib/human-label";
-import {
-  distributeWeeklyReport,
-  retryWeeklyReportInvitations,
-  type WeeklyReportNotifier,
-} from "./weekly-report-distribution.server";
+import type { WeeklyReportNotifier } from "./weekly-report-distribution.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { offerSendRecipient } from "./weekly-report-offer-recipient.server";
@@ -11,7 +7,6 @@ import {
   currentIsoWeek,
   isAssignmentUnread,
   isAutoSendCancelled,
-  isWeekSendDismissed,
   isValidTemplateName,
   memberReportTitle,
   insertAssistantReportBody,
@@ -43,14 +38,12 @@ import { canEditWeeklyReportContent } from "./weekly-report-editability.server";
 import { memoryForPrompt, parseStoredWeeklyReportMemory } from "./weekly-report-memory.server";
 import { canReadReport } from "./report-readers.server";
 import { writeKeyPointExtraction } from "./key-point-extraction-write.server";
-import {
-  isWeeklyScheduleDue,
-  zonedCalendarDate,
-} from "#src/features/records/weekly-report-schedule-due";
+import { zonedCalendarDate } from "#src/features/records/weekly-report-schedule-due";
 import { loadRecordsCatalog } from "./record-catalog-load.server";
 import { requireMembership } from "./record-catalog-access.server";
 import { REPORT_PERSON_SELECT, reportPersonView } from "./record-member-weeks.server";
 import { recordSideChat } from "./record-side-chat.server";
+import { recordDistribution } from "./record-distribution.server";
 import {
   ensureFormatForSettings,
   rebaseLiveFormatToCurrentWeek,
@@ -105,110 +98,6 @@ export class RecordCatalog {
     private readonly db: Db,
     private readonly notifier?: WeeklyReportNotifier,
   ) {}
-
-  private async loadFormatSendState(input: {
-    workspaceId: string;
-    userId: string;
-    reportId: string;
-    now?: Date;
-  }): Promise<{
-    canSend: boolean;
-    schedule: {
-      sendWeekday: number;
-      sendTime: string;
-      scheduleEnabled: boolean;
-      autoSendCancelled: boolean;
-      alreadySent: boolean;
-    } | null;
-  }> {
-    const now = input.now ?? new Date();
-    const report = await this.db.weeklyReport.findFirst({
-      where: {
-        id: input.reportId,
-        workspaceId: input.workspaceId,
-        authorId: input.userId,
-        kind: "template",
-      },
-      select: { id: true, settingsId: true, content: true },
-    });
-    if (!report?.settingsId) return { canSend: false, schedule: null };
-    const settings = await this.db.weeklyReportTemplate.findFirst({
-      where: {
-        id: report.settingsId,
-        workspaceId: input.workspaceId,
-        ownerId: input.userId,
-        applied: true,
-      },
-      select: { id: true, sendWeekday: true, sendTime: true, scheduleEnabled: true },
-    });
-    if (!settings) return { canSend: false, schedule: null };
-    const liveFormat = await this.db.weeklyReport.findFirst({
-      where: {
-        workspaceId: input.workspaceId,
-        authorId: input.userId,
-        kind: "template",
-        settingsId: settings.id,
-        submissions: { none: { kind: "member" } },
-      },
-      orderBy: { updatedAt: "desc" },
-      select: { id: true },
-    });
-    if (liveFormat?.id !== input.reportId) return { canSend: false, schedule: null };
-    const currentWeek = currentIsoWeek(zonedCalendarDate(now));
-    const alreadySent = Boolean(
-      await this.db.weeklyReport.findFirst({
-        where: {
-          workspaceId: input.workspaceId,
-          authorId: input.userId,
-          kind: "template",
-          settingsId: settings.id,
-          cycle: { year: currentWeek.year, week: currentWeek.week },
-          submissions: { some: { kind: "member" } },
-        },
-        select: { id: true },
-      }),
-    );
-    const autoSendCancelled = isAutoSendCancelled(
-      asReportContent(report.content),
-      currentWeek.year,
-      currentWeek.week,
-    );
-    const weekDismissed = isWeekSendDismissed(
-      asReportContent(report.content),
-      currentWeek.year,
-      currentWeek.week,
-    );
-    const schedule = {
-      sendWeekday: settings.sendWeekday,
-      sendTime: settings.sendTime,
-      scheduleEnabled: settings.scheduleEnabled,
-      autoSendCancelled,
-      alreadySent,
-    };
-    return {
-      canSend:
-        !weekDismissed &&
-        canSendWeeklyAssignmentsNow({
-          applied: true,
-          alreadySent,
-          sendWeekday: settings.sendWeekday,
-          sendTime: settings.sendTime,
-          scheduleEnabled: settings.scheduleEnabled,
-          autoSendCancelled,
-          now,
-        }),
-      schedule,
-    };
-  }
-
-  private async canSendWeeklyAssignments(input: {
-    workspaceId: string;
-    userId: string;
-    reportId: string;
-    now?: Date;
-  }) {
-    return (await this.loadFormatSendState(input)).canSend;
-  }
 
   async loadCatalog(input: { workspaceId: string; userId: string; now?: Date }) {
     return loadRecordsCatalog(this.db, input, (args) => ensureFormatForSettings(this.db, args));
@@ -368,7 +257,7 @@ export class RecordCatalog {
       });
     }
     if (report.kind === "template") {
-      return this.sendWeeklyAssignments({
+      return recordDistribution(this.db, this.notifier).sendWeeklyAssignments({
         workspaceId: input.workspaceId,
         userId: input.userId,
         sourceReportId: report.id,
@@ -382,227 +271,6 @@ export class RecordCatalog {
    * Leader manual send: persist source content, create a new weekly parent for the
    * current cycle, and open unread assignments for configured recipients.
    */
-  async sendWeeklyAssignments(input: {
-    workspaceId: string;
-    userId: string;
-    sourceReportId: string;
-    content?: ReportContent;
-    now?: Date;
-  }) {
-    await requireMembership(this.db, input.workspaceId, input.userId);
-    const source = await this.db.weeklyReport.findFirst({
-      where: {
-        id: input.sourceReportId,
-        workspaceId: input.workspaceId,
-        kind: "template",
-        authorId: input.userId,
-      },
-      select: { id: true, content: true, settingsId: true },
-    });
-    if (!source?.settingsId) throw new AppError("NOT_FOUND");
-
-    const content = normalizeReportContent(input.content ?? asReportContent(source.content));
-    if (input.content) {
-      await this.db.weeklyReport.update({
-        where: { id: source.id },
-        data: { content: content as unknown as Prisma.InputJsonValue },
-      });
-    }
-
-    const sendSettings = await this.db.weeklyReportTemplate.findFirst({
-      where: {
-        id: source.settingsId,
-        workspaceId: input.workspaceId,
-        ownerId: input.userId,
-        applied: true,
-      },
-      include: { recipients: { select: { userId: true } } },
-    });
-    if (!sendSettings) throw new AppError("INVALID_INPUT", { errorId: "weekly-send-no-settings" });
-
-    return distributeWeeklyReport(
-      this.db,
-      {
-        workspaceId: input.workspaceId,
-        userId: input.userId,
-        templateId: source.settingsId,
-        content,
-        now: input.now,
-      },
-      this.notifier,
-    );
-  }
-
-  /**
-   * Cron entry: for each applied+scheduleEnabled settings row that is due now,
-   * reuse sendWeeklyAssignments once per ISO week (skip if that cycle already has
-   * Leader-sent assignments).
-   */
-  async runDueScheduledWeeklyAssignments(input: { now?: Date } = {}) {
-    const now = input.now ?? new Date();
-    const settings = await this.db.weeklyReportTemplate.findMany({
-      where: { applied: true, scheduleEnabled: true, frequency: "weekly" },
-      select: {
-        id: true,
-        name: true,
-        workspaceId: true,
-        ownerId: true,
-        sendTime: true,
-        sendWeekday: true,
-      },
-    });
-
-    const results: Array<{
-      workspaceId: string;
-      templateId: string;
-      status: "sent" | "skipped" | "failed";
-      reason?: string;
-      parentId?: string;
-      assignmentCount?: number;
-      notifications?: Array<{ reportId: string; status: string }>;
-    }> = [];
-
-    for (const row of settings) {
-      if (
-        !isWeeklyScheduleDue({
-          now,
-          sendWeekday: row.sendWeekday,
-          sendTime: row.sendTime,
-        })
-      ) {
-        results.push({
-          workspaceId: row.workspaceId,
-          templateId: row.id,
-          status: "skipped",
-          reason: "not-due",
-        });
-        continue;
-      }
-
-      const scheduleNow = zonedCalendarDate(now);
-      const { year, week } = currentIsoWeek(scheduleNow);
-      const alreadySent = await this.db.weeklyReport.findFirst({
-        where: {
-          workspaceId: row.workspaceId,
-          kind: "template",
-          authorId: row.ownerId,
-          settingsId: row.id,
-          cycle: { year, week },
-          submissions: { some: { kind: "member" } },
-        },
-        select: { id: true },
-      });
-      if (alreadySent) {
-        try {
-          const notifications = await retryWeeklyReportInvitations(
-            this.db,
-            {
-              workspaceId: row.workspaceId,
-              parentId: alreadySent.id,
-              templateName: row.name,
-              year,
-              week,
-            },
-            this.notifier,
-          );
-          const failed = notifications.some((result) => result.status === "failed");
-          results.push({
-            workspaceId: row.workspaceId,
-            templateId: row.id,
-            parentId: alreadySent.id,
-            status: failed ? "failed" : "skipped",
-            reason: failed ? "invitation-failed" : "already-sent",
-            notifications,
-          });
-        } catch {
-          results.push({
-            workspaceId: row.workspaceId,
-            templateId: row.id,
-            status: "failed",
-            reason: "invitation-failed",
-          });
-        }
-        continue;
-      }
-
-      const liveFormat = await this.db.weeklyReport.findFirst({
-        where: {
-          workspaceId: row.workspaceId,
-          authorId: row.ownerId,
-          kind: "template",
-          settingsId: row.id,
-          submissions: { none: { kind: "member" } },
-        },
-        select: { content: true },
-      });
-      if (liveFormat && isAutoSendCancelled(asReportContent(liveFormat.content), year, week)) {
-        results.push({
-          workspaceId: row.workspaceId,
-          templateId: row.id,
-          status: "skipped",
-          reason: "auto-send-cancelled",
-        });
-        continue;
-      }
-
-      const source = await ensureFormatForSettings(this.db, {
-        workspaceId: row.workspaceId,
-        userId: row.ownerId,
-        settingsId: row.id,
-        settingsName: row.name,
-        now: scheduleNow,
-      });
-
-      const membership = await this.db.workspaceMembership.findUnique({
-        where: {
-          workspaceId_userId: { workspaceId: row.workspaceId, userId: row.ownerId },
-        },
-        select: { userId: true },
-      });
-      if (!membership) {
-        results.push({
-          workspaceId: row.workspaceId,
-          templateId: row.id,
-          status: "skipped",
-          reason: "source-author-not-member",
-        });
-        continue;
-      }
-
-      try {
-        const sent = await this.sendWeeklyAssignments({
-          workspaceId: row.workspaceId,
-          userId: row.ownerId,
-          sourceReportId: source.id,
-          now,
-        });
-        results.push({
-          workspaceId: row.workspaceId,
-          templateId: row.id,
-          status: sent.notifications.some((result) => result.status === "failed")
-            ? "failed"
-            : "sent",
-          parentId: sent.parentId,
-          assignmentCount: sent.assignmentCount,
-          notifications: sent.notifications,
-        });
-      } catch (error) {
-        results.push({
-          workspaceId: row.workspaceId,
-          templateId: row.id,
-          status: "failed",
-          reason: error instanceof Error ? error.message : "send-failed",
-        });
-      }
-    }
-
-    return {
-      checkedAt: now.toISOString(),
-      sent: results.filter((row) => row.status === "sent").length,
-      results,
-    };
-  }
-
   async deleteMemberReport(input: { workspaceId: string; userId: string; reportId: string }) {
     await requireMembership(this.db, input.workspaceId, input.userId);
     const report = await this.db.weeklyReport.findFirst({
@@ -1170,7 +838,7 @@ export class RecordCatalog {
           surface,
           canSendAssignments:
             report.kind === "template" && surface === "format"
-              ? await this.canSendWeeklyAssignments({
+              ? await recordDistribution(this.db, this.notifier).canSendWeeklyAssignments({
                   workspaceId: input.workspaceId,
                   userId: input.userId,
                   reportId: report.id,
@@ -1179,7 +847,7 @@ export class RecordCatalog {
           sendSchedule:
             report.kind === "template" && surface === "format"
               ? (
-                  await this.loadFormatSendState({
+                  await recordDistribution(this.db, this.notifier).loadFormatSendState({
                     workspaceId: input.workspaceId,
                     userId: input.userId,
                     reportId: report.id,
@@ -1889,7 +1557,7 @@ export class RecordCatalog {
     body: string;
     payload: Extract<RecordAssistantPayload, { kind: "offer-send" }>;
   } | null> {
-    const sendState = await this.loadFormatSendState(input);
+    const sendState = await recordDistribution(this.db, this.notifier).loadFormatSendState(input);
     if (!sendState.canSend) return null;
 
     const report = await this.db.weeklyReport.findFirst({
@@ -2006,7 +1674,7 @@ export class RecordCatalog {
       },
     });
     if (!report || report.submissions.length > 0) throw new AppError("NOT_FOUND");
-    const sendState = await this.loadFormatSendState({
+    const sendState = await recordDistribution(this.db, this.notifier).loadFormatSendState({
       workspaceId: input.workspaceId,
       userId: input.userId,
       reportId: report.id,

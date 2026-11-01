@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { RecordCatalog } from "#src/server/records/record-catalog.server";
-import { recordSideChat } from "#src/server/records/record-side-chat.server";
 import {
   looksLikeMemberGenerateOfferAccept,
   parseRecordAssistantPayload,
