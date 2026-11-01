@@ -20,6 +20,20 @@ export const KIRO_ACP_ARGS = ["acp", "--agent-engine", "v3", "--auth-method", "c
  * this version before ever offering the Kiro runtime. */
 export const KIRO_MIN_CLI_VERSION = "2.21.2";
 
+/** How long an elicited configuration answer may take to report a rejected login. The
+ * `displayError` arrives with the answer, so this only bounds a dispatch delay. */
+export const AUTH_DIAGNOSIS_WAIT_MS = 2_000;
+
+/** Whether a session's configuration offers a usable selection for `category`. */
+export function configOffers(options: SessionConfigOption[], category: string): boolean {
+  return options.some(
+    (option) =>
+      (option.category === category || option.id === category) &&
+      option.type === "select" &&
+      option.options.some((entry) => "value" in entry || entry.options.length > 0),
+  );
+}
+
 /** ACP owns RPC framing/validation; JsonlProcess retains the existing process-tree lifecycle. */
 export class KiroConnection {
   readonly process: JsonlProcess;
@@ -50,6 +64,7 @@ export class KiroConnection {
     });
     this.connection = client({ name: host.clientInfo.name })
       .onNotification("session/update", ({ params }) => {
+        this.#observeAuthFailure(params.update);
         if (params.update.sessionUpdate === "config_option_update") {
           this.#config.set(params.sessionId, params.update.configOptions);
           for (const listener of this.#configChanged) listener();
@@ -74,13 +89,7 @@ export class KiroConnection {
     category: string,
     timeoutMs = 30_000,
   ) {
-    const ready = (options: SessionConfigOption[]) =>
-      options.some(
-        (option) =>
-          (option.category === category || option.id === category) &&
-          option.type === "select" &&
-          option.options.some((entry) => "value" in entry || entry.options.length > 0),
-      );
+    const ready = (options: SessionConfigOption[]) => configOffers(options, category);
     if (ready(initial)) return initial;
     let check: () => void = () => {};
     try {
@@ -127,6 +136,48 @@ export class KiroConnection {
     ]);
     if ("failure" in outcome) throw outcome.failure;
     return outcome.value;
+  }
+
+  /**
+   * Kiro reports a login it cannot use as a `displayError` on the session rather than as an error
+   * on the request it could not serve (measured against kiro-cli 2.33.1, 2026-11-01: a model
+   * selection answers successfully and the next update carries "Authentication failed. Please
+   * sign in again."). It is the same terminal fact the stderr line reports.
+   */
+  #observeAuthFailure(update: SessionNotification["update"]): void {
+    if (this.#authFailure || update.sessionUpdate !== "session_info_update") return;
+    const message = record(record(update._meta?.kiro)?.displayError)?.message;
+    if (typeof message !== "string" || !isKiroAuthFailure(message)) return;
+    this.#authFailure = kiroLoginRequired();
+    this.#authFailureReported.resolve(this.#authFailure);
+  }
+
+  /**
+   * Asks Kiro for a configuration it may not be able to serve, so a rejected login is reported
+   * now instead of as a missing option after the configuration deadline. Kiro answers the request
+   * itself successfully; the reason rides the next session update. Bounded by
+   * `AUTH_DIAGNOSIS_WAIT_MS`: when no rejected login is reported, the caller keeps its ordinary
+   * wait and nothing about a healthy runtime changes.
+   */
+  async elicitAuthFailure(sessionId: string, configId: string, value: string): Promise<void> {
+    await this.guarded(
+      this.connection.agent.request("session/set_config_option", { sessionId, configId, value }),
+      AUTH_DIAGNOSIS_WAIT_MS,
+    ).catch(() => {});
+    // The reason rides the notification stream right after the answer.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        this.#authFailureReported.promise,
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, AUTH_DIAGNOSIS_WAIT_MS);
+          timer.unref?.();
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+    if (this.#authFailure) throw this.#authFailure;
   }
 
   #close() {

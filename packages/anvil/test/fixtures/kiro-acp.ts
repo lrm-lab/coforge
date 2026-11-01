@@ -27,8 +27,17 @@ const catalog = process.argv.includes("--catalog");
 const delayedConfig = process.argv.includes("--delayed-config");
 const earlyConfig = process.argv.includes("--early-config");
 const missingConfig = process.argv.includes("--missing-config");
+// A login Kiro accepts locally but cannot serve: the model list never arrives, and asking for a
+// model answers successfully while the reason rides the next session update.
+const profileMissing = process.argv.includes("--profile-missing");
 const closedConfig = process.argv.includes("--closed-config");
-let modelsReady = !(delayedConfig || earlyConfig || missingConfig || closedConfig);
+let modelsReady = !(
+  delayedConfig ||
+  earlyConfig ||
+  missingConfig ||
+  closedConfig ||
+  profileMissing
+);
 const agent = catalog
   ? "vibe"
   : (await readdir(join(process.cwd(), ".kiro/agents")))
@@ -170,6 +179,16 @@ async function handle(request: Message) {
         update({ sessionUpdate: "config_option_update", configOptions: configOptions() });
       }
       if (closedConfig && request.params?.configId === "mode") process.exit(0);
+      if (profileMissing && request.params?.configId === "model") {
+        update({
+          sessionUpdate: "session_info_update",
+          _meta: {
+            kiro: {
+              displayError: { message: "Authentication failed. Please sign in again." },
+            },
+          },
+        });
+      }
       break;
     case "session/prompt":
       if (!configured) {

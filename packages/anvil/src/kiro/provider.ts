@@ -14,7 +14,7 @@ import type {
   NewSessionRequest,
 } from "@agentclientprotocol/sdk";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
-import { bounded, KIRO_ACP_ARGS, KiroConnection, record } from "./connection";
+import { bounded, configOffers, KIRO_ACP_ARGS, KiroConnection, record } from "./connection";
 import { readKiroUsage } from "./usage";
 import { kiroUpdateEvents } from "./update-events";
 import { assertKiroVersionSupported } from "./version";
@@ -207,6 +207,12 @@ class KiroSession implements AgentSession {
     };
     await select("mode", this.profileName);
     if (this.options.runtime?.model) {
+      // A login Kiro cannot use is reported as a `displayError` on the first configuration it
+      // cannot serve, not as a missing option: ask for the model now (bounded) so the launch
+      // fails with the reason instead of waiting out the configuration deadline. A healthy Kiro
+      // already offers the option, so nothing is elicited and the ordinary wait below applies.
+      if (!configOffers(config, "model"))
+        await this.#transport.elicitAuthFailure(sessionId, "model", this.options.runtime.model);
       config = await this.#transport.waitForConfig(
         sessionId,
         config,
