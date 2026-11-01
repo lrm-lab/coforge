@@ -108,6 +108,7 @@ import { assertOwnIntent } from "./runtime-intent-validation";
 import { currentObservedUsage } from "./runtime-usage-observation";
 import { failCollectorRunningSlots } from "./runtime-collector-failure";
 import { runtimeEnvelope } from "./runtime-envelope";
+import { holdRunners, releaseRunners } from "./runtime-runner-hold";
 import { handleAgentMessage } from "./runtime-message-delivery";
 import {
   flushHeldDeliveries,
@@ -2032,36 +2033,41 @@ export class DaemonRuntime {
     return context;
   }
 
-  /**
-   * Stops admitting new Agent turns and reports which Agents are still busy. Idempotent: a repeat
-   * call only re-reads the busy set, which is what the restart's quiescence poll relies on.
-   */
+  /** Stops admitting new Agent turns and reports which Agents are still busy. */
   holdRunners(reason: RunnerHoldReason): BusyAgentReport[] {
-    if (this.#runnerHold === undefined)
-      logger.info("Runner hold engaged", { event: "daemon.runner_hold.engaged", reason });
-    this.#runnerHold = { reason, renewedAtMs: Date.now() };
-    return this.busyAgents();
+    const runtime = this;
+    return holdRunners(
+      {
+        get hold() {
+          return runtime.#runnerHold;
+        },
+        set hold(value) {
+          runtime.#runnerHold = value;
+        },
+      },
+      reason,
+      this.#activityPublisher,
+    );
   }
 
   /** Lifts the hold and resumes every delivery queued behind it, in arrival order. */
   releaseRunners(): BusyAgentReport[] {
-    if (this.#runnerHold !== undefined)
-      logger.info("Runner hold released", {
-        event: "daemon.runner_hold.released",
-        reason: this.#runnerHold.reason,
-      });
-    this.#runnerHold = undefined;
-    dropHeldMentionsWithoutSession({
-      inputDrain: this.#inputDrain,
-      hasSession: (agentId) => Boolean(this.#agentProcessManager.session(agentId)),
-      hasLaunch: (agentId) => this.#agentLaunches.has(agentId),
-      dropMention: (message) =>
-        this.#mentionDeliveries.drop(message, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN),
-    });
-    // Copied deliberately: a finishing drain deletes its own entry mid-iteration.
-    const queued = [...this.#inputDrain.entries()].map(([agentId]) => agentId);
-    for (const agentId of queued) this.#inputDrain.ensure(agentId);
-    return this.busyAgents();
+    const runtime = this;
+    return releaseRunners(
+      {
+        get hold() {
+          return runtime.#runnerHold;
+        },
+        set hold(value) {
+          runtime.#runnerHold = value;
+        },
+      },
+      this.#activityPublisher,
+      this.#inputDrain,
+      this.#agentProcessManager,
+      this.#agentLaunches,
+      this.#mentionDeliveries,
+    );
   }
 
   get runnerHeld(): boolean {
