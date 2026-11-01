@@ -1,8 +1,6 @@
-import { humanLabel } from "#src/lib/human-label";
 import type { WeeklyReportNotifier } from "./weekly-report-distribution.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
-import { offerSendRecipient } from "./weekly-report-offer-recipient.server";
 import {
   currentIsoWeek,
   isAutoSendCancelled,
@@ -13,14 +11,8 @@ import {
   withWeekSendDismissed,
   type ReportContent,
 } from "#src/features/records/records-content";
-import {
-  parseRecordAssistantPayload,
-  type RecordAssistantPayload,
-} from "#src/features/records/weekly-highlight-extract";
-import {
-  formatOfferSendWeekTitle,
-  isWeeklySendArmed,
-} from "#src/features/records/weekly-send-window";
+import { type RecordAssistantPayload } from "#src/features/records/weekly-highlight-extract";
+import { isWeeklySendArmed } from "#src/features/records/weekly-send-window";
 import { canEditWeeklyReportContent } from "./weekly-report-editability.server";
 import { memoryForPrompt, parseStoredWeeklyReportMemory } from "./weekly-report-memory.server";
 import { zonedCalendarDate } from "#src/features/records/weekly-report-schedule-due";
@@ -30,14 +22,11 @@ import { recordSubject } from "./record-subject.server";
 import { recordSideChat } from "./record-side-chat.server";
 import { recordDistribution } from "./record-distribution.server";
 import { recordAssistantCatalog } from "./record-assistant-catalog.server";
+import { recordAssistantOffer } from "./record-assistant-offer.server";
 import { recordReportContent } from "./record-report-content.server";
-import {
-  ensureFormatForSettings,
-  rebaseLiveFormatToCurrentWeek,
-} from "./record-catalog-format.server";
+import { ensureFormatForSettings } from "./record-catalog-format.server";
 
 type Db = PrismaClient;
-type SideChatComments = Awaited<ReturnType<ReturnType<typeof recordSideChat>["listComments"]>>;
 
 function asReportContent(value: unknown): ReportContent {
   return normalizeReportContent(value);
@@ -670,7 +659,7 @@ export class RecordCatalog {
     return recordSideChat(this.db).listComments({ ...input, assistantSessionId });
   }
 
-  async ensureAssistantIntro(input: {
+  ensureAssistantIntro(input: {
     workspaceId: string;
     userId: string;
     subjectType: "report" | "cycle";
@@ -679,224 +668,7 @@ export class RecordCatalog {
     assistantSessionId: string;
     now?: Date;
   }) {
-    const existing = await recordSideChat(this.db).listComments(input);
-    if (input.surface === "plain" || input.surface === "member-leader") {
-      return existing;
-    }
-
-    if (input.surface === "format" && input.subjectType === "report") {
-      return this.ensureFormatSendOfferIntro({ ...input, existing });
-    }
-
-    if (existing.length > 0) return existing;
-
-    if (input.surface === "member-assignee" && input.subjectType === "report") {
-      const report = await this.db.weeklyReport.findFirst({
-        where: {
-          id: input.subjectId,
-          workspaceId: input.workspaceId,
-          kind: "member",
-          authorId: input.userId,
-        },
-        select: {
-          cycle: { select: { year: true, week: true } },
-          author: { select: { displayName: true, username: true } },
-        },
-      });
-      if (report) {
-        const displayName = humanLabel(report.author);
-        await this.writeAssistantComment({
-          workspaceId: input.workspaceId,
-          subjectType: "report",
-          subjectId: input.subjectId,
-          assistantSessionId: input.assistantSessionId,
-          body: `hi，${displayName}，${report.cycle.year} W${report.cycle.week}的工作周报模板已收到，是否需要我来帮你直接生成？`,
-          payload: { kind: "offer-help-generate" },
-        });
-      }
-    }
-
-    return recordSideChat(this.db).listComments(input);
-  }
-
-  /**
-   * When the live format enters a sendable window, post one offer-send card for
-   * the current ISO week. Earlier weeks' cards stay in the thread as history.
-   * Another session that already has this week's card does not grow its own
-   * send/cancel buttons.
-   */
-  private async ensureFormatSendOfferIntro(input: {
-    workspaceId: string;
-    userId: string;
-    subjectId: string;
-    assistantSessionId: string;
-    existing: SideChatComments;
-    now?: Date;
-  }) {
-    const { year, week } = currentIsoWeek(zonedCalendarDate(input.now ?? new Date()));
-    const sessionHasCurrentWeek = input.existing.some((row) => {
-      const payload = parseRecordAssistantPayload(row.payload);
-      return payload?.kind === "offer-send" && payload.year === year && payload.week === week;
-    });
-    if (sessionHasCurrentWeek) return input.existing;
-
-    if (
-      await this.hasCurrentWeekOfferSend({
-        workspaceId: input.workspaceId,
-        reportId: input.subjectId,
-        now: input.now,
-      })
-    ) {
-      return input.existing;
-    }
-
-    const offer = await this.buildFormatOfferSend({
-      workspaceId: input.workspaceId,
-      userId: input.userId,
-      reportId: input.subjectId,
-      now: input.now,
-    });
-    if (!offer) return input.existing;
-
-    await this.writeAssistantComment({
-      workspaceId: input.workspaceId,
-      subjectType: "report",
-      subjectId: input.subjectId,
-      assistantSessionId: input.assistantSessionId,
-      body: offer.body,
-      payload: offer.payload,
-    });
-    return recordSideChat(this.db).listComments({
-      workspaceId: input.workspaceId,
-      userId: input.userId,
-      subjectType: "report",
-      subjectId: input.subjectId,
-      assistantSessionId: input.assistantSessionId,
-    });
-  }
-
-  /** True when any session (or null-session) already has this week's offer-send card. */
-  private async hasCurrentWeekOfferSend(input: {
-    workspaceId: string;
-    reportId: string;
-    now?: Date;
-  }): Promise<boolean> {
-    const { year, week } = currentIsoWeek(zonedCalendarDate(input.now ?? new Date()));
-    const rows = await this.db.recordComment.findMany({
-      where: {
-        workspaceId: input.workspaceId,
-        subjectType: "report",
-        reportId: input.reportId,
-        authorType: "assistant",
-      },
-      select: { payload: true },
-      orderBy: { createdAt: "desc" },
-      take: 100,
-    });
-    return rows.some((row) => {
-      const payload = parseRecordAssistantPayload(row.payload);
-      return payload?.kind === "offer-send" && payload.year === year && payload.week === week;
-    });
-  }
-
-  private async buildFormatOfferSend(input: {
-    workspaceId: string;
-    userId: string;
-    reportId: string;
-    now?: Date;
-  }): Promise<{
-    body: string;
-    payload: Extract<RecordAssistantPayload, { kind: "offer-send" }>;
-  } | null> {
-    const sendState = await recordDistribution(this.db, this.notifier).loadFormatSendState(input);
-    if (!sendState.canSend) return null;
-
-    const report = await this.db.weeklyReport.findFirst({
-      where: {
-        id: input.reportId,
-        workspaceId: input.workspaceId,
-        authorId: input.userId,
-        kind: "template",
-      },
-      select: {
-        id: true,
-        settingsId: true,
-        updatedAt: true,
-        cycle: { select: { id: true, year: true, week: true } },
-        author: { select: { displayName: true, username: true } },
-        submissions: { where: { kind: "member" }, select: { id: true }, take: 1 },
-      },
-    });
-    if (!report?.settingsId) return null;
-    // Sent overviews keep their week; the live format advances with the calendar.
-    const now = input.now ?? new Date();
-    const { year, week } =
-      (report.submissions?.length ?? 0) > 0
-        ? { year: report.cycle.year, week: report.cycle.week }
-        : await rebaseLiveFormatToCurrentWeek(this.db, {
-            workspaceId: input.workspaceId,
-            userId: input.userId,
-            reportId: report.id,
-            cycle: report.cycle,
-            now,
-          });
-
-    const settings = await this.db.weeklyReportTemplate.findFirst({
-      where: {
-        id: report.settingsId,
-        workspaceId: input.workspaceId,
-        ownerId: input.userId,
-      },
-      select: {
-        allMembers: true,
-        recipients: {
-          select: {
-            user: {
-              select: { id: true, displayName: true, username: true, avatarObjectKey: true },
-            },
-          },
-        },
-      },
-    });
-    if (!settings) return null;
-
-    let people: Array<{
-      id: string;
-      displayName: string | null;
-      username: string;
-      avatarObjectKey: string | null;
-    }>;
-    if (settings.allMembers) {
-      const memberships = await this.db.workspaceMembership.findMany({
-        where: { workspaceId: input.workspaceId },
-        select: {
-          user: {
-            select: { id: true, displayName: true, username: true, avatarObjectKey: true },
-          },
-        },
-        take: 40,
-      });
-      people = memberships.map((row) => row.user);
-    } else {
-      people = settings.recipients.map((row) => row.user);
-    }
-
-    const recipients = people
-      .filter((user) => user.id !== input.userId)
-      .map((user) => offerSendRecipient(input.workspaceId, user));
-    const displayName = humanLabel(report.author);
-    return {
-      body: `hi，${displayName}，${year} W${week}的工作周报模板已生成，请确认是否发送。`,
-      payload: {
-        kind: "offer-send",
-        year,
-        week,
-        weekTitle: formatOfferSendWeekTitle(year, week),
-        updatedAt: report.updatedAt.toISOString(),
-        recipients: recipients.slice(0, 8),
-        recipientTotal: recipients.length,
-      },
-    };
+    return recordAssistantOffer(this.db, this.notifier).ensureAssistantIntro(input);
   }
 
   /** Move an unsent live format onto this week's cycle when the calendar advanced. */

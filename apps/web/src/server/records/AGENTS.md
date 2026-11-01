@@ -12,3 +12,4 @@ Records rules live in [`../../features/records/AGENTS.md`](../../features/record
 - `record-key-point-edits.server.ts` owns confirmed and dismissed key-point markdown writes.
 - `record-report-content.server.ts` owns report body persistence, send-state preservation, and submit-side effects.
 - `record-subject.server.ts` owns report and personal-note subject reads, including viewer-specific body projection.
+- `record-assistant-offer.server.ts` owns Assistant intro and weekly send-offer orchestration.
