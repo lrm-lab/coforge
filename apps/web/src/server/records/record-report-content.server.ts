@@ -9,6 +9,7 @@ import {
   publishMemberReportDelivery,
   reportBodyRestoreView,
   reportContentForAuthor,
+  switchReportBodyVersion,
   reportTabsEqual,
   retainMemberReportDelivery,
   withAutoSendCancelled,
@@ -260,9 +261,60 @@ export function recordReportContent(db: Db) {
     };
   }
 
+  async function applyConfirmedReportBody(input: {
+    workspaceId: string;
+    userId: string;
+    reportId: string;
+    content: ReportContent;
+    sourceMessageId?: string;
+  }) {
+    const content = normalizeReportContent(input.content);
+    return saveReportContent({
+      workspaceId: input.workspaceId,
+      userId: input.userId,
+      reportId: input.reportId,
+      content: {
+        ...content,
+        ...(content.tabs && !input.sourceMessageId
+          ? { assistantDraft: { tabs: { ...content.tabs } } }
+          : {}),
+      },
+      askToSend: false,
+      assistantInsertMessageId: input.sourceMessageId,
+    });
+  }
+
+  async function switchWeeklyReportBodyVersion(input: {
+    workspaceId: string;
+    userId: string;
+    reportId: string;
+  }) {
+    await requireMembership(db, input.workspaceId, input.userId);
+    const report = await db.weeklyReport.findFirst({
+      where: { id: input.reportId, workspaceId: input.workspaceId },
+      select: { id: true, authorId: true, content: true },
+    });
+    if (!report) throw new AppError("NOT_FOUND");
+    if (
+      !canEditWeeklyReportContent({
+        viewerUserId: input.userId,
+        authorUserId: report.authorId,
+      })
+    ) {
+      throw new AppError("ACCESS_DENIED");
+    }
+    return saveReportContent({
+      workspaceId: input.workspaceId,
+      userId: input.userId,
+      reportId: input.reportId,
+      content: switchReportBodyVersion(normalizeReportContent(report.content)),
+      askToSend: false,
+    });
+  }
+
   /**
    * Assistant body-edit write. Does not ask-to-send; the user still controls send.
    * A message id captures the previous body so the author can switch back.
    */
-  return { saveReportContent };
+  return { saveReportContent, applyConfirmedReportBody, switchWeeklyReportBodyVersion };
 }

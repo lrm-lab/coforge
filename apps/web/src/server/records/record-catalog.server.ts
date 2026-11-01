@@ -6,14 +6,11 @@ import {
   isAutoSendCancelled,
   isValidTemplateName,
   normalizeReportContent,
-  switchReportBodyVersion,
   withAutoSendCancelled,
   withWeekSendDismissed,
-  type ReportContent,
 } from "#src/features/records/records-content";
 import { type RecordAssistantPayload } from "#src/features/records/weekly-highlight-extract";
 import { isWeeklySendArmed } from "#src/features/records/weekly-send-window";
-import { canEditWeeklyReportContent } from "./weekly-report-editability.server";
 import { zonedCalendarDate } from "#src/features/records/weekly-report-schedule-due";
 import { loadRecordsCatalog } from "./record-catalog-load.server";
 import { requireMembership } from "./record-catalog-access.server";
@@ -456,64 +453,19 @@ export class RecordCatalog {
     return recordAssistantCatalog(this.db).readAssistantReportSection(input);
   }
 
+  applyConfirmedReportBody(
+    input: Parameters<ReturnType<typeof recordReportContent>["applyConfirmedReportBody"]>[0],
+  ) {
+    return recordReportContent(this.db).applyConfirmedReportBody(input);
+  }
+
+  switchWeeklyReportBodyVersion(
+    input: Parameters<ReturnType<typeof recordReportContent>["switchWeeklyReportBodyVersion"]>[0],
+  ) {
+    return recordReportContent(this.db).switchWeeklyReportBodyVersion(input);
+  }
+
   /** Create a personal workspace note (Markdown body). */
-  async applyConfirmedReportBody(input: {
-    workspaceId: string;
-    userId: string;
-    reportId: string;
-    content: ReportContent;
-    sourceMessageId?: string;
-  }) {
-    const content = normalizeReportContent(input.content);
-    return recordReportContent(this.db).saveReportContent({
-      workspaceId: input.workspaceId,
-      userId: input.userId,
-      reportId: input.reportId,
-      content: {
-        ...content,
-        ...(content.tabs && !input.sourceMessageId
-          ? { assistantDraft: { tabs: { ...content.tabs } } }
-          : {}),
-      },
-      askToSend: false,
-      assistantInsertMessageId: input.sourceMessageId,
-    });
-  }
-
-  /** Show the other stored version, keeping edits on the side the author leaves. */
-  async switchWeeklyReportBodyVersion(input: {
-    workspaceId: string;
-    userId: string;
-    reportId: string;
-  }) {
-    await requireMembership(this.db, input.workspaceId, input.userId);
-    const report = await this.db.weeklyReport.findFirst({
-      where: { id: input.reportId, workspaceId: input.workspaceId },
-      select: { id: true, authorId: true, content: true },
-    });
-    if (!report) throw new AppError("NOT_FOUND");
-    if (
-      !canEditWeeklyReportContent({
-        viewerUserId: input.userId,
-        authorUserId: report.authorId,
-      })
-    ) {
-      throw new AppError("ACCESS_DENIED");
-    }
-    const next = switchReportBodyVersion(asReportContent(report.content));
-    return recordReportContent(this.db).saveReportContent({
-      workspaceId: input.workspaceId,
-      userId: input.userId,
-      reportId: input.reportId,
-      content: next,
-      askToSend: false,
-    });
-  }
-
-  /**
-   * Side-chat Confirm for a key-point-edit suggestion: writes markdown into
-   * `content.keyPointExtraction` without replacing the report body tabs.
-   */
   private async writeAssistantComment(input: {
     workspaceId: string;
     subjectType: "report" | "cycle";

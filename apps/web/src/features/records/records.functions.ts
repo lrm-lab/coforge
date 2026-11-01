@@ -243,7 +243,7 @@ export const applyConfirmedWeeklyReportBody = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).applyConfirmedReportBody({
+    return recordReportContent(db).applyConfirmedReportBody({
       workspaceId,
       userId: user.id,
       reportId: data.reportId,
@@ -256,7 +256,7 @@ export const switchWeeklyReportBodyVersion = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(z.object({ reportId: z.uuid() }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).switchWeeklyReportBodyVersion({
+    return recordReportContent(db).switchWeeklyReportBodyVersion({
       workspaceId,
       userId: user.id,
       reportId: data.reportId,

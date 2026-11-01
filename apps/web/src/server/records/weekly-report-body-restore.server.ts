@@ -1,6 +1,6 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { isChannelMessageTarget } from "@lrm/coforge-sdk/internal";
-import { RecordCatalog } from "./record-catalog.server";
+import { recordReportContent } from "./record-report-content.server";
 import { parseWeeklyReportAssistantSuggestion } from "./weekly-report-assistant-suggestion.server";
 
 /**
@@ -38,7 +38,7 @@ export async function applyIncomingWeeklyReportBodyEdit(
     select: { agentId: true },
   });
   if (assistant?.agentId !== input.agentId) return;
-  await new RecordCatalog(db).applyConfirmedReportBody({
+  await recordReportContent(db).applyConfirmedReportBody({
     workspaceId: input.workspaceId,
     userId: user.id,
     reportId: suggestion.reportId,
