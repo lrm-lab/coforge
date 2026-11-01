@@ -91,6 +91,7 @@ export async function handleAgentMessage(
     return;
   }
   if (ports.agentProcessManager.session(message.agentId)) ports.inputDrain.ensure(message.agentId);
+  // Otherwise a launch is in flight, and it drains the queue once its session is up.
   return delivery;
 }
 
