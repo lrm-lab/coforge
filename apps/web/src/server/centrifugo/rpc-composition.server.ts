@@ -9,6 +9,7 @@ import {
   AGENT_WORKSPACE_FILES_LIST_RESULT_METHOD,
   AGENT_WORKSPACE_FILE_READ_RESULT_METHOD,
   AGENT_WORKSPACE_DELETE_RESULT_METHOD,
+  AGENT_WORKSPACE_SCAN_RESULT_METHOD,
   AGENT_CONTROL_RESULT_METHOD,
   REMINDER_FIRE_METHOD,
   REMINDER_SNAPSHOT_METHOD,
@@ -23,6 +24,7 @@ import {
   createAgentWorkspaceFileReadResultMethod,
   createAgentWorkspaceFilesListResultMethod,
   createAgentWorkspaceDeleteResultMethod,
+  createAgentWorkspaceScanResultMethod,
 } from "./agent-workspace-files-cache.server";
 
 import {
@@ -359,6 +361,7 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
         [AGENT_WORKSPACE_FILES_LIST_RESULT_METHOD]: createAgentWorkspaceFilesListResultMethod(),
         [AGENT_WORKSPACE_FILE_READ_RESULT_METHOD]: createAgentWorkspaceFileReadResultMethod(),
         [AGENT_WORKSPACE_DELETE_RESULT_METHOD]: createAgentWorkspaceDeleteResultMethod(),
+        [AGENT_WORKSPACE_SCAN_RESULT_METHOD]: createAgentWorkspaceScanResultMethod(),
         [AGENT_CONTROL_RESULT_METHOD]: createAgentControlResultMethod(control),
         ...daemonReportMethods(db),
         [AGENT_START_METHOD]: createAgentStartMethod(

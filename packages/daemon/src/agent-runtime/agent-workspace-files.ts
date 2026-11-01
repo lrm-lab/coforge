@@ -36,6 +36,16 @@ export type AgentWorkspaceFilesDeleteOutcome = {
   status: "ok" | "missing" | "busy" | "denied" | "unreadable" | "error";
 };
 
+export type AgentWorkspaceDirectoriesScanOutcome = {
+  status: "ok" | "missing" | "unavailable";
+  workspaces: Array<{
+    agentId: string;
+    status: "present";
+    rootPath: string;
+    modifiedAtMs: number;
+  }>;
+};
+
 // Must stay under Centrifugo's websocket.message_size_limit (infra/*/centrifugo/config.yaml),
 // which `RPC_PAYLOAD_MAX_BYTES` is the SDK's single statement of; the whole text travels in one RPC
 // message.
@@ -86,26 +96,6 @@ function sniffImageContentType(bytes: Uint8Array): string | null {
 // to avoid making the UI wait for one filesystem round-trip per entry, but bounded so a large
 // directory cannot flood the host with stat requests.
 const LIST_STAT_CONCURRENCY = 32;
-/** A bounded delete fan-out keeps recursive removals fast without flooding the disk. */
-const DELETE_CONCURRENCY = 4;
-
-async function runBounded<T>(
-  values: readonly T[],
-  concurrency: number,
-  work: (value: T) => Promise<void>,
-) {
-  let next = 0;
-  await Promise.all(
-    Array.from({ length: Math.min(concurrency, values.length) }, async () => {
-      while (true) {
-        const index = next++;
-        if (index >= values.length) return;
-        await work(values[index]!);
-      }
-    }),
-  );
-}
-
 const emptyListEntries: AgentWorkspaceFileEntry[] = [];
 
 function isENOENT(error: unknown): boolean {
@@ -181,22 +171,14 @@ export async function deleteAgentWorkspaceFiles(params: {
   try {
     const root = resolve(params.agentWorkspaceDirectory);
     await noLinkedAncestors(root);
-    let entries: string[];
     try {
-      entries = await readdir(root);
+      await readdir(root);
     } catch (error) {
       return { status: isENOENT(error) ? "missing" : classifyDeleteFailure(error) };
     }
+    // The workspace itself goes too: one recursive remove is faster than deleting entries one by
+    // one and preserves the same symlink safety because the root's ancestors were checked above.
     let firstError: unknown;
-    await runBounded(entries, DELETE_CONCURRENCY, async (entry) => {
-      try {
-        await rm(join(root, entry), { recursive: true, force: true });
-      } catch (error) {
-        firstError ??= error;
-      }
-    });
-    // The directory itself goes too: an Agent that is already gone leaves exactly a directory
-    // with nothing else in it, which is still a workspace a person meant to delete.
     try {
       await rm(root, { recursive: true, force: true });
     } catch (error) {
@@ -209,6 +191,39 @@ export async function deleteAgentWorkspaceFiles(params: {
       status: isENOENT(error) ? "missing" : reportWorkspaceDeleteFailure(error, params.agentId),
     };
   }
+}
+
+/** Lists every Agent directory in one local filesystem pass. The web tier supplies no Agent IDs,
+ * so retained directories for deleted Agents remain visible and can be removed. */
+export async function scanAgentWorkspaceDirectories(params: {
+  agentsDirectory: string;
+}): Promise<AgentWorkspaceDirectoriesScanOutcome> {
+  let entries: import("node:fs").Dirent[];
+  try {
+    entries = await readdir(params.agentsDirectory, { withFileTypes: true });
+  } catch (error) {
+    return {
+      status: isENOENT(error) ? "missing" : "unavailable",
+      workspaces: [],
+    };
+  }
+  const workspaces = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const rootPath = join(params.agentsDirectory, entry.name);
+    try {
+      const info = await lstat(rootPath);
+      workspaces.push({
+        agentId: entry.name,
+        status: "present" as const,
+        rootPath,
+        modifiedAtMs: Math.round(info.mtimeMs),
+      });
+    } catch {
+      // A directory may disappear between readdir and lstat; the next scan will reconcile it.
+    }
+  }
+  return { status: "ok", workspaces };
 }
 
 /**

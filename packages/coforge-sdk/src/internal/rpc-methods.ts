@@ -75,6 +75,8 @@ export const RPC_METHODS = {
   agentSkillsListResult: "agent:v1:skills:list_result",
   agentWorkspaceFilesList: "agent:v1:workspace_files:list",
   agentWorkspaceFilesListResult: "agent:v1:workspace_files:list_result",
+  agentWorkspaceScan: "agent:v1:workspace:scan",
+  agentWorkspaceScanResult: "agent:v1:workspace:scan_result",
   agentWorkspaceFileRead: "agent:v1:workspace_files:read",
   agentWorkspaceFileReadResult: "agent:v1:workspace_files:read_result",
   agentWorkspaceDelete: "agent:v1:workspace_files:delete",

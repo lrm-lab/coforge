@@ -34,6 +34,7 @@ import { DaemonNoticePublications } from "./daemon-notice-publications";
 import { DaemonProviderPublications } from "./daemon-provider-publications";
 import { rpcData } from "./rpc-data";
 import { DaemonQueries } from "./daemon-queries";
+import { DaemonConnectionWorkspaceBindings } from "./daemon-connection-workspace-bindings";
 import { agentApiRoutes, taskConversationHttpRequest } from "@lrm/coforge-sdk/agent";
 import type {
   AgentActionPrepareRequest,
@@ -230,7 +231,10 @@ export const COMPUTER_STATUS_REFRESH_MS = 30_000;
 const logger = getLogger(["coforge", "daemon", "connection"]);
 
 /** The Daemon's single connection for its configured Workspace. */
-export class DaemonConnection implements DaemonConnectionClient {
+export class DaemonConnection
+  extends DaemonConnectionWorkspaceBindings
+  implements DaemonConnectionClient
+{
   #client: CentrifugeWorkspaceClient | undefined;
   #connected = false;
   #hasConnected = false;
@@ -250,6 +254,10 @@ export class DaemonConnection implements DaemonConnectionClient {
   readonly #agentMigrationLease = new ListenerSlot<(lease: ReceivedAgentMigrationLease) => void>();
   readonly #agentMigrationCancel = new ListenerSlot<(cancel: AgentMigrationCancel) => void>();
   readonly #queries = new DaemonQueries((method, bytes) => this.#rpc(method, bytes));
+
+  protected get daemonQueries() {
+    return this.#queries;
+  }
   readonly #providerPublications = new DaemonProviderPublications((method, bytes) =>
     this.#rpc(method, bytes),
   );
@@ -325,6 +333,7 @@ export class DaemonConnection implements DaemonConnectionClient {
     private readonly agentChannelHttpClient: AgentChannelHttpClient = defaultAgentChannelHttpClient,
     private readonly agentActionPrepareHttpClient: AgentActionPrepareHttpClient = defaultAgentActionPrepareHttpClient,
   ) {
+    super();
     if (!endpoint) throw new Error("cloud endpoint not configured");
   }
 
@@ -564,17 +573,6 @@ export class DaemonConnection implements DaemonConnectionClient {
   onAgentMigrationCancel(callback: (cancel: AgentMigrationCancel) => void): () => void {
     return this.#agentMigrationCancel.set(callback);
   }
-
-  readonly onSkillsList = this.#queries.skills.onRequest;
-  readonly sendSkillsListResult = this.#queries.skills.sendResult;
-  readonly onWorkspaceFilesList = this.#queries.files.onRequest;
-  readonly sendWorkspaceFilesListResult = this.#queries.files.sendResult;
-  readonly onWorkspaceFileRead = this.#queries.file.onRequest;
-  readonly sendWorkspaceFileReadResult = this.#queries.file.sendResult;
-  readonly onWorkspaceDelete = this.#queries.deletion.onRequest;
-  readonly sendWorkspaceDeleteResult = this.#queries.deletion.sendResult;
-  readonly onPiChatRequest = this.#queries.piChat.onRequest;
-  readonly sendPiChatFrame = this.#queries.piChat.sendResult;
 
   onUsageScan(callback: (request: DaemonRuntimeUsageScanRequest) => Promise<void>): () => void {
     return this.#providerPublications.onUsageScan(callback);

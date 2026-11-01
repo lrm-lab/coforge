@@ -23,7 +23,10 @@ export const deleteAgentWorkspace = createServerFn({ method: "POST" })
       workspaceId,
       computerId: data.computerId,
     });
-    const query = computerWorkspaceFilesQuery(db, computer.id, { list: false });
+    const query = computerWorkspaceFilesQuery(db, computer.id, {
+      list: false,
+      allowOrphan: true,
+    });
     const response = await query.delete({ userId: user.id, workspaceId }, data.agentId);
     if (response.status !== "ready")
       throw new AppError("TEMPORARILY_UNAVAILABLE", {

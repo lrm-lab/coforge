@@ -10,8 +10,10 @@ import {
   listAgentWorkspaceFilesInputSchema,
   readAgentWorkspaceFileInputSchema,
 } from "./agent.schemas";
-import { archivedAgentWorkspaceFilesQuery } from "#src/server/computers/computer-workspace-files.server";
-import { scanComputerAgentWorkspaces } from "#src/server/computers/computer-agent-workspaces.server";
+import {
+  archivedAgentWorkspaceFilesQuery,
+  archivedAgentWorkspaceScanQuery,
+} from "#src/server/computers/computer-workspace-files.server";
 import { workspaceMemberRole } from "#src/server/workspaces/workspace-membership.server";
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import {
@@ -88,32 +90,26 @@ export const scanArchivedAgentWorkspace = createServerFn({ method: "POST" })
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     declareNoStore();
     const viewer = { userId: user.id, workspaceId };
-    const query = archivedAgentWorkspaceFilesQuery(
-      db,
-      await workspaceMemberRole(db, workspaceId, user.id),
-      { list: true },
-    );
+    const role = await workspaceMemberRole(db, workspaceId, user.id);
     const agent = await db.agent.findFirst({
       where: { id: data.agentId, workspaceId, deletedAt: { not: null } },
       select: { id: true, name: true, displayName: true, deletedAt: true },
     });
     if (!agent) return null;
-    const [workspace] = await scanComputerAgentWorkspaces([agent], async (request) => {
-      const response = await query.list(
-        viewer,
-        request.agentId,
-        request.dirPath,
-        request.includeHidden,
-      );
-      if (response.status !== "ready")
-        return {
-          status: response.status === "offline" ? "unreadable" : "error",
-          rootPath: "",
-          entries: [],
-        };
-      return response.result;
-    });
-    return workspace ?? null;
+    const response = await archivedAgentWorkspaceScanQuery(db, role).scan(viewer, [agent.id]);
+    const summary =
+      response.status === "ready"
+        ? response.result.workspaces.find((workspace) => workspace.agentId === agent.id)
+        : undefined;
+    return {
+      agentId: agent.id,
+      name: agent.name,
+      displayName: agent.displayName,
+      state: "deleted" as const,
+      status: summary?.status ?? (response.status === "ready" ? "missing" : "unavailable"),
+      rootPath: summary?.rootPath ?? "",
+      modifiedAtMs: summary?.modifiedAtMs ?? 0,
+    };
   });
 
 /** Deletes an archived Agent's workspace from its Computer, for the same viewers. */

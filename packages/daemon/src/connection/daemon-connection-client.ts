@@ -27,6 +27,8 @@ import type {
   AgentSkillsListResult,
   AgentWorkspaceFilesListRequest,
   AgentWorkspaceFilesListResult,
+  AgentWorkspaceScanRequest,
+  AgentWorkspaceScanResult,
   AgentWorkspaceFileReadRequest,
   AgentWorkspaceFileReadResult,
   AgentWorkspaceDeleteRequest,
@@ -128,6 +130,8 @@ export interface DaemonConnectionClient extends AgentApiConnectionClient {
     callback: (request: AgentWorkspaceFilesListRequest) => Promise<void>,
   ): () => void;
   sendWorkspaceFilesListResult?(result: AgentWorkspaceFilesListResult): Promise<void>;
+  onWorkspaceScan?(callback: (request: AgentWorkspaceScanRequest) => Promise<void>): () => void;
+  sendWorkspaceScanResult?(result: AgentWorkspaceScanResult): Promise<void>;
   onWorkspaceFileRead?(
     callback: (request: AgentWorkspaceFileReadRequest) => Promise<void>,
   ): () => void;

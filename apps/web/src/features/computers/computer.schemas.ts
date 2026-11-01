@@ -53,10 +53,8 @@ export type ComputerAgentWorkspaceScan = {
   name: string;
   displayName: string;
   state: "active" | "deleted";
-  status: "present" | "missing" | "unavailable" | "partial";
+  status: "present" | "missing" | "unavailable";
   rootPath: string;
-  fileCount: number;
-  totalSizeBytes: number;
   modifiedAtMs: number;
 };
 

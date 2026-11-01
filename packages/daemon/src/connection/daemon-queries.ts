@@ -4,6 +4,9 @@ import {
   AGENT_SKILLS_LIST_RESULT_METHOD,
   decodeAgentWorkspaceFilesListRequest,
   encodeAgentWorkspaceFilesListResult,
+  decodeAgentWorkspaceScanRequest,
+  encodeAgentWorkspaceScanResult,
+  AGENT_WORKSPACE_SCAN_RESULT_METHOD,
   AGENT_WORKSPACE_FILES_LIST_RESULT_METHOD,
   decodeAgentWorkspaceFileReadRequest,
   encodeAgentWorkspaceFileReadResult,
@@ -57,6 +60,7 @@ export class DaemonQueries {
   readonly skills;
   readonly files;
   readonly file;
+  readonly scan;
   readonly deletion;
   readonly piChat;
   constructor(rpc: Rpc) {
@@ -70,6 +74,12 @@ export class DaemonQueries {
       decodeAgentWorkspaceFilesListRequest,
       encodeAgentWorkspaceFilesListResult,
       AGENT_WORKSPACE_FILES_LIST_RESULT_METHOD,
+      rpc,
+    );
+    this.scan = new DaemonQuery(
+      decodeAgentWorkspaceScanRequest,
+      encodeAgentWorkspaceScanResult,
+      AGENT_WORKSPACE_SCAN_RESULT_METHOD,
       rpc,
     );
     this.file = new DaemonQuery(
@@ -92,8 +102,8 @@ export class DaemonQueries {
     );
   }
   receive(bytes: Uint8Array, scope: Scope) {
-    return [this.piChat, this.skills, this.files, this.file, this.deletion].some((query) =>
-      query.receive(bytes, scope),
+    return [this.piChat, this.skills, this.files, this.scan, this.file, this.deletion].some(
+      (query) => query.receive(bytes, scope),
     );
   }
 }

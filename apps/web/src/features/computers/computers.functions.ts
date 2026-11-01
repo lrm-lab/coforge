@@ -47,10 +47,9 @@ import { getComputerUpgradeStore } from "#src/server/computers/computer-upgrade-
 import { runtimeAuthView } from "#src/server/computers/computer-runtime-auth.server";
 import { runUpgradeComputerAction } from "#src/server/computers/upgrade-computer-action.server";
 import {
-  computerWorkspaceFilesQuery,
+  computerWorkspaceScanQuery,
   findOwnedWorkspaceComputer,
 } from "#src/server/computers/computer-workspace-files.server";
-import { scanComputerAgentWorkspaces as scanWorkspaceInventory } from "#src/server/computers/computer-agent-workspaces.server";
 import {
   parseAgentRuntimeConfig,
   publicAgentRuntimeConfig,
@@ -220,23 +219,39 @@ export const scanAgentWorkspaces = createServerFn({ method: "POST" })
       select: { id: true, name: true, displayName: true, deletedAt: true },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     });
-    const query = computerWorkspaceFilesQuery(db, computer.id, { list: true });
-    const inventory = await scanWorkspaceInventory(agents, async (request) => {
-      const response = await query.list(
-        { userId: user.id, workspaceId },
-        request.agentId,
-        request.dirPath,
-        request.includeHidden,
-      );
-      if (response.status !== "ready")
-        return {
-          status: response.status === "offline" ? "unreadable" : "error",
-          rootPath: "",
-          entries: [],
-        };
-      return response.result;
+    const response = await computerWorkspaceScanQuery(db, computer.id).scan(
+      { userId: user.id, workspaceId },
+      agents.map((agent) => agent.id),
+    );
+    const summaries =
+      response.status === "ready"
+        ? new Map(response.result.workspaces.map((workspace) => [workspace.agentId, workspace]))
+        : new Map();
+    const known = agents.map((agent) => {
+      const summary = summaries.get(agent.id);
+      if (summary) summaries.delete(agent.id);
+      return {
+        agentId: agent.id,
+        name: agent.name,
+        displayName: agent.displayName,
+        state: agent.deletedAt ? ("deleted" as const) : ("active" as const),
+        status: summary?.status ?? (response.status === "ready" ? "missing" : "unavailable"),
+        rootPath: summary?.rootPath ?? "",
+        modifiedAtMs: summary?.modifiedAtMs ?? 0,
+      };
     });
-    return inventory;
+    const orphaned = [...summaries.values()]
+      .sort((a, b) => a.agentId.localeCompare(b.agentId))
+      .map((summary) => ({
+        agentId: summary.agentId,
+        name: summary.agentId,
+        displayName: summary.agentId,
+        state: "deleted" as const,
+        status: summary.status,
+        rootPath: summary.rootPath,
+        modifiedAtMs: summary.modifiedAtMs,
+      }));
+    return [...known, ...orphaned];
   });
 
 /** Computer owners may remove an Agent workspace's local contents. The Agent row is retained;

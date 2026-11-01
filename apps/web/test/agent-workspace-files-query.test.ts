@@ -8,9 +8,12 @@ import {
   type AgentWorkspaceDeleteRequest,
   type AgentWorkspaceFilesListRequest,
   type AgentWorkspaceFilesListResult,
+  type AgentWorkspaceScanRequest,
+  type AgentWorkspaceScanResult,
 } from "@lrm/coforge-sdk/internal";
 import {
   AgentWorkspaceFilesQuery,
+  AgentWorkspaceScanQuery,
   type WorkspaceFilesAssignment,
 } from "#src/server/agents/agent-workspace-files.server";
 import {
@@ -186,6 +189,50 @@ test("Workspace deletion binds the owner's assignment and returns the daemon ter
   expect(await q.delete({ userId: "owner", workspaceId: "workspace" }, "agent")).toEqual({
     status: "ready",
     result: { ...request!, status: "ok" },
+  });
+});
+
+test("workspace scan sends one directory request and keeps orphan directories", async () => {
+  let request: AgentWorkspaceScanRequest | undefined;
+  const result: AgentWorkspaceScanResult = {
+    protocolMajor: 1,
+    requestId: "scan-request",
+    workspaceId: "workspace",
+    computerId: "computer",
+    workspaces: [
+      {
+        agentId: "orphan-agent",
+        status: "present",
+        rootPath: "/workspaces/orphan-agent",
+        modifiedAtMs: 123,
+      },
+    ],
+  };
+  const q = new AgentWorkspaceScanQuery(
+    {
+      findOwned: async () => undefined,
+      online: async () => true,
+      publishScan: async (value) => {
+        request = value;
+      },
+      scanResults: {
+        begin: async () => {},
+        read: async () => (request ? result : undefined),
+        clear: async () => {},
+      },
+      computerId: "computer",
+    },
+    { now: () => 0, wait: async () => {}, timeoutMs: 100 },
+  );
+  expect(await q.scan({ userId: "owner", workspaceId: "workspace" }, [])).toEqual({
+    status: "ready",
+    result,
+  });
+  expect(request).toEqual({
+    protocolMajor: 1,
+    requestId: expect.any(String),
+    workspaceId: "workspace",
+    computerId: "computer",
   });
 });
 

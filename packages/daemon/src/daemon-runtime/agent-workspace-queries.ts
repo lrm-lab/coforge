@@ -2,18 +2,21 @@ import type {
   RuntimeProvider,
   AgentWorkspaceFilesListRequest,
   AgentWorkspaceFilesListResult,
+  AgentWorkspaceScanRequest,
+  AgentWorkspaceScanResult,
   AgentWorkspaceFileReadRequest,
   AgentWorkspaceFileReadResult,
 } from "@lrm/coforge-sdk/internal";
 import type { DaemonConfig } from "./runtime";
-import { agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
+import { agentsDirectory, agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
 import { listAgentSkills } from "#src/code-agent/agent-skills";
 import {
   listAgentWorkspaceFiles,
   readAgentWorkspaceFile,
+  scanAgentWorkspaceDirectories,
 } from "#src/agent-runtime/agent-workspace-files";
 
-/** Total workspace observations this daemon may run at once across all Agents and requests. */
+/** Total concurrent browse/read observations this daemon may run across all Agents. */
 export const WORKSPACE_FILES_SCAN_CONCURRENCY = 4;
 
 /** Serialized, safe workspace observations, separate from runtime lifecycle and mutations. */
@@ -22,6 +25,17 @@ export class AgentWorkspaceQueries {
   #workspaceFilesScanning = new Set<string>();
   #workspaceFilesInFlight = 0;
   constructor(private readonly provider: (agentId: string) => RuntimeProvider | undefined) {}
+
+  async scan(
+    connection: DaemonConfig,
+    request: AgentWorkspaceScanRequest,
+  ): Promise<Pick<AgentWorkspaceScanResult, "workspaces">> {
+    void request;
+    const scan = await scanAgentWorkspaceDirectories({
+      agentsDirectory: agentsDirectory(connection.workspaceRoot, connection.workspaceId),
+    });
+    return { workspaces: scan.workspaces };
+  }
   async listSkills(
     connection: DaemonConfig,
     request: { agentId: string; provider: RuntimeProvider },

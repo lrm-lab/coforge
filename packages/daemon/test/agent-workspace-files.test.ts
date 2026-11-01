@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { realpathSync } from "node:fs";
-import { chmod, mkdtemp, mkdir, readdir, rm, stat, symlink } from "node:fs/promises";
+import { chmod, mkdtemp, mkdir, rm, stat, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -8,10 +8,29 @@ import {
   deleteAgentWorkspaceFiles,
   listAgentWorkspaceFiles,
   readAgentWorkspaceFile,
+  scanAgentWorkspaceDirectories,
 } from "#src/agent-runtime/agent-workspace-files";
 
 // macOS tmpdir lives under /var, a symlink; the path-safety checks reject linked ancestors.
 const tempRoot = realpathSync(tmpdir());
+
+test("workspace scan lists every Agent directory with its directory mtime", async () => {
+  const root = await mkdtemp(join(tempRoot, "workspace-scan-"));
+  try {
+    await mkdir(join(root, "agent-a"));
+    await mkdir(join(root, "agent-b"));
+    await Bun.write(join(root, "not-an-agent-file"), "ignored");
+    const result = await scanAgentWorkspaceDirectories({ agentsDirectory: root });
+    expect(result.status).toBe("ok");
+    expect(result.workspaces.map((workspace) => workspace.agentId).sort()).toEqual([
+      "agent-a",
+      "agent-b",
+    ]);
+    expect(result.workspaces.every((workspace) => workspace.modifiedAtMs > 0)).toBe(true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 test("Workspace Files listing sorts directories before files and hides dotfiles unless asked", async () => {
   const root = await mkdtemp(join(tempRoot, "workspace-files-list-"));

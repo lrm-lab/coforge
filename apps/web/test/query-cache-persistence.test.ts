@@ -826,8 +826,6 @@ describe("a Computer's Agent workspace scan", () => {
         state: "active",
         status: "present",
         rootPath: "/home/ada/.coforge/agents/agent-1",
-        fileCount: 3,
-        totalSizeBytes: 1024,
         modifiedAtMs: 1_790_000_000_000,
       },
     ],

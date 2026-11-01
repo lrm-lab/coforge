@@ -9,7 +9,6 @@ import { getLocale } from "#src/paraglide/runtime";
 import { m } from "#src/paraglide/messages";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { DetailGroup } from "./computer-detail-rows";
-import { formatWorkspaceSize } from "./workspace-size";
 import type { ComputerAgentWorkspaceScan } from "./computer.schemas";
 import type { AgentWorkspaceScanSnapshot } from "./agent-workspace-scan.query";
 
@@ -108,18 +107,13 @@ export function ComputerDetailWorkspaceInventory({
                     <p className="mt-1 truncate font-mono text-xs text-tertiary">
                       {workspace.rootPath}
                     </p>
-                    <p className="mt-1 text-xs text-tertiary">
-                      {workspace.status === "present"
-                        ? m.computer_agent_workspace_stats({
-                            files: String(workspace.fileCount),
-                            size: formatWorkspaceSize(workspace.totalSizeBytes),
-                          })
-                        : workspace.status === "missing"
+                    {workspace.status !== "present" && (
+                      <p className="mt-1 text-xs text-tertiary">
+                        {workspace.status === "missing"
                           ? m.computer_agent_workspace_missing()
-                          : workspace.status === "partial"
-                            ? m.computer_agent_workspace_partial()
-                            : m.computer_agent_workspace_unavailable()}
-                    </p>
+                          : m.computer_agent_workspace_unavailable()}
+                      </p>
+                    )}
                     {workspace.modifiedAtMs > 0 && (
                       <p className="mt-1 text-xs text-tertiary">
                         {m.computer_agent_workspace_modified({
@@ -133,7 +127,7 @@ export function ComputerDetailWorkspaceInventory({
                       type="button"
                       size="sm"
                       color="tertiary-destructive"
-                      isDisabled={workspace.status !== "present" && workspace.status !== "partial"}
+                      isDisabled={workspace.status !== "present"}
                       onPress={() => setDeleteTarget(workspace)}
                     >
                       {m.computer_agent_workspace_delete()}

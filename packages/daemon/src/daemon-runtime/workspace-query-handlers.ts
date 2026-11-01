@@ -1,6 +1,8 @@
 import type {
   AgentWorkspaceDeleteRequest,
   AgentWorkspaceDeleteResult,
+  AgentWorkspaceScanRequest,
+  AgentWorkspaceScanResult,
 } from "@lrm/coforge-sdk/internal";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import type { AgentWorkspaceQueries } from "./agent-workspace-queries";
@@ -8,7 +10,7 @@ import type { DaemonConfig } from "./runtime";
 
 type Queries = {
   connection: DaemonConfig;
-  observations: Pick<AgentWorkspaceQueries, "listSkills" | "listFiles" | "readFile">;
+  observations: Pick<AgentWorkspaceQueries, "listSkills" | "listFiles" | "readFile" | "scan">;
   deleteWorkspace(
     request: AgentWorkspaceDeleteRequest,
   ): Promise<Pick<AgentWorkspaceDeleteResult, "status">>;
@@ -48,6 +50,20 @@ export function subscribeWorkspaceQueries(
       const result = await queries.observations.listFiles(connection, request);
       if (!queries.isStopping() && queries.currentTransport() === transport)
         await transport.sendWorkspaceFilesListResult?.({ ...request, ...result });
+    }),
+    transport.onWorkspaceScan?.(async (request: AgentWorkspaceScanRequest) => {
+      if (
+        queries.isStopping() ||
+        request.workspaceId !== connection.workspaceId ||
+        request.computerId !== connection.computerId
+      )
+        return;
+      const result: Pick<AgentWorkspaceScanResult, "workspaces"> = await queries.observations.scan(
+        connection,
+        request,
+      );
+      if (!queries.isStopping() && queries.currentTransport() === transport)
+        await transport.sendWorkspaceScanResult?.({ ...request, ...result });
     }),
     transport.onWorkspaceFileRead?.(async (request) => {
       if (

@@ -8,7 +8,6 @@ import {
   scanArchivedAgentWorkspace,
 } from "#src/features/agents/agent-workspace-files.functions";
 import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
-import { formatWorkspaceSize } from "#src/features/computers/workspace-size";
 import { useTimeFormat } from "#src/lib/time-format-context";
 import { formatDateForDisplay } from "#src/lib/dates";
 import { m } from "#src/paraglide/messages";
@@ -102,7 +101,7 @@ function ManagedWorkspace({
   });
   const [confirming, setConfirming] = useState(false);
   const state = workspace.data;
-  const present = state?.status === "present" || state?.status === "partial";
+  const present = state?.status === "present";
   return (
     <>
       <dd className="mt-1 text-sm text-primary">
@@ -114,14 +113,6 @@ function ManagedWorkspace({
               ? m.agent_archive_workspace_removed()
               : m.agent_archive_workspace_on_computer({ computer: computer.label })}
       </dd>
-      {present && state.status === "present" && (
-        <dd className="mt-1 text-xs text-tertiary">
-          {m.computer_agent_workspace_stats({
-            files: String(state.fileCount),
-            size: formatWorkspaceSize(state.totalSizeBytes),
-          })}
-        </dd>
-      )}
       {present && (
         <dd className="mt-3">
           <Button

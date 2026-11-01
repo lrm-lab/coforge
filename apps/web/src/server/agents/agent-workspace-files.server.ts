@@ -3,6 +3,8 @@ import type {
   AgentWorkspaceFileReadResult,
   AgentWorkspaceDeleteRequest,
   AgentWorkspaceDeleteResult,
+  AgentWorkspaceScanRequest,
+  AgentWorkspaceScanResult,
   AgentWorkspaceFilesListRequest,
   AgentWorkspaceFilesListResult,
 } from "@lrm/coforge-sdk/internal";
@@ -28,6 +30,11 @@ export type PendingWorkspaceDelete = {
   userId: string;
   revision: string;
 };
+export type PendingWorkspaceScan = {
+  request: AgentWorkspaceScanRequest;
+  userId: string;
+  revisions: Map<string, string>;
+};
 
 export interface AgentWorkspaceFilesListResults {
   begin(pending: PendingWorkspaceFilesList): Promise<void>;
@@ -44,6 +51,11 @@ export interface AgentWorkspaceDeleteResults {
   read(requestId: string): Promise<AgentWorkspaceDeleteResult | undefined>;
   clear(requestId: string): Promise<void>;
 }
+export interface AgentWorkspaceScanResults {
+  begin(pending: PendingWorkspaceScan): Promise<void>;
+  read(requestId: string): Promise<AgentWorkspaceScanResult | undefined>;
+  clear(requestId: string): Promise<void>;
+}
 
 type WorkspaceFilesListResponse =
   | { status: "ready"; result: AgentWorkspaceFilesListResult }
@@ -58,8 +70,8 @@ type WorkspaceDeleteResponse =
 /**
  * How long to wait before reading a pending result again. A Daemon usually answers within tens of
  * milliseconds, so a flat 100 ms poll made every observation cost at least 100 ms, and the Computer
- * page's workspace scan pays it once per directory, one directory at a time (the Daemon serves one
- * listing at a time). For the first half second the result is read every 20 ms, so an answer is seen
+ * page's workspace scan pays it once per request. For the first half second the result is read every
+ * 20 ms, so an answer is seen
  * within 20 ms of arriving; after that the old 100 ms interval returns, so a slow or missing answer
  * costs only 20 extra reads over its 5 s timeout.
  */
@@ -220,6 +232,89 @@ export class AgentWorkspaceFilesQuery {
       return { status: "unavailable" };
     } finally {
       await deleteResults.clear(request.requestId).catch(() => {});
+    }
+  }
+}
+
+export class AgentWorkspaceScanQuery {
+  constructor(
+    private readonly dependencies: {
+      findOwned(
+        viewer: WorkspaceFilesViewer,
+        agentId: string,
+      ): Promise<WorkspaceFilesAssignment | undefined>;
+      online(scope: { workspaceId: string; computerId: string }): Promise<boolean>;
+      publishScan(request: AgentWorkspaceScanRequest): Promise<void>;
+      scanResults: AgentWorkspaceScanResults;
+      computerId?: string;
+    },
+    private readonly timing: {
+      now: () => number;
+      wait: (ms: number) => Promise<void>;
+      timeoutMs: number;
+    } = { now: Date.now, wait: (ms) => Bun.sleep(ms), timeoutMs: 5_000 },
+  ) {}
+
+  async scan(viewer: WorkspaceFilesViewer, agentIds: readonly string[]) {
+    const assignments = await Promise.all(
+      agentIds.map(
+        async (agentId) => [agentId, await this.dependencies.findOwned(viewer, agentId)] as const,
+      ),
+    );
+    const valid = assignments.every(([, assignment]) => assignment);
+    const computerId = this.dependencies.computerId ?? assignments[0]?.[1]?.computerId;
+    if (
+      (!valid && !this.dependencies.computerId) ||
+      !computerId ||
+      assignments.some(([, assignment]) => !assignment || assignment.computerId !== computerId)
+    )
+      return { status: "unavailable" as const };
+    const request: AgentWorkspaceScanRequest = {
+      protocolMajor: 1,
+      requestId: crypto.randomUUID(),
+      workspaceId: viewer.workspaceId,
+      computerId,
+    };
+    try {
+      if (!(await this.dependencies.online({ workspaceId: viewer.workspaceId, computerId })))
+        return { status: "offline" as const };
+      await this.dependencies.scanResults.begin({
+        request,
+        userId: viewer.userId,
+        revisions: new Map(
+          assignments.map(([agentId, assignment]) => [agentId, assignment!.revision]),
+        ),
+      });
+      await this.dependencies.publishScan(request);
+      const deadline = this.timing.now() + this.timing.timeoutMs;
+      let attempt = 0;
+      do {
+        const result = await this.dependencies.scanResults.read(request.requestId);
+        if (result) {
+          const current = await Promise.all(
+            agentIds.map(
+              async (agentId) =>
+                [agentId, await this.dependencies.findOwned(viewer, agentId)] as const,
+            ),
+          );
+          if (
+            current.some(
+              ([agentId, assignment]) =>
+                !assignment ||
+                assignment.computerId !== computerId ||
+                assignment.revision !== assignments.find(([id]) => id === agentId)![1]!.revision,
+            )
+          )
+            return { status: "unavailable" as const };
+          return { status: "ready" as const, result };
+        }
+        await this.timing.wait(pollDelayMs(attempt++));
+      } while (this.timing.now() < deadline);
+      return { status: "timeout" as const };
+    } catch {
+      return { status: "unavailable" as const };
+    } finally {
+      await this.dependencies.scanResults.clear(request.requestId).catch(() => {});
     }
   }
 }

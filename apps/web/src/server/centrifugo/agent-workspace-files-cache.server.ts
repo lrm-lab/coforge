@@ -14,6 +14,10 @@ import {
   type AgentWorkspaceFilesListResult,
   type AgentWorkspaceDeleteRequest,
   type AgentWorkspaceDeleteResult,
+  decodeAgentWorkspaceScanResult,
+  encodeAgentWorkspaceScanResult,
+  type AgentWorkspaceScanRequest,
+  type AgentWorkspaceScanResult,
 } from "@lrm/coforge-sdk/internal";
 import {
   sameWorkspaceFileReadScope,
@@ -25,6 +29,8 @@ import {
   type PendingWorkspaceFilesList,
   type AgentWorkspaceDeleteResults,
   type PendingWorkspaceDelete,
+  type AgentWorkspaceScanResults,
+  type PendingWorkspaceScan,
 } from "#src/server/agents/agent-workspace-files.server";
 import type { CentrifugoRpcMethod } from "./rpc-handler.server";
 import { RedisPendingResults } from "./redis-pending-results.server";
@@ -86,9 +92,31 @@ export class RedisAgentWorkspaceDeleteResults
   }
 }
 
+export class RedisAgentWorkspaceScanResults
+  extends RedisPendingResults<
+    AgentWorkspaceScanRequest,
+    AgentWorkspaceScanResult,
+    PendingWorkspaceScan
+  >
+  implements AgentWorkspaceScanResults
+{
+  constructor(redis: ResultsRedis) {
+    super(redis, {
+      prefix: `${PREFIX}:scan`,
+      encode: encodeAgentWorkspaceScanResult,
+      decode: decodeAgentWorkspaceScanResult,
+      sameScope: (a, b) =>
+        a.requestId === b.requestId &&
+        a.workspaceId === b.workspaceId &&
+        a.computerId === b.computerId,
+    });
+  }
+}
+
 let listSingleton: RedisAgentWorkspaceFilesListResults | undefined;
 let readSingleton: RedisAgentWorkspaceFileReadResults | undefined;
 let deleteSingleton: RedisAgentWorkspaceDeleteResults | undefined;
+let scanSingleton: RedisAgentWorkspaceScanResults | undefined;
 
 export function getAgentWorkspaceFilesListResults() {
   if (!listSingleton)
@@ -112,6 +140,14 @@ export function getAgentWorkspaceDeleteResults() {
       openRedisClient(redisUrlFor("Workspace Files queries")),
     );
   return deleteSingleton;
+}
+
+export function getAgentWorkspaceScanResults() {
+  if (!scanSingleton)
+    scanSingleton = new RedisAgentWorkspaceScanResults(
+      openRedisClient(redisUrlFor("Agent workspace scans")),
+    );
+  return scanSingleton;
 }
 
 export function createAgentWorkspaceFilesListResultMethod(
@@ -161,6 +197,23 @@ export function createAgentWorkspaceDeleteResultMethod(
     )
       return { code: 403, message: "Workspace delete result scope is not authorized" };
     await (results ?? getAgentWorkspaceDeleteResults()).accept(result);
+    return new Uint8Array();
+  };
+}
+
+export function createAgentWorkspaceScanResultMethod(
+  results?: Pick<RedisAgentWorkspaceScanResults, "accept">,
+): CentrifugoRpcMethod {
+  return async (payload, { principal }) => {
+    const result = decodeAgentWorkspaceScanResult(payload);
+    if (
+      !principal.userId ||
+      principal.agentId ||
+      principal.workspaceId !== result.workspaceId ||
+      principal.computerId !== result.computerId
+    )
+      return { code: 403, message: "Agent workspace scan result scope is not authorized" };
+    await (results ?? getAgentWorkspaceScanResults()).accept(result);
     return new Uint8Array();
   };
 }

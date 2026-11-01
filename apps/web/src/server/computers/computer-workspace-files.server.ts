@@ -5,12 +5,14 @@ import {
 import type { PrismaClient } from "#src/generated/prisma/client";
 import {
   AgentWorkspaceFilesQuery,
+  AgentWorkspaceScanQuery,
   type WorkspaceFilesAssignment,
   type WorkspaceFilesViewer,
 } from "#src/server/agents/agent-workspace-files.server";
 import {
   getAgentWorkspaceDeleteResults,
   getAgentWorkspaceFilesListResults,
+  getAgentWorkspaceScanResults,
 } from "#src/server/centrifugo/agent-workspace-files-cache.server";
 import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
 import { isAdminLike, isWorkspaceMemberRole } from "#src/server/workspaces/member-role.server";
@@ -18,6 +20,7 @@ import {
   createCentrifugoServerApi,
   daemonControlChannel,
 } from "#src/server/centrifugo/server-api.server";
+import { encodeAgentWorkspaceScanRequest } from "@lrm/coforge-sdk/internal";
 
 type Db = Pick<PrismaClient, "computer" | "agent">;
 
@@ -122,12 +125,30 @@ const UNUSED_RESULTS = {
 export function computerWorkspaceFilesQuery(
   db: Pick<Db, "agent">,
   computerId: string,
-  options: { list: boolean },
+  options: { list: boolean; allowOrphan?: boolean },
 ) {
-  return workspaceFilesQuery(
-    (viewer, agentId) => ownedComputerAgentAssignment(db, computerId, viewer, agentId),
-    options,
-  );
+  return workspaceFilesQuery(async (viewer, agentId) => {
+    const assignment = await ownedComputerAgentAssignment(db, computerId, viewer, agentId);
+    if (assignment || !options.allowOrphan) return assignment;
+    // The Computer owner may remove a retained directory that no longer has a DB Agent row.
+    // The handler has already authorized the Computer; the SDK path codec still constrains the
+    // identifier before it reaches the daemon.
+    return { computerId, revision: "orphan-directory" };
+  }, options);
+}
+
+export function computerWorkspaceScanQuery(db: Pick<Db, "agent">, computerId: string) {
+  return new AgentWorkspaceScanQuery({
+    findOwned: (viewer, agentId) => ownedComputerAgentAssignment(db, computerId, viewer, agentId),
+    online: (scope) => getComputerStatusCache().get(scope),
+    publishScan: (request) =>
+      createCentrifugoServerApi().publish(
+        daemonControlChannel(request.workspaceId, request.computerId),
+        encodeAgentWorkspaceScanRequest(request),
+      ),
+    scanResults: getAgentWorkspaceScanResults(),
+    computerId,
+  });
 }
 
 /** The same query for an archived Agent's profile (`archivedAgentWorkspaceAssignment`). */
@@ -140,6 +161,20 @@ export function archivedAgentWorkspaceFilesQuery(
     (viewer, agentId) => archivedAgentWorkspaceAssignment(db, { ...viewer, role }, agentId),
     options,
   );
+}
+
+export function archivedAgentWorkspaceScanQuery(db: Pick<Db, "agent">, role: string | undefined) {
+  return new AgentWorkspaceScanQuery({
+    findOwned: (viewer, agentId) =>
+      archivedAgentWorkspaceAssignment(db, { ...viewer, role }, agentId),
+    online: (scope) => getComputerStatusCache().get(scope),
+    publishScan: (request) =>
+      createCentrifugoServerApi().publish(
+        daemonControlChannel(request.workspaceId, request.computerId),
+        encodeAgentWorkspaceScanRequest(request),
+      ),
+    scanResults: getAgentWorkspaceScanResults(),
+  });
 }
 
 function workspaceFilesQuery(

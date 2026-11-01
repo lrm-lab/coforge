@@ -40,8 +40,8 @@ These rules apply to `src/server/computers/`.
   routes. Keep the check there, never in one caller.
 - `computer-lifecycle-memory.server.ts` is the only store of a shutdown
   reason and of the last daemon instance whose return was announced.
-- `computer-agent-workspaces.server.ts` summarizes the Daemon's existing
-  workspace-directory observations for the Computer owner's detail inventory.
+- `computer-workspace-files.server.ts` requests one local Daemon workspace scan
+  for the Computer owner's detail inventory; the Daemon owns directory traversal.
 - `computer-model-catalog-refresh.server.ts` waits for the terminal reply to
   an explicit model probe — scoped to one provider when the request names it; ordinary catalog
   reads use the stored inventory. Each provider's outcome reports separately.
