@@ -75,7 +75,7 @@ import {
   type AgentWorkspaceDeleteRequest,
   type AgentWorkspaceDeleteResult,
 } from "@lrm/coforge-sdk/internal";
-import { AgentMigrationRunner } from "#src/agent-migration/migration-runner";
+import type { AgentMigrationRunner } from "#src/agent-migration/migration-runner";
 import { usageScanFailure, usageScanReading, usageScanResult } from "./usage-scan-response";
 import { AgentControl } from "#src/agent-runtime/agent-control";
 import { AgentSessions } from "#src/agent-runtime/agent-session";
@@ -121,11 +121,7 @@ import { runtimeMachineStatus } from "./machine-status-reporter";
 import { agentActivityDrafts } from "./agent-activity-drafts";
 import { sendAgentStatus, type AgentStatusReportPorts } from "./agent-status-report";
 import { agentIdForContext, contextFor } from "./agent-context";
-import {
-  cleanupUnconfirmed,
-  launchFailureDraft,
-  stopFailureMessage,
-} from "./agent-failure-presentation";
+import { cleanupUnconfirmed, launchFailureDraft } from "./agent-failure-presentation";
 import { RuntimeRelease } from "./runtime-release";
 import { AgentFeatureSync } from "./agent-feature-sync";
 import { WakeRecycle } from "./wake-recycle";
@@ -151,7 +147,7 @@ import {
 } from "./mention-delivery-tracker";
 import { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
 import type { MintAppItem } from "#src/agent-app-inbox/agent-app-inbox";
-import { SystemCleaner, type SystemCleanerOptions } from "#src/system-cleaner/system-cleaner";
+import type { SystemCleaner, SystemCleanerOptions } from "#src/system-cleaner/system-cleaner";
 import { isAgentApiKey } from "#src/credentials/agent-api-key";
 import { AgentPreflightError } from "./agent-preflight-error";
 import { shutdownReasonForHold, type RunnerHold } from "./shutdown-reason";
@@ -161,6 +157,7 @@ import { RuntimeStartup } from "./runtime-startup";
 import { RuntimeStop } from "./runtime-stop";
 import { composeMessages } from "./message-composition";
 import { composeRuntimeServices } from "./runtime-services-composition";
+import { AgentOperations } from "./agent-operations";
 import { composeAgentControl } from "./agent-control-composition";
 import {
   UpgradeResultReporter,
@@ -168,16 +165,12 @@ import {
   type UpgradeOperationsReading,
 } from "./upgrade-result-reporter";
 import type { UnrefTimerSchedule } from "./unref-timer";
-import { getLogger } from "@logtape/logtape";
 import { COFORGE_DAEMON_VERSION } from "#src/version";
-import { ReminderScheduler } from "#src/agent-reminder/reminder-scheduler";
-import { AgentAppConfigSync } from "#src/agent-app-config/agent-app-config-sync";
+import type { ReminderScheduler } from "#src/agent-reminder/reminder-scheduler";
+import type { AgentAppConfigSync } from "#src/agent-app-config/agent-app-config-sync";
 import { logAgentOperationFailure } from "./agent-failure-logs";
 import { acceptAppRegistrationNotice } from "#src/agent-app-inbox/app-registration-notice";
-import { diagnosticErrorName } from "@lrm/coforge-sdk/internal";
 import type { AgentVersionResponse } from "@lrm/coforge-sdk/agent";
-
-const logger = getLogger(["coforge", "daemon", "runtime"]);
 
 /** Per-provider reading deadline supplied by a runtime usage scan. */
 export const USAGE_SCAN_READ_TIMEOUT_MS = 10_000;
@@ -483,6 +476,8 @@ export class DaemonRuntime {
   readonly #startup: RuntimeStartup;
   /** The closing flow; assigned at the constructor's end like `#startup`. */
   readonly #shutdown: RuntimeStop;
+  /** The cloud-facing Agent operations; assigned at the constructor's end. */
+  readonly #agentOperations: AgentOperations;
   readonly #workspaceQueries = new AgentWorkspaceQueries(
     (agentId) => this.#agentProcessManager.runtime(agentId)?.config.provider,
   );
@@ -825,6 +820,35 @@ export class DaemonRuntime {
       stalledRecoverySweep: this.#stalledRecoverySweep,
       catalogFreshnessSweep: this.#catalogFreshnessSweep,
       machineStatus: this.#machineStatus,
+    });
+    this.#agentOperations = new AgentOperations({
+      connection: this.#connection,
+      transport: () => this.#transport,
+      assertRunning: () => this.#assertRunning(),
+      assertOwnIntent: (probe) => this.#assertOwnIntent(probe),
+      agentIdForContext: (context) => this.#agentIdForContext(context),
+      canonicalAgentMessageTarget: (agentId, target, agentApiKey) =>
+        this.#canonicalAgentMessageTarget(agentId, target, agentApiKey),
+      currentActivityLaunch: (agentId) => this.#currentActivityLaunches.get(agentId),
+      activityPublisher: this.#activityPublisher,
+      drafts: this.#drafts,
+      activity: (agentId, detailKind, level, detail, extra) =>
+        this.#activity(agentId, detailKind, level, detail, extra),
+      messageAttention: this.#messageAttention,
+      deliveryQueue: this.#deliveryQueue,
+      inputDrain: this.#inputDrain,
+      mentionDeliveries: this.#mentionDeliveries,
+      launchCustody: this.#launchCustody,
+      processManager: this.#agentProcessManager,
+      agentStops: this.#agentStops,
+      stoppingAgents: this.#stoppingAgents,
+      sessionReferences: this.#sessionReferences,
+      interruptIfBusy: (agentId, launch) => this.#interruptIfBusy(agentId, launch),
+      disposeLaunchObservations: (agentId) => this.#disposeLaunchObservations(agentId),
+      revokeLocalLaunch: (agentId) => this.#revokeLocalLaunch(agentId),
+      stopCoordinator: this.#stopCoordinator,
+      cleanupUnconfirmed: (agentId, error) => this.#cleanupUnconfirmed(agentId, error),
+      messageOperations: this.#messageOperations,
     });
     this.#shutdown = new RuntimeStop({
       startup: this.#startup,
@@ -1235,68 +1259,7 @@ export class DaemonRuntime {
    * server the process is gone. Never mutates any other runtime state.
    */
   async handleAgentActivityProbe(probe: AgentActivityProbe): Promise<void> {
-    this.#assertOwnIntent(probe);
-    const launch = this.#currentActivityLaunches.get(probe.agentId);
-    if (!launch) {
-      logger.info("Activity probe received for an Agent that is not running", {
-        event: "agent_activity_probe:not_running",
-        request_id: probe.requestId,
-        workspace_id: probe.workspaceId,
-        computer_id: probe.computerId,
-        agent_id: probe.agentId,
-        probe_id: probe.probeId,
-        outcome: "skipped",
-      });
-      return;
-    }
-    const unread = this.#messageAttention.unreadDeliveries(probe.agentId);
-    const hold = this.#deliveryQueue.explicitHold(probe.agentId);
-    if (unread.length && hold !== "fingerprint_fence") {
-      logger.info("Activity probe answered for an Agent with unread messages", {
-        event: "agent_activity_probe:pending_delivery",
-        request_id: probe.requestId,
-        workspace_id: probe.workspaceId,
-        computer_id: probe.computerId,
-        agent_id: probe.agentId,
-        probe_id: probe.probeId,
-        launch_id: launch.launchId,
-        target_count: unread.length,
-        message_count: unread.reduce((sum, target) => sum + target.count, 0),
-        ...(hold ? { hold_reason: hold } : {}),
-      });
-      this.#activityPublisher.publish(probe.agentId, launch, {
-        ...this.#activity(
-          probe.agentId,
-          AGENT_ACTIVITY_DETAIL_KIND.MESSAGE_RECEIVED,
-          "info",
-          "Message received",
-          { entries: [] },
-        ),
-        probeId: probe.probeId,
-      });
-      return;
-    }
-    const remembered = this.#activityPublisher.lastBusy(probe.agentId);
-    if (launch.startup?.waiting) {
-      this.#activityPublisher.publish(probe.agentId, launch, {
-        ...this.#drafts.starting(probe.agentId),
-        probeId: probe.probeId,
-      });
-      return;
-    }
-    if (remembered && remembered.launch === launch) {
-      this.#activityPublisher.publish(probe.agentId, launch, {
-        ...remembered.activity,
-        probeId: probe.probeId,
-        entries: [],
-        isHeartbeat: false,
-      });
-      return;
-    }
-    this.#activityPublisher.publish(probe.agentId, launch, {
-      ...this.#drafts.idle(probe.agentId),
-      probeId: probe.probeId,
-    });
+    return this.#agentOperations.handleActivityProbe(probe);
   }
 
   async handleAgentMessage(message: AgentMessageDelivery): Promise<void> {
@@ -1339,88 +1302,11 @@ export class DaemonRuntime {
    * acknowledged, so a rejoin does not bring them back on `ready`) and the pending attention of
    * those channels and their threads. */
   handleAgentInboxPurge(purge: AgentInboxPurge): void {
-    this.#assertRunning();
-    if (purge.workspaceId !== this.#connection.workspaceId)
-      throw new Error("agent inbox purge targets another Workspace");
-    const conversations = new Set(purge.conversationIds);
-    const session = this.#agentProcessManager.session(purge.agentId);
-    for (const conversationId of conversations)
-      void session?.purgeConversation?.(conversationId).catch((error) => {
-        logger.warning("Memory conversation cleanup failed", {
-          event: "agent.inbox.purge_cleanup_failed",
-          agent_id: purge.agentId,
-          error_code: diagnosticErrorName(error),
-        });
-      });
-    let dropped = 0;
-    const queue = this.#inputDrain.get(purge.agentId);
-    if (queue)
-      queue.items = queue.items.filter((item) => {
-        if (item.kind !== "delivery" || !conversations.has(item.message.conversationId))
-          return true;
-        // Taken and dropped: acknowledged, so the server does not bring it back after a rejoin. A
-        // tracked mention is never ACKed untold: the Agent will not be told it, so it is rejected.
-        if (
-          !this.#mentionDeliveries.drop(
-            item.message,
-            MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED,
-          )
-        )
-          this.#launchCustody.acknowledge(item.message);
-        item.completion.resolve();
-        dropped++;
-        return false;
-      });
-    dropped += this.#deliveryQueue.discardConversations(purge.agentId, conversations).length;
-    this.#messageAttention.clearTargets(purge.agentId, purge.targets);
-    logger.info("Agent inbox purged for channels it can no longer read", {
-      event: "agent.inbox.purged",
-      agent_id: purge.agentId,
-      reason: purge.reason,
-      conversation_count: conversations.size,
-      dropped_delivery_count: dropped,
-    });
+    return this.#agentOperations.handleInboxPurge(purge);
   }
 
   stopAgent(agentId: string): Promise<void> {
-    const existingStop = this.#agentStops.get(agentId);
-    if (existingStop) return existingStop;
-    // Close this Agent's launch gate and local capabilities before the first await.
-    this.#stoppingAgents.add(agentId);
-    this.#sessionReferences.delete(agentId);
-    this.#inputDrain.close(agentId, new Error(`Agent runtime is stopping: ${agentId}`));
-    // Invalidate acceptance before disposal: a late native reply cannot acknowledge a cancelled
-    // delivery or attach its attention to the replacement session.
-    this.#messageAttention.clearAgent(agentId, { cancelNotices: true });
-    void this.#mentionDeliveries.cancelAgent(agentId);
-    this.#agentProcessManager.session(agentId)?.cancelPendingNotices?.();
-    const activityLaunch = this.#currentActivityLaunches.get(agentId);
-    activityLaunch?.startup?.dispose();
-    if (activityLaunch) activityLaunch.stopping = true;
-    this.#interruptIfBusy(agentId, activityLaunch);
-    this.#activityPublisher.forgetBusy(agentId);
-    this.#disposeLaunchObservations(agentId);
-    this.#revokeLocalLaunch(agentId);
-    const stopping = this.#stopCoordinator
-      .stopAgent(agentId)
-      .catch((error) => {
-        if (activityLaunch)
-          this.#activityPublisher.publish(
-            agentId,
-            activityLaunch,
-            this.#drafts.runtimeError(
-              agentId,
-              stopFailureMessage(this.#cleanupUnconfirmed(agentId, error)),
-            ),
-          );
-        throw error;
-      })
-      .finally(() => {
-        this.#agentStops.delete(agentId);
-        if (!this.#agentProcessManager.isStopping(agentId)) this.#stoppingAgents.delete(agentId);
-      });
-    this.#agentStops.set(agentId, stopping);
-    return stopping;
+    return this.#agentOperations.stopAgent(agentId);
   }
 
   /** Forgets one ended launch's observation state without affecting another Agent. */
@@ -1561,26 +1447,7 @@ export class DaemonRuntime {
     request: LocalAgentMessageRequest,
     agentApiKey: string,
   ): Promise<AgentMessageResponse> {
-    this.#assertRunning();
-    const agentId = this.#agentIdForContext(context);
-    if (!this.#transport.agentMessage)
-      throw new AgentPreflightError("daemon connection is not connected", "DAEMON_NOT_CONNECTED");
-    if (!isAgentApiKey(agentApiKey))
-      throw new AgentPreflightError("Agent API key is missing", "AGENT_API_KEY_MISSING");
-    logger.info("Agent message operation received", {
-      event: "agent.message.operation",
-      agent_id: agentId,
-      operation: request.operation,
-      target: request.target ?? "*",
-    });
-    // A spelling a read has already mapped to its canonical target shares that target's state.
-    const target = request.target
-      ? this.#messageAttention.resolveTarget(
-          agentId,
-          await this.#canonicalAgentMessageTarget(agentId, request.target, agentApiKey),
-        )
-      : undefined;
-    return this.#messageOperations.handle(agentId, request, target, agentApiKey);
+    return this.#agentOperations.agentMessage(context, request, agentApiKey);
   }
 
   /**

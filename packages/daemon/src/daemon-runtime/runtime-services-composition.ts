@@ -74,7 +74,9 @@ export function composeRuntimeServices(ports: RuntimeServicesPorts): RuntimeServ
     },
   });
   const appConfigs = new AppConfigSync({
-    // The snapshot request asks only through a transport that has the method.
+    // `DaemonConnection#requestAppConfigSnapshot` implements this on every daemon connection; the
+    // port stays optional for transports that carry no App config, and a sync only asks after the
+    // server pushed a config through one that did, so the assertion holds where it is reached.
     requestSnapshot: (agentId) =>
       transport().requestAppConfigSnapshot!({
         ...ports.envelope(),
