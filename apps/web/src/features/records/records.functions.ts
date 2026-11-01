@@ -13,12 +13,13 @@ import { recordDistribution } from "#src/server/records/record-distribution.serv
 import { recordAssistantCatalog } from "#src/server/records/record-assistant-catalog.server";
 import { recordKeyPointEdits } from "#src/server/records/record-key-point-edits.server";
 import { recordReportContent } from "#src/server/records/record-report-content.server";
+import { recordNavAttention } from "#src/server/records/record-nav-attention.server";
 import { normalizeReportContent, type ReportContent } from "./records-content";
 
 export const loadRecordsNavAttention = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .handler(async ({ context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).loadNavAttention({ workspaceId, userId: user.id });
+    return recordNavAttention(db).loadNavAttention({ workspaceId, userId: user.id });
   });
 
 const reportContentSchema: z.ZodType<ReportContent> = z.object({

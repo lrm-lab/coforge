@@ -3,14 +3,12 @@ import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import {
   currentIsoWeek,
-  isAutoSendCancelled,
   isValidTemplateName,
   normalizeReportContent,
   withAutoSendCancelled,
   withWeekSendDismissed,
 } from "#src/features/records/records-content";
 import { type RecordAssistantPayload } from "#src/features/records/weekly-highlight-extract";
-import { isWeeklySendArmed } from "#src/features/records/weekly-send-window";
 import { zonedCalendarDate } from "#src/features/records/weekly-report-schedule-due";
 import { loadRecordsCatalog } from "./record-catalog-load.server";
 import { requireMembership } from "./record-catalog-access.server";
@@ -22,6 +20,7 @@ import { recordAssistantOffer } from "./record-assistant-offer.server";
 import { recordReportContent } from "./record-report-content.server";
 import { ensureFormatForSettings } from "./record-catalog-format.server";
 import { asReportContent } from "./record-content-coercion.server";
+import { recordNavAttention } from "./record-nav-attention.server";
 
 type Db = PrismaClient;
 
@@ -42,77 +41,11 @@ export class RecordCatalog {
     return loadRecordsCatalog(this.db, input, (args) => ensureFormatForSettings(this.db, args));
   }
 
-  /** Records rail dot: Leader preview hour, or an unread member assignment. */
-  async loadNavAttention(input: { workspaceId: string; userId: string; now?: Date }) {
-    await requireMembership(this.db, input.workspaceId, input.userId);
-    const unreadAssignment = await this.db.weeklyReport.findFirst({
-      where: {
-        workspaceId: input.workspaceId,
-        kind: "member",
-        authorId: input.userId,
-        sourceTemplateId: { not: null },
-        hiddenFromAuthor: false,
-        content: { path: ["assignment", "unread"], equals: true },
-      },
-      select: { id: true },
-    });
-    if (unreadAssignment) return { preview: true as const };
-
-    const now = input.now ?? new Date();
-    const currentWeek = currentIsoWeek(zonedCalendarDate(now));
-    const settings = await this.db.weeklyReportTemplate.findMany({
-      where: {
-        workspaceId: input.workspaceId,
-        ownerId: input.userId,
-        applied: true,
-        scheduleEnabled: true,
-      },
-      select: { id: true, sendWeekday: true, sendTime: true },
-    });
-    if (settings.length === 0) return { preview: false as const };
-    const stream = {
-      workspaceId: input.workspaceId,
-      authorId: input.userId,
-      kind: "template" as const,
-      settingsId: { in: settings.map((row) => row.id) },
-    };
-    const [sent, live] = await Promise.all([
-      this.db.weeklyReport.findMany({
-        where: {
-          ...stream,
-          cycle: { year: currentWeek.year, week: currentWeek.week },
-          submissions: { some: { kind: "member" } },
-        },
-        select: { settingsId: true },
-      }),
-      this.db.weeklyReport.findMany({
-        where: { ...stream, submissions: { none: { kind: "member" } } },
-        select: { settingsId: true, content: true },
-      }),
-    ]);
-    const sentSettingsIds = new Set(sent.map((row) => row.settingsId));
-    const liveContentBySettingsId = new Map<string | null, unknown>();
-    for (const row of live) {
-      if (!liveContentBySettingsId.has(row.settingsId))
-        liveContentBySettingsId.set(row.settingsId, row.content);
-    }
-    for (const row of settings) {
-      const armed = isWeeklySendArmed({
-        applied: true,
-        alreadySent: sentSettingsIds.has(row.id),
-        sendWeekday: row.sendWeekday,
-        sendTime: row.sendTime,
-        scheduleEnabled: true,
-        autoSendCancelled: isAutoSendCancelled(
-          asReportContent(liveContentBySettingsId.get(row.id)),
-          currentWeek.year,
-          currentWeek.week,
-        ),
-        now,
-      });
-      if (armed) return { preview: true as const };
-    }
-    return { preview: false as const };
+  /** Compatibility seam for existing nav-attention tests and callers. */
+  loadNavAttention(
+    input: Parameters<ReturnType<typeof recordNavAttention>["loadNavAttention"]>[0],
+  ) {
+    return recordNavAttention(this.db).loadNavAttention(input);
   }
 
   /**
