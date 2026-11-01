@@ -8,7 +8,6 @@ export type RuntimeTransportLifecyclePorts = {
   set transport(value: DaemonConnectionClient);
   transportFactory: DaemonConnectionClientFactory;
   connection: { workspaceId: string; computerId: string };
-  subscriptions: Array<() => void>;
 };
 
 /**

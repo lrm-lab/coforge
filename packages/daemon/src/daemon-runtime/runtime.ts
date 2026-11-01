@@ -1,6 +1,3 @@
-import { subscribeRuntimeAuth } from "./runtime-auth-subscription";
-import { subscribeWorkspaceQueries } from "./workspace-query-handlers";
-import type { RuntimeAuthController } from "./runtime-auth-controller";
 import { createRuntimeAuthAdapter } from "#src/code-agent/registry";
 import type { RuntimeAuthAdapter, RuntimeAuthProvider } from "@lrm/coforge-anvil";
 import {
@@ -10,7 +7,6 @@ import {
   type CodeAgentProvider,
   type UsageSnapshot,
 } from "@lrm/coforge-anvil";
-import { mkdirSync } from "node:fs";
 import { OperatingSystemInfo } from "#src/platform/operating-system";
 import { FileConversationSessionStore } from "#src/persistence/conversation-session-store";
 import { escapePathIdentity } from "#src/persistence/path-scope";
@@ -46,8 +42,6 @@ export type DaemonConfig = {
 /** @deprecated wire-facing callers should use DaemonConfig internally. */
 export type WorkspaceConfig = DaemonConfig;
 import type { DaemonCredentialStore } from "#src/credentials/credential-store";
-import { PiChatRelay } from "#src/pi-chat/relay";
-import { readyCapabilities } from "./ready-capabilities";
 import type {
   DaemonConnectionClient,
   DaemonConnectionClientFactory,
@@ -56,7 +50,6 @@ import { DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS } from "#src/connection/shutdown-noti
 import { DaemonConnectionStoppedError } from "#src/connection/daemon-connection-stopped-error";
 import {
   type DaemonConnectRejectionReason,
-  WORKSPACE_PROTOCOL_MAJOR,
   type DaemonShutdownReason,
   type RunnerHoldReason,
   AGENT_MESSAGE_REJECT_METHOD,
@@ -105,7 +98,7 @@ import { assertOwnIntent } from "./runtime-intent-validation";
 import { currentObservedUsage } from "./runtime-usage-observation";
 import { failCollectorRunningSlots } from "./runtime-collector-failure";
 import { runtimeEnvelope } from "./runtime-envelope";
-import { replaceTransport, subscribe, unsubscribeAll } from "./runtime-transport-lifecycle";
+import { replaceTransport } from "./runtime-transport-lifecycle";
 import { holdRunners, releaseRunners } from "./runtime-runner-hold";
 import { agentTask, acceptReminderDue, mintAppItem, reminder } from "./runtime-agent-api-reminders";
 import {
@@ -173,9 +166,7 @@ import { AgentPreflightError } from "./agent-preflight-error";
 import { shutdownReasonForHold, type RunnerHold } from "./shutdown-reason";
 import { CodeAgentInventorySync, type CodeAgentDiscovery } from "./code-agent-inventory-sync";
 import { RuntimeAuthReporter } from "./runtime-auth-reporter";
-import { subscribeProviderScans } from "./provider-scan-handlers";
-import { subscribeRuntimeReconnect } from "./runtime-reconnect";
-import { RuntimePublicationSubscriptions } from "./runtime-publication-subscriptions";
+import { RuntimeStartup } from "./runtime-startup";
 import {
   UpgradeResultReporter,
   type RecoveredUpgradeResult,
@@ -189,7 +180,7 @@ import { AgentAppConfigSync } from "#src/agent-app-config/agent-app-config-sync"
 import { FileReminderReceiptStore } from "#src/persistence/reminder-receipt-store";
 import { logAgentApiKeyRevokeFailed, logAgentOperationFailure } from "./agent-failure-logs";
 import { acceptAppRegistrationNotice } from "#src/agent-app-inbox/app-registration-notice";
-import { diagnosticErrorCode, diagnosticErrorName } from "@lrm/coforge-sdk/internal";
+import { diagnosticErrorName } from "@lrm/coforge-sdk/internal";
 import type { AgentVersionResponse } from "@lrm/coforge-sdk/agent";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
@@ -208,13 +199,8 @@ export class DaemonRuntime {
   readonly #credentials: DaemonCredentialStore;
   readonly #transportFactory: DaemonConnectionClientFactory;
   #transport: DaemonConnectionClient;
-  #startPromise: Promise<void> | undefined;
-  /** Aborted by `stop`, so a start still waiting for the cloud never holds a stop up. */
-  #startAbort: AbortController | undefined;
   #stopPromise: Promise<void> | undefined;
-  #started = false;
   #stopping = false;
-  #subscriptions: Array<() => void> = [];
   readonly #agentControl: AgentControl;
   readonly #agentSessions: AgentSessions;
   readonly #messageAttention: AgentMessageAttentionIndex;
@@ -352,7 +338,7 @@ export class DaemonRuntime {
   });
   /** Re-reads model catalogs whose on-disk key changed: an update, a sign-in or a sign-out. */
   readonly #catalogFreshnessSweep = new CatalogFreshnessSweep({
-    transport: () => (this.#started && !this.#stopping ? this.#transport : undefined),
+    transport: () => (this.#startup.started && !this.#stopping ? this.#transport : undefined),
     recheck: (transport) => this.#codeAgentInventory.recheckCatalogs(transport),
   });
   /** The OS version the ready report carries; read once, off the ready path. */
@@ -361,7 +347,7 @@ export class DaemonRuntime {
   readonly #machineStatus = runtimeMachineStatus({
     connection: () => this.#connection,
     dataDirectory: () => this.stateDirectory,
-    transport: () => (this.#started && !this.#stopping ? this.#transport : undefined),
+    transport: () => (this.#startup.started && !this.#stopping ? this.#transport : undefined),
   });
   readonly #wakeRecycle = new WakeRecycle({
     provider: (provider) => this.#createProvider(provider),
@@ -479,7 +465,7 @@ export class DaemonRuntime {
     currentLaunch: (agentId) => this.#currentActivityLaunches.get(agentId),
     transport: () => this.#transport,
     workspaceId: () => this.#connection.workspaceId,
-    active: () => this.#started,
+    active: () => this.#startup.started,
   });
   /** Runner-hold reason while this runtime is refusing new turns; undefined when not held.
    * Deliberately in-memory only, so a restarted daemon is never born held. */
@@ -498,9 +484,10 @@ export class DaemonRuntime {
   readonly #observationPorts: RuntimeEventObservationPorts;
   readonly #codeAgentInventory: CodeAgentInventorySync;
   readonly #runtimeAuth: RuntimeAuthReporter;
-  #runtimeAuthControl: RuntimeAuthController | undefined;
   readonly #upgradeResults: UpgradeResultReporter;
-  #piChat?: PiChatRelay;
+  /** The Workspace connection's open sequence and the state it installs; assigned at the
+   * constructor's end, once every collaborator it names exists. */
+  readonly #startup: RuntimeStartup;
   readonly #workspaceQueries = new AgentWorkspaceQueries(
     (agentId) => this.#agentProcessManager.runtime(agentId)?.config.provider,
   );
@@ -947,6 +934,72 @@ export class DaemonRuntime {
         this.#launchFailureActivity(agentId, provider, error),
       drainAppInboxNotices: (agentId) => this.#inboxCoordinator.drainAppInboxNotices(agentId),
     });
+    this.#startup = new RuntimeStartup({
+      transport: () => this.#transport,
+      replaceTransport: () => this.#replaceTransport(),
+      credentials: this.#credentials,
+      runtimeInstanceId: this.#runtimeInstanceId,
+      startedAtMs: this.#startedAt,
+      computerVersion: this.computerVersion,
+      isStopping: () => this.#stopping,
+      publications: {
+        startAgent: (intent) => this.handleAgentStart(intent),
+        stopAgent: (intent) => this.handleAgentStop(intent),
+        interruptAgent: (intent) => this.handleAgentTurnInterrupt(intent),
+        probeAgent: (probe) => this.handleAgentActivityProbe(probe),
+        purgeAgentInbox: (purge) => this.handleAgentInboxPurge(purge),
+        resetWorkspace: (request) => this.handleAgentWorkspaceReset(request),
+        deliverMessage: (message) => this.handleAgentMessage(message),
+        stopRuntime: () => this.stop(),
+        connectionRefused: (reason) => this.lifecycle.connectionRefused?.(reason),
+        applyReminderSync: (sync) => this.#reminders.apply(sync),
+        applyAppConfigSync: (sync) => this.#appConfigs.apply(sync),
+        acceptAppRegistrationNotice: (notice) =>
+          acceptAppRegistrationNotice(notice, {
+            isRunning: (agentId) => this.#readyRunningAgentIds().includes(agentId),
+            mint: (agentId, item) => this.mintAppItem(agentId, item),
+          }).then(() => {}),
+        migration: this.#migrations
+          ? {
+              pruneLeftovers: () => this.#migrations!.pruneLeftovers(),
+              lease: (lease) => void this.#migrations!.lease(lease),
+              cancel: (cancel) => this.#migrations!.cancel(cancel),
+            }
+          : undefined,
+      },
+      agentControl: this.#agentControl,
+      agentSessions: this.#agentSessions,
+      readyRunningAgentIds: () => this.#readyRunningAgentIds(),
+      operatingSystem: this.#operatingSystem,
+      upgradeResults: this.#upgradeResults,
+      runtimeAuth: this.#runtimeAuth,
+      runtimeAuthFactory: this.runtimeAuthFactory,
+      codeAgentInventory: this.#codeAgentInventory,
+      scanUsage: (provider) => this.scanUsage(provider),
+      workspaceQueries: this.#workspaceQueries,
+      deleteWorkspace: (request) => this.#deleteWorkspace(this.#connection, request),
+      sendPiChatFrame: async (frame) => {
+        if (this.#stopping || !this.#transport.sendPiChatFrame)
+          throw new Error("Pi chat connection unavailable");
+        await this.#transport.sendPiChatFrame(frame);
+      },
+      lifecycle: {
+        requestRestart: this.lifecycle.requestRestart,
+        requestUpgrade: this.lifecycle.requestUpgrade
+          ? (requestId, expectedVersion) => this.#requestUpgrade(requestId, expectedVersion)
+          : undefined,
+        connectionRefused: this.lifecycle.connectionRefused,
+        recoveredRestartRequestIds: this.lifecycle.recoveredRestartRequestIds,
+        recoveredUpgradeRequestIds: this.lifecycle.recoveredUpgradeRequestIds,
+      },
+      requestReminderSnapshot: (agentId) => this.#requestReminderSnapshot(agentId),
+      resyncAppConfigs: () => this.#resyncAppConfigs(),
+      activityPublisher: this.#activityPublisher,
+      coldIdleSweep: this.#coldIdleSweep,
+      stalledRecoverySweep: this.#stalledRecoverySweep,
+      catalogFreshnessSweep: this.#catalogFreshnessSweep,
+      machineStatus: this.#machineStatus,
+    });
   }
 
   get agentProcessManager(): AgentProcessManager {
@@ -954,7 +1007,7 @@ export class DaemonRuntime {
   }
 
   #assertRunning(): void {
-    if (this.#stopping || !this.#started)
+    if (this.#stopping || !this.#startup.started)
       throw new AgentPreflightError(NOT_RUNNING, "DAEMON_NOT_RUNNING");
   }
 
@@ -1004,16 +1057,7 @@ export class DaemonRuntime {
       throw new Error("Daemon cannot be started for another Workspace connection");
     }
     if (this.#stopping) return Promise.reject(new DaemonConnectionStoppedError());
-    if (this.#started) return Promise.resolve();
-    if (this.#startPromise) return this.#startPromise;
-
-    const startAbort = new AbortController();
-    this.#startAbort = startAbort;
-    this.#startPromise = this.#start(connection, startAbort.signal).finally(() => {
-      this.#startPromise = undefined;
-      this.#startAbort = undefined;
-    });
-    return this.#startPromise;
+    return this.#startup.start(connection);
   }
 
   async #replaceTransport(): Promise<unknown> {
@@ -1027,197 +1071,7 @@ export class DaemonRuntime {
       },
       transportFactory: this.#transportFactory,
       connection: this.#connection,
-      subscriptions: this.#subscriptions,
     });
-  }
-
-  #subscribe(unsubscribe: (() => void) | undefined): void {
-    subscribe(this.#subscriptions, unsubscribe);
-  }
-
-  #unsubscribeAll(): void {
-    unsubscribeAll(this.#subscriptions);
-  }
-
-  async #start(connection: DaemonConfig, signal: AbortSignal): Promise<void> {
-    mkdirSync(connection.workspaceRoot, { recursive: true });
-    const token = await this.#credentials.load(connection.workspaceId, connection.computerId);
-    if (!token) throw new Error("Workspace credential is missing");
-    const publications = new RuntimePublicationSubscriptions({
-      transport: this.#transport,
-      workspaceId: connection.workspaceId,
-      computerId: connection.computerId,
-      startAgent: (intent) => this.handleAgentStart(intent),
-      stopAgent: (intent) => this.handleAgentStop(intent),
-      interruptAgent: (intent) => this.handleAgentTurnInterrupt(intent),
-      probeAgent: (probe) => this.handleAgentActivityProbe(probe),
-      purgeAgentInbox: (purge) => this.handleAgentInboxPurge(purge),
-      resetWorkspace: (request) => this.handleAgentWorkspaceReset(request),
-      deliverMessage: (message) => this.handleAgentMessage(message),
-      stopRuntime: () => this.stop(),
-      connectionRefused: (reason) => this.lifecycle.connectionRefused?.(reason),
-      applyReminderSync: (sync) => this.#reminders.apply(sync),
-      applyAppConfigSync: (sync) => this.#appConfigs.apply(sync),
-      acceptAppRegistrationNotice: (notice) =>
-        acceptAppRegistrationNotice(notice, {
-          isRunning: (agentId) => this.#readyRunningAgentIds().includes(agentId),
-          mint: (agentId, item) => this.mintAppItem(agentId, item),
-        }).then(() => {}),
-      migration: this.#migrations
-        ? {
-            pruneLeftovers: () => this.#migrations!.pruneLeftovers(),
-            lease: (lease) => void this.#migrations!.lease(lease),
-            cancel: (cancel) => this.#migrations!.cancel(cancel),
-          }
-        : undefined,
-    });
-    try {
-      const auth = subscribeRuntimeAuth(this.#transport, {
-        owner: {
-          protocolMajor: 1,
-          workspaceId: connection.workspaceId,
-          computerId: connection.computerId,
-        },
-        workingDirectory: connection.workspaceRoot,
-        createAdapter: this.runtimeAuthFactory,
-        refresh: () => this.#runtimeAuth.refresh(),
-        refreshProvider: (provider) => this.#runtimeAuth.refreshProvider(provider),
-      });
-      this.#runtimeAuthControl = auth?.controller;
-      this.#subscribe(auth?.unsubscribe);
-      this.#upgradeResults.start();
-      this.#subscribe(
-        subscribeRuntimeReconnect(this.#transport, {
-          workspaceId: connection.workspaceId,
-          computerId: connection.computerId,
-          refreshInventory: (transport) => {
-            void this.#codeAgentInventory
-              .reportRuntimes(transport)
-              .then((report) => this.#codeAgentInventory.refreshStaleCatalogs(report, transport))
-              .catch(() => {});
-          },
-          runningAgentIds: () => this.#readyRunningAgentIds(),
-          requestReminderSnapshot: (agentId) => this.#requestReminderSnapshot(agentId),
-          resyncAppConfigs: () => this.#resyncAppConfigs(),
-          replayAgentControl: () => this.#agentControl.replay(),
-          replayAgentSessions: () => this.#agentSessions.replay(),
-          reportUpgradeResults: () => this.#upgradeResults.report(),
-        }),
-      );
-      const transport = this.#transport;
-      this.#piChat ??= new PiChatRelay(connection, async (frame) => {
-        if (this.#stopping || !this.#transport.sendPiChatFrame)
-          throw new Error("Pi chat connection unavailable");
-        await this.#transport.sendPiChatFrame(frame);
-      });
-      this.#subscribe(
-        transport.onPiChatRequest?.(async (request) => {
-          if (
-            this.#stopping ||
-            request.workspaceId !== connection.workspaceId ||
-            request.computerId !== connection.computerId
-          )
-            return;
-          await this.#piChat?.execute(request);
-        }),
-      );
-      for (const unsubscribe of subscribeWorkspaceQueries(transport, {
-        connection,
-        observations: this.#workspaceQueries,
-        deleteWorkspace: (request) => this.#deleteWorkspace(connection, request),
-        currentTransport: () => this.#transport,
-        isStopping: () => this.#stopping,
-      }))
-        this.#subscribe(unsubscribe);
-      for (const unsubscribe of subscribeProviderScans(this.#transport, {
-        connection,
-        runtime: this,
-        currentTransport: () => this.#transport,
-        isStopping: () => this.#stopping,
-        runtimeAuth: this.#runtimeAuth,
-        inventory: this.#codeAgentInventory,
-      }))
-        this.#subscribe(unsubscribe);
-      // Register publication listeners after the auxiliary query/scanning listeners, matching the
-      // original start order; the server may recover persisted Agents immediately at ready.
-      for (const unsubscribe of await publications.install()) this.#subscribe(unsubscribe);
-      await this.#transport.start(token, {
-        workspaceId: connection.workspaceId,
-        computerId: connection.computerId,
-        serverHttpUrl: connection.serverHttpUrl,
-        requestRestart: this.lifecycle.requestRestart,
-        requestUpgrade: this.lifecycle.requestUpgrade
-          ? (requestId, expectedVersion) => this.#requestUpgrade(requestId, expectedVersion)
-          : undefined,
-        signal,
-      });
-      await this.#agentControl.replay();
-      await this.#agentSessions.replay();
-      // Off the event loop, once: the OS version only changes with an upgrade.
-      await this.#operatingSystem.read();
-      await this.#transport.ready(
-        () => ({
-          protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
-          requestId: crypto.randomUUID(),
-          workspaceId: connection.workspaceId,
-          // Legacy connection records have no computer identity; the server rejects this.
-          computerId: connection.computerId ?? "",
-          // Protocol field retained for compatibility with the existing ready handshake.
-          workerInstanceId: this.#runtimeInstanceId,
-          startedAt: this.#startedAt,
-          runningAgentIds: this.#readyRunningAgentIds(),
-          daemonVersion: COFORGE_DAEMON_VERSION,
-          computerVersion: this.computerVersion,
-          ...this.#operatingSystem.current,
-          recoveredRestartRequestIds: this.lifecycle.recoveredRestartRequestIds ?? [],
-          recoveredUpgradeRequestIds: this.lifecycle.recoveredUpgradeRequestIds ?? [],
-          capabilities: readyCapabilities(!!this.#migrations, !!this.#runtimeAuthControl),
-        }),
-        signal,
-      );
-      await this.#upgradeResults.report();
-      await Promise.all(
-        this.#readyRunningAgentIds().map((agentId) => this.#requestReminderSnapshot(agentId)),
-      );
-      this.#resyncAppConfigs();
-      const { buffered, dropped } = publications.release();
-      if (dropped > 0)
-        logger.warn("Delivery notices held during start were dropped; the cloud resends them", {
-          event: "daemon_runtime:notices_dropped",
-          dropped,
-        });
-      this.#started = true;
-      this.#activityPublisher.enable();
-      this.#coldIdleSweep.start();
-      this.#stalledRecoverySweep.start();
-      this.#catalogFreshnessSweep.start();
-      this.#machineStatus.start();
-      // Kick off optional inventory before flushing buffered publications so immediate probes can
-      // make progress while the first Agent inputs are delivered.
-      const codeAgentReport = this.#codeAgentInventory.reportRuntimes(transport);
-      await Promise.all(buffered.map((flush) => flush()));
-      // Inventory is optional and may spawn several provider CLIs. Start accepting Agent
-      // traffic as soon as the cloud handshake and recovery replay are complete; a slow probe
-      // must never hold the first reply or a daemon restart hostage.
-      void codeAgentReport
-        .then((report) => this.#codeAgentInventory.refreshStaleCatalogs(report, transport))
-        .catch(() => {});
-    } catch (error) {
-      this.#runtimeAuthControl?.stop();
-      this.#runtimeAuthControl = undefined;
-      this.#unsubscribeAll();
-      this.#upgradeResults.stop();
-      this.#started = false;
-      // A connection left up keeps reporting this Computer online for a Workspace that never
-      // started, so a failed start takes its transport down too.
-      const stopError = await this.#replaceTransport();
-      if (stopError !== undefined)
-        logger.warn("Stopping the connection of a failed start failed", {
-          event: "daemon_runtime:failed_start_stop_failed",
-          error_code: diagnosticErrorCode(stopError),
-        });
-      throw error;
-    }
   }
 
   /**
@@ -1458,7 +1312,7 @@ export class DaemonRuntime {
 
   async handleAgentWorkspaceReset(request: AgentWorkspaceResetRequest): Promise<void> {
     if (
-      !this.#started ||
+      !this.#startup.started ||
       this.#stopping ||
       request.workspaceId !== this.#connection.workspaceId ||
       request.computerId !== this.#connection.computerId
@@ -2029,9 +1883,7 @@ export class DaemonRuntime {
     this.#runnerHold = undefined;
     // Close every local capability synchronously before any shutdown await.
     this.#stopping = true;
-    this.#runtimeAuthControl?.stop();
-    this.#runtimeAuthControl = undefined;
-    this.#started = false;
+    const piChatClosed = this.#startup.close();
     this.#coldIdleSweep.stop();
     this.#stalledRecoverySweep.stop();
     this.#catalogFreshnessSweep.stop();
@@ -2057,10 +1909,10 @@ export class DaemonRuntime {
       void this.#mentionDeliveries.cancelAgent(agentId);
       this.#agentProcessManager.session(agentId)?.cancelPendingNotices?.();
     }
-    this.#unsubscribeAll();
+    this.#startup.unsubscribeAll();
     // A start still waiting for its first cloud connection would otherwise hold this stop up for
     // as long as the cloud stays unreachable.
-    this.#startAbort?.abort(new DaemonConnectionStoppedError());
+    this.#startup.abort();
     this.#reminders.stop();
     this.systemCleaner.clear();
     // Each attempt is leased again on the next ready, and its run picks up from the server's state.
@@ -2068,7 +1920,7 @@ export class DaemonRuntime {
     for (const token of this.#agentProxyTokens.values()) this.#agentProxy?.revoke(token);
     this.#agentProxyTokens.clear();
     this.#agentContexts.clear();
-    this.#stopPromise = this.#stop(shutdownReason).finally(() => {
+    this.#stopPromise = this.#stop(shutdownReason, piChatClosed).finally(() => {
       this.#stopPromise = undefined;
       this.#stopping = false;
     });
@@ -2133,10 +1985,7 @@ export class DaemonRuntime {
     }
   }
 
-  async #stop(shutdownReason: DaemonShutdownReason): Promise<void> {
-    const piChat = this.#piChat;
-    this.#piChat = undefined;
-    const piChatClosed = piChat?.close();
+  async #stop(shutdownReason: DaemonShutdownReason, piChatClosed: Promise<void>): Promise<void> {
     // No retry timer may outlive this daemon instance: a launch that was mid-cooldown left a
     // "starting" record behind, which the next instance repairs and recovers (`recover()`).
     this.#agentControl.dispose();
@@ -2153,7 +2002,8 @@ export class DaemonRuntime {
     } catch (error) {
       shutdownError = error;
     }
-    if (this.#startPromise) await Promise.allSettled([this.#startPromise]);
+    const start = this.#startup.pending();
+    if (start) await Promise.allSettled([start]);
     await Promise.allSettled(this.#agentLaunches.values());
     await Promise.allSettled(this.#inputDrain.drains());
     try {
