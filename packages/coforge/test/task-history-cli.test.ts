@@ -19,7 +19,7 @@ test("Task history lists current and superseded card state", async () => {
     ...taskStamps,
     owner: null,
   };
-  const args = ["task", "history", "--channel", "#general", "--number", "2"];
+  const args = ["task", "history", "--target", "#general", "--number", "2"];
   expect(
     await run(args, {
       ...base,

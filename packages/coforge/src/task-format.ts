@@ -2,6 +2,7 @@ import {
   TASK_STATUSES,
   type TaskClaimConflict,
   type TaskClaimResult,
+  type TaskCommand,
   type TaskHistoryEvent,
   type TaskMember,
   type TaskResult,
@@ -48,7 +49,7 @@ function boardRow(task: TaskView): string {
   return `#${task.number} [${task.status}] ${fenceMessageBody(task.title)}${owner}${creator} ${messageField(task)} rev=${task.revision}${resourceReceipt(task)}${times(task)}${details}`;
 }
 
-/** One conversation's Tasks, in board order, as `coforge task list --channel` prints them. */
+/** One conversation's Tasks, in board order, as `coforge task list --target` prints them. */
 export function formatTaskBoard(
   target: string,
   result: TaskResult,
@@ -170,6 +171,15 @@ export function formatTaskStatusUpdated(task: TaskView): string {
 
 export function formatTaskDeleted(number: number): string {
   return `#${number} deleted.`;
+}
+
+/** The current title and description of one board Task. */
+export function formatTaskShow(task: TaskView): string {
+  return [
+    `## Task #${task.number} [${task.status}]`,
+    `Title: ${fenceMessageBody(task.title)}`,
+    `Description: ${task.description ? fenceMessageBody(task.description) : "(none set)"}`,
+  ].join("\n");
 }
 
 function historyActor(event: TaskHistoryEvent): string {
@@ -321,4 +331,48 @@ export function claimRefusal(target: string, result: TaskResult): CliError | und
     suggestedNextAction:
       "Do not retry the identical claim and do not start conflicting execution. If you are this lane's canonical owner, correct the routing in the original thread.",
   });
+}
+
+/** What a `task` subcommand prints for the server's answer. */
+export function formatTaskResult(command: TaskCommand, result: TaskResult): string {
+  const target = command.target!;
+  const task = result.tasks[0];
+  switch (command.operation) {
+    case "list":
+      return command.mine
+        ? formatMyTaskList(result, command.status)
+        : formatTaskBoard(target, result, command.status);
+    case "show":
+      if (!task) throw new Error(`the server returned no task for task ${command.operation}`);
+      return formatTaskShow(task);
+    case "history":
+      return formatTaskHistory(result);
+    case "create":
+      return formatTasksCreated(target, result);
+    case "delete":
+      return formatTaskDeleted(command.number!);
+    case "receipt":
+      return formatResourceReceiptRecorded(target, result);
+    case "amend":
+      return formatTaskAmended(result);
+    case "claim": {
+      const refusal = claimRefusal(target, result);
+      if (refusal) throw refusal;
+      return formatClaimResults(target, result);
+    }
+  }
+  if (!task) throw new Error(`the server returned no task for task ${command.operation}`);
+  switch (command.operation) {
+    case "convert":
+      return formatTaskConverted(target, task);
+    case "unclaim":
+      return formatTaskUnclaimed(task);
+    case "assign":
+    case "unassign":
+      return formatTaskAssigned(task);
+    case "update":
+      return formatTaskStatusUpdated(task);
+    default:
+      throw new Error(`no output is defined for task ${command.operation}`);
+  }
 }

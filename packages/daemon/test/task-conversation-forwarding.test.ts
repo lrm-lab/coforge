@@ -4,7 +4,7 @@ import { startAgentProxy } from "#src/agent-proxy";
 import { DaemonConnection } from "#src/connection/daemon-connection";
 import type { CentrifugeWorkspaceClient } from "#src/connection/centrifuge-workspace-client";
 
-/** `coforge task show|read|reply|follow|unfollow|list --following` through the daemon: the local
+/** `coforge task view|read|reply|follow|unfollow|list --following` through the daemon: the local
  * proxy admits the six routes and hands each to the runtime as one request, and the connection
  * forwards it to the cloud with the Agent's credentials, answering the cloud's response as it came. */
 

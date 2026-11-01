@@ -49,7 +49,7 @@ const VIEW = {
   hasOlder: false,
 };
 
-test("decodes a task show, a reply, a follow change and the followed list", () => {
+test("decodes a task view, a reply, a follow change and the followed list", () => {
   expect(decodeAgentTaskViewResponse(VIEW)).toEqual(VIEW);
   expect(
     decodeAgentTaskReplyResponse({ messageId: "m3", sequence: 3, idempotencyKey: "k" }),
@@ -70,7 +70,7 @@ test("decodes a task show, a reply, a follow change and the followed list", () =
 
 test("refuses responses of the wrong shape", () => {
   expect(() => decodeAgentTaskViewResponse({ ...VIEW, recentMessages: "x" })).toThrow(
-    "invalid Agent task show response",
+    "invalid Agent task view response",
   );
   expect(() => decodeAgentTaskReplyResponse({ sequence: 3 })).toThrow(
     "invalid Agent task reply response",

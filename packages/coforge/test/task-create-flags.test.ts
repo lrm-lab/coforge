@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { parseArgs, run, type MessageTransport } from "../index";
 
-const create = ["task", "create", "--channel", "#general", "--title", "Fix it"];
+const create = ["task", "create", "--target", "#general", "--title", "Fix it"];
 
 test("task create takes a description, a source message and --alongside", () => {
   expect(
@@ -34,7 +34,7 @@ test("task create without them is as before", () => {
 });
 
 test("one source message may serve every --title, a description only a single one", () => {
-  const titles = ["task", "create", "--channel", "#general", "--title", "A", "--title", "B"];
+  const titles = ["task", "create", "--target", "#general", "--title", "A", "--title", "B"];
   expect(parseArgs([...titles, "--message-id", "m1"])).toMatchObject({
     task: { titles: ["A", "B"], messageId: "m1" },
   });
@@ -53,16 +53,16 @@ test("a blank description or message id is refused", () => {
 });
 
 test("the other task operations do not take them", () => {
-  expect(() => parseArgs(["task", "list", "--channel", "#general", "--alongside"])).toThrow();
+  expect(() => parseArgs(["task", "list", "--target", "#general", "--alongside"])).toThrow();
   expect(() =>
-    parseArgs(["task", "claim", "--channel", "#general", "--number", "1", "--description", "x"]),
+    parseArgs(["task", "claim", "--target", "#general", "--number", "1", "--description", "x"]),
   ).toThrow();
 });
 
 test("task conversation commands are parsed by coforge's own argument parser", () => {
-  expect(parseArgs(["task", "show", "#general:#7", "--limit", "2"])).toEqual({
+  expect(parseArgs(["task", "view", "#general:#7", "--limit", "2"])).toEqual({
     command: "task-conversation",
-    op: "show",
+    op: "view",
     task: { ref: "#general:#7", board: "#general", number: 7 },
     limit: 2,
   });
@@ -89,7 +89,7 @@ test("run sends a task conversation command through the transport", async () => 
 
 test("the task conversation commands and create's new flags are in the help", async () => {
   const { commandHelp } = await import("../src/command-help");
-  for (const command of ["show", "reply", "read", "follow", "unfollow"])
+  for (const command of ["view", "reply", "read", "follow", "unfollow"])
     expect(commandHelp(["task", command, "--help"])).toContain(`coforge task ${command} [<ref>]`);
   expect(commandHelp(["task", "create", "--help"])).toContain("--alongside");
   expect(commandHelp(["task", "list", "--help"])).toContain("--following");

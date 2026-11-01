@@ -161,21 +161,7 @@ import {
 } from "#src/attention-args";
 
 export type { ChannelInvocation, InboxInvocation, ThreadInvocation };
-import {
-  claimRefusal,
-  formatClaimResults,
-  formatMyTaskList,
-  formatResourceReceiptRecorded,
-  formatTaskAmended,
-  formatTaskAssigned,
-  formatTaskBoard,
-  formatTaskConverted,
-  formatTaskDeleted,
-  formatTaskHistory,
-  formatTaskStatusUpdated,
-  formatTaskUnclaimed,
-  formatTasksCreated,
-} from "#src/task-format";
+import { formatTaskResult } from "#src/task-format";
 
 export { createAgentApiClient } from "@lrm/coforge-sdk/agent";
 
@@ -1743,46 +1729,4 @@ function formatHeldTaskRequest(result: TaskResult, reviewerIsolation: boolean): 
   }
   const messages = result.heldMessages?.map(formatMessageLine).join("\n");
   return `Task request held.${messages ? ` Review newer messages:\n${messages}` : ""}`;
-}
-
-/** What a `task` subcommand prints for the server's answer. */
-function formatTaskResult(command: TaskCommand, result: TaskResult): string {
-  const target =
-    command.target?.startsWith("@") && command.peerKind ? `dm:${command.target}` : command.target!;
-  const task = result.tasks[0];
-  switch (command.operation) {
-    case "list":
-      return command.mine
-        ? formatMyTaskList(result, command.status)
-        : formatTaskBoard(target, result, command.status);
-    case "history":
-      return formatTaskHistory(result);
-    case "create":
-      return formatTasksCreated(target, result);
-    case "delete":
-      return formatTaskDeleted(command.number!);
-    case "receipt":
-      return formatResourceReceiptRecorded(target, result);
-    case "amend":
-      return formatTaskAmended(result);
-    case "claim": {
-      const refusal = claimRefusal(target, result);
-      if (refusal) throw refusal;
-      return formatClaimResults(target, result);
-    }
-  }
-  if (!task) throw new Error(`the server returned no task for task ${command.operation}`);
-  switch (command.operation) {
-    case "convert":
-      return formatTaskConverted(target, task);
-    case "unclaim":
-      return formatTaskUnclaimed(task);
-    case "assign":
-    case "unassign":
-      return formatTaskAssigned(task);
-    case "update":
-      return formatTaskStatusUpdated(task);
-    default:
-      throw new Error(`no output is defined for task ${command.operation}`);
-  }
 }

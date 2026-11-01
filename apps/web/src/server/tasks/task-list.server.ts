@@ -1,3 +1,4 @@
+import { AppError } from "#src/lib/app-error";
 import type { Prisma } from "#src/generated/prisma/client";
 import { viewsWithCounts } from "./task-discussion-counts.server";
 import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
@@ -96,6 +97,25 @@ export async function listOwnTasks(
     })),
     coverage: scope.coverage,
     pagination: { mode: "complete", truncated: false },
+  };
+}
+
+/** One task's current card, as `task show` reads it. */
+export async function showTask(
+  ports: TaskBoardPorts,
+  workspaceId: string,
+  conversationId: string,
+  command: TaskCommand,
+): Promise<TaskResult> {
+  const task = await ports.db.task.findFirst({
+    where: { conversationId, number: command.number },
+    select: taskSelection,
+  });
+  if (!task) throw new AppError("NOT_FOUND");
+  return {
+    tasks: await viewsWithCounts(ports.db, workspaceId, [task], (row, counts) =>
+      taskView(row, ports.reader, counts),
+    ),
   };
 }
 

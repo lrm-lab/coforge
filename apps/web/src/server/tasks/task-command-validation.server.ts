@@ -9,6 +9,7 @@ import { AppError } from "#src/lib/app-error";
 export function validateTaskCommand(command: TaskCommand) {
   const operations = [
     "list",
+    "show",
     "create",
     "convert",
     "claim",
@@ -98,9 +99,17 @@ export function validateTaskCommand(command: TaskCommand) {
       throw new AppError("INVALID_INPUT");
   }
   if (
-    ["unclaim", "update", "assign", "unassign", "amend", "history", "delete", "receipt"].includes(
-      command.operation,
-    ) &&
+    [
+      "show",
+      "unclaim",
+      "update",
+      "assign",
+      "unassign",
+      "amend",
+      "history",
+      "delete",
+      "receipt",
+    ].includes(command.operation) &&
     !command.number
   )
     throw new AppError("INVALID_INPUT");

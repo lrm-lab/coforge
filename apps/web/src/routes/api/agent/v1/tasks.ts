@@ -21,6 +21,7 @@ import { readAgentJsonBody } from "#src/server/agents/agent-http-routes.server";
 
 const taskOperations = [
   "list",
+  "show",
   "create",
   "convert",
   "claim",
@@ -60,6 +61,7 @@ const taskRequestSchema = z
     idempotencyKey: z.string().min(1),
     conversationId: z.uuid().optional(),
     target: z.string().min(1).optional(),
+    peerKind: z.enum(["human", "agent"]).optional(),
     number: z.number().int().positive().optional(),
     numbers: z.array(z.number().int().positive()).min(1).optional(),
     messageId: z.string().min(1).optional(),

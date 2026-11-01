@@ -12,7 +12,7 @@ import { assignTask, unassignTask } from "./task-assignment.server";
 import { amendTask, deleteTask, taskHistory, updateTaskStatus } from "./task-amendments.server";
 import { claimTasks, convertOrClaim, unclaimTask } from "./task-claims.server";
 import { validateTaskCommand } from "./task-command-validation.server";
-import { listConversationTasks, listOwnTasks } from "./task-list.server";
+import { listConversationTasks, listOwnTasks, showTask } from "./task-list.server";
 import { recordResourceReceipt } from "./task-resource-receipt.server";
 import { resolveTaskScope } from "./task-scope.server";
 import type {
@@ -141,6 +141,8 @@ export class TaskBoard {
 
     if (command.operation === "list")
       return listConversationTasks(this.ports, scope.workspaceId, scope.conversationId, command);
+    if (command.operation === "show")
+      return showTask(this.ports, scope.workspaceId, scope.conversationId, command);
     const member = scope.member!;
     const ports = this.ports;
     // The Workspace's task-conversations experiment decides for everyone in it: a person or an

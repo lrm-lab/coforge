@@ -36,7 +36,7 @@ test("show asks for the task and its limit and prints the view", async () => {
     recentMessages: [],
     hasOlder: false,
   });
-  const text = await runTaskConversation(transport, invoke(["show", REF, "--limit", "3"]));
+  const text = await runTaskConversation(transport, invoke(["view", REF, "--limit", "3"]));
   expect(transport.requests).toEqual([{ route: "view", query: { ...WIRE, limit: "3" } }]);
   expect(text).toContain("## Task #general:#7 [todo]");
 });
@@ -191,10 +191,10 @@ test("unfollow sends its reason, and list --following asks for the followed task
 test("an answer of the wrong shape is INVALID_JSON_RESPONSE, and a missing transport is refused", async () => {
   const error = await runTaskConversation(
     transportAnswering({ nope: 1 }),
-    invoke(["show", REF]),
+    invoke(["view", REF]),
   ).catch((failure: CliError) => failure);
   expect((error as CliError).code).toBe("INVALID_JSON_RESPONSE");
-  await expect(runTaskConversation({}, invoke(["show", REF]))).rejects.toThrow(
+  await expect(runTaskConversation({}, invoke(["view", REF]))).rejects.toThrow(
     "Task conversation transport is unavailable",
   );
 });

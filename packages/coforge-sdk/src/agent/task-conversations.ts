@@ -1,5 +1,5 @@
 /**
- * Wire contract for `coforge task show|read|reply|follow|unfollow|list --following`: the Agent
+ * Wire contract for `coforge task view|read|reply|follow|unfollow|list --following`: the Agent
  * routes under `/api/agent/v1/tasks/` that serve a task's own conversation. The CLI sends a
  * request to the Daemon proxy and the Daemon forwards the same request to the cloud, so one
  * description of it serves both.
@@ -33,7 +33,7 @@ export function taskConversationHttpRequest(
   };
 }
 
-/** One message of a task's conversation, as `task show` lists it; `sender` is null for a notice
+/** One message of a task's conversation, as `task view` lists it; `sender` is null for a notice
  * the server posted. */
 export type AgentTaskViewMessage = {
   id: string;
@@ -128,7 +128,7 @@ export function decodeAgentTaskViewResponse(value: unknown): AgentTaskViewRespon
     !value.recentMessages.every(isViewMessage) ||
     typeof value.hasOlder !== "boolean"
   )
-    throw new Error("invalid Agent task show response");
+    throw new Error("invalid Agent task view response");
   return value as AgentTaskViewResponse;
 }
 

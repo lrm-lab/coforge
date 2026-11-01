@@ -19,6 +19,7 @@ export type TaskInvocation = {
 
 const TASK_OPERATIONS = [
   "list",
+  "show",
   "create",
   "convert",
   "claim",
@@ -35,9 +36,10 @@ type TaskOperation = (typeof TASK_OPERATIONS)[number];
 
 /** The flags each `task` subcommand takes. */
 const TASK_FLAGS: Record<TaskOperation, readonly string[]> = {
-  list: ["--channel", "--mine", "--status", "--json"],
+  list: ["--target", "--mine", "--status", "--json"],
+  show: ["--target", "--peer-kind", "--number", "--json"],
   create: [
-    "--channel",
+    "--target",
     "--peer-kind",
     "--title",
     "--assignee",
@@ -47,13 +49,13 @@ const TASK_FLAGS: Record<TaskOperation, readonly string[]> = {
     "--alongside",
     "--json",
   ],
-  convert: ["--channel", "--peer-kind", "--message-id", "--json"],
-  claim: ["--channel", "--peer-kind", "--number", "--message-id", "--reviewer-isolation", "--json"],
-  unclaim: ["--channel", "--peer-kind", "--number", "--expected-revision", "--json"],
-  assign: ["--channel", "--peer-kind", "--number", "--assignee", "--expected-revision", "--json"],
-  unassign: ["--channel", "--peer-kind", "--number", "--expected-revision", "--json"],
+  convert: ["--target", "--peer-kind", "--message-id", "--json"],
+  claim: ["--target", "--peer-kind", "--number", "--message-id", "--reviewer-isolation", "--json"],
+  unclaim: ["--target", "--peer-kind", "--number", "--expected-revision", "--json"],
+  assign: ["--target", "--peer-kind", "--number", "--assignee", "--expected-revision", "--json"],
+  unassign: ["--target", "--peer-kind", "--number", "--expected-revision", "--json"],
   update: [
-    "--channel",
+    "--target",
     "--peer-kind",
     "--number",
     "--status",
@@ -62,7 +64,7 @@ const TASK_FLAGS: Record<TaskOperation, readonly string[]> = {
     "--json",
   ],
   amend: [
-    "--channel",
+    "--target",
     "--peer-kind",
     "--number",
     "--title",
@@ -72,10 +74,10 @@ const TASK_FLAGS: Record<TaskOperation, readonly string[]> = {
     "--reviewer-isolation",
     "--json",
   ],
-  history: ["--channel", "--peer-kind", "--number", "--json"],
-  delete: ["--channel", "--peer-kind", "--number", "--json"],
+  history: ["--target", "--peer-kind", "--number", "--json"],
+  delete: ["--target", "--peer-kind", "--number", "--json"],
   receipt: [
-    "--channel",
+    "--target",
     "--peer-kind",
     "--number",
     "--object",
@@ -106,7 +108,7 @@ const TASK_SWITCHES = new Set([
   "--json",
 ]);
 
-const TASK_CHANNEL = /^(?:#[a-z0-9][a-z0-9_-]{0,31}|dm:@[a-z0-9][a-z0-9_-]{0,63})$/;
+const TASK_TARGET = /^(?:#[a-z0-9][a-z0-9_-]{0,31}|@[a-z0-9][a-z0-9_-]{0,63})$/;
 
 function invalidTaskArg(message: string): CliError {
   return new CliError({ code: "INVALID_ARG", message, retryable: false });
@@ -167,20 +169,19 @@ export function parseTaskArgs(
   const one = (flag: string) => values.get(flag)?.[0];
 
   const mine = values.has("--mine");
-  const channel = one("--channel");
-  const target = channel?.startsWith("dm:@") ? channel.slice(3) : channel;
+  const target = one("--target");
   const peerKind = one("--peer-kind");
   const json = values.has("--json");
   if (peerKind !== undefined && peerKind !== "human" && peerKind !== "agent")
     throw invalidTaskArg(`--peer-kind must be human or agent; got ${peerKind}`);
   if (peerKind !== undefined && !target?.startsWith("@"))
-    throw invalidTaskArg("--peer-kind can only be used with a dm:@peer channel");
+    throw invalidTaskArg("--peer-kind can only be used with a direct @peer target");
   if (operation === "list") validateTaskListScope(target, mine, one("--status"));
   if (!mine) {
-    if (!channel?.trim()) throw invalidTaskArg("--channel is required");
-    if (!TASK_CHANNEL.test(channel))
+    if (!target?.trim()) throw invalidTaskArg("--target is required");
+    if (!TASK_TARGET.test(target))
       throw invalidTaskArg(
-        `--channel must be a conversation ('#channel' or 'dm:@peer'); got ${channel}`,
+        `--target must be a conversation ('#channel' or '@peer'); got ${target}`,
       );
   }
 
@@ -307,10 +308,10 @@ function taskReceiptArgs(one: (flag: string) => string | undefined): TaskResourc
 
 const TASK_LIST_STATUSES = ["all", ...TASK_STATUSES] as const;
 
-/** `task list` reads one conversation (`--channel`) or this Agent's own Tasks (`--mine`). */
+/** `task list` reads one conversation (`--target`) or this Agent's own Tasks (`--mine`). */
 function validateTaskListScope(target: string | undefined, mine: boolean, status?: string) {
   if (status !== undefined && !(TASK_LIST_STATUSES as readonly string[]).includes(status))
     throw invalidTaskArg(`--status must be one of ${TASK_LIST_STATUSES.join("|")}; got ${status}`);
-  if (mine && target) throw invalidTaskArg("--mine cannot be combined with --channel");
-  if (!mine && !target) throw invalidTaskArg("--channel is required (or pass --mine)");
+  if (mine && target) throw invalidTaskArg("--mine cannot be combined with --target");
+  if (!mine && !target) throw invalidTaskArg("--target is required (or pass --mine)");
 }

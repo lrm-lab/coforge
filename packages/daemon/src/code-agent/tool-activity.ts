@@ -134,7 +134,7 @@ type CoforgeCliTool = { tool: string; summary?: (args: Args) => string | undefin
 export type CoforgeInvocation = { tool: string; summary?: string; args: Args };
 
 const target = (args: Args) => flagValue(args, "--target");
-const taskChannel = (args: Args) => flagValue(args, "--channel");
+const taskChannel = (args: Args) => flagValue(args, "--target");
 const taskRef = (args: Args) => {
   const channel = taskChannel(args);
   const number = taskNumbers(args)[0];

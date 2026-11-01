@@ -13,27 +13,27 @@ function refusal(args: string[]): CliError {
   throw new Error("expected a refusal");
 }
 
-test("task show takes a ref or --channel and --number, and a limit", () => {
-  expect(parseTaskConversationArgs(["show", "#general:#7"])).toEqual({
+test("task view takes a ref or --target and --number, and a limit", () => {
+  expect(parseTaskConversationArgs(["view", "#general:#7"])).toEqual({
     command: "task-conversation",
-    op: "show",
+    op: "view",
     task: GENERAL_7,
   });
   expect(
-    parseTaskConversationArgs(["show", "--limit", "3", "--channel", "#general", "--number", "7"]),
-  ).toEqual({ command: "task-conversation", op: "show", task: GENERAL_7, limit: 3 });
+    parseTaskConversationArgs(["view", "--limit", "3", "--target", "#general", "--number", "7"]),
+  ).toEqual({ command: "task-conversation", op: "view", task: GENERAL_7, limit: 3 });
 });
 
-test("task show refuses a limit that is not a positive integer", () => {
+test("task view refuses a limit that is not a positive integer", () => {
   for (const limit of ["0", "-1", "x", "1.5"]) {
-    const error = refusal(["show", "#general:#7", "--limit", limit]);
+    const error = refusal(["view", "#general:#7", "--limit", limit]);
     expect(error.code).toBe("INVALID_ARG");
     expect(error.message).toBe(`--limit must be a positive integer; got ${limit}`);
   }
 });
 
-test("task show and unfollow refuse what the server would, naming the limit", () => {
-  expect(refusal(["show", "#general:#7", "--limit", "21"]).message).toBe(
+test("task view and unfollow refuse what the server would, naming the limit", () => {
+  expect(refusal(["view", "#general:#7", "--limit", "21"]).message).toBe(
     "--limit is at most 20; got 21",
   );
   expect(refusal(["unfollow", "#general:#7", "--reason", "x".repeat(201)]).message).toBe(
@@ -106,11 +106,11 @@ test("a command that names no task, or two, or repeats a flag, is refused", () =
   expect(refusal(["follow", "#general:#7", "#general:#8"]).message).toBe(
     "Give one task ref, not several.",
   );
-  expect(refusal(["show", "#general:#7", "--limit", "1", "--limit", "2"]).message).toBe(
+  expect(refusal(["view", "#general:#7", "--limit", "1", "--limit", "2"]).message).toBe(
     '"--limit" is given more than once.',
   );
-  expect(refusal(["show", "#general:#7", "--limit"]).message).toBe('"--limit" needs a value.');
-  expect(refusal(["show", "#general:abcd1234"]).code).toBe("INVALID_TARGET");
+  expect(refusal(["view", "#general:#7", "--limit"]).message).toBe('"--limit" needs a value.');
+  expect(refusal(["view", "#general:abcd1234"]).code).toBe("INVALID_TARGET");
 });
 
 test("task list --following lists the followed conversations and nothing else", () => {
@@ -118,16 +118,11 @@ test("task list --following lists the followed conversations and nothing else", 
     command: "task-conversation",
     op: "following",
   });
-  for (const extra of [
-    ["--mine"],
-    ["--channel", "#general"],
-    ["--channel", "#general"],
-    ["--status", "todo"],
-  ]) {
+  for (const extra of [["--mine"], ["--target", "#general"], ["--status", "todo"]]) {
     const error = refusal(["list", "--following", ...extra]);
     expect(error.code).toBe("INVALID_ARG");
     expect(error.message).toBe(
-      "--following lists the task conversations you follow; it cannot be combined with --mine, --target, --channel or --status",
+      "--following lists the task conversations you follow; it cannot be combined with --mine, --target or --status",
     );
   }
   expect(refusal(["list", "--following", "--json"]).code).toBe("INVALID_ARG");
@@ -135,7 +130,7 @@ test("task list --following lists the followed conversations and nothing else", 
 
 test("other task operations are not conversation commands", () => {
   expect(parseTaskConversationArgs(["list", "--mine"])).toBeUndefined();
-  expect(parseTaskConversationArgs(["create", "--channel", "#general"])).toBeUndefined();
+  expect(parseTaskConversationArgs(["create", "--target", "#general"])).toBeUndefined();
   expect(parseTaskConversationArgs([])).toBeUndefined();
 });
 

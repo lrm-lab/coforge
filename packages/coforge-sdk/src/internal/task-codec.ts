@@ -20,6 +20,7 @@ export type TaskResponse = TaskResult & { idempotencyKey: string };
 
 const operations = new Set<TaskCommand["operation"]>([
   "list",
+  "show",
   "create",
   "convert",
   "claim",
@@ -162,7 +163,7 @@ export function validateTaskRequest(value: TaskRequest): void {
       value.messageIds === undefined &&
       !numeric) ||
     (value.operation === "claim" && (numeric || messages)) ||
-    (["unclaim", "history", "delete"].includes(value.operation) &&
+    (["show", "unclaim", "history", "delete"].includes(value.operation) &&
       value.number !== undefined &&
       value.numbers === undefined &&
       !messages) ||

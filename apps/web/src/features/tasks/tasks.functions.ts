@@ -13,6 +13,7 @@ const taskCommand = z
   .object({
     operation: z.enum([
       "list",
+      "show",
       "create",
       "convert",
       "claim",

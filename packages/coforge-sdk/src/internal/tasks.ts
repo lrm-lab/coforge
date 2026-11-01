@@ -151,6 +151,7 @@ export type TaskHistoryEvent = {
 export type TaskCommand = {
   operation:
     | "list"
+    | "show"
     | "create"
     | "convert"
     | "claim"
