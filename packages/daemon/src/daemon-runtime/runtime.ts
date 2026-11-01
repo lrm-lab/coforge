@@ -108,7 +108,17 @@ import { assertOwnIntent } from "./runtime-intent-validation";
 import { currentObservedUsage } from "./runtime-usage-observation";
 import { failCollectorRunningSlots } from "./runtime-collector-failure";
 import { runtimeEnvelope } from "./runtime-envelope";
-import { handleAgentMessage, handleTrackedMention } from "./runtime-message-delivery";
+import { handleAgentMessage } from "./runtime-message-delivery";
+import {
+  flushHeldDeliveries,
+  interruptIfBusy,
+  isWorking,
+  narrateUnavailable,
+  reconcileIdleTurn,
+  releaseSurvivingHolds,
+  releaseTurnEndHolds,
+  showQuietTurn,
+} from "./runtime-turn-management";
 import { abandonLaunch, scheduleStartupFailure } from "./agent-startup-failure";
 import { agentsDirectory, agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
 import { revokeAgentApiKey } from "./agent-api-key-revoke";
@@ -148,7 +158,6 @@ import {
   isTrackedMention,
   MentionDeliveryTracker,
   type RunningMentionIdentity,
-  type TrackedMentionDelivery,
 } from "./mention-delivery-tracker";
 import { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
 import type { MintAppItem } from "#src/agent-app-inbox/agent-app-inbox";
@@ -1556,10 +1565,6 @@ export class DaemonRuntime {
     return handleAgentMessage(this.#messageDeliveryPorts(), message);
   }
 
-  #handleTrackedMention(message: TrackedMentionDelivery): Promise<void> {
-    return handleTrackedMention(this.#messageDeliveryPorts(), message);
-  }
-
   /** The launch and native session a tracked mention may name: the ones last reported for this
    * Agent, while that launch is the one running. */
   #runningMentionIdentity(agentId: string): RunningMentionIdentity | undefined {
@@ -1722,93 +1727,61 @@ export class DaemonRuntime {
     return activityDraft(this.#connection.workspaceId, agentId, detailKind, level, detail, extra);
   }
 
-  /** Narrates a daemon-initiated cold start: a stored session found unusable, or one recycled. */
+  #turnPorts() {
+    return {
+      messageAttention: this.#messageAttention,
+      activityPublisher: this.#activityPublisher,
+      deliveryQueue: this.#deliveryQueue,
+      inboxCoordinator: this.#inboxCoordinator,
+      launchCustody: this.#launchCustody,
+      processManager: this.#agentProcessManager,
+      currentActivityLaunches: this.#currentActivityLaunches,
+      phaseBookkeeping: this.#phaseBookkeeping,
+      runtimeRelease: this.#runtimeRelease,
+      systemCleaner: this.systemCleaner,
+      drafts: this.#drafts,
+      activity: (
+        agentId: string,
+        kind: AgentActivity["detailKind"],
+        level: AgentActivity["level"],
+        detail: string,
+        extra?: Partial<ActivityDraft>,
+      ) => this.#activity(agentId, kind, level, detail, extra),
+      isWorking: (agentId: string) => isWorking(this.#turnPorts(), agentId),
+    };
+  }
+
   #narrateUnavailable(
     agentId: string,
     launch: ActivityLaunch,
     { detail, entryText }: { detail: string; entryText?: string },
   ): void {
-    this.#activityPublisher.publish(
-      agentId,
-      launch,
-      this.#activity(
-        agentId,
-        AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_UNAVAILABLE,
-        "info",
-        detail,
-        entryText ? { entries: [{ kind: "text", text: entryText }] } : {},
-      ),
-    );
+    narrateUnavailable(this.#turnPorts(), agentId, launch, detail, entryText);
   }
-
-  /** Attempts delivery of everything just released from an explicit or busy-gated hold, as one
-   * coalesced notice — never blocking the caller on it. Shared by ordinary turn-end draining and
-   * the runtime-error delivery backoff. */
   #flushHeldDeliveries(agentId: string, held: AgentMessageDelivery[]): void {
-    void this.#messageAttention.flush(agentId, held).catch((error: unknown) => {
-      logger.warn("Held Agent deliveries were not accepted", {
-        event: "agent.delivery_queue.flush_rejected",
-        agent_id: agentId,
-        held_count: held.length,
-        already_acknowledged: true,
-        error_code: diagnosticErrorName(error),
-      });
-    });
+    flushHeldDeliveries(this.#turnPorts(), agentId, held);
   }
-
-  /** Reports runtime_interrupted when a requested stop/restart cuts a busy turn.
-   * Must run before `forgetBusy`, which erases the busy evidence. */
   #interruptIfBusy(agentId: string, activityLaunch: ActivityLaunch | undefined): void {
-    if (!activityLaunch) return;
-    const busy = this.#activityPublisher.lastBusy(agentId);
-    if (busy && busy.launch === activityLaunch)
-      this.#activityPublisher.publish(agentId, activityLaunch, this.#drafts.interrupted(agentId));
+    interruptIfBusy(this.#turnPorts(), agentId, activityLaunch);
   }
-
-  /**
-   * Shows a turn that ended without an error, as the reference client does: still working while
-   * tasks it started run in the background, otherwise Idle, which ends the Agent's working
-   * stretch (`SystemCleaner.onAgentWorkingToIdle`).
-   */
   #showQuietTurn(
     agentId: string,
     launch: ActivityLaunch,
     publish: (agentId: string, launch: ActivityLaunch, activity: ActivityDraft) => void,
   ): void {
-    const waiting = launch.backgroundTasks?.quietDetail();
-    publish(agentId, launch, this.#drafts.quietTurn(agentId, waiting));
-    if (!waiting) this.systemCleaner.onAgentWorkingToIdle(agentId);
+    showQuietTurn(this.#turnPorts(), agentId, launch, publish);
   }
-
-  /** Restore observation and delivery gating only; this is no proof of a turn outcome. */
   #reconcileIdleTurn(agentId: string, launch: ActivityLaunch): boolean {
-    if (
-      this.#currentActivityLaunches.get(agentId) !== launch ||
-      this.#agentProcessManager.session(agentId)?.hasLiveTurn !== false
-    )
-      return false;
-    // A turn already showing its wait for background tasks stays as it is: the heartbeat keeps
-    // that warm until a task ends.
-    const waiting = launch.backgroundTasks?.quietDetail();
-    const shown = this.#activityPublisher.lastBusy(agentId)?.activity;
-    if (
-      waiting &&
-      shown?.detailKind === AGENT_ACTIVITY_DETAIL_KIND.SUBAGENT_ACTIVITY &&
-      shown.detail === waiting
-    )
-      return false;
-    // Preserve output accepted while the turn was live before publishing its final Idle.
-    // Otherwise the pending trajectory timer could publish it after Idle and rearm Busy.
-    launch.trajectory?.flush();
-    launch.stalled?.finish(agentId);
-    this.#phaseBookkeeping.dispose(agentId);
-    if (this.#isWorking(agentId)) {
-      this.#showQuietTurn(agentId, launch, (id, source, activity) =>
-        this.#activityPublisher.publish(id, source, activity),
-      );
-      this.#releaseTurnEndHolds(agentId);
-    }
-    return true;
+    return reconcileIdleTurn(this.#turnPorts(), agentId, launch);
+  }
+  #releaseSurvivingHolds(agentId: string): void {
+    releaseSurvivingHolds(this.#turnPorts(), agentId);
+  }
+  #isWorking(agentId: string): boolean {
+    return isWorking(this.#turnPorts(), agentId);
+  }
+  #releaseTurnEndHolds(agentId: string): void {
+    releaseTurnEndHolds(this.#turnPorts(), agentId);
   }
 
   /** The Agent no longer lives on this Computer: its workspace was deleted or moved away. */
@@ -1820,29 +1793,6 @@ export class DaemonRuntime {
       consumedSeqs: this.#consumedSeqs,
       featureSync: this.#sync,
     });
-  }
-
-  /** Presents what was kept across an exit or a runtime's end, as at idle. */
-  #releaseSurvivingHolds(agentId: string): void {
-    this.#launchCustody.flushSurvivingDeliveryQueue(agentId);
-    this.#inboxCoordinator.releaseHeldAppItems(agentId);
-    this.#inboxCoordinator.releaseFallbackNotices(agentId);
-  }
-
-  /** Whether the Agent is mid-turn, by its last busy Activity or a notice just written. */
-  #isWorking(agentId: string): boolean {
-    return (
-      this.#activityPublisher.lastBusy(agentId) !== undefined || this.#deliveryQueue.isBusy(agentId)
-    );
-  }
-
-  #releaseTurnEndHolds(agentId: string): void {
-    const held = this.#deliveryQueue.idle(agentId);
-    if (held.length) this.#flushHeldDeliveries(agentId, held);
-    // Flush first: notifying marks busy synchronously, so app items re-hold for the next
-    // turn rather than racing the notice that just started it.
-    this.#inboxCoordinator.releaseHeldAppItems(agentId);
-    this.#inboxCoordinator.releaseFallbackNotices(agentId);
   }
 
   #sendAgentStatus(agentId: string, status: "active" | "inactive"): void {

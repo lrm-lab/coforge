@@ -11,7 +11,6 @@ import type { AgentInputDrain } from "./agent-input-drain";
 import type { AgentLaunchCustody } from "./agent-launch-custody";
 import type { MentionDeliveryTracker, TrackedMentionDelivery } from "./mention-delivery-tracker";
 import type { RuntimeRelease } from "./runtime-release";
-import type { LaunchFailureBackoff } from "#src/agent-runtime/launch-failure-backoff";
 import { isTrackedMention } from "./mention-delivery-tracker";
 import { getLogger } from "@logtape/logtape";
 
