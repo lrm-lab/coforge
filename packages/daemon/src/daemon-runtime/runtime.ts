@@ -68,7 +68,6 @@ import {
   type RuntimeProvider,
   RUNTIME_PROVIDER_USES_EXTERNAL_CLI,
   type UsageScanResponse,
-  CLEANER_APP_ID,
   type LocalReminderRequest,
   type ReminderJob,
   type TaskCommand,
@@ -77,7 +76,6 @@ import {
   type AgentWorkspaceDeleteResult,
 } from "@lrm/coforge-sdk/internal";
 import { AgentMigrationRunner } from "#src/agent-migration/migration-runner";
-import { AgentMigrationBucketClient } from "#src/connection/agent-migration-bucket-client";
 import { usageScanFailure, usageScanReading, usageScanResult } from "./usage-scan-response";
 import { AgentControl } from "#src/agent-runtime/agent-control";
 import { AgentSessions } from "#src/agent-runtime/agent-session";
@@ -114,7 +112,6 @@ import {
   showQuietTurn,
 } from "./runtime-turn-management";
 import { abandonLaunch, scheduleStartupFailure } from "./agent-startup-failure";
-import { agentsDirectory, agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
 import { revokeAgentApiKey } from "./agent-api-key-revoke";
 import { ColdIdleSweep } from "./cold-idle-sweep";
 import { StalledRecoverySweep } from "./stalled-recovery-sweep";
@@ -163,6 +160,7 @@ import { RuntimeAuthReporter } from "./runtime-auth-reporter";
 import { RuntimeStartup } from "./runtime-startup";
 import { RuntimeStop } from "./runtime-stop";
 import { composeMessages } from "./message-composition";
+import { composeRuntimeServices } from "./runtime-services-composition";
 import { composeAgentControl } from "./agent-control-composition";
 import {
   UpgradeResultReporter,
@@ -174,7 +172,6 @@ import { getLogger } from "@logtape/logtape";
 import { COFORGE_DAEMON_VERSION } from "#src/version";
 import { ReminderScheduler } from "#src/agent-reminder/reminder-scheduler";
 import { AgentAppConfigSync } from "#src/agent-app-config/agent-app-config-sync";
-import { FileReminderReceiptStore } from "#src/persistence/reminder-receipt-store";
 import { logAgentOperationFailure } from "./agent-failure-logs";
 import { acceptAppRegistrationNotice } from "#src/agent-app-inbox/app-registration-notice";
 import { diagnosticErrorName } from "@lrm/coforge-sdk/internal";
@@ -615,54 +612,29 @@ export class DaemonRuntime {
     this.#messageAttention = messages.messageAttention;
     this.#inboxCoordinator = messages.inboxCoordinator;
     this.#messageOperations = messages.messageOperations;
-    this.#reminders = new ReminderScheduler(
-      { workspaceId: connection.workspaceId, computerId: connection.computerId },
-      new FileReminderReceiptStore(stateDirectory, connection.workspaceId, connection.computerId),
-      (request) => {
-        if (!this.#transport.fireReminder) throw new Error("reminder fire is unavailable");
-        return this.#transport.fireReminder(request);
-      },
-      (job, occurrence) => this.#acceptReminderDue(job, occurrence.late),
-    );
-    this.systemCleaner = new SystemCleaner({
-      ...systemCleaner,
-      agentsDirectory: agentsDirectory(connection.workspaceRoot, connection.workspaceId),
-      inbox: {
+    const services = composeRuntimeServices({
+      connection,
+      stateDirectory,
+      transport: () => this.#transport,
+      envelope: this.#env,
+      cleanerInbox: {
         upsert: async (agentId, item) =>
           (await this.#inboxCoordinator.appInbox(agentId)).upsert(item),
         remove: (agentId, itemId) => this.#inboxCoordinator.removeAppItem(agentId, itemId),
       },
-      wake: async (agentId, itemId) => {
-        // A busy Agent sees the item at its next idle drain; a stopped one at its next launch.
-        if (this.#isWorking(agentId)) return;
-        await this.#inboxCoordinator.notifyAppItem(agentId, itemId, { startStopped: false });
-      },
+      isWorking: (agentId) => this.#isWorking(agentId),
+      notifyAppItem: (agentId, itemId) =>
+        this.#inboxCoordinator.notifyAppItem(agentId, itemId, { startStopped: false }),
+      acceptReminderDue: (job, late) => this.#acceptReminderDue(job, late),
+      systemCleaner,
+      stopAgent: (agentId) => this.stopAgent(agentId),
+      runningAgentIds: () => this.#agentProcessManager.runningAgentIds(),
+      forgetLocalAgent: (agentId) => this.#forgetLocalAgent(agentId),
     });
-    this.#appConfigs = new AgentAppConfigSync({
-      // `#requestAppConfigSnapshot` asks only through a transport that has the method.
-      requestSnapshot: (agentId) =>
-        this.#transport.requestAppConfigSnapshot!({
-          ...this.#env(),
-          agentId,
-        }),
-      apps: { [CLEANER_APP_ID]: this.systemCleaner },
-    });
-    // The transport is replaced on each start, so the runner reaches the route through whichever
-    // one is current.
-    this.#migrations = this.#transport.agentMigrationServer
-      ? new AgentMigrationRunner({
-          server: () => this.#transport.agentMigrationServer!(),
-          bucket: new AgentMigrationBucketClient(),
-          agents: {
-            stop: (agentId) => this.stopAgent(agentId),
-            isRunning: (agentId) => this.#agentProcessManager.runningAgentIds().includes(agentId),
-            movedAway: (agentId) => this.#forgetLocalAgent(agentId),
-          },
-          workspaceDirectory: (agentId) =>
-            agentWorkspaceDirectory(connection.workspaceRoot, connection.workspaceId, agentId),
-          stateDirectory,
-        })
-      : undefined;
+    this.#reminders = services.reminders;
+    this.systemCleaner = services.systemCleaner;
+    this.#appConfigs = services.appConfigs;
+    this.#migrations = services.migrations;
     const control = composeAgentControl({
       connection,
       runtimeInstanceId: this.#runtimeInstanceId,
