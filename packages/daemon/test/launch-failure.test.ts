@@ -1,6 +1,10 @@
 import { expect, test } from "bun:test";
-import { RuntimeStartFailedError } from "@lrm/coforge-anvil";
-import { launchFailureActivity, launchFailureTrace } from "#src/agent-runtime/launch-failure";
+import { RuntimeLoginRequiredError, RuntimeStartFailedError } from "@lrm/coforge-anvil";
+import {
+  isNonRetryableLaunchFailure,
+  launchFailureActivity,
+  launchFailureTrace,
+} from "#src/agent-runtime/launch-failure";
 
 test("launchFailureTrace extracts classified launch evidence from a PiLaunchError", () => {
   const error = {
@@ -59,4 +63,25 @@ test("a runtime that cannot start is its own reason, never read as too old", () 
   // The CLI's own first stderr line is what tells a person what to fix.
   expect(activity.detail).toContain("No version is set for shim: node");
   expect(activity.detail).not.toContain("too old");
+});
+
+test("a runtime whose login is not usable names the login as the thing to fix", () => {
+  const activity = launchFailureActivity(
+    new RuntimeLoginRequiredError("Kiro CLI is not logged in on this Computer"),
+    "Kiro CLI",
+  );
+  expect(activity.runtimeError.errorReason).toBe("runtime_login_required");
+  expect(activity.detail).toBe(
+    "Kiro CLI needs you to log in on this Computer before it can start. Log in to Kiro CLI " +
+      "there, then start the Agent again.",
+  );
+});
+
+test("only a reason no retry can fix skips the launch retries", () => {
+  expect(
+    isNonRetryableLaunchFailure(new RuntimeLoginRequiredError("Kiro CLI is not logged in")),
+  ).toBe(true);
+  // Every other reason keeps the same attempts and backoff.
+  expect(isNonRetryableLaunchFailure(new RuntimeStartFailedError("exited 1"))).toBe(false);
+  expect(isNonRetryableLaunchFailure(new Error("boom"))).toBe(false);
 });

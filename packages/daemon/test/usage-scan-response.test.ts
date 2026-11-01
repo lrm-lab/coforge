@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  UsageReauthRequiredError,
   UsageUnavailableError,
   UsageUnsupportedError,
   type UsageSnapshot,
@@ -80,7 +81,8 @@ describe("usageScanFailure", () => {
     expect(decoded(answer.snapshotJson)).toEqual(observed);
   });
 
-  test("a Kiro expired-token usage read is unavailable, never reauth", () => {
+  test("a read that failed stays unavailable, and a sign-out answers reauth (task #380)", () => {
+    // A read that merely failed says nothing about the runtime: no badge, no dot, no usage.
     expect(usageScanFailure(new UsageUnavailableError(), () => undefined, now)).toMatchObject({
       status: "unavailable",
       message: "Provider usage is unavailable",
@@ -88,6 +90,12 @@ describe("usageScanFailure", () => {
     expect(usageScanFailure(new Error("boom"), () => undefined, now)).toMatchObject({
       status: "error",
       message: "Usage scan failed",
+    });
+    // A login the runtime no longer has is the one state a person must fix, so it answers reauth
+    // instead of a failed read the page would otherwise not show.
+    expect(usageScanFailure(new UsageReauthRequiredError(), () => undefined, now)).toMatchObject({
+      status: "reauth",
+      message: "Provider usage requires signing in again",
     });
   });
 });

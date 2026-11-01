@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import {
+  UsageReauthRequiredError,
   UsageUnavailableError,
   type OwnedChildProcess,
   type OwnedProcessTree,
@@ -161,7 +162,7 @@ test("classifies an unavailable executable as unavailable usage", async () => {
   ).rejects.toBeInstanceOf(UsageUnavailableError);
 });
 
-test("does not start chat usage when whoami reports a null account", async () => {
+test("a null account is a sign-out, not a failed read, and starts no chat usage", async () => {
   const whoami = new FixtureTree('{"account":null}', 1);
   const calls: string[][] = [];
   await expect(
@@ -175,8 +176,22 @@ test("does not start chat usage when whoami reports a null account", async () =>
         },
       },
     }),
-  ).rejects.toBeInstanceOf(UsageUnavailableError);
+  ).rejects.toBeInstanceOf(UsageReauthRequiredError);
   expect(calls[0]?.slice(1)).toEqual(["whoami", "--format", "json"]);
+});
+
+test("a rejected bearer token in the usage output is a sign-out, not a failed read", async () => {
+  // kiro-cli 2.33.1, 2026-11-01: the chat command exits non-zero with this line when its stored
+  // login is no longer accepted.
+  const whoami = new FixtureTree('{"account":{"accountType":"IamIdentityCenter"}}');
+  const tree = new FixtureTree("The bearer token included in the request is invalid", 1);
+  await expect(
+    readKiroUsageResponse({
+      workingDirectory: "/tmp/kiro-project",
+      timeoutMs: 1000,
+      spawn: spawner([whoami, tree], {}),
+    }),
+  ).rejects.toBeInstanceOf(UsageReauthRequiredError);
 });
 
 test("stops usage immediately when the native output starts device login", async () => {
@@ -209,6 +224,24 @@ test("keeps Kiro usage unavailable instead of turning it into a sign-in state", 
   ).toMatchObject({
     status: "unavailable",
     message: "Provider usage is unavailable",
+  });
+});
+
+test("a sign-out answers reauth ahead of a stale snapshot, which would hide it", () => {
+  const observed = {
+    provider: "kiro",
+    collectedAt: "2026-10-31T00:00:00.000Z",
+    primary: { usedPercent: 10, status: "ok", windowDurationMinutes: 100, resetsAt: "2026-11-01" },
+  } as const;
+  expect(
+    usageScanFailure(
+      new UsageReauthRequiredError(),
+      () => observed as never,
+      () => new Date(),
+    ),
+  ).toMatchObject({
+    status: "reauth",
+    message: "Provider usage requires signing in again",
   });
 });
 

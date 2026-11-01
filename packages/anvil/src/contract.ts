@@ -217,6 +217,14 @@ export class UsageUnavailableError extends Error {
     super("Provider usage is unavailable");
   }
 }
+/** The runtime's stored login is gone or was rejected, so a person must sign in before its
+ * account can be read again — distinct from a read that merely failed. */
+export class UsageReauthRequiredError extends Error {
+  constructor() {
+    super("Provider usage requires the runtime to be signed in again");
+  }
+}
+
 /** The signed-in account has no plan usage to scan at all (a Codex API-key or Bedrock account,
  * or `requiresOpenaiAuth === false`, has no rate-limit windows) — mapped to the `unsupported`
  * scan status like Pi's static answer, not a misleading empty reading. */
@@ -255,6 +263,17 @@ export class RuntimeStartFailedError extends Error {
   ) {
     super(message, options);
     this.name = "RuntimeStartFailedError";
+  }
+}
+
+/** The runtime on this Computer is not signed in, or its stored login was rejected, so the launch
+ * cannot start until a person signs in there. A managed launch is not retried for this: the same
+ * launch cannot succeed until the login changes. */
+export class RuntimeLoginRequiredError extends Error {
+  readonly code = "runtime_login_required";
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "RuntimeLoginRequiredError";
   }
 }
 

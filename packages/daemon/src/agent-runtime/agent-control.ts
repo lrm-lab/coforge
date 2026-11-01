@@ -9,10 +9,10 @@ import type {
 } from "@lrm/coforge-sdk/internal";
 import { AgentSessionRecoveryError } from "@lrm/coforge-anvil";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
-import { launchFailureLogFields } from "./launch-failure";
+import { settleLaunchFailure } from "./launch-attempt-failure";
 import type { AgentRuntimeRecord, AgentRuntimeState } from "./agent-runtime-state";
 import type { AgentSessions } from "./agent-session";
-import { LAUNCH_FAILURE_MAX_ATTEMPTS, LaunchFailureBackoff } from "./launch-failure-backoff";
+import { LaunchFailureBackoff } from "./launch-failure-backoff";
 
 const logger = getLogger(["coforge", "daemon", "agent-control"]);
 
@@ -454,8 +454,11 @@ export class AgentControl {
    * stay inside the managed Start it is recovering.
    *
    * On failure the attempt either schedules the next one (the record stays `starting`, no result
-   * is reported, and the server's operation stays pending) or, once the attempts are used up,
-   * reports the same terminal `launch_failed` result this path always reported.
+   * is reported, and the server's operation stays pending) or reports the same terminal
+   * `launch_failed` result this path always reported. The attempts are used up, or skipped
+   * outright for a reason no retry can fix (`NON_RETRYABLE_LAUNCH_FAILURE_REASONS`, a login the
+   * runtime no longer has), because the server's operation would otherwise stay pending for the
+   * whole retry window.
    */
   async #attemptStart(
     intent: AgentStartIntent,
@@ -527,48 +530,21 @@ export class AgentControl {
         });
         throw stopError;
       }
-      const failure = this.#launchFailures.recordFailure(intent.agentId);
-      if (attempt < LAUNCH_FAILURE_MAX_ATTEMPTS) {
-        logger.warning("Agent launch failed; retrying after backoff", {
-          event: "agent_control:launch_retry_scheduled",
-          agent_id: intent.agentId,
-          attempt,
-          attempts: failure.attempts,
-          cooldown_ms: failure.cooldownMs,
-          retry_at_ms: failure.untilMs,
-          outcome: "retry",
-          error_code: diagnosticErrorCode(launchError),
-          ...launchFailureLogFields(launchError),
-        });
-        // The record deliberately stays "starting": a live phase, so the next daemon instance
-        // repairs a launch that died mid-cooldown instead of fencing on it
-        // (`repairStaleRecord`), and the server's operation stays non-terminal so the retry is
-        // still authorized. `lastResult` is left as it was — the retry owns the outcome now.
-        await this.store.write(intent.agentId, record);
-        this.#scheduleLaunchRetry(intent, scope, launchId, attempt + 1, failure.cooldownMs);
-        return;
-      }
-      const attempts = this.#launchFailures.reset(intent.agentId);
-      this.#clearLaunchRetry(intent.agentId);
-      record.phase = "failed";
-      record.lastResult = {
-        ...scope,
-        phase: "failed",
+      const failed = await settleLaunchFailure({
+        intent,
+        scope,
         launchId,
-        sequence: ++record.sequence,
-        errorCode: "launch_failed",
-      };
-      logger.warning("Agent launch failed", {
-        event: "agent_control:launch_failed",
-        agent_id: intent.agentId,
-        attempts,
-        error_code: diagnosticErrorCode(launchError),
-        // The terminal record of an exhausted launch carries the same classified evidence as the
-        // retry warnings above: once the retries are gone this is the only log line left, so the
-        // category/provider/model facts must not be stranded on the earlier `launch_retry_scheduled`.
-        ...launchFailureLogFields(launchError),
+        attempt,
+        record,
+        error: launchError,
+        failures: this.#launchFailures,
+        store: this.store,
+        scheduleRetry: (next, cooldownMs) =>
+          this.#scheduleLaunchRetry(intent, scope, launchId, next, cooldownMs),
+        clearRetry: () => this.#clearLaunchRetry(intent.agentId),
       });
-      await this.store.write(intent.agentId, record);
+      if (failed) await this.runtime.result(failed).catch(() => {});
+      return;
     }
     await this.runtime.result(record.lastResult).catch(() => {});
   }

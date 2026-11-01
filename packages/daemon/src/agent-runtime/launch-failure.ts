@@ -72,6 +72,8 @@ export const LAUNCH_FAILURE_REASON = {
   RUNTIME_VERSION_TOO_OLD: "runtime_version_too_old",
   /** The CLI could not start at all: a spawn failure, a non-zero exit, or a timeout. */
   RUNTIME_START_FAILED: "runtime_start_failed",
+  /** The runtime is not signed in on this Computer, or its stored login was rejected. */
+  RUNTIME_LOGIN_REQUIRED: "runtime_login_required",
   /** The runtime on this Computer does not offer the Agent's configured model. */
   MODEL_NOT_FOUND: "model_not_found",
   /** The runtime cannot use the Agent's model provider setting. */
@@ -89,10 +91,25 @@ const TYPED_REASONS: readonly LaunchFailureReason[] = [
   LAUNCH_FAILURE_REASON.RUNTIME_NOT_FOUND,
   LAUNCH_FAILURE_REASON.RUNTIME_VERSION_TOO_OLD,
   LAUNCH_FAILURE_REASON.RUNTIME_START_FAILED,
+  LAUNCH_FAILURE_REASON.RUNTIME_LOGIN_REQUIRED,
   LAUNCH_FAILURE_REASON.MODEL_NOT_FOUND,
   LAUNCH_FAILURE_REASON.MODEL_PROVIDER_NOT_CONFIGURED,
   LAUNCH_FAILURE_REASON.AGENT_ENVIRONMENT_INVALID,
 ];
+
+/**
+ * Launch failure reasons a managed Start does not retry: no attempt can succeed until a person
+ * changes something on the Computer. Every other reason keeps the same attempts and backoff
+ * (`launch-failure-backoff.ts`), because a transient cause may clear between attempts.
+ */
+export const NON_RETRYABLE_LAUNCH_FAILURE_REASONS: readonly LaunchFailureReason[] = [
+  LAUNCH_FAILURE_REASON.RUNTIME_LOGIN_REQUIRED,
+];
+
+/** Whether a failed launch is one no retry can fix. */
+export function isNonRetryableLaunchFailure(error: unknown): boolean {
+  return NON_RETRYABLE_LAUNCH_FAILURE_REASONS.includes(launchFailureReason(error));
+}
 
 /** The server did not hand this launch its configuration and Agent API key. The reason code stays
  * one, but what actually happened is kept: a Computer that could not reach the server must not be
@@ -209,6 +226,11 @@ function launchFailureDetail(
         "Computer (its own `--version` is the quickest check), then start the Agent again."
       );
     }
+    case LAUNCH_FAILURE_REASON.RUNTIME_LOGIN_REQUIRED:
+      return (
+        `${runtimeName} needs you to log in on this Computer before it can start. Log in to ` +
+        `${runtimeName} there, then start the Agent again.`
+      );
     case LAUNCH_FAILURE_REASON.RUNTIME_SPAWN_FAILED:
       return (
         "Agent runtime could not be started. See `coforge-computer logs` for the cause, then " +

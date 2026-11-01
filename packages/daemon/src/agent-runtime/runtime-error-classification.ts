@@ -130,6 +130,9 @@ const RUNTIME_AUTH_PATTERNS = [
   /\bplease (?:sign|log) in\b/i,
   /\bsession expired\b/i,
   /\b(?:api key|token)\b[^.]{0,20}\b(?:invalid|expired|missing)\b/i,
+  // Kiro's rejected login: `The bearer token included in the request is invalid` (403
+  // AccessDeniedException, or a 401 UnauthorizedException), which the short window above misses.
+  /\bbearer token\b[^.\n]{0,80}\b(?:invalid|expired|missing)\b/i,
   /\bre-?authenticate\b/i,
   /\bauthentication failed\b/i,
   /\bauth(?:entication)? failed\b/i,

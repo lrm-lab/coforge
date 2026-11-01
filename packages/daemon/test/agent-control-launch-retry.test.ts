@@ -8,7 +8,7 @@ import type {
   SessionIdentity,
 } from "@lrm/coforge-sdk/internal";
 import { LAUNCH_FAILURE_MAX_ATTEMPTS } from "#src/agent-runtime/launch-failure-backoff";
-import { RuntimeModelNotFoundError } from "@lrm/coforge-anvil";
+import { RuntimeLoginRequiredError, RuntimeModelNotFoundError } from "@lrm/coforge-anvil";
 import { captureDaemonLogs } from "./log-capture";
 
 /** A scheduler that only records what `AgentControl` asked for, so a test drives every retry
@@ -138,6 +138,22 @@ test("consecutive failures back off 1s, 2s, 4s... 30s and then report launch_fai
   expect(h.results[0]).toMatchObject({ phase: "failed", errorCode: "launch_failed" });
   expect(h.record()?.phase).toBe("failed");
   expect(h.record()?.lastResult?.phase).toBe("failed");
+});
+
+test("a login no retry can fix ends the launch on its first failure, without a cooldown", async () => {
+  const h = harness(async () => {
+    throw new RuntimeLoginRequiredError("Kiro CLI is not logged in on this Computer");
+  });
+
+  await h.control.start(startIntent);
+
+  // One attempt, no retry armed, and the server's Start operation is answered right away instead
+  // of staying pending for the whole retry window.
+  expect(h.launches).toEqual([1]);
+  expect(h.timers.delays()).toEqual([]);
+  expect(h.results).toHaveLength(1);
+  expect(h.results[0]).toMatchObject({ phase: "failed", errorCode: "launch_failed" });
+  expect(h.record()?.phase).toBe("failed");
 });
 
 test("the launch-failed warnings carry the typed reason, the cause, and the SDK trace", async () => {

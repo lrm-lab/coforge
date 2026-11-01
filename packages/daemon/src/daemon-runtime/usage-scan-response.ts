@@ -1,4 +1,5 @@
 import {
+  UsageReauthRequiredError,
   UsageUnavailableError,
   UsageUnsupportedError,
   type UsageSnapshot,
@@ -42,16 +43,20 @@ export function usageScanReading(
 }
 
 /**
- * The answer to a reading that threw. A non-subscription account has no plan usage at all, so
- * `unsupported` wins over a stale observed snapshot, which a reading like this can never have
- * produced; any other failure falls back to the observed snapshot when there is one. `observed` is
- * only asked for in that case, because reading it also prunes expired windows.
+ * The answer to a reading that threw. A login the runtime no longer has answers `reauth` — the
+ * one state a person must fix — ahead of any stale snapshot, which would hide it. A
+ * non-subscription account has no plan usage at all, so `unsupported` wins over a stale observed
+ * snapshot, which a reading like this can never have produced; any other failure falls back to
+ * the observed snapshot when there is one. `observed` is only asked for in that case, because
+ * reading it also prunes expired windows.
  */
 export function usageScanFailure(
   error: unknown,
   observed: () => UsageSnapshot | undefined,
   now: () => Date,
 ): UsageScanResponse {
+  if (error instanceof UsageReauthRequiredError)
+    return usageScanResult("reauth", undefined, "Provider usage requires signing in again");
   if (error instanceof UsageUnsupportedError)
     return usageScanResult(
       "unsupported",

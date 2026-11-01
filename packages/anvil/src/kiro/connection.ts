@@ -1,5 +1,7 @@
 import { asRecord as record } from "#src/json-record";
 import { JsonlProcess } from "#src/jsonl-process";
+import type { RuntimeLoginRequiredError } from "#src/contract";
+import { isKiroAuthFailure, kiroLoginRequired } from "./auth-failure";
 import type { KiroConnectionHost } from "./host";
 import {
   client,
@@ -24,6 +26,10 @@ export class KiroConnection {
   readonly connection;
   readonly #config = new Map<string, SessionConfigOption[]>();
   readonly #configChanged = new Set<() => void>();
+  /** Set once the CLI says on stderr that its login is not usable; every guarded handshake call
+   * then fails with it instead of waiting out its own bound. */
+  #authFailure: RuntimeLoginRequiredError | undefined;
+  readonly #authFailureReported = Promise.withResolvers<RuntimeLoginRequiredError>();
   #closed = false;
 
   constructor(
@@ -37,6 +43,11 @@ export class KiroConnection {
     }),
   ) {
     this.process = new JsonlProcess(command, cwd, environment, host.processTreeSpawner);
+    this.process.onStderr((line) => {
+      if (this.#authFailure || !isKiroAuthFailure(line)) return;
+      this.#authFailure = kiroLoginRequired();
+      this.#authFailureReported.resolve(this.#authFailure);
+    });
     this.connection = client({ name: host.clientInfo.name })
       .onNotification("session/update", ({ params }) => {
         if (params.update.sessionUpdate === "config_option_update") {
@@ -73,7 +84,7 @@ export class KiroConnection {
     if (ready(initial)) return initial;
     let check: () => void = () => {};
     try {
-      return await bounded(
+      return await this.guarded(
         new Promise<SessionConfigOption[]>((resolve, reject) => {
           check = () => {
             if (this.#closed)
@@ -91,6 +102,33 @@ export class KiroConnection {
     }
   }
 
+  /**
+   * A handshake request bounded by `timeoutMs` that fails as soon as Kiro says its login is not
+   * usable on stderr, instead of waiting out the bound. A rejected login is terminal for the
+   * launch, so the caller must see it as `RuntimeLoginRequiredError` rather than as a timeout or
+   * a closed connection.
+   */
+  async guarded<T>(work: Promise<T>, timeoutMs = 30_000): Promise<T> {
+    try {
+      return await bounded(this.#guardAuth(work), timeoutMs);
+    } catch (error) {
+      if (this.#authFailure) throw this.#authFailure;
+      throw error;
+    }
+  }
+
+  /** `work`, settled as the CLI's rejected login the moment it reports one. */
+  async #guardAuth<T>(work: Promise<T>): Promise<T> {
+    if (this.#authFailure) throw this.#authFailure;
+    type Outcome = { value: T } | { failure: RuntimeLoginRequiredError };
+    const outcome: Outcome = await Promise.race([
+      work.then((value): Outcome => ({ value })),
+      this.#authFailureReported.promise.then((failure): Outcome => ({ failure })),
+    ]);
+    if ("failure" in outcome) throw outcome.failure;
+    return outcome.value;
+  }
+
   #close() {
     this.#closed = true;
     this.connection.close();
@@ -104,7 +142,7 @@ export class KiroConnection {
       clientCapabilities: {},
       clientInfo: this.host.clientInfo,
     };
-    const response = await bounded(this.connection.agent.request("initialize", request));
+    const response = await this.guarded(this.connection.agent.request("initialize", request));
     if (
       response.protocolVersion !== 1 ||
       !response.agentCapabilities?.loadSession ||

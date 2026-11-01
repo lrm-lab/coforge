@@ -18,6 +18,11 @@ if (process.argv.includes("--version")) {
   process.exit(0);
 }
 if (process.argv.includes("--agent")) process.exit(2);
+// A CLI whose stored login is gone: it says so on stderr and exits without answering ACP.
+if (process.argv.includes("--login-required")) {
+  process.stderr.write("error: You are not logged in, please log in with kiro-cli login\n");
+  process.exit(1);
+}
 const catalog = process.argv.includes("--catalog");
 const delayedConfig = process.argv.includes("--delayed-config");
 const earlyConfig = process.argv.includes("--early-config");

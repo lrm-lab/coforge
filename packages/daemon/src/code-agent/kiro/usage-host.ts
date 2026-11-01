@@ -1,10 +1,11 @@
 import {
   type OwnedProcessTree,
   type ProcessTreeSpawner,
+  UsageReauthRequiredError,
   UsageUnavailableError,
   withDeadline,
 } from "@lrm/coforge-anvil";
-import { KIRO_USAGE_TIMEOUT_MS, parseKiroWhoami } from "@lrm/coforge-anvil/kiro";
+import { isKiroAuthFailure, KIRO_USAGE_TIMEOUT_MS, parseKiroWhoami } from "@lrm/coforge-anvil/kiro";
 import { cleanupOwnedTree } from "@lrm/coforge-anvil/execution";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
@@ -24,6 +25,7 @@ const logger = getLogger(["coforge", "daemon", "kiro-usage"]);
 type KiroUsageFailureReason =
   | "timeout"
   | "not_logged_in"
+  | "reauth_required"
   | "device_login"
   | "nonzero_exit"
   | "empty_output"
@@ -112,6 +114,11 @@ export async function readKiroUsageResponse(options: KiroUsageHostOptions): Prom
           earlyStop = cleanupOwnedTree(tree!, tree!.child).catch(() => {});
       }),
     );
+    // A login the service no longer accepts is the one failure a person must fix, so it is not
+    // reported as a read that merely failed: Kiro says so in the command's own output, and it
+    // exits non-zero for it, so this comes before the exit-code classification.
+    if (isKiroAuthFailure(`${result.stdout}\n${result.stderr}`))
+      throw new KiroUsageFailure("reauth_required");
     if (result.exitCode !== 0 || earlyStop)
       throw new KiroUsageFailure(earlyStop ? "device_login" : "nonzero_exit");
     const output = result.stdout.includes("Estimated Usage")
@@ -122,11 +129,14 @@ export async function readKiroUsageResponse(options: KiroUsageHostOptions): Prom
     if (!output.trim()) throw new KiroUsageFailure("empty_output");
     return output;
   } catch (error) {
+    const reason = error instanceof KiroUsageFailure ? error.reason : "unexpected";
     logger.warning("Kiro usage read failed", {
       event: "kiro_usage:read_failed",
-      reason: error instanceof KiroUsageFailure ? error.reason : "unexpected",
-      outcome: "unavailable",
+      reason,
+      outcome: reason === "reauth_required" ? "reauth" : "unavailable",
     });
+    if (reason === "reauth_required" || reason === "not_logged_in")
+      throw new UsageReauthRequiredError();
     throw new UsageUnavailableError();
   } finally {
     if (tree) await (earlyStop ?? cleanupOwnedTree(tree, tree.child)).catch(() => {});

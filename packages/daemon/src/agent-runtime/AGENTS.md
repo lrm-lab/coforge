@@ -87,8 +87,14 @@ Rules for Agent lifecycle, control, Session state, and Activity in
 - Log every failed launch as `agent_runtime:launch_failed` with
   `launchFailureLogFields` (reason, redacted message, SDK trace); the
   Activity sends people to that log line.
-- The reason changes no retry: every managed Start keeps the same launch
-  attempts and backoff whatever the reason.
+- The reason changes no retry, with one exception: a reason listed in
+  `NON_RETRYABLE_LAUNCH_FAILURE_REASONS` (today only `runtime_login_required`)
+  skips the retries, because no attempt can succeed until a person signs the
+  runtime in. Every other reason keeps the same launch attempts and backoff.
+- `launch-attempt-failure.ts` owns what a failed attempt owes — the retry
+  after its cooldown, or the terminal `launch_failed` record — including the
+  non-retryable decision above; `AgentControl` only asks it and stops when it
+  scheduled a retry.
 
 ## Launch identity
 

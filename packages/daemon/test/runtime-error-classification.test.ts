@@ -80,6 +80,17 @@ test.each([
   expect(result.takesAgentOffline).toBe(true);
 });
 
+test("Kiro's rejected bearer token is an auth failure under its 403, not a retryable provider error", () => {
+  // kiro-cli 2.33.1, 2026-11-01: 403 AccessDeniedException with this message when the stored
+  // token is no longer accepted. The status block alone would call a 403 a provider API error.
+  const result = classifyRuntimeErrorText(
+    "The bearer token included in the request is invalid (403 AccessDeniedException)",
+  );
+  expect(result.errorClass).toBe(RUNTIME_ERROR_CLASS.AUTH);
+  expect(result.requiredAction).toBe("user_reauth");
+  expect(result.takesAgentOffline).toBe(true);
+});
+
 test("a bare 401 status is an auth failure", () => {
   const result = classifyRuntimeErrorText("request failed with status 401");
   expect(result.errorClass).toBe(RUNTIME_ERROR_CLASS.AUTH);
