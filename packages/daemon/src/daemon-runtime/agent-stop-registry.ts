@@ -44,6 +44,14 @@ export class AgentStopRegistry {
   }
 
   /**
+   * Marks the Agent stopping without forgetting its Session: an abandoned launch is teardown, not
+   * a person's Stop, and the next wake must still resume the Session it reported.
+   */
+  markStopping(agentId: string): void {
+    this.#stopping.add(agentId);
+  }
+
+  /**
    * Begins a stop: the Agent stops admitting launches and forgets the Session its previous launch
    * reported, before the first await of the stop itself.
    */

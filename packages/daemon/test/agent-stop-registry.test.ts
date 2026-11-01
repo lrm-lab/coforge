@@ -30,6 +30,16 @@ test("a stop in flight is joined, and settles only when its process is no longer
   expect(registry.isStopping("a")).toBe(false);
 });
 
+test("marking an Agent stopping keeps the Session a later wake resumes", () => {
+  const registry = new AgentStopRegistry();
+  registry.rememberSession("a", { requestId: "req-1", provider: "kiro", sessionId: "sess-1" });
+  // What an abandoned launch does: teardown marks the Agent stopping, but a person's Stop is the
+  // only thing that forgets the Session.
+  registry.markStopping("a");
+  expect(registry.stopping("a")).toBe(true);
+  expect(registry.sessionReference("a")?.sessionId).toBe("sess-1");
+});
+
 test("a failed startup can mark its Agent stopping without a stop in flight", () => {
   const registry = new AgentStopRegistry();
   registry.beginStop("a");

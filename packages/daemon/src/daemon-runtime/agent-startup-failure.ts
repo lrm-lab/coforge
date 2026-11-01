@@ -17,17 +17,17 @@ const logger = getLogger(["coforge", "daemon", "runtime"]);
 type Ports = {
   stopping: boolean;
   /** Which Agents are stopping: a failed startup joins that state. */
-  stops: Pick<AgentStopRegistry, "beginStop" | "pendingStop" | "forgetStopping">;
-  inputDrain: AgentInputDrain;
+  stops: Pick<AgentStopRegistry, "markStopping" | "pendingStop" | "forgetStopping">;
+  inputDrain: Pick<AgentInputDrain, "close">;
   currentActivityLaunches: Map<string, ActivityLaunch>;
   interruptIfBusy(agentId: string, launch: ActivityLaunch | undefined): void;
-  activityPublisher: AgentActivityPublisher<ActivityLaunch>;
+  activityPublisher: Pick<AgentActivityPublisher<ActivityLaunch>, "forgetBusy" | "publish">;
   disposeLaunchObservations(agentId: string): void;
   revokeLocalLaunch(agentId: string): void;
-  offlineResidency: AgentOfflineResidency;
-  stopCoordinator: AgentStopCoordinator;
-  drafts: AgentActivityDrafts;
-  agentControl: AgentControl;
+  offlineResidency: Pick<AgentOfflineResidency, "record" | "remember">;
+  stopCoordinator: Pick<AgentStopCoordinator, "releaseAgentRuntime">;
+  drafts: Pick<AgentActivityDrafts, "runtimeError">;
+  agentControl: Pick<AgentControl, "stopped">;
 };
 
 export async function abandonLaunch(
@@ -35,7 +35,7 @@ export async function abandonLaunch(
   agentId: string,
   error: unknown,
 ): Promise<unknown> {
-  ports.stops.beginStop(agentId);
+  ports.stops.markStopping(agentId);
   ports.inputDrain.close(agentId, error);
   const activityLaunch = ports.currentActivityLaunches.get(agentId);
   activityLaunch?.startup?.dispose();
