@@ -108,6 +108,7 @@ import { assertOwnIntent } from "./runtime-intent-validation";
 import { currentObservedUsage } from "./runtime-usage-observation";
 import { failCollectorRunningSlots } from "./runtime-collector-failure";
 import { runtimeEnvelope } from "./runtime-envelope";
+import { handleAgentMessage, handleTrackedMention } from "./runtime-message-delivery";
 import { abandonLaunch, scheduleStartupFailure } from "./agent-startup-failure";
 import { agentsDirectory, agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
 import { revokeAgentApiKey } from "./agent-api-key-revoke";
@@ -1295,6 +1296,25 @@ export class DaemonRuntime {
     );
   }
 
+  #messageDeliveryPorts() {
+    return {
+      assertRunning: () => this.#assertRunning(),
+      workspaceId: this.#connection.workspaceId,
+      stoppingAgents: this.#stoppingAgents,
+      runnerHold: this.#runnerHold,
+      runtimeRelease: this.#runtimeRelease,
+      sync: this.#sync,
+      exitedDelivery: this.#exitedDelivery,
+      wakeLaunches: this.#wakeLaunches,
+      agentLaunches: this.#agentLaunches,
+      deliveryQueue: this.#deliveryQueue,
+      launchCustody: this.#launchCustody,
+      inputDrain: this.#inputDrain,
+      agentProcessManager: this.#agentProcessManager,
+      mentionDeliveries: this.#mentionDeliveries,
+    };
+  }
+
   #env = () => runtimeEnvelope(this.#connection);
 
   /** Tears down a launch whose recovery notice was rejected; returns the error to surface. */
@@ -1533,93 +1553,11 @@ export class DaemonRuntime {
   }
 
   async handleAgentMessage(message: AgentMessageDelivery): Promise<void> {
-    this.#assertRunning();
-    if (message.protocolMajor !== WORKSPACE_PROTOCOL_MAJOR)
-      throw new Error("unsupported agent protocol major");
-    if (message.workspaceId !== this.#connection.workspaceId)
-      throw new Error("agent message targets another Workspace");
-    if (isTrackedMention(message)) return this.#handleTrackedMention(message);
-    if (this.#stoppingAgents.has(message.agentId))
-      throw new Error(`Agent runtime is stopping: ${message.agentId}`);
-    // A stalled provider is restarted for this message; arrivals meanwhile wait for that relaunch.
-    if (this.#runnerHold === undefined) {
-      const recovering = this.#runtimeRelease.isRecovering(message.agentId);
-      const stalled = recovering ? undefined : this.#runtimeRelease.stalled(message.agentId);
-      if (recovering || stalled) {
-        this.#exitedDelivery.keepForNextLaunch(message.agentId, message);
-        if (stalled) return this.#runtimeRelease.recoverStalled(message.agentId, stalled);
-        return;
-      }
-    }
-    if (this.#runnerHold === undefined && this.#sync.changed(message))
-      return this.#sync.restart(message);
-    const exited =
-      this.#runnerHold === undefined &&
-      !this.#agentProcessManager.session(message.agentId) &&
-      !this.#agentLaunches.has(message.agentId);
-    if (exited) return this.#exitedDelivery.deliver(message);
-    // A wake launch that will present waiting deliveries is still in flight: join them as well,
-    // rather than arriving as a second notice right after theirs. Only a wake: a recovery launch
-    // drops what waits once its own notice is accepted, and that notice does not cover this one.
-    if (
-      this.#runnerHold === undefined &&
-      !this.#agentProcessManager.session(message.agentId) &&
-      this.#wakeLaunches.has(message.agentId) &&
-      this.#deliveryQueue.hasQueued(message.agentId)
-    ) {
-      this.#exitedDelivery.keepForNextLaunch(message.agentId, message);
-      return;
-    }
-    const delivery = this.#launchCustody.enqueueDelivery(message.agentId, message);
-    // Runner hold: the delivery is queued, never rejected and never indexed. Attention indexing is
-    // what wakes a turn, and the server's canonical read boundary only advances when the Agent
-    // itself drains `check` - so a held delivery stays undelivered server-side and is re-fetched
-    // after the restart. Nothing is acknowledged while the hold is in force.
-    if (this.#runnerHold !== undefined) {
-      void delivery.catch(() => {});
-      logger.info("Agent delivery queued behind a runner hold", {
-        event: "agent.message.delivery_held",
-        agent_id: message.agentId,
-        delivery_id: message.deliveryId,
-        reason: this.#runnerHold.reason,
-      });
-      return;
-    }
-    if (this.#agentProcessManager.session(message.agentId))
-      this.#inputDrain.ensure(message.agentId);
-    // Otherwise a launch is in flight, and it drains the queue once its session is up.
-    return delivery;
+    return handleAgentMessage(this.#messageDeliveryPorts(), message);
   }
 
-  /**
-   * A tracked @mention: told only to the running launch and session its envelope names, and ACKed
-   * only once drained there (`MentionDeliveryTracker`). It never wakes an Agent, waits for a
-   * launch or a pending server Start, or becomes `no_process`: with no running session it is
-   * drained if already consumed and refused as `IDENTITY_UNKNOWN` otherwise, and the server
-   * decides what happens next. A runner hold queues it unacknowledged like any delivery.
-   */
   #handleTrackedMention(message: TrackedMentionDelivery): Promise<void> {
-    const { agentId } = message;
-    const refusal = this.#mentionDeliveries.admissionRefusal(message);
-    if (refusal) return this.#mentionDeliveries.refuse(message, refusal);
-    // A stalled provider being restarted is no session to tell: refused as unknown, the server
-    // keeps the mention pending and issues it again for the relaunch's session report.
-    if (
-      this.#runnerHold === undefined &&
-      (this.#stoppingAgents.has(agentId) ||
-        this.#runtimeRelease.isRecovering(agentId) ||
-        !this.#agentProcessManager.session(agentId))
-    ) {
-      this.#mentionDeliveries.drop(message, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN);
-      return Promise.resolve();
-    }
-    const delivery = this.#launchCustody.enqueueDelivery(agentId, message);
-    if (this.#runnerHold !== undefined) {
-      void delivery.catch(() => {});
-      return Promise.resolve();
-    }
-    this.#inputDrain.ensure(agentId);
-    return delivery;
+    return handleTrackedMention(this.#messageDeliveryPorts(), message);
   }
 
   /** The launch and native session a tracked mention may name: the ones last reported for this
