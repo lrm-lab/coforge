@@ -19,12 +19,9 @@ import { readKiroUsage } from "./usage";
 import { kiroUpdateEvents } from "./update-events";
 import { assertKiroVersionSupported } from "./version";
 import { STOP_REASON_FAILURE_MESSAGES } from "./stop-reasons";
+import { KiroTurnSteering } from "./session-steering";
 import { scrubRuntimeErrorText } from "#src/runtime-error-text";
 import type { KiroRuntimeHost, KiroProviderOptions } from "./host";
-
-/** How long a turn end waits for the steering outcome Kiro wrote before its prompt response. The
- * frames are already on the wire, so this only bounds a pathological dispatch delay. */
-const STEERING_OUTCOME_WAIT_MS = 1_000;
 
 export class KiroProvider implements CodeAgentProvider {
   readonly provider = RUNTIME_PROVIDER.KIRO;
@@ -95,18 +92,7 @@ class KiroSession implements AgentSession {
   #pending: { resolve(): void; reject(error: Error): void } | undefined;
   #admissions: Promise<void> = Promise.resolve();
   #turn: Promise<void> | undefined;
-  /**
-   * Native ACP `steer-<uuid>` id -> the notice text sent under it and whether Kiro's own
-   * `steering_injected` update has since confirmed the model read it. Populated only by a
-   * `_session/steer` call that returned `queued: true`; drained by the matching
-   * `steering_cleared` (Kiro's `steer` delivery mode).
-   */
-  readonly #steeredMessages = new Map<
-    string,
-    { text: string; injected: boolean; options?: AgentNoticeOptions }
-  >();
-  /** Wakes `#settleTurnSteering` when a steering outcome arrives. */
-  #steeringObserved: (() => void) | undefined;
+  readonly #steering: KiroTurnSteering;
   #generation = 0;
   #disposed = false;
   #dispose: Promise<void> | undefined;
@@ -145,6 +131,14 @@ class KiroSession implements AgentSession {
         };
       },
     );
+    this.#steering = new KiroTurnSteering({
+      acceptsInput: () => !this.#disposed && !this.#interrupting && Boolean(this.#identity),
+      sessionId: () => this.#identity?.sessionId ?? "",
+      hasLiveTurn: () => this.#turn !== undefined,
+      request: (method, params) =>
+        bounded(this.#transport.connection.agent.request(method, params)),
+      emit: (event) => this.#emit(event),
+    });
   }
 
   async open() {
@@ -251,7 +245,7 @@ class KiroSession implements AgentSession {
    */
   notify(message: string, options?: AgentNoticeOptions): Promise<void> {
     const accepted = this.#admissions.then(() =>
-      this.#turn ? this.#steer(message, options) : this.#prompt(message),
+      this.#turn ? this.#steering.steer(message, options) : this.#prompt(message),
     );
     this.#admissions = accepted.catch(() => {});
     return accepted;
@@ -279,7 +273,7 @@ class KiroSession implements AgentSession {
           // redelivery) must already see this Agent as idle.
           if (this.#turn === turn) this.#turn = undefined;
           if (generation !== this.#generation || this.#disposed) return;
-          await this.#settleTurnSteering();
+          await this.#steering.settle();
           if (generation !== this.#generation || this.#disposed) return;
           // ACP's standard `StopReason` union has no "error" member, but Kiro sends it; widen
           // to `string` so every value the CLI can actually send is handled explicitly below.
@@ -313,7 +307,7 @@ class KiroSession implements AgentSession {
         async (error: unknown) => {
           if (this.#pending === admitted) admitted.reject(new Error("Kiro rejected input"));
           if (this.#turn === turn) this.#turn = undefined;
-          if (generation === this.#generation && !this.#disposed) await this.#settleTurnSteering();
+          if (generation === this.#generation && !this.#disposed) await this.#steering.settle();
           if (generation === this.#generation && !this.#disposed) {
             // The JSON-RPC error's own message is a real, specific fact ("Instructions not
             // selected", an upstream auth failure, …); scrub it the same way every other
@@ -354,92 +348,6 @@ class KiroSession implements AgentSession {
     }
   }
 
-  /**
-   * Injects `message` into the running turn via Kiro's undocumented `_session/steer` ACP
-   * extension (measured against kiro-cli 2.22.0, 2026-09-18). Resolves once Kiro
-   * accepts it (`queued: true`); a later `steering_cleared` for this id with no prior
-   * `steering_injected` means Kiro's own buffer discarded it before the model ever read it, and
-   * emits the fallback `notice-undelivered` event for the daemon core to redeliver once idle.
-   *
-   * When the extension rejects the call outright (unknown method, an unrelated throw) or answers
-   * `queued: false` (a turn boundary raced its own persistence — `dropped: "epoch_changed"`),
-   * this notice was never accepted at all: emit the same fallback event immediately and reject,
-   * so the daemon core never ACKs a delivery that never reached the model.
-   */
-  async #steer(message: string, options?: AgentNoticeOptions): Promise<void> {
-    if (this.#disposed || this.#interrupting || !this.#identity)
-      throw new Error("Kiro cannot accept input");
-    const sessionId = this.#identity.sessionId;
-    let response: { queued: boolean; messageId: string; dropped?: string } | undefined;
-    try {
-      response = await bounded(
-        this.#transport.connection.agent.request<
-          { queued: boolean; messageId: string; dropped?: string },
-          { sessionId: string; message: string }
-        >("_session/steer", { sessionId, message }),
-      );
-    } catch {
-      // Falls through to the shared "not accepted" handling below.
-    }
-    if (response?.queued && this.#turn) {
-      this.#steeredMessages.set(response.messageId, { text: message, injected: false, options });
-      return;
-    }
-    if (response?.queued)
-      // The turn ended while Kiro was queueing the steer: no turn will read it, so take it back
-      // out of Kiro's buffer before the daemon redelivers it as the next prompt.
-      await bounded(
-        this.#transport.connection.agent.request("_session/steer/clear", { sessionId }),
-      ).catch(() => {});
-    // Not steered, but still accepted: the daemon core redelivers this text once the Agent is
-    // idle (`notice-undelivered`). Resolving keeps the delivery's single ACK; rejecting would
-    // leave it unacknowledged and the server would redeliver it on top of the fallback.
-    this.#emitUndelivered(message, options);
-  }
-
-  /**
-   * Settles this turn's steers before the turn is reported ended. Kiro writes a turn's steering
-   * outcome before its prompt response: `acp-server.js` (kiro-cli 2.24.1) runs
-   * `clearSteeringAtTurnBoundary` — `steering_cleared` for every unread steer, after its own
-   * continuation retries — before `return {stopReason}`, and a cancel clears the buffer first.
-   * The ACP client dispatches notifications through async handlers, though, so a
-   * `steering_injected`/`steering_cleared` written before the response can still reach `#update`
-   * after it. Waits (at most `STEERING_OUTCOME_WAIT_MS`) until every steer is injected or
-   * cleared; one still unconfirmed then never reached the model and is reported undelivered —
-   * before `completed`, whose listener settles what that turn was told.
-   */
-  async #settleTurnSteering(): Promise<void> {
-    // This turn's steers only: a turn prompted while this one waits steers its own.
-    const turnSteers = [...this.#steeredMessages.keys()];
-    const unconfirmed = () =>
-      turnSteers.some((id) => this.#steeredMessages.get(id)?.injected === false);
-    const deadline = Date.now() + STEERING_OUTCOME_WAIT_MS;
-    while (unconfirmed() && !this.#disposed) {
-      const remaining = deadline - Date.now();
-      if (remaining <= 0) break;
-      const observed = Promise.withResolvers<void>();
-      this.#steeringObserved = observed.resolve;
-      const timer = setTimeout(observed.resolve, remaining);
-      await observed.promise;
-      clearTimeout(timer);
-      this.#steeringObserved = undefined;
-    }
-    for (const id of turnSteers) {
-      const entry = this.#steeredMessages.get(id);
-      this.#steeredMessages.delete(id);
-      if (entry && !entry.injected) this.#emitUndelivered(entry.text, entry.options);
-    }
-  }
-
-  /** A notice that never reached the model, named with the deliveries `notify` said it carried. */
-  #emitUndelivered(text: string, options: AgentNoticeOptions | undefined): void {
-    this.#emit({
-      type: "notice-undelivered",
-      text,
-      ...(options?.deliveryIds?.length ? { deliveryIds: options.deliveryIds } : {}),
-    });
-  }
-
   #update(notification: SessionNotification) {
     if (this.#disposed || notification.sessionId !== this.#identity?.sessionId) return;
     const update = notification.update;
@@ -459,32 +367,7 @@ class KiroSession implements AgentSession {
       }
     }
     for (const event of kiroUpdateEvents(update)) this.#emit(event);
-    if (
-      update.sessionUpdate === "session_info_update" &&
-      meta?.kind === "steering_injected" &&
-      typeof meta.messageId === "string"
-    ) {
-      const entry = this.#steeredMessages.get(meta.messageId);
-      if (entry) entry.injected = true;
-      this.#steeringObserved?.();
-    }
-    if (
-      update.sessionUpdate === "session_info_update" &&
-      meta?.kind === "steering_cleared" &&
-      Array.isArray(meta.messageIds)
-    ) {
-      // Kiro clears its whole steering buffer at every non-cancelled turn end (after retrying
-      // delivery for up to 3 further turns) and on session/cancel; the cleared id list can
-      // include ids already confirmed via `steering_injected`. Only a still-unconfirmed one
-      // means the model never actually read it - that one alone needs redelivery.
-      for (const id of meta.messageIds) {
-        if (typeof id !== "string") continue;
-        const entry = this.#steeredMessages.get(id);
-        this.#steeredMessages.delete(id);
-        if (entry && !entry.injected) this.#emitUndelivered(entry.text, entry.options);
-      }
-      this.#steeringObserved?.();
-    }
+    this.#steering.observe(update, meta);
     if (
       update.sessionUpdate === "session_info_update" &&
       meta?.kind === "error" &&
@@ -541,7 +424,7 @@ class KiroSession implements AgentSession {
   dispose(options?: Readonly<{ cutoffAtMs?: number }>): Promise<void> {
     this.#disposed = true;
     this.#pending?.reject(new Error("Kiro session closed"));
-    this.#steeredMessages.clear();
+    this.#steering.clear();
     this.#dispose ??= this.#transport.dispose(options).finally(this.cleanupProfile);
     return this.#dispose;
   }
