@@ -7,6 +7,7 @@ import { userConversationChannel } from "#src/features/conversations/conversatio
 import { readAfterStreamPositions } from "#src/server/conversations/chat-stream-positions.server";
 import { recordCatalog } from "#src/server/records/record-catalog.server";
 import { recordStats } from "#src/server/records/record-catalog-stats.server";
+import { recordTemplates } from "#src/server/records/record-catalog-templates.server";
 import { normalizeReportContent, type ReportContent } from "./records-content";
 
 export const loadRecordsNavAttention = createServerFn({ method: "GET" })
@@ -288,14 +289,14 @@ export const dismissKeyPointConfirmDraft = createServerFn({ method: "POST" })
 export const loadWeeklyTemplates = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .handler(async ({ context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).listTemplates({ workspaceId, userId: user.id });
+    return recordTemplates(db).listTemplates({ workspaceId, userId: user.id });
   });
 
 export const loadWeeklyTemplateForReport = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .validator(z.object({ reportId: z.uuid() }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).loadTemplateForReport({
+    return recordTemplates(db).loadTemplateForReport({
       workspaceId,
       userId: user.id,
       reportId: data.reportId,
@@ -305,7 +306,7 @@ export const loadWeeklyTemplateForReport = createServerFn({ method: "GET" })
 export const loadKeyPointPrompts = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .handler(async ({ context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).loadKeyPointPrompts({ workspaceId, userId: user.id });
+    return recordTemplates(db).loadKeyPointPrompts({ workspaceId, userId: user.id });
   });
 
 export const saveKeyPointPrompts = createServerFn({ method: "POST" })
@@ -317,7 +318,7 @@ export const saveKeyPointPrompts = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).saveKeyPointPrompts({
+    return recordTemplates(db).saveKeyPointPrompts({
       workspaceId,
       userId: user.id,
       slot: data.slot,
@@ -334,7 +335,7 @@ export const deleteKeyPointPromptHistory = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).deleteKeyPointPromptHistory({
+    return recordTemplates(db).deleteKeyPointPromptHistory({
       workspaceId,
       userId: user.id,
       slot: data.slot,
@@ -346,7 +347,7 @@ export const restartPersonalKeyPointExtraction = createServerFn({ method: "POST"
   .middleware([workspaceUserMiddleware])
   .validator(z.object({ reportId: z.uuid() }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).restartPersonalKeyPointExtraction({
+    return recordTemplates(db).restartPersonalKeyPointExtraction({
       workspaceId,
       userId: user.id,
       reportId: data.reportId,
@@ -362,7 +363,7 @@ export const startTeamKeyPointExtraction = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).startTeamKeyPointExtraction({
+    return recordTemplates(db).startTeamKeyPointExtraction({
       workspaceId,
       userId: user.id,
       overviewReportId: data.overviewReportId,
@@ -374,7 +375,7 @@ export const applyWeeklyTemplate = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(z.object({ templateId: z.uuid() }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).applyTemplate({
+    return recordTemplates(db).applyTemplate({
       workspaceId,
       userId: user.id,
       templateId: data.templateId,
@@ -401,7 +402,7 @@ export const createWeeklyTemplate = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).createTemplate({ workspaceId, userId: user.id, ...data });
+    return recordTemplates(db).createTemplate({ workspaceId, userId: user.id, ...data });
   });
 
 export const updateWeeklyTemplate = createServerFn({ method: "POST" })
@@ -420,7 +421,7 @@ export const updateWeeklyTemplate = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).updateTemplate({
+    return recordTemplates(db).updateTemplate({
       workspaceId,
       userId: user.id,
       ...data,
@@ -431,7 +432,7 @@ export const deleteWeeklyTemplate = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(z.object({ templateId: z.uuid() }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).deleteTemplate({
+    return recordTemplates(db).deleteTemplate({
       workspaceId,
       userId: user.id,
       templateId: data.templateId,

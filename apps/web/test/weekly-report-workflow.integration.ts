@@ -207,8 +207,9 @@ test("conversation configures, sends once, collects a member submission and writ
     expect(await workflow.execute(actor, { type: "templates" })).toMatchObject({
       templates: [{ id: configured.id }],
     });
-    const { RecordCatalog: Catalog } = await import("#src/server/records/record-catalog.server");
-    const cycle = await new Catalog(db).ensureCurrentCycle(actor);
+    const { ensureCurrentCycle } = await import("#src/server/records/record-catalog-format.server");
+    const { RecordCatalog } = await import("#src/server/records/record-catalog.server");
+    const cycle = await ensureCurrentCycle(db, actor);
     const liveFormat = await db.weeklyReport.create({
       data: {
         workspaceId: actor.workspaceId,
@@ -247,7 +248,7 @@ test("conversation configures, sends once, collects a member submission and writ
     const reportId = inbox.reports[0]!.id;
     expect(notifications).toContain(reportId);
     expect(
-      await new Catalog(db).readAssistantReportSection({
+      await new RecordCatalog(db).readAssistantReportSection({
         ...memberActor,
         reportId,
         section: "Summary",
@@ -292,7 +293,6 @@ test("conversation configures, sends once, collects a member submission and writ
       reportId,
       tabs: { Summary: { markdown: "Unsent revision" } },
     });
-    const { RecordCatalog } = await import("#src/server/records/record-catalog.server");
     expect(
       await new RecordCatalog(db).readAssistantReportSection({
         ...actor,

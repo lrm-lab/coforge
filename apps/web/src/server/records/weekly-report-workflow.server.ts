@@ -4,6 +4,7 @@ import { AppError } from "#src/lib/app-error";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 import { loadKeyPointPromptForLeader } from "./weekly-report-key-points.server";
 import { RecordCatalog } from "./record-catalog.server";
+import { recordTemplates } from "./record-catalog-templates.server";
 import {
   distributeWeeklyReport,
   type WeeklyReportNotifier,
@@ -30,6 +31,7 @@ export class WeeklyReportWorkflow {
     });
     if (!membership) throw new AppError("ACCESS_DENIED");
     const catalog = new RecordCatalog(this.db, this.notifier);
+    const templates = recordTemplates(this.db);
     if (action.type === "templates")
       return catalog.listAssistantTemplateFormats({ ...actor, ...action });
     if (action.type === "configure") {
@@ -37,7 +39,7 @@ export class WeeklyReportWorkflow {
       if (new Set(configuration.recipientUserIds).size !== configuration.recipientUserIds.length)
         throw new AppError("INVALID_INPUT");
       if (templateId)
-        return catalog.updateTemplate({
+        return templates.updateTemplate({
           ...actor,
           ...configuration,
           templateId,
@@ -55,7 +57,7 @@ export class WeeklyReportWorkflow {
       });
       if (existing) return existing;
       try {
-        return await catalog.createTemplate({
+        return await templates.createTemplate({
           ...actor,
           ...configuration,
           id,

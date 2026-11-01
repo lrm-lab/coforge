@@ -10,15 +10,11 @@ import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile
 import { offerSendRecipient } from "./weekly-report-offer-recipient.server";
 import {
   currentIsoWeek,
-  emptyReportContent,
   isAssignmentUnread,
   isAutoSendCancelled,
   isWeekSendDismissed,
   isValidTemplateName,
-  isValidIsoWeekNumber,
-  isHourlySendTime,
   memberReportTitle,
-  memberWeekTitle,
   insertAssistantReportBody,
   normalizeReportContent,
   publishMemberReportDelivery,
@@ -47,13 +43,7 @@ import {
   formatOfferSendWeekTitle,
   isWeeklySendArmed,
 } from "#src/features/records/weekly-send-window";
-import {
-  alignReportContentToSections,
-  parseTemplateSections,
-  reportContentFromSections,
-  sectionsFromReportContent,
-  type TemplateOutlineSection,
-} from "#src/features/records/template-outline-sections";
+import { parseTemplateSections } from "#src/features/records/template-outline-sections";
 import { canEditWeeklyReportContent } from "./weekly-report-editability.server";
 import { memoryForPrompt, parseStoredWeeklyReportMemory } from "./weekly-report-memory.server";
 import { canReadReport } from "./report-readers.server";
@@ -63,12 +53,41 @@ import {
   zonedCalendarDate,
 } from "#src/features/records/weekly-report-schedule-due";
 import { loadRecordsCatalog } from "./record-catalog-load.server";
-import { requireMembership, requireWeeklyReportLeader } from "./record-catalog-access.server";
+import { requireMembership } from "./record-catalog-access.server";
+import {
+  ensureFormatForSettings,
+  rebaseLiveFormatToCurrentWeek,
+  syncSettingsOutlineFromFormat,
+} from "./record-catalog-format.server";
 
 type Db = PrismaClient;
 
 function asReportContent(value: unknown): ReportContent {
   return normalizeReportContent(value);
+}
+
+const REPORT_PERSON_SELECT = {
+  id: true,
+  username: true,
+  displayName: true,
+  avatarObjectKey: true,
+} as const;
+
+function reportPersonView(
+  workspaceId: string,
+  person: {
+    id: string;
+    username: string;
+    displayName: string | null;
+    avatarObjectKey: string | null;
+  },
+) {
+  return {
+    userId: person.id,
+    username: person.username,
+    displayName: humanLabel(person),
+    avatarUrl: workspaceUserAvatarUrl(workspaceId, person.id, person.avatarObjectKey),
+  };
 }
 
 async function memberSubmitMatchesReceived(
@@ -105,104 +124,6 @@ function memberReportContentForViewer(
     return reportContentForAuthor(content);
   }
   return reportContentForRecipient(content);
-}
-
-function asStringArray(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string")
-    : [];
-}
-
-/** What every weekly-report read selects of a person it names: an author, a sharer, a member. */
-const REPORT_PERSON_SELECT = {
-  id: true,
-  username: true,
-  displayName: true,
-  avatarObjectKey: true,
-} as const;
-
-/** A person as a weekly-report view names them: by their name (`humanLabel`), never their username. */
-function reportPersonView(
-  workspaceId: string,
-  person: {
-    id: string;
-    username: string;
-    displayName: string | null;
-    avatarObjectKey: string | null;
-  },
-) {
-  return {
-    userId: person.id,
-    username: person.username,
-    displayName: humanLabel(person),
-    avatarUrl: workspaceUserAvatarUrl(workspaceId, person.id, person.avatarObjectKey),
-  };
-}
-
-function templateListItem(template: {
-  id: string;
-  name: string;
-  frequency: string;
-  sendTime: string;
-  sendWeekday: number;
-  dimensions: unknown;
-  mainTitles: unknown;
-  allMembers: boolean;
-  applied: boolean;
-  scheduleEnabled: boolean;
-  updatedAt: Date;
-  recipients: Array<{
-    user: { id: string; username: string; displayName: string | null };
-  }>;
-}) {
-  return {
-    id: template.id,
-    name: template.name,
-    frequency: template.frequency,
-    sendTime: template.sendTime,
-    sendWeekday: template.sendWeekday,
-    dimensions: asStringArray(template.dimensions),
-    mainTitles: asStringArray(template.mainTitles),
-    sections: parseTemplateSections(template.dimensions),
-    allMembers: template.allMembers,
-    active: template.applied,
-    scheduleEnabled: template.scheduleEnabled,
-    updatedAt: template.updatedAt.toISOString(),
-    recipients: template.recipients.map((row) => ({
-      userId: row.user.id,
-      username: row.user.username,
-      displayName: humanLabel(row.user),
-    })),
-  };
-}
-
-type TemplateInput = {
-  name: string;
-  frequency: "weekly";
-  sendTime: string;
-  sendWeekday: number;
-  scheduleEnabled: boolean;
-  sections: TemplateOutlineSection[];
-  allMembers: boolean;
-  recipientUserIds: string[];
-};
-
-/** The columns a template create or update writes from validated input. */
-function templateWriteData(input: TemplateInput, sections: TemplateOutlineSection[]) {
-  return {
-    name: input.name.trim(),
-    frequency: input.frequency,
-    sendTime: input.sendTime,
-    sendWeekday: input.sendWeekday,
-    applied: input.scheduleEnabled,
-    scheduleEnabled: input.scheduleEnabled,
-    dimensions: sections as unknown as Prisma.InputJsonValue,
-    mainTitles: [] as string[],
-    allMembers: input.allMembers,
-    recipients: input.allMembers
-      ? undefined
-      : { create: input.recipientUserIds.map((userId) => ({ userId })) },
-  };
 }
 
 export class RecordCatalog {
@@ -316,7 +237,7 @@ export class RecordCatalog {
   }
 
   async loadCatalog(input: { workspaceId: string; userId: string; now?: Date }) {
-    return loadRecordsCatalog(this.db, input, (args) => this.ensureFormatForSettings(args));
+    return loadRecordsCatalog(this.db, input, (args) => ensureFormatForSettings(this.db, args));
   }
 
   /** Records rail dot: Leader preview hour, or an unread member assignment. */
@@ -394,270 +315,6 @@ export class RecordCatalog {
 
   /**
    * Ensure a live format document for one applied settings stream (no assignments).
-   */
-  private async ensureFormatForSettings(
-    input: {
-      workspaceId: string;
-      userId: string;
-      settingsId: string;
-      settingsName: string;
-      now?: Date;
-      sections?: TemplateOutlineSection[];
-      alignContent?: boolean;
-    },
-    db: Prisma.TransactionClient = this.db,
-  ): Promise<{ id: string }> {
-    const linked = await db.weeklyReport.findFirst({
-      where: {
-        workspaceId: input.workspaceId,
-        authorId: input.userId,
-        kind: "template",
-        settingsId: input.settingsId,
-        submissions: { none: { kind: "member" } },
-      },
-      orderBy: { updatedAt: "desc" },
-      select: { id: true },
-    });
-    if (linked) {
-      if (input.alignContent && input.sections && input.sections.length > 0) {
-        await this.syncFormatReportToSections(
-          {
-            workspaceId: input.workspaceId,
-            userId: input.userId,
-            reportId: linked.id,
-            sections: input.sections,
-          },
-          db,
-        );
-      }
-      const current = await db.weeklyReport.findFirst({
-        where: { id: linked.id },
-        select: {
-          title: true,
-          cycle: { select: { id: true, year: true, week: true } },
-        },
-      });
-      if (current && current.title !== input.settingsName) {
-        await db.weeklyReport.update({
-          where: { id: linked.id },
-          data: { title: input.settingsName },
-        });
-      }
-      if (current?.cycle) {
-        await this.rebaseLiveFormatToCurrentWeek(
-          {
-            workspaceId: input.workspaceId,
-            userId: input.userId,
-            reportId: linked.id,
-            cycle: current.cycle,
-            now: input.now ?? new Date(),
-          },
-          db,
-        );
-      }
-      return linked;
-    }
-
-    const orphan = await db.weeklyReport.findFirst({
-      where: {
-        workspaceId: input.workspaceId,
-        authorId: input.userId,
-        kind: "template",
-        settingsId: null,
-        submissions: { none: { kind: "member" } },
-      },
-      orderBy: { updatedAt: "desc" },
-      select: {
-        id: true,
-        cycle: { select: { id: true, year: true, week: true } },
-      },
-    });
-    if (orphan) {
-      await db.weeklyReport.update({
-        where: { id: orphan.id },
-        data: { settingsId: input.settingsId, title: input.settingsName },
-      });
-      if (input.alignContent && input.sections && input.sections.length > 0) {
-        await this.syncFormatReportToSections(
-          {
-            workspaceId: input.workspaceId,
-            userId: input.userId,
-            reportId: orphan.id,
-            sections: input.sections,
-          },
-          db,
-        );
-      }
-      await this.rebaseLiveFormatToCurrentWeek(
-        {
-          workspaceId: input.workspaceId,
-          userId: input.userId,
-          reportId: orphan.id,
-          cycle: orphan.cycle,
-          now: input.now ?? new Date(),
-        },
-        db,
-      );
-      return orphan;
-    }
-
-    const cycle = await this.ensureCycleAt(
-      {
-        workspaceId: input.workspaceId,
-        userId: input.userId,
-        ...currentIsoWeek(input.now ?? new Date()),
-      },
-      db,
-    );
-    const baseContent =
-      input.sections && input.sections.length > 0
-        ? reportContentFromSections(input.sections)
-        : emptyReportContent();
-    const prior = await db.weeklyReport.findFirst({
-      where: {
-        workspaceId: input.workspaceId,
-        authorId: input.userId,
-        kind: "template",
-        settingsId: input.settingsId,
-      },
-      orderBy: { updatedAt: "desc" },
-      select: { content: true },
-    });
-    const priorPrompts = prior ? asReportContent(prior.content).keyPointPrompts : undefined;
-    const content = priorPrompts ? { ...baseContent, keyPointPrompts: priorPrompts } : baseContent;
-    const created = await db.weeklyReport.create({
-      data: {
-        workspaceId: input.workspaceId,
-        cycleId: cycle.id,
-        authorId: input.userId,
-        settingsId: input.settingsId,
-        kind: "template",
-        title: input.settingsName,
-        status: "draft",
-        content: content as unknown as Prisma.InputJsonValue,
-      },
-      select: { id: true },
-    });
-    return created;
-  }
-
-  private async syncFormatReportToSections(
-    input: {
-      workspaceId: string;
-      userId: string;
-      reportId: string;
-      sections: TemplateOutlineSection[];
-    },
-    db: Prisma.TransactionClient = this.db,
-  ) {
-    const report = await db.weeklyReport.findFirst({
-      where: {
-        id: input.reportId,
-        workspaceId: input.workspaceId,
-        authorId: input.userId,
-        kind: "template",
-        submissions: { none: { kind: "member" } },
-      },
-      select: { id: true, content: true },
-    });
-    if (!report) return;
-    const next = alignReportContentToSections(asReportContent(report.content), input.sections);
-    await db.weeklyReport.update({
-      where: { id: report.id },
-      data: { content: next as unknown as Prisma.InputJsonValue },
-    });
-  }
-
-  private async syncSettingsOutlineFromFormat(input: {
-    workspaceId: string;
-    userId: string;
-    settingsId: string;
-    content: ReportContent;
-  }) {
-    const settings = await this.db.weeklyReportTemplate.findFirst({
-      where: {
-        id: input.settingsId,
-        workspaceId: input.workspaceId,
-        ownerId: input.userId,
-      },
-      select: { id: true },
-    });
-    if (!settings) return;
-    const sections = sectionsFromReportContent(input.content);
-    await this.db.weeklyReportTemplate.update({
-      where: { id: settings.id },
-      data: {
-        dimensions: sections as unknown as Prisma.InputJsonValue,
-        mainTitles: [],
-      },
-    });
-  }
-
-  async ensureCurrentCycle(input: {
-    workspaceId: string;
-    userId: string;
-    now?: Date;
-  }): Promise<{ id: string; year: number; week: number; title: string; created: boolean }> {
-    await requireMembership(this.db, input.workspaceId, input.userId);
-    const { year, week } = currentIsoWeek(input.now ?? new Date());
-    return this.ensureCycleAt({
-      workspaceId: input.workspaceId,
-      userId: input.userId,
-      year,
-      week,
-    });
-  }
-
-  /** Find or create the Workspace ISO-week bucket for `(year, week)`. */
-  async ensureCycleAt(
-    input: {
-      workspaceId: string;
-      userId: string;
-      year: number;
-      week: number;
-    },
-    db: Prisma.TransactionClient = this.db,
-  ): Promise<{ id: string; year: number; week: number; title: string; created: boolean }> {
-    await requireMembership(db, input.workspaceId, input.userId);
-    if (!isValidIsoWeekNumber(input.week) || !Number.isInteger(input.year)) {
-      throw new AppError("INVALID_INPUT");
-    }
-    const title = memberWeekTitle(input.year, input.week);
-    const existing = await db.weeklyReportCycle.findUnique({
-      where: {
-        workspaceId_year_week: {
-          workspaceId: input.workspaceId,
-          year: input.year,
-          week: input.week,
-        },
-      },
-      select: { id: true, year: true, week: true, title: true },
-    });
-    if (existing) {
-      return {
-        id: existing.id,
-        year: existing.year,
-        week: existing.week,
-        title: existing.title,
-        created: false,
-      };
-    }
-    const cycle = await db.weeklyReportCycle.create({
-      data: {
-        workspaceId: input.workspaceId,
-        year: input.year,
-        week: input.week,
-        title,
-        createdById: input.userId,
-      },
-      select: { id: true, year: true, week: true, title: true },
-    });
-    return { id: cycle.id, year: cycle.year, week: cycle.week, title: cycle.title, created: true };
-  }
-
-  /**
-   * Rename the live format document (and its settings stream). ISO week stays
-   * calendar-owned; overview parents with member submissions are rejected.
    */
   async updateFormatReportMeta(input: {
     workspaceId: string;
@@ -913,7 +570,7 @@ export class RecordCatalog {
         continue;
       }
 
-      const source = await this.ensureFormatForSettings({
+      const source = await ensureFormatForSettings(this.db, {
         workspaceId: row.workspaceId,
         userId: row.ownerId,
         settingsId: row.id,
@@ -1827,7 +1484,7 @@ export class RecordCatalog {
       },
     });
     if (report.kind === "template" && report.submissions.length === 0 && report.settingsId) {
-      await this.syncSettingsOutlineFromFormat({
+      await syncSettingsOutlineFromFormat(this.db, {
         workspaceId: input.workspaceId,
         userId: input.userId,
         settingsId: report.settingsId,
@@ -2072,364 +1729,6 @@ export class RecordCatalog {
     return { id: report.id, content: next };
   }
 
-  async listTemplates(input: { workspaceId: string; userId: string }) {
-    await requireWeeklyReportLeader(this.db, input.workspaceId, input.userId);
-    const templates = await this.db.weeklyReportTemplate.findMany({
-      where: { workspaceId: input.workspaceId, ownerId: input.userId },
-      orderBy: [{ applied: "desc" }, { updatedAt: "desc" }],
-      include: {
-        recipients: {
-          include: { user: { select: { id: true, username: true, displayName: true } } },
-        },
-      },
-    });
-    return templates.map((template) => templateListItem(template));
-  }
-
-  /** Settings row behind a viewer's own format, for the template-detail dialog. */
-  async loadTemplateForReport(input: { workspaceId: string; userId: string; reportId: string }) {
-    await requireWeeklyReportLeader(this.db, input.workspaceId, input.userId);
-    const report = await this.db.weeklyReport.findFirst({
-      where: {
-        id: input.reportId,
-        workspaceId: input.workspaceId,
-        authorId: input.userId,
-        kind: "template",
-      },
-      select: { settingsId: true },
-    });
-    if (!report?.settingsId) throw new AppError("NOT_FOUND");
-    const template = await this.db.weeklyReportTemplate.findFirst({
-      where: {
-        id: report.settingsId,
-        workspaceId: input.workspaceId,
-        ownerId: input.userId,
-      },
-      include: {
-        recipients: {
-          include: { user: { select: { id: true, username: true, displayName: true } } },
-        },
-      },
-    });
-    if (!template) throw new AppError("NOT_FOUND");
-    return templateListItem(template);
-  }
-
-  /**
-   * Leader-owned team/personal key-point prompts (stored on a live format document).
-   * Uses the newest applied settings stream, else the newest owned settings row.
-   */
-  async loadKeyPointPrompts(input: { workspaceId: string; userId: string }) {
-    await requireWeeklyReportLeader(this.db, input.workspaceId, input.userId);
-    const { emptyKeyPointPrompts } = await import("#src/features/records/records-content");
-    const format = await this.resolvePromptFormatDoc(input);
-    if (!format) return emptyKeyPointPrompts();
-    return asReportContent(format.content).keyPointPrompts ?? emptyKeyPointPrompts();
-  }
-
-  async saveKeyPointPrompts(input: {
-    workspaceId: string;
-    userId: string;
-    slot: "team" | "personal";
-    text: string;
-  }) {
-    const { emptyKeyPointPrompts, withKeyPointPrompts } =
-      await import("#src/features/records/records-content");
-    const { mergeKeyPointPromptSlot } = await import("./weekly-report-key-points.server");
-    await requireWeeklyReportLeader(this.db, input.workspaceId, input.userId);
-    const settings = await this.db.weeklyReportTemplate.findFirst({
-      where: { workspaceId: input.workspaceId, ownerId: input.userId },
-      orderBy: [{ applied: "desc" }, { updatedAt: "desc" }],
-      select: { id: true, name: true, dimensions: true },
-    });
-    if (!settings) throw new AppError("NOT_FOUND");
-    const format = await this.ensureFormatForSettings({
-      workspaceId: input.workspaceId,
-      userId: input.userId,
-      settingsId: settings.id,
-      settingsName: settings.name,
-      sections: parseTemplateSections(settings.dimensions),
-    });
-    const row = await this.db.weeklyReport.findFirst({
-      where: { id: format.id },
-      select: { content: true },
-    });
-    if (!row) throw new AppError("NOT_FOUND");
-    const content = asReportContent(row.content);
-    const current = content.keyPointPrompts ?? emptyKeyPointPrompts();
-    // Preserve the caller's text exactly (including empty / trailing newlines).
-    const nextPrompts = mergeKeyPointPromptSlot(current, input.slot, input.text);
-    const next = withKeyPointPrompts(content, nextPrompts);
-    const updated = await this.db.weeklyReport.update({
-      where: { id: format.id },
-      data: { content: next as unknown as Prisma.InputJsonValue },
-      select: { content: true },
-    });
-    return asReportContent(updated.content).keyPointPrompts ?? nextPrompts;
-  }
-
-  async deleteKeyPointPromptHistory(input: {
-    workspaceId: string;
-    userId: string;
-    slot: "team" | "personal";
-    historyIndex: number;
-  }) {
-    const { emptyKeyPointPrompts, removeKeyPointPromptHistoryEntry, withKeyPointPrompts } =
-      await import("#src/features/records/records-content");
-    await requireWeeklyReportLeader(this.db, input.workspaceId, input.userId);
-    const settings = await this.db.weeklyReportTemplate.findFirst({
-      where: { workspaceId: input.workspaceId, ownerId: input.userId },
-      orderBy: [{ applied: "desc" }, { updatedAt: "desc" }],
-      select: { id: true, name: true, dimensions: true },
-    });
-    if (!settings) throw new AppError("NOT_FOUND");
-    const format = await this.ensureFormatForSettings({
-      workspaceId: input.workspaceId,
-      userId: input.userId,
-      settingsId: settings.id,
-      settingsName: settings.name,
-      sections: parseTemplateSections(settings.dimensions),
-    });
-    const row = await this.db.weeklyReport.findFirst({
-      where: { id: format.id },
-      select: { content: true },
-    });
-    if (!row) throw new AppError("NOT_FOUND");
-    const content = asReportContent(row.content);
-    const current = content.keyPointPrompts ?? emptyKeyPointPrompts();
-    const nextPrompts = {
-      ...current,
-      [input.slot]: removeKeyPointPromptHistoryEntry(current[input.slot], input.historyIndex),
-    };
-    await this.db.weeklyReport.update({
-      where: { id: format.id },
-      data: {
-        content: withKeyPointPrompts(content, nextPrompts) as unknown as Prisma.InputJsonValue,
-      },
-    });
-    return nextPrompts;
-  }
-
-  /** Leader-only: force a new personal key-point extraction run for a member report. */
-  async restartPersonalKeyPointExtraction(input: {
-    workspaceId: string;
-    userId: string;
-    reportId: string;
-  }) {
-    await requireMembership(this.db, input.workspaceId, input.userId);
-    const report = await this.db.weeklyReport.findFirst({
-      where: {
-        id: input.reportId,
-        workspaceId: input.workspaceId,
-        kind: "member",
-      },
-      select: {
-        id: true,
-        status: true,
-        sourceTemplate: { select: { authorId: true } },
-      },
-    });
-    if (!report?.sourceTemplate) throw new AppError("NOT_FOUND");
-    if (report.sourceTemplate.authorId !== input.userId) throw new AppError("ACCESS_DENIED");
-    if (report.status !== "submitted" && report.status !== "shared") {
-      throw new AppError("INVALID_INPUT");
-    }
-    const { startPersonalKeyPointExtraction } = await import("./weekly-report-key-points.server");
-    return startPersonalKeyPointExtraction(this.db, {
-      workspaceId: input.workspaceId,
-      memberReportId: report.id,
-      force: true,
-    });
-  }
-
-  /** Leader-only: start or re-run team key-point extraction for an overview week parent. */
-  async startTeamKeyPointExtraction(input: {
-    workspaceId: string;
-    userId: string;
-    overviewReportId: string;
-    force?: boolean;
-  }) {
-    await requireMembership(this.db, input.workspaceId, input.userId);
-    const overview = await this.db.weeklyReport.findFirst({
-      where: {
-        id: input.overviewReportId,
-        workspaceId: input.workspaceId,
-        kind: "template",
-        authorId: input.userId,
-      },
-      select: { id: true },
-    });
-    if (!overview) throw new AppError("NOT_FOUND");
-    const assignmentCount = await this.db.weeklyReport.count({
-      where: {
-        workspaceId: input.workspaceId,
-        sourceTemplateId: overview.id,
-        kind: "member",
-      },
-    });
-    if (assignmentCount === 0) throw new AppError("NOT_FOUND");
-    const { startTeamKeyPointExtraction } = await import("./weekly-report-key-points.server");
-    return startTeamKeyPointExtraction(this.db, {
-      workspaceId: input.workspaceId,
-      overviewReportId: overview.id,
-      force: input.force ?? true,
-    });
-  }
-
-  private async resolvePromptFormatDoc(input: { workspaceId: string; userId: string }) {
-    await requireMembership(this.db, input.workspaceId, input.userId);
-    const settings = await this.db.weeklyReportTemplate.findFirst({
-      where: { workspaceId: input.workspaceId, ownerId: input.userId },
-      orderBy: [{ applied: "desc" }, { updatedAt: "desc" }],
-      select: { id: true, name: true, dimensions: true },
-    });
-    if (!settings) return null;
-    const linked = await this.ensureFormatForSettings({
-      workspaceId: input.workspaceId,
-      userId: input.userId,
-      settingsId: settings.id,
-      settingsName: settings.name,
-      sections: parseTemplateSections(settings.dimensions),
-    });
-    return this.db.weeklyReport.findFirst({
-      where: { id: linked.id },
-      select: { id: true, content: true },
-    });
-  }
-
-  /** Toggle whether this send-settings row is an active send stream (multiple allowed).
-   * Product「是否启用」keeps `applied` and `scheduleEnabled` in lockstep (WR-33). */
-  async applyTemplate(input: { workspaceId: string; userId: string; templateId: string }) {
-    await requireWeeklyReportLeader(this.db, input.workspaceId, input.userId);
-    const template = await this.db.weeklyReportTemplate.findFirst({
-      where: { id: input.templateId, workspaceId: input.workspaceId, ownerId: input.userId },
-      select: { id: true, name: true, applied: true, dimensions: true },
-    });
-    if (!template) throw new AppError("NOT_FOUND");
-    if (template.applied) {
-      await this.db.weeklyReportTemplate.update({
-        where: { id: template.id },
-        data: { applied: false, scheduleEnabled: false },
-      });
-      return { id: template.id, active: false as const };
-    }
-    await this.db.weeklyReportTemplate.update({
-      where: { id: template.id },
-      data: { applied: true, scheduleEnabled: true },
-    });
-    await this.ensureFormatForSettings({
-      workspaceId: input.workspaceId,
-      userId: input.userId,
-      settingsId: template.id,
-      settingsName: template.name,
-      sections: parseTemplateSections(template.dimensions),
-      alignContent: true,
-    });
-    return { id: template.id, active: true as const };
-  }
-
-  /** Rejects a malformed template or recipients outside the Workspace; returns the parsed parts. */
-  private async validateTemplateInput(input: TemplateInput & { workspaceId: string }) {
-    if (!isValidTemplateName(input.name)) throw new AppError("INVALID_INPUT");
-    if (input.sendWeekday < 1 || input.sendWeekday > 7) throw new AppError("INVALID_INPUT");
-    if (!isHourlySendTime(input.sendTime)) throw new AppError("INVALID_INPUT");
-    if (!input.allMembers && input.recipientUserIds.length > 0) {
-      const members = await this.db.workspaceMembership.count({
-        where: {
-          workspaceId: input.workspaceId,
-          userId: { in: input.recipientUserIds },
-        },
-      });
-      if (members !== input.recipientUserIds.length) throw new AppError("INVALID_INPUT");
-    }
-    return { sections: parseTemplateSections(input.sections), enabled: input.scheduleEnabled };
-  }
-
-  async createTemplate(
-    input: TemplateInput & { workspaceId: string; userId: string; id?: string },
-  ) {
-    await requireWeeklyReportLeader(this.db, input.workspaceId, input.userId);
-    const { sections, enabled } = await this.validateTemplateInput(input);
-    return this.db.$transaction(async (tx) => {
-      const created = await tx.weeklyReportTemplate.create({
-        data: {
-          ...(input.id ? { id: input.id } : {}),
-          workspaceId: input.workspaceId,
-          ownerId: input.userId,
-          ...templateWriteData(input, sections),
-        },
-      });
-      if (enabled) {
-        await this.ensureFormatForSettings(
-          {
-            workspaceId: input.workspaceId,
-            userId: input.userId,
-            settingsId: created.id,
-            settingsName: input.name.trim(),
-            sections,
-            alignContent: true,
-          },
-          tx,
-        );
-      }
-      return { id: created.id };
-    });
-  }
-
-  async updateTemplate(
-    input: TemplateInput & { workspaceId: string; userId: string; templateId: string },
-  ) {
-    await requireWeeklyReportLeader(this.db, input.workspaceId, input.userId);
-    const template = await this.db.weeklyReportTemplate.findFirst({
-      where: { id: input.templateId, workspaceId: input.workspaceId, ownerId: input.userId },
-      select: { id: true, applied: true, name: true },
-    });
-    if (!template) throw new AppError("NOT_FOUND");
-    const { sections, enabled } = await this.validateTemplateInput(input);
-    await this.db.$transaction(async (tx) => {
-      await tx.weeklyReportTemplateRecipient.deleteMany({ where: { templateId: template.id } });
-      await tx.weeklyReportTemplate.update({
-        where: { id: template.id },
-        data: templateWriteData(input, sections),
-      });
-    });
-    const liveFormat = !enabled
-      ? await this.db.weeklyReport.findFirst({
-          where: {
-            workspaceId: input.workspaceId,
-            authorId: input.userId,
-            settingsId: template.id,
-            kind: "template",
-            submissions: { none: { kind: "member" } },
-          },
-          select: { id: true },
-        })
-      : null;
-    // Disabling the schedule must not leave a stale format for manual sends.
-    if (enabled || liveFormat) {
-      await this.ensureFormatForSettings({
-        workspaceId: input.workspaceId,
-        userId: input.userId,
-        settingsId: template.id,
-        settingsName: input.name.trim(),
-        sections,
-        alignContent: true,
-      });
-    }
-    return { id: template.id };
-  }
-
-  async deleteTemplate(input: { workspaceId: string; userId: string; templateId: string }) {
-    await requireWeeklyReportLeader(this.db, input.workspaceId, input.userId);
-    const template = await this.db.weeklyReportTemplate.findFirst({
-      where: { id: input.templateId, workspaceId: input.workspaceId, ownerId: input.userId },
-      select: { id: true },
-    });
-    if (!template) throw new AppError("NOT_FOUND");
-    await this.db.weeklyReportTemplate.delete({ where: { id: template.id } });
-    return { ok: true as const };
-  }
-
   private async writeAssistantComment(input: {
     workspaceId: string;
     subjectType: "report" | "cycle";
@@ -2640,7 +1939,7 @@ export class RecordCatalog {
     const { year, week } =
       (report.submissions?.length ?? 0) > 0
         ? { year: report.cycle.year, week: report.cycle.week }
-        : await this.rebaseLiveFormatToCurrentWeek({
+        : await rebaseLiveFormatToCurrentWeek(this.db, {
             workspaceId: input.workspaceId,
             userId: input.userId,
             reportId: report.id,
@@ -2707,38 +2006,6 @@ export class RecordCatalog {
   }
 
   /** Move an unsent live format onto this week's cycle when the calendar advanced. */
-  private async rebaseLiveFormatToCurrentWeek(
-    input: {
-      workspaceId: string;
-      userId: string;
-      reportId: string;
-      cycle: { id: string; year: number; week: number };
-      now: Date;
-    },
-    db: Prisma.TransactionClient = this.db,
-  ): Promise<{ year: number; week: number }> {
-    const current = currentIsoWeek(zonedCalendarDate(input.now));
-    if (input.cycle.year === current.year && input.cycle.week === current.week) {
-      return current;
-    }
-    const cycle = await this.ensureCycleAt(
-      {
-        workspaceId: input.workspaceId,
-        userId: input.userId,
-        year: current.year,
-        week: current.week,
-      },
-      db,
-    );
-    if (input.cycle.id !== cycle.id) {
-      await db.weeklyReport.update({
-        where: { id: input.reportId },
-        data: { cycleId: cycle.id },
-      });
-    }
-    return { year: cycle.year, week: cycle.week };
-  }
-
   /** Leader cancels this week's template send entirely（取消本周周报）. */
   async dismissWeeklyFormatSend(input: {
     workspaceId: string;
