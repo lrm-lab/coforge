@@ -20,6 +20,8 @@ export function recordReportSend(db: Db, notifier?: WeeklyReportNotifier) {
     reportId: string;
     now?: Date;
   }) {
+    // A confirmation targets the named report: member reports are submitted, while templates
+    // are distributed to their configured recipients.
     await requireMembership(db, input.workspaceId, input.userId);
     const report = await db.weeklyReport.findFirst({
       where: { id: input.reportId, workspaceId: input.workspaceId, authorId: input.userId },
@@ -55,6 +57,8 @@ export function recordReportSend(db: Db, notifier?: WeeklyReportNotifier) {
     assistantSessionId?: string | null;
     now?: Date;
   }) {
+    // Cancel the calendar week cron will arbitrate, not the live format's possibly stale cycle.
+    // Stamping the creation week would let the schedule recreate this week's send.
     await requireMembership(db, input.workspaceId, input.userId);
     const report = await db.weeklyReport.findFirst({
       where: {

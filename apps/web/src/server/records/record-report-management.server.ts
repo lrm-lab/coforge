@@ -75,6 +75,8 @@ export function recordReportManagement(db: Db) {
     year: number;
     week: number;
   }) {
+    // Stamp the live format so cron skips this ISO week. Without a settings stream there is
+    // no live format to mark and manual send remains available.
     if (!input.settingsId) return;
     const liveFormat = await db.weeklyReport.findFirst({
       where: {
@@ -104,6 +106,8 @@ export function recordReportManagement(db: Db) {
     userId: string;
     reportId: string;
   }) {
+    // Delete only the Leader's overview node. Member submissions stay in 我的周报 and 收藏,
+    // are unlinked from this parent, and the live format is marked cancelled for this week.
     await requireMembership(db, input.workspaceId, input.userId);
     const overview = await db.weeklyReport.findFirst({
       where: {
@@ -142,6 +146,8 @@ export function recordReportManagement(db: Db) {
   }
 
   async function deleteMemberWeek(input: { workspaceId: string; userId: string; cycleId: string }) {
+    // Delete only this viewer's template parents and their submissions. Keep the cycle while
+    // any other report remains, and cancel auto-send for every deleted settings stream.
     await requireMembership(db, input.workspaceId, input.userId);
     const cycle = await db.weeklyReportCycle.findFirst({
       where: { id: input.cycleId, workspaceId: input.workspaceId },

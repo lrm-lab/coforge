@@ -22,6 +22,8 @@ export async function updateFormatReportMeta(
   db: PrismaClient,
   input: { workspaceId: string; userId: string; reportId: string; title: string },
 ): Promise<{ id: string; title: string; year: number; week: number }> {
+  // Only the author's live format can be renamed; a sent overview with member submissions is
+  // historical and must keep its title.
   await requireMembership(db, input.workspaceId, input.userId);
   if (!isValidTemplateName(input.title)) throw new AppError("INVALID_INPUT");
   const title = input.title.trim();

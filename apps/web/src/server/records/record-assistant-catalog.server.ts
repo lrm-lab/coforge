@@ -117,6 +117,7 @@ export function recordAssistantCatalog(db: Db) {
   }
 
   async function createNote(input: { workspaceId: string; userId: string; title?: string }) {
+    /** Create a personal workspace note in Markdown. */
     await requireMembership(db, input.workspaceId, input.userId);
     const title = (input.title?.trim() || "Untitled").slice(0, 200);
     const note = await db.recordNote.create({

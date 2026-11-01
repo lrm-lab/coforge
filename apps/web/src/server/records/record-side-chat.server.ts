@@ -401,6 +401,7 @@ export function recordSideChat(db: Db) {
     reportId: string;
     assistantSessionId: string;
   }) {
+    /** Assignee's 「需要」 choice posts the E2 clarifying reply and collect-plan card. */
     await requireMembership(db, input.workspaceId, input.userId);
     const report = await db.weeklyReport.findFirst({
       where: {
@@ -431,6 +432,7 @@ export function recordSideChat(db: Db) {
     payload?: RecordAssistantPayload;
     assistantSessionId?: string | null;
   }) {
+    /** Platform-owned progress bubble for collector progress and packs. */
     const { resolveLatestChatSessionId } =
       await import("./weekly-report-assistant-chat-session.server");
     const assistantSessionId =
