@@ -97,6 +97,8 @@ export function reconcileIdleTurn(
     ports.processManager.session(agentId)?.hasLiveTurn !== false
   )
     return false;
+  // A turn already showing its wait for background tasks stays as it is: the heartbeat keeps
+  // that warm until a task ends.
   const waiting = launch.backgroundTasks?.quietDetail();
   const shown = ports.activityPublisher.lastBusy(agentId)?.activity;
   if (
@@ -105,6 +107,8 @@ export function reconcileIdleTurn(
     shown.detail === waiting
   )
     return false;
+  // Preserve output accepted while the turn was live before publishing its final Idle.
+  // Otherwise the pending trajectory timer could publish it after Idle and rearm Busy.
   launch.trajectory?.flush();
   launch.stalled?.finish(agentId);
   ports.phaseBookkeeping.dispose(agentId);
@@ -134,10 +138,13 @@ export function isWorking(ports: RuntimeTurnPorts, agentId: string): boolean {
 export function releaseTurnEndHolds(ports: RuntimeTurnPorts, agentId: string): void {
   const held = ports.deliveryQueue.idle(agentId);
   if (held.length) flushHeldDeliveries(ports, agentId, held);
+  // Flush first: notifying marks busy synchronously, so app items re-hold for the next
+  // turn rather than racing the notice that just started it.
   ports.inboxCoordinator.releaseHeldAppItems(agentId);
   ports.inboxCoordinator.releaseFallbackNotices(agentId);
 }
 
+/** Narrates a daemon-initiated cold start: a stored session found unusable, or one recycled. */
 export function narrateUnavailable(
   ports: RuntimeTurnPorts,
   agentId: string,
