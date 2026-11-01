@@ -71,8 +71,7 @@ async function viewerSide(ports: DirectConversationPorts, conversationId: string
           // The other side keeps its row after leaving (a deleted Agent's DM stays readable);
           // only the seen-by aggregate below restricts itself to active members.
           leftAt: true,
-          // The viewer's own conversation-level read cursor: the client positions the
-          // initial view at the first unread message and draws the divider there.
+          // Each member's read cursor, for how far the others have read the viewer's messages.
           readThroughSequence: true,
           agentReadThroughSequence: true,
           // The full public profile: the pane resolves stored `<@kind:uuid>` tokens (and offers
@@ -237,9 +236,6 @@ export async function openConversationForUser(
       sender.id,
       members.filter((member) => member.leftAt === null),
     ),
-    // The viewer's conversation-level read boundary: first unread = first top-level
-    // message past this. Thread replies are positioned by their thread instead.
-    readThroughSequence: sender.readThroughSequence,
     threads,
     threadReadThrough,
     ...(agent

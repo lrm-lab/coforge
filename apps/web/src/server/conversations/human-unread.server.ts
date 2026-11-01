@@ -22,7 +22,7 @@ export const HUMAN_UNREAD_MESSAGE_SQL = Prisma.sql`m."sequence" > LEAST(cm."read
 
 /** Where a person stands in one of their conversations: how many of its top-level messages are
  * unread for them (the badge, by the same rule `PublicChannels.list` counts every row's with), and
- * their read cursor (`readThroughSequence`), which a page's stored window draws its divider from. */
+ * their read cursor (`readThroughSequence`), which a read-cursor move announces. */
 export type HumanReadState = { unreadCount: number; readThroughSequence: number };
 export type HumanReadAdvance = HumanReadState & { memberId: string; readThroughAdvanced: boolean };
 

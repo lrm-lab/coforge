@@ -221,7 +221,12 @@ test("a DM between members reads, sends and is read by its conversation id", asy
 
   await conversations.markRead(workspaceId, grace.id, conversationId, sent.sequence);
   expect(
-    (await conversations.page(workspaceId, grace.id, conversationId)).readThroughSequence,
+    (
+      await db.conversationMember.findFirstOrThrow({
+        where: { conversationId, userId: grace.id },
+        select: { readThroughSequence: true },
+      })
+    ).readThroughSequence,
   ).toBe(sent.sequence);
 });
 

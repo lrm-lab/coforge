@@ -202,43 +202,16 @@ test("an open is caught up only once a read has landed, after what it read was m
   );
   reconciler.subscribe(() => heard.push(reconciler.caughtUp()));
 
-  // The unread divider waits on this (task #276): a failed read has not caught anything up.
+  // A failed read has not caught anything up: the update notice keeps saying so.
   await reconciler.reconcile();
   expect(reconciler.caughtUp()).toBe(false);
   await wait(30);
 
-  // The failure is heard (not caught up), then the merge is seen while still not caught up, so
-  // the divider can land on what it brought.
+  // The failure is heard (not caught up), then the merge is seen while still not caught up.
   expect(heard).toEqual([false, false, true]);
   // Heard once: a later read merges as caught up, and no one is told again.
   await reconciler.reconcile();
   expect(heard).toEqual([false, false, true, true]);
-});
-
-test("an open is caught up through the newest message its first catch-up found", async () => {
-  const reconciler = createConversationReconciler(
-    { afterSequence: 5 },
-    async (cursor) => (cursor.afterSequence === 5 ? [{ id: "m7", sequence: 7 }] : []),
-    () => {},
-  );
-  expect(reconciler.caughtUpThrough()).toBeUndefined();
-  await reconciler.reconcile();
-  expect(reconciler.caughtUpThrough()).toBe(7);
-
-  // What arrives later came while the conversation was open (task #358).
-  reconciler.advance({ afterSequence: 9 });
-  await reconciler.reconcile();
-  expect(reconciler.caughtUpThrough()).toBe(7);
-
-  // Caught up without a read: through the newest message the window holds, which a window
-  // replaced since the open (a jump's) may have past the cursor.
-  const idle = createConversationReconciler(
-    { afterSequence: 5 },
-    async () => [],
-    () => {},
-  );
-  idle.caughtUpWithoutRead(8);
-  expect(idle.caughtUpThrough()).toBe(8);
 });
 
 test("failed catch-ups are counted and heard until one lands", async () => {

@@ -64,14 +64,9 @@ because the API is experimental.
   alone stores only after a read. The query is looked up when the write runs: one errored, dropped,
   or marked stale since is not stored, and a page write whose data is not one to open at leaves
   the stored copy alone.
-- A conversation's read cursor: the pane freezes its unread divider for the visit, so the live
-  window keeps the cursor it opened with; when the server's cursor moves (`noteReadThrough`, called
-  after a successful mark-read, and for every `channel.marked.v1`/`dm.marked.v1`, which carries the
-  cursor as Slack's `channel_marked` carries its `ts`: a read in the Activity inbox, another tab or
-  another device), what is stored carries the new one, never moving back, and leaving the
-  conversation takes it into the window (`adoptReadThrough`) so coming back in the same page load
-  draws no divider over what was read. A conversation not on screen takes it at once. A window
-  held only in storage is moved where it is stored.
+- A conversation window keeps no read cursor of its own: where the viewer's unread starts is read
+  on every open (`conversationOpenQuery`, task #378), never kept, so a stored or in-memory window
+  paints at once and its age cannot move the "New messages" divider.
 - A query the server answers `NOT_FOUND` (deleted, or access lost) is removed from storage.
 - `maxAge` is 7 days and a sweep removes older rows at most once a day.
 - A deploy keeps every stored row: the copy is thrown away only when its shape can no longer be

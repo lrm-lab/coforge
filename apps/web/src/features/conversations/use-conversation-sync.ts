@@ -6,10 +6,11 @@ import { messageIdFromHash, threadRootFromMessageAnchor } from "./conversation-t
 import { isAppError, isAppErrorCode } from "#src/lib/app-error";
 import { ACTIVITY_INBOX_QUERY_PREFIX } from "#src/features/inbox/activity-inbox-queries";
 import { conversationAroundQuery } from "./conversation-queries";
+import { markOpenReadStale } from "./conversation-open-query";
 import type { ThreadRootLoad } from "./thread-root-state";
 import type { DirectConversationView } from "./conversation-types";
 import { threadReadThrough } from "./thread-summary-model";
-import { useAwaitingRestoredWindow } from "./use-conversation-open-boundary";
+import { useConversationOpened } from "./use-conversation-open";
 
 type ConversationSyncView = Pick<
   DirectConversationView,
@@ -125,12 +126,18 @@ export function useConversationSync({
   }, [openTaskMessageId, selected, closeThread]);
 
   const reading = useRef(false);
-  const restoring = useAwaitingRestoredWindow(conversation.conversationId);
+  // A thread's read waits, like its divider, for this open's read of where its unread starts
+  // (task #378): moving the thread's cursor first would bring that read back with nothing unread.
+  const threadOpened = useConversationOpened(
+    conversation.conversationId,
+    threadInView,
+    Boolean(threadInView),
+  );
   useEffect(() => {
     if (
       !threadInView ||
       !threadInViewSequence ||
-      restoring ||
+      !threadOpened ||
       reading.current ||
       document.visibilityState === "hidden"
     )
@@ -144,6 +151,7 @@ export function useConversationSync({
           ...previous,
           [threadInView]: threadInViewSequence,
         }));
+        markOpenReadStale(queryClient, conversation.conversationId, threadInView);
         // Activity's rows too: a thread opened from there is read here, not by its row.
         void queryClient.invalidateQueries({ queryKey: ACTIVITY_INBOX_QUERY_PREFIX });
       })
@@ -156,7 +164,7 @@ export function useConversationSync({
   }, [
     threadInView,
     threadInViewSequence,
-    restoring,
+    threadOpened,
     conversation,
     queryClient,
     onReadThread,
@@ -201,7 +209,7 @@ export function useConversationSync({
     queryClient,
   ]);
 
-  return { visited, windowRead, threadCursor, threadRootFailure, loadThreadRoot };
+  return { visited, windowRead, threadRootFailure, loadThreadRoot };
 }
 
 /**

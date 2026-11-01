@@ -19,11 +19,6 @@ import type { ReadPositions } from "./conversation-pane-layout";
 export type DirectConversationView = {
   conversationId: string;
   senderMemberId: string;
-  /** The viewer's read cursor over this view's messages: the channel's member
-   * cursor for a channel pane, that thread's `thread_reads` cursor for a thread pane. The
-   * first message past it is the first unread; the initial view positions there and draws the
-   * divider. Absent for a non-member, a fully-read fresh seed, or an unvisited thread. */
-  readThroughSequence?: number;
   /** What the viewer's own messages read their ticks from (`ownMessageReadState`). */
   readTicks?: ReadPositions;
   threadReadThrough?: Record<string, number>;

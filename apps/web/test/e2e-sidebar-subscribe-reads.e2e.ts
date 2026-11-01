@@ -1,10 +1,10 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
+import { serverFunctionIds, serverFunctionOf } from "./helpers/server-function-ids";
 import {
   userConversationChannel,
   workspaceConversationChannel,
@@ -58,24 +58,7 @@ const readsOf = (count: number): Reads =>
 const listsOf = (url: URL): ChatListRead[] =>
   CHAT_LIST_READS.filter((list) => decodeURIComponent(url.search).includes(`"${list}"`));
 
-/** This build's Server Function ids by export name, as the build states them
- * (`NAME_createServerFn_handler = createServerRpc({ id: "<64 hex>" ...`). */
-function serverFunctionIds(): Map<string, Counted> {
-  const bundle = join(import.meta.dir, "../.output/server/index.mjs");
-  const source = readFileSync(bundle, "utf8");
-  const byName = new Map<string, string>();
-  const pattern =
-    /([A-Za-z0-9_$]+)_createServerFn_handler\s*=\s*createServerRpc\(\{\s*id:\s*"([0-9a-f]{64})"/g;
-  for (const [, name, id] of source.matchAll(pattern)) byName.set(name, id);
-  const ids = new Map<string, Counted>();
-  for (const name of COUNTED) {
-    const id = byName.get(name);
-    if (!id) throw new Error(`Server Function ${name} is not in ${bundle}`);
-    ids.set(id, name);
-  }
-  return ids;
-}
-const countedIds = serverFunctionIds();
+const countedIds = serverFunctionIds(COUNTED);
 
 type ProxySocket = { path: string; protocol?: string; upstream?: WebSocket; pending: unknown[] };
 
@@ -101,7 +84,7 @@ function countingProxy() {
         });
         return upgraded ? undefined : new Response("WebSocket upgrade failed", { status: 500 });
       }
-      const name = countedIds.get(url.pathname.split("/_serverFn/")[1] ?? "");
+      const name = serverFunctionOf(countedIds, url);
       if (name) reads[name] += 1;
       const lists = name === "loadChatLists" ? listsOf(url) : [];
       for (const list of lists) reads[list] += 1;

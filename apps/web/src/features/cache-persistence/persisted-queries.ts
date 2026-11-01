@@ -25,7 +25,7 @@ import { CONVERSATION_WINDOW_PAGE_SIZE } from "#src/lib/conversation-window";
  * the network. `test/query-cache-stored-shape.test.ts` fails on a change to a kept kind's shape
  * until this is bumped and the new shape pinned there.
  */
-export const STORED_SHAPE_VERSION = 12;
+export const STORED_SHAPE_VERSION = 13;
 export const storedShapeBuster = String(STORED_SHAPE_VERSION);
 
 export const STORED_KINDS = [
@@ -112,7 +112,6 @@ type ConversationWindow = {
   pages: Array<{
     hasNewer?: boolean;
     hasOlder?: boolean;
-    readThroughSequence?: number;
     messages?: unknown[];
     threads?: Readonly<Record<string, unknown>>;
     threadReadThrough?: Readonly<Record<string, number>>;
@@ -252,22 +251,4 @@ export function isStoredData(queryKey: QueryKey, data: unknown): boolean {
     case undefined:
       return false;
   }
-}
-
-/**
- * A kept conversation window with its read cursor moved to `throughSequence`: the server's cursor
- * moved there while the page kept the window's own (the pane freezes its unread divider for the
- * visit). It never moves back, and a window without a cursor (a non-member's) keeps none.
- */
-export function withReadThrough(queryKey: QueryKey, data: unknown, throughSequence: number) {
-  if (storedKindOf(queryKey) !== "conversation-window" || !isConversationWindow(data)) return data;
-  const behind = (page: ConversationWindow["pages"][number]) =>
-    page.readThroughSequence !== undefined && page.readThroughSequence < throughSequence;
-  if (!data.pages.some(behind)) return data;
-  return {
-    ...data,
-    pages: data.pages.map((page) =>
-      behind(page) ? { ...page, readThroughSequence: throughSequence } : page,
-    ),
-  };
 }

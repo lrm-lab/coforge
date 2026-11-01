@@ -3,10 +3,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
 import { useConversationAgentProfile } from "#src/features/agents/profile-panel/open-agent-profile";
-import {
-  adoptReadThrough,
-  noteReadThrough,
-} from "#src/features/cache-persistence/browser-query-cache";
 import { useLiveAgent } from "#src/features/agents/workspace-agents-realtime";
 import { ACTIVITY_INBOX_QUERY_PREFIX } from "#src/features/inbox/activity-inbox-queries";
 import { ConversationTaskBoard } from "#src/features/tasks/conversation-task-board";
@@ -19,7 +15,7 @@ import { useMarkConversationSeen } from "./unread-store";
 import type { ConversationPageTarget } from "./conversation-page-loader";
 import type { ConversationPageSearch } from "./conversation-page-search";
 import type { DirectConversationView } from "./conversation-types";
-import { directConversationQuery, publicChannelQuery } from "./conversation-queries";
+import { markOpenReadStale } from "./conversation-open-query";
 import { latestTopLevelSequence, persistReadCursor } from "./conversation-unread";
 import { markDirectConversationRead } from "./conversations.functions";
 import { DirectConversation, DirectConversationHeader } from "./direct-conversation";
@@ -32,7 +28,7 @@ import { useReopenClosedOnOpen } from "./sidebar-lists";
 import { useStandaloneThread } from "./standalone-thread";
 import { useChannelConversation, useDirectConversation } from "./use-conversation-data";
 import { useConversationView, useShownConversationTab } from "./use-conversation-view";
-import { useAwaitingRestoredWindow } from "./use-conversation-open-boundary";
+import { useConversationOpened } from "./use-conversation-open";
 
 type ConversationPageProps = {
   search: ConversationPageSearch;
@@ -71,8 +67,6 @@ function ChannelConversationPage({
     useChannelConversation(channelId);
   const { conversation } = page;
   const advanceReadCursor = useServerFn(markPublicChannelRead);
-  const queryClient = useQueryClient();
-  useReadCursorAdoptedOnLeave("channel", channelId);
   return (
     <ConversationPageBody
       {...props}
@@ -85,14 +79,7 @@ function ChannelConversationPage({
       name={channelLabel(conversation)}
       readCursor={{
         key: `channel:${channelId}`,
-        advance: async (throughSequence) => {
-          await advanceReadCursor({ data: { channelId, throughSequence } });
-          noteReadThrough(
-            queryClient,
-            publicChannelQuery(channelId).query.queryKey,
-            throughSequence,
-          );
-        },
+        advance: (throughSequence) => advanceReadCursor({ data: { channelId, throughSequence } }),
       }}
       header={(tabs) => (
         <ChannelConversationHeader
@@ -227,8 +214,6 @@ function DirectConversationPageBody({
   }) {
   const { conversationId } = page.conversation;
   const advanceReadCursor = useServerFn(markDirectConversationRead);
-  const queryClient = useQueryClient();
-  useReadCursorAdoptedOnLeave("direct", conversationId);
   return (
     <ConversationPageBody
       {...props}
@@ -238,32 +223,11 @@ function DirectConversationPageBody({
       isMember
       readCursor={{
         key: `dm:${conversationId}`,
-        advance: async (throughSequence) => {
-          await advanceReadCursor({ data: { conversationId, throughSequence } });
-          noteReadThrough(
-            queryClient,
-            directConversationQuery(conversationId).query.queryKey,
-            throughSequence,
-          );
-        },
+        advance: (throughSequence) =>
+          advanceReadCursor({ data: { conversationId, throughSequence } }),
       }}
     />
   );
-}
-
-/**
- * While the conversation is open its window keeps the read cursor it opened with (the pane freezes
- * the unread divider for the visit); leaving it takes the cursor the server moved to into the
- * window, so coming back in this page load draws no divider over what was read.
- */
-function useReadCursorAdoptedOnLeave(kind: "channel" | "direct", id: string) {
-  const queryClient = useQueryClient();
-  useEffect(() => {
-    const { queryKey } = (kind === "channel" ? publicChannelQuery : directConversationQuery)(
-      id,
-    ).query;
-    return () => adoptReadThrough(queryClient, queryKey);
-  }, [queryClient, kind, id]);
 }
 
 type ConversationPageData =
@@ -337,25 +301,30 @@ function ConversationPageBody({
   const refreshedActivity = useRef<string | undefined>(undefined);
   const advance = (throughSequence: number, label: string, refreshActivity: boolean) =>
     void persistReadCursor(() => readCursor.advance(throughSequence), label).then(() => {
+      markOpenReadStale(queryClient, conversation.conversationId);
       if (refreshActivity)
         void queryClient.invalidateQueries({ queryKey: ACTIVITY_INBOX_QUERY_PREFIX });
     });
   // The cursor's write is rebuilt each render around the same conversation; the effect reruns only
-  // when what it reads changes. It waits, like the divider, for a stored copy's own read: moving the
-  // server's cursor first would bring that read back with nothing unread.
+  // when what it reads changes. It waits, like the divider, for this open's read of where the
+  // viewer's unread starts (task #378): moving the server's cursor first would bring that read back
+  // with nothing unread.
   const readThrough = useEffectEvent((throughSequence: number) => {
     const first = refreshedActivity.current !== readCursor.key;
     refreshedActivity.current = readCursor.key;
     advance(throughSequence, readCursor.key, first);
   });
-  const restoring = useAwaitingRestoredWindow(conversation.conversationId);
+  const opened = useConversationOpened(
+    conversation.conversationId,
+    undefined,
+    isMember && !threadAlone,
+  );
   useEffect(() => {
-    if (!topLevelEnd || !isMember || threadAlone || restoring) return;
+    if (!topLevelEnd || !isMember || threadAlone || !opened) return;
     readThrough(topLevelEnd);
-  }, [readCursor.key, topLevelEnd, isMember, threadAlone, restoring]);
-  // Reading to the latest waits for a stored copy's own read too (task #358).
+  }, [readCursor.key, topLevelEnd, isMember, threadAlone, opened]);
   const readLatest = (throughSequence: number) => {
-    if (!isMember || restoring) return;
+    if (!isMember || !opened) return;
     advance(throughSequence, `${readCursor.key}:latest`, true);
   };
   const { onOpenAgentProfile } = agentProfile;

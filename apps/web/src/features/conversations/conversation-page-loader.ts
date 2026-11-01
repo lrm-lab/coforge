@@ -15,6 +15,7 @@ import {
   publicChannelQuery,
   savedMessagesQuery,
 } from "./conversation-queries";
+import { conversationOpenQuery } from "./conversation-open-query";
 import { windowReadSettled } from "./conversation-window-reads";
 import type { conversationPages, ConversationPage, PageMessage } from "./conversation-window-query";
 import { NO_SAVED } from "./saved-messages-collection";
@@ -92,15 +93,12 @@ async function readConversationPage(
 ): Promise<void> {
   const window =
     target.kind === "channel"
-      ? await ensureConversationWindow(
-          queryClient,
-          publicChannelQuery(target.id).query,
-          deps.anchor,
-        )
-      : await ensureConversationWindow(
+      ? await openConversationWindow(queryClient, publicChannelQuery(target.id).query, target, deps)
+      : await openConversationWindow(
           queryClient,
           directConversationQuery(target.id).query,
-          deps.anchor,
+          target,
+          deps,
         );
   const conversationId = window.pages.at(-1)?.conversationId;
   if (!deps.tasks || !conversationId) return;
@@ -117,6 +115,30 @@ async function readConversationPage(
   // (`finished.pending`), so the page never gives way to its loading page for them.
   if (cause === "stay") void summary.catch(() => undefined);
   else await summary;
+}
+
+/**
+ * The window a page opens on, with this open's read of where the viewer's unread starts
+ * (`conversationOpenQuery`, task #378) read beside it. A window the page holds already (in memory,
+ * or the browser's stored copy) paints at once, and the pane takes the read up when it lands. With
+ * none, the page waits for both, so its first picture lands on the "New messages" divider: a first
+ * unread outside the newest page is read around, like a jump. A page that names its own message
+ * (a jump, an open thread's root) opens there instead. A failed read is the pane's to retry.
+ */
+function openConversationWindow<M extends PageMessage, T extends ConversationPage<M>>(
+  queryClient: QueryClient,
+  query: ReturnType<typeof conversationPages<M, T>>["query"],
+  target: ConversationPageTarget,
+  deps: ReturnType<typeof conversationPageLoaderDeps>,
+): Promise<InfiniteData<T, ConversationWindowCursor>> {
+  const open = queryClient
+    .fetchQuery({ ...conversationOpenQuery(target.id), retry: false })
+    .catch(() => undefined);
+  if (deps.anchor || queryClient.getQueryData(query.queryKey))
+    return ensureConversationWindow(queryClient, query, deps.anchor);
+  // Started beside the open read; the window read below joins it.
+  void queryClient.ensureInfiniteQueryData(query).catch(() => undefined);
+  return open.then((read) => ensureConversationWindow(queryClient, query, read?.firstUnread?.id));
 }
 
 /** Per Query client, by window Query hash: the reads under way replacing a window that lacks the
@@ -191,8 +213,8 @@ async function readConversationWindow<M extends PageMessage, T extends Conversat
       pageParams: [undefined],
     };
     queryClient.setQueryData(query.queryKey, window);
-    // The window is a read of the server now, with the viewer's cursor: no longer the browser's
-    // stored copy, whose own read the divider and the read cursor would wait for (task #358).
+    // The window is a read of the server now: no longer the browser's stored copy, whose own read
+    // is followed until it lands (`followRestoredReads`).
     noteRestoredCopyReplaced(queryClient, query.queryKey);
     return window;
   } catch {

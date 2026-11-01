@@ -267,7 +267,7 @@ export function decodeChannelUpdatedEvent(value: unknown): ChannelUpdatedEvent {
  * user. Like the other signals it names ids only, except that `channel.marked.v1` carries the
  * channel's unread count and read cursor after the move (Slack's `channel_marked` carries the
  * cursor as its `ts`), so a read in the open channel updates the sidebar without a list re-read per
- * message, and a page's stored window of that channel opens with the divider where it now is.
+ * message.
  *
  * - `channel.marked.v1`: the read cursor moved (read, marked unread, marked Done).
  * - `channel.joined.v1` / `channel.left.v1`: the viewer joined, was added, created, left or was removed.

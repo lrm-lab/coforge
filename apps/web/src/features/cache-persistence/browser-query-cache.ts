@@ -39,22 +39,6 @@ export function installBrowserQueryCachePersistence(
   });
 }
 
-/** The server's read cursor of the conversation `queryKey` moved to `throughSequence`: what is
- * stored for it carries the new cursor (`noteReadThrough`). A no-op where nothing is kept. */
-export function noteReadThrough(
-  queryClient: QueryClient,
-  queryKey: readonly unknown[],
-  throughSequence: number,
-) {
-  installed.get(queryClient)?.noteReadThrough(queryKey, throughSequence);
-}
-
-/** The person is leaving the conversation `queryKey`: its window takes the cursor noted for it
- * (`adoptReadThrough`). A no-op where nothing is kept. */
-export function adoptReadThrough(queryClient: QueryClient, queryKey: readonly unknown[]) {
-  installed.get(queryClient)?.adoptReadThrough(queryKey);
-}
-
 /** Reads of the restored query `queryKey` that failed in a row, and the way to hear them change
  * (`followRestoredReads`); always 0 where nothing is kept. */
 export function restoredReadFailures(queryClient: QueryClient, queryKey: readonly unknown[]) {
@@ -65,12 +49,6 @@ export function restoredReadFailures(queryClient: QueryClient, queryKey: readonl
  * (`followRestoredReads`); always false where nothing is kept. */
 export function restoredReadPaused(queryClient: QueryClient, queryKey: readonly unknown[]) {
   return installed.get(queryClient)?.restoredReadPaused(queryKey) ?? false;
-}
-
-/** Whether the query `queryKey` shows its restored copy still, its own read not yet landed
- * (`followRestoredReads`); always false where nothing is kept. */
-export function awaitingRestoredRead(queryClient: QueryClient, queryKey: readonly unknown[]) {
-  return installed.get(queryClient)?.awaitingRestoredRead(queryKey) ?? false;
 }
 
 /** The query `queryKey` was given data read from the server by hand: it no longer shows its

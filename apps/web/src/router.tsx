@@ -7,6 +7,7 @@ import { installBrowserQueryCachePersistence } from "#src/features/cache-persist
 import { GlobalError } from "#src/features/errors/page-load-error";
 import { deLocalizeUrl, localizeUrl } from "#src/paraglide/runtime";
 import { PENDING_DELAY_MS, PENDING_MIN_MS } from "#src/lib/pending-policy";
+import { PRELOAD_STALE_MS } from "#src/lib/preload-policy";
 import { isNonLocalizedPath } from "#src/lib/non-localized-path";
 import { routeTree } from "./routeTree.gen";
 
@@ -54,7 +55,7 @@ export function getRouter() {
     defaultPendingMs: PENDING_DELAY_MS,
     defaultPendingMinMs: PENDING_MIN_MS,
     defaultPreload: "intent",
-    defaultPreloadStaleTime: 30_000,
+    defaultPreloadStaleTime: PRELOAD_STALE_MS,
     defaultErrorComponent: GlobalError,
     defaultNotFoundComponent: NotFound,
     rewrite: {

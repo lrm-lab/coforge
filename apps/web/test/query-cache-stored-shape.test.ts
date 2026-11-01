@@ -78,7 +78,6 @@ const message = {
 const windowFields = {
   senderMemberId: "member-1",
   othersReadThroughSequence: 0,
-  readThroughSequence: 1,
   threads: {
     m1: {
       replyCount: 1,
@@ -462,6 +461,19 @@ const PINNED_SHAPES: Record<number, Record<string, string>> = {
     "channel window": "b1d091db9cdd9119",
     "direct window with an Agent": "cfb56f0008e53e3a",
     "direct window with a person": "8ffc1a72c5a7dfd6",
+    "sidebar channels": "71e962a71254dad3",
+    "sidebar directs": "5205999212e744be",
+    "channel names": "292a0fa92b3cbad1",
+    "saved messages": "29e083a65a909ec0",
+    "agent workspace scan": "d45d053aa4368e73",
+    "chat sections": "b49b26a074dbffb9",
+    "chat section order": "fc37a20be1db425d",
+  },
+  // A conversation window no longer carries the viewer's read cursor (task #378).
+  13: {
+    "channel window": "eea5d9e2a379995a",
+    "direct window with an Agent": "2fee8267523e1b97",
+    "direct window with a person": "0906fd265d7973a6",
     "sidebar channels": "71e962a71254dad3",
     "sidebar directs": "5205999212e744be",
     "channel names": "292a0fa92b3cbad1",

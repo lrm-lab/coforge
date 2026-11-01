@@ -85,11 +85,6 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
   // The Saved view's `?message=` position jump reads its search state here, next to the
   // thread's — the wrapper owns the router so `ConversationPane` below stays hook-free.
   const { jumpMessageId, clearJumpMessage } = useConversationPositionJump();
-  // The stream's open waits for the window that holds the message it lands on (task #358).
-  const landingConversation = useMemo(
-    () => ({ ...conversation, landing: jumpMessage ?? jumpMessageId }),
-    [conversation, jumpMessage, jumpMessageId],
-  );
   // An open thread keeps its last-seen root. The bounded window drops a root's page when the main
   // stream is scrolled far enough; the thread pane then keeps showing the thread's root as it was
   // (its replies are the thread's own Query, which the window does not bound) rather than going
@@ -139,7 +134,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
     ...sidePaneProps,
     streamRead: windowRead,
     root,
-    conversation: { ...conversation, readThroughSequence: threadCursor(root.id) },
+    conversation,
     onSend: (
       ...[body, idempotencyKey, attachmentIds, options]: Parameters<typeof conversationProps.onSend>
     ) =>
@@ -239,20 +234,19 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
   // The thread in view is marked read: the task popup's when it is open, else the side pane's.
   const threadInView = openTaskRoot?.id ?? (detailVisible ? selected : undefined);
   const threadInViewSequence = useThreadTailSequence(conversation.conversationId, threadInView);
-  const { visited, windowRead, threadCursor, threadRootFailure, loadThreadRoot } =
-    useConversationSync({
-      conversation,
-      searchThreadRootId,
-      openTaskMessageId,
-      taskRootReads,
-      selected,
-      threadInView,
-      threadInViewSequence,
-      onLoadMessageAround,
-      onReadThread,
-      openThreadFromHash,
-      closeThread,
-    });
+  const { visited, windowRead, threadRootFailure, loadThreadRoot } = useConversationSync({
+    conversation,
+    searchThreadRootId,
+    openTaskMessageId,
+    taskRootReads,
+    selected,
+    threadInView,
+    threadInViewSequence,
+    onLoadMessageAround,
+    onReadThread,
+    openThreadFromHash,
+    closeThread,
+  });
   /** A thread's root: as loaded, else as last seen while it was open. */
   const threadRootOf = (rootId: string) =>
     conversation.messages.find((message) => message.id === rootId) ??
@@ -318,7 +312,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
           onLoadMessageAround={onLoadMessageAround}
           onReadLatest={onReadLatest}
           header={header}
-          conversation={landingConversation}
+          conversation={conversation}
           composerTarget={threadContext}
           onOpenThread={openThread}
         />

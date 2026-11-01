@@ -155,10 +155,6 @@ export async function openChannel(
     canCreateAgents: canCreateAgents(authority.serverRole),
     // Any member of a live channel stops its Agents (`ChannelAgentControl.stopAll`).
     canStopAgents: authority.isActiveMember && channel.archivedAt === null,
-    // The viewer's conversation-level read cursor over top-level messages:
-    // the client positions the initial view at the first unread message and draws the
-    // divider there. Undefined for a non-member (nothing is "unread for them").
-    readThroughSequence: member?.readThroughSequence,
     ...(member
       ? {
           othersReadThroughSequence: othersReadThroughSequence(member.id, mentionRows),

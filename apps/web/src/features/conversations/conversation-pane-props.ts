@@ -49,4 +49,7 @@ export type ConversationPaneProps = Omit<ConversationProps, "conversation" | "ag
   jumpMessage?: string;
   /** Called exactly once per consumed jump, to strip the param one-shot like a hash. */
   onJumpMessageConsumed?: () => void;
+  /** False for a stream with no read cursor of its own (a Task popup's discussion): it opens at
+   * its latest and draws no "New messages" divider. */
+  keepsReadCursor?: boolean;
 };

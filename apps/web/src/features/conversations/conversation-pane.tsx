@@ -10,7 +10,6 @@ import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 
 import { useSavedMessages } from "./conversation-host";
-import { conversationOpenPosition } from "./conversation-open-position";
 import { ConversationBottomPin } from "./conversation-bottom-pin";
 import { OlderMessagesRow, type OlderLoad } from "./older-messages-row";
 import {
@@ -38,7 +37,7 @@ import { NewerSentinel } from "./conversation-newer-sentinel";
 import { useOwnMessagesIndex } from "./own-messages-menu";
 import { useLoadedOwnMessages } from "./use-loaded-own-messages";
 import { isViewerMessage } from "./own-message";
-import { useConversationOpenBoundary } from "./use-conversation-open-boundary";
+import { useConversationOpen } from "./use-conversation-open";
 import { useSystemMessageGroups } from "./use-system-message-groups";
 import type { ConversationPaneProps } from "./conversation-pane-props";
 import { MESSAGE_COLUMN_CLASS } from "#src/features/settings/message-width";
@@ -79,6 +78,7 @@ export function ConversationPane({
   jumpMessage,
   onJumpMessageConsumed,
   mentionCompletion = true,
+  keepsReadCursor = true,
 }: ConversationPaneProps) {
   // Days and times follow the viewer's locale and time zone (their saved one, else the browser's).
   // The pane is only ever rendered in the browser, so the locale is known at once.
@@ -180,10 +180,11 @@ export function ConversationPane({
   const [newerCommit, setNewerCommit] = useState(0);
   const appliedNewerCommitRef = useRef(0);
   // The initial position and divider are captured once per conversation or thread open.
-  const { boundary: openBoundary, openKey } = useConversationOpenBoundary(
+  const { boundary: openBoundary, openKey } = useConversationOpen(
     conversation,
     root?.id,
     followingLatest,
+    { keepsCursor: keepsReadCursor, loadAround: onLoadMessageAround },
   );
   const lastSequence = conversation.messages.at(-1)?.sequence;
   const firstSequence = conversation.messages[0]?.sequence;
@@ -298,7 +299,7 @@ export function ConversationPane({
         setFollowingLatest(false);
         return undefined;
       }
-      const openMessageId = opening ? conversationOpenPosition(openBoundary) : undefined;
+      const openMessageId = opening ? openBoundary?.id : undefined;
       if (openMessageId && !window.location.hash) {
         if (conversation.messages.some((message) => message.id === openMessageId)) {
           setFollowingLatest(false);

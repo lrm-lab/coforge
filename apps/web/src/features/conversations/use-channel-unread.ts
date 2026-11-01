@@ -20,7 +20,6 @@ import {
   rereadMissedBySubscribe,
   replaceUnreadCounts,
   listsChangedIn,
-  storedCursorMove,
   type ChatList,
   type UnreadChannel,
   type UnreadEventInput,
@@ -51,7 +50,6 @@ export function useChannelUnread({
   onSidebarListsChanged,
   onConversationActivity,
   readPosition,
-  onReadCursorMoved,
 }: {
   workspaceId?: string;
   /** The viewer, whose own direct-message signal channel carries their DM badges, and whose own
@@ -79,8 +77,6 @@ export function useChannelUnread({
     list: ChatList,
     channel: string,
   ) => Promise<StreamPosition | undefined> | undefined;
-  /** The viewer's read cursor in a conversation moved, here or elsewhere (`storedCursorMove`). */
-  onReadCursorMoved: (move: ReturnType<typeof storedCursorMove>) => void;
   /** One message in a chat the sidebar lists: write that row from the event, no read. */
   onConversationActivity: (event: ConversationActivityEvent) => void;
 }): UnreadState {
@@ -96,7 +92,6 @@ export function useChannelUnread({
     onChannelSignal,
     onSidebarListsChanged,
     readPosition,
-    onReadCursorMoved,
     onConversationActivity,
   });
   refs.current = {
@@ -109,7 +104,6 @@ export function useChannelUnread({
     onChannelSignal,
     onSidebarListsChanged,
     readPosition,
-    onReadCursorMoved,
     onConversationActivity,
   };
   const rereadMissed = useCallback(
@@ -148,7 +142,6 @@ export function useChannelUnread({
       if ("unreadCount" in event) {
         const open = refs.current.openConversationId;
         store.update((current) => applyMarked(current, event, { openConversationId: open }));
-        refs.current.onReadCursorMoved(storedCursorMove(event, open));
       }
       const lists = listsChangedIn(refs.current.workspaceId, event);
       if (lists.length > 0) refs.current.onSidebarListsChanged(lists);

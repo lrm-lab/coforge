@@ -1,11 +1,12 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { storedShapeBuster } from "#src/features/cache-persistence/persisted-queries";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
+import { openReadLanded } from "./helpers/open-unread-e2e";
+import { serverFunctionIds, serverFunctionOf } from "./helpers/server-function-ids";
 
 /**
  * The browser's copy of the Query cache in a real browser (`src/features/cache-persistence/`):
@@ -34,35 +35,7 @@ const artifacts = join(import.meta.dir, "../../../.amp/e2e/query-cache-persisten
  * the sections, all in one call) and the conversation. */
 const CHAT_READS = ["loadChatLists", "loadPublicChannel"] as const;
 
-/** This build's Server Function ids, by export name. The id on the wire is the hash the build gave
- * the function - it does not encode the name, so it cannot be decoded back out of the URL. The
- * artifact the local Web is serving states the pairing, one line per function:
- * `NAME_createServerFn_handler = createServerRpc({ id: "<64 hex>" ...`. */
-function serverFunctionIds(): Map<string, string> {
-  const bundle = join(import.meta.dir, "../.output/server/index.mjs");
-  let source: string;
-  try {
-    source = readFileSync(bundle, "utf8");
-  } catch {
-    throw new Error(
-      `${bundle} is missing: build the Web package first (NODE_ENV=production bun run --cwd apps/web build)`,
-    );
-  }
-  const byName = new Map<string, string>();
-  const pattern =
-    /([A-Za-z0-9_$]+)_createServerFn_handler\s*=\s*createServerRpc\(\{\s*id:\s*"([0-9a-f]{64})"/g;
-  for (const [, name, id] of source.matchAll(pattern)) byName.set(name, id);
-  const ids = new Map<string, string>();
-  for (const name of CHAT_READS) {
-    const id = byName.get(name);
-    // Never skip silently: an e2e that means to hold Chat's reads must fail loudly if it cannot
-    // recognise them in this build (docs/agents/testing.md).
-    if (!id) throw new Error(`Server Function ${name} is not in ${bundle}`);
-    ids.set(id, name);
-  }
-  return ids;
-}
-const chatReadIds = serverFunctionIds();
+const chatReadIds = serverFunctionIds(CHAT_READS);
 
 type ProxySocket = {
   path: string;
@@ -91,7 +64,7 @@ function gatedProxy() {
       }
       if (url.pathname === "/auth/logout" || url.pathname.endsWith("/auth/logout"))
         return new Response("signed out (stand-in for Authing)", { status: 200 });
-      const name = chatReadIds.get(url.pathname.split("/_serverFn/")[1] ?? "");
+      const name = serverFunctionOf(chatReadIds, url);
       if (gate && name) {
         const held = `${name} ${heldNow.size}`;
         heldNow.add(held);
@@ -369,13 +342,13 @@ test("a conversation read in one page load opens from the browser's copy without
     if (Date.now() > deadline) throw new Error("the channel was not marked read through message 3");
     await Bun.sleep(200);
   }
-  // What the browser keeps for the channel carries the cursor the server moved to (the page's
-  // writes wait for their burst to end).
-  const storedCursor = `(async () => (await ${withStore(
+  // The browser keeps the channel's window with the third message (the page's writes wait for
+  // their burst to end). It keeps no read cursor: the divider is the open's own read (task #378).
+  const storedThird = `(async () => JSON.stringify((await ${withStore(
     "readonly",
     `return new Promise((r) => { const q = store.get(${JSON.stringify(channelKey(DEV_BROWSER_USER.id))}); q.onsuccess = () => r(q.result); });`,
-  )})?.state.data.pages[0]?.readThroughSequence)()`;
-  await until(`${storedCursor}.then((cursor) => cursor === 3)`);
+  )})?.state.data.pages ?? []).includes(${JSON.stringify(third)}))()`;
+  await until(`${storedThird}.then((stored) => stored)`);
   await browser("open", `${proxy.origin}${workspacePath}/members`);
   await pageIsUp(`!!(${chatLink()})`);
 
@@ -390,10 +363,17 @@ test("a conversation read in one page load opens from the browser's copy without
         `document.querySelector('[role="separator"][aria-label="New messages"]') !== null`,
       ),
     ).toBe(false);
-    await browser("screenshot", join(artifacts, "read-then-reopened.png"));
   } finally {
     proxy.release();
   }
+  // Nor once the open's own read has landed.
+  await waitFor(openReadLanded(channelId));
+  expect(
+    await evaluate<boolean>(
+      `document.querySelector('[role="separator"][aria-label="New messages"]') !== null`,
+    ),
+  ).toBe(false);
+  await browser("screenshot", join(artifacts, "read-then-reopened.png"));
 }, 300_000);
 
 test("a conversation read and left, then opened again in the same page load, shows no divider over what was read", async () => {

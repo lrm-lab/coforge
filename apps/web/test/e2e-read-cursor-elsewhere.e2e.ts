@@ -4,12 +4,14 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
+import { openReadLanded } from "./helpers/open-unread-e2e";
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
 
 /**
- * A channel read on another device moves the read cursor this device keeps for it: the stored
- * window takes the cursor `channel.marked.v1` carries, and opening the channel here draws no
- * "New messages" divider over what was read there (Slack's `channel_marked` carries it as `ts`).
+ * A channel read on another device opens here without a "New messages" divider over what was read
+ * there, from the window this device holds in memory and from the one it stored alike: the divider
+ * comes from the open's own read of where the viewer's unread starts (task #378), never from a
+ * window held from earlier.
  *
  * Two devices are two `agent-browser` sessions, each its own profile (cookies, IndexedDB), signed in
  * as the same dev user. Opt-in like the other browser E2Es: a real local Web built with
@@ -85,14 +87,14 @@ const otherBody = `Somewhere else ${suffix}`;
 
 const visible = (text: string) => `document.body.innerText.includes(${JSON.stringify(text)})`;
 const dividerShown = `document.querySelector('[role="separator"][aria-label="New messages"]') !== null`;
-/** The read cursor this device stores for the channel, straight from IndexedDB. */
-const storedCursor = () => `(async () => {
+/** Whether this device has stored the channel's window, straight from IndexedDB. */
+const storedWindow = () => `(async () => {
   const db = await new Promise((r, j) => { const q = indexedDB.open("coforge-query-cache"); q.onsuccess = () => r(q.result); q.onerror = () => j(q.error); });
   const row = await new Promise((r) => { const q = db.transaction("queries").objectStore("queries").get(${JSON.stringify(
     `${DEV_BROWSER_USER.id}/tanstack-query-["conversation","channel","${readId}"]`,
   )}); q.onsuccess = () => r(q.result); });
   db.close();
-  return row?.state?.data?.pages?.[0]?.readThroughSequence ?? null;
+  return row?.state?.data?.pages?.length > 0;
 })()`;
 const clickChannel = (id: string) => `document.querySelector('a[href*="/channel/${id}"]').click()`;
 
@@ -170,10 +172,10 @@ afterAll(async () => {
 });
 
 test("a channel read on another device opens here without a divider over what was read", async () => {
-  // This device reads the channel, stores it at cursor 3, and moves on to another channel.
+  // This device reads the channel, stores its window, and moves on to another channel.
   await here.run("open", `${proxy.origin}${workspacePath}/channel/${readId}`);
   await here.until(visible(body(3)), 60_000);
-  await here.until(`${storedCursor()}.then((cursor) => cursor === 3)`);
+  await here.until(`${storedWindow()}.then((stored) => stored)`);
   await here.run("eval", clickChannel(otherId));
   await here.until(visible(otherBody));
 
@@ -191,18 +193,15 @@ test("a channel read on another device opens here without a divider over what wa
     await Bun.sleep(200);
   }
 
-  // This device's stored window takes the cursor the read carried.
-  await here.until(`${storedCursor()}.then((cursor) => cursor === 5)`);
-
   // Opening the channel here, from memory, draws no divider over what the other device read.
   await here.run("eval", clickChannel(readId));
-  await here.until(visible(body(5)));
+  await here.until(`${visible(body(5))} && ${openReadLanded(readId)}`);
   expect(await here.evaluate<boolean>(dividerShown)).toBe(false);
   await here.run("screenshot", join(artifacts, "opened-from-memory.png"));
 
   // Nor does a new page load, which opens it from storage.
   await here.run("open", `${proxy.origin}${workspacePath}/channel/${readId}`);
-  await here.until(visible(body(5)), 60_000);
+  await here.until(`${visible(body(5))} && ${openReadLanded(readId)}`, 60_000);
   expect(await here.evaluate<boolean>(dividerShown)).toBe(false);
   await here.run("screenshot", join(artifacts, "opened-from-storage.png"));
 }, 300_000);

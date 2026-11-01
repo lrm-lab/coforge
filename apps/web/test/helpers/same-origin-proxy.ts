@@ -8,7 +8,11 @@ type ProxySocket = { path: string; protocol?: string; upstream?: WebSocket; pend
 export function sameOriginProxy(
   upstreamOrigin: string,
   centrifugoOrigin: string,
-  options: { afterUpstream?(url: URL): Promise<void> } = {},
+  options: {
+    afterUpstream?(url: URL): Promise<void>;
+    /** Answers a request with a 503 instead of forwarding it, while this says so. */
+    refuse?(url: URL): boolean;
+  } = {},
 ) {
   const upstream = new URL(upstreamOrigin);
   const centrifugo = new URL(centrifugoOrigin);
@@ -27,6 +31,7 @@ export function sameOriginProxy(
         });
         return upgraded ? undefined : new Response("WebSocket upgrade failed", { status: 500 });
       }
+      if (options.refuse?.(url)) return new Response("Refused by the test", { status: 503 });
       const forwardHeaders = new Headers(request.headers);
       forwardHeaders.set("origin", upstream.origin);
       forwardHeaders.delete("referer");

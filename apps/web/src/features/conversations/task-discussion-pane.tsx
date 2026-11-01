@@ -71,6 +71,7 @@ export function TaskDiscussionPane({
       <ConversationPane
         {...pane}
         rootSlot={rootSlot}
+        keepsReadCursor={false}
         conversation={{
           mentionables,
           ...newest,
@@ -81,7 +82,6 @@ export function TaskDiscussionPane({
           threads: undefined,
           messages,
           hasOlder: pages.hasNextPage,
-          readThroughSequence: messages.at(-1)?.sequence,
         }}
         onSend={async (body, idempotencyKey, attachmentIds, options) => {
           await reply({

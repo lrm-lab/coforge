@@ -5,6 +5,7 @@ import { humanLabel } from "#src/lib/human-label";
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import {
   conversationAroundInputSchema,
+  conversationOpenInputSchema,
   conversationThreadInputSchema,
   directConversationInputSchema,
   directConversationPageInputSchema,
@@ -30,6 +31,7 @@ import { WorkspaceAssistants } from "#src/server/agents/workspace-assistants.ser
 import { productionCloudComputers } from "#src/server/hosts/host-production.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { ConversationHistory } from "#src/server/conversations/conversation-history.server";
+import { firstUnreadOnOpen } from "#src/server/conversations/conversation-open.server";
 import { attachViewerViews } from "#src/server/conversations/viewer-views.server";
 import { getMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
 import { withMessageSendTrace } from "#src/server/observability/tracing.server";
@@ -111,6 +113,18 @@ export const loadConversationAround = createServerFn({ method: "GET" })
       messages: await attachViewerViews(db, workspaceId, user.id, page.messages),
     };
   });
+
+/**
+ * Where the viewer's unread starts in one of their conversations, or in one thread of it, read
+ * each time a pane opens (`firstUnreadOnOpen`): the pane's divider, landing and read cursor wait for
+ * it, never for a window the page held from earlier.
+ */
+export const loadConversationOpen = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .validator(conversationOpenInputSchema)
+  .handler(async ({ context: { user, db, workspaceId }, data }) => ({
+    firstUnread: await firstUnreadOnOpen(db, { workspaceId, userId: user.id, ...data }),
+  }));
 
 /**
  * Every reply of one thread, for a channel or a direct conversation alike: what its pane shows

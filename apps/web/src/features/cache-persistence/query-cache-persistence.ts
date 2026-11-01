@@ -13,7 +13,6 @@ import {
   readsAfterRestore,
   storedQueryData,
   storedShapeBuster,
-  withReadThrough,
 } from "./persisted-queries";
 import { followRestoredReads } from "./restored-reads";
 
@@ -229,15 +228,10 @@ export function installQueryCachePersistence(
           ]);
       }, []),
   };
-  /** Read cursors the server moved past what the page's windows hold, by query (`noteReadThrough`). */
-  const readThrough = new Map<string, number>();
-  /** What goes to storage for a query: only what a restore needs, cut to its first paint, with the
-   * read cursor the server moved to. */
+  /** What goes to storage for a query: only what a restore needs, cut to its first paint. */
   const toStored = (persisted: Omit<PersistedQuery, "state"> & { state: Query["state"] }) => {
-    const kept = storedQueryData(persisted.queryKey, persisted.state.data);
-    if (kept === undefined) return undefined;
-    const cursor = readThrough.get(persisted.queryHash);
-    const data = cursor === undefined ? kept : withReadThrough(persisted.queryKey, kept, cursor);
+    const data = storedQueryData(persisted.queryKey, persisted.state.data);
+    if (data === undefined) return undefined;
     return {
       buster: persisted.buster,
       queryHash: persisted.queryHash,
@@ -335,15 +329,6 @@ export function installQueryCachePersistence(
     if (!stored) return;
     return storage.setItem(`${PERSISTER_KEY_PREFIX}-${queryHash}`, stored);
   };
-  /** Moves the cursor of a window held only in storage; nothing stored stays nothing. */
-  const storeReadThrough = async (queryHash: string, throughSequence: number) => {
-    const key = `${PERSISTER_KEY_PREFIX}-${queryHash}`;
-    const stored = await storage.getItem(key);
-    if (!stored) return;
-    const data = withReadThrough(stored.queryKey, stored.state.data, throughSequence);
-    if (data === stored.state.data) return;
-    await storage.setItem(key, { ...stored, state: { ...stored.state, data } });
-  };
   const schedulePageWrite = (queryHash: string) => {
     if (pageWrites.has(queryHash)) return;
     pageWrites.set(
@@ -371,7 +356,6 @@ export function installQueryCachePersistence(
     restoredReadFailures: (queryKey: QueryKey) => restoredReads.failures(hashKey(queryKey)),
     /** Whether the read of the restored query `queryKey` was parked offline and has not landed. */
     restoredReadPaused: (queryKey: QueryKey) => restoredReads.paused(hashKey(queryKey)),
-    awaitingRestoredRead: (queryKey: QueryKey) => restoredReads.awaiting(hashKey(queryKey)),
     restoredCopyReplaced: (queryKey: QueryKey) => {
       const query = queryClient.getQueryCache().find({ queryKey, exact: true });
       if (query) restoredReads.replaced(query);
@@ -403,37 +387,6 @@ export function installQueryCachePersistence(
         await persister.persisterGc();
         await store.set(marker, Date.now());
       }, undefined);
-    },
-    /**
-     * The person read the conversation `queryKey` through `throughSequence` and the server's cursor
-     * moved there. The page's window keeps the cursor it opened with (its divider stays for the
-     * visit); what is stored carries the new one from now on, so the next page load draws no
-     * divider over messages already read.
-     */
-    noteReadThrough(queryKey: QueryKey, throughSequence: number) {
-      if (!persistsQuery(queryKey)) return;
-      const queryHash = hashKey(queryKey);
-      if ((readThrough.get(queryHash) ?? -1) >= throughSequence) return;
-      readThrough.set(queryHash, throughSequence);
-      // A window this page holds is stored from memory, with the cursor (`toStored`); one it holds
-      // only in storage (read on another page or device) is moved where it is stored, so the next
-      // open, here or after a reload, draws its divider where the person now is.
-      if (queryClient.getQueryCache().get(queryHash)?.state.status === "success")
-        schedulePageWrite(queryHash);
-      else void storeReadThrough(queryHash, throughSequence);
-    },
-    /**
-     * Takes the cursor noted for `queryKey` into the page's own window: the person is leaving the
-     * conversation, so its divider is no longer on screen, and coming back in this page load opens
-     * the window from memory.
-     */
-    adoptReadThrough(queryKey: QueryKey) {
-      const cursor = readThrough.get(hashKey(queryKey));
-      if (cursor === undefined) return;
-      const current = queryClient.getQueryData(queryKey);
-      if (current === undefined) return;
-      const moved = withReadThrough(queryKey, current, cursor);
-      if (moved !== current) queryClient.setQueryData(queryKey, moved);
     },
     /**
      * Stores the kept query `queryKey` as the cache holds it now, without waiting out

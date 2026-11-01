@@ -163,22 +163,7 @@ export function clearUnread(
 }
 
 /** A viewer event that moved a read cursor, carrying the count it left. */
-export type MarkedEvent = Extract<ViewerEvent, { unreadCount: number }>;
-
-/**
- * Where a read-cursor move puts the conversation's window: its stored copy takes the cursor the
- * move carries, so the next open draws the divider where the person now is (Slack's
- * `channel_marked` `ts`), and so does the page's own window at once (`adoptNow`), except for the
- * conversation on screen, which keeps the divider it opened with until the person leaves it.
- */
-export function storedCursorMove(event: MarkedEvent, openConversationId: string | undefined) {
-  return {
-    kind: event.type === "channel.marked.v1" ? ("channel" as const) : ("direct" as const),
-    conversationId: event.conversationId,
-    throughSequence: event.readThroughSequence,
-    adoptNow: event.conversationId !== openConversationId,
-  };
-}
+type MarkedEvent = Extract<ViewerEvent, { unreadCount: number }>;
 
 /**
  * The viewer's read cursor in a channel or DM moved (`channel.marked.v1`, `dm.marked.v1`): read or

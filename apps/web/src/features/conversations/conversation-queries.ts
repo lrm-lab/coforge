@@ -265,21 +265,17 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
     [conversationId],
   );
   useEffect(() => reconciliation.stop, [reconciliation]);
-  // Whether this open has read what arrived since the window was last read (the divider waits).
-  const caughtUpThrough = useSyncExternalStore(
-    reconciliation.subscribe,
-    reconciliation.caughtUpThrough,
-  );
+  // Whether this open has read what arrived since the window was last read.
+  const caughtUp = useSyncExternalStore(reconciliation.subscribe, reconciliation.caughtUp);
   const catchUpFailures = useSyncExternalStore(reconciliation.subscribe, reconciliation.failures);
   const shown = useMemo(
     () => ({
       ...conversation,
-      caughtUp: caughtUpThrough !== undefined,
-      caughtUpThrough,
+      caughtUp,
       catchUpFailures,
       retryCatchUp: () => void reconciliation.reconcile({ restart: true }),
     }),
-    [conversation, caughtUpThrough, catchUpFailures, reconciliation],
+    [conversation, caughtUp, catchUpFailures, reconciliation],
   );
   // The window's own network read moves the reconciler past what it holds (see `advance`); the
   // page's own writes to the window (a sent message merged in) do not, since messages from others
@@ -376,11 +372,7 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
     onRead,
     {
       key: query.queryKey,
-      caughtUp: () =>
-        reconciliation.caughtUpWithoutRead(
-          queryClient.getQueryData<Pages<T>>(query.queryKey)?.pages.at(-1)?.messages.at(-1)
-            ?.sequence,
-        ),
+      caughtUp: reconciliation.caughtUpWithoutRead,
     },
   );
 

@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 
 import {
   applyUnreadEvent,
-  storedCursorMove,
   clearUnread,
   closedConversationLists,
   seedUnreadCounts,
@@ -366,32 +365,6 @@ describe("persistReadCursor", () => {
     expect(attempts).toBe(2);
     expect(warnings).toHaveLength(1);
     expect(String(warnings[0])).toContain("read cursor did not persist");
-  });
-});
-
-describe("a read cursor moved on another page or device", () => {
-  const ids = { workspaceId: "workspace-a", conversationId: "channel-a" };
-  const marked = {
-    type: "channel.marked.v1" as const,
-    ...ids,
-    unreadCount: 0,
-    readThroughSequence: 9,
-  };
-
-  test("moves the conversation's stored window there, and the page's own at once when it is not open", () => {
-    expect(storedCursorMove(marked, "channel-b")).toEqual({
-      kind: "channel",
-      conversationId: "channel-a",
-      throughSequence: 9,
-      adoptNow: true,
-    });
-    expect(
-      storedCursorMove({ ...marked, type: "dm.marked.v1", conversationId: "dm-a" }, undefined),
-    ).toEqual({ kind: "direct", conversationId: "dm-a", throughSequence: 9, adoptNow: true });
-  });
-
-  test("leaves the open conversation's divider where it opened until the person leaves it", () => {
-    expect(storedCursorMove(marked, "channel-a").adoptNow).toBe(false);
   });
 });
 

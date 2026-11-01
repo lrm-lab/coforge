@@ -189,7 +189,6 @@ test.skipIf(!connectionString)(
         canDelete: true,
         canCreateAgents: true,
         canStopAgents: true,
-        readThroughSequence: 2,
         threadReadThrough: { [threadRoot.id]: reply.sequence },
         followedThreadRootIds: [threadRoot.id],
         hasOlder: false,
@@ -216,7 +215,6 @@ test.skipIf(!connectionString)(
         canDelete: false,
         canCreateAgents: false,
         canStopAgents: true,
-        readThroughSequence: 0,
         threadReadThrough: {},
         followedThreadRootIds: [],
       });
@@ -233,7 +231,6 @@ test.skipIf(!connectionString)(
         pinned: false,
         channelCapabilities: NO_CAPABILITIES,
         canStopAgents: false,
-        readThroughSequence: undefined,
         threadReadThrough: {},
         followedThreadRootIds: [],
       });
@@ -346,7 +343,6 @@ test.skipIf(!connectionString)(
       expect(page).toMatchObject({
         conversationId,
         senderMemberId: viewerRow.id,
-        readThroughSequence: 1,
         threadReadThrough: { [root.id]: reply.sequence },
         kind: "agent",
         agent: { id: agent.id, name: agent.name, displayName: agent.displayName },

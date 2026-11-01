@@ -62,6 +62,10 @@ export const ownMessageIndexInputSchema = conversationHistoryInputSchema.extend(
 export const conversationAroundInputSchema = conversationHistoryInputSchema.extend({
   messageId: uuid,
 });
+/** Where the viewer's unread starts in a conversation, or in one thread of it (task #378). */
+export const conversationOpenInputSchema = conversationHistoryInputSchema.extend({
+  threadRootId: uuid.optional(),
+});
 /** One thread's replies, by the conversation and the thread's root message. */
 export const conversationThreadInputSchema = conversationHistoryInputSchema.extend({
   threadRootId: uuid,
