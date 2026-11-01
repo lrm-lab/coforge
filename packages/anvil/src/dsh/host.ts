@@ -4,6 +4,8 @@ import type { CliVersionReader } from "#src/version-gate";
 
 export interface DshLaunchFiles {
   readonly patchPath: string;
+  /** Removes the private launch files. Must be idempotent: a session calls it after an interrupt
+   * and again when it disposes. */
   cleanup(): Promise<void>;
 }
 
