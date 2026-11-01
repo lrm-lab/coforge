@@ -9,6 +9,7 @@ import type { AgentExitedDelivery } from "./agent-exited-delivery";
 import type { AgentFeatureSync } from "./agent-feature-sync";
 import type { AgentInputDrain } from "./agent-input-drain";
 import type { AgentLaunchCustody } from "./agent-launch-custody";
+import type { ActivityLaunch } from "./activity-launch";
 import type { MentionDeliveryTracker, TrackedMentionDelivery } from "./mention-delivery-tracker";
 import type { RuntimeRelease } from "./runtime-release";
 import { isTrackedMention } from "./mention-delivery-tracker";
@@ -21,7 +22,7 @@ export type RuntimeMessageDeliveryPorts = {
   workspaceId: string;
   stoppingAgents: Set<string>;
   runnerHold: { reason: string } | undefined;
-  runtimeRelease: RuntimeRelease<any>;
+  runtimeRelease: RuntimeRelease<ActivityLaunch>;
   sync: AgentFeatureSync;
   exitedDelivery: AgentExitedDelivery;
   wakeLaunches: Set<string>;
@@ -46,6 +47,7 @@ export async function handleAgentMessage(
   if (ports.stoppingAgents.has(message.agentId))
     throw new Error(`Agent runtime is stopping: ${message.agentId}`);
   if (ports.runnerHold === undefined) {
+    // A stalled provider is restarted for this message; arrivals meanwhile wait for that relaunch.
     const recovering = ports.runtimeRelease.isRecovering(message.agentId);
     const stalled = recovering ? undefined : ports.runtimeRelease.stalled(message.agentId);
     if (recovering || stalled) {
@@ -67,10 +69,17 @@ export async function handleAgentMessage(
     ports.wakeLaunches.has(message.agentId) &&
     ports.deliveryQueue.hasQueued(message.agentId)
   ) {
+    // A wake launch that will present waiting deliveries is still in flight: join them as well,
+    // rather than arriving as a second notice right after theirs. Only a wake: a recovery launch
+    // drops what waits once its own notice is accepted, and that notice does not cover this one.
     ports.exitedDelivery.keepForNextLaunch(message.agentId, message);
     return;
   }
   const delivery = ports.launchCustody.enqueueDelivery(message.agentId, message);
+  // Runner hold: the delivery is queued, never rejected and never indexed. Attention indexing is
+  // what wakes a turn, and the server's canonical read boundary only advances when the Agent
+  // itself drains `check` - so a held delivery stays undelivered server-side and is re-fetched
+  // after the restart. Nothing is acknowledged while the hold is in force.
   if (ports.runnerHold !== undefined) {
     void delivery.catch(() => {});
     logger.info("Agent delivery queued behind a runner hold", {
@@ -85,6 +94,13 @@ export async function handleAgentMessage(
   return delivery;
 }
 
+/**
+ * A tracked @mention: told only to the running launch and session its envelope names, and ACKed
+ * only once drained there (`MentionDeliveryTracker`). It never wakes an Agent, waits for a
+ * launch or a pending server Start, or becomes `no_process`: with no running session it is
+ * drained if already consumed and refused as `IDENTITY_UNKNOWN` otherwise, and the server
+ * decides what happens next. A runner hold queues it unacknowledged like any delivery.
+ */
 export function handleTrackedMention(
   ports: RuntimeMessageDeliveryPorts,
   message: TrackedMentionDelivery,
@@ -98,6 +114,8 @@ export function handleTrackedMention(
       ports.runtimeRelease.isRecovering(agentId) ||
       !ports.agentProcessManager.session(agentId))
   ) {
+    // A stalled provider being restarted is no session to tell: refused as unknown, the server
+    // keeps the mention pending and issues it again for the relaunch's session report.
     ports.mentionDeliveries.drop(message, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN);
     return Promise.resolve();
   }

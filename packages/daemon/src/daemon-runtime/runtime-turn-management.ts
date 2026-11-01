@@ -41,6 +41,9 @@ export type RuntimeTurnPorts = {
   isWorking(agentId: string): boolean;
 };
 
+/** Attempts delivery of everything just released from an explicit or busy-gated hold, as one
+ * coalesced notice — never blocking the caller on it. Shared by ordinary turn-end draining and
+ * the runtime-error delivery backoff. */
 export function flushHeldDeliveries(
   ports: RuntimeTurnPorts,
   agentId: string,
@@ -57,6 +60,8 @@ export function flushHeldDeliveries(
   });
 }
 
+/** Reports runtime_interrupted when a requested stop/restart cuts a busy turn. Must run before
+ * `forgetBusy`, which erases the busy evidence. */
 export function interruptIfBusy(
   ports: RuntimeTurnPorts,
   agentId: string,
@@ -68,6 +73,8 @@ export function interruptIfBusy(
     ports.activityPublisher.publish(agentId, launch, ports.drafts.interrupted(agentId));
 }
 
+/** Shows a turn that ended without an error, as the reference client does: still working while
+ * tasks it started run in the background, otherwise Idle, which ends the Agent's working stretch. */
 export function showQuietTurn(
   ports: RuntimeTurnPorts,
   agentId: string,
@@ -79,6 +86,7 @@ export function showQuietTurn(
   if (!waiting) ports.systemCleaner.onAgentWorkingToIdle(agentId);
 }
 
+/** Restore observation and delivery gating only; this is no proof of a turn outcome. */
 export function reconcileIdleTurn(
   ports: RuntimeTurnPorts,
   agentId: string,
@@ -109,12 +117,14 @@ export function reconcileIdleTurn(
   return true;
 }
 
+/** Presents what was kept across an exit or a runtime's end, as at idle. */
 export function releaseSurvivingHolds(ports: RuntimeTurnPorts, agentId: string): void {
   ports.launchCustody.flushSurvivingDeliveryQueue(agentId);
   ports.inboxCoordinator.releaseHeldAppItems(agentId);
   ports.inboxCoordinator.releaseFallbackNotices(agentId);
 }
 
+/** Whether the Agent is mid-turn, by its last busy Activity or a notice just written. */
 export function isWorking(ports: RuntimeTurnPorts, agentId: string): boolean {
   return (
     ports.activityPublisher.lastBusy(agentId) !== undefined || ports.deliveryQueue.isBusy(agentId)
