@@ -6,6 +6,7 @@ import { loadKeyPointPromptForLeader } from "./weekly-report-key-points.server";
 import { RecordCatalog } from "./record-catalog.server";
 import { recordTemplates } from "./record-catalog-templates.server";
 import { recordAssistantCatalog } from "./record-assistant-catalog.server";
+import { recordKeyPointEdits } from "./record-key-point-edits.server";
 import {
   distributeWeeklyReport,
   type WeeklyReportNotifier,
@@ -198,7 +199,7 @@ export class WeeklyReportWorkflow {
       };
     }
     if (action.type === "summary")
-      return catalog.applyConfirmedKeyPointMarkdown({
+      return recordKeyPointEdits(this.db).applyConfirmedKeyPointMarkdown({
         ...actor,
         reportId: report.id,
         markdown: action.markdown,

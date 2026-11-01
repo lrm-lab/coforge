@@ -10,6 +10,7 @@ import { recordStats } from "#src/server/records/record-catalog-stats.server";
 import { recordTemplates } from "#src/server/records/record-catalog-templates.server";
 import { recordDistribution } from "#src/server/records/record-distribution.server";
 import { recordAssistantCatalog } from "#src/server/records/record-assistant-catalog.server";
+import { recordKeyPointEdits } from "#src/server/records/record-key-point-edits.server";
 import { normalizeReportContent, type ReportContent } from "./records-content";
 
 export const loadRecordsNavAttention = createServerFn({ method: "GET" })
@@ -269,7 +270,7 @@ export const applyConfirmedKeyPointMarkdown = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).applyConfirmedKeyPointMarkdown({
+    return recordKeyPointEdits(db).applyConfirmedKeyPointMarkdown({
       workspaceId,
       userId: user.id,
       reportId: data.reportId,
@@ -281,7 +282,7 @@ export const dismissKeyPointConfirmDraft = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(z.object({ reportId: z.uuid() }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).dismissKeyPointConfirmDraft({
+    return recordKeyPointEdits(db).dismissKeyPointConfirmDraft({
       workspaceId,
       userId: user.id,
       reportId: data.reportId,

@@ -9,3 +9,4 @@ Records rules live in [`../../features/records/AGENTS.md`](../../features/record
 - `record-side-chat.server.ts` owns Records side-chat intents and platform comment read/write operations.
 - `record-distribution.server.ts` owns weekly send-window state, manual distribution, and scheduled sends.
 - `record-assistant-catalog.server.ts` owns Assistant format/report listings and personal note writes.
+- `record-key-point-edits.server.ts` owns confirmed and dismissed key-point markdown writes.
