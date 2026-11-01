@@ -101,7 +101,9 @@ function ManagedWorkspace({
   });
   const [confirming, setConfirming] = useState(false);
   const state = workspace.data;
-  const present = state?.status === "present";
+  // Deleting does not depend on the scan (a Computer too old to scan can still delete): only a
+  // directory the Computer reported gone has nothing to delete. A failed delete says so itself.
+  const deletable = !workspace.isPending && state?.status !== "missing";
   return (
     <>
       <dd className="mt-1 text-sm text-primary">
@@ -113,7 +115,7 @@ function ManagedWorkspace({
               ? m.agent_archive_workspace_removed()
               : m.agent_archive_workspace_on_computer({ computer: computer.label })}
       </dd>
-      {present && (
+      {deletable && (
         <dd className="mt-3">
           <Button
             color="secondary-destructive"

@@ -273,6 +273,7 @@ export function ComputerDetail({
                 canScan={Boolean(onScanAgentWorkspaces)}
                 onScan={() => void scanWorkspaces()}
                 canDelete={Boolean(onDeleteAgentWorkspace)}
+                timeZone={timeZone}
                 onDelete={async (agentId) => {
                   if (!onDeleteAgentWorkspace) return;
                   const result = await onDeleteAgentWorkspace(agentId);

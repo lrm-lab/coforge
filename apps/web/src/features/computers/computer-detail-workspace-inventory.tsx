@@ -1,10 +1,14 @@
 import { useState } from "react";
-import { FolderSearch } from "@untitledui/icons";
+import { useHydrated } from "@tanstack/react-router";
+import { FolderSearch, Trash01 } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
+import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { m } from "#src/paraglide/messages";
 import { isAppErrorCode } from "#src/lib/app-error";
+import { formatCalendarDate } from "#src/lib/dates";
+import { getLocale } from "#src/paraglide/runtime";
 import { formatWorkspaceSize } from "./workspace-size";
 import { DetailGroup } from "./computer-detail-rows";
 import type { ComputerAgentWorkspaceScan } from "./computer.schemas";
@@ -17,6 +21,7 @@ export function ComputerDetailWorkspaceInventory({
   onScan,
   canDelete,
   onDelete,
+  timeZone,
 }: {
   snapshot: AgentWorkspaceScanSnapshot | null;
   status: "idle" | "scanning" | "error";
@@ -24,7 +29,9 @@ export function ComputerDetailWorkspaceInventory({
   onScan: () => void;
   canDelete: boolean;
   onDelete: (agentId: string) => Promise<void>;
+  timeZone: string | null;
 }) {
+  const hydrated = useHydrated();
   const [deleteTarget, setDeleteTarget] = useState<ComputerAgentWorkspaceScan | undefined>();
   const deletedCount = snapshot
     ? snapshot.workspaces.filter((item) => item.state === "deleted").length
@@ -75,7 +82,7 @@ export function ComputerDetailWorkspaceInventory({
               {snapshot.workspaces.map((workspace) => (
                 <li
                   key={workspace.agentId}
-                  className="flex min-w-0 items-start justify-between gap-4 py-3 text-sm"
+                  className="flex min-w-0 items-center justify-between gap-4 py-3 text-sm"
                 >
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
@@ -91,7 +98,7 @@ export function ComputerDetailWorkspaceInventory({
                     <p className="mt-1 truncate font-mono text-xs text-tertiary">
                       {workspace.rootPath}
                     </p>
-                    <p className="mt-1 text-xs text-tertiary">
+                    <p className="mt-1 truncate text-xs text-tertiary">
                       {workspace.status === "present"
                         ? m.computer_agent_workspace_stats({
                             files: String(workspace.fileCount),
@@ -100,25 +107,27 @@ export function ComputerDetailWorkspaceInventory({
                         : workspace.status === "missing"
                           ? m.computer_agent_workspace_missing()
                           : m.computer_agent_workspace_unavailable()}
+                      {hydrated &&
+                        workspace.modifiedAtMs > 0 &&
+                        ` · ${m.computer_agent_workspace_modified({
+                          date: formatCalendarDate(
+                            new Date(workspace.modifiedAtMs),
+                            timeZone,
+                            getLocale(),
+                          ),
+                        })}`}
                     </p>
-                    {workspace.modifiedAtMs > 0 && (
-                      <p className="mt-1 text-xs text-tertiary">
-                        {m.computer_agent_workspace_modified({
-                          date: new Date(workspace.modifiedAtMs).toLocaleString(),
-                        })}
-                      </p>
-                    )}
                   </div>
                   {canDelete && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      color="tertiary-destructive"
-                      isDisabled={workspace.status !== "present"}
-                      onPress={() => setDeleteTarget(workspace)}
-                    >
-                      {m.computer_agent_workspace_delete()}
-                    </Button>
+                    // Deleting does not depend on the scan answering, as on an archived Agent's
+                    // profile: only a directory the Computer reported gone has nothing to delete.
+                    <ButtonUtility
+                      color="secondary"
+                      icon={Trash01}
+                      tooltip={m.computer_agent_workspace_delete()}
+                      isDisabled={workspace.status === "missing"}
+                      onClick={() => setDeleteTarget(workspace)}
+                    />
                   )}
                 </li>
               ))}
