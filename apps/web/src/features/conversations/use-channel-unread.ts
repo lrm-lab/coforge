@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime";
 import { publicationDataOrUndefined } from "#src/features/realtime/publication-data";
@@ -26,6 +27,7 @@ import {
 } from "./conversation-unread";
 import type { ChannelSignal } from "./channel-signals";
 import { UnreadStore } from "./unread-store";
+import { markOpenReadStale } from "./conversation-open-query";
 
 export type UnreadState = {
   store: UnreadStore;
@@ -82,6 +84,7 @@ export function useChannelUnread({
 }): UnreadState {
   // Never replaced, so the callbacks below read it without listing it.
   const [store] = useState(() => new UnreadStore());
+  const queryClient = useQueryClient();
   const refs = useRef({
     workspaceId,
     userId,
@@ -134,61 +137,67 @@ export function useChannelUnread({
   });
   // The viewer's own channel carries their `ViewerEvent`s and every message they may read: their
   // channels' and their direct conversations' alike.
-  const onUserPublication = useCallback((publication: { data: unknown }) => {
-    // Parsed once for the decoders below, each of which takes it as it is.
-    const data = publicationDataOrUndefined(publication.data);
-    const event = decodeViewerEvent(data);
-    if (event) {
-      if ("unreadCount" in event) {
-        const open = refs.current.openConversationId;
-        store.update((current) => applyMarked(current, event, { openConversationId: open }));
+  const onUserPublication = useCallback(
+    (publication: { data: unknown }) => {
+      // Parsed once for the decoders below, each of which takes it as it is.
+      const data = publicationDataOrUndefined(publication.data);
+      const event = decodeViewerEvent(data);
+      if (event) {
+        if ("unreadCount" in event) {
+          const open = refs.current.openConversationId;
+          store.update((current) => applyMarked(current, event, { openConversationId: open }));
+          // Read or marked unread elsewhere (another tab, Activity): a kept open read, a preload's,
+          // no longer says where a next open's unread starts. The open on screen keeps what it froze.
+          markOpenReadStale(queryClient, event.conversationId);
+        }
+        const lists = listsChangedIn(refs.current.workspaceId, event);
+        if (lists.length > 0) refs.current.onSidebarListsChanged(lists);
+        return;
       }
-      const lists = listsChangedIn(refs.current.workspaceId, event);
-      if (lists.length > 0) refs.current.onSidebarListsChanged(lists);
-      return;
-    }
-    // A private channel's events come here instead of the Workspace channel. This channel is the
-    // viewer's in every Workspace, so another Workspace's are dropped.
-    const signal = channelSignalOf(data);
-    if (signal) {
-      if (signal.workspaceId === refs.current.workspaceId) refs.current.onChannelSignal(signal);
-      return;
-    }
-    const activity = decodeConversationActivityEvent(data);
-    if (!activity) return;
-    // The badge rule needs only the shape below; the row writer gets the whole event, whose
-    // preview and sender are what the row shows.
-    const message: UnreadEventInput = {
-      conversationId: activity.conversationId,
-      sequence: activity.sequence,
-      kind: activity.kind,
-      senderKind: activity.sender.kind,
-      ...(activity.threadRootId ? { threadRootId: activity.threadRootId } : {}),
-      ...(activity.senderUserId ? { senderUserId: activity.senderUserId } : {}),
-      ...(activity.senderAgentId ? { senderAgentId: activity.senderAgentId } : {}),
-    };
-    const {
-      channels: channelRows,
-      openConversationId: open,
-      listedConversationIds: listed,
-      onClosedConversationActivity: reopenFromActivity,
-      onConversationActivity: writeRow,
-    } = refs.current;
-    const conversations = new Set(channelRows.map((channel) => channel.id));
-    const viewerId = refs.current.userId;
-    const stale = closedConversationLists(message, listed, viewerId);
-    // A chat the list does not hold is brought in by a read of that one list; every other row is
-    // written from the event itself.
-    if (stale.length > 0) reopenFromActivity(stale, message);
-    else writeRow(activity);
-    store.update((current) =>
-      applyUnreadEvent(current, message, {
-        conversations,
+      // A private channel's events come here instead of the Workspace channel. This channel is the
+      // viewer's in every Workspace, so another Workspace's are dropped.
+      const signal = channelSignalOf(data);
+      if (signal) {
+        if (signal.workspaceId === refs.current.workspaceId) refs.current.onChannelSignal(signal);
+        return;
+      }
+      const activity = decodeConversationActivityEvent(data);
+      if (!activity) return;
+      // The badge rule needs only the shape below; the row writer gets the whole event, whose
+      // preview and sender are what the row shows.
+      const message: UnreadEventInput = {
+        conversationId: activity.conversationId,
+        sequence: activity.sequence,
+        kind: activity.kind,
+        senderKind: activity.sender.kind,
+        ...(activity.threadRootId ? { threadRootId: activity.threadRootId } : {}),
+        ...(activity.senderUserId ? { senderUserId: activity.senderUserId } : {}),
+        ...(activity.senderAgentId ? { senderAgentId: activity.senderAgentId } : {}),
+      };
+      const {
+        channels: channelRows,
         openConversationId: open,
-        viewerId,
-      }),
-    );
-  }, []);
+        listedConversationIds: listed,
+        onClosedConversationActivity: reopenFromActivity,
+        onConversationActivity: writeRow,
+      } = refs.current;
+      const conversations = new Set(channelRows.map((channel) => channel.id));
+      const viewerId = refs.current.userId;
+      const stale = closedConversationLists(message, listed, viewerId);
+      // A chat the list does not hold is brought in by a read of that one list; every other row is
+      // written from the event itself.
+      if (stale.length > 0) reopenFromActivity(stale, message);
+      else writeRow(activity);
+      store.update((current) =>
+        applyUnreadEvent(current, message, {
+          conversations,
+          openConversationId: open,
+          viewerId,
+        }),
+      );
+    },
+    [queryClient],
+  );
   useRealtimeSubscription({
     channel: userId ? userConversationChannel(userId) : undefined,
     onPublication: onUserPublication,
