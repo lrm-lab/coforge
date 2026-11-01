@@ -4,6 +4,7 @@ import { z } from "zod";
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { AppError } from "#src/lib/app-error";
 import { recordCatalog } from "#src/server/records/record-catalog.server";
+import { recordSideChat } from "#src/server/records/record-side-chat.server";
 import {
   ensureWeeklyReportAssistant,
   WEEKLY_REPORT_ASSISTANT_DISPLAY_NAME,
@@ -67,7 +68,7 @@ export const addRecordComment = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).postSideChat({
+    return recordSideChat(db).postSideChat({
       workspaceId,
       userId: user.id,
       subjectType: data.subjectType,
@@ -173,7 +174,7 @@ export const postWeeklyReportAssistantRequest = createServerFn({ method: "POST" 
       sessionId: data.sessionId,
     });
     if (data.subjectType === "report" && looksLikeMemberReportRuleIntent(data.body)) {
-      const comments = await recordCatalog(db).postMemberReportRuleSideChatIfApplicable({
+      const comments = await recordSideChat(db).postMemberReportRuleSideChatIfApplicable({
         workspaceId,
         userId: user.id,
         subjectType: data.subjectType,
@@ -300,7 +301,7 @@ export const confirmMemberReportIntent = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).confirmMemberReportIntent({
+    return recordSideChat(db).confirmMemberReportIntent({
       workspaceId,
       userId: user.id,
       reportId: data.reportId,
@@ -319,7 +320,7 @@ export const declineMemberReportIntent = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    const declined = await recordCatalog(db).declineMemberReportIntent({
+    const declined = await recordSideChat(db).declineMemberReportIntent({
       workspaceId,
       userId: user.id,
       reportId: data.reportId,
