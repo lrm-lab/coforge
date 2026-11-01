@@ -162,6 +162,7 @@ import { CodeAgentInventorySync, type CodeAgentDiscovery } from "./code-agent-in
 import { RuntimeAuthReporter } from "./runtime-auth-reporter";
 import { RuntimeStartup } from "./runtime-startup";
 import { RuntimeStop } from "./runtime-stop";
+import { composeMessages } from "./message-composition";
 import { composeAgentControl } from "./agent-control-composition";
 import {
   UpgradeResultReporter,
@@ -580,86 +581,28 @@ export class DaemonRuntime {
       acknowledge: lifecycle.acknowledgeUpgradeResult,
       schedule: lifecycle.upgradeResultSchedule,
     });
-    this.#mentionDeliveries = new MentionDeliveryTracker(connection.computerId, {
-      transition: (report) =>
-        this.#transport.sendAgentMentionDeliveryTransition?.(report) ?? Promise.resolve(),
-      terminalError: (report) =>
-        this.#transport.sendAgentMentionDeliveryTerminalError?.(report) ?? Promise.resolve(),
-      acknowledge: (message) => this.#messageAttention.acknowledge(message),
-      running: (agentId) => this.#runningMentionIdentity(agentId),
-      consumed: (message) => this.#messageAttention.hasConsumed(message),
-      told: (message) => this.#messageAttention.wasNotified(message),
-      decided: (message, outcome) => this.#messageAttention.logDecision(message, outcome),
-      announce: (message) => this.#messageAttention.announce(message),
-      busy: (agentId, conversationId) =>
-        (conversationId
-          ? this.#agentProcessManager.session(agentId)?.hasLiveTurnForConversation?.(conversationId)
-          : undefined) ?? this.#deliveryQueue.isBusy(agentId),
-      blocked: (agentId) =>
-        this.#deliveryQueue.explicitHold(agentId) ??
-        (this.#deliveryQueue.shouldHold(agentId) ? "queued_until_idle" : undefined),
-    });
-    this.#messageAttention = new AgentMessageAttentionIndex(
-      connection.workspaceId,
-      this.#agentProcessManager,
-      (ack) => this.#transport.sendAgentDeliveryAck?.(ack) ?? Promise.resolve(),
-      (agentId, conversation) => {
-        try {
-          this.#activityPublisher.publishCurrent(
-            agentId,
-            this.#activity(
-              agentId,
-              AGENT_ACTIVITY_DETAIL_KIND.MESSAGE_RECEIVED,
-              "info",
-              "Message received",
-              {
-                entries: [],
-                ...(conversation
-                  ? {
-                      conversationId: conversation.conversationId,
-                      conversationTarget: conversation.target,
-                    }
-                  : {}),
-              },
-            ),
-          );
-          const launch = this.#currentActivityLaunches.get(agentId);
-          if (launch) this.#reconcileIdleTurn(agentId, launch);
-        } catch {
-          // Best-effort observation must not turn accepted input into failed delivery.
-        }
-      },
-      {
-        shouldHold: (agentId) => this.#deliveryQueue.shouldHold(agentId),
-        queued: (agentId) => this.#deliveryQueue.pending(agentId),
-        enqueue: (agentId, message) => this.#deliveryQueue.enqueue(agentId, message),
-        busy: (agentId) => {
-          if (!this.#deliveryQueue.isBusy(agentId)) this.#launchCustody.noteTurnStarted(agentId);
-          this.#deliveryQueue.busy(agentId);
-        },
-        noticeSettled: (agentId) => {
-          const launch = this.#currentActivityLaunches.get(agentId);
-          if (launch) this.#reconcileIdleTurn(agentId, launch);
-        },
-        consumedSeqs: this.#consumedSeqs,
-        noticePrefix: (agentId) => this.#sync.noticePrefix(agentId),
-      },
-    );
-    this.#inboxCoordinator = new AgentInboxCoordinator({
-      workspaceId: connection.workspaceId,
+    const messages = composeMessages({
+      connection,
       stateDirectory,
+      transport: () => this.#transport,
       consumedSeqs: this.#consumedSeqs,
-      messageAttention: this.#messageAttention,
       deliveryQueue: this.#deliveryQueue,
       runtimeRelease: this.#runtimeRelease,
       processManager: this.#agentProcessManager,
+      launchCustody: () => this.#launchCustody,
+      activityPublisher: this.#activityPublisher,
+      currentActivityLaunch: (agentId) => this.#currentActivityLaunches.get(agentId),
+      activity: (agentId, detailKind, level, detail, extra) =>
+        this.#activity(agentId, detailKind, level, detail, extra),
+      sync: this.#sync,
+      contexts: this.#contexts,
+      memoryAgent: (agentId) => this.memoryFence(agentId),
+      reconcileIdleTurn: (agentId, launch) => this.#reconcileIdleTurn(agentId, launch),
       startAgent: (agentId, config, sessionId) =>
         this.#startAgent(agentId, config, undefined, { sessionId }),
-      currentActivityLaunch: (agentId) => this.#currentActivityLaunches.get(agentId),
-      reconcileIdleTurn: (agentId, launch) => this.#reconcileIdleTurn(agentId, launch),
-      mentionDeliveries: this.#mentionDeliveries,
       assertRunning: () => this.#assertRunning(),
       agentIdForContext: (context) => this.#agentIdForContext(context),
+      runningMentionIdentity: (agentId) => this.#runningMentionIdentity(agentId),
     });
     this.agentRequests = new AgentRequestForwarder({
       get transport() {
@@ -668,32 +611,10 @@ export class DaemonRuntime {
       connection,
       authorizedAgent: (context, agentApiKey) => this.#authorizedAgent(context, agentApiKey),
     });
-    this.#messageOperations = new AgentMessageOperations({
-      connection,
-      attention: this.#messageAttention,
-      isMemoryAgent: (agentId) => Boolean(this.memoryFence(agentId)),
-      contexts: this.#contexts,
-      inbox: (agentId) => this.#inboxCoordinator.agentInbox(agentId),
-      appItemsPending: (agentId) => this.#inboxCoordinator.appItemsPending(agentId),
-      get transport() {
-        return runtime.#transport;
-      },
-      reportFreshnessHold: (agentId, activity) =>
-        this.#activityPublisher.publishCurrent(
-          agentId,
-          this.#activity(
-            agentId,
-            AGENT_ACTIVITY_DETAIL_KIND.FRESHNESS_HOLD,
-            "info",
-            activity.detail,
-            {
-              activityKind: activity.activityKind,
-              entries: activity.entries,
-              producerFactId: activity.producerFactId,
-            },
-          ),
-        ),
-    });
+    this.#mentionDeliveries = messages.mentionDeliveries;
+    this.#messageAttention = messages.messageAttention;
+    this.#inboxCoordinator = messages.inboxCoordinator;
+    this.#messageOperations = messages.messageOperations;
     this.#reminders = new ReminderScheduler(
       { workspaceId: connection.workspaceId, computerId: connection.computerId },
       new FileReminderReceiptStore(stateDirectory, connection.workspaceId, connection.computerId),
