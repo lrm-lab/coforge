@@ -21,12 +21,10 @@ import {
 import { newerPageCommit, positionJumpDecision } from "./conversation-thread-search";
 import { JUMP_HIGHLIGHT_MS } from "./message-jump-highlight";
 import { latestTopLevelSequence } from "./conversation-unread";
-import { streamState, type StreamRead } from "./stream-state";
+import { streamState } from "./stream-state";
 import { ConversationComposerFooter } from "./conversation-composer-footer";
-import { ThreadPaneHeader, type ThreadFollow } from "./thread-pane-header";
+import { ThreadPaneHeader } from "./thread-pane-header";
 import { makeReferenceBodyFormatter } from "./mention-text";
-import type { ChipMention } from "./message-markdown";
-import type { ChannelSuggestion } from "./reference-completion";
 import { MessageRow, dayLabel, groupsWithPrevious } from "./message-row";
 import { outboxContinuesRun, ownMessageReadState } from "./conversation-pane-layout";
 import { useMessageExpansion } from "./use-message-expansion";
@@ -42,7 +40,7 @@ import { useLoadedOwnMessages } from "./use-loaded-own-messages";
 import { isViewerMessage } from "./own-message";
 import { useConversationOpenBoundary } from "./use-conversation-open-boundary";
 import { useSystemMessageGroups } from "./use-system-message-groups";
-import type { ConversationProps, DirectConversationView } from "./conversation-types";
+import type { ConversationPaneProps } from "./conversation-pane-props";
 import { MESSAGE_COLUMN_CLASS } from "#src/features/settings/message-width";
 import { ConversationStreamPlaceholder } from "./conversation-stream-placeholder";
 import { ThreadRepliesMarker } from "./thread-replies-marker";
@@ -81,48 +79,7 @@ export function ConversationPane({
   jumpMessage,
   onJumpMessageConsumed,
   mentionCompletion = true,
-}: Omit<ConversationProps, "conversation" | "agentStatus"> & {
-  conversation: Omit<DirectConversationView, "agent">;
-  header?: React.ReactNode;
-  readOnlyNotice?: React.ReactNode;
-  emptyState: { title: string; description: string; media: React.ReactNode };
-  /** Whether this stream's read has completed - see `stream-state.ts`. */
-  streamRead?: StreamRead;
-  root?: DirectConversationView["messages"][number];
-  /** Shown above a Task popup's independently scrolling replies. */
-  rootSlot?: React.ReactNode;
-  onClose?: () => void;
-  /** Where a thread lives, named after "Thread" in its header: `#channel` or `@name`. */
-  threadContext?: string;
-  /** Who the main stream's composer sends to (`#channel`, `@name`), named in its placeholder. */
-  composerTarget?: string;
-  /** Leaves the thread for its root message in the conversation's stream. */
-  onViewInConversation?: () => void;
-  /** The viewer's follow state for this thread, where following is offered (channels). */
-  threadFollow?: ThreadFollow;
-  /** Opens a root's thread from the stream: the rows then offer each root's thread entry and
-   * preview, which read the conversation's thread store (`ThreadStoreProvider`). */
-  onOpenThread?: (rootId: string) => void;
-  /** Shown in the thread header before its actions menu (the Agents following the thread). */
-  threadHeaderAction?: React.ReactNode;
-  /** Plain-`@handle` display resolution for the stream (see `MessageBody`). Built by each
-   * wrapper — the DM from its Agent counterpart, a channel from its member directory. */
-  plainMentions?: Map<string, ChipMention>;
-  /** Opens a task reference's detail popup. Owned by `ThreadedConversationContent`. */
-  onOpenTask?: (number: number) => void;
-  /** Channel id → current name, for the channel links in a body (see `MessageBody`). Owned by
-   * `ThreadedConversationContent`, which reads the viewer's channel list. */
-  channelNames?: ReadonlyMap<string, string>;
-  /** Every channel of the Workspace, for the composer's `#` list. Owned by
-   * `ThreadedConversationContent`, which reads it from the messages layout. */
-  channels?: readonly ChannelSuggestion[];
-  /** The Saved view's position-only jump anchor (`?message=<uuid>`; see
-   * `useConversationPositionJump`). Supplied only by the main pane's wrapper — the router
-   * read lives there so this pane keeps no router hooks. */
-  jumpMessage?: string;
-  /** Called exactly once per consumed jump, to strip the param one-shot like a hash. */
-  onJumpMessageConsumed?: () => void;
-}) {
+}: ConversationPaneProps) {
   // Days and times follow the viewer's locale and time zone (their saved one, else the browser's).
   // The pane is only ever rendered in the browser, so the locale is known at once.
   const timeZone = useTimeZone();
