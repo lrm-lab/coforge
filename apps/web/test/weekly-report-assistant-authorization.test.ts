@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { RecordCatalog } from "#src/server/records/record-catalog.server";
+import { recordAssistantCatalog } from "#src/server/records/record-assistant-catalog.server";
 import { PrismaAgentRepository } from "#src/server/db/repositories/agent.repositories.server";
 import { decodeWeeklyReportRequest, validateWeeklyReportRequest } from "@lrm/coforge-sdk/internal";
 import { parseWeeklyReportAssistantSuggestion } from "#src/server/records/weekly-report-assistant-suggestion.server";
@@ -61,7 +62,7 @@ test("assistant visible report lists only query author or template-owner visibil
     },
   } as unknown as PrismaClient;
 
-  await new RecordCatalog(db).listAssistantVisibleReports({
+  await recordAssistantCatalog(db).listAssistantVisibleReports({
     workspaceId: "workspace-1",
     userId: "user-1",
     limit: 10,

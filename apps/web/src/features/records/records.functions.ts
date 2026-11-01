@@ -9,6 +9,7 @@ import { recordCatalog } from "#src/server/records/record-catalog.server";
 import { recordStats } from "#src/server/records/record-catalog-stats.server";
 import { recordTemplates } from "#src/server/records/record-catalog-templates.server";
 import { recordDistribution } from "#src/server/records/record-distribution.server";
+import { recordAssistantCatalog } from "#src/server/records/record-assistant-catalog.server";
 import { normalizeReportContent, type ReportContent } from "./records-content";
 
 export const loadRecordsNavAttention = createServerFn({ method: "GET" })
@@ -115,7 +116,7 @@ export const createRecordNote = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(z.object({ title: z.string().trim().max(200).optional() }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).createNote({
+    return recordAssistantCatalog(db).createNote({
       workspaceId,
       userId: user.id,
       title: data.title,
@@ -132,7 +133,7 @@ export const saveRecordNote = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).saveNote({
+    return recordAssistantCatalog(db).saveNote({
       workspaceId,
       userId: user.id,
       noteId: data.noteId,
@@ -145,7 +146,7 @@ export const deleteRecordNote = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(z.object({ noteId: z.uuid() }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).deleteNote({
+    return recordAssistantCatalog(db).deleteNote({
       workspaceId,
       userId: user.id,
       noteId: data.noteId,
@@ -194,7 +195,7 @@ export const markWeeklyAssignmentOpened = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(z.object({ reportId: z.uuid() }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).markAssignmentOpened({
+    return recordAssistantCatalog(db).markAssignmentOpened({
       workspaceId,
       userId: user.id,
       reportId: data.reportId,

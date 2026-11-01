@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { RecordCatalog } from "#src/server/records/record-catalog.server";
+import { recordAssistantCatalog } from "#src/server/records/record-assistant-catalog.server";
 import {
   WEEKLY_REPORT_ASSISTANT_DISPLAY_NAME,
   ensureWeeklyReportAssistant,
@@ -119,7 +120,7 @@ test("assistant report lists are visible-only and cursor bounded", async () => {
     },
   } as unknown as PrismaClient;
 
-  const result = await new RecordCatalog(db).listAssistantVisibleReports({
+  const result = await recordAssistantCatalog(db).listAssistantVisibleReports({
     workspaceId: "workspace-1",
     userId: "user-1",
     limit: 2,

@@ -5,6 +5,7 @@ import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 import { loadKeyPointPromptForLeader } from "./weekly-report-key-points.server";
 import { RecordCatalog } from "./record-catalog.server";
 import { recordTemplates } from "./record-catalog-templates.server";
+import { recordAssistantCatalog } from "./record-assistant-catalog.server";
 import {
   distributeWeeklyReport,
   type WeeklyReportNotifier,
@@ -31,9 +32,10 @@ export class WeeklyReportWorkflow {
     });
     if (!membership) throw new AppError("ACCESS_DENIED");
     const catalog = new RecordCatalog(this.db, this.notifier);
+    const assistantCatalog = recordAssistantCatalog(this.db);
     const templates = recordTemplates(this.db);
     if (action.type === "templates")
-      return catalog.listAssistantTemplateFormats({ ...actor, ...action });
+      return assistantCatalog.listAssistantTemplateFormats({ ...actor, ...action });
     if (action.type === "configure") {
       const { type: _type, requestId, templateId, ...configuration } = action;
       if (new Set(configuration.recipientUserIds).size !== configuration.recipientUserIds.length)

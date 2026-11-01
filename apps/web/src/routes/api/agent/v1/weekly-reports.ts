@@ -7,6 +7,7 @@ import {
   RepositoryAgentAuthorization,
 } from "#src/server/db/repositories/agent.repositories.server";
 import { recordCatalog } from "#src/server/records/record-catalog.server";
+import { recordAssistantCatalog } from "#src/server/records/record-assistant-catalog.server";
 import { weeklyReportAssistantOwner } from "#src/server/records/weekly-report-assistant.server";
 import { executeAgentWeeklyReport } from "#src/server/agents/agent-weekly-report-http.server";
 
@@ -18,8 +19,14 @@ export const Route = createFileRoute("/api/agent/v1/weekly-reports")({
         try {
           const command = validateWeeklyReportRequest(await request.json());
           const authorization = new RepositoryAgentAuthorization(new PrismaAgentRepository(db));
+          const catalog = recordCatalog(db);
+          const assistantCatalog = recordAssistantCatalog(db);
           const result = await executeAgentWeeklyReport(
-            recordCatalog(db),
+            {
+              loadAssistantContextManifest: (input) => catalog.loadAssistantContextManifest(input),
+              listAssistantVisibleReports: assistantCatalog.listAssistantVisibleReports,
+              readAssistantReportSection: (input) => catalog.readAssistantReportSection(input),
+            },
             {
               computerIdForAuthorizedAgent: (workspaceId, agentId, userId) =>
                 authorization.computerIdForAuthorizedAgent(workspaceId, agentId, userId),
