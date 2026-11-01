@@ -17,6 +17,7 @@ export const MEMBER_WEEKS_PAGE_SIZE = 12;
 /** Where a page of member weeks ends: the next page holds only weeks older than this one. */
 export type MemberWeekCursor = { year: number; week: number };
 
+/** What every weekly-report read selects of a person it names: an author, a sharer, a member. */
 export const REPORT_PERSON_SELECT = {
   id: true,
   username: true,
@@ -24,7 +25,7 @@ export const REPORT_PERSON_SELECT = {
   avatarObjectKey: true,
 } as const;
 
-/** How a report's author is shown in Records lists. */
+/** A person as a weekly-report view names them: by their name (`humanLabel`), never their username. */
 export function reportPersonView(
   workspaceId: string,
   person: {

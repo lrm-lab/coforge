@@ -5,7 +5,6 @@ import {
   isHourlySendTime,
   isValidTemplateName,
   normalizeReportContent,
-  type ReportContent,
 } from "#src/features/records/records-content";
 import {
   parseTemplateSections,
@@ -15,10 +14,6 @@ import { requireMembership, requireWeeklyReportLeader } from "./record-catalog-a
 import { ensureFormatForSettings } from "./record-catalog-format.server";
 
 type Db = PrismaClient;
-
-function asReportContent(value: unknown): ReportContent {
-  return normalizeReportContent(value);
-}
 
 function asStringArray(value: unknown): string[] {
   return Array.isArray(value)
@@ -188,7 +183,7 @@ export function recordTemplates(db: Db) {
     const { emptyKeyPointPrompts } = await import("#src/features/records/records-content");
     const format = await resolvePromptFormatDoc(input);
     if (!format) return emptyKeyPointPrompts();
-    return asReportContent(format.content).keyPointPrompts ?? emptyKeyPointPrompts();
+    return normalizeReportContent(format.content).keyPointPrompts ?? emptyKeyPointPrompts();
   }
 
   async function saveKeyPointPrompts(input: {
@@ -219,7 +214,7 @@ export function recordTemplates(db: Db) {
       select: { content: true },
     });
     if (!row) throw new AppError("NOT_FOUND");
-    const content = asReportContent(row.content);
+    const content = normalizeReportContent(row.content);
     const current = content.keyPointPrompts ?? emptyKeyPointPrompts();
     // Preserve the caller's text exactly (including empty / trailing newlines).
     const nextPrompts = mergeKeyPointPromptSlot(current, input.slot, input.text);
@@ -229,7 +224,7 @@ export function recordTemplates(db: Db) {
       data: { content: next as unknown as Prisma.InputJsonValue },
       select: { content: true },
     });
-    return asReportContent(updated.content).keyPointPrompts ?? nextPrompts;
+    return normalizeReportContent(updated.content).keyPointPrompts ?? nextPrompts;
   }
 
   async function deleteKeyPointPromptHistory(input: {
@@ -259,7 +254,7 @@ export function recordTemplates(db: Db) {
       select: { content: true },
     });
     if (!row) throw new AppError("NOT_FOUND");
-    const content = asReportContent(row.content);
+    const content = normalizeReportContent(row.content);
     const current = content.keyPointPrompts ?? emptyKeyPointPrompts();
     const nextPrompts = {
       ...current,

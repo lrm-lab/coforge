@@ -19,10 +19,6 @@ import { zonedCalendarDate } from "#src/features/records/weekly-report-schedule-
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
-function asReportContent(value: unknown): ReportContent {
-  return normalizeReportContent(value);
-}
-
 /** Find or create the Workspace ISO-week bucket for `(year, week)`. */
 export async function ensureCycleAt(
   db: Db,
@@ -99,7 +95,7 @@ async function syncFormatReportToSections(
     select: { id: true, content: true },
   });
   if (!report) return;
-  const next = alignReportContentToSections(asReportContent(report.content), input.sections);
+  const next = alignReportContentToSections(normalizeReportContent(report.content), input.sections);
   await db.weeklyReport.update({
     where: { id: report.id },
     data: { content: next as unknown as Prisma.InputJsonValue },
@@ -242,7 +238,7 @@ export async function ensureFormatForSettings(
     orderBy: { updatedAt: "desc" },
     select: { content: true },
   });
-  const priorPrompts = prior ? asReportContent(prior.content).keyPointPrompts : undefined;
+  const priorPrompts = prior ? normalizeReportContent(prior.content).keyPointPrompts : undefined;
   const content = priorPrompts ? { ...baseContent, keyPointPrompts: priorPrompts } : baseContent;
   return db.weeklyReport.create({
     data: {

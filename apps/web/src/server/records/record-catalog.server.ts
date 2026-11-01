@@ -6,7 +6,6 @@ import {
 } from "./weekly-report-distribution.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
-import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { offerSendRecipient } from "./weekly-report-offer-recipient.server";
 import {
   currentIsoWeek,
@@ -54,6 +53,7 @@ import {
 } from "#src/features/records/weekly-report-schedule-due";
 import { loadRecordsCatalog } from "./record-catalog-load.server";
 import { requireMembership } from "./record-catalog-access.server";
+import { REPORT_PERSON_SELECT, reportPersonView } from "./record-member-weeks.server";
 import {
   ensureFormatForSettings,
   rebaseLiveFormatToCurrentWeek,
@@ -64,30 +64,6 @@ type Db = PrismaClient;
 
 function asReportContent(value: unknown): ReportContent {
   return normalizeReportContent(value);
-}
-
-const REPORT_PERSON_SELECT = {
-  id: true,
-  username: true,
-  displayName: true,
-  avatarObjectKey: true,
-} as const;
-
-function reportPersonView(
-  workspaceId: string,
-  person: {
-    id: string;
-    username: string;
-    displayName: string | null;
-    avatarObjectKey: string | null;
-  },
-) {
-  return {
-    userId: person.id,
-    username: person.username,
-    displayName: humanLabel(person),
-    avatarUrl: workspaceUserAvatarUrl(workspaceId, person.id, person.avatarObjectKey),
-  };
 }
 
 async function memberSubmitMatchesReceived(
@@ -314,7 +290,8 @@ export class RecordCatalog {
   }
 
   /**
-   * Ensure a live format document for one applied settings stream (no assignments).
+   * Rename the live format document (and its settings stream). ISO week stays calendar-owned;
+   * overview parents with member submissions are rejected.
    */
   async updateFormatReportMeta(input: {
     workspaceId: string;
