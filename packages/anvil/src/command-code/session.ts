@@ -8,6 +8,7 @@ import type {
 } from "@coforge/agent";
 import { RuntimeModelNotFoundError } from "#src/contract";
 import { AcpSession, type AcpSessionProfile } from "#src/acp/session";
+import type { AcpConnection } from "#src/acp/connection";
 import {
   commandCodeConnection,
   COMMAND_CODE_ACP_TIMEOUT_MS,
@@ -38,12 +39,10 @@ export class CommandCodeSession implements AgentSession {
   }
 
   #profile(): AcpSessionProfile {
-    const { options, providerOptions, command, timeoutMs } = {
-      options: this.options,
-      providerOptions: this.providerOptions,
-      command: this.command,
-      timeoutMs: this.#timeoutMs,
-    };
+    const options = this.options;
+    const providerOptions = this.providerOptions;
+    const command = this.command;
+    const timeoutMs = this.#timeoutMs;
     return {
       label: "Command Code",
       openTransport: (sink) =>
@@ -93,7 +92,7 @@ export class CommandCodeSession implements AgentSession {
   }
 
   async #applyRuntimeConfig(
-    transport: ReturnType<AcpSessionProfile["openTransport"]>,
+    transport: AcpConnection,
     sessionId: string,
     initial: SessionConfigOption[],
   ) {

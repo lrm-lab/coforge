@@ -36,6 +36,11 @@ export type AcpSessionProfile = Readonly<{
   turn(): AcpTurnReader;
   /** Anything the runtime owns outside the process: an instruction mod, private files. */
   cleanup?(): Promise<void>;
+  /** Replaces a failed turn's scrubbed provider detail, for a failure the runtime names itself.
+   * Returning a message drops the provider's error code with it. */
+  detailMessage?(detail: string): string | undefined;
+  /** Runs after an interrupt settled the turn, for work the runtime owes at that point. */
+  afterInterrupt?(): Promise<void>;
   /** The permission answer; the default allows once while the session is live. */
   permission?(request: RequestPermissionRequest, live: boolean): { outcome: PermissionAnswer };
 }>;
@@ -190,13 +195,16 @@ export class AcpSession implements AgentSession {
         nonEmptyString(data?.message) ??
         (rpcFailure ? nonEmptyString(error.data) : undefined) ??
         (error instanceof Error ? error.message : `${this.profile.label} prompt failed`);
+      const named = this.profile.detailMessage?.(detail);
       if (!this.#disposed)
         this.#emit(
-          {
-            type: "error",
-            message: scrubRuntimeErrorText(detail),
-            ...(rpcFailure ? { providerErrorCode: String(error.code) } : {}),
-          },
+          named
+            ? { type: "error", message: named }
+            : {
+                type: "error",
+                message: scrubRuntimeErrorText(detail),
+                ...(rpcFailure ? { providerErrorCode: String(error.code) } : {}),
+              },
           input,
         );
       if (!(error instanceof RequestError)) this.#failed = true;
@@ -278,6 +286,7 @@ export class AcpSession implements AgentSession {
         });
         if (this.#turn) await this.bounded(this.#turn, this.timeoutMs);
       }
+      await this.profile.afterInterrupt?.();
     } catch (error) {
       await this.dispose();
       throw error;
