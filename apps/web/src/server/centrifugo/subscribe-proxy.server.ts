@@ -2,6 +2,7 @@ import { isRecord } from "@lrm/coforge-sdk/internal";
 import { UUID_LIKE_SOURCE } from "@lrm/coforge-sdk/internal/uuid";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { canSeeAgent } from "#src/server/agents/agent-visibility.server";
+import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import { personConversationAccess } from "#src/server/conversations/channel-read-access.server";
 import { BROWSER_PAGE_META } from "#src/server/auth/browser-realtime-token.server";
 import { resolveActorServerRole } from "#src/server/conversations/channel-authority.server";
@@ -80,6 +81,7 @@ const CHANNELS: {
       return (
         role !== undefined &&
         agent !== undefined &&
+        agent.visibility !== AGENT_VISIBILITY.PUBLIC &&
         canSeeAgent({ kind: "user", userId: user, role }, agent)
       );
     },

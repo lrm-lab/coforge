@@ -30,6 +30,7 @@ const ada = "33333333-3333-4333-8333-333333333333";
 const grace = "44444444-4444-4444-8444-444444444444";
 const conversation = "55555555-5555-4555-8555-555555555555";
 const privateAgent = "66666666-6666-4666-8666-666666666666";
+const publicAgent = "77777777-7777-4777-8777-777777777777";
 
 /** Ada is a member of `ws`, Grace its admin; Ada reads `conversation`; the private Agent is
  * Grace's. */
@@ -45,9 +46,13 @@ const access: BrowserSubscriptionAccess = {
   readsConversation: async (conversationId, userId) =>
     conversationId === conversation && userId === ada,
   workspaceAgent: async (workspaceId, agentId) =>
-    workspaceId === ws && agentId === privateAgent
-      ? { visibility: "private", ownerId: grace, systemKind: null }
-      : undefined,
+    workspaceId !== ws
+      ? undefined
+      : agentId === privateAgent
+        ? { visibility: "private", ownerId: grace, systemKind: null }
+        : agentId === publicAgent
+          ? { visibility: "public", ownerId: grace, systemKind: null }
+          : undefined,
 };
 
 // Built by the channel builders the page subscribes with, so a renamed channel fails here.
@@ -56,6 +61,8 @@ test("each channel is held by the people its token used to be issued to", async 
     [ada, workspaceConversationChannel(ws), true],
     [ada, workspaceConversationChannel(otherWs), false],
     [ada, agentStatusChannel(ws), true],
+    // The public Agent is owned by Grace, but Ada subscribes to the Workspace status channel.
+    [ada, agentStatusChannelForAgent(ws, publicAgent), false],
     [ada, agentActivityChannel(ws), true],
     [ada, workspacePresenceChannel(ws), true],
     [ada, userConversationChannel(ada), true],
