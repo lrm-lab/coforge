@@ -12,7 +12,7 @@ import type {
 } from "@coforge/agent";
 import { withDeadline } from "#src/deadline";
 import { asRecord, nonEmptyString } from "#src/json-record";
-import { GrokConnection } from "./connection";
+import { grokConnection, type GrokConnection } from "./connection";
 import { GrokTurnEvents } from "./update-events";
 import type { GrokRuntimeHost } from "./host";
 
@@ -92,7 +92,7 @@ class GrokSession implements AgentSession {
       argv.push("--model", options.runtime.model);
     if (options.runtime?.reasoning) argv.push("--reasoning-effort", options.runtime.reasoning);
     argv.push("stdio");
-    this.#transport = new GrokConnection(
+    this.#transport = grokConnection(
       argv,
       options.agentWorkspaceDirectory,
       host.buildSessionEnvironment(options),

@@ -33,7 +33,11 @@ export function devinConnection(
       timedOut: "Devin ACP operation timed out",
     },
     readConfig: readConfigOptions,
-    onUpdate,
+    onUpdate: (method, params) => {
+      if (method !== "session/update") return;
+      const update = asRecord(params.update);
+      if (typeof params.sessionId === "string" && update) onUpdate(params.sessionId, update);
+    },
     onPermission,
     onPromptWrite,
   });

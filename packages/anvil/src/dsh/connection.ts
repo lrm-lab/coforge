@@ -1,4 +1,5 @@
 import type { RequestPermissionRequest, RequestPermissionResponse } from "@agentclientprotocol/sdk";
+import { asRecord } from "#src/json-record";
 import { AcpConnection, acpBounded, type AcpConnectionHost } from "#src/acp/connection";
 
 export const DSH_ACP_ARGS = ["--profile", "acp"] as const;
@@ -28,7 +29,11 @@ export function dshConnection(
       closedBeforeConfig: "DSH ACP process closed before configuration",
       timedOut: "DSH ACP operation timed out",
     },
-    onUpdate,
+    onUpdate: (method, params) => {
+      if (method !== "session/update") return;
+      const update = asRecord(params.update);
+      if (typeof params.sessionId === "string" && update) onUpdate(params.sessionId, update);
+    },
     onPermission,
     onPromptWrite,
   });

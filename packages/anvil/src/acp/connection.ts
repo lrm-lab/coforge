@@ -35,9 +35,11 @@ export type AcpConnectionOptions = {
   /** Reads a `config_option_update` into the options this runtime publishes; absent for a
    * runtime that never publishes configuration this way. */
   readConfig?(update: Readonly<Record<string, unknown>>): SessionConfigOption[] | undefined;
-  /** Each `session/update`, observed synchronously so an update keeps its place before the
-   * response that follows it. */
-  onUpdate?(sessionId: string, update: Readonly<Record<string, unknown>>): void;
+  /** Extra ACP notification methods this runtime publishes, observed like `session/update`. */
+  notifications?: readonly string[];
+  /** Each observed notification, synchronously, so it keeps its place before the response that
+   * follows it. */
+  onUpdate?(method: string, params: Readonly<Record<string, unknown>>): void;
   onPermission?(request: RequestPermissionRequest): RequestPermissionResponse;
   /** Runs before a `session/prompt` frame is written, for a runtime that must know a turn
    * began. */
@@ -73,16 +75,22 @@ export class AcpConnection {
       })
       .connect({
         readable: this.process.records((record) => {
-          if (record.method !== "session/update") return;
+          if (
+            record.method !== "session/update" &&
+            !options.notifications?.includes(String(record.method))
+          )
+            return;
           const params = asRecord(record.params);
-          const update = asRecord(params?.update);
-          if (typeof params?.sessionId !== "string" || !update) return;
-          const config = options.readConfig?.(update);
-          if (config) {
+          if (!params) return;
+          // Each adapter reads the fields its runtime publishes; the shared tap only decides
+          // which methods are observed and keeps them in arrival order.
+          const update = asRecord(params.update);
+          const config = update ? options.readConfig?.(update) : undefined;
+          if (config && typeof params.sessionId === "string") {
             this.#config.set(params.sessionId, config);
             for (const listener of this.#configChanged) listener();
           }
-          options.onUpdate?.(params.sessionId, update);
+          options.onUpdate?.(String(record.method), params);
         }) as ReadableStream<AnyMessage>,
         writable: new WritableStream<AnyMessage>({
           write: (message) => {
@@ -129,15 +137,16 @@ export class AcpConnection {
     }
   }
 
-  async initialize(timeoutMs: number): Promise<InitializeResponse> {
-    const response = await this.bounded(
-      this.connection.agent.request<InitializeResponse, InitializeRequest>("initialize", {
+  async initialize(timeoutMs?: number): Promise<InitializeResponse> {
+    const work = this.connection.agent.request<InitializeResponse, InitializeRequest>(
+      "initialize",
+      {
         protocolVersion: 1,
         clientCapabilities: {},
         clientInfo: this.options.host.clientInfo,
-      }),
-      timeoutMs,
+      },
     );
+    const response = timeoutMs === undefined ? await work : await this.bounded(work, timeoutMs);
     if (response.protocolVersion !== 1) throw new Error(this.options.messages.unsupportedProtocol);
     return response;
   }

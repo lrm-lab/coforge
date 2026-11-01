@@ -3,6 +3,7 @@ import type {
   RequestPermissionResponse,
   SessionConfigOption,
 } from "@agentclientprotocol/sdk";
+import { asRecord } from "#src/json-record";
 import { AcpConnection, acpBounded, type AcpConnectionHost } from "#src/acp/connection";
 
 export const COMMAND_CODE_ACP_ARGS = ["acp"] as const;
@@ -40,7 +41,11 @@ export function commandCodeConnection(
       timedOut: "Command Code ACP operation timed out",
     },
     readConfig: readConfigOptions,
-    onUpdate,
+    onUpdate: (method, params) => {
+      if (method !== "session/update") return;
+      const update = asRecord(params.update);
+      if (typeof params.sessionId === "string" && update) onUpdate(params.sessionId, update);
+    },
     onPermission,
     onPromptWrite,
   });
