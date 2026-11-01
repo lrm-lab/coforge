@@ -27,6 +27,10 @@ export type AgentStopCoordinatorPorts = {
   publishStopped: (agentId: string, launch: ActivityLaunch) => void;
 };
 
+export function createAgentStopCoordinator(ports: AgentStopCoordinatorPorts): AgentStopCoordinator {
+  return new AgentStopCoordinator(ports);
+}
+
 /** Owns process release and stop ordering after DaemonRuntime has closed admission. */
 export class AgentStopCoordinator {
   constructor(private readonly ports: AgentStopCoordinatorPorts) {}

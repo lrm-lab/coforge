@@ -16,7 +16,7 @@ import { FileConversationSessionStore } from "#src/persistence/conversation-sess
 import { escapePathIdentity } from "#src/persistence/path-scope";
 import { AgentInputDrain } from "./agent-input-drain";
 import { rebindAgent } from "./agent-rebind";
-import { AgentLaunchCustody } from "./agent-launch-custody";
+import { AgentLaunchCustody, createAgentLaunchCustody } from "./agent-launch-custody";
 import { AgentContexts } from "./agent-contexts";
 import { PhaseBookkeeping } from "./phase-bookkeeping";
 import {
@@ -33,16 +33,10 @@ import {
   type AgentRuntime,
 } from "#src/agent-runtime/agent-process-manager";
 import { type SessionReference } from "./launch-identity";
+import { connectionSessionInvalidate } from "./session-invalidate-activity";
 import { activityDraft } from "./activity-draft";
-import {
-  recoveryHasContent,
-  recoveryOf,
-  runtimeConfigOf,
-  type AgentRecoveryContext,
-} from "./runtime-launch-intent";
-import { validUsageWindow } from "./runtime-activity-text";
+import { recoveryOf, runtimeConfigOf, type AgentRecoveryContext } from "./runtime-launch-intent";
 import { LaunchFailureBackoff } from "#src/agent-runtime/launch-failure-backoff";
-import { AGENT_STARTUP_TIMEOUT_MS, agentStartupInput } from "#src/agent-runtime/agent-startup";
 import { createAgentDesktopHolds } from "#src/agent-runtime/agent-desktop";
 export type DaemonConfig = {
   workspaceId: string;
@@ -86,38 +80,47 @@ import {
   type RuntimeProvider,
   RUNTIME_PROVIDER_USES_EXTERNAL_CLI,
   type UsageScanResponse,
+  CLEANER_APP_ID,
   type AgentReminderOperationRequest,
   type LocalReminderRequest,
   type ReminderJob,
   type ReminderSync,
   type TaskCommand,
   type TaskResult,
-  parseUpgradeErrorCode,
   type AgentWorkspaceDeleteRequest,
   type AgentWorkspaceDeleteResult,
-  thrownMessage,
 } from "@lrm/coforge-sdk/internal";
 import { AgentMigrationRunner } from "#src/agent-migration/migration-runner";
+import { AgentMigrationBucketClient } from "#src/connection/agent-migration-bucket-client";
 import { usageScanFailure, usageScanReading, usageScanResult } from "./usage-scan-response";
 import { AgentControl } from "#src/agent-runtime/agent-control";
 import { AgentSessions } from "#src/agent-runtime/agent-session";
+import { AgentRuntimeState } from "#src/agent-runtime/agent-runtime-state";
+import { MemoryAgentRuntimeStateStore } from "#src/persistence/memory-agent-runtime-state-store";
 import { AgentWorkspaceQueries } from "./agent-workspace-queries";
-import { deleteAgentWorkspace } from "./delete-agent-workspace";
 import { AgentMessageAttentionIndex } from "./agent-message-attention-index";
-import { AgentInboxCoordinator } from "./agent-inbox-coordinator";
-import { AgentStopCoordinator } from "./agent-stop-coordinator";
-import { AgentLaunchCoordinator } from "./agent-launch-coordinator";
-import { createRuntimeCoordinatorAssembly } from "./runtime-coordinator-assembly";
-import { agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
+import { AgentInboxCoordinator, createAgentInboxCoordinator } from "./agent-inbox-coordinator";
+import { AgentStopCoordinator, createAgentStopCoordinator } from "./agent-stop-coordinator";
+import { AgentLaunchCoordinator, createAgentLaunchCoordinator } from "./agent-launch-coordinator";
+import { startAgent } from "./agent-start-coordinator";
+import { deleteWorkspace, requestUpgrade } from "./runtime-lifecycle-operations";
+import {
+  assertOwnIntent,
+  currentObservedUsage,
+  failCollectorRunningSlots,
+  runtimeEnvelope,
+} from "./runtime-small-helpers";
+import { abandonLaunch, scheduleStartupFailure } from "./agent-startup-failure";
+import { agentsDirectory, agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
 import { revokeAgentApiKey } from "./agent-api-key-revoke";
 import { ColdIdleSweep } from "./cold-idle-sweep";
 import { StalledRecoverySweep } from "./stalled-recovery-sweep";
 import { CatalogFreshnessSweep } from "./catalog-freshness-sweep";
+import { rememberUsage } from "./usage-memory";
 import { dropHeldMentionsWithoutSession } from "./held-mention-sweep";
 import { runtimeMachineStatus } from "./machine-status-reporter";
 import { agentActivityDrafts } from "./agent-activity-drafts";
 import { sendAgentStatus, type AgentStatusReportPorts } from "./agent-status-report";
-import { workspaceEnvelope } from "./agent-inbox-factories";
 import { agentIdForContext, contextFor } from "./agent-context";
 import {
   cleanupUnconfirmed,
@@ -128,6 +131,7 @@ import { RuntimeRelease } from "./runtime-release";
 import { AgentFeatureSync } from "./agent-feature-sync";
 import { WakeRecycle } from "./wake-recycle";
 import { AgentMessageOperations } from "./agent-message-operations";
+import { createAgentMessageOperations } from "./agent-message-operations-factory";
 import { AgentRequestForwarder } from "./agent-request-forwarder";
 import { AgentDeliveryQueue } from "./agent-delivery-queue";
 import { canonicalThreadTarget } from "./thread-target";
@@ -174,6 +178,7 @@ import {
   reminderAppInboxSummary,
 } from "#src/agent-reminder/reminder-scheduler";
 import { AgentAppConfigSync } from "#src/agent-app-config/agent-app-config-sync";
+import { FileReminderReceiptStore } from "#src/persistence/reminder-receipt-store";
 import { logAgentApiKeyRevokeFailed, logAgentOperationFailure } from "./agent-failure-logs";
 import { acceptAppRegistrationNotice } from "#src/agent-app-inbox/app-registration-notice";
 import { diagnosticErrorCode, diagnosticErrorName } from "@lrm/coforge-sdk/internal";
@@ -442,7 +447,7 @@ export class DaemonRuntime {
     agentStatusSequences: this.#agentStatusSequences,
     offlineResidency: this.#offlineResidency,
     transport: () => this.#transport,
-    envelope: () => this.#envelope(),
+    envelope: () => this.#env(),
     runtimeInstanceId: this.#runtimeInstanceId,
     startedAtMs: this.#startedAt,
   };
@@ -450,7 +455,7 @@ export class DaemonRuntime {
   /** Per-launch context-usage and service-tier readings (`agent-usage-report.ts`). */
   readonly #usageReport = new AgentUsageReport({
     sessionId: (agentId) => this.#sessionReferences.get(agentId)?.sessionId,
-    envelope: () => this.#envelope(),
+    envelope: () => this.#env(),
     daemonInstanceId: () => this.#runtimeInstanceId,
     recordClientSeq: (agentId, clientSeq) =>
       this.#agentProcessManager.recordClientSeq(agentId, clientSeq),
@@ -648,103 +653,292 @@ export class DaemonRuntime {
         noticePrefix: (agentId) => this.#sync.noticePrefix(agentId),
       },
     );
-    const assembly = createRuntimeCoordinatorAssembly({
-      connection,
+    this.#inboxCoordinator = createAgentInboxCoordinator({
+      workspaceId: connection.workspaceId,
       stateDirectory,
-      systemCleanerOptions: systemCleaner,
       consumedSeqs: this.#consumedSeqs,
       messageAttention: this.#messageAttention,
       deliveryQueue: this.#deliveryQueue,
       runtimeRelease: this.#runtimeRelease,
-      agentProcessManager: this.#agentProcessManager,
-      startAgent: (agentId: any, config: any, recovery: any, request: any) =>
-        this.#startAgent(agentId, config, recovery, request),
-      currentActivityLaunches: this.#currentActivityLaunches,
-      reconcileIdleTurn: (agentId: any, launch: any) => this.#reconcileIdleTurn(agentId, launch),
+      processManager: this.#agentProcessManager,
+      startAgent: (agentId, config, sessionId) =>
+        this.#startAgent(agentId, config, undefined, { sessionId }),
+      currentActivityLaunch: (agentId) => this.#currentActivityLaunches.get(agentId),
+      reconcileIdleTurn: (agentId, launch) => this.#reconcileIdleTurn(agentId, launch),
       mentionDeliveries: this.#mentionDeliveries,
       assertRunning: () => this.#assertRunning(),
-      agentIdForContext: (context: any) => this.#agentIdForContext(context),
-      transport: () => this.#transport,
-      authorizedAgent: (context: any, agentApiKey: any) =>
-        this.#authorizedAgent(context, agentApiKey),
-      memoryFence: (agentId: any) => this.memoryFence(agentId),
+      agentIdForContext: (context) => this.#agentIdForContext(context),
+    });
+    this.agentRequests = new AgentRequestForwarder({
+      get transport() {
+        return runtime.#transport;
+      },
+      connection,
+      authorizedAgent: (context, agentApiKey) => this.#authorizedAgent(context, agentApiKey),
+    });
+    this.#messageOperations = createAgentMessageOperations({
+      connection,
+      attention: this.#messageAttention,
+      isMemoryAgent: (agentId) => Boolean(this.memoryFence(agentId)),
       contexts: this.#contexts,
+      inbox: (agentId) => this.#inboxCoordinator.agentInbox(agentId),
+      appItemsPending: (agentId) => this.#inboxCoordinator.appItemsPending(agentId),
+      get transport() {
+        return runtime.#transport;
+      },
+      reportFreshnessHold: (agentId, activity) =>
+        this.#activityPublisher.publishCurrent(
+          agentId,
+          this.#activity(
+            agentId,
+            AGENT_ACTIVITY_DETAIL_KIND.FRESHNESS_HOLD,
+            "info",
+            activity.detail,
+            {
+              activityKind: activity.activityKind,
+              entries: activity.entries,
+              producerFactId: activity.producerFactId,
+            },
+          ),
+        ),
+    });
+    this.#reminders = new ReminderScheduler(
+      { workspaceId: connection.workspaceId, computerId: connection.computerId },
+      new FileReminderReceiptStore(stateDirectory, connection.workspaceId, connection.computerId),
+      (request) => {
+        if (!this.#transport.fireReminder) throw new Error("reminder fire is unavailable");
+        return this.#transport.fireReminder(request);
+      },
+      (job, occurrence) => this.#acceptReminderDue(job, occurrence.late),
+    );
+    this.systemCleaner = new SystemCleaner({
+      ...systemCleaner,
+      agentsDirectory: agentsDirectory(connection.workspaceRoot, connection.workspaceId),
+      inbox: {
+        upsert: async (agentId, item) =>
+          (await this.#inboxCoordinator.appInbox(agentId)).upsert(item),
+        remove: (agentId, itemId) => this.#inboxCoordinator.removeAppItem(agentId, itemId),
+      },
+      wake: async (agentId, itemId) => {
+        // A busy Agent sees the item at its next idle drain; a stopped one at its next launch.
+        if (this.#isWorking(agentId)) return;
+        await this.#inboxCoordinator.notifyAppItem(agentId, itemId, { startStopped: false });
+      },
+    });
+    this.#appConfigs = new AgentAppConfigSync({
+      // `#requestAppConfigSnapshot` asks only through a transport that has the method.
+      requestSnapshot: (agentId) =>
+        this.#transport.requestAppConfigSnapshot!({
+          ...this.#env(),
+          agentId,
+        }),
+      apps: { [CLEANER_APP_ID]: this.systemCleaner },
+    });
+    // The transport is replaced on each start, so the runner reaches the route through whichever
+    // one is current.
+    this.#migrations = this.#transport.agentMigrationServer
+      ? new AgentMigrationRunner({
+          server: () => this.#transport.agentMigrationServer!(),
+          bucket: new AgentMigrationBucketClient(),
+          agents: {
+            stop: (agentId) => this.stopAgent(agentId),
+            isRunning: (agentId) => this.#agentProcessManager.runningAgentIds().includes(agentId),
+            movedAway: (agentId) => this.#forgetLocalAgent(agentId),
+          },
+          workspaceDirectory: (agentId) =>
+            agentWorkspaceDirectory(connection.workspaceRoot, connection.workspaceId, agentId),
+          stateDirectory,
+        })
+      : undefined;
+    const state = new AgentRuntimeState(
+      // Control state lives only in this process: the server
+      // re-dispatches what should still be running after a restart, so a persisted record could
+      // only outlive the writer it was waiting on.
+      new MemoryAgentRuntimeStateStore(connection.workspaceRoot, connection.workspaceId),
+    );
+    this.#agentSessions = new AgentSessions(state, async (snapshot) => {
+      await this.#reportAgentSession({
+        protocolMajor: snapshot.protocolMajor,
+        requestId: crypto.randomUUID(),
+        workspaceId: snapshot.workspaceId,
+        computerId: snapshot.computerId,
+        agentId: snapshot.agentId,
+        provider: snapshot.provider,
+        startRequestId: snapshot.requestId,
+        daemonInstanceId: snapshot.daemonInstanceId ?? this.#runtimeInstanceId,
+        launchId: snapshot.launchId,
+        sessionId: snapshot.identity.sessionId,
+        sessionState: snapshot.identity.state,
+        controlEpoch: snapshot.epoch,
+        sequence: snapshot.sequence,
+      });
+    });
+    this.#agentControl = new AgentControl(this.#runtimeInstanceId, state, this.#agentSessions, {
+      running: (agentId) => Boolean(this.#agentProcessManager.session(agentId)),
+      stop: async (agentId) => {
+        const session = this.#agentProcessManager.session(agentId);
+        await this.stopAgent(agentId);
+        return session?.readSessionIdentity?.();
+      },
+      launch: async (intent, launchId, replacedSessionId, invalidateReason) => {
+        if (replacedSessionId) this.#sessionReferences.delete(intent.agentId);
+        const runtime = await this.#startAgent(
+          intent.agentId,
+          runtimeConfigOf(intent),
+          recoveryOf(intent),
+          {
+            sessionId: intent.sessionId,
+            requestId: intent.requestId,
+            previousLaunchId: intent.previousLaunchId,
+            sessionMode: intent.sessionMode,
+            resumePrompt: intent.resumePrompt,
+            introductionPrompt: intent.introductionPrompt,
+            control: { controlEpoch: intent.controlEpoch, launchId },
+            replacedSessionId,
+            invalidateReason,
+          },
+        );
+        return runtime.session.readSessionIdentity?.();
+      },
+      wake: async (intent) => {
+        await this.#startAgent(
+          intent.agentId,
+          runtimeConfigOf(intent),
+          { wakeMessage: intent.wakeMessage },
+          {
+            requestId: intent.requestId,
+            resumePrompt: intent.resumePrompt,
+            introductionPrompt: intent.introductionPrompt,
+          },
+        );
+      },
+      rebind: (intent, launchId) => this.#rebindAgent(intent, launchId),
+      startSettled: (agentId) => this.#exitedDelivery.releaseStartBuffer(agentId),
+      // `launchId` is always present here (minted synchronously by `AgentControl.start()`
+      // before this call); the wire message and the retry's cold-start Activity
+      // (`#launchAgent`'s `request.invalidateReason` narration) both follow that same,
+      // effectively-unconditional signal — there is no longer a separate controlEpoch gate.
+      invalidateSession: (intent, launchId, sessionId, reason) => {
+        this.#transport.sendSessionInvalidate?.(
+          connectionSessionInvalidate(this.#connection, this.#runtimeInstanceId, {
+            agentId: intent.agentId,
+            provider: intent.provider,
+            sessionId,
+            launchId,
+            reason,
+          }),
+        );
+      },
+      result: async (result) => {
+        await this.#transport.sendAgentControlResult?.(result);
+      },
+    });
+    this.#observationPorts = {
       activityPublisher: this.#activityPublisher,
-      activity: (agentId: any, kind: any, level: any, detail: any, extra: any) =>
+      deliveryQueue: this.#deliveryQueue,
+      offlineResidency: this.#offlineResidency,
+      usageReport: this.#usageReport,
+      phaseBookkeeping: this.#phaseBookkeeping,
+      runtimeErrorHold: this.#runtimeErrorHold,
+      mentionDeliveries: this.#mentionDeliveries,
+      agentSessions: this.#agentSessions,
+      systemCleaner: this.systemCleaner,
+      collectSkillAgents: this.#collectSkillAgents,
+      fastModeWarned: this.#fastModeWarned,
+      isWorking: (agentId) => this.#isWorking(agentId),
+      activityDraft: (agentId, kind, level, detail, extra) =>
         this.#activity(agentId, kind, level, detail, extra),
-      acceptReminderDue: (job: any, late: any) => this.#acceptReminderDue(job, late),
-      envelope: () => this.#envelope(),
-      stopAgent: (agentId: any) => this.stopAgent(agentId),
-      forgetLocalAgent: (agentId: any) => this.#forgetLocalAgent(agentId),
-      reportAgentSession: (report: any) => this.#reportAgentSession(report),
-      runtimeInstanceId: this.#runtimeInstanceId,
-      sessionReferences: this.#sessionReferences,
-      rebindAgent: (intent: any, launchId: any) => this.#rebindAgent(intent, launchId),
-      exitedDelivery: this.#exitedDelivery,
-      observationPorts: undefined,
-      observedUsage: this.#observedUsage,
-      drafts: this.#drafts,
-      showQuietTurn: (agentId: any, launch: any, publish: any) =>
-        this.#showQuietTurn(agentId, launch, publish),
-      releaseTurnEndHolds: (agentId: any) => this.#releaseTurnEndHolds(agentId),
-      failCollectorRunningSlots: (agentId: any, reason: any) =>
+      runtimeErrorActivity: (agentId, message) => this.#drafts.runtimeError(agentId, message),
+      interruptedActivity: (agentId) => this.#drafts.interrupted(agentId),
+      showQuietTurn: (agentId, launch, publish) => this.#showQuietTurn(agentId, launch, publish),
+      reconcileIdleTurn: (agentId, launch) => this.#reconcileIdleTurn(agentId, launch),
+      rememberUsage: (snapshot) => rememberUsage(this.#observedUsage, snapshot),
+      releaseTurnEndHolds: (agentId) => this.#releaseTurnEndHolds(agentId),
+      drainAppInboxNotices: (agentId) => this.#inboxCoordinator.drainAppInboxNotices(agentId),
+      failCollectorRunningSlots: (agentId, reason) =>
         this.#failCollectorRunningSlots(agentId, reason),
+    };
+    this.#launchCustody = createAgentLaunchCustody({
+      messageAttention: this.#messageAttention,
+      deliveryQueue: this.#deliveryQueue,
       inputDrain: this.#inputDrain,
+      agentProcessManager: this.#agentProcessManager,
+      currentActivityLaunches: this.#currentActivityLaunches,
       introducedAgents: this.#introducedAgents,
+      releaseHeldAppItems: (agentId) => this.#inboxCoordinator.releaseHeldAppItems(agentId),
+      releaseFallbackNotices: (agentId) => this.#inboxCoordinator.releaseFallbackNotices(agentId),
+    });
+    this.#stopCoordinator = createAgentStopCoordinator({
       agentLaunches: this.#agentLaunches,
+      currentActivityLaunches: this.#currentActivityLaunches,
+      inputDrain: this.#inputDrain,
+      processManager: this.#agentProcessManager,
+      activityPublisher: this.#activityPublisher,
       desktops: this.#desktops,
       agentApiKeys: this.#agentApiKeys,
-      revokeAgentApiKey: (agentId: any, apiKey: any) => this.#revokeAgentApiKey(agentId, apiKey),
-      sendAgentStatus: (agentId: any, status: any) => this.#sendAgentStatus(agentId, status),
+      revokeAgentApiKey: (agentId, apiKey) => this.#revokeAgentApiKey(agentId, apiKey),
+      messageAttention: this.#messageAttention,
+      deliveryQueue: this.#deliveryQueue,
       runtimeErrorHold: this.#runtimeErrorHold,
       offlineResidency: this.#offlineResidency,
-      runtimeInstance: this.#runtimeInstanceId,
+      sendAgentStatus: (agentId, status) => this.#sendAgentStatus(agentId, status),
+      publishStopped: (agentId, launch) =>
+        this.#activityPublisher.publish(agentId, launch, this.#drafts.stopped(agentId)),
+    });
+    this.#launchCoordinator = createAgentLaunchCoordinator({
+      connection: this.#connection,
+      transport: () => this.#transport,
+      runtimeInstanceId: this.#runtimeInstanceId,
+      agentProcessManager: this.#agentProcessManager,
+      sessionReferences: this.#sessionReferences,
+      currentActivityLaunches: this.#currentActivityLaunches,
+      activityPublisher: this.#activityPublisher,
       phaseBookkeeping: this.#phaseBookkeeping,
+      contexts: this.#contexts,
+      deliveryQueue: this.#deliveryQueue,
       usageReport: this.#usageReport,
       fastModeWarned: this.#fastModeWarned,
       sync: this.#sync,
+      agentApiKeys: this.#agentApiKeys,
       agentProxy: this.#agentProxy,
       agentProxyTokens: this.#agentProxyTokens,
+      desktops: this.#desktops,
       wakeRecycle: this.#wakeRecycle,
       stoppingAgents: this.#stoppingAgents,
       collectSkillAgents: this.#collectSkillAgents,
+      introducedAgents: this.#introducedAgents,
+      messageAttention: this.#messageAttention,
+      agentControl: this.#agentControl,
+      agentSessions: this.#agentSessions,
+      runtimeErrorHold: this.#runtimeErrorHold,
       replyIntents: this.#replyIntents,
+      offlineResidency: this.#offlineResidency,
+      drafts: this.#drafts,
+      systemCleaner: this.systemCleaner,
       agentStops: this.#agentStops,
-      stopping: this.#stopping,
-      assertAgentNotStopping: (agentId: any) => this.#assertAgentNotStopping(agentId),
-      contextFor: (agentId: any) => this.#contextFor(agentId),
-      scheduleStartupFailure: (agentId: any, launch: any) =>
-        this.#scheduleStartupFailure(agentId, launch),
-      observeRuntimeEvent: (
-        agentId: any,
-        launch: any,
-        config: any,
-        runtime: any,
-        managed: any,
-        event: any,
-      ) => this.#observeRuntimeEvent(agentId, launch, config, runtime, managed, event),
-      narrateUnavailable: (agentId: any, launch: any, activity: any) =>
+      isStopping: () => this.#stopping,
+      assertRunning: () => this.#assertRunning(),
+      assertAgentNotStopping: (agentId) => this.#assertAgentNotStopping(agentId),
+      contextFor: (agentId) => this.#contextFor(agentId),
+      envelope: () => this.#env(),
+      reportAgentSession: (report) => this.#reportAgentSession(report),
+      sendAgentStatus: (agentId, status) => this.#sendAgentStatus(agentId, status),
+      scheduleStartupFailure: (agentId, launch) => this.#scheduleStartupFailure(agentId, launch),
+      observeRuntimeEvent: (agentId, launch, config, runtime, managed, event) =>
+        this.#observeRuntimeEvent(agentId, launch, config, runtime, managed, event),
+      reconcileIdleTurn: (agentId, launch) => this.#reconcileIdleTurn(agentId, launch),
+      activity: (agentId, detailKind, level, detail, extra) =>
+        this.#activity(agentId, detailKind, level, detail, extra),
+      narrateUnavailable: (agentId, launch, activity) =>
         this.#narrateUnavailable(agentId, launch, activity),
-      disposeLaunchObservations: (agentId: any) => this.#disposeLaunchObservations(agentId),
-      revokeLocalLaunch: (agentId: any, context: any, proxyToken: any) =>
+      disposeLaunchObservations: (agentId) => this.#disposeLaunchObservations(agentId),
+      revokeLocalLaunch: (agentId, context, proxyToken) =>
         this.#revokeLocalLaunch(agentId, context, proxyToken),
-      launchFailureActivity: (agentId: any, provider: any, error: any) =>
+      revokeAgentApiKey: (agentId, apiKey) => this.#revokeAgentApiKey(agentId, apiKey),
+      launchFailureActivity: (agentId, provider, error) =>
         this.#launchFailureActivity(agentId, provider, error),
-      isWorking: (agentId: any) => this.#isWorking(agentId),
+      drainAppInboxNotices: (agentId) => this.#inboxCoordinator.drainAppInboxNotices(agentId),
     });
-    this.#inboxCoordinator = assembly.inboxCoordinator;
-    this.agentRequests = assembly.agentRequests;
-    this.#messageOperations = assembly.messageOperations;
-    this.#reminders = assembly.reminders;
-    this.systemCleaner = assembly.systemCleaner;
-    this.#appConfigs = assembly.appConfigs;
-    this.#migrations = assembly.migrations;
-    this.#agentSessions = assembly.agentSessions;
-    this.#agentControl = assembly.agentControl;
-    this.#observationPorts = assembly.observationPorts;
-    this.#launchCustody = assembly.launchCustody;
-    this.#stopCoordinator = assembly.stopCoordinator;
-    this.#launchCoordinator = assembly.launchCoordinator;
   }
 
   get agentProcessManager(): AgentProcessManager {
@@ -1030,49 +1224,26 @@ export class DaemonRuntime {
    * `UpgradeResultReporter` owns the reporting rules.
    */
   async #requestUpgrade(requestId: string, expectedVersion?: string): Promise<void> {
-    const requestUpgrade = this.lifecycle.requestUpgrade;
-    if (!requestUpgrade) throw new Error("upgrade requests are unsupported");
-    try {
-      await requestUpgrade(requestId, expectedVersion);
-      void this.#upgradeResults.report();
-    } catch (error) {
-      const message = thrownMessage(error);
-      const errorCode = parseUpgradeErrorCode((error as { code?: unknown } | null)?.code);
-      logger.warn("Computer upgrade request was refused", {
-        event: "upgrade:request_refused",
-        request_id: requestId,
-        workspace_id: this.#connection.workspaceId,
-        error_code: errorCode ?? diagnosticErrorCode(error),
-        error_message: message,
-      });
-      await this.#upgradeResults.reportRefused({
-        requestId,
-        status: "failed",
-        completedAtMs: Date.now(),
-        error: message,
-        ...(errorCode ? { errorCode } : {}),
-      });
-      throw error;
-    }
+    return requestUpgrade(
+      this.lifecycle.requestUpgrade,
+      this.#upgradeResults,
+      requestId,
+      expectedVersion,
+      this.#connection.workspaceId,
+    );
   }
 
   async #deleteWorkspace(
     connection: DaemonConfig,
     request: Pick<AgentWorkspaceDeleteRequest, "agentId">,
   ): Promise<Pick<AgentWorkspaceDeleteResult, "status">> {
-    return deleteAgentWorkspace({
-      agentId: request.agentId,
-      agentWorkspaceDirectory: agentWorkspaceDirectory(
-        connection.workspaceRoot,
-        connection.workspaceId,
-        request.agentId,
-      ),
-      isRunning: (agentId) =>
-        Boolean(this.#agentProcessManager.runtime(agentId)) ||
-        this.#agentProcessManager.isStopping(agentId),
-      stopAgent: (agentId) => this.stopAgent(agentId),
-      forget: (agentId) => this.#forgetLocalAgent(agentId),
-    });
+    return deleteWorkspace(
+      connection,
+      request,
+      this.#agentProcessManager,
+      (agentId) => this.stopAgent(agentId),
+      (agentId) => this.#forgetLocalAgent(agentId),
+    );
   }
 
   startAgent(
@@ -1102,212 +1273,59 @@ export class DaemonRuntime {
     recovery: AgentRecoveryContext | undefined,
     request: LaunchRequest,
   ): Promise<AgentRuntime> {
-    try {
-      this.#assertRunning();
-      this.#assertAgentNotStopping(agentId);
-      if (this.#migrations?.holds(agentId))
-        throw new AgentPreflightError(
-          `Agent workspace is moving to another Computer: ${agentId}`,
-          "AGENT_MIGRATING",
-        );
-    } catch (error) {
-      return Promise.reject(error);
-    }
-    this.#requestAppConfigSnapshot(agentId);
-    const enqueueRecovery = (context: AgentRecoveryContext) =>
-      this.#inputDrain.enqueue(agentId, (completion) => ({
-        kind: "recovery",
-        context,
-        completion,
-      }));
-    const enqueueTurn = (text: string, introduction?: true) =>
-      this.#inputDrain.enqueue(agentId, (completion) => ({
-        kind: "prompt",
-        text,
-        introduction,
-        completion,
-      }));
-    const { resumePrompt, introductionPrompt } = request;
-    const carriesPrompt = introductionPrompt !== undefined || resumePrompt !== undefined;
-    const introduction =
-      introductionPrompt !== undefined &&
-      !this.#introducedAgents.has(agentId) &&
-      !this.#inputDrain
-        .get(agentId)
-        ?.items.some((item) => item.kind === "prompt" && item.introduction)
-        ? introductionPrompt
-        : undefined;
-    // This Start's input in order: its introduction, the recovery handed over, its resume prompt.
-    const enqueueStartInput = (context: AgentRecoveryContext | undefined) => {
-      const introductionCompletion =
-        introduction === undefined ? undefined : enqueueTurn(introduction, true);
-      const recoveryCompletion = context ? enqueueRecovery(context) : undefined;
-      const promptCompletion = resumePrompt === undefined ? undefined : enqueueTurn(resumePrompt);
-      return {
-        recoveryCompletion,
-        inputs: [introductionCompletion, recoveryCompletion, promptCompletion].filter(
-          (input) => input !== undefined,
-        ),
-      };
-    };
-    const existingLaunch = this.#agentLaunches.get(agentId);
-    if (existingLaunch) {
-      if (carriesPrompt || recoveryHasContent(recovery)) {
-        const queue = this.#inputDrain.get(agentId);
-        if (queue)
-          queue.items = queue.items.filter((item) => {
-            if (item.kind !== "startup") return true;
-            item.completion.resolve();
-            return false;
-          });
-      }
-      // A launch in progress presents this start's input too.
-      const { inputs } = enqueueStartInput(recovery);
-      if (!inputs.length) return existingLaunch;
-      const inputCompletion = Promise.all(inputs);
-      // Input can be cancelled before provider creation finishes. Keep the creation promise as
-      // the launch fence, while observing an early input rejection until creation settles.
-      void inputCompletion.catch(() => {});
-      const extendedLaunch = existingLaunch
-        .then(async (runtime) => {
-          await inputCompletion;
-          return runtime;
-        })
-        .finally(() => {
-          if (this.#agentLaunches.get(agentId) === extendedLaunch)
-            this.#agentLaunches.delete(agentId);
-        });
-      this.#agentLaunches.set(agentId, extendedLaunch);
-      return extendedLaunch;
-    }
-    const activeRuntime = this.#agentProcessManager.runtime(agentId);
-    if (activeRuntime) {
-      if (!recovery && !carriesPrompt)
-        return Promise.reject(new Error(`Agent runtime is already active: ${agentId}`));
-      // A running Agent keeps its process and session: it is handed only this start's
-      // introduction, wake message and resume prompt, never its resume messages or unread summary.
-      const { inputs } = enqueueStartInput(
-        recovery?.wakeMessage ? { wakeMessage: recovery.wakeMessage } : undefined,
-      );
-      if (!inputs.length) return Promise.resolve(activeRuntime);
-      this.#inputDrain.ensure(agentId);
-      return Promise.all(inputs).then(() => activeRuntime);
-    }
-
-    // A brand-new process started inside the hold window would be killed seconds later by the
-    // upgrade's stop. Refusing is safe: `#agentControl.replay()` re-issues the intent after the
-    // restart. Launches that only extend a live runtime returned above and are untouched.
-    if (this.#runnerHold !== undefined)
-      return Promise.reject(new Error(`Agent launches are held for ${this.#runnerHold.reason}`));
-
-    this.#messageAttention.clearAgent(agentId);
-
-    // Register the launch before its first await so concurrent starts cannot mint twice.
-    // Launch failure is surfaced by `launch`; the item completion is also rejected when cleared.
-    // The Start's input (a resume prompt is a user's guidance when resuming a stopped Agent, sent
-    // with no recovery) is queued before the launch, so any message that arrives while the process
-    // is still starting queues behind it.
-    const { recoveryCompletion, inputs } = enqueueStartInput(recovery);
-    for (const input of inputs) void input.catch(() => {});
-    // A Start carrying a prompt never gets the starter, even when it queued none of its own.
-    const startupCompletion =
-      !carriesPrompt && !recoveryHasContent(recovery)
-        ? this.#inputDrain.enqueue(agentId, (completion) => ({
-            kind: "startup",
-            text: agentStartupInput(
-              request.sessionMode !== "create" &&
-                Boolean(request.sessionId ?? this.#sessionReferences.get(agentId)?.sessionId),
-            ),
-            completion,
-          }))
-        : undefined;
-    void startupCompletion?.catch(() => {});
-    const launching = this.#launchCoordinator.launchAgent(agentId, config, request);
-    const launch = launching
-      .then(
-        async (runtime) => {
-          // Any successful launch, a managed Start included, ends a wake cooldown.
-          this.#wakeLaunchFailures.reset(agentId);
-          this.#inputDrain.ensure(agentId);
-          if (recoveryCompletion) await recoveryCompletion;
-          // No recovery item was enqueued for this launch at all (so
-          // `#recoverAttention` never ran), yet the session is ready — flush anything
-          // AgentDeliveryQueue held across an unexpected exit now. Do not open a
-          // second recovery notice: the queued startup input opens the initial turn if needed.
-          else this.#releaseSurvivingHolds(agentId);
-          if (startupCompletion) await startupCompletion;
-          return runtime;
-        },
-        (error: unknown) => {
-          this.#exitedDelivery.keepInputDeliveriesForNextLaunch(agentId, error);
-          this.#inputDrain.close(agentId, error);
-          throw error;
-        },
-      )
-      .finally(() => {
-        if (this.#agentLaunches.get(agentId) === launch) this.#agentLaunches.delete(agentId);
-      });
-    this.#agentLaunches.set(agentId, launch);
-    return launch;
+    return startAgent(
+      {
+        assertRunning: () => this.#assertRunning(),
+        assertAgentNotStopping: (id) => this.#assertAgentNotStopping(id),
+        migrations: this.#migrations,
+        requestAppConfigSnapshot: (id) => this.#requestAppConfigSnapshot(id),
+        inputDrain: this.#inputDrain,
+        introducedAgents: this.#introducedAgents,
+        agentLaunches: this.#agentLaunches,
+        agentProcessManager: this.#agentProcessManager,
+        runnerHold: this.#runnerHold,
+        messageAttention: this.#messageAttention,
+        wakeLaunchFailures: this.#wakeLaunchFailures,
+        launchCoordinator: this.#launchCoordinator,
+        exitedDelivery: this.#exitedDelivery,
+        releaseSurvivingHolds: (id) => this.#releaseSurvivingHolds(id),
+        sessionReferences: this.#sessionReferences,
+      },
+      agentId,
+      config,
+      recovery,
+      request,
+    );
   }
 
-  /** The fields every daemon -> server report opens with: this protocol, a fresh request id, and
-   * this runtime's own Workspace and Computer. */
-  #envelope() {
-    return workspaceEnvelope(this.#connection.workspaceId, this.#connection.computerId);
-  }
+  #env = () => runtimeEnvelope(this.#connection);
 
   /** Tears down a launch whose recovery notice was rejected; returns the error to surface. */
   async #abandonLaunch(agentId: string, error: unknown): Promise<unknown> {
-    this.#stoppingAgents.add(agentId);
-    this.#inputDrain.close(agentId, error);
-    const activityLaunch = this.#currentActivityLaunches.get(agentId);
-    activityLaunch?.startup?.dispose();
-    if (activityLaunch) activityLaunch.stopping = true;
-    this.#interruptIfBusy(agentId, activityLaunch);
-    this.#activityPublisher.forgetBusy(agentId);
-    this.#disposeLaunchObservations(agentId);
-    this.#revokeLocalLaunch(agentId);
-    // An abandoned launch is teardown, not a person's Stop: an offline error's record must
-    // survive so later deliveries still restate the failure that took the Agent down.
-    const offlineError = this.#offlineResidency.record(agentId);
-    try {
-      await this.#stopCoordinator.releaseAgentRuntime(agentId);
-      if (offlineError) this.#offlineResidency.remember(agentId, offlineError);
-      if (!this.#agentStops.has(agentId)) this.#stoppingAgents.delete(agentId);
-      return error;
-    } catch (cleanupError) {
-      return cleanupError;
-    }
-  }
-
-  async #failAgentStartup(agentId: string, launch: ActivityLaunch): Promise<void> {
-    if (this.#stopping || launch.stopping || this.#currentActivityLaunches.get(agentId) !== launch)
-      return;
-    const detail = `Agent runtime did not become ready within ${AGENT_STARTUP_TIMEOUT_MS / 1000} seconds. Check the provider on this Computer, then start the Agent again.`;
-    const error = new Error(detail);
-    if (!launch.startup?.fail(error)) return;
-    logger.warning("Agent runtime startup failed", {
-      event: "agent_runtime:startup_timed_out",
-      agent_id: agentId,
-      launch_id: launch.launchId,
-      timeout_ms: AGENT_STARTUP_TIMEOUT_MS,
-      outcome: "failed",
-    });
-    this.#activityPublisher.publish(agentId, launch, this.#drafts.runtimeError(agentId, detail));
-    const outcome = await this.#abandonLaunch(agentId, error);
-    if (outcome !== error) throw outcome;
-    await this.#agentControl.stopped(agentId, launch.launchId);
+    return abandonLaunch(this.#startupFailurePorts(), agentId, error);
   }
 
   #scheduleStartupFailure(agentId: string, launch: ActivityLaunch): void {
-    void this.#failAgentStartup(agentId, launch).catch((error: unknown) => {
-      logger.error("Agent startup cleanup did not confirm process exit", {
-        event: "agent_runtime:startup_cleanup_failed",
-        agent_id: agentId,
-        error_code: diagnosticErrorCode(error),
-      });
-    });
+    scheduleStartupFailure(this.#startupFailurePorts(), agentId, launch);
+  }
+
+  #startupFailurePorts() {
+    return {
+      stopping: this.#stopping,
+      stoppingAgents: this.#stoppingAgents,
+      inputDrain: this.#inputDrain,
+      currentActivityLaunches: this.#currentActivityLaunches,
+      interruptIfBusy: (id: string, current: ActivityLaunch | undefined) =>
+        this.#interruptIfBusy(id, current),
+      activityPublisher: this.#activityPublisher,
+      disposeLaunchObservations: (id: string) => this.#disposeLaunchObservations(id),
+      revokeLocalLaunch: (id: string) => this.#revokeLocalLaunch(id),
+      offlineResidency: this.#offlineResidency,
+      stopCoordinator: this.#stopCoordinator,
+      agentStops: this.#agentStops,
+      drafts: this.#drafts,
+      agentControl: this.#agentControl,
+    };
   }
 
   /**
@@ -1322,7 +1340,7 @@ export class DaemonRuntime {
         sessionReferences: this.#sessionReferences,
         agentProcessManager: this.#agentProcessManager,
         runtimeInstanceId: this.#runtimeInstanceId,
-        envelope: () => this.#envelope(),
+        envelope: () => this.#env(),
         reportAgentSession: (report) => this.#reportAgentSession(report),
         sendAgentStatus: (agentId, status) => this.#sendAgentStatus(agentId, status),
       },
@@ -1353,50 +1371,17 @@ export class DaemonRuntime {
     );
   }
 
-  /**
-   * A collector turn that dies before HTTPS submit (e.g. model 405) must
-   * still settle Collect Run slots — Activity alone is not a completion boundary.
-   */
-  async #failCollectorRunningSlots(agentId: string, failureReason: string): Promise<void> {
-    const agentApiKey = this.#agentApiKeys.get(agentId);
-    if (!agentApiKey || !this.#transport.agentWeeklyReportCollect) return;
-    await this.#transport.agentWeeklyReportCollect(
-      {
-        idempotencyKey: crypto.randomUUID(),
-        failRunningSlots: true,
-        failureReason,
-      },
-      agentApiKey,
-    );
-  }
+  #failCollectorRunningSlots = (agentId: string, failureReason: string) =>
+    failCollectorRunningSlots(this.#transport, this.#agentApiKeys, agentId, failureReason);
 
-  #currentObservedUsage(provider: RuntimeProvider): UsageSnapshot | undefined {
-    const snapshot = this.#observedUsage.get(provider);
-    if (!snapshot) return undefined;
-    const now = Date.now();
-    const primary = validUsageWindow(snapshot.primary, now);
-    const secondary = validUsageWindow(snapshot.secondary, now);
-    if (!primary && !secondary) {
-      this.#observedUsage.delete(provider);
-      return undefined;
-    }
-    const current = { ...snapshot, primary, secondary };
-    this.#observedUsage.set(provider, current);
-    return current;
-  }
+  #currentObservedUsage = (provider: RuntimeProvider) =>
+    currentObservedUsage(this.#observedUsage, provider);
 
-  #assertOwnIntent(intent: {
+  #assertOwnIntent = (intent: {
     protocolMajor: number;
     workspaceId: string;
     computerId?: string;
-  }): void {
-    if (intent.protocolMajor !== WORKSPACE_PROTOCOL_MAJOR)
-      throw new Error("unsupported agent protocol major");
-    if (intent.workspaceId !== this.#connection.workspaceId)
-      throw new Error("agent intent targets another Workspace");
-    if (intent.computerId !== this.#connection.computerId)
-      throw new Error("agent intent targets another Computer");
-  }
+  }) => assertOwnIntent(intent, this.#connection.workspaceId, this.#connection.computerId);
 
   async handleAgentStart(intent: AgentStartIntent): Promise<AgentRuntime> {
     this.#assertOwnIntent({
@@ -2133,7 +2118,7 @@ export class DaemonRuntime {
   async #requestReminderSnapshot(agentId: string): Promise<void> {
     if (!this.#transport.requestSnapshot) return;
     const sync: ReminderSync = await this.#transport.requestSnapshot({
-      ...this.#envelope(),
+      ...this.#env(),
       agentId,
     });
     await this.#reminders.apply(sync);
@@ -2373,7 +2358,7 @@ export class DaemonRuntime {
       this.#settleMigrations(),
       this.#connection.computerId
         ? this.#transport.sendShutdownNotice?.({
-            ...this.#envelope(),
+            ...this.#env(),
             workerInstanceId: this.#runtimeInstanceId,
             reason: shutdownReason,
           })

@@ -24,6 +24,10 @@ export type AgentLaunchCustodyPorts = Readonly<{
   releaseFallbackNotices(agentId: string): void;
 }>;
 
+export function createAgentLaunchCustody(ports: AgentLaunchCustodyPorts): AgentLaunchCustody {
+  return new AgentLaunchCustody(ports);
+}
+
 /**
  * What the daemon owes a launch at its boundary: delivery admission and custody acknowledgment,
  * the recovery-notice pass that reconciles held state, and the turn-open bookkeeping a prompt or

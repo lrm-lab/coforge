@@ -106,6 +106,12 @@ export type AgentLaunchCoordinatorPorts = {
   drainAppInboxNotices: (agentId: string) => Promise<void>;
 };
 
+export function createAgentLaunchCoordinator(
+  ports: AgentLaunchCoordinatorPorts,
+): AgentLaunchCoordinator {
+  return new AgentLaunchCoordinator(ports);
+}
+
 export class AgentLaunchCoordinator {
   constructor(readonly ports: AgentLaunchCoordinatorPorts) {}
 
