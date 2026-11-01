@@ -11,6 +11,7 @@ import { recordTemplates } from "#src/server/records/record-catalog-templates.se
 import { recordDistribution } from "#src/server/records/record-distribution.server";
 import { recordAssistantCatalog } from "#src/server/records/record-assistant-catalog.server";
 import { recordKeyPointEdits } from "#src/server/records/record-key-point-edits.server";
+import { recordReportContent } from "#src/server/records/record-report-content.server";
 import { normalizeReportContent, type ReportContent } from "./records-content";
 
 export const loadRecordsNavAttention = createServerFn({ method: "GET" })
@@ -165,7 +166,7 @@ export const saveWeeklyReportContent = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).saveReportContent({
+    return recordReportContent(db).saveReportContent({
       workspaceId,
       userId: user.id,
       reportId: data.reportId,

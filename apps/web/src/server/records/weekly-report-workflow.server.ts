@@ -3,10 +3,10 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 import { loadKeyPointPromptForLeader } from "./weekly-report-key-points.server";
-import { RecordCatalog } from "./record-catalog.server";
 import { recordTemplates } from "./record-catalog-templates.server";
 import { recordAssistantCatalog } from "./record-assistant-catalog.server";
 import { recordKeyPointEdits } from "./record-key-point-edits.server";
+import { recordReportContent } from "./record-report-content.server";
 import {
   distributeWeeklyReport,
   type WeeklyReportNotifier,
@@ -32,7 +32,6 @@ export class WeeklyReportWorkflow {
       select: { role: true },
     });
     if (!membership) throw new AppError("ACCESS_DENIED");
-    const catalog = new RecordCatalog(this.db, this.notifier);
     const assistantCatalog = recordAssistantCatalog(this.db);
     const templates = recordTemplates(this.db);
     if (action.type === "templates")
@@ -211,14 +210,14 @@ export class WeeklyReportWorkflow {
       const tabs = Object.keys(content.tabs ?? {});
       if (Object.keys(action.tabs).some((tab) => !tabs.includes(tab)))
         throw new AppError("INVALID_INPUT");
-      return catalog.saveReportContent({
+      return recordReportContent(this.db).saveReportContent({
         ...actor,
         reportId: report.id,
         content: { ...content, tabs: { ...content.tabs, ...action.tabs } },
         askToSend: false,
       });
     }
-    return catalog.saveReportContent({
+    return recordReportContent(this.db).saveReportContent({
       ...actor,
       reportId: report.id,
       content,
