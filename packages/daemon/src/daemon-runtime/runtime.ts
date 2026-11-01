@@ -24,7 +24,6 @@ import {
   type RuntimeEventObservationPorts,
 } from "./runtime-event-observation";
 import { interruptAgentTurn } from "./turn-interrupt";
-import { heldTaskResult } from "./held-task-result";
 import type { AgentProxy, LaunchRequest, SessionMode } from "./runtime-launch-types";
 import {
   AgentProcessManager,
@@ -81,10 +80,8 @@ import {
   RUNTIME_PROVIDER_USES_EXTERNAL_CLI,
   type UsageScanResponse,
   CLEANER_APP_ID,
-  type AgentReminderOperationRequest,
   type LocalReminderRequest,
   type ReminderJob,
-  type ReminderSync,
   type TaskCommand,
   type TaskResult,
   type AgentWorkspaceDeleteRequest,
@@ -136,7 +133,6 @@ import { ColdIdleSweep } from "./cold-idle-sweep";
 import { StalledRecoverySweep } from "./stalled-recovery-sweep";
 import { CatalogFreshnessSweep } from "./catalog-freshness-sweep";
 import { rememberUsage } from "./usage-memory";
-import { dropHeldMentionsWithoutSession } from "./held-mention-sweep";
 import { runtimeMachineStatus } from "./machine-status-reporter";
 import { agentActivityDrafts } from "./agent-activity-drafts";
 import { sendAgentStatus, type AgentStatusReportPorts } from "./agent-status-report";
@@ -171,7 +167,6 @@ import {
 } from "./mention-delivery-tracker";
 import { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
 import type { MintAppItem } from "#src/agent-app-inbox/agent-app-inbox";
-import { reminderDueItemId } from "#src/agent-app-inbox/registry";
 import { SystemCleaner, type SystemCleanerOptions } from "#src/system-cleaner/system-cleaner";
 import { isAgentApiKey } from "#src/credentials/agent-api-key";
 import { AgentPreflightError } from "./agent-preflight-error";
@@ -189,11 +184,7 @@ import {
 import type { UnrefTimerSchedule } from "./unref-timer";
 import { getLogger } from "@logtape/logtape";
 import { COFORGE_DAEMON_VERSION } from "#src/version";
-import {
-  ReminderScheduler,
-  reminderAppInboxPreview,
-  reminderAppInboxSummary,
-} from "#src/agent-reminder/reminder-scheduler";
+import { ReminderScheduler } from "#src/agent-reminder/reminder-scheduler";
 import { AgentAppConfigSync } from "#src/agent-app-config/agent-app-config-sync";
 import { FileReminderReceiptStore } from "#src/persistence/reminder-receipt-store";
 import { logAgentApiKeyRevokeFailed, logAgentOperationFailure } from "./agent-failure-logs";
