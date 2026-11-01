@@ -12,7 +12,7 @@ import {
   type CentrifugoServerApi,
 } from "#src/server/centrifugo/server-api.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
-import { RecordCatalog } from "./record-catalog.server";
+import { recordAssistantCatalog } from "./record-assistant-catalog.server";
 import { ensureWeeklyReportAssistant } from "./weekly-report-assistant.server";
 import { ensureWeeklyReportAssistantRuntimeSession } from "./weekly-report-assistant-runtime-session.server";
 import {
@@ -151,8 +151,7 @@ export class WeeklyReportAssistantChat {
       );
     }
 
-    const catalog = new RecordCatalog(this.db);
-    const contextManifest = await catalog.loadAssistantContextManifest({
+    const contextManifest = await recordAssistantCatalog(this.db).loadAssistantContextManifest({
       workspaceId: input.workspaceId,
       userId: input.userId,
       subjectType: input.subjectType,

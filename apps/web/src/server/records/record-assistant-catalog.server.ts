@@ -8,6 +8,8 @@ import {
 } from "#src/features/records/records-content";
 import { parseTemplateSections } from "#src/features/records/template-outline-sections";
 import { requireMembership } from "./record-catalog-access.server";
+import { memoryForPrompt, parseStoredWeeklyReportMemory } from "./weekly-report-memory.server";
+import { recordSubject } from "./record-subject.server";
 
 type Db = PrismaClient;
 
@@ -214,6 +216,114 @@ export function recordAssistantCatalog(db: Db) {
     return { id: report.id, unread: false as const };
   }
 
+  async function loadAssistantContextManifest(input: {
+    workspaceId: string;
+    userId: string;
+    subjectType: "report" | "cycle";
+    subjectId: string;
+  }) {
+    await requireMembership(db, input.workspaceId, input.userId);
+    if (input.subjectType === "report") {
+      const subject = await recordSubject(db).getSubject({
+        workspaceId: input.workspaceId,
+        userId: input.userId,
+        id: input.subjectId,
+      });
+      if (subject.type !== "report") throw new AppError("NOT_FOUND");
+      const formats = await listAssistantTemplateFormats(input);
+      const assistant =
+        subject.report.kind === "member"
+          ? await db.weeklyReportAssistant.findUnique({
+              where: {
+                workspaceId_userId: {
+                  workspaceId: input.workspaceId,
+                  userId: subject.report.author.userId,
+                },
+              },
+              select: { memory: true },
+            })
+          : undefined;
+      return {
+        subjectType: input.subjectType,
+        subjectId: input.subjectId,
+        cycle: subject.report.cycle,
+        kind: subject.report.kind,
+        status: subject.report.status,
+        structure: Object.keys(subject.report.content.tabs ?? {}),
+        availableData: [
+          "current_report",
+          "template",
+          "submission_status",
+          "visible_member_reports",
+          "favorites",
+        ],
+        templateFormats: formats.templates,
+        templateFormatsNextCursor: formats.nextCursor,
+        contextVersion: subject.report.updatedAt,
+        ...(subject.report.kind === "member"
+          ? memoryForPrompt(parseStoredWeeklyReportMemory(assistant?.memory))
+          : {}),
+      } as const;
+    }
+    const cycle = await db.weeklyReportCycle.findFirst({
+      where: { id: input.subjectId, workspaceId: input.workspaceId },
+      select: {
+        id: true,
+        year: true,
+        week: true,
+        title: true,
+        createdAt: true,
+        _count: { select: { reports: true } },
+      },
+    });
+    if (!cycle) throw new AppError("NOT_FOUND");
+    const formats = await listAssistantTemplateFormats(input);
+    return {
+      subjectType: input.subjectType,
+      subjectId: input.subjectId,
+      cycle: { id: cycle.id, year: cycle.year, week: cycle.week, title: cycle.title },
+      structure: [],
+      availableData: ["cycle", "visible_member_reports", "submission_status"],
+      templateFormats: formats.templates,
+      templateFormatsNextCursor: formats.nextCursor,
+      reportCount: cycle._count.reports,
+      contextVersion: cycle.createdAt.toISOString(),
+    } as const;
+  }
+
+  async function readAssistantReportSection(input: {
+    workspaceId: string;
+    userId: string;
+    reportId: string;
+    section: string;
+    maxCharacters?: number;
+  }) {
+    const subject = await recordSubject(db).getSubject({
+      workspaceId: input.workspaceId,
+      userId: input.userId,
+      id: input.reportId,
+    });
+    if (subject.type !== "report") throw new AppError("NOT_FOUND");
+    const section = input.section.trim();
+    const tab = subject.report.content.tabs?.[section];
+    if (!tab) throw new AppError("NOT_FOUND");
+    const maxCharacters = Math.max(1, Math.min(input.maxCharacters ?? 12_000, 12_000));
+    const markdown = tab.markdown.slice(0, maxCharacters);
+    return {
+      reportId: input.reportId,
+      section,
+      markdown,
+      truncated: markdown.length < tab.markdown.length,
+      source: {
+        kind: "weekly_report",
+        reportId: input.reportId,
+        userId: subject.report.author.userId,
+        displayName: subject.report.author.displayName,
+        cycle: subject.report.cycle,
+      },
+    } as const;
+  }
+
   return {
     listAssistantTemplateFormats,
     listAssistantVisibleReports,
@@ -221,5 +331,7 @@ export function recordAssistantCatalog(db: Db) {
     saveNote,
     deleteNote,
     markAssignmentOpened,
+    loadAssistantContextManifest,
+    readAssistantReportSection,
   };
 }

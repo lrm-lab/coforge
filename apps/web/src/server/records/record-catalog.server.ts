@@ -14,7 +14,6 @@ import {
 import { type RecordAssistantPayload } from "#src/features/records/weekly-highlight-extract";
 import { isWeeklySendArmed } from "#src/features/records/weekly-send-window";
 import { canEditWeeklyReportContent } from "./weekly-report-editability.server";
-import { memoryForPrompt, parseStoredWeeklyReportMemory } from "./weekly-report-memory.server";
 import { zonedCalendarDate } from "#src/features/records/weekly-report-schedule-due";
 import { loadRecordsCatalog } from "./record-catalog-load.server";
 import { requireMembership } from "./record-catalog-access.server";
@@ -439,116 +438,22 @@ export class RecordCatalog {
     });
   }
 
-  private async memberMemoryPrompt(workspaceId: string, userId: string) {
-    const assistant = await this.db.weeklyReportAssistant.findUnique({
-      where: { workspaceId_userId: { workspaceId, userId } },
-      select: { memory: true },
-    });
-    return memoryForPrompt(parseStoredWeeklyReportMemory(assistant?.memory));
-  }
-
-  async loadAssistantContextManifest(input: {
-    workspaceId: string;
-    userId: string;
-    subjectType: "report" | "cycle";
-    subjectId: string;
-  }) {
-    await requireMembership(this.db, input.workspaceId, input.userId);
-
-    if (input.subjectType === "report") {
-      const subject = await this.getSubject({
-        workspaceId: input.workspaceId,
-        userId: input.userId,
-        id: input.subjectId,
-      });
-      if (subject.type !== "report") throw new AppError("NOT_FOUND");
-      const formats = await recordAssistantCatalog(this.db).listAssistantTemplateFormats(input);
-      return {
-        subjectType: input.subjectType,
-        subjectId: input.subjectId,
-        cycle: subject.report.cycle,
-        kind: subject.report.kind,
-        status: subject.report.status,
-        structure: Object.keys(subject.report.content.tabs ?? {}),
-        availableData: [
-          "current_report",
-          "template",
-          "submission_status",
-          "visible_member_reports",
-          "favorites",
-        ],
-        templateFormats: formats.templates,
-        templateFormatsNextCursor: formats.nextCursor,
-        contextVersion: subject.report.updatedAt,
-        ...(subject.report.kind === "member"
-          ? await this.memberMemoryPrompt(input.workspaceId, subject.report.author.userId)
-          : {}),
-      } as const;
-    }
-
-    const cycle = await this.db.weeklyReportCycle.findFirst({
-      where: { id: input.subjectId, workspaceId: input.workspaceId },
-      select: {
-        id: true,
-        year: true,
-        week: true,
-        title: true,
-        createdAt: true,
-        _count: { select: { reports: true } },
-      },
-    });
-    if (!cycle) throw new AppError("NOT_FOUND");
-    const formats = await recordAssistantCatalog(this.db).listAssistantTemplateFormats(input);
-    return {
-      subjectType: input.subjectType,
-      subjectId: input.subjectId,
-      cycle: { id: cycle.id, year: cycle.year, week: cycle.week, title: cycle.title },
-      structure: [],
-      availableData: ["cycle", "visible_member_reports", "submission_status"],
-      templateFormats: formats.templates,
-      templateFormatsNextCursor: formats.nextCursor,
-      reportCount: cycle._count.reports,
-      contextVersion: cycle.createdAt.toISOString(),
-    } as const;
-  }
-
-  /** Shared format discovery; only owners receive editable delivery settings. */
-  async readAssistantReportSection(input: {
-    workspaceId: string;
-    userId: string;
-    reportId: string;
-    section: string;
-    maxCharacters?: number;
-  }) {
-    const subject = await this.getSubject({
-      workspaceId: input.workspaceId,
-      userId: input.userId,
-      id: input.reportId,
-    });
-    if (subject.type !== "report") throw new AppError("NOT_FOUND");
-    const section = input.section.trim();
-    const tab = subject.report.content.tabs?.[section];
-    if (!tab) throw new AppError("NOT_FOUND");
-    const maxCharacters = Math.max(1, Math.min(input.maxCharacters ?? 12_000, 12_000));
-    const markdown = tab.markdown.slice(0, maxCharacters);
-    return {
-      reportId: input.reportId,
-      section,
-      markdown,
-      truncated: markdown.length < tab.markdown.length,
-      source: {
-        kind: "weekly_report",
-        reportId: input.reportId,
-        userId: subject.report.author.userId,
-        displayName: subject.report.author.displayName,
-        cycle: subject.report.cycle,
-      },
-    } as const;
-  }
-
   /** Compatibility seam for existing subject tests and callers. */
   getSubject(input: { workspaceId: string; userId: string; id: string }) {
     return recordSubject(this.db, this.notifier).getSubject(input);
+  }
+
+  /** Compatibility seams for existing assistant catalog tests and callers. */
+  loadAssistantContextManifest(
+    input: Parameters<ReturnType<typeof recordAssistantCatalog>["loadAssistantContextManifest"]>[0],
+  ) {
+    return recordAssistantCatalog(this.db).loadAssistantContextManifest(input);
+  }
+
+  readAssistantReportSection(
+    input: Parameters<ReturnType<typeof recordAssistantCatalog>["readAssistantReportSection"]>[0],
+  ) {
+    return recordAssistantCatalog(this.db).readAssistantReportSection(input);
   }
 
   /** Create a personal workspace note (Markdown body). */

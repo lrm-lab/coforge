@@ -6,6 +6,7 @@ import { userConversationChannel } from "#src/features/conversations/conversatio
 
 import { readAfterStreamPositions } from "#src/server/conversations/chat-stream-positions.server";
 import { recordCatalog } from "#src/server/records/record-catalog.server";
+import { recordSubject } from "#src/server/records/record-subject.server";
 import { recordStats } from "#src/server/records/record-catalog-stats.server";
 import { recordTemplates } from "#src/server/records/record-catalog-templates.server";
 import { recordDistribution } from "#src/server/records/record-distribution.server";
@@ -92,7 +93,7 @@ export const loadRecordSubject = createServerFn({ method: "GET" })
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     const { streamPositions, data: subject } = await readAfterStreamPositions(
       [userConversationChannel(user.id)],
-      () => recordCatalog(db).getSubject({ workspaceId, userId: user.id, id: data.id }),
+      () => recordSubject(db).getSubject({ workspaceId, userId: user.id, id: data.id }),
     );
     return { ...subject, streamPositions };
   });
@@ -106,7 +107,7 @@ export const loadWeeklyReportAssistantContext = createServerFn({ method: "GET" }
     }),
   )
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).loadAssistantContextManifest({
+    return recordAssistantCatalog(db).loadAssistantContextManifest({
       workspaceId,
       userId: user.id,
       subjectType: data.subjectType,
