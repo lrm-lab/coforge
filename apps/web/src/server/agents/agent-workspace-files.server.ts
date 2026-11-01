@@ -255,7 +255,7 @@ export class AgentWorkspaceScanQuery {
     } = { now: Date.now, wait: (ms) => Bun.sleep(ms), timeoutMs: 5_000 },
   ) {}
 
-  async scan(viewer: WorkspaceFilesViewer, agentIds: readonly string[]) {
+  async scan(viewer: WorkspaceFilesViewer, agentIds: readonly string[], withStatistics = false) {
     const assignments = await Promise.all(
       agentIds.map(
         async (agentId) => [agentId, await this.dependencies.findOwned(viewer, agentId)] as const,
@@ -274,6 +274,7 @@ export class AgentWorkspaceScanQuery {
       requestId: crypto.randomUUID(),
       workspaceId: viewer.workspaceId,
       computerId,
+      withStatistics,
     };
     try {
       if (!(await this.dependencies.online({ workspaceId: viewer.workspaceId, computerId })))

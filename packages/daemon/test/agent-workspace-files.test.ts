@@ -8,8 +8,11 @@ import {
   deleteAgentWorkspaceFiles,
   listAgentWorkspaceFiles,
   readAgentWorkspaceFile,
-  scanAgentWorkspaceDirectories,
 } from "#src/agent-runtime/agent-workspace-files";
+import {
+  scanAgentWorkspaceDirectories,
+  summarizeAgentWorkspaceDirectories,
+} from "#src/agent-runtime/agent-workspace-scan";
 
 // macOS tmpdir lives under /var, a symlink; the path-safety checks reject linked ancestors.
 const tempRoot = realpathSync(tmpdir());
@@ -32,7 +35,27 @@ test("workspace scan lists every Agent directory with its directory mtime", asyn
   }
 });
 
-test("workspace scan counts regular files and bytes recursively, including reserved storage", async () => {
+test("a listing never descends into a workspace, however much it holds", async () => {
+  const root = await mkdtemp(join(tempRoot, "workspace-scan-listing-"));
+  try {
+    await mkdir(join(root, "agent-a", "nested"), { recursive: true });
+    await Bun.write(join(root, "agent-a", "one.txt"), "one");
+    await Bun.write(join(root, "agent-a", "nested", "two.txt"), "twotwo");
+    const result = await scanAgentWorkspaceDirectories({ agentsDirectory: root });
+    expect(result.workspaces).toEqual([
+      expect.objectContaining({
+        agentId: "agent-a",
+        fileCount: 0,
+        totalSizeBytes: 0,
+        statisticsStatus: "",
+      }),
+    ]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("workspace statistics count regular files and bytes recursively, including reserved storage", async () => {
   const root = await mkdtemp(join(tempRoot, "workspace-scan-stats-"));
   try {
     await mkdir(join(root, "agent-a", "nested"), { recursive: true });
@@ -40,13 +63,63 @@ test("workspace scan counts regular files and bytes recursively, including reser
     await Bun.write(join(root, "agent-a", "nested", "two.txt"), "twotwo");
     await mkdir(join(root, "agent-a", ".builtin-runtime"));
     await Bun.write(join(root, "agent-a", ".builtin-runtime", "internal.json"), "hidden");
-    const result = await scanAgentWorkspaceDirectories({ agentsDirectory: root });
+    const result = await summarizeAgentWorkspaceDirectories({ agentsDirectory: root });
     expect(result.status).toBe("ok");
     expect(result.workspaces).toEqual([
       expect.objectContaining({
         agentId: "agent-a",
         fileCount: 3,
         totalSizeBytes: 15,
+        statisticsStatus: "complete",
+      }),
+    ]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a workspace that runs out of time reports lower bounds, not a failed scan", async () => {
+  const root = await mkdtemp(join(tempRoot, "workspace-scan-truncated-"));
+  try {
+    await mkdir(join(root, "agent-a", "nested"), { recursive: true });
+    await Bun.write(join(root, "agent-a", "one.txt"), "one");
+    await Bun.write(join(root, "agent-a", "nested", "two.txt"), "twotwo");
+    const result = await summarizeAgentWorkspaceDirectories({
+      agentsDirectory: root,
+      budgets: { workspaceMs: 0, workspaceFiles: 25_000, totalMs: 10_000 },
+      now: () => 1_000,
+    });
+    expect(result.status).toBe("ok");
+    expect(result.workspaces).toEqual([
+      expect.objectContaining({
+        agentId: "agent-a",
+        fileCount: 0,
+        totalSizeBytes: 0,
+        statisticsStatus: "truncated",
+      }),
+    ]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a workspace after the total budget is skipped rather than measured", async () => {
+  const root = await mkdtemp(join(tempRoot, "workspace-scan-skipped-"));
+  try {
+    await mkdir(join(root, "agent-a"));
+    await Bun.write(join(root, "agent-a", "one.txt"), "one");
+    const result = await summarizeAgentWorkspaceDirectories({
+      agentsDirectory: root,
+      budgets: { workspaceMs: 500, workspaceFiles: 25_000, totalMs: 0 },
+      now: () => 1_000,
+    });
+    expect(result.status).toBe("ok");
+    expect(result.workspaces).toEqual([
+      expect.objectContaining({
+        agentId: "agent-a",
+        fileCount: 0,
+        totalSizeBytes: 0,
+        statisticsStatus: "skipped",
       }),
     ]);
   } finally {

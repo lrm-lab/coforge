@@ -291,6 +291,7 @@ const fixtures = [
         modifiedAtMs: 1_790_000_000_000,
         fileCount: 2,
         totalSizeBytes: 456,
+        statisticsStatus: "complete",
       },
     ],
   }),

@@ -23,6 +23,7 @@ import {
 } from "#src/features/computers/computers-pending";
 import {
   scanAgentWorkspaces,
+  scanAgentWorkspaceStats,
   deleteComputer,
   refreshComputerRuntimeCatalog,
   formatCloudComputer,
@@ -84,6 +85,7 @@ function ComputerDetailPage() {
   const readRestart = useServerFn(readComputerRestartStatus);
   const requestUpgrade = useServerFn(upgradeComputer);
   const scanWorkspaces = useServerFn(scanAgentWorkspaces);
+  const scanWorkspaceStats = useServerFn(scanAgentWorkspaceStats);
   const deleteWorkspace = useServerFn(deleteAgentWorkspace);
   const unlinkComputer = useServerFn(removeComputer);
   const deleteComputerFn = useServerFn(deleteComputer);
@@ -113,6 +115,37 @@ function ComputerDetailPage() {
                 // Stored before the scan reads as done, so a reload right after it keeps the result
                 // (a page write otherwise waits a second, and `pagehide` is best effort).
                 await storeQueryNow(queryClient, workspaceScanQuery.queryKey);
+                // The listing is on screen; the Daemon's budgeted measurements arrive after it and
+                // are merged in. They never delay or fail the rows.
+                if (snapshot.workspaces.some((workspace) => workspace.status === "present"))
+                  void scanWorkspaceStats({ data: { computerId } })
+                    .catch(() => undefined)
+                    .then(async (rows) => {
+                      const byAgent = new Map((rows ?? []).map((row) => [row.agentId, row]));
+                      queryClient.setQueryData<AgentWorkspaceScanSnapshot | null>(
+                        workspaceScanQuery.queryKey,
+                        (current) => {
+                          if (!current || current.scannedAt !== snapshot.scannedAt) return current;
+                          return {
+                            ...current,
+                            workspaces: current.workspaces.map((row) => {
+                              const stats = byAgent.get(row.agentId);
+                              return {
+                                ...row,
+                                fileCount: stats?.fileCount ?? 0,
+                                totalSizeBytes: stats?.totalSizeBytes ?? 0,
+                                statisticsStatus: stats?.statisticsStatus ?? "unavailable",
+                              };
+                            }),
+                          };
+                        },
+                      );
+                      const merged = queryClient.getQueryData<AgentWorkspaceScanSnapshot | null>(
+                        workspaceScanQuery.queryKey,
+                      );
+                      if (merged?.scannedAt === snapshot.scannedAt)
+                        await storeQueryNow(queryClient, workspaceScanQuery.queryKey);
+                    });
               }
             : undefined
         }

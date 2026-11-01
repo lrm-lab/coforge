@@ -108,7 +108,8 @@ export class RedisAgentWorkspaceScanResults
       sameScope: (a, b) =>
         a.requestId === b.requestId &&
         a.workspaceId === b.workspaceId &&
-        a.computerId === b.computerId,
+        a.computerId === b.computerId &&
+        a.withStatistics === b.withStatistics,
     });
   }
 }

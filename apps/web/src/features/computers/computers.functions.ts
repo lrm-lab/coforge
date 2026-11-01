@@ -46,10 +46,7 @@ import { PrismaComputerRuntimeRepository } from "#src/server/db/repositories/com
 import { getComputerUpgradeStore } from "#src/server/computers/computer-upgrade-store.server";
 import { runtimeAuthView } from "#src/server/computers/computer-runtime-auth.server";
 import { runUpgradeComputerAction } from "#src/server/computers/upgrade-computer-action.server";
-import {
-  computerWorkspaceScanQuery,
-  findOwnedWorkspaceComputer,
-} from "#src/server/computers/computer-workspace-files.server";
+import { readAgentWorkspaceScan } from "#src/server/computers/computer-workspace-scan.server";
 import {
   parseAgentRuntimeConfig,
   publicAgentRuntimeConfig,
@@ -208,54 +205,25 @@ export const scanAgentWorkspaces = createServerFn({ method: "POST" })
   .validator(scanAgentWorkspacesInputSchema)
   .handler(async ({ context: { user, db, workspaceId }, data }) => {
     declareNoStore();
-    const computer = await findOwnedWorkspaceComputer(db, {
-      userId: user.id,
-      workspaceId,
-      computerId: data.computerId,
-    });
-
-    const agents = await db.agent.findMany({
-      where: { workspaceId, computerId: computer.id },
-      select: { id: true, name: true, displayName: true, deletedAt: true },
-      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-    });
-    const response = await computerWorkspaceScanQuery(db, computer.id).scan(
-      { userId: user.id, workspaceId },
-      agents.map((agent) => agent.id),
+    return readAgentWorkspaceScan(
+      db,
+      { userId: user.id, workspaceId, computerId: data.computerId },
+      false,
     );
-    const summaries =
-      response.status === "ready"
-        ? new Map(response.result.workspaces.map((workspace) => [workspace.agentId, workspace]))
-        : new Map();
-    const known = agents.map((agent) => {
-      const summary = summaries.get(agent.id);
-      if (summary) summaries.delete(agent.id);
-      return {
-        agentId: agent.id,
-        name: agent.name,
-        displayName: agent.displayName,
-        state: agent.deletedAt ? ("deleted" as const) : ("active" as const),
-        status: summary?.status ?? (response.status === "ready" ? "missing" : "unavailable"),
-        rootPath: summary?.rootPath ?? "",
-        fileCount: summary?.fileCount ?? 0,
-        totalSizeBytes: summary?.totalSizeBytes ?? 0,
-        modifiedAtMs: summary?.modifiedAtMs ?? 0,
-      };
-    });
-    const orphaned = [...summaries.values()]
-      .sort((a, b) => a.agentId.localeCompare(b.agentId))
-      .map((summary) => ({
-        agentId: summary.agentId,
-        name: summary.agentId,
-        displayName: summary.agentId,
-        state: "deleted" as const,
-        status: summary.status,
-        rootPath: summary.rootPath,
-        fileCount: summary.fileCount,
-        totalSizeBytes: summary.totalSizeBytes,
-        modifiedAtMs: summary.modifiedAtMs,
-      }));
-    return [...known, ...orphaned];
+  });
+
+/** The budgeted file counts and sizes for that same inventory. It never blocks the listing: the
+ * page renders the rows first and merges these in when they arrive. */
+export const scanAgentWorkspaceStats = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(scanAgentWorkspacesInputSchema)
+  .handler(async ({ context: { user, db, workspaceId }, data }) => {
+    declareNoStore();
+    return readAgentWorkspaceScan(
+      db,
+      { userId: user.id, workspaceId, computerId: data.computerId },
+      true,
+    );
   });
 
 /** Computer owners may remove an Agent workspace's local contents. The Agent row is retained;

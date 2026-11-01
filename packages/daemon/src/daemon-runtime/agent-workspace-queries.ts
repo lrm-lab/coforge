@@ -13,8 +13,11 @@ import { listAgentSkills } from "#src/code-agent/agent-skills";
 import {
   listAgentWorkspaceFiles,
   readAgentWorkspaceFile,
-  scanAgentWorkspaceDirectories,
 } from "#src/agent-runtime/agent-workspace-files";
+import {
+  scanAgentWorkspaceDirectories,
+  summarizeAgentWorkspaceDirectories,
+} from "#src/agent-runtime/agent-workspace-scan";
 
 /** Total concurrent browse/read observations this daemon may run across all Agents. */
 export const WORKSPACE_FILES_SCAN_CONCURRENCY = 4;
@@ -24,17 +27,33 @@ export class AgentWorkspaceQueries {
   #skillsScanning = false;
   #workspaceFilesScanning = new Set<string>();
   #workspaceFilesInFlight = 0;
+  /** One budgeted statistics walk at a time: repeated requests share the running one. */
+  #workspaceStatistics:
+    | { agentsDirectory: string; promise: ReturnType<typeof summarizeAgentWorkspaceDirectories> }
+    | undefined;
   constructor(private readonly provider: (agentId: string) => RuntimeProvider | undefined) {}
 
   async scan(
     connection: DaemonConfig,
     request: AgentWorkspaceScanRequest,
   ): Promise<Pick<AgentWorkspaceScanResult, "workspaces">> {
-    void request;
-    const scan = await scanAgentWorkspaceDirectories({
-      agentsDirectory: agentsDirectory(connection.workspaceRoot, connection.workspaceId),
-    });
+    const directory = agentsDirectory(connection.workspaceRoot, connection.workspaceId);
+    const scan = request.withStatistics
+      ? await this.#summarizeWorkspaceDirectories(directory)
+      : await scanAgentWorkspaceDirectories({ agentsDirectory: directory });
     return { workspaces: scan.workspaces };
+  }
+
+  #summarizeWorkspaceDirectories(directory: string) {
+    const running = this.#workspaceStatistics;
+    if (running?.agentsDirectory === directory) return running.promise;
+    const promise = summarizeAgentWorkspaceDirectories({ agentsDirectory: directory }).finally(
+      () => {
+        if (this.#workspaceStatistics?.promise === promise) this.#workspaceStatistics = undefined;
+      },
+    );
+    this.#workspaceStatistics = { agentsDirectory: directory, promise };
+    return promise;
   }
   async listSkills(
     connection: DaemonConfig,

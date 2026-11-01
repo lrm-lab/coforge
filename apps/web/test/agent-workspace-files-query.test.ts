@@ -199,14 +199,16 @@ test("workspace scan sends one directory request and keeps orphan directories", 
     requestId: "scan-request",
     workspaceId: "workspace",
     computerId: "computer",
+    withStatistics: false,
     workspaces: [
       {
         agentId: "orphan-agent",
         status: "present",
         rootPath: "/workspaces/orphan-agent",
         modifiedAtMs: 123,
-        fileCount: 2,
-        totalSizeBytes: 456,
+        fileCount: 0,
+        totalSizeBytes: 0,
+        statisticsStatus: "",
       },
     ],
   };
@@ -235,7 +237,51 @@ test("workspace scan sends one directory request and keeps orphan directories", 
     requestId: expect.any(String),
     workspaceId: "workspace",
     computerId: "computer",
+    withStatistics: false,
   });
+});
+
+test("the statistics read asks for measurements in the same scan request", async () => {
+  let request: AgentWorkspaceScanRequest | undefined;
+  const result: AgentWorkspaceScanResult = {
+    protocolMajor: 1,
+    requestId: "scan-request",
+    workspaceId: "workspace",
+    computerId: "computer",
+    withStatistics: true,
+    workspaces: [
+      {
+        agentId: "orphan-agent",
+        status: "present",
+        rootPath: "/workspaces/orphan-agent",
+        modifiedAtMs: 123,
+        fileCount: 25_000,
+        totalSizeBytes: 999_000,
+        statisticsStatus: "truncated",
+      },
+    ],
+  };
+  const q = new AgentWorkspaceScanQuery(
+    {
+      findOwned: async () => undefined,
+      online: async () => true,
+      publishScan: async (value) => {
+        request = value;
+      },
+      scanResults: {
+        begin: async () => {},
+        read: async () => (request ? result : undefined),
+        clear: async () => {},
+      },
+      computerId: "computer",
+    },
+    { now: () => 0, wait: async () => {}, timeoutMs: 100 },
+  );
+  expect(await q.scan({ userId: "owner", workspaceId: "workspace" }, [], true)).toEqual({
+    status: "ready",
+    result,
+  });
+  expect(request?.withStatistics).toBe(true);
 });
 
 test("Workspace Files list result RPC trusts daemon claims rather than claimed payload scope", async () => {

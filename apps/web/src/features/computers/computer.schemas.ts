@@ -55,9 +55,16 @@ export type ComputerAgentWorkspaceScan = {
   state: "active" | "deleted";
   status: "present" | "missing" | "unavailable";
   rootPath: string;
+  /** Lower bounds while `statisticsStatus` is "truncated"; 0 until the statistics read answers. */
   fileCount: number;
   totalSizeBytes: number;
   modifiedAtMs: number;
+  /**
+   * "pending" from the listing that renders the rows, until the budgeted statistics read answers
+   * with "complete", "truncated" (lower bounds) or "skipped" (no measurement); "unavailable" when
+   * the Daemon did not answer for this directory.
+   */
+  statisticsStatus: "pending" | "complete" | "truncated" | "skipped" | "unavailable";
 };
 
 const runtimeInput = z.object({
