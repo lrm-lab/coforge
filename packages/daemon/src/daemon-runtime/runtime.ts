@@ -110,6 +110,13 @@ import { failCollectorRunningSlots } from "./runtime-collector-failure";
 import { runtimeEnvelope } from "./runtime-envelope";
 import { holdRunners, releaseRunners } from "./runtime-runner-hold";
 import { agentTask, acceptReminderDue, mintAppItem, reminder } from "./runtime-agent-api-reminders";
+import {
+  drainAppInboxNotices,
+  inbox,
+  requestAppConfigSnapshot,
+  requestReminderSnapshot,
+  resyncAppConfigs,
+} from "./runtime-app-inbox-sync";
 import { handleAgentMessage } from "./runtime-message-delivery";
 import {
   flushHeldDeliveries,
@@ -1307,6 +1314,18 @@ export class DaemonRuntime {
     );
   }
 
+  #appInboxSyncPorts() {
+    return {
+      transport: () => this.#transport,
+      appConfigs: this.#appConfigs,
+      reminders: this.#reminders,
+      inboxCoordinator: this.#inboxCoordinator,
+      env: () => this.#env(),
+      readyRunningAgentIds: () => this.#readyRunningAgentIds(),
+      launchingAgentIds: this.#agentLaunches.keys(),
+    };
+  }
+
   #agentApiRemindersPorts() {
     return {
       assertRunning: () => this.#assertRunning(),
@@ -1927,41 +1946,24 @@ export class DaemonRuntime {
     return acceptReminderDue(this.#agentApiRemindersPorts(), job, late);
   }
 
-  /** A new connection: asks again for every running Agent's App config. */
   #resyncAppConfigs(): void {
-    this.#appConfigs.connected();
-    // A launch in progress asked on the old connection, whose answer is now dropped.
-    for (const agentId of new Set([...this.#readyRunningAgentIds(), ...this.#agentLaunches.keys()]))
-      this.#requestAppConfigSnapshot(agentId);
+    resyncAppConfigs(this.#appInboxSyncPorts());
   }
 
-  /** Asks once per connection for the Agent's App config; the cloud resends on the next one. */
   #requestAppConfigSnapshot(agentId: string): void {
-    if (!this.#transport.requestAppConfigSnapshot) return;
-    void this.#appConfigs.request(agentId).catch((error: unknown) =>
-      logger.warn("Asking for an Agent's App config failed; the next connection asks again", {
-        event: "agent_app_config:snapshot_failed",
-        agent_id: agentId,
-        error_code: diagnosticErrorName(error),
-      }),
-    );
+    requestAppConfigSnapshot(this.#appInboxSyncPorts(), agentId);
   }
 
   async #requestReminderSnapshot(agentId: string): Promise<void> {
-    if (!this.#transport.requestSnapshot) return;
-    const sync: ReminderSync = await this.#transport.requestSnapshot({
-      ...this.#env(),
-      agentId,
-    });
-    await this.#reminders.apply(sync);
+    return requestReminderSnapshot(this.#appInboxSyncPorts(), agentId);
   }
 
   async inbox(context: string, request: LocalInboxRequest): Promise<InboxResponse> {
-    return this.#inboxCoordinator.inbox(context, request);
+    return inbox(this.#appInboxSyncPorts(), context, request);
   }
 
   async drainAppInboxNotices(agentId: string): Promise<void> {
-    return this.#inboxCoordinator.drainAppInboxNotices(agentId);
+    return drainAppInboxNotices(this.#appInboxSyncPorts(), agentId);
   }
 
   #agentIdForContext(context: string): string {
