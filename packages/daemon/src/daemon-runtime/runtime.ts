@@ -1,7 +1,6 @@
 import { createRuntimeAuthAdapter } from "#src/code-agent/registry";
 import type { RuntimeAuthAdapter, RuntimeAuthProvider } from "@lrm/coforge-anvil";
 import {
-  AgentProcessCleanupError,
   type AgentRuntimeConfig,
   type AgentRuntimeEvent,
   type CodeAgentProvider,
@@ -46,11 +45,9 @@ import type {
   DaemonConnectionClient,
   DaemonConnectionClientFactory,
 } from "#src/connection/daemon-connection-client";
-import { DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS } from "#src/connection/shutdown-notice-timeout";
 import { DaemonConnectionStoppedError } from "#src/connection/daemon-connection-stopped-error";
 import {
   type DaemonConnectRejectionReason,
-  type DaemonShutdownReason,
   type RunnerHoldReason,
   AGENT_MESSAGE_REJECT_METHOD,
   MENTION_DELIVERY_TERMINAL_CODES,
@@ -167,6 +164,7 @@ import { shutdownReasonForHold, type RunnerHold } from "./shutdown-reason";
 import { CodeAgentInventorySync, type CodeAgentDiscovery } from "./code-agent-inventory-sync";
 import { RuntimeAuthReporter } from "./runtime-auth-reporter";
 import { RuntimeStartup } from "./runtime-startup";
+import { RuntimeStop } from "./runtime-stop";
 import {
   UpgradeResultReporter,
   type RecoveredUpgradeResult,
@@ -178,7 +176,7 @@ import { COFORGE_DAEMON_VERSION } from "#src/version";
 import { ReminderScheduler } from "#src/agent-reminder/reminder-scheduler";
 import { AgentAppConfigSync } from "#src/agent-app-config/agent-app-config-sync";
 import { FileReminderReceiptStore } from "#src/persistence/reminder-receipt-store";
-import { logAgentApiKeyRevokeFailed, logAgentOperationFailure } from "./agent-failure-logs";
+import { logAgentOperationFailure } from "./agent-failure-logs";
 import { acceptAppRegistrationNotice } from "#src/agent-app-inbox/app-registration-notice";
 import { diagnosticErrorName } from "@lrm/coforge-sdk/internal";
 import type { AgentVersionResponse } from "@lrm/coforge-sdk/agent";
@@ -364,7 +362,6 @@ export class DaemonRuntime {
   readonly #appConfigs: AgentAppConfigSync;
   /** This Computer's Agent migration runs; absent when the transport cannot reach the route. */
   readonly #migrations: AgentMigrationRunner | undefined;
-  #migrationsClosed: Promise<void> | undefined;
   readonly #inboxCoordinator: AgentInboxCoordinator;
   readonly #stopCoordinator: AgentStopCoordinator;
   readonly #launchCoordinator: AgentLaunchCoordinator;
@@ -488,6 +485,8 @@ export class DaemonRuntime {
   /** The Workspace connection's open sequence and the state it installs; assigned at the
    * constructor's end, once every collaborator it names exists. */
   readonly #startup: RuntimeStartup;
+  /** The closing flow; assigned at the constructor's end like `#startup`. */
+  readonly #shutdown: RuntimeStop;
   readonly #workspaceQueries = new AgentWorkspaceQueries(
     (agentId) => this.#agentProcessManager.runtime(agentId)?.config.provider,
   );
@@ -999,6 +998,43 @@ export class DaemonRuntime {
       stalledRecoverySweep: this.#stalledRecoverySweep,
       catalogFreshnessSweep: this.#catalogFreshnessSweep,
       machineStatus: this.#machineStatus,
+    });
+    this.#shutdown = new RuntimeStop({
+      startup: this.#startup,
+      coldIdleSweep: this.#coldIdleSweep,
+      stalledRecoverySweep: this.#stalledRecoverySweep,
+      catalogFreshnessSweep: this.#catalogFreshnessSweep,
+      machineStatus: this.#machineStatus,
+      activityPublisher: this.#activityPublisher,
+      currentActivityLaunches: this.#currentActivityLaunches,
+      phaseBookkeeping: this.#phaseBookkeeping,
+      runtimeErrorHold: this.#runtimeErrorHold,
+      upgradeResults: this.#upgradeResults,
+      usageReport: this.#usageReport,
+      fastModeWarned: this.#fastModeWarned,
+      inputDrain: this.#inputDrain,
+      agentLaunches: this.#agentLaunches,
+      agentProcessManager: this.#agentProcessManager,
+      stoppingAgents: this.#stoppingAgents,
+      messageAttention: this.#messageAttention,
+      mentionDeliveries: this.#mentionDeliveries,
+      reminders: this.#reminders,
+      systemCleaner: this.systemCleaner,
+      migrations: this.#migrations,
+      agentProxy: this.#agentProxy,
+      agentProxyTokens: this.#agentProxyTokens,
+      agentContexts: this.#agentContexts,
+      agentControl: this.#agentControl,
+      agentSessions: this.#agentSessions,
+      connection: this.#connection,
+      transport: () => this.#transport,
+      envelope: this.#env,
+      runtimeInstanceId: this.#runtimeInstanceId,
+      agentApiKeys: this.#agentApiKeys,
+      revokeAgentApiKey: (agentId, apiKey) => this.#revokeAgentApiKey(agentId, apiKey),
+      replaceTransport: () => this.#replaceTransport(),
+      consumedSeqs: this.#consumedSeqs,
+      sendAgentStatus: (agentId, status) => this.#sendAgentStatus(agentId, status),
     });
   }
 
@@ -1881,175 +1917,12 @@ export class DaemonRuntime {
       this.lifecycle.installerJournalExists ?? (() => false),
     );
     this.#runnerHold = undefined;
-    // Close every local capability synchronously before any shutdown await.
     this.#stopping = true;
-    const piChatClosed = this.#startup.close();
-    this.#coldIdleSweep.stop();
-    this.#stalledRecoverySweep.stop();
-    this.#catalogFreshnessSweep.stop();
-    this.#machineStatus.stop();
-    this.#activityPublisher.disable();
-    for (const [agentId, launch] of this.#currentActivityLaunches) {
-      launch.startup?.dispose();
-      launch.stalled?.dispose(agentId);
-    }
-    this.#phaseBookkeeping.disposeAll();
-    this.#runtimeErrorHold.disposeAll();
-    this.#upgradeResults.stop();
-    this.#usageReport.clear();
-    this.#fastModeWarned.clear();
-    for (const agentId of new Set([
-      ...[...this.#inputDrain.entries()].map(([agentId]) => agentId),
-      ...this.#agentLaunches.keys(),
-      ...this.#agentProcessManager.activeAgentIds(),
-    ])) {
-      this.#stoppingAgents.add(agentId);
-      this.#inputDrain.close(agentId, new Error("daemon runtime is stopping"));
-      this.#messageAttention.clearAgent(agentId, { cancelNotices: true });
-      void this.#mentionDeliveries.cancelAgent(agentId);
-      this.#agentProcessManager.session(agentId)?.cancelPendingNotices?.();
-    }
-    this.#startup.unsubscribeAll();
-    // A start still waiting for its first cloud connection would otherwise hold this stop up for
-    // as long as the cloud stays unreachable.
-    this.#startup.abort();
-    this.#reminders.stop();
-    this.systemCleaner.clear();
-    // Each attempt is leased again on the next ready, and its run picks up from the server's state.
-    this.#migrationsClosed = this.#migrations?.close();
-    for (const token of this.#agentProxyTokens.values()) this.#agentProxy?.revoke(token);
-    this.#agentProxyTokens.clear();
-    this.#agentContexts.clear();
-    this.#stopPromise = this.#stop(shutdownReason, piChatClosed).finally(() => {
+    this.#stopPromise = this.#shutdown.run(shutdownReason).finally(() => {
       this.#stopPromise = undefined;
       this.#stopping = false;
     });
     return this.#stopPromise;
-  }
-
-  /**
-   * Waits for the reminder work that was already running when `stop()` closed the scheduler: a fire
-   * request awaiting the cloud, a wake, and the receipt writes they lead to. A receipt is the
-   * re-fire fence, so a write that has begun must land before the state directory is released
-   * (a caller that removes it right after `stop()` would otherwise see the write recreate it).
-   * The scheduler starts nothing new once stopped; this only lets the started work finish.
-   *
-   * The bound is `DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS`, the one teardown bound that fits the whole
-   * stop in the service manager's grace period (launchd: 5 s). This wait runs alongside the
-   * notice, so it never extends the stop past what the notice's own bound allows. The fire
-   * request's own timeout cannot be the bound:
-   * centrifuge-js gives every RPC its default 5 s (`timeout`), which nothing here changes, and that
-   * alone would use the whole grace period. A stop that gives up leaves the receipt written before
-   * the fire in place, so the next daemon repeats the same request.
-   */
-  async #settleReminders(): Promise<void> {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const timedOut = new Promise<"timed_out">((resolve) => {
-      timer = setTimeout(() => resolve("timed_out"), DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS);
-    });
-    try {
-      const settled = await Promise.race([
-        this.#reminders.awaitIdle().then(() => "settled" as const),
-        timedOut,
-      ]);
-      if (settled === "timed_out")
-        logger.info("Stop gave up waiting for reminder work that was still running", {
-          event: "daemon_runtime:reminder_settle_timed_out",
-          outcome: "unknown",
-          duration_ms: DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS,
-        });
-    } finally {
-      // A pending timer would keep the process alive for the rest of the bound.
-      clearTimeout(timer);
-    }
-  }
-
-  /**
-   * Waits, on the same bound as `#settleReminders`, for the migration runs `stop()` aborted: a
-   * placement's rename or an attempt's removal under the state directory must not outlive it. A
-   * run that is still going when the bound passes is picked up from the server's state next time.
-   */
-  async #settleMigrations(): Promise<void> {
-    const closed = this.#migrationsClosed;
-    if (!closed) return;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      await Promise.race([
-        closed,
-        new Promise<void>((resolve) => {
-          timer = setTimeout(resolve, DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS);
-        }),
-      ]);
-    } finally {
-      clearTimeout(timer);
-    }
-  }
-
-  async #stop(shutdownReason: DaemonShutdownReason, piChatClosed: Promise<void>): Promise<void> {
-    // No retry timer may outlive this daemon instance: a launch that was mid-cooldown left a
-    // "starting" record behind, which the next instance repairs and recovers (`recover()`).
-    this.#agentControl.dispose();
-    const activeAgentIds = this.#agentProcessManager.activeAgentIds();
-    const sessions = activeAgentIds.map((id) => ({
-      id,
-      session: this.#agentProcessManager.session(id),
-      launchId: this.#currentActivityLaunches.get(id)?.launchId,
-    }));
-    let shutdownError: unknown;
-    // Start cleanup before awaiting any launch or input that cleanup itself must release.
-    try {
-      await this.#agentProcessManager.shutdown();
-    } catch (error) {
-      shutdownError = error;
-    }
-    const start = this.#startup.pending();
-    if (start) await Promise.allSettled([start]);
-    await Promise.allSettled(this.#agentLaunches.values());
-    await Promise.allSettled(this.#inputDrain.drains());
-    try {
-      // Reconcile sessions whose creation finished during shutdown, including failed cleanup.
-      for (const agentId of this.#stoppingAgents)
-        if (this.#agentProcessManager.isStopping(agentId)) throw new AgentProcessCleanupError();
-      await this.#agentProcessManager.shutdown();
-      this.#stoppingAgents.clear();
-      for (const { id, session, launchId } of sessions) {
-        if (launchId)
-          await this.#agentControl.stopped(id, launchId, await session?.readSessionIdentity?.());
-        await this.#agentSessions.replay(id);
-      }
-    } catch (error) {
-      shutdownError ??= error;
-    }
-    for (const agentId of activeAgentIds) this.#sendAgentStatus(agentId, "inactive");
-    this.#currentActivityLaunches.clear();
-    this.#sessionReferences.clear();
-    // Every Agent process is down now. Each key they were using gets its one revoke request,
-    // best-effort: a failure is logged, never fails teardown, and is not retried. The shutdown
-    // notice goes out alongside, never ahead of them: its own bound must not push the revokes
-    // past the service manager's grace period. The transport bounds it and never throws. Reminder
-    // work already running settles alongside too, on the same bound, before the transport closes.
-    await Promise.all([
-      this.#settleReminders(),
-      piChatClosed,
-      this.#settleMigrations(),
-      this.#connection.computerId
-        ? this.#transport.sendShutdownNotice?.({
-            ...this.#env(),
-            workerInstanceId: this.#runtimeInstanceId,
-            reason: shutdownReason,
-          })
-        : undefined,
-      ...[...this.#agentApiKeys].map(([agentId, agentApiKey]) =>
-        this.#revokeAgentApiKey(agentId, agentApiKey).catch((error) => {
-          logAgentApiKeyRevokeFailed(agentId, error);
-        }),
-      ),
-    ]);
-    const transportError = await this.#replaceTransport();
-    shutdownError ??= transportError;
-    // Every write already committed; closing releases the WAL and the file handles.
-    this.#consumedSeqs.close();
-    if (shutdownError !== undefined) throw shutdownError;
   }
 }
 
