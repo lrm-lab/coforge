@@ -1,16 +1,14 @@
 import { asRecord as record } from "#src/json-record";
-import { JsonlProcess } from "#src/jsonl-process";
 import type { RuntimeLoginRequiredError } from "#src/contract";
+import { acpProcess, type AcpConnection } from "#src/acp/connection";
+import type { AcpRuntimeProfile } from "#src/acp/profile";
 import { isKiroAuthFailure, kiroLoginRequired } from "./auth-failure";
 import type { KiroConnectionHost } from "./host";
-import {
-  client,
-  type AnyMessage,
-  type InitializeRequest,
-  type SessionNotification,
-  type RequestPermissionRequest,
-  type RequestPermissionResponse,
-  type SessionConfigOption,
+import type {
+  RequestPermissionRequest,
+  RequestPermissionResponse,
+  SessionConfigOption,
+  SessionNotification,
 } from "@agentclientprotocol/sdk";
 
 export const KIRO_ACP_ARGS = ["acp", "--agent-engine", "v3", "--auth-method", "cli"] as const;
@@ -34,53 +32,87 @@ export function configOffers(options: SessionConfigOption[], category: string): 
   );
 }
 
-/** ACP owns RPC framing/validation; JsonlProcess retains the existing process-tree lifecycle. */
+export const KIRO_PROFILE: AcpRuntimeProfile = {
+  // Kiro's session already appends `KIRO_ACP_ARGS` to the resolved executable before it builds
+  // this connection, so the profile adds none.
+  args: [],
+  readConfig: (update) =>
+    update.sessionUpdate === "config_option_update" && Array.isArray(update.configOptions)
+      ? (update.configOptions as SessionConfigOption[])
+      : undefined,
+  configReady: (option, category) => configOffers([option], category),
+  capabilityCheck: (response) => {
+    if (
+      !response.agentCapabilities?.loadSession ||
+      !record(response.agentCapabilities._meta?.kiro)?.replayMarking
+    )
+      throw new Error("Kiro v3 ACP capabilities are unavailable; update kiro-cli");
+  },
+  messages: {
+    unsupportedProtocol: "Unsupported Kiro ACP protocol version",
+    closedBeforeConfig: "Kiro ACP process closed before configuration",
+    timedOut: "Kiro ACP operation timed out",
+  },
+};
+
+/**
+ * Kiro's ACP connection: the shared process and client, plus Kiro's own login guard. Kiro reports
+ * a login it cannot use on stderr and as a `displayError` session update rather than as an error
+ * on the request it could not serve, so its handshake operations fail as
+ * `RuntimeLoginRequiredError` the moment either says so.
+ *
+ * Its updates use the ACP client's own dispatch, not the shared synchronous tap: a steer is
+ * registered from `_session/steer`'s answer and then reads the `steering_cleared` that follows
+ * it, so that clear must not overtake the answer.
+ */
 export class KiroConnection {
-  readonly process: JsonlProcess;
-  readonly connection;
-  readonly #config = new Map<string, SessionConfigOption[]>();
-  readonly #configChanged = new Set<() => void>();
-  /** Set once the CLI says on stderr that its login is not usable; every guarded handshake call
-   * then fails with it instead of waiting out its own bound. */
+  readonly #inner: AcpConnection;
+  /** Set once the CLI says its login is not usable; every guarded handshake call then fails with
+   * it instead of waiting out its own bound. */
   #authFailure: RuntimeLoginRequiredError | undefined;
   readonly #authFailureReported = Promise.withResolvers<RuntimeLoginRequiredError>();
-  #closed = false;
 
   constructor(
     command: readonly string[],
     cwd: string,
     environment: Readonly<Record<string, string>>,
-    private readonly host: KiroConnectionHost,
+    host: KiroConnectionHost,
     onUpdate: (notification: SessionNotification) => void = () => {},
     onPermission: (request: RequestPermissionRequest) => RequestPermissionResponse = () => ({
       outcome: { outcome: "cancelled" },
     }),
   ) {
-    this.process = new JsonlProcess(command, cwd, environment, host.processTreeSpawner);
-    this.process.onStderr((line) => {
-      if (this.#authFailure || !isKiroAuthFailure(line)) return;
-      this.#authFailure = kiroLoginRequired();
-      this.#authFailureReported.resolve(this.#authFailure);
+    this.#inner = acpProcess(KIRO_PROFILE, {
+      command,
+      cwd,
+      environment,
+      clientInfo: host.clientInfo,
+      processTreeSpawner: host.processTreeSpawner,
+      updateDispatch: "notification",
+      onUpdate: (method, params) => {
+        if (method !== "session/update") return;
+        const notification = params as SessionNotification;
+        this.#observeAuthFailure(notification.update);
+        onUpdate(notification);
+      },
+      onPermission,
+      onStderr: (line) => {
+        if (this.#authFailure || !isKiroAuthFailure(line)) return;
+        this.#fail();
+      },
     });
-    this.connection = client({ name: host.clientInfo.name })
-      .onNotification("session/update", ({ params }) => {
-        this.#observeAuthFailure(params.update);
-        if (params.update.sessionUpdate === "config_option_update") {
-          this.#config.set(params.sessionId, params.update.configOptions);
-          for (const listener of this.#configChanged) listener();
-        }
-        onUpdate(params);
-      })
-      .onRequest("session/request_permission", ({ params }) => onPermission(params))
-      .connect({
-        readable: this.process.records() as ReadableStream<AnyMessage>,
-        writable: new WritableStream<AnyMessage>({
-          write: (message) => this.process.send(message),
-        }),
-      });
-    // The stream ends when the process does and the SDK closes the connection once it has
-    // handled everything still queued, so a response written just before an exit is not lost.
-    void this.connection.closed.then(() => this.#close());
+  }
+
+  get process() {
+    return this.#inner.process;
+  }
+
+  get connection() {
+    return this.#inner.connection;
+  }
+
+  get closed() {
+    return this.#inner.closed;
   }
 
   async waitForConfig(
@@ -89,33 +121,17 @@ export class KiroConnection {
     category: string,
     timeoutMs = 30_000,
   ) {
-    const ready = (options: SessionConfigOption[]) => configOffers(options, category);
-    if (ready(initial)) return initial;
-    let check: () => void = () => {};
-    try {
-      return await this.guarded(
-        new Promise<SessionConfigOption[]>((resolve, reject) => {
-          check = () => {
-            if (this.#closed)
-              return reject(new Error("Kiro ACP process closed before configuration"));
-            const options = this.#config.get(sessionId);
-            if (options && ready(options)) resolve(options);
-          };
-          this.#configChanged.add(check);
-          check();
-        }),
-        timeoutMs,
-      );
-    } finally {
-      this.#configChanged.delete(check);
-    }
+    return this.guarded(
+      this.#inner.waitForConfig(sessionId, initial, category, timeoutMs),
+      timeoutMs,
+    );
   }
 
   /**
    * A handshake request bounded by `timeoutMs` that fails as soon as Kiro says its login is not
-   * usable on stderr, instead of waiting out the bound. A rejected login is terminal for the
-   * launch, so the caller must see it as `RuntimeLoginRequiredError` rather than as a timeout or
-   * a closed connection.
+   * usable, instead of waiting out the bound. A rejected login is terminal for the launch, so the
+   * caller must see it as `RuntimeLoginRequiredError` rather than as a timeout or a closed
+   * connection.
    */
   async guarded<T>(work: Promise<T>, timeoutMs = 30_000): Promise<T> {
     try {
@@ -148,6 +164,10 @@ export class KiroConnection {
     if (this.#authFailure || update.sessionUpdate !== "session_info_update") return;
     const message = record(record(update._meta?.kiro)?.displayError)?.message;
     if (typeof message !== "string" || !isKiroAuthFailure(message)) return;
+    this.#fail();
+  }
+
+  #fail(): void {
     this.#authFailure = kiroLoginRequired();
     this.#authFailureReported.resolve(this.#authFailure);
   }
@@ -180,33 +200,12 @@ export class KiroConnection {
     if (this.#authFailure) throw this.#authFailure;
   }
 
-  #close() {
-    this.#closed = true;
-    this.connection.close();
-    for (const listener of this.#configChanged) listener();
-    this.#config.clear();
-  }
-
   async initialize() {
-    const request: InitializeRequest = {
-      protocolVersion: 1,
-      clientCapabilities: {},
-      clientInfo: this.host.clientInfo,
-    };
-    const response = await this.guarded(this.connection.agent.request("initialize", request));
-    if (
-      response.protocolVersion !== 1 ||
-      !response.agentCapabilities?.loadSession ||
-      !record(response.agentCapabilities._meta?.kiro)?.replayMarking
-    ) {
-      throw new Error("Kiro v3 ACP capabilities are unavailable; update kiro-cli");
-    }
-    return response;
+    return this.guarded(this.#inner.initialize());
   }
 
   async dispose(options?: Readonly<{ cutoffAtMs?: number }>) {
-    this.#close();
-    await this.process.dispose(options);
+    return this.#inner.dispose(options);
   }
 }
 

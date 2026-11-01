@@ -29,6 +29,20 @@ export type AcpConnectionOptions = {
   /** Reads a `config_option_update` into the options this runtime publishes; absent for a
    * runtime that never publishes configuration this way. */
   readConfig?(update: Readonly<Record<string, unknown>>): SessionConfigOption[] | undefined;
+  /** Whether a published option offers a usable selection for `category`; a runtime whose options
+   * are nested decides for itself. */
+  configReady?(option: SessionConfigOption, category: string): boolean;
+  /** Refuses an initialize response whose capabilities this runtime needs. */
+  capabilityCheck?(response: InitializeResponse): void;
+  /** A stderr line from the runtime, for a failure it reports only there. */
+  onStderr?(line: string): void;
+  /**
+   * How `session/update` reaches `onUpdate`. The default record tap is synchronous, so an update
+   * keeps its place before the response that follows it. A runtime whose session registers state
+   * from a response before its next update means something (Kiro's steering) needs the ACP
+   * client's own dispatch instead, which runs after that response.
+   */
+  updateDispatch?: "tap" | "notification";
   /** Extra ACP notification methods this runtime publishes, observed like `session/update`. */
   notifications?: readonly string[];
   /** Each observed notification, synchronously, so it keeps its place before the response that
@@ -61,6 +75,8 @@ export function acpProcess(
     onUpdate?(method: string, params: unknown): void;
     onPermission?(request: RequestPermissionRequest): RequestPermissionResponse;
     onPromptWrite?(): void;
+    onStderr?(line: string): void;
+    updateDispatch?: "tap" | "notification";
   },
 ): AcpConnection {
   return new AcpConnection({
@@ -74,6 +90,10 @@ export function acpProcess(
     onUpdate: options.onUpdate,
     onPermission: options.onPermission,
     onPromptWrite: options.onPromptWrite,
+    onStderr: options.onStderr,
+    updateDispatch: options.updateDispatch,
+    configReady: profile.configReady,
+    capabilityCheck: profile.capabilityCheck,
   });
 }
 
@@ -99,8 +119,14 @@ export class AcpConnection {
       options.environment,
       host.processTreeSpawner,
     );
+    this.process.onStderr((line) => options.onStderr?.(line));
     this.connection = client({ name: host.clientInfo.name })
-      .onNotification("session/update", () => {})
+      .onNotification("session/update", ({ params }) => {
+        // In `notification` mode the ACP client's own dispatch delivers the update, after the
+        // response it follows; the record tap below still collects configuration.
+        if (this.options.updateDispatch === "notification")
+          this.options.onUpdate?.("session/update", params);
+      })
       .onRequest("session/request_permission", ({ params }) => {
         return options.onPermission?.(params) ?? { outcome: { outcome: "cancelled" } };
       })
@@ -120,6 +146,8 @@ export class AcpConnection {
             this.#config.set(params.sessionId, config);
             for (const listener of this.#configChanged) listener();
           }
+          if (record.method === "session/update" && options.updateDispatch === "notification")
+            return;
           options.onUpdate?.(String(record.method), record.params);
         }) as ReadableStream<AnyMessage>,
         writable: new WritableStream<AnyMessage>({
@@ -146,7 +174,9 @@ export class AcpConnection {
     timeoutMs: number,
   ): Promise<SessionConfigOption[]> {
     const ready = (options: SessionConfigOption[]) =>
-      options.some((option) => selectReady(option, category));
+      options.some(
+        (option) => this.options.configReady?.(option, category) ?? selectReady(option, category),
+      );
     if (ready(initial)) return initial;
     let check: () => void = () => {};
     try {
@@ -178,6 +208,7 @@ export class AcpConnection {
     );
     const response = timeoutMs === undefined ? await work : await this.bounded(work, timeoutMs);
     if (response.protocolVersion !== 1) throw new Error(this.options.messages.unsupportedProtocol);
+    this.options.capabilityCheck?.(response);
     return response;
   }
 

@@ -1,4 +1,4 @@
-import type { SessionConfigOption } from "@agentclientprotocol/sdk";
+import type { InitializeResponse, SessionConfigOption } from "@agentclientprotocol/sdk";
 
 /** The messages a runtime's own ACP protocol failures carry. */
 export type AcpProfileMessages = Readonly<{
@@ -24,5 +24,9 @@ export type AcpRuntimeProfile = Readonly<{
   /** Reads a `config_option_update` into the options this runtime publishes; absent for a
    * runtime that never publishes configuration this way. */
   readConfig?(update: Readonly<Record<string, unknown>>): SessionConfigOption[] | undefined;
+  /** Whether a published option offers a usable selection for `category`. */
+  configReady?(option: SessionConfigOption, category: string): boolean;
+  /** Refuses an initialize response whose capabilities this runtime needs. */
+  capabilityCheck?(response: InitializeResponse): void;
   messages: AcpProfileMessages;
 }>;
