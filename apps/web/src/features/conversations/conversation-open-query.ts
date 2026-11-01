@@ -31,16 +31,20 @@ export const conversationOpenQuery = (conversationId: string, rootId?: string) =
     retry: true,
   });
 
-/** The read cursor moved during this open: its open read no longer says where a next open's unread
- * starts. The panes of this open keep what they froze; nothing is read until a next open asks. */
+/**
+ * The read cursor moved, here or on another device: the open read no longer says where a next
+ * open's unread starts. An open that observes it keeps what it froze, and the read is only marked
+ * stale, for a next open to read again. One nobody observes (a loader's read ahead, still in flight
+ * or answered, that a click within the router's preload reuse would open on) is dropped, so that
+ * click reads afresh rather than draw a divider over messages read since (task #378).
+ */
 export function markOpenReadStale(
   queryClient: QueryClient,
   conversationId: string,
   rootId?: string,
 ) {
-  void queryClient.invalidateQueries({
-    queryKey: conversationOpenQuery(conversationId, rootId).queryKey,
-    exact: true,
-    refetchType: "none",
-  });
+  const filters = { queryKey: conversationOpenQuery(conversationId, rootId).queryKey, exact: true };
+  if (queryClient.getQueryCache().find(filters)?.isActive())
+    void queryClient.invalidateQueries({ ...filters, refetchType: "none" });
+  else queryClient.removeQueries(filters);
 }

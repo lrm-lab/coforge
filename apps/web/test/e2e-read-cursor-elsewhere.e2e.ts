@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { openReadLanded } from "./helpers/open-unread-e2e";
+import { waitFor } from "./helpers/activity-inbox-e2e";
+import { openReadLanded, openReadState } from "./helpers/open-unread-e2e";
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
 
 /**
@@ -104,6 +105,15 @@ async function post(conversationId: string, sequence: number, text: string) {
   });
 }
 
+/** The viewer's read cursor, written by the other device, has reached message `sequence`. */
+async function readThrough(sequence: number) {
+  await waitFor(
+    async () =>
+      (await db.conversationMember.findUniqueOrThrow({ where: { id: viewerMemberId } }))
+        .readThroughSequence === sequence,
+  );
+}
+
 beforeAll(async () => {
   const membership = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id, role: "owner" },
@@ -167,6 +177,8 @@ afterAll(async () => {
   await db.conversationMember.deleteMany({ where: { conversationId: { in: [readId, otherId] } } });
   await db.conversation.deleteMany({ where: { id: { in: [readId, otherId] } } });
   await db.workspaceMembership.deleteMany({ where: { userId: writerUserId } });
+  // Joining the workspace gave the writer a private assistant (`WorkspaceAssistantOnboarding`).
+  await db.agent.deleteMany({ where: { ownerId: writerUserId } });
   await db.user.deleteMany({ where: { id: writerUserId } });
   await db.$disconnect();
 });
@@ -184,14 +196,7 @@ test("a channel read on another device opens here without a divider over what wa
   await post(readId, 5, body(5));
   await elsewhere.run("open", `${proxy.origin}${workspacePath}/channel/${readId}`);
   await elsewhere.until(visible(body(5)), 60_000);
-  const deadline = Date.now() + 30_000;
-  while (
-    (await db.conversationMember.findUniqueOrThrow({ where: { id: viewerMemberId } }))
-      .readThroughSequence !== 5
-  ) {
-    if (Date.now() > deadline) throw new Error("the other device did not read through message 5");
-    await Bun.sleep(200);
-  }
+  await readThrough(5);
 
   // Opening the channel here, from memory, draws no divider over what the other device read.
   await here.run("eval", clickChannel(readId));
@@ -204,4 +209,39 @@ test("a channel read on another device opens here without a divider over what wa
   await here.until(`${visible(body(5))} && ${openReadLanded(readId)}`, 60_000);
   expect(await here.evaluate<boolean>(dividerShown)).toBe(false);
   await here.run("screenshot", join(artifacts, "opened-from-storage.png"));
+}, 300_000);
+
+test("a channel the pointer rested on, then read on another device, opens here without a divider", async () => {
+  // This device loads afresh on another channel (the router keeps no match of the read one); two
+  // messages come, and the pointer rests on the channel's link, so the router reads its open ahead
+  // (`defaultPreload: "intent"`), first unread and all.
+  // The other device, left on the read channel, must not read the new messages before the rest.
+  await elsewhere.run("open", "about:blank");
+  await here.run("open", `${proxy.origin}${workspacePath}/channel/${otherId}`);
+  await here.until(visible(otherBody), 60_000);
+  await post(readId, 6, body(6));
+  await post(readId, 7, body(7));
+  await here.run("hover", `a[href*="/channel/${readId}"]`);
+  const rested = Date.now();
+  await here.until(openReadLanded(readId));
+  const preloaded = await here.evaluate<number>(`${openReadState(readId)}.dataUpdatedAt`);
+
+  // The other device reads them; this one hears it (`channel.marked.v1`), and the read kept from
+  // the pointer's rest no longer stands (`markOpenReadStale`).
+  await elsewhere.run("open", `${proxy.origin}${workspacePath}/channel/${readId}`);
+  await elsewhere.until(visible(body(7)), 60_000);
+  await readThrough(7);
+  await here.until(`(${openReadState(readId)} ?? { isInvalidated: true }).isInvalidated`);
+
+  // A click within the preload's lifetime opens on it, but takes no stale read: it reads afresh,
+  // and shows no divider.
+  // Past the router's preload reuse (`PRELOAD_STALE_MS`, 30s) the click would read afresh anyway,
+  // and the case would pass without what it checks.
+  expect(Date.now() - rested).toBeLessThan(25_000);
+  await here.run("eval", clickChannel(readId));
+  await here.until(
+    `${visible(body(7))} && (${openReadState(readId)}?.dataUpdatedAt ?? 0) > ${preloaded}`,
+  );
+  expect(await here.evaluate<boolean>(dividerShown)).toBe(false);
+  await here.run("screenshot", join(artifacts, "opened-after-preload.png"));
 }, 300_000);

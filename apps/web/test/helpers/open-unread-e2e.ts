@@ -19,14 +19,19 @@ export function dividerBetween(before: string, after: string) {
   })()`;
 }
 
-/** The open's read of where the viewer's unread starts has landed in the page
- * (`conversationOpenQuery`, task #378): the divider, if any, is settled. */
-export function openReadLanded(conversationId: string) {
+/** The page's open read of where the viewer's unread starts (`conversationOpenQuery`, task
+ * #378), as TanStack holds it: undefined until it is asked. */
+export function openReadState(conversationId: string) {
   return `window.__TSR_ROUTER__.options.context.queryClient.getQueryState(${JSON.stringify([
     "conversation-open",
     conversationId,
     "",
-  ])})?.status === "success"`;
+  ])})`;
+}
+
+/** The open's read has landed in the page: the divider, if any, is settled. */
+export function openReadLanded(conversationId: string) {
+  return `${openReadState(conversationId)}?.status === "success"`;
 }
 
 /** Message `id`'s row lies wholly inside the visible part of the conversation's history. */
