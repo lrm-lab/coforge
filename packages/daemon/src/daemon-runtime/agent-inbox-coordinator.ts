@@ -38,12 +38,6 @@ export type AgentInboxCoordinatorPorts = {
   agentIdForContext: (context: string) => string;
 };
 
-export function createAgentInboxCoordinator(
-  ports: AgentInboxCoordinatorPorts,
-): AgentInboxCoordinator {
-  return new AgentInboxCoordinator(ports);
-}
-
 /** Coordinates the per-Agent message and App Inbox state owned by a daemon runtime. */
 export class AgentInboxCoordinator {
   readonly #agentInboxes = new Map<string, AgentInboxStateMachine>();

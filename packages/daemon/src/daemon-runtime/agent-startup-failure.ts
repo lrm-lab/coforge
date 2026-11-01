@@ -43,6 +43,8 @@ export async function abandonLaunch(
   ports.activityPublisher.forgetBusy(agentId);
   ports.disposeLaunchObservations(agentId);
   ports.revokeLocalLaunch(agentId);
+  // An abandoned launch is teardown, not a person's Stop: an offline error's record must
+  // survive so later deliveries still restate the failure that took the Agent down.
   const offlineError = ports.offlineResidency.record(agentId);
   try {
     await ports.stopCoordinator.releaseAgentRuntime(agentId);

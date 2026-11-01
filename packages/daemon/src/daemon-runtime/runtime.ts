@@ -16,7 +16,7 @@ import { FileConversationSessionStore } from "#src/persistence/conversation-sess
 import { escapePathIdentity } from "#src/persistence/path-scope";
 import { AgentInputDrain } from "./agent-input-drain";
 import { rebindAgent } from "./agent-rebind";
-import { AgentLaunchCustody, createAgentLaunchCustody } from "./agent-launch-custody";
+import { AgentLaunchCustody } from "./agent-launch-custody";
 import { AgentContexts } from "./agent-contexts";
 import { PhaseBookkeeping } from "./phase-bookkeeping";
 import {
@@ -99,17 +99,15 @@ import { AgentRuntimeState } from "#src/agent-runtime/agent-runtime-state";
 import { MemoryAgentRuntimeStateStore } from "#src/persistence/memory-agent-runtime-state-store";
 import { AgentWorkspaceQueries } from "./agent-workspace-queries";
 import { AgentMessageAttentionIndex } from "./agent-message-attention-index";
-import { AgentInboxCoordinator, createAgentInboxCoordinator } from "./agent-inbox-coordinator";
-import { AgentStopCoordinator, createAgentStopCoordinator } from "./agent-stop-coordinator";
-import { AgentLaunchCoordinator, createAgentLaunchCoordinator } from "./agent-launch-coordinator";
+import { AgentInboxCoordinator } from "./agent-inbox-coordinator";
+import { AgentStopCoordinator } from "./agent-stop-coordinator";
+import { AgentLaunchCoordinator } from "./agent-launch-coordinator";
 import { startAgent } from "./agent-start-coordinator";
 import { deleteWorkspace, requestUpgrade } from "./runtime-lifecycle-operations";
-import {
-  assertOwnIntent,
-  currentObservedUsage,
-  failCollectorRunningSlots,
-  runtimeEnvelope,
-} from "./runtime-small-helpers";
+import { assertOwnIntent } from "./runtime-intent-validation";
+import { currentObservedUsage } from "./runtime-usage-observation";
+import { failCollectorRunningSlots } from "./runtime-collector-failure";
+import { runtimeEnvelope } from "./runtime-envelope";
 import { abandonLaunch, scheduleStartupFailure } from "./agent-startup-failure";
 import { agentsDirectory, agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
 import { revokeAgentApiKey } from "./agent-api-key-revoke";
@@ -131,7 +129,6 @@ import { RuntimeRelease } from "./runtime-release";
 import { AgentFeatureSync } from "./agent-feature-sync";
 import { WakeRecycle } from "./wake-recycle";
 import { AgentMessageOperations } from "./agent-message-operations";
-import { createAgentMessageOperations } from "./agent-message-operations-factory";
 import { AgentRequestForwarder } from "./agent-request-forwarder";
 import { AgentDeliveryQueue } from "./agent-delivery-queue";
 import { canonicalThreadTarget } from "./thread-target";
@@ -653,7 +650,7 @@ export class DaemonRuntime {
         noticePrefix: (agentId) => this.#sync.noticePrefix(agentId),
       },
     );
-    this.#inboxCoordinator = createAgentInboxCoordinator({
+    this.#inboxCoordinator = new AgentInboxCoordinator({
       workspaceId: connection.workspaceId,
       stateDirectory,
       consumedSeqs: this.#consumedSeqs,
@@ -676,7 +673,7 @@ export class DaemonRuntime {
       connection,
       authorizedAgent: (context, agentApiKey) => this.#authorizedAgent(context, agentApiKey),
     });
-    this.#messageOperations = createAgentMessageOperations({
+    this.#messageOperations = new AgentMessageOperations({
       connection,
       attention: this.#messageAttention,
       isMemoryAgent: (agentId) => Boolean(this.memoryFence(agentId)),
@@ -858,7 +855,7 @@ export class DaemonRuntime {
       failCollectorRunningSlots: (agentId, reason) =>
         this.#failCollectorRunningSlots(agentId, reason),
     };
-    this.#launchCustody = createAgentLaunchCustody({
+    this.#launchCustody = new AgentLaunchCustody({
       messageAttention: this.#messageAttention,
       deliveryQueue: this.#deliveryQueue,
       inputDrain: this.#inputDrain,
@@ -868,7 +865,7 @@ export class DaemonRuntime {
       releaseHeldAppItems: (agentId) => this.#inboxCoordinator.releaseHeldAppItems(agentId),
       releaseFallbackNotices: (agentId) => this.#inboxCoordinator.releaseFallbackNotices(agentId),
     });
-    this.#stopCoordinator = createAgentStopCoordinator({
+    this.#stopCoordinator = new AgentStopCoordinator({
       agentLaunches: this.#agentLaunches,
       currentActivityLaunches: this.#currentActivityLaunches,
       inputDrain: this.#inputDrain,
@@ -885,7 +882,7 @@ export class DaemonRuntime {
       publishStopped: (agentId, launch) =>
         this.#activityPublisher.publish(agentId, launch, this.#drafts.stopped(agentId)),
     });
-    this.#launchCoordinator = createAgentLaunchCoordinator({
+    this.#launchCoordinator = new AgentLaunchCoordinator({
       connection: this.#connection,
       transport: () => this.#transport,
       runtimeInstanceId: this.#runtimeInstanceId,
