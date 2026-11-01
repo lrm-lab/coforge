@@ -100,10 +100,7 @@ export function ComputerDetailWorkspaceInventory({
                     </p>
                     <p className="mt-1 truncate text-xs text-tertiary">
                       {workspace.status === "present"
-                        ? m.computer_agent_workspace_stats({
-                            files: String(workspace.fileCount),
-                            size: formatWorkspaceSize(workspace.totalSizeBytes),
-                          })
+                        ? workspaceStatistics(workspace)
                         : workspace.status === "missing"
                           ? m.computer_agent_workspace_missing()
                           : m.computer_agent_workspace_unavailable()}
@@ -153,6 +150,26 @@ export function ComputerDetailWorkspaceInventory({
       />
     </DetailGroup>
   );
+}
+
+/** A present workspace's size and file count as far as the Computer measured them. */
+function workspaceStatistics(workspace: ComputerAgentWorkspaceScan): string {
+  const counts = {
+    files: new Intl.NumberFormat(getLocale()).format(workspace.fileCount),
+    size: formatWorkspaceSize(workspace.totalSizeBytes),
+  };
+  switch (workspace.statisticsStatus) {
+    case "pending":
+      return m.computer_agent_workspace_stats_pending();
+    case "complete":
+      return m.computer_agent_workspace_stats(counts);
+    // The measurement stopped at its budget: what it reached is a lower bound.
+    case "truncated":
+      return m.computer_agent_workspace_stats_truncated(counts);
+    case "skipped":
+    case "unavailable":
+      return "—";
+  }
 }
 
 /** Why the delete failed, in the words ui settled on; anything unrecognised keeps the old line. */
