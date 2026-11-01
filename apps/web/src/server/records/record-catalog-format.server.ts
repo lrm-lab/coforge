@@ -3,6 +3,7 @@ import { AppError } from "#src/lib/app-error";
 import {
   currentIsoWeek,
   emptyReportContent,
+  isValidTemplateName,
   memberWeekTitle,
   normalizeReportContent,
   type ReportContent,
@@ -16,6 +17,41 @@ import {
 import { requireMembership } from "./record-catalog-access.server";
 import { isValidIsoWeekNumber } from "#src/features/records/records-content";
 import { zonedCalendarDate } from "#src/features/records/weekly-report-schedule-due";
+
+export async function updateFormatReportMeta(
+  db: PrismaClient,
+  input: { workspaceId: string; userId: string; reportId: string; title: string },
+): Promise<{ id: string; title: string; year: number; week: number }> {
+  await requireMembership(db, input.workspaceId, input.userId);
+  if (!isValidTemplateName(input.title)) throw new AppError("INVALID_INPUT");
+  const title = input.title.trim();
+  const report = await db.weeklyReport.findFirst({
+    where: { id: input.reportId, workspaceId: input.workspaceId },
+    select: {
+      id: true,
+      authorId: true,
+      kind: true,
+      title: true,
+      settingsId: true,
+      cycle: { select: { year: true, week: true } },
+      submissions: { where: { kind: "member" }, select: { id: true }, take: 1 },
+    },
+  });
+  if (!report || report.kind !== "template") throw new AppError("NOT_FOUND");
+  if (report.authorId !== input.userId || report.submissions.length > 0) {
+    throw new AppError("ACCESS_DENIED");
+  }
+  if (title !== report.title) {
+    await db.weeklyReport.update({ where: { id: report.id }, data: { title } });
+    if (report.settingsId) {
+      await db.weeklyReportTemplate.update({
+        where: { id: report.settingsId },
+        data: { name: title },
+      });
+    }
+  }
+  return { id: report.id, title, year: report.cycle.year, week: report.cycle.week };
+}
 
 type Db = PrismaClient | Prisma.TransactionClient;
 

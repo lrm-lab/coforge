@@ -4,6 +4,7 @@ import { AppError } from "#src/lib/app-error";
 import {
   isAssignmentUnread,
   memberReportTitle,
+  normalizeReportContent,
   reportBodyRestoreView,
   reportContentForAuthor,
   reportContentForRecipient,
@@ -15,7 +16,6 @@ import { REPORT_PERSON_SELECT, reportPersonView } from "./record-member-weeks.se
 import { recordDistribution } from "./record-distribution.server";
 import type { WeeklyReportNotifier } from "./weekly-report-distribution.server";
 import { requireMembership } from "./record-catalog-access.server";
-import { asReportContent } from "./record-content-coercion.server";
 
 type Db = PrismaClient;
 
@@ -65,11 +65,11 @@ export function recordSubject(db: Db, notifier?: WeeklyReportNotifier) {
       const isTemplateAuthor = report.author.id === input.userId;
       let content =
         report.kind === "member"
-          ? memberReportContentForViewer(asReportContent(report.content), {
+          ? memberReportContentForViewer(normalizeReportContent(report.content), {
               viewerIsAuthor: isTemplateAuthor,
               status: report.status,
             })
-          : asReportContent(report.content);
+          : normalizeReportContent(report.content);
       if (
         report.kind === "member" &&
         report.author.id === input.userId &&
@@ -78,7 +78,7 @@ export function recordSubject(db: Db, notifier?: WeeklyReportNotifier) {
       ) {
         content = {
           ...content,
-          received: { tabs: asReportContent(report.sourceTemplate.content).tabs ?? {} },
+          received: { tabs: normalizeReportContent(report.sourceTemplate.content).tabs ?? {} },
         };
       }
       const assignmentCount =
@@ -144,7 +144,7 @@ export function recordSubject(db: Db, notifier?: WeeklyReportNotifier) {
           content,
           bodyRestoreView:
             report.kind === "member" && report.author.id === input.userId
-              ? reportBodyRestoreView(asReportContent(report.content))
+              ? reportBodyRestoreView(normalizeReportContent(report.content))
               : null,
           submittedAt: report.submittedAt?.toISOString() ?? null,
           updatedAt: report.updatedAt.toISOString(),

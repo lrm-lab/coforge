@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { RecordCatalog } from "#src/server/records/record-catalog.server";
+import { recordAssistantOffer } from "#src/server/records/record-assistant-offer.server";
 import {
   looksLikeMemberGenerateOfferAccept,
   parseRecordAssistantPayload,
@@ -135,7 +135,7 @@ test("ensureAssistantIntro posts assignee welcome with 需要 offer", async () =
       ];
     };
 
-  const rows = await new RecordCatalog(db).ensureAssistantIntro({
+  const rows = await recordAssistantOffer(db).ensureAssistantIntro({
     workspaceId: "ws-1",
     userId: "user-1",
     subjectType: "report",
@@ -238,7 +238,7 @@ test("ensureAssistantIntro posts format offer-send when the send window is open"
     ];
   };
 
-  const rows = await new RecordCatalog(db).ensureAssistantIntro({
+  const rows = await recordAssistantOffer(db).ensureAssistantIntro({
     workspaceId: "ws-1",
     userId: "leader",
     subjectType: "report",
@@ -358,7 +358,7 @@ test("ensureAssistantIntro does not fan out offer-send when another session alre
     },
   } as unknown as PrismaClient;
 
-  const rows = await new RecordCatalog(db).ensureAssistantIntro({
+  const rows = await recordAssistantOffer(db).ensureAssistantIntro({
     workspaceId: "ws-1",
     userId: "leader",
     subjectType: "report",
@@ -433,7 +433,7 @@ test("ensureAssistantIntro leaves a new session empty after this week's send was
     },
   } as unknown as PrismaClient;
 
-  const rows = await new RecordCatalog(db).ensureAssistantIntro({
+  const rows = await recordAssistantOffer(db).ensureAssistantIntro({
     workspaceId: "ws-1",
     userId: "leader",
     subjectType: "report",

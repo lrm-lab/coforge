@@ -4,7 +4,7 @@ These rules also cover `src/server/records/`.
 
 - Workspace Records (weekly reports) belong to `features/records/` (list/detail,
   settings, stats, side comments, and Server Functions) and
-  `server/records/record-catalog.server.ts` (cycles, reports,
+  focused modules under `server/records/` (cycles, reports,
   templates, favorites, notes, and comments) and
   `server/records/record-catalog-load.server.ts` (`loadCatalog` directory).
   Persistence is Prisma under Workspace membership. Report bodies use lightweight
@@ -13,8 +13,9 @@ These rules also cover `src/server/records/`.
   resolve「我的周报」unread with an id-only JSON-path query. Side panels retain
   platform comments and Collect cards alongside the private
   assistant conversation.
-  The weekly-report assistant's on-demand reads reuse `RecordCatalog` through
-  Agent HTTPS `POST /api/agent/v1/weekly-reports`, authorized as the assistant owner User.
+  The weekly-report assistant's on-demand reads use
+  `record-assistant-catalog.server.ts` through Agent HTTPS `POST /api/agent/v1/weekly-reports`,
+  authorized as the assistant owner User.
   Multi-Computer collect belongs to
   `server/records/weekly-report-collector.server.ts` (per-Computer Collector
   bindings) and `server/records/weekly-report-collect-run.server.ts` (narrow

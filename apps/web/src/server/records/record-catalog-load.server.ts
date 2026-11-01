@@ -5,8 +5,8 @@ import {
   currentIsoWeek,
   isAutoSendCancelled,
   memberReportTitle,
+  normalizeReportContent,
 } from "#src/features/records/records-content";
-import { asReportContent } from "./record-content-coercion.server";
 import {
   currentWeekTemplateTitle,
   isWeeklySendArmed,
@@ -172,7 +172,7 @@ export async function loadRecordsCatalog(
         select: { content: true },
       });
       const autoSendCancelled = isAutoSendCancelled(
-        asReportContent(formatDoc?.content),
+        normalizeReportContent(formatDoc?.content),
         currentWeek.year,
         currentWeek.week,
       );

@@ -51,7 +51,8 @@ test("a removed workspace member cannot discover templates", async () => {
 });
 
 test("page context and DM expose the same formats without other owners' delivery settings", async () => {
-  const { RecordCatalog } = await import("#src/server/records/record-catalog.server");
+  const { recordAssistantCatalog } =
+    await import("#src/server/records/record-assistant-catalog.server");
   const db = {
     workspaceMembership: { findUnique: async () => ({ role: "member" }) },
     weeklyReportCycle: {
@@ -87,7 +88,7 @@ test("page context and DM expose the same formats without other owners' delivery
   const result = (await new WeeklyReportWorkflow(db).execute(actor, { type: "templates" })) as {
     templates: unknown[];
   };
-  const context = await new RecordCatalog(db).loadAssistantContextManifest({
+  const context = await recordAssistantCatalog(db).loadAssistantContextManifest({
     ...actor,
     subjectType: "cycle",
     subjectId: "cycle",

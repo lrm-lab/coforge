@@ -3,8 +3,9 @@ import { z } from "zod";
 
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { AppError } from "#src/lib/app-error";
-import { recordCatalog } from "#src/server/records/record-catalog.server";
 import { recordSideChat } from "#src/server/records/record-side-chat.server";
+import { recordAssistantOffer } from "#src/server/records/record-assistant-offer.server";
+import { recordReportSend } from "#src/server/records/record-report-send.server";
 import {
   ensureWeeklyReportAssistant,
   WEEKLY_REPORT_ASSISTANT_DISPLAY_NAME,
@@ -23,7 +24,7 @@ export const loadWeeklyReportAssistantStatus = createServerFn({ method: "GET" })
   });
 
 async function readWeeklyReportAssistantStatus(
-  db: Parameters<typeof recordCatalog>[0],
+  db: Parameters<typeof recordSideChat>[0],
   userId: string,
   workspaceId: string,
 ) {
@@ -78,7 +79,7 @@ export const addRecordComment = createServerFn({ method: "POST" })
     });
   });
 
-function weeklyReportAssistantChat(db: Parameters<typeof recordCatalog>[0]) {
+function weeklyReportAssistantChat(db: Parameters<typeof recordSideChat>[0]) {
   return openWeeklyReportAssistantChat(db);
 }
 
@@ -246,7 +247,7 @@ export const ensureRecordAssistantIntro = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).ensureAssistantIntro({
+    return recordAssistantOffer(db).ensureAssistantIntro({
       workspaceId,
       userId: user.id,
       subjectType: data.subjectType,
@@ -265,7 +266,7 @@ export const dismissWeeklyFormatSend = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).dismissWeeklyFormatSend({
+    return recordReportSend(db).dismissWeeklyFormatSend({
       workspaceId,
       userId: user.id,
       reportId: data.reportId,
@@ -282,7 +283,7 @@ export const acceptMemberGenerateHelp = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).acceptMemberGenerateHelp({
+    return recordSideChat(db).acceptMemberGenerateHelp({
       workspaceId,
       userId: user.id,
       reportId: data.reportId,

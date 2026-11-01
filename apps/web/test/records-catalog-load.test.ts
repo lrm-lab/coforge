@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { RecordCatalog } from "#src/server/records/record-catalog.server";
+import { loadRecordsCatalog } from "#src/server/records/record-catalog-load.server";
+import { ensureFormatForSettings } from "#src/server/records/record-catalog-format.server";
 
 test("loadCatalog lists cycles without report content and marks unread by id only", async () => {
   let cycleQuery: { select?: { reports?: { select?: Record<string, unknown> } } } | undefined;
@@ -95,10 +96,14 @@ test("loadCatalog lists cycles without report content and marks unread by id onl
     },
   } as unknown as PrismaClient;
 
-  const catalog = await new RecordCatalog(db).loadCatalog({
-    workspaceId: "workspace-1",
-    userId: "member-a",
-  });
+  const catalog = await loadRecordsCatalog(
+    db,
+    {
+      workspaceId: "workspace-1",
+      userId: "member-a",
+    },
+    (args) => ensureFormatForSettings(db, args),
+  );
 
   expect(cycleQuery?.select?.reports?.select).toBeDefined();
   expect(cycleQuery?.select?.reports?.select).not.toHaveProperty("content");
@@ -213,10 +218,14 @@ test("loadCatalog hides other leaders' template parents under 成员周报", asy
     },
   } as unknown as PrismaClient;
 
-  const catalog = await new RecordCatalog(db).loadCatalog({
-    workspaceId: "workspace-1",
-    userId: "leader-b",
-  });
+  const catalog = await loadRecordsCatalog(
+    db,
+    {
+      workspaceId: "workspace-1",
+      userId: "leader-b",
+    },
+    (args) => ensureFormatForSettings(db, args),
+  );
 
   expect(catalog.memberWeeks).toEqual([
     {
@@ -299,10 +308,14 @@ test("loadCatalog creates a personal format when send settings are applied", asy
     },
   } as unknown as PrismaClient;
 
-  const catalog = await new RecordCatalog(db).loadCatalog({
-    workspaceId: "workspace-1",
-    userId: "leader-b",
-  });
+  const catalog = await loadRecordsCatalog(
+    db,
+    {
+      workspaceId: "workspace-1",
+      userId: "leader-b",
+    },
+    (args) => ensureFormatForSettings(db, args),
+  );
 
   expect(catalog.formatChips).toEqual([
     expect.objectContaining({
@@ -414,11 +427,15 @@ test("loadCatalog exposes one chip per applied settings stream", async () => {
 
   // The fixture seeds 2026 W38 and expects that week's alreadySent state; pin `now` to W38
   // (mid-week, noon UTC) so the test is deterministic instead of breaking every week rollover.
-  const catalog = await new RecordCatalog(db).loadCatalog({
-    workspaceId: "workspace-1",
-    userId: "leader-b",
-    now: new Date("2026-09-17T12:00:00.000Z"),
-  });
+  const catalog = await loadRecordsCatalog(
+    db,
+    {
+      workspaceId: "workspace-1",
+      userId: "leader-b",
+      now: new Date("2026-09-17T12:00:00.000Z"),
+    },
+    (args) => ensureFormatForSettings(db, args),
+  );
 
   expect(catalog.formatChips).toEqual([
     expect.objectContaining({

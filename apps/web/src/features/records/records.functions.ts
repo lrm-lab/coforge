@@ -5,7 +5,7 @@ import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { userConversationChannel } from "#src/features/conversations/conversation-realtime";
 
 import { readAfterStreamPositions } from "#src/server/conversations/chat-stream-positions.server";
-import { recordCatalog } from "#src/server/records/record-catalog.server";
+import { loadRecordsCatalog as loadRecordsCatalogData } from "#src/server/records/record-catalog-load.server";
 import { recordSubject } from "#src/server/records/record-subject.server";
 import { recordStats } from "#src/server/records/record-catalog-stats.server";
 import { recordTemplates } from "#src/server/records/record-catalog-templates.server";
@@ -14,6 +14,10 @@ import { recordAssistantCatalog } from "#src/server/records/record-assistant-cat
 import { recordKeyPointEdits } from "#src/server/records/record-key-point-edits.server";
 import { recordReportContent } from "#src/server/records/record-report-content.server";
 import { recordNavAttention } from "#src/server/records/record-nav-attention.server";
+import { recordReportManagement } from "#src/server/records/record-report-management.server";
+import { updateFormatReportMeta as updateFormatReportMetaData } from "#src/server/records/record-catalog-format.server";
+import { recordReportSend } from "#src/server/records/record-report-send.server";
+import { ensureFormatForSettings } from "#src/server/records/record-catalog-format.server";
 import { normalizeReportContent, type ReportContent } from "./records-content";
 
 export const loadRecordsNavAttention = createServerFn({ method: "GET" })
@@ -31,14 +35,16 @@ const reportContentSchema: z.ZodType<ReportContent> = z.object({
 export const loadRecordsCatalog = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .handler(async ({ context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).loadCatalog({ workspaceId, userId: user.id });
+    return loadRecordsCatalogData(db, { workspaceId, userId: user.id }, (args) =>
+      ensureFormatForSettings(db, args),
+    );
   });
 
 export const deleteMemberWeeklyReport = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(z.object({ reportId: z.uuid() }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).deleteMemberReport({
+    return recordReportManagement(db).deleteMemberReport({
       workspaceId,
       userId: user.id,
       reportId: data.reportId,
@@ -54,7 +60,7 @@ export const setWeeklyReportFavorite = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).setReportFavorite({
+    return recordReportManagement(db).setReportFavorite({
       workspaceId,
       userId: user.id,
       reportId: data.reportId,
@@ -67,7 +73,7 @@ export const deleteOverviewReport = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(z.object({ reportId: z.uuid() }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).deleteOverviewReport({
+    return recordReportManagement(db).deleteOverviewReport({
       workspaceId,
       userId: user.id,
       reportId: data.reportId,
@@ -79,7 +85,7 @@ export const deleteMemberWeek = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(z.object({ cycleId: z.uuid() }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).deleteMemberWeek({
+    return recordReportManagement(db).deleteMemberWeek({
       workspaceId,
       userId: user.id,
       cycleId: data.cycleId,
@@ -187,7 +193,7 @@ export const updateFormatReportMeta = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).updateFormatReportMeta({
+    return updateFormatReportMetaData(db, {
       workspaceId,
       userId: user.id,
       reportId: data.reportId,
@@ -210,7 +216,7 @@ export const confirmWeeklyReportSend = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(z.object({ reportId: z.uuid() }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    return recordCatalog(db).confirmPromptedSend({
+    return recordReportSend(db).confirmPromptedSend({
       workspaceId,
       userId: user.id,
       reportId: data.reportId,

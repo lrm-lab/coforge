@@ -1,6 +1,10 @@
 import { expect, test } from "bun:test";
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { RecordCatalog } from "#src/server/records/record-catalog.server";
+import { recordReportManagement } from "#src/server/records/record-report-management.server";
+import { recordSubject } from "#src/server/records/record-subject.server";
+import { recordReportContent } from "#src/server/records/record-report-content.server";
+import { loadRecordsCatalog } from "#src/server/records/record-catalog-load.server";
+import { ensureFormatForSettings } from "#src/server/records/record-catalog-format.server";
 
 test("deleteMemberReport hides a sent submission from the author and keeps the leader copy", async () => {
   const deleted: string[] = [];
@@ -39,7 +43,7 @@ test("deleteMemberReport hides a sent submission from the author and keeps the l
     },
   } as unknown as PrismaClient;
 
-  const result = await new RecordCatalog(db).deleteMemberReport({
+  const result = await recordReportManagement(db).deleteMemberReport({
     workspaceId: "ws-1",
     userId: "member-1",
     reportId: "sent-1",
@@ -117,14 +121,22 @@ test("loadCatalog omits an author-hidden submission from 我的周报 and keeps 
     weeklyReport: { findMany: async () => [] },
   } as unknown as PrismaClient;
 
-  const authorCatalog = await new RecordCatalog(db).loadCatalog({
-    workspaceId: "ws-1",
-    userId: "member-1",
-  });
-  const leaderCatalog = await new RecordCatalog(db).loadCatalog({
-    workspaceId: "ws-1",
-    userId: "leader-1",
-  });
+  const authorCatalog = await loadRecordsCatalog(
+    db,
+    {
+      workspaceId: "ws-1",
+      userId: "member-1",
+    },
+    (args) => ensureFormatForSettings(db, args),
+  );
+  const leaderCatalog = await loadRecordsCatalog(
+    db,
+    {
+      workspaceId: "ws-1",
+      userId: "leader-1",
+    },
+    (args) => ensureFormatForSettings(db, args),
+  );
 
   expect(authorCatalog.myReports.map((row) => row.id)).toEqual([]);
   expect(authorCatalog.favorites.map((row) => row.id)).toEqual([]);
@@ -153,7 +165,7 @@ test("deleteMemberReport still removes a draft that was never sent", async () =>
     },
   } as unknown as PrismaClient;
 
-  const result = await new RecordCatalog(db).deleteMemberReport({
+  const result = await recordReportManagement(db).deleteMemberReport({
     workspaceId: "ws-1",
     userId: "member-1",
     reportId: "draft-1",
@@ -187,13 +199,13 @@ test("getSubject hides a sent report from its author and still opens it for the 
     weeklyReport: { findFirst: async () => report },
     weeklyReportFavorite: { findUnique: async () => null },
   } as unknown as PrismaClient;
-  const catalog = new RecordCatalog(db);
+  const subject = recordSubject(db);
 
   await expect(
-    catalog.getSubject({ workspaceId: "ws-1", userId: "member-1", id: "sent-1" }),
+    subject.getSubject({ workspaceId: "ws-1", userId: "member-1", id: "sent-1" }),
   ).rejects.toMatchObject({ code: "NOT_FOUND" });
 
-  const leader = await catalog.getSubject({
+  const leader = await subject.getSubject({
     workspaceId: "ws-1",
     userId: "leader-1",
     id: "sent-1",
@@ -228,7 +240,7 @@ test("saveReportContent refuses to change a submission the author already remove
   } as unknown as PrismaClient;
 
   await expect(
-    new RecordCatalog(db).saveReportContent({
+    recordReportContent(db).saveReportContent({
       workspaceId: "ws-1",
       userId: "member-1",
       reportId: "sent-1",

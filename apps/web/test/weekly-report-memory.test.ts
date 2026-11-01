@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { RecordCatalog } from "#src/server/records/record-catalog.server";
+import { recordReportContent } from "#src/server/records/record-report-content.server";
 
 import {
   applyMemorySettlement,
@@ -446,7 +446,7 @@ test("resending a member report settles memory again and does not extract key po
     },
   } as unknown as PrismaClient;
 
-  await new RecordCatalog(db).saveReportContent({
+  await recordReportContent(db).saveReportContent({
     workspaceId: "workspace-1",
     userId: "user-1",
     reportId,

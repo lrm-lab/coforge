@@ -186,7 +186,7 @@ function normalizeSuggestion(value: unknown): WeeklyReportAssistantSuggestion | 
   if (row.type === "body-edit") {
     if (typeof row.reportId !== "string" || !UUID_RE.test(row.reportId)) return null;
     if (typeof row.summary !== "string" || row.summary.trim().length === 0) return null;
-    const content = asReportContent(row.content);
+    const content = parseStoredReportContent(row.content);
     if (!content) return null;
     return {
       type: "body-edit",
@@ -208,7 +208,7 @@ function isTemplateOutlineSection(section: unknown): section is TemplateOutlineS
   );
 }
 
-function asReportContent(value: unknown): ReportContent | null {
+function parseStoredReportContent(value: unknown): ReportContent | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const tabsValue = Reflect.get(value, "tabs");
   if (tabsValue === undefined) {

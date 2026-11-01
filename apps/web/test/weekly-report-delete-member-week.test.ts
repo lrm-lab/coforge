@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { isAutoSendCancelled, type ReportContent } from "#src/features/records/records-content";
-import { RecordCatalog } from "#src/server/records/record-catalog.server";
+import { recordReportManagement } from "#src/server/records/record-report-management.server";
 
 test("deleteMemberWeek removes the viewer's templates and submissions only", async () => {
   const deletedReports: string[] = [];
@@ -95,7 +95,7 @@ test("deleteMemberWeek removes the viewer's templates and submissions only", asy
     $transaction: async (fn: (tx: typeof db) => Promise<unknown>) => fn(db),
   } as unknown as PrismaClient;
 
-  const result = await new RecordCatalog(db).deleteMemberWeek({
+  const result = await recordReportManagement(db).deleteMemberWeek({
     workspaceId: "ws-1",
     userId: "user-1",
     cycleId: "cycle-1",
@@ -182,7 +182,7 @@ test("deleteMemberWeek removes cycle when the viewer owned the only reports", as
     $transaction: async (fn: (tx: typeof db) => Promise<unknown>) => fn(db),
   } as unknown as PrismaClient;
 
-  const result = await new RecordCatalog(db).deleteMemberWeek({
+  const result = await recordReportManagement(db).deleteMemberWeek({
     workspaceId: "ws-1",
     userId: "user-1",
     cycleId: "cycle-1",
@@ -284,7 +284,7 @@ test("deleteOverviewReport drops the leader week node but keeps member reports a
     $transaction: async (fn: (tx: typeof db) => Promise<unknown>) => fn(db),
   } as unknown as PrismaClient;
 
-  const result = await new RecordCatalog(db).deleteOverviewReport({
+  const result = await recordReportManagement(db).deleteOverviewReport({
     workspaceId: "ws-1",
     userId: "user-1",
     reportId: "overview-1",
@@ -312,7 +312,7 @@ test("deleteMemberWeek refuses a cycle where the viewer owns no template parent"
   } as unknown as PrismaClient;
 
   await expect(
-    new RecordCatalog(db).deleteMemberWeek({
+    recordReportManagement(db).deleteMemberWeek({
       workspaceId: "ws-1",
       userId: "user-1",
       cycleId: "cycle-1",
@@ -367,7 +367,7 @@ test("deleteOverviewReport cancels auto-send for that ISO week on the live forma
     $transaction: async (fn: (tx: typeof db) => Promise<unknown>) => fn(db),
   } as unknown as PrismaClient;
 
-  const result = await new RecordCatalog(db).deleteOverviewReport({
+  const result = await recordReportManagement(db).deleteOverviewReport({
     workspaceId: "ws-1",
     userId: "user-1",
     reportId: "overview-1",
@@ -458,7 +458,7 @@ test("deleteMemberWeek cancels auto-send for each deleted overview settings stre
     $transaction: async (fn: (tx: typeof db) => Promise<unknown>) => fn(db),
   } as unknown as PrismaClient;
 
-  const result = await new RecordCatalog(db).deleteMemberWeek({
+  const result = await recordReportManagement(db).deleteMemberWeek({
     workspaceId: "ws-1",
     userId: "user-1",
     cycleId: "cycle-39",

@@ -395,6 +395,56 @@ export function recordSideChat(db: Db) {
     }));
   }
 
+  async function acceptMemberGenerateHelp(input: {
+    workspaceId: string;
+    userId: string;
+    reportId: string;
+    assistantSessionId: string;
+  }) {
+    await requireMembership(db, input.workspaceId, input.userId);
+    const report = await db.weeklyReport.findFirst({
+      where: {
+        id: input.reportId,
+        workspaceId: input.workspaceId,
+        kind: "member",
+        authorId: input.userId,
+      },
+      select: { id: true },
+    });
+    if (!report) throw new AppError("NOT_FOUND");
+    return postSideChat({
+      workspaceId: input.workspaceId,
+      userId: input.userId,
+      subjectType: "report",
+      subjectId: report.id,
+      assistantSessionId: input.assistantSessionId,
+      body: "需要",
+    });
+  }
+
+  async function postAssistantCollectComment(input: {
+    workspaceId: string;
+    userId: string;
+    subjectType: "report" | "cycle";
+    subjectId: string;
+    body: string;
+    payload?: RecordAssistantPayload;
+    assistantSessionId?: string | null;
+  }) {
+    const { resolveLatestChatSessionId } =
+      await import("./weekly-report-assistant-chat-session.server");
+    const assistantSessionId =
+      input.assistantSessionId ??
+      (await resolveLatestChatSessionId(db, {
+        workspaceId: input.workspaceId,
+        userId: input.userId,
+        subjectType: input.subjectType,
+        subjectId: input.subjectId,
+      }));
+    await writeAssistantComment({ ...input, assistantSessionId });
+    return listComments({ ...input, assistantSessionId });
+  }
+
   async function addUserComment(input: {
     workspaceId: string;
     userId: string;
@@ -425,6 +475,8 @@ export function recordSideChat(db: Db) {
     postMemberReportRuleSideChatIfApplicable,
     confirmMemberReportIntent,
     declineMemberReportIntent,
+    acceptMemberGenerateHelp,
+    postAssistantCollectComment,
     listComments,
     addUserComment,
   };

@@ -5,7 +5,7 @@ import {
   reportContentForRecipient,
   type ReportContent,
 } from "#src/features/records/records-content";
-import { RecordCatalog } from "#src/server/records/record-catalog.server";
+import { recordReportContent } from "#src/server/records/record-report-content.server";
 import { applyIncomingWeeklyReportBodyEdit } from "#src/server/records/weekly-report-body-restore.server";
 import { buildWeeklyReportAssistantSuggestionBody } from "#src/server/records/weekly-report-assistant-suggestion.server";
 
@@ -36,7 +36,7 @@ test("applyConfirmedReportBody writes only after the author confirms a suggestio
     },
   } as unknown as PrismaClient;
 
-  const result = await new RecordCatalog(db).applyConfirmedReportBody({
+  const result = await recordReportContent(db).applyConfirmedReportBody({
     workspaceId: "workspace-1",
     userId: "user-1",
     reportId: "11111111-1111-1111-1111-111111111111",
@@ -78,10 +78,10 @@ test("a confirmed assistant draft stays put while the author edits the working b
       },
     },
   } as unknown as PrismaClient;
-  const catalog = new RecordCatalog(db);
+  const content = recordReportContent(db);
   const assistantTabs = { Progress: { markdown: "- 本周提交了 8 次代码。\n" } };
 
-  await catalog.applyConfirmedReportBody({
+  await content.applyConfirmedReportBody({
     workspaceId: "workspace-1",
     userId: "user-1",
     reportId,
@@ -92,7 +92,7 @@ test("a confirmed assistant draft stays put while the author edits the working b
   expect(stored.assistantDraft).toEqual({ tabs: assistantTabs });
 
   const editedTabs = { Progress: { markdown: "- 本周解决了登录超时。\n" } };
-  await catalog.saveReportContent({
+  await content.saveReportContent({
     workspaceId: "workspace-1",
     userId: "user-1",
     reportId,
@@ -136,8 +136,8 @@ test("an assistant message writes the draft and a later switch returns the previ
       },
     },
   } as unknown as PrismaClient;
-  const catalog = new RecordCatalog(db);
-  const written = await catalog.applyConfirmedReportBody({
+  const content = recordReportContent(db);
+  const written = await content.applyConfirmedReportBody({
     workspaceId: "workspace-1",
     userId: "user-1",
     reportId,
@@ -152,7 +152,7 @@ test("an assistant message writes the draft and a later switch returns the previ
     showing: "latest",
   });
 
-  await catalog.saveReportContent({
+  await content.saveReportContent({
     workspaceId: "workspace-1",
     userId: "user-1",
     reportId,
@@ -160,7 +160,7 @@ test("an assistant message writes the draft and a later switch returns the previ
   });
   expect(stored.bodyRestore?.latest.tabs).toEqual({ Progress: { markdown: "最新版" } });
 
-  const previous = await catalog.switchWeeklyReportBodyVersion({
+  const previous = await content.switchWeeklyReportBodyVersion({
     workspaceId: "workspace-1",
     userId: "user-1",
     reportId,
@@ -169,7 +169,7 @@ test("an assistant message writes the draft and a later switch returns the previ
   expect(previous.bodyRestoreView?.showing).toBe("previous");
   expect(stored.bodyRestore?.latest.tabs).toEqual({ Progress: { markdown: "最新版改过" } });
 
-  const again = await catalog.applyConfirmedReportBody({
+  const again = await content.applyConfirmedReportBody({
     workspaceId: "workspace-1",
     userId: "user-1",
     reportId,

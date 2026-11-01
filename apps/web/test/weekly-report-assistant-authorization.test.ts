@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
-import { RecordCatalog } from "#src/server/records/record-catalog.server";
+import { recordReportContent } from "#src/server/records/record-report-content.server";
 import { recordAssistantCatalog } from "#src/server/records/record-assistant-catalog.server";
 import { PrismaAgentRepository } from "#src/server/db/repositories/agent.repositories.server";
 import { decodeWeeklyReportRequest, validateWeeklyReportRequest } from "@lrm/coforge-sdk/internal";
@@ -39,7 +39,7 @@ test("assistant section reads deny member reports the User cannot see", async ()
   } as unknown as PrismaClient;
 
   await expect(
-    new RecordCatalog(db).readAssistantReportSection({
+    recordAssistantCatalog(db).readAssistantReportSection({
       workspaceId: "workspace-1",
       userId: "user-1",
       reportId: "report-other",
@@ -109,7 +109,7 @@ test("confirmed body writes stay author-only and never ask the assistant to send
   } as unknown as PrismaClient;
 
   await expect(
-    new RecordCatalog(db).applyConfirmedReportBody({
+    recordReportContent(db).applyConfirmedReportBody({
       workspaceId: "workspace-1",
       userId: "outsider-1",
       reportId: "11111111-1111-1111-1111-111111111111",
@@ -118,7 +118,7 @@ test("confirmed body writes stay author-only and never ask the assistant to send
   ).rejects.toEqual(new AppError("ACCESS_DENIED"));
   expect(updated).toBe(false);
 
-  const result = await new RecordCatalog(db).applyConfirmedReportBody({
+  const result = await recordReportContent(db).applyConfirmedReportBody({
     workspaceId: "workspace-1",
     userId: "author-1",
     reportId: "11111111-1111-1111-1111-111111111111",

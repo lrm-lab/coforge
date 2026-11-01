@@ -23,7 +23,7 @@ import {
   type CollectWindowKind,
 } from "./weekly-report-collect-run.server";
 import { resolveCollectWindow } from "#src/features/records/weekly-report-collect-window";
-import { RecordCatalog } from "./record-catalog.server";
+import { recordSideChat } from "./record-side-chat.server";
 import { resolveLatestChatSessionId } from "./weekly-report-assistant-chat-session.server";
 import {
   formatMemoryPromptSection,
@@ -204,8 +204,7 @@ export async function submitWeeklyReportCollectPlan(
   });
   const runnable = detailed.slots.filter((slot) => slot.status === "running");
   if (runnable.length === 0) {
-    const catalog = new RecordCatalog(db);
-    await catalog.postAssistantCollectComment({
+    await recordSideChat(db).postAssistantCollectComment({
       workspaceId: input.workspaceId,
       userId: input.userId,
       subjectType: "report",
@@ -276,8 +275,7 @@ export async function submitWeeklyReportCollectPlan(
     throw error;
   }
 
-  const catalog = new RecordCatalog(db);
-  await catalog.postAssistantCollectComment({
+  await recordSideChat(db).postAssistantCollectComment({
     workspaceId: input.workspaceId,
     userId: input.userId,
     subjectType: "report",
@@ -325,7 +323,6 @@ export async function reportCollectSlotOutcome(
   });
   if (!runMeta) return accepted;
 
-  const catalog = new RecordCatalog(db);
   const computer = await db.computer.findFirst({
     where: { id: input.computerId },
     select: { displayName: true, name: true },
@@ -335,7 +332,7 @@ export async function reportCollectSlotOutcome(
   if (accepted.synthesisStarted) {
     // One user-visible progress line: collect→synthesize handoff. Per-slot
     // "已就绪" is redundant when this accept already finishes the wave.
-    await catalog.postAssistantCollectComment({
+    await recordSideChat(db).postAssistantCollectComment({
       workspaceId: input.workspaceId,
       userId: runMeta.userId,
       subjectType: "report",
@@ -349,7 +346,7 @@ export async function reportCollectSlotOutcome(
       runId: input.runId,
     });
   } else if (accepted.waveExhausted || (accepted.run.allTerminal && !accepted.run.canSynthesize)) {
-    await catalog.postAssistantCollectComment({
+    await recordSideChat(db).postAssistantCollectComment({
       workspaceId: input.workspaceId,
       userId: runMeta.userId,
       subjectType: "report",
@@ -357,7 +354,7 @@ export async function reportCollectSlotOutcome(
       body: "采集结束，但没有可用的采集包，无法生成周报草稿。请检查采集 Agent 的模型配置后重新提交采集计划。",
     });
   } else if (input.outcome === "ready") {
-    await catalog.postAssistantCollectComment({
+    await recordSideChat(db).postAssistantCollectComment({
       workspaceId: input.workspaceId,
       userId: runMeta.userId,
       subjectType: "report",
@@ -365,7 +362,7 @@ export async function reportCollectSlotOutcome(
       body: `采集包 · ${label} 已就绪。`,
     });
   } else if (input.outcome === "empty") {
-    await catalog.postAssistantCollectComment({
+    await recordSideChat(db).postAssistantCollectComment({
       workspaceId: input.workspaceId,
       userId: runMeta.userId,
       subjectType: "report",
@@ -373,7 +370,7 @@ export async function reportCollectSlotOutcome(
       body: `采集 · ${label} 未找到可用证据。`,
     });
   } else {
-    await catalog.postAssistantCollectComment({
+    await recordSideChat(db).postAssistantCollectComment({
       workspaceId: input.workspaceId,
       userId: runMeta.userId,
       subjectType: "report",
@@ -403,7 +400,6 @@ export async function reportCollectorRuntimeFailure(
   const failed = await failRunningCollectSlotsForAgent(db, input);
   if (failed.slotCount === 0) return failed;
 
-  const catalog = new RecordCatalog(db);
   const computer = await db.computer.findFirst({
     where: { id: input.computerId },
     select: { displayName: true, name: true },
@@ -419,7 +415,7 @@ export async function reportCollectorRuntimeFailure(
     });
     if (!runMeta) continue;
     if (accepted.synthesisStarted) {
-      await catalog.postAssistantCollectComment({
+      await recordSideChat(db).postAssistantCollectComment({
         workspaceId: input.workspaceId,
         userId: runMeta.userId,
         subjectType: "report",
@@ -433,7 +429,7 @@ export async function reportCollectorRuntimeFailure(
         runId: accepted.run.id,
       });
     } else if (accepted.waveExhausted) {
-      await catalog.postAssistantCollectComment({
+      await recordSideChat(db).postAssistantCollectComment({
         workspaceId: input.workspaceId,
         userId: runMeta.userId,
         subjectType: "report",
@@ -441,7 +437,7 @@ export async function reportCollectorRuntimeFailure(
         body: "采集结束，但没有可用的采集包，无法生成周报草稿。请检查采集 Agent 的模型配置后重新提交采集计划。",
       });
     } else {
-      await catalog.postAssistantCollectComment({
+      await recordSideChat(db).postAssistantCollectComment({
         workspaceId: input.workspaceId,
         userId: runMeta.userId,
         subjectType: "report",

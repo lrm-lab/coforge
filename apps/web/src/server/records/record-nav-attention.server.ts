@@ -1,9 +1,12 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { currentIsoWeek, isAutoSendCancelled } from "#src/features/records/records-content";
+import {
+  currentIsoWeek,
+  isAutoSendCancelled,
+  normalizeReportContent,
+} from "#src/features/records/records-content";
 import { isWeeklySendArmed } from "#src/features/records/weekly-send-window";
 import { zonedCalendarDate } from "#src/features/records/weekly-report-schedule-due";
 import { requireMembership } from "./record-catalog-access.server";
-import { asReportContent } from "./record-content-coercion.server";
 
 export function recordNavAttention(db: PrismaClient) {
   async function loadNavAttention(input: { workspaceId: string; userId: string; now?: Date }) {
@@ -67,7 +70,7 @@ export function recordNavAttention(db: PrismaClient) {
         sendTime: row.sendTime,
         scheduleEnabled: true,
         autoSendCancelled: isAutoSendCancelled(
-          asReportContent(liveContentBySettingsId.get(row.id)),
+          normalizeReportContent(liveContentBySettingsId.get(row.id)),
           currentWeek.year,
           currentWeek.week,
         ),

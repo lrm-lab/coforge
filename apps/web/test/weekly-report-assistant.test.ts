@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { RecordCatalog } from "#src/server/records/record-catalog.server";
+
 import { recordAssistantCatalog } from "#src/server/records/record-assistant-catalog.server";
 import {
   WEEKLY_REPORT_ASSISTANT_DISPLAY_NAME,
@@ -69,7 +69,7 @@ test("assistant context manifests expose structure without report bodies", async
     },
   } as unknown as PrismaClient;
 
-  const manifest = await new RecordCatalog(db).loadAssistantContextManifest({
+  const manifest = await recordAssistantCatalog(db).loadAssistantContextManifest({
     workspaceId: "workspace-1",
     userId: "user-1",
     subjectType: "report",
@@ -167,7 +167,7 @@ test("assistant report reads are section-scoped, bounded, and source-backed", as
     },
   } as unknown as PrismaClient;
 
-  const result = await new RecordCatalog(db).readAssistantReportSection({
+  const result = await recordAssistantCatalog(db).readAssistantReportSection({
     workspaceId: "workspace-1",
     userId: "user-1",
     reportId: "report-1",

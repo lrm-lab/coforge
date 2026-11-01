@@ -3,6 +3,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { WeeklyReportWorkflow } from "#src/server/records/weekly-report-workflow.server";
 import { recordDistribution } from "#src/server/records/record-distribution.server";
+import { recordAssistantCatalog } from "#src/server/records/record-assistant-catalog.server";
 import { quietCentrifugo } from "./helpers/fake-centrifugo";
 
 // Run explicitly against a disposable PostgreSQL database, never production.
@@ -49,9 +50,8 @@ test("disabled schedule configuration updates the format used by an immediate se
     const inbox = (await workflow.execute(actor, { type: "inbox" })) as {
       reports: Array<{ id: string; kind: string }>;
     };
-    const { RecordCatalog } = await import("#src/server/records/record-catalog.server");
     expect(
-      await new RecordCatalog(db).readAssistantReportSection({
+      recordAssistantCatalog(db).readAssistantReportSection({
         ...actor,
         reportId: inbox.reports.find((report) => report.kind === "member")!.id,
         section: "Technique",
@@ -137,8 +137,6 @@ test("template creation reports initialization failures and retries the complete
       templates: [{ id: created!.id, sections: configuration.sections }],
       nextCursor: null,
     });
-    const { RecordCatalog } = await import("#src/server/records/record-catalog.server");
-    const catalog = new RecordCatalog(db, notifier);
     const sent = await recordDistribution(db, notifier).runDueScheduledWeeklyAssignments({
       now: new Date("2030-01-04T07:00:00Z"),
     });
@@ -148,7 +146,7 @@ test("template creation reports initialization failures and retries the complete
     };
     expect(inbox.reports.filter((report) => report.kind === "template")).toHaveLength(2);
     expect(
-      await catalog.readAssistantReportSection({
+      await recordAssistantCatalog(db).readAssistantReportSection({
         ...actor,
         reportId: inbox.reports.find((report) => report.kind === "member")!.id,
         section: "Technique",
@@ -209,7 +207,6 @@ test("conversation configures, sends once, collects a member submission and writ
       templates: [{ id: configured.id }],
     });
     const { ensureCurrentCycle } = await import("#src/server/records/record-catalog-format.server");
-    const { RecordCatalog } = await import("#src/server/records/record-catalog.server");
     const cycle = await ensureCurrentCycle(db, actor);
     const liveFormat = await db.weeklyReport.create({
       data: {
@@ -249,7 +246,7 @@ test("conversation configures, sends once, collects a member submission and writ
     const reportId = inbox.reports[0]!.id;
     expect(notifications).toContain(reportId);
     expect(
-      await new RecordCatalog(db).readAssistantReportSection({
+      recordAssistantCatalog(db).readAssistantReportSection({
         ...memberActor,
         reportId,
         section: "Summary",
@@ -295,7 +292,7 @@ test("conversation configures, sends once, collects a member submission and writ
       tabs: { Summary: { markdown: "Unsent revision" } },
     });
     expect(
-      await new RecordCatalog(db).readAssistantReportSection({
+      recordAssistantCatalog(db).readAssistantReportSection({
         ...actor,
         reportId,
         section: "Summary",

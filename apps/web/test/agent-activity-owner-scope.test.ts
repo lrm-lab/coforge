@@ -22,9 +22,7 @@ test("a public Agent may publish from a Computer owned by another Workspace memb
   // Computer ownership is deliberately a Workspace-connection concern. The Agent's owner is not
   // part of publication scope: a public Agent may run on another member's Computer.
   expect(await lookups.agentBelongsToWorkspace("workspace-1", "agent-1")).toBe(true);
-  expect(await lookups.agentBelongsToComputer("workspace-1", "agent-1", "computer-1")).toBe(
-    true,
-  );
+  expect(await lookups.agentBelongsToComputer("workspace-1", "agent-1", "computer-1")).toBe(true);
   expect(await lookups.currentRuntimeFence!("workspace-1", "computer-1", "agent-1")).toEqual({
     daemonInstanceId: "daemon-1",
     launchId: "launch-1",
