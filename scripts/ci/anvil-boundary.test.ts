@@ -18,9 +18,15 @@ const runtimes = [
   "codex",
   "claude-code",
 ].map((name) => resolve(anvil, "src", name));
-const execution = ["execution", "jsonl-process", "catalog-process", "process-tree-cleanup"].map(
-  (name) => resolve(anvil, "src", name),
-);
+const execution = [
+  "execution",
+  "jsonl-process",
+  "catalog-process",
+  "process-tree-cleanup",
+  // The ACP connection every ACP adapter shares (task #365): shared execution, like the JSONL
+  // process it wraps, so it may depend on those files and adapters may depend on it.
+  "acp",
+].map((name) => resolve(anvil, "src", name));
 const perTurn = resolve(anvil, "src/per-turn");
 
 function isRuntimeImplementation(path: string): boolean {
@@ -29,7 +35,9 @@ function isRuntimeImplementation(path: string): boolean {
 
 function isSharedImplementation(path: string): boolean {
   return (
-    execution.some((file) => path === file || path === file + ".ts") ||
+    execution.some(
+      (file) => path === file || path === file + ".ts" || path.startsWith(file + sep),
+    ) ||
     path === perTurn ||
     path.startsWith(perTurn + sep)
   );

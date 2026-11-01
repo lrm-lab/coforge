@@ -1,5 +1,5 @@
 import type { CodeAgentModelCatalog } from "@lrm/coforge-sdk/internal";
-import { DshConnection, DSH_ACP_TIMEOUT_MS, dshBounded } from "./connection";
+import { dshConnection, DSH_ACP_TIMEOUT_MS, dshBounded, type DshConnection } from "./connection";
 import { dshCatalogFromConfig } from "./catalog";
 import { assertDshVersion } from "./version";
 import type { DshRuntimeHost } from "./host";
@@ -19,7 +19,7 @@ export async function discoverDshCatalog(options: {
   let transport: DshConnection | undefined;
   let sessionId: string | undefined;
   try {
-    transport = new DshConnection(
+    transport = dshConnection(
       options.command,
       options.cwd,
       options.host.buildEnvironment({

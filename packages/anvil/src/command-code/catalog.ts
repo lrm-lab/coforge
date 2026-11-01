@@ -6,7 +6,11 @@ import {
 import { getLogger } from "@logtape/logtape";
 import { catalogErrorMessage, within } from "#src/catalog-discovery";
 import { scrubStderrHint } from "#src/stderr-hint";
-import { CommandCodeConnection, commandCodeBounded } from "./connection";
+import {
+  commandCodeConnection,
+  commandCodeBounded,
+  type CommandCodeConnection,
+} from "./connection";
 import type { CommandCodeRuntimeHost } from "./host";
 
 const logger = getLogger(["coforge", "daemon", "code-agent", RUNTIME_PROVIDER.COMMAND_CODE]);
@@ -27,7 +31,7 @@ export async function discoverCommandCodeCatalog(
   // A CLI argument error is not a secret; still, only the first scrubbed, bounded line is kept.
   let stderrHint: string | undefined;
   try {
-    transport = new CommandCodeConnection(
+    transport = commandCodeConnection(
       command,
       undefined,
       cwd,

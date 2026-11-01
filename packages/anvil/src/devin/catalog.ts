@@ -6,7 +6,7 @@ import {
 import { getLogger } from "@logtape/logtape";
 import { catalogErrorMessage, within } from "#src/catalog-discovery";
 import { scrubStderrHint } from "#src/stderr-hint";
-import { DevinConnection, devinBounded } from "./connection";
+import { devinConnection, devinBounded, type DevinConnection } from "./connection";
 import type { DevinRuntimeHost } from "./host";
 
 const logger = getLogger(["coforge", "daemon", "code-agent", RUNTIME_PROVIDER.DEVIN]);
@@ -33,7 +33,7 @@ export async function discoverDevinCatalog(
   // A CLI argument error is not a secret; still, only the first scrubbed, bounded line is kept.
   let stderrHint: string | undefined;
   try {
-    transport = new DevinConnection(
+    transport = devinConnection(
       command,
       cwd,
       { ...host.buildCatalogEnvironment(environment), PWD: cwd },

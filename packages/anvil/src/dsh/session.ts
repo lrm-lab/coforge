@@ -13,7 +13,7 @@ import type {
 import { RuntimeModelNotFoundError } from "#src/contract";
 import { asRecord, nonEmptyString } from "#src/json-record";
 import { scrubRuntimeErrorText } from "#src/runtime-error-text";
-import { DshConnection, DSH_ACP_TIMEOUT_MS, dshBounded } from "./connection";
+import { dshConnection, DSH_ACP_TIMEOUT_MS, dshBounded, type DshConnection } from "./connection";
 import { dshCatalogFromConfig } from "./catalog";
 import { DshTurnEvents } from "./update-events";
 import type { DshLaunchFiles, DshProviderOptions } from "./host";
@@ -58,7 +58,7 @@ export class DshSession implements AgentSession {
     private readonly files: DshLaunchFiles,
   ) {
     this.#timeoutMs = providerOptions.acpTimeoutMs ?? DSH_ACP_TIMEOUT_MS;
-    this.#transport = new DshConnection(
+    this.#transport = dshConnection(
       command,
       options.agentWorkspaceDirectory,
       providerOptions.host.buildEnvironment(options),

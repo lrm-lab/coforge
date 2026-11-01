@@ -15,9 +15,10 @@ import { RuntimeModelNotFoundError } from "#src/contract";
 import { asRecord, nonEmptyString } from "#src/json-record";
 import { scrubRuntimeErrorText } from "#src/runtime-error-text";
 import {
-  CommandCodeConnection,
+  commandCodeConnection,
   COMMAND_CODE_ACP_TIMEOUT_MS,
   commandCodeBounded,
+  type CommandCodeConnection,
 } from "./connection";
 import { CommandCodeTurnEvents } from "./update-events";
 import type { CommandCodeProviderOptions } from "./host";
@@ -65,7 +66,7 @@ export class CommandCodeSession implements AgentSession {
   async open() {
     this.#mod = await createCommandCodeInstructionMod(this.options.instructions);
     try {
-      const transport = new CommandCodeConnection(
+      const transport = commandCodeConnection(
         this.command,
         this.#mod.modPath,
         this.options.agentWorkspaceDirectory,

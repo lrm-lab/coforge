@@ -13,7 +13,12 @@ import type {
 import { RuntimeModelNotFoundError } from "#src/contract";
 import { asRecord, nonEmptyString } from "#src/json-record";
 import { scrubRuntimeErrorText } from "#src/runtime-error-text";
-import { DevinConnection, DEVIN_ACP_TIMEOUT_MS, devinBounded } from "./connection";
+import {
+  devinConnection,
+  DEVIN_ACP_TIMEOUT_MS,
+  devinBounded,
+  type DevinConnection,
+} from "./connection";
 import { DevinTurnEvents } from "./update-events";
 import type { DevinProviderOptions } from "./host";
 import { createDevinRuleFile, type DevinRuleFile } from "./rules";
@@ -62,7 +67,7 @@ export class DevinSession implements AgentSession {
       this.options.instructions,
     );
     try {
-      const transport = new DevinConnection(
+      const transport = devinConnection(
         this.command,
         this.options.agentWorkspaceDirectory,
         this.providerOptions.host.buildEnvironment(this.options),

@@ -2,7 +2,7 @@ import { RequestError, type SessionConfigOption } from "@agentclientprotocol/sdk
 import { within } from "#src/catalog-discovery";
 import { JsonlRequestError } from "#src/jsonl-error";
 import { DEVIN_CATALOG_TIMEOUT_MS } from "./catalog";
-import { DevinConnection, devinBounded } from "./connection";
+import { devinConnection, devinBounded, type DevinConnection } from "./connection";
 import type { DevinRuntimeHost } from "./host";
 
 /** Devin's own `default` is the provider default. Callers store that as an empty string. */
@@ -67,7 +67,7 @@ export async function readDevinModelEfforts(
   let transport: DevinConnection | undefined;
   let sessionId: string | undefined;
   try {
-    transport = new DevinConnection(
+    transport = devinConnection(
       command,
       cwd,
       { ...host.buildCatalogEnvironment(environment), PWD: cwd },

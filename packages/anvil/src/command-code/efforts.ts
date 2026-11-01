@@ -3,7 +3,11 @@ import { RuntimeModelNotFoundError } from "#src/contract";
 import { within } from "#src/catalog-discovery";
 import { JsonlRequestError } from "#src/jsonl-error";
 import { COMMAND_CODE_CATALOG_TIMEOUT_MS } from "./catalog";
-import { CommandCodeConnection, commandCodeBounded } from "./connection";
+import {
+  commandCodeConnection,
+  commandCodeBounded,
+  type CommandCodeConnection,
+} from "./connection";
 import type { CommandCodeRuntimeHost } from "./host";
 
 /** Command Code's own `default` is the provider default. Callers store that as an empty string. */
@@ -90,7 +94,7 @@ export async function readCommandCodeReasoningEfforts(
   let transport: CommandCodeConnection | undefined;
   let sessionId: string | undefined;
   try {
-    transport = new CommandCodeConnection(
+    transport = commandCodeConnection(
       command,
       undefined,
       cwd,
