@@ -10,13 +10,10 @@ import {
   type CodeAgentProvider,
   type UsageSnapshot,
 } from "@lrm/coforge-anvil";
-import { isMemoryAgentRuntime } from "@coforge/agent";
 import { mkdirSync } from "node:fs";
 import { OperatingSystemInfo } from "#src/platform/operating-system";
 import { FileConversationSessionStore } from "#src/persistence/conversation-session-store";
 import { escapePathIdentity } from "#src/persistence/path-scope";
-import { ActivityTrajectory } from "#src/agent-runtime/activity-trajectory";
-import { TURN_ACTIVITY_EVENT_TYPES } from "#src/agent-runtime/runtime-phases";
 import { AgentInputDrain } from "./agent-input-drain";
 import { rebindAgent } from "./agent-rebind";
 import { AgentLaunchCustody } from "./agent-launch-custody";
@@ -26,31 +23,17 @@ import {
   observeRuntimeEvent,
   type RuntimeEventObservationPorts,
 } from "./runtime-event-observation";
-import { runtimeErrorRecoverySignal } from "#src/agent-runtime/runtime-error-recovery";
-import { ToolCallLedger } from "#src/agent-runtime/tool-call-ledger";
-import {
-  StalledTurnTracker,
-  stalledTurnNotice,
-  stalledTurnSilenceMs,
-} from "./stalled-turn-indicator";
 import { interruptAgentTurn } from "./turn-interrupt";
 import { heldTaskResult } from "./held-task-result";
 import type { AgentProxy, LaunchRequest, SessionMode } from "./runtime-launch-types";
-import { OutstandingBackgroundTasks } from "#src/agent-runtime/subagent-progress-activity";
-import { buildRuntimeCrashedActivity } from "#src/agent-runtime/runtime-error-activity";
 import {
   AgentProcessManager,
   type CodeAgentProviderFactory,
   type AgentRestartConfig,
   type AgentRuntime,
 } from "#src/agent-runtime/agent-process-manager";
-import { resolveLaunchIdentity, type SessionReference } from "./launch-identity";
-import {
-  runtimeDisplayName,
-  sessionInvalidateActivityText,
-  connectionSessionInvalidate,
-} from "./session-invalidate-activity";
-import { ignoredAgentEnvironmentActivity } from "./agent-environment-activity";
+import { type SessionReference } from "./launch-identity";
+import { connectionSessionInvalidate } from "./session-invalidate-activity";
 import { activityDraft } from "./activity-draft";
 import {
   recoveryHasContent,
@@ -59,15 +42,8 @@ import {
   type AgentRecoveryContext,
 } from "./runtime-launch-intent";
 import { validUsageWindow } from "./runtime-activity-text";
-import { parseAssignedSkillPacks } from "#src/code-agent/assigned-skills";
-import { AgentAuthorizationError, launchFailureLogFields } from "#src/agent-runtime/launch-failure";
 import { LaunchFailureBackoff } from "#src/agent-runtime/launch-failure-backoff";
-import {
-  AgentStartup,
-  AGENT_STARTUP_TIMEOUT_MS,
-  agentStartupInput,
-} from "#src/agent-runtime/agent-startup";
-import { agentRuntimeContextEnvironment } from "#src/code-agent/environment";
+import { AGENT_STARTUP_TIMEOUT_MS, agentStartupInput } from "#src/agent-runtime/agent-startup";
 import { createAgentDesktopHolds } from "#src/agent-runtime/agent-desktop";
 export type DaemonConfig = {
   workspaceId: string;
@@ -136,9 +112,8 @@ import { deleteAgentWorkspace } from "./delete-agent-workspace";
 import { AgentMessageAttentionIndex } from "./agent-message-attention-index";
 import { AgentInboxCoordinator } from "./agent-inbox-coordinator";
 import { AgentStopCoordinator } from "./agent-stop-coordinator";
-import { requestAgentLaunchConfig, wakeReusedAgent } from "./agent-launch-config";
+import { AgentLaunchCoordinator } from "./agent-launch-coordinator";
 import { revokeAgentApiKey } from "./agent-api-key-revoke";
-import { ProviderProgress } from "./stalled-recovery";
 import { ColdIdleSweep } from "./cold-idle-sweep";
 import { StalledRecoverySweep } from "./stalled-recovery-sweep";
 import { CatalogFreshnessSweep } from "./catalog-freshness-sweep";
@@ -166,7 +141,6 @@ import {
   AgentActivityPublisher,
   type ActivityDraft,
   type BusyAgentReport,
-  isBusyActivityDetailKind,
 } from "./agent-activity-publisher";
 import { RuntimeErrorDeliveryHold } from "./runtime-error-delivery-hold";
 import type { ActivityLaunch } from "./activity-launch";
@@ -400,6 +374,7 @@ export class DaemonRuntime {
   #migrationsClosed: Promise<void> | undefined;
   readonly #inboxCoordinator: AgentInboxCoordinator;
   readonly #stopCoordinator: AgentStopCoordinator;
+  readonly #launchCoordinator: AgentLaunchCoordinator;
   /** Per-Agent MEMORY.md and disk hints. Inert until a cloud config for an Agent is applied to
    * it (`applyConfig`/`replaceOwnerSnapshot`). */
   readonly systemCleaner: SystemCleaner;
@@ -911,6 +886,60 @@ export class DaemonRuntime {
       publishStopped: (agentId, launch) =>
         this.#activityPublisher.publish(agentId, launch, this.#drafts.stopped(agentId)),
     });
+    this.#launchCoordinator = new AgentLaunchCoordinator({
+      connection: this.#connection,
+      transport: () => this.#transport,
+      runtimeInstanceId: this.#runtimeInstanceId,
+      agentProcessManager: this.#agentProcessManager,
+      sessionReferences: this.#sessionReferences,
+      currentActivityLaunches: this.#currentActivityLaunches,
+      activityPublisher: this.#activityPublisher,
+      phaseBookkeeping: this.#phaseBookkeeping,
+      contexts: this.#contexts,
+      deliveryQueue: this.#deliveryQueue,
+      usageReport: this.#usageReport,
+      fastModeWarned: this.#fastModeWarned,
+      sync: this.#sync,
+      agentApiKeys: this.#agentApiKeys,
+      agentProxy: this.#agentProxy,
+      agentProxyTokens: this.#agentProxyTokens,
+      desktops: this.#desktops,
+      wakeRecycle: this.#wakeRecycle,
+      stoppingAgents: this.#stoppingAgents,
+      collectSkillAgents: this.#collectSkillAgents,
+      introducedAgents: this.#introducedAgents,
+      messageAttention: this.#messageAttention,
+      agentControl: this.#agentControl,
+      agentSessions: this.#agentSessions,
+      runtimeErrorHold: this.#runtimeErrorHold,
+      replyIntents: this.#replyIntents,
+      offlineResidency: this.#offlineResidency,
+      drafts: this.#drafts,
+      systemCleaner: this.systemCleaner,
+      agentStops: this.#agentStops,
+      isStopping: () => this.#stopping,
+      assertRunning: () => this.#assertRunning(),
+      assertAgentNotStopping: (agentId) => this.#assertAgentNotStopping(agentId),
+      contextFor: (agentId) => this.#contextFor(agentId),
+      envelope: () => this.#envelope(),
+      reportAgentSession: (report) => this.#reportAgentSession(report),
+      sendAgentStatus: (agentId, status) => this.#sendAgentStatus(agentId, status),
+      scheduleStartupFailure: (agentId, launch) => this.#scheduleStartupFailure(agentId, launch),
+      observeRuntimeEvent: (agentId, launch, config, runtime, managed, event) =>
+        this.#observeRuntimeEvent(agentId, launch, config, runtime, managed, event),
+      reconcileIdleTurn: (agentId, launch) => this.#reconcileIdleTurn(agentId, launch),
+      activity: (agentId, detailKind, level, detail, extra) =>
+        this.#activity(agentId, detailKind, level, detail, extra),
+      narrateUnavailable: (agentId, launch, activity) =>
+        this.#narrateUnavailable(agentId, launch, activity),
+      disposeLaunchObservations: (agentId) => this.#disposeLaunchObservations(agentId),
+      revokeLocalLaunch: (agentId, context, proxyToken) =>
+        this.#revokeLocalLaunch(agentId, context, proxyToken),
+      revokeAgentApiKey: (agentId, apiKey) => this.#revokeAgentApiKey(agentId, apiKey),
+      launchFailureActivity: (agentId, provider, error) =>
+        this.#launchFailureActivity(agentId, provider, error),
+      drainAppInboxNotices: (agentId) => this.#inboxCoordinator.drainAppInboxNotices(agentId),
+    });
   }
 
   get agentProcessManager(): AgentProcessManager {
@@ -1388,7 +1417,7 @@ export class DaemonRuntime {
           }))
         : undefined;
     void startupCompletion?.catch(() => {});
-    const launching = this.#launchAgent(agentId, config, request);
+    const launching = this.#launchCoordinator.launchAgent(agentId, config, request);
     const launch = launching
       .then(
         async (runtime) => {
@@ -1444,418 +1473,6 @@ export class DaemonRuntime {
       return error;
     } catch (cleanupError) {
       return cleanupError;
-    }
-  }
-
-  async #launchAgent(
-    agentId: string,
-    config: AgentRuntimeConfig,
-    request: LaunchRequest,
-  ): Promise<AgentRuntime> {
-    const { control } = request;
-    // A daemon-initiated launch (no `control` — a wake, never a server Start) reuses
-    // the last server-supplied launch identity remembered alongside this Agent's restart config,
-    // instead of minting a fresh one. An Agent with no remembered identity (never brought under
-    // AgentControl, or already forgotten by an explicit Stop) keeps minting, unchanged.
-    const serverLaunch = control ? undefined : this.#agentProcessManager.serverLaunch(agentId);
-    const { requestId, reference, previousLaunchId, launchId, reused, managedScope } =
-      resolveLaunchIdentity({
-        request,
-        provider: config.provider,
-        previous: this.#sessionReferences.get(agentId),
-        serverLaunch,
-      });
-    this.#sessionReferences.set(agentId, reference);
-    const launch: ActivityLaunch = {
-      launchId,
-      clientSeq: reused ? this.#agentProcessManager.lastClientSeq(agentId) : 0,
-      stopping: false,
-    };
-    if (!control)
-      logger.info("Agent self-initiated launch resolved its launch identity", {
-        event: "agent_control:wake_launch",
-        agent_id: agentId,
-        launch_id: launch.launchId,
-        request_id: managedScope?.requestId,
-        epoch: managedScope?.controlEpoch,
-        outcome: reused ? "reused" : "minted",
-      });
-    this.#currentActivityLaunches.set(agentId, launch);
-    this.#activityPublisher.forgetBusy(agentId);
-    this.#phaseBookkeeping.dispose(agentId);
-    this.#contexts.newContext(agentId, config.provider);
-    // This launch's delivery mode, read by AgentMessageAttentionIndex.receive via
-    // #deliveryQueue.shouldHold on every delivery for this Agent from now on.
-    this.#deliveryQueue.setProvider(agentId, config.provider);
-    this.#usageReport.forget(agentId);
-    this.#fastModeWarned.delete(agentId);
-    // AgentControl's fresh retry after a kiro/pi AgentSessionRecoveryError: the invalidate was
-    // already reported before this launch (see `invalidateSession` above); narrate the cold
-    // start here, where the real launch's ActivityLaunch now exists. `invalidateReason` is
-    // threaded explicitly through this one launch's request (see `LaunchRequest`), never a
-    // side channel: it can neither outlive this launch nor attach to a later unrelated one.
-    if (request.replacedSessionId && request.invalidateReason)
-      this.#narrateUnavailable(
-        agentId,
-        launch,
-        sessionInvalidateActivityText(
-          runtimeDisplayName(config.provider),
-          request.replacedSessionId,
-          request.invalidateReason,
-        ),
-      );
-    const current = () => this.#currentActivityLaunches.get(agentId) === launch && !launch.stopping;
-    let agentApiKey: string | undefined;
-    try {
-      const launchConfig = await requestAgentLaunchConfig(
-        this.#transport,
-        this.#connection.workspaceId,
-        agentId,
-        managedScope,
-      ).catch((error: unknown) => {
-        throw new AgentAuthorizationError(error);
-      });
-      agentApiKey = launchConfig.agentApiKey;
-      this.#sync.launched(agentId, launchConfig.identity);
-      this.#assertRunning();
-      this.#assertAgentNotStopping(agentId);
-      // Skipped at spawn, never deleted: report each reserved stored variable by name.
-      const skipped = ignoredAgentEnvironmentActivity(
-        { workspaceId: this.#connection.workspaceId, agentId },
-        launchConfig.envVars,
-        config.provider,
-      );
-      if (skipped) this.#activityPublisher.publish(agentId, launch, skipped);
-      this.#agentApiKeys.set(agentId, agentApiKey);
-      const proxyToken = this.#agentProxy?.issue(agentId, agentApiKey);
-      if (proxyToken) this.#agentProxyTokens.set(agentId, proxyToken);
-      const localContext = proxyToken ?? this.#contextFor(agentId);
-      const desktopEnvironment = await this.#desktops.hold(agentId);
-      const workspaceDirectory = agentWorkspaceDirectory(
-        this.#connection.workspaceRoot,
-        this.#connection.workspaceId,
-        agentId,
-      );
-      // A session left cold with a large context is not resumed: a fresh one opens with a briefing.
-      const recycled = request.replacedSessionId
-        ? undefined
-        : await this.#wakeRecycle.plan({
-            agentId,
-            provider: config.provider,
-            envVars: launchConfig.envVars,
-            sessionId: reference.sessionId,
-            sessionMode: reference.sessionMode,
-            hasResumePrompt: request.resumePrompt !== undefined,
-            memoryAgent: isMemoryAgentRuntime(config),
-            agentWorkspaceDirectory: workspaceDirectory,
-          });
-      // `reference.sessionId` is overwritten by the next report.
-      const recycledSessionId = recycled ? reference.sessionId : undefined;
-      if (recycled) this.#narrateUnavailable(agentId, launch, { detail: recycled.activityText });
-      const runtime = await this.#agentProcessManager.start(
-        agentId,
-        {
-          ...config,
-          ...(launchConfig.providerConfig ? { providerConfig: launchConfig.providerConfig } : {}),
-          envVars: launchConfig.envVars,
-        },
-        {
-          agentWorkspaceDirectory: workspaceDirectory,
-          sessionId: recycled ? undefined : reference.sessionId,
-          environment: {
-            ...desktopEnvironment,
-            COFORGE_DAEMON_SOCKET: "",
-            COFORGE_AGENT_CONTEXT: localContext,
-            COFORGE_AGENT_PROXY_URL: this.#agentProxy?.url ?? "",
-            // Same server-authored identity the standing prompt's "Current Runtime Context"
-            // section renders; exported so the Agent process and every tool it spawns
-            // can read these facts directly instead of parsing them out of prose.
-            ...agentRuntimeContextEnvironment({
-              agentId,
-              agentWorkspaceDirectory: workspaceDirectory,
-              identity: launchConfig.identity,
-            }),
-          },
-          runtimeId: launch.launchId,
-          onSessionId: this.#transport.reportAgentSession
-            ? async (reportedSessionId, driverReplacedSessionId) => {
-                if (!current() || this.#stopping)
-                  throw new Error("Agent session launch was superseded");
-                // Kept for compat on the session report's own `replacedSessionId` field only
-                // (unrelated to whether an invalidate is sent below): either a driver-reported
-                // replacement just now, or one carried over from AgentControl's own retry.
-                const replaced =
-                  driverReplacedSessionId ?? recycledSessionId ?? request.replacedSessionId;
-                if (driverReplacedSessionId) {
-                  // Claude Code/Codex replace a missing native session inside the driver: only a
-                  // driver-reported replacement (not AgentControl's carried-over
-                  // `request.replacedSessionId`, already reported once) emits here. Sent BEFORE
-                  // the session report below, fire-and-forget, so the server can still match the
-                  // stale session; after the report lands this would be a no-op.
-                  this.#transport.sendSessionInvalidate?.(
-                    connectionSessionInvalidate(this.#connection, this.#runtimeInstanceId, {
-                      agentId,
-                      provider: config.provider,
-                      sessionId: driverReplacedSessionId,
-                      launchId: launch.launchId,
-                      reason: "missing",
-                    }),
-                  );
-                }
-                await this.#reportAgentSession({
-                  ...this.#envelope(),
-                  agentId,
-                  provider: config.provider,
-                  sessionId: reportedSessionId,
-                  ...(replaced ? { replacedSessionId: replaced } : {}),
-                  daemonInstanceId: this.#runtimeInstanceId,
-                  launchId: launch.launchId,
-                  // Read live off `reference` (the same object `#rebindAgent` mutates in place),
-                  // not the `requestId`/`control` consts this closure captured at
-                  // launch time: a driver-side session replacement reported after a rebind must
-                  // carry the NEW request/epoch, not the one this launch started under.
-                  startRequestId: reference.requestId,
-                  ...(reference.controlEpoch ? { controlEpoch: reference.controlEpoch } : {}),
-                  ...(previousLaunchId ? { previousLaunchId } : {}),
-                });
-                if (!current()) return;
-                reference.sessionId = reportedSessionId;
-                reference.sessionMode = "resume";
-                reference.launchId = launch.launchId;
-                if (driverReplacedSessionId)
-                  this.#narrateUnavailable(
-                    agentId,
-                    launch,
-                    sessionInvalidateActivityText(
-                      runtimeDisplayName(config.provider),
-                      driverReplacedSessionId,
-                      "missing",
-                    ),
-                  );
-              }
-            : undefined,
-          sessionMode: recycled ? "create" : reference.sessionMode,
-          assignedSkillPacks: parseAssignedSkillPacks(launchConfig.assignedSkillPacks),
-          identity: launchConfig.identity,
-          serverLaunch: managedScope
-            ? {
-                requestId: managedScope.requestId,
-                controlEpoch: managedScope.controlEpoch ?? 0,
-                launchId: managedScope.launchId,
-              }
-            : undefined,
-        },
-      );
-      if (
-        parseAssignedSkillPacks(launchConfig.assignedSkillPacks).includes("weekly-report-collect")
-      )
-        this.#collectSkillAgents.add(agentId);
-      if (this.#stoppingAgents.has(agentId)) {
-        await this.#agentProcessManager.stop(agentId);
-        throw new Error(`Agent runtime is stopping: ${agentId}`);
-      }
-      this.#sendAgentStatus(agentId, "active");
-      this.#activityPublisher.publish(agentId, launch, {
-        ...this.#drafts.starting(agentId),
-        requestId,
-      });
-      launch.startup = new AgentStartup(() => this.#scheduleStartupFailure(agentId, launch));
-      const trajectories = new Map<string, ActivityTrajectory>();
-      const trajectoryFor = (scope: AgentRuntimeEvent["conversation"]) => {
-        const key = scope?.conversationId ?? "";
-        let trajectory = trajectories.get(key);
-        if (!trajectory) {
-          trajectory = new ActivityTrajectory((event) =>
-            this.#observeRuntimeEvent(agentId, launch, config, runtime, Boolean(control), {
-              ...event,
-              ...(scope ? { conversation: scope } : {}),
-            }),
-          );
-          trajectories.set(key, trajectory);
-        }
-        return trajectory;
-      };
-      const trajectory = {
-        accept: (event: AgentRuntimeEvent) => trajectoryFor(event.conversation).accept(event),
-        flush: () => {
-          for (const item of trajectories.values()) item.flush();
-        },
-        dispose: () => {
-          for (const item of trajectories.values()) item.dispose();
-          trajectories.clear();
-        },
-      };
-      launch.trajectory = trajectory;
-      const progress = new ProviderProgress();
-      launch.progress = progress;
-      const toolCalls = new ToolCallLedger();
-      launch.toolCalls = toolCalls;
-      launch.stalled = new StalledTurnTracker(
-        stalledTurnNotice(launch, {
-          isCurrent: (id) => this.#currentActivityLaunches.get(id) === launch,
-          publish: (id, detail) =>
-            this.#activityPublisher.publish(
-              id,
-              launch,
-              this.#activity(id, AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_STALLED, "error", detail),
-            ),
-        }),
-        stalledTurnSilenceMs(config.envVars),
-      );
-      const replyIntents = this.#replyIntents.tracker(agentId, launch);
-      launch.replyIntents = replyIntents;
-      launch.backgroundTasks = new OutstandingBackgroundTasks();
-      const unsubscribe = runtime.session.subscribe((event) => {
-        progress.observe();
-        toolCalls.observe(event);
-        replyIntents.observe(event);
-        const isCurrent = current();
-        // Raw: text and thinking count before the trajectory coalesces them, and before this
-        // event marks the Agent busy (a hold released while busy flushes only at the turn end).
-        const recoverySignal = isCurrent ? runtimeErrorRecoverySignal(event) : undefined;
-        if (recoverySignal)
-          this.#runtimeErrorHold.noteRecoverySignal(
-            agentId,
-            recoverySignal,
-            launch.runtimeErrorClassFence,
-          );
-        if (isCurrent) launch.startup?.observe(event);
-        const turnActivity =
-          event.type === "activity"
-            ? isBusyActivityDetailKind(event.activity.detailKind)
-            : TURN_ACTIVITY_EVENT_TYPES.has(event.type);
-        if (turnActivity && this.#reconcileIdleTurn(agentId, launch)) return;
-        trajectory.accept(event);
-      });
-      runtime.session.onExit(() => {
-        this.#desktops.end(agentId);
-        launch.startup?.dispose();
-        trajectory.dispose();
-        replyIntents.dispose();
-        if (this.#currentActivityLaunches.get(agentId) !== launch) return;
-        // No leaked watchdog timer, and a later launch for this Agent starts clean.
-        this.#disposeLaunchObservations(agentId);
-        this.#collectSkillAgents.delete(agentId);
-        this.#introducedAgents.delete(agentId);
-        this.#messageAttention.clearAgent(agentId);
-        // An unexpected exit only clears busy — whatever a queue_until_idle provider
-        // was still holding stays queued for the next launch; only explicit Stop discards it
-        // (see AgentStopCoordinator.releaseAgentRuntime).
-        this.#deliveryQueue.onProcessExit(agentId);
-        this.#revokeLocalLaunch(agentId, localContext, proxyToken);
-        void this.#revokeAgentApiKey(agentId, agentApiKey).catch((revokeError) => {
-          // Local access is already revoked; the key stays pending and is retried later.
-          logAgentApiKeyRevokeFailed(agentId, revokeError);
-        });
-        unsubscribe();
-        if (launch.stopping) return;
-        // A process that ended without a crash has stopped working too.
-        if (!launch.crashDetail) this.systemCleaner.onAgentWorkingToIdle(agentId);
-        // A reused launch is tracked by AgentControl exactly like a managed one is —
-        // its exit must flip the on-disk record back to "stopped" (via `wake()`'s mirror image,
-        // `stopped()`) so a later wake or server Start sees a truthful record.
-        if (control || reused)
-          void runtime.session
-            .readSessionIdentity?.()
-            .then((identity) => this.#agentControl.stopped(agentId, launch.launchId, identity))
-            .then(() => this.#agentSessions.replay(agentId))
-            .catch(() => {});
-        // An exit that leaves the most recent `error` event unresolved by a `completed`
-        // outcome is a crash; any other unintentional exit keeps the stopped wording, because
-        // the Agent's control state is stopped either way.
-        // An exit after an offline error republishes that error's Activity (the same wording,
-        // as the reference Computer does at close) rather than a bare `runtime_crashed`.
-        const crashed = launch.offlineError
-          ? this.#activity(
-              agentId,
-              launch.offlineError.detailKind,
-              launch.offlineError.level,
-              launch.offlineError.detail,
-              {
-                entries: launch.offlineError.entries,
-                runtimeError: launch.offlineError.runtimeError,
-              },
-            )
-          : launch.crashDetail && buildRuntimeCrashedActivity(launch.crashDetail);
-        this.#activityPublisher.publish(
-          agentId,
-          launch,
-          crashed
-            ? this.#activity(agentId, crashed.detailKind, crashed.level, crashed.detail, {
-                entries: crashed.entries,
-                runtimeError: crashed.runtimeError,
-              })
-            : this.#drafts.stopped(agentId),
-        );
-        if (this.#currentActivityLaunches.get(agentId) === launch)
-          this.#currentActivityLaunches.delete(agentId);
-      });
-      if (reused)
-        wakeReusedAgent(runtime.session, (identity) =>
-          this.#agentControl.wake(agentId, launch.launchId, identity),
-        );
-      void this.drainAppInboxNotices(agentId).catch(() => {});
-      return runtime;
-    } catch (error) {
-      this.#desktops.end(agentId);
-      launch.startup?.dispose();
-      this.#revokeLocalLaunch(agentId);
-      if (agentApiKey) {
-        try {
-          await this.#revokeAgentApiKey(agentId, agentApiKey);
-        } catch (revokeError) {
-          logAgentApiKeyRevokeFailed(agentId, revokeError);
-        }
-      }
-      if (!this.#stopping && !this.#stoppingAgents.has(agentId)) {
-        // The Activity sends people to the Computer log for the cause; this is that line.
-        logger.warning("Agent launch failed", {
-          event: "agent_runtime:launch_failed",
-          agent_id: agentId,
-          provider: config.provider,
-          launch_id: launch.launchId,
-          ...launchFailureLogFields(error),
-          outcome: "failed",
-        });
-        this.#sendAgentStatus(agentId, "inactive");
-        // A thrown launch failure whose text classifies as an offline error (auth, plan access)
-        // gets that failure's prompt and offline record, not the generic launcher wording — as
-        // the reference Computer does for `runtime.start.request_failed`. The launch-failure
-        // reason in the log above stays the typed one; classification only chooses what the
-        // person sees and what a later `no_process` rejection restates.
-        const offlineLaunchError =
-          launch.offlineError ??
-          this.#offlineResidency.thrownLaunchActivity(
-            agentId,
-            launch,
-            runtimeDisplayName(config.provider),
-            config,
-            error,
-          );
-        this.#activityPublisher.publish(
-          agentId,
-          launch,
-          offlineLaunchError
-            ? this.#activity(
-                agentId,
-                offlineLaunchError.detailKind,
-                offlineLaunchError.level,
-                offlineLaunchError.detail,
-                {
-                  entries: offlineLaunchError.entries,
-                  runtimeError: offlineLaunchError.runtimeError,
-                },
-              )
-            : this.#launchFailureActivity(agentId, config.provider, error),
-        );
-      }
-      if (this.#currentActivityLaunches.get(agentId) === launch) {
-        this.#activityPublisher.forgetBusy(agentId);
-        this.#disposeLaunchObservations(agentId);
-        // An explicit Stop still needs this identity to report its final outcome.
-        if (!this.#agentStops.has(agentId)) this.#currentActivityLaunches.delete(agentId);
-      }
-      throw error;
     }
   }
 

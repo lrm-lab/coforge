@@ -1,6 +1,5 @@
 import type { AgentLaunchConfig } from "#src/connection/daemon-connection-client";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
-export { wakeReusedAgent } from "./agent-wake-control";
 export async function requestAgentLaunchConfig(
   transport: DaemonConnectionClient,
   workspaceId: string,

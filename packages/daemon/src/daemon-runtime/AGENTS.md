@@ -30,6 +30,8 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
 - `runtime-reconnect.ts` owns reconnect recovery subscriptions; `runtime.ts` supplies inventory, reminder, replay, and upgrade-report callbacks.
 - `runtime-publication-subscriptions.ts` owns pre-ready publication buffering and Agent/control/App/migration event listeners; `runtime.ts` supplies operation handlers and releases buffered work after ready.
 - `agent-stop-coordinator.ts` owns process release/stop ordering after runtime admission closes; `runtime.ts` supplies launch maps and lifecycle collaborators.
+- `agent-launch-coordinator.ts` owns launch identity and launch-state initialization; `runtime.ts` supplies lifecycle ports and start admission.
+- `agent-launch-process.ts` owns the provider process boundary and its Session, Activity, and exit cleanup callbacks for one resolved launch.
 - `agent-launch-config.ts` owns the transport fallback for obtaining an Agent launch credential/config.
 - `agent-wake-control.ts` owns reused-wake identity reads and control-record wake ordering; an
   unavailable provider identity keeps the wake and preserves the last known identity.
