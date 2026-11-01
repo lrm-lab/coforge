@@ -31,7 +31,7 @@ starts a comment. Messages from the conversation arrive with `target=<ref>`.
 
 | Command                                                         | Does                                                                                                                          |
 | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `task view <ref> [--limit n]`                                   | Title, assignee, creator, source message, description, whether you follow it, and the latest messages (at most 20)            |
+| `task show <ref> [--limit n]`                                   | Title, assignee, creator, source message, description, whether you follow it, and the latest messages (at most 20)            |
 | `task reply <ref>` (body on stdin)                              | Posts in the conversation, creating it on the first reply. `--mention human:<uuid>:<handle>`, `--attachment-id <uuid>` repeat |
 | `task read <ref> [--before\|--after\|--around <id>] [--unread]` | Reads the conversation as `message read` does; `--unread` starts after your read position and moves it                        |
 | `task follow <ref>` / `task unfollow <ref> [--reason text]`     | Follow or stop following. The reason (at most 200 characters) appears in a notice in the conversation                         |

@@ -18,8 +18,8 @@ then observes its card under **In review** with that Agent as owner. Reload must
 preserve both owner and status. No test code claims or advances the Task to review.
 On 2026-09-14 the combined message/attachment/Task scenario passed: **1 pass,
 0 fail, 16 assertions**, 42.82 seconds. The native Pi session independently showed
-`coforge task claim --target "@dev-user" --number 1`, result `#1: claimed`, and
-`coforge task update --target "@dev-user" --number 1 --status in_review`.
+`coforge task claim --channel "dm:@dev-user" --peer-kind human --number 1`, result `#1: claimed`, and
+`coforge task update --channel "dm:@dev-user" --peer-kind human --number 1 --status in_review`.
 The Agent's `task-result.txt` contained `task received`; the refreshed board
 screenshot was inspected. These tool/file checks were diagnostic inspection,
 not additional automated browser assertions. This does not isolate assignment

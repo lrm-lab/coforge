@@ -191,7 +191,7 @@ export function readTaskText(
  * count leaves both out, and a page keeps what it had. */
 export type DiscussionCounts = { replyCount: number; earlierReplies: number };
 
-/** The first line of a source message, cut for a card or a `task view` line. */
+/** The first line of a source message, cut for a card or a `task show` line. */
 function sourcePreview(text: string) {
   const line = text.replace(/\s+/g, " ").trim();
   return line.length > 160 ? `${line.slice(0, 159)}…` : line;

@@ -94,7 +94,7 @@ test("task create --help explains atomic assignment and how to undo an accidenta
   expect(help).toContain("Atomic assignment:");
   expect(help).toContain("Self-assignment starts work");
   expect(help).toContain(
-    "coforge task update --target <channel> --number <N> --status todo`; the task stays assigned to you.",
+    "coforge task update --channel <channel> --number <N> --status todo`; the task stays assigned to you.",
   );
   expect(help).toContain(
     "If handle resolution or channel authorization fails, no task is created.",

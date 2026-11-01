@@ -264,7 +264,7 @@ describe("Agent Task freshness", () => {
         owner: "@agent-a",
         fireAt: "2026-09-10T12:00:00.000Z",
         messageId: "message-a",
-        conversationId: "conversation-a",
+        targetChannelId: "conversation-a",
       },
     };
     const harness = await messageHarness(

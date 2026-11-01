@@ -4,10 +4,10 @@ import { CliError } from "./cli-error";
 import { readWindowOptions, type MessageReadOptions } from "./message-read-args";
 import { resolveTaskRef, type TaskRef } from "./task-ref";
 
-/** `coforge task view|reply|read|follow|unfollow|list --following`: the commands on a task's own
+/** `coforge task show|reply|read|follow|unfollow|list --following`: the commands on a task's own
  * conversation. */
 export type TaskConversationInvocation = { command: "task-conversation" } & (
-  | { op: "view"; task: TaskRef; limit?: number }
+  | { op: "show"; task: TaskRef; limit?: number }
   | {
       op: "reply";
       task: TaskRef;
@@ -25,7 +25,7 @@ type TaskConversationOp = Exclude<TaskConversationInvocation["op"], "following">
 
 /** What each command takes besides the task: flags with a value, and flags without one. */
 const FLAGS: Record<TaskConversationOp, { values: string[]; switches: string[] }> = {
-  view: { values: ["--limit"], switches: [] },
+  show: { values: ["--limit"], switches: [] },
   reply: { values: ["--mention", "--attachment-id"], switches: ["--json"] },
   read: { values: ["--before", "--after", "--around", "--limit"], switches: ["--unread"] },
   follow: { values: [], switches: [] },
@@ -55,7 +55,7 @@ function collect(op: TaskConversationOp, args: readonly string[]) {
       positional = name;
       continue;
     }
-    const known = ["--target", "--number", ...valueFlags, ...switches].includes(name);
+    const known = ["--channel", "--number", ...valueFlags, ...switches].includes(name);
     if (!known) throw invalidArgument(command, `Unknown argument "${name}".`);
     if (name === "--attachment-id") {
       const list = args[++index];
@@ -128,12 +128,12 @@ export function parseTaskConversationArgs(
     op as TaskConversationOp,
     args.slice(1),
   );
-  const task = resolveTaskRef(positional, values.get("--target"), values.get("--number"));
+  const task = resolveTaskRef(positional, values.get("--channel"), values.get("--number"));
   const invocation = { command: "task-conversation" as const, task };
   switch (op as TaskConversationOp) {
-    case "view": {
+    case "show": {
       const limit = viewLimit(values.get("--limit"));
-      return { ...invocation, op: "view", ...(limit === undefined ? {} : { limit }) };
+      return { ...invocation, op: "show", ...(limit === undefined ? {} : { limit }) };
     }
     case "reply":
       return {

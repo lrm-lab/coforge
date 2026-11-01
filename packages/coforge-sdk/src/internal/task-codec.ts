@@ -37,7 +37,7 @@ const modes = new Set(["inline", "withheld"]);
 /** The largest PostgreSQL `integer`, the column type of a task's number and revision: a larger
  * value names no task and cannot be stored or queried. */
 export const PG_INTEGER_MAX = 2_147_483_647;
-const targetPattern = /^(?:#[a-z0-9][a-z0-9_-]{0,31}|@[a-z0-9][a-z0-9_-]{0,31})$/;
+const targetPattern = /^(?:#[a-z0-9][a-z0-9_-]{0,31}|@[a-z0-9][a-z0-9_-]{0,63})$/;
 const ownerPattern = /^@[a-z0-9][a-z0-9_-]{0,63}$/;
 const isNonblank = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0;
@@ -82,6 +82,10 @@ export function validateTaskRequest(value: TaskRequest): void {
     throw new Error("invalid Task target");
   if (value.mine !== undefined && typeof value.mine !== "boolean")
     throw new Error("invalid Task request");
+  if (value.peerKind !== undefined && !["human", "agent"].includes(value.peerKind))
+    throw new Error("invalid Task peer kind");
+  if (value.peerKind !== undefined && (!value.target || !value.target.startsWith("@")))
+    throw new Error("invalid Task peer kind");
   if (value.mine && value.operation !== "list") throw new Error("invalid Task target");
   if (value.number !== undefined && !isPgPositive(value.number))
     throw new Error("invalid Task number");

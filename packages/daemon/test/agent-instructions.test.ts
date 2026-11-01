@@ -33,7 +33,7 @@ test("ordinary requests do not require task creation or per-turn memory bookkeep
   expect(instructions).toContain("Answer ordinary questions freely");
   expect(instructions).toContain("Before implementing a shared channel request");
   expect(instructions).toContain(
-    "coforge task claim --target '<channel>' --message-id <root-message-id>",
+    "coforge task claim --channel '<channel>' --message-id <root-message-id>",
   );
   expect(instructions).toContain("Only a successful claimant implements");
   expect(instructions).toContain("others may analyze or review in its thread");

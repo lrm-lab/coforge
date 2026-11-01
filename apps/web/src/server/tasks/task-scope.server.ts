@@ -5,6 +5,7 @@ import { TASK_SCOPE_WHERE } from "./task-view.server";
 import type { TaskCommand, TaskPrincipal } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
 import { MEMBER_SELECT, type TaskBoardPorts } from "./task-board-ports.server";
+import { agentDirectKey } from "#src/features/conversations/direct-key";
 
 export async function resolveTaskScope(
   ports: TaskBoardPorts,
@@ -65,23 +66,35 @@ export async function resolveTaskScope(
   }
   const agent = await ports.db.agent.findFirst({
     where: { id: principal.agentId, workspaceId: principal.workspaceId, ...ACTIVE_AGENT_WHERE },
-    select: { id: true },
+    select: { id: true, ownerId: true },
   });
   if (!agent) throw new AppError("ACCESS_DENIED");
   if (command.conversationId || !command.target) throw new AppError("INVALID_INPUT");
   const target = command.target!;
-  if (!/^#[a-z0-9][a-z0-9_-]{0,31}$/.test(target) && !/^@[a-z0-9][a-z0-9_-]{0,31}$/.test(target))
+  if (!/^#[a-z0-9][a-z0-9_-]{0,31}$/.test(target) && !/^@[a-z0-9][a-z0-9_-]{0,63}$/.test(target))
     throw new AppError("INVALID_INPUT");
-  const targetUser = target.startsWith("@")
-    ? await ports.db.user.findFirst({
-        where: {
-          username: target.slice(1),
-          memberships: { some: { workspaceId: principal.workspaceId } },
-        },
-        select: { id: true },
-      })
-    : null;
-  if (target.startsWith("@") && !targetUser) throw new AppError("NOT_FOUND");
+  const targetUser =
+    target.startsWith("@") && command.peerKind !== "agent"
+      ? await ports.db.user.findFirst({
+          where: {
+            username: target.slice(1),
+            memberships: { some: { workspaceId: principal.workspaceId } },
+          },
+          select: { id: true },
+        })
+      : null;
+  const targetAgent =
+    target.startsWith("@") && command.peerKind === "agent"
+      ? await ports.db.agent.findFirst({
+          where: {
+            workspaceId: principal.workspaceId,
+            name: target.slice(1),
+            ...ACTIVE_AGENT_WHERE,
+          },
+          select: { id: true },
+        })
+      : null;
+  if (target.startsWith("@") && !targetUser && !targetAgent) throw new AppError("NOT_FOUND");
   const conversation = target.startsWith("#")
     ? await ports.db.conversation.findFirst({
         where: {
@@ -106,11 +119,15 @@ export async function resolveTaskScope(
           directKey: { not: null },
           AND: [
             { members: { some: { agentId: principal.agentId, ...ACTIVE_MEMBER_WHERE } } },
-            {
-              members: {
-                some: { user: { username: target.slice(1) }, ...ACTIVE_MEMBER_WHERE },
-              },
-            },
+            ...(targetAgent
+              ? [{ directKey: agentDirectKey(agent.ownerId, targetAgent.id) }]
+              : [
+                  {
+                    members: {
+                      some: { user: { username: target.slice(1) }, ...ACTIVE_MEMBER_WHERE },
+                    },
+                  },
+                ]),
           ],
         },
         select: {

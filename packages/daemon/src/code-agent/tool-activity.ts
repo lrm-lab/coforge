@@ -134,8 +134,9 @@ type CoforgeCliTool = { tool: string; summary?: (args: Args) => string | undefin
 export type CoforgeInvocation = { tool: string; summary?: string; args: Args };
 
 const target = (args: Args) => flagValue(args, "--target");
+const taskChannel = (args: Args) => flagValue(args, "--channel");
 const taskRef = (args: Args) => {
-  const channel = target(args);
+  const channel = taskChannel(args);
   const number = taskNumbers(args)[0];
   return channel && number !== undefined ? `${channel} #t${number}` : undefined;
 };
@@ -159,12 +160,12 @@ const COFORGE_CLI_TOOLS: Readonly<Record<string, CoforgeCliTool>> = {
   "channel add-member": { tool: "add_channel_member", summary: target },
   "channel join": { tool: "join_channel", summary: target },
   "channel leave": { tool: "leave_channel", summary: target },
-  "task list": { tool: "list_tasks", summary: target },
-  "task create": { tool: "create_tasks", summary: target },
+  "task list": { tool: "list_tasks", summary: taskChannel },
+  "task create": { tool: "create_tasks", summary: taskChannel },
   "task claim": {
     tool: "claim_tasks",
     summary: (args) => {
-      const channel = target(args);
+      const channel = taskChannel(args);
       const tasks = taskNumbers(args)
         .map((n) => `#t${n}`)
         .join(",");

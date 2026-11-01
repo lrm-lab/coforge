@@ -174,7 +174,7 @@ export async function recordResourceReceipt(
       owner: `@${result.owner.name}`,
       fireAt: result.reminder.fireAt.toISOString(),
       messageId: result.reminder.messageId,
-      conversationId,
+      targetChannelId: conversationId,
     },
   };
 }

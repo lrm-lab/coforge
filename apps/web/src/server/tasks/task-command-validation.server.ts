@@ -39,6 +39,10 @@ export function validateTaskCommand(command: TaskCommand) {
   )
     throw new AppError("INVALID_INPUT");
   if (command.status === "all" && command.operation !== "list") throw new AppError("INVALID_INPUT");
+  if (command.peerKind !== undefined && !["human", "agent"].includes(command.peerKind))
+    throw new AppError("INVALID_INPUT");
+  if (command.peerKind !== undefined && !command.target?.startsWith("@"))
+    throw new AppError("INVALID_INPUT");
   if (command.numbers?.some((number) => !Number.isSafeInteger(number) || number < 1))
     throw new AppError("INVALID_INPUT");
   if (command.messageIds?.some((messageId) => !messageId.trim()))

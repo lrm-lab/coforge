@@ -16,7 +16,7 @@ function followingLine(view: AgentTaskViewResponse): string {
     : "Following: no - replies do not wake you unless you are @mentioned";
 }
 
-/** The window of the conversation `task view` shows: its latest messages, oldest first. */
+/** The window of the conversation `task show` shows: its latest messages, oldest first. */
 function discussion(view: AgentTaskViewResponse): string[] {
   if (!view.conversation.exists)
     return ["Discussion: none yet - the first reply starts the task's conversation."];
@@ -32,7 +32,7 @@ function discussion(view: AgentTaskViewResponse): string[] {
   ];
 }
 
-/** `coforge task view`: the task, whether its replies wake the Agent, the latest of its
+/** `coforge task show`: the task, whether its replies wake the Agent, the latest of its
  * conversation, and the commands that act on it. */
 function sourceLine({ taskRef, task }: AgentTaskViewResponse): string {
   const source = task.sourceMessage!;

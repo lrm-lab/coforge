@@ -21,5 +21,7 @@ test("task conversations off or absent leaves the prompt exactly as before", () 
   expect(build({ features: {} })).toBe(plain);
   expect(build({ features: { taskConversations: false } })).toBe(plain);
   expect(plain).not.toContain("Tasks have their own conversations");
-  expect(plain).toContain("coforge task claim --target '<channel>' --message-id <root-message-id>");
+  expect(plain).toContain(
+    "coforge task claim --channel '<channel>' --message-id <root-message-id>",
+  );
 });

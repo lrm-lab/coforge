@@ -13,27 +13,27 @@ function refusal(args: string[]): CliError {
   throw new Error("expected a refusal");
 }
 
-test("task view takes a ref or --target and --number, and a limit", () => {
-  expect(parseTaskConversationArgs(["view", "#general:#7"])).toEqual({
+test("task show takes a ref or --channel and --number, and a limit", () => {
+  expect(parseTaskConversationArgs(["show", "#general:#7"])).toEqual({
     command: "task-conversation",
-    op: "view",
+    op: "show",
     task: GENERAL_7,
   });
   expect(
-    parseTaskConversationArgs(["view", "--limit", "3", "--target", "#general", "--number", "7"]),
-  ).toEqual({ command: "task-conversation", op: "view", task: GENERAL_7, limit: 3 });
+    parseTaskConversationArgs(["show", "--limit", "3", "--channel", "#general", "--number", "7"]),
+  ).toEqual({ command: "task-conversation", op: "show", task: GENERAL_7, limit: 3 });
 });
 
-test("task view refuses a limit that is not a positive integer", () => {
+test("task show refuses a limit that is not a positive integer", () => {
   for (const limit of ["0", "-1", "x", "1.5"]) {
-    const error = refusal(["view", "#general:#7", "--limit", limit]);
+    const error = refusal(["show", "#general:#7", "--limit", limit]);
     expect(error.code).toBe("INVALID_ARG");
     expect(error.message).toBe(`--limit must be a positive integer; got ${limit}`);
   }
 });
 
-test("task view and unfollow refuse what the server would, naming the limit", () => {
-  expect(refusal(["view", "#general:#7", "--limit", "21"]).message).toBe(
+test("task show and unfollow refuse what the server would, naming the limit", () => {
+  expect(refusal(["show", "#general:#7", "--limit", "21"]).message).toBe(
     "--limit is at most 20; got 21",
   );
   expect(refusal(["unfollow", "#general:#7", "--reason", "x".repeat(201)]).message).toBe(
@@ -106,11 +106,11 @@ test("a command that names no task, or two, or repeats a flag, is refused", () =
   expect(refusal(["follow", "#general:#7", "#general:#8"]).message).toBe(
     "Give one task ref, not several.",
   );
-  expect(refusal(["view", "#general:#7", "--limit", "1", "--limit", "2"]).message).toBe(
+  expect(refusal(["show", "#general:#7", "--limit", "1", "--limit", "2"]).message).toBe(
     '"--limit" is given more than once.',
   );
-  expect(refusal(["view", "#general:#7", "--limit"]).message).toBe('"--limit" needs a value.');
-  expect(refusal(["view", "#general:abcd1234"]).code).toBe("INVALID_TARGET");
+  expect(refusal(["show", "#general:#7", "--limit"]).message).toBe('"--limit" needs a value.');
+  expect(refusal(["show", "#general:abcd1234"]).code).toBe("INVALID_TARGET");
 });
 
 test("task list --following lists the followed conversations and nothing else", () => {
@@ -120,7 +120,7 @@ test("task list --following lists the followed conversations and nothing else", 
   });
   for (const extra of [
     ["--mine"],
-    ["--target", "#general"],
+    ["--channel", "#general"],
     ["--channel", "#general"],
     ["--status", "todo"],
   ]) {
@@ -135,7 +135,7 @@ test("task list --following lists the followed conversations and nothing else", 
 
 test("other task operations are not conversation commands", () => {
   expect(parseTaskConversationArgs(["list", "--mine"])).toBeUndefined();
-  expect(parseTaskConversationArgs(["create", "--target", "#general"])).toBeUndefined();
+  expect(parseTaskConversationArgs(["create", "--channel", "#general"])).toBeUndefined();
   expect(parseTaskConversationArgs([])).toBeUndefined();
 });
 

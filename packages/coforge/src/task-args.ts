@@ -11,7 +11,11 @@ import {
   type TaskConversationInvocation,
 } from "#src/task-conversation-args";
 
-export type TaskInvocation = { command: "task"; task: Omit<TaskCommand, "idempotencyKey"> };
+export type TaskInvocation = {
+  command: "task";
+  task: Omit<TaskCommand, "idempotencyKey">;
+  json?: boolean;
+};
 
 const TASK_OPERATIONS = [
   "list",
@@ -31,35 +35,48 @@ type TaskOperation = (typeof TASK_OPERATIONS)[number];
 
 /** The flags each `task` subcommand takes. */
 const TASK_FLAGS: Record<TaskOperation, readonly string[]> = {
-  list: ["--target", "--mine", "--status"],
+  list: ["--channel", "--mine", "--status", "--json"],
   create: [
-    "--target",
+    "--channel",
+    "--peer-kind",
     "--title",
     "--assignee",
     "--creates-resource",
     "--description",
     "--message-id",
     "--alongside",
+    "--json",
   ],
-  convert: ["--target", "--message-id"],
-  claim: ["--target", "--number", "--message-id", "--reviewer-isolation"],
-  unclaim: ["--target", "--number", "--expected-revision"],
-  assign: ["--target", "--number", "--assignee", "--expected-revision"],
-  unassign: ["--target", "--number", "--expected-revision"],
-  update: ["--target", "--number", "--status", "--expected-revision", "--reviewer-isolation"],
+  convert: ["--channel", "--peer-kind", "--message-id", "--json"],
+  claim: ["--channel", "--peer-kind", "--number", "--message-id", "--reviewer-isolation", "--json"],
+  unclaim: ["--channel", "--peer-kind", "--number", "--expected-revision", "--json"],
+  assign: ["--channel", "--peer-kind", "--number", "--assignee", "--expected-revision", "--json"],
+  unassign: ["--channel", "--peer-kind", "--number", "--expected-revision", "--json"],
+  update: [
+    "--channel",
+    "--peer-kind",
+    "--number",
+    "--status",
+    "--expected-revision",
+    "--reviewer-isolation",
+    "--json",
+  ],
   amend: [
-    "--target",
+    "--channel",
+    "--peer-kind",
     "--number",
     "--title",
     "--description",
     "--clear-description",
     "--expected-revision",
     "--reviewer-isolation",
+    "--json",
   ],
-  history: ["--target", "--number"],
-  delete: ["--target", "--number"],
+  history: ["--channel", "--peer-kind", "--number", "--json"],
+  delete: ["--channel", "--peer-kind", "--number", "--json"],
   receipt: [
-    "--target",
+    "--channel",
+    "--peer-kind",
     "--number",
     "--object",
     "--purpose",
@@ -68,6 +85,7 @@ const TASK_FLAGS: Record<TaskOperation, readonly string[]> = {
     "--expiry",
     "--runbook",
     "--tracking",
+    "--json",
   ],
 };
 
@@ -85,9 +103,10 @@ const TASK_SWITCHES = new Set([
   "--mine",
   "--creates-resource",
   "--alongside",
+  "--json",
 ]);
 
-const TASK_TARGET = /^(?:#[a-z0-9][a-z0-9_-]{0,31}|@[a-z0-9][a-z0-9_-]{0,31})$/;
+const TASK_CHANNEL = /^(?:#[a-z0-9][a-z0-9_-]{0,31}|dm:@[a-z0-9][a-z0-9_-]{0,63})$/;
 
 function invalidTaskArg(message: string): CliError {
   return new CliError({ code: "INVALID_ARG", message, retryable: false });
@@ -148,19 +167,27 @@ export function parseTaskArgs(
   const one = (flag: string) => values.get(flag)?.[0];
 
   const mine = values.has("--mine");
-  const target = one("--target");
+  const channel = one("--channel");
+  const target = channel?.startsWith("dm:@") ? channel.slice(3) : channel;
+  const peerKind = one("--peer-kind");
+  const json = values.has("--json");
+  if (peerKind !== undefined && peerKind !== "human" && peerKind !== "agent")
+    throw invalidTaskArg(`--peer-kind must be human or agent; got ${peerKind}`);
+  if (peerKind !== undefined && !target?.startsWith("@"))
+    throw invalidTaskArg("--peer-kind can only be used with a dm:@peer channel");
   if (operation === "list") validateTaskListScope(target, mine, one("--status"));
   if (!mine) {
-    if (!target?.trim()) throw invalidTaskArg("--target is required");
-    if (!TASK_TARGET.test(target))
+    if (!channel?.trim()) throw invalidTaskArg("--channel is required");
+    if (!TASK_CHANNEL.test(channel))
       throw invalidTaskArg(
-        `--target must be a conversation ('#channel' or '@user'); got ${target}`,
+        `--channel must be a conversation ('#channel' or 'dm:@peer'); got ${channel}`,
       );
   }
 
   const task: Omit<TaskCommand, "idempotencyKey"> = {
     operation,
     target,
+    ...(peerKind ? { peerKind: peerKind as "human" | "agent" } : {}),
     ...(mine ? { mine: true } : {}),
   };
   if (operation === "list") {
@@ -250,7 +277,7 @@ export function parseTaskArgs(
     (values.has("--reviewer-isolation") || reviewerIsolationFromEnvironment())
   )
     task.freshnessContextMode = "withheld";
-  return { command: "task", task };
+  return { command: "task", task, ...(json ? { json: true } : {}) };
 }
 
 /** The seven resource-receipt fields, each required and nonblank. */
@@ -280,10 +307,10 @@ function taskReceiptArgs(one: (flag: string) => string | undefined): TaskResourc
 
 const TASK_LIST_STATUSES = ["all", ...TASK_STATUSES] as const;
 
-/** `task list` reads one conversation (`--target`) or this Agent's own Tasks (`--mine`). */
+/** `task list` reads one conversation (`--channel`) or this Agent's own Tasks (`--mine`). */
 function validateTaskListScope(target: string | undefined, mine: boolean, status?: string) {
   if (status !== undefined && !(TASK_LIST_STATUSES as readonly string[]).includes(status))
     throw invalidTaskArg(`--status must be one of ${TASK_LIST_STATUSES.join("|")}; got ${status}`);
-  if (mine && target) throw invalidTaskArg("--mine cannot be combined with --target");
-  if (!mine && !target) throw invalidTaskArg("--target is required (or pass --mine)");
+  if (mine && target) throw invalidTaskArg("--mine cannot be combined with --channel");
+  if (!mine && !target) throw invalidTaskArg("--channel is required (or pass --mine)");
 }

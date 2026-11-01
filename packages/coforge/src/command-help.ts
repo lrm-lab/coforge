@@ -131,38 +131,38 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
   },
   task: {
     syntax:
-      "coforge task list|view|reply|read|follow|unfollow|create|claim|assign|unassign|convert|unclaim|update|amend|history|delete|receipt ...",
-    example: "coforge task list --target '#general'",
+      "coforge task list|show|reply|read|follow|unfollow|create|claim|assign|unassign|convert|unclaim|update|amend|history|delete|receipt ...",
+    example: "coforge task list --channel '#general'",
   },
   "task list": {
     syntax:
-      "coforge task list (--target <target> | --mine | --following) [--status all|todo|in_progress|in_review|done|closed] [--json]",
+      "coforge task list (--channel <channel> | --mine | --following) [--status all|todo|in_progress|in_review|done|closed] [--json]",
     flags: [
       "--following  the task conversations you follow, with their unread counts (no other flag combines with it)",
     ],
     example: "coforge task list --mine",
   },
-  "task view": {
-    syntax: "coforge task view [<ref>] [--target <board> --number <n>] [--limit <n>]",
+  "task show": {
+    syntax: "coforge task show [<ref>] [--channel <board> --number <n>] [--limit <n>]",
     flags: [
       "<ref>  the task: '#channel:#7', or 'dm:@peer:#7' for a task in a DM; quote it, an unquoted # starts a shell comment",
-      "--target, --number  the board ('#channel' or 'dm:@peer') and the task's number, instead of the ref",
+      "--channel, --number  the board ('#channel' or 'dm:@peer') and the task's number, instead of the ref",
       "--limit  how many of the latest messages to show (default 5, at most 20)",
     ],
     guidance:
       "Shows the task, whether its replies wake you, and the latest messages of its own conversation.",
-    example: "coforge task view '#general:#7'",
+    example: "coforge task show '#general:#7'",
   },
   "task reply": {
     syntax:
-      "coforge task reply [<ref>] [--target <board> --number <n>] [--attachment-id <uuid>]... [--mention human:<uuid>:<handle>|agent:<uuid>:<handle>]... [--json]",
+      "coforge task reply [<ref>] [--channel <board> --number <n>] [--attachment-id <uuid>]... [--mention human:<uuid>:<handle>|agent:<uuid>:<handle>]... [--json]",
     guidance:
       "The reply body is read from stdin. The reply posts in the task's own conversation, which its first reply creates, and makes you follow the task.",
     example: "coforge task reply '#general:#7' <<'COFORGE_MESSAGE'\nOn it.\nCOFORGE_MESSAGE",
   },
   "task read": {
     syntax:
-      "coforge task read [<ref>] [--target <board> --number <n>] [--unread | --before|--after|--around <id>] [--limit <n>]",
+      "coforge task read [<ref>] [--channel <board> --number <n>] [--unread | --before|--after|--around <id>] [--limit <n>]",
     flags: [
       "--unread  messages after your read position, moving it forward (no anchor combines with it)",
       "--before | --after | --around  one history window, by message id",
@@ -171,12 +171,12 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
     example: "coforge task read '#general:#7' --unread",
   },
   "task follow": {
-    syntax: "coforge task follow [<ref>] [--target <board> --number <n>]",
+    syntax: "coforge task follow [<ref>] [--channel <board> --number <n>]",
     guidance: "Following makes the task's replies wake you.",
     example: "coforge task follow '#general:#7'",
   },
   "task unfollow": {
-    syntax: "coforge task unfollow [<ref>] [--target <board> --number <n>] [--reason <text>]",
+    syntax: "coforge task unfollow [<ref>] [--channel <board> --number <n>] [--reason <text>]",
     flags: ["--reason  why you stop, shown in the conversation (at most 200 characters)"],
     guidance:
       "Stops ordinary replies waking you. A later @mention, being assigned the task or claiming it follows it again; replying in it does too.",
@@ -184,7 +184,7 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
   },
   "task create": {
     syntax:
-      "coforge task create --target <target> --title <title>... [--assignee @handle] [--creates-resource] [--description <text>] [--message-id <id>] [--alongside] [--json]",
+      "coforge task create --channel <channel> [--peer-kind human|agent] --title <title>... [--assignee @handle] [--creates-resource] [--description <text>] [--message-id <id>] [--alongside] [--json]",
     flags: [
       "--description  details for the task; only with a single --title",
       "--message-id  the channel message the task is made from (full id or its short form); applies to every --title",
@@ -193,28 +193,29 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
     guidance: [
       "Atomic assignment:",
       "  --assignee applies to every --title. Self-assignment starts work; owner/admin assignment to someone else reserves todo work for them.",
-      "  To undo an accidental self-start, run `coforge task update --target <channel> --number <N> --status todo`; the task stays assigned to you.",
+      "  To undo an accidental self-start, run `coforge task update --channel <channel> --number <N> --status todo`; the task stays assigned to you.",
       "  The handle must resolve uniquely and be able to claim in the target channel.",
       "  If handle resolution or channel authorization fails, no task is created.",
     ].join("\n"),
-    example: "coforge task create --target '#general' --title 'Fix the flaky test'",
+    example: "coforge task create --channel '#general' --title 'Fix the flaky test'",
   },
   "task claim": {
     syntax:
-      "coforge task claim --target <target> (--number <n> | --message-id <id>)... [--reviewer-isolation]",
-    example: "coforge task claim --target '#general' --number 42",
+      "coforge task claim --channel <channel> [--peer-kind human|agent] (--number <n> | --message-id <id>)... [--reviewer-isolation] [--json]",
+    example: "coforge task claim --channel '#general' --number 42",
   },
   "task assign": {
     syntax:
-      "coforge task assign --target <target> --number <n> --assignee @handle [--expected-revision <n>]",
+      "coforge task assign --channel <channel> [--peer-kind human|agent] --number <n> --assignee @handle [--expected-revision <n>] [--json]",
   },
   "task unassign": {
-    syntax: "coforge task unassign --target <target> --number <n> [--expected-revision <n>]",
+    syntax:
+      "coforge task unassign --channel <channel> [--peer-kind human|agent] --number <n> [--expected-revision <n>] [--json]",
   },
   "task update": {
     syntax:
-      "coforge task update --target <target> --number <n> --status <status> [--reviewer-isolation]",
-    example: "coforge task update --target '#general' --number 42 --status in_review",
+      "coforge task update --channel <channel> [--peer-kind human|agent] --number <n> --status <status> [--reviewer-isolation] [--json]",
+    example: "coforge task update --channel '#general' --number 42 --status in_review",
   },
   reminder: {
     syntax: "coforge reminder schedule|list|cancel|update|snooze ...",
@@ -331,26 +332,28 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
     example: "coforge thread unfollow --target '#general:12345678'",
   },
   "task unclaim": {
-    syntax: "coforge task unclaim --target <target> --number <n> [--expected-revision <n>]",
+    syntax:
+      "coforge task unclaim --channel <channel> [--peer-kind human|agent] --number <n> [--expected-revision <n>] [--json]",
   },
   "task convert": {
-    syntax: "coforge task convert --target <target> --number <n> [--json]",
+    syntax:
+      "coforge task convert --channel <channel> [--peer-kind human|agent] --message-id <id> [--json]",
   },
   "task amend": {
     syntax:
-      "coforge task amend --target <target> --number <n> [--title <title>] [--reviewer-isolation]",
+      "coforge task amend --channel <channel> [--peer-kind human|agent] --number <n> [--title <title>] [--description <text>|--clear-description] [--reviewer-isolation] [--json]",
   },
   "task history": {
-    syntax: "coforge task history --target <target> --number <n> [--json]",
+    syntax:
+      "coforge task history --channel <channel> [--peer-kind human|agent] --number <n> [--json]",
   },
   "task receipt": {
-    syntax: "coforge task receipt --target <target> --number <n> [--json]",
+    syntax:
+      "coforge task receipt --channel <channel> [--peer-kind human|agent] --number <n> [--json]",
   },
   "task delete": {
-    syntax: "coforge task delete --target <target> --number <n> [--json]",
-  },
-  "task show": {
-    syntax: "coforge task show --target <target> --number <n> [--json]",
+    syntax:
+      "coforge task delete --channel <channel> [--peer-kind human|agent] --number <n> [--json]",
   },
   "reminder log": {
     syntax: "coforge reminder log --id <id> [--json]",

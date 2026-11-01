@@ -9,6 +9,16 @@ const base = {
 
 test("validateTaskRequest accepts a well-formed list command", () => {
   expect(() => validateTaskRequest(base)).not.toThrow();
+  expect(() => validateTaskRequest({ ...base, target: "@ada", peerKind: "human" })).not.toThrow();
+});
+
+test("validateTaskRequest requires peer kind only for direct targets", () => {
+  expect(() => validateTaskRequest({ ...base, peerKind: "agent" })).toThrow(
+    "invalid Task peer kind",
+  );
+  expect(() =>
+    validateTaskRequest({ ...base, target: "@ada", peerKind: "robot" as never }),
+  ).toThrow("invalid Task peer kind");
 });
 
 test("validateTaskRequest rejects an unknown operation, thread targets, and missing operation arguments", () => {

@@ -2,6 +2,7 @@ import {
   TASK_STATUSES,
   type TaskClaimConflict,
   type TaskClaimResult,
+  type TaskHistoryEvent,
   type TaskMember,
   type TaskResult,
   type TaskStatus,
@@ -47,7 +48,7 @@ function boardRow(task: TaskView): string {
   return `#${task.number} [${task.status}] ${fenceMessageBody(task.title)}${owner}${creator} ${messageField(task)} rev=${task.revision}${resourceReceipt(task)}${times(task)}${details}`;
 }
 
-/** One conversation's Tasks, in board order, as `coforge task list --target` prints them. */
+/** One conversation's Tasks, in board order, as `coforge task list --channel` prints them. */
 export function formatTaskBoard(
   target: string,
   result: TaskResult,
@@ -171,6 +172,38 @@ export function formatTaskDeleted(number: number): string {
   return `#${number} deleted.`;
 }
 
+function historyActor(event: TaskHistoryEvent): string {
+  if (event.actorType === "system") return "@system";
+  return event.actorName ? `@${event.actorName}` : "<unresolved>";
+}
+
+export function formatTaskHistory(result: TaskResult): string {
+  const task = result.tasks[0]!;
+  const events = result.history?.length
+    ? result.history
+        .map((event) => {
+          const lines = [
+            `seq=${event.seq} time=${event.createdAt} actor=${historyActor(event)} type=${event.eventType}`,
+            `  ${JSON.stringify(event.payload)}`,
+          ];
+          if (event.eventType === "amended") {
+            const { title, description } = event.payload.changes;
+            lines.push(
+              "  Superseded card:",
+              ...(title ? [`    title: ${fenceMessageBody(title.from)}`] : []),
+              ...(description
+                ? [`    description: ${fenceMessageBody(description.from ?? "(none set)")}`]
+                : []),
+            );
+          }
+          return lines.join("\n");
+        })
+        .join("\n")
+    : "No recorded events.";
+  const description = task.description ? fenceMessageBody(task.description) : "(none set)";
+  return `## Task #${task.number} history — revision ${task.revision}\n\nCurrent title: ${fenceMessageBody(task.title)}\nCurrent description: ${description}\n\n${events}`;
+}
+
 /** The card after `coforge task amend`, with the revision and the history event it recorded. */
 export function formatTaskAmended(result: TaskResult): string {
   const task = result.tasks[0]!;
@@ -179,10 +212,25 @@ export function formatTaskAmended(result: TaskResult): string {
     task.description === null || task.description === undefined
       ? "details: <none>"
       : `details:\n  ${fenceMessageBody(task.description)}`;
+  const superseded =
+    event?.eventType === "amended"
+      ? [
+          "superseded card:",
+          ...(event.payload.changes.title
+            ? [`  title: ${fenceMessageBody(event.payload.changes.title.from)}`]
+            : []),
+          ...(event.payload.changes.description
+            ? [
+                `  description: ${fenceMessageBody(event.payload.changes.description.from ?? "(none set)")}`,
+              ]
+            : []),
+        ]
+      : [];
   return [
     `#${task.number} amended — revision ${task.revision}${event ? `, event seq ${event.seq}.` : "; no change recorded."}`,
     `title: ${fenceMessageBody(task.title)}`,
     details,
+    ...superseded,
   ].join("\n");
 }
 
@@ -194,7 +242,7 @@ export function formatResourceReceiptRecorded(target: string, result: TaskResult
   if (followup)
     lines.push(
       `Expiry follow-up ${shortId(followup.id)} owned by ${followup.owner} fires ${followup.fireAt}.`,
-      `Follow-up anchor: msg=${shortId(followup.messageId)} conversation=${followup.conversationId}.`,
+      `Follow-up anchor: msg=${shortId(followup.messageId)} targetChannelId=${followup.targetChannelId}.`,
     );
   return lines.join("\n");
 }

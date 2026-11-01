@@ -44,7 +44,7 @@ export class SourceMessageTaken extends AppError {
         .slice(0, 60) || held.holder;
     const reply = board
       ? `coforge task reply "${board}:#${taskNumber}"`
-      : `coforge task reply --target <the target you used> --number ${taskNumber}`;
+      : `coforge task reply --channel <the channel you used> --number ${taskNumber}`;
     super("CONFLICT", {
       errorId: SOURCE_MESSAGE_TAKEN,
       details: { taskNumber, holder: held.holder, holderName },

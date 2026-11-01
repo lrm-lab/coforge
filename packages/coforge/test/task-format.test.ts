@@ -269,6 +269,8 @@ test("An amend receipt shows the new revision, its history event and the current
       "details:",
       "  a",
       "  │ b",
+      "superseded card:",
+      "  description: (none set)",
     ].join("\n"),
   );
   expect(formatTaskAmended({ tasks: [{ ...amended, description: null }], history: [] })).toBe(
@@ -290,14 +292,14 @@ test("A resource receipt names the expiry follow-up and where it is anchored", (
         owner: "@kiro",
         fireAt: "2030-03-04T05:06:00.000Z",
         messageId: "7abcdef0-1111-2222-3333-444444444444",
-        conversationId: "5a5a5a5a-1111-2222-3333-444444444444",
+        targetChannelId: "5a5a5a5a-1111-2222-3333-444444444444",
       },
     }),
   ).toBe(
     [
       "Resource receipt recorded for task #7 in #general.",
       "Expiry follow-up 0f1e2d3c-1111 owned by @kiro fires 2030-03-04T05:06:00.000Z.",
-      "Follow-up anchor: msg=7abcdef0-1111 conversation=5a5a5a5a-1111-2222-3333-444444444444.",
+      "Follow-up anchor: msg=7abcdef0-1111 targetChannelId=5a5a5a5a-1111-2222-3333-444444444444.",
     ].join("\n"),
   );
 });

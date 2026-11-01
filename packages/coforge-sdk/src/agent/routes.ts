@@ -27,7 +27,7 @@ const INBOX_LIST_ROUTE = {
   method: "GET",
   path: "/api/agent/v1/inbox/conversations",
 } as const;
-/** `coforge task view|reply|follow|unfollow|list --following`: a task's own conversation. Same
+/** `coforge task show|reply|follow|unfollow|list --following`: a task's own conversation. Same
  * routes under `proxy`, `local` and `cloud`. */
 const TASK_CONVERSATION_ROUTES = {
   view: { method: "GET", path: "/api/agent/v1/tasks/view" },

@@ -198,7 +198,7 @@ test("a multi-line bash command with no heredoc is sanitized to a single-line to
   expect(toolInput).not.toContain("hunter2");
 });
 
-test("CoForge CLI invocations resolve to the reference client's semantic tools and summaries, never the raw command", () => {
+test("CoForge CLI semantic mapping stays stable", () => {
   // The closed set and the summary formats follow the reference Computer 1.0.47
   // (`resolveRaftCliInvocation` and `summarizeToolInput`); the five channel tools it leaves
   // unlabeled get a label and their channel here. `detail` is pinned as literal
@@ -301,49 +301,49 @@ test("CoForge CLI invocations resolve to the reference client's semantic tools a
       toolInput: "#general",
     },
     {
-      command: "coforge task list --target #general --status all",
+      command: "coforge task list --channel #general --status all",
       detailKind: "tool_started",
       detail: "Listing tasks…",
       toolName: "list_tasks",
       toolInput: "#general",
     },
     {
-      command: "coforge task create --target #general --title 'Ship the thing'",
+      command: "coforge task create --channel #general --title 'Ship the thing'",
       detailKind: "tool_started",
       detail: "Creating tasks…",
       toolName: "create_tasks",
       toolInput: "#general",
     },
     {
-      command: "coforge task claim --target #general --number 7 --number 8",
+      command: "coforge task claim --channel #general --number 7 --number 8",
       detailKind: "tool_started",
       detail: "Claiming tasks…",
       toolName: "claim_tasks",
       toolInput: "#general #t7,#t8",
     },
     {
-      command: "coforge task claim --target #general --message-id deadbeef",
+      command: "coforge task claim --channel #general --message-id deadbeef",
       detailKind: "tool_started",
       detail: "Claiming tasks…",
       toolName: "claim_tasks",
       toolInput: "#general",
     },
     {
-      command: "coforge task unclaim --target #general --number 7",
+      command: "coforge task unclaim --channel #general --number 7",
       detailKind: "tool_started",
       detail: "Unclaiming task…",
       toolName: "unclaim_task",
       toolInput: "#general #t7",
     },
     {
-      command: "coforge task update --target #general --number 7 --status done",
+      command: "coforge task update --channel #general --number 7 --status done",
       detailKind: "tool_started",
       detail: "Updating task status…",
       toolName: "update_task_status",
       toolInput: "#general #t7",
     },
     {
-      command: "coforge task update --target #general --status done",
+      command: "coforge task update --channel #general --status done",
       detailKind: "tool_started",
       detail: "Updating task status…",
       toolName: "update_task_status",
@@ -416,13 +416,13 @@ test("CoForge subcommands outside the reference client's set are ordinary comman
     "coforge channel info #general",
     "coforge channel create --name launch",
     "coforge thread unfollow --target #general:deadbeef",
-    "coforge task convert --target #general --message-id deadbeef",
-    "coforge task assign --target #general --number 7 --assignee @bob",
-    "coforge task unassign --target #general --number 7",
-    "coforge task amend --target #general --number 7 --title New",
-    "coforge task history --target #general --number 7",
-    "coforge task delete --target #general --number 7",
-    "coforge task receipt --target #general --number 7",
+    "coforge task convert --channel #general --message-id deadbeef",
+    "coforge task assign --channel #general --number 7 --assignee @bob",
+    "coforge task unassign --channel #general --number 7",
+    "coforge task amend --channel #general --number 7 --title New",
+    "coforge task history --channel #general --number 7",
+    "coforge task delete --channel #general --number 7",
+    "coforge task receipt --channel #general --number 7",
     "coforge reminder update --id deadbeef-dead-beef-dead-beefdeadbeef --title New",
     "coforge reminder snooze --id deadbeef-dead-beef-dead-beefdeadbeef --delay-seconds 60",
     "coforge reminder log --id deadbeef-dead-beef-dead-beefdeadbeef",
@@ -453,14 +453,14 @@ test("a CoForge invocation is recognized in any chained segment, behind env assi
   const cases: [string, string, string | undefined][] = [
     ["COFORGE_X=1 coforge channel join --target #general", "join_channel", "#general"],
     ["bash -c 'coforge channel join --target #general'", "join_channel", "#general"],
-    ['zsh -lc "coforge task list --target #general"', "list_tasks", "#general"],
+    ['zsh -lc "coforge task list --channel #general"', "list_tasks", "#general"],
     ["sh -c 'A=1 coforge message check'", "check_messages", undefined],
     ["cd /work && coforge channel leave --target #general", "leave_channel", "#general"],
     ["true; B=2 coforge message read --target @alice", "read_history", "@alice"],
     ["coforge channel join --target=#general", "join_channel", "#general"],
     ["coforge message send --target @a --target @b", "send_message", "@b"],
     ["coforge message check | grep unread", "check_messages", undefined],
-    ["coforge task list --target #general && echo done", "list_tasks", "#general"],
+    ["coforge task list --channel #general && echo done", "list_tasks", "#general"],
     ["coforge message check; echo done", "check_messages", undefined],
   ];
   for (const [command, toolName, toolInput] of cases) {

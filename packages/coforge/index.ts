@@ -24,7 +24,6 @@ import {
   type MentionSelectorInput as MentionSelector,
   type ReminderSummaryRecord,
   type TaskCommand,
-  type TaskHistoryEvent,
   type TaskResult,
   type WeeklyReportCommand,
   type WeeklyReportResponse,
@@ -172,6 +171,7 @@ import {
   formatTaskBoard,
   formatTaskConverted,
   formatTaskDeleted,
+  formatTaskHistory,
   formatTaskStatusUpdated,
   formatTaskUnclaimed,
   formatTasksCreated,
@@ -938,6 +938,7 @@ export async function run(args: readonly string[], transport: MessageTransport):
   }
   if (invocation.command === "task") {
     if (!transport.task) throw new Error("Task transport is unavailable");
+    const outputJson = invocation.json === true;
     let command = { ...invocation.task, idempotencyKey: crypto.randomUUID() } as TaskCommand;
     if (
       (command.operation === "update" || command.operation === "unclaim") &&
@@ -957,7 +958,7 @@ export async function run(args: readonly string[], transport: MessageTransport):
       const result = await transport.task(command);
       if (result.state === "held")
         return formatHeldTaskRequest(result, command.freshnessContextMode === "withheld");
-      return formatTaskResult(command, result);
+      return outputJson ? result : formatTaskResult(command, result);
     } catch (error) {
       // Deleting is irreversible and a refusal is an authority fact, not a race: name who may.
       if (
@@ -1746,7 +1747,8 @@ function formatHeldTaskRequest(result: TaskResult, reviewerIsolation: boolean): 
 
 /** What a `task` subcommand prints for the server's answer. */
 function formatTaskResult(command: TaskCommand, result: TaskResult): string {
-  const target = command.target!;
+  const target =
+    command.target?.startsWith("@") && command.peerKind ? `dm:${command.target}` : command.target!;
   const task = result.tasks[0];
   switch (command.operation) {
     case "list":
@@ -1783,22 +1785,4 @@ function formatTaskResult(command: TaskCommand, result: TaskResult): string {
     default:
       throw new Error(`no output is defined for task ${command.operation}`);
   }
-}
-
-function historyActor(event: TaskHistoryEvent): string {
-  if (event.actorType === "system") return "@system";
-  return event.actorName ? `@${event.actorName}` : "<unresolved>";
-}
-
-function formatTaskHistory(result: TaskResult): string {
-  const task = result.tasks[0]!;
-  const events = result.history?.length
-    ? result.history
-        .map(
-          (event) =>
-            `seq=${event.seq} time=${event.createdAt} actor=${historyActor(event)} type=${event.eventType}\n  ${JSON.stringify(event.payload)}`,
-        )
-        .join("\n")
-    : "No recorded events.";
-  return `## Task #${task.number} history — revision ${task.revision}\n\n${task.title}\n\n${events}`;
 }

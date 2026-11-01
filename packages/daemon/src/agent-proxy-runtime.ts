@@ -151,7 +151,7 @@ export type AgentProxyRuntime = {
   ): Promise<AgentAppConfigResponse>;
   /** `coforge app list|token`: forwarded as it is, the cloud's response answered as it came. */
   agentApp?(context: string, request: AgentAppRequest, agentApiKey: string): Promise<Response>;
-  /** `coforge task view|read|reply|follow|unfollow|list --following`: forwarded as it is, the
+  /** `coforge task show|read|reply|follow|unfollow|list --following`: forwarded as it is, the
    * cloud's response answered as it came. */
   agentTaskConversation?(
     context: string,

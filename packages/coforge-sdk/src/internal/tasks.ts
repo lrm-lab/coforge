@@ -3,6 +3,7 @@ import type { AgentMessageRecord } from "./local-daemon";
 
 export const TASK_STATUSES = ["todo", "in_progress", "in_review", "done", "closed"] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
+export type TaskPeerKind = "human" | "agent";
 
 /**
  * The statuses a Task may move to in ordinary hands, as the reference product's board works: work
@@ -87,7 +88,7 @@ export type TaskView = {
   earlierDiscussion?: { threadRootId: string; replyCount: number };
   /** The channel message the task was made from (`create --message-id`). */
   sourceMessageId?: string | null;
-  /** The channel message the task was made from, as a card or `task view` shows it; null when it
+  /** The channel message the task was made from, as a card or `task show` shows it; null when it
    * was made from none. `threadRootId` is set when that message is a reply. */
   sourceMessage?: {
     messageId: string;
@@ -165,6 +166,8 @@ export type TaskCommand = {
   /** Browser callers identify the conversation; Agent callers use its public target. */
   conversationId?: string;
   target?: string;
+  /** For a direct board target (`@peer`), whether the peer is a human or Agent. */
+  peerKind?: TaskPeerKind;
   number?: number;
   numbers?: number[];
   messageId?: string;
@@ -225,7 +228,7 @@ export type TaskResult = {
     owner: string;
     fireAt: string;
     messageId: string;
-    conversationId: string;
+    targetChannelId: string;
   };
   state?: "held";
   freshnessContextMode?: "inline" | "withheld";

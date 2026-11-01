@@ -114,7 +114,7 @@ async function runReply(
   }
 }
 
-/** Runs `coforge task view|reply|read|follow|unfollow|list --following` and returns what it prints. */
+/** Runs `coforge task show|reply|read|follow|unfollow|list --following` and returns what it prints. */
 export async function runTaskConversation(
   transport: TaskConversationTransport,
   invocation: TaskConversationInvocation,
@@ -130,7 +130,7 @@ export async function runTaskConversation(
   const { task } = invocation;
   const ref = { channel: task.board, task_number: String(task.number) };
   switch (invocation.op) {
-    case "view": {
+    case "show": {
       const query = { ...ref, ...(invocation.limit ? { limit: String(invocation.limit) } : {}) };
       return formatTaskView(
         decoded(decodeAgentTaskViewResponse, await send({ route: "view", query })),
