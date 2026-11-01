@@ -3,11 +3,22 @@ import type {
   RequestPermissionResponse,
   SessionConfigOption,
 } from "@agentclientprotocol/sdk";
-import { asRecord } from "#src/json-record";
-import { AcpConnection, acpBounded, type AcpConnectionHost } from "#src/acp/connection";
+import { acpBounded, acpProcess, type AcpConnection } from "#src/acp/connection";
+import type { AcpRuntimeProfile } from "#src/acp/profile";
+import type { CommandCodeRuntimeHost } from "./host";
 
 export const COMMAND_CODE_ACP_ARGS = ["acp"] as const;
 export const COMMAND_CODE_ACP_TIMEOUT_MS = 120_000;
+
+export const COMMAND_CODE_PROFILE: AcpRuntimeProfile = {
+  args: COMMAND_CODE_ACP_ARGS,
+  readConfig: readConfigOptions,
+  messages: {
+    unsupportedProtocol: "Unsupported Command Code ACP protocol version",
+    closedBeforeConfig: "Command Code ACP process closed before configuration",
+    timedOut: "Command Code ACP operation timed out",
+  },
+};
 
 export type CommandCodeConnection = AcpConnection;
 
@@ -21,29 +32,23 @@ export function commandCodeConnection(
   modPath: string | undefined,
   cwd: string,
   environment: Readonly<Record<string, string>>,
-  host: AcpConnectionHost,
+  host: CommandCodeRuntimeHost,
   onUpdate: (sessionId: string, update: Readonly<Record<string, unknown>>) => void = () => {},
   onPermission: (request: RequestPermissionRequest) => RequestPermissionResponse = () => ({
     outcome: { outcome: "cancelled" },
   }),
   onPromptWrite: () => void = () => {},
 ): AcpConnection {
-  const argv = [...command, ...COMMAND_CODE_ACP_ARGS];
-  if (modPath) argv.push("--mod", modPath);
-  return new AcpConnection({
-    command: argv,
+  return acpProcess(COMMAND_CODE_PROFILE, {
+    command,
+    extraArgs: modPath ? ["--mod", modPath] : [],
     cwd,
     environment,
-    host,
-    messages: {
-      unsupportedProtocol: "Unsupported Command Code ACP protocol version",
-      closedBeforeConfig: "Command Code ACP process closed before configuration",
-      timedOut: "Command Code ACP operation timed out",
-    },
-    readConfig: readConfigOptions,
+    clientInfo: host.clientInfo,
+    processTreeSpawner: host.processTreeSpawner,
     onUpdate: (method, params) => {
       if (method !== "session/update") return;
-      const update = asRecord(params.update);
+      const update = asUpdate(params);
       if (typeof params.sessionId === "string" && update) onUpdate(params.sessionId, update);
     },
     onPermission,
@@ -52,7 +57,14 @@ export function commandCodeConnection(
 }
 
 export function commandCodeBounded<T>(work: Promise<T>, timeoutMs: number): Promise<T> {
-  return acpBounded(work, timeoutMs, "Command Code ACP operation timed out");
+  return acpBounded(work, timeoutMs, COMMAND_CODE_PROFILE.messages.timedOut);
+}
+
+function asUpdate(params: Readonly<Record<string, unknown>>) {
+  const update = params.update;
+  return typeof update === "object" && update !== null
+    ? (update as Readonly<Record<string, unknown>>)
+    : undefined;
 }
 
 function readConfigOptions(

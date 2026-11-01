@@ -11,6 +11,7 @@ import { JsonlProcess } from "#src/jsonl-process";
 import { asRecord } from "#src/json-record";
 import { withDeadline } from "#src/deadline";
 import type { ProcessTreeSpawner } from "#src/process-tree";
+import type { AcpProfileMessages, AcpRuntimeProfile } from "./profile";
 
 /** Connection identity and process ownership, supplied by the embedding host. */
 export type AcpConnectionHost = {
@@ -18,20 +19,13 @@ export type AcpConnectionHost = {
   readonly processTreeSpawner: ProcessTreeSpawner;
 };
 
-/** The messages this runtime's own protocol failures carry, so each adapter keeps its wording. */
-export type AcpConnectionMessages = Readonly<{
-  unsupportedProtocol: string;
-  closedBeforeConfig: string;
-  timedOut: string;
-}>;
-
 export type AcpConnectionOptions = {
   /** The full argv, executable included. */
   command: readonly string[];
   cwd: string;
   environment: Readonly<Record<string, string>>;
   host: AcpConnectionHost;
-  messages: AcpConnectionMessages;
+  messages: AcpProfileMessages;
   /** Reads a `config_option_update` into the options this runtime publishes; absent for a
    * runtime that never publishes configuration this way. */
   readConfig?(update: Readonly<Record<string, unknown>>): SessionConfigOption[] | undefined;
@@ -45,6 +39,42 @@ export type AcpConnectionOptions = {
    * began. */
   onPromptWrite?(): void;
 };
+
+/**
+ * One ACP runtime's process and client, built from its profile: the arguments the profile adds to
+ * the resolved executable, the identity it announces, the notifications it publishes, and the
+ * configuration it reads.
+ */
+export function acpProcess(
+  profile: AcpRuntimeProfile,
+  options: {
+    /** The resolved executable. */
+    command: readonly string[];
+    /** Arguments this call adds after the profile's (a `--mod` or `--patch` path). */
+    extraArgs?: readonly string[];
+    cwd: string;
+    environment: Readonly<Record<string, string>>;
+    /** Identity this runtime's host announces for the connection. */
+    clientInfo: Readonly<{ name: string; version: string }>;
+    processTreeSpawner: ProcessTreeSpawner;
+    onUpdate?(method: string, params: Readonly<Record<string, unknown>>): void;
+    onPermission?(request: RequestPermissionRequest): RequestPermissionResponse;
+    onPromptWrite?(): void;
+  },
+): AcpConnection {
+  return new AcpConnection({
+    command: [...options.command, ...profile.args, ...(options.extraArgs ?? [])],
+    cwd: options.cwd,
+    environment: options.environment,
+    host: { clientInfo: options.clientInfo, processTreeSpawner: options.processTreeSpawner },
+    messages: profile.messages,
+    notifications: profile.notifications,
+    readConfig: profile.readConfig,
+    onUpdate: options.onUpdate,
+    onPermission: options.onPermission,
+    onPromptWrite: options.onPromptWrite,
+  });
+}
 
 /**
  * One ACP runtime's connection: the JSONL child process, the ACP client wired to it, the
