@@ -27,7 +27,6 @@ import {
   type AgentRuntime,
 } from "#src/agent-runtime/agent-process-manager";
 import { type SessionReference } from "./launch-identity";
-import { connectionSessionInvalidate } from "./session-invalidate-activity";
 import { activityDraft } from "./activity-draft";
 import { recoveryOf, runtimeConfigOf, type AgentRecoveryContext } from "./runtime-launch-intent";
 import { LaunchFailureBackoff } from "#src/agent-runtime/launch-failure-backoff";
@@ -82,8 +81,6 @@ import { AgentMigrationBucketClient } from "#src/connection/agent-migration-buck
 import { usageScanFailure, usageScanReading, usageScanResult } from "./usage-scan-response";
 import { AgentControl } from "#src/agent-runtime/agent-control";
 import { AgentSessions } from "#src/agent-runtime/agent-session";
-import { AgentRuntimeState } from "#src/agent-runtime/agent-runtime-state";
-import { MemoryAgentRuntimeStateStore } from "#src/persistence/memory-agent-runtime-state-store";
 import { AgentWorkspaceQueries } from "./agent-workspace-queries";
 import { AgentMessageAttentionIndex } from "./agent-message-attention-index";
 import { AgentInboxCoordinator } from "./agent-inbox-coordinator";
@@ -165,6 +162,7 @@ import { CodeAgentInventorySync, type CodeAgentDiscovery } from "./code-agent-in
 import { RuntimeAuthReporter } from "./runtime-auth-reporter";
 import { RuntimeStartup } from "./runtime-startup";
 import { RuntimeStop } from "./runtime-stop";
+import { composeAgentControl } from "./agent-control-composition";
 import {
   UpgradeResultReporter,
   type RecoveredUpgradeResult,
@@ -744,89 +742,25 @@ export class DaemonRuntime {
           stateDirectory,
         })
       : undefined;
-    const state = new AgentRuntimeState(
-      // Control state lives only in this process: the server
-      // re-dispatches what should still be running after a restart, so a persisted record could
-      // only outlive the writer it was waiting on.
-      new MemoryAgentRuntimeStateStore(connection.workspaceRoot, connection.workspaceId),
-    );
-    this.#agentSessions = new AgentSessions(state, async (snapshot) => {
-      await this.#reportAgentSession({
-        protocolMajor: snapshot.protocolMajor,
-        requestId: crypto.randomUUID(),
-        workspaceId: snapshot.workspaceId,
-        computerId: snapshot.computerId,
-        agentId: snapshot.agentId,
-        provider: snapshot.provider,
-        startRequestId: snapshot.requestId,
-        daemonInstanceId: snapshot.daemonInstanceId ?? this.#runtimeInstanceId,
-        launchId: snapshot.launchId,
-        sessionId: snapshot.identity.sessionId,
-        sessionState: snapshot.identity.state,
-        controlEpoch: snapshot.epoch,
-        sequence: snapshot.sequence,
-      });
-    });
-    this.#agentControl = new AgentControl(this.#runtimeInstanceId, state, this.#agentSessions, {
+    const control = composeAgentControl({
+      connection,
+      runtimeInstanceId: this.#runtimeInstanceId,
       running: (agentId) => Boolean(this.#agentProcessManager.session(agentId)),
-      stop: async (agentId) => {
-        const session = this.#agentProcessManager.session(agentId);
-        await this.stopAgent(agentId);
-        return session?.readSessionIdentity?.();
-      },
-      launch: async (intent, launchId, replacedSessionId, invalidateReason) => {
-        if (replacedSessionId) this.#sessionReferences.delete(intent.agentId);
-        const runtime = await this.#startAgent(
-          intent.agentId,
-          runtimeConfigOf(intent),
-          recoveryOf(intent),
-          {
-            sessionId: intent.sessionId,
-            requestId: intent.requestId,
-            previousLaunchId: intent.previousLaunchId,
-            sessionMode: intent.sessionMode,
-            resumePrompt: intent.resumePrompt,
-            introductionPrompt: intent.introductionPrompt,
-            control: { controlEpoch: intent.controlEpoch, launchId },
-            replacedSessionId,
-            invalidateReason,
-          },
-        );
-        return runtime.session.readSessionIdentity?.();
-      },
-      wake: async (intent) => {
-        await this.#startAgent(
-          intent.agentId,
-          runtimeConfigOf(intent),
-          { wakeMessage: intent.wakeMessage },
-          {
-            requestId: intent.requestId,
-            resumePrompt: intent.resumePrompt,
-            introductionPrompt: intent.introductionPrompt,
-          },
-        );
-      },
+      session: (agentId) => this.#agentProcessManager.session(agentId),
+      stopAgent: (agentId) => this.stopAgent(agentId),
+      startAgent: (agentId, config, recovery, request) =>
+        this.#startAgent(agentId, config, recovery, request),
       rebind: (intent, launchId) => this.#rebindAgent(intent, launchId),
+      forgetSessionReference: (agentId) => this.#sessionReferences.delete(agentId),
       startSettled: (agentId) => this.#exitedDelivery.releaseStartBuffer(agentId),
-      // `launchId` is always present here (minted synchronously by `AgentControl.start()`
-      // before this call); the wire message and the retry's cold-start Activity
-      // (`#launchAgent`'s `request.invalidateReason` narration) both follow that same,
-      // effectively-unconditional signal — there is no longer a separate controlEpoch gate.
-      invalidateSession: (intent, launchId, sessionId, reason) => {
-        this.#transport.sendSessionInvalidate?.(
-          connectionSessionInvalidate(this.#connection, this.#runtimeInstanceId, {
-            agentId: intent.agentId,
-            provider: intent.provider,
-            sessionId,
-            launchId,
-            reason,
-          }),
-        );
-      },
-      result: async (result) => {
+      sendSessionInvalidate: (message) => this.#transport.sendSessionInvalidate?.(message),
+      reportSession: (report) => this.#reportAgentSession(report),
+      sendControlResult: async (result) => {
         await this.#transport.sendAgentControlResult?.(result);
       },
     });
+    this.#agentSessions = control.agentSessions;
+    this.#agentControl = control.agentControl;
     this.#observationPorts = {
       activityPublisher: this.#activityPublisher,
       deliveryQueue: this.#deliveryQueue,
