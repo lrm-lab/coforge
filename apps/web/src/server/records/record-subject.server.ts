@@ -4,7 +4,6 @@ import { AppError } from "#src/lib/app-error";
 import {
   isAssignmentUnread,
   memberReportTitle,
-  normalizeReportContent,
   reportBodyRestoreView,
   reportContentForAuthor,
   reportContentForRecipient,
@@ -16,12 +15,9 @@ import { REPORT_PERSON_SELECT, reportPersonView } from "./record-member-weeks.se
 import { recordDistribution } from "./record-distribution.server";
 import type { WeeklyReportNotifier } from "./weekly-report-distribution.server";
 import { requireMembership } from "./record-catalog-access.server";
+import { asReportContent } from "./record-content-coercion.server";
 
 type Db = PrismaClient;
-
-function asReportContent(value: unknown): ReportContent {
-  return normalizeReportContent(value);
-}
 
 /** Authors keep the working body. Other viewers see the last send. */
 function memberReportContentForViewer(

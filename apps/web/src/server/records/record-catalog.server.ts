@@ -25,12 +25,9 @@ import { recordAssistantCatalog } from "./record-assistant-catalog.server";
 import { recordAssistantOffer } from "./record-assistant-offer.server";
 import { recordReportContent } from "./record-report-content.server";
 import { ensureFormatForSettings } from "./record-catalog-format.server";
+import { asReportContent } from "./record-content-coercion.server";
 
 type Db = PrismaClient;
-
-function asReportContent(value: unknown): ReportContent {
-  return normalizeReportContent(value);
-}
 
 export class RecordCatalog {
   constructor(

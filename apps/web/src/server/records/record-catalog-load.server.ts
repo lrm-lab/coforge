@@ -5,9 +5,8 @@ import {
   currentIsoWeek,
   isAutoSendCancelled,
   memberReportTitle,
-  normalizeReportContent,
-  type ReportContent,
 } from "#src/features/records/records-content";
+import { asReportContent } from "./record-content-coercion.server";
 import {
   currentWeekTemplateTitle,
   isWeeklySendArmed,
@@ -25,10 +24,6 @@ import { requireMembership } from "./record-catalog-access.server";
 import { zonedCalendarDate } from "#src/features/records/weekly-report-schedule-due";
 
 type Db = PrismaClient;
-
-function asReportContent(value: unknown): ReportContent {
-  return normalizeReportContent(value);
-}
 
 /** Ensures a live format document for one applied settings row (may write on GET). */
 export type EnsureFormatForSettings = (input: {
