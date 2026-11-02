@@ -77,11 +77,25 @@ describe("pre-commit (offline)", () => {
     expect(repo.commitAll(OFFLINE).exitCode).toBe(0);
   });
 
-  test("migrations already in the base are never judged, edited or not", () => {
+  test("the migration-safety rule never judges a base migration, but editing one is blocked", () => {
     const old = migration("20260101000000_old");
     repo.seed({ [old]: "DROP TABLE legacy;\n" });
     repo.write({ [old]: "DROP TABLE legacy;\n-- touched\n" });
-    expect(repo.commitAll(OFFLINE).exitCode).toBe(0);
+    const result = repo.commitAll(OFFLINE);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("migration-immutable");
+    expect(result.stderr).not.toContain("migration-safety");
+  });
+
+  test("renaming a migration already in the base is blocked", () => {
+    const old = migration("20260101000000_old");
+    repo.seed({ [old]: "DROP TABLE legacy;\n" });
+    repo.write({ [migration("20260101000000_renamed")]: "DROP TABLE legacy;\n" });
+    repo.ok("rm", old);
+    const result = repo.commitAll(OFFLINE);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain(old);
+    expect(result.stderr).toContain("migration-immutable");
   });
 
   test("a new migration may use a table another new migration creates", () => {

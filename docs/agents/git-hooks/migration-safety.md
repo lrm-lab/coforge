@@ -8,6 +8,10 @@ environment that already applied it records the name and skips it, so the new co
 run there; a database that has not run it would diverge. Change data with a new migration
 directory instead.
 
+The commit-time check uses `HEAD` as its base, so a migration committed locally but not pushed
+cannot be amended either: add a new migration to correct it. Only a migration already on the
+remote can have run in another environment; the local gate is deliberately stricter.
+
 Part of [Git hooks](README.md), the rule `migration-safety` of the [hard rules](hard-rules.md).
 
 A migration that locks or rewrites a table with data can stall the running version for as long as
