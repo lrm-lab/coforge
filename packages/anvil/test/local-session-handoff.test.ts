@@ -273,6 +273,7 @@ test("overlapping head and tail windows project a JSONL record only once", async
     { bytes: 200 },
   );
   expect(read?.records).toEqual([{ type: "message", value: "once" }]);
+  expect(read?.complete).toBeTrue();
 });
 
 test("a stalled filesystem read returns an incomplete search at the deadline", async () => {

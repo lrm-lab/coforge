@@ -152,3 +152,21 @@ test("migration recovery logs a stable error type without external diagnostic te
     warning.mockRestore();
   }
 });
+
+test("a superseded daemon cannot overwrite the current daemon capability leases", async () => {
+  let capabilityRecords = 0;
+  const method = createDaemonRuntimeReadyMethod({
+    restarts: {
+      ready: async () => {},
+      identity: async () => ({ workerInstanceId: "current-worker" }),
+    } as never,
+    capabilities: {
+      record: async () => void capabilityRecords++,
+    },
+  });
+  expect(await method(readyPayload(), { principal: principal() })).toEqual({
+    code: 409,
+    message: "daemon runtime was superseded",
+  });
+  expect(capabilityRecords).toBe(0);
+});

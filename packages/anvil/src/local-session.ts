@@ -127,13 +127,14 @@ export async function readLocalSessionWindows(
     );
     let prefix = head;
     const prefixBytes = Buffer.from(prefix);
+    const windowsCoverFile = tail.startOffset === 0 || tail.startOffset <= prefixBytes.byteLength;
     if (tail.startOffset > 0 && tail.startOffset < prefixBytes.byteLength)
       prefix = prefixBytes.subarray(0, tail.startOffset).toString("utf8");
     const countedText = tail.startOffset === 0 ? tail.text : prefix + tail.text;
     budget.bytes -= Math.min(allowance, new TextEncoder().encode(countedText).byteLength);
     return {
       records: jsonlWindows(prefix, tail),
-      complete: tail.startOffset === 0,
+      complete: windowsCoverFile,
     };
   } catch (error) {
     if (error instanceof LocalSessionDeadlineError) throw error;

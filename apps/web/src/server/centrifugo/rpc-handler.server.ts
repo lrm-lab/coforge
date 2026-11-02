@@ -391,12 +391,6 @@ export const createDaemonRuntimeReadyMethod =
         },
         request.recoveredRestartRequestIds,
       );
-      stage = "capability_record";
-      await capabilities?.record(
-        request.workspaceId,
-        request.computerId,
-        request.capabilities ?? [],
-      );
       stage = "identity_check";
       const current = await restarts?.identity?.({
         workspaceId: request.workspaceId,
@@ -404,6 +398,12 @@ export const createDaemonRuntimeReadyMethod =
       });
       if (current && current.workerInstanceId !== request.workerInstanceId)
         return { code: 409, message: "daemon runtime was superseded" };
+      stage = "capability_record";
+      await capabilities?.record(
+        request.workspaceId,
+        request.computerId,
+        request.capabilities ?? [],
+      );
       stage = "computer_observation";
       await observe?.(
         { workspaceId: request.workspaceId, computerId: request.computerId },
