@@ -2,7 +2,6 @@ import {
   CpuChip01 as Cpu,
   Hash01 as Hash,
   Key01 as Key,
-  List,
   Monitor01 as Monitor,
   UserPlus01 as UserPlus,
 } from "@untitledui/icons";
@@ -19,8 +18,6 @@ export function actionCardIcon(kind: ActionCardView["kind"]) {
       return Cpu;
     case "desktop:takeover":
       return Monitor;
-    case "choice":
-      return List;
     case "page:fill":
     case "app:grant_agent":
     case "app:register":
@@ -38,8 +35,6 @@ export function actionCardTitle(view: ActionCardView): string {
       return m.action_card_title_page_fill();
     case "desktop:takeover":
       return m.action_card_title_desktop_takeover();
-    case "choice":
-      return m.action_card_title_choice();
     case "channel:create":
       return m.action_card_title_channel_create();
     case "agent:create":
@@ -94,8 +89,6 @@ export function actionCardDeniedReason(view: ActionCardView): string | undefined
       return m.action_card_denied_page_fill();
     case "desktop:takeover":
       return m.action_card_denied_desktop_takeover();
-    case "choice":
-      return m.action_card_denied_choice();
     default:
       return undefined;
   }

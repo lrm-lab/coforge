@@ -107,4 +107,5 @@ COFORGEACTION
 Read the card again: `[action card: executed; choice=password]` means they clicked that option. The
 choice delivery also names who answered, for example `@alice answered your choice "How should we
 sign in?" in #general: password · Password`.
-If they type in chat instead, interpret their reply and continue without waiting for the card.
+If they type in chat instead, interpret their reply and continue without waiting for the card. The
+card letters the options A, B, C… in their order, so a typed "B" means the second option.

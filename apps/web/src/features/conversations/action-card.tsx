@@ -24,8 +24,8 @@ import {
 import { CreateChannelDialog } from "./create-channel-dialog";
 import { ChannelAddMembersDialog } from "./channel-add-members-dialog";
 import { ActionCardAppBody } from "./action-card-app-body";
+import { ChoiceActionCard } from "./action-card-choice";
 import {
-  ActionCardChoiceBody,
   ActionCardDesktopTakeoverBody,
   ActionCardHandoffDoneSuffix,
   ActionCardOpenDesktopButton,
@@ -89,7 +89,6 @@ export function ActionCard({ card }: { card: ActionCardView }) {
   const [fillValues, setFillValues] = useState<Record<string, string>>({});
   const isPageFill = view.kind === "page:fill";
   const isDesktopTakeover = view.kind === "desktop:takeover";
-  const isChoice = view.kind === "choice";
   // Known only to someone in the channel, who alone may commit (task #302).
   const addMemberChannelId = view.kind === "channel:add_member" ? view.channel.id : null;
   const [approving, setApproving] = useState(false);
@@ -213,16 +212,12 @@ export function ActionCard({ card }: { card: ActionCardView }) {
   }
 
   async function pickChoice(optionId: string) {
-    if (view.kind !== "choice") return;
-    setApproving(true);
     setError("");
     try {
       await commitChoice({ data: { messageId: view.messageId, optionId } });
       await refetch();
     } catch {
       setError(m.action_card_error());
-    } finally {
-      setApproving(false);
     }
   }
 
@@ -254,6 +249,16 @@ export function ActionCard({ card }: { card: ActionCardView }) {
     setDialogOpen(true);
   }
 
+  if (view.kind === "choice")
+    return (
+      <ChoiceActionCard
+        view={view}
+        error={error}
+        cancelling={cancelling}
+        onPick={pickChoice}
+        onCancel={() => void doCancel()}
+      />
+    );
   const Icon = actionCardIcon(view.kind);
   const title = actionCardTitle(view);
   const commitLabel = actionCardCommitLabel(view, approving);
@@ -316,13 +321,6 @@ export function ActionCard({ card }: { card: ActionCardView }) {
           />
         )}
         {view.kind === "desktop:takeover" && <ActionCardDesktopTakeoverBody view={view} />}
-        {view.kind === "choice" && (
-          <ActionCardChoiceBody
-            view={view}
-            approving={approving}
-            onPick={(optionId) => void pickChoice(optionId)}
-          />
-        )}
         {view.draftHint && <p className="text-xs text-tertiary italic">{view.draftHint}</p>}
       </div>
 
@@ -334,7 +332,7 @@ export function ActionCard({ card }: { card: ActionCardView }) {
 
       {view.state === "pending" && (
         <div className="flex flex-wrap items-center gap-2">
-          {view.canCommit && !isChoice ? (
+          {view.canCommit ? (
             <Button
               size="sm"
               isDisabled={
@@ -352,9 +350,9 @@ export function ActionCard({ card }: { card: ActionCardView }) {
             >
               {commitLabel}
             </Button>
-          ) : !view.canCommit ? (
+          ) : (
             <p className="text-xs text-tertiary">{deniedReason}</p>
-          ) : null}
+          )}
           <ActionCardOpenDesktopButton
             enabled={Boolean((isPageFill || isDesktopTakeover) && view.canCommit && desktopUrl)}
             onOpen={openDesktop}

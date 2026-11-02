@@ -96,15 +96,14 @@ export type ActionCardView =
       agentName: string;
       result?: { done: true };
     })
-  /** Clickable options; free text may still answer when allowFreeText is true. */
+  /** An Agent's question with clickable options, for the person it names. */
   | (ActionCardViewBase & {
       kind: "choice";
       prompt: string;
       options: { id: string; label: string }[];
-      allowFreeText: boolean;
-      /** The asked person's user id; absent only on a card made before every choice named one,
-       * which nobody can answer. */
-      to?: string;
+      /** The asked person as the card names them, and whether that is the viewer; absent on a card
+       * made before every choice named one, which nobody can answer. */
+      asked?: { displayName: string; isViewer: boolean };
       result?: { optionId: string; label: string };
     })
   | (ActionCardViewBase & {

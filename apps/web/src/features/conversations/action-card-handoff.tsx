@@ -54,40 +54,6 @@ export function ActionCardDesktopTakeoverBody({
   );
 }
 
-/** Structured choice options; free-text reply stays available in chat when allowed. */
-export function ActionCardChoiceBody({
-  view,
-  approving,
-  onPick,
-}: {
-  view: Extract<ActionCardView, { kind: "choice" }>;
-  approving: boolean;
-  onPick: (optionId: string) => void;
-}) {
-  return (
-    <>
-      <p>{view.prompt}</p>
-      {view.allowFreeText && <p className="text-tertiary">{m.action_card_choice_free_text()}</p>}
-      {view.state === "pending" && view.canCommit && (
-        <div className="flex flex-col gap-1 pt-1">
-          {view.options.map((option) => (
-            <Button
-              key={option.id}
-              color="secondary"
-              size="sm"
-              className="w-full justify-start whitespace-normal text-left"
-              isDisabled={approving}
-              onPress={() => onPick(option.id)}
-            >
-              {option.label}
-            </Button>
-          ))}
-        </div>
-      )}
-    </>
-  );
-}
-
 /** Open the cloud desktop for page:fill / desktop:takeover while the card is pending. */
 export function ActionCardOpenDesktopButton({
   enabled,
@@ -119,14 +85,6 @@ export function ActionCardHandoffDoneSuffix({ view }: { view: ActionCardView }) 
       <>
         {" · "}
         {m.action_card_desktop_takeover_done()}
-      </>
-    );
-  }
-  if (view.kind === "choice" && view.result) {
-    return (
-      <>
-        {" · "}
-        {m.action_card_choice_done({ label: view.result.label })}
       </>
     );
   }

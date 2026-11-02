@@ -63,14 +63,17 @@ export function choiceActionCardView(
   payload: ResolvedChoicePayload,
   viewerUserId: string,
   pending: boolean,
+  userName: ReadonlyMap<string, string>,
 ): ActionCardView {
+  const askedName = payload.to ? userName.get(payload.to) : undefined;
   return {
     ...base,
     kind: "choice",
     prompt: payload.prompt,
     options: payload.options,
-    allowFreeText: payload.allowFreeText,
-    ...(payload.to ? { to: payload.to } : {}),
+    ...(askedName && payload.to
+      ? { asked: { displayName: askedName, isViewer: payload.to === viewerUserId } }
+      : {}),
     canCommit: pending && payload.to === viewerUserId,
     result: card.result as { optionId: string; label: string } | undefined,
   };

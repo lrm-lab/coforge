@@ -22,7 +22,10 @@ export function actionCardSummary(action: ActionCardAction): string {
       : "Open the cloud desktop to finish this step";
   }
   if (action.type === "choice") {
-    const labels = action.options.map((option) => option.label).join("; ");
+    // Lettered as the card letters them, so a reply of "B" reads as the second option.
+    const labels = action.options
+      .map((option, index) => `${String.fromCharCode(65 + index)}. ${option.label}`)
+      .join("; ");
     return `Choose: ${action.prompt} (${labels})`;
   }
   if (action.type === "channel:create") return `Action card: create channel #${action.name}`;

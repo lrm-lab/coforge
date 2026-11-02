@@ -158,8 +158,17 @@ test("a choice card names who is asked, and only they may choose", async () => {
   expect(payload.to).toBe(userId);
   const base = { messageId, state: "pending" as const, canCommit: false, canCancel: false };
   const card = { result: null };
-  expect(choiceActionCardView(base, card, payload, userId, true).canCommit).toBe(true);
-  expect(choiceActionCardView(base, card, payload, "another-user", true).canCommit).toBe(false);
+  const names = new Map([[userId, "Choice Person"]]);
+  const view = choiceActionCardView(base, card, payload, userId, true, names);
+  expect(view.canCommit).toBe(true);
+  // The card names whom it asks, so everyone else sees whose choice it waits on.
+  expect(view.kind === "choice" && view.asked).toEqual({
+    displayName: "Choice Person",
+    isViewer: true,
+  });
+  expect(choiceActionCardView(base, card, payload, "another-user", true, names).canCommit).toBe(
+    false,
+  );
   await expect(
     resolveChoicePayload(db, conversationId, { ...action, to: "not-a-member" }),
   ).rejects.toThrow();
