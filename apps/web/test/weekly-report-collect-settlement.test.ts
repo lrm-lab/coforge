@@ -222,3 +222,86 @@ test("settleStaleCollectRun keeps collecting while the computer runtime is onlin
   expect(view.status).toBe(COLLECT_RUN_STATUS.collecting);
   expect(view.slots[0]?.status).toBe(COLLECT_SLOT_STATUS.running);
 });
+
+test("settleStaleCollectRun checks and marks offline computers in parallel", async () => {
+  const { settleStaleCollectRun, COLLECT_RUN_STATUS, COLLECT_SLOT_STATUS } =
+    await import("#src/server/records/weekly-report-collect-run.server");
+
+  const startedAt = new Date("2026-10-08T07:14:12.680Z");
+  const slotStatuses = new Map([
+    ["computer-1", COLLECT_SLOT_STATUS.running],
+    ["computer-2", COLLECT_SLOT_STATUS.running],
+  ]);
+  let runStatus = COLLECT_RUN_STATUS.collecting;
+  let activePresenceChecks = 0;
+  let maxPresenceChecks = 0;
+  let activeSlotUpdates = 0;
+  let maxSlotUpdates = 0;
+  const runRow = () => ({
+    id: "run-1",
+    reportId: "report-1",
+    workspaceId: "ws-1",
+    userId: "user-1",
+    status: runStatus,
+    windowKind: "week",
+    windowStart: new Date("2026-10-05T00:00:00.000Z"),
+    windowEnd: new Date("2026-10-12T00:00:00.000Z"),
+    startedAt,
+    completedAt: null,
+    createdAt: startedAt,
+    slots: [...slotStatuses].map(([computerId, status]) => ({
+      id: `slot-${computerId}`,
+      computerId,
+      collectorAgentId: `agent-${computerId}`,
+      scanPaths: ["/work"],
+      status,
+      retryCount: 0,
+      failureReason: status === COLLECT_SLOT_STATUS.failed ? "offline" : null,
+      packMarkdown: null,
+      requestId: null,
+    })),
+  });
+  const db = {
+    weeklyReportCollectRun: {
+      findFirst: async () => runRow(),
+      findFirstOrThrow: async () => runRow(),
+      updateMany: async ({ data }: { data: Record<string, unknown> }) => {
+        runStatus = String(data.status);
+        return { count: 1 };
+      },
+    },
+    weeklyReportCollectSlot: {
+      updateMany: async ({
+        where,
+        data,
+      }: {
+        where: { computerId?: string };
+        data: Record<string, unknown>;
+      }) => {
+        activeSlotUpdates += 1;
+        maxSlotUpdates = Math.max(maxSlotUpdates, activeSlotUpdates);
+        await Promise.resolve();
+        activeSlotUpdates -= 1;
+        if (where.computerId) slotStatuses.set(where.computerId, String(data.status));
+        return { count: 1 };
+      },
+    },
+  };
+
+  const view = await settleStaleCollectRun(
+    db as never,
+    { workspaceId: "ws-1", userId: "user-1", runId: "run-1" },
+    startedAt.getTime() + 1_000,
+    async () => {
+      activePresenceChecks += 1;
+      maxPresenceChecks = Math.max(maxPresenceChecks, activePresenceChecks);
+      await Promise.resolve();
+      activePresenceChecks -= 1;
+      return false;
+    },
+  );
+
+  expect(maxPresenceChecks).toBe(2);
+  expect(maxSlotUpdates).toBe(2);
+  expect(view.status).toBe(COLLECT_RUN_STATUS.cancelled);
+});

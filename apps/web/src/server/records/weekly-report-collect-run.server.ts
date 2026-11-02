@@ -400,21 +400,23 @@ export async function settleStaleCollectRun(
   if (run.status !== COLLECT_RUN_STATUS.collecting || !run.startedAt) return toRunView(run);
 
   const offlineComputerIds = await offlineRunningComputerIds(run.slots, isComputerOnline);
-  for (const computerId of offlineComputerIds) {
-    await db.weeklyReportCollectSlot.updateMany({
-      where: {
-        runId: run.id,
-        status: COLLECT_SLOT_STATUS.running,
-        computerId,
-      },
-      data: {
-        status: COLLECT_SLOT_STATUS.failed,
-        failureReason: COLLECT_SLOT_OFFLINE_REASON,
-        // A later submit from a queued wake must not reopen this slot.
-        requestId: crypto.randomUUID(),
-      },
-    });
-  }
+  await Promise.all(
+    offlineComputerIds.map((computerId) =>
+      db.weeklyReportCollectSlot.updateMany({
+        where: {
+          runId: run.id,
+          status: COLLECT_SLOT_STATUS.running,
+          computerId,
+        },
+        data: {
+          status: COLLECT_SLOT_STATUS.failed,
+          failureReason: COLLECT_SLOT_OFFLINE_REASON,
+          // A later submit from a queued wake must not reopen this slot.
+          requestId: crypto.randomUUID(),
+        },
+      }),
+    ),
+  );
 
   const overdue = nowMs - run.startedAt.getTime() >= COLLECT_SLOT_STALL_MS;
   if (offlineComputerIds.length === 0 && !overdue) return toRunView(run);
@@ -512,12 +514,12 @@ async function offlineRunningComputerIds(
 ): Promise<string[]> {
   if (!isComputerOnline) return [];
   const running = slots.filter((slot) => slot.status === COLLECT_SLOT_STATUS.running);
-  const offline: string[] = [];
-  for (const slot of running) {
-    if (await isComputerOnline(slot.computerId)) continue;
-    offline.push(slot.computerId);
-  }
-  return offline;
+  const results = await Promise.all(
+    running.map(async (slot) =>
+      (await isComputerOnline(slot.computerId)) ? undefined : slot.computerId,
+    ),
+  );
+  return results.filter((computerId): computerId is string => computerId !== undefined);
 }
 
 /** Missing or unreadable presence counts as offline, matching the Computer list. A lookup
