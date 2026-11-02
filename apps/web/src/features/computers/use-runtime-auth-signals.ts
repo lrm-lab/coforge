@@ -1,4 +1,5 @@
 import { getRouteApi, useRouter } from "@tanstack/react-router";
+import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import { useRef } from "react";
 
 import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime";
@@ -45,7 +46,7 @@ export function useRuntimeAuthStatusRefresh(computerId: string) {
       subscribedBefore.current = true;
     },
     onSignal: (signal) => {
-      if (signal.type === "runtime-auth.status.v1") reread();
+      if (signal.type === REALTIME_EVENTS.runtimeAuthStatus) reread();
     },
   });
 }

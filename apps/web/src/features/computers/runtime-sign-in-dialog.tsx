@@ -1,4 +1,5 @@
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal/runtime-provider";
+import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import {
   useEffect,
   useLayoutEffect,
@@ -151,7 +152,7 @@ function SignInAttempt({
       catchUp();
     },
     onSignal: (signal) => {
-      if (signal.type !== "runtime-auth.login.v1" || signal.provider !== provider) return;
+      if (signal.type !== REALTIME_EVENTS.runtimeAuthLogin || signal.provider !== provider) return;
       if (loginId.current) dispatch({ type: "view", view: signal, now: Date.now() });
       else if (early.current.length < EARLY_VIEW_LIMIT) early.current.push(signal);
     },

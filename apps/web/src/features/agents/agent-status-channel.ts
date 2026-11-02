@@ -1,4 +1,5 @@
 import { utf8Encoder } from "@lrm/coforge-sdk/internal";
+import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 
 import { publicationData } from "#src/features/realtime/publication-data";
 import { AGENT_VISIBILITY } from "./agent-visibility";
@@ -47,7 +48,7 @@ export type AgentVisibilityChangedEvent = { type: "agent:visibility_changed"; ag
  * roster rather than trusting an event payload, so private profile fields never cross this
  * shared Workspace channel. */
 export type AgentDirectoryChangedEvent = {
-  type: "agent.changed.v1";
+  type: typeof REALTIME_EVENTS.agentChanged;
   agentId: string;
   kind: "created" | "updated" | "deleted";
 };
@@ -57,7 +58,7 @@ export function isAgentDirectoryChangedEvent(value: unknown): value is AgentDire
     Boolean(value) &&
     typeof value === "object" &&
     !Array.isArray(value) &&
-    Reflect.get(value as object, "type") === "agent.changed.v1" &&
+    Reflect.get(value as object, "type") === REALTIME_EVENTS.agentChanged &&
     typeof Reflect.get(value as object, "agentId") === "string" &&
     (Reflect.get(value as object, "kind") === "created" ||
       Reflect.get(value as object, "kind") === "updated" ||

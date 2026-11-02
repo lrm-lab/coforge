@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import { parseRuntimeProvider, RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
@@ -97,7 +98,7 @@ export function LocalAgentForm({
   useRuntimeAuthSignals(computerId, {
     onSubscribed: () => {},
     onSignal: (signal) => {
-      if (signal.type === "runtime-auth.login.v1" && signal.result?.kind === "logged_in")
+      if (signal.type === REALTIME_EVENTS.runtimeAuthLogin && signal.result?.kind === "logged_in")
         setSignedIn((current) => new Set(current).add(`${signal.computerId}:${signal.provider}`));
     },
   });

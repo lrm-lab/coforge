@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import { useServerFn } from "@tanstack/react-start";
 import type { RuntimeAuthLogoutResult, RuntimeAuthProvider } from "@lrm/coforge-sdk/internal";
 
@@ -69,7 +70,7 @@ export function RuntimeSignOutDialog({
   useRuntimeAuthSignals(computerId, {
     onSubscribed: catchUp,
     onSignal: (signal) => {
-      if (signal.type === "runtime-auth.logout.v1") settle(signal);
+      if (signal.type === REALTIME_EVENTS.runtimeAuthLogout) settle(signal);
     },
   });
 

@@ -1,4 +1,5 @@
 import { publicationDataOrUndefined } from "#src/features/realtime/publication-data";
+import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import type { RuntimeAuthSignal } from "#src/server/computers/runtime-auth.server";
 
 /**
@@ -10,9 +11,9 @@ import type { RuntimeAuthSignal } from "#src/server/computers/runtime-auth.serve
 export const runtimeAuthChannel = (userId: string) => `runtimeauth:user:${userId}`;
 
 const SIGNAL_TYPES: Record<RuntimeAuthSignal["type"], true> = {
-  "runtime-auth.login.v1": true,
-  "runtime-auth.logout.v1": true,
-  "runtime-auth.status.v1": true,
+  [REALTIME_EVENTS.runtimeAuthLogin]: true,
+  [REALTIME_EVENTS.runtimeAuthLogout]: true,
+  [REALTIME_EVENTS.runtimeAuthStatus]: true,
 };
 
 /** A publication on that channel, as JSON or its bytes; anything else is dropped. */
