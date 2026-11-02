@@ -298,30 +298,21 @@ test("a grant that is lost ends when it is next refreshed", async () => {
   }
 }, 120_000);
 
-test("an Agent made private while a page shows it ends at the next refresh, and is not retried", async () => {
-  // Task #348: pages hold every channel through the subscribe proxy, with no token to outlive the
-  // grant. Ada sees Grace's Agent while it is public; once it is private she must stop hearing it.
+test("a public Agent's own status channel is refused; the workspace channel carries it", async () => {
+  // Task #377: a public Agent's status is published on the Workspace status channel. Its
+  // per-Agent channel exists only for a private Agent, so a page may not subscribe to it.
   const ada = await connected(ADA);
-  shortenBy = SUBSCRIPTION_LIFETIME_S - 2;
   try {
     const page = watched(ada, `agentstatus:${WORKSPACE}:${AGENT}`);
-    await until(() => page.subscription.state === SubscriptionState.Subscribed, 5_000);
-    agentVisibility = "private";
-    await until(() => page.subscription.state === SubscriptionState.Unsubscribed, 90_000);
-    // The refusal is final: nothing asks again, and the connection stays.
-    await Bun.sleep(2_000);
-    expect(page.states).toEqual([
-      "subscribing 0",
-      "subscribed",
-      "subscribing 2501",
-      "unsubscribed 403",
-    ]);
+    await until(() => page.subscription.state === SubscriptionState.Unsubscribed, 5_000);
+    expect(page.states).toEqual(["subscribing 0", "unsubscribed 403"]);
+    const workspacePage = watched(ada, `agentstatus:${WORKSPACE}`);
+    await until(() => workspacePage.subscription.state === SubscriptionState.Subscribed, 5_000);
     expect(ada.state).toBe(State.Connected);
   } finally {
-    shortenBy = 0;
-    agentVisibility = "public";
+    readers.add(ADA);
   }
-}, 120_000);
+}, 30_000);
 
 /**
  * Task #348: a page reads its Activity dot with where the viewer's own channel stood, then

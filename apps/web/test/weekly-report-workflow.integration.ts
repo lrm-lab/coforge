@@ -51,7 +51,7 @@ test("disabled schedule configuration updates the format used by an immediate se
       reports: Array<{ id: string; kind: string }>;
     };
     expect(
-      recordAssistantCatalog(db).readAssistantReportSection({
+      await recordAssistantCatalog(db).readAssistantReportSection({
         ...actor,
         reportId: inbox.reports.find((report) => report.kind === "member")!.id,
         section: "Technique",
@@ -246,7 +246,7 @@ test("conversation configures, sends once, collects a member submission and writ
     const reportId = inbox.reports[0]!.id;
     expect(notifications).toContain(reportId);
     expect(
-      recordAssistantCatalog(db).readAssistantReportSection({
+      await recordAssistantCatalog(db).readAssistantReportSection({
         ...memberActor,
         reportId,
         section: "Summary",
@@ -292,7 +292,7 @@ test("conversation configures, sends once, collects a member submission and writ
       tabs: { Summary: { markdown: "Unsent revision" } },
     });
     expect(
-      recordAssistantCatalog(db).readAssistantReportSection({
+      await recordAssistantCatalog(db).readAssistantReportSection({
         ...actor,
         reportId,
         section: "Summary",
