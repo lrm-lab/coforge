@@ -1,4 +1,4 @@
-import { Bookmark, Pin01 } from "@untitledui/icons";
+import { Pin01 } from "@untitledui/icons";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { DndContext } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -8,7 +8,6 @@ import { useAppToast } from "#src/components/ui/toast";
 import type { LiveAgent } from "#src/features/agents/workspace-agents-realtime";
 import { cx } from "#src/utils/cx";
 import { m } from "#src/paraglide/messages";
-import { ConversationRow } from "./conversation-row";
 import {
   ChannelDirectoryRow,
   DirectDirectoryRow,
@@ -17,7 +16,7 @@ import {
 } from "./conversation-directory-rows";
 import { useDirectoryLayout } from "./directory-layout";
 import { DIRECTORY_INSET, DirectoryEmptyNote, DirectorySection } from "./directory-section-group";
-import { useSavedEntries } from "./conversation-host";
+import { SavedDirectoryRow } from "./saved-directory-row";
 import { conversationRowMenuEnabled } from "./conversation-row-menu-model";
 import { useChatSections, useSidebarActions } from "./sidebar-lists";
 import { ChatSectionDialog } from "./chat-section-dialog";
@@ -69,7 +68,6 @@ export function ConversationDirectory({
   /** The Saved view is open — its sidebar entry renders as the current row. */
   selectedSaved?: boolean;
 }) {
-  const savedCount = useSavedEntries()?.length;
   const groups = useChatSections();
   const { sortedChannels, directRows, base, natural } = useDirectoryLayout({
     channels,
@@ -243,24 +241,7 @@ export function ConversationDirectory({
       {/* No top margin. The list pane's 0.75rem padding is the whole gap above
           this row, so the header rule lands 24px above the bookmark. */}
       <div className={DIRECTORY_INSET}>
-        <ConversationRow
-          target={{ view: "saved" }}
-          current={selectedSaved}
-          count={
-            savedCount
-              ? { value: savedCount, label: m.conversation_saved_count({ count: savedCount }) }
-              : undefined
-          }
-          label={m.conversation_saved_nav()}
-          icon={
-            <Bookmark
-              aria-hidden="true"
-              className={cx("size-4", selectedSaved ? "text-brand-secondary" : "text-primary")}
-            />
-          }
-        >
-          {m.conversation_saved_nav()}
-        </ConversationRow>
+        <SavedDirectoryRow current={selectedSaved} />
       </div>
       {groups.status === "failed" && (
         <div role="alert" className={cx(DIRECTORY_INSET, "py-2 text-sm text-error-primary")}>
