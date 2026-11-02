@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { encodeAgentSessionReport } from "@lrm/coforge-sdk/internal";
 import { createAgentSessionMethod } from "#src/server/centrifugo/rpc-handler.server";
 import {
+  AgentSessionVerifyError,
   AgentSessions,
   type RuntimeSessionReference,
 } from "#src/server/agents/agent-sessions.server";
@@ -43,7 +44,11 @@ test("an accepted session report issues the Agent's pending mentions again; a re
     launchId: "launch-1",
   };
 
-  await expect(sessions.accept({ ...report, launchId: "stale" })).rejects.toThrow();
+  const rejected = sessions.accept({ ...report, launchId: "stale" });
+  await expect(rejected).rejects.toThrow("Agent session report is stale or unauthorized");
+  // The diagnostics name the comparison, never its values.
+  await expect(rejected).rejects.toBeInstanceOf(AgentSessionVerifyError);
+  await rejected.catch((error: AgentSessionVerifyError) => expect(error.field).toBe("launchId"));
   expect(resent).toEqual([]);
   await sessions.accept(report);
   expect(resent).toEqual([{ workspaceId: "w", computerId: "c", agentId: "a" }]);

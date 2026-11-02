@@ -5,7 +5,10 @@ import {
   type AgentSessionInvalidate,
 } from "@lrm/coforge-sdk/internal";
 import type { AgentSessionReceiver } from "#src/server/agents/agent-session.server";
-import type { AgentSessions } from "#src/server/agents/agent-sessions.server";
+import {
+  AgentSessionVerifyError,
+  type AgentSessions,
+} from "#src/server/agents/agent-sessions.server";
 import type { CentrifugoRpcMethod } from "./rpc-handler.server";
 import { rejectionReason } from "./rejection-reason.server";
 import { rejectNonDaemonPrincipal } from "./daemon-principal.server";
@@ -70,6 +73,7 @@ export function createAgentSessionMethod(
           epoch: report?.controlEpoch,
           sequence: report?.sequence,
           reason: rejectionReason(error, KNOWN_REJECTION_REASONS),
+          ...(error instanceof AgentSessionVerifyError ? { field: error.field } : {}),
         }),
       );
       return { code: 403, message: "Agent Session snapshot is not authorized" };

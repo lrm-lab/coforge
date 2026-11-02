@@ -4,7 +4,10 @@ import {
   createAgentSessionMethod,
   createAgentSessionInvalidateMethod,
 } from "#src/server/centrifugo/agent-session-receiver.server";
-import type { AgentSessions } from "#src/server/agents/agent-sessions.server";
+import {
+  AgentSessionVerifyError,
+  type AgentSessions,
+} from "#src/server/agents/agent-sessions.server";
 import type { AgentSessionReceiver } from "#src/server/agents/agent-session.server";
 import type { CentrifugoRpcMetadata } from "#src/server/centrifugo/rpc-handler.server";
 
@@ -141,6 +144,34 @@ test("a genuine invalidate failure (propagated, not swallowed) logs with request
       computer_id: "c",
       launch_id: "launch-a",
       reason: "unexpected: Error",
+    }),
+  ]);
+});
+
+test("a verify rejection logs the field that diverged, still with the stable reason", async () => {
+  const sessions: Pick<AgentSessions, "accept" | "verify"> = {
+    accept: async () => {
+      // The real `accept` verifies first; this is the error that reaches the handler.
+      throw new AgentSessionVerifyError("sessionId");
+    },
+    verify: async () => {
+      throw new Error("must not be reached without a snapshot");
+    },
+  };
+  const method = createAgentSessionMethod(sessions, undefined);
+  const capture = captureWarnings();
+  let response;
+  try {
+    response = await method(payload, metadata);
+  } finally {
+    capture.restore();
+  }
+  expect(response).toEqual({ code: 403, message: "Agent Session snapshot is not authorized" });
+  expect(capture.warnings).toEqual([
+    expect.objectContaining({
+      event: "agent_session:snapshot_rejected",
+      reason: "Agent session report is stale or unauthorized",
+      field: "sessionId",
     }),
   ]);
 });

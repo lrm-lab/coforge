@@ -34,6 +34,31 @@ export interface AgentSessionRepository {
   ): Promise<boolean>;
 }
 
+/** The reference comparison `verify()` refused, named so `snapshot_rejected` can log which one
+ * diverged. Only the name: values never leave the database, and the message stays the one stable
+ * reason the daemon already receives. */
+export type AgentSessionVerifyField =
+  | "agent"
+  | "workspaceId"
+  | "computerId"
+  | "provider"
+  | "reference"
+  | "reference.provider"
+  | "reference.computerId"
+  | "startRequestId"
+  | "daemonInstanceId"
+  | "launchId"
+  | "sessionId"
+  | "currentDaemon";
+
+/** `verify()`'s rejection: the field name is diagnostics, the message is the wire reason. */
+export class AgentSessionVerifyError extends Error {
+  constructor(readonly field: AgentSessionVerifyField) {
+    super("Agent session report is stale or unauthorized");
+    this.name = "AgentSessionVerifyError";
+  }
+}
+
 /** The tracked mentions an Agent's newly accepted launch and session issue again
  * (`MentionDeliveryReports`). It never throws. */
 export type AcceptedSessionMentions = {
@@ -137,28 +162,38 @@ export class AgentSessions {
     };
   }
 
-  async verify(report: AgentSessionReport) {
+  async verify(report: AgentSessionReport): Promise<RuntimeSessionReference> {
     const agent = await this.repository.read(report.agentId);
     const old = agent?.reference;
+    const reject = (field: AgentSessionVerifyField): never => {
+      throw new AgentSessionVerifyError(field);
+    };
+    if (!agent) throw new AgentSessionVerifyError("agent");
+    if (agent.workspaceId !== report.workspaceId) reject("workspaceId");
+    if (agent.computerId !== report.computerId) reject("computerId");
+    if (agent.provider !== report.provider) reject("provider");
+    if (!old) throw new AgentSessionVerifyError("reference");
+    if (old.provider !== report.provider) reject("reference.provider");
+    if (old.computerId !== report.computerId) reject("reference.computerId");
+    if (old.startRequestId !== report.startRequestId) reject("startRequestId");
+    if (old.daemonInstanceId !== report.daemonInstanceId) reject("daemonInstanceId");
     if (
-      !agent ||
-      agent.workspaceId !== report.workspaceId ||
-      agent.computerId !== report.computerId ||
-      agent.provider !== report.provider ||
-      !old ||
-      old.provider !== report.provider ||
-      old.computerId !== report.computerId ||
-      old.startRequestId !== report.startRequestId ||
-      old.daemonInstanceId !== report.daemonInstanceId ||
-      (old.launchId &&
-        old.launchId !== report.launchId &&
-        old.launchId !== report.previousLaunchId) ||
-      (old.sessionId &&
-        old.sessionId !== report.sessionId &&
-        old.sessionId !== report.replacedSessionId) ||
+      old.launchId &&
+      old.launchId !== report.launchId &&
+      old.launchId !== report.previousLaunchId
+    )
+      reject("launchId");
+    if (
+      old.sessionId &&
+      old.sessionId !== report.sessionId &&
+      old.sessionId !== report.replacedSessionId
+    )
+      reject("sessionId");
+    // Last: it awaits, so every cheaper comparison above decides first.
+    if (
       (await this.currentDaemon(report.workspaceId, report.computerId)) !== report.daemonInstanceId
     )
-      throw new Error("Agent session report is stale or unauthorized");
+      reject("currentDaemon");
     return old;
   }
 
