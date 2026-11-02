@@ -124,9 +124,10 @@ export type AgentSessionInvalidate = {
 export const AGENT_CONTEXT_USAGE_METHOD = RPC_METHODS.agentContextUsage;
 /**
  * Fire-and-forget daemon-to-cloud notice of the Agent's current context-window usage, observed
- * at the top-level Claude Code `result` record. Never delivered as Activity; a
- * provider with no such signal never emits it (Claude Code only today). This message never
- * shipped, so its fields are numbered contiguously.
+ * at the top-level Claude Code `result` record or at Codex's `thread/tokenUsage/updated` (its
+ * last request). Never delivered as Activity; a provider with no such signal never emits it
+ * (Claude Code and Codex today). This message never shipped, so its fields are numbered
+ * contiguously.
  */
 export type AgentContextUsage = {
   protocolMajor: number;

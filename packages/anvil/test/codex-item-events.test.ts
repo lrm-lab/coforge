@@ -71,7 +71,11 @@ test("a started turn forgets the bookkeeping of a turn whose completion was lost
         changes: [{ kind: { type: "add" }, path: "/w/a.ts", diff: "" }],
       }),
     ),
-  ).toEqual([{ type: "tool-end", id: "f1:0", isError: false }]);
+    // Its start belonged to the lost turn, so this completion is announced anew: one file.
+  ).toEqual([
+    expect.objectContaining({ type: "tool-start", id: "f1:0" }),
+    { type: "tool-end", id: "f1:0", isError: false },
+  ]);
 });
 
 describe("CodexItemEvents: commands", () => {
@@ -166,7 +170,7 @@ describe("CodexItemEvents: file changes", () => {
     }
   });
 
-  test("ends the completed change's files when its start was never seen", () => {
+  test("announces, then ends, the completed change's files when its start was never seen", () => {
     expect(
       feed(
         new CodexItemEvents(),
@@ -181,6 +185,21 @@ describe("CodexItemEvents: file changes", () => {
         }),
       ),
     ).toEqual([
+      // Announced at completion, as Raft 1.0.59 does, so the edits show (task #339).
+      {
+        type: "tool-start",
+        id: "f1:0",
+        name: "write_file",
+        input: { file_path: "/w/a.ts" },
+        occurredAt: timestamp,
+      },
+      {
+        type: "tool-start",
+        id: "f1:1",
+        name: "edit_file",
+        input: { file_path: "/w/b.ts" },
+        occurredAt: timestamp,
+      },
       { type: "tool-end", id: "f1:0", isError: false },
       { type: "tool-end", id: "f1:1", isError: false },
     ]);

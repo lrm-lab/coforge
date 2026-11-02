@@ -72,7 +72,7 @@ Rules for the Workspace cloud connection in `src/connection/`. They extend
 ## Fire-and-forget messages
 
 Session invalidate (`sendSessionInvalidate`) and Agent context usage
-(`sendAgentContextUsage`, Claude Code only) follow the same delivery rules:
+(`sendAgentContextUsage`, Claude Code and Codex) follow the same delivery rules:
 
 - Callers never await them. They go out over `client.rpc(...)` immediately
   when connected.

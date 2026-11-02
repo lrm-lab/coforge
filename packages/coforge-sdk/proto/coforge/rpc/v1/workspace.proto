@@ -113,9 +113,10 @@ message AgentSessionInvalidate {
 }
 
 // Fire-and-forget daemon-to-cloud notice of the Agent's current context-window usage, observed
-// at the top-level Claude Code `result` record. Claude Code only for now; a provider
-// with no such signal never emits it. Never delivered as Activity. This message never shipped,
-// so its fields are numbered contiguously.
+// at the top-level Claude Code `result` record or at Codex's `thread/tokenUsage/updated` (its
+// last request). Claude Code and Codex for now; a provider with no such signal never emits it.
+// Never delivered as Activity. This message never shipped, so its fields are numbered
+// contiguously.
 message AgentContextUsage {
   uint32 protocol_major = 1;
   string request_id = 2;

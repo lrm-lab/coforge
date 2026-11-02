@@ -85,15 +85,9 @@ export class CodexItemEvents {
     if (tool) return id ? [{ type: "tool-start", id, ...tool.start(item), occurredAt }] : [];
     if (item.type === "fileChange") {
       const itemId = id ?? "file-change";
-      const changes = fileChanges(item);
-      this.#fileChangeCounts.set(itemId, changes.length);
-      return changes.map((change, index) => ({
-        type: "tool-start",
-        id: `${itemId}:${index}`,
-        name: change.kind === "add" ? "write_file" : "edit_file",
-        input: { file_path: change.path },
-        occurredAt,
-      }));
+      const starts = fileChangeStarts(itemId, item, occurredAt);
+      this.#fileChangeCounts.set(itemId, starts.length);
+      return starts;
     }
     return [];
   }
@@ -137,14 +131,21 @@ export class CodexItemEvents {
     }
     if (item.type === "fileChange") {
       const itemId = id ?? "file-change";
-      const count = this.#fileChangeCounts.get(itemId) ?? fileChanges(item).length;
+      const seen = this.#fileChangeCounts.get(itemId);
       this.#fileChangeCounts.delete(itemId);
       const failed = item.status === "failed" || item.status === "declined";
-      return Array.from({ length: count }, (_, index) => ({
-        type: "tool-end",
-        id: `${itemId}:${index}`,
-        isError: failed,
-      }));
+      // A change Codex never announced at `item/started` is announced now, so its edit shows
+      // like any other before it ends (Raft 1.0.59 / oar 0.76).
+      const starts = seen === undefined ? fileChangeStarts(itemId, item, occurredAt) : [];
+      const count = seen ?? starts.length;
+      return [
+        ...starts,
+        ...Array.from({ length: count }, (_, index) => ({
+          type: "tool-end" as const,
+          id: `${itemId}:${index}`,
+          isError: failed,
+        })),
+      ];
     }
     return [];
   }
@@ -228,6 +229,21 @@ function messageEvent(answerKind: unknown, text: string, record: JsonRecord): Ag
 }
 
 /** Each changed file with its kind: the official `{ type }` object, or a legacy kind string. */
+/** One `tool-start` per path a file change touches, each its own call `<itemId>:<index>`. */
+function fileChangeStarts(
+  itemId: string,
+  item: JsonRecord,
+  occurredAt: ReturnType<typeof eventTime>,
+): AgentRuntimeEvent[] {
+  return fileChanges(item).map((change, index) => ({
+    type: "tool-start",
+    id: `${itemId}:${index}`,
+    name: change.kind === "add" ? "write_file" : "edit_file",
+    input: { file_path: change.path },
+    occurredAt,
+  }));
+}
+
 function fileChanges(item: JsonRecord): Array<{ kind: string | undefined; path: string }> {
   const changes = Array.isArray(item.changes) ? item.changes : [item];
   return changes.flatMap((value) => {

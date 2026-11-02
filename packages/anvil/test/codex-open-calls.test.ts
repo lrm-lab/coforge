@@ -58,3 +58,18 @@ test("the command's own completion ends it", () => {
     ]),
   ).toEqual(new Set());
 });
+
+test("a file change seen only at completion is announced before it ends", () => {
+  const events = new CodexItemEvents();
+  const done = record("item/completed", edit("fc-9"));
+  expect(events.accept(done, asRecord(done.params))).toEqual([
+    {
+      type: "tool-start",
+      id: "fc-9:0",
+      name: "edit_file",
+      input: { file_path: "a.ts" },
+      occurredAt: "2026-11-02T10:00:00.000Z",
+    },
+    { type: "tool-end", id: "fc-9:0", isError: false },
+  ]);
+});

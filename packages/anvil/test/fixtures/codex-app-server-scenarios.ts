@@ -202,7 +202,22 @@ function turnScenario(input: string | undefined, turnId: string): void {
     write({ method: "warning", params: { threadId: "other-thread", message: "elsewhere" } });
     say("Done");
   }
+  const reading = {
+    last: { totalTokens: 120_000 },
+    total: { totalTokens: 6_900_000 },
+    modelContextWindow: 258_400,
+  };
+  if (input === "token-usage-foreign") {
+    // Another thread's reading (a subagent's), then this thread's after its turn completed.
+    write({
+      method: "thread/tokenUsage/updated",
+      params: { threadId: "other-thread", turnId, tokenUsage: reading },
+    });
+    say("Done");
+  }
   completeTurn(turnId, input === "interrupted-empty" ? "interrupted" : "completed");
+  if (input === "token-usage-foreign")
+    notify("thread/tokenUsage/updated", { turnId, tokenUsage: reading });
 }
 
 function completeTurn(turnId: string, status = "completed"): void {

@@ -52,3 +52,22 @@ test("a Codex session reports the last request's context as its context usage", 
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("token usage from another thread or after the turn completed is not a reading", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "coforge-codex-context-"));
+  const session = await scenarioProvider().createAgentSession({
+    agentWorkspaceDirectory: directory,
+    instructions: "Test.",
+  });
+  const events: AgentRuntimeEvent[] = [];
+  session.subscribe((event) => events.push(event));
+  try {
+    await session.sendMessage("token-usage-foreign");
+    await waitForEvent(events, "completed");
+    await Bun.sleep(50);
+    expect(events.filter((event) => event.type === "context-usage")).toEqual([]);
+  } finally {
+    await session.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
