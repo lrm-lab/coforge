@@ -78,9 +78,11 @@ test.skipIf(!connectionString)(
             timestamp '2026-01-01' + (${index}::int * ${UNREAD_PER_CHANNEL}::int + i) * interval '1 second'
           FROM generate_series(1, ${UNREAD_PER_CHANNEL}::int) AS i`;
       }
-      // The rest of a Workspace: 100 channels the viewer is not in, of 1,000 messages each. A
-      // table of a few conversations makes a sequential scan cheaper than the conversation index
-      // for each page row's count, which no Workspace of any size would see.
+      // The rest of a Workspace: 100 channels the viewer is not in, of 1,000 messages from their
+      // members. A table of a few conversations makes a sequential scan cheaper than the
+      // conversation index for each page row's count; a table of system messages (no sender)
+      // makes the unread probe look as if it matched nothing, and the planner then reads every
+      // unread message to sort them. A Workspace is neither.
       await db.conversation.createMany({
         data: Array.from({ length: OTHER_CHANNELS }, (_, index) => ({
           workspaceId: workspace.id,
@@ -88,9 +90,16 @@ test.skipIf(!connectionString)(
         })),
       });
       await db.$executeRaw`
-        INSERT INTO messages (id, "conversationId", "workspaceId", body, sequence)
-        SELECT gen_random_uuid(), c."id", c."workspaceId", 'elsewhere ' || i, i
-        FROM conversations c CROSS JOIN generate_series(1, ${MESSAGES_PER_OTHER_CHANNEL}::int) AS i
+        INSERT INTO conversation_members (id, "conversationId", "workspaceId", "userId")
+        SELECT gen_random_uuid(), c."id", c."workspaceId", ${writer.id}::uuid
+        FROM conversations c
+        WHERE c."workspaceId" = ${workspace.id}::uuid AND c."channelName" LIKE 'page-other-%'`;
+      await db.$executeRaw`
+        INSERT INTO messages (id, "conversationId", "workspaceId", "senderMemberId", body, sequence)
+        SELECT gen_random_uuid(), cm."conversationId", cm."workspaceId", cm."id", 'elsewhere ' || i, i
+        FROM conversation_members cm
+        JOIN conversations c ON c."id" = cm."conversationId"
+        CROSS JOIN generate_series(1, ${MESSAGES_PER_OTHER_CHANNEL}::int) AS i
         WHERE c."workspaceId" = ${workspace.id}::uuid AND c."channelName" LIKE 'page-other-%'`;
       const inbox = new ActivityInbox(db, {});
       const first = await inbox.list(workspace.id, viewer.id, { filter: "all", limit: PAGE_SIZE });
