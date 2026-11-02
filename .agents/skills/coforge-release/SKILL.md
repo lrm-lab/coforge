@@ -35,7 +35,7 @@ follow [`AGENTS.md`](../../../AGENTS.md) for Issue, branch, review, and decision
 1. Use `rg --files` to discover the current workflow, Compose, packaging, feed,
    installer, and version-store files; do not rely on remembered paths.
 2. Compare their real operator inputs and outputs with the canonical contract.
-3. If the document still says the operator interface is unimplemented, stop
+3. If the operator interface an operation needs is not implemented, stop
    before external mutation, report the missing interface, and identify its
    tracked implementation Issue when one is discoverable. Only update that
    Issue when the current task explicitly authorizes project work. Never

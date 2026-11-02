@@ -17,7 +17,7 @@ Rules for Agent lifecycle, control, Session state, and Activity in
   launch's tasks without a terminal notification, by task id, and the wait a quiet turn shows.
 - `activity-trajectory.ts` owns launch-local display-delta coalescing (350 ms),
   boundary flushing, and bounded retention. Assembled-text redaction is provided by
-  `code-agent/agent-activity.ts`. Adapters
+  `packages/anvil/src/agent-activity.ts`. Adapters
   supply only official display events and explicit lineage, never raw
   reasoning.
 - `tool-call-ledger.ts` is a launch's one record of open tool calls (stalled
@@ -81,7 +81,7 @@ Rules for Agent lifecycle, control, Session state, and Activity in
 - Decide the reason only from `hasErrorCode` against a typed launch error:
   an Error subclass whose `readonly code` is its reason, thrown where the
   cause is known (`AgentAuthorizationError` here, the spawner's
-  `RuntimeExecutableNotFoundError`, the errors in `code-agent/contract.ts`).
+  `RuntimeExecutableNotFoundError`, the errors in `packages/anvil/src/contract.ts`).
   Never match message text or read provider-specific errors; anything else is
   `runtime_spawn_failed`. Add a reason only together with its thrower.
 - Log every failed launch as `agent_runtime:launch_failed` with

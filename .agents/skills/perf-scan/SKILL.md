@@ -53,7 +53,7 @@ Default: the three named areas. Several paths may be requested at once.
    committed). Remove the worktree when the scan ends.
 2. **Scan in parallel, read-only.** Launch one read-only search agent per area in
    a single message. Its brief is the area's checklist plus the report format
-   below. Do not pin a model. Scanners never edit files, run tests, or build.
+   below. Scanners never edit files, run tests, or build.
 3. **Verify.** The coordinator re-reads the code behind at least each area's top
    candidate, or hands it to an independent agent without the scanner's
    conclusion. Drop or downgrade whatever does not hold. A scanner's confident
@@ -70,7 +70,7 @@ Default: the three named areas. Several paths may be requested at once.
 
 ## Scan report format
 
-Under 600 words:
+Short enough for the owner to read in one pass:
 
 - The top 3-5 candidates, ranked by expected user-visible impact times
   confidence. Each gives `file:line`, the exact pattern, the user action or event

@@ -43,9 +43,10 @@ terminal behavior.
   Never hand-edit `package.json` or `bun.lock`.
 - The repository's `.oxlintrc.json` rejects Node networking, HTTP, TLS, and
   child-process imports that have Bun-native alternatives. Treat a lint error
-  as a required implementation change, not something to silence. If a
-  genuinely platform-specific exception is necessary, add a narrow inline
-  lint disable with the reason and link it to the relevant Bun documentation.
+  as a required implementation change, not something to silence. A genuinely
+  platform-specific exception needs prior approval (root `AGENTS.md`, Decision
+  gates), then a narrow inline lint disable with the reason and a link to the
+  relevant Bun documentation.
 
 ## Approved Node compatibility cases
 

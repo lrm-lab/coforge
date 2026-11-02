@@ -61,7 +61,7 @@ function ownLaunchFailureTrace(error: unknown): LaunchFailureTrace | undefined {
  * `runtimeError` (class `LauncherError`), so a reader picks the explanation by code and never
  * parses `detail`. Each value except the fallback is the `code` of a typed launch error thrown
  * where the failure is known: `AgentAuthorizationError` below, `RuntimeExecutableNotFoundError`
- * in the spawner, and the typed errors in `code-agent/contract.ts`.
+ * in the spawner, and the typed errors in `@lrm/coforge-anvil`'s `contract.ts`.
  */
 export const LAUNCH_FAILURE_REASON = {
   /** The daemon could not obtain the Agent's launch configuration and API key from the server. */
