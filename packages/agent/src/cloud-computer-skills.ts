@@ -1,6 +1,5 @@
 import { cp, lstat, mkdir, readdir, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { spawnSync } from "node:child_process";
 
 const STABLE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 
@@ -56,33 +55,27 @@ export function cloudComputerAdditionalSkillPaths(options: {
 
 /**
  * Ensures the persistent Agent skills directory exists, migrates a legacy
- * `<agentWs>/.pi/skills` tree into it once, and best-effort bind-mounts so
- * naive writes to `.pi/skills` also land on the volume. No-op when the cloud
- * gate is off (non-cloud-computer).
+ * `<agentWs>/.pi/skills` tree into it once, seeds shared skills, and mirrors
+ * the durable tree back to `.pi/skills` so the default Pi loader finds them.
+ * No-op when the cloud gate is off (non-cloud-computer).
  */
 export async function prepareCloudComputerAgentSkills(options: {
   agentId: string;
   agentWorkspaceDirectory: string;
   environment?: Readonly<Record<string, string | undefined>>;
-}): Promise<{ enabled: boolean; directory: string; bound: boolean }> {
+}): Promise<{ enabled: boolean; directory: string }> {
   const environment = options.environment ?? Bun.env;
   const legacy = join(resolve(options.agentWorkspaceDirectory), ".pi", "skills");
   if (!isCloudComputerSkillsEnabled(environment)) {
-    return { enabled: false, directory: legacy, bound: false };
+    return { enabled: false, directory: legacy };
   }
 
   const directory = cloudComputerAgentSkillsDirectory(options.agentId, environment);
   await mkdir(directory, { recursive: true, mode: 0o700 });
   await migrateLegacyAgentSkills(legacy, directory);
-  // Shared container skills are also visible through the Agent `.pi/skills` root
-  // (bind-mounted below), so the default Pi loader finds them without runner changes.
   await seedSharedSkillsInto(directory, environment);
-  const bound = tryBindMount(directory, legacy);
-  if (!bound) {
-    await mkdir(legacy, { recursive: true, mode: 0o700 });
-    await seedSharedSkillsInto(legacy, environment);
-  }
-  return { enabled: true, directory, bound };
+  await mirrorSkillsTree(directory, legacy);
+  return { enabled: true, directory };
 }
 
 async function seedSharedSkillsInto(
@@ -125,7 +118,6 @@ async function migrateLegacyAgentSkills(legacy: string, persistent: string): Pro
     return;
   }
   if (!legacyStat.isDirectory() || legacyStat.isSymbolicLink()) return;
-  if (await isBindMountOf(legacy, persistent)) return;
 
   let entries: string[];
   try {
@@ -148,35 +140,11 @@ async function migrateLegacyAgentSkills(legacy: string, persistent: string): Pro
   }
 }
 
-async function isBindMountOf(target: string, source: string): Promise<boolean> {
-  if (process.platform !== "linux") return false;
-  const result = spawnSync("findmnt", ["-n", "-o", "SOURCE,TARGET", target], {
-    encoding: "utf8",
-  });
-  if (result.status !== 0) return false;
-  const line = result.stdout.trim();
-  return line.includes(source) || line.includes(resolve(source));
-}
-
-function tryBindMount(source: string, target: string): boolean {
-  if (process.platform !== "linux") return false;
-  try {
-    const sourceResolved = resolve(source);
-    const targetResolved = resolve(target);
-    spawnSync("mkdir", ["-p", targetResolved], { stdio: "ignore" });
-    // If something already occupies the target as a non-empty real tree, clear it
-    // only when empty-after-migration; otherwise refuse to mount over data.
-    const probe = spawnSync("findmnt", ["-n", targetResolved], { encoding: "utf8" });
-    if (probe.status === 0 && probe.stdout.trim()) {
-      return probe.stdout.includes(sourceResolved);
-    }
-    const mounted = spawnSync("mount", ["--bind", sourceResolved, targetResolved], {
-      encoding: "utf8",
-    });
-    return mounted.status === 0;
-  } catch {
-    return false;
-  }
+/** Replace `target` with a fresh copy of `source` (real trees, no softlink roots). */
+async function mirrorSkillsTree(source: string, target: string): Promise<void> {
+  await mkdir(resolve(target, ".."), { recursive: true, mode: 0o700 });
+  await rm(target, { recursive: true, force: true });
+  await cp(source, target, { recursive: true, verbatimSymlinks: true });
 }
 
 /** Prepare durable skill roots and return Pi additionalSkillPaths (empty off-gate). */

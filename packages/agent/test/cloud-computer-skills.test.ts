@@ -75,6 +75,10 @@ test("prepareCloudComputerAgentSkills migrates legacy .pi/skills when gate is on
     expect(
       await Bun.file(join(workspace, "agent-skills", "agent-9", "legacy-skill", "SKILL.md")).text(),
     ).toContain("legacy-skill");
+    // Mirrored back so the default Pi loader still finds the skill under .pi/skills.
+    expect(
+      await Bun.file(join(root, ".pi", "skills", "legacy-skill", "SKILL.md")).text(),
+    ).toContain("legacy-skill");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
