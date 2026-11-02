@@ -1,5 +1,13 @@
 # Migration safety
 
+## Immutability
+
+A migration that exists on the base is immutable: editing, renaming or deleting
+`apps/web/prisma/migrations/<name>/migration.sql` fails the `migration-immutable` hard rule. An
+environment that already applied it records the name and skips it, so the new content would never
+run there; a database that has not run it would diverge. Change data with a new migration
+directory instead.
+
 Part of [Git hooks](README.md), the rule `migration-safety` of the [hard rules](hard-rules.md).
 
 A migration that locks or rewrites a table with data can stall the running version for as long as

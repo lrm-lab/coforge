@@ -26,6 +26,7 @@ import { commitIdentities, type IdentityMatch, stagedIdentities } from "./commit
 import { linkPath, markdownLinks } from "./markdown-links";
 import { unquote } from "./unquote";
 import { MIGRATION_SAFETY_FIX, migrationSafetyViolations } from "../migration-safety/hard-rule";
+import { MIGRATION_IMMUTABLE_FIX, migrationImmutabilityViolations } from "./migration-immutable";
 
 type Rule =
   | "size-ratchet"
@@ -33,7 +34,8 @@ type Rule =
   | "markdown-links"
   | "new-suppression"
   | "author-identity"
-  | "migration-safety";
+  | "migration-safety"
+  | "migration-immutable";
 type Violation = { rule: Rule; location: string; found: string };
 
 const FIX: Record<Rule, string> = {
@@ -47,6 +49,7 @@ const FIX: Record<Rule, string> = {
   "author-identity":
     "Commit as the person running the Agent, never as an Agent or bot (AGENTS.md); author and committer both count: set `git config user.name` and `git config user.email` to their own identity. Rewrite a listed commit not yet on main with `git rebase --exec 'git commit --amend --no-edit --reset-author' <base>`; one already on main is rewritten only when Frank asks. A Co-authored-by trailer is not checked.",
   "migration-safety": MIGRATION_SAFETY_FIX,
+  "migration-immutable": MIGRATION_IMMUTABLE_FIX,
 };
 
 // Rule 11: new suppressions. The token alternatives end in a character class so that this file's
@@ -369,6 +372,10 @@ async function fileViolations(source: ChangeSource): Promise<Violation[]> {
     ...linkViolations(source, exempt, changes),
     ...suppressionViolations(source, exempt),
     ...migrationSafetyViolations(source),
+    ...migrationImmutabilityViolations(source).map((violation) => ({
+      rule: "migration-immutable" as const,
+      ...violation,
+    })),
   ];
 }
 

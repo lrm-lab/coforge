@@ -36,6 +36,7 @@ one `hard-rules: <message>` line, prefixed `::error::` on GitHub Actions.
 | `new-suppression` | An added line carries a lint, type-check or test suppression (list below). Existing ones are not flagged. |
 | `author-identity` | The author or the committer looks like an Agent or bot (patterns below). |
 | `migration-safety` | A migration the change adds has a high-risk statement and no valid safety annotation, a hash that no longer matches, a `rewrite` verdict, or no `lock_timeout` where one is required. See [Migration safety](migration-safety.md). |
+| `migration-immutable` | The change edits, renames or deletes an `apps/web/prisma/migrations/*/migration.sql` that already exists on the base (HEAD for a commit, the range's base for CI). A new migration directory is allowed. See [Migration safety](migration-safety.md#immutability). |
 
 **Markdown length.** Markdown means `.md`, `.mdx`, `.mdc`, and `.markdown`. A file must have
 fewer than 200 lines: line 200 is already a violation. A final unterminated line counts, while a
