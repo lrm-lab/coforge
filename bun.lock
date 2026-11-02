@@ -9,8 +9,6 @@
         "@alicloud/cdn20180510": "9.2.0",
         "@alicloud/credentials": "2.4.7",
         "@alicloud/openapi-client": "0.4.15",
-        "@bufbuild/buf": "1.72.0",
-        "@bufbuild/protoc-gen-es": "^2.14.0",
         "@coforge/computer": "workspace:*",
         "@coforge/web": "workspace:*",
         "@lrm/coforge-daemon": "workspace:*",
@@ -323,6 +321,8 @@
         "zod": "4.5.4",
       },
       "devDependencies": {
+        "@bufbuild/buf": "1.72.0",
+        "@bufbuild/protoc-gen-es": "^2.14.0",
         "@types/bun": "1.4.4",
         "oxfmt": "0.65.0",
         "oxlint": "1.80.0",

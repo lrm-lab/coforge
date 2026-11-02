@@ -33,8 +33,6 @@
     "@alicloud/cdn20180510": "9.2.0",
     "@alicloud/credentials": "2.4.7",
     "@alicloud/openapi-client": "0.4.15",
-    "@bufbuild/buf": "1.72.0",
-    "@bufbuild/protoc-gen-es": "^2.14.0",
     "@coforge/computer": "workspace:*",
     "@coforge/web": "workspace:*",
     "@lrm/coforge-daemon": "workspace:*",
