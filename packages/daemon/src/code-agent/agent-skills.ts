@@ -2,6 +2,11 @@ import { constants } from "node:fs";
 import { lstat, open, opendir, realpath } from "node:fs/promises";
 import { basename, join, relative, resolve, sep } from "node:path";
 import {
+  cloudComputerAgentSkillsDirectory,
+  cloudComputerSharedSkillsDirectory,
+  isCloudComputerSkillsEnabled,
+} from "@coforge/agent/cloud-computer-skills";
+import {
   RUNTIME_PROVIDER,
   type AgentSkillsScope,
   type RuntimeProvider,
@@ -17,10 +22,12 @@ export async function listAgentSkills(options: {
   provider: RuntimeProvider;
   agentWorkspaceDirectory: string;
   environment?: Readonly<Record<string, string>>;
+  agentId?: string;
 }): Promise<{ global: AgentSkillsScope; workspace: AgentSkillsScope }> {
   const env = agentEnvironment(options.environment);
   const cwd = resolve(options.agentWorkspaceDirectory);
   const home = env.HOME;
+  const cloudSkills = isCloudComputerSkillsEnabled(options.environment ?? Bun.env);
   const local = (path: string, legacy?: Root["legacy"]): Root => ({
     path: join(cwd, path),
     label: path,
@@ -153,6 +160,24 @@ export async function listAgentSkills(options: {
       break;
     case RUNTIME_PROVIDER.PI:
       locals = [local(".pi/skills", "pi"), local(".agents/skills")];
+      if (cloudSkills) {
+        const shared = cloudComputerSharedSkillsDirectory(options.environment ?? Bun.env);
+        locals = [
+          { path: shared, label: "$WORKSPACE/skills" },
+          ...(options.agentId
+            ? [
+                {
+                  path: cloudComputerAgentSkillsDirectory(
+                    options.agentId,
+                    options.environment ?? Bun.env,
+                  ),
+                  label: "$WORKSPACE/agent-skills",
+                },
+              ]
+            : []),
+          ...locals,
+        ];
+      }
       if (home)
         globals = [
           native("PI_CODING_AGENT_DIR", ".pi/agent", "skills", "pi"),
@@ -164,7 +189,27 @@ export async function listAgentSkills(options: {
       // `.builtin-runtime`, so `~/.pi/agent/skills` is not read; the SDK's package manager still
       // always adds `~/.agents/skills` (only an isolated memory-fence or eval session sets
       // `noSkills`).
+      // Cloud-computer gate: also observe persistent `/workspace/skills` and
+      // `/workspace/agent-skills/<agentId>`. Non-cloud keeps the historical roots only.
       locals = [local(".pi/skills", "pi"), local(".agents/skills")];
+      if (cloudSkills) {
+        const shared = cloudComputerSharedSkillsDirectory(options.environment ?? Bun.env);
+        locals = [
+          { path: shared, label: "$WORKSPACE/skills" },
+          ...(options.agentId
+            ? [
+                {
+                  path: cloudComputerAgentSkillsDirectory(
+                    options.agentId,
+                    options.environment ?? Bun.env,
+                  ),
+                  label: "$WORKSPACE/agent-skills",
+                },
+              ]
+            : []),
+          ...locals,
+        ];
+      }
       if (home) globals = [personal(".agents/skills")];
       break;
     default: {

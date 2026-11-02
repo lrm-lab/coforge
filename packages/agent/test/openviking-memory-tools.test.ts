@@ -8,9 +8,9 @@ import {
 import {
   MemoryAgentTurnBudget,
   createMemoryFenceTools,
-  resourceLoaderOptionsForSession,
   type MemoryAgentProxy,
 } from "../src/runner";
+import { resourceLoaderOptionsForSession } from "../src/session-resource-loader";
 
 const MUTATION_TOOL_NAMES = [
   "bash",

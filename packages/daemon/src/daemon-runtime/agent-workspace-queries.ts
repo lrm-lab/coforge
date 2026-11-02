@@ -69,10 +69,15 @@ export class AgentWorkspaceQueries {
       // it does not override HOME or provider-native config roots.
       return await listAgentSkills({
         provider: request.provider,
+        agentId: request.agentId,
         agentWorkspaceDirectory: agentWorkspaceDirectory(
           connection.workspaceRoot,
           connection.workspaceId,
           request.agentId,
+        ),
+        // Cloud-computer gate reads COFORGE_CLOUD_COMPUTER from the Daemon host env.
+        environment: Object.fromEntries(
+          Object.entries(Bun.env).filter((entry): entry is [string, string] => entry[1] != null),
         ),
       });
     } catch {

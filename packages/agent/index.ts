@@ -8,11 +8,15 @@ export {
   createSession,
   discoverModels,
   discoverPiModels,
-  evalDisablesHostPiInjection,
   findSessionFile,
   PI_MODEL_REFRESH_TIMEOUT_MS,
   resolveAgentSessionFile,
 } from "#src/runner";
+export {
+  EVAL_DISABLE_HOST_PI_INJECTION,
+  evalDisablesHostPiInjection,
+  resourceLoaderOptionsForSession,
+} from "#src/session-resource-loader";
 export {
   exportAgentTrainingTrajectory,
   type AgentTrainingStep,
@@ -33,6 +37,16 @@ export {
   getCoforgeSessionDir,
   prepareAgentSessionDirectory,
 } from "#src/paths";
+export {
+  COFORGE_CLOUD_COMPUTER_ENV,
+  cloudComputerAdditionalSkillPaths,
+  cloudComputerAgentSkillsDirectory,
+  cloudComputerSharedSkillsDirectory,
+  cloudComputerWorkspaceRoot,
+  isCloudComputerSkillsEnabled,
+  prepareCloudComputerAgentSkills,
+  prepareCloudComputerSessionSkillPaths,
+} from "#src/cloud-computer-skills";
 export { isMemoryAgentRuntime } from "#src/contract";
 export type {
   AgentActivity,

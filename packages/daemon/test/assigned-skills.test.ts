@@ -74,6 +74,25 @@ test("assigned skill install never overwrites an existing same-named skill", asy
   }
 });
 
+test("assignedSkillsDirectory stays on .pi/skills when cloud gate is off", () => {
+  expect(assignedSkillsDirectory("coforge", "/agent-ws")).toBe(join("/agent-ws", ".pi", "skills"));
+  expect(
+    assignedSkillsDirectory("coforge", "/agent-ws", {
+      agentId: "a1",
+      environment: { COFORGE_CLOUD_COMPUTER: "0" },
+    }),
+  ).toBe(join("/agent-ws", ".pi", "skills"));
+});
+
+test("assignedSkillsDirectory uses /workspace/agent-skills when cloud gate is on", () => {
+  expect(
+    assignedSkillsDirectory("coforge", "/agent-ws", {
+      agentId: "a1",
+      environment: { COFORGE_CLOUD_COMPUTER: "1", WORKSPACE: "/workspace" },
+    }),
+  ).toBe(join("/workspace", "agent-skills", "a1"));
+});
+
 test("assignedSkillsDirectory places Cursor packs under .cursor/skills", () => {
   expect(assignedSkillsDirectory("cursor", "/workspace")).toBe(
     join("/workspace", ".cursor", "skills"),

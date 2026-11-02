@@ -16,7 +16,10 @@
   "imports": {
     "#src/*": "./src/*.ts"
   },
-  "exports": "./index.ts",
+  "exports": {
+    ".": "./index.ts",
+    "./cloud-computer-skills": "./src/cloud-computer-skills.ts"
+  },
   "scripts": {
     "test": "bun test",
     "format": "oxfmt .",

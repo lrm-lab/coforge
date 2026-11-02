@@ -1,5 +1,9 @@
 import { lstat, mkdir, rename, rm, unlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import {
+  cloudComputerAgentSkillsDirectory,
+  isCloudComputerSkillsEnabled,
+} from "@coforge/agent/cloud-computer-skills";
 import { RUNTIME_PROVIDER, type RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import { WEEKLY_REPORT_SKILL_FILES } from "#src/code-agent/skills/weekly-report";
 import { WEEKLY_REPORT_COLLECT_SKILL_FILES } from "#src/code-agent/skills/weekly-report-collect";
@@ -12,10 +16,16 @@ const PACKS: Record<AssignedSkillPack, Readonly<Record<string, string>>> = {
   "weekly-report-collect": WEEKLY_REPORT_COLLECT_SKILL_FILES,
 };
 
+export type AssignedSkillsDirectoryOptions = {
+  agentId?: string;
+  environment?: Readonly<Record<string, string | undefined>>;
+};
+
 /** Provider-native workspace Skills root for CoForge-assigned packs. */
 export function assignedSkillsDirectory(
   provider: RuntimeProvider,
   agentWorkspaceDirectory: string,
+  options?: AssignedSkillsDirectoryOptions,
 ): string {
   const cwd = resolve(agentWorkspaceDirectory);
   switch (provider) {
@@ -39,8 +49,14 @@ export function assignedSkillsDirectory(
     case RUNTIME_PROVIDER.GROK:
       return join(cwd, ".grok", "skills");
     case RUNTIME_PROVIDER.PI:
-    case RUNTIME_PROVIDER.COFORGE:
+    case RUNTIME_PROVIDER.COFORGE: {
+      // Cloud-computer only: persist under /workspace/agent-skills/<agentId>.
+      // Non-cloud keeps `<agentWs>/.pi/skills` unchanged.
+      if (options?.agentId && isCloudComputerSkillsEnabled(options.environment ?? Bun.env)) {
+        return cloudComputerAgentSkillsDirectory(options.agentId, options.environment ?? Bun.env);
+      }
       return join(cwd, ".pi", "skills");
+    }
     default: {
       const unreachable: never = provider;
       throw new Error(`Unhandled runtime provider: ${unreachable}`);
@@ -56,10 +72,15 @@ export async function installAssignedSkills(options: {
   provider: RuntimeProvider;
   agentWorkspaceDirectory: string;
   packs: readonly AssignedSkillPack[];
+  agentId?: string;
+  environment?: Readonly<Record<string, string | undefined>>;
 }): Promise<{ written: string[]; skipped: string[] }> {
   const written: string[] = [];
   const skipped: string[] = [];
-  const root = assignedSkillsDirectory(options.provider, options.agentWorkspaceDirectory);
+  const root = assignedSkillsDirectory(options.provider, options.agentWorkspaceDirectory, {
+    agentId: options.agentId,
+    environment: options.environment,
+  });
   for (const pack of options.packs) {
     const files = PACKS[pack];
     if (!files) continue;

@@ -17,6 +17,7 @@ import { seedAgentMemory } from "./agent-memory-seed";
 import { isMemoryAgentToolProfile } from "@lrm/coforge-sdk/agent";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { isMemoryAgentRuntime, evalDisablesHostPiInjection } from "@coforge/agent";
+import { prepareCloudComputerAgentSkills } from "@coforge/agent/cloud-computer-skills";
 import { mkdir } from "node:fs/promises";
 
 export type { AgentStatus } from "./agent-state-machine";
@@ -137,11 +138,20 @@ export class AgentProcessManager {
         displayName: identity?.displayName,
         description: identity?.description,
       });
+      // Cloud-computer only: migrate/bind Agent skills onto /workspace/agent-skills/<id>.
+      // No-op when COFORGE_CLOUD_COMPUTER is unset (non-cloud-computer).
+      await prepareCloudComputerAgentSkills({
+        agentId,
+        agentWorkspaceDirectory,
+        environment: { ...Bun.env, ...environment },
+      });
       if (assignedSkillPacks.length > 0) {
         await installAssignedSkills({
           provider: config.provider,
           agentWorkspaceDirectory,
           packs: assignedSkillPacks,
+          agentId,
+          environment: { ...Bun.env, ...environment },
         });
       }
     }
