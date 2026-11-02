@@ -46,6 +46,7 @@ export function InlineVideo({ attachment, href }: { attachment: Attachment; href
         </div>
       ) : media.player ? (
         <InlineVideoPlayer
+          key={media.attempt}
           {...media.player}
           label={attachment.fileName}
           onSize={setSize}

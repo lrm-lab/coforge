@@ -38,8 +38,9 @@ const LOAD_MARGIN = "160px";
  * `player` is what to play once the source is known; `element` is the player's ref.
  */
 export function useInlineMedia<E extends HTMLMediaElement>(attachment: Attachment, href: string) {
-  const [watchNear, nearNow] = useNearViewport(true, LOAD_MARGIN);
+  // Once near, it stays loaded and stops watching.
   const [near, setNear] = useState(false);
+  const [watchNear, nearNow] = useNearViewport(!near, LOAD_MARGIN);
   if (nearNow && !near) setNear(true);
   const [failure, setFailure] = useState<MediaFailure>();
   const [attempt, setAttempt] = useState(0);
@@ -79,10 +80,11 @@ export function useInlineMedia<E extends HTMLMediaElement>(attachment: Attachmen
       setFailure(undefined);
       setAttempt((count) => count + 1);
     },
+    /** Keys the player: a retry mounts a new one. */
+    attempt,
     player:
       source.status === "ready"
         ? {
-            key: attempt,
             src: (attempt > 0 && source.fallbackSrc) || source.src,
             fallbackSrc: attempt > 0 ? undefined : source.fallbackSrc,
           }

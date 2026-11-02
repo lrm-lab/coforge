@@ -84,6 +84,7 @@ export function InlineAudio({ attachment, href }: { attachment: Attachment; href
         </div>
       ) : media.player ? (
         <InlineAudioPlayer
+          key={media.attempt}
           {...media.player}
           label={attachment.fileName}
           onFailed={media.onFailed}
