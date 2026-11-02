@@ -79,8 +79,8 @@ export class PrismaDirectConversationPreferences {
    * changed. One row's own flag, so it takes no conversation lock. */
   async setMuted({ memberId }: ViewerDirectMembership, muted: boolean) {
     const updated = await this.db.conversationMember.updateMany({
-      where: { id: memberId, notificationLevel: { not: muted ? "muted" : "all" } },
-      data: { notificationLevel: muted ? "muted" : "all" },
+      where: { id: memberId, channelMuted: { not: muted } },
+      data: { notificationLevel: muted ? "muted" : "all", channelMuted: muted },
     });
     return { muted, changed: updated.count > 0 };
   }

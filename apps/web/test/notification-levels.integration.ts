@@ -124,3 +124,42 @@ test("a noisy channel gets one mute hint, and muting adopts it", async () => {
   expect(stored?.outcome).toBe("adopted");
   expect(agentMemberId).toBeTruthy();
 });
+
+test("mentions do not argue for muting: 50 mentioned deliveries make no hint", async () => {
+  const channel = await db.conversation.create({
+    data: { workspaceId, channelName: `levels-mentions-${suffix}`, visibility: "public" },
+  });
+  await db.conversationMember.create({
+    data: { workspaceId, conversationId: channel.id, agentId },
+  });
+  for (let index = 0; index < 50; index += 1) {
+    const message = await db.message.create({
+      data: {
+        workspaceId,
+        conversationId: channel.id,
+        sequence: 100 + index,
+        senderMemberId: null,
+        body: `mention ${index}`,
+      },
+    });
+    await db.agentMessageDelivery.create({
+      data: {
+        workspaceId,
+        conversationId: channel.id,
+        agentId,
+        messageId: message.id,
+        sequence: 100 + index,
+        mentionOutcome: "delivered",
+      },
+    });
+  }
+  expect(
+    await new AgentMuteHints(db).forInbox({
+      workspaceId,
+      agentId,
+      conversationId: channel.id,
+      target: "#mentions",
+      muted: false,
+    }),
+  ).toBeNull();
+});

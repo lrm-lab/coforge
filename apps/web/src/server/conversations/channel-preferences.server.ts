@@ -58,7 +58,7 @@ export async function setAgentMuted(
       where: {
         conversationId_agentId: { conversationId: channel.id, agentId },
       },
-      data: { notificationLevel: muted ? "muted" : "all" },
+      data: { notificationLevel: muted ? "muted" : "all", channelMuted: muted },
     });
   });
   if (muted) await new AgentMuteHints(db).adopt(agentId, channel.id);
@@ -80,7 +80,10 @@ export async function setNotificationLevel(
     return changeMemberRow(
       tx,
       { conversationId: channel.id, userId },
-      { unless: { notificationLevel: next }, data: { notificationLevel: next } },
+      {
+        unless: { notificationLevel: next, channelMuted: next === "muted" },
+        data: { notificationLevel: next, channelMuted: next === "muted" },
+      },
     );
   });
   if (changed)
@@ -106,7 +109,7 @@ export async function setUserMuted(
       { conversationId: channel.id, userId },
       {
         unless: { notificationLevel: muted ? "muted" : "all" },
-        data: { notificationLevel: muted ? "muted" : "all" },
+        data: { notificationLevel: muted ? "muted" : "all", channelMuted: muted },
       },
     );
   });

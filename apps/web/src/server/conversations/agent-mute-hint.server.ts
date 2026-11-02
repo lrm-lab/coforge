@@ -65,8 +65,10 @@ export class AgentMuteHints {
           agentId: input.agentId,
           conversationId: input.conversationId,
           createdAt: { gte: since },
-          // A delivery with no reason is an ordinary channel delivery; a mention is not counted.
-          OR: [{ reason: null }, { reason: { not: "mentioned" } }],
+          // Ordinary messages only: a tracked @mention, a followed thread reply and a task or
+          // system notice each reach the Agent after a mute, so none of them argues for one.
+          mentionOutcome: null,
+          message: { threadRootId: null, systemMessage: null },
         },
       }),
       this.db.message.count({
@@ -78,15 +80,19 @@ export class AgentMuteHints {
       }),
     ]);
     if (messages < MUTE_HINT_MESSAGES || replies >= MUTE_HINT_REPLIES) return null;
-    await this.db.agentMuteHint.create({
-      data: {
-        agentId: input.agentId,
-        conversationId: input.conversationId,
-        workspaceId: input.workspaceId,
-        windowStart: since,
-      },
+    // Two inbox reads can both see no hint; only the insert that wins returns it.
+    const inserted = await this.db.agentMuteHint.createMany({
+      data: [
+        {
+          agentId: input.agentId,
+          conversationId: input.conversationId,
+          workspaceId: input.workspaceId,
+          windowStart: since,
+        },
+      ],
+      skipDuplicates: true,
     });
-    return muteHintText(input.target, messages, replies);
+    return inserted.count > 0 ? muteHintText(input.target, messages, replies) : null;
   }
 
   /** The Agent muted the channel: the suggestion was adopted. */
