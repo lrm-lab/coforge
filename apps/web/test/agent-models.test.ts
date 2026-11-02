@@ -1,14 +1,19 @@
 import { describe, expect, test } from "bun:test";
 
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
-import { listVisibleAgentModels } from "#src/server/agents/agent-models.server";
+import { headerDescription, listVisibleAgentModels } from "#src/server/agents/agent-models.server";
 import type { AgentVisibilityViewer } from "#src/server/agents/agent-visibility.server";
 
 const WORKSPACE_ID = "workspace-1";
 const member: AgentVisibilityViewer = { kind: "user", userId: "user-member", role: "member" };
 
 function fakeDb(
-  rows: Array<{ id: string; computerId?: string | null; runtimeConfig: unknown }>,
+  rows: Array<{
+    id: string;
+    computerId?: string | null;
+    runtimeConfig: unknown;
+    description?: string;
+  }>,
   catalogs: Array<{ computerId: string; provider: string; models: unknown }> = [],
 ) {
   const calls: Prisma.AgentFindManyArgs[] = [];
@@ -16,7 +21,7 @@ function fakeDb(
     agent: {
       findMany: async (args: Prisma.AgentFindManyArgs) => {
         calls.push(args);
-        return rows.map((row) => ({ computerId: null, ...row }));
+        return rows.map((row) => ({ computerId: null, description: "", ...row }));
       },
     },
     computerModelCatalog: {
@@ -160,5 +165,28 @@ describe("listVisibleAgentModels", () => {
         { ownerId: "user-admin" },
       ],
     });
+  });
+
+  test("gives each Agent its header description", async () => {
+    const { db } = fakeDb([
+      { id: "agent-a", runtimeConfig: config(""), description: "CoForge 后端：接口\n细节" },
+      { id: "agent-b", runtimeConfig: config("") },
+    ]);
+    expect((await listVisibleAgentModels(db, WORKSPACE_ID, member)).descriptions).toEqual({
+      "agent-a": "CoForge 后端：接口",
+      "agent-b": "",
+    });
+  });
+});
+
+describe("headerDescription", () => {
+  test("is a description's first non-blank line, cut short when long", () => {
+    expect(headerDescription("")).toBe("");
+    expect(headerDescription("\n  CoForge 后端：接口和数据  \nmore detail")).toBe(
+      "CoForge 后端：接口和数据",
+    );
+    expect(headerDescription("x".repeat(200))).toBe(`${"x".repeat(160)}…`);
+    // By code point, so an emoji at the cut is never split in half.
+    expect(headerDescription(`${"x".repeat(159)}😀😀`)).toBe(`${"x".repeat(159)}😀…`);
   });
 });

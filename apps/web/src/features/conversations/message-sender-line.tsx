@@ -1,13 +1,14 @@
 import { Button } from "#src/components/base/buttons/button";
-import { AgentModelLabel } from "#src/features/agents/agent-model-label";
+import { AgentDescriptionLabel, AgentModelLabel } from "#src/features/agents/agent-model-label";
 import { DeletedAgentBadge } from "#src/features/agents/deleted-agent";
 
 import type { MessageView } from "./message-view";
 
 /**
  * The line over a message that starts a group: who sent it (a link to their profile when there
- * is one to open), an Agent's model, a deleted Agent's badge, and the time. In a narrow pane the
- * model gives way first, then the name, which ends in an ellipsis; the time always stays.
+ * is one to open), an Agent's model and description, a deleted Agent's badge, and the time. In a
+ * narrow pane the description gives way first, then the model, then the name, which ends in an
+ * ellipsis; the time always stays.
  *
  * The name does not shrink at all: flex shrinks every item in proportion to its width, so even a
  * name next to a label with a far larger shrink factor lost a fraction of a pixel, and a truncating
@@ -47,14 +48,16 @@ export function MessageSenderLine({
             {displayName}
           </span>
         )}
-        {message.senderKind === "agent" &&
-          message.senderAgentId &&
-          !deleted && (
-            // Hidden while the label draws nothing (models off, or none known), so no gap is left.
+        {message.senderKind === "agent" && message.senderAgentId && !deleted && (
+          <>
+            {/* Hidden while the label draws nothing (models off, or none known), so no gap is
+                  left; the description draws no element at all when there is none. */}
             <span className="flex min-w-0 empty:hidden">
               <AgentModelLabel agentId={message.senderAgentId} seenAt={message.createdAt} />
             </span>
-          )}
+            <AgentDescriptionLabel agentId={message.senderAgentId} seenAt={message.createdAt} />
+          </>
+        )}
       </span>
       {/* Outside the box, like the time: a name cut to the box then leaves room for the badge. */}
       {deleted && <DeletedAgentBadge />}

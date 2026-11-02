@@ -26,12 +26,15 @@ export async function listVisibleAgentModels(
   readAt: number;
   models: Record<string, string>;
   modelIds: Record<string, string>;
+  /** Each Agent's description as its message header shows it: the first line, at most
+   * `HEADER_DESCRIPTION_MAX` characters; `""` for none. The whole is in its hover card. */
+  descriptions: Record<string, string>;
 }> {
   // Taken before the read: the list covers every Agent that existed by `readAt`.
   const readAt = now();
   const rows = await db.agent.findMany({
     where: { workspaceId, ...ACTIVE_AGENT_WHERE, ...visibleAgentWhere(viewer) },
-    select: { id: true, computerId: true, runtimeConfig: true },
+    select: { id: true, computerId: true, runtimeConfig: true, description: true },
   });
   const agents = rows.map((row) => ({ ...row, choice: modelChoice(row.runtimeConfig) }));
   const computerIds = [...new Set(agents.flatMap((agent) => agent.computerId ?? []))];
@@ -49,13 +52,32 @@ export async function listVisibleAgentModels(
     }
   const models: Record<string, string> = {};
   const modelIds: Record<string, string> = {};
-  for (const { id, computerId, choice } of agents) {
+  const descriptions: Record<string, string> = {};
+  for (const { id, computerId, choice, description } of agents) {
+    descriptions[id] = headerDescription(description);
     models[id] = choice
       ? agentModelName(computerId ? catalogs.get(computerId) : undefined, choice)
       : "";
     modelIds[id] = choice?.model ?? "";
   }
-  return { readAt, models, modelIds };
+  return { readAt, models, modelIds, descriptions };
+}
+
+/** Longer than a header line ever shows, short enough that a long profile costs little. */
+const HEADER_DESCRIPTION_MAX = 160;
+
+/** The first non-blank line of a description, cut to `HEADER_DESCRIPTION_MAX` code points (so
+ * an emoji is never split in half). */
+export function headerDescription(description: string) {
+  const line =
+    description
+      .split("\n")
+      .find((text) => text.trim())
+      ?.trim() ?? "";
+  const points = Array.from(line);
+  return points.length > HEADER_DESCRIPTION_MAX
+    ? `${points.slice(0, HEADER_DESCRIPTION_MAX).join("")}…`
+    : line;
 }
 
 /** The model an Agent is configured with, or `undefined` when its stored config cannot be read. */

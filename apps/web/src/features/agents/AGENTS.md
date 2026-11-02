@@ -29,12 +29,12 @@ These rules apply to `src/features/agents/`.
   failing soft, so the display-expiry timer, a resubscribe gap and directory and visibility events
   cover them. `useLiveAgents` leaves them out; the chat list header reads the busy ones through
   `useWorkspaceBusyAgents`. Never subscribe to a private Agent's channel twice (not ref-counted).
-- The model beside an Agent's name in chat (`agent-models.ts`, Settings → Show
-  agent model) is one query per Workspace over every Agent the viewer may see
-  (`listVisibleAgentModels`, scoped by `visibleAgentWhere`), wider than
-  `listAgents`. A row reads its own Agent with `select` and never receives the
-  map. The query is read again on focus and reconnect, when an unknown Agent
-  newer than the list appears, and after a runtime save or a visibility change.
+- The model and description line beside an Agent's name in chat (`agent-models.ts`; the model
+  behind Settings → Show agent model) are one query per Workspace over every Agent the viewer may
+  see (`listVisibleAgentModels`, scoped by `visibleAgentWhere`), wider than `listAgents`. A row
+  reads its own Agent with `select` and never receives the map. The query is read again on focus
+  and reconnect, when an unknown Agent newer than the list appears, after a runtime or profile
+  save, and on a visibility or directory change.
 - `agent-status-realtime.ts` consumes backend display snapshots from the
   initial server response and the realtime status channel and accepts newer
   revisions. At display expiry it refreshes from the backend and retries on

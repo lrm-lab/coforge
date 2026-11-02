@@ -29,7 +29,7 @@ import {
   workspaceActivityQuery,
   type RecentActivityByAgent,
 } from "./agent-activity-queries";
-import { agentModelsQueryKey } from "./agent-models";
+import { AGENT_MODELS_KEY, agentModelsQueryKey } from "./agent-models";
 import type { AgentMascot } from "./agent-mascot";
 import type { ExtraAgent } from "./extra-agent";
 import { loadExtraAgents } from "./extra-agents.functions";
@@ -139,6 +139,8 @@ export function WorkspaceAgentsProvider({
           queryKey: ["conversation", "mentionables"],
           refetchType: "active",
         });
+        // The message headers' model and description lines.
+        void queryClient.invalidateQueries({ queryKey: AGENT_MODELS_KEY, refetchType: "active" });
       }),
     [queryClient],
   );

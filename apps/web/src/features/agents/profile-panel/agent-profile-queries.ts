@@ -1,4 +1,5 @@
 import { MEMBER_DIRECTORY_KEY } from "#src/features/agents/member-directory-queries";
+import { AGENT_MODELS_KEY } from "#src/features/agents/agent-models";
 import { queryOptions, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 
@@ -82,6 +83,8 @@ export function useInvalidateAgentProfile(agentId: string | undefined) {
       queryClient.invalidateQueries({ queryKey: ["conversation"] }),
       // The Members grid pages its cards through the Query cache, not the route loader.
       queryClient.invalidateQueries({ queryKey: MEMBER_DIRECTORY_KEY }),
+      // The message headers' description line (`agent-models.ts`).
+      queryClient.invalidateQueries({ queryKey: AGENT_MODELS_KEY }),
       router.invalidate({ sync: true }),
     ]);
   };

@@ -2,7 +2,7 @@ import { ClientOnly } from "@tanstack/react-router";
 
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { useShowAgentModel } from "#src/features/settings/show-agent-model";
-import { useAgentModel } from "./agent-models";
+import { useAgentDescription, useAgentModel } from "./agent-models";
 import { useCurrentWorkspaceId } from "./workspace-agents-realtime";
 
 /** An Agent's configured model beside its name in chat (Settings → Show agent model). The model
@@ -42,6 +42,58 @@ function AgentModelText({
     <Tooltip title={model}>
       <TooltipTrigger className="max-w-48 min-w-0 shrink-[8] cursor-default truncate rounded-sm text-xs text-tertiary outline-focus-ring focus-visible:outline-2">
         {model}
+      </TooltipTrigger>
+    </Tooltip>
+  );
+}
+
+/**
+ * An Agent's description after its model in chat, as Raft's message header has it: its first
+ * line, in the model's quiet type. It takes only the room the line has to spare (no basis, growing
+ * to its own width at most), so it is cut first and to nothing before the model or the name
+ * gives way; the line is in the tooltip, and the Agent's profile has the rest. Shown
+ * whatever the model setting, and only once the browser has read it (see `AgentModelLabel`).
+ */
+export function AgentDescriptionLabel({
+  agentId,
+  seenAt,
+}: {
+  agentId: string;
+  seenAt: Date | string;
+}) {
+  return (
+    <ClientOnly>
+      <AgentDescriptionContent agentId={agentId} seenAt={seenAt} />
+    </ClientOnly>
+  );
+}
+
+function AgentDescriptionContent({ agentId, seenAt }: { agentId: string; seenAt: Date | string }) {
+  const workspaceId = useCurrentWorkspaceId();
+  if (!workspaceId) return null;
+  return <AgentDescriptionText agentId={agentId} workspaceId={workspaceId} seenAt={seenAt} />;
+}
+
+function AgentDescriptionText({
+  agentId,
+  workspaceId,
+  seenAt,
+}: {
+  agentId: string;
+  workspaceId: string;
+  seenAt: Date | string;
+}) {
+  const description = useAgentDescription(workspaceId, agentId, seenAt);
+  if (!description) return null;
+  return (
+    <Tooltip title={description}>
+      {/* Out of the tab order: on by default in every Agent header, it would be a stop per message,
+          and the line is its text, read whole whatever the width cuts. */}
+      <TooltipTrigger
+        excludeFromTabOrder
+        className="max-w-max min-w-0 flex-[1_1_0%] cursor-default truncate rounded-sm text-left text-xs text-tertiary outline-focus-ring focus-visible:outline-2"
+      >
+        {description}
       </TooltipTrigger>
     </Tooltip>
   );
