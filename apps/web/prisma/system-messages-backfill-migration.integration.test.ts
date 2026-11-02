@@ -21,6 +21,7 @@ const readMigration = async (suffix: string) => {
 const helperPerson = await readMigration("_helper_person");
 const helperTask = await readMigration("_helper_task");
 const helperDrop = await readMigration("_helper_drop");
+const paramsMigration = await readMigration("_backfill_params");
 
 afterAll(async () => {
   await pool?.end();
@@ -88,7 +89,7 @@ async function withSchema(run: (client: PoolClient) => Promise<void>) {
 
 test("the backfill migration exists and carries its guard", () => {
   expect(migrationName).toBeDefined();
-  expect(migration).toMatch(/unparseable > 50/);
+  expect(migration).toMatch(/unclassified > 50/);
   expect(migration).toMatch(/RAISE EXCEPTION/);
 });
 
@@ -111,6 +112,7 @@ test.skipIf(!connectionString)(
       await client.query(helperPerson);
       await client.query(helperTask);
       await client.query(migration);
+      await client.query(paramsMigration);
       await client.query(helperDrop);
       const rows = await client.query<{ kind: string; count: string }>(
         `SELECT kind, count(*)::text AS count FROM system_messages GROUP BY kind`,
@@ -147,7 +149,7 @@ test.skipIf(!connectionString)(
         );
       await client.query(helperPerson);
       await client.query(helperTask);
-      await expect(client.query(migration)).rejects.toThrow(/unparseable/);
+      await expect(client.query(migration)).rejects.toThrow(/unclassified/);
       const rows = await client.query(`SELECT count(*)::int AS count FROM system_messages`);
       expect(rows.rows[0]!.count).toBe(0);
     }),

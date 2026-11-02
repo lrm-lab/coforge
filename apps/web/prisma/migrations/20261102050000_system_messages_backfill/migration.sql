@@ -1,26 +1,29 @@
 -- migration-safety v1
--- checked: 2026-11-02T04:12:38.939Z  pg: 18.0  verdict: ok-with-lock-timeout
+-- checked: 2026-11-02T03:24:20.272Z  pg: 18.0  verdict: ok-with-lock-timeout
 -- snapshot: 2026-11-02T02:44:37.622Z production
--- body-sha256: 1540b94a8ecb6ea774506564ae59659093cf11aabedad607672b4cf702c90d31
+-- body-sha256: ad293883c2fddce7caacfe4a15402801e7d3357aa7e67c5dee8fc7880279ca76
 -- table: "*" rows≈-1 size=0 lock=access-exclusive rewrite=yes statement=unrecognised statement
 SET lock_timeout = '5s';
 
--- Backfill the structured kind and full parameters of every existing system message
--- (`senderMemberId IS NULL`). Historical rows parse into the same params new notices write, so
--- the web has one rendering path; only a row that cannot be parsed becomes `legacy_text`.
--- People and tasks resolve through the helper functions; more than 50 unparseable rows, or more
--- than 1%, aborts the whole migration.
+-- Backfill the structured kind of every existing system message (`senderMemberId IS NULL`).
+-- Historical rows keep their rendered English body as `params.body`; the web shows it as-is when
+-- the structured fields are absent. New notices never store their body in `params`.
+-- A classification that cannot explain more than 50 rows or 1% of them aborts the whole
+-- migration, so a new historical format is noticed at deploy time instead of being guessed.
 DO $$
 DECLARE
   total bigint;
-  unparseable bigint;
+  unclassified bigint;
   sample text;
 BEGIN
   SELECT count(*) INTO total FROM messages WHERE "senderMemberId" IS NULL;
 
   CREATE TEMP TABLE _sys_backfill ON COMMIT DROP AS
   SELECT
-    m.id AS "messageId", m."conversationId", m."workspaceId", m."threadRootId", m.body,
+    m.id AS "messageId",
+    m."conversationId",
+    m."workspaceId",
+    m.body,
     CASE
       WHEN m.body ~ '^📋 [0-9]+ new tasks? created: ' THEN 'task.created'
       WHEN m.body ~ '^📋 .+ converted a message to task #[0-9]+' THEN 'task.converted'
@@ -41,80 +44,30 @@ BEGIN
   FROM messages m
   WHERE m."senderMemberId" IS NULL;
 
-  SELECT count(*) INTO unparseable FROM _sys_backfill WHERE kind = 'unclassified';
+  SELECT count(*) INTO unclassified FROM _sys_backfill WHERE kind = 'unclassified';
   SELECT string_agg(left(body, 160), E'\n') INTO sample
   FROM (SELECT body FROM _sys_backfill WHERE kind = 'unclassified' LIMIT 5) examples;
-  RAISE NOTICE 'system_messages backfill: total=%, unparseable=%, samples=%',
-    total, unparseable, coalesce(sample, '');
+  RAISE NOTICE 'system_messages backfill: total=%, unclassified=%, samples=%',
+    total, unclassified, coalesce(sample, '');
 
-  IF unparseable > 50 OR (total > 0 AND unparseable::numeric / total > 0.01) THEN
-    RAISE EXCEPTION 'system_messages backfill refused: % of % system messages unparseable', unparseable, total;
+  IF unclassified > 50 OR (total > 0 AND unclassified::numeric / total > 0.01) THEN
+    RAISE EXCEPTION 'system_messages backfill refused: % of % system messages unclassified',
+      unclassified, total;
   END IF;
 
   INSERT INTO system_messages ("messageId", "conversationId", "workspaceId", kind, params)
-  SELECT b."messageId", b."conversationId", b."workspaceId",
-    CASE WHEN b.kind = 'unclassified' THEN 'legacy_text' ELSE b.kind END,
-    CASE b.kind
-      WHEN 'task.created' THEN jsonb_build_object('tasks', (
-        SELECT coalesce(jsonb_agg(public.coforge_sys_task(b."workspaceId", x[1]::int, x[2])), '[]'::jsonb)
-        FROM regexp_matches(substring(b.body from 'created: (.*)$'), '#([0-9]+) "([^"]*)"', 'g') AS x
-      ))
-      WHEN 'task.converted' THEN jsonb_build_object(
-        'actor', public.coforge_sys_person(b."workspaceId", '', coalesce((regexp_match(b.body, '^📋 (.+?) converted a message'))[1], '')),
-        'task', public.coforge_sys_task(b."workspaceId", coalesce((regexp_match(b.body, 'converted a message to task #([0-9]+)'))[1]::int, 0), coalesce((regexp_match(b.body, 'converted a message to task #[0-9]+ "([^"]*)"'))[1], '')))
-      WHEN 'task.from_message' THEN jsonb_build_object(
-        'actor', public.coforge_sys_person(b."workspaceId", '', coalesce((regexp_match(b.body, '^📋 (.+?) made task'))[1], '')),
-        'task', public.coforge_sys_task(b."workspaceId", coalesce((regexp_match(b.body, 'made task #([0-9]+)'))[1]::int, 0), coalesce((regexp_match(b.body, 'made task #[0-9]+ "([^"]*)"'))[1], '')))
-      WHEN 'task.assigned' THEN CASE WHEN b.body ~ '^📌 Assigned @' THEN jsonb_build_object(
-            'actor', public.coforge_sys_person(b."workspaceId", '', ''),
-            'task', public.coforge_sys_task(b."workspaceId", coalesce((regexp_match(b.body, 'Assigned @[^ ]+ to tasks? #([0-9]+)'))[1]::int, 0), coalesce((regexp_match(b.body, 'Assigned @[^ ]+ to tasks? #[0-9]+ "([^"]*)"'))[1], '')),
-            'assignee', public.coforge_sys_person(b."workspaceId", coalesce((regexp_match(b.body, 'Assigned @([^ ]+) to tasks?'))[1], ''), '')) ELSE jsonb_build_object(
-            'actor', public.coforge_sys_person(b."workspaceId", '', coalesce((regexp_match(b.body, '^📌 (.+?) assigned #'))[1], '')),
-            'task', public.coforge_sys_task(b."workspaceId", coalesce((regexp_match(b.body, 'assigned #([0-9]+)'))[1]::int, 0), coalesce((regexp_match(b.body, 'assigned #[0-9]+ "([^"]*)"'))[1], '')),
-            'assignee', public.coforge_sys_person(b."workspaceId", coalesce((regexp_match(b.body, ' to @([^ ]+)$'))[1], ''), '')) END
-      WHEN 'task.claimed' THEN jsonb_build_object(
-        'claimer', public.coforge_sys_person(b."workspaceId", coalesce((regexp_match(b.body, '^📌 ([^ ]+) claimed #'))[1], ''), ''),
-        'task', public.coforge_sys_task(b."workspaceId", coalesce((regexp_match(b.body, 'claimed #([0-9]+)'))[1]::int, 0), coalesce((regexp_match(b.body, 'claimed #[0-9]+ "([^"]*)"'))[1], '')))
-      WHEN 'task.moved' THEN jsonb_build_object(
-        'actor', public.coforge_sys_person(b."workspaceId", '', coalesce((regexp_match(b.body, '^(.+?) moved #'))[1], '')),
-        'task', public.coforge_sys_task(b."workspaceId", coalesce((regexp_match(b.body, 'moved #([0-9]+)'))[1]::int, 0), coalesce((regexp_match(b.body, 'moved #[0-9]+ "([^"]*)"'))[1], '')),
-        'status', CASE coalesce((regexp_match(b.body, 'to (Todo|In Progress|In Review|Done|Closed)$'))[1], '')
-          WHEN 'Todo' THEN 'todo' WHEN 'In Progress' THEN 'in_progress'
-          WHEN 'In Review' THEN 'in_review' WHEN 'Done' THEN 'done' WHEN 'Closed' THEN 'closed'
-          ELSE 'todo' END)
-      WHEN 'task.unassigned' THEN jsonb_build_object(
-        'actor', public.coforge_sys_person(b."workspaceId", '', coalesce((regexp_match(b.body, '^🔓 (.+?) unassigned #'))[1], '')),
-        'task', public.coforge_sys_task(b."workspaceId", coalesce((regexp_match(b.body, 'unassigned #([0-9]+)'))[1]::int, 0), coalesce((regexp_match(b.body, 'unassigned #[0-9]+ "([^"]*)"'))[1], '')))
-      WHEN 'task.assigned_you' THEN jsonb_build_object(
-        'actor', public.coforge_sys_person(b."workspaceId", coalesce((regexp_match(b.body, '^@?([^ ]+) assigned you task #'))[1], ''), ''),
-        'task', public.coforge_sys_task(b."workspaceId", coalesce((regexp_match(b.body, 'assigned you task #([0-9]+)'))[1]::int, 0), coalesce((regexp_match(b.body, 'assigned you task #[0-9]+: (.*)$'))[1], '')))
-      WHEN 'task.unfollowed' THEN jsonb_build_object(
-        'actor', public.coforge_sys_person(b."workspaceId", '', coalesce((regexp_match(b.body, '^(.+?) stopped following'))[1], '')),
-        'task', coalesce((SELECT public.coforge_sys_task(b."workspaceId", t.number, t.title) FROM tasks t WHERE t."messageId" = b."threadRootId" LIMIT 1), public.coforge_sys_task(b."workspaceId", 0, '')),
-        'reason', nullif(coalesce((regexp_match(b.body, 'stopped following this task: (.*)$'))[1], ''), ''))
-      WHEN 'channel.coordinator_changed' THEN CASE WHEN b.body ~ '^\[CoForge coordinator change\]' THEN jsonb_build_object(
-            'channelId', (SELECT c.id FROM conversations c WHERE c."workspaceId" = b."workspaceId" AND c."channelName" = coalesce((regexp_match(b.body, '^\[CoForge coordinator change\] #([^:]+):'))[1], '') LIMIT 1),
-            'channelName', coalesce((regexp_match(b.body, '^\[CoForge coordinator change\] #([^:]+):'))[1], ''),
-            'actor', public.coforge_sys_person(b."workspaceId", '', ''),
-            'next', public.coforge_sys_person(b."workspaceId", coalesce((regexp_match(b.body, 'coordinator=@?([^ ]+)$'))[1], ''), '')) ELSE jsonb_build_object(
-            'channelId', (SELECT c.id FROM conversations c WHERE c."workspaceId" = b."workspaceId" AND c."channelName" = coalesce((regexp_match(b.body, ' of #([^ ]+)$'))[1], '') LIMIT 1),
-            'channelName', coalesce((regexp_match(b.body, ' of #([^ ]+)$'))[1], ''),
-            'actor', public.coforge_sys_person(b."workspaceId", '', coalesce((regexp_match(b.body, '^(.+?) (?:made @|removed @)'))[1], '')),
-            'next', CASE WHEN b.body ~ ' made @' THEN public.coforge_sys_person(b."workspaceId", coalesce((regexp_match(b.body, 'made @([^ ]+) the coordinator'))[1], ''), '') ELSE NULL END,
-            'previous', CASE WHEN b.body ~ 'removed @' THEN public.coforge_sys_person(b."workspaceId", coalesce((regexp_match(b.body, 'removed @([^ ]+) as coordinator'))[1], ''), '')
-              WHEN b.body ~ 'replacing @' THEN public.coforge_sys_person(b."workspaceId", coalesce((regexp_match(b.body, 'replacing @([^)]+)'))[1], ''), '') ELSE NULL END) END
-      WHEN 'agent_dm.chain_limit' THEN '{}'::jsonb
-      WHEN 'agent_dm.rate_limit' THEN '{}'::jsonb
-      ELSE jsonb_build_object('body', b.body)
-    END
-  FROM _sys_backfill b
+  SELECT "messageId", "conversationId", "workspaceId",
+    CASE WHEN kind = 'unclassified' THEN 'legacy_text' ELSE kind END,
+    jsonb_build_object('body', body)
+  FROM _sys_backfill
   ON CONFLICT ("messageId") DO NOTHING;
 
-  SELECT count(*) INTO unparseable
-  FROM messages m LEFT JOIN system_messages s ON s."messageId" = m.id
+  SELECT count(*) INTO unclassified
+  FROM messages m
+  LEFT JOIN system_messages s ON s."messageId" = m.id
   WHERE m."senderMemberId" IS NULL AND s."messageId" IS NULL;
-  IF unparseable > 0 THEN
-    RAISE EXCEPTION 'system_messages backfill left % system messages without a row', unparseable;
+  IF unclassified > 0 THEN
+    RAISE EXCEPTION 'system_messages backfill left % system messages without a row', unclassified;
   END IF;
 END $$;
 
