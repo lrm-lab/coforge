@@ -6,10 +6,10 @@
  * system message stays as it is.
  */
 
-export type SystemMessageKind = "taskUpdate" | "reminder" | "system";
+export type SystemMessageKind = "taskUpdate" | "system";
 
 /** The order a summary lists its parts in. */
-const SUMMARY_ORDER: readonly SystemMessageKind[] = ["taskUpdate", "reminder", "system"];
+const SUMMARY_ORDER: readonly SystemMessageKind[] = ["taskUpdate", "system"];
 
 /** A leading word with no letter, digit, `@` or `#` in it: the emoji a notice may open with. */
 const LEADING_SYMBOL_WORD = /^[^\p{L}\p{N}@#]+$/u;
@@ -18,10 +18,7 @@ const LEADING_SYMBOL_WORD = /^[^\p{L}\p{N}@#]+$/u;
  * An assignment (`📌 X assigned #N "…" to @y`) or an unassignment (`X unassigned #N`) is not in
  * this list, so it is summarized as a system message. */
 const TASK_UPDATE =
-  /\b(?:new tasks? created|converted a message to task #\d+|claimed #\d+|released #\d+|moved #\d+|deleted #\d+|(?:started|was assigned) tasks? #\d+)\b/iu;
-
-const REMINDER =
-  /^(?:Reminder\s+#\w+|Reminder(?: \([^)]+\))?:|.+?\s+(?:scheduled|canceled|cancelled)\s+(?:a\s+)?reminder\b)/iu;
+  /\b(?:new tasks? created|converted a message to task #\d+|claimed #\d+|moved #\d+|(?:started|was assigned) tasks? #\d+)\b/iu;
 
 function withoutLeadingSymbol(body: string): string {
   const text = body.trim();
@@ -34,7 +31,6 @@ function withoutLeadingSymbol(body: string): string {
 export function systemMessageKind(body: string): SystemMessageKind {
   const text = withoutLeadingSymbol(body);
   if (TASK_UPDATE.test(text)) return "taskUpdate";
-  if (REMINDER.test(text)) return "reminder";
   return "system";
 }
 

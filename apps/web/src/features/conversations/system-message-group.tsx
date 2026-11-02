@@ -13,7 +13,6 @@ import {
 
 function partLabel(kind: SystemMessageKind, count: number): string {
   if (kind === "taskUpdate") return m.conversation_system_group_task_updates({ count });
-  if (kind === "reminder") return m.conversation_system_group_reminders({ count });
   return m.conversation_system_group_messages({ count });
 }
 

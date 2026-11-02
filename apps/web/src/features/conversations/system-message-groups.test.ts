@@ -22,22 +22,12 @@ describe("system message kind", () => {
     expect(systemMessageKind('🔄 Frank An moved #4 "Fix login" to In Progress')).toBe("taskUpdate");
     expect(systemMessageKind('📋 1 new task created: #4 "Fix login"')).toBe("taskUpdate");
     expect(systemMessageKind("📋 3 new tasks created: #4, #5, #6")).toBe("taskUpdate");
-    expect(systemMessageKind('🔓 frank-an released #4 "Fix login"')).toBe("taskUpdate");
-    expect(systemMessageKind("🗑️ frank-an deleted #4")).toBe("taskUpdate");
     expect(systemMessageKind("frank-an converted a message to task #7")).toBe("taskUpdate");
   });
 
   test("an assignment or unassignment notice is summarized as a system message", () => {
     expect(systemMessageKind('📌 Frank assigned #3 "Fix login" to @coder')).toBe("system");
     expect(systemMessageKind('🔓 Frank An unassigned #4 "Fix login"')).toBe("system");
-  });
-
-  test("reminder notices are reminder updates, with or without a leading emoji", () => {
-    expect(systemMessageKind("⏰ Reminder: stand-up in five minutes")).toBe("reminder");
-    expect(systemMessageKind("Reminder (daily): water the plants")).toBe("reminder");
-    expect(systemMessageKind("Reminder #r12 fired")).toBe("reminder");
-    expect(systemMessageKind("@coder scheduled a reminder for 9:00")).toBe("reminder");
-    expect(systemMessageKind("Frank An cancelled reminder #r12")).toBe("reminder");
   });
 
   test("anything else is a plain system message", () => {
@@ -101,19 +91,17 @@ describe("grouping system messages", () => {
 });
 
 describe("summarizing a group", () => {
-  test("counts each kind and lists task updates, reminders, then other system messages", () => {
+  test("counts each kind and lists task updates before other system messages", () => {
     const summary = summarizeSystemGroup([
       system("a", "Frank An joined the channel."),
       system("b", '📌 frank-an claimed #4 "Fix login"'),
-      system("c", "⏰ Reminder: stand-up"),
-      system("d", '🔄 Frank An moved #4 "Fix login" to Done'),
+      system("c", '🔄 Frank An moved #4 "Fix login" to Done'),
     ]);
 
     expect(summary).toEqual({
-      total: 4,
+      total: 3,
       parts: [
         { kind: "taskUpdate", count: 2 },
-        { kind: "reminder", count: 1 },
         { kind: "system", count: 1 },
       ],
     });

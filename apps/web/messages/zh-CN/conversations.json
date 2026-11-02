@@ -15,15 +15,6 @@
       }
     }
   ],
-  "conversation_system_group_reminders": [
-    {
-      "declarations": ["input count", "local countPlural = count: plural"],
-      "selectors": ["countPlural"],
-      "match": {
-        "countPlural=other": "{count} 条提醒更新"
-      }
-    }
-  ],
   "conversation_system_group_messages": [
     {
       "declarations": ["input count", "local countPlural = count: plural"],

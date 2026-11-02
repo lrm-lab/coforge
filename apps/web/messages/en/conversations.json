@@ -15,16 +15,6 @@
       }
     }
   ],
-  "conversation_system_group_reminders": [
-    {
-      "declarations": ["input count", "local countPlural = count: plural"],
-      "selectors": ["countPlural"],
-      "match": {
-        "countPlural=one": "{count} reminder update",
-        "countPlural=other": "{count} reminder updates"
-      }
-    }
-  ],
   "conversation_system_group_messages": [
     {
       "declarations": ["input count", "local countPlural = count: plural"],
