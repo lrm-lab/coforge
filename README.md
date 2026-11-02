@@ -66,6 +66,8 @@ The architecture invariants every change must respect are in
 | [docs/operations/aliyun-oss-cdn/](docs/operations/aliyun-oss-cdn/README.md) | OSS/CDN provisioning runbook |
 | [docs/operations/cdn-certificates/](docs/operations/cdn-certificates/README.md) | CDN certificate renewal runbook |
 | [docs/agents/testing.md](docs/agents/testing.md) | Testing guidance for agents |
+| [docs/agents/module-design.md](docs/agents/module-design.md) | Module ownership, layers, naming, imports and the module map |
+| [docs/agents/delivery.md](docs/agents/delivery.md) | GitHub Flow, direct pushes, CR contents, TDD, review and the incidents behind them |
 | [docs/agents/architecture-invariants.md](docs/agents/architecture-invariants.md) | Package, process, transport, protocol and storage rules every change keeps |
 | [docs/agents/ui-manual-checks.md](docs/agents/ui-manual-checks.md) | Manual UI verification scenarios by interface area |
 | [docs/agents/shared-agent-skills.md](docs/agents/shared-agent-skills.md) | Project skills, independent review, release and reference-research rules every agent follows |
