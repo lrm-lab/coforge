@@ -118,6 +118,25 @@ describe("getTaskMoveCommand", () => {
       }
   });
 
+  test("a Task made to create a resource is not offered Done until its receipt is in", () => {
+    const awaiting = { ...task("in_review", owner("me")), requiresResourceReceipt: true };
+    expect(getTaskMoveCommand(awaiting, "me", "done")).toBeUndefined();
+    expect(getTaskMoveCommand(awaiting, "me", "done", { canSetAnyStatus: true })).toBeUndefined();
+    const received: TaskView = {
+      ...awaiting,
+      resourceReceipt: {
+        object: "staging database",
+        purpose: "load test",
+        teardownOwner: "@me",
+        securityPrivacy: "no personal data",
+        expiry: "2026-12-01",
+        runbook: "docs/runbook.md",
+        tracking: "#12",
+      },
+    };
+    expect(getTaskMoveCommand(received, "me", "done")).toEqual(update("done"));
+  });
+
   test("a Task nobody owns goes only to To do or Closed, a Workspace admin's move included", () => {
     const manager = { canSetAnyStatus: true };
     expect(getTaskMoveCommand(task("todo"), "me", "in_review", manager)).toBeUndefined();

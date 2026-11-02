@@ -46,6 +46,16 @@ export function taskStatusNeedsOwner(status: TaskStatus): boolean {
   return status !== "todo" && status !== "closed";
 }
 
+/** Whether a Task cannot yet be in this status for want of its resource receipt: one made to
+ * create a resource becomes Done only once the receipt is recorded (the server answers CONFLICT
+ * otherwise). */
+export function taskStatusAwaitsReceipt(
+  status: TaskStatus,
+  task: { requiresReceipt: boolean; hasReceipt: boolean },
+): boolean {
+  return status === "done" && task.requiresReceipt && !task.hasReceipt;
+}
+
 /** A conversation member named on a Task: its owner or its creator. */
 export type TaskMember = {
   memberId: string;

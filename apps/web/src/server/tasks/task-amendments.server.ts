@@ -1,5 +1,6 @@
 import { taskSelection } from "./task-view.server";
 import {
+  taskStatusAwaitsReceipt,
   taskStatusMoveAllowed,
   taskStatusNeedsOwner,
   type TaskCommand,
@@ -53,7 +54,12 @@ export async function updateTaskStatus(
   if (!taskStatusMoveAllowed(storedTaskStatus(task.status), status, { manager }))
     throw new AppError("ACCESS_DENIED");
   if (taskStatusNeedsOwner(status) && !task.ownerMemberId) throw new AppError("CONFLICT");
-  if (status === "done" && task.createsResource && !task.resourceReceipt)
+  if (
+    taskStatusAwaitsReceipt(status, {
+      requiresReceipt: task.createsResource,
+      hasReceipt: Boolean(task.resourceReceipt),
+    })
+  )
     throw new AppError("CONFLICT");
   const updated = await withNotices(ports, conversation, async (tx, notices) => {
     // Under the conversation lock, so a blocker finishing at the same time is seen either way.

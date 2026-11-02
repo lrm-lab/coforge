@@ -182,6 +182,8 @@ export function TaskBoard<T extends BoardTask>({
           hidden={hiddenColumns}
           onHiddenChange={setColumnHidden}
           disabled={!onCommand}
+          // A conversation's board says above it when any command, a move included, is refused.
+          showMoveError={!conversation}
           currentMemberId={(task) => task.currentMemberId ?? null}
           onMove={async (task, command) => {
             await onCommand?.(task, command);

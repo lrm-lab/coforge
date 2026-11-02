@@ -1,4 +1,5 @@
 import {
+  taskStatusAwaitsReceipt,
   taskStatusMoveAllowed,
   taskStatusNeedsOwner,
   type TaskStatus,
@@ -36,6 +37,13 @@ export function getTaskMoveCommand(
   }
 
   if (!task.owner && taskStatusNeedsOwner(nextStatus)) return undefined;
+  if (
+    taskStatusAwaitsReceipt(nextStatus, {
+      requiresReceipt: Boolean(task.requiresResourceReceipt),
+      hasReceipt: Boolean(task.resourceReceipt),
+    })
+  )
+    return undefined;
   // Only the owner works a task: anyone else may reopen it, finish it or close it. A Workspace
   // owner or admin may work it too, as the server lets them set any status.
   if (!canSetAnyStatus && !own && (nextStatus === "in_progress" || nextStatus === "in_review"))

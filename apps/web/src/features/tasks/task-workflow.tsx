@@ -75,6 +75,7 @@ export function TaskWorkflow<T extends TaskView>({
   paged,
   hidden,
   onHiddenChange,
+  showMoveError,
 }: {
   tasks: readonly T[];
   layout: TaskLayout;
@@ -91,6 +92,9 @@ export function TaskWorkflow<T extends TaskView>({
   disabled?: boolean;
   onMove: (task: T, command: TaskMoveCommand) => Promise<void>;
   renderTask: (task: T, controls: TaskControls) => ReactNode;
+  /** False where the page already says a refused command failed (a conversation's board), so a
+   * refused move is not said twice. */
+  showMoveError: boolean;
 }) {
   const id = useId();
   const [active, setActive] = useState<T>();
@@ -153,7 +157,7 @@ export function TaskWorkflow<T extends TaskView>({
       onDragCancel={() => setActive(undefined)}
       onDragEnd={(event) => void dropped(event)}
     >
-      {error && (
+      {error && showMoveError && (
         <p role="alert" className="mb-4 text-sm text-error-primary">
           {m.tasks_mutation_error()}
         </p>
@@ -210,11 +214,25 @@ export function TaskWorkflow<T extends TaskView>({
           </aside>
         )}
       </div>
+      {/* The overlay takes the dragged card's own box: a board card's, or a list row's, so it
+          stays under the pointer either way. */}
       <DragOverlay dropAnimation={null}>
         {active ? (
-          <div className="w-64 rotate-2 rounded-lg border border-secondary bg-primary p-3 shadow-lg">
+          <div
+            className={cn(
+              "size-full overflow-hidden rounded-lg border border-secondary bg-primary shadow-lg",
+              layout === "list" ? "flex items-center gap-2 px-3" : "rotate-2 p-3",
+            )}
+          >
             <span className="text-xs font-medium text-tertiary tabular-nums">#{active.number}</span>
-            <p className="mt-1 line-clamp-3 text-sm font-medium text-primary">{active.title}</p>
+            <p
+              className={cn(
+                "text-sm font-medium text-primary",
+                layout === "list" ? "truncate" : "mt-1 line-clamp-3",
+              )}
+            >
+              {active.title}
+            </p>
           </div>
         ) : null}
       </DragOverlay>
