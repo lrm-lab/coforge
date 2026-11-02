@@ -1,38 +1,27 @@
-import { isAppError } from "#src/lib/app-error";
-import { TASK_ASSIGNMENT_MANAGER_REQUIRED } from "./task-assignment";
-import { useTaskAssignmentAccess } from "./use-task-assignment-access";
-import { AssigneeMenu } from "./task-assignee-menu";
-import { TaskFieldTrigger as EditableTrigger } from "./task-field-trigger";
-import type { TaskCommand, TaskStatus, TaskView } from "@lrm/coforge-sdk/internal";
-import { useQuery } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
-import {
-  ChevronDown,
-  ChevronUp,
-  DotsHorizontal as MoreHorizontal,
-  XClose,
-} from "@untitledui/icons";
+import type { TaskView } from "@lrm/coforge-sdk/internal";
+import { DotsHorizontal as MoreHorizontal, XClose } from "@untitledui/icons";
 import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { Heading } from "react-aria-components";
 
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
-import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import type { Mentionable } from "#src/features/conversations/mention-text";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { StatusBadge, TaskHistory, type TimelineNames } from "./task-history";
-import { TaskPerson } from "./task-owner";
-import { getTaskMoveCommand, taskStatusOptions } from "./task-move";
-import { executeTask } from "./tasks.functions";
 import { TaskDeleteDialog, taskDeleteMenuItem, useCanDeleteTask } from "./task-delete";
-import { TaskSourceLink } from "./task-source";
+import type { VisibleTaskName } from "./task-relation-edits";
+import { taskRelationMenuItems } from "./task-relation-lines";
+import {
+  TaskDetailTabs,
+  TaskHistoryPage,
+  TaskSubtasksPage,
+  type TaskDetailTab,
+} from "./task-detail-tabs";
+import { TaskSection, type RelationPicker } from "./task-section";
 import { ownsDiscussion, taskFollowMenuItem, useTaskFollow } from "./task-follow";
-import { useConversationTaskWrites } from "./use-conversation-tasks";
 import { statusLabel, TASK_STATUS_COLOR, type TaskControls } from "./task-workflow";
-
-type DetailCommand = Omit<TaskCommand, "idempotencyKey" | "conversationId"> & { number: number };
+import { useTaskRelationAccess, type DetailCommand } from "./use-task-relations";
 
 /** A Task card's "More actions" button, as the menu shows it and as the card's stand-in for the
  * menu does until someone reaches for it (`BoardTaskCard`). */
@@ -147,15 +136,19 @@ type TaskDetailDialogProps = {
    * Without them the assignee is shown but cannot be changed. */
   members?: readonly Mentionable[];
   currentMemberId: string | null;
-  thread?: (taskSection: ReactNode) => ReactNode;
+  thread?: () => ReactNode;
   /** Leaves the popup for a message in the conversation's chat; where absent, a Task made from
    * someone's message does not link it. */
   onOpenSource?: (message: { messageId: string; threadRootId?: string }) => void;
+  /** Opens a Task this one is related to, in its own channel where that is where it lives. Where
+   * absent, related Tasks are named but not opened. */
+  onOpenRelated?: (task: VisibleTaskName) => void;
 };
 
 /**
- * The Task popup: title, change history, status/assignee controls and — where the caller owns
- * the conversation — the Task message's thread, which `thread` renders around the task section.
+ * The Task popup: its title and properties, then tabs for the discussion (where the caller owns
+ * the conversation, the Task message's thread, which `thread` renders around the section), the
+ * sub-tasks and History.
  */
 export function TaskDetailDialog({
   task,
@@ -168,9 +161,14 @@ export function TaskDetailDialog({
   currentMemberId,
   thread,
   onOpenSource,
+  onOpenRelated,
 }: TaskDetailDialogProps) {
   const [deleting, setDeleting] = useState(false);
+  // The relation pickers belong to the popup, not its task section: the header menu opens them too.
+  const [picker, setPicker] = useState<RelationPicker | null>(null);
+  const [tab, setTab] = useState<TaskDetailTab>("discussion");
   const canDelete = useCanDeleteTask(task, currentMemberId);
+  const relations = useTaskRelationAccess(task, currentMemberId);
   // A Task followed for its own conversation; a message's thread keeps the thread's own follow.
   const follow = useTaskFollow(task, open && Boolean(thread) && ownsDiscussion(task));
   const section = (
@@ -179,6 +177,9 @@ export function TaskDetailDialog({
       onCommand={onCommand}
       members={members}
       currentMemberId={currentMemberId}
+      picker={picker}
+      onPickerChange={setPicker}
+      onOpenRelated={onOpenRelated}
       source={
         task.sourceMessage && onOpenSource && conversationName
           ? {
@@ -190,6 +191,13 @@ export function TaskDetailDialog({
       }
     />
   );
+  // The discussion is there only with a thread; the sub-tasks only once there are some.
+  const tabs: TaskDetailTab[] = [
+    ...(thread ? (["discussion"] as const) : []),
+    ...(relations.on && task.subtasks ? (["subtasks"] as const) : []),
+    "history",
+  ];
+  const current = tabs.includes(tab) ? tab : tabs[0];
   return (
     <>
       <TaskPopupOverlay isOpen={open} onOpenChange={onOpenChange}>
@@ -215,7 +223,7 @@ export function TaskDetailDialog({
                   {m.tasks_details_title({ number: String(task.number) })}
                 </Heading>
               </div>
-              {(follow || canDelete) && (
+              {(relations.on || follow || canDelete) && (
                 <Dropdown.Root>
                   <ButtonUtility
                     tooltip={m.tasks_more_actions({ number: String(task.number) })}
@@ -223,10 +231,31 @@ export function TaskDetailDialog({
                     size="sm"
                     color="tertiary"
                   />
-                  <Dropdown.Popover placement="bottom end" className="w-52">
-                    <Dropdown.Menu onAction={(key) => key === "delete" && setDeleting(true)}>
-                      {follow && taskFollowMenuItem(follow)}
-                      {canDelete && taskDeleteMenuItem()}
+                  <Dropdown.Popover placement="bottom end">
+                    <Dropdown.Menu
+                      onAction={(key) => {
+                        if (key === "delete") setDeleting(true);
+                        else if (key === "parent" || key === "blocker" || key === "subtask")
+                          setPicker(key);
+                      }}
+                    >
+                      {relations.on && (
+                        <Dropdown.Section>
+                          {taskRelationMenuItems({
+                            canEdit: relations.canEdit,
+                            canAddBlocker: relations.canAddBlocker,
+                            hasParent: task.parent != null,
+                          })}
+                        </Dropdown.Section>
+                      )}
+                      {(follow || canDelete) && (
+                        <Dropdown.Section
+                          className={cn(relations.on && "border-t border-secondary pt-1")}
+                        >
+                          {follow && taskFollowMenuItem(follow)}
+                          {canDelete && taskDeleteMenuItem()}
+                        </Dropdown.Section>
+                      )}
                     </Dropdown.Menu>
                   </Dropdown.Popover>
                 </Dropdown.Root>
@@ -239,11 +268,25 @@ export function TaskDetailDialog({
                 onClick={() => onOpenChange(false)}
               />
             </div>
-            {thread ? (
-              <div className="flex min-h-0 flex-1 flex-col">{thread(section)}</div>
-            ) : (
-              <div className="min-h-0 flex-1 overflow-y-auto">{section}</div>
-            )}
+            <TaskDetailTabs
+              tabs={tabs}
+              selected={current}
+              onChange={setTab}
+              subtasks={task.subtasks}
+              task={section}
+              pages={{
+                discussion: () => thread?.(),
+                subtasks: () => (
+                  <TaskSubtasksPage
+                    task={task}
+                    canAdd={relations.canEdit}
+                    onAdd={() => setPicker("subtask")}
+                    onOpen={onOpenRelated}
+                  />
+                ),
+                history: () => <TaskHistoryPage task={task} members={members} />,
+              }}
+            />
           </Dialog>
         </Modal>
       </TaskPopupOverlay>
@@ -275,241 +318,5 @@ function TaskPopupOverlay(
       isDismissable
       className="max-sm:items-stretch max-sm:px-0 max-sm:[--modal-pb:0px] max-sm:[--modal-pt:0px]"
     />
-  );
-}
-
-function TaskSection({
-  task,
-  onCommand,
-  members,
-  currentMemberId,
-  source,
-}: {
-  task: TaskView;
-  onCommand?: (command: DetailCommand) => Promise<void>;
-  members?: readonly Mentionable[];
-  currentMemberId: string | null;
-  /** The message the Task was made from, as a link back to it. */
-  source?: ComponentProps<typeof TaskSourceLink>;
-}) {
-  const execute = useServerFn(executeTask);
-  const writeTasks = useConversationTaskWrites();
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<"permission" | "other" | null>(null);
-  const access = useTaskAssignmentAccess();
-  const canEditAssignment =
-    access.canAssignOthers || !task.owner || task.owner.memberId === currentMemberId;
-  const assignableMembers = access.canAssignOthers
-    ? members
-    : members?.filter((member) => member.kind === "user" && member.id === access.userId);
-  // Keyed by revision: every change bumps it, so the history reloads whenever the Task changes
-  // and an older response can never overwrite a newer one.
-  const history = useQuery({
-    queryKey: ["task", "history", task.conversationId, task.number, task.revision],
-    queryFn: async () => {
-      const result = await execute({
-        data: {
-          operation: "history",
-          idempotencyKey: crypto.randomUUID(),
-          conversationId: task.conversationId,
-          number: task.number,
-        },
-      });
-      return result.history ?? [];
-    },
-    placeholderData: (previous) => previous,
-  });
-
-  async function run(command: DetailCommand) {
-    if (pending) return;
-    setPending(true);
-    setError(null);
-    try {
-      if (onCommand) {
-        await onCommand(command);
-      } else {
-        // No external owner: run it here, then write the server's copies into the conversation's
-        // Tasks, so the chip, the popup and the Tasks tab show the change without reading again.
-        const result = await execute({
-          data: {
-            ...command,
-            idempotencyKey: crypto.randomUUID(),
-            conversationId: task.conversationId,
-          },
-        });
-        writeTasks(task.conversationId, [{ tasks: result.tasks, deleted: [] }]);
-      }
-    } catch (failure) {
-      const permission =
-        isAppError(failure) && failure.errorId === TASK_ASSIGNMENT_MANAGER_REQUIRED;
-      setError(permission ? "permission" : "other");
-      if (permission) void access.refetch();
-    } finally {
-      setPending(false);
-    }
-  }
-
-  const creator = task.creator;
-  // History names its actor by handle and an assignee by User/Agent id: the conversation's
-  // members first, then the Task's own owner and creator, who may have left the conversation.
-  const people = [
-    ...(members ?? []).map(({ kind, id, handle, label }) => ({ kind, id, handle, name: label })),
-    ...[task.owner, creator].filter((person) => person !== null),
-  ];
-  const unknown = m.tasks_history_unknown_member();
-  const names: TimelineNames = {
-    actor: (type, handle) => {
-      const known = people.find((person) => person.kind === type && person.handle === handle);
-      if (known) return known.name;
-      // A person who has left the conversation is no longer listed, and their username is not a
-      // name to read; an Agent's handle is its name.
-      return type === "user" ? unknown : (handle ?? unknown);
-    },
-    assignee: (kind, id) =>
-      people.find((person) => person.kind === kind && person.id === id)?.name ?? unknown,
-  };
-
-  return (
-    // A phone keeps this fixed block short so the thread under it gets the screen: a two-line
-    // title, Status and Owner side by side with their labels inline, and the creator left to the
-    // History's "Created task" entry.
-    <section className="flex flex-col gap-3 border-b border-secondary px-4 py-3 sm:gap-5 sm:px-6 sm:py-5">
-      <h3 className="line-clamp-2 text-md font-semibold break-words text-primary sm:line-clamp-3 sm:text-lg">
-        {task.title}
-      </h3>
-
-      <dl className="flex flex-wrap items-center gap-x-6 gap-y-2 sm:grid sm:grid-cols-3 sm:gap-x-8 sm:gap-y-4">
-        <TaskField label={m.tasks_overview_status()}>
-          <StatusMenu
-            task={task}
-            currentMemberId={currentMemberId}
-            disabled={pending}
-            onSelect={(status) => {
-              const command = getTaskMoveCommand(task, currentMemberId, status);
-              if (command) void run(command);
-            }}
-          />
-        </TaskField>
-        <TaskField label={m.tasks_overview_owner()}>
-          <AssigneeMenu
-            task={task}
-            members={assignableMembers}
-            disabled={pending || !currentMemberId || !canEditAssignment}
-            onSelect={(assignee) =>
-              void run(
-                assignee
-                  ? { operation: "assign", number: task.number, assignee }
-                  : { operation: "unassign", number: task.number },
-              )
-            }
-          />
-        </TaskField>
-        <TaskField label={m.tasks_created_by()} className="max-sm:hidden">
-          <TaskPerson person={creator} />
-        </TaskField>
-        {source && (
-          <TaskField label={m.tasks_source()} className="sm:col-span-3">
-            <TaskSourceLink {...source} />
-          </TaskField>
-        )}
-      </dl>
-      {error && (
-        <p role="alert" className="text-sm text-error-primary">
-          {error === "permission"
-            ? m.tasks_assignment_requires_workspace_manager()
-            : m.tasks_update_failed()}
-        </p>
-      )}
-
-      <div className="border-t border-secondary pt-2 sm:pt-3">
-        <Button
-          color="link-gray"
-          size="sm"
-          iconTrailing={historyOpen ? ChevronUp : ChevronDown}
-          aria-expanded={historyOpen}
-          onPress={() => setHistoryOpen((value) => !value)}
-        >
-          {m.tasks_history()}
-        </Button>
-        {historyOpen && (
-          <div className="max-h-40 overflow-y-auto pr-2 sm:max-h-64">
-            <TaskHistory failed={history.isError} events={history.data} names={names} />
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-/** One field of the popup: its label above its value (or the control that edits it), or to its
- * left on a phone. */
-function TaskField({
-  label,
-  children,
-  className,
-}: {
-  label: string;
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <div
-      className={cn(
-        "flex min-w-0 items-center gap-2 sm:flex-col sm:items-stretch sm:gap-1",
-        className,
-      )}
-    >
-      <dt className="shrink-0 text-xs text-tertiary sm:text-sm">{label}</dt>
-      <dd className="flex min-h-8 min-w-0 items-center">{children}</dd>
-    </div>
-  );
-}
-
-function StatusMenu({
-  task,
-  currentMemberId,
-  disabled,
-  onSelect,
-}: {
-  task: TaskView;
-  currentMemberId: string | null;
-  disabled: boolean;
-  onSelect: (status: TaskStatus) => void;
-}) {
-  const options = taskStatusOptions(task, currentMemberId);
-  if (options.length === 1) return <StatusBadge status={task.status} />;
-  return (
-    <Dropdown.Root>
-      <EditableTrigger
-        label={`${m.tasks_change_status()}: ${statusLabel(task.status)}`}
-        disabled={disabled}
-      >
-        <StatusBadge status={task.status} />
-      </EditableTrigger>
-      <Dropdown.Popover placement="bottom start" className="w-52">
-        <Dropdown.Menu
-          aria-label={m.tasks_change_status()}
-          selectionMode="single"
-          selectedKeys={[task.status]}
-          onAction={(key) => {
-            const status = options.find((option) => option === key);
-            if (status && status !== task.status) onSelect(status);
-          }}
-        >
-          {options.map((status) => (
-            <Dropdown.Item
-              key={status}
-              id={status}
-              label={
-                task.status === "closed" && status === "todo"
-                  ? m.tasks_reopen_to_todo()
-                  : statusLabel(status)
-              }
-            />
-          ))}
-        </Dropdown.Menu>
-      </Dropdown.Popover>
-    </Dropdown.Root>
   );
 }

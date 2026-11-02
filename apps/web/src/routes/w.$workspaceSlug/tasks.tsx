@@ -157,6 +157,7 @@ function TasksPage() {
           key={openTask.conversationId}
           task={openTask}
           onOpenTask={openConversationTask}
+          onOpenTaskIn={openPopup}
           onClose={closePopup}
           onCommand={(input) => (command ? command(openTask, input) : Promise.resolve())}
           onTaskChanged={refreshOverview}

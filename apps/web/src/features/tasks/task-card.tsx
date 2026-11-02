@@ -6,6 +6,8 @@ import { cn } from "#src/lib/utils";
 import { Folder } from "@untitledui/icons";
 
 import type { FilterableTask } from "./task-filters";
+import { TaskParentMark, TaskSubtaskMark, TaskBlockedMark } from "./task-relations";
+import type { TaskRelations } from "./task-relation-edits";
 import { TaskOwnerAvatar } from "./task-owner";
 import { TaskStatusIcon } from "./task-status-icon";
 import type { TaskControls } from "./task-workflow";
@@ -80,6 +82,7 @@ export function TaskCard({
   controls,
   menu,
   list,
+  relations,
   onReach,
 }: {
   task: TaskView;
@@ -93,12 +96,17 @@ export function TaskCard({
   controls: TaskControls;
   menu?: ReactNode;
   list: boolean;
+  /** What the task waits on, the Task it is part of and its sub-tasks' progress. */
+  relations?: TaskRelations;
   /** Someone is reaching for the card: a mouse came over it. Not a touch or a pen, which can
    * come down on a button with no hover first, and whose press must land on what it started on. */
   onReach?: () => void;
 }) {
   const onPointerEnter =
     onReach && ((event: PointerEvent) => event.pointerType === "mouse" && onReach());
+  const blocked = relations?.blocked ? <TaskBlockedMark blockedBy={relations.blockedBy} /> : null;
+  const parent = relations?.parent ? <TaskParentMark parent={relations.parent} /> : null;
+  const subtasks = relations?.subtasks ? <TaskSubtaskMark subtasks={relations.subtasks} /> : null;
   const tools = (controls.handle || menu) && (
     <div className="flex shrink-0 items-center">
       {controls.handle}
@@ -121,6 +129,13 @@ export function TaskCard({
         <h3 className="min-w-0 flex-1 text-sm font-medium text-primary">
           {renderTitle(<span className="line-clamp-1">{task.title}</span>)}
         </h3>
+        {blocked}
+        {(parent || subtasks) && (
+          <span className="hidden shrink-0 items-center gap-2 text-xs text-tertiary sm:inline-flex">
+            {parent}
+            {subtasks}
+          </span>
+        )}
         {source && (
           <Pill className={cn("hidden sm:inline-flex", HIDDEN_ON_BOARD.source)}>
             <span className="truncate">{source}</span>
@@ -170,6 +185,15 @@ export function TaskCard({
         <p className="mt-1 line-clamp-2 text-sm text-tertiary [overflow-wrap:anywhere]">
           {task.description}
         </p>
+      )}
+      {/* Under the title, in words: what the Task waits on and how far its sub-tasks are. The
+          title keeps its place under the number, as on any card; the card grows a line instead
+          of crowding the top one. Its parent shows once it is opened, and in the list. */}
+      {(blocked || subtasks) && (
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+          {blocked}
+          {subtasks}
+        </div>
       )}
       {(project || tools) && (
         <div

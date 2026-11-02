@@ -1,4 +1,9 @@
-import type { TaskHistoryEvent, TaskStatus } from "@lrm/coforge-sdk/internal";
+import {
+  taskNameLabel,
+  type TaskHistoryEvent,
+  type TaskName,
+  type TaskStatus,
+} from "@lrm/coforge-sdk/internal";
 import { getRouteApi } from "@tanstack/react-router";
 import { ArrowRight } from "@untitledui/icons";
 
@@ -102,8 +107,19 @@ function eventTitle(event: TaskHistoryEvent) {
       return m.tasks_history_assignee_changed();
     case "amended":
       return m.tasks_history_amended();
+    case "dependencies_changed":
+      return m.tasks_history_blockers_changed();
+    case "parent_changed":
+      return m.tasks_history_parent_changed();
   }
 }
+
+/** What a change from or to nothing reads as. */
+const EMPTY_VALUE = "—";
+
+/** A related Task as History names it; one the reader may not name is only "a task elsewhere". */
+const relatedName = (name: TaskName) => (name.hidden ? m.tasks_hidden() : taskNameLabel(name));
+const relatedNames = (names: readonly TaskName[]) => names.map(relatedName).join(", ");
 
 function EventDetail({ event, names }: { event: TaskHistoryEvent; names: TimelineNames }) {
   const detail = "mt-1 text-sm text-secondary";
@@ -137,7 +153,6 @@ function EventDetail({ event, names }: { event: TaskHistoryEvent; names: Timelin
     }
     case "amended": {
       const { title, description } = event.payload.changes;
-      const empty = "—";
       return (
         <>
           {title && (
@@ -153,12 +168,41 @@ function EventDetail({ event, names }: { event: TaskHistoryEvent; names: Timelin
             <p className={cn(detail, "line-clamp-3 break-words")}>
               {m.tasks_history_field_change({
                 field: m.tasks_description(),
-                from: description.from ?? empty,
-                to: description.to ?? empty,
+                from: description.from ?? EMPTY_VALUE,
+                to: description.to ?? EMPTY_VALUE,
               })}
             </p>
           )}
         </>
+      );
+    }
+    case "dependencies_changed": {
+      const { added, removed } = event.payload;
+      return (
+        <>
+          {added.length > 0 && (
+            <p className={detail}>
+              {m.tasks_history_blockers_added({ names: relatedNames(added) })}
+            </p>
+          )}
+          {removed.length > 0 && (
+            <p className={detail}>
+              {m.tasks_history_blockers_removed({ names: relatedNames(removed) })}
+            </p>
+          )}
+        </>
+      );
+    }
+    case "parent_changed": {
+      const { from, to } = event.payload;
+      return (
+        <p className={detail}>
+          {m.tasks_history_field_change({
+            field: m.tasks_parent(),
+            from: from ? relatedName(from) : EMPTY_VALUE,
+            to: to ? relatedName(to) : EMPTY_VALUE,
+          })}
+        </p>
       );
     }
   }

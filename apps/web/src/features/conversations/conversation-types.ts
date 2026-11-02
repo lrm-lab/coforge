@@ -193,6 +193,9 @@ export type TaskPopupControls = {
   /** The host's own copy of the open Task, shown until the conversation holds it. */
   task?: TaskView;
   openTask: (number: number) => void;
+  /** Opens a Task of another conversation (a related Task in another channel), where the host can
+   * show one; absent, the conversation's own page does. */
+  openTaskIn?: (task: { conversationId: string; number: number }) => void;
   closeTask: () => void;
   /** The open Task was deleted from the popup, which then closes. */
   onTaskDeleted?: () => void;

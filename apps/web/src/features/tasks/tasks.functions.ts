@@ -1,5 +1,10 @@
 import { canAssignOther } from "#src/server/tasks/task-assignment-authority.server";
-import { TASK_STATUSES, type TaskCommand } from "@lrm/coforge-sdk/internal";
+import {
+  isTaskRef,
+  TASK_STATUSES,
+  type TaskCommand,
+  type TaskRef,
+} from "@lrm/coforge-sdk/internal";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
@@ -36,6 +41,9 @@ const taskCommand = z
     numbers: z.array(z.number().int().positive()).min(1).optional(),
     messageIds: z.array(z.string().min(8).max(36)).min(1).optional(),
     mine: z.boolean().optional(),
+    // Blockers and the parent (Tasks v2): the server's own validation decides what each may be.
+    blockedBy: z.array(z.custom<TaskRef>(isTaskRef)).max(100).optional(),
+    parent: z.custom<TaskRef>(isTaskRef).nullable().optional(),
     assignee: z.string().nullable().optional(),
     description: z.string().max(50_000).nullable().optional(),
     createsResource: z.boolean().optional(),

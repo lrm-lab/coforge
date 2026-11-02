@@ -137,3 +137,15 @@ workspaceId]` Query its loader fills (`task-overview-collection.ts`,
   The page creates no Tasks: new ones start from a conversation's Tasks tab
   (`CreateTaskDialog`), titles only, several at once in one `create` with
   `titles`, so all of them are created or none.
+- Blockers, parent and sub-tasks (Tasks v2, `useTaskConversationsOn() === true`; off or unknown:
+  no relation UI, no `show` read, no menu items, no card marks) show on every card from the Task's
+  own view (`blockedBy`, `blocked`, `parent`, `subtasks`) and in the popup (`TaskSection`:
+  `task-relation-lines.tsx`, with `use-task-relations.ts` for the `show` read of `blocking` and
+  `subtree`, keyed by revision, and the commands). The pure rules are `task-relation-edits.ts`.
+  Blockers are edited by `amend` with the whole new `blockedBy` set (`TaskRef[]`, a bare number in the
+  Task's own conversation, `channel` otherwise) and the Task's revision. A hidden blocker has no ref,
+  so a Task waiting for one can be read but its blockers are neither removed nor added to
+  (`blockerRefs`): the amendment would drop it. Pickers (`task-picker.tsx`) list this conversation's
+  unfinished Tasks, and a search reaches other channels' from the Tasks page's read
+  (`useTaskCandidates`, read only while a picker is open). A refusal's sentence never reaches the
+  browser; the popup's error line words only `relationRefusal`'s two kinds.

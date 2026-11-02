@@ -16,8 +16,8 @@ export type ConversationPaneProps = Omit<ConversationProps, "conversation" | "ag
   /** Whether this stream's read has completed - see `stream-state.ts`. */
   streamRead?: StreamRead;
   root?: DirectConversationView["messages"][number];
-  /** Shown above a Task popup's independently scrolling replies. */
-  rootSlot?: ReactNode;
+  /** The Task popup's discussion: the popup shows the Task above it, in place of a header. */
+  inTaskPopup?: boolean;
   onClose?: () => void;
   /** Where a thread lives, named after "Thread" in its header: `#channel` or `@name`. */
   threadContext?: string;

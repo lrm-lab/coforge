@@ -25,7 +25,6 @@ export function TaskDiscussionPane({
   conversationId: known,
   board,
   mentionables,
-  rootSlot,
   // The host conversation's own-message index and jumps say nothing about this one.
   onLoadOwnMessages: _ownMessages,
   onLoadMessageAround: _around,
@@ -37,7 +36,6 @@ export function TaskDiscussionPane({
   board: { conversationId: string; number: number };
   /** Whom a reply may mention before the conversation exists: the board's members. */
   mentionables: DirectConversationView["mentionables"];
-  rootSlot: PaneProps["rootSlot"];
 }) {
   const reply = useServerFn(replyToTask);
   const queryClient = useQueryClient();
@@ -57,20 +55,17 @@ export function TaskDiscussionPane({
   // while it is read, so the composer keeps the files on their way to it.
   if (known && !made && !newest)
     return (
-      <>
-        {rootSlot}
-        <ThreadLoadStatus
-          load={threadRootLoadOf(pages)}
-          withRoot={false}
-          onRetry={() => void pages.refetch()}
-        />
-      </>
+      <ThreadLoadStatus
+        load={threadRootLoadOf(pages)}
+        withRoot={false}
+        onRetry={() => void pages.refetch()}
+      />
     );
   return (
     <ComposerScopeProvider value={scope}>
       <ConversationPane
         {...pane}
-        rootSlot={rootSlot}
+        inTaskPopup
         keepsReadCursor={false}
         conversation={{
           mentionables,

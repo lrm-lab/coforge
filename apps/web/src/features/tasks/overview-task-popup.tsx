@@ -16,6 +16,8 @@ type OverviewTaskPopupProps = {
   task: OverviewTaskRow;
   /** Opens another Task of the same conversation (a `task #N` chip in the thread). */
   onOpenTask: (number: number) => void;
+  /** Opens a Task of another channel (a related Task) over the overview. */
+  onOpenTaskIn: (task: { conversationId: string; number: number }) => void;
   onClose: () => void;
   /** The overview's own command path, for the popup shown when the conversation cannot load. */
   onCommand: (command: OverviewTaskCommand) => Promise<void>;
@@ -87,7 +89,13 @@ function ChannelTaskPopup(props: OverviewTaskPopupProps) {
 }
 
 /** What the channel hands its popup, and the overview kept in step with it. */
-function usePopupState({ task, onOpenTask, onClose, onTaskChanged }: OverviewTaskPopupProps) {
+function usePopupState({
+  task,
+  onOpenTask,
+  onOpenTaskIn,
+  onClose,
+  onTaskChanged,
+}: OverviewTaskPopupProps) {
   const workspaceId = useCurrentWorkspaceId() ?? "";
   const channels = useSuspenseQuery(channelNamesQuery(workspaceId)).data;
   const taskPopup = useMemo<TaskPopupControls>(
@@ -95,10 +103,11 @@ function usePopupState({ task, onOpenTask, onClose, onTaskChanged }: OverviewTas
       openTaskNumber: task.number,
       task,
       openTask: onOpenTask,
+      openTaskIn: onOpenTaskIn,
       closeTask: onClose,
       onTaskDeleted: onTaskChanged,
     }),
-    [task, onOpenTask, onClose, onTaskChanged],
+    [task, onOpenTask, onOpenTaskIn, onClose, onTaskChanged],
   );
   // The conversation's own copy is the live one; until it holds the open Task (still reading it,
   // or its read failed) the overview's copy keeps the popup up.

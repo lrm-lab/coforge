@@ -17,10 +17,14 @@ export function CreateTaskDialog({
   open,
   onOpenChange,
   onCreate,
+  describeError,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreate: (titles: string[], idempotencyKey: string) => Promise<void>;
+  /** Words a refusal the caller knows the reason for (a sub-task under a Task that cannot take
+   * one); anything else reads as the plain failure. */
+  describeError?: (cause: unknown) => string | undefined;
 }) {
   const [rows, setRows] = useState(newRows);
   const [error, setError] = useState("");
@@ -57,8 +61,8 @@ export function CreateTaskDialog({
       submission.current = undefined;
       setRows(newRows());
       onOpenChange(false);
-    } catch {
-      setError(m.tasks_create_error());
+    } catch (cause) {
+      setError(describeError?.(cause) ?? m.tasks_create_error());
     } finally {
       busy.current = false;
       setSaving(false);

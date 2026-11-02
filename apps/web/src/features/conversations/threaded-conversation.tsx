@@ -9,6 +9,7 @@ import { AgentProfilePanel } from "#src/features/agents/profile-panel/agent-prof
 import { PersonProfilePanel } from "#src/features/agents/person-profile-panel";
 import { resolveVisibleConversationSlot } from "#src/features/agents/profile-panel/profile-panel-slot";
 import { TaskDetailDialog } from "#src/features/tasks/task-detail-dialog";
+import { useOpenRelatedTask } from "#src/features/tasks/use-open-related-task";
 import { ConversationTaskDemand } from "#src/features/tasks/conversation-task-demand";
 import { useNumberedTask } from "#src/features/tasks/use-conversation-tasks";
 import { ownsDiscussion } from "#src/features/tasks/task-follow";
@@ -111,6 +112,11 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
     closeTask: closeTaskReference,
   } = taskPopup ?? conversationTaskPopup;
   const openTask = useNumberedTask(conversation.conversationId, openTaskNumber) ?? taskPopup?.task;
+  const openRelatedTask = useOpenRelatedTask({
+    channels: channelList,
+    openHere: openTaskReference,
+    openIn: taskPopup?.openTaskIn,
+  });
   // A Task with a conversation of its own, or made without a message (one nobody has spoken about
   // yet), shows that conversation, never a message's thread.
   const taskDiscussionId = openTask?.discussionConversationId ?? undefined;
@@ -158,30 +164,34 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
         if (!next) closeTaskReference();
       }}
       onDeleted={taskPopup?.onTaskDeleted}
+      onOpenRelated={openRelatedTask}
       conversationName={conversationName}
       members={conversation.mentionables}
       currentMemberId={conversation.senderMemberId || null}
       onOpenSource={taskPopup ? undefined : conversationTaskPopup.showMessage}
       thread={
         ownDiscussion
-          ? (taskSection) => (
+          ? () => (
               <TaskDiscussionPane
                 {...sidePaneProps}
                 conversationId={taskDiscussionId}
                 board={{ conversationId: conversation.conversationId, number: openTask.number }}
                 mentionables={conversation.mentionables}
-                rootSlot={taskSection}
                 emptyState={taskRepliesEmpty}
               />
             )
-          : openTaskRoot &&
-            ((taskSection) => (
-              <ThreadPane
-                {...threadPaneProps(openTaskRoot)}
-                rootSlot={taskSection}
-                emptyState={taskRepliesEmpty}
-              />
-            ))
+          : // A message's thread: its tab is there while the message is still being read, so the
+            // popup does not open on another tab and jump back.
+            openTaskMessageId === undefined
+            ? undefined
+            : () =>
+                openTaskRoot && (
+                  <ThreadPane
+                    {...threadPaneProps(openTaskRoot)}
+                    inTaskPopup
+                    emptyState={taskRepliesEmpty}
+                  />
+                )
       }
     />
   ) : null;

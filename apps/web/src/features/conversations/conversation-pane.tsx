@@ -53,7 +53,7 @@ export function ConversationPane({
   streamRead = "settled",
   onSend,
   root,
-  rootSlot,
+  inTaskPopup = false,
   onClose,
   threadContext,
   composerTarget,
@@ -221,7 +221,7 @@ export function ConversationPane({
   // The side pane's replies marker (the task popup puts the task in place of the root, so it has
   // none). Pending replies count: the marker is there from the first send, not after it lands.
   const threadMarker =
-    Boolean(root) && !rootSlot && conversation.messages.length + shownOutbox.length > 0;
+    Boolean(root) && !inTaskPopup && conversation.messages.length + shownOutbox.length > 0;
   // The first pending row continues the viewer's run of messages right above it, as a sent one would.
   const outboxContinues = outboxContinuesRun(
     conversation.messages,
@@ -243,12 +243,12 @@ export function ConversationPane({
   const { expandedMessages, toggleExpandedMessage } = useMessageExpansion();
   const collapsible = conversation.collapseLongMessages === true;
   // A thread, or the Task popup's discussion: a reply's composer and no stream notices.
-  const narrow = Boolean(root ?? rootSlot);
+  const narrow = Boolean(root) || inTaskPopup;
   // The message column's side room follows the pane's own width (`MESSAGE_COLUMN_CLASS` gives it
   // up in a narrow pane), so a thread beside a channel keeps none while one that fills the page, as
   // on Activity, lines up as a channel does. Only the Task popup's discussion goes without: its
   // dialog has margins of its own.
-  const column = !rootSlot;
+  const column = !inTaskPopup;
   // A window replacement in flight (an "around" read) has no messages yet, but that is not an
   // empty conversation: only a settled read may say so (stream-state.ts, #112/#113).
   const streamLoading = streamState(conversation.messages.length, streamRead) === "loading";
@@ -621,9 +621,7 @@ export function ConversationPane({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {rootSlot ? (
-        <div className="shrink-0 bg-primary">{rootSlot}</div>
-      ) : root ? (
+      {inTaskPopup ? null : root ? (
         <ThreadPaneHeader
           context={threadContext}
           onScrollToTop={() => historyRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
@@ -653,7 +651,7 @@ export function ConversationPane({
         >
           {/* The side room sits inside the scroller, so the scrollbar stays on the pane edge. */}
           <div className={column ? MESSAGE_COLUMN_CLASS : undefined}>
-            {root && !rootSlot && root.weeklyReportHidden !== true && (
+            {root && !inTaskPopup && root.weeklyReportHidden !== true && (
               <ThreadRootMessage
                 conversationId={conversation.conversationId}
                 message={root}

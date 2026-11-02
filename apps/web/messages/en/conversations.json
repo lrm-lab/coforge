@@ -195,7 +195,6 @@
   "tasks_history": "History",
   "tasks_history_empty": "No task changes recorded",
   "tasks_history_error": "Task history could not be loaded. Try again.",
-  "tasks_created_by": "Created by",
   "tasks_source": "Source",
   "tasks_follow": "Follow Task",
   "tasks_unfollow": "Unfollow Task",

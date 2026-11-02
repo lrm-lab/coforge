@@ -18,7 +18,7 @@ type PaneProps = ComponentProps<typeof ConversationPane>;
 export function ThreadPane({
   conversation,
   root,
-  rootSlot,
+  inTaskPopup,
   threadContext,
   onClose,
   ...pane
@@ -31,11 +31,8 @@ export function ThreadPane({
     const load = threadRootLoadOf(thread);
     const retry = () => void thread.refetch();
     // The Task popup shows the Task itself in place of a header, and its thread below it.
-    return rootSlot ? (
-      <>
-        {rootSlot}
-        <ThreadLoadStatus load={load} withRoot={false} onRetry={retry} />
-      </>
+    return inTaskPopup ? (
+      <ThreadLoadStatus load={load} withRoot={false} onRetry={retry} />
     ) : (
       <ThreadRootState load={load} context={threadContext} onClose={onClose} onRetry={retry} />
     );
@@ -53,7 +50,7 @@ export function ThreadPane({
       <ConversationPane
         {...pane}
         root={root}
-        rootSlot={rootSlot}
+        inTaskPopup={inTaskPopup}
         threadContext={threadContext}
         onClose={onClose}
         conversation={{ ...conversation, messages: thread.data.replies }}
