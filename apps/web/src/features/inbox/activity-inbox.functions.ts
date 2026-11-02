@@ -4,6 +4,7 @@ import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { userConversationChannel } from "#src/features/conversations/conversation-realtime";
 import { readAfterStreamPositions } from "#src/server/conversations/chat-stream-positions.server";
 import { browserActivityInbox } from "#src/server/inbox/browser-activity-inbox.server";
+import { waitingChoiceCards } from "#src/server/conversations/waiting-choice-cards.server";
 import {
   activityInboxPageSchema,
   activityInboxReadAllSchema,
@@ -23,6 +24,14 @@ export const loadActivityInbox = createServerFn({ method: "GET" })
       () => browserActivityInbox(db).list(workspaceId, user.id, data),
     );
     return { ...page, streamPositions };
+  });
+
+/** The pending choice cards the viewer may answer, for the Activity "waiting" section. */
+export const loadWaitingChoiceCards = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .handler(async ({ context }) => {
+    const { db, workspaceId, user } = context;
+    return waitingChoiceCards(db, workspaceId, user.id);
   });
 
 /** Marks one item Done (and read) through the newest message the viewer saw in it. */

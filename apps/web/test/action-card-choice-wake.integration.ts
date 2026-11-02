@@ -6,6 +6,7 @@ import {
   commitChoiceCard,
   resolveChoicePayload,
 } from "#src/server/conversations/action-card-choice.server";
+import { waitingChoiceCards } from "#src/server/conversations/waiting-choice-cards.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 
 const connectionString = Bun.env.DATABASE_URL;
@@ -149,4 +150,47 @@ test("a choice card names who is asked, and only they may choose", async () => {
   await expect(
     resolveChoicePayload(db, conversationId, { ...action, to: "not-a-member" }),
   ).rejects.toThrow();
+});
+
+test("the waiting list shows the cards this person may answer", async () => {
+  const agentMember = await db.conversationMember.findFirstOrThrow({
+    where: { conversationId, agentId },
+  });
+  const makeCard = async (sequence: number, extra: Record<string, unknown>) => {
+    const message = await db.message.create({
+      data: {
+        workspaceId,
+        conversationId,
+        sequence,
+        senderMemberId: agentMember.id,
+        body: "Which?",
+      },
+    });
+    await db.actionCard.create({
+      data: {
+        messageId: message.id,
+        conversationId,
+        workspaceId,
+        kind: "choice",
+        payload: {
+          type: "choice",
+          prompt: "Which?",
+          options: [
+            { id: "a", label: "Red" },
+            { id: "b", label: "Blue" },
+          ],
+          allowFreeText: true,
+          ...extra,
+        },
+        preparedByAgentId: agentId,
+      },
+    });
+    return message.id;
+  };
+  const mine = await makeCard(2, { to: userId });
+  const other = await makeCard(3, { to: "someone-else" });
+  const noTo = await makeCard(4, {});
+  const waiting = await waitingChoiceCards(db, workspaceId, userId);
+  expect(waiting.map((card) => card.messageId).sort()).toEqual([mine, noTo].sort());
+  expect(waiting.some((card) => card.messageId === other)).toBe(false);
 });
