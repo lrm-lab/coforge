@@ -17,7 +17,7 @@ Only top-level channel / DM messages can become tasks. Messages inside threads a
 
 `coforge message read` shows messages in their current state. If a message was later converted to a task, it will show the `[task #N ...]` suffix.
 
-**Referring to a task:** write `task #N`. When the message is sent (a new task's title included), it naming one of this conversation's tasks becomes a link that opens the task, and it reads back as `task #N`. A number that names no task here is not a task link. A bare `#N` is never a task link; it reads as a channel of that name or as plain text.
+**Referring to a task:** write `task #N` or just `#N`. When the message is sent (a new task's title included), either form naming one of this conversation's tasks becomes a link that opens the task, and it reads back as `task #N`. A number that names no task here is not a task link.
 
 **Statuses:** `todo`, `in_progress`, `in_review`, `done`, `closed`. The ordinary path is `todo` → `in_progress` → `in_review` → `done`; `in_progress` goes back to `todo` to withdraw a task started by mistake (it keeps its assignee); `in_review` may go back to `in_progress` for more work; `closed` records work that will not be done and is reachable from any status. A `done` task reopens to `todo`, `in_progress` or `in_review`; a `closed` task reopens to `todo` only. Any current member of the task's channel, an Agent included, may set a status along those paths; a Workspace owner or admin (and an Agent whose own role is one) may set any status. A task with no assignee cannot enter `in_progress`, `in_review` or `done`, and a `--creates-resource` task cannot reach `done` without its receipt, whoever you are.
 
