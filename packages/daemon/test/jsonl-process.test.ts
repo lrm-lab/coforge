@@ -249,18 +249,32 @@ async function waitUntil(predicate: () => boolean): Promise<void> {
   throw new Error("condition was not met");
 }
 
+/** Whether the pid still names a running process.
+ *
+ * `kill(pid, 0)` is the liveness probe, but on macOS it also succeeds for a zombie: a descendant
+ * that dispose killed is reparented and stays unreaped for a moment, so the bare probe reports it
+ * present after `dispose()` returned. Ask the process table for the state instead, as the linux
+ * branch already does, and treat a zombie (or a pid reaped between the two reads) as exited. */
 function pidExists(pid: number): boolean {
   try {
     process.kill(pid, 0);
-    if (process.platform === "linux") {
-      const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
-      return stat.slice(stat.lastIndexOf(")") + 2).split(" ")[0] !== "Z";
-    }
-    return true;
   } catch (error) {
     if ((error as { code?: string }).code === "ESRCH") return false;
     throw error;
   }
+  if (process.platform === "linux") {
+    try {
+      const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+      return stat.slice(stat.lastIndexOf(")") + 2).split(" ")[0] !== "Z";
+    } catch (error) {
+      if ((error as { code?: string }).code === "ENOENT") return false;
+      throw error;
+    }
+  }
+  const stat = Bun.spawnSync(["ps", "-o", "stat=", "-p", String(pid)])
+    .stdout.toString()
+    .trim();
+  return stat !== "" && !stat.startsWith("Z");
 }
 
 function killIfPresent(pid: number): void {
