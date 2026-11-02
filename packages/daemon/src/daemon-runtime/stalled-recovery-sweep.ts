@@ -102,3 +102,30 @@ export class StalledRecoverySweep<L extends ReleasableLaunch> {
       });
   }
 }
+
+/** What the runtime supplies once per launch; the sweep's own ports are derived from it. */
+export type StalledRecoverySweepHost<L extends ReleasableLaunch> = Readonly<{
+  agentIds(): string[];
+  hasQueuedDeliveries(agentId: string): boolean;
+  runnerHold(): boolean;
+  isStopping(agentId: string): boolean;
+  release: Readonly<{
+    isRecovering(agentId: string): boolean;
+    stalled(agentId: string): StalledRuntime<L> | undefined;
+    recoverStalled(agentId: string, stalled: StalledRuntime<L>): Promise<void>;
+  }>;
+}>;
+
+export function stalledRecoverySweep<L extends ReleasableLaunch>(
+  host: StalledRecoverySweepHost<L>,
+): StalledRecoverySweep<L> {
+  return new StalledRecoverySweep({
+    agentIds: host.agentIds,
+    hasQueuedDeliveries: host.hasQueuedDeliveries,
+    runnerHold: host.runnerHold,
+    isStopping: host.isStopping,
+    isRecovering: (agentId) => host.release.isRecovering(agentId),
+    stalled: (agentId) => host.release.stalled(agentId),
+    recover: (agentId, stalled) => host.release.recoverStalled(agentId, stalled),
+  });
+}

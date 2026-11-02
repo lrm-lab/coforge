@@ -40,6 +40,7 @@ afterEach(() => setSystemTime());
 test("a busy turn with no provider event for 15 minutes, no open tool call and a resumable session is recovered", () => {
   const stalled = {
     turnBusy: true,
+    liveTurn: true,
     silentForMs: STALLED_RECOVERY_SILENCE_MS,
     hasOpenToolCall: false,
     resumable: true,
@@ -49,11 +50,33 @@ test("a busy turn with no provider event for 15 minutes, no open tool call and a
   expect(
     shouldRecoverStalledRuntime({ ...stalled, silentForMs: STALLED_RECOVERY_SILENCE_MS - 1 }),
   ).toBe(false);
+  // A live turn the delivery path does not see as busy is still a turn to wait on.
   expect(shouldRecoverStalledRuntime({ ...stalled, turnBusy: false })).toBe(false);
   // A long build or test run is silent until it ends; it is never killed for a message.
   expect(shouldRecoverStalledRuntime({ ...stalled, hasOpenToolCall: true })).toBe(false);
   // A restart that cannot resume the session would start the conversation over.
   expect(shouldRecoverStalledRuntime({ ...stalled, resumable: false })).toBe(false);
+});
+
+test("a delivery queued for 15 minutes whose turn never began is recovered by the same judgment", () => {
+  const waiting = {
+    turnBusy: false,
+    liveTurn: false,
+    silentForMs: STALLED_RECOVERY_SILENCE_MS,
+    queuedForMs: STALLED_RECOVERY_SILENCE_MS,
+    hasOpenToolCall: false,
+    resumable: true,
+  };
+  expect(shouldRecoverStalledRuntime(waiting)).toBe(true);
+  expect(
+    shouldRecoverStalledRuntime({ ...waiting, queuedForMs: STALLED_RECOVERY_SILENCE_MS - 1 }),
+  ).toBe(false);
+  // An idle provider that just received its first message is not stalled, however long it was
+  // quiet before that message.
+  expect(shouldRecoverStalledRuntime({ ...waiting, queuedForMs: 0 })).toBe(false);
+  expect(shouldRecoverStalledRuntime({ ...waiting, queuedForMs: undefined })).toBe(false);
+  expect(shouldRecoverStalledRuntime({ ...waiting, resumable: false })).toBe(false);
+  expect(shouldRecoverStalledRuntime({ ...waiting, hasOpenToolCall: true })).toBe(false);
 });
 
 // Open tool calls are the launch's `ToolCallLedger` (tool-call-ledger.test.ts).
@@ -74,6 +97,8 @@ async function harness(
     disposeFails?: boolean;
     relaunchFails?: boolean;
     holdFirstSessionNotices?: boolean;
+    /** Whether the session reports a live turn; false models a delivery whose turn never began. */
+    sessionLiveTurn?: () => boolean;
   } = {},
 ) {
   setSystemTime(START);
@@ -129,7 +154,7 @@ async function harness(
             record.inputs.push(notice);
           },
           get hasLiveTurn() {
-            return true;
+            return options.sessionLiveTurn?.() ?? true;
           },
           readSessionIdentity: async () => ({ sessionId: "native-1", state: "resumable" as const }),
           subscribe(listener) {
@@ -257,6 +282,24 @@ test("a message for a turn silent for 15 minutes restarts the provider, resuming
     expect(kinds).not.toContain("stopped");
     expect(kinds).not.toContain("runtime_crashed");
     expect(h.activities.every((activity) => activity.launchId === "launch-1")).toBe(true);
+  } finally {
+    await h.runtime.stop();
+  }
+});
+
+test("a message to an idle provider whose turn never began is delivered, not treated as stalled", async () => {
+  const h = await harness({ sessionLiveTurn: () => false });
+  try {
+    // The provider has been quiet for a while, but this delivery has just arrived: the stall
+    // clock is the delivery's wait, so an idle Agent receives it instead of being restarted.
+    h.sessions[0]!.emit({ type: "progress" });
+    setSystemTime(minutes(15));
+    await h.deliver(1);
+
+    expect(h.sessions).toHaveLength(1);
+    expect(h.sessions[0]!.disposed).toBe(false);
+    expect(h.sessions[0]!.notices).toHaveLength(1);
+    expect(h.activities.map((activity) => activity.detailKind)).not.toContain("stalled_recovery");
   } finally {
     await h.runtime.stop();
   }

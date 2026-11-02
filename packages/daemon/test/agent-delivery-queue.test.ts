@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, setSystemTime, test } from "bun:test";
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { AgentDeliveryQueue } from "#src/daemon-runtime/agent-delivery-queue";
 
@@ -189,4 +189,23 @@ test("discarding conversations removes only their held deliveries", () => {
   expect(queue.pending("agent-1").map((message) => message.deliveryId)).toEqual(["delivery-dm-1"]);
   expect(queue.discardConversations("agent-1", new Set(["conversation-dm"]))).toHaveLength(1);
   expect(queue.hasQueued("agent-1")).toBe(false);
+});
+
+test("the queue measures how long the oldest held delivery has waited", () => {
+  const queue = new AgentDeliveryQueue();
+  try {
+    setSystemTime(new Date("2026-11-02T00:00:00.000Z"));
+    expect(queue.queuedForMs("agent-1")).toBeUndefined();
+    queue.enqueue("agent-1", delivery("one"));
+    queue.enqueue("agent-1", delivery("two"));
+    setSystemTime(new Date("2026-11-02T00:15:00.000Z"));
+    expect(queue.queuedForMs("agent-1")).toBe(15 * 60_000);
+    // Draining clears the clock; the next delivery starts its own wait.
+    queue.discardPending("agent-1");
+    expect(queue.queuedForMs("agent-1")).toBeUndefined();
+    queue.enqueue("agent-1", delivery("three"));
+    expect(queue.queuedForMs("agent-1")).toBe(0);
+  } finally {
+    setSystemTime();
+  }
 });

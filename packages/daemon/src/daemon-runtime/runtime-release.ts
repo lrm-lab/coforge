@@ -62,6 +62,8 @@ export type RuntimeReleasePorts<L extends ReleasableLaunch> = Readonly<{
   restartConfig(agentId: string): AgentRestartConfig | undefined;
   /** The launch of the Agent's last busy Activity, while it has one. */
   lastBusyLaunch(agentId: string): L | undefined;
+  /** How long the Agent's oldest queued delivery has waited, if any is queued. */
+  queuedForMs(agentId: string): number | undefined;
   /** The session reported to the cloud can be resumed by a relaunch. */
   resumable(agentId: string): boolean;
   /** The native session this runtime last reported. */
@@ -130,7 +132,11 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
     if (!launch || !progress || !session || !restart) return undefined;
     const stalled = shouldRecoverStalledRuntime({
       turnBusy: this.#ports.lastBusyLaunch(agentId) === launch && session.hasLiveTurn !== false,
+      // A waiting delivery whose submitted turn never began reports no live turn: that is the
+      // "queued but no new round started" case, not a turn to wait on.
+      liveTurn: session.hasLiveTurn === true,
       silentForMs: progress.silentForMs(),
+      queuedForMs: this.#ports.queuedForMs(agentId),
       hasOpenToolCall: launch.toolCalls?.hasOpenToolCall ?? false,
       resumable: this.#ports.resumable(agentId),
     });

@@ -58,7 +58,14 @@ export class ProviderProgress {
 export type StalledRecoveryFacts = Readonly<{
   /** The launch's turn is busy and its session still reports a live turn. */
   turnBusy: boolean;
+  /** The session reports a live turn, whether or not the delivery path sees it as busy. A
+   * waiting delivery whose submitted turn never began reports no live turn at all. */
+  liveTurn: boolean;
   silentForMs: number;
+  /** How long the oldest queued delivery has waited; undefined when nothing is queued. This is
+   * the clock for a delivery whose turn never began — an idle provider that just received its
+   * first message is not stalled, however quiet it was before. */
+  queuedForMs?: number;
   /** A tool call is running: a long build or test is silent until it ends. */
   hasOpenToolCall: boolean;
   /** The session reported a native session id the relaunch can resume. */
@@ -66,15 +73,15 @@ export type StalledRecoveryFacts = Readonly<{
 }>;
 
 /**
- * Whether a message arriving now should restart the Agent's provider instead of being steered
- * into its turn: the turn has been silent for `STALLED_RECOVERY_SILENCE_MS`, nothing it is waiting
- * on is still running, and the restart can resume the same session.
+ * Whether a message waiting for this Agent means its provider should be restarted instead of
+ * waiting: either the turn it is in has been silent for `STALLED_RECOVERY_SILENCE_MS`, or the
+ * delivery was admitted but no turn ever started, with nothing still running and a session the
+ * restart can resume. Both are the same recovery path; the second only covers the queued message
+ * that never got a turn (the sweep already requires one to be waiting).
  */
 export function shouldRecoverStalledRuntime(facts: StalledRecoveryFacts): boolean {
-  return (
-    facts.turnBusy &&
-    facts.silentForMs >= STALLED_RECOVERY_SILENCE_MS &&
-    !facts.hasOpenToolCall &&
-    facts.resumable
-  );
+  const silentTurnStalled = facts.turnBusy && facts.silentForMs >= STALLED_RECOVERY_SILENCE_MS;
+  const queuedTurnNeverStarted =
+    !facts.turnBusy && !facts.liveTurn && (facts.queuedForMs ?? 0) >= STALLED_RECOVERY_SILENCE_MS;
+  return (silentTurnStalled || queuedTurnNeverStarted) && !facts.hasOpenToolCall && facts.resumable;
 }

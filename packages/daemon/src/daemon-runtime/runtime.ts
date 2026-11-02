@@ -114,7 +114,7 @@ import {
 import { abandonLaunch, scheduleStartupFailure } from "./agent-startup-failure";
 import { revokeAgentApiKey } from "./agent-api-key-revoke";
 import { ColdIdleSweep } from "./cold-idle-sweep";
-import { StalledRecoverySweep } from "./stalled-recovery-sweep";
+import { stalledRecoverySweep } from "./stalled-recovery-sweep";
 import { CatalogFreshnessSweep } from "./catalog-freshness-sweep";
 import { rememberUsage } from "./usage-memory";
 import { runtimeMachineStatus } from "./machine-status-reporter";
@@ -276,6 +276,7 @@ export class DaemonRuntime {
     runtime: (agentId) => this.#agentProcessManager.runtime(agentId),
     restartConfig: (agentId) => this.#agentProcessManager.restartConfig(agentId),
     lastBusyLaunch: (agentId) => this.#activityPublisher.lastBusy(agentId)?.launch,
+    queuedForMs: (agentId) => this.#deliveryQueue.queuedForMs(agentId),
     resumable: (agentId) => this.#runningMentionIdentity(agentId) !== undefined,
     sessionId: (agentId) => this.#stopState.sessionId(agentId),
     isStopping: (agentId) => this.#stopState.stopping(agentId),
@@ -312,14 +313,12 @@ export class DaemonRuntime {
     provider: (provider) => this.#createProvider(provider),
     stop: (stop) => this.#runtimeRelease.stopColdIdle(stop),
   });
-  readonly #stalledRecoverySweep = new StalledRecoverySweep<ActivityLaunch>({
+  readonly #stalledRecoverySweep = stalledRecoverySweep({
     agentIds: () => this.#agentProcessManager.runningAgentIds(),
     hasQueuedDeliveries: (agentId) => this.#deliveryQueue.hasQueued(agentId),
     runnerHold: () => this.#runnerHold !== undefined,
     isStopping: (agentId) => this.#stopState.stopping(agentId),
-    isRecovering: (agentId) => this.#runtimeRelease.isRecovering(agentId),
-    stalled: (agentId) => this.#runtimeRelease.stalled(agentId),
-    recover: (agentId, stalled) => this.#runtimeRelease.recoverStalled(agentId, stalled),
+    release: this.#runtimeRelease,
   });
   /** Re-reads model catalogs whose on-disk key changed: an update, a sign-in or a sign-out. */
   readonly #catalogFreshnessSweep = new CatalogFreshnessSweep({
