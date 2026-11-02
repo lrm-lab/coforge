@@ -1,4 +1,5 @@
 import type { Prisma } from "#src/generated/prisma/client";
+import { STALLED_RESTART_LIMIT_ERROR } from "@lrm/coforge-sdk/internal";
 import type { AgentStatusCache } from "./agent-status.server";
 import type { AgentDisplay } from "./agent-display.server";
 import { appLogoUrl } from "#src/server/apps/app-logo.server";
@@ -36,6 +37,14 @@ type DetailAgent = {
   };
   runtimeConfig: Prisma.JsonValue;
   controlState?: Prisma.JsonValue | null;
+  activity?: {
+    detailKind: string;
+    runtimeErrorReason?: string | null;
+  }[];
+  latestActivity?: {
+    detailKind: string;
+    runtimeErrorReason?: string | null;
+  } | null;
   weeklyReportAssistant?: { id: string } | null;
   /** Set when a user stopped this Agent. */
   stoppedAt?: Date | null;
@@ -123,7 +132,16 @@ export class AgentDetailQuery {
     const isFailed =
       control?.phase === "failed" &&
       control.configRevision === agentControlRevision(agent.runtimeConfig);
-    const failureReason = isFailed ? (control?.errorCode ?? "launch_failed") : null;
+    let failureReason: string | null = isFailed ? (control?.errorCode ?? "launch_failed") : null;
+    if (!failureReason && !agent.stoppedAt) {
+      const recentActivity = agent.latestActivity ?? agent.activity?.[0];
+      const isStalledLimit =
+        recentActivity?.detailKind === "runtime_stalled" &&
+        recentActivity.runtimeErrorReason === STALLED_RESTART_LIMIT_ERROR.errorReason;
+      if (isStalledLimit && (!display || display.detailKind === "runtime_stalled")) {
+        failureReason = STALLED_RESTART_LIMIT_ERROR.errorReason;
+      }
+    }
     return {
       id: agent.id,
       workspaceId: agent.workspaceId,
