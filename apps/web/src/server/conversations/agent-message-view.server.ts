@@ -1,4 +1,9 @@
-import { renderForwardedMessage, type ForwardedMessage } from "@lrm/coforge-sdk/internal";
+import {
+  MESSAGE_LINE_SEPARATOR,
+  renderForwardedMessage,
+  type ForwardedMessage,
+} from "@lrm/coforge-sdk/internal";
+import { CHOICE_OTHER_OPTION_ID } from "@lrm/coforge-sdk/agent";
 import {
   agentReadableBody,
   deliveryMentionsAgent,
@@ -42,6 +47,14 @@ type StoredAgentMessage = {
   attachments?: readonly { id: string }[];
 };
 
+/**
+ * A person's own words, fenced: every continuation line carries the `│` prefix message text uses,
+ * so an answer cannot look like CLI output or a second message (task #336).
+ */
+export function fenceUserText(text: string): string {
+  return text.split(MESSAGE_LINE_SEPARATOR).join("\n  │ ");
+}
+
 /** Appended so an Agent can tell pending from executed, and which `choice` was picked. */
 export function actionCardBodySuffix(card: {
   state: string;
@@ -56,7 +69,7 @@ export function actionCardBodySuffix(card: {
       typeof (card.result as { optionId: unknown }).optionId === "string"
         ? (card.result as { optionId: string }).optionId
         : "";
-    if (/^[a-z][a-z0-9_]{0,31}$/.test(optionId)) {
+    if (optionId === CHOICE_OTHER_OPTION_ID || /^[a-z][a-z0-9_]{0,31}$/.test(optionId)) {
       return `[action card: executed; choice=${optionId}]`;
     }
   }
@@ -69,10 +82,18 @@ export function choiceResultBody(
   target: string,
   chooser?: { handle: string } | null,
 ): AgentReadableBody {
-  const result = card?.result as { optionId?: string; label?: string } | null | undefined;
+  const result = card?.result as
+    | { optionId?: string; label?: string; text?: string }
+    | null
+    | undefined;
   const payload = card?.payload as { prompt?: string } | null | undefined;
   const prompt = payload?.prompt ? `"${payload.prompt}" ` : "";
-  const chosen = result?.label ? `${result.optionId ?? ""} · ${result.label}`.trim() : "an option";
+  const chosen =
+    result?.optionId === CHOICE_OTHER_OPTION_ID
+      ? `${result.label ?? "Other"} (their own words)\n  │ ${fenceUserText(result.text ?? "")}`
+      : result?.label
+        ? `${result.optionId ?? ""} · ${result.label}`.trim()
+        : "an option";
   const who = chooser?.handle ? `@${chooser.handle}` : "Someone";
   return `${who} answered your choice ${prompt}in ${target}: ${chosen}` as AgentReadableBody;
 }

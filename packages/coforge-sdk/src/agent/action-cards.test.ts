@@ -303,6 +303,31 @@ describe("choiceActionSchema", () => {
     expect(validateActionCardAction(duplicate)).toBe("choice option ids must be unique");
   });
 
+  test("parses the optional own-answer row, off only when the Agent says so", () => {
+    const parsed = actionCardActionSchema.parse({
+      type: "choice",
+      prompt: "Pick one",
+      options: [
+        { id: "a", label: "A" },
+        { id: "b", label: "B" },
+      ],
+      to: "@alice",
+      other: { enabled: false, label: "Something else" },
+    });
+    if (parsed.type !== "choice") throw new Error("expected choice");
+    expect(parsed.other).toEqual({ enabled: false, label: "Something else" });
+    const plain = actionCardActionSchema.parse({
+      type: "choice",
+      prompt: "Pick one",
+      options: [
+        { id: "a", label: "A" },
+        { id: "b", label: "B" },
+      ],
+      to: "@alice",
+    });
+    expect(plain.type === "choice" && plain.other).toBeUndefined();
+  });
+
   test("parses a choice without `to`, which an older Computer's CLI sends", () => {
     // That CLI has no `to` in its schema and strips it; the server then asks the owner. The CLI
     // itself still refuses to prepare one (see `toActionCardAction`).

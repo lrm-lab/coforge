@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { CHANNEL_NAME_PATTERN } from "@lrm/coforge-sdk/internal";
+import { CHOICE_OTHER_OPTION_ID, CHOICE_OTHER_TEXT_MAX_LENGTH } from "@lrm/coforge-sdk/agent";
 
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { AppRecoverOwnerActionCards } from "#src/server/conversations/app-recover-owner-action-cards.server";
@@ -167,10 +168,14 @@ export const commitChoiceActionCard = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(
     messageIdInput.extend({
-      optionId: z
-        .string()
-        .trim()
-        .regex(/^[a-z][a-z0-9_]{0,31}$/),
+      optionId: z.union([
+        z.literal(CHOICE_OTHER_OPTION_ID),
+        z
+          .string()
+          .trim()
+          .regex(/^[a-z][a-z0-9_]{0,31}$/),
+      ]),
+      text: z.string().max(CHOICE_OTHER_TEXT_MAX_LENGTH).optional(),
     }),
   )
   .handler(async ({ data, context: { db, workspaceId, user } }) => {
@@ -179,7 +184,11 @@ export const commitChoiceActionCard = createServerFn({ method: "POST" })
       db,
       new CentrifugoConversationRealtime(centrifugo),
       { workspaceId, actorUserId: user.id },
-      { messageId: data.messageId, optionId: data.optionId },
+      {
+        messageId: data.messageId,
+        optionId: data.optionId,
+        ...(data.text !== undefined && { text: data.text }),
+      },
     );
   });
 

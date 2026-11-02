@@ -1,7 +1,13 @@
-import type { ChoiceAction, ResolvedChoicePayload } from "@lrm/coforge-sdk/agent";
+import {
+  CHOICE_OTHER_OPTION_ID,
+  CHOICE_OTHER_TEXT_MAX_LENGTH,
+  type ChoiceAction,
+  type ResolvedChoicePayload,
+} from "@lrm/coforge-sdk/agent";
 import type { ActionCardView, ActionCardViewBase } from "./action-card-view.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
+import { fenceUserText } from "./agent-message-view.server";
 import { publishActionCardUpdate } from "./action-card-message.server";
 import { AgentDeliveryPublisher } from "./agent-delivery.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
@@ -60,6 +66,10 @@ export async function resolveChoicePayload(
     prompt: action.prompt,
     options: action.options.map((option) => ({ id: option.id, label: option.label })),
     to: user.id,
+    // On unless the Agent turned it off; only cards made with this field (or after it existed) get it.
+    ...(action.other?.enabled === false
+      ? {}
+      : { other: action.other?.label ? { label: action.other.label } : {} }),
   };
 }
 
@@ -80,19 +90,21 @@ export function choiceActionCardView(
     ...(askedName && payload.to
       ? { asked: { displayName: askedName, isViewer: payload.to === viewerUserId } }
       : {}),
+    ...(payload.other ? { other: payload.other } : {}),
     canCommit: pending && payload.to === viewerUserId,
-    result: card.result as { optionId: string; label: string } | undefined,
+    result: card.result as { optionId: string; label: string; text?: string } | undefined,
   };
 }
 
-/** Records which option the person clicked. Free-text replies do not commit the card. */
+/** Records which option the person clicked, or their own answer ("other"). Free-text chat replies
+ * do not commit the card. */
 export async function commitChoiceCard(
   db: PrismaClient,
   realtime: ConversationRealtime | undefined,
   principal: { workspaceId: string; actorUserId: string },
-  input: { messageId: string; optionId: string },
+  input: { messageId: string; optionId: string; text?: string },
   dependencies: { publisher?: Pick<CentrifugoServerApi, "publishBatch"> } = {},
-): Promise<{ optionId: string; label: string }> {
+): Promise<{ optionId: string; label: string; text?: string }> {
   const card = await loadPendingActionCard(
     db,
     principal.workspaceId,
@@ -102,16 +114,14 @@ export async function commitChoiceCard(
   );
   const payload = card.payload as ResolvedChoicePayload;
   if (payload.to !== principal.actorUserId) throw new AppError("ACCESS_DENIED");
-  const option = payload.options.find((entry) => entry.id === input.optionId);
-  if (!option) throw new AppError("INVALID_INPUT");
-  const result = { optionId: option.id, label: option.label };
+  const answer = choiceAnswer(payload, input);
   const updated = await db.actionCard.updateMany({
     where: { messageId: input.messageId, state: "pending" },
     data: {
       state: "executed",
       committedByUserId: principal.actorUserId,
       committedAt: new Date(),
-      result: result as unknown as Prisma.InputJsonValue,
+      result: answer as unknown as Prisma.InputJsonValue,
     },
   });
   if (updated.count === 0) throw new AppError("CONFLICT");
@@ -123,9 +133,28 @@ export async function commitChoiceCard(
     agentId: card.preparedByAgentId,
     actorUserId: principal.actorUserId,
     prompt: payload.prompt,
-    option,
+    answer,
   });
-  return result;
+  return answer;
+}
+
+/** The answer a click or the person's own row records; `_other` needs non-blank text within the
+ * cap, and only a card that offers it may record one. */
+function choiceAnswer(
+  payload: ResolvedChoicePayload,
+  input: { optionId: string; text?: string },
+): { optionId: string; label: string; text?: string } {
+  if (input.optionId === CHOICE_OTHER_OPTION_ID) {
+    // A stored payload omits `other` when the Agent turned it off; a hand-made one may still say so.
+    const other = payload.other as { label?: string; enabled?: boolean } | undefined;
+    if (!other || other.enabled === false) throw new AppError("INVALID_INPUT");
+    const text = input.text?.trim();
+    if (!text || text.length > CHOICE_OTHER_TEXT_MAX_LENGTH) throw new AppError("INVALID_INPUT");
+    return { optionId: CHOICE_OTHER_OPTION_ID, label: other.label ?? "Other", text };
+  }
+  const option = payload.options.find((entry) => entry.id === input.optionId);
+  if (!option) throw new AppError("INVALID_INPUT");
+  return { optionId: option.id, label: option.label };
 }
 
 /** The choice is a delivery: the Agent that asked is woken with who answered and what they chose,
@@ -140,7 +169,7 @@ async function wakeAskingAgent(
     agentId: string;
     actorUserId: string;
     prompt: string;
-    option: { id: string; label: string };
+    answer: { optionId: string; label: string; text?: string };
   },
 ) {
   const [message, agent, actor] = await Promise.all([
@@ -185,6 +214,10 @@ async function wakeAskingAgent(
     conversationTarget(message.conversation, targetOf),
     message.threadRootId,
   );
+  const answered =
+    input.answer.optionId === CHOICE_OTHER_OPTION_ID
+      ? `${input.answer.label} (their own words)\n  │ ${fenceUserText(input.answer.text ?? "")}`
+      : `${input.answer.optionId} · ${input.answer.label}`;
   await new AgentDeliveryPublisher(publisher ?? createCentrifugoServerApi()).publish(
     input.workspaceId,
     [
@@ -197,7 +230,7 @@ async function wakeAskingAgent(
         deliveryId: delivery.deliveryId,
         sequence: message.sequence,
         createdAtMs: delivery.createdAt.getTime(),
-        body: `${who} answered your choice "${input.prompt}" in ${target}: ${input.option.id} · ${input.option.label}`,
+        body: `${who} answered your choice "${input.prompt}" in ${target}: ${answered}`,
         mentions: [],
         target,
         latestSenderKind: "system",

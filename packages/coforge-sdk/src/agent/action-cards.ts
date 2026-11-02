@@ -157,6 +157,14 @@ const choiceOptionSchema = z.object({
  * Offer clickable options. Choosing records `optionId` on the card; a typed reply leaves the
  * card pending for the Agent to interpret.
  */
+const choiceOtherSchema = z.object({
+  /** Default on; `enabled: false` removes the row and refuses an `_other` answer. */
+  enabled: z.boolean().optional(),
+  /** The row and result label; the client's localized default ("Other" / "其他") applies when
+   * absent. */
+  label: z.string().trim().min(1).max(80).optional(),
+});
+
 export const choiceActionSchema = z.object({
   type: z.literal("choice"),
   prompt: z.string().trim().min(1).max(200),
@@ -167,9 +175,19 @@ export const choiceActionSchema = z.object({
    * the schema keeps it optional so a card from an older Computer (whose CLI has no such field
    * and strips it) still parses, and the server asks that Agent's owner as it did before. */
   to: idOrHandleSchema.optional(),
+  /** An answer of the person's own, as a final row that is itself an input (Frank, #447). On
+   * unless `enabled: false`; only cards made with this field offer it. */
+  other: choiceOtherSchema.optional(),
   draftHint: draftHintSchema,
 });
 export type ChoiceAction = z.infer<typeof choiceActionSchema>;
+
+/** The id an "other" answer records; the option-id grammar forbids a leading underscore, so no
+ * Agent option can collide with it. */
+export const CHOICE_OTHER_OPTION_ID = "_other";
+
+/** The most the person's own answer may hold, as the prompt's bound. */
+export const CHOICE_OTHER_TEXT_MAX_LENGTH = 200;
 
 export const actionCardActionSchema = z.discriminatedUnion("type", [
   channelCreateActionSchema,
@@ -271,6 +289,9 @@ export type ResolvedChoicePayload = {
   options: { id: string; label: string }[];
   /** The asked person's user id; every choice card names one. */
   to: string;
+  /** Present when the card offers an answer of the person's own; absent when the Agent disabled
+   * it and on cards made before the field existed. */
+  other?: { label?: string };
 };
 export type ResolvedActionCardPayload =
   | ResolvedChannelCreatePayload

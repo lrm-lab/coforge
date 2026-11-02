@@ -111,7 +111,10 @@ export type ActionCardView =
       /** The asked person as the card names them, and whether that is the viewer; absent on a card
        * made before every choice named one, which nobody can answer. */
       asked?: { displayName: string; isViewer: boolean };
-      result?: { optionId: string; label: string };
+      /** Present when the card offers the person's own answer as its last row; absent when the
+       * Agent turned it off and on cards made before it existed. */
+      other?: { label?: string };
+      result?: { optionId: string; label: string; text?: string };
     })
   | (ActionCardViewBase & {
       kind: "app:recover_owner";

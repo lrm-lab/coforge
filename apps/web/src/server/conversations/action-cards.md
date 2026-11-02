@@ -29,9 +29,11 @@ Moved out of [`AGENTS.md`](AGENTS.md) to keep it under 200 lines; the rules are 
 - A `desktop:takeover` card stores the Agent and computer ids so the browser can open that
   Agent's cloud desktop. Commit only marks that the person finished the step; opening the desktop
   does not go through the server.
-- A `choice` card stores the prompt, options and the user id of the one person it asks (`to`,
-  required from the CLI). Commit records `{ optionId, label }`; only that person may commit it,
-  and the Agent is woken with who answered and what they chose. A request without `to` comes from
+- A `choice` card stores the prompt, options, the user id of the one person it asks (`to`,
+  required from the CLI) and, unless the Agent turned it off, an `other` row that is itself an
+  input. Commit records `{ optionId, label }`, or `{ optionId: "_other", label, text }` for the
+  person's own answer (text capped and fenced for the Agent); only that person may commit it, and
+  the Agent is woken with who answered and what they chose. A request without `to` comes from
   a Computer whose CLI predates the field (its schema strips it): the server asks the Agent's
   owner, as before, and its prepare response carries a `warning` saying the Computer should be
   upgraded (never the message body, which people see in previews). Remove that fallback when no
