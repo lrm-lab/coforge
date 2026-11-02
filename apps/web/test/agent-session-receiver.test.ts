@@ -40,10 +40,10 @@ const payload = encodeAgentSessionReport({
   launchId: "launch-a",
 });
 
-test("a rejected Session snapshot logs a warning with an allowlisted reason and stays a bare 403", async () => {
+test("a rejected Session snapshot with non-verify error logs a warning and returns 503", async () => {
   const sessions: Pick<AgentSessions, "accept" | "verify"> = {
     accept: async () => {
-      throw new Error("Agent session report is stale or unauthorized");
+      throw new Error("database connection failed");
     },
     verify: async () => {
       throw new Error("must not be reached: accept() calls verify() itself when needed");
@@ -57,14 +57,14 @@ test("a rejected Session snapshot logs a warning with an allowlisted reason and 
   } finally {
     capture.restore();
   }
-  expect(response).toEqual({ code: 403, message: "Agent Session snapshot is not authorized" });
+  expect(response).toEqual({ code: 503, message: "Agent session could not be accepted" });
   expect(capture.warnings).toEqual([
     expect.objectContaining({
       event: "agent_session:snapshot_rejected",
       agent_id: "agent-a",
       workspace_id: "w",
       computer_id: "c",
-      reason: "Agent session report is stale or unauthorized",
+      reason: "unexpected: Error",
     }),
   ]);
 });
@@ -148,7 +148,7 @@ test("a genuine invalidate failure (propagated, not swallowed) logs with request
   ]);
 });
 
-test("a verify rejection logs the field that diverged, still with the stable reason", async () => {
+test("a verify rejection logs the field that diverged, still with the stable reason and category", async () => {
   const sessions: Pick<AgentSessions, "accept" | "verify"> = {
     accept: async () => {
       // The real `accept` verifies first; this is the error that reaches the handler.
@@ -166,12 +166,49 @@ test("a verify rejection logs the field that diverged, still with the stable rea
   } finally {
     capture.restore();
   }
-  expect(response).toEqual({ code: 403, message: "Agent Session snapshot is not authorized" });
+  expect(response).toEqual({
+    code: 403,
+    message: "Agent Session snapshot is not authorized",
+    category: "session_mismatch",
+  });
   expect(capture.warnings).toEqual([
     expect.objectContaining({
       event: "agent_session:snapshot_rejected",
+      category: "session_mismatch",
       reason: "Agent session report is stale or unauthorized",
       field: "sessionId",
+    }),
+  ]);
+});
+
+test("a launchId verify rejection returns superseded", async () => {
+  const sessions: Pick<AgentSessions, "accept" | "verify"> = {
+    accept: async () => {
+      throw new AgentSessionVerifyError("launchId");
+    },
+    verify: async () => {
+      throw new Error("must not be reached without a snapshot");
+    },
+  };
+  const method = createAgentSessionMethod(sessions, undefined);
+  const capture = captureWarnings();
+  let response;
+  try {
+    response = await method(payload, metadata);
+  } finally {
+    capture.restore();
+  }
+  expect(response).toEqual({
+    code: 409,
+    message: "Agent session launch was superseded",
+    category: "superseded",
+  });
+  expect(capture.warnings).toEqual([
+    expect.objectContaining({
+      event: "agent_session:snapshot_rejected",
+      category: "superseded",
+      reason: "Agent session report is stale or unauthorized",
+      field: "launchId",
     }),
   ]);
 });

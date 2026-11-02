@@ -677,50 +677,26 @@ export function createWorkspaceGetMethod(useCase: WorkspaceQueryUseCase): Centri
   );
 }
 
-export type CentrifugoRpcRequest = {
-  client?: string;
-  transport?: string;
-  protocol?: string;
-  encoding?: string;
-  user?: string;
-  method?: string;
-  data?: unknown;
-  b64data?: string;
-  meta?: Record<string, unknown>;
-};
-
-export type CentrifugoRpcMetadata = {
-  principal: AuthenticatedDaemonPrincipal;
-  client?: string;
-  transport?: string;
-  protocol?: string;
-  encoding?: string;
-};
-
-export type AuthenticatedDaemonPrincipal = {
-  userId: string;
-  workspaceId: string;
-  computerId: string;
-  agentId?: string;
-};
-
-export type CentrifugoRpcError = {
-  code: number;
-  message: string;
-};
-
-export class CentrifugoRpcAuthenticationError extends RequestAuthenticationError {}
-
-export type CentrifugoRpcHandlerResult = Uint8Array | CentrifugoRpcError;
-export type CentrifugoRpcMethod = (
-  payload: Uint8Array,
-  metadata: CentrifugoRpcMetadata,
-) => CentrifugoRpcHandlerResult | Promise<CentrifugoRpcHandlerResult>;
-export type CentrifugoRpcAuthenticate = (
-  request: CentrifugoRpcRequest,
-  context: Request,
-) => AuthenticatedDaemonPrincipal | Promise<AuthenticatedDaemonPrincipal>;
-export type CentrifugoProxyAuthorizer = (request: Request) => void | Promise<void>;
+export {
+  type CentrifugoRpcRequest,
+  type CentrifugoRpcMetadata,
+  type AuthenticatedDaemonPrincipal,
+  type CentrifugoRpcError,
+  CentrifugoRpcAuthenticationError,
+  type CentrifugoRpcHandlerResult,
+  type CentrifugoRpcMethod,
+  type CentrifugoRpcAuthenticate,
+  type CentrifugoProxyAuthorizer,
+} from "./rpc-types.server";
+import type {
+  CentrifugoRpcRequest,
+  CentrifugoRpcMetadata,
+  AuthenticatedDaemonPrincipal,
+  CentrifugoRpcError,
+  CentrifugoRpcMethod,
+  CentrifugoRpcAuthenticate,
+  CentrifugoProxyAuthorizer,
+} from "./rpc-types.server";
 
 export function createComputerRegistrationMethod(useCase: {
   register: (

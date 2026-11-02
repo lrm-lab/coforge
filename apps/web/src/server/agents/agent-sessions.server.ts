@@ -51,11 +51,20 @@ export type AgentSessionVerifyField =
   | "sessionId"
   | "currentDaemon";
 
+export type AgentSessionVerifyCategory = "superseded" | "session_mismatch";
+
+export function sessionVerifyCategory(field: AgentSessionVerifyField): AgentSessionVerifyCategory {
+  return field === "sessionId" ? "session_mismatch" : "superseded";
+}
+
 /** `verify()`'s rejection: the field name is diagnostics, the message is the wire reason. */
 export class AgentSessionVerifyError extends Error {
+  readonly category: AgentSessionVerifyCategory;
+
   constructor(readonly field: AgentSessionVerifyField) {
     super("Agent session report is stale or unauthorized");
     this.name = "AgentSessionVerifyError";
+    this.category = sessionVerifyCategory(field);
   }
 }
 

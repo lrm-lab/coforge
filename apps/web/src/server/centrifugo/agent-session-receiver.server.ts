@@ -62,8 +62,35 @@ export function createAgentSessionMethod(
       }
       return new Uint8Array();
     } catch (error) {
-      // A rejected snapshot previously vanished as a bare 403, the same silent pattern fixed
-      // for `agent:control:result`; log it for the same diagnosability.
+      if (error instanceof AgentSessionVerifyError) {
+        console.warn(
+          JSON.stringify({
+            event: "agent_session:snapshot_rejected",
+            agent_id: report?.agentId,
+            workspace_id: metadata.principal.workspaceId,
+            computer_id: metadata.principal.computerId,
+            epoch: report?.controlEpoch,
+            sequence: report?.sequence,
+            category: error.category,
+            reason: rejectionReason(error, KNOWN_REJECTION_REASONS),
+            field: error.field,
+          }),
+        );
+        if (error.category === "superseded") {
+          return {
+            code: 409,
+            message: "Agent session launch was superseded",
+            category: "superseded",
+          };
+        }
+        return {
+          code: 403,
+          message: "Agent Session snapshot is not authorized",
+          category: "session_mismatch",
+        };
+      }
+      const isKnown =
+        error instanceof Error && KNOWN_REJECTION_REASONS.has(error.message);
       console.warn(
         JSON.stringify({
           event: "agent_session:snapshot_rejected",
@@ -73,10 +100,12 @@ export function createAgentSessionMethod(
           epoch: report?.controlEpoch,
           sequence: report?.sequence,
           reason: rejectionReason(error, KNOWN_REJECTION_REASONS),
-          ...(error instanceof AgentSessionVerifyError ? { field: error.field } : {}),
         }),
       );
-      return { code: 403, message: "Agent Session snapshot is not authorized" };
+      if (isKnown) {
+        return { code: 403, message: "Agent Session snapshot is not authorized" };
+      }
+      return { code: 503, message: "Agent session could not be accepted" };
     }
   };
 }

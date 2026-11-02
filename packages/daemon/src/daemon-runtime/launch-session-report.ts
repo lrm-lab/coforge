@@ -8,8 +8,20 @@ import type { SessionReference } from "./launch-identity";
 import type { LaunchPhaseTiming } from "./launch-phase-timing";
 import type { LaunchRequest } from "./runtime-launch-types";
 import { inferredReplacedSession, replacedSessionFor } from "./session-replacement";
+import { AgentSessionSupersededError } from "#src/agent-runtime/launch-failure";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
+
+/** Whether the server's session report rejection says this launch or daemon instance is superseded. */
+export function isSessionReportSuperseded(error: unknown): boolean {
+  if (error instanceof AgentSessionSupersededError) return true;
+  if (typeof error === "object" && error !== null) {
+    if ((error as { category?: unknown }).category === "superseded") return true;
+    if ((error as { code?: unknown }).code === 409) return true;
+  }
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /superseded/iu.test(message);
+}
 
 export type LaunchSessionReportPorts = Readonly<{
   current(): boolean;
@@ -98,6 +110,16 @@ export async function reportLaunchSession(
     });
     input.timing?.phase("session_reported");
   } catch (error) {
+    if (isSessionReportSuperseded(error)) {
+      logger.warning("Agent session report was superseded; stopping process", {
+        event: "agent_session:report_superseded",
+        agent_id: input.agentId,
+        launch_id: input.launchId,
+        provider: input.provider,
+        error_code: diagnosticErrorCode(error),
+      });
+      throw new AgentSessionSupersededError();
+    }
     logger.warning("Agent session report was not accepted; the launch continues", {
       event: "agent_session:report_deferred",
       agent_id: input.agentId,

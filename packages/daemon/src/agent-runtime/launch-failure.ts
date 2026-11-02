@@ -108,9 +108,18 @@ export const NON_RETRYABLE_LAUNCH_FAILURE_REASONS: readonly LaunchFailureReason[
 
 /** Whether a failed launch is one no retry can fix. */
 export function isNonRetryableLaunchFailure(error: unknown): boolean {
+  if (error instanceof AgentSessionSupersededError) return true;
   if (NON_RETRYABLE_LAUNCH_FAILURE_REASONS.includes(launchFailureReason(error))) return true;
   if (error instanceof AgentAuthorizationError && error.failure === "refused") return true;
   return false;
+}
+
+/** The session report was refused by the server because this launch, daemon instance or request is no longer current. */
+export class AgentSessionSupersededError extends Error {
+  constructor(message = "Agent session launch was superseded") {
+    super(message);
+    this.name = "AgentSessionSupersededError";
+  }
 }
 
 /** The server did not hand this launch its configuration and Agent API key. The reason code stays

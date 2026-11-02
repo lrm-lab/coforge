@@ -22,3 +22,13 @@ Moved out of [`AGENTS.md`](AGENTS.md) to keep it under 200 lines; the rules are 
   untouched and never marks the state `recovered`. Its `currentDaemon`
   constructor argument is required so the freshness check cannot be skipped.
   A mismatch is an idempotent no-op; a genuine failure propagates.
+- Session snapshot verification categories (task #405):
+  - When verified, a rejection classifies strictly into `superseded` vs `session_mismatch`.
+  - `superseded` (code 409, `category: "superseded"`): `currentDaemon`, `daemonInstanceId`,
+    `launchId`, `startRequestId`, `computerId`, or `workspaceId` diverged. The launch or daemon
+    instance is no longer current. The daemon must terminate the process immediately without retry.
+  - `session_mismatch` (code 403, `category: "session_mismatch"`): only `sessionId` diverged
+    (driver rebound native session without server awareness). The daemon logs a warning, keeps
+    serving, and aligns on the next report.
+  - Any non-verification failure (e.g. database error) returns code 503 so the daemon keeps
+    serving without treating itself as superseded.
