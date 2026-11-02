@@ -185,10 +185,18 @@ test("a choice card names who is asked, and only they may choose", async () => {
     errorId: "action_card_choice_to",
     hint: "the person to ask is not in this conversation",
   });
-  // A choice always names one: a card without `to` is refused rather than sent to the owner.
+  // A direct caller with no fallback refuses a card that names nobody; the prepare path passes
+  // the preparing Agent's owner for an older Computer's CLI, whose schema strips `to`.
   await expect(
-    resolveChoicePayload(db, conversationId, { ...action, to: "" }),
+    resolveChoicePayload(db, conversationId, { ...action, to: undefined }),
   ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+  const legacy = await resolveChoicePayload(
+    db,
+    conversationId,
+    { ...action, to: undefined },
+    userId,
+  );
+  expect(legacy.to).toBe(userId);
 });
 
 test("the waiting list shows the cards this person may answer", async () => {

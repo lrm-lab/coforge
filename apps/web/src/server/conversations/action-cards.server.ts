@@ -36,25 +36,20 @@ import { isAdminLike } from "#src/server/workspaces/member-role.server";
 export type * from "./action-card-view.server";
 export type { ActionCardTargetRepository } from "./action-card-target.server";
 
-/** A choice whose `to` is missing names nobody: the SDK schema requires it, and this refusal
- * names the fix before the schema's generic issues would. */
-function assertChoiceNamesWhoItAsks(value: unknown) {
-  if (!value || typeof value !== "object") return;
-  const action = value as { type?: unknown; to?: unknown };
-  if (action.type !== "choice") return;
-  if (typeof action.to === "string" && action.to.trim()) return;
-  throw new AppError("INVALID_INPUT", {
-    errorId: "action_card_choice_to",
-    hint: "a choice card must name who it asks: set `to` to their handle or user id",
-  });
-}
+/**
+ * A choice card from a Computer whose CLI predates `to`: its schema has no such field and zod
+ * strips unknown keys, so the request arrives without one. The card asks the preparing Agent's
+ * owner, as it did before `to` existed, and the reply says the Computer should be upgraded.
+ * Delete this fallback when no supported Computer is older than the release that added `to`.
+ */
+const LEGACY_CHOICE_WARNING =
+  "This Agent's Computer is out of date: a choice card should name who it asks with `to`. Ask its owner to upgrade the Computer; this card asks the owner, as before.";
 
 /**
  * An action card's own validity, which needs nothing but the action: its schema and its
  * cross-field rules. Throws `ActionCardError("INVALID_ACTION")`.
  */
 export function parseActionCardAction(value: unknown) {
-  assertChoiceNamesWhoItAsks(value);
   const parsed = actionCardActionSchema.safeParse(value);
   if (!parsed.success) {
     const issues = parsed.error.issues.map(
@@ -106,9 +101,10 @@ export class ActionCards {
       target.conversationId,
       action,
     );
-    const body = action.draftHint
-      ? `${actionCardSummary(action)}\n${action.draftHint}`
-      : actionCardSummary(action);
+    const legacyChoice = action.type === "choice" && !action.to?.trim();
+    const body = `${actionCardSummary(action)}${action.draftHint ? `\n${action.draftHint}` : ""}${
+      legacyChoice ? `\n\n⚠️ ${LEGACY_CHOICE_WARNING}` : ""
+    }`;
 
     const created = await this.db.$transaction((tx) =>
       createActionCardMessage(tx, principal, target, {
@@ -119,7 +115,11 @@ export class ActionCards {
       }),
     );
     await publishActionCardMessage(this.db, this.realtime, principal.workspaceId, target, created);
-    return { messageId: created.id, metadata: { kind: "action-card" } };
+    return {
+      messageId: created.id,
+      metadata: { kind: "action-card" },
+      ...(legacyChoice ? { warning: LEGACY_CHOICE_WARNING } : {}),
+    };
   }
 
   /** Browser-facing views for a page of messages: `actionCardViews`. */
@@ -322,7 +322,19 @@ export class ActionCards {
       return resolvePageFillPayload(this.db, workspaceId, agentId, action);
     if (action.type === "desktop:takeover")
       return resolveDesktopTakeoverPayload(this.db, workspaceId, agentId, action);
-    if (action.type === "choice") return resolveChoicePayload(this.db, conversationId, action);
+    if (action.type === "choice") {
+      // A request without `to` comes from a Computer whose CLI predates it (see
+      // LEGACY_CHOICE_WARNING): ask the Agent's owner, as before.
+      const ownerUserId = action.to?.trim()
+        ? undefined
+        : (
+            await this.db.agent.findUnique({
+              where: { id: agentId },
+              select: { ownerId: true },
+            })
+          )?.ownerId;
+      return resolveChoicePayload(this.db, conversationId, action, ownerUserId);
+    }
     if (action.type === "app:register") return resolveAppRegisterPayload(this.db, action);
     if (action.type === "app:recover_owner")
       return resolveAppRecoverOwnerPayload(this.db, { workspaceId, agentId }, action);

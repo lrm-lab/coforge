@@ -303,7 +303,9 @@ describe("choiceActionSchema", () => {
     expect(validateActionCardAction(duplicate)).toBe("choice option ids must be unique");
   });
 
-  test("requires the person the choice asks", () => {
+  test("parses a choice without `to`, which an older Computer's CLI sends", () => {
+    // That CLI has no `to` in its schema and strips it; the server then asks the owner. The CLI
+    // itself still refuses to prepare one (see `toActionCardAction`).
     const withoutTo = actionCardActionSchema.safeParse({
       type: "choice",
       prompt: "Pick one",
@@ -312,7 +314,7 @@ describe("choiceActionSchema", () => {
         { id: "b", label: "B" },
       ],
     });
-    expect(withoutTo.success).toBe(false);
+    expect(withoutTo.success).toBe(true);
   });
 });
 

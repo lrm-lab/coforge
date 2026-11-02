@@ -30,9 +30,12 @@ Moved out of [`AGENTS.md`](AGENTS.md) to keep it under 200 lines; the rules are 
   Agent's cloud desktop. Commit only marks that the person finished the step; opening the desktop
   does not go through the server.
 - A `choice` card stores the prompt, options and the user id of the one person it asks (`to`,
-  required). Commit records `{ optionId, label }`; only that person may commit it, and the Agent is
-  woken with who answered and what they chose. A card made before `to` was required names nobody
-  and can no longer be answered. Agent-facing reads append
-  `[action card: executed; choice=<id>]` when that result is present.
+  required from the CLI). Commit records `{ optionId, label }`; only that person may commit it,
+  and the Agent is woken with who answered and what they chose. A request without `to` comes from
+  a Computer whose CLI predates the field (its schema strips it): the server asks the Agent's
+  owner, as before, and says in the card and the prepare response that the Computer should be
+  upgraded. Remove that fallback when no supported Computer is older than the release that added
+  `to`. A card made before `to` was required names nobody and can no longer be answered.
+  Agent-facing reads append `[action card: executed; choice=<id>]` when that result is present.
 - Agent-facing message reads append ` [action card: <state>]` (or the choice form above) to a
   card message's body so an Agent never claims a resource exists before a human commits it.

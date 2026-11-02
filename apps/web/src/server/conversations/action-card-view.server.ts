@@ -1,6 +1,8 @@
 /** What the browser sees of an action card (`ActionCards.viewsFor`), one shape per kind. */
+import type { AgentActionPrepareResponse } from "@lrm/coforge-sdk/agent";
 
-export type ActionCardPrepareResult = { messageId: string; metadata: { kind: "action-card" } };
+/** What `prepare` answers, exactly the shape the Agent API promises. */
+export type ActionCardPrepareResult = AgentActionPrepareResponse;
 
 export type ActionCardState = "pending" | "executed" | "cancelled";
 

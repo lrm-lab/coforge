@@ -42,7 +42,8 @@ test("an invalid action is refused with its issues before any dependency is buil
   expect(Object.keys(body).sort()).toEqual(["code", "error", "retryable"]);
 });
 
-test("a choice that names nobody is refused as INVALID_INPUT, saying to set `to`", async () => {
+test("a choice without `to` reaches prepare, for an older Computer's CLI", async () => {
+  let received: unknown;
   const response = await handleAgentActionPrepare(
     prepare({
       target: "#ops",
@@ -56,14 +57,27 @@ test("a choice that names nobody is refused as INVALID_INPUT, saying to set `to`
       },
     }),
     principal,
-    unbuildable,
+    () => ({
+      prepare: async (_principal, input) => {
+        received = input.action;
+        return {
+          messageId: "message-1",
+          metadata: { kind: "action-card" },
+          warning: "upgrade the Computer",
+        };
+      },
+    }),
   );
 
-  const { status, body } = await answer(response);
-  expect(status).toBe(400);
-  expect(body).toMatchObject({ code: "INVALID_INPUT", retryable: false });
-  expect(body.error).toContain("must name who it asks");
-  expect(body.error).toContain("`to`");
+  expect(await answer(response)).toEqual({
+    status: 200,
+    body: {
+      messageId: "message-1",
+      metadata: { kind: "action-card" },
+      warning: "upgrade the Computer",
+    },
+  });
+  expect(received).toMatchObject({ type: "choice", prompt: "Which color?" });
 });
 
 test("a business refusal relays its error id and hint to the Agent", async () => {

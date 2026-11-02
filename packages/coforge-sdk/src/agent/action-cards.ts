@@ -163,9 +163,10 @@ export const choiceActionSchema = z.object({
   options: z.array(choiceOptionSchema).min(2).max(8),
   /** Deprecated and ignored: accepted only so older CLIs that still send it keep working. */
   allowFreeText: z.boolean().optional(),
-  /** The person the card asks: a handle (`@alice` or `alice`) or a UUID. Required: a choice
-   * always names who may answer it; there is no default owner. */
-  to: idOrHandleSchema,
+  /** The person the card asks: a handle (`@alice` or `alice`) or a UUID. The CLI requires it;
+   * the schema keeps it optional so a card from an older Computer (whose CLI has no such field
+   * and strips it) still parses, and the server asks that Agent's owner as it did before. */
+  to: idOrHandleSchema.optional(),
   draftHint: draftHintSchema,
 });
 export type ChoiceAction = z.infer<typeof choiceActionSchema>;
@@ -287,4 +288,7 @@ export type AgentActionPrepareRequest = {
 export type AgentActionPrepareResponse = {
   messageId: string;
   metadata: { kind: "action-card" };
+  /** Set when the card was made for an older Computer whose CLI predates the card's newer
+   * fields (a choice without `to` asks its owner); the reason says to upgrade. */
+  warning?: string;
 };

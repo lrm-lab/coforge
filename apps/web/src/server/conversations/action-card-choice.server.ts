@@ -18,18 +18,25 @@ import { directTargets } from "#src/server/db/repositories/agent-peer-direct.rep
 const USER_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** The choice card's payload, with `to` resolved to the asked person's user id: they must be in
- * the conversation the card is posted in. Every card names one; there is no default owner. */
+ * the conversation the card is posted in. `legacyOwnerUserId` is the preparing Agent's owner, for
+ * a card from a Computer whose CLI predates `to`: that CLI's schema strips the field, so the
+ * request arrives without one, and the card asks the owner as it did before `to` existed. The
+ * owner is checked like any other target, so a card in a conversation they cannot read is refused
+ * rather than left impossible to answer. The fallback goes away when no supported Computer is
+ * older than the release that added `to`. */
 export async function resolveChoicePayload(
   db: Pick<PrismaClient, "user" | "conversationMember">,
   conversationId: string,
   action: ChoiceAction,
+  legacyOwnerUserId?: string,
 ): Promise<ResolvedChoicePayload> {
-  if (!action.to?.trim())
+  const asked = action.to?.trim() ?? legacyOwnerUserId;
+  if (!asked)
     throw new AppError("INVALID_INPUT", {
       errorId: "action_card_choice_to",
       hint: "a choice card must name who it asks: set `to` to their handle or user id",
     });
-  const handle = action.to.replace(/^@/, "");
+  const handle = asked.replace(/^@/, "");
   const user = await db.user.findFirst({
     where: USER_ID.test(handle) ? { id: handle } : { username: handle },
     select: { id: true },
