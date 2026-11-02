@@ -6,13 +6,14 @@ const logger = getLogger(["coforge", "daemon", "runtime"]);
 
 /** How often the daemon looks for stalled providers, as in the reference client (its sweep runs
  * every five minutes). A message's own arrival judges its Agent immediately; the sweep exists for
- * the deliveries that already wait quietly behind a provider that stopped answering. */
+ * the deliveries that already wait quietly behind a provider that stopped answering, and for a
+ * turn that hung with no message coming at all (task #404). */
 export const STALLED_RECOVERY_SWEEP_MS = 5 * 60_000;
 
 export type StalledRecoverySweepPorts<L extends ReleasableLaunch> = Readonly<{
   agentIds(): string[];
-  /** Deliveries waiting for the Agent: recovery exists for them; a silent launch with nothing
-   * queued is left alone. */
+  /** Deliveries waiting for the Agent. With none, a stalled turn's restart is unattended: capped
+   * per stuck spell, and its relaunch is told where the old turn stopped. */
   hasQueuedDeliveries(agentId: string): boolean;
   /** A runner hold pauses every Agent at once; no single one is judged while it stands. */
   runnerHold(): boolean;
@@ -23,13 +24,18 @@ export type StalledRecoverySweepPorts<L extends ReleasableLaunch> = Readonly<{
   /** The same stalled judgment a new message applies. */
   stalled(agentId: string): StalledRuntime<L> | undefined;
   /** Ends the stalled provider and wakes the Agent on the same launch, resuming its session. */
-  recover(agentId: string, stalled: StalledRuntime<L>): Promise<void>;
+  recover(
+    agentId: string,
+    stalled: StalledRuntime<L>,
+    options?: Readonly<{ unattended?: boolean }>,
+  ): Promise<void>;
 }>;
 
 /**
  * Every `STALLED_RECOVERY_SWEEP_MS`, judges each live Agent the way an arriving message does:
  * a busy turn silent past the stall window, with nothing it waits on still running and a session
- * the relaunch can resume, is restarted and its queued deliveries proceed.
+ * the relaunch can resume, is restarted and its queued deliveries proceed. With none queued it is
+ * restarted all the same, as an unattended recovery (`RuntimeRelease.recoverStalled`).
  */
 export class StalledRecoverySweep<L extends ReleasableLaunch> {
   readonly #ports: StalledRecoverySweepPorts<L>;
@@ -77,12 +83,12 @@ export class StalledRecoverySweep<L extends ReleasableLaunch> {
         this.#ports.isRecovering(agentId)
       )
         continue;
-      if (!this.#ports.hasQueuedDeliveries(agentId)) continue;
       const stalled = this.#ports.stalled(agentId);
       if (!stalled) continue;
       judged++;
+      // With nothing queued the restart is the sweep's own: capped, and told where it stopped.
       await this.#ports
-        .recover(agentId, stalled)
+        .recover(agentId, stalled, { unattended: !this.#ports.hasQueuedDeliveries(agentId) })
         .then(() => {
           recoveries++;
         })
@@ -112,7 +118,11 @@ export type StalledRecoverySweepHost<L extends ReleasableLaunch> = Readonly<{
   release: Readonly<{
     isRecovering(agentId: string): boolean;
     stalled(agentId: string): StalledRuntime<L> | undefined;
-    recoverStalled(agentId: string, stalled: StalledRuntime<L>): Promise<void>;
+    recoverStalled(
+      agentId: string,
+      stalled: StalledRuntime<L>,
+      options?: Readonly<{ unattended?: boolean }>,
+    ): Promise<void>;
   }>;
 }>;
 
@@ -126,6 +136,6 @@ export function stalledRecoverySweep<L extends ReleasableLaunch>(
     isStopping: host.isStopping,
     isRecovering: (agentId) => host.release.isRecovering(agentId),
     stalled: (agentId) => host.release.stalled(agentId),
-    recover: (agentId, stalled) => host.release.recoverStalled(agentId, stalled),
+    recover: (agentId, stalled, options) => host.release.recoverStalled(agentId, stalled, options),
   });
 }

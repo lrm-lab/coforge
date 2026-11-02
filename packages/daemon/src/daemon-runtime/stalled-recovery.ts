@@ -1,4 +1,7 @@
+import { foldUntrustedLine, truncateCodePoints } from "@lrm/coforge-sdk/internal";
 import { processClockMs } from "#src/platform/process-tree";
+
+const LAST_STEP_MAX_CHARS = 200;
 
 /**
  * How long a busy turn's provider may stay silent before a new message restarts it, as in the
@@ -24,8 +27,16 @@ export class ProviderProgress {
     this.#turnStartedProcessClockMs = processClock();
   }
 
-  observe(): void {
+  #lastCompletedAtMs: number | undefined;
+
+  observe(event?: Readonly<{ type: string }>): void {
     this.#lastEventAtMs = Date.now();
+    if (event?.type === "completed") this.#lastCompletedAtMs = this.#lastEventAtMs;
+  }
+
+  /** When this launch last finished a turn; undefined until it does. */
+  get lastCompletedAtMs(): number | undefined {
+    return this.#lastCompletedAtMs;
   }
 
   /** Input that starts a turn (a notice to an idle Agent) restarts the clock, as in the reference
@@ -84,4 +95,49 @@ export function shouldRecoverStalledRuntime(facts: StalledRecoveryFacts): boolea
   const queuedTurnNeverStarted =
     !facts.turnBusy && !facts.liveTurn && (facts.queuedForMs ?? 0) >= STALLED_RECOVERY_SILENCE_MS;
   return (silentTurnStalled || queuedTurnNeverStarted) && !facts.hasOpenToolCall && facts.resumable;
+}
+
+/** How many times in a row a stalled turn is restarted with no message waiting for it (task
+ * #404). Past this the owner is told and the Agent is left alone until a message arrives or
+ * someone restarts it: a turn that hangs again every time is not helped by more restarts. */
+export const UNATTENDED_RECOVERY_LIMIT = 2;
+
+/** What an unattended recovery may do now: restart, report the limit (once), or nothing. */
+export type UnattendedRecoveryAdmission = "restart" | "limit" | "held";
+
+/**
+ * The run of unattended restarts per Agent. A turn that completes after the last restart ends
+ * the run (the relaunch's own progress says so), so the next stall starts a new one.
+ */
+export class UnattendedRecoveries {
+  readonly #runs = new Map<string, { count: number; lastAtMs: number; reported: boolean }>();
+
+  admit(
+    agentId: string,
+    lastCompletedAtMs: number | undefined,
+    nowMs = Date.now(),
+  ): UnattendedRecoveryAdmission {
+    let run = this.#runs.get(agentId);
+    if (run && lastCompletedAtMs !== undefined && lastCompletedAtMs > run.lastAtMs) run = undefined;
+    run ??= { count: 0, lastAtMs: 0, reported: false };
+    this.#runs.set(agentId, run);
+    if (run.count >= UNATTENDED_RECOVERY_LIMIT) {
+      if (run.reported) return "held";
+      run.reported = true;
+      return "limit";
+    }
+    run.count += 1;
+    run.lastAtMs = nowMs;
+    return "restart";
+  }
+}
+
+/** The first turn of a relaunch no message asked for: where the old turn stopped, and to go on
+ * from there. */
+export function unattendedResumePrompt(silentForMs: number, lastStep: string | undefined): string {
+  const minutes = Math.max(1, Math.round(silentForMs / 60_000));
+  // Activity text can quote a command or a provider message: one line, bounded (task #336).
+  const text = truncateCodePoints(foldUntrustedLine(lastStep ?? ""), LAST_STEP_MAX_CHARS);
+  const step = text ? ` Its last reported step was: ${text}.` : "";
+  return `[CoForge notice: Your previous turn produced no output for ${minutes} minutes, so CoForge restarted your runtime and resumed this session.${step} No new message is waiting. Continue the work you were doing from where it stopped: check its current state first instead of repeating finished steps. If it was waiting on something that cannot finish, tell whoever asked for the work.]`;
 }

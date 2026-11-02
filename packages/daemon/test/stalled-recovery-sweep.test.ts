@@ -41,15 +41,19 @@ test("the sweep restarts a stalled Agent that has deliveries waiting", async () 
   expect(recovered).toEqual(["agent-a"]);
 });
 
-test("a stalled Agent with nothing queued is left alone", async () => {
+test("a stalled Agent with nothing queued is restarted too, as an unattended recovery (task #404)", async () => {
   const stalled = stalledRuntime("agent-a");
-  const { p, recovered } = ports({
-    agentIds: () => ["agent-a"],
-    hasQueuedDeliveries: () => false,
+  const unattended: Array<boolean | undefined> = [];
+  const { p } = ports({
+    agentIds: () => ["agent-a", "agent-b"],
+    hasQueuedDeliveries: (id) => id === "agent-b",
     stalled: () => stalled,
+    recover: async (_agentId, _stalled, options) => {
+      unattended.push(options?.unattended);
+    },
   });
   await new StalledRecoverySweep(p).sweep();
-  expect(recovered).toEqual([]);
+  expect(unattended).toEqual([true, false]);
 });
 
 test("a runner hold or a recovery in flight suppresses the judgment", async () => {

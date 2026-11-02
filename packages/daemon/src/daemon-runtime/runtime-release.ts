@@ -11,9 +11,14 @@ import {
 } from "#src/agent-runtime/wake-session-recycle";
 import { runtimeDisplayName } from "./session-invalidate-activity";
 import { idleBlocker, type AgentIdleFacts, type ColdIdleAgent } from "./cold-idle-sweep";
+import type { BusyActivity } from "./agent-activity-publisher";
+import type { LaunchRequest } from "./runtime-launch-types";
 import {
   STALLED_RECOVERY_EXIT_TIMEOUT_MS,
+  UNATTENDED_RECOVERY_LIMIT,
+  UnattendedRecoveries,
   shouldRecoverStalledRuntime,
+  unattendedResumePrompt,
   type ProviderProgress,
 } from "./stalled-recovery";
 
@@ -52,16 +57,29 @@ type RuntimeReleasePlan = Readonly<{
     awaited: boolean;
     /** Logged when the relaunch fails. */
     failure: Readonly<{ message: string; event: string }>;
+    /** The relaunch's first turn, when no message waits to be it. */
+    resumePrompt?: string;
   }>;
 }>;
+
+/** What a wake relaunches from: the remembered restart config, and the first turn to give it. */
+export type WakeRestart = AgentRestartConfig & Readonly<{ resumePrompt?: string }>;
+
+/** The launch a wake asks for: the session to resume and, when there is one, its first turn. */
+export function wakeRequest(restart: WakeRestart): LaunchRequest {
+  return {
+    sessionId: restart.sessionId,
+    ...(restart.resumePrompt !== undefined ? { resumePrompt: restart.resumePrompt } : {}),
+  };
+}
 
 export type RuntimeReleasePorts<L extends ReleasableLaunch> = Readonly<{
   /** The Agent's current launch. */
   launch(agentId: string): L | undefined;
   runtime(agentId: string): AgentRuntime | undefined;
   restartConfig(agentId: string): AgentRestartConfig | undefined;
-  /** The launch of the Agent's last busy Activity, while it has one. */
-  lastBusyLaunch(agentId: string): L | undefined;
+  /** The Agent's last busy Activity and its launch, while it has one. */
+  lastBusy(agentId: string): BusyActivity<L> | undefined;
   /** How long the Agent's oldest queued delivery has waited, if any is queued. */
   queuedForMs(agentId: string): number | undefined;
   /** The session reported to the cloud can be resumed by a relaunch. */
@@ -88,7 +106,7 @@ export type RuntimeReleasePorts<L extends ReleasableLaunch> = Readonly<{
   /** The runtime stayed up: presents what was kept as it would at a turn's end. */
   flushParked(agentId: string): void;
   /** Launches the Agent again from its remembered restart config. */
-  wake(agentId: string, restart: AgentRestartConfig): Promise<unknown>;
+  wake(agentId: string, restart: WakeRestart): Promise<unknown>;
   /** Publishes an Activity for `launch`. */
   publish(
     agentId: string,
@@ -111,6 +129,7 @@ export type RuntimeReleasePorts<L extends ReleasableLaunch> = Readonly<{
 export class RuntimeRelease<L extends ReleasableLaunch> {
   readonly #ports: RuntimeReleasePorts<L>;
   readonly #recovering = new Set<string>();
+  readonly #unattended = new UnattendedRecoveries();
 
   constructor(ports: RuntimeReleasePorts<L>) {
     this.#ports = ports;
@@ -131,7 +150,7 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
     const progress = launch?.progress;
     if (!launch || !progress || !session || !restart) return undefined;
     const stalled = shouldRecoverStalledRuntime({
-      turnBusy: this.#ports.lastBusyLaunch(agentId) === launch && session.hasLiveTurn !== false,
+      turnBusy: this.#ports.lastBusy(agentId)?.launch === launch && session.hasLiveTurn !== false,
       // A waiting delivery whose submitted turn never began reports no live turn: that is the
       // "queued but no new round started" case, not a turn to wait on.
       liveTurn: session.hasLiveTurn === true,
@@ -149,14 +168,47 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
    * Agent on the same launch, resuming the session it last reported. Messages meanwhile wait for
    * the relaunch.
    */
-  async recoverStalled(agentId: string, stalled: StalledRuntime<L>): Promise<void> {
+  async recoverStalled(
+    agentId: string,
+    stalled: StalledRuntime<L>,
+    options: Readonly<{ unattended?: boolean }> = {},
+  ): Promise<void> {
     const { launch, session, restart, silentForMs } = stalled;
+    let resumePrompt: string | undefined;
+    if (options.unattended) {
+      // No message waits: the restart is the sweep's own, capped per stuck spell (task #404).
+      const admission = this.#unattended.admit(agentId, launch.progress?.lastCompletedAtMs);
+      if (admission === "held") return;
+      if (admission === "limit") return this.#reportUnattendedLimit(agentId, launch, restart);
+      resumePrompt = unattendedResumePrompt(
+        silentForMs,
+        this.#ports.lastBusy(agentId)?.activity.detail,
+      );
+    }
     await this.#endAndWake(
       agentId,
       launch,
       session,
-      stalledRuntimePlan(restart, agentId, silentForMs),
+      stalledRuntimePlan(restart, agentId, silentForMs, resumePrompt),
     );
+  }
+
+  /** The Agent stalled again after the last unattended restart allowed: its owner sees why, as
+   * the error banner, and nothing restarts it until a message arrives or someone does. */
+  #reportUnattendedLimit(agentId: string, launch: L, restart: AgentRestartConfig): void {
+    const runtimeName = runtimeDisplayName(restart.config.provider);
+    this.#ports.publish(
+      agentId,
+      launch,
+      "error",
+      AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_ERROR,
+      `The ${runtimeName} runtime stalled again after ${UNATTENDED_RECOVERY_LIMIT} automatic restarts with no message waiting. It is not restarted again until a message arrives or someone restarts it.`,
+    );
+    logger.warn("Agent runtime stalled past its unattended restart limit", {
+      event: "agent.runtime.stalled_recovery_limit",
+      agent_id: agentId,
+      limit: UNATTENDED_RECOVERY_LIMIT,
+    });
   }
 
   /** Restarts a live runtime so its next launch reads fresh launch config (a feature changed).
@@ -234,7 +286,13 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
       const sessionId = this.#ports.sessionId(agentId) ?? current.sessionId;
       // From here a message joins the wake launch as any other does.
       this.#recovering.delete(agentId);
-      const woken = this.#ports.wake(agentId, { ...current, sessionId }).catch((error: unknown) =>
+      const resumePrompt = plan.wake.resumePrompt;
+      const next: WakeRestart = {
+        ...current,
+        sessionId,
+        ...(resumePrompt ? { resumePrompt } : {}),
+      };
+      const woken = this.#ports.wake(agentId, next).catch((error: unknown) =>
         logger.error(plan.wake.failure.message, {
           event: plan.wake.failure.event,
           agent_id: agentId,
@@ -294,22 +352,28 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
   }
 }
 
+/** `resumePrompt` is the relaunch's first turn when no message waits for it. */
 function stalledRuntimePlan(
   restart: AgentRestartConfig,
   agentId: string,
   silentForMs: number,
+  resumePrompt?: string,
 ): RuntimeReleasePlan {
   const runtimeName = runtimeDisplayName(restart.config.provider);
+  const unattended = resumePrompt !== undefined;
   return {
     announce: {
       detailKind: AGENT_ACTIVITY_DETAIL_KIND.STALLED_RECOVERY,
-      text: `Restarting stalled ${runtimeName} runtime for queued message`,
+      text: unattended
+        ? `Restarting stalled ${runtimeName} runtime; no message was waiting`
+        : `Restarting stalled ${runtimeName} runtime for queued message`,
     },
     log: () =>
-      logger.warn("Agent runtime stalled; restarting it for a queued message", {
+      logger.warn("Agent runtime stalled; restarting it", {
         event: "agent.runtime.stalled_recovery",
         agent_id: agentId,
         silent_for_ms: silentForMs,
+        unattended,
       }),
     failure: {
       text: `Restarting the stalled ${runtimeName} runtime failed`,
@@ -323,6 +387,7 @@ function stalledRuntimePlan(
         message: "Agent stalled-runtime relaunch failed",
         event: "agent.runtime.stalled_recovery_failed",
       },
+      ...(resumePrompt !== undefined ? { resumePrompt } : {}),
     },
   };
 }

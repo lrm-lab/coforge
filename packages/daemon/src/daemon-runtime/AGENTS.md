@@ -114,3 +114,7 @@ Read the [message attention and delivery rules](../../../../docs/agents/daemon-m
 ## Skills metadata
 
 - Resolve the stable Agent directory and route Skills queries and results; never parse skill files here. That belongs to `code-agent/agent-skills.ts`.
+- `stalled-recovery-sweep.ts` restarts a busy turn silent for 15 minutes with no open tool call and
+  a resumable session even when no message waits (task #404). Such an unattended restart resumes
+  with a prompt naming where the turn stopped, and at most `UNATTENDED_RECOVERY_LIMIT` run in a row
+  before a turn completes; past that the owner sees an error and only a message or a restart helps.

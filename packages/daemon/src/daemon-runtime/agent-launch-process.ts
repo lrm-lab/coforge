@@ -251,7 +251,7 @@ export async function launchAgentProcess(
     launch.replyIntents = replyIntents;
     launch.backgroundTasks = new OutstandingBackgroundTasks();
     const unsubscribe = runtime.session.subscribe((event) => {
-      progress.observe();
+      progress.observe(event);
       toolCalls.observe(event);
       replyIntents.observe(event);
       const isCurrent = current();

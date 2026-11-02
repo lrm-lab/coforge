@@ -24,7 +24,6 @@ import type { AgentProxy, LaunchRequest, SessionMode } from "./runtime-launch-ty
 import {
   AgentProcessManager,
   type CodeAgentProviderFactory,
-  type AgentRestartConfig,
   type AgentRuntime,
 } from "#src/agent-runtime/agent-process-manager";
 import { activityDraft } from "./activity-draft";
@@ -122,7 +121,7 @@ import { agentActivityDrafts } from "./agent-activity-drafts";
 import { sendAgentStatus, type AgentStatusReportPorts } from "./agent-status-report";
 import { agentIdForContext, contextFor } from "./agent-context";
 import { cleanupUnconfirmed, launchFailureDraft } from "./agent-failure-presentation";
-import { RuntimeRelease } from "./runtime-release";
+import { RuntimeRelease, wakeRequest, type WakeRestart } from "./runtime-release";
 import { AgentFeatureSync } from "./agent-feature-sync";
 import { WakeRecycle } from "./wake-recycle";
 import { AgentMessageOperations } from "./agent-message-operations";
@@ -275,7 +274,7 @@ export class DaemonRuntime {
     launch: (agentId) => this.#currentActivityLaunches.get(agentId),
     runtime: (agentId) => this.#agentProcessManager.runtime(agentId),
     restartConfig: (agentId) => this.#agentProcessManager.restartConfig(agentId),
-    lastBusyLaunch: (agentId) => this.#activityPublisher.lastBusy(agentId)?.launch,
+    lastBusy: (agentId) => this.#activityPublisher.lastBusy(agentId),
     queuedForMs: (agentId) => this.#deliveryQueue.queuedForMs(agentId),
     resumable: (agentId) => this.#runningMentionIdentity(agentId) !== undefined,
     sessionId: (agentId) => this.#stopState.sessionId(agentId),
@@ -1279,10 +1278,8 @@ export class DaemonRuntime {
 
   /** Relaunches an exited Agent for a message; a failure starts or extends the wake cooldown. A
    * successful launch presents whatever `AgentDeliveryQueue` holds for it as one notice. */
-  #wakeAgent(agentId: string, restart: AgentRestartConfig): Promise<AgentRuntime> {
-    const launch = this.#startAgent(agentId, restart.config, undefined, {
-      sessionId: restart.sessionId,
-    });
+  #wakeAgent(agentId: string, restart: WakeRestart): Promise<AgentRuntime> {
+    const launch = this.#startAgent(agentId, restart.config, undefined, wakeRequest(restart));
     this.#wakeLaunches.add(agentId);
     void launch
       .catch(() => this.#wakeLaunchFailures.recordFailure(agentId))
