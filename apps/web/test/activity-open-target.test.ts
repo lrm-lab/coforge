@@ -1,5 +1,10 @@
 import { expect, test } from "bun:test";
-import { activityChatLink, activityOpenTarget } from "#src/features/inbox/activity-open-target";
+import {
+  activityChatLink,
+  activityOpenTarget,
+  waitingChoiceTarget,
+} from "#src/features/inbox/activity-open-target";
+import type { WaitingChoiceCard } from "#src/server/conversations/waiting-choice-cards.server";
 import type { ActivityInboxItem } from "#src/server/inbox/activity-inbox.server";
 
 /** A channel's Activity item: only what `activityOpenTarget` reads. */
@@ -95,4 +100,46 @@ test("a reply to a comment opens at the comment it answers, the one the comments
     attachmentId: "file",
     commentId: "root-comment",
   });
+});
+
+/** A waiting choice card in a channel: only what `waitingChoiceTarget` reads. */
+function card(overrides: Partial<WaitingChoiceCard>): WaitingChoiceCard {
+  return {
+    messageId: "card",
+    conversationId: "conversation",
+    channel: { name: "general", visibility: "public" },
+    threadRootId: null,
+    task: null,
+    ...overrides,
+  } as WaitingChoiceCard;
+}
+
+test("a waiting choice card opens at the card, in its channel or direct conversation", () => {
+  expect(waitingChoiceTarget(card({}))).toEqual({
+    kind: "channel",
+    id: "conversation",
+    messageId: "card",
+  });
+  expect(waitingChoiceTarget(card({ channel: null }))).toEqual({
+    kind: "dm",
+    id: "conversation",
+    messageId: "card",
+  });
+});
+
+test("a waiting choice card posted in a thread opens that thread alone, at the card", () => {
+  expect(waitingChoiceTarget(card({ threadRootId: "root" }))).toEqual({
+    kind: "channel",
+    id: "conversation",
+    messageId: "root",
+    threadRootId: "root",
+    threadReplyId: "card",
+    threadAlone: true,
+  });
+});
+
+test("a waiting choice card in a Task's conversation opens the Task over its channel's board", () => {
+  expect(
+    waitingChoiceTarget(card({ channel: null, task: { conversationId: "channel", number: 7 } })),
+  ).toEqual({ kind: "channel", id: "channel", task: 7 });
 });

@@ -1,8 +1,20 @@
 import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { getRouteApi } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { keepPreviousData, useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import { AtSign, CheckDone01, Inbox01, Mail01, Pin01 } from "@untitledui/icons";
+import {
+  keepPreviousData,
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import {
+  AtSign,
+  CheckDone01,
+  Inbox01,
+  Mail01,
+  MessageQuestionCircle,
+  Pin01,
+} from "@untitledui/icons";
 
 import { Tab, TabList, Tabs } from "#src/components/application/tabs/tabs";
 import { Badge } from "#src/components/base/badges/badges";
@@ -28,6 +40,8 @@ import {
   ACTIVITY_INBOX_QUERY_PREFIX,
   activityInboxQuery,
   type ActivityInboxPage,
+  WAITING_CHOICE_CARDS_KEY,
+  waitingChoiceCardsQuery,
 } from "./activity-inbox-queries";
 import { useActivityDoneProjection } from "./activity-inbox-done";
 import type { ActivityInboxFilter } from "./activity-inbox.schemas";
@@ -36,6 +50,7 @@ import { ACTIVITY_LIST_BESIDE_FROM, ActivityConversationPane } from "./activity-
 import { openedItemKey } from "./activity-open-target";
 import { useActivityItemActions } from "./use-activity-item-actions";
 import { ActivityInboxRow } from "./activity-inbox-row";
+import { WaitingChoiceRow } from "./waiting-choice-row";
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
@@ -85,6 +100,14 @@ export function ActivityInboxView({
     () => (query.data ? projectDone(query.data) : undefined),
     [query.data, projectDone],
   );
+
+  // The choice cards waiting on the viewer head the All view, so a question is not buried by chat.
+  const waitingQuery = useQuery({
+    ...waitingChoiceCardsQuery(workspaceId),
+    enabled: filter === "all",
+  });
+  // A disabled query keeps its cached cards: the filter hides them on the other views.
+  const waiting = (filter === "all" && waitingQuery.data) || [];
 
   const firstPage = projectedData?.pages[0];
   const pinned = useMemo(() => firstPage?.pinned ?? [], [firstPage]);
@@ -147,10 +170,19 @@ export function ActivityInboxView({
       ),
     [filter, queryClient, refreshLists, user.id, workspaceId],
   );
+  // A choice card posted, answered or withdrawn is announced to the person it asks as an Activity
+  // change, once per burst.
+  const refreshWaiting = useCallback(
+    () => void queryClient.invalidateQueries({ queryKey: WAITING_CHOICE_CARDS_KEY }),
+    [queryClient],
+  );
   useActivityInboxRealtime({
     userId: user.id,
     onMessage: refreshFirstPage,
-    onActivity: refreshLists,
+    onActivity: () => {
+      refreshLists();
+      refreshWaiting();
+    },
     onSubscribed,
     refreshOnPins: true,
   });
@@ -178,26 +210,12 @@ export function ActivityInboxView({
     run();
   }, [markAllRead, loadedAt, refresh]);
 
-  const empty = items.length === 0 && pinned.length === 0;
-  const pinnedLabel = m.conversation_pinned_section();
-  const sections = [
-    {
-      heading: <ActivityInboxSectionHeading icon={Pin01} label={pinnedLabel} />,
-      label: pinnedLabel,
-      items: pinned,
-    },
-    {
-      heading: pinned.length > 0 && (
-        <ActivityInboxSectionHeading
-          label={m.activity_inbox_all_conversations()}
-          className="pt-4"
-        />
-      ),
-      label: m.navigation_activity(),
-      items,
-    },
-  ].filter((section) => section.items.length > 0);
-
+  // Not empty while the waiting cards are still being read: they may be all there is.
+  const empty =
+    items.length === 0 &&
+    pinned.length === 0 &&
+    waiting.length === 0 &&
+    !(filter === "all" && waitingQuery.isPending);
   const row = (item: ActivityInboxItem) => (
     <ActivityInboxRow
       key={item.key}
@@ -209,6 +227,23 @@ export function ActivityInboxView({
       onOpen={onOpen}
     />
   );
+  // Waiting on you, Pinned, then the rest: each section that has rows, the rest headed only below
+  // another.
+  const sections = [
+    {
+      label: m.activity_inbox_waiting(),
+      icon: MessageQuestionCircle,
+      rows: waiting.map((card) => (
+        <WaitingChoiceRow key={card.messageId} card={card} onOpen={onOpen} />
+      )),
+    },
+    { label: m.conversation_pinned_section(), icon: Pin01, rows: pinned.map(row) },
+    {
+      label: m.navigation_activity(),
+      heading: m.activity_inbox_all_conversations(),
+      rows: items.map(row),
+    },
+  ].filter((section) => section.rows.length > 0);
 
   const activeCount = firstPage?.activeItemCount;
   const list = (
@@ -296,11 +331,17 @@ export function ActivityInboxView({
         ) : empty ? (
           <ActivityInboxEmpty filter={filter} onShowAll={() => onFilterChange("all")} />
         ) : (
-          sections.map((section) => (
+          sections.map((section, index) => (
             <Fragment key={section.label}>
-              {section.heading}
+              {(section.icon || index > 0) && (
+                <ActivityInboxSectionHeading
+                  icon={section.icon}
+                  label={section.heading ?? section.label}
+                  className={cn(index > 0 && "pt-4")}
+                />
+              )}
               <ol aria-label={section.label} className="flex flex-col">
-                {section.items.map(row)}
+                {section.rows}
               </ol>
             </Fragment>
           ))

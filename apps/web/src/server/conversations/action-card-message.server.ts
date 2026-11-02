@@ -63,6 +63,7 @@ export async function publishActionCardMessage(
     ...(await messageSignalScope(db, target.conversationId, workspaceId)),
     threadRootId: target.threadRootId,
   });
+  await announceToAskedPerson(db, realtime, message.id);
 }
 
 /** A card's state changed: browsers showing its message refresh it. */
@@ -89,5 +90,31 @@ export async function publishActionCardUpdate(
       });
   } catch {
     // PostgreSQL remains canonical; browser reconciliation repairs a missed publication.
+  }
+  // Answered here or in another tab, or withdrawn: it no longer waits on the person it asks.
+  await announceToAskedPerson(db, realtime, messageId);
+}
+
+/**
+ * A choice card posted or changed: the person it asks hears an Activity change, and their "Waiting
+ * on you" list reads again. Sent to them alone, wherever the card is: a thread they do not follow
+ * or a Task's conversation announces its message to no one else's Activity.
+ */
+async function announceToAskedPerson(
+  db: PrismaClient,
+  realtime: ConversationRealtime | undefined,
+  messageId: string,
+) {
+  if (!realtime?.activityChanged) return;
+  try {
+    const card = await db.actionCard.findUnique({
+      where: { messageId },
+      select: { kind: true, payload: true, workspaceId: true },
+    });
+    const asked = card?.kind === "choice" ? (card.payload as { to?: string }).to : undefined;
+    if (card && asked)
+      await realtime.activityChanged({ workspaceId: card.workspaceId, userId: asked });
+  } catch {
+    // PostgreSQL remains canonical; the list reads again when Activity next loads it.
   }
 }

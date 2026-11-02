@@ -18,7 +18,11 @@ import type {
 } from "#src/features/realtime/subscription-gap";
 import type { ActivityInboxItem } from "#src/server/inbox/activity-inbox.server";
 
-import { loadActivityInbox, loadActivityNavAttention } from "./activity-inbox.functions";
+import {
+  loadActivityInbox,
+  loadActivityNavAttention,
+  loadWaitingChoiceCards,
+} from "./activity-inbox.functions";
 import type { ActivityInboxCursor, ActivityInboxFilter } from "./activity-inbox.schemas";
 
 /** Every cached page of every view shares this prefix, so one invalidation refreshes them all. */
@@ -104,6 +108,18 @@ function withoutItem<
     })),
   };
 }
+
+/** Every workspace's "Waiting on you" list. Apart from the inbox's prefix: reading or finishing an
+ * item cannot change which cards wait, so those refreshes leave it be. */
+export const WAITING_CHOICE_CARDS_KEY = ["waiting-choice-cards"] as const;
+
+/** The choice cards waiting on the viewer, for Activity's first section. The server announces a
+ * card posted, answered or withdrawn to the person it asks as an Activity change. */
+export const waitingChoiceCardsQuery = (workspaceId: string) =>
+  queryOptions({
+    queryKey: [...WAITING_CHOICE_CARDS_KEY, workspaceId],
+    queryFn: () => loadWaitingChoiceCards(),
+  });
 
 /** Whether the viewer has unread activity, for the nav rail's Activity dot. Shares the inbox's
  * query prefix, so every list refresh also refreshes the dot. An answer read from further back in

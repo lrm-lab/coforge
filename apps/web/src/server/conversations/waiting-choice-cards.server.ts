@@ -1,3 +1,5 @@
+import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
+import type { ChannelVisibility } from "#src/features/conversations/channel-visibility";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { readableConversationWhere } from "./channel-read-access.server";
 
@@ -5,18 +7,21 @@ import { readableConversationWhere } from "./channel-read-access.server";
 export type WaitingChoiceCard = {
   messageId: string;
   conversationId: string;
-  channelName: string | null;
+  /** The channel the card is in; null in a direct conversation or a Task's. */
+  channel: { name: string; visibility: ChannelVisibility } | null;
+  /** The thread the card was posted in, when it is a reply. */
+  threadRootId: string | null;
+  /** The Task whose conversation the card is in, by its channel and number. */
+  task: { conversationId: string; number: number } | null;
   prompt: string;
   options: { id: string; label: string }[];
-  /** The asked person's user id. */
-  to: string;
-  preparedBy: { agentId: string; name: string };
+  preparedBy: { agentId: string; name: string; avatarUrl: string };
   createdAt: string;
 };
 
 /**
- * The pending choice cards this person may answer, newest first: a card that names them, in a
- * conversation they can read. The card's own commit rule (`payload.to`) is the filter.
+ * The pending choice cards this person may answer, newest first: a card that names them (its
+ * `payload.to`, the card's own commit rule), in a conversation they can read.
  */
 export async function waitingChoiceCards(
   db: Pick<PrismaClient, "actionCard">,
@@ -28,6 +33,7 @@ export async function waitingChoiceCards(
       workspaceId,
       kind: "choice",
       state: "pending",
+      payload: { path: ["to"], equals: userId },
       conversation: readableConversationWhere(workspaceId, { userId }),
     },
     orderBy: { createdAt: "desc" },
@@ -36,28 +42,37 @@ export async function waitingChoiceCards(
       conversationId: true,
       payload: true,
       createdAt: true,
-      conversation: { select: { channelName: true } },
-      preparedByAgent: { select: { id: true, name: true } },
+      message: { select: { threadRootId: true } },
+      conversation: {
+        select: {
+          channelName: true,
+          visibility: true,
+          taskDiscussionOf: { select: { conversationId: true, number: true } },
+        },
+      },
+      preparedByAgent: { select: { id: true, displayName: true, avatarMascot: true } },
     },
   });
-  return cards.flatMap((card) => {
-    const payload = card.payload as {
-      to?: string;
-      prompt?: string;
-      options?: { id: string; label: string }[];
-    };
-    if (payload.to !== userId) return [];
-    return [
-      {
-        messageId: card.messageId,
-        conversationId: card.conversationId,
-        channelName: card.conversation.channelName,
-        prompt: payload.prompt ?? "",
-        options: payload.options ?? [],
-        to: userId,
-        preparedBy: { agentId: card.preparedByAgent.id, name: card.preparedByAgent.name },
-        createdAt: card.createdAt.toISOString(),
+  return cards.map((card) => {
+    const payload = card.payload as { prompt?: string; options?: { id: string; label: string }[] };
+    const { channelName, visibility, taskDiscussionOf } = card.conversation;
+    const agent = card.preparedByAgent;
+    return {
+      messageId: card.messageId,
+      conversationId: card.conversationId,
+      channel: channelName
+        ? { name: channelName, visibility: visibility as ChannelVisibility }
+        : null,
+      threadRootId: card.message.threadRootId,
+      task: taskDiscussionOf,
+      prompt: payload.prompt ?? "",
+      options: payload.options ?? [],
+      preparedBy: {
+        agentId: agent.id,
+        name: agent.displayName,
+        avatarUrl: agentAvatarUrl(agent.id, agent.avatarMascot),
       },
-    ];
+      createdAt: card.createdAt.toISOString(),
+    };
   });
 }

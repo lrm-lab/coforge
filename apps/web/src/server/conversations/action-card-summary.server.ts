@@ -1,4 +1,5 @@
 import type { ActionCardAction } from "@lrm/coforge-sdk/agent";
+import { choiceLetter } from "#src/features/conversations/choice-letter";
 import { bareHandle } from "./action-card-handles.server";
 import { appRecoverOwnerSummary } from "./app-recover-owner-action-cards.server";
 import { appRegisterSummary } from "./app-register-action-cards.server";
@@ -22,11 +23,12 @@ export function actionCardSummary(action: ActionCardAction): string {
       : "Open the cloud desktop to finish this step";
   }
   if (action.type === "choice") {
-    // Lettered as the card letters them, so a reply of "B" reads as the second option.
+    // Lettered as the card letters them, so a reply of "B" reads as the second option. No English
+    // lead-in: the body is the card's preview, and the question is in the asker's own language.
     const labels = action.options
-      .map((option, index) => `${String.fromCharCode(65 + index)}. ${option.label}`)
+      .map((option, index) => `${choiceLetter(index)}. ${option.label}`)
       .join("; ");
-    return `Choose: ${action.prompt} (${labels})`;
+    return `${action.prompt} (${labels})`;
   }
   if (action.type === "channel:create") return `Action card: create channel #${action.name}`;
   if (action.type === "agent:create") return `Action card: create agent ${action.name}`;

@@ -110,9 +110,14 @@ test("choosing an option wakes the asking Agent with the choice, and posts no me
       return new Map(publications.map((_, index) => [String(index), { status: "sent" }]));
     },
   };
+  const changed: unknown[] = [];
+  const realtime = {
+    messageAvailable: async () => undefined,
+    activityChanged: async (input: unknown) => void changed.push(input),
+  };
   const result = await commitChoiceCard(
     db,
-    undefined,
+    realtime as never,
     { workspaceId, actorUserId: userId },
     { messageId, optionId: "a" },
     { publisher: publisher as never },
@@ -121,6 +126,8 @@ test("choosing an option wakes the asking Agent with the choice, and posts no me
   const card = await db.actionCard.findUniqueOrThrow({ where: { messageId } });
   expect(card.state).toBe("executed");
   expect(card.result).toEqual({ optionId: "a", label: "Red" });
+  // The asked person's Activity hears the card leave their "Waiting on you" list.
+  expect(changed).toEqual([{ workspaceId, userId }]);
   const delivery = await db.agentMessageDelivery.findUniqueOrThrow({
     where: { messageId_agentId: { messageId, agentId } },
   });
@@ -224,5 +231,18 @@ test("the waiting list shows the cards this person may answer", async () => {
   const noTo = await makeCard(4, {});
   const waiting = await waitingChoiceCards(db, workspaceId, userId);
   expect(waiting.map((card) => card.messageId)).toEqual([mine]);
+  // Where to open it and who asks: a channel card, not in a thread or a Task.
+  expect(waiting[0]).toMatchObject({
+    conversationId,
+    channel: { visibility: "public" },
+    threadRootId: null,
+    task: null,
+    prompt: "Which?",
+    options: [
+      { id: "a", label: "Red" },
+      { id: "b", label: "Blue" },
+    ],
+    preparedBy: { agentId },
+  });
   expect(waiting.some((card) => card.messageId === other || card.messageId === noTo)).toBe(false);
 });

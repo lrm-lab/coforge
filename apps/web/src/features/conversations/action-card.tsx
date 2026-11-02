@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Badge } from "#src/components/base/badges/badges";
@@ -47,6 +47,7 @@ import { getCloudDesktopOrigin } from "#src/features/computers/cloud-desktop-ori
 import { cloudDesktopUrl, openCloudDesktopWindow } from "#src/features/computers/cloud-desktop-url";
 import { formatAgentProfileParam } from "#src/features/agents/profile-panel/profile-panel-search";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
+import { WAITING_CHOICE_CARDS_KEY } from "#src/features/inbox/activity-inbox-queries";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { projectsQuery } from "#src/features/projects/project-tree-queries";
 import type { ActionCardRef, ActionCardView } from "#src/server/conversations/action-cards.server";
@@ -86,6 +87,7 @@ export function ActionCard({ card }: { card: ActionCardView }) {
   const commitFill = useServerFn(commitPageFillActionCard);
   const commitDesktop = useServerFn(commitDesktopTakeoverActionCard);
   const commitChoice = useServerFn(commitChoiceActionCard);
+  const queryClient = useQueryClient();
   const [fillValues, setFillValues] = useState<Record<string, string>>({});
   const isPageFill = view.kind === "page:fill";
   const isDesktopTakeover = view.kind === "desktop:takeover";
@@ -215,6 +217,8 @@ export function ActionCard({ card }: { card: ActionCardView }) {
     setError("");
     try {
       await commitChoice({ data: { messageId: view.messageId, optionId } });
+      // Answered, it no longer waits on the viewer in Activity.
+      void queryClient.invalidateQueries({ queryKey: WAITING_CHOICE_CARDS_KEY });
       await refetch();
     } catch {
       setError(m.action_card_error());

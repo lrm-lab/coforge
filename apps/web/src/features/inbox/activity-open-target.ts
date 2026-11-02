@@ -2,6 +2,7 @@ import {
   messageHash,
   type HostedConversationTarget,
 } from "#src/features/conversations/conversation-page-search";
+import type { WaitingChoiceCard } from "#src/server/conversations/waiting-choice-cards.server";
 import type { ActivityInboxItem } from "#src/server/inbox/activity-inbox.server";
 
 /**
@@ -50,15 +51,37 @@ export function activityOpenTarget({
   // what is new.
   const anchor = mentionAction ? latest.id : (firstUnreadMessageId ?? firstMentionMessageId);
   return rootId
-    ? {
-        kind,
-        id: place.conversationId,
-        messageId: rootId,
-        threadRootId: rootId,
-        threadReplyId: anchor ?? undefined,
-        threadAlone: true,
-      }
+    ? threadAlone(kind, place.conversationId, rootId, anchor ?? undefined)
     : { kind, id: place.conversationId, messageId: anchor ?? latest.id };
+}
+
+/** A thread opened alone, scrolled to `replyId`. */
+function threadAlone(
+  kind: "channel" | "dm",
+  conversationId: string,
+  rootId: string,
+  replyId: string | undefined,
+): HostedConversationTarget {
+  return {
+    kind,
+    id: conversationId,
+    messageId: rootId,
+    threadRootId: rootId,
+    threadReplyId: replyId,
+    threadAlone: true,
+  };
+}
+
+/**
+ * Where a waiting choice card opens, at the card, to be answered there: a Task's card in its popup
+ * over the board, a reply's in its thread alone, any other in its channel or direct conversation.
+ */
+export function waitingChoiceTarget(card: WaitingChoiceCard): HostedConversationTarget {
+  if (card.task) return { kind: "channel", id: card.task.conversationId, task: card.task.number };
+  const kind = card.channel ? "channel" : "dm";
+  return card.threadRootId
+    ? threadAlone(kind, card.conversationId, card.threadRootId, card.messageId)
+    : { kind, id: card.conversationId, messageId: card.messageId };
 }
 
 /** The target's place in Chat, as a TanStack `Link`'s options. */

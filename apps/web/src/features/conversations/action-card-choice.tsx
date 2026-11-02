@@ -5,11 +5,9 @@ import { Button } from "#src/components/base/buttons/button";
 import type { ActionCardView } from "#src/server/conversations/action-cards.server";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
+import { choiceLetter } from "./choice-letter";
 
 type ChoiceView = Extract<ActionCardView, { kind: "choice" }>;
-
-/** A, B, C… for the options in their order: what a person says ("B") when they answer by typing. */
-const letter = (index: number) => String.fromCharCode(65 + index);
 
 /**
  * An Agent's question with lettered options. The asked person picks one and the card closes on it:
@@ -48,7 +46,7 @@ export function ChoiceActionCard({
     if (document.activeElement === document.body) cardRef.current?.focus();
     setAnnouncement(
       m.action_card_choice_chosen({
-        option: `${letter(chosenIndex)}. ${view.options[chosenIndex]!.label}`,
+        option: `${choiceLetter(chosenIndex)}. ${view.options[chosenIndex]!.label}`,
       }),
     );
   }, [executed, isAsked, chosenIndex, view.options]);
@@ -87,19 +85,23 @@ export function ChoiceActionCard({
                     "group-hover:bg-primary group-hover:text-brand-secondary group-hover:ring-brand",
                 )}
               >
-                {letter(index)}
+                {choiceLetter(index)}
               </span>
-              <span className="min-w-0 flex-1 text-sm wrap-anywhere text-primary">
+              {/* Row tops align: the letter sits beside the option's first line, however many it
+                  wraps to. */}
+              <span className="mt-0.5 min-w-0 flex-1 text-sm wrap-anywhere text-primary">
                 {option.label}
               </span>
-              {answeredBy && <span className="shrink-0 text-xs text-tertiary">{answeredBy}</span>}
+              {answeredBy && (
+                <span className="mt-1 shrink-0 text-xs text-tertiary">{answeredBy}</span>
+              )}
             </>
           );
           return (
             <li key={option.id}>
               {view.canCommit ? (
                 <AriaButton
-                  aria-label={`${letter(index)}. ${option.label}`}
+                  aria-label={`${choiceLetter(index)}. ${option.label}`}
                   // Stays focusable while the pick is sent, so a failed pick leaves focus here.
                   aria-disabled={picking ? true : undefined}
                   onPress={async () => {
@@ -112,7 +114,7 @@ export function ChoiceActionCard({
                     }
                   }}
                   className={cn(
-                    "group flex w-full cursor-pointer items-center gap-3 rounded-lg px-1 py-1.5 text-left outline-focus-ring focus-visible:outline-2",
+                    "group flex w-full cursor-pointer items-start gap-3 rounded-lg px-1 py-1.5 text-left outline-focus-ring focus-visible:outline-2",
                     "hover:bg-primary_hover aria-disabled:cursor-default aria-disabled:hover:bg-transparent",
                     picking && !isChosen && "opacity-50",
                   )}
@@ -120,7 +122,7 @@ export function ChoiceActionCard({
                   {row}
                 </AriaButton>
               ) : (
-                <div className="flex items-center gap-3 px-1 py-1.5">{row}</div>
+                <div className="flex items-start gap-3 px-1 py-1.5">{row}</div>
               )}
             </li>
           );

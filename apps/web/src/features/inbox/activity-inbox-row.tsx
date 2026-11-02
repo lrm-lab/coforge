@@ -26,6 +26,15 @@ import { activityChatLink, activityOpenTarget } from "./activity-open-target";
 import { activityRowPlace } from "./activity-row-place";
 import type { ActivityItemActions } from "./use-activity-item-actions";
 
+/** An Activity row's item: a hairline divides it from the row above, from the text column on (past
+ * the gutter, the 2.375rem face and the 0.75rem gap). */
+export const ACTIVITY_ROW_ITEM_CLASS =
+  "group relative before:pointer-events-none before:absolute before:top-0 before:right-0 before:left-[calc(var(--page-gutter)+3.125rem)] before:border-t before:border-secondary first:before:hidden";
+
+/** An Activity row's link: the face and the two text lines, on the page's inset. */
+export const ACTIVITY_ROW_LINK_CLASS =
+  "flex items-center gap-3 px-page py-3 outline-focus-ring transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2";
+
 /** A message's text rendered as inline Markdown, or its first attachment's name. */
 function Preview({ message }: { message: ActivityInboxItem["latest"] }) {
   // A system notice reads in the viewer's language, not as its stored English body.
@@ -88,9 +97,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
   }
 
   return (
-    // A hairline divides a row from the one above it, from the text column on: past the gutter,
-    // the 2.375rem icon and the 0.75rem gap.
-    <li className="group relative select-none [-webkit-touch-callout:none] before:pointer-events-none before:absolute before:top-0 before:right-0 before:left-[calc(var(--page-gutter)+3.125rem)] before:border-t before:border-secondary first:before:hidden">
+    <li className={cn(ACTIVITY_ROW_ITEM_CLASS, "select-none [-webkit-touch-callout:none]")}>
       {/* The row is a React Aria link so the context menu (`MenuTrigger trigger="contextMenu"`)
           can use it as its trigger; `render` hands the element to TanStack's `Link`, which owns
           navigation. Opening a row reads it, like opening the conversation does. */}
@@ -127,7 +134,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
             )
           }
           className={cn(
-            "flex items-center gap-3 px-page py-3 outline-focus-ring transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2",
+            ACTIVITY_ROW_LINK_CLASS,
             // The row's own hover, kept while the pointer is on its Done check (a sibling).
             current ? "bg-chat-selected-bg" : "group-hover:bg-primary_hover",
           )}

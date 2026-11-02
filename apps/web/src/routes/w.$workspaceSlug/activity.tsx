@@ -19,7 +19,10 @@ import { PageLoadError } from "#src/features/errors/page-load-error";
 import { ACTIVITY_LIST_BESIDE_FROM } from "#src/features/inbox/activity-conversation-pane";
 import { ActivityInboxPending } from "#src/features/inbox/activity-inbox-pending";
 import { ActivityInboxView } from "#src/features/inbox/activity-inbox-view";
-import { activityInboxQuery } from "#src/features/inbox/activity-inbox-queries";
+import {
+  activityInboxQuery,
+  waitingChoiceCardsQuery,
+} from "#src/features/inbox/activity-inbox-queries";
 import {
   ACTIVITY_INBOX_FILTERS,
   type ActivityInboxFilter,
@@ -52,7 +55,12 @@ export const Route = createFileRoute("/w/$workspaceSlug/activity")({
     const parent = await parentMatchPromise;
     const workspaceId = parent.loaderData?.currentWorkspace?.id;
     if (!workspaceId) return;
-    const ready = queryClient.ensureInfiniteQueryData(activityInboxQuery(workspaceId, deps.filter));
+    const ready = Promise.all([
+      queryClient.ensureInfiniteQueryData(activityInboxQuery(workspaceId, deps.filter)),
+      // The All view opens with what waits on the viewer above its rows, not pushed in after.
+      deps.filter === "all" &&
+        queryClient.ensureQueryData(waitingChoiceCardsQuery(workspaceId)).catch(() => undefined),
+    ]);
     // The open conversation is read as Chat reads it (`loadHostedConversation` reads only in the
     // browser). Opening another card while on Activity only starts the reads, so the pane shows
     // its loading state at once. A failed read is left to the pane, which says so.
