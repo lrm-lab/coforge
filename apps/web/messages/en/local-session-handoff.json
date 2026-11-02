@@ -20,15 +20,18 @@
   "handoff_active_warning": "This session was used in {tool} in the last few minutes. Make sure it has stopped there first, or both sides may change the project directory at once.",
   "handoff_agent_name": "Agent name",
   "handoff_model_default": "Default model",
-  "handoff_excerpt_failed": "Could not read this session's recent context — the briefing below will only carry the opening request. You can still proceed, or pick another session.",
+  "handoff_excerpt_failed": "Could not read this session's recent context, so the briefing below carries only the opening request. You can continue or choose another session.",
   "handoff_excerpt_busy": "The computer is still reading this session. Try again shortly.",
   "handoff_briefing_preview": "Briefing the agent will receive (review before sending)",
-  "handoff_briefing_failed": "Agent {name} was created, but sending the briefing failed — retrying only resends the briefing, it will not create a second agent.",
+  "handoff_briefing_failed": "Agent {name} was created, but the briefing could not be sent. Resending sends only this briefing and never creates a second Agent; you can also talk to it in its DM.",
   "handoff_resend": "Resend briefing",
   "handoff_submit": "Create Agent & Send Briefing",
   "handoff_creating": "Creating…",
   "handoff_agent_description": "Handoff agent taking over a {tool} session in {cwd}.",
   "handoff_role_user": "User",
   "handoff_role_assistant": "Assistant",
-  "handoff_briefing": "You are taking over an existing coding session as a handoff.\n\n- Source tool: {tool}\n- Model there: {model}\n- Project directory: {cwd}\n\nOriginal opening request:\n{firstMessage}\n\nMost recent exchanges (excerpt):\n{recent}\n\nFirst: cd into {cwd}, inspect the current state (git status, recent changes), then reply with a short takeover summary — what was being worked on, where it stands, and your plan — and continue the unfinished work from there."
+  "handoff_briefing": "You are taking over an existing coding session as a handoff.\n\n- Source tool: {tool}\n- Model there: {model}\n- Project directory: {cwd}\n\nOriginal opening request:\n{firstMessage}\n\nMost recent exchanges (excerpt):\n{recent}\n\nFirst: cd into {cwd}, inspect the current state (git status, recent changes), then reply with a short takeover summary — what was being worked on, where it stands, and your plan — and continue the unfinished work from there.",
+  "handoff_open_dm": "Open DM",
+  "handoff_no_match": "No sessions match the search",
+  "handoff_session_list": "Local sessions"
 }

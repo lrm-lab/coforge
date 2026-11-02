@@ -84,6 +84,7 @@ export function HandoffSessionPicker({
             state={state}
             listed={byTool[tool]}
             tool={tool}
+            query={picker.query}
             searching={searching}
             onSelect={onSelect}
             onRetry={onRetry}
@@ -98,6 +99,7 @@ function SessionListBody({
   state,
   listed,
   tool,
+  query,
   searching,
   onSelect,
   onRetry,
@@ -105,6 +107,7 @@ function SessionListBody({
   state: SessionListState;
   listed: LocalSessionEntry[];
   tool: HandoffRuntimeProvider;
+  query: string;
   searching: boolean;
   onSelect: (session: LocalSessionEntry) => void;
   onRetry: () => void;
@@ -127,7 +130,9 @@ function SessionListBody({
         <p className="py-8 text-center text-sm text-tertiary">
           {state.sessions.length === 0
             ? m.handoff_empty()
-            : m.handoff_tool_empty({ tool: runtimeProviderLabel(tool) })}
+            : query.trim()
+              ? m.handoff_no_match()
+              : m.handoff_tool_empty({ tool: runtimeProviderLabel(tool) })}
         </p>
       ) : (
         <SessionList sessions={listed} onSelect={onSelect} />
@@ -147,7 +152,7 @@ function SessionList({
   const now = Date.now();
   return (
     <ListBox
-      aria-label={m.handoff_title()}
+      aria-label={m.handoff_session_list()}
       selectionMode="none"
       onAction={(key) => {
         const session = sessions.find((candidate) => sessionKey(candidate) === key);

@@ -54,13 +54,17 @@ export function HandoffForm({
   );
   const [active] = useState(() => isRecentlyActive(session.updatedAtMs, Date.now()));
   const excerpt = useLocalSessionExcerpt(computerId, session);
-  const { submit, pending, error, createdName, briefingFailed } = useHandoffCreate({
-    onDone: onClose,
-  });
+  const { submit, pending, error, createdName, briefingFailed, openConversation } =
+    useHandoffCreate({
+      onDone: onClose,
+    });
+  const dmOpen = openConversation !== undefined;
   useEffect(() => {
-    onBusyChange(pending);
+    // Once the Agent's direct conversation is open, closing would lose the resend: the dialog stays
+    // until the briefing is delivered or the person leaves for that conversation.
+    onBusyChange(pending || dmOpen);
     return () => onBusyChange(false);
-  }, [pending, onBusyChange]);
+  }, [pending, dmOpen, onBusyChange]);
 
   const model = session.model.trim();
   const ready = excerpt.state.kind === "ready" ? excerpt.state.excerpt : undefined;
@@ -145,9 +149,15 @@ export function HandoffForm({
         <Alert color="error" description={m.handoff_briefing_failed({ name: shownName })} />
       )}
       <DialogActions>
-        <DialogCancel type="button" isDisabled={pending} onPress={onClose}>
-          {m.controls_cancel()}
-        </DialogCancel>
+        {openConversation ? (
+          <DialogCancel type="button" isDisabled={pending} onPress={() => void openConversation()}>
+            {m.handoff_open_dm()}
+          </DialogCancel>
+        ) : (
+          <DialogCancel type="button" isDisabled={pending} onPress={onClose}>
+            {m.controls_cancel()}
+          </DialogCancel>
+        )}
         <DialogAction
           type="submit"
           isDisabled={!canSubmit}

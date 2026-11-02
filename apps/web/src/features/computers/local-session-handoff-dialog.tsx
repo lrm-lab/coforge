@@ -69,6 +69,9 @@ function HandoffContent({
     queryFn: () => loadComputers(),
     staleTime: 0,
     gcTime: 0,
+    // Not again while the dialog is open: a changed list would move the wizard to another Computer.
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
   // A cloud Computer has no one's own sessions to hand off.
   const own = (computers.data ?? []).filter(
@@ -79,7 +82,9 @@ function HandoffContent({
   const computerId = own.some((computer) => computer.id === chosenId)
     ? chosenId
     : (own.find((computer) => computer.online) ?? own[0])?.id;
-  const [session, setSession] = useState<LocalSessionEntry>();
+  // The session belongs to the Computer it was picked on; another Computer drops it.
+  const [picked, setPicked] = useState<{ computerId: string; session: LocalSessionEntry }>();
+  const session = picked && picked.computerId === computerId ? picked.session : undefined;
 
   return (
     <>
@@ -103,7 +108,7 @@ function HandoffContent({
       </div>
       {computers.isPending ? (
         <HandoffProgress label={m.handoff_loading()} />
-      ) : computers.isError ? (
+      ) : computers.data === undefined ? (
         <HandoffRefusal
           color="warning"
           text={m.channel_members_computers_error()}
@@ -146,7 +151,11 @@ function HandoffContent({
             key={computerId}
             computerId={computerId}
             session={session}
-            onSessionChange={setSession}
+            onSessionChange={(next) => {
+              // Picking a session pins its Computer, so nothing can move the form to another.
+              if (next) setChosenId(computerId);
+              setPicked(next && { computerId, session: next });
+            }}
             onBusyChange={onBusyChange}
             onClose={onClose}
           />

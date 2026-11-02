@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { AGENT_NAME_MAX_LENGTH } from "@lrm/coforge-sdk/internal";
 import { DIRECT_MESSAGE_MAX_LENGTH } from "#src/features/conversations/conversation.schemas";
 import {
   briefingFirstMessage,
@@ -127,5 +128,7 @@ describe("freeAgentName", () => {
   });
   test("steps past taken names, compared without case", () => {
     expect(freeAgentName("Coforge", new Set(["coforge", "coforge-2"]))).toBe("Coforge-3");
+    const long = "a".repeat(AGENT_NAME_MAX_LENGTH);
+    expect(freeAgentName(long, new Set([long]))).toBe(`${"a".repeat(AGENT_NAME_MAX_LENGTH - 2)}-2`);
   });
 });

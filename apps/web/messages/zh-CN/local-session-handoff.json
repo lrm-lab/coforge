@@ -23,12 +23,15 @@
   "handoff_excerpt_failed": "读取这个会话的近期上下文失败，下面的简报只包含最初的请求。你可以继续，也可以换一个会话。",
   "handoff_excerpt_busy": "电脑还在读取这个会话，稍后重试。",
   "handoff_briefing_preview": "将发给智能体的交接简报（发送前请过目）",
-  "handoff_briefing_failed": "智能体 {name} 已创建，但简报发送失败。重试只会重发简报，不会重复创建智能体。",
+  "handoff_briefing_failed": "智能体 {name} 已创建，但简报发送失败。重发只会补发这份简报，不会再建一个智能体；也可以先去私信里和它说。",
   "handoff_resend": "重发简报",
   "handoff_submit": "创建智能体并发送简报",
   "handoff_creating": "创建中…",
   "handoff_agent_description": "交接智能体：接手 {tool} 在 {cwd} 的会话。",
   "handoff_role_user": "用户",
   "handoff_role_assistant": "助手",
-  "handoff_briefing": "你正在接手一个已有的编码会话（交接）。\n\n- 来源工具：{tool}\n- 原模型：{model}\n- 项目目录：{cwd}\n\n最初的任务请求：\n{firstMessage}\n\n最近的对话片段：\n{recent}\n\n请先 cd 到 {cwd}，查看当前状态（git status、最近改动），然后回复一份简短的接手摘要——之前在做什么、进行到哪、你接下来的计划——并从那里继续完成未完成的工作。"
+  "handoff_briefing": "你正在接手一个已有的编码会话（交接）。\n\n- 来源工具：{tool}\n- 原模型：{model}\n- 项目目录：{cwd}\n\n最初的任务请求：\n{firstMessage}\n\n最近的对话片段：\n{recent}\n\n请先 cd 到 {cwd}，查看当前状态（git status、最近改动），然后回复一份简短的接手摘要——之前在做什么、进行到哪、你接下来的计划——并从那里继续完成未完成的工作。",
+  "handoff_open_dm": "打开私信",
+  "handoff_no_match": "没有符合搜索的会话",
+  "handoff_session_list": "本机会话"
 }

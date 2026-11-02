@@ -64,6 +64,11 @@ export function useHandoffCreate({ onDone }: { onDone: () => void }) {
       return;
     }
     setBriefingFailed(false);
+    await openConversation(conversationId);
+  }
+
+  /** Goes to the Agent's direct conversation and closes the dialog. */
+  async function openConversation(conversationId: string) {
     await refreshSidebar(["dms"]);
     closeList();
     await navigate({
@@ -98,5 +103,14 @@ export function useHandoffCreate({ onDone }: { onDone: () => void }) {
     });
   }
 
-  return { submit, pending, error, createdName: created?.name, briefingFailed };
+  const conversationId = created?.conversationId;
+  return {
+    submit,
+    pending,
+    error,
+    createdName: created?.name,
+    briefingFailed,
+    /** Leaves for the Agent's direct conversation, once it is open, without the briefing. */
+    openConversation: conversationId ? () => openConversation(conversationId) : undefined,
+  };
 }

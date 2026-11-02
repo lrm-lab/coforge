@@ -1,4 +1,8 @@
-import { truncateCodePointsWithEllipsis, type LocalSessionTurn } from "@lrm/coforge-sdk/internal";
+import {
+  AGENT_NAME_MAX_LENGTH,
+  truncateCodePointsWithEllipsis,
+  type LocalSessionTurn,
+} from "@lrm/coforge-sdk/internal";
 
 import { finishedAgentUsername } from "#src/features/agents/agent-username";
 import { DIRECT_MESSAGE_MAX_LENGTH } from "#src/features/conversations/conversation.schemas";
@@ -26,7 +30,9 @@ export function defaultAgentName(cwd: string, toolLabel: string): string {
 export function freeAgentName(name: string, taken: ReadonlySet<string>): string {
   if (!taken.has(name.toLowerCase())) return name;
   for (let suffix = 2; ; suffix += 1) {
-    const candidate = `${name}-${suffix}`;
+    // Cut the base, not the suffix, so the candidate stays a valid username.
+    const tail = `-${suffix}`;
+    const candidate = `${name.slice(0, AGENT_NAME_MAX_LENGTH - tail.length).replace(/-+$/, "")}${tail}`;
     if (!taken.has(candidate.toLowerCase())) return candidate;
   }
 }
