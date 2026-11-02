@@ -18,6 +18,7 @@ import {
   shouldRecoverStalledRuntime,
 } from "#src/daemon-runtime/stalled-recovery";
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
+import { captureDaemonLogs } from "./log-capture";
 
 const tempRoot = realpathSync(tmpdir());
 const connection: WorkspaceConfig = {
@@ -99,6 +100,8 @@ async function harness(
     holdFirstSessionNotices?: boolean;
     /** Whether the session reports a live turn; false models a delivery whose turn never began. */
     sessionLiveTurn?: () => boolean;
+    /** Whether the server refuses the session report (a 403 stale reference). */
+    reportSessionFails?: boolean;
   } = {},
 ) {
   setSystemTime(START);
@@ -192,6 +195,10 @@ async function harness(
         },
         async sendAgentControlResult() {},
         async reportAgentSession(report) {
+          if (options.reportSessionFails)
+            throw Object.assign(new Error("Agent session report is stale or unauthorized"), {
+              code: 403,
+            });
           reportedLaunchIds.push(report.launchId);
           cloud.push(`session ${report.launchId}`);
         },
@@ -255,6 +262,28 @@ async function harness(
     mention,
   };
 }
+
+test("a refused session report does not roll back a provider that already started", async () => {
+  const { result: h, records } = await captureDaemonLogs(() =>
+    harness({ reportSessionFails: true }),
+  );
+  try {
+    h.sessions[0]!.emit({ type: "progress" });
+    await h.deliver(1);
+
+    // The report is refused, yet the launched process keeps serving: the launch is local work,
+    // the report a cloud observation.
+    expect(h.sessions).toHaveLength(1);
+    expect(h.sessions[0]!.disposed).toBe(false);
+    expect(h.sessions[0]!.notices).toHaveLength(1);
+    expect(h.acks).toContain("delivery-1");
+    expect(records.map((record) => record.properties.event)).toContain(
+      "agent_session:report_deferred",
+    );
+  } finally {
+    await h.runtime.stop();
+  }
+});
 
 test("a message for a turn silent for 15 minutes restarts the provider, resuming its session, and reaches the new one", async () => {
   const h = await harness();

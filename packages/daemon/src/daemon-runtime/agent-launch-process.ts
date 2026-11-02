@@ -7,7 +7,7 @@ import { parseAssignedSkillPacks } from "#src/code-agent/assigned-skills";
 import { agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
 import { ProviderProgress } from "./stalled-recovery";
 import { LaunchPhaseTiming } from "./launch-phase-timing";
-import { inferredReplacedSession, replacedSessionFor } from "./session-replacement";
+import { reportLaunchSession } from "./launch-session-report";
 import {
   StalledTurnTracker,
   stalledTurnNotice,
@@ -135,78 +135,50 @@ export async function launchAgentProcess(
         },
         runtimeId: launch.launchId,
         onSessionId: ports.transport().reportAgentSession
-          ? async (reportedSessionId, driverReplacedSessionId) => {
-              if (!current() || ports.isStopping())
-                throw new Error("Agent session launch was superseded");
-              // The session report names what it replaces whenever the driver reported a
-              // different session than the one this launch was told to resume, even when the
-              // driver did not say so itself: the server refuses an unnamed identity swap.
-              // The mode the provider was actually handed: a wake recycle always starts fresh,
-              // whatever session this launch was originally asked to continue.
-              const requestedSessionMode = recycled ? "create" : reference.sessionMode;
-              const requestedSessionId = request.sessionId ?? reference.sessionId;
-              const inferred = inferredReplacedSession({
-                requestedSessionId,
-                requestedSessionMode,
-                reportedSessionId,
-              });
-              const replaced = replacedSessionFor({
-                driverReplacedSessionId,
-                recycledSessionId,
-                requestedReplacedSessionId: request.replacedSessionId,
-                requestedSessionId,
-                requestedSessionMode,
-                reportedSessionId,
-              });
-              const replacementToInvalidate = driverReplacedSessionId ?? inferred;
-              if (replacementToInvalidate) {
-                // A session replaced inside the driver, or one whose resume the driver turned
-                // into a fresh session: only these emit here (not AgentControl's carried-over
-                // `request.replacedSessionId`, already reported once). Sent BEFORE the session
-                // report below, fire-and-forget, so the server can still match the stale
-                // session; after the report lands this would be a no-op.
-                ports.transport().sendSessionInvalidate?.(
-                  connectionSessionInvalidate(ports.connection, ports.runtimeInstanceId, {
-                    agentId,
-                    provider: config.provider,
-                    sessionId: replacementToInvalidate,
-                    launchId: launch.launchId,
-                    reason: "missing",
-                  }),
-                );
-              }
-              await ports.reportAgentSession({
-                ...ports.envelope(),
-                agentId,
-                provider: config.provider,
-                sessionId: reportedSessionId,
-                ...(replaced ? { replacedSessionId: replaced } : {}),
-                daemonInstanceId: ports.runtimeInstanceId,
-                launchId: launch.launchId,
-                // Read live off `reference` (the same object `#rebindAgent` mutates in place),
-                // not the `requestId`/`control` consts this closure captured at
-                // launch time: a driver-side session replacement reported after a rebind must
-                // carry the NEW request/epoch, not the one this launch started under.
-                startRequestId: reference.requestId,
-                ...(reference.controlEpoch ? { controlEpoch: reference.controlEpoch } : {}),
-                ...(previousLaunchId ? { previousLaunchId } : {}),
-              });
-              timing.phase("session_reported");
-              if (!current()) return;
-              reference.sessionId = reportedSessionId;
-              reference.sessionMode = "resume";
-              reference.launchId = launch.launchId;
-              if (replacementToInvalidate)
-                ports.narrateUnavailable(
+          ? async (reportedSessionId, driverReplacedSessionId) =>
+              reportLaunchSession(
+                {
+                  current,
+                  isStopping: () => ports.isStopping(),
+                  envelope: () => ports.envelope(),
+                  report: (report) => ports.reportAgentSession(report),
+                  invalidate: (sessionId) =>
+                    ports.transport().sendSessionInvalidate?.(
+                      connectionSessionInvalidate(ports.connection, ports.runtimeInstanceId, {
+                        agentId,
+                        provider: config.provider,
+                        sessionId,
+                        launchId: launch.launchId,
+                        reason: "missing",
+                      }),
+                    ),
+                  narrateReplaced: (sessionId) => {
+                    ports.narrateUnavailable(
+                      agentId,
+                      launch,
+                      sessionInvalidateActivityText(
+                        runtimeDisplayName(config.provider),
+                        sessionId,
+                        "missing",
+                      ),
+                    );
+                  },
+                },
+                {
                   agentId,
-                  launch,
-                  sessionInvalidateActivityText(
-                    runtimeDisplayName(config.provider),
-                    replacementToInvalidate,
-                    "missing",
-                  ),
-                );
-            }
+                  provider: config.provider,
+                  launchId: launch.launchId,
+                  reference,
+                  request,
+                  recycled: recycled !== undefined,
+                  recycledSessionId,
+                  reportedSessionId,
+                  daemonInstanceId: ports.runtimeInstanceId,
+                  driverReplacedSessionId,
+                  previousLaunchId,
+                  timing,
+                },
+              )
           : undefined,
         sessionMode: recycled ? "create" : reference.sessionMode,
         assignedSkillPacks: parseAssignedSkillPacks(launchConfig.assignedSkillPacks),
