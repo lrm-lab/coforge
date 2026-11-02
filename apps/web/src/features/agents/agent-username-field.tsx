@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AtSign, RefreshCw01 } from "@untitledui/icons";
+import { AtSign, RefreshCw05 } from "@untitledui/icons";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
@@ -7,7 +7,7 @@ import { m } from "#src/paraglide/messages";
 import { finishedAgentUsername, randomAgentUsername, typedAgentUsername } from "./agent-username";
 
 /**
- * The create form's username: prefilled with a suggestion the dice replaces, and reshaped as it is
+ * The create form's username: prefilled with a suggestion the suggest button replaces, and reshaped as it is
  * typed so it never needs its rules spelled out. Mounted with the dialog's content, so each opening
  * suggests a fresh name.
  */
@@ -47,7 +47,7 @@ export function AgentUsernameField({
       />
       <div className="absolute top-0 right-0 flex h-5 items-center">
         <ButtonUtility
-          icon={RefreshCw01}
+          icon={RefreshCw05}
           size="xs"
           color="tertiary"
           tooltip={m.agent_form_username_suggest()}

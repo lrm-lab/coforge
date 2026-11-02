@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQueryClient } from "@tanstack/react-query";
-import { RefreshCw01 } from "@untitledui/icons";
+import { RefreshCw05 } from "@untitledui/icons";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
@@ -177,7 +177,7 @@ export function CloudAgentForm({
           />
           <div className="absolute top-0 right-0 flex h-5 items-center">
             <ButtonUtility
-              icon={RefreshCw01}
+              icon={RefreshCw05}
               size="xs"
               color="tertiary"
               tooltip={m.agent_form_username_suggest()}
