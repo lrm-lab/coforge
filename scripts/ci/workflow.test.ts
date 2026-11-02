@@ -3,7 +3,7 @@ import { chmod, mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { selectChecks } from "./selection";
+import { nativeTestJobs, selectChecks } from "./selection";
 import { type Job, type Step, parse } from "./workflow-helpers";
 
 const ci = await parse("ci.yml");
@@ -152,6 +152,22 @@ test("only the installer crate restores the Rust cache, and only a push to main 
   }
   const actions = (ci.jobs["installer-crate"].steps as Step[]).map((step) => step.uses);
   expect(actions.some((uses) => uses?.startsWith("Swatinem/rust-cache@"))).toBe(true);
+});
+
+test("the native jobs install only the Computer's workspace, and selection knows every package test they run", () => {
+  for (const name of ["macos-lifecycle", "windows-release"]) {
+    const runs = (ci.jobs[name].steps as Step[]).map((step) => step.run ?? "");
+    // The root package.json depends on every workspace, Web included; these jobs need one.
+    expect(runs, name).toContain("bun install --frozen-lockfile --filter ./packages/computer");
+    const tested = runs
+      .filter((run) => run.startsWith("bun test "))
+      .flatMap((run) => run.match(/packages\/\S+\.ts/g) ?? []);
+    expect(tested.length, name).toBeGreaterThan(0);
+    for (const path of tested) expect(nativeTestJobs[path], path).toContain(name);
+    for (const [path, jobs] of Object.entries(nativeTestJobs)) {
+      expect(tested.includes(path), `${name} ${path}`).toBe(jobs.includes(name));
+    }
+  }
 });
 
 test("CI holds nothing that can deploy or publish", async () => {

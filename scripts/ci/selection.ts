@@ -56,6 +56,16 @@ export const crossPackageScans: {
   },
 ];
 
+/** Package test files a native job runs (ci.yml's macos-lifecycle and windows-release steps), so a
+ * change to one runs that job too; workflow.test.ts pins the two against each other. */
+export const nativeTestJobs: Record<string, string[]> = {
+  "packages/daemon/test/launchd-job.test.ts": ["macos-lifecycle"],
+  "packages/daemon/test/launchd-process.integration.ts": ["macos-lifecycle"],
+  "packages/daemon/test/macos-supervisor.test.ts": ["macos-lifecycle"],
+  "packages/daemon/test/code-agent-path.test.ts": ["windows-release"],
+  "packages/computer/test/release-executable.test.ts": ["macos-lifecycle", "windows-release"],
+};
+
 export function selectChecks(paths: string[], track: "changes" | "web" | "local" | "installer") {
   if (track === "installer") {
     // The installer's own publication, from the exact main commit: its crate on all six native
@@ -105,14 +115,9 @@ export function selectChecks(paths: string[], track: "changes" | "web" | "local"
       affected = track === "web" ? [] : ["web"];
     } else if (
       /^packages\/(computer|daemon)\/test\/.*\.test\.ts$/.test(path) ||
-      path === "packages/daemon/test/launchd-process.integration.ts"
+      Object.hasOwn(nativeTestJobs, path)
     ) {
-      affected = [path.split("/")[1]!];
-      const nativeTest =
-        /\/(launchd-job\.test|launchd-process\.integration|macos-supervisor\.test)\.ts$/;
-      if (path.startsWith("packages/daemon/") && nativeTest.test(path)) {
-        affected.push("macos-lifecycle");
-      }
+      affected = [path.split("/")[1]!, ...(nativeTestJobs[path] ?? [])];
     } else if (path.startsWith("packages/computer/")) {
       affected = ["computer", "macos-lifecycle", "windows-release"];
     } else if (/^packages\/(agent|cli|coforge|daemon)\//.test(path)) {

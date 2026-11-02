@@ -126,8 +126,7 @@ jobs:
       - name: Install toolchain
         run: mise install
 
-      # Every Linux job below repeats this step as *bun-cache. On macOS and Windows a cold
-      # install is as fast as restoring it, so they do not cache.
+      # Every Linux job below repeats this step as *bun-cache; elsewhere a cold install is faster.
       - &bun-cache
         name: Cache Bun packages
         if: runner.os == 'Linux'
@@ -251,8 +250,9 @@ jobs:
       - *setup-mise
       - name: Install toolchain
         run: mise install
-
-      - *bun-install
+      - &computer-install
+        name: Install the Computer's dependencies
+        run: bun install --frozen-lockfile --filter ./packages/computer
       - name: Generate protocol
         run: bun run --cwd packages/coforge-sdk generate
       - name: Verify real launchd lifecycle
@@ -260,7 +260,7 @@ jobs:
       - name: Verify published macOS executable signature and modes
         # Bun < 1.4.2 signed invalidly, which macOS 27 kills; `codesign --verify
         # --strict` catches it; darwin-signing pins the DR.
-        run: bun test scripts/release/compile-targets.test.ts scripts/release/darwin-signing.test.ts
+        run: bun test packages/computer/test/release-executable.test.ts scripts/release/compile-targets.test.ts scripts/release/darwin-signing.test.ts
 
   # Three machines split the test files; the Web track builds the image instead of the package.
   web:
@@ -316,7 +316,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 15
     env:
-      # Bun hardlinks from its cache only on the checkout's volume (D:, not C:, on x64), else copies.
+      # On the checkout's volume (D: on x64), so Bun hardlinks packages instead of copying them.
       BUN_INSTALL_CACHE_DIR: ${{ github.workspace }}/../bun-cache
     steps:
       - *checkout
@@ -325,8 +325,7 @@ jobs:
         with:
           version: "2026.9.2"
           install_args: bun
-
-      - *bun-install
+      - *computer-install
       - name: Generate protocol
         run: bun run --cwd packages/coforge-sdk generate
       - name: Test compiled version and server configuration
@@ -334,10 +333,9 @@ jobs:
           # GitHub empties runner.temp at job boundaries. Each test creates a unique
           # subdirectory; external Windows readers must not fail functional tests.
           COFORGE_RELEASE_TEST_ARTIFACT_ROOT: ${{ runner.temp }}
-        run: bun test scripts/release/compile-targets.test.ts --test-name-pattern "published Computer"
+        run: bun test packages/computer/test/release-executable.test.ts -t "published Computer"
       - name: Test the code-agent search path on real Windows
-        # Exercise the host-shaped path cases and the native executable fixture whose
-        # interpreter exists only on the discovered PATH.
+        # The host-shaped path cases, and an interpreter found only on the discovered PATH.
         run: bun test packages/daemon/test/code-agent-path.test.ts
 
   # The static install.ps1 gate; scripts/ci/check-install-ps1.ps1 says why it exists.

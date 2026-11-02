@@ -1,5 +1,8 @@
 import { join, resolve } from "node:path";
-import { resolveServerUrl } from "@coforge/computer/src/release-channel";
+// By path, not package name: the Computer's own tests (packages/computer/test/
+// release-executable.test.ts) run this build on Windows from an install of that one workspace,
+// which has no root node_modules to resolve `@coforge/computer` from.
+import { resolveServerUrl } from "../../packages/computer/src/release-channel";
 import { zodResolvePlugin } from "../bun-resolve-zod-plugin";
 
 // The release target names this repository already uses across docs/release/, updater.ts's
@@ -12,8 +15,8 @@ import { zodResolvePlugin } from "../bun-resolve-zod-plugin";
 // The darwin targets need Bun >= 1.4.2 (mise.lock pins it): earlier Bun wrote an invalid ad-hoc
 // code signature into compiled executables (oven-sh/bun#32159). macOS 26 still ran them, but
 // macOS 27 kills them at launch with SIGKILL / OS_REASON_CODESIGNING, so every published
-// Computer built by an older Bun was dead on arrival there. compile-targets.test.ts verifies the
-// signature with `codesign --verify --strict` on macOS hosts. A build given a signer replaces
+// Computer built by an older Bun was dead on arrival there. release-executable.test.ts verifies
+// the signature with `codesign --verify --strict` on macOS hosts. A build given a signer replaces
 // Bun's ad-hoc signature with the Computer's own (darwin-signing.ts).
 const BUN_COMPILE_TARGETS = {
   "linux-x64": "bun-linux-x64",
@@ -66,7 +69,8 @@ export type CompileTargetOptions = {
 export type CompiledArtifacts = { computer: Uint8Array };
 
 /** Cross-compiles the unified release binary for one target.
- * compile-targets.test.ts executes the host-target Computer to verify its release identity;
+ * packages/computer/test/release-executable.test.ts executes the host-target Computer to verify
+ * its release identity;
  * build-release.test.ts covers manifest assembly using small fixture binaries. */
 export async function compileTargetArtifacts(
   options: CompileTargetOptions,

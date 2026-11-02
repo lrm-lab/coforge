@@ -44,8 +44,8 @@ with three scopes selected by `scripts/ci/selection.ts`:
   Agent changes additionally validate Web's imported Agent test contract.
   Client source changes retain native macOS and Windows smoke checks. Changes
   confined to Computer/Daemon test files run their owning package, plus Web,
-  whose import-alias scan reads package tests; the three
-  macOS lifecycle test files also run on macOS. A test that scans source
+  whose import-alias scan reads package tests; a test file a native job also
+  runs (`nativeTestJobs` in `selection.ts`) runs that macOS or Windows job too. A test that scans source
   outside its own package (the SDK's RuntimeProvider literal scan over every
   `src`, Web's import-alias scan over package `src` and `test`) is listed in
   `selection.ts`'s cross-package scan table, so a change inside its scan scope
@@ -120,7 +120,12 @@ toolchain configuration, and lockfile. macOS and Windows jobs install cold:
 restoring the cache there took as long as the install it saves. Every job still
 runs a frozen install; cache hits never skip dependency validation. The Windows
 executable job keeps Bun's cache on the checkout's volume, so Bun hardlinks
-packages instead of copying them. The installer crate job restores its compiled
+packages instead of copying them. The macOS and Windows executable jobs install
+only the Computer's workspace and those it depends on
+(`bun install --filter ./packages/computer`): the root `package.json` depends
+on every workspace, Web included. Their release-executable test therefore lives
+in `packages/computer/test`, and the SDK owns the protobuf tools it generates
+with. The installer crate job restores its compiled
 dependencies per target with [Swatinem/rust-cache](https://github.com/Swatinem/rust-cache),
 saved only by a push to `main`; no other job reads it.
 
