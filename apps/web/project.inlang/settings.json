@@ -8,6 +8,7 @@
       "./messages/{locale}/common.json",
       "./messages/{locale}/system-notices.json",
       "./messages/{locale}/agents.json",
+      "./messages/{locale}/agent-workspace.json",
       "./messages/{locale}/agent-migration.json",
       "./messages/{locale}/agent-reminders.json",
       "./messages/{locale}/agent-activity.json",
