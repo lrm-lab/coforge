@@ -15,6 +15,7 @@ import {
   publicChannelQuery,
   savedMessagesQuery,
 } from "./conversation-queries";
+import { prefetchChannelPageReads } from "./channel-page-reads";
 import { conversationOpenQuery } from "./conversation-open-query";
 import { windowReadSettled } from "./conversation-window-reads";
 import type { conversationPages, ConversationPage, PageMessage } from "./conversation-window-query";
@@ -91,15 +92,13 @@ async function readConversationPage(
     workspaceId,
   }: { cause: "preload" | "enter" | "stay"; workspaceId: () => Promise<string> },
 ): Promise<void> {
-  const window =
+  const opening =
     target.kind === "channel"
-      ? await openConversationWindow(queryClient, publicChannelQuery(target.id).query, target, deps)
-      : await openConversationWindow(
-          queryClient,
-          directConversationQuery(target.id).query,
-          target,
-          deps,
-        );
+      ? openConversationWindow(queryClient, publicChannelQuery(target.id).query, target, deps)
+      : openConversationWindow(queryClient, directConversationQuery(target.id).query, target, deps);
+  // A channel's roster and mention outsiders are read beside its window, not after the page shows.
+  if (target.kind === "channel") prefetchChannelPageReads(queryClient, target.id, opening);
+  const window = await opening;
   const conversationId = window.pages.at(-1)?.conversationId;
   if (!deps.tasks || !conversationId) return;
   const completedWindow = deps.tasks;

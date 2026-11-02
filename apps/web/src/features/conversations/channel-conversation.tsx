@@ -19,9 +19,8 @@ import {
   type HeaderTabs,
 } from "./conversation-header-tabs";
 import type { SendOptions } from "./composer-outbox";
-import type { Mentionable } from "./mention-text";
 import { plainMentionsByHandle } from "./message-markdown";
-import { loadPublicChannelMentionOutsiders } from "./channels.functions";
+import { channelMentionOutsidersQuery, readsMentionOutsiders } from "./channel-page-reads";
 import { useChannelMentionables } from "./use-channel-mentionables";
 import {
   ThreadedConversation,
@@ -258,18 +257,14 @@ export function ChannelConversation({
     conversation.conversationId,
     conversation.mentionables,
   );
-  // Who else the viewer may mention on purpose. Read once the page mounts, and refetched with the
-  // directory (the key shares its prefix) on `member.changed.v1`, on a resubscribe that lost
-  // publications, and on focus — not on the first subscribe, which follows its first read by
-  // about one round trip (see `useConversationQuery`). Loaded only for a member of an open
-  // channel, who has a composer.
+  // Who else the viewer may mention on purpose. Read by the page's loader beside its window
+  // (`prefetchChannelPageReads`), and refetched with the directory (the key shares its prefix) on
+  // `member.changed.v1`, on a resubscribe that lost publications, and on focus — not on the first
+  // subscribe, which follows its first read by about one round trip (see `useConversationQuery`).
+  // Loaded only for a member of an open channel, who has a composer.
   const mentionOutsiders = useQuery({
-    queryKey: ["conversation", "mentionables", conversation.conversationId, "outsiders"],
-    queryFn: (): Promise<Mentionable[]> =>
-      loadPublicChannelMentionOutsiders({ data: { channelId: conversation.conversationId } }),
-    enabled: Boolean(conversation.senderMemberId) && !conversation.archived,
-    staleTime: 15_000,
-    refetchOnWindowFocus: true,
+    ...channelMentionOutsidersQuery(conversation.conversationId),
+    enabled: readsMentionOutsiders(conversation),
   });
   const conversationWithFreshDirectory = useMemo(
     () => ({
