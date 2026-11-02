@@ -2,9 +2,7 @@ import { useEffect, useEffectEvent, useState, type CSSProperties } from "react";
 import { Download01 } from "@untitledui/icons";
 import { getReadableFileSize } from "#src/components/application/file-upload/file-upload-base";
 import { Button } from "#src/components/base/buttons/button";
-import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { fileTypeLabel } from "#src/features/files/file-meta";
-import { FileTypeIcon } from "#src/features/files/file-type-icon";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { attachmentPreviewKind, previewKindFor } from "./attachment-preview-kind";
@@ -184,78 +182,77 @@ export function MessageAttachments({ attachments }: { attachments: readonly Atta
       {videos.map((attachment) => (
         <InlineVideo key={attachment.id} attachment={attachment} href={attachmentUrl(attachment)} />
       ))}
-      {files.map((attachment) => (
-        <AttachmentCard key={attachment.id} attachment={attachment} />
-      ))}
+      {files.length > 0 && (
+        // Two cards to a row, as wide as the image grid above them.
+        <div
+          className="mt-1 grid w-full grid-cols-2 gap-1"
+          style={{ maxWidth: `min(${MESSAGE_GALLERY_MAX_WIDTH_PX}px, 100%)` }}
+        >
+          {files.map((attachment) => (
+            <AttachmentCard key={attachment.id} attachment={attachment} />
+          ))}
+        </div>
+      )}
     </>
   );
 }
 
-const CARD_BODY =
-  "h-auto min-w-0 flex-1 justify-start rounded-xl rounded-r-none p-3 hover:bg-secondary [&>span]:w-full [&>span]:min-w-0";
+/** The card's own button: the whole card opens the file's preview, or downloads it. */
+const CARD =
+  "h-auto w-full min-w-0 justify-start rounded-[10px] bg-primary px-2.5 py-2 ring-1 ring-secondary ring-inset hover:bg-primary_hover [&>span]:w-full [&>span]:min-w-0";
 
-/** One non-image file: its type, name and size, opening its preview (or, without one,
- * downloading it), with a Download button. */
+/**
+ * One non-image file, laid out as Raft does (fixed width, two to a row in the image grid's width)
+ * with two lines instead of its three (task #238): its type and name, then its size. The card opens
+ * the file's preview; a file with none downloads instead, and only that card shows a download
+ * mark, so the two read apart at a glance. Raft's description line ("Markdown 文档") and its
+ * "Markdown 预览" repeat the type tag, so they are left out on purpose.
+ */
 function AttachmentCard({ attachment }: { attachment: Attachment }) {
-  const href = attachmentUrl(attachment);
   const typeLabel = fileTypeLabel(attachment.fileName, attachment.contentType);
   const previewable = previewKindFor(attachment);
   const body = (
-    <span className="flex min-w-0 items-center gap-3 text-left">
-      <FileTypeIcon
-        fileName={attachment.fileName}
-        contentType={attachment.contentType}
-        className="size-10 shrink-0"
-      />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium text-primary">
+    <span className="flex min-w-0 flex-col gap-1 text-left">
+      <span className="flex min-w-0 items-center gap-1.5">
+        {typeLabel && (
+          <span className="inline-flex shrink-0 items-center rounded-[4px] bg-secondary px-1 font-mono text-xs font-semibold text-tertiary ring-1 ring-secondary ring-inset">
+            {typeLabel}
+          </span>
+        )}
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-primary">
           {attachment.fileName}
         </span>
-        <span className="block truncate text-xs text-tertiary">
-          {typeLabel ? `${typeLabel} · ` : ""}
-          {getReadableFileSize(attachment.sizeBytes)}
-        </span>
+      </span>
+      <span className="flex min-w-0 items-center justify-between gap-2 text-xs text-tertiary tabular-nums">
+        <span className="min-w-0 truncate">{getReadableFileSize(attachment.sizeBytes)}</span>
+        {!previewable && <Download01 aria-hidden="true" className="size-3.5 shrink-0" />}
       </span>
     </span>
   );
-  return (
-    <div className="group/attachment mt-1 flex w-full max-w-sm min-w-0 items-center rounded-xl bg-primary ring-1 ring-secondary ring-inset">
-      {previewable ? (
-        <AttachmentReviewDialog file={attachment}>
-          {({ loading }) => (
-            <Button
-              color="tertiary"
-              noTextPadding
-              isLoading={loading}
-              aria-label={m.conversation_attachment_preview_open({ name: attachment.fileName })}
-              className={CARD_BODY}
-            >
-              {body}
-            </Button>
-          )}
-        </AttachmentReviewDialog>
-      ) : (
-        // No preview: the card downloads the file, as on Raft, and it takes no comments.
+  return previewable ? (
+    <AttachmentReviewDialog file={attachment}>
+      {({ loading }) => (
         <Button
           color="tertiary"
           noTextPadding
-          href={`${href}?download`}
-          aria-label={m.attachment_preview_download({ name: attachment.fileName })}
-          className={CARD_BODY}
+          isLoading={loading}
+          aria-label={m.conversation_attachment_preview_open({ name: attachment.fileName })}
+          className={CARD}
         >
           {body}
         </Button>
       )}
-      <span className="mx-1 h-8 w-px shrink-0 bg-border-secondary" aria-hidden="true" />
-      <div className="shrink-0 pr-2">
-        <ButtonUtility
-          icon={Download01}
-          size="xs"
-          color="secondary"
-          tooltip={m.conversation_attachment_download()}
-          href={`${href}?download`}
-        />
-      </div>
-    </div>
+    </AttachmentReviewDialog>
+  ) : (
+    // No preview: the card downloads the file, as on Raft, and it takes no comments.
+    <Button
+      color="tertiary"
+      noTextPadding
+      href={`${attachmentUrl(attachment)}?download`}
+      aria-label={m.attachment_preview_download({ name: attachment.fileName })}
+      className={CARD}
+    >
+      {body}
+    </Button>
   );
 }
