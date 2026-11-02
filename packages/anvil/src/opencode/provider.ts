@@ -24,6 +24,7 @@ import { assertOpenCodeVersionSupported } from "./version";
  */
 export class OpenCodeProvider implements CodeAgentProvider {
   readonly provider = RUNTIME_PROVIDER.OPENCODE;
+  readonly reportsCompaction = false;
   readonly #host: PerTurnSessionHost;
   readonly #versionReader: CliVersionReader;
   readonly #command: readonly string[];

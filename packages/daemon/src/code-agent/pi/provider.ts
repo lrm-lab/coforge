@@ -9,6 +9,7 @@ import { piRuntimeHost } from "./host";
 /** CoForge Agent uses the same Pi SDK implementation without a child process. */
 export class CoforgeProvider implements CodeAgentProvider {
   readonly provider = RUNTIME_PROVIDER.COFORGE;
+  readonly reportsCompaction = true;
 
   async createAgentSession(options: AgentSessionOptions): Promise<AgentSession> {
     const runtime = options.runtime;

@@ -14,6 +14,7 @@ import { assertAntigravityVersionSupported } from "./version";
  */
 export class AntigravityProvider implements CodeAgentProvider {
   readonly provider = RUNTIME_PROVIDER.ANTIGRAVITY;
+  readonly reportsCompaction = false;
   readonly #host: AntigravityRuntimeHost;
   readonly #command: readonly string[];
 

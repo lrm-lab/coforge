@@ -6,6 +6,7 @@ import type { CommandCodeProviderOptions } from "./host";
 import { assertCommandCodeVersionSupported } from "./version";
 export class CommandCodeProvider implements CodeAgentProvider {
   readonly provider = RUNTIME_PROVIDER.COMMAND_CODE;
+  readonly reportsCompaction = false;
   constructor(private readonly options: CommandCodeProviderOptions) {}
   async createAgentSession(options: AgentSessionOptions): Promise<AgentSession> {
     if (options.sessionId !== undefined && !options.sessionId.trim())

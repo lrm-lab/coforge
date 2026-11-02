@@ -10,6 +10,7 @@ import { createCursorTurnProtocol } from "./turn-protocol";
  */
 export class CursorProvider implements CodeAgentProvider {
   readonly provider = RUNTIME_PROVIDER.CURSOR;
+  readonly reportsCompaction = true;
   readonly #host: PerTurnSessionHost;
   readonly #command: readonly string[];
 

@@ -7,6 +7,7 @@ import { assertDevinVersionSupported } from "./version";
 
 export class DevinProvider implements CodeAgentProvider {
   readonly provider = RUNTIME_PROVIDER.DEVIN;
+  readonly reportsCompaction = false;
   constructor(private readonly options: DevinProviderOptions) {}
   async createAgentSession(options: AgentSessionOptions): Promise<AgentSession> {
     if (options.sessionId !== undefined && !options.sessionId.trim())

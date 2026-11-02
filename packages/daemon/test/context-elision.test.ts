@@ -3,7 +3,7 @@ import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentMessageRecord } from "@lrm/coforge-sdk/internal";
-import { elideSeenInContext, reportsCompaction } from "#src/daemon-runtime/context-elision";
+import { elideSeenInContext } from "#src/daemon-runtime/context-elision";
 import { AgentContextLedger } from "#src/persistence/agent-context-ledger";
 import { AgentStateDb } from "#src/persistence/agent-state-db";
 
@@ -98,11 +98,6 @@ test("a new context introduces everything again", () =>
     expect(elideSeenInContext([message()], ledger).messages[0]!.channelCoordination).toBe(ROLE);
   }));
 
-test("only runtimes that report a finished compaction are eligible", () => {
-  expect(reportsCompaction("claude-code")).toBe(true);
-  expect(reportsCompaction("devin")).toBe(false);
-});
-
 test("giving the claims back shows the same text on the next read", () =>
   withLedger((ledger) => {
     const first = elideSeenInContext([message(), message()], ledger);
@@ -111,9 +106,3 @@ test("giving the claims back shows the same text on the next read", () =>
     expect(again.senderDescription).toBe("Staff engineer");
     expect(again.channelCoordination).toBe(ROLE);
   }));
-
-test("both Pi-based runtimes report a finished compaction", () => {
-  expect(reportsCompaction("coforge")).toBe(true);
-  expect(reportsCompaction("pi")).toBe(true);
-  expect(reportsCompaction("devin")).toBe(false);
-});

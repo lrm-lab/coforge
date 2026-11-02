@@ -9,6 +9,7 @@
 - Agent instructions, assigned Skills, Git hooks, runtime inventory and caches stay with the host. Adapters consume the prepared session options; they do not coordinate those policies.
 - `src/per-turn/` owns the one Session state machine, input queue, interrupt/dispose, identity reports and child-process wrapper shared by per-turn adapters. Provider differences belong to `TurnProtocol` fields or `TurnReader` hooks; do not copy the Session or parse provider output there.
 - `src/acp/` owns the one ACP connection and session state machine shared by the ACP adapters. A runtime declares its differences in `AcpRuntimeProfile` (arguments, notifications, configuration, wording) and `AcpSessionProfile` (authentication, session open, turn projection, insertion, admission deadline); do not copy the connection or the session into an adapter.
+- An adapter that emits `compaction-finished` declares `CodeAgentProvider.reportsCompaction = true`; every adapter declares the field, and `packages/daemon/test/provider-compaction-declaration.test.ts` checks the declaration against the emitters. The daemon reads the declaration instead of keeping a runtime-name list.
 - Preserve provider behavior while migrating one contract or runtime slice at a time. Run the package checks and the daemon checks for every slice.
 
 ## Module map

@@ -124,8 +124,8 @@ Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
   `context_observations`), kept per context: a sender's description and a
   channel's role line (`channelCoordination`) reach the Agent once, and
   `AgentMessageOperations` leaves repeats out of `check` and the reads. A launch
-  or a finished compaction starts a new context, and only runtimes that report
-  a finished compaction (`reportsCompaction`; the embedded `coforge` runtime and
-  `pi` run the same Pi adapter) are elided, so a runtime that
-  cannot say when its context was cut is never left short. The context number is
-  stored, never counted from zero again after a restart.
+  or a finished compaction starts a new context, and only runtimes whose
+  adapter declares a finished compaction (`CodeAgentProvider.reportsCompaction`)
+  are elided, so a runtime that cannot say when its context was cut is never
+  left short. The embedded `coforge` runtime and `pi` share the Pi adapter.
+  The context number is stored, never counted from zero again after a restart.

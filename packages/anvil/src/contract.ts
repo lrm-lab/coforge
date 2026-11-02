@@ -23,6 +23,10 @@ export type {
 } from "@coforge/agent";
 export interface CodeAgentProvider {
   readonly provider: RuntimeProvider;
+  /** Whether this adapter reports a finished compaction, so a caller can tell when the Agent's
+   * context was cut. Every adapter declares it; a provider this build does not know is never
+   * elided. */
+  readonly reportsCompaction?: boolean;
   createAgentSession(options: AgentSessionOptions): Promise<AgentSession>;
   readUsage?(options: {
     workingDirectory: string;

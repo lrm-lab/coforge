@@ -1,31 +1,10 @@
-import {
-  RUNTIME_PROVIDER,
-  type AgentMessageRecord,
-  type RuntimeProvider,
-} from "@lrm/coforge-sdk/internal";
+import type { AgentMessageRecord } from "@lrm/coforge-sdk/internal";
 import type { AgentContexts } from "./agent-contexts";
 import type {
   AgentContextLedger,
   ContextObservationKind,
 } from "#src/persistence/agent-context-ledger";
 import { holdClaims } from "./response-claims";
-
-/** The runtimes whose adapters report a finished compaction. For any other the daemon cannot tell
- * when the Agent's context was cut, so it never leaves anything out. `coforge` and `pi` are the
- * same embedded Pi adapter, and `coforge` is the default runtime. */
-const COMPACTION_REPORTING_RUNTIMES: ReadonlySet<string> = new Set<RuntimeProvider>([
-  RUNTIME_PROVIDER.CLAUDE_CODE,
-  RUNTIME_PROVIDER.CODEX,
-  RUNTIME_PROVIDER.COFORGE,
-  RUNTIME_PROVIDER.CURSOR,
-  RUNTIME_PROVIDER.GROK,
-  RUNTIME_PROVIDER.KIRO,
-  RUNTIME_PROVIDER.PI,
-]);
-
-export function reportsCompaction(runtime: string): boolean {
-  return COMPACTION_REPORTING_RUNTIMES.has(runtime);
-}
 
 /** The channel a target belongs to: `#name` for the channel and for any thread in it. */
 function channelOf(target: string): string | undefined {
@@ -74,7 +53,7 @@ export function elideSeenInContext(
   };
 }
 
-/** `elideSeenInContext` for one Agent's read, or the messages as they are when the Agent's runtime
+/** `elideSeenInContext` for one Agent's read, or the messages as they are when the Agent's adapter
  * does not report compaction or the operation's output does not print a sender's description and
  * a channel's role line (a search hit does not, so it must not use them up). */
 export function elideForAgent(

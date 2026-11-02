@@ -25,6 +25,7 @@ import type { KiroRuntimeHost, KiroProviderOptions } from "./host";
 
 export class KiroProvider implements CodeAgentProvider {
   readonly provider = RUNTIME_PROVIDER.KIRO;
+  readonly reportsCompaction = true;
   constructor(private readonly options: KiroProviderOptions) {}
 
   readUsage(options: { workingDirectory: string; timeoutMs?: number }) {
