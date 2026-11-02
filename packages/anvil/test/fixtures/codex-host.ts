@@ -19,6 +19,7 @@ const labels: Record<string, string> = {
 export const fixtureCodexHistory = {
   readHostEnvironment: () => undefined,
   homeDirectory: () => "/home/fixture",
+  isDirectoryWithoutSymlinks: async () => true,
   readDirectoryEntries: async () => [],
   async readFileTail(): Promise<{ text: string; startOffset: number }> {
     throw new Error("fixture has no rollout");

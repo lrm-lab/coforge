@@ -50,6 +50,10 @@ async function candidates(options: LocalSessionSearchOptions, host: CodexHistory
     const observations = await Promise.all(
       batch.map(async (current) => {
         try {
+          if (
+            !(await localSessionIo(host.isDirectoryWithoutSymlinks(current.path), options.limits))
+          )
+            return { current, entries: [] };
           return {
             current,
             entries: await localSessionIo(host.readDirectoryEntries(current.path), options.limits),

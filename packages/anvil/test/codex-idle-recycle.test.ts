@@ -38,6 +38,7 @@ function rolloutHost(options: {
   return {
     readHostEnvironment: (name) => options.env?.[name],
     homeDirectory: () => options.home ?? "/home/fixture",
+    isDirectoryWithoutSymlinks: async () => true,
     async readDirectoryEntries(path) {
       const dir = nodes.get(path);
       if (!dir || dir.kind !== "dir") throw new Error(`not a directory: ${path}`);

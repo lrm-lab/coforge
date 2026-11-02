@@ -11,6 +11,7 @@ import {
   readHistoryFileHeadBytes,
   readHistoryFileTail,
   readHistoryFileTailBytes,
+  isDirectoryWithoutSymlinks,
 } from "#src/code-agent/bounded-history-file";
 
 const REREAD_FILE_MAX_BYTES = 64 * 1024;
@@ -53,6 +54,7 @@ export const claudeHistoryHost: ClaudeBriefingHost = {
   readHostEnvironment: (name) => Bun.env[name],
   homeDirectory: homedir,
   readDirectoryEntries: (path) => readdir(path, { withFileTypes: true }),
+  isDirectoryWithoutSymlinks,
   readDirectoryNames: (path) => readdir(path),
   lstat,
   readFileTail: readHistoryFileTail,

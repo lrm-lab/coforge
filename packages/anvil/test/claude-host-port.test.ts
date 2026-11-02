@@ -20,6 +20,7 @@ function unusedHost(): ClaudeRuntimeHost {
     readHostEnvironment: unexpected,
     homeDirectory: unexpected,
     readDirectoryEntries: unexpected,
+    isDirectoryWithoutSymlinks: unexpected,
     readDirectoryNames: unexpected,
     lstat: unexpected,
     readFileTail: unexpected,

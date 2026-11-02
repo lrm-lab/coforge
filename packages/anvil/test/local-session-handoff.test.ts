@@ -42,6 +42,7 @@ function claudeHost(input: Record<string, FileNode>): ClaudeHistoryHost {
   return {
     readHostEnvironment: (name) => (name === "CLAUDE_CONFIG_DIR" ? "/claude" : undefined),
     homeDirectory: () => "/home/test",
+    isDirectoryWithoutSymlinks: async () => true,
     async readDirectoryEntries(path) {
       return directoryEntries(files, path).map((name): ClaudeDirectoryEntry => ({
         name,
@@ -154,6 +155,7 @@ function codexHost(input: Record<string, FileNode>): CodexHistoryHost {
   return {
     readHostEnvironment: (name) => (name === "CODEX_HOME" ? "/codex" : undefined),
     homeDirectory: () => "/home/test",
+    isDirectoryWithoutSymlinks: async () => true,
     async readDirectoryEntries(path) {
       return directoryEntries(files, path).map((name): CodexDirectoryEntry => {
         const full = `${path}/${name}`;

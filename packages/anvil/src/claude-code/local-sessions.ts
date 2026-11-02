@@ -34,11 +34,11 @@ async function candidates(options: LocalSessionSearchOptions, host: ClaudeHistor
   let files = 0;
   let complete = true;
   let projects;
+  const projectsRoot = join(configDirectory(host), "projects");
   try {
-    projects = await localSessionIo(
-      host.readDirectoryEntries(join(configDirectory(host), "projects")),
-      options.limits,
-    );
+    if (!(await localSessionIo(host.isDirectoryWithoutSymlinks(projectsRoot), options.limits)))
+      return { found, complete: true };
+    projects = await localSessionIo(host.readDirectoryEntries(projectsRoot), options.limits);
   } catch (error) {
     return { found, complete: !(error instanceof LocalSessionDeadlineError) };
   }
@@ -52,9 +52,10 @@ async function candidates(options: LocalSessionSearchOptions, host: ClaudeHistor
       complete = false;
       break;
     }
-    const root = join(configDirectory(host), "projects", project.name);
+    const root = join(projectsRoot, project.name);
     let entries;
     try {
+      if (!(await localSessionIo(host.isDirectoryWithoutSymlinks(root), options.limits))) continue;
       entries = await localSessionIo(host.readDirectoryEntries(root), options.limits);
     } catch (error) {
       if (error instanceof LocalSessionDeadlineError) {

@@ -88,6 +88,7 @@ export interface ClaudeHistoryHost {
   readHostEnvironment(name: "CLAUDE_CONFIG_DIR" | "HOME"): string | undefined;
   homeDirectory(): string;
   readDirectoryEntries(path: string): Promise<readonly ClaudeDirectoryEntry[]>;
+  isDirectoryWithoutSymlinks(path: string): Promise<boolean>;
   readDirectoryNames(path: string): Promise<readonly string[]>;
   lstat(path: string): Promise<ClaudeFileInfo>;
   readFileTail(path: string, tailBytes: number): Promise<{ text: string; startOffset: number }>;
