@@ -289,7 +289,7 @@ export class MessageForwards {
     scope: { workspaceId: string; userId: string; destination: string },
   ): Promise<CopiedAttachments> {
     const { db } = this.ports;
-    const copied: { id: string; objectKey: string }[] = [];
+    const copied: CopiedAttachment[] = [];
     const discard = async () => {
       if (!copied.length) return;
       const files = await this.ports.storage();
@@ -301,11 +301,20 @@ export class MessageForwards {
     if (!source.attachments.length) return { ids: [], discard };
     try {
       const files = await this.ports.storage();
-      for (const original of source.attachments) {
-        const id = randomUUID();
-        const objectKey = `workspaces/${scope.workspaceId}/attachments/${id}/original`;
-        await files.copyObject(original.objectKey, objectKey);
-        copied.push({ id, objectKey });
+      const copies = await Promise.allSettled(
+        source.attachments.map(async (original) => {
+          const id = randomUUID();
+          const objectKey = `workspaces/${scope.workspaceId}/attachments/${id}/original`;
+          await files.copyObject(original.objectKey, objectKey);
+          return { id, objectKey, original };
+        }),
+      );
+      const failed = copies.find(
+        (copy): copy is PromiseRejectedResult => copy.status === "rejected",
+      );
+      copied.push(...copies.flatMap((copy) => (copy.status === "fulfilled" ? [copy.value] : [])));
+      if (failed) throw failed.reason;
+      for (const { id, objectKey, original } of copied) {
         await db.attachment.create({
           data: {
             id,
@@ -328,5 +337,11 @@ export class MessageForwards {
     return { ids: copied.map((copy) => copy.id), discard };
   }
 }
+
+type CopiedAttachment = {
+  id: string;
+  objectKey: string;
+  original: ForwardSource["attachments"][number];
+};
 
 type CopiedAttachments = { ids: string[]; discard: () => Promise<void> };
