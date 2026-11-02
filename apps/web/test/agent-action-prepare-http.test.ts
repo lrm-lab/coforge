@@ -66,6 +66,27 @@ test("a choice that names nobody is refused as INVALID_INPUT, saying to set `to`
   expect(body.error).toContain("`to`");
 });
 
+test("a business refusal relays its error id and hint to the Agent", async () => {
+  const response = await handleAgentActionPrepare(
+    prepare({ target: "@ada", action: { type: "channel:create", name: "ops" } }),
+    principal,
+    () => ({
+      prepare: async () => {
+        throw new AppError("INVALID_INPUT", {
+          errorId: "action_card_choice_to",
+          hint: "the person to ask is not in this conversation",
+        });
+      },
+    }),
+  );
+
+  const { status, body } = await answer(response);
+  expect(status).toBe(400);
+  expect(body.code).toBe("INVALID_INPUT");
+  expect(body.error).toContain("action_card_choice_to");
+  expect(body.error).toContain("the person to ask is not in this conversation");
+});
+
 test("an action-card refusal names its field in the Agent API refusal shape", async () => {
   const response = await handleAgentActionPrepare(
     prepare({

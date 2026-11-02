@@ -93,13 +93,14 @@ The person opens your screen from the card, finishes the step, then marks it don
 ## Choices
 
 When several mutually exclusive next steps exist (for example login methods), post a `choice`
-card so the person can click. The card must name who it asks: `to` is required (a handle or user
-id), and only that person may choose. They may also answer in free text when `allowFreeText` is
-true (the default). Example:
+card so the person can click. The card must name who it asks: `to` is required, is a handle
+(`@alice`) or user id, and that person must be a member of the conversation. Replace `@alice`
+with the handle of the person you want to ask; there is no default owner. They may also answer
+in free text when `allowFreeText` is true (the default). Example:
 
 ```
-coforge action prepare --target "@owner" <<'COFORGEACTION'
-{"type":"choice","prompt":"How should we sign in?","to":"@owner","options":[{"id":"password","label":"Password"},{"id":"otp","label":"Verification code"},{"id":"github","label":"Continue with GitHub"},{"id":"takeover","label":"I will open the cloud desktop myself"}]}
+coforge action prepare --target "@alice" <<'COFORGEACTION'
+{"type":"choice","prompt":"How should we sign in?","to":"@alice","options":[{"id":"password","label":"Password"},{"id":"otp","label":"Verification code"},{"id":"github","label":"Continue with GitHub"},{"id":"takeover","label":"I will open the cloud desktop myself"}]}
 COFORGEACTION
 ```
 

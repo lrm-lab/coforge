@@ -16,6 +16,8 @@ const suffix = crypto.randomUUID().slice(0, 8);
 
 let workspaceId: string;
 let userId: string;
+let outsiderId: string;
+let outsiderHandle: string;
 let agentId: string;
 let conversationId: string;
 let messageId: string;
@@ -25,11 +27,19 @@ beforeAll(async () => {
     data: { username: `choice-${suffix}`, displayName: "Choice" },
   });
   userId = user.id;
+  // A person of the Workspace who is not in the conversation the card is posted in.
+  const outsider = await db.user.create({
+    data: { username: `choice-out-${suffix}`, displayName: "Outsider" },
+  });
+  outsiderId = outsider.id;
+  outsiderHandle = outsider.username;
   const workspace = await db.workspace.create({
     data: {
       slug: `choice-${suffix}`,
       name: "Choice",
-      members: { create: { userId, role: "member" } },
+      members: {
+        create: [{ userId, role: "member" }, { userId: outsider.id }],
+      },
     },
   });
   workspaceId = workspace.id;
@@ -89,6 +99,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await db.workspace.delete({ where: { id: workspaceId } }).catch(() => undefined);
   await db.user.delete({ where: { id: userId } }).catch(() => undefined);
+  await db.user.delete({ where: { id: outsiderId } }).catch(() => undefined);
   await db.$disconnect();
 });
 
@@ -152,6 +163,14 @@ test("a choice card names who is asked, and only they may choose", async () => {
   await expect(
     resolveChoicePayload(db, conversationId, { ...action, to: "not-a-member" }),
   ).rejects.toThrow();
+  // A person who exists but is not in this conversation cannot be asked here.
+  await expect(
+    resolveChoicePayload(db, conversationId, { ...action, to: outsiderHandle }),
+  ).rejects.toMatchObject({
+    code: "INVALID_INPUT",
+    errorId: "action_card_choice_to",
+    hint: "the person to ask is not in this conversation",
+  });
   // A choice always names one: a card without `to` is refused rather than sent to the owner.
   await expect(
     resolveChoicePayload(db, conversationId, { ...action, to: "" }),
