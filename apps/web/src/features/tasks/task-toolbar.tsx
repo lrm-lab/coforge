@@ -157,7 +157,7 @@ export function TaskToolbar({
               )}
               <SubmenuTrigger>
                 <Dropdown.Item label={m.tasks_overview_status()} />
-                <Dropdown.Popover placement="end top" className="w-52">
+                <Dropdown.SubmenuPopover className="w-52">
                   <Dropdown.Menu
                     aria-label={m.tasks_overview_status()}
                     selectionMode="single"
@@ -169,7 +169,7 @@ export function TaskToolbar({
                       <Dropdown.Item key={value} id={value} label={statusLabel(value)} />
                     ))}
                   </Dropdown.Menu>
-                </Dropdown.Popover>
+                </Dropdown.SubmenuPopover>
               </SubmenuTrigger>
             </Dropdown.Menu>
           </Dropdown.Popover>
@@ -241,14 +241,14 @@ function FilterSubmenu({
   return (
     <SubmenuTrigger>
       <Dropdown.Item label={name} />
-      <Dropdown.Popover placement="end top" className="w-64">
+      <Dropdown.SubmenuPopover className="w-64">
         <PickerMenu
           label={name}
           options={options}
           selectedKeys={picked}
           onSelectedKeysChange={onChange}
         />
-      </Dropdown.Popover>
+      </Dropdown.SubmenuPopover>
     </SubmenuTrigger>
   );
 }

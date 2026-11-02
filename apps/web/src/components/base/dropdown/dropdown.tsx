@@ -19,6 +19,7 @@ import {
     Separator as AriaSeparator,
 } from "react-aria-components";
 import { cx } from "#src/utils/cx";
+import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { Avatar } from "#src/components/base/avatar/avatar";
 import { CheckboxBase } from "#src/components/base/checkbox/checkbox";
 import { RadioButtonBase } from "#src/components/base/radio-buttons/radio-buttons";
@@ -164,6 +165,29 @@ const DropdownPopover = (props: DropdownPopoverProps) => {
     );
 };
 
+/**
+ * A submenu's popover: beside its item where the viewport is wide enough for two menus side by side
+ * wherever the first one opens (md), and below the item on a narrower one, where neither side of a
+ * menu may have room for a second and React Aria, unable to flip it, would leave it hanging off
+ * screen. Below, it abuts its item, so a pointer moving down into it crosses no other item of the
+ * menu (which would take focus and close it), the cross axis keeps it inside the viewport, and it
+ * is never wider than the viewport.
+ */
+const DropdownSubmenuPopover = ({
+    className,
+    ...props
+}: Omit<DropdownPopoverProps, "placement" | "offset" | "className"> & { className?: string }) => {
+    const wide = useBreakpoint("md");
+    return (
+        <DropdownPopover
+            {...props}
+            placement={wide ? "end top" : "bottom start"}
+            offset={wide ? undefined : 0}
+            className={cx("max-w-[calc(100vw-1.5rem)]", className)}
+        />
+    );
+};
+
 const DropdownSeparator = (props: AriaSeparatorProps) => {
     return <AriaSeparator {...props} className={cx("my-1 h-px w-full bg-border-secondary", props.className)} />;
 };
@@ -190,6 +214,7 @@ const DropdownDotsButton = (props: AriaButtonProps & RefAttributes<HTMLButtonEle
 export const Dropdown = {
     Root: AriaMenuTrigger,
     Popover: DropdownPopover,
+    SubmenuPopover: DropdownSubmenuPopover,
     Menu: DropdownMenu,
     Section: AriaMenuSection,
     SectionHeader: AriaHeader,

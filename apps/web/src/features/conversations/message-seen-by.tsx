@@ -144,7 +144,7 @@ export function MessageSeenByMenuEntry({
           <ReaderFaces readers={readers} />
         </span>
       </Dropdown.Item>
-      <Dropdown.Popover placement="end top" className="w-56">
+      <Dropdown.SubmenuPopover className="w-56">
         <Dropdown.Menu aria-label={m.conversation_seen_by()} className="max-h-80">
           {readers.map((reader) => (
             <Dropdown.Item
@@ -159,7 +159,7 @@ export function MessageSeenByMenuEntry({
             </Dropdown.Item>
           ))}
         </Dropdown.Menu>
-      </Dropdown.Popover>
+      </Dropdown.SubmenuPopover>
     </SubmenuTrigger>
   ) : (
     <Dropdown.Item isDisabled icon={SeenIcon} label={seenLabel(seen?.count)} />

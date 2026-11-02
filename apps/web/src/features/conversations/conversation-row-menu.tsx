@@ -125,7 +125,7 @@ export function ConversationRowMenu({
                 isDisabled={!sectionsReady}
                 selectionIndicator="none"
               />
-              <Dropdown.Popover placement="right top">
+              <Dropdown.SubmenuPopover>
                 <Dropdown.Menu aria-label={m.chat_section_move()} onAction={handleAction}>
                   <Dropdown.Item
                     id="section:home"
@@ -150,7 +150,7 @@ export function ConversationRowMenu({
                     selectionIndicator="none"
                   />
                 </Dropdown.Menu>
-              </Dropdown.Popover>
+              </Dropdown.SubmenuPopover>
             </SubmenuTrigger>
             {items.map((item) => (
               <Fragment key={item.id}>
