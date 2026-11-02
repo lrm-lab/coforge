@@ -15,10 +15,15 @@ export function AgentUsernameField({
   label = m.agent_form_username(),
   defaultValue,
   note,
+  autoFocus,
+  isReadOnly,
 }: {
   label?: string;
   defaultValue?: string;
   note?: string;
+  autoFocus?: boolean;
+  /** While a create runs: the name it sent stays the name shown. */
+  isReadOnly?: boolean;
 }) {
   const [username, setUsername] = useState(() => defaultValue ?? randomAgentUsername());
   // Typing cannot produce a malformed name, and Submit drops a trailing hyphen, so an empty field
@@ -34,6 +39,8 @@ export function AgentUsernameField({
         hideRequiredIndicator
         size="sm"
         icon={AtSign}
+        autoFocus={autoFocus}
+        isReadOnly={isReadOnly}
         value={username}
         onChange={(text) => setUsername(typedAgentUsername(text))}
         onBlur={() => {
@@ -51,6 +58,7 @@ export function AgentUsernameField({
           size="xs"
           color="tertiary"
           tooltip={m.agent_form_username_suggest()}
+          isDisabled={isReadOnly}
           onClick={() => setUsername((current) => randomAgentUsername(current))}
         />
       </div>

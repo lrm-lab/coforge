@@ -9,7 +9,6 @@
   "agent_create_local_description": "Runs on your own computer, ready to chat as soon as it’s made. Keep the computer online to use it.",
   "agent_create_computer": "Computer",
   "agent_create_description": "Description",
-  "agent_create_name": "Name",
   "agent_create_kind_label": "Where it runs",
   "agent_create_kind_cloud": "Cloud",
   "agent_create_kind_local": "Local Computer"

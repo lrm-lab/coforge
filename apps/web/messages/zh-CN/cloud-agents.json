@@ -9,7 +9,6 @@
   "agent_create_local_description": "使用自己的本地电脑运行智能体，新建后即可私聊，使用时需保持电脑在线。",
   "agent_create_computer": "选择电脑",
   "agent_create_description": "智能体描述",
-  "agent_create_name": "名称",
   "agent_create_kind_label": "运行位置",
   "agent_create_kind_cloud": "云端",
   "agent_create_kind_local": "本地电脑"

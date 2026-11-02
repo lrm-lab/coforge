@@ -40,6 +40,9 @@ model Agent {
   /// Creation time of an owed DM introduction (`AgentIntroduction`); set by human creation
   /// and private platform-assistant provisioning. Null once settled or when none is owed.
   introductionDueAt         DateTime?
+  /// The client's id for a cloud creation (`CreateCloudAgent`): a retried request finds the Agent
+  /// it made by it. Null for every other Agent, and for cloud Agents made before it was stored.
+  createRequestId           String?                    @db.Uuid
   currentSessionId          String?                    @db.Uuid
   currentSession            AgentSession?              @relation("CurrentAgentSession", fields: [currentSessionId], references: [id], onDelete: SetNull)
   sessions                  AgentSession[]             @relation("AgentSessions")
@@ -77,6 +80,7 @@ model Agent {
   appBot                    AppInstallationBot?
 
   @@unique([workspaceId, name])
+  @@unique([workspaceId, createRequestId])
   @@unique([id, workspaceId])
   @@index([workspaceId, ownerId])
   @@index([workspaceId, createdAt])

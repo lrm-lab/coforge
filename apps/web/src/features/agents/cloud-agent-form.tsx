@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQueryClient } from "@tanstack/react-query";
-import { RefreshCw05 } from "@untitledui/icons";
-import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { m } from "#src/paraglide/messages";
@@ -14,7 +12,8 @@ import { AGENT_DISPLAY_NAME_MAX_LENGTH } from "./agent.schemas";
 import { agentCreateErrorMessage } from "./agent-form";
 import { createCloudAgent } from "./cloud-agents.functions";
 import { AgentCreateFooter, AgentCreateForm } from "./agent-create-frame";
-import { randomAgentUsername } from "./agent-username";
+import { finishedAgentUsername } from "./agent-username";
+import { AgentUsernameField } from "./agent-username-field";
 
 /** The new-Agent dialog's cloud form, under its kind cards: a name, then the Agent is made on the
  * Workspace's cloud Computer and its direct conversation opens. `onBusyChange` keeps the dialog up
@@ -40,10 +39,9 @@ export function CloudAgentForm({
   const queryClient = useQueryClient();
   const workspaceId = useCurrentWorkspaceId();
   const refreshSidebar = useRefreshSidebar({ throwOnError: true });
-  const [name, setName] = useState(() => randomAgentUsername());
   const [error, setError] = useState("");
   const [submitting, guard] = useSubmitGuard();
-  const request = useRef<{ name: string; requestId: string } | null>(null);
+  const [requestId] = useState(() => crypto.randomUUID());
   const controller = useRef<AbortController | null>(null);
   const openingDirect = useRef(false);
   const [opening, setOpening] = useState(false);
@@ -70,18 +68,25 @@ export function CloudAgentForm({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!name.trim()) return;
+    const form = new FormData(event.currentTarget);
+    const name = finishedAgentUsername(String(form.get("name") ?? ""));
+    const displayName = String(form.get("displayName") ?? "").trim() || undefined;
+    if (!name) {
+      setError(m.agent_form_username_required());
+      return;
+    }
     await guard(async () => {
       setError("");
-      // Preserve the request across a timeout, lost response, or a failed DM navigation.
-      if (request.current?.name !== name.trim())
-        request.current = { name: name.trim(), requestId: crypto.randomUUID() };
+      // One request id for the form's life: after a timeout, a lost response or a failed DM
+      // navigation the server returns the Agent this request already made, even under a name
+      // edited since; after a refusal (a taken name) nothing was made, and the new name is used.
+      const request = { name, displayName, requestId };
       const active = new AbortController();
       controller.current = active;
       try {
         const deadline = Date.now() + 120_000;
         while (!active.signal.aborted) {
-          const result = await create({ data: request.current, signal: active.signal });
+          const result = await create({ data: request, signal: active.signal });
           if (active.signal.aborted) return;
           if (result.status !== "preparing") {
             try {
@@ -151,34 +156,18 @@ export function CloudAgentForm({
           cancelDisabled={opening}
           submitLabel={m.agent_create_submit_chat()}
           submitting={submitting}
-          submitDisabled={!name.trim()}
         />
       }
     >
       <div className="flex flex-col gap-3 px-6 pt-5 pb-2">
-        <div className="relative min-w-0">
-          <Input
-            label={m.agent_create_name()}
-            size="sm"
-            value={name}
-            onChange={setName}
-            maxLength={AGENT_DISPLAY_NAME_MAX_LENGTH}
-            isRequired
-            hideRequiredIndicator
-            isReadOnly={submitting}
-            autoFocus={autoFocus}
-          />
-          <div className="absolute top-0 right-0 flex h-5 items-center">
-            <ButtonUtility
-              icon={RefreshCw05}
-              size="xs"
-              color="tertiary"
-              tooltip={m.agent_form_username_suggest()}
-              isDisabled={submitting}
-              onClick={() => setName((current) => randomAgentUsername(current))}
-            />
-          </div>
-        </div>
+        <AgentUsernameField autoFocus={autoFocus} isReadOnly={submitting} />
+        <Input
+          label={m.agent_form_display_name()}
+          name="displayName"
+          size="sm"
+          maxLength={AGENT_DISPLAY_NAME_MAX_LENGTH}
+          isReadOnly={submitting}
+        />
         {submitting && (
           <p role="status" className="text-sm text-tertiary">
             {m.cloud_agent_create_preparing()}

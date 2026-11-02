@@ -20,9 +20,9 @@ export const createCloudAgent = createServerFn({ method: "POST" })
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     const role = await workspaceMemberRole(db, workspaceId, user.id);
     const result = await new CreateCloudAgent({
-      find: (workspaceId, name) =>
+      findByRequest: (workspaceId, createRequestId) =>
         db.agent.findUnique({
-          where: { workspaceId_name: { workspaceId, name } },
+          where: { workspaceId_createRequestId: { workspaceId, createRequestId } },
           select: { id: true, ownerId: true, deletedAt: true, stoppedAt: true },
         }),
       ensureComputer: ({ userId, workspaceId }) =>

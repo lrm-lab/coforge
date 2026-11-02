@@ -40,6 +40,9 @@ export type AgentCreateInput = {
   /** Defaults to public when omitted, matching every creation path except the
    * weekly-report Collector Agent, which is created private outside this use case. */
   visibility?: AgentVisibility;
+  /** The client's id for this creation, so a retried request finds the Agent it made
+   * (`CreateCloudAgent`). Unique per Workspace. */
+  createRequestId?: string;
 };
 
 /**
@@ -145,6 +148,7 @@ export class ManageAgents {
       description,
       computerId: input.computerId,
       visibility: input.visibility ?? AGENT_VISIBILITY.PUBLIC,
+      ...(input.createRequestId ? { createRequestId: input.createRequestId } : {}),
       // A human-created Agent owes its creator an introduction (`AgentIntroduction`).
       introductionDueAt: new Date(),
       runtimeConfig: {

@@ -1,6 +1,5 @@
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
-import { nameToSlug } from "#src/lib/slug";
 import {
   assertCanCreateAgents,
   type WorkspaceMemberRole,
@@ -21,7 +20,8 @@ const configuredPi = { provider: RUNTIME_PROVIDER.PI, model: "", modelProvider: 
 export class CreateCloudAgent {
   constructor(
     private readonly ports: {
-      find(workspaceId: string, name: string): Promise<CreatedAgent | null>;
+      /** The Agent an earlier attempt of this request created, if one did. */
+      findByRequest(workspaceId: string, requestId: string): Promise<CreatedAgent | null>;
       ensureComputer(
         principal: Principal,
       ): Promise<{ computerId: string; containerReady: boolean }>;
@@ -38,11 +38,15 @@ export class CreateCloudAgent {
     },
   ) {}
 
-  async execute(principal: Principal, input: { name: string; requestId: string }) {
+  /** `name` is the username the user typed, as a local Agent's is. A request answered late or
+   * lost is retried with its `requestId`, stored on the Agent it created: the retry gets that
+   * Agent back, whatever name it now carries, and another request for a held name is refused. */
+  async execute(
+    principal: Principal,
+    input: { name: string; displayName?: string; requestId: string },
+  ) {
     assertCanCreateAgents(principal.role);
-    // Keep the visible name in any language, with a stable handle for response-loss retries.
-    const name = `${nameToSlug(input.name, 20) || "bot"}-${input.requestId}`;
-    const existing = await this.ports.find(principal.workspaceId, name);
+    const existing = await this.ports.findByRequest(principal.workspaceId, input.requestId);
     if (existing) return this.result(principal, existing);
     const computer = await this.ports.ensureComputer(principal);
     if (!computer.containerReady) return { status: "preparing" as const };
@@ -55,8 +59,9 @@ export class CreateCloudAgent {
       return { status: "preparing" as const };
     try {
       const created = await this.ports.create(principal, {
-        name,
-        displayName: input.name.trim(),
+        name: input.name,
+        ...(input.displayName ? { displayName: input.displayName } : {}),
+        createRequestId: input.requestId,
         description: "",
         computerId: computer.computerId,
         // Inherit Pi's configured model, reasoning, and credentials on the cloud Computer.
@@ -68,8 +73,8 @@ export class CreateCloudAgent {
         agentId: created.agent.id,
       };
     } catch (error) {
-      // A concurrent retry may have won the unique-name write.
-      const committed = await this.ports.find(principal.workspaceId, name);
+      // A concurrent attempt of this request may have won the unique request-id write.
+      const committed = await this.ports.findByRequest(principal.workspaceId, input.requestId);
       if (committed) return this.result(principal, committed);
       throw error;
     }

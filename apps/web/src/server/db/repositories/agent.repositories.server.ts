@@ -103,6 +103,8 @@ function mapAgent(agent: {
 export type AgentCreateInput = Omit<AgentRecord, "id" | "createdAt"> & {
   id?: string;
   introductionDueAt?: Date;
+  /** Set by a cloud creation; unique per Workspace with it (`Agent.createRequestId`). */
+  createRequestId?: string;
 };
 
 export interface AgentRepository {
