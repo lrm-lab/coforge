@@ -33,8 +33,10 @@ export function ComputerDetailWorkspaceInventory({
 }) {
   const hydrated = useHydrated();
   const [deleteTarget, setDeleteTarget] = useState<ComputerAgentWorkspaceScan | undefined>();
+  // Only a directory the Computer listed is known to remain on disk.
   const deletedCount = snapshot
-    ? snapshot.workspaces.filter((item) => item.state === "deleted").length
+    ? snapshot.workspaces.filter((item) => item.state === "deleted" && item.status === "present")
+        .length
     : 0;
   return (
     <DetailGroup
