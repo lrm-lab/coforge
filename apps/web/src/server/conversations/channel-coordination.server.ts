@@ -147,40 +147,6 @@ export async function changeChannelCoordinator(
           current.coordinatorAgent?.name,
           next?.name,
         ),
-        systemMessage: {
-          create: {
-            kind: "channel.coordinator_changed",
-            params: {
-              channelId,
-              channelName: current.channelName!,
-              actor: {
-                memberId: actorMember.id,
-                handle: actor.username,
-                displayName: humanLabel(actor),
-              },
-              ...(current.coordinatorAgentId && current.coordinatorAgent
-                ? {
-                    previous: {
-                      memberId: previousMember?.id ?? "",
-                      handle: current.coordinatorAgent.name,
-                      displayName: current.coordinatorAgent.name,
-                    },
-                  }
-                : {}),
-              ...(next
-                ? {
-                    next: {
-                      memberId: nextMember!.id,
-                      handle: next.name,
-                      displayName: next.name,
-                    },
-                  }
-                : {}),
-            },
-            conversationId: channelId,
-            workspaceId,
-          },
-        },
         deliveries: {
           create: members.flatMap(({ agent }) =>
             agent ? [{ workspaceId, conversationId: channelId, agentId: agent.id, sequence }] : [],
@@ -188,6 +154,41 @@ export async function changeChannelCoordinator(
         },
       },
       include: { deliveries: true },
+    });
+    await tx.systemMessage.create({
+      data: {
+        messageId: message.id,
+        conversationId: channelId,
+        workspaceId,
+        kind: "channel.coordinator_changed",
+        params: {
+          channelId,
+          channelName: current.channelName!,
+          actor: {
+            memberId: actorMember.id,
+            handle: actor.username,
+            displayName: humanLabel(actor),
+          },
+          ...(current.coordinatorAgentId && current.coordinatorAgent
+            ? {
+                previous: {
+                  memberId: previousMember?.id ?? "",
+                  handle: current.coordinatorAgent.name,
+                  displayName: current.coordinatorAgent.name,
+                },
+              }
+            : {}),
+          ...(next
+            ? {
+                next: {
+                  memberId: nextMember!.id,
+                  handle: next.name,
+                  displayName: next.name,
+                },
+              }
+            : {}),
+        },
+      },
     });
     return { message, members, target: `#${current.channelName}` };
   });
