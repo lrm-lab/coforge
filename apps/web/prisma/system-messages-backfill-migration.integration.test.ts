@@ -69,13 +69,13 @@ async function withSchema(run: (client: PoolClient) => Promise<void>) {
     );
     await client.query(`CREATE TABLE agents (id uuid PRIMARY KEY, name text, "displayName" text)`);
     await client.query(
-      `CREATE TABLE conversation_members (id uuid PRIMARY KEY, "workspaceId" uuid, "userId" uuid, "agentId" uuid)`,
+      `CREATE TABLE conversation_members (id uuid PRIMARY KEY, "workspaceId" uuid, "conversationId" uuid, "userId" uuid, "agentId" uuid)`,
     );
     await client.query(
       `CREATE TABLE conversations (id uuid PRIMARY KEY, "workspaceId" uuid, "channelName" text)`,
     );
     await client.query(
-      `CREATE TABLE tasks (id uuid PRIMARY KEY, "workspaceId" uuid, number int, title text, "messageId" uuid)`,
+      `CREATE TABLE tasks (id uuid PRIMARY KEY, "workspaceId" uuid, "conversationId" uuid, number int, title text, "messageId" uuid)`,
     );
     await run(client);
   } finally {
@@ -144,6 +144,65 @@ test.skipIf(!connectionString)(
       await expect(client.query(migration)).rejects.toThrow(/unclassified/);
       const rows = await client.query(`SELECT count(*)::int AS count FROM system_messages`);
       expect(rows.rows[0]!.count).toBe(0);
+    }),
+  30_000,
+);
+
+test.skipIf(!connectionString)(
+  "a task and a person resolve inside the notice's own conversation",
+  async () =>
+    withSchema(async (client) => {
+      const workspace = crypto.randomUUID();
+      const channelA = crypto.randomUUID();
+      const channelB = crypto.randomUUID();
+      const ada = crypto.randomUUID();
+      const sam1 = crypto.randomUUID();
+      const sam2 = crypto.randomUUID();
+      const adaInA = crypto.randomUUID();
+      const adaInB = crypto.randomUUID();
+      const sam1InA = crypto.randomUUID();
+      const sam2InA = crypto.randomUUID();
+      const taskA = crypto.randomUUID();
+      const taskB = crypto.randomUUID();
+      const claimed = crypto.randomUUID();
+      const moved = crypto.randomUUID();
+      await client.query(
+        `INSERT INTO users (id, username, "displayName") VALUES ($1,'ada','Ada'), ($2,'sam1','Sam'), ($3,'sam2','Sam')`,
+        [ada, sam1, sam2],
+      );
+      await client.query(
+        `INSERT INTO conversations (id, "workspaceId", "channelName") VALUES ($1,$3,'a'), ($2,$3,'b')`,
+        [channelA, channelB, workspace],
+      );
+      await client.query(
+        `INSERT INTO conversation_members (id, "workspaceId", "conversationId", "userId")
+         VALUES ($1,$5,$6,$7), ($2,$5,$8,$7), ($3,$5,$6,$9), ($4,$5,$6,$10)`,
+        [adaInA, adaInB, sam1InA, sam2InA, workspace, channelA, ada, channelB, sam1, sam2],
+      );
+      await client.query(
+        `INSERT INTO tasks (id, "workspaceId", "conversationId", number, title)
+         VALUES ($1,$3,$4,4,'Fix'), ($2,$3,$5,4,'Fix')`,
+        [taskA, taskB, workspace, channelA, channelB],
+      );
+      await client.query(
+        `INSERT INTO messages (id, "conversationId", "workspaceId", "senderMemberId", body)
+         VALUES ($1,$3,$4,NULL,'📌 ada claimed #4 "Fix"'), ($2,$3,$4,NULL,'Sam moved #4 "Fix" to Done')`,
+        [claimed, moved, channelA, workspace],
+      );
+      await client.query(migration);
+      await client.query(paramsMigration);
+      const claimedRow = await client.query(
+        `SELECT params FROM system_messages WHERE "messageId" = $1`,
+        [claimed],
+      );
+      expect(claimedRow.rows[0]!.params.claimer.memberId).toBe(adaInA);
+      expect(claimedRow.rows[0]!.params.task.taskId).toBe(taskA);
+      const movedRow = await client.query(
+        `SELECT params FROM system_messages WHERE "messageId" = $1`,
+        [moved],
+      );
+      expect(movedRow.rows[0]!.params.actor.memberId).toBeNull();
+      expect(movedRow.rows[0]!.params.task.taskId).toBe(taskA);
     }),
   30_000,
 );
