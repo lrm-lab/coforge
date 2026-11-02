@@ -89,8 +89,11 @@ test("a choice card asking the viewer waits in Activity until they answer it", a
   };
   const mine = `E2E waiting mine ${suffix}`;
   const theirs = `E2E waiting theirs ${suffix}`;
-  const mineId = await card(1, mine, DEV_BROWSER_USER.id);
-  await card(2, theirs, peer.id);
+  // Three older cards for the viewer too: four in all, past the three the section shows.
+  const older = [1, 2, 3].map((index) => `E2E waiting older ${index} ${suffix}`);
+  for (const [index, prompt] of older.entries()) await card(index + 1, prompt, DEV_BROWSER_USER.id);
+  await card(4, theirs, peer.id);
+  const mineId = await card(5, mine, DEV_BROWSER_USER.id);
   const section = `document.querySelector('ol[aria-label="Waiting on you"]')`;
   const listed = (prompt: string) =>
     `(${section}?.textContent ?? "").includes(${JSON.stringify(prompt)})`;
@@ -102,12 +105,30 @@ test("a choice card asking the viewer waits in Activity until they answer it", a
     await browser("wait", "--fn", `${listed(mine)} && ${pageHydrated}`);
     // Only the card that asks the viewer: the other asks the peer.
     expect(await evaluate<boolean>(listed(theirs))).toBe(false);
+    // Three show, newest first, the heading counts all four, and the oldest is behind "1 more".
+    const shownRows = `${section}.querySelectorAll(":scope > li").length`;
+    expect(await evaluate<number>(shownRows)).toBe(3);
+    expect(await evaluate<boolean>(listed(older[0]!))).toBe(false);
+    expect(await evaluate<string>(`${section}.previousElementSibling.textContent`)).toContain(
+      "· 4",
+    );
     await browser("screenshot", join(artifacts, "waiting.png"));
+    await browser("find", "text", "1 more", "click");
+    await browser("wait", "--fn", listed(older[0]!));
+    expect(await evaluate<number>(shownRows)).toBe(4);
 
     // The row opens the conversation at the card, which the viewer answers there.
     await browser("find", "text", mine, "click");
     await browser("wait", "--fn", `document.querySelector('${pick}') !== null`);
-    await browser("click", pick);
+    // The pane may still be scrolling to the card when the option first appears, and a click on
+    // a moving target lands beside it: click again until the card closes on the pick.
+    const closed = `document.querySelector('${pick}') === null`;
+    for (let attempt = 0; !(await evaluate<boolean>(closed)); attempt++) {
+      if (attempt === 5) throw new Error("the pick never landed");
+      await browser("click", pick).catch(() => undefined);
+      for (let poll = 0; poll < 15 && !(await evaluate<boolean>(closed)); poll++)
+        await Bun.sleep(200);
+    }
     await browser("wait", "--fn", `!${listed(mine)}`);
     await browser("screenshot", join(artifacts, "answered.png"));
     const answered = await db.actionCard.findUniqueOrThrow({ where: { messageId: mineId } });

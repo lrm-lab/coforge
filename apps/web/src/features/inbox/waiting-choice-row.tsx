@@ -1,6 +1,5 @@
 import { Link } from "@tanstack/react-router";
 
-import { Badge } from "#src/components/base/badges/badges";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { LiveAgentAvatar } from "#src/features/agents/live-agent-avatar";
 import { choiceLetter } from "#src/features/conversations/choice-letter";
@@ -10,6 +9,7 @@ import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import type { WaitingChoiceCard } from "#src/server/conversations/waiting-choice-cards.server";
 import { followInternalLinkClick } from "#src/features/conversations/internal-app-href";
 import { cn } from "#src/lib/utils";
+import { m } from "#src/paraglide/messages";
 import { ACTIVITY_ROW_ITEM_CLASS, ACTIVITY_ROW_LINK_CLASS } from "./activity-inbox-row";
 import { activityChatLink, waitingChoiceTarget } from "./activity-open-target";
 
@@ -28,6 +28,14 @@ export function WaitingChoiceRow({
 }) {
   const workspaceSlug = useWorkspaceSlug();
   const target = waitingChoiceTarget(card);
+  // Where it was asked: its channel, or a Task's, as "#channel · Task #N"; a DM goes unnamed.
+  const channel = card.task?.channel ?? card.channel;
+  const place = [
+    channel && channelLabel(channel),
+    card.task && m.activity_inbox_waiting_task({ number: card.task.number }),
+  ]
+    .filter(Boolean)
+    .join(" · ");
   const options = card.options
     .map((option, index) => `${choiceLetter(index)}. ${option.label}`)
     .join(" · ");
@@ -52,11 +60,6 @@ export function WaitingChoiceRow({
             <span className="min-w-0 truncate text-md font-semibold text-primary">
               {card.prompt}
             </span>
-            {card.task && (
-              <Badge type="color" size="sm" color="gray" className="shrink-0">
-                #{card.task.number}
-              </Badge>
-            )}
             <RelativeTime
               value={card.createdAt}
               plain
@@ -64,7 +67,7 @@ export function WaitingChoiceRow({
             />
           </span>
           <span className="truncate text-sm text-tertiary">
-            {card.channel && `${channelLabel(card.channel)} · `}
+            {place && `${place} · `}
             <span className="font-semibold text-secondary">{card.preparedBy.name}: </span>
             {options}
           </span>

@@ -140,6 +140,8 @@ test("a waiting choice card posted in a thread opens that thread alone, at the c
 
 test("a waiting choice card in a Task's conversation opens the Task over its channel's board", () => {
   expect(
-    waitingChoiceTarget(card({ channel: null, task: { conversationId: "channel", number: 7 } })),
+    waitingChoiceTarget(
+      card({ channel: null, task: { conversationId: "channel", number: 7, channel: null } }),
+    ),
   ).toEqual({ kind: "channel", id: "channel", task: 7 });
 });

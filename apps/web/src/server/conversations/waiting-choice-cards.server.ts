@@ -11,8 +11,12 @@ export type WaitingChoiceCard = {
   channel: { name: string; visibility: ChannelVisibility } | null;
   /** The thread the card was posted in, when it is a reply. */
   threadRootId: string | null;
-  /** The Task whose conversation the card is in, by its channel and number. */
-  task: { conversationId: string; number: number } | null;
+  /** The Task whose conversation the card is in: its number, and the channel it is on. */
+  task: {
+    conversationId: string;
+    number: number;
+    channel: { name: string; visibility: ChannelVisibility } | null;
+  } | null;
   prompt: string;
   options: { id: string; label: string }[];
   preparedBy: { agentId: string; name: string; avatarUrl: string };
@@ -47,7 +51,13 @@ export async function waitingChoiceCards(
         select: {
           channelName: true,
           visibility: true,
-          taskDiscussionOf: { select: { conversationId: true, number: true } },
+          taskDiscussionOf: {
+            select: {
+              conversationId: true,
+              number: true,
+              conversation: { select: { channelName: true, visibility: true } },
+            },
+          },
         },
       },
       preparedByAgent: { select: { id: true, displayName: true, avatarMascot: true } },
@@ -60,11 +70,13 @@ export async function waitingChoiceCards(
     return {
       messageId: card.messageId,
       conversationId: card.conversationId,
-      channel: channelName
-        ? { name: channelName, visibility: visibility as ChannelVisibility }
-        : null,
+      channel: channelOf({ channelName, visibility }),
       threadRootId: card.message.threadRootId,
-      task: taskDiscussionOf,
+      task: taskDiscussionOf && {
+        conversationId: taskDiscussionOf.conversationId,
+        number: taskDiscussionOf.number,
+        channel: channelOf(taskDiscussionOf.conversation),
+      },
       prompt: payload.prompt ?? "",
       options: payload.options ?? [],
       preparedBy: {
@@ -75,4 +87,11 @@ export async function waitingChoiceCards(
       createdAt: card.createdAt.toISOString(),
     };
   });
+}
+
+/** A channel's name and visibility; null for a direct conversation or a Task's. */
+function channelOf(conversation: { channelName: string | null; visibility: string }) {
+  return conversation.channelName
+    ? { name: conversation.channelName, visibility: conversation.visibility as ChannelVisibility }
+    : null;
 }

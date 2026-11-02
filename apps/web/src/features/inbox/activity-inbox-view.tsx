@@ -106,8 +106,11 @@ export function ActivityInboxView({
     ...waitingChoiceCardsQuery(workspaceId),
     enabled: filter === "all",
   });
+  const [allWaiting, setAllWaiting] = useState(false);
   // A disabled query keeps its cached cards: the filter hides them on the other views.
   const waiting = (filter === "all" && waitingQuery.data) || [];
+  // Folded again once few enough wait that nothing was folded.
+  const expandedWaiting = allWaiting && waiting.length > WAITING_SHOWN;
 
   const firstPage = projectedData?.pages[0];
   const pinned = useMemo(() => firstPage?.pinned ?? [], [firstPage]);
@@ -233,9 +236,27 @@ export function ActivityInboxView({
     {
       label: m.activity_inbox_waiting(),
       icon: MessageQuestionCircle,
-      rows: waiting.map((card) => (
+      // However many wait, they never push the conversations off the screen: the first few show,
+      // the rest behind "N more", and the heading says how many in all.
+      count: waiting.length,
+      rows: (expandedWaiting ? waiting : waiting.slice(0, WAITING_SHOWN)).map((card) => (
         <WaitingChoiceRow key={card.messageId} card={card} onOpen={onOpen} />
       )),
+      footer: waiting.length > WAITING_SHOWN && (
+        // On the rows' text column, with room to tap.
+        <div className="py-1.5 pl-[calc(var(--page-gutter)+3.125rem)]">
+          <Button
+            size="sm"
+            color="link-gray"
+            aria-expanded={expandedWaiting}
+            onClick={() => setAllWaiting(!expandedWaiting)}
+          >
+            {expandedWaiting
+              ? m.activity_inbox_waiting_fewer()
+              : m.activity_inbox_waiting_more({ count: waiting.length - WAITING_SHOWN })}
+          </Button>
+        </div>
+      ),
     },
     { label: m.conversation_pinned_section(), icon: Pin01, rows: pinned.map(row) },
     {
@@ -337,12 +358,14 @@ export function ActivityInboxView({
                 <ActivityInboxSectionHeading
                   icon={section.icon}
                   label={section.heading ?? section.label}
+                  count={section.count}
                   className={cn(index > 0 && "pt-4")}
                 />
               )}
               <ol aria-label={section.label} className="flex flex-col">
                 {section.rows}
               </ol>
+              {section.footer}
             </Fragment>
           ))
         )}
@@ -376,6 +399,9 @@ export function ActivityInboxView({
     </div>
   );
 }
+
+/** The waiting cards shown before the rest fold behind "N more". */
+const WAITING_SHOWN = 3;
 
 const FILTER_TABS: ReadonlyArray<{
   id: ActivityInboxFilter;
@@ -450,10 +476,13 @@ function ActivityInboxTabs({
 function ActivityInboxSectionHeading({
   icon: Icon,
   label,
+  count,
   className,
 }: {
   icon?: typeof Pin01;
   label: string;
+  /** How many the section holds, after its label. */
+  count?: number;
   className?: string;
 }) {
   return (
@@ -465,6 +494,12 @@ function ActivityInboxSectionHeading({
     >
       {Icon && <Icon aria-hidden="true" className="size-3 shrink-0 text-fg-quaternary" />}
       {label}
+      {count !== undefined && (
+        <span className="font-normal text-quaternary tabular-nums">
+          <span aria-hidden="true">· </span>
+          {count}
+        </span>
+      )}
     </h2>
   );
 }
