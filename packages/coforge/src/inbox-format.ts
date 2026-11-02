@@ -144,6 +144,7 @@ export function formatInboxCheck(result: InboxCheckResult, nowMs: number): strin
     trailer.push("Next: run coforge inbox check to list all unread conversations.");
   else trailer.push("Next: nothing to do; new messages will reach you as they arrive.");
   sections.push(trailer.join("\n"));
+  if (list.muteHint) sections.push(`Mute suggestion: ${list.muteHint}`);
   if (result.appItems.length > 0)
     sections.push(
       [
