@@ -215,11 +215,11 @@ describe("ComputerRuntimeVisibility", () => {
     const base = fixture();
     const repository: ComputerRuntimeVisibilityRepository = {
       listInWorkspace: (ws) => base.visibility.list({ userId: "user-2", workspaceId: ws }),
-      findInWorkspace: (ws, comp, prov) =>
+      findInWorkspace: async (ws, comp, prov) =>
         base.records.find(
           (r) => r.workspaceId === ws && r.computerId === comp && r.provider === prov,
         ),
-      findByIdInWorkspace: (ws, id) =>
+      findByIdInWorkspace: async (ws, id) =>
         base.records.find((r) => r.workspaceId === ws && r.id === id),
       setPublic: async (id, isPublic) => {
         const r = base.records.find((c) => c.id === id);

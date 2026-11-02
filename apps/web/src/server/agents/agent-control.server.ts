@@ -5,24 +5,21 @@ import {
   type AgentControlResult,
   type AgentControlScope,
   type AgentStartIntent,
-  type SessionIdentity,
 } from "@lrm/coforge-sdk/internal";
 import {
   daemonControlChannel,
   type CentrifugoServerApi,
 } from "#src/server/centrifugo/server-api.server";
-import type { AgentRuntimeConfig } from "./agent-runtime-config.server";
 import { runtimeStartFields } from "./manage-agents.server";
 import { assertAgentLive } from "./active-agent.server";
 import { AppError } from "#src/lib/app-error";
 import { canSeeAgent } from "./agent-visibility.server";
 import type { AgentRuntimeLock } from "./agent-runtime-lock.server";
-import type { AcceptedSessionMentions, AgentSessions } from "./agent-sessions.server";
-import type { AgentIntroduction, AgentIntroductionFacts } from "./agent-introduction.server";
+import type { AgentSessions } from "./agent-sessions.server";
+import type { AgentIntroduction } from "./agent-introduction.server";
 import { LocalAgentControlSignal, type AgentControlSignal } from "./agent-control-signal.server";
 import {
   assertHasAgentControlCapability,
-  type AgentControlCapability,
   type WorkspaceMemberRole,
 } from "#src/server/workspaces/member-role.server";
 import { errorType } from "#src/server/errors/error-type.server";

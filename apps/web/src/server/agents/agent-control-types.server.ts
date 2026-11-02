@@ -1,10 +1,15 @@
-import type { AgentControlScope, AgentStartIntent } from "@lrm/coforge-sdk/internal";
-import type { SessionIdentity } from "./agent-sessions.server";
+import type {
+  AgentControlScope,
+  AgentStartIntent,
+  SessionIdentity,
+} from "@lrm/coforge-sdk/internal";
 import type { AgentRuntimeConfig } from "./agent-runtime-config.server";
 import type { AgentIntroductionFacts } from "./agent-introduction.server";
-import type { AcceptedSessionMentions } from "#src/server/conversations/accepted-session-mentions.server";
-import type { WorkspaceMemberRole } from "#src/server/workspaces/workspace-member-role.server";
-import type { AgentControlCapability } from "#src/server/workspaces/workspace-capabilities.server";
+import type { AcceptedSessionMentions } from "./agent-sessions.server";
+import type {
+  AgentControlCapability,
+  WorkspaceMemberRole,
+} from "#src/server/workspaces/member-role.server";
 
 /** Only the recovery fields a Start intent may carry; a full `AgentStartIntent` (e.g.
  * `recover()`'s) structurally satisfies this too. */
