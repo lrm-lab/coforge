@@ -177,7 +177,9 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
     let resumePrompt: string | undefined;
     if (options.unattended) {
       // No message waits: the restart is the sweep's own, capped per stuck spell (task #404).
-      const admission = this.#unattended.admit(agentId, launch.progress?.lastCompletedAtMs);
+      // A background command or subagent may be what the turn waits on: never killed for this.
+      if ((launch.backgroundTasks?.count ?? 0) > 0) return;
+      const admission = this.#unattended.admit(agentId, launch, launch.progress?.lastCompletedAtMs);
       if (admission === "held") return;
       if (admission === "limit") return this.#reportUnattendedLimit(agentId, launch, restart);
       resumePrompt = unattendedResumePrompt(
@@ -194,14 +196,16 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
   }
 
   /** The Agent stalled again after the last unattended restart allowed: its owner sees why, as
-   * the error banner, and nothing restarts it until a message arrives or someone does. */
+   * an error, and nothing restarts it until a message arrives or someone does. A stall, not a
+   * turn-ending kind: the turn is still live and hung, so a message must still read it as stalled
+   * and restart it. */
   #reportUnattendedLimit(agentId: string, launch: L, restart: AgentRestartConfig): void {
     const runtimeName = runtimeDisplayName(restart.config.provider);
     this.#ports.publish(
       agentId,
       launch,
       "error",
-      AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_ERROR,
+      AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_STALLED,
       `The ${runtimeName} runtime stalled again after ${UNATTENDED_RECOVERY_LIMIT} automatic restarts with no message waiting. It is not restarted again until a message arrives or someone restarts it.`,
     );
     logger.warn("Agent runtime stalled past its unattended restart limit", {

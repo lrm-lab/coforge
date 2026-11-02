@@ -1,6 +1,9 @@
-import { expect, test } from "bun:test";
+import { expect, setSystemTime, test } from "bun:test";
 import type { AgentSession } from "@lrm/coforge-anvil";
+import { AGENT_ACTIVITY_DETAIL_KIND } from "@lrm/coforge-sdk/internal";
 import type { AgentRestartConfig } from "#src/agent-runtime/agent-process-manager";
+import { activityDraft } from "#src/daemon-runtime/activity-draft";
+import { AgentActivityPublisher } from "#src/daemon-runtime/agent-activity-publisher";
 import {
   RuntimeRelease,
   type RuntimeReleasePorts,
@@ -92,7 +95,8 @@ test("restarts with nothing waiting stop at the limit, tell the owner once, and 
   expect(published).toEqual([
     expect.objectContaining({
       level: "error",
-      detailKind: "runtime_error",
+      // A stall, not a turn-ending kind: the hung turn must still read as stalled.
+      detailKind: "runtime_stalled",
       text: expect.stringContaining(`after ${UNATTENDED_RECOVERY_LIMIT} automatic restarts`),
     }),
   ]);
@@ -102,4 +106,84 @@ test("restarts with nothing waiting stop at the limit, tell the owner once, and 
   launch.progress!.observe({ type: "completed" });
   await runtimeRelease.recoverStalled("agent-a", stalled, { unattended: true });
   expect(woken).toHaveLength(UNATTENDED_RECOVERY_LIMIT + 1);
+});
+
+test("a turn waiting on a background task is not restarted when nothing is queued", async () => {
+  const { runtimeRelease, stalled, launch, woken } = release();
+  (launch as { backgroundTasks?: { count: number } }).backgroundTasks = { count: 1 };
+  await runtimeRelease.recoverStalled("agent-a", stalled, { unattended: true });
+  expect(woken).toEqual([]);
+});
+
+test("past the limit, a different launch (a message or a person restarted it) starts a new run", async () => {
+  const { runtimeRelease, stalled, woken } = release();
+  for (let n = 0; n <= UNATTENDED_RECOVERY_LIMIT; n++)
+    await runtimeRelease.recoverStalled("agent-a", stalled, { unattended: true });
+  expect(woken).toHaveLength(UNATTENDED_RECOVERY_LIMIT);
+  const relaunched = { ...stalled, launch: { stopping: false, progress: new ProviderProgress() } };
+  await runtimeRelease.recoverStalled("agent-a", relaunched, { unattended: true });
+  expect(woken).toHaveLength(UNATTENDED_RECOVERY_LIMIT + 1);
+});
+
+test("with the real publisher, the limit notice leaves the hung turn judged stalled", async () => {
+  const launch = {
+    launchId: "launch-1",
+    clientSeq: 0,
+    stopping: false,
+    progress: new ProviderProgress(),
+  };
+  const publisher = new AgentActivityPublisher<typeof launch>({
+    currentLaunch: () => launch,
+    transport: { sendAgentActivity() {} },
+    recordClientSeq() {},
+    reconcileIdleTurn: () => false,
+  });
+  publisher.enable();
+  const draft = (detailKind: string, level: "info" | "error", detail: string) =>
+    activityDraft("workspace-a", "agent-a", detailKind, level, detail);
+  publisher.publish(
+    "agent-a",
+    launch,
+    draft(AGENT_ACTIVITY_DETAIL_KIND.THINKING_STARTED, "info", "Thinking"),
+  );
+  const session = { hasLiveTurn: true } as unknown as AgentSession;
+  const restart: AgentRestartConfig = {
+    config: { provider: "pi", model: "m", modelProvider: "anthropic", reasoning: "balanced" },
+    sessionId: "native-1",
+  };
+  const runtimeRelease = new RuntimeRelease<typeof launch>({
+    launch: () => launch,
+    runtime: () => ({ session }) as never,
+    restartConfig: () => restart,
+    lastBusy: (agentId) => publisher.lastBusy(agentId),
+    queuedForMs: () => undefined,
+    resumable: () => true,
+    sessionId: () => "native-1",
+    isStopping: () => false,
+    daemonIdleFacts: () => ({}) as never,
+    hasParkedWork: () => false,
+    flushParked: () => {},
+    // The stalled launch stays current: no relaunch replaces it in this test.
+    wake: async () => {},
+    publish: (agentId, current, level, detailKind, text) =>
+      publisher.publish(agentId, current, draft(detailKind, level, text)),
+    handBackMentions: async () => {},
+    release: async () => {},
+  });
+  try {
+    launch.progress = new ProviderProgress();
+    setSystemTime(new Date(Date.now() + 16 * 60_000));
+    const stalled = runtimeRelease.stalled("agent-a")!;
+    expect(stalled).toBeDefined();
+    for (let n = 0; n <= UNATTENDED_RECOVERY_LIMIT; n++) {
+      launch.stopping = false;
+      await runtimeRelease.recoverStalled("agent-a", stalled, { unattended: true });
+    }
+    launch.stopping = false;
+    // A message arriving now still finds a stalled turn to restart.
+    expect(runtimeRelease.stalled("agent-a")).toBeDefined();
+  } finally {
+    setSystemTime();
+    publisher.forgetBusy("agent-a");
+  }
 });

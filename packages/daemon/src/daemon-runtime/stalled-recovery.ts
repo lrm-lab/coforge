@@ -105,25 +105,32 @@ export const UNATTENDED_RECOVERY_LIMIT = 2;
 /** What an unattended recovery may do now: restart, report the limit (once), or nothing. */
 export type UnattendedRecoveryAdmission = "restart" | "limit" | "held";
 
+type UnattendedRun = { count: number; lastAtMs: number; reportedFor?: object };
+
 /**
  * The run of unattended restarts per Agent. A turn that completes after the last restart ends
- * the run (the relaunch's own progress says so), so the next stall starts a new one.
+ * the run (the relaunch's own progress says so), so the next stall starts a new one. Past the
+ * limit nothing here relaunches the Agent, so a different launch than the one reported on was
+ * started by someone else (a message, a person): it starts a new run too.
  */
 export class UnattendedRecoveries {
-  readonly #runs = new Map<string, { count: number; lastAtMs: number; reported: boolean }>();
+  readonly #runs = new Map<string, UnattendedRun>();
 
+  /** `launch` is the stalled launch's identity, compared only by reference. */
   admit(
     agentId: string,
+    launch: object,
     lastCompletedAtMs: number | undefined,
     nowMs = Date.now(),
   ): UnattendedRecoveryAdmission {
     let run = this.#runs.get(agentId);
     if (run && lastCompletedAtMs !== undefined && lastCompletedAtMs > run.lastAtMs) run = undefined;
-    run ??= { count: 0, lastAtMs: 0, reported: false };
+    if (run?.reportedFor && run.reportedFor !== launch) run = undefined;
+    run ??= { count: 0, lastAtMs: 0 };
     this.#runs.set(agentId, run);
     if (run.count >= UNATTENDED_RECOVERY_LIMIT) {
-      if (run.reported) return "held";
-      run.reported = true;
+      if (run.reportedFor) return "held";
+      run.reportedFor = launch;
       return "limit";
     }
     run.count += 1;
