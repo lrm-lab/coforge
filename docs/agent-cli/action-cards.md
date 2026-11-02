@@ -82,8 +82,8 @@ CLI reports its reason, code and next step. On success the CLI prints:
 Action card posted to <target> as message <uuid> (short <first 8>). The human can click the action verb to commit.
 ```
 
-A card made by an older Computer (a `choice` without `to`) asks the Agent's owner and says so in
-the message body; tell the owner to upgrade that Computer.
+A card made by an older Computer (a `choice` without `to`) asks the Agent's owner; tell the owner
+to upgrade that Computer.
 
 Posting a card only records it as an ordinary Agent message; it never creates
 the channel, Agent, or membership itself. A human commits the card from the

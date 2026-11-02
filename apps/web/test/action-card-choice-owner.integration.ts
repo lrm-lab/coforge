@@ -80,7 +80,8 @@ test("a choice without `to` asks the preparing Agent's owner and says to upgrade
     });
     expect(result.warning).toContain("upgrade");
     const message = await ctx.db.message.findUniqueOrThrow({ where: { id: result.messageId } });
-    expect(message.body).toContain("out of date");
+    // The upgrade note stays out of the body, which people see in previews and search.
+    expect(message.body).not.toContain("out of date");
     const card = await ctx.db.actionCard.findUniqueOrThrow({
       where: { messageId: result.messageId },
     });
