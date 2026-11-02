@@ -50,11 +50,10 @@ the message is sent. Write the channel's exact name, followed by a space or punc
 outside inline code, a code block or a link, for it to link; any other `#name` stays plain text.
 When you read the message back it shows as `#name` again.
 
-A `task #N` or a bare `#N` naming one of this conversation's tasks is turned into a link to that
-task when the message is sent, which opens the task for humans; when you read the message back it
-shows as `task #N`. Any other `#N` — a pull request or issue number, say — stays plain text, unless
-a channel has exactly that name. A `#N` inside inline code, a code block or a link is never a task
-link.
+A `task #N` naming one of this conversation's tasks is turned into a link to that task when the
+message is sent, which opens the task for humans; when you read the message back it shows as
+`task #N`. A bare `#N` is never a task link: it reads as a channel of that name, or stays plain
+text. A `task #N` inside inline code, a code block or a link is never a task link.
 
 A `#name:` followed by a short id prefix of a top-level message in that channel (as the CLI prints
 it), or its whole id, is turned into a link that opens that message's thread when the message is

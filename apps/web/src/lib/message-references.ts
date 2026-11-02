@@ -11,19 +11,11 @@
  * 2. a thread reference, `#name:shortid` (`THREAD_REFERENCE_PATTERN`): one top-level message of
  *    that channel, named by a unique 6–12 hex prefix of its id or by the whole id;
  * 3. a task reference, `task #N` (`TASK_REFERENCE_PATTERN`);
- * 4. a bare `#N` (`BARE_TASK_REFERENCE_PATTERN`): one of the conversation's tasks, otherwise a
- *    channel of that name;
- * 5. a channel reference, `#name` (`CHANNEL_REFERENCE_PATTERN`).
+ * 4. a channel reference, `#name` (`CHANNEL_REFERENCE_PATTERN`).
  *
  * The earliest match wins, and at the same position the earlier alternative wins. A match is
  * consumed whether or not it resolves, which is what gives each reference its precedence: a thread
  * reference's `#name` is never also a channel, and the `#N` of `task #N` is never also a channel.
- * A bare `#N` therefore carries its own fall-through: it is read with the whole `#name` run it
- * starts, and resolves to the task N, else the channel that run names. When the run is longer than
- * the number (`#132-plan`), a channel with that whole name comes first, so a channel name that
- * starts with digits still reads whole; failing that, the number is still the task. Only the
- * channel reading needs the whole run written exactly: in `#5-\_b\_` the escapes rule out a
- * channel, but the `#5` is written exactly and is still the task.
  *
  * An unresolved thread reference — no such channel, no such message, or a prefix two messages
  * share — stays text as a whole: its `#name` is consumed with it and never read as a channel, nor,
@@ -33,8 +25,7 @@
  * What resolves becomes its stored token, spliced into the body as written at the node's source
  * offsets (mapped back through the escaping), so every byte outside a replaced reference stays
  * identical. A match whose source is not exactly its text — an escaped `\#name`, a character
- * reference — is written literally, not referenced (except a bare `#N` whose number is written
- * exactly, above).
+ * reference — is written literally, not referenced.
  *
  * A token already in the body is not special here: like a mention token, it is a claim that every
  * consumer checks against authoritative data (the renderer links a channel token only when the
@@ -46,7 +37,6 @@
  * body with the answers. The token grammar and the readers live in the SDK.
  */
 import {
-  BARE_TASK_REFERENCE_PATTERN,
   CHANNEL_NAME_PATTERN,
   CHANNEL_REFERENCE_PATTERN,
   MENTION_PATTERN,
@@ -68,20 +58,10 @@ type Reference =
   /** `name` is the channel name, `anchor` the message id or prefix, both lower-cased. */
   | { kind: "thread"; name: string; anchor: string }
   | { kind: "task"; number: number }
-  /** A bare `#N`: `name` is the whole `#name` run it starts, lower-cased, and `rest` what that run
-   * holds after the number, as written (empty when the run is just the number). */
-  | { kind: "bareNumber"; number: number; name: string; rest: string }
   | { kind: "channel"; name: string };
 
-/**
- * One alternative's reading of its match: the reference, and the text it consumes. `exactPart` is
- * what a prefix of that text still reads as when the whole is not written exactly but the prefix
- * is (see `proseReferences`).
- */
-type Reading = { reference: Reference; text: string; exactPart?: Omit<Reading, "exactPart"> };
-
-/** The `#name` run a channel reference reads, anchored where a bare `#N` starts. */
-const CHANNEL_RUN = new RegExp(CHANNEL_REFERENCE_PATTERN.source, "uy");
+/** One alternative's reading of its match: the reference, and the text it consumes. */
+type Reading = { reference: Reference; text: string };
 
 /** The alternatives in precedence order. Each reads its own match into a `Reading`. */
 const ALTERNATIVES: readonly { pattern: RegExp; read: (match: RegExpExecArray) => Reading }[] = [
@@ -105,7 +85,6 @@ const ALTERNATIVES: readonly { pattern: RegExp; read: (match: RegExpExecArray) =
     pattern: TASK_REFERENCE_PATTERN,
     read: (match) => ({ reference: { kind: "task", number: Number(match[1]) }, text: match[0] }),
   },
-  { pattern: BARE_TASK_REFERENCE_PATTERN, read: readBareNumber },
   {
     pattern: CHANNEL_REFERENCE_PATTERN,
     // Channel names are stored lower-case, so a reference matches regardless of case.
@@ -115,28 +94,6 @@ const ALTERNATIVES: readonly { pattern: RegExp; read: (match: RegExpExecArray) =
     }),
   },
 ];
-
-/** A bare `#N`, read with the whole `#name` run it starts, so it can fall through to a channel. */
-function readBareNumber(match: RegExpExecArray): Reading {
-  CHANNEL_RUN.lastIndex = match.index;
-  // The run always matches here: a bare `#N` is itself a `#name` run.
-  const run = CHANNEL_RUN.exec(match.input)![0];
-  const number = Number(match[1]);
-  return {
-    reference: {
-      kind: "bareNumber",
-      number,
-      name: run.slice(1).toLowerCase(),
-      rest: run.slice(match[0].length),
-    },
-    text: run,
-    // Only the channel reading needs the whole run: the number alone is still the task.
-    exactPart:
-      run.length > match[0].length
-        ? { reference: { kind: "task", number }, text: match[0] }
-        : undefined,
-  };
-}
 
 /**
  * One private scanner per alternative, created once. `exec` with `lastIndex` is stateful, so the
@@ -210,10 +167,7 @@ export function readMessageReferences(body: string): MessageReferences {
   for (const { reference } of references) {
     if (reference.kind === "mention") handles.add(reference.handle);
     else if (reference.kind === "task") taskNumbers.add(reference.number);
-    else if (reference.kind === "bareNumber") {
-      taskNumbers.add(reference.number);
-      if (CHANNEL_NAME_PATTERN.test(reference.name)) channelNames.add(reference.name);
-    } else if (reference.kind === "channel" && CHANNEL_NAME_PATTERN.test(reference.name))
+    else if (reference.kind === "channel" && CHANNEL_NAME_PATTERN.test(reference.name))
       channelNames.add(reference.name);
     else if (reference.kind === "thread" && CHANNEL_NAME_PATTERN.test(reference.name))
       threads.set(`${reference.name}:${reference.anchor}`, {
@@ -255,14 +209,6 @@ function tokenFor(reference: Reference, lookup: MessageReferenceLookup): string 
     }
     case "task":
       return lookup.task?.(reference.number) ? taskReferenceToken(reference.number) : undefined;
-    case "bareNumber": {
-      const task = lookup.task?.(reference.number);
-      const channel = lookup.channel?.(reference.name);
-      // The task comes first, except against a channel named by a run longer than the number.
-      if (channel && (reference.rest || !task))
-        return channelReferenceToken(channel.id, channel.name);
-      return task ? taskReferenceToken(reference.number) + reference.rest : undefined;
-    }
     case "channel": {
       const channel = lookup.channel?.(reference.name);
       return channel && channelReferenceToken(channel.id, channel.name);
@@ -296,15 +242,11 @@ function proseReferences(body: string): { reference: Reference; start: number; e
           ? aligned.starts + match.index
           : aligned.starts[match.index]!;
       // Written exactly as matched: an escape or a character reference inside it means the
-      // author wrote the characters literally. A reading whose exact prefix still means something
-      // (a bare `#N` whose run goes on) falls back to that prefix.
-      const exact = [match, match.exactPart].find(
-        (reading) => reading !== undefined && source.startsWith(reading.text, from),
-      );
-      if (!exact) continue;
+      // author wrote the characters literally.
+      if (!source.startsWith(match.text, from)) continue;
       // Reference text holds no `<`, so it maps back to the body one character for one.
       const start = toBody ? toBody(from) : from;
-      references.push({ reference: exact.reference, start, end: start + exact.text.length });
+      references.push({ reference: match.reference, start, end: start + match.text.length });
     }
   }
   return references;
