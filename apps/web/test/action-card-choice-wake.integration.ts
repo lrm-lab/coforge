@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { commitChoiceCard } from "#src/server/conversations/action-card-choice.server";
+import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 
 const connectionString = Bun.env.DATABASE_URL;
 if (!connectionString) throw new Error("DATABASE_URL must point to local PostgreSQL");
@@ -115,4 +116,11 @@ test("choosing an option wakes the asking Agent with the choice, and posts no me
   expect(decoded).toContain("Red");
   const messages = await db.message.count({ where: { conversationId } });
   expect(messages).toBe(1);
+  // The Agent was offline: the recovery replay carries the answer, not its own question.
+  const pending = await new PrismaDirectConversationRepository(db).readPendingAgentDeliveries(
+    workspaceId,
+    agentId,
+  );
+  const replay = pending.find((row) => row.messageId === messageId);
+  expect(replay?.body).toContain("chose a · Red");
 });

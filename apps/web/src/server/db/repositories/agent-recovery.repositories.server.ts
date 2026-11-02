@@ -12,6 +12,7 @@ import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.ser
 import { MESSAGE_MENTIONS_SELECT } from "#src/server/conversations/mentions.server";
 import {
   agentDeliveryView,
+  choiceResultBody,
   type AgentReadableBody,
 } from "#src/server/conversations/agent-message-view.server";
 import {
@@ -76,6 +77,7 @@ export async function readPendingAgentDeliveries(
           attachments: { select: { id: true }, orderBy: { position: "asc" } },
           pendingMentionActions: { where: NOTIFIED_AGENT_WHERE(agentId), select: { id: true } },
           memoryHint: { select: { id: true, targetAgentId: true, deliveredAt: true } },
+          actionCard: { select: { kind: true, payload: true, result: true } },
         },
       },
     },
@@ -100,6 +102,7 @@ export async function readPendingAgentDeliveries(
     deliveries.map((delivery) => delivery.conversation),
   );
   return deliveries.map((delivery) => {
+    const { actionCard, ...message } = delivery.message;
     // agentMessageSender handles both human and Agent authors and validates the handle;
     // reading sender.user alone produces a bare @ for Agent messages.
     const sender = agentMessageSender(delivery.message.sender);
@@ -117,7 +120,9 @@ export async function readPendingAgentDeliveries(
       latestSenderKind: sender.kind,
       latestSenderHandle: sender.handle,
       latestSenderDescription: sender.description,
-      ...agentDeliveryView(delivery.message, agentId),
+      ...agentDeliveryView(message, agentId),
+      // A choice delivery replays the answer, not the Agent's own card question.
+      ...(delivery.reason === "choice" ? { body: choiceResultBody(actionCard, target) } : {}),
       // A comment notification's reason rides the envelope on replay exactly as the live push
       // sent it.
       ...(delivery.reason ? { reason: delivery.reason } : {}),

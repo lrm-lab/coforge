@@ -72,6 +72,7 @@ export async function commitChoiceCard(
     messageId: input.messageId,
     conversationId: card.conversationId,
     agentId: card.preparedByAgentId,
+    prompt: payload.prompt,
     option,
   });
   return result;
@@ -87,6 +88,7 @@ async function wakeAskingAgent(
     messageId: string;
     conversationId: string;
     agentId: string;
+    prompt: string;
     option: { id: string; label: string };
   },
 ) {
@@ -106,11 +108,10 @@ async function wakeAskingAgent(
     }),
   ]);
   if (!message) return;
-  const delivery = await db.agentMessageDelivery.upsert({
-    where: {
-      messageId_agentId: { messageId: input.messageId, agentId: input.agentId },
-    },
-    create: {
+  // The Agent's own card message has no delivery; an existing one means another path wrote it,
+  // which must fail loudly rather than have its reason overwritten.
+  const delivery = await db.agentMessageDelivery.create({
+    data: {
       workspaceId: input.workspaceId,
       conversationId: input.conversationId,
       agentId: input.agentId,
@@ -118,9 +119,9 @@ async function wakeAskingAgent(
       sequence: message.sequence,
       reason: "choice",
     },
-    update: { reason: "choice" },
     select: { deliveryId: true, createdAt: true },
   });
+  const target = `#${message.conversation.channelName ?? input.conversationId}${message.threadRootId ? `:${message.threadRootId}` : ""}`;
   await new AgentDeliveryPublisher(publisher ?? createCentrifugoServerApi()).publish(
     input.workspaceId,
     [
@@ -133,9 +134,9 @@ async function wakeAskingAgent(
         deliveryId: delivery.deliveryId,
         sequence: message.sequence,
         createdAtMs: delivery.createdAt.getTime(),
-        body: `chose ${input.option.id} · ${input.option.label}`,
+        body: `Choice "${input.prompt}" in ${target}: chose ${input.option.id} · ${input.option.label}`,
         mentions: [],
-        target: `#${message.conversation.channelName ?? input.conversationId}${message.threadRootId ? `:${message.threadRootId}` : ""}`,
+        target,
         latestSenderKind: "system",
         latestSenderHandle: "",
         latestSenderDescription: "",
