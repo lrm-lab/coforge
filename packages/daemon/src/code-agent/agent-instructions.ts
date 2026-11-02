@@ -1,5 +1,10 @@
 import { collapseWhitespace } from "@lrm/coforge-anvil";
 import {
+  cloudComputerAgentSkillsDirectory,
+  cloudComputerSharedSkillsDirectory,
+  isCloudComputerSkillsEnabled,
+} from "@coforge/agent/cloud-computer-skills";
+import {
   CHANNEL_ARGUMENT_EXAMPLES,
   OPENVIKING_ARGUMENT_EXAMPLES,
   OPENVIKING_OPERATION_ID_RULE,
@@ -233,13 +238,23 @@ message_read: ${CHANNEL_ARGUMENT_EXAMPLES.message_read}${offerOnly ? "" : `\nsen
 
 export type CoforgeCliGuideOptions = Pick<
   CoforgeAgentPromptContext,
-  "extraCriticalRules" | "capabilities"
+  "extraCriticalRules" | "capabilities" | "agentId"
 >;
 
 export const CLI_CHANNEL_MESSAGE_EXAMPLE = `coforge message check --target '#channel'
 coforge message send --target '#channel' <<'COFORGE_MESSAGE'
 Your reply text, with literal \`backticks\` and $variables preserved.
 COFORGE_MESSAGE`;
+
+/** Cloud-computer only. Empty string on ordinary (non-cloud) hosts. */
+function cloudComputerSkillsGuidance(agentId: string | undefined): string {
+  if (!isCloudComputerSkillsEnabled()) return "";
+  const shared = cloudComputerSharedSkillsDirectory();
+  const agentDir = agentId
+    ? cloudComputerAgentSkillsDirectory(agentId)
+    : `${shared.replace(/\/skills$/, "")}/agent-skills/<agentId>`;
+  return `Persistent skills on this cloud computer: write shared skills under \`${shared}/<name>/SKILL.md\`, and this Agent's skills under \`${agentDir}/<name>/SKILL.md\`. Do not rely on \`/root/.pi/agent/skills\` or only \`.pi/skills\` under the Agent workspace — those are not the durable copies. Delete by removing the directory under those persistent paths.\n`;
+}
 
 function buildCoforgeCliGuideSections(options: CoforgeCliGuideOptions = {}) {
   return {
@@ -255,7 +270,9 @@ Notices list targets, not bodies. Run \`coforge message check --target '<target>
 If a failed send says \`Retryable: yes\`, run its next action; else \`Draft saved: yes\` means unknown delivery: do not resend automatically. Do not poll for new messages.`,
     execution: `## Work
 Answer ordinary questions freely; untracked DM needs no Task. Before implementing a shared channel request, claim its original top-level message with \`coforge task claim --target '<channel>' --message-id <root-message-id>\` (existing: \`--number <n>\`); avoid duplicates. Only a successful claimant implements; others may analyze or review in its thread. If a claim fails, do not start conflicting execution. Tracked work: in_review; done after human approval.
-${options.capabilities?.memoryDisposition ? "Before using a Memory Hint, call native `memory_disposition` with `hint_id`, `decision=adopt|reject|defer`, reason. Only the call is a receipt; adopt is intent.\n" : ""}Read MEMORY.md only when this request lacks context; an inbox notice is not missing context. During a long task, note where you are in notes/active-context.md so you can resume if this session's context is compacted — never to hand the work to a later turn.
+${options.capabilities?.memoryDisposition ? "Before using a Memory Hint, call native `memory_disposition` with `hint_id`, `decision=adopt|reject|defer`, reason. Only the call is a receipt; adopt is intent.\n" : ""}${cloudComputerSkillsGuidance(
+      options.agentId,
+    )}Read MEMORY.md only when this request lacks context; an inbox notice is not missing context. During a long task, note where you are in notes/active-context.md so you can resume if this session's context is compacted — never to hand the work to a later turn.
 **Complete ALL your work before stopping.** Finish multi-step work, report results, then run \`coforge task list --mine\` and pick up any unfinished task assigned to you. Do not poll for new messages.`,
     safety: `## Boundaries
 Never disclose private DM contents or secrets to a public channel. Credentials follow human intent: do not solicit, expose, or relay credentials on your own, or create a disclosure a human did not request; redact unexpected credential-shaped output. Follow user preferences.${options.capabilities?.cloudDesktop ? " Private page input (password, OTP, and similar): open the page first, then post a `page:fill` action card with `id`/`label`/`input` (CSS `selector` optional) — never ask them to paste the secret into chat (the platform refuses such sends), and if they do paste one, refuse to type it and re-offer the card. `page-fill.py --inspect` lists visible fields. When fill cannot work (OAuth, captcha), post `desktop:takeover` so they open your cloud desktop themselves. Prefer a `choice` card when several login paths exist. See `coforge manual get action-cards`." : ""}
