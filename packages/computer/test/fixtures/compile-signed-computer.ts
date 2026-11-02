@@ -1,5 +1,9 @@
-import { DARWIN_SIGNING_KEY_ENV, signDarwinExecutable } from "../darwin-signing";
-import { compileTargetArtifacts, isReleaseTarget } from "../compile-targets";
+import { compileTargetArtifacts } from "../../scripts/compile-release";
+import { isReleaseTarget } from "../../../../scripts/release/compile-targets";
+import {
+  DARWIN_SIGNING_KEY_ENV,
+  signDarwinExecutable,
+} from "../../../../scripts/release/darwin-signing";
 
 // Compiles one darwin Computer the way a publish does - signed by a closure over the identity -
 // and prints the SHA-256 of the bytes `compileTargetArtifacts` returned. The key arrives in the

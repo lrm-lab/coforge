@@ -260,7 +260,7 @@ jobs:
       - name: Verify published macOS executable signature and modes
         # Bun < 1.4.2 signed invalidly, which macOS 27 kills; `codesign --verify
         # --strict` catches it; darwin-signing pins the DR.
-        run: bun test packages/computer/test/release-executable.test.ts scripts/release/compile-targets.test.ts scripts/release/darwin-signing.test.ts
+        run: bun test packages/computer/test/release-executable.test.ts scripts/release/darwin-signing.test.ts
 
   # Three machines split the test files; the Web track builds the image instead of the package.
   web:

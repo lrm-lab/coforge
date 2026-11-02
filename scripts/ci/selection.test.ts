@@ -229,6 +229,13 @@ test("documentation skips application checks, while shared and unknown inputs fa
     "release",
     "windows-release",
   ]);
+  // The Computer's release build lives in its package, but publish.ts and its tests load it.
+  expect(selectChecks(["packages/computer/scripts/compile-release.ts"], "changes")).toEqual([
+    "computer",
+    "macos-lifecycle",
+    "release",
+    "windows-release",
+  ]);
 });
 
 test("benchmark changes run the Web job, which checks and tests the benchmarks, and deploy nothing", async () => {

@@ -1,10 +1,3 @@
-import { join, resolve } from "node:path";
-// By path, not package name: the Computer's own tests (packages/computer/test/
-// release-executable.test.ts) run this build on Windows from an install of that one workspace,
-// which has no root node_modules to resolve `@coforge/computer` from.
-import { resolveServerUrl } from "../../packages/computer/src/release-channel";
-import { zodResolvePlugin } from "../bun-resolve-zod-plugin";
-
 // The release target names this repository already uses across docs/release/, updater.ts's
 // manifest.platforms keys and install.sh's/install.ps1's `uname`/architecture switch, mapped to
 // the `Bun.build({ compile: { target } })` string that actually cross-compiles each one. Verified
@@ -16,8 +9,7 @@ import { zodResolvePlugin } from "../bun-resolve-zod-plugin";
 // code signature into compiled executables (oven-sh/bun#32159). macOS 26 still ran them, but
 // macOS 27 kills them at launch with SIGKILL / OS_REASON_CODESIGNING, so every published
 // Computer built by an older Bun was dead on arrival there. release-executable.test.ts verifies
-// the signature with `codesign --verify --strict` on macOS hosts. A build given a signer replaces
-// Bun's ad-hoc signature with the Computer's own (darwin-signing.ts).
+// the signature with `codesign --verify --strict` on macOS hosts.
 const BUN_COMPILE_TARGETS = {
   "linux-x64": "bun-linux-x64",
   "linux-arm64": "bun-linux-arm64",
@@ -48,99 +40,4 @@ export function resolveBunCompileTarget(
     throw new Error(`unsupported release target: ${target}`);
   }
   return BUN_COMPILE_TARGETS[target];
-}
-
-const REPO_ROOT = resolve(import.meta.dir, "../..");
-const COMPUTER_ENTRYPOINT = join(REPO_ROOT, "packages/computer/src/main.ts");
-
-export type CompileTargetOptions = {
-  target: ReleaseTarget;
-  version: string;
-  feedUrl: string;
-  /** Directory the unified binary is written into; each target's compile call needs its
-   * own directory or scratch file name to avoid two targets racing on the same output path. */
-  outputDirectory: string;
-  /** Signs a `darwin-*` output in place before its bytes are read, so every checksum computed
-   * later is of the signed bytes. Never called for other targets; without it (local and test
-   * builds) the output keeps Bun's ad-hoc signature. */
-  sign?: (executable: string) => Promise<void>;
-};
-
-export type CompiledArtifacts = { computer: Uint8Array };
-
-/** Cross-compiles the unified release binary for one target.
- * packages/computer/test/release-executable.test.ts executes the host-target Computer to verify
- * its release identity;
- * build-release.test.ts covers manifest assembly using small fixture binaries. */
-export async function compileTargetArtifacts(
-  options: CompileTargetOptions,
-): Promise<CompiledArtifacts> {
-  const bunTarget = resolveBunCompileTarget(options.target);
-  const serverUrl = resolveServerUrl(options.feedUrl);
-  const computer = await compileOne({
-    entrypoint: COMPUTER_ENTRYPOINT,
-    bunTarget,
-    outfile: join(options.outputDirectory, `${options.target}-coforge-computer`),
-    sign: isDarwinTarget(options.target) ? options.sign : undefined,
-    // Bun.build()'s `env` option, verified against Bun 1.4.0, does inline a variable that is
-    // actually set in the process running the build - but stays a *live runtime lookup* in the
-    // compiled binary when that variable is unset at build time (the exact case the spec's
-    // "runtime can still override it" concern describes: a build invoked without the variable
-    // exported would silently keep resolving it at install time instead of failing to build).
-    // `define` cannot degrade that way: it always inlines the literal given here, so a release
-    // build can never accidentally ship a binary that still trusts whatever feed URL happens to
-    // be in its environment at update time.
-    define: {
-      "process.env.COFORGE_RELEASE_FEED_URL": JSON.stringify(options.feedUrl),
-      "process.env.COFORGE_E2E_ALLOW_DEVICE_AUTH": JSON.stringify("0"),
-      "Bun.env.COFORGE_COMPUTER_VERSION": JSON.stringify(options.version),
-      "process.env.COFORGE_DAEMON_VERSION": JSON.stringify(options.version),
-      // The `__agent-cli` dispatch bundles `@lrm/coforge/runner` (packages/coforge/src/cli.ts)
-      // into this same executable; `coforge version`/`coforge --version` need the real release
-      // version inlined the same way, not the package.json fallback.
-      "Bun.env.COFORGE_CLI_VERSION": JSON.stringify(options.version),
-      "process.env.COFORGE_DAEMON_SERVER_URL": JSON.stringify(serverUrl),
-    },
-  });
-  return { computer };
-}
-
-async function compileOne(options: {
-  entrypoint: string;
-  bunTarget: string;
-  outfile: string;
-  define: Record<string, string>;
-  sign?: (executable: string) => Promise<void>;
-}): Promise<Uint8Array> {
-  const result = await Bun.build({
-    entrypoints: [options.entrypoint],
-    compile: { target: options.bunTarget as Bun.Build.CompileTarget, outfile: options.outfile },
-    // `main.ts` dispatches each role through a dynamic `import()`; split, each becomes a chunk
-    // embedded in the executable and loaded at runtime (https://bun.com/docs/bundler/executables,
-    // "Code splitting"), so an `__agent-cli` call no longer parses the Daemon and Computer code.
-    // Measured on linux-x64: `coforge version` 0.40 s / 89 MB RSS unsplit, 0.09 s / 50 MB split.
-    splitting: true,
-    define: options.define,
-    plugins: [zodResolvePlugin(resolve(import.meta.dir, "../.."))],
-  });
-  if (!result.success) {
-    throw new Error(
-      `bun build failed for ${options.entrypoint} (${options.bunTarget}): ${result.logs
-        .map(String)
-        .join("; ")}`,
-    );
-  }
-  const output = result.outputs[0];
-  if (!output) {
-    throw new Error(
-      `bun build produced no output for ${options.entrypoint} (${options.bunTarget})`,
-    );
-  }
-  // Bun appends ".exe" to a windows compile target's outfile regardless of what extension was
-  // requested, so the path actually written (output.path) is read back here rather than trusting
-  // the outfile this function asked for.
-  //
-  // Signing rewrites the file, so it comes before the bytes are read.
-  await options.sign?.(output.path);
-  return new Uint8Array(await Bun.file(output.path).arrayBuffer());
 }
