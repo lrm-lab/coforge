@@ -7,10 +7,7 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { isRecord } from "@lrm/coforge-sdk/internal";
 import { ComputerRegistrationError } from "#src/server/computers/registration.server";
-import {
-  handleRequestError,
-  RequestAuthenticationError,
-} from "#src/server/errors/request-error-handler.server";
+import { handleRequestError } from "#src/server/errors/request-error-handler.server";
 import { requireDaemonPrincipal } from "./daemon-rpc-principal.server";
 import { validModelCatalogs } from "./rpc-handler-catalog-validation.server";
 import { WorkspaceQueryError, WorkspaceQueryUseCase } from "#src/server/workspaces/query.server";
@@ -691,7 +688,6 @@ export {
 import type {
   CentrifugoRpcRequest,
   CentrifugoRpcMetadata,
-  AuthenticatedDaemonPrincipal,
   CentrifugoRpcError,
   CentrifugoRpcMethod,
   CentrifugoRpcAuthenticate,
