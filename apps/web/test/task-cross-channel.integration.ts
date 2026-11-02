@@ -108,6 +108,9 @@ test("a private channel's task looks like one that does not exist to someone who
       channel.id,
     );
     expect(allowed.tasks[0]!.blocked).toBe(true);
+    // The write is accepted, and the answer names the blocker as hidden: the write's own
+    // conversation is not the private channel's.
+    expect(allowed.tasks[0]!.blockedBy).toEqual([{ hidden: true, status: "todo" }]);
   } finally {
     await db.$disconnect();
   }
