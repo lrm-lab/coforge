@@ -11,7 +11,8 @@ import { TaskBoard } from "#src/server/tasks/task-board.server";
  * A conversation's Tasks tab is the Tasks page's board scoped to that conversation: the same
  * Filter and Display toolbar and the same cards, without the page header, the source label or
  * Project. Cards carry no Claim or Unclaim button: moving an unowned To do Task to In progress
- * claims it. Done is read in pages of 50 within the finished-work window, as on the Tasks page.
+ * claims it, and while it is carried the columns it cannot go to are marked. Done is read in
+ * pages of 50 within the finished-work window, as on the Tasks page.
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`, the dev user a member of
  * its Workspace (seed-dev). Each run seeds a fresh channel, Agent and direct message. Screenshots
@@ -188,8 +189,15 @@ test("a conversation's Tasks tab is the Tasks page board, claims by moving and p
         String(Math.round(fromX + ((toX - fromX) * step) / 10)),
         String(Math.round(fromY + ((toY - fromY) * step) / 10)),
       );
+    // While carried, a column the unowned card cannot go to is marked (dimmed, "not allowed"
+    // pointer); the one it can go to is not.
+    const blockedColumn = (column: string) =>
+      `document.querySelector('section[aria-label=${JSON.stringify(column)}]').hasAttribute("data-drop-blocked")`;
+    expect(await eval_(blockedColumn("In review"))).toBe(true);
+    expect(await eval_(blockedColumn("In progress"))).toBe(false);
     await browser("mouse", "up");
     await waitFor(movedAndSaved(dragTitle, "In progress"));
+    expect(await eval_(blockedColumn("In review"))).toBe(false);
     const claimed = await db.task.findMany({
       where: { conversationId: channel.id, title: { in: [openTitle, dragTitle] } },
       orderBy: { number: "asc" },

@@ -127,13 +127,16 @@ export function TaskWorkflow<T extends TaskView>({
   const hides = layout === "board" && groups.length > 1 && hidden !== undefined;
   const shownGroups = hides ? groups.filter((group) => !hidden.has(group.status)) : groups;
   const hiddenGroups = hides ? groups.filter((group) => hidden.has(group.status)) : [];
-  const dropEnabled = (status: TaskStatus) =>
-    Boolean(
+  // While a card is carried, a column it can go to takes the drop; one it cannot says so before
+  // the drop (it dims, and the pointer over it reads "not allowed"). Its own column stays idle.
+  const dropState = (status: TaskStatus): DropState => {
+    if (!active || status === active.status) return "idle";
+    const open =
       !disabled &&
       !pending &&
-      active &&
-      getTaskMoveCommand(active, currentMemberId(active), status, { canSetAnyStatus }),
-    );
+      getTaskMoveCommand(active, currentMemberId(active), status, { canSetAnyStatus });
+    return open ? "open" : "blocked";
+  };
 
   const controls = (task: T): TaskControls => {
     if (disabled) return { handle: null, moves: [] };
@@ -179,7 +182,7 @@ export function TaskWorkflow<T extends TaskView>({
             loaded={group.tasks.length}
             paged={paged?.[group.status]}
             board={layout === "board"}
-            enabled={dropEnabled(group.status)}
+            dropState={dropState(group.status)}
             hidable={hides}
             onHide={hides && onHiddenChange ? () => onHiddenChange(group.status, true) : undefined}
           >
@@ -207,7 +210,7 @@ export function TaskWorkflow<T extends TaskView>({
                 key={group.status}
                 status={group.status}
                 count={paged?.[group.status]?.count ?? group.tasks.length}
-                enabled={dropEnabled(group.status)}
+                dropState={dropState(group.status)}
                 onShow={() => onHiddenChange?.(group.status, false)}
               />
             ))}
@@ -299,12 +302,16 @@ function DragHandle({ task, disabled }: { task: TaskView; disabled: boolean }) {
   );
 }
 
+/** A group while a card is carried: it takes the drop, it cannot (the card may not move there), or
+ * it has no part in the drag (no card is carried, or this is the card's own group). */
+type DropState = "open" | "blocked" | "idle";
+
 function TaskGroup({
   status,
   count,
   loaded,
   board,
-  enabled,
+  dropState,
   paged,
   hidable,
   onHide,
@@ -321,13 +328,13 @@ function TaskGroup({
   /** The cards the group holds now. */
   loaded: number;
   board: boolean;
-  enabled: boolean;
+  dropState: DropState;
   paged?: PagedTaskGroup;
   /** The group's first `shown` cards. */
   children: (shown: number) => ReactNode;
 }) {
   // A collapsed group stays a drop target, so a card can still be moved into it.
-  const drop = useDroppable({ id: status, disabled: !enabled });
+  const drop = useDroppable({ id: status, disabled: dropState !== "open" });
   const label = statusLabel(status);
   // Every group starts open; its header collapses it for as long as the board is shown.
   const [expanded, setExpanded] = useState(true);
@@ -348,16 +355,19 @@ function TaskGroup({
     <section
       ref={drop.setNodeRef}
       aria-label={label}
+      data-drop-blocked={dropState === "blocked" || undefined}
       className={
         board
           ? cn(
-              "flex min-w-0 flex-col rounded-xl bg-secondary transition-shadow md:max-w-80 md:min-w-52 md:flex-1",
+              "flex min-w-0 flex-col rounded-xl bg-secondary transition-[box-shadow,opacity] md:max-w-80 md:min-w-52 md:flex-1",
+              dropState === "blocked" && "opacity-50",
               hidable && HIDDEN_COLUMN_CLASS[status],
               !expanded && "md:self-start",
               drop.isOver && "ring-2 ring-brand ring-inset",
             )
           : cn(
-              "min-w-0 overflow-hidden rounded-xl border border-secondary bg-primary",
+              "min-w-0 overflow-hidden rounded-xl border border-secondary bg-primary transition-opacity",
+              dropState === "blocked" && "opacity-50",
               drop.isOver && "ring-2 ring-brand",
             )
       }
@@ -448,24 +458,26 @@ function TaskGroup({
 function HiddenColumn({
   status,
   count,
-  enabled,
+  dropState,
   onShow,
 }: {
   status: TaskStatus;
   count: number;
-  enabled: boolean;
+  dropState: DropState;
   onShow: () => void;
 }) {
-  const drop = useDroppable({ id: status, disabled: !enabled });
+  const drop = useDroppable({ id: status, disabled: dropState !== "open" });
   const label = statusLabel(status);
   return (
     <AriaButton
       ref={drop.setNodeRef}
       aria-label={m.tasks_show_column({ status: label, count: String(count) })}
       onPress={onShow}
+      data-drop-blocked={dropState === "blocked" || undefined}
       className={({ isFocusVisible, isHovered }) =>
         cn(
-          "flex h-10 w-full cursor-pointer items-center gap-2 rounded-lg border border-secondary bg-primary px-3 text-sm text-secondary outline-focus-ring transition-colors",
+          "flex h-10 w-full cursor-pointer items-center gap-2 rounded-lg border border-secondary bg-primary px-3 text-sm text-secondary outline-focus-ring transition-[background-color,opacity]",
+          dropState === "blocked" && "opacity-50",
           isHovered && "bg-primary_hover",
           isFocusVisible && "outline-2 outline-offset-2",
           drop.isOver && "ring-2 ring-brand",

@@ -173,6 +173,11 @@ html[data-drag-cursor],
 html[data-drag-cursor] * {
   cursor: grabbing !important;
 }
+/* Over a place the carried item cannot be dropped (`data-drop-blocked`), the pointer says so. */
+html[data-drag-cursor] [data-drop-blocked],
+html[data-drag-cursor] [data-drop-blocked] * {
+  cursor: not-allowed !important;
+}
 
 @import "./styles/coforge-theme.css";
 
