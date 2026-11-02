@@ -57,31 +57,50 @@ export async function handleReplyIntentPublication(
     return publicationDenied();
   const visibility = await dependencies.agentVisibility(workspaceId, agentId);
   if (visibility === undefined) return publicationDenied();
-  const unresolvedTarget = () => {
-    if (intent.phase === REPLY_INTENT_PHASE.END)
-      console.debug(
+  const { target } = intent;
+  const isStart = intent.phase === REPLY_INTENT_PHASE.START;
+  /**
+   * The intent is dropped: nothing shows "X is replying". An end only clears what a start showed,
+   * so it is debugged; a start dropped is why a reply showed no signal (task #117), so it is
+   * logged with what the target says without its name: direct or channel, and a thread's anchor.
+   */
+  const unresolvedTarget = (
+    reason: "no_target" | "unresolved" | "resolver_failed",
+    error?: unknown,
+  ) => {
+    const record = {
+      workspace_id: workspaceId,
+      agent_id: agentId,
+      call_id: intent.callId,
+      reason,
+      ...(error === undefined ? {} : { error_type: errorType(error) }),
+    };
+    if (isStart)
+      console.warn(
         JSON.stringify({
-          event: "reply_intent:end_unresolved",
-          workspace_id: workspaceId,
-          agent_id: agentId,
-          call_id: intent.callId,
+          event: "reply_intent:start_unresolved",
+          ...record,
+          ...targetShape(target),
         }),
       );
+    else console.debug(JSON.stringify({ event: "reply_intent:end_unresolved", ...record }));
     return publicationDenied();
   };
-  const { target } = intent;
-  if (!target) return unresolvedTarget();
+  if (!target) return unresolvedTarget("no_target");
   const direct = !target.startsWith("#");
-  const isStart = intent.phase === REPLY_INTENT_PHASE.START;
-  const resolved = await dependencies
-    .resolveReplyTarget?.({
+  let found: ReplyIntentTarget | undefined;
+  try {
+    found = await dependencies.resolveReplyTarget?.({
       workspaceId,
       agentId,
       callId: intent.callId,
       target,
-    })
-    .catch(() => undefined);
-  if (!resolved) return unresolvedTarget();
+    });
+  } catch (error) {
+    return unresolvedTarget("resolver_failed", error);
+  }
+  if (!found) return unresolvedTarget("unresolved");
+  const resolved = found;
 
   const data = encodeAgentReplyIntent({
     ...frame,
@@ -99,6 +118,30 @@ export async function handleReplyIntentPublication(
     ? resolved.peerUserId && userConversationChannel(resolved.peerUserId)
     : conversationRealtimeChannel(resolved.conversationId);
   if (!channel) return publicationDenied();
-  await dependencies.publish?.(channel, data, { skipHistory: true }).catch(() => {});
+  await dependencies.publish?.(channel, data, { skipHistory: true }).catch((error: unknown) => {
+    console.warn(
+      JSON.stringify({
+        event: "reply_intent:publish_failed",
+        workspace_id: workspaceId,
+        agent_id: agentId,
+        call_id: intent.callId,
+        phase: intent.phase,
+        conversation_id: resolved.conversationId,
+        thread_root_id: resolved.threadRootId,
+        error_type: errorType(error),
+      }),
+    );
+  });
   return publicationRerouted(direct ? "the person's own channel" : "the conversation's channel");
 }
+
+/** What a send target addresses, without the channel's or person's name: a thread's anchor is a
+ * message id. */
+function targetShape(target: string | undefined) {
+  if (!target) return { target_kind: "none" };
+  if (!target.startsWith("#")) return { target_kind: "direct" };
+  const anchor = target.slice(1).split(":")[1];
+  return anchor ? { target_kind: "thread", thread_anchor: anchor } : { target_kind: "channel" };
+}
+
+const errorType = (error: unknown) => (error instanceof Error ? error.name : typeof error);

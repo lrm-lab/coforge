@@ -55,7 +55,7 @@ Agent 即将在某个会话里发言时，输入框上方显示“某某正在�
 发布代理（`agent-activity-publish.server.ts`）把每帧只解码一次；带 `reply_intent` 的交给 `reply-intent-publish.server.ts`。两者共用 `agent-activity-relay.server.ts` 的范围校验（Workspace、Computer、Agent 归属）；reply intent 另行定向发布，不再走 Activity 中继。
 
 - 目标由 `PrismaDirectConversationRepository.resolveAgentReplyTarget` 解析：发送路径同一套语法（`#channel[:thread]`、`@user[:thread]`）和检查（App 事件会话只读、Workspace assistant 的私信不解析、私信对方须在 Workspace 内），但只读：Agent 与该用户尚无私信时不解析，也不创建私信。解析不出的帧被拒绝（Centrifugo 只丢这一次发布）。结果按 Workspace、Agent、调用、目标缓存（`reply-target-cache.server.ts`，最多 512 条）：每次命中刷新 30 秒空闲期限，8 秒一次的重发让长调用的 `end` 仍能命中；不是持久映射；
-- 频道的 `start` 与 `end` 都解析同一目标，只向 `chat:<conversation_id>` 发布一次，并丢弃原 Activity 发布。`skip_history` 禁止保存、恢复重放；解析不到的 `end` 丢弃并记录不含原始目标的调试事件；
+- 频道的 `start` 与 `end` 都解析同一目标，只向 `chat:<conversation_id>` 发布一次，并丢弃原 Activity 发布。`skip_history` 禁止保存、恢复重放；解析不到的 `end` 丢弃并记录不含原始目标的调试事件；解析不到（或解析出错）的 `start` 丢弃并记一条 warn 级 `reply_intent:start_unresolved`：带 `reason`（`no_target` / `unresolved` / `resolver_failed` 加 `error_type`）和目标形状（`target_kind` 为 `direct` / `channel` / `thread`，thread 另带锚点消息 id `thread_anchor`），不带频道名或用户名。发布到 Centrifugo 失败记 `reply_intent:publish_failed`，带 `conversation_id`、`thread_root_id` 和 `error_type`；
 - 私信的 `start` 与 `end` 都解析目标，只发布到对方本人的 `chat:user:<user_id>`（`skip_history`，重订阅恢复不重放），再答复发布代理丢弃原发布；永远不进 Activity 通道；
 - 转发的 `start` 只带 `phase`、`call_id`、`early`、`conversation_id`、`thread_root_id`；转发的 `end` 只有 `phase` 与 `call_id`，Daemon 发来的其余字段一律不转发；不入库，不改变 Agent display。
 

@@ -197,6 +197,82 @@ describe("reply intent publication to a channel", () => {
       }
     },
   );
+  test.each([
+    [startFrame, { target_kind: "channel" }],
+    [
+      frame({ phase: REPLY_INTENT_PHASE.START, callId: "call-1", target: "#general:01a199" }),
+      { target_kind: "thread", thread_anchor: "01a199" },
+    ],
+    [directStart, { target_kind: "direct" }],
+  ] as const)(
+    "an unresolved start is dropped and logged with its target's shape, never its name: %j",
+    async (start, shape) => {
+      const warn = spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        const { deps, published } = dependencies({ resolveReplyTarget: async () => undefined });
+        expect(await errorCode(await handleAgentActivityPublication(request(start), deps))).toBe(
+          403,
+        );
+        expect(published).toEqual([]);
+        expect(warn.mock.calls).toHaveLength(1);
+        expect(JSON.parse(String(warn.mock.calls[0]![0]))).toEqual({
+          event: "reply_intent:start_unresolved",
+          workspace_id: "workspace-1",
+          agent_id: "agent-1",
+          call_id: "call-1",
+          reason: "unresolved",
+          ...shape,
+        });
+        expect(JSON.stringify(warn.mock.calls)).not.toMatch(/general|frank/);
+      } finally {
+        warn.mockRestore();
+      }
+    },
+  );
+  test("a start whose target lookup threw is logged with the error's type", async () => {
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const { deps } = dependencies({
+        resolveReplyTarget: async () => {
+          throw new TypeError("database down");
+        },
+      });
+      expect(await errorCode(await handleAgentActivityPublication(request(startFrame), deps))).toBe(
+        403,
+      );
+      expect(JSON.parse(String(warn.mock.calls[0]![0]))).toMatchObject({
+        event: "reply_intent:start_unresolved",
+        reason: "resolver_failed",
+        error_type: "TypeError",
+      });
+      expect(JSON.stringify(warn.mock.calls)).not.toContain("database down");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+  test("a publish that fails is logged with the conversation and thread root it was for", async () => {
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const { deps } = dependencies({
+        publish: async () => {
+          throw new Error("centrifugo unavailable");
+        },
+      });
+      await handleAgentActivityPublication(request(startFrame), deps);
+      expect(JSON.parse(String(warn.mock.calls[0]![0]))).toEqual({
+        event: "reply_intent:publish_failed",
+        workspace_id: "workspace-1",
+        agent_id: "agent-1",
+        call_id: "call-1",
+        phase: "start",
+        conversation_id: "conversation-1",
+        thread_root_id: "root-1",
+        error_type: "Error",
+      });
+    } finally {
+      warn.mockRestore();
+    }
+  });
 });
 
 describe("reply intent publication to a direct message", () => {
