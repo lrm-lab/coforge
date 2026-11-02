@@ -37,10 +37,31 @@ export type StoredAgentForward = {
 type StoredAgentMessage = {
   body: string;
   mentions: readonly MessageMentionRef[];
-  actionCard?: { state: string } | null;
+  actionCard?: { state: string; kind?: string; result?: unknown } | null;
   forward?: StoredAgentForward | null;
   attachments?: readonly { id: string }[];
 };
+
+/** Appended so an Agent can tell pending from executed, and which `choice` was picked. */
+export function actionCardBodySuffix(card: {
+  state: string;
+  kind?: string;
+  result?: unknown;
+}): string {
+  if (card.state === "executed" && card.kind === "choice") {
+    const optionId =
+      card.result &&
+      typeof card.result === "object" &&
+      "optionId" in card.result &&
+      typeof (card.result as { optionId: unknown }).optionId === "string"
+        ? (card.result as { optionId: string }).optionId
+        : "";
+    if (/^[a-z][a-z0-9_]{0,31}$/.test(optionId)) {
+      return `[action card: executed; choice=${optionId}]`;
+    }
+  }
+  return `[action card: ${card.state}]`;
+}
 
 /** A forward's snapshot as an Agent reads it. The snapshot body is already plain text. */
 export function agentForwarded(
@@ -113,7 +134,7 @@ function projectMessage(
 ): { text: string; mentionsAgent?: true; forwarded?: ForwardedMessage } {
   const readable = agentReadableBody(message.body, message.mentions);
   return {
-    text: message.actionCard ? `${readable} [action card: ${message.actionCard.state}]` : readable,
+    text: message.actionCard ? `${readable} ${actionCardBodySuffix(message.actionCard)}` : readable,
     ...(readerAgentId && deliveryMentionsAgent(message.mentions, readerAgentId)
       ? { mentionsAgent: true as const }
       : {}),

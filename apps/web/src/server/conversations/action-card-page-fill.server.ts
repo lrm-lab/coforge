@@ -20,6 +20,8 @@ export function pageFillActionCardView(
     ...base,
     kind: "page:fill",
     prompt: payload.prompt,
+    computerId: payload.computerId,
+    agentId: payload.agentId,
     fields: payload.fields.map((field) => ({
       id: field.id,
       label: field.label,
@@ -47,11 +49,12 @@ export async function resolvePageFillPayload(
     type: "page:fill",
     ...(action.prompt ? { prompt: action.prompt } : {}),
     agentId,
+    computerId: agent.computerId,
     fields: action.fields.map((field) => ({
       id: field.id,
       label: field.label,
       input: field.input,
-      selector: field.selector,
+      ...(field.selector ? { selector: field.selector } : {}),
     })),
   };
 }

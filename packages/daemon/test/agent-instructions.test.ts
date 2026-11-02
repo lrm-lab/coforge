@@ -59,12 +59,19 @@ test("before a long task, progress goes to notes/active-context.md rather than M
 test("capability-gated rules appear only when the launch has the capability", () => {
   expect(instructions).not.toContain("memory_disposition");
   expect(instructions).not.toContain("page:fill");
+  expect(instructions).not.toContain("desktop:takeover");
   const capable = buildCoforgeAgentInstructions({
     agentWorkspaceDirectory: directory,
     capabilities: { memoryDisposition: true, cloudDesktop: true },
   });
   expect(capable).toContain("call native `memory_disposition`");
-  expect(capable).toContain("a `page:fill` action card");
+  expect(capable).toContain("`page:fill` action card");
+  expect(capable).toContain("never ask them to paste the secret into chat");
+  expect(capable).toContain("the platform refuses such sends");
+  expect(capable).toContain("`selector` optional");
+  expect(capable).toContain("page-fill.py --inspect");
+  expect(capable).toContain("`desktop:takeover`");
+  expect(capable).toContain("refuse to type it");
 });
 
 test("message preparation avoids shared files and stops before sending stale contents", () => {

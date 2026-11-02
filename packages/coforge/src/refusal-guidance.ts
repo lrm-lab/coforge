@@ -70,6 +70,13 @@ export function refusalNextAction(
         "Retrying will not help: ask this Agent's owner to reconnect GitHub in Settings → " +
         "Integrations, then retry the push or `gh` command."
       );
+    case "CREDENTIAL_SOLICITATION_REFUSED":
+      return (
+        `${nothingDone ?? "Nothing was done"}: do not ask for passwords or verification codes in ` +
+        "chat. Post a `page:fill` action card (`coforge manual get action-cards`), or " +
+        "`desktop:takeover` when the form cannot be filled, then send a normal reply without " +
+        "requesting the secret."
+      );
   }
   if (operation === "send")
     return code === undefined && (status === 400 || status === 403)

@@ -8,8 +8,13 @@
   "conversation_unread_divider": "新消息",
   "conversation_system_group_task_updates": [
     {
-      "declarations": ["input count", "local countPlural = count: plural"],
-      "selectors": ["countPlural"],
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
       "match": {
         "countPlural=other": "{count} 条任务更新"
       }
@@ -17,8 +22,13 @@
   ],
   "conversation_system_group_reminders": [
     {
-      "declarations": ["input count", "local countPlural = count: plural"],
-      "selectors": ["countPlural"],
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
       "match": {
         "countPlural=other": "{count} 条提醒更新"
       }
@@ -26,8 +36,13 @@
   ],
   "conversation_system_group_messages": [
     {
-      "declarations": ["input count", "local countPlural = count: plural"],
-      "selectors": ["countPlural"],
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
       "match": {
         "countPlural=other": "{count} 条系统消息"
       }
@@ -35,8 +50,14 @@
   ],
   "conversation_system_group_one_part": [
     {
-      "declarations": ["input count", "input part", "local countPlural = count: plural"],
-      "selectors": ["countPlural"],
+      "declarations": [
+        "input count",
+        "input part",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
       "match": {
         "countPlural=other": "{part}"
       }
@@ -152,8 +173,13 @@
   "tasks_create_add_another": "再加一个",
   "tasks_create_heading": [
     {
-      "declarations": ["input count", "local p = count: plural"],
-      "selectors": ["p"],
+      "declarations": [
+        "input count",
+        "local p = count: plural"
+      ],
+      "selectors": [
+        "p"
+      ],
       "match": {
         "p=one": "创建任务",
         "p=other": "创建任务"
@@ -162,8 +188,13 @@
   ],
   "tasks_create_submit": [
     {
-      "declarations": ["input count", "local p = count: plural"],
-      "selectors": ["p"],
+      "declarations": [
+        "input count",
+        "local p = count: plural"
+      ],
+      "selectors": [
+        "p"
+      ],
       "match": {
         "p=one": "创建任务",
         "p=other": "创建 {count} 个任务"
@@ -246,33 +277,6 @@
   "tasks_finished_load_more": "加载更多",
   "tasks_finished_load_failed": "这些任务没能加载出来。",
   "tasks_finished_retry": "重试",
-  "action_card_title_channel_create": "创建群聊",
-  "action_card_title_agent_create": "创建 Agent",
-  "action_card_title_add_member": "添加成员",
-  "action_card_title_page_fill": "填入网页",
-  "action_card_commit_page_fill": "填入网页",
-  "action_card_page_fill_filling": "正在填入…",
-  "action_card_page_fill_note": "只会写进云电脑上的网页，不会留在对话里，Agent 也看不到。",
-  "action_card_page_fill_done": "已填入网页",
-  "action_card_denied_page_fill": "只有这个 Agent 的所有者可以填写。",
-  "action_card_page_fill_browser": "网页还没打开。请让 Agent 先在它自己的浏览器里打开这个页面。",
-  "action_card_page_fill_desktop": "没能写进云电脑上的网页，请重试。",
-  "action_card_page_fill_field": "没有找到要填的格子。请让 Agent 再发一张卡片。",
-  "action_card_commit_channel_create": "创建群聊",
-  "action_card_commit_agent_create": "创建 Agent",
-  "action_card_commit_add_member": "添加成员",
-  "action_card_denied_agent_create": "只有工作区所有者和管理员可以创建 Agent。",
-  "action_card_denied_add_member": "加入 #{channel} 后才能添加成员。",
-  "action_card_state_pending": "待处理",
-  "action_card_error": "操作卡片更新失败，请重试。",
-  "action_card_cancelling": "正在取消…",
-  "action_card_dismiss": "取消",
-  "action_card_done": "已完成 · 由 {name} 提交 · {time}",
-  "action_card_unknown": "未知",
-  "action_card_cancelled": "已取消",
-  "action_card_required_computer": "必须运行在 {name}",
-  "action_card_suggested_computer": "建议的电脑：{name}",
-  "action_card_initial_members": "初始成员",
   "conversation_mention_suggestions": "提及建议",
   "conversation_channel_suggestions": "群聊建议",
   "conversation_channel_archived": "已归档",
@@ -297,8 +301,13 @@
   "conversation_pinned_empty_hint": "将群聊或私聊拖到这里置顶",
   "conversation_saved_count": [
     {
-      "declarations": ["input count", "local countPlural = count: plural"],
-      "selectors": ["countPlural"],
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
       "match": {
         "countPlural=other": "{count} 项"
       }
@@ -365,8 +374,13 @@
   "chat_drag_over": "移动到{name}附近。",
   "chat_saving_changes": [
     {
-      "declarations": ["input count", "local p = count: plural"],
-      "selectors": ["p"],
+      "declarations": [
+        "input count",
+        "local p = count: plural"
+      ],
+      "selectors": [
+        "p"
+      ],
       "match": {
         "p=one": "正在保存 {count} 项改动…",
         "p=other": "正在保存 {count} 项改动…"

@@ -1,12 +1,7 @@
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import {
-  CpuChip01 as Cpu,
-  Hash01 as Hash,
-  Key01 as Key,
-  UserPlus01 as UserPlus,
-} from "@untitledui/icons";
 import { Link } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Badge } from "#src/components/base/badges/badges";
@@ -20,18 +15,36 @@ import {
   commitAppRecoverOwnerActionCard,
   commitAppRegisterActionCard,
   commitChannelCreateActionCard,
+  commitChoiceActionCard,
+  commitDesktopTakeoverActionCard,
   commitPageFillActionCard,
   denyAppGrantActionCard,
   loadActionCardStates,
 } from "./action-cards.functions";
 import { CreateChannelDialog } from "./create-channel-dialog";
 import { ChannelAddMembersDialog } from "./channel-add-members-dialog";
+import { ActionCardAppBody } from "./action-card-app-body";
+import {
+  ActionCardChoiceBody,
+  ActionCardDesktopTakeoverBody,
+  ActionCardHandoffDoneSuffix,
+  ActionCardOpenDesktopButton,
+  ActionCardPageFillBody,
+} from "./action-card-handoff";
+import {
+  actionCardCommitLabel,
+  actionCardDeniedReason,
+  actionCardIcon,
+  actionCardTitle,
+} from "./action-card-labels";
 import { AgentCreateDialog } from "#src/features/agents/agent-create-dialog";
 import { createAgent } from "#src/features/agents/agents.functions";
 import {
   getComputerRuntimeCatalog,
   listComputers,
 } from "#src/features/computers/computers.functions";
+import { getCloudDesktopOrigin } from "#src/features/computers/cloud-desktop-origin.functions";
+import { cloudDesktopUrl, openCloudDesktopWindow } from "#src/features/computers/cloud-desktop-url";
 import { formatAgentProfileParam } from "#src/features/agents/profile-panel/profile-panel-search";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import type { ActionCardRef, ActionCardView } from "#src/server/conversations/action-cards.server";
@@ -69,8 +82,12 @@ export function ActionCard({ card }: { card: ActionCardView }) {
   const registerApp = useServerFn(commitAppRegisterActionCard);
   const recoverOwner = useServerFn(commitAppRecoverOwnerActionCard);
   const commitFill = useServerFn(commitPageFillActionCard);
+  const commitDesktop = useServerFn(commitDesktopTakeoverActionCard);
+  const commitChoice = useServerFn(commitChoiceActionCard);
   const [fillValues, setFillValues] = useState<Record<string, string>>({});
   const isPageFill = view.kind === "page:fill";
+  const isDesktopTakeover = view.kind === "desktop:takeover";
+  const isChoice = view.kind === "choice";
   // Known only to someone in the channel, who alone may commit (task #302).
   const addMemberChannelId = view.kind === "channel:add_member" ? view.channel.id : null;
   const [approving, setApproving] = useState(false);
@@ -81,6 +98,27 @@ export function ActionCard({ card }: { card: ActionCardView }) {
   const loadComputers = useServerFn(listComputers);
   const loadRuntimeCatalog = useServerFn(getComputerRuntimeCatalog);
   const [computers, setComputers] = useState<Awaited<ReturnType<typeof listComputers>>>();
+  const loadDesktopOrigin = useServerFn(getCloudDesktopOrigin);
+  const desktopComputerId =
+    view.kind === "page:fill" || view.kind === "desktop:takeover" ? view.computerId : undefined;
+  const desktopAgentId =
+    view.kind === "page:fill" || view.kind === "desktop:takeover" ? view.agentId : undefined;
+  const desktopTitle = view.kind === "desktop:takeover" ? view.agentName : undefined;
+  const desktopOrigin = useQuery({
+    queryKey: ["cloud-desktop-origin"],
+    queryFn: () => loadDesktopOrigin(),
+    enabled: Boolean(desktopComputerId && desktopAgentId),
+    staleTime: 60_000,
+  });
+  const desktopUrl =
+    desktopOrigin.data && desktopComputerId && desktopAgentId
+      ? cloudDesktopUrl(desktopOrigin.data, desktopComputerId, desktopAgentId, desktopTitle)
+      : undefined;
+
+  function openDesktop() {
+    if (!desktopUrl || !desktopComputerId || !desktopAgentId) return;
+    openCloudDesktopWindow(desktopUrl, desktopComputerId, desktopAgentId);
+  }
 
   async function refetch() {
     const states = await refresh({ data: { messageIds: [view.messageId] } });
@@ -151,6 +189,34 @@ export function ActionCard({ card }: { card: ActionCardView }) {
     }
   }
 
+  async function finishDesktop() {
+    if (view.kind !== "desktop:takeover") return;
+    setApproving(true);
+    setError("");
+    try {
+      await commitDesktop({ data: { messageId: view.messageId } });
+      await refetch();
+    } catch {
+      setError(m.action_card_error());
+    } finally {
+      setApproving(false);
+    }
+  }
+
+  async function pickChoice(optionId: string) {
+    if (view.kind !== "choice") return;
+    setApproving(true);
+    setError("");
+    try {
+      await commitChoice({ data: { messageId: view.messageId, optionId } });
+      await refetch();
+    } catch {
+      setError(m.action_card_error());
+    } finally {
+      setApproving(false);
+    }
+  }
+
   async function register() {
     setApproving(true);
     setError("");
@@ -179,64 +245,10 @@ export function ActionCard({ card }: { card: ActionCardView }) {
     setDialogOpen(true);
   }
 
-  const icon =
-    view.kind === "channel:create"
-      ? Hash
-      : view.kind === "agent:create"
-        ? Cpu
-        : isPageFill || isAppGrant || isAppRegister || isRecoverOwner
-          ? Key
-          : UserPlus;
-  const title = isPageFill
-    ? m.action_card_title_page_fill()
-    : view.kind === "channel:create"
-      ? m.action_card_title_channel_create()
-      : view.kind === "agent:create"
-        ? m.action_card_title_agent_create()
-        : isAppGrant
-          ? m.app_card_title()
-          : isAppRegister
-            ? m.app_register_card_title()
-            : isRecoverOwner
-              ? m.app_recover_card_title()
-              : m.action_card_title_add_member();
-  const commitLabel = isPageFill
-    ? approving
-      ? m.action_card_page_fill_filling()
-      : m.action_card_commit_page_fill()
-    : view.kind === "channel:create"
-      ? m.action_card_commit_channel_create()
-      : view.kind === "agent:create"
-        ? m.action_card_commit_agent_create()
-        : isAppGrant
-          ? approving
-            ? m.app_card_approving()
-            : m.agent_apps_approve()
-          : isAppRegister
-            ? approving
-              ? m.app_register_card_committing()
-              : m.app_register_card_commit()
-            : isRecoverOwner
-              ? approving
-                ? m.app_recover_card_committing()
-                : m.app_recover_card_commit()
-              : m.action_card_commit_add_member();
-  const deniedReason =
-    view.kind === "agent:create"
-      ? m.action_card_denied_agent_create()
-      : view.kind === "channel:add_member"
-        ? m.action_card_denied_add_member({ channel: view.channel.displayName })
-        : isAppGrant
-          ? m.app_card_denied_reason()
-          : isAppRegister
-            ? m.app_register_card_denied_reason()
-            : isRecoverOwner
-              ? m.app_recover_card_denied_reason()
-              : isPageFill
-                ? m.action_card_denied_page_fill()
-                : undefined;
-
-  const Icon = icon;
+  const Icon = actionCardIcon(view.kind);
+  const title = actionCardTitle(view);
+  const commitLabel = actionCardCommitLabel(view, approving);
+  const deniedReason = actionCardDeniedReason(view);
   return (
     <div className="mt-1 flex max-w-md flex-col gap-3 rounded-xl border border-secondary bg-primary p-4 shadow-xs">
       <div className="flex items-center gap-2">
@@ -284,83 +296,23 @@ export function ActionCard({ card }: { card: ActionCardView }) {
             {chipList([...view.humans, ...view.agents])}
           </>
         )}
-        {view.kind === "app:grant_agent" && (
-          <>
-            <p>{m.app_card_request({ app: `${view.app.name} (${view.app.key})` })}</p>
-            <p className="text-tertiary">{m.app_card_scopes({ scopes: view.scopes.join(", ") })}</p>
-          </>
-        )}
-        {view.kind === "app:recover_owner" && (
-          <>
-            <p>
-              {m.app_recover_card_request({
-                agent: view.toAgent.name,
-                app: `${view.app.name} (${view.app.key})`,
-              })}
-            </p>
-            <p className="text-tertiary">{m.app_recover_card_note()}</p>
-          </>
-        )}
-        {view.kind === "app:register" && (
-          <>
-            <p>{view.app.name}</p>
-            <p className="text-tertiary">
-              {view.app.clientKey
-                ? m.app_register_card_client_key({ key: view.app.clientKey })
-                : m.app_register_card_client_key_auto()}
-            </p>
-            {view.app.redirectUrls.length > 0 && (
-              <p className="text-tertiary break-all">
-                {m.app_register_card_redirect({ urls: view.app.redirectUrls.join(", ") })}
-              </p>
-            )}
-            {view.app.homepageUrl && (
-              <p className="text-tertiary break-all">
-                {m.app_register_card_homepage({ url: view.app.homepageUrl })}
-              </p>
-            )}
-            {view.app.agentManifestUrl && (
-              <p className="text-tertiary break-all">
-                {m.app_register_card_manifest({ url: view.app.agentManifestUrl })}
-              </p>
-            )}
-            {view.app.description && <p className="text-tertiary">{view.app.description}</p>}
-            {view.app.whenToUse && (
-              <p className="text-tertiary">
-                {m.app_register_card_when_to_use({ text: view.app.whenToUse })}
-              </p>
-            )}
-            <p className="text-tertiary">
-              {m.app_register_card_category({ category: view.app.category })}
-            </p>
-            <p className="text-tertiary">
-              {m.app_register_card_scopes({ scopes: view.app.scopes.join(", ") })}
-            </p>
-          </>
-        )}
+        {(view.kind === "app:grant_agent" ||
+          view.kind === "app:recover_owner" ||
+          view.kind === "app:register") && <ActionCardAppBody view={view} />}
         {view.kind === "page:fill" && (
-          <>
-            {view.prompt && <p>{view.prompt}</p>}
-            <p className="text-tertiary">{m.action_card_page_fill_note()}</p>
-            {view.state === "pending" && view.canCommit && (
-              <div className="flex flex-col gap-2 pt-1">
-                {view.fields.map((field) => (
-                  <label key={field.id} className="flex flex-col gap-1">
-                    <span className="text-xs text-tertiary">{field.label}</span>
-                    <input
-                      type={field.input === "password" ? "password" : "text"}
-                      autoComplete="off"
-                      value={fillValues[field.id] ?? ""}
-                      onChange={(event) =>
-                        setFillValues((current) => ({ ...current, [field.id]: event.target.value }))
-                      }
-                      className="w-full rounded-md border border-secondary bg-primary px-2.5 py-1.5 text-sm text-primary outline-none"
-                    />
-                  </label>
-                ))}
-              </div>
-            )}
-          </>
+          <ActionCardPageFillBody
+            view={view}
+            fillValues={fillValues}
+            setFillValues={setFillValues}
+          />
+        )}
+        {view.kind === "desktop:takeover" && <ActionCardDesktopTakeoverBody view={view} />}
+        {view.kind === "choice" && (
+          <ActionCardChoiceBody
+            view={view}
+            approving={approving}
+            onPick={(optionId) => void pickChoice(optionId)}
+          />
         )}
         {view.draftHint && <p className="text-xs text-tertiary italic">{view.draftHint}</p>}
       </div>
@@ -373,7 +325,7 @@ export function ActionCard({ card }: { card: ActionCardView }) {
 
       {view.state === "pending" && (
         <div className="flex flex-wrap items-center gap-2">
-          {view.canCommit ? (
+          {view.canCommit && !isChoice ? (
             <Button
               size="sm"
               isDisabled={
@@ -385,14 +337,19 @@ export function ActionCard({ card }: { card: ActionCardView }) {
               }
               onPress={() => {
                 if (isPageFill) void fillPage();
+                else if (isDesktopTakeover) void finishDesktop();
                 else void openDialog();
               }}
             >
               {commitLabel}
             </Button>
-          ) : (
+          ) : !view.canCommit ? (
             <p className="text-xs text-tertiary">{deniedReason}</p>
-          )}
+          ) : null}
+          <ActionCardOpenDesktopButton
+            enabled={Boolean((isPageFill || isDesktopTakeover) && view.canCommit && desktopUrl)}
+            onOpen={openDesktop}
+          />
           {view.canCancel && (
             <Button
               size="sm"
@@ -417,12 +374,7 @@ export function ActionCard({ card }: { card: ActionCardView }) {
             name: view.committedBy?.displayName ?? m.action_card_unknown(),
             time: view.committedAt ? new Date(view.committedAt).toLocaleString() : "",
           })}
-          {view.kind === "page:fill" && view.result && (
-            <>
-              {" · "}
-              {m.action_card_page_fill_done()}
-            </>
-          )}
+          <ActionCardHandoffDoneSuffix view={view} />
           {view.kind === "channel:create" && view.result && (
             <>
               {" · "}

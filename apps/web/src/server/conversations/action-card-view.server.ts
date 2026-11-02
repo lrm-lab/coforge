@@ -79,8 +79,27 @@ export type ActionCardView =
   | (ActionCardViewBase & {
       kind: "page:fill";
       prompt?: string;
+      computerId: string;
+      agentId: string;
       fields: { id: string; label: string; input: "text" | "password" }[];
       result?: { filled: string[] };
+    })
+  /** Open this Agent's cloud desktop when page:fill cannot finish the step. */
+  | (ActionCardViewBase & {
+      kind: "desktop:takeover";
+      prompt?: string;
+      computerId: string;
+      agentId: string;
+      agentName: string;
+      result?: { done: true };
+    })
+  /** Clickable options; free text may still answer when allowFreeText is true. */
+  | (ActionCardViewBase & {
+      kind: "choice";
+      prompt: string;
+      options: { id: string; label: string }[];
+      allowFreeText: boolean;
+      result?: { optionId: string; label: string };
     })
   | (ActionCardViewBase & {
       kind: "app:recover_owner";

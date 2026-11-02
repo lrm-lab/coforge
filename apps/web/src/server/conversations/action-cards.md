@@ -17,8 +17,15 @@ Moved out of [`AGENTS.md`](AGENTS.md) to keep it under 200 lines; the rules are 
 - `ActionCards.cancel` (the preparing Agent's owner or a Workspace owner/admin) only moves `pending
 → cancelled`; it refuses `app:grant_agent`, which `AppGrantActionCards.deny` cancels after `AppAgentAccess.deny`.
 - Card state changes publish the existing `ConversationRealtime.messageAvailable`; do not add a card-specific realtime channel.
-- A `page:fill` card stores field labels and selectors only. Commit types the submitted values
-  into that Agent's browser through the desktop proxy and marks the card executed with the field
-  names. The values are not written to the card, the message, or the result.
-- Agent-facing message reads append ` [action card: <state>]` to a card message's body so an Agent never claims a
-  resource exists before a human commits it.
+- A `page:fill` card stores field labels, optional selectors, and the Agent's computer id only.
+  Commit types the submitted values into that Agent's browser through the desktop proxy (which
+  resolves by label / password type when no selector is stored) and marks the card executed with
+  the field names. The values are not written to the card, the message, or the result. The card
+  also offers Open desktop as a client-side fallback.
+- A `desktop:takeover` card stores the Agent and computer ids so the browser can open that
+  Agent's cloud desktop. Commit only marks that the person finished the step; opening the desktop
+  does not go through the server.
+- A `choice` card stores the prompt and options. Commit records `{ optionId, label }`. Agent-
+  facing reads append `[action card: executed; choice=<id>]` when that result is present.
+- Agent-facing message reads append ` [action card: <state>]` (or the choice form above) to a
+  card message's body so an Agent never claims a resource exists before a human commits it.
