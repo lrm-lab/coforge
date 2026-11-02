@@ -3,6 +3,9 @@ import type { ActionCardView, ActionCardViewBase } from "./action-card-view.serv
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { publishActionCardUpdate } from "./action-card-message.server";
+import { AgentDeliveryPublisher } from "./agent-delivery.server";
+import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
+import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import type { ConversationRealtime } from "./conversation-realtime.server";
 import { loadPendingActionCard } from "./pending-action-card.server";
 
@@ -39,6 +42,7 @@ export async function commitChoiceCard(
   realtime: ConversationRealtime | undefined,
   principal: { workspaceId: string; actorUserId: string },
   input: { messageId: string; optionId: string },
+  dependencies: { publisher?: Pick<CentrifugoServerApi, "publishBatch"> } = {},
 ): Promise<{ optionId: string; label: string }> {
   const card = await loadPendingActionCard(
     db,
@@ -63,5 +67,79 @@ export async function commitChoiceCard(
   });
   if (updated.count === 0) throw new AppError("CONFLICT");
   await publishActionCardUpdate(db, realtime, card.conversationId, input.messageId);
+  await wakeAskingAgent(db, dependencies.publisher, {
+    workspaceId: principal.workspaceId,
+    messageId: input.messageId,
+    conversationId: card.conversationId,
+    agentId: card.preparedByAgentId,
+    option,
+  });
   return result;
+}
+
+/** The choice is a delivery: the Agent that asked is woken with the chosen label, and it does not
+ * have to read the card back. No message is posted for the person. */
+async function wakeAskingAgent(
+  db: PrismaClient,
+  publisher: Pick<CentrifugoServerApi, "publishBatch"> | undefined,
+  input: {
+    workspaceId: string;
+    messageId: string;
+    conversationId: string;
+    agentId: string;
+    option: { id: string; label: string };
+  },
+) {
+  const [message, agent] = await Promise.all([
+    db.message.findUnique({
+      where: { id: input.messageId },
+      select: {
+        id: true,
+        sequence: true,
+        threadRootId: true,
+        conversation: { select: { channelName: true } },
+      },
+    }),
+    db.agent.findUnique({
+      where: { id: input.agentId },
+      select: { computerId: true },
+    }),
+  ]);
+  if (!message) return;
+  const delivery = await db.agentMessageDelivery.upsert({
+    where: {
+      messageId_agentId: { messageId: input.messageId, agentId: input.agentId },
+    },
+    create: {
+      workspaceId: input.workspaceId,
+      conversationId: input.conversationId,
+      agentId: input.agentId,
+      messageId: input.messageId,
+      sequence: message.sequence,
+      reason: "choice",
+    },
+    update: { reason: "choice" },
+    select: { deliveryId: true, createdAt: true },
+  });
+  await new AgentDeliveryPublisher(publisher ?? createCentrifugoServerApi()).publish(
+    input.workspaceId,
+    [
+      {
+        computerId: agent?.computerId ?? null,
+        requestId: input.messageId,
+        conversationId: input.conversationId,
+        agentId: input.agentId,
+        messageId: input.messageId,
+        deliveryId: delivery.deliveryId,
+        sequence: message.sequence,
+        createdAtMs: delivery.createdAt.getTime(),
+        body: `chose ${input.option.id} · ${input.option.label}`,
+        mentions: [],
+        target: `#${message.conversation.channelName ?? input.conversationId}${message.threadRootId ? `:${message.threadRootId}` : ""}`,
+        latestSenderKind: "system",
+        latestSenderHandle: "",
+        latestSenderDescription: "",
+      },
+    ],
+  );
 }
