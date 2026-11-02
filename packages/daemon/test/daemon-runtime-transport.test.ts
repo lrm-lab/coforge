@@ -76,6 +76,9 @@ test("owns one AgentProcessManager for its workspace", async () => {
       {
         computerId: "computer-a",
         workspaceId: "workspace-a",
+        // The worker identity the server fences capability leases with.
+        workerInstanceId: expect.any(String),
+        startedAt: expect.any(Number),
         signal: expect.any(AbortSignal),
       },
     ],
