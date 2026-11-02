@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
+import { AttachmentComments } from "#src/server/attachments/attachment-comments.server";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
+import { PrismaAttachmentCommentStore } from "#src/server/db/repositories/attachment-comments.repositories.server";
 import { setupAgentReplying } from "./helpers/agent-replying-fixture";
 
 /**
@@ -32,8 +34,9 @@ test("file cards in light and dark", async () => {
     where: { conversationId: channelId, userId: DEV_BROWSER_USER.id },
     select: { userId: true },
   });
-  for (const [fileName, contentType, sizeBytes] of FILES)
-    await fx.db.attachment.create({
+  const ids = new Map<string, string>();
+  for (const [fileName, contentType, sizeBytes] of FILES) {
+    const attachment = await fx.db.attachment.create({
       data: {
         workspaceId: fx.workspaceId,
         conversationId: channelId,
@@ -45,6 +48,14 @@ test("file cards in light and dark", async () => {
         sizeBytes,
       },
     });
+    ids.set(fileName, attachment.id);
+  }
+  // Comments on two files: the card shows how many, a file without any shows nothing.
+  const comments = new AttachmentComments(new PrismaAttachmentCommentStore(fx.db));
+  const actor = { workspaceId: fx.workspaceId, userId: DEV_BROWSER_USER.id };
+  const first = await comments.post(actor, { attachmentId: ids.get("t.md")!, body: "Looks good" });
+  await comments.post(actor, { attachmentId: ids.get("t.md")!, body: "Agreed", rootId: first.id });
+  await comments.post(actor, { attachmentId: ids.get("t.csv")!, body: "One more column?" });
 
   await fx.open(channelId);
   await until(`document.body.innerText.includes("t.zip")`, 60_000);
@@ -54,6 +65,11 @@ test("file cards in light and dark", async () => {
     `new Set(${JSON.stringify(FILES.map(([name]) => name))}.map((name) => [...document.querySelectorAll("[aria-label]")].find((el) => el.getAttribute("aria-label").includes(name))?.getBoundingClientRect().top)).size`,
   );
   expect(rows).toBe(5);
+  const labels = await fx.evaluate<string[]>(
+    `[...document.querySelectorAll("[aria-label]")].map((el) => el.getAttribute("aria-label")).filter((label) => /t\\.(md|csv|txt)$|comment/.test(label))`,
+  );
+  expect(labels).toContain("Preview t.md, 2 comments");
+  expect(labels).toContain("Preview t.csv, 1 comment");
   // The app's own theme setting, as Settings stores it.
   await fx.evaluate(`localStorage.setItem("coforge-theme", "dark")`);
   try {

@@ -18,7 +18,7 @@ import {
 import {
   browserMessageFields,
   browserMessageUpdates,
-  mapBrowserMessage,
+  mapBrowserMessages,
 } from "./conversation-history.server";
 import { othersReadThroughSequence } from "./conversation-read-state.server";
 import { mentionAffinityScores } from "./mentions.server";
@@ -170,7 +170,7 @@ export async function openChannel(
     mentionables: mentionables(workspaceId, mentionRows, mentionScores),
     hasOlder,
     hasNewer,
-    messages: pageMessages.map((message) => mapBrowserMessage(message, workspaceId)),
+    messages: await mapBrowserMessages(db, pageMessages, workspaceId),
   };
 }
 
@@ -184,5 +184,5 @@ export async function channelUpdates(
 ) {
   await memberChannel(db, workspaceId, userId, channelId);
   const messages = await browserMessageUpdates(db, channelId, afterSequence, afterReplySequence);
-  return messages.map((message) => mapBrowserMessage(message, workspaceId));
+  return mapBrowserMessages(db, messages, workspaceId);
 }

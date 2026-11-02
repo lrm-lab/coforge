@@ -40,6 +40,9 @@ export type AttachmentView = {
   thumbnailUrl?: string;
   iconUrl?: string;
   largeUrl?: string;
+  /** How many comments the file has, on a message in the conversation stream; absent for none
+   * and on surfaces that show no file card (`attachmentCommentCounts`). */
+  commentCount?: number;
 };
 
 /** A signing failure must never take a message read down: the client falls back to the

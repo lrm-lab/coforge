@@ -14,7 +14,7 @@ import { workspaceUserAvatarUrl } from "./user-profile.repositories.server";
 import {
   browserMessageFields,
   browserMessageUpdates,
-  mapBrowserMessage,
+  mapBrowserMessages,
 } from "#src/server/conversations/conversation-history.server";
 import { readWindowThreads } from "#src/server/conversations/thread-summaries.server";
 import { windowPageFlags } from "#src/lib/conversation-window";
@@ -278,7 +278,7 @@ export async function openConversationForUser(
     mentionables: conversationMentionables(workspaceId, members),
     hasOlder,
     hasNewer,
-    messages: messages.map((message) => mapBrowserMessage(message, workspaceId)),
+    messages: await mapBrowserMessages(ports.db, messages, workspaceId),
   };
 }
 
@@ -297,7 +297,7 @@ export async function updatesSince(
     afterSequence,
     afterReplySequence,
   );
-  return messages.map((message) => mapBrowserMessage(message, workspaceId));
+  return mapBrowserMessages(ports.db, messages, workspaceId);
 }
 
 /** Advances the person's DM read cursor (`markHumanRead`): where it left them, or undefined

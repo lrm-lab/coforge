@@ -7,7 +7,7 @@ import { conversationMentionables } from "#src/server/db/repositories/user-direc
 import {
   browserMessageFields,
   ConversationHistory,
-  mapBrowserMessage,
+  mapBrowserMessages,
 } from "./conversation-history.server";
 
 /**
@@ -113,7 +113,7 @@ export class TaskConversationPages {
       mentionables: conversationMentionables(workspaceId, board),
       hasOlder,
       hasNewer,
-      messages: messages.map((message) => mapBrowserMessage(message, workspaceId)),
+      messages: await mapBrowserMessages(this.db, messages, workspaceId),
     };
   }
 

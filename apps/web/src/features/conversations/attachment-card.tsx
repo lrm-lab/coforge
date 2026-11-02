@@ -1,5 +1,5 @@
 import { useEffect, useEffectEvent, useState, type CSSProperties } from "react";
-import { Download01 } from "@untitledui/icons";
+import { Download01, MessageChatSquare } from "@untitledui/icons";
 import { getReadableFileSize } from "#src/components/application/file-upload/file-upload-base";
 import { Button } from "#src/components/base/buttons/button";
 import { fileTypeLabel } from "#src/features/files/file-meta";
@@ -211,6 +211,10 @@ const CARD =
 function AttachmentCard({ attachment }: { attachment: Attachment }) {
   const typeLabel = fileTypeLabel(attachment.fileName, attachment.contentType);
   const previewable = previewKindFor(attachment);
+  const commentCount = attachment.commentCount ?? 0;
+  // The count is drawn as a mark; the card's name says it in words.
+  const comments =
+    commentCount > 0 ? `, ${m.conversation_attachment_comment_count({ count: commentCount })}` : "";
   const body = (
     <span className="flex min-w-0 flex-col gap-1 text-left">
       <span className="flex min-w-0 items-center gap-1.5">
@@ -224,7 +228,15 @@ function AttachmentCard({ attachment }: { attachment: Attachment }) {
         </span>
       </span>
       <span className="flex min-w-0 items-center justify-between gap-2 text-xs text-tertiary tabular-nums">
-        <span className="min-w-0 truncate">{getReadableFileSize(attachment.sizeBytes)}</span>
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="min-w-0 truncate">{getReadableFileSize(attachment.sizeBytes)}</span>
+          {commentCount > 0 && (
+            <span className="flex shrink-0 items-center gap-0.5" aria-hidden="true">
+              <MessageChatSquare className="size-3.5" />
+              {commentCount}
+            </span>
+          )}
+        </span>
         {!previewable && <Download01 aria-hidden="true" className="size-3.5 shrink-0" />}
       </span>
     </span>
@@ -236,7 +248,7 @@ function AttachmentCard({ attachment }: { attachment: Attachment }) {
           color="tertiary"
           noTextPadding
           isLoading={loading}
-          aria-label={m.conversation_attachment_preview_open({ name: attachment.fileName })}
+          aria-label={`${m.conversation_attachment_preview_open({ name: attachment.fileName })}${comments}`}
           className={CARD}
         >
           {body}
@@ -249,7 +261,7 @@ function AttachmentCard({ attachment }: { attachment: Attachment }) {
       color="tertiary"
       noTextPadding
       href={`${attachmentUrl(attachment)}?download`}
-      aria-label={m.attachment_preview_download({ name: attachment.fileName })}
+      aria-label={`${m.attachment_preview_download({ name: attachment.fileName })}${comments}`}
       className={CARD}
     >
       {body}

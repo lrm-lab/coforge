@@ -68,9 +68,44 @@ export type BrowserMessageRow = Prisma.MessageGetPayload<{
   select: typeof browserMessageFields;
 }>;
 
+/**
+ * How many comments each attachment of these messages has (task #238), in one indexed query for
+ * the whole page rather than one per attachment. Every comment on the file counts, a reply
+ * included: each has its `AttachmentComment` row.
+ */
+export async function attachmentCommentCounts(
+  db: Pick<PrismaClient, "attachmentComment">,
+  messages: readonly { attachments: readonly { id: string }[] }[],
+): Promise<ReadonlyMap<string, number>> {
+  const attachmentIds = messages.flatMap((message) => message.attachments.map(({ id }) => id));
+  if (attachmentIds.length === 0) return new Map();
+  const rows = await db.attachmentComment.groupBy({
+    by: ["attachmentId"],
+    where: { attachmentId: { in: attachmentIds } },
+    _count: { _all: true },
+  });
+  return new Map(rows.map((row) => [row.attachmentId, row._count._all]));
+}
+
+/** A page of messages for the stream, with their attachments' comment counts. */
+export async function mapBrowserMessages(
+  db: Pick<PrismaClient, "attachmentComment">,
+  messages: readonly BrowserMessageRow[],
+  workspaceId: string,
+) {
+  const commentCounts = await attachmentCommentCounts(db, messages);
+  return messages.map((message) => mapBrowserMessage(message, workspaceId, commentCounts));
+}
+
 /** Exported for a pure unit test of this projection (no database needed). Channels and direct
  * conversations share it whole: `senderMemberId` is how a pane tells the viewer's own messages. */
-export function mapBrowserMessage(message: BrowserMessageRow, workspaceId: string) {
+export function mapBrowserMessage(
+  message: BrowserMessageRow,
+  workspaceId: string,
+  /** The attachments' comment counts, from `attachmentCommentCounts`; a surface that shows no
+   * file cards leaves them out. */
+  commentCounts?: ReadonlyMap<string, number>,
+) {
   const suggestion = message.sender?.agentId
     ? parseWeeklyReportAssistantSuggestion(message.body)
     : null;
@@ -127,7 +162,10 @@ export function mapBrowserMessage(message: BrowserMessageRow, workspaceId: strin
     // re-renders its memoized row.
     createdAt: message.createdAt.toISOString(),
     mentions: message.mentions.map(browserMessageMention),
-    attachments: message.attachments.map((attachment) => attachmentView(attachment)),
+    attachments: message.attachments.map((attachment) => {
+      const commentCount = commentCounts?.get(attachment.id);
+      return { ...attachmentView(attachment), ...(commentCount ? { commentCount } : {}) };
+    }),
     reactions: reactionSummaries(message.reactions),
     /** The `reactionVersion` that `reactions` is at least as new as. Typed optional, like
      * `senderUserId`, for a message the browser cached before it existed. */
@@ -377,7 +415,7 @@ export class ConversationHistory {
       hasOlder: beforeRows.length > beforeCount + 1,
       hasNewer: afterRows.length > afterCount,
       anchorThreadRootId: anchor.threadRoot?.id,
-      messages: roots.map((message) => mapBrowserMessage(message, workspaceId)),
+      messages: await mapBrowserMessages(this.db, roots, workspaceId),
       threads,
       threadReadThrough,
       followedThreadRootIds: followed,
@@ -410,6 +448,6 @@ export class ConversationHistory {
       }),
     ]);
     if (!root) throw new AppError("NOT_FOUND");
-    return { replies: replies.map((reply) => mapBrowserMessage(reply, workspaceId)) };
+    return { replies: await mapBrowserMessages(this.db, replies, workspaceId) };
   }
 }
