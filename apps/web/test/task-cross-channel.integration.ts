@@ -1,6 +1,7 @@
 import { test, expect } from "bun:test";
 import type { TaskLink } from "@lrm/coforge-sdk/internal";
 import type { TaskChangedSignal } from "#src/server/conversations/conversation-realtime.server";
+import type { TaskBoard } from "#src/server/tasks/task-board.server";
 import { setup } from "./fixtures/task-dependencies";
 
 /** Blockers and parents across the channels of one Workspace, against real PostgreSQL. */
@@ -256,6 +257,41 @@ test("a blocker's change announces its dependent to the dependent's own conversa
     expect(view!.blockedBy).toMatchObject([
       { number: blocker, channel: other.channelName, status: "in_review" },
     ]);
+  } finally {
+    await db.$disconnect();
+  }
+});
+
+test("a non-member of a public channel reads a Task's detail and downstream list", async () => {
+  const { db, board, principals, make, channel, other } = await setup();
+  try {
+    const workspaceId = principals.alice.workspaceId;
+    // A Workspace member who is not in the public channel the blocker lives in.
+    const carol = await db.user.create({
+      data: {
+        displayName: "carol",
+        username: `carol-${crypto.randomUUID().slice(0, 8)}`,
+      },
+    });
+    await db.workspaceMembership.create({ data: { workspaceId, userId: carol.id } });
+    const [blocker] = await make("alice", 1, {}, other.id);
+    const [waiting] = await make("alice", 1, {
+      blockedBy: [{ number: blocker!, channel: other.channelName! }],
+    });
+    const runAsCarol = (command: Record<string, unknown>) =>
+      board.execute({ workspaceId, userId: carol.id }, {
+        idempotencyKey: crypto.randomUUID(),
+        conversationId: other.id,
+        ...command,
+      } as Parameters<TaskBoard["execute"]>[1]);
+    // `show` carries the downstream list the detail shows; `history` its tab.
+    const shown = await runAsCarol({ operation: "show", number: blocker });
+    expect(shown.blocking).toMatchObject([{ number: waiting, channel: channel.channelName }]);
+    expect((await runAsCarol({ operation: "history", number: blocker })).tasks).toHaveLength(1);
+    // Reading does not widen into writing.
+    await expect(runAsCarol({ operation: "claim", number: blocker })).rejects.toMatchObject({
+      code: "ACCESS_DENIED",
+    });
   } finally {
     await db.$disconnect();
   }

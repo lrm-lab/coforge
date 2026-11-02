@@ -40,6 +40,13 @@ export const TASK_V2_USE_CREATE = "task_v2_use_create";
 export const TASK_MESSAGE_SOURCE_REQUIRES_CONVERSATIONS =
   "task_message_source_requires_conversations";
 
+/** The Task commands a reader who is not a member of a readable channel may run. */
+const READ_ONLY_TASK_OPERATIONS: ReadonlySet<TaskCommand["operation"]> = new Set([
+  "list",
+  "show",
+  "history",
+]);
+
 /** Canonical authorization and transaction seam for message-backed Tasks. */
 export class TaskBoard {
   private readonly overviewReads: TaskOverviewReads;
@@ -166,7 +173,10 @@ export class TaskBoard {
     if (command.operation === "list" && command.mine && (principal.agentId || principal.userId))
       return listOwnTasks(this.ports, principal, command);
     const scope = presolvedScope ?? (await resolveTaskScope(this.ports, principal, command));
-    if (scope.channel && !scope.member && command.operation !== "list")
+    // A non-member of a channel the Workspace lets them read may read its Tasks: the list, one
+    // Task's detail (its downstream list and subtree included) and its history. Only a member
+    // writes.
+    if (scope.channel && !scope.member && !READ_ONLY_TASK_OPERATIONS.has(command.operation))
       throw new AppError("ACCESS_DENIED");
     if (!scope.member && !scope.channel) throw new AppError("ACCESS_DENIED");
 
