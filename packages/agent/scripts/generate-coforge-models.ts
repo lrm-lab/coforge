@@ -36,7 +36,11 @@ const allModels: CodeAgentModelMetadata[] = runtime
   }))
   .sort((left, right) => {
     const byProvider = left.modelProvider.localeCompare(right.modelProvider);
-    return byProvider !== 0 ? byProvider : compareNewestFirst(left, right);
+    if (byProvider !== 0) return byProvider;
+    // A gateway's ids are `vendor/model`, so their version numbers do not compare across vendors;
+    // keep its own order and let each vendor's catalog speak for itself.
+    if (left.modelProvider === "openrouter") return left.id.localeCompare(right.id);
+    return compareNewestFirst(left, right);
   });
 
 /** The first version-shaped number in an id: `gpt-5.4-mini` -> `[5, 4]`, `gemini-3.7-flash` -> `[3, 7]`. */

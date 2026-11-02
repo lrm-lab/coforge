@@ -483,7 +483,7 @@ describe("external Code Agent inventory", () => {
       expect.objectContaining({ id: "aion-labs/aion-2.0", modelProvider: "openrouter" }),
     );
     expect(coforgeCatalog?.models).toContainEqual(
-      expect.objectContaining({ id: "deepseek/deepseek-chat", modelProvider: "openrouter" }),
+      expect.objectContaining({ id: "amazon/nova-pro-v1", modelProvider: "openrouter" }),
     );
     const piCatalog = inventory.catalogs.find((catalog) => catalog.provider === "pi");
     expect(piCatalog).toEqual({ provider: "pi", models: [] });
