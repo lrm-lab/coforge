@@ -38,4 +38,3 @@ test("refuses a send that asks for a password in chat before calling the sender"
   });
   expect(sent).toBe(false);
 });
-
