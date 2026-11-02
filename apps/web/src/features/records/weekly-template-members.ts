@@ -6,6 +6,7 @@ export type TemplateMemberOption = {
   username: string;
   displayName: string | null;
   role?: string;
+  avatarUrl?: string | null;
 };
 
 export function memberLabel(member: {

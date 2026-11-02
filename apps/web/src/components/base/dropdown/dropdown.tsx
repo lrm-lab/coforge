@@ -1,4 +1,4 @@
-import { type FC, type RefAttributes, useCallback } from "react";
+import { type FC, type ReactNode, type RefAttributes, useCallback } from "react";
 import { Check, ChevronRight, DotsVertical } from "@untitledui/icons";
 import type {
     ButtonProps as AriaButtonProps,
@@ -36,11 +36,13 @@ interface DropdownItemProps extends AriaMenuItemProps {
     icon?: FC<{ className?: string }>;
     /** Avatar URL to be displayed on the left side of the item. */
     avatarUrl?: string;
+    /** A picture drawn on the left side of the item, where the icon goes (a person's face, a Project's image). */
+    leading?: ReactNode;
     /** The selection indicator to be displayed on the item. */
     selectionIndicator?: "checkmark" | "checkbox" | "radio" | "toggle" | "none";
 }
 
-const DropdownItem = ({ label, children, addon, icon: Icon, avatarUrl, unstyled, selectionIndicator = "checkmark", ...props }: DropdownItemProps) => {
+const DropdownItem = ({ label, children, addon, icon: Icon, avatarUrl, leading, unstyled, selectionIndicator = "checkmark", ...props }: DropdownItemProps) => {
     const SelectionIndicator = useCallback(
         (state: MenuItemRenderProps & { className?: string }) => {
             if (selectionIndicator === "checkmark") {
@@ -97,7 +99,7 @@ const DropdownItem = ({ label, children, addon, icon: Icon, avatarUrl, unstyled,
                         state.hasSubmenu && "pr-1.5",
                     )}
                 >
-                    {state.selectionMode !== "none" && !avatarUrl && !Icon && <SelectionIndicator {...state} className="mr-2" />}
+                    {state.selectionMode !== "none" && !avatarUrl && !Icon && !leading && <SelectionIndicator {...state} className="mr-2" />}
 
                     {avatarUrl && (
                         <div className="mr-2 flex size-4 items-center justify-center">
@@ -107,13 +109,16 @@ const DropdownItem = ({ label, children, addon, icon: Icon, avatarUrl, unstyled,
 
                     {Icon && <Icon aria-hidden="true" className="mr-2.5 size-4 shrink-0 stroke-[2.25px] text-fg-quaternary" />}
 
+                    {leading && <span className="mr-2.5 flex size-4 shrink-0 items-center justify-center">{leading}</span>}
+
                     <span className={cx("grow truncate text-sm/5.5 font-medium text-secondary", state.isFocused && "text-secondary_hover")}>
                         {label || (typeof children === "function" ? children(state) : children)}
                     </span>
 
-                    {addon && <span className="ml-1 shrink-0 pr-1 text-xs font-medium text-quaternary">{addon}</span>}
+                    {/* A long addon (an Agent's generated @handle) gives way to the label past half the row. */}
+                    {addon && <span className="ml-1 max-w-1/2 shrink-0 truncate pr-1 text-xs font-medium text-quaternary">{addon}</span>}
 
-                    {state.selectionMode !== "none" && (avatarUrl || Icon) && <SelectionIndicator {...state} className="ml-1" />}
+                    {state.selectionMode !== "none" && (avatarUrl || Icon || leading) && <SelectionIndicator {...state} className="ml-1" />}
 
                     {state.hasSubmenu && <ChevronRight aria-hidden="true" className="ml-auto size-4 shrink-0 stroke-[2.25px] text-fg-quaternary" />}
                 </div>

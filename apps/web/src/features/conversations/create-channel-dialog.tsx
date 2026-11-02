@@ -9,7 +9,7 @@ import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Checkbox } from "#src/components/base/checkbox/checkbox";
 import { Input } from "#src/components/base/input/input";
-import { Select } from "#src/components/base/select/select";
+import { EntityPickerField, projectOptions } from "#src/features/pickers/entity-picker";
 import { Toggle } from "#src/components/base/toggle/toggle";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { isAppErrorCode } from "#src/lib/app-error";
@@ -53,7 +53,7 @@ type CreateChannelDialogProps = {
   ) => Promise<CreatedChannel | void>;
   /** Opens a channel the dialog created (the picker's result state and success). */
   onOpenChannel?: (channelId: string) => void | Promise<void>;
-  projects?: { id: string; name: string; slug: string }[];
+  projects?: { id: string; name: string; slug: string; iconUrl?: string | null }[];
   /** Preselects a Project, e.g. the one an Agent's card suggests; ignored when it is not in
    * `projects`. */
   defaultProjectId?: string;
@@ -74,6 +74,9 @@ type CreateChannelDialogProps = {
   /** Offers making the channel private; an Agent's card has decided that already. */
   offersPrivate?: boolean;
 };
+
+/** The "No Project" row's key: a Project id is never empty. */
+const NO_PROJECT = "none";
 
 export function CreateChannelDialog({
   open,
@@ -249,17 +252,14 @@ function CreateChannelForm({
   // The group chat dialog always offers the field (a Workspace with no Project shows it disabled,
   // reading "No Project"); the single-column dialog keeps it only when there is a Project to pick.
   const projectField = (memberPicker || projects.length > 0) && (
-    <Select
-      aria-label={m.channel_project()}
+    <EntityPickerField
+      label={m.channel_project()}
       placeholder={m.channel_no_project()}
-      selectedKey={projectId || null}
-      onSelectionChange={(key) => setProjectId(String(key))}
+      selectedKey={projectId || NO_PROJECT}
       isDisabled={locked || projects.length === 0}
-    >
-      {projects.map((project) => (
-        <Select.Item key={project.id} id={project.id} label={`${project.name} (${project.slug})`} />
-      ))}
-    </Select>
+      options={[{ id: NO_PROJECT, label: m.channel_no_project() }, ...projectOptions(projects)]}
+      onSelect={(key) => setProjectId(key === NO_PROJECT ? "" : key)}
+    />
   );
   // Slack's switch, without a description: the name says what it does.
   const privateField = offersPrivate && (

@@ -1,0 +1,5 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "picker_search": "Search",
+  "picker_no_matches": "No matches"
+}

@@ -46,9 +46,9 @@ Part of [Agents UI](AGENTS.md). Rules for `src/features/agents/`.
   gives the initial and its tone; `deleted` greys either). Only a face whose picture can be missing
   locally (the settings preview after removing the avatar) passes `userId`, for the default cartoon.
   The base `Avatar` and the other base components know nothing of stickers, so a person's face is
-  never drawn through them directly, and a feature draws an Agent's face itself (the task assignee
-  menu passes `assigneeFace` as the item icon). A channel's group avatar puts its members' stickers
-  overlapping with no fill behind them (`group-avatar.tsx`, `collage-layout.ts`): a person with an uploaded photo
+  never drawn through them directly, and a feature draws an Agent's face itself (the shared picker,
+  `features/pickers/entity-picker.tsx`, passes each row's face as the item icon). A channel's
+  group avatar puts its members' stickers overlapping with no fill behind them (`group-avatar.tsx`, `collage-layout.ts`): a person with an uploaded photo
   there is that round photo with a white edge. Stacked faces carry the stack's page-coloured
   separator ring. The pickers (`AvatarChoice`) draw each figure as a sticker on a tile whose
   selection is a neutral ring and light fill; the person presets stay still, the mascots move.

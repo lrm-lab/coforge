@@ -199,7 +199,6 @@
   "tasks_follow": "Follow Task",
   "tasks_unfollow": "Unfollow Task",
   "tasks_change_assignee": "Change owner",
-  "tasks_search_members": "Search members",
   "tasks_reopen_to_todo": "Reopen to Todo",
   "tasks_update_failed": "Task update failed. Try again.",
   "tasks_history_created": "Created task",

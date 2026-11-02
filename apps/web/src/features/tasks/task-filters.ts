@@ -43,6 +43,7 @@ export type OwnerOption = {
   id: string;
   kind: "me" | "none" | "user" | "agent";
   name: string;
+  avatarUrl?: string | null;
   count: number;
 };
 
@@ -63,7 +64,13 @@ export function ownerOptions(tasks: readonly FilterableTask[]): OwnerOption[] {
       continue;
     }
     const kind = !owner ? "none" : isViewer ? "me" : owner.kind;
-    byId.set(id, { id, kind, name: owner?.name ?? "", count: task.count ?? 1 });
+    byId.set(id, {
+      id,
+      kind,
+      name: owner?.name ?? "",
+      avatarUrl: owner?.avatarUrl,
+      count: task.count ?? 1,
+    });
   }
   const rank = { me: 0, none: 1, user: 2, agent: 3 } as const;
   return [...byId.values()].sort(
@@ -71,7 +78,7 @@ export function ownerOptions(tasks: readonly FilterableTask[]): OwnerOption[] {
   );
 }
 
-export type ProjectOption = { id: string; name: string; count: number };
+export type ProjectOption = { id: string; name: string; iconUrl?: string | null; count: number };
 
 /** The Projects to pick from by name, then "No project", with how many Tasks each has. */
 export function projectOptions(tasks: readonly FilterableTask[]): ProjectOption[] {
@@ -80,7 +87,13 @@ export function projectOptions(tasks: readonly FilterableTask[]): ProjectOption[
     const id = projectKey(task);
     const known = byId.get(id);
     if (known) known.count += task.count ?? 1;
-    else byId.set(id, { id, name: task.project?.name ?? "", count: task.count ?? 1 });
+    else
+      byId.set(id, {
+        id,
+        name: task.project?.name ?? "",
+        iconUrl: task.project?.iconUrl,
+        count: task.count ?? 1,
+      });
   }
   return [...byId.values()].sort((left, right) =>
     left.id === NO_PROJECT ? 1 : right.id === NO_PROJECT ? -1 : left.name.localeCompare(right.name),

@@ -394,7 +394,7 @@ test("people are shown by their names, and no screen shows a username", async ()
     const fromChip = `[...document.querySelectorAll('[aria-label="Search filters"] button')].find((button) => button.textContent.trim().startsWith("From"))`;
     await waitFor(hydrated(fromChip));
     await browser("eval", `${fromChip}.click()`);
-    const fromField = 'input[placeholder="Find a person or Agent"]';
+    const fromField = 'input[placeholder="Search"]';
     const fromOptions = () =>
       evaluate<string[]>(
         `[...document.querySelectorAll('[role="menuitemradio"], [role="menuitem"]')].map((item) => item.textContent.trim())`,

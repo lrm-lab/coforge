@@ -6,7 +6,7 @@ import { Check, Share04 as Share } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
 import { TextArea } from "#src/components/base/textarea/textarea";
-import { Select } from "#src/components/base/select/select";
+import { EntityPickerField, projectOptions } from "#src/features/pickers/entity-picker";
 import { useAppToast } from "#src/components/ui/toast";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { projectsQuery } from "#src/features/projects/project-tree-queries";
@@ -253,20 +253,18 @@ export function ProjectField({
   // Under the name form a rule sets it apart: it saves on pick, not with the form's Save.
   return (
     <div className="mt-5 flex flex-col gap-1.5 border-t border-secondary pt-5 first:mt-0 first:border-t-0 first:pt-0">
-      <Select
+      <EntityPickerField
+        fieldLabel={m.channel_settings_project()}
         label={m.channel_settings_project()}
         selectedKey={project?.id ?? NO_PROJECT}
         isDisabled={saving || !projects}
-        onSelectionChange={(key) => {
-          if (key !== null) void change(String(key));
-        }}
-      >
-        <Select.Item id={NO_PROJECT} label={m.channel_no_project()} />
-        {/* The current Project stays listed while the Workspace's are still being read. */}
-        {(projects ?? (project ? [project] : [])).map((candidate) => (
-          <Select.Item key={candidate.id} id={candidate.id} label={candidate.name} />
-        ))}
-      </Select>
+        options={[
+          { id: NO_PROJECT, label: m.channel_no_project() },
+          // The current Project stays listed while the Workspace's are still being read.
+          ...projectOptions(projects ?? (project ? [project] : [])),
+        ]}
+        onSelect={(key) => void change(key)}
+      />
       {repository && <div>{repository}</div>}
     </div>
   );

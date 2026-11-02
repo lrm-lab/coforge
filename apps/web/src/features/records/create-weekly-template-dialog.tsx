@@ -1,7 +1,7 @@
 import { humanLabel } from "#src/lib/human-label";
 import { useEffectEvent, useLayoutEffect, useMemo, useState, type FormEvent } from "react";
 import { XClose as X } from "@untitledui/icons";
-import { Heading, type Key } from "react-aria-components";
+import { Heading } from "react-aria-components";
 
 import { BadgeWithButton } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
@@ -10,6 +10,7 @@ import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Input } from "#src/components/base/input/input";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { Select } from "#src/components/base/select/select";
+import { PickerMenu, type PickerOption } from "#src/features/pickers/entity-picker";
 import { m } from "#src/paraglide/messages";
 import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
 import { isValidTemplateName, hourlySendTimes } from "./records-content";
@@ -68,7 +69,6 @@ export function CreateWeeklyTemplateDialog({
   const [sections, setSections] = useState<TemplateOutlineSection[]>(foundationModelsSections);
   const [allMembers, setAllMembers] = useState(true);
   const [recipientIds, setRecipientIds] = useState<string[]>([]);
-  const [recipientQuery, setRecipientQuery] = useState("");
   const [frequency] = useState<"weekly">("weekly");
   const [sendTime, setSendTime] = useState<string>("15:00");
   const [sendWeekday, setSendWeekday] = useState(5);
@@ -76,26 +76,25 @@ export function CreateWeeklyTemplateDialog({
   const [nameError, setNameError] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const filteredMembers = useMemo(() => {
-    const query = recipientQuery.trim().toLowerCase();
-    if (!query) return members;
-    return members.filter((member) => {
-      const display = humanLabel(member).toLowerCase();
-      const role = (member.role ?? "").toLowerCase();
-      return (
-        display.includes(query) ||
-        member.username.toLowerCase().includes(query) ||
-        role.includes(query)
-      );
-    });
-  }, [recipientQuery, members]);
+  // Everyone first, then each person, searched by name, username and role too.
+  const recipientOptions = useMemo(
+    (): PickerOption[] => [
+      { id: "all", label: m.records_template_all_members() },
+      ...members.map((member) => ({
+        id: member.userId,
+        label: memberLabel(member),
+        face: { kind: "identity" as const, name: humanLabel(member), src: member.avatarUrl },
+        keywords: [member.username, member.role].filter(Boolean).join(" "),
+      })),
+    ],
+    [members],
+  );
 
   function reset() {
     setName(FOUNDATION_MODELS_WEEKLY_TEMPLATE_NAME);
     setSections(foundationModelsSections());
     setAllMembers(true);
     setRecipientIds([]);
-    setRecipientQuery("");
     setSendTime("15:00");
     setSendWeekday(5);
     setEnabled(true);
@@ -113,7 +112,6 @@ export function CreateWeeklyTemplateDialog({
     setSections(parsed.length > 0 ? parsed : [emptySection()]);
     setAllMembers(template.allMembers);
     setRecipientIds(template.allMembers ? [] : template.recipients.map((row) => row.userId));
-    setRecipientQuery("");
     setSendTime(template.sendTime || "15:00");
     setSendWeekday(template.sendWeekday || 5);
     setEnabled(Boolean(template.active));
@@ -182,8 +180,8 @@ export function CreateWeeklyTemplateDialog({
   }
 
   const selectedRecipientKeys = allMembers
-    ? new Set<Key>(["all", ...filteredMembers.map((member) => member.userId)])
-    : new Set<Key>(recipientIds);
+    ? ["all", ...members.map((member) => member.userId)]
+    : recipientIds;
 
   function toggleRecipient(userId: string | "all") {
     if (userId === "all") {
@@ -208,12 +206,12 @@ export function CreateWeeklyTemplateDialog({
     setRecipientIds(next);
   }
 
-  function onRecipientSelectionChange(keys: "all" | Set<Key>) {
-    if (keys === "all") return;
+  /** The one recipient a tick or untick changed. */
+  function onRecipientSelectionChange(ids: string[]) {
     const changed =
-      [...keys].find((key) => !selectedRecipientKeys.has(key)) ??
-      [...selectedRecipientKeys].find((key) => !keys.has(key));
-    if (changed !== undefined) toggleRecipient(changed === "all" ? "all" : String(changed));
+      ids.find((id) => !selectedRecipientKeys.includes(id)) ??
+      selectedRecipientKeys.find((id) => !ids.includes(id));
+    if (changed !== undefined) toggleRecipient(changed);
   }
 
   async function submit(event: FormEvent) {
@@ -401,36 +399,12 @@ export function CreateWeeklyTemplateDialog({
                           </span>
                         </Button>
                         <Dropdown.Popover placement="bottom start" className="w-80">
-                          <div className="border-b border-secondary p-2">
-                            <Input
-                              size="sm"
-                              type="search"
-                              value={recipientQuery}
-                              onChange={setRecipientQuery}
-                              placeholder={m.records_search_placeholder()}
-                            />
-                          </div>
-                          <Dropdown.Menu
-                            aria-label={m.records_template_recipients_title()}
-                            selectionMode="multiple"
+                          <PickerMenu
+                            label={m.records_template_recipients_title()}
+                            options={recipientOptions}
                             selectedKeys={selectedRecipientKeys}
-                            onSelectionChange={onRecipientSelectionChange}
-                            className="max-h-64 overflow-y-auto"
-                          >
-                            <Dropdown.Item
-                              id="all"
-                              label={m.records_template_all_members()}
-                              selectionIndicator="checkbox"
-                            />
-                            {filteredMembers.map((member) => (
-                              <Dropdown.Item
-                                key={member.userId}
-                                id={member.userId}
-                                label={memberLabel(member)}
-                                selectionIndicator="checkbox"
-                              />
-                            ))}
-                          </Dropdown.Menu>
+                            onSelectedKeysChange={onRecipientSelectionChange}
+                          />
                         </Dropdown.Popover>
                       </Dropdown.Root>
                     </div>

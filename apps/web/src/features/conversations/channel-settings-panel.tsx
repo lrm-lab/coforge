@@ -8,7 +8,7 @@ import {
   SlideoutMenu,
 } from "#src/components/application/slideout-menus/slideout-menu";
 import { Toggle } from "#src/components/base/toggle/toggle";
-import { Select } from "#src/components/base/select/select";
+import { EntityPickerField, memberOption } from "#src/features/pickers/entity-picker";
 import { useAppToast } from "#src/components/ui/toast";
 import { AgentProfilePanel } from "#src/features/agents/profile-panel/agent-profile-panel";
 import { PersonProfilePanel } from "#src/features/agents/person-profile-panel";
@@ -299,7 +299,9 @@ function CoordinatorSection({
   const agents = (conversation.mentionables ?? []).filter(
     (entry) => entry.kind === "agent" && !entry.outsider,
   );
-  const selected = conversation.coordinatorAgent?.id ?? "none";
+  const selected = conversation.coordinatorAgent
+    ? `agent:${conversation.coordinatorAgent.id}`
+    : "none";
 
   async function change(value: string) {
     setSaving(true);
@@ -307,7 +309,7 @@ function CoordinatorSection({
       await setCoordinator({
         data: {
           channelId: conversation.conversationId,
-          coordinatorAgentId: value === "none" ? null : value,
+          coordinatorAgentId: value === "none" ? null : value.slice("agent:".length),
         },
       });
       await onChanged();
@@ -320,20 +322,18 @@ function CoordinatorSection({
 
   return (
     <PanelSection title={m.channel_settings_coordinator_title()}>
-      <Select
+      <EntityPickerField
+        fieldLabel={m.channel_settings_coordinator_label()}
         label={m.channel_settings_coordinator_label()}
         hint={m.channel_settings_coordinator_hint()}
         selectedKey={selected}
         isDisabled={saving}
-        onSelectionChange={(key) => {
-          if (key !== null) void change(String(key));
-        }}
-      >
-        <Select.Item id="none" label={m.channel_settings_coordinator_none()} />
-        {agents.map((agent) => (
-          <Select.Item key={agent.id} id={agent.id} label={agent.label} />
-        ))}
-      </Select>
+        options={[
+          { id: "none", label: m.channel_settings_coordinator_none() },
+          ...agents.map(memberOption),
+        ]}
+        onSelect={(key) => void change(key)}
+      />
     </PanelSection>
   );
 }

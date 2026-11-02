@@ -187,7 +187,6 @@
   "tasks_follow": "关注任务",
   "tasks_unfollow": "取消关注任务",
   "tasks_change_assignee": "更改负责人",
-  "tasks_search_members": "搜索成员",
   "tasks_reopen_to_todo": "重新打开为待办",
   "tasks_update_failed": "任务更新失败，请重试。",
   "tasks_history_created": "创建任务",

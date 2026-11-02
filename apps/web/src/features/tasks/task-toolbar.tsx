@@ -18,6 +18,7 @@ import { cn } from "#src/lib/utils";
 import { TagCloseX } from "#src/components/base/tags/base-components/tag-close-x";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Select } from "#src/components/base/select/select";
+import { PickerMenu, projectOption, type PickerOption } from "#src/features/pickers/entity-picker";
 import { m } from "#src/paraglide/messages";
 import {
   TASK_DISPLAY_FIELDS,
@@ -74,24 +75,29 @@ export function TaskToolbar({
   // Counted over every Task, so the numbers hold still while picking.
   const owners = useMemo(
     () =>
-      ownerOptions(tasks).map((option) => ({
+      ownerOptions(tasks).map((option): PickerOption => ({
         id: option.id,
         label: ownerLabel(option),
-        count: option.count,
+        face:
+          option.kind === "none"
+            ? undefined
+            : { kind: "identity", name: option.name, src: option.avatarUrl },
+        addon: String(option.count),
       })),
     [tasks],
   );
   const projects = useMemo(
     () =>
-      projectOptions(tasks).map((option) => ({
-        id: option.id,
-        label: option.name || m.tasks_overview_no_project(),
-        count: option.count,
+      projectOptions(tasks).map((option): PickerOption => ({
+        ...(option.id === NO_PROJECT
+          ? { id: option.id, label: m.tasks_overview_no_project() }
+          : projectOption(option)),
+        addon: String(option.count),
       })),
     [tasks],
   );
   // A pick no listed Task has (a saved link, an older finished Task's owner) has no name here.
-  const labelsOf = (options: readonly Choice[], picked: readonly string[], none: string) =>
+  const labelsOf = (options: readonly PickerOption[], picked: readonly string[], none: string) =>
     picked.map(
       (id) =>
         options.find((option) => option.id === id)?.label ??
@@ -215,8 +221,6 @@ function namesLabel(names: readonly string[]) {
     : m.tasks_filter_names_more({ names: names.slice(0, 2).join(", "), count: names.length - 2 });
 }
 
-type Choice = { id: string; label: string; count: number };
-
 function FilterSubmenu({
   name,
   options,
@@ -224,7 +228,7 @@ function FilterSubmenu({
   onChange,
 }: {
   name: string;
-  options: readonly Choice[];
+  options: readonly PickerOption[];
   picked: readonly string[];
   onChange: (picked: string[]) => void;
 }) {
@@ -232,26 +236,12 @@ function FilterSubmenu({
     <SubmenuTrigger>
       <Dropdown.Item label={name} />
       <Dropdown.Popover placement="end top" className="w-64">
-        <Dropdown.Menu
-          aria-label={name}
-          selectionMode="multiple"
+        <PickerMenu
+          label={name}
+          options={options}
           selectedKeys={picked}
-          shouldCloseOnSelect={false}
-          className="max-h-80"
-          onSelectionChange={(keys) => {
-            if (keys !== "all") onChange([...keys].map(String));
-          }}
-        >
-          {options.map((option) => (
-            <Dropdown.Item
-              key={option.id}
-              id={option.id}
-              label={option.label}
-              addon={String(option.count)}
-              selectionIndicator="checkbox"
-            />
-          ))}
-        </Dropdown.Menu>
+          onSelectedKeysChange={onChange}
+        />
       </Dropdown.Popover>
     </SubmenuTrigger>
   );

@@ -1,15 +1,9 @@
 import { channelLabel } from "#src/features/conversations/channel-visibility";
-import { useMemo, useState, type FC, type Key, type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, SearchLg } from "@untitledui/icons";
-import {
-  Autocomplete as AriaAutocomplete,
-  Input as AriaInput,
-  SearchField as AriaSearchField,
-  useFilter,
-} from "react-aria-components";
+import { ChevronDown } from "@untitledui/icons";
 
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { EntityPicker } from "#src/features/pickers/entity-picker";
 import { Button } from "#src/components/base/buttons/button";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { m } from "#src/paraglide/messages";
@@ -43,28 +37,6 @@ const SCOPE_LABEL: Record<SearchScope, () => string> = {
 };
 
 /**
- * A menu row's leading avatar: the photo, or the name's initial on its own colour, as avatars
- * show everywhere else. Passed as the row's `icon`, so the selection check sits at the end.
- */
-function senderAvatar(sender: Sender): FC<{ className?: string }> {
-  return function SenderAvatar() {
-    // The row's own label names the sender; the initial is decoration, so screen readers skip
-    // it (the official Avatar does not forward `aria-hidden`). Sized like the menu's own avatars.
-    return (
-      <span aria-hidden="true" className="mr-2 shrink-0">
-        <IdentityAvatar
-          size="xs"
-          alt=""
-          src={sender.avatarUrl ?? undefined}
-          name={sender.name}
-          className="size-5"
-        />
-      </span>
-    );
-  };
-}
-
-/**
  * The filters under the search box: From, Scope, Channel, Time and Sort, then Clear all. Each
  * chip names its current value. Sort applies only to a query, so it is disabled without one.
  */
@@ -85,29 +57,28 @@ export function SearchFilterBar({
     () => (directory ? directorySenders(directory, m.search_from_me()) : []),
     [directory],
   );
-  // One avatar component per sender, kept across renders so menu rows do not remount.
-  const avatars = useMemo(
-    () => new Map(senders.map((candidate) => [candidate.key, senderAvatar(candidate)])),
-    [senders],
-  );
   const sender = senders.find((candidate) => candidate.id === filters.senderId);
   const channel = directory?.channels.find((candidate) => candidate.id === filters.channelId);
   const scopeCount = filters.scope?.length ?? 0;
 
   return (
     <div role="group" aria-label={m.search_filters()} className="flex flex-wrap items-center gap-2">
-      <SearchableChip
-        label={sender ? m.search_from_named({ name: sender.label }) : m.search_from()}
-        searchLabel={m.search_find_sender()}
+      <EntityPicker
+        trigger={
+          <Chip>{sender ? m.search_from_named({ name: sender.label }) : m.search_from()}</Chip>
+        }
+        label={m.search_find_sender()}
         selectedKey={sender?.key ?? ANY}
-        anyLabel={m.search_from_anyone()}
-        items={senders.map((candidate) => ({
-          key: candidate.key,
-          label: candidate.label,
-          textValue: candidate.textValue,
-          addon: candidate.addon,
-          icon: avatars.get(candidate.key),
-        }))}
+        options={[
+          { id: ANY, label: m.search_from_anyone() },
+          ...senders.map((candidate) => ({
+            id: candidate.key,
+            label: candidate.label,
+            face: { kind: "identity" as const, name: candidate.name, src: candidate.avatarUrl },
+            addon: candidate.addon,
+            keywords: candidate.textValue,
+          })),
+        ]}
         onSelect={(key) => {
           const chosen = senders.find((candidate) => candidate.key === key);
           onChange(withSender(filters, chosen && { id: chosen.id, kind: chosen.kind }));
@@ -137,18 +108,20 @@ export function SearchFilterBar({
           </Dropdown.Menu>
         </Dropdown.Popover>
       </Dropdown.Root>
-      <SearchableChip
-        label={channel ? channelLabel(channel) : m.search_channel()}
-        searchLabel={m.search_find_channel()}
+      <EntityPicker
+        trigger={<Chip>{channel ? channelLabel(channel) : m.search_channel()}</Chip>}
+        label={m.search_find_channel()}
         selectedKey={filters.channelId ?? ANY}
-        anyLabel={m.search_channel_any()}
-        items={(directory?.channels ?? []).map((candidate) => ({
-          key: candidate.id,
-          label: channelLabel(candidate),
-          textValue: `${candidate.name} ${candidate.description}`,
-          addon: candidate.archived ? m.search_archived() : undefined,
-        }))}
-        onSelect={(key) => onChange({ ...filters, channelId: key })}
+        options={[
+          { id: ANY, label: m.search_channel_any() },
+          ...(directory?.channels ?? []).map((candidate) => ({
+            id: candidate.id,
+            label: channelLabel(candidate),
+            keywords: `${candidate.name} ${candidate.description}`,
+            addon: candidate.archived ? m.search_archived() : undefined,
+          })),
+        ]}
+        onSelect={(key) => onChange({ ...filters, channelId: key === ANY ? undefined : key })}
       />
       <SingleChoiceChip
         ariaLabel={m.search_time()}
@@ -229,74 +202,6 @@ function SingleChoiceChip({
             <Dropdown.Item key={option.key} id={option.key} label={option.label} />
           ))}
         </Dropdown.Menu>
-      </Dropdown.Popover>
-    </Dropdown.Root>
-  );
-}
-
-/**
- * A chip whose menu is a searchable list with an "any" entry first that clears the filter, the
- * same shape as the Task assignee picker.
- */
-function SearchableChip({
-  label,
-  searchLabel,
-  selectedKey,
-  anyLabel,
-  items,
-  onSelect,
-}: {
-  label: string;
-  searchLabel: string;
-  selectedKey: string;
-  anyLabel: string;
-  items: {
-    key: string;
-    label: string;
-    textValue: string;
-    addon?: string;
-    icon?: FC<{ className?: string }>;
-  }[];
-  onSelect: (key: string | undefined) => void;
-}) {
-  const { contains } = useFilter({ sensitivity: "base" });
-  const [search, setSearch] = useState("");
-  return (
-    <Dropdown.Root onOpenChange={(isOpen) => isOpen && setSearch("")}>
-      <Chip>{label}</Chip>
-      <Dropdown.Popover placement="bottom start" className="w-72">
-        <AriaAutocomplete filter={contains} inputValue={search} onInputChange={setSearch}>
-          <div className="border-b border-secondary py-1">
-            <AriaSearchField aria-label={searchLabel} value={search} onChange={setSearch} autoFocus>
-              <div className="flex items-center gap-2 px-3 py-2">
-                <SearchLg aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
-                <AriaInput
-                  placeholder={searchLabel}
-                  className="w-full bg-transparent text-sm text-primary outline-hidden placeholder:text-placeholder"
-                />
-              </div>
-            </AriaSearchField>
-          </div>
-          <Dropdown.Menu
-            aria-label={searchLabel}
-            selectionMode="single"
-            selectedKeys={[selectedKey]}
-            className="max-h-72"
-            onAction={(key: Key) => onSelect(key === ANY ? undefined : String(key))}
-          >
-            <Dropdown.Item id={ANY} label={anyLabel} />
-            {items.map((item) => (
-              <Dropdown.Item
-                key={item.key}
-                id={item.key}
-                label={item.label}
-                textValue={item.textValue}
-                addon={item.addon}
-                icon={item.icon}
-              />
-            ))}
-          </Dropdown.Menu>
-        </AriaAutocomplete>
       </Dropdown.Popover>
     </Dropdown.Root>
   );
