@@ -1,6 +1,6 @@
 import { channelLabel } from "#src/features/conversations/channel-visibility";
 import { useEffect, useState } from "react";
-import { Bell01 as Bell, Clock, Link01 as LinkIcon, Repeat01 as Repeat } from "@untitledui/icons";
+import { AlarmClock, Clock, Link01 as LinkIcon, Repeat01 as Repeat } from "@untitledui/icons";
 import { Link } from "@tanstack/react-router";
 import { Button } from "#src/components/base/buttons/button";
 import { RelativeTime } from "#src/components/ui/relative-time";
@@ -81,7 +81,7 @@ export function AgentReminders({
   if (!result.reminders.length)
     return (
       <AgentTabEmpty
-        icon={Bell}
+        icon={AlarmClock}
         title={m.agent_reminders_empty()}
         description={m.agent_reminders_empty_description()}
       />

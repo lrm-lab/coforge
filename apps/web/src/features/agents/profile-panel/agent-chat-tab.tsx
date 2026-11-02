@@ -3,12 +3,13 @@ import { useQuery } from "@tanstack/react-query";
 import { Hash01, MessageChatCircle } from "@untitledui/icons";
 
 import { Alert } from "#src/components/ui/alert";
+import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { AgentChannelList } from "./agent-chat-channels";
 import { AgentPeerDmList } from "./agent-peer-dms-section";
 import { agentChannelsQuery, agentPeerConversationsQuery } from "./agent-profile-queries";
 import { SECTION_CAPTION_CLASS } from "./inline-edit-field";
-import { AgentTabEmpty } from "./agent-tab-empty";
+import { AGENT_TAB_BAR_CLASS, AgentTabEmpty } from "./agent-tab-empty";
 
 /**
  * The Chat tab: the channels the Agent is in and its conversations with other Agents, one read
@@ -23,7 +24,7 @@ export function AgentChatTab({ agentId, timeZone }: { agentId: string; timeZone:
   // The heading bar stays over every state, as on Raft; the body below it changes.
   return (
     <div>
-      <h2 className="border-b border-secondary px-5 py-3 text-xs font-medium text-secondary">
+      <h2 className={cn(AGENT_TAB_BAR_CLASS, "px-5 text-xs font-medium text-secondary")}>
         {m.agent_chat_heading()}
       </h2>
       {channelsQuery.isError || peersQuery.isError ? (
@@ -32,6 +33,7 @@ export function AgentChatTab({ agentId, timeZone }: { agentId: string; timeZone:
         <p className="px-5 py-4 text-sm text-tertiary">{m.agent_chat_loading()}</p>
       ) : channels.length === 0 && peers.length === 0 ? (
         <AgentTabEmpty
+          belowBar
           icon={MessageChatCircle}
           title={m.agent_chat_empty_title()}
           description={m.agent_chat_empty_description()}

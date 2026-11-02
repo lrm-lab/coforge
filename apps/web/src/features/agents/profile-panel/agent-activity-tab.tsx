@@ -4,6 +4,8 @@ import { Skeleton } from "#src/components/ui/skeleton";
 import type { AgentDiagnosticFacts } from "#src/features/agents/agent-diagnostics";
 import { AgentActivityTimeline } from "#src/features/agents/agent-activity-timeline";
 import { useAgentActivityFeed } from "#src/features/agents/workspace-agents-realtime";
+import { cn } from "#src/lib/utils";
+import { AGENT_TAB_BAR_CLASS } from "./agent-tab-empty";
 import { m } from "#src/paraglide/messages";
 import { CopyDiagnosticsButton } from "./copy-diagnostics-button";
 import { SECTION_CAPTION_CLASS } from "./inline-edit-field";
@@ -22,7 +24,7 @@ export function AgentActivityTab({
   const feed = useAgentActivityFeed(agent.id);
   return (
     <>
-      <div className="flex shrink-0 items-center justify-between border-b border-secondary py-1 pr-3.5 pl-5">
+      <div className={cn(AGENT_TAB_BAR_CLASS, "justify-between pr-3.5 pl-5")}>
         <p className={SECTION_CAPTION_CLASS}>{m.agent_activity_diagnostics()}</p>
         <CopyDiagnosticsButton agent={agent} display={display} />
       </div>

@@ -109,6 +109,7 @@ export function AgentActivityTimeline({
   if (!rows.length)
     return (
       <AgentTabEmpty
+        belowBar
         icon={ActivityIcon}
         title={m.agent_activity_empty()}
         description={m.agent_activity_empty_description()}
