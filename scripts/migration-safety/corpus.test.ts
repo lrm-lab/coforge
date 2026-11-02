@@ -22,6 +22,7 @@ test("every existing migration can be read", () => {
 
 test("the unrecognised statements are the hand-written ones", () => {
   const unknown = analyses.flatMap(({ analysis }) => analysis.risky.filter((risk) => risk.unknown));
-  // DO blocks, WITH ... UPDATE, and CREATE TRIGGER: nothing Prisma generates.
-  expect(unknown.length).toBe(11);
+  // DO blocks, WITH ... UPDATE, and CREATE TRIGGER: nothing Prisma generates. The backfill
+  // params migration (20261102070000_system_messages_backfill_params) adds one hand-written DO.
+  expect(unknown.length).toBe(12);
 });
