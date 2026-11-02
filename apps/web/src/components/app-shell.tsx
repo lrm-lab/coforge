@@ -69,7 +69,7 @@ function useActivityAttention(user: AppUser) {
 }
 
 /** Chat is the Workspace's home page ("") and its conversations. */
-const CHAT_SECTIONS = ["", "channel", "messages", "saved"];
+const CHAT_SECTIONS = ["", "channel", "messages", "saved", "drafts"];
 
 function useNavItems(
   base: string,

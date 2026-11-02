@@ -219,5 +219,7 @@
   "experiments_computers_need_upgrade": "Upgrade {computers} to CoForge {version} or later first.",
   "experiments_reload": "Reload to apply",
   "experiments_task_conversations": "Task conversations",
-  "experiments_task_conversations_description": "Each task is its own conversation that people can follow and reply to. Applies to the whole Workspace, Agents included."
+  "experiments_task_conversations_description": "Each task is its own conversation that people can follow and reply to. Applies to the whole Workspace, Agents included.",
+  "experiments_drafts": "Drafts",
+  "experiments_drafts_description": "Unsent messages from every conversation, collected in one place under Saved. Kept on each device."
 }

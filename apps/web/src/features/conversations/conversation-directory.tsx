@@ -39,6 +39,7 @@ import {
   type CollapsibleSectionId,
   type DirectorySectionId,
 } from "./directory-sections";
+import { DraftsDirectoryRow } from "./drafts-directory-row";
 import {
   EMPTY_SECTION_HIDDEN_CLASS,
   readHideEmptySidebarSections,
@@ -54,6 +55,7 @@ export function ConversationDirectory({
   selectedChannelId,
   selectedDmId,
   selectedSaved,
+  selectedDrafts,
 }: {
   channels: DirectoryChannel[];
   agents: LiveAgent[];
@@ -67,6 +69,8 @@ export function ConversationDirectory({
   selectedDmId?: string;
   /** The Saved view is open — its sidebar entry renders as the current row. */
   selectedSaved?: boolean;
+  /** The Drafts view is open — its sidebar entry renders as the current row. */
+  selectedDrafts?: boolean;
 }) {
   const groups = useChatSections();
   const { sortedChannels, directRows, base, natural } = useDirectoryLayout({
@@ -242,6 +246,7 @@ export function ConversationDirectory({
           this row, so the header rule lands 24px above the bookmark. */}
       <div className={DIRECTORY_INSET}>
         <SavedDirectoryRow current={selectedSaved} />
+        <DraftsDirectoryRow current={selectedDrafts} />
       </div>
       {groups.status === "failed" && (
         <div role="alert" className={cx(DIRECTORY_INSET, "py-2 text-sm text-error-primary")}>

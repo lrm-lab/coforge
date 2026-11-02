@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test";
 
+import type { LiveAgent } from "#src/features/agents/workspace-agents-realtime";
 import type { DirectoryChannel } from "#src/features/conversations/conversation-directory-rows";
 import type { ChatSection } from "#src/features/conversations/chat-section.schemas";
-import { directoryLayout } from "#src/features/conversations/directory-layout";
+import { directEntries, directoryLayout } from "#src/features/conversations/directory-layout";
 import type { ListedDirect } from "#src/features/conversations/sidebar-rows";
 
 /**
@@ -80,4 +81,29 @@ test("a section kept in its own order needs no times", () => {
     "channel:none",
     "channel:newer",
   ]);
+});
+
+test("a DM is an entry named for its peer, the viewer's own marked as theirs, and one with a gone Agent is dropped", () => {
+  const withAgent: ListedDirect = {
+    ...direct("with-agent", 1),
+    peer: { kind: "agent", agentId: "agent-1" },
+  };
+  const gone: ListedDirect = { ...direct("gone", 2), peer: { kind: "agent", agentId: "agent-2" } };
+  const agent: LiveAgent = {
+    id: "agent-1",
+    name: "scout",
+    displayName: "Scout",
+    status: { value: "inactive", expiresAt: null },
+  };
+  const entries = directEntries(
+    [direct("someone", 0), withAgent, gone, direct("self", 3)],
+    [agent],
+    "user-self",
+  );
+  expect(entries.map(({ conversationId, name, self }) => [conversationId, name, self])).toEqual([
+    ["someone", "someone", false],
+    ["with-agent", "Scout", false],
+    ["self", "self", true],
+  ]);
+  expect(entries[1]?.agent).toBe(agent);
 });

@@ -1,5 +1,4 @@
 import { createContext, useContext, useRef, useState, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { useParams, useSearch } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { Heading } from "react-aria-components";
@@ -10,12 +9,9 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { useAppToast } from "#src/components/ui/toast";
 import { useLatestCallback } from "#src/hooks/use-latest-callback";
-import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { m } from "#src/paraglide/messages";
-import {
-  loadTaskConversationsOn,
-  makeTaskFromMessage,
-} from "#src/features/tasks/message-task.functions";
+import { makeTaskFromMessage } from "#src/features/tasks/message-task.functions";
+import { useTaskConversationsOn } from "#src/features/tasks/use-task-conversations-on";
 import { useConversationTaskWrites } from "#src/features/tasks/use-conversation-tasks";
 import { useOpenConversationTask } from "./open-conversation-thread";
 
@@ -40,14 +36,7 @@ export function useMakeTaskFromMessage(): MakeTask | null {
  * asks first: open that Task, or make this one anyway, beside it.
  */
 export function MessageTaskHost({ children }: { children: ReactNode }) {
-  const loadOn = useServerFn(loadTaskConversationsOn);
-  const workspaceId = useCurrentWorkspaceId();
-  const on = useQuery({
-    queryKey: ["task-conversations-on", workspaceId],
-    queryFn: () => loadOn(),
-    // Read again on a page's next host after a minute, so a switch in Settings shows here.
-    staleTime: 60_000,
-  }).data?.on;
+  const on = useTaskConversationsOn();
   const make = useServerFn(makeTaskFromMessage);
   const writeTasks = useConversationTaskWrites();
   const { openTask } = useOpenConversationTask();

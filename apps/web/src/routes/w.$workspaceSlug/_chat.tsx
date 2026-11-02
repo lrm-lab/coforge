@@ -13,6 +13,7 @@ import {
   channelNamesQuery,
   savedMessagesQuery,
 } from "#src/features/conversations/conversation-queries";
+import { draftsOnQuery } from "#src/features/conversations/use-drafts-on";
 import { NO_SAVED } from "#src/features/conversations/saved-messages-collection";
 
 export const Route = createFileRoute("/w/$workspaceSlug/_chat")({
@@ -54,10 +55,16 @@ export const Route = createFileRoute("/w/$workspaceSlug/_chat")({
       if (channels && channelNamesBehind(read.names, channels.rows))
         await queryClient.fetchQuery({ ...query, staleTime: 0 });
     });
-    const [, , , currentWorkspaceId] = await Promise.all([
+    // Whether Drafts is on, so the sidebar's Drafts row and the Drafts page do not pop in after the
+    // first paint. A failed read is left in the cache, where `useDraftsOn` reads it as off.
+    const draftsOn = workspaceId.then((workspaceId) =>
+      queryClient.ensureQueryData(draftsOnQuery(workspaceId)).catch(() => undefined),
+    );
+    const [, , , , currentWorkspaceId] = await Promise.all([
       channelNames,
       saved,
       sidebarLists,
+      draftsOn,
       workspaceId,
     ]);
     // Keys the conversation pages' Workspace-scoped reads (a Tasks tab's finished counts).

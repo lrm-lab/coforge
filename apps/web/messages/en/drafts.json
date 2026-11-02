@@ -1,0 +1,18 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "conversation_drafts_nav": "Drafts",
+  "conversation_drafts_count": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} draft",
+        "countPlural=other": "{count} drafts"
+      }
+    }
+  ],
+  "conversation_drafts_empty_title": "No drafts",
+  "conversation_drafts_empty_description": "Messages you write but don't send, in any conversation, stay here.",
+  "conversation_drafts_draft_marker": "Draft:",
+  "conversation_drafts_thread_in": "Thread in {place}"
+}

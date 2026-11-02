@@ -33,7 +33,7 @@ const channels = [
   { id: "c3", joined: true, archived: true },
 ];
 // Direct messages the sidebar lists (a closed one is not).
-const lists = { channels, directIds: ["d1"] };
+const lists = { channels, directIds: ["d1"], draftsOn: true };
 
 describe("the conversation Chat reopens", () => {
   beforeEach(stubLocalStorage);
@@ -48,6 +48,11 @@ describe("the conversation Chat reopens", () => {
     expect(rememberedConversation("w1")).toEqual({ dmId: "d1" });
     rememberConversation("w1", "/w/acme/saved");
     expect(rememberedConversation("w1")).toEqual({ view: "saved" });
+  });
+
+  test("is the Drafts view when that was opened last", () => {
+    rememberConversation("w1", "/w/acme/drafts");
+    expect(rememberedConversation("w1")).toEqual({ view: "drafts" });
   });
 
   test("is kept per Workspace", () => {
@@ -84,6 +89,16 @@ describe("where Chat lands", () => {
     expect(landingConversation({ channelId: "c0" }, lists)).toEqual({ channelId: "c0" });
     expect(landingConversation({ dmId: "d1" }, lists)).toEqual({ dmId: "d1" });
     expect(landingConversation({ view: "saved" }, lists)).toEqual({ view: "saved" });
+    expect(landingConversation({ view: "drafts" }, lists)).toEqual({ view: "drafts" });
+  });
+
+  test("is not the Drafts view while the Drafts experiment is off", () => {
+    expect(landingConversation({ view: "drafts" }, { ...lists, draftsOn: false })).toEqual({
+      channelId: "c1",
+    });
+    expect(landingConversation({ view: "saved" }, { ...lists, draftsOn: false })).toEqual({
+      view: "saved",
+    });
   });
 
   test("falls back to the first joined channel once the remembered one is gone", () => {
@@ -99,6 +114,7 @@ describe("where Chat lands", () => {
       landingConversation(undefined, {
         channels: [channels[0]!, channels[3]!],
         directIds: [],
+        draftsOn: true,
       }),
     ).toBeUndefined();
   });

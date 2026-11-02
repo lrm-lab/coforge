@@ -22,10 +22,9 @@ import { TasksPending } from "#src/features/tasks/tasks-pending";
 import { useTaskOverview } from "#src/features/tasks/use-task-overview";
 import {
   finishedSummaryQuery,
-  finishedTasksScopeKey,
+  overviewTaskQuery,
   useFinishedTasks,
 } from "#src/features/tasks/use-finished-tasks";
-import { loadOverviewTask } from "#src/features/tasks/tasks.functions";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 
 export const Route = createFileRoute("/w/$workspaceSlug/tasks")({
@@ -100,16 +99,7 @@ function TasksPage() {
   // A Task `task` names that the page has not read (a finished one past the opened pages, or one
   // created since the page loaded), read on its own. It sits with the finished-work reads, so the
   // reads after each command and announcement refresh it too.
-  const lookup = useQuery({
-    queryKey: [
-      ...finishedTasksScopeKey({ workspaceId }),
-      "task",
-      taskRef?.conversationId,
-      taskRef?.number,
-    ],
-    queryFn: () => loadOverviewTask({ data: taskRef! }),
-    enabled: Boolean(taskRef && !listed),
-  });
+  const lookup = useQuery(overviewTaskQuery(workspaceId, listed ? undefined : taskRef));
   // The Task whose popup `task` names.
   const openTask = listed ?? (taskRef && !listed ? (lookup.data ?? undefined) : undefined);
   const openConversationId = openTask?.conversationId;

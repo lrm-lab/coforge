@@ -4,7 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { replyToTask } from "#src/features/tasks/task-conversation.functions";
 import { taskFollowQueryKey } from "#src/features/tasks/task-follow";
 import { ConversationPane } from "./conversation-pane";
-import { composerDraftKey } from "./composer-draft";
+import { taskDraftKey } from "./composer-draft";
 import { ComposerScopeProvider, type ComposerScope } from "./composer-scope";
 import type { DirectConversationView } from "./conversation-types";
 import { ThreadLoadStatus, threadRootLoadOf } from "./thread-root-state";
@@ -47,7 +47,7 @@ export function TaskDiscussionPane({
   // growing; the scope reaches it and its outbox without threading two props through the pane.
   const scope = useMemo<ComposerScope>(
     () => ({
-      draftKey: composerDraftKey(`task:${board.conversationId}:${board.number}`),
+      draftKey: taskDraftKey(board.conversationId, board.number),
       uploadTo: () => (conversationId && seated ? Promise.resolve(conversationId) : ensure()),
     }),
     [board.conversationId, board.number, conversationId, seated, ensure],

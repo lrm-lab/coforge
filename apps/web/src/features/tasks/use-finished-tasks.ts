@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import {
   keepPreviousData,
   queryOptions,
+  skipToken,
   useInfiniteQuery,
   useQuery,
   useQueryClient,
@@ -11,7 +12,7 @@ import type { TaskView } from "@lrm/coforge-sdk/internal";
 
 import type { OverviewTaskRow } from "./task-overview-collection";
 import type { TaskFilter } from "./task-filters";
-import { loadFinishedTaskSummary, loadFinishedTasks } from "./tasks.functions";
+import { loadFinishedTaskSummary, loadFinishedTasks, loadOverviewTask } from "./tasks.functions";
 import {
   finishedCount,
   finishedRows,
@@ -29,6 +30,25 @@ export type FinishedTasksScope = { workspaceId: string; conversationId?: string 
 /** One board's finished-work reads, under its Workspace's key; its `refresh` reads them again. */
 export const finishedTasksScopeKey = ({ workspaceId, conversationId }: FinishedTasksScope) =>
   [...finishedTasksKey(workspaceId), conversationId ?? "workspace"] as const;
+
+/**
+ * One Task by its board and number, in any status, as the Tasks page shows it; `null` when the
+ * viewer cannot see it. It sits with the finished-work reads, so the reads after each command and
+ * announcement refresh it too. Without a Task it reads nothing.
+ */
+export const overviewTaskQuery = (
+  workspaceId: string,
+  task: { conversationId: string; number: number } | undefined,
+) =>
+  queryOptions({
+    queryKey: [
+      ...finishedTasksScopeKey({ workspaceId }),
+      "task",
+      task?.conversationId,
+      task?.number,
+    ],
+    queryFn: task ? () => loadOverviewTask({ data: task }) : skipToken,
+  });
 
 /**
  * How long a finished-work read stays fresh.

@@ -46,6 +46,25 @@ export function useDirectoryLayout(input: LayoutInput) {
 }
 
 /**
+ * One entry per existing DM (an Agent or member the viewer never wrote to has none), Agents and
+ * members mixed in the list's order, each with the name it goes by. A DM with an Agent that is
+ * gone is left out. The sidebar and the Drafts page both read their DMs this way.
+ */
+export function directEntries(
+  directRows: readonly ListedDirect[],
+  agents: readonly LiveAgent[],
+  viewerId?: string,
+): DirectEntry[] {
+  const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
+  return directRows.flatMap((row): DirectEntry[] => {
+    if (row.peer.kind === "people")
+      return [{ ...row, name: row.peer.displayName, self: row.peer.userId === viewerId }];
+    const agent = agentsById.get(row.peer.agentId);
+    return agent ? [{ ...row, name: agent.displayName, agent, self: false }] : [];
+  });
+}
+
+/**
  * Where every row of the Chat directory goes: the channels (joined first), one entry per DM with
  * its name and live Agent, each section's rows by key (`base`), and the order a row dragged out of
  * Pinned returns to (`natural`). Derived once per list change (`useDirectoryLayout`), not per
@@ -67,16 +86,8 @@ export function directoryLayout({
   const sortedChannels = [...channels].sort((left, right) =>
     left.joined === right.joined ? 0 : left.joined ? -1 : 1,
   );
-  // One row per existing DM (an Agent or member the viewer never wrote to has none), Agents and
-  // members mixed in the list's order. A DM with an Agent that is gone is left out; a closed one is
-  // left out of its section by the split.
-  const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
-  const directRows = directRowList.flatMap((row): DirectEntry[] => {
-    if (row.peer.kind === "people")
-      return [{ ...row, name: row.peer.displayName, self: row.peer.userId === viewerId }];
-    const agent = agentsById.get(row.peer.agentId);
-    return agent ? [{ ...row, name: agent.displayName, agent, self: false }] : [];
-  });
+  // A closed DM is left out of its section by the split.
+  const directRows = directEntries(directRowList, agents, viewerId);
   const split = splitPinnedConversations(sortedChannels, directRows);
   const base: DirectoryLayout = {
     pinned: split.pinned.map((entry) =>

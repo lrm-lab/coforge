@@ -1,0 +1,17 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "conversation_drafts_nav": "草稿",
+  "conversation_drafts_count": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=other": "{count} 项"
+      }
+    }
+  ],
+  "conversation_drafts_empty_title": "没有草稿",
+  "conversation_drafts_empty_description": "在任何会话里写了但没发出去的消息，都会留在这里。",
+  "conversation_drafts_draft_marker": "草稿：",
+  "conversation_drafts_thread_in": "{place} 中的讨论"
+}

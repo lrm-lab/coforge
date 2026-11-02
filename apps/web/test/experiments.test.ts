@@ -19,13 +19,64 @@ function setup(flags: readonly string[]) {
   return { experiments, stored };
 }
 
-test("the registry names each experiment's flag and whether a change needs a reload", () => {
-  expect(EXPERIMENTS.taskConversations).toEqual({ flag: "task-conversations", reload: false });
+test("the registry names each experiment's flag, default and whether a change needs a reload", () => {
+  expect(EXPERIMENTS.taskConversations).toEqual({
+    flag: "task-conversations",
+    defaultEnabled: false,
+    reload: false,
+  });
+  expect(EXPERIMENTS.drafts).toEqual({ flag: null, defaultEnabled: true, reload: false });
 });
 
-test("a Workspace whose flag is off lists nothing and can enable nothing", async () => {
+test("an experiment without a flag is offered to every Workspace, on until its choice says off", async () => {
   const { experiments, stored } = setup([]);
-  expect(await experiments.list(workspace)).toEqual([]);
+  expect(await experiments.list(workspace)).toEqual([
+    { key: "drafts", enabled: true, reload: false },
+  ]);
+  expect(await experiments.enabled("drafts", workspace)).toBeTrue();
+  expect(await experiments.enabled("taskConversations", workspace)).toBeFalse();
+  expect(await experiments.set(workspace, "owner", "drafts", false)).toEqual({
+    key: "drafts",
+    enabled: false,
+    reload: false,
+  });
+  expect(stored.get("w1")).toEqual({ drafts: false });
+  expect(await experiments.enabled("drafts", workspace)).toBeFalse();
+  expect(await experiments.list(workspace)).toEqual([
+    { key: "drafts", enabled: false, reload: false },
+  ]);
+  expect(await experiments.enabled("drafts", { ...workspace, workspaceId: "w2" })).toBeTrue();
+  await experiments.set(workspace, "admin", "drafts", true);
+  expect(await experiments.enabled("drafts", workspace)).toBeTrue();
+});
+
+test("a member cannot switch an unflagged experiment either", async () => {
+  const { experiments, stored } = setup([]);
+  await expect(experiments.set(workspace, "member", "drafts", false)).rejects.toMatchObject({
+    code: "ACCESS_DENIED",
+  });
+  expect(stored.size).toBe(0);
+});
+
+test("an unflagged experiment is never looked up by flag", async () => {
+  const asked: string[] = [];
+  const experiments = new Experiments(
+    { read: async () => ({}), write: async () => {} },
+    async (flag) => {
+      asked.push(flag);
+      return false;
+    },
+  );
+  await experiments.list(workspace);
+  await experiments.enabled("drafts", workspace);
+  expect(asked.filter((flag) => flag !== "task-conversations")).toEqual([]);
+});
+
+test("a Workspace whose flag is off lists only the unflagged experiments and cannot enable a flagged one", async () => {
+  const { experiments, stored } = setup([]);
+  expect(await experiments.list(workspace)).toEqual([
+    { key: "drafts", enabled: true, reload: false },
+  ]);
   expect(await experiments.enabled("taskConversations", workspace)).toBeFalse();
   await expect(
     experiments.set(workspace, "owner", "taskConversations", true),
@@ -37,6 +88,7 @@ test("a visible experiment starts off, and is on only once an owner or admin swi
   const { experiments } = setup(["task-conversations"]);
   expect(await experiments.list(workspace)).toEqual([
     { key: "taskConversations", enabled: false, reload: false },
+    { key: "drafts", enabled: true, reload: false },
   ]);
   expect(await experiments.set(workspace, "admin", "taskConversations", true)).toEqual({
     key: "taskConversations",
@@ -69,10 +121,11 @@ test("a Workspace's choice does nothing once its flag goes off", async () => {
 test("stored keys the registry no longer knows are ignored", async () => {
   const experiments = new Experiments(
     { read: async () => ({ retiredThing: true }), write: async () => {} },
-    async () => true,
+    async (flag) => flag === "task-conversations",
   );
   expect(await experiments.list(workspace)).toEqual([
     { key: "taskConversations", enabled: false, reload: false },
+    { key: "drafts", enabled: true, reload: false },
   ]);
 });
 

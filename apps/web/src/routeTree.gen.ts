@@ -102,6 +102,7 @@ import { Route as ApiOpenvikingWorkspaceIdSplatRouteImport } from './routes/api/
 import { Route as ApiProjectsProjectIdIconRouteImport } from './routes/api/projects.$projectId.icon'
 import { Route as ApiWorkspacesWorkspaceIdIconRouteImport } from './routes/api/workspaces/$workspaceId/icon'
 import { Route as WWorkspaceSlugChatIndexRouteImport } from './routes/w.$workspaceSlug/_chat.index'
+import { Route as WWorkspaceSlugChatDraftsRouteImport } from './routes/w.$workspaceSlug/_chat.drafts'
 import { Route as WWorkspaceSlugChatSavedRouteImport } from './routes/w.$workspaceSlug/_chat.saved'
 import { Route as WWorkspaceSlugComputersComputersRouteImport } from './routes/w.$workspaceSlug/_computers.computers'
 import { Route as WWorkspaceSlugAgentAgentIdRouteImport } from './routes/w.$workspaceSlug/agent.$agentId'
@@ -667,6 +668,12 @@ const WWorkspaceSlugChatIndexRoute = WWorkspaceSlugChatIndexRouteImport.update({
   path: '/',
   getParentRoute: () => WWorkspaceSlugChatRoute,
 } as any)
+const WWorkspaceSlugChatDraftsRoute =
+  WWorkspaceSlugChatDraftsRouteImport.update({
+    id: '/drafts',
+    path: '/drafts',
+    getParentRoute: () => WWorkspaceSlugChatRoute,
+  } as any)
 const WWorkspaceSlugChatSavedRoute = WWorkspaceSlugChatSavedRouteImport.update({
   id: '/saved',
   path: '/saved',
@@ -1158,6 +1165,7 @@ export interface FileRoutesByFullPath {
   '/api/openviking/$workspaceId/$': typeof ApiOpenvikingWorkspaceIdSplatRoute
   '/api/projects/$projectId/icon': typeof ApiProjectsProjectIdIconRoute
   '/api/workspaces/$workspaceId/icon': typeof ApiWorkspacesWorkspaceIdIconRoute
+  '/w/$workspaceSlug/drafts': typeof WWorkspaceSlugChatDraftsRoute
   '/w/$workspaceSlug/saved': typeof WWorkspaceSlugChatSavedRoute
   '/w/$workspaceSlug/computers': typeof WWorkspaceSlugComputersComputersRoute
   '/w/$workspaceSlug/agent/$agentId': typeof WWorkspaceSlugAgentAgentIdRoute
@@ -1318,6 +1326,7 @@ export interface FileRoutesByTo {
   '/api/openviking/$workspaceId/$': typeof ApiOpenvikingWorkspaceIdSplatRoute
   '/api/projects/$projectId/icon': typeof ApiProjectsProjectIdIconRoute
   '/api/workspaces/$workspaceId/icon': typeof ApiWorkspacesWorkspaceIdIconRoute
+  '/w/$workspaceSlug/drafts': typeof WWorkspaceSlugChatDraftsRoute
   '/w/$workspaceSlug/saved': typeof WWorkspaceSlugChatSavedRoute
   '/w/$workspaceSlug/computers': typeof WWorkspaceSlugComputersComputersRoute
   '/w/$workspaceSlug/agent/$agentId': typeof WWorkspaceSlugAgentAgentIdRoute
@@ -1481,6 +1490,7 @@ export interface FileRoutesById {
   '/api/openviking/$workspaceId/$': typeof ApiOpenvikingWorkspaceIdSplatRoute
   '/api/projects/$projectId/icon': typeof ApiProjectsProjectIdIconRoute
   '/api/workspaces/$workspaceId/icon': typeof ApiWorkspacesWorkspaceIdIconRoute
+  '/w/$workspaceSlug/_chat/drafts': typeof WWorkspaceSlugChatDraftsRoute
   '/w/$workspaceSlug/_chat/saved': typeof WWorkspaceSlugChatSavedRoute
   '/w/$workspaceSlug/_computers/computers': typeof WWorkspaceSlugComputersComputersRoute
   '/w/$workspaceSlug/agent/$agentId': typeof WWorkspaceSlugAgentAgentIdRoute
@@ -1644,6 +1654,7 @@ export interface FileRouteTypes {
     | '/api/openviking/$workspaceId/$'
     | '/api/projects/$projectId/icon'
     | '/api/workspaces/$workspaceId/icon'
+    | '/w/$workspaceSlug/drafts'
     | '/w/$workspaceSlug/saved'
     | '/w/$workspaceSlug/computers'
     | '/w/$workspaceSlug/agent/$agentId'
@@ -1804,6 +1815,7 @@ export interface FileRouteTypes {
     | '/api/openviking/$workspaceId/$'
     | '/api/projects/$projectId/icon'
     | '/api/workspaces/$workspaceId/icon'
+    | '/w/$workspaceSlug/drafts'
     | '/w/$workspaceSlug/saved'
     | '/w/$workspaceSlug/computers'
     | '/w/$workspaceSlug/agent/$agentId'
@@ -1966,6 +1978,7 @@ export interface FileRouteTypes {
     | '/api/openviking/$workspaceId/$'
     | '/api/projects/$projectId/icon'
     | '/api/workspaces/$workspaceId/icon'
+    | '/w/$workspaceSlug/_chat/drafts'
     | '/w/$workspaceSlug/_chat/saved'
     | '/w/$workspaceSlug/_computers/computers'
     | '/w/$workspaceSlug/agent/$agentId'
@@ -2814,6 +2827,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WWorkspaceSlugChatIndexRouteImport
       parentRoute: typeof WWorkspaceSlugChatRoute
     }
+    '/w/$workspaceSlug/_chat/drafts': {
+      id: '/w/$workspaceSlug/_chat/drafts'
+      path: '/drafts'
+      fullPath: '/w/$workspaceSlug/drafts'
+      preLoaderRoute: typeof WWorkspaceSlugChatDraftsRouteImport
+      parentRoute: typeof WWorkspaceSlugChatRoute
+    }
     '/w/$workspaceSlug/_chat/saved': {
       id: '/w/$workspaceSlug/_chat/saved'
       path: '/saved'
@@ -3339,6 +3359,7 @@ const AuthGithubRouteWithChildren = AuthGithubRoute._addFileChildren(
 )
 
 interface WWorkspaceSlugChatRouteChildren {
+  WWorkspaceSlugChatDraftsRoute: typeof WWorkspaceSlugChatDraftsRoute
   WWorkspaceSlugChatSavedRoute: typeof WWorkspaceSlugChatSavedRoute
   WWorkspaceSlugChatIndexRoute: typeof WWorkspaceSlugChatIndexRoute
   WWorkspaceSlugChatChannelChannelIdRoute: typeof WWorkspaceSlugChatChannelChannelIdRoute
@@ -3346,6 +3367,7 @@ interface WWorkspaceSlugChatRouteChildren {
 }
 
 const WWorkspaceSlugChatRouteChildren: WWorkspaceSlugChatRouteChildren = {
+  WWorkspaceSlugChatDraftsRoute: WWorkspaceSlugChatDraftsRoute,
   WWorkspaceSlugChatSavedRoute: WWorkspaceSlugChatSavedRoute,
   WWorkspaceSlugChatIndexRoute: WWorkspaceSlugChatIndexRoute,
   WWorkspaceSlugChatChannelChannelIdRoute:

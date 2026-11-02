@@ -6,16 +6,22 @@ import type {
 } from "#src/server/feature-flags/feature-flags.server";
 
 /**
- * The experiments a Workspace's owner or admin can switch on in Settings. The flag decides which
- * Workspaces offer one; the Workspace's own switch decides whether it applies to everyone in it
- * and to every Agent. Graduating an experiment removes its entry here and its flag: a stored
- * choice for a key that is no longer listed is ignored, so no dead switch is left behind.
+ * The experiments a Workspace's owner or admin can switch in Settings. A flag decides which
+ * Workspaces offer one; an entry with no flag (`flag: null`) is offered to every Workspace. The
+ * Workspace's own switch decides whether it applies to everyone in it and to every Agent, and
+ * `defaultEnabled` is what applies until the switch is first used. Graduating an experiment
+ * removes its entry here and its flag: a stored choice for a key that is no longer listed is
+ * ignored, so no dead switch is left behind.
  *
  * `reload` says a change only takes full effect after the page reloads or reconnects.
  */
 export const EXPERIMENTS = {
-  taskConversations: { flag: "task-conversations", reload: false },
-} as const satisfies Record<string, { flag: FeatureFlag; reload: boolean }>;
+  taskConversations: { flag: "task-conversations", defaultEnabled: false, reload: false },
+  drafts: { flag: null, defaultEnabled: true, reload: false },
+} as const satisfies Record<
+  string,
+  { flag: FeatureFlag | null; defaultEnabled: boolean; reload: boolean }
+>;
 
 export type ExperimentKey = keyof typeof EXPERIMENTS;
 
@@ -43,23 +49,35 @@ export class Experiments {
     private readonly beforeEnable: ExperimentPreconditions = {},
   ) {}
 
-  /** The experiments this Workspace offers, with its switch for each. */
-  async list(workspace: FeatureFlagContext): Promise<ExperimentView[]> {
-    const stored = await this.repository.read(workspace.workspaceId);
-    const offered = await Promise.all(
-      EXPERIMENT_KEYS.map(async (key) =>
-        (await this.flagEnabled(EXPERIMENTS[key].flag, workspace)) ? key : null,
-      ),
-    );
-    return offered
-      .filter((key) => key !== null)
-      .map((key) => ({ key, enabled: stored[key] === true, reload: EXPERIMENTS[key].reload }));
+  /** Whether the Workspace offers the experiment: always when it has no flag. */
+  private async offered(key: ExperimentKey, workspace: FeatureFlagContext) {
+    const { flag } = EXPERIMENTS[key];
+    return flag === null || (await this.flagEnabled(flag, workspace));
   }
 
-  /** On when the Workspace offers it and its owner or an admin switched it on. */
+  /** The experiments this Workspace offers, with its switch for each. */
+  async list(workspace: FeatureFlagContext): Promise<ExperimentView[]> {
+    const [stored, offered] = await Promise.all([
+      this.repository.read(workspace.workspaceId),
+      Promise.all(
+        EXPERIMENT_KEYS.map(async (key) => ((await this.offered(key, workspace)) ? key : null)),
+      ),
+    ]);
+    return offered
+      .filter((key) => key !== null)
+      .map((key) => ({
+        key,
+        enabled: stored[key] ?? EXPERIMENTS[key].defaultEnabled,
+        reload: EXPERIMENTS[key].reload,
+      }));
+  }
+
+  /** On when the Workspace offers it and its choice, or failing that the experiment's default, is on. */
   async enabled(key: ExperimentKey, workspace: FeatureFlagContext) {
-    if (!(await this.flagEnabled(EXPERIMENTS[key].flag, workspace))) return false;
-    return (await this.repository.read(workspace.workspaceId))[key] === true;
+    if (!(await this.offered(key, workspace))) return false;
+    return (
+      (await this.repository.read(workspace.workspaceId))[key] ?? EXPERIMENTS[key].defaultEnabled
+    );
   }
 
   /**
@@ -73,8 +91,7 @@ export class Experiments {
     enabled: boolean,
   ): Promise<ExperimentView> {
     assertCanManageWorkspaceSettings(actorRole);
-    if (!(await this.flagEnabled(EXPERIMENTS[key].flag, workspace)))
-      throw new AppError("NOT_FOUND");
+    if (!(await this.offered(key, workspace))) throw new AppError("NOT_FOUND");
     if (enabled) await this.beforeEnable[key]?.(workspace.workspaceId);
     await this.repository.write(workspace.workspaceId, key, enabled);
     return { key, enabled, reload: EXPERIMENTS[key].reload };

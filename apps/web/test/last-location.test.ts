@@ -13,6 +13,9 @@ describe("the last location opening the app root returns to", () => {
     const cookie = lastLocationCookie("/w/acme/channel/c1", false);
     expect(restorableLastLocation(`theme=dark; ${sentBack(cookie)}`)).toBe("/w/acme/channel/c1");
     expect(restorableLastLocation(sentBack(lastLocationCookie("/w/acme", false)))).toBe("/w/acme");
+    expect(restorableLastLocation(sentBack(lastLocationCookie("/w/acme/drafts", false)))).toBe(
+      "/w/acme/drafts",
+    );
   });
 
   test("lives for 24 hours from the last page the user opened", () => {

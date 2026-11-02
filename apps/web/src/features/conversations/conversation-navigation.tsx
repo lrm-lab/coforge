@@ -230,6 +230,7 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
                   selectedChannelId={channel?.channelId}
                   selectedDmId={openDm?.dmId}
                   selectedSaved={pathname === workspacePath(workspaceSlug, "/saved")}
+                  selectedDrafts={pathname === workspacePath(workspaceSlug, "/drafts")}
                 />
               </div>
               <ConversationListResizeHandle />

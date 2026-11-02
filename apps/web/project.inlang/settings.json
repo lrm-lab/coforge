@@ -18,6 +18,7 @@
       "./messages/{locale}/action-cards.json",
       "./messages/{locale}/conversation-attachments.json",
       "./messages/{locale}/message-forward.json",
+      "./messages/{locale}/drafts.json",
       "./messages/{locale}/channels.json",
       "./messages/{locale}/activity-inbox.json",
       "./messages/{locale}/search.json",

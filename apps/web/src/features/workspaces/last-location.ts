@@ -18,6 +18,7 @@ const APP_SECTIONS = [
   "channel",
   "messages",
   "saved",
+  "drafts",
   "activity",
   "tasks",
   "search",

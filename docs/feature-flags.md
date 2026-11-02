@@ -99,15 +99,21 @@ those keys.
 
 ## Experiments
 
-An experiment is a flag a Workspace owner or admin switches on for the whole Workspace in Settings
-→ Experiments (shown only to them, and only while the Workspace offers one): it applies to every member and every Agent at once. The flag still
-decides which Workspaces offer it; the Workspace's own switch (`workspaces.experiments`, a sparse
-key → boolean map, off by default) decides whether it applies. Members see no switch; the server
-refuses a change from anyone but an owner or admin.
-`apps/web/src/server/experiments/` holds the registry (`EXPERIMENTS`: key, flag, and whether a change
-needs a reload) and `Experiments.enabled(key, workspace)`, the one question server code
-asks. When an experiment graduates, delete its registry entry and its flag together; a stored
-choice for an unlisted key is ignored, so nothing else needs migrating.
+An experiment is a Workspace-wide switch an owner or admin flips in Settings → Experiments (shown
+only to them, and only while the Workspace offers one): it applies to every member and every Agent
+at once. Members see no switch; the server refuses a change from anyone but an owner or admin.
+
+An experiment either has a flag or has none. With a flag, the flag decides which Workspaces offer it
+(a flag-less Workspace does not list it and cannot enable it). With `flag: null` every Workspace
+offers it, and a feature that has shipped but that a Workspace may want to turn off is exactly that:
+Drafts is one. The Workspace's own choice (`workspaces.experiments`, a sparse key → boolean map)
+decides whether it applies, and the entry's `defaultEnabled` is what applies until the choice is
+first made: off for `taskConversations`, on for `drafts`. An explicit stored `false` stays off.
+
+`apps/web/src/server/experiments/` holds the registry (`EXPERIMENTS`: key, flag or `null`,
+`defaultEnabled`, and whether a change needs a reload) and `Experiments.enabled(key, workspace)`, the
+one question server code asks. When an experiment graduates, delete its registry entry and its flag
+(if any) together; a stored choice for an unlisted key is ignored, so nothing else needs migrating.
 
 [openfeature]: https://openfeature.dev/docs/reference/technologies/server/javascript/
 [flagd-provider]: https://github.com/open-feature/js-sdk-contrib/tree/main/libs/providers/flagd

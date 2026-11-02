@@ -10,6 +10,7 @@ import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { m } from "#src/paraglide/messages";
 import { ConversationPending } from "./conversation-pending";
+import { useDraftsOn } from "./use-drafts-on";
 import { useSidebarLists } from "./sidebar-lists";
 import {
   conversationAt,
@@ -31,6 +32,7 @@ export function EmptyConversation() {
   const agents = useVisibleLiveAgents();
   const workspaceId = useCurrentWorkspaceId();
   const workspaceSlug = useWorkspaceSlug();
+  const draftsOn = useDraftsOn();
   const desktop = useBreakpoint("lg");
   const navigate = useNavigate();
   // While any navigation is under way (the landing one included) the pane leaves it alone; once
@@ -38,15 +40,32 @@ export function EmptyConversation() {
   const navigating = useRouterState({ select: (state) => state.status === "pending" });
   useEffect(() => {
     if (!desktop || navigating) return;
-    const target = landingConversation(
-      workspaceId ? rememberedConversation(workspaceId) : undefined,
-      {
-        channels,
-        directIds: listedDirectIds(directs, agents),
-      },
-    );
+    const remembered = workspaceId ? rememberedConversation(workspaceId) : undefined;
+    // Drafts is a place to land only once its experiment is known to be on: wait for that.
+    if (
+      draftsOn === undefined &&
+      remembered &&
+      "view" in remembered &&
+      remembered.view === "drafts"
+    )
+      return;
+    const target = landingConversation(remembered, {
+      channels,
+      directIds: listedDirectIds(directs, agents),
+      draftsOn: draftsOn === true,
+    });
     if (target) void navigate({ ...conversationRoute(target, workspaceSlug), replace: true });
-  }, [desktop, navigating, workspaceId, workspaceSlug, channels, agents, directs, navigate]);
+  }, [
+    desktop,
+    navigating,
+    workspaceId,
+    workspaceSlug,
+    channels,
+    agents,
+    directs,
+    draftsOn,
+    navigate,
+  ]);
 
   // While a channel or direct message is opening, this pane would still ask for the choice just
   // made until the router's pending fallback is due: show the conversation skeleton instead, and
