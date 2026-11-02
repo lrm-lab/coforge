@@ -212,10 +212,7 @@ export function MessageActionSheet({
           )
         }
       >
-        <Dialog
-          aria-label={m.conversation_message_actions()}
-          className="pb-[env(safe-area-inset-bottom)]"
-        >
+        <Dialog aria-label={m.conversation_message_actions()} className="pb-safe-bottom">
           <div aria-hidden="true" className="mx-auto mt-2 h-1 w-9 rounded-full bg-quaternary/40" />
           {/* The tapped message, quoted in a muted card at the top — the Slack/Discord
               mobile signature that tells you which message the actions belong to. */}

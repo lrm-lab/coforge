@@ -190,7 +190,10 @@ export function AttachmentReviewDialog({
         className="px-0 backdrop-blur-none sm:px-0 [--modal-pb:0px] [--modal-pt:0px] sm:[--modal-pb:0px] sm:[--modal-pt:0px]"
       >
         <Modal className="h-dvh max-h-dvh w-full rounded-none shadow-none max-sm:h-(--visual-viewport-height) max-sm:max-h-(--visual-viewport-height) max-sm:overflow-hidden sm:rounded-none">
-          <Dialog aria-label={file.fileName} className="flex h-full flex-col overflow-hidden">
+          <Dialog
+            aria-label={file.fileName}
+            className="flex h-full flex-col overflow-hidden safe-area-padding"
+          >
             {({ close }) => (
               <>
                 <div className="flex h-14 shrink-0 items-center gap-1 border-b border-secondary bg-primary pr-2 pl-4">

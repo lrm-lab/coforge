@@ -108,7 +108,7 @@ export const SidebarMobileDrawer = (props: SidebarExpandedProps) => (
  * never depends on the stored preference. */
 export const SidebarExpanded = (props: SidebarExpandedProps) => (
   <>
-    <div className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:flex lg:[.sidebar-collapsed_&]:hidden">
+    <div className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:flex lg:pt-safe-top lg:pb-safe-bottom lg:pl-safe-left lg:[.sidebar-collapsed_&]:hidden">
       <div style={{ width: SIDEBAR_EXPANDED_WIDTH }} className="h-full">
         <SidebarExpandedPanel {...props} onCollapse={() => writeSidebarExpanded(false)} />
       </div>

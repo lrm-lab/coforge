@@ -35,7 +35,17 @@ export function ModalOverlay({
   return (
     <OfficialModalOverlay
       {...props}
-      style={{ "--visual-viewport-top": `${viewportTop}px` } as CSSProperties}
+      style={
+        {
+          "--visual-viewport-top": `${viewportTop}px`,
+          // A full-screen dialog keeps the home indicator clear (styles.css), but not above an
+          // on-screen keyboard, which covers the indicator: the inset shrinks by however much the
+          // keyboard takes off the visual viewport. A focused field alone is no sign, as iOS
+          // raises no keyboard for a field focused without a tap.
+          "--spacing-safe-bottom":
+            "max(0px, calc(env(safe-area-inset-bottom, 0px) - (100dvh - var(--visual-viewport-height, 100dvh))))",
+        } as CSSProperties
+      }
       className={(state) =>
         cx(
           "max-sm:top-(--visual-viewport-top) max-sm:bottom-auto max-sm:h-(--visual-viewport-height) max-sm:min-h-0",

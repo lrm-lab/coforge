@@ -98,7 +98,10 @@ export function ImageLightbox({
       className="bg-black/60 px-0 backdrop-blur-none sm:px-0 [--modal-pb:0px] [--modal-pt:0px] sm:[--modal-pb:0px] sm:[--modal-pt:0px]"
     >
       <Modal className="h-dvh max-h-dvh w-full rounded-none bg-transparent shadow-none max-sm:h-(--visual-viewport-height) max-sm:max-h-(--visual-viewport-height) max-sm:overflow-hidden sm:rounded-none">
-        <Dialog aria-label={image.fileName} className="flex h-full flex-col overflow-hidden">
+        <Dialog
+          aria-label={image.fileName}
+          className="flex h-full flex-col overflow-hidden safe-area-padding"
+        >
           {({ close }) => (
             <LightboxContent
               images={images}

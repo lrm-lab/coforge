@@ -46,6 +46,30 @@
   --spacing-page: var(--page-gutter);
 }
 
+/* A phone's safe area (notch, status bar, home indicator), 0 elsewhere: `pt-safe-top`,
+   `pb-[max(1rem,var(--spacing-safe-bottom))]`. Never `env()` directly (docs/design/sizing-units.md). */
+@theme {
+  --spacing-safe-top: env(safe-area-inset-top, 0px);
+  --spacing-safe-right: env(safe-area-inset-right, 0px);
+  --spacing-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --spacing-safe-left: env(safe-area-inset-left, 0px);
+}
+
+/* All four, for a layer that covers the whole screen. */
+@utility safe-area-padding {
+  padding: var(--spacing-safe-top) var(--spacing-safe-right) var(--spacing-safe-bottom)
+    var(--spacing-safe-left);
+}
+
+/* On a touch screen the app shell never moves, only its panes scroll: no rubber-banding or
+   pull-to-refresh on the root. Touch only, so a trackpad keeps its swipe back and forward. */
+@media (pointer: coarse) {
+  html,
+  body {
+    overscroll-behavior: none;
+  }
+}
+
 /* The bar across the top of an Agent panel tab (Activity, Chat); an empty state under it starts
    this much higher, so it sits where it sits in a tab without one (agent-tab-empty.tsx). */
 @theme {

@@ -226,7 +226,7 @@ export function ForwardNotePane({
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         <ForwardedMessageCard forwarded={forwarded} attachments={attachments} />
       </div>
-      <div className="flex shrink-0 flex-col gap-3 border-t border-secondary p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+      <div className="flex shrink-0 flex-col gap-3 border-t border-secondary p-4 pb-[max(1rem,var(--spacing-safe-bottom))]">
         {notice}
         <Recipients picked={picked} onRemove={onRemove} />
         <TextArea

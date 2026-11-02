@@ -242,7 +242,7 @@ export function MessageForwardDialog({
       }}
       className="max-lg:[--modal-pb:0px] max-lg:[--modal-pt:0px] max-lg:px-0"
     >
-      <Modal className="max-lg:h-(--visual-viewport-height) max-lg:w-full max-lg:rounded-none lg:w-[calc(100vw-4rem)] lg:max-w-4xl">
+      <Modal className="max-lg:h-(--visual-viewport-height) max-lg:w-full max-lg:rounded-none max-lg:safe-area-padding lg:w-[calc(100vw-4rem)] lg:max-w-4xl">
         <Dialog className="flex h-full max-h-[inherit] flex-col overflow-hidden text-left lg:h-[min(40rem,calc(var(--visual-viewport-height)-4rem))]">
           {desktop || step === "destinations" ? (
             <DialogHeader
@@ -307,7 +307,7 @@ export function MessageForwardDialog({
             </div>
           </div>
           {!desktop && step === "destinations" && (
-            <div className="flex shrink-0 justify-end border-t border-secondary px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            <div className="flex shrink-0 justify-end border-t border-secondary px-4 py-3 pb-[max(0.75rem,var(--spacing-safe-bottom))]">
               <Button size="md" isDisabled={picked.length === 0} onPress={() => setStep("note")}>
                 {m.message_forward_next()}
               </Button>

@@ -18,7 +18,7 @@ import { installSharedApp, type SharedApp } from "./shared-app.functions";
 /** The page around a private share link's content: the CoForge mark and one centered column. */
 function SharedAppFrame({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-dvh bg-primary px-4 py-8 md:px-8">
+    <div className="min-h-dvh bg-primary px-[max(1rem,var(--spacing-safe-left))] pt-[max(2rem,var(--spacing-safe-top))] pb-[max(2rem,var(--spacing-safe-bottom))] md:px-8">
       <Link to="/" aria-label="CoForge" className="inline-block">
         <img src="/logo.svg" alt="" className="size-8" />
       </Link>

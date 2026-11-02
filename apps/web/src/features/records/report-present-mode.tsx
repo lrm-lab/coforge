@@ -121,7 +121,7 @@ export function ReportPresentMode({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex flex-col bg-primary"
+      className="fixed inset-0 z-50 flex flex-col bg-primary safe-area-padding"
       role="dialog"
       aria-modal="true"
       aria-label={page.name}

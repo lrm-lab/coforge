@@ -26,6 +26,15 @@
 - 从 DOM 量出来的实际位置和尺寸：`getBoundingClientRect()`、`scrollTop`、拖拽坐标都是 px，据此定位浮层时直接用 px，不要换算成 rem。
 - `sr-only` 这类 1px 隐藏技巧。
 
+## 手机安全区
+
+页面铺满整块屏幕（`__root.tsx` 的 `viewport-fit=cover`），所以刘海、状态栏和 Home 指示条底下也有页面。要避开它们，用 `styles.css` 里的间距 `--spacing-safe-top/right/bottom/left`，也就是 `pt-safe-top`、`pb-safe-bottom` 这类类名；四边一起留用 `safe-area-padding`；要和最小留白取大，写 `pb-[max(1rem,var(--spacing-safe-bottom))]`。不要直接写 `env(safe-area-inset-*)`。
+
+- 应用外壳（`app-shell.tsx`）已经四边都留了，外壳里的页面不用再留。外壳之外的整页也要自己留：登录、设备授权、应用授权、分享的应用、错误页（`ErrorPageFrame`）。
+- 盖住整屏的层也要自己留：手机侧栏抽屉、文件预览、图片查看、任务详情和转发在手机上的全屏形态、演示模式。桌面侧栏是 `fixed`，同样要自己留。
+- 对话框里的 `--spacing-safe-bottom` 会减去键盘占掉的高度（`ui/modal.tsx`），键盘弹起时就是 0，因为键盘已经盖住了 Home 指示条。光看输入框有没有焦点不准：iOS 上不是点出来的焦点不会弹键盘。
+- 触屏上页面本身不回弹，也不能下拉刷新（`overscroll-behavior: none`），滚动只发生在各个面板里。触控板上保留双指前进后退。
+
 ## 不受约束的范围
 
 - Untitled UI 官方组件（`src/components/base/**`、`application/**`、`foundations/**`）按[第 7 节](official-components.md)源码不改，里面的 `rounded-[10px]`、`pr-[calc(...+1px)]` 等保持上游原样。

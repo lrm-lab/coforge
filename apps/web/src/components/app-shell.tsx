@@ -215,7 +215,8 @@ export function AppShell({
 
   return (
     <MobileDrawerProvider>
-      <div className="flex h-svh flex-col bg-primary font-body antialiased lg:flex-row lg:bg-(image:--sidebar-gradient)">
+      {/* Clears the notch and the home indicator on a phone. */}
+      <div className="flex h-svh flex-col bg-primary safe-area-padding font-body antialiased lg:flex-row lg:bg-(image:--sidebar-gradient)">
         {/* Each sidebar is `fixed` + a spacer div reserving its width in flow;
           `contents` keeps that pair as direct flex items of this `lg:flex` shell. The drawer is
           mobile only; on desktop `sidebar-collapsed` on <html> picks the expanded one or the rail. */}

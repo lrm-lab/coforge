@@ -50,7 +50,7 @@ export function ReportImageZoom({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[60] flex flex-col bg-overlay/80"
+      className="fixed inset-0 z-[60] flex flex-col bg-overlay/80 safe-area-padding"
       role="dialog"
       aria-modal="true"
       aria-label={alt || m.records_report_image_zoom_in()}

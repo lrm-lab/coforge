@@ -12,10 +12,10 @@ const toastStyle: CSSProperties & Record<`--${string}`, string> = {
 };
 
 const offset = {
-  top: "max(1rem, env(safe-area-inset-top))",
-  bottom: "max(1rem, env(safe-area-inset-bottom))",
-  right: "max(1rem, env(safe-area-inset-right))",
-  left: "max(1rem, env(safe-area-inset-left))",
+  top: "max(1rem, var(--spacing-safe-top))",
+  bottom: "max(1rem, var(--spacing-safe-bottom))",
+  right: "max(1rem, var(--spacing-safe-right))",
+  left: "max(1rem, var(--spacing-safe-left))",
 };
 
 export function AppToastProvider({ children }: { children: React.ReactNode }) {

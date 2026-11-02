@@ -122,7 +122,7 @@ export function CreateChannelDialog({
       {memberPicker ? (
         // On a phone the sheet takes the screen's height, so the member list has room to fill
         // (task #331); side by side the panes share a fixed height.
-        <Modal className="w-[calc(100vw-2rem)] max-w-4xl overflow-hidden max-md:h-full max-md:w-full max-md:rounded-b-none">
+        <Modal className="w-[calc(100vw-2rem)] max-w-4xl overflow-hidden max-md:h-full max-md:w-full max-md:rounded-b-none max-md:pb-safe-bottom">
           <Dialog className="flex h-full flex-col p-0 md:h-[min(36rem,calc(100dvh-4rem))] md:flex-row">
             {({ close }) => <CreateChannelForm {...form} memberPicker close={close} />}
           </Dialog>

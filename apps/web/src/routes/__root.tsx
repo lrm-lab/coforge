@@ -24,7 +24,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       },
       {
         name: "viewport",
-        content: "width=device-width, initial-scale=1",
+        // `viewport-fit=cover`: without it every `env(safe-area-inset-*)` reads 0 (styles.css).
+        content: "width=device-width, initial-scale=1, viewport-fit=cover",
       },
       {
         name: "theme-color",

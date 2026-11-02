@@ -104,7 +104,7 @@ export const SidebarRail = ({ activeUrl, items, subheader, footer }: SidebarRail
 
   return (
     <>
-      <div className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:flex lg:[html:not(.sidebar-collapsed)_&]:hidden">
+      <div className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:flex lg:pt-safe-top lg:pb-safe-bottom lg:pl-safe-left lg:[html:not(.sidebar-collapsed)_&]:hidden">
         {rail}
       </div>
       {/* Spacer: the real aside is `fixed`, so this reserves its width in flow. */}

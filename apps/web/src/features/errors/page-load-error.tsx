@@ -1,3 +1,4 @@
+import { ErrorPageFrame } from "./error-page-frame";
 import { useRouter } from "@tanstack/react-router";
 
 import { Button } from "#src/components/base/buttons/button";
@@ -41,10 +42,10 @@ export function PageLoadError({ error }: { error: unknown }) {
 
 export function GlobalError({ error }: { error: unknown }) {
   return (
-    <div className="grid min-h-screen place-items-center bg-primary p-6">
+    <ErrorPageFrame>
       <div className="w-full max-w-lg">
         <PageLoadError error={error} />
       </div>
-    </div>
+    </ErrorPageFrame>
   );
 }

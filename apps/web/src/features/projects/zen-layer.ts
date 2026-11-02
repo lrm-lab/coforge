@@ -4,4 +4,4 @@
  * zen mode still renders above it, without relying on DOM/portal paint order to break the tie at an
  * equal z-index.
  */
-export const ZEN_LAYER = "fixed inset-0 z-40 bg-primary";
+export const ZEN_LAYER = "fixed inset-0 z-40 bg-primary safe-area-padding";

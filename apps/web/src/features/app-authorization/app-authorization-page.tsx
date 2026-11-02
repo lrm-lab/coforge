@@ -27,7 +27,7 @@ export function AppAuthorizationPage({
 }) {
   const [shown, setShown] = useState(page);
   return (
-    <div className="min-h-dvh bg-secondary">
+    <div className="min-h-dvh bg-secondary safe-area-padding">
       <header className="border-b border-secondary bg-primary">
         <div className="flex items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-4">
           <div className="flex min-w-0 items-center gap-2">

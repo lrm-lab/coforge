@@ -1,3 +1,4 @@
+import { ErrorPageFrame } from "./error-page-frame";
 import { useNavigate, useRouter } from "@tanstack/react-router";
 import { SearchLg } from "@untitledui/icons";
 
@@ -10,7 +11,7 @@ export function NotFoundPage() {
   const router = useRouter();
   const navigate = useNavigate();
   return (
-    <div className="grid min-h-screen place-items-center bg-primary p-6">
+    <ErrorPageFrame>
       <EmptyState size="lg">
         <EmptyState.Header>
           <EmptyState.FeaturedIcon color="gray" icon={SearchLg} />
@@ -28,6 +29,6 @@ export function NotFoundPage() {
           <Button onPress={() => void navigate({ to: "/" })}>{m.not_found_home()}</Button>
         </EmptyState.Footer>
       </EmptyState>
-    </div>
+    </ErrorPageFrame>
   );
 }

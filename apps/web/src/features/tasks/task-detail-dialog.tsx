@@ -196,7 +196,7 @@ export function TaskDetailDialog({
         <Modal
           className={cn(
             // On a phone the thread scrolls, never the sheet (the shared Modal scrolls there).
-            "flex h-full w-full flex-col overflow-hidden rounded-none max-sm:overflow-hidden max-sm:shadow-none",
+            "flex h-full w-full flex-col overflow-hidden rounded-none max-sm:overflow-hidden max-sm:shadow-none max-sm:safe-area-padding",
             // With a thread the popup is a workspace; without one it only wraps the task.
             thread
               ? "sm:h-[min(92vh,64rem)] sm:w-[min(60rem,calc(100vw-2rem))]"

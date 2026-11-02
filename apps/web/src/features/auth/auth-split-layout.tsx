@@ -11,7 +11,7 @@ import { LandingBrandPanel } from "#src/features/landing/landing-brand-panel";
  */
 export function AuthSplitLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="grid min-h-dvh bg-primary lg:grid-cols-2">
+    <div className="grid min-h-dvh bg-primary safe-area-padding lg:grid-cols-2">
       <div className="flex flex-col px-4 py-8 md:px-8">
         <Link to="/" aria-label="CoForge" className="self-start">
           <CoForgeMark className="h-7" />

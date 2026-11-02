@@ -1,3 +1,4 @@
+import { ErrorPageFrame } from "#src/features/errors/error-page-frame";
 import { QueryClient } from "@tanstack/react-query";
 import { DbClient, DbProvider } from "@tanstack/react-db";
 import { createRouter as createTanStackRouter } from "@tanstack/react-router";
@@ -22,10 +23,9 @@ const NotFoundPage = lazy(async () => ({
   default: (await import("#src/features/errors/not-found-page")).NotFoundPage,
 }));
 
-/** The fallback is the page's own frame, so arriving content fills it instead of shifting it. */
 function NotFound() {
   return (
-    <Suspense fallback={<div className="grid min-h-screen place-items-center bg-primary p-6" />}>
+    <Suspense fallback={<ErrorPageFrame />}>
       <NotFoundPage />
     </Suspense>
   );

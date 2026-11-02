@@ -53,12 +53,13 @@ export const MobileNavigationHeader = ({ children }: PropsWithChildren) => {
           <AriaModal className="w-full max-w-74 cursor-auto will-change-transform">
             <AriaDialog
               aria-label={m.navigation_open_menu()}
-              className="h-dvh outline-hidden focus:outline-hidden"
+              // The drawer's own color fills the safe area it keeps clear (styles.css).
+              className="h-dvh bg-sidebar pt-safe-top pb-safe-bottom pl-safe-left outline-hidden focus:outline-hidden"
             >
               <AriaButton
                 aria-label={m.navigation_close_menu()}
                 onPress={() => state.close()}
-                className="fixed top-2.5 left-full ml-2 flex size-11 cursor-pointer items-center justify-center rounded-lg p-2 text-fg-white/70 outline-focus-ring hover:bg-white/10 hover:text-fg-white focus-visible:outline-2 focus-visible:outline-offset-2"
+                className="fixed top-[calc(0.625rem+var(--spacing-safe-top))] left-full ml-2 flex size-11 cursor-pointer items-center justify-center rounded-lg p-2 text-fg-white/70 outline-focus-ring hover:bg-white/10 hover:text-fg-white focus-visible:outline-2 focus-visible:outline-offset-2"
               >
                 <CloseIcon className="size-6" />
               </AriaButton>

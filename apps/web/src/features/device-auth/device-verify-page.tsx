@@ -87,7 +87,7 @@ export function DeviceVerifyPage({
   }
 
   return (
-    <main className="flex min-h-svh items-center justify-center bg-primary px-4 py-16 sm:px-6">
+    <main className="flex min-h-svh items-center justify-center bg-primary px-[max(1rem,var(--spacing-safe-left))] pt-[max(4rem,var(--spacing-safe-top))] pb-[max(4rem,var(--spacing-safe-bottom))] sm:px-6">
       <div className="w-full max-w-md">
         {stage.name === "approved" || stage.name === "denied" ? (
           <Settled approved={stage.name === "approved"} />
