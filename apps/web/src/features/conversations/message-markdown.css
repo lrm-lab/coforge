@@ -355,15 +355,3 @@
 .message-markdown a.message-markdown-thread-reference:hover {
   filter: brightness(0.95);
 }
-
-/* A display formula (task #287): its own block, scrolling sideways when wider than the message
-   rather than widening it. KaTeX draws in `currentColor`, so it follows the text in both themes. */
-.message-markdown-formula {
-  margin: 0.5rem 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-}
-
-.message-markdown-formula .katex-display {
-  margin: 0;
-}

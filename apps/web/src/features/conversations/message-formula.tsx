@@ -66,7 +66,12 @@ export function MessageFormula({ source, display }: { source: string; display: b
 
   if (display)
     return html ? (
-      <div className="message-markdown-formula" dangerouslySetInnerHTML={{ __html: html }} />
+      // Its own block, scrolling sideways when wider than the message rather than widening it.
+      // KaTeX draws in `currentColor`, so it follows the text in both themes.
+      <div
+        className="message-markdown-formula my-2 overflow-x-auto overflow-y-hidden [&_.katex-display]:m-0"
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
     ) : (
       <div className="message-markdown-code">
         <pre>

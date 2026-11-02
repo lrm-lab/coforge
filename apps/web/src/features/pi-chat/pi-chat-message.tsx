@@ -10,6 +10,8 @@ import { m } from "#src/paraglide/messages";
 import { PiChatCopy } from "./pi-chat-copy";
 import { usePiChatDisclosure } from "./pi-chat-disclosure";
 import { piChatLocalPath, usePiChatFiles } from "./pi-chat-files-context";
+import { MessageFormula } from "#src/features/conversations/message-formula";
+import { remarkMessageMath, rewriteLatexDelimiters } from "#src/lib/message-math";
 
 const CodeBlock = lazy(() => import("./pi-chat-code-block"));
 
@@ -22,6 +24,8 @@ const markdownComponents: Components = {
     const language = Array.isArray(classes)
       ? String(classes.find((name) => String(name).startsWith("language-")) ?? "").slice(9)
       : "";
+    // A `$$` block, a `\[…\]` one and a ```math fence (`message-math.ts`), drawn as in messages.
+    if (language === "math") return <MessageFormula source={value} display />;
     return (
       <Suspense
         fallback={
@@ -124,6 +128,8 @@ export function PiChatMessage({ message }: { message: Message }) {
     },
     code({ children, className }) {
       const value = String(children);
+      if (className?.split(" ").includes("language-math"))
+        return <MessageFormula source={value} display={false} />;
       const path =
         !className &&
         !value.includes("\n") &&
@@ -203,11 +209,11 @@ export function PiChatMessage({ message }: { message: Message }) {
         <>
           <div className="prose max-w-none text-sm leading-relaxed text-primary [&_pre]:overflow-auto [&_pre]:rounded-lg [&_pre]:bg-secondary [&_pre]:p-3 [&_pre]:text-xs [&_table]:block [&_table]:overflow-auto [&_a]:text-brand-secondary">
             <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
+              remarkPlugins={[remarkGfm, remarkMessageMath]}
               rehypePlugins={[rehypeSanitize]}
               components={components}
             >
-              {message.text}
+              {rewriteLatexDelimiters(message.text)}
             </ReactMarkdown>
           </div>
           {!message.toolCalls?.length && message.id !== "streaming" && (
