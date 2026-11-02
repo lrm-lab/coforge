@@ -225,15 +225,8 @@ test("Workspace humans enrolled in general see one general channel; outsiders ca
     expect(mentionNotification?.url).toBe(
       `/notifications/open?workspace=${workspace.slug}&target=${encodeURIComponent(`/w/${workspace.slug}/channel/${engineering.id}?view=chat#message-${mutedMention.id}`)}`,
     );
-    // An explicit @mention pierces the mute for notificationForRecipient too, with the same
-    // title/body/url/tag/conversationPath the push payload carries.
-    expect(await pushSubscriptions.notificationForRecipient(mutedMention.id, bob.id)).toEqual({
-      title: mentionNotification!.title,
-      body: mentionNotification!.body,
-      url: mentionNotification!.url,
-      tag: `message:${mutedMention.id}`,
-      conversationPath: `/w/${workspace.slug}/channel/${engineering.id}`,
-    });
+    // A muted member's push stays off even when @mentioned; only the badge shows.
+    expect(await pushSubscriptions.notificationForRecipient(mutedMention.id, bob.id)).toBeNull();
     expect(await pushSubscriptions.notificationForRecipient(mutedMention.id, alice.id)).toBeNull();
     await channels.setUserMuted(workspace.id, bob.id, engineering.id, false);
     expect(subscriptionsOf(await pushSubscriptions.notificationForMessage(saved.id))).toEqual([

@@ -268,13 +268,14 @@ test("Agent channel mute suppresses ordinary notices, preserves mentions and rea
         (m) => m.id === reply.messageId,
       ),
     ).toBe(true);
+    await channels.setAgentMuted(workspace.id, second.id, "#general", true);
     const start = published.length;
     await channels.send({
       workspaceId: workspace.id,
       userId: user.id,
       channelId: general.id,
       idempotencyKey: crypto.randomUUID(),
-      body: "An Agent joins #general muted, so ordinary chatter there does not reach it",
+      body: "A muted Agent does not hear ordinary chatter",
     });
     expect(published.slice(start).map((m) => m.agentId)).toEqual([]);
     await channels.setAgentMuted(workspace.id, second.id, "#general", false);
@@ -518,7 +519,6 @@ test("an Agent's channel message reaches other Agents without an @mention: unmut
       });
     const helper = await agent("helper");
     const scout = await agent("scout");
-    // Muted explicitly: Agents join unmuted now.
     const quiet = await agent("quiet");
     await enrollGeneral(db, workspace.id);
     const channels = new PublicChannels(
@@ -1639,7 +1639,7 @@ test("channel threads enforce channel scope and isolate reads, recovery, notific
       threadRootId: root.id,
     });
     const pushSubscriptions = new PrismaWebPushSubscriptionStore(db);
-    // Muted: no push, even for a followed thread.
+    // Muted: no push.
     expect(
       subscriptionsOf(await pushSubscriptions.notificationForMessage(followerNotice.id)),
     ).toEqual([]);
