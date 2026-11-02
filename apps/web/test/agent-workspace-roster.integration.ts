@@ -64,6 +64,7 @@ test("lists hundreds of channels with membership, mute, archive and last post in
           workspaceId: workspace.id,
           agentId: agent.id,
           channelMuted: conversation.channelName === "c000",
+          notificationLevel: conversation.channelName === "c000" ? "muted" : "all",
           channelRole: conversation.channelName === "c002" ? "admin" : "member",
         })),
     });

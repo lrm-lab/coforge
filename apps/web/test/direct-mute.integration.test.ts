@@ -133,7 +133,7 @@ test.skipIf(!db)("only a DM's own participant mutes it", async () => {
   expect((await listedMuted(conversations, ada.id))[conversationId]).toBe(false);
 });
 
-test.skipIf(!db)("a muted DM sends no Web Push unless the viewer is @mentioned in it", async () => {
+test.skipIf(!db)("a muted DM sends no Web Push, even when the viewer is @mentioned", async () => {
   const conversations = new DirectConversations(db!);
   const push = new PrismaWebPushSubscriptionStore(db!);
   const { conversationId } = await conversations.open(workspaceId, grace.id, { userId: ada.id });
@@ -178,7 +178,8 @@ test.skipIf(!db)("a muted DM sends no Web Push unless the viewer is @mentioned i
   expect(await recipients(ordinary)).toEqual([]);
   expect(await push.notificationForRecipient(ordinary, ada.id)).toBeNull();
 
+  // A muted DM still shows the @mention badge, but sends no Web Push.
   const mentioned = await messageFromGrace(true);
-  expect(await recipients(mentioned)).toEqual([ada.id]);
-  expect(await push.notificationForRecipient(mentioned, ada.id)).not.toBeNull();
+  expect(await recipients(mentioned)).toEqual([]);
+  expect(await push.notificationForRecipient(mentioned, ada.id)).toBeNull();
 });

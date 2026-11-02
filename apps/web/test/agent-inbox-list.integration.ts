@@ -72,6 +72,7 @@ test("lists unread conversations by the definition in the code, newest activity 
           agentReadThroughSequence: options.read ?? 0,
           joinedAt: new Date(0),
           channelMuted: options.muted ?? false,
+          notificationLevel: options.muted ? "muted" : "all",
           leftAt: options.left ? new Date() : null,
         },
       });
@@ -407,6 +408,7 @@ test("followed threads with unread replies are listed as threads, muted channel 
           // The channel itself is read, so only the threads can be unread.
           agentReadThroughSequence: 100,
           channelMuted: options.muted ?? false,
+          notificationLevel: options.muted ? "muted" : "all",
           leftAt: options.left ? new Date() : null,
         },
       });

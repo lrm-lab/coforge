@@ -72,7 +72,7 @@ pgTest("will-notify matches whom a posted comment notifies", async () => {
     // A muted channel keeps a subscriber asleep, but a mention wakes them.
     await f.db.conversationMember.updateMany({
       where: { conversationId: f.conversation.id, userId: f.member.id },
-      data: { channelMuted: true },
+      data: { channelMuted: true, notificationLevel: "muted" },
     });
     audience = await comments.audience(owner, f.attachment.id);
     expect(commentNotifier(audience)("quiet", [])).toEqual([]);

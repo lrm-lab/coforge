@@ -49,7 +49,11 @@ test("assignment receipts survive mute and disconnect without waking unrelated A
       members: {
         create: [
           { userId: human.id },
-          ...workspace.agents.map((agent) => ({ agentId: agent.id, channelMuted: true })),
+          ...workspace.agents.map((agent) => ({
+            agentId: agent.id,
+            channelMuted: true,
+            notificationLevel: "muted",
+          })),
         ],
       },
     },

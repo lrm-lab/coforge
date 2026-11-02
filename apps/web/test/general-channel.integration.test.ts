@@ -40,7 +40,7 @@ async function generalMembers(db: Prisma.TransactionClient, workspaceId: string)
       archivedAt: true,
       members: {
         where: { leftAt: null },
-        select: { userId: true, agentId: true, channelMuted: true },
+        select: { userId: true, agentId: true, notificationLevel: true },
       },
     },
   });
@@ -51,7 +51,7 @@ async function generalMembers(db: Prisma.TransactionClient, workspaceId: string)
       .map((row) => (row.userId ? `user:${row.userId}` : `agent:${row.agentId}`))
       .sort(),
     muted: general.members
-      .filter((row) => row.channelMuted)
+      .filter((row) => row.notificationLevel === "muted")
       .map((row) => (row.userId ? `user:${row.userId}` : `agent:${row.agentId}`))
       .sort(),
   };
@@ -108,7 +108,7 @@ test.skipIf(!connectionString)(
 );
 
 test.skipIf(!connectionString)(
-  "an admitted member and a new public Agent join #general, the Agent muted; a private Agent does not until it becomes public",
+  "an admitted member and a new public Agent join #general unmuted; a private Agent does not until it becomes public",
   async () => {
     const db = connect();
     const suffix = crypto.randomUUID().slice(0, 8);
@@ -184,19 +184,16 @@ test.skipIf(!connectionString)(
         ].sort(),
       );
       expect(enrolled?.members).not.toContain(`agent:${secret.id}`);
-      // An Agent joins #general muted, so ordinary chatter there does not wake every Agent in the
-      // Workspace; a personal @mention still reaches it. Humans join unmuted.
-      expect(enrolled?.muted).toEqual([`agent:${helper.id}`]);
+      // Agents and humans join #general unmuted; an Agent may mute it later itself.
+      expect(enrolled?.muted).toEqual([]);
 
-      // An Agent that later becomes public joins #general muted too.
+      // An Agent that later becomes public joins #general unmuted too.
       await new PrismaChangeAgentVisibilityStore(db).apply({
         agentId: secret.id,
         workspaceId: workspace.id,
         visibility: "public",
       });
-      expect((await generalMembers(db, workspace.id))?.muted).toEqual(
-        [`agent:${helper.id}`, `agent:${secret.id}`].sort(),
-      );
+      expect((await generalMembers(db, workspace.id))?.muted).toEqual([]);
 
       // A re-join keeps the Agent's own setting: unmuted, made private (leaving), made public again.
       const visibility = new PrismaChangeAgentVisibilityStore(db);
@@ -211,7 +208,7 @@ test.skipIf(!connectionString)(
         workspaceId: workspace.id,
         visibility: "public",
       });
-      expect((await generalMembers(db, workspace.id))?.muted).toEqual([`agent:${helper.id}`]);
+      expect((await generalMembers(db, workspace.id))?.muted).toEqual([]);
       // The returning member starts read through the history, like anyone joining.
       const returningRow = await db.conversationMember.findUniqueOrThrow({
         where: { conversationId_userId: { conversationId: general.id, userId: returning.id } },
@@ -231,14 +228,19 @@ test.skipIf(!connectionString)(
   "the migrations bring #general back: unarchived or created, with every human and public live Agent in it, the Agents muted",
   async () => {
     const db = connect();
-    // The restore migration, then the one that mutes the Agents it enrolled, in deploy order.
+    // The restore migration, the one that mutes the Agents it enrolled, then the
+    // notification-level backfill that carries that mute into the new column.
     const migrations = join(import.meta.dir, "../prisma/migrations");
     const sqlFor = (suffix: string) => {
       const dir = readdirSync(migrations).find((name) => name.endsWith(suffix));
       expect(dir).toBeDefined();
       return readFileSync(join(migrations, dir!, "migration.sql"), "utf8");
     };
-    const steps = [sqlFor("_restore_general_channel"), sqlFor("_mute_agents_in_general")];
+    const steps = [
+      sqlFor("_restore_general_channel"),
+      sqlFor("_mute_agents_in_general"),
+      sqlFor("_notification_level_backfill"),
+    ];
     const suffix = crypto.randomUUID().slice(0, 8);
     try {
       await db.$transaction(async (tx) => {

@@ -286,12 +286,15 @@ test("channels lists the open channels the Agent is an active member of, by name
     }),
     channel("outside"),
   ]);
-  const join = (conversationId: string, extra: { channelMuted?: boolean; leftAt?: Date } = {}) =>
+  const join = (
+    conversationId: string,
+    extra: { channelMuted?: boolean; notificationLevel?: string; leftAt?: Date } = {},
+  ) =>
     db.conversationMember.create({
       data: { conversationId, workspaceId, agentId: agents.ada!.id, ...extra },
     });
   await join(beta!.id);
-  await join(alpha!.id, { channelMuted: true });
+  await join(alpha!.id, { channelMuted: true, notificationLevel: "muted" });
   await join(gone!.id);
   await join(left!.id, { leftAt: new Date() });
   await join(hidden!.id);

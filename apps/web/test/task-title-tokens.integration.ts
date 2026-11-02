@@ -53,8 +53,8 @@ test("a created Task's title stores its references as tokens, and its own mentio
         members: {
           create: [
             { userId: human.id },
-            { agentId: helper.id, channelMuted: true },
-            { agentId: quiet.id, channelMuted: true },
+            { agentId: helper.id, channelMuted: true, notificationLevel: "muted" },
+            { agentId: quiet.id, channelMuted: true, notificationLevel: "muted" },
             { agentId: open.id },
           ],
         },

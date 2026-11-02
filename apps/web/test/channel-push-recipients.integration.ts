@@ -51,7 +51,9 @@ test("a channel member without a browser push subscription is still a notificati
     const pushSubscriptions = new PrismaWebPushSubscriptionStore(db);
     const notification = await pushSubscriptions.notificationForMessage(message.id);
     expect(notification?.workspaceId).toBe(workspace.id);
-    expect(notification?.recipients).toEqual([{ userId: carol.id, subscriptions: [] }]);
+    expect(notification?.recipients).toEqual([
+      { userId: carol.id, language: null, subscriptions: [] },
+    ]);
     expect(await pushSubscriptions.notificationForRecipient(message.id, carol.id)).toEqual({
       title: notification!.title,
       body: notification!.body,

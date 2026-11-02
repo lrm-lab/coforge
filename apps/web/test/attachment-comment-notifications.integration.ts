@@ -96,7 +96,7 @@ test("an @-mentioned member is notified as mentioned, seated, and bypasses mute"
       where: {
         conversationId_userId: { conversationId: f.conversation.id, userId: f.member.id },
       },
-      data: { channelMuted: true },
+      data: { channelMuted: true, notificationLevel: "muted" },
     });
     const comment = await comments.post(
       f.actor,
@@ -119,7 +119,7 @@ test("an @-mentioned member is notified as mentioned, seated, and bypasses mute"
       where: {
         conversationId_userId: { conversationId: f.conversation.id, userId: f.owner.id },
       },
-      data: { channelMuted: true },
+      data: { channelMuted: true, notificationLevel: "muted" },
     });
     const second = await comments.post(
       { workspaceId: f.workspace.id, userId: f.member.id },
