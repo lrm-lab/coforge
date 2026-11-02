@@ -170,3 +170,52 @@ test("a superseded daemon cannot overwrite the current daemon capability leases"
   });
   expect(capabilityRecords).toBe(0);
 });
+
+test("overlapping ready calls cannot let the older worker write capabilities last", async () => {
+  let current = { workerInstanceId: "old", startedAt: 1, daemonVersion: "1" };
+  let capability = { workerInstanceId: "", startedAt: 0, values: [] as readonly string[] };
+  const oldRecordStarted = Promise.withResolvers<void>();
+  const releaseOldRecord = Promise.withResolvers<void>();
+  const method = createDaemonRuntimeReadyMethod({
+    restarts: {
+      ready: async (
+        _scope: { workspaceId: string; computerId: string },
+        candidate: { workerInstanceId: string; startedAt: number; daemonVersion: string },
+      ) => {
+        if (candidate.startedAt > current.startedAt) current = candidate;
+      },
+      identity: async () => current,
+    } as never,
+    capabilities: {
+      record: async (_workspaceId, _computerId, values, identity) => {
+        if (identity.workerInstanceId === "old") {
+          oldRecordStarted.resolve();
+          await releaseOldRecord.promise;
+        }
+        if (identity.startedAt > capability.startedAt) capability = { ...identity, values };
+      },
+    },
+  });
+  const payload = (workerInstanceId: string, startedAt: number, capabilities: string[]) =>
+    encodeDaemonRuntimeReadyRequest({
+      ...decodeDaemonRuntimeReadyRequest(readyPayload()),
+      workerInstanceId,
+      startedAt,
+      capabilities,
+    });
+
+  const oldReady = method(payload("old", 1, []), { principal: principal() });
+  await oldRecordStarted.promise;
+  expect(
+    await method(payload("new", 2, ["local-session-handoff:v1"]), {
+      principal: principal(),
+    }),
+  ).toBeInstanceOf(Uint8Array);
+  releaseOldRecord.resolve();
+  expect(await oldReady).toBeInstanceOf(Uint8Array);
+  expect(capability).toEqual({
+    workerInstanceId: "new",
+    startedAt: 2,
+    values: ["local-session-handoff:v1"],
+  });
+});

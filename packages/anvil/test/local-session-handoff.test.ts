@@ -389,3 +389,30 @@ test("Claude stats and Codex directory observations use bounded concurrency", as
   expect(maxCodex).toBeGreaterThan(1);
   expect(maxCodex).toBeLessThanOrEqual(8);
 });
+
+test("a tail starting exactly on a JSONL boundary keeps its first record", async () => {
+  const first = `${JSON.stringify({ id: 1 })}\n`;
+  const second = `${JSON.stringify({ id: 2 })}\n`;
+  expect(first.length).toBe(second.length);
+  const text = first + second;
+  const boundaryLimits = {
+    ...limits,
+    maxFileBytes: text.length,
+    maxContentBytes: text.length,
+  };
+  const read = await readLocalSessionWindows(
+    "/session.jsonl",
+    boundaryLimits,
+    {
+      async readFileHead(_path, bytes) {
+        return text.slice(0, bytes);
+      },
+      async readFileTail(_path, bytes) {
+        const startOffset = text.length - bytes;
+        return { text: text.slice(startOffset), startOffset };
+      },
+    },
+    { bytes: text.length },
+  );
+  expect(read).toEqual({ records: [{ id: 1 }, { id: 2 }], complete: true });
+});

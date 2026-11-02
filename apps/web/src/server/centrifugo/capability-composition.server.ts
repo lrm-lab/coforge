@@ -35,8 +35,15 @@ export function daemonCapabilityLeases() {
   return {
     reminderLease,
     capabilityLeases: {
-      record: (workspaceId: string, computerId: string, capabilities: readonly string[]) =>
-        Promise.all(leases.map((lease) => lease.record(workspaceId, computerId, capabilities))),
+      record: (
+        workspaceId: string,
+        computerId: string,
+        capabilities: readonly string[],
+        identity: { workerInstanceId: string; startedAt: number },
+      ) =>
+        Promise.all(
+          leases.map((lease) => lease.record(workspaceId, computerId, capabilities, identity)),
+        ),
       refresh: async (workspaceId: string, computerId: string) => {
         await Promise.all(leases.map((lease) => lease.refresh(workspaceId, computerId)));
       },
