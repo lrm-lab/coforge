@@ -280,10 +280,12 @@ describe("choiceActionSchema", () => {
         { id: "password", label: "Password" },
         { id: "otp", label: "Verification code" },
       ],
+      to: "@alice",
     });
     expect(parsed.type).toBe("choice");
     if (parsed.type !== "choice") throw new Error("expected choice");
     expect(parsed.allowFreeText).toBe(true);
+    expect(parsed.to).toBe("@alice");
     expect(validateActionCardAction(parsed)).toBeNull();
 
     const duplicate = actionCardActionSchema.parse({
@@ -293,8 +295,21 @@ describe("choiceActionSchema", () => {
         { id: "a", label: "A" },
         { id: "a", label: "Again" },
       ],
+      to: "@alice",
     });
     expect(validateActionCardAction(duplicate)).toBe("choice option ids must be unique");
+  });
+
+  test("requires the person the choice asks", () => {
+    const withoutTo = actionCardActionSchema.safeParse({
+      type: "choice",
+      prompt: "Pick one",
+      options: [
+        { id: "a", label: "A" },
+        { id: "b", label: "B" },
+      ],
+    });
+    expect(withoutTo.success).toBe(false);
   });
 });
 

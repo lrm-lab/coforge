@@ -93,14 +93,17 @@ The person opens your screen from the card, finishes the step, then marks it don
 ## Choices
 
 When several mutually exclusive next steps exist (for example login methods), post a `choice`
-card so the person can click. They may also answer in free text when `allowFreeText` is true
-(the default). Example:
+card so the person can click. The card must name who it asks: `to` is required (a handle or user
+id), and only that person may choose. They may also answer in free text when `allowFreeText` is
+true (the default). Example:
 
 ```
 coforge action prepare --target "@owner" <<'COFORGEACTION'
-{"type":"choice","prompt":"How should we sign in?","options":[{"id":"password","label":"Password"},{"id":"otp","label":"Verification code"},{"id":"github","label":"Continue with GitHub"},{"id":"takeover","label":"I will open the cloud desktop myself"}]}
+{"type":"choice","prompt":"How should we sign in?","to":"@owner","options":[{"id":"password","label":"Password"},{"id":"otp","label":"Verification code"},{"id":"github","label":"Continue with GitHub"},{"id":"takeover","label":"I will open the cloud desktop myself"}]}
 COFORGEACTION
 ```
 
-Read the card again: `[action card: executed; choice=password]` means they clicked that option.
+Read the card again: `[action card: executed; choice=password]` means they clicked that option. The
+choice delivery also names who answered, for example `@alice answered your choice "How should we
+sign in?" in #general: password · Password`.
 If they type in chat instead, interpret their reply and continue without waiting for the card.

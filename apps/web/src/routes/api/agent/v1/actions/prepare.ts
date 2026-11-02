@@ -1,5 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
+import {
+  agentAuthMiddleware,
+  agentErrorResponse,
+} from "#src/server/agents/agent-http-middleware.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import {
   ActionCards,
@@ -50,13 +53,9 @@ export async function handleAgentActionPrepare(
     if (error instanceof ActionCardError) return actionCardRefusal(error);
     const refused = postingTargetRefusalResponse(error, body.target);
     if (refused) return refused;
-    if (isAppError(error))
-      return Response.json(
-        { error: error.code },
-        {
-          status: error.code === "ACCESS_DENIED" ? 403 : error.code === "CONFLICT" ? 409 : 422,
-        },
-      );
+    // A board refusal carries its reason, error id and the status its code means, as every other
+    // Agent route answers one.
+    if (isAppError(error)) return agentErrorResponse(error);
     throw error;
   }
 }

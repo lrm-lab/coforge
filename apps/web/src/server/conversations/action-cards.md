@@ -29,7 +29,10 @@ Moved out of [`AGENTS.md`](AGENTS.md) to keep it under 200 lines; the rules are 
 - A `desktop:takeover` card stores the Agent and computer ids so the browser can open that
   Agent's cloud desktop. Commit only marks that the person finished the step; opening the desktop
   does not go through the server.
-- A `choice` card stores the prompt and options. Commit records `{ optionId, label }`. Agent-
-  facing reads append `[action card: executed; choice=<id>]` when that result is present.
+- A `choice` card stores the prompt, options and the user id of the one person it asks (`to`,
+  required). Commit records `{ optionId, label }`; only that person may commit it, and the Agent is
+  woken with who answered and what they chose. A card made before `to` was required names nobody
+  and can no longer be answered. Agent-facing reads append
+  `[action card: executed; choice=<id>]` when that result is present.
 - Agent-facing message reads append ` [action card: <state>]` (or the choice form above) to a
   card message's body so an Agent never claims a resource exists before a human commits it.

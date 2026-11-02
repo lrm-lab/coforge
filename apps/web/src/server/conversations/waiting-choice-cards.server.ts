@@ -8,16 +8,15 @@ export type WaitingChoiceCard = {
   channelName: string | null;
   prompt: string;
   options: { id: string; label: string }[];
-  /** The asked person's user id, when the card names one. */
-  to?: string;
+  /** The asked person's user id. */
+  to: string;
   preparedBy: { agentId: string; name: string };
   createdAt: string;
 };
 
 /**
- * The pending choice cards this person may answer, newest first: a card that names them, or one
- * without `to` prepared by an Agent they own, in a conversation they can read. The card's own
- * commit rule (`payload.to`, else the Agent's owner) is the filter.
+ * The pending choice cards this person may answer, newest first: a card that names them, in a
+ * conversation they can read. The card's own commit rule (`payload.to`) is the filter.
  */
 export async function waitingChoiceCards(
   db: Pick<PrismaClient, "actionCard">,
@@ -38,7 +37,7 @@ export async function waitingChoiceCards(
       payload: true,
       createdAt: true,
       conversation: { select: { channelName: true } },
-      preparedByAgent: { select: { id: true, name: true, ownerId: true } },
+      preparedByAgent: { select: { id: true, name: true } },
     },
   });
   return cards.flatMap((card) => {
@@ -47,7 +46,7 @@ export async function waitingChoiceCards(
       prompt?: string;
       options?: { id: string; label: string }[];
     };
-    if (payload.to ? payload.to !== userId : card.preparedByAgent.ownerId !== userId) return [];
+    if (payload.to !== userId) return [];
     return [
       {
         messageId: card.messageId,
@@ -55,7 +54,7 @@ export async function waitingChoiceCards(
         channelName: card.conversation.channelName,
         prompt: payload.prompt ?? "",
         options: payload.options ?? [],
-        ...(payload.to ? { to: payload.to } : {}),
+        to: userId,
         preparedBy: { agentId: card.preparedByAgent.id, name: card.preparedByAgent.name },
         createdAt: card.createdAt.toISOString(),
       },

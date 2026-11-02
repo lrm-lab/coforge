@@ -36,11 +36,25 @@ import { isAdminLike } from "#src/server/workspaces/member-role.server";
 export type * from "./action-card-view.server";
 export type { ActionCardTargetRepository } from "./action-card-target.server";
 
+/** A choice whose `to` is missing names nobody: the SDK schema requires it, and this refusal
+ * names the fix before the schema's generic issues would. */
+function assertChoiceNamesWhoItAsks(value: unknown) {
+  if (!value || typeof value !== "object") return;
+  const action = value as { type?: unknown; to?: unknown };
+  if (action.type !== "choice") return;
+  if (typeof action.to === "string" && action.to.trim()) return;
+  throw new AppError("INVALID_INPUT", {
+    errorId: "action_card_choice_to",
+    hint: "a choice card must name who it asks: set `to` to their handle or user id",
+  });
+}
+
 /**
  * An action card's own validity, which needs nothing but the action: its schema and its
  * cross-field rules. Throws `ActionCardError("INVALID_ACTION")`.
  */
 export function parseActionCardAction(value: unknown) {
+  assertChoiceNamesWhoItAsks(value);
   const parsed = actionCardActionSchema.safeParse(value);
   if (!parsed.success) {
     const issues = parsed.error.issues.map(

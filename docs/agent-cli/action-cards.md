@@ -41,9 +41,11 @@ yet:
   this Agent's cloud screen when `page:fill` cannot finish the step (OAuth, captcha, unknown
   selectors). Do not ask for secrets in chat.
 - **`choice`**: `prompt`, `options` (2–8 of `{id,label}` with unique `id`s matching
-  `^[a-z][a-z0-9_]{0,31}$`), `allowFreeText?` (default true), `draftHint?`. The person clicks an
-  option; free text may still answer when allowed. An executed choice reads back as
-  `[action card: executed; choice=<id>]`.
+  `^[a-z][a-z0-9_]{0,31}$`), `to` (required: the handle or user id of the person who may
+  answer; there is no default owner), `allowFreeText?` (default true), `draftHint?`. The person
+  clicks an option; free text may still answer when allowed. An executed choice reads back as
+  `[action card: executed; choice=<id>]`. The asking Agent is told who answered and what they
+  chose.
 - **`channel:add_member`**: `channel` (handle or UUID), `humans?`,
   `agents?` (at least one of the two non-empty), `draftHint?`.
 - **`app:register`**: `name`, `clientKey?`, `redirectUrls?`, `homepageUrl?`, `description?`,

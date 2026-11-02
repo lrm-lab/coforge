@@ -38,6 +38,12 @@ import type {
  * The port types keep a plain `body: string`, which this is assignable to. */
 type AgentFacing<T extends { body: string }> = Omit<T, "body"> & { body: AgentReadableBody };
 
+/** Who answered a replayed choice, when their user row still reads; `null` leaves it unnamed. */
+const chooserOf = (choosers: ReadonlyMap<string, string>, userId: string) => {
+  const handle = choosers.get(userId);
+  return handle ? { handle } : null;
+};
+
 export async function readPendingAgentDeliveries(
   ports: DirectConversationPorts,
   workspaceId: string,
@@ -77,30 +83,48 @@ export async function readPendingAgentDeliveries(
           attachments: { select: { id: true }, orderBy: { position: "asc" } },
           pendingMentionActions: { where: NOTIFIED_AGENT_WHERE(agentId), select: { id: true } },
           memoryHint: { select: { id: true, targetAgentId: true, deliveredAt: true } },
-          actionCard: { select: { kind: true, payload: true, result: true } },
+          actionCard: {
+            select: { kind: true, payload: true, result: true, committedByUserId: true },
+          },
         },
       },
     },
   });
+  // Who answered each replayed choice, so the answer reads the same as the live push.
+  const chooserIds = [
+    ...new Set(
+      deliveries.flatMap((delivery) =>
+        delivery.reason === "choice" && delivery.message.actionCard?.committedByUserId
+          ? [delivery.message.actionCard.committedByUserId]
+          : [],
+      ),
+    ),
+  ];
   // A notified delivery reaches the Agent as a non-member only while it is not in the channel.
-  const memberOf = new Set(
-    (
-      await ports.db.conversationMember.findMany({
-        where: {
-          agentId,
-          ...ACTIVE_MEMBER_WHERE,
-          conversationId: { in: [...new Set(deliveries.map((d) => d.conversationId))] },
-        },
-        select: { conversationId: true },
-      })
-    ).map((member) => member.conversationId),
-  );
-  const targetOf = await directTargets(
-    ports.db,
-    workspaceId,
-    agentId,
-    deliveries.map((delivery) => delivery.conversation),
-  );
+  const [memberRows, targetOf, chooserRows] = await Promise.all([
+    ports.db.conversationMember.findMany({
+      where: {
+        agentId,
+        ...ACTIVE_MEMBER_WHERE,
+        conversationId: { in: [...new Set(deliveries.map((d) => d.conversationId))] },
+      },
+      select: { conversationId: true },
+    }),
+    directTargets(
+      ports.db,
+      workspaceId,
+      agentId,
+      deliveries.map((delivery) => delivery.conversation),
+    ),
+    chooserIds.length
+      ? ports.db.user.findMany({
+          where: { id: { in: chooserIds } },
+          select: { id: true, username: true },
+        })
+      : Promise.resolve([] as { id: string; username: string }[]),
+  ]);
+  const memberOf = new Set(memberRows.map((member) => member.conversationId));
+  const choosers = new Map(chooserRows.map((user) => [user.id, user.username]));
   return deliveries.map((delivery) => {
     const { actionCard, ...message } = delivery.message;
     // agentMessageSender handles both human and Agent authors and validates the handle;
@@ -122,7 +146,17 @@ export async function readPendingAgentDeliveries(
       latestSenderDescription: sender.description,
       ...agentDeliveryView(message, agentId),
       // A choice delivery replays the answer, not the Agent's own card question.
-      ...(delivery.reason === "choice" ? { body: choiceResultBody(actionCard, target) } : {}),
+      ...(delivery.reason === "choice"
+        ? {
+            body: choiceResultBody(
+              actionCard,
+              target,
+              actionCard?.committedByUserId
+                ? chooserOf(choosers, actionCard.committedByUserId)
+                : null,
+            ),
+          }
+        : {}),
       // A comment notification's reason rides the envelope on replay exactly as the live push
       // sent it.
       ...(delivery.reason ? { reason: delivery.reason } : {}),

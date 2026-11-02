@@ -79,6 +79,7 @@ beforeAll(async () => {
           { id: "b", label: "Blue" },
         ],
         allowFreeText: true,
+        to: userId,
       },
       preparedByAgentId: agentId,
     },
@@ -117,17 +118,18 @@ test("choosing an option wakes the asking Agent with the choice, and posts no me
   expect(published).toHaveLength(1);
   const encoded = (published[0] as { data: Record<string, number> }).data;
   const decoded = new TextDecoder().decode(Uint8Array.from(Object.values(encoded)));
-  expect(decoded).toContain("chose a");
-  expect(decoded).toContain("Red");
+  const answer = `@choice-${suffix} answered your choice "Which color?" in #choice-${suffix}: a · Red`;
+  expect(decoded).toContain(answer);
   const messages = await db.message.count({ where: { conversationId } });
   expect(messages).toBe(1);
-  // The Agent was offline: the recovery replay carries the answer, not its own question.
+  // The Agent was offline: the recovery replay carries the answer, not its own question, and
+  // reads exactly as the live push did.
   const pending = await new PrismaDirectConversationRepository(db).readPendingAgentDeliveries(
     workspaceId,
     agentId,
   );
   const replay = pending.find((row) => row.messageId === messageId);
-  expect(replay?.body).toContain("chose a · Red");
+  expect(String(replay?.body)).toBe(answer);
 });
 
 test("a choice card names who is asked, and only they may choose", async () => {
@@ -144,12 +146,16 @@ test("a choice card names who is asked, and only they may choose", async () => {
   const payload = await resolveChoicePayload(db, conversationId, action);
   expect(payload.to).toBe(userId);
   const base = { messageId, state: "pending" as const, canCommit: false, canCancel: false };
-  const card = { preparedByAgent: { ownerId: "another-user" }, result: null };
+  const card = { result: null };
   expect(choiceActionCardView(base, card, payload, userId, true).canCommit).toBe(true);
   expect(choiceActionCardView(base, card, payload, "another-user", true).canCommit).toBe(false);
   await expect(
     resolveChoicePayload(db, conversationId, { ...action, to: "not-a-member" }),
   ).rejects.toThrow();
+  // A choice always names one: a card without `to` is refused rather than sent to the owner.
+  await expect(
+    resolveChoicePayload(db, conversationId, { ...action, to: "" }),
+  ).rejects.toMatchObject({ code: "INVALID_INPUT" });
 });
 
 test("the waiting list shows the cards this person may answer", async () => {
@@ -189,8 +195,9 @@ test("the waiting list shows the cards this person may answer", async () => {
   };
   const mine = await makeCard(2, { to: userId });
   const other = await makeCard(3, { to: "someone-else" });
+  // A card that names nobody (one made before `to` was required) is nobody's to answer.
   const noTo = await makeCard(4, {});
   const waiting = await waitingChoiceCards(db, workspaceId, userId);
-  expect(waiting.map((card) => card.messageId).sort()).toEqual([mine, noTo].sort());
-  expect(waiting.some((card) => card.messageId === other)).toBe(false);
+  expect(waiting.map((card) => card.messageId)).toEqual([mine]);
+  expect(waiting.some((card) => card.messageId === other || card.messageId === noTo)).toBe(false);
 });

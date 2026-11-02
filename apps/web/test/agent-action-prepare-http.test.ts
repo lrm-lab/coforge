@@ -42,6 +42,30 @@ test("an invalid action is refused with its issues before any dependency is buil
   expect(Object.keys(body).sort()).toEqual(["code", "error", "retryable"]);
 });
 
+test("a choice that names nobody is refused as INVALID_INPUT, saying to set `to`", async () => {
+  const response = await handleAgentActionPrepare(
+    prepare({
+      target: "#ops",
+      action: {
+        type: "choice",
+        prompt: "Which color?",
+        options: [
+          { id: "a", label: "Red" },
+          { id: "b", label: "Blue" },
+        ],
+      },
+    }),
+    principal,
+    unbuildable,
+  );
+
+  const { status, body } = await answer(response);
+  expect(status).toBe(400);
+  expect(body).toMatchObject({ code: "INVALID_INPUT", retryable: false });
+  expect(body.error).toContain("must name who it asks");
+  expect(body.error).toContain("`to`");
+});
+
 test("an action-card refusal names its field in the Agent API refusal shape", async () => {
   const response = await handleAgentActionPrepare(
     prepare({

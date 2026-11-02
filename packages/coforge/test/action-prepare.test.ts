@@ -2,6 +2,7 @@ import { CLI_USAGE } from "../src/usage";
 import { afterEach, expect, mock, spyOn, test } from "bun:test";
 import { parseArgs, run, type MessageTransport } from "../index";
 import { CliError } from "#src/cli-error";
+import { toActionCardAction } from "#src/action-prepare-input";
 import { connectLocal } from "#src/local-client";
 import { agentApiRoutes } from "@lrm/coforge-sdk/agent";
 
@@ -17,6 +18,27 @@ const noopTransport: MessageTransport = {
 };
 
 // --- parseArgs -------------------------------------------------------------
+
+test("a choice without `to` is refused locally, saying who it must name", () => {
+  const error = (() => {
+    try {
+      toActionCardAction({
+        type: "choice",
+        prompt: "Pick one",
+        options: [
+          { id: "a", label: "A" },
+          { id: "b", label: "B" },
+        ],
+      });
+      return undefined;
+    } catch (thrown) {
+      return thrown;
+    }
+  })();
+  expect(error).toBeInstanceOf(CliError);
+  expect((error as CliError).code).toBe("INVALID_ACTION");
+  expect((error as CliError).message).toContain("must name who it asks");
+});
 
 test("parseArgs parses 'action prepare --target <target>'", () => {
   expect(parseArgs(["action", "prepare", "--target", "#general"])).toEqual({

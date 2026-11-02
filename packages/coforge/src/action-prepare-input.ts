@@ -66,6 +66,17 @@ export function parseActionCardInput(raw: string): unknown {
  * to `INVALID_ACTION` with a joined issue list.
  */
 export function toActionCardAction(json: unknown): ActionCardAction {
+  // A choice always names who it asks; the SDK schema requires it, and this says what to set
+  // before the schema's generic `expected string` issue would.
+  const choice =
+    json && typeof json === "object" ? (json as { type?: unknown; to?: unknown }) : undefined;
+  if (choice?.type === "choice" && (typeof choice.to !== "string" || choice.to.trim() === ""))
+    throw new CliError({
+      code: "INVALID_ACTION",
+      message:
+        'Action failed validation: to: a choice card must name who it asks (set "to" to their handle or user id)',
+      retryable: false,
+    });
   const parsed = actionCardActionSchema.safeParse(json);
   if (!parsed.success) {
     const issues = parsed.error.issues

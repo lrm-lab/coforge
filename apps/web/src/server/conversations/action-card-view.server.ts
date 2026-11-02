@@ -102,7 +102,8 @@ export type ActionCardView =
       prompt: string;
       options: { id: string; label: string }[];
       allowFreeText: boolean;
-      /** The asked person's user id, when the card names one. */
+      /** The asked person's user id; absent only on a card made before every choice named one,
+       * which nobody can answer. */
       to?: string;
       result?: { optionId: string; label: string };
     })

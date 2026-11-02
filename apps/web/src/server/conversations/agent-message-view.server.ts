@@ -63,16 +63,18 @@ export function actionCardBodySuffix(card: {
   return `[action card: ${card.state}]`;
 }
 
-/** The choice result an offline Agent missed: which card, where, and what was chosen. */
+/** The choice result an offline Agent missed: who answered, which card, where, and what they chose. */
 export function choiceResultBody(
   card: { kind: string; payload: unknown; result: unknown } | null,
   target: string,
+  chooser?: { handle: string } | null,
 ): AgentReadableBody {
   const result = card?.result as { optionId?: string; label?: string } | null | undefined;
   const payload = card?.payload as { prompt?: string } | null | undefined;
   const prompt = payload?.prompt ? `"${payload.prompt}" ` : "";
   const chosen = result?.label ? `${result.optionId ?? ""} · ${result.label}`.trim() : "an option";
-  return `Choice ${prompt}in ${target}: chose ${chosen}` as AgentReadableBody;
+  const who = chooser?.handle ? `@${chooser.handle}` : "Someone";
+  return `${who} answered your choice ${prompt}in ${target}: ${chosen}` as AgentReadableBody;
 }
 
 /** A forward's snapshot as an Agent reads it. The snapshot body is already plain text. */
