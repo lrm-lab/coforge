@@ -58,7 +58,9 @@ function agentAttentionSource(scope: AgentAttentionScope) {
     scope.ownMemberId
       ? Prisma.sql` AND m."senderMemberId" IS DISTINCT FROM ${scope.ownMemberId}::uuid`
       : Prisma.empty
-  }`;
+  }
+  -- A system notice (no sender member) never changes what the Agent should say; it does not hold.
+  AND m."senderMemberId" IS NOT NULL`;
   if (readsDeliveries)
     return {
       sequence,

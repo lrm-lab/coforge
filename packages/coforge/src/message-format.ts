@@ -267,6 +267,9 @@ export function formatHeldSend(target: string, response: HeldSendResponse): stri
     for (const message of heldMessages) lines.push(heldPreviewLine(message));
   }
   lines.push(`  └ Previews are truncated. Full text: coforge message read --target "${target}"`);
+  lines.push(
+    "  (a plain `coforge message read` or `coforge message check` marks what it showed as seen; `--around` marks only the messages it showed)",
+  );
 
   const continuation = response.continuation;
   const paths: string[] = [];
