@@ -1,3 +1,4 @@
+import { readLocalSessionWindows } from "@lrm/coforge-anvil";
 import { expect, test } from "bun:test";
 import {
   readClaudeLocalSessionExcerpt,
@@ -247,4 +248,50 @@ test("content budget exhaustion is explicit and symlink sessions are ignored", a
   expect(result.sessions).toEqual([]);
   expect(result.contentSearchComplete).toBeFalse();
   expect(result.scanComplete).toBeTrue();
+});
+
+test("overlapping head and tail windows project a JSONL record only once", async () => {
+  const record = JSON.stringify({ type: "message", value: "once" });
+  const text = `${"x".repeat(60)}\n${record}\n${"y".repeat(50)}\n`;
+  const overlapLimits = {
+    ...limits,
+    maxFileBytes: 200,
+    maxContentBytes: 200,
+  };
+  const read = await readLocalSessionWindows(
+    "/session.jsonl",
+    overlapLimits,
+    {
+      async readFileHead(_path, bytes) {
+        return text.slice(0, bytes);
+      },
+      async readFileTail(_path, bytes) {
+        const startOffset = Math.max(0, text.length - bytes);
+        return { text: text.slice(startOffset), startOffset };
+      },
+    },
+    { bytes: 200 },
+  );
+  expect(read?.records).toEqual([{ type: "message", value: "once" }]);
+});
+
+test("a stalled filesystem read returns an incomplete search at the deadline", async () => {
+  const stalled = new Promise<readonly ClaudeDirectoryEntry[]>(() => {});
+  const started = Date.now();
+  const result = await searchClaudeLocalSessions(
+    {
+      query: "",
+      limits: { ...limits, deadlineAtMs: started + 10, now: Date.now },
+    },
+    {
+      ...claudeHost({}),
+      readDirectoryEntries: () => stalled,
+    },
+  );
+  expect(result).toEqual({
+    sessions: [],
+    scanComplete: false,
+    contentSearchComplete: true,
+  });
+  expect(Date.now() - started).toBeLessThan(100);
 });

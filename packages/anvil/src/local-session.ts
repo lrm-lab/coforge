@@ -1,3 +1,19 @@
+import { withDeadline } from "#src/deadline";
+
+export class LocalSessionDeadlineError extends Error {
+  override name = "LocalSessionDeadlineError";
+}
+
+export async function localSessionIo<T>(work: Promise<T>, limits: LocalSessionLimits): Promise<T> {
+  const remaining = Math.floor(limits.deadlineAtMs - limits.now());
+  if (remaining <= 0) throw new LocalSessionDeadlineError("Local session scan deadline exceeded");
+  return withDeadline(
+    work,
+    remaining,
+    () => new LocalSessionDeadlineError("Local session scan deadline exceeded"),
+  );
+}
+
 export type LocalSessionLimits = {
   maxResults: number;
   maxDirectories: number;
@@ -97,17 +113,25 @@ export async function readLocalSessionWindows(
   try {
     const headBytes = Math.min(256 * 1024, Math.floor(allowance / 2));
     const tailBytes = Math.max(1, allowance - headBytes);
-    const [head, tail] = await Promise.all([
-      host.readFileHead?.(path, headBytes) ?? Promise.resolve(""),
-      host.readFileTail(path, tailBytes),
-    ]);
-    const countedText = tail.startOffset === 0 ? tail.text : head + tail.text;
+    const [head, tail] = await localSessionIo(
+      Promise.all([
+        host.readFileHead?.(path, headBytes) ?? Promise.resolve(""),
+        host.readFileTail(path, tailBytes),
+      ]),
+      limits,
+    );
+    let prefix = head;
+    const prefixBytes = Buffer.from(prefix);
+    if (tail.startOffset > 0 && tail.startOffset < prefixBytes.byteLength)
+      prefix = prefixBytes.subarray(0, tail.startOffset).toString("utf8");
+    const countedText = tail.startOffset === 0 ? tail.text : prefix + tail.text;
     budget.bytes -= Math.min(allowance, new TextEncoder().encode(countedText).byteLength);
     return {
-      records: jsonlWindows(head, tail),
+      records: jsonlWindows(prefix, tail),
       complete: tail.startOffset === 0,
     };
-  } catch {
+  } catch (error) {
+    if (error instanceof LocalSessionDeadlineError) throw error;
     return;
   }
 }

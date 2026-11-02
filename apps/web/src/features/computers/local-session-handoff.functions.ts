@@ -37,7 +37,7 @@ async function authorizeCreate(
 }
 
 /** Lists or searches this User's local Claude Code and Codex sessions on one owned Computer. */
-export const searchLocalSessions = createServerFn({ method: "GET" })
+export const searchLocalSessions = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(searchInput)
   .handler(async ({ data, context: { db, user, workspaceId } }) => {
@@ -51,7 +51,7 @@ export const searchLocalSessions = createServerFn({ method: "GET" })
   });
 
 /** Reads a bounded, conversation-only briefing for a selected local session. */
-export const readLocalSessionExcerpt = createServerFn({ method: "GET" })
+export const readLocalSessionExcerpt = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(excerptInput)
   .handler(async ({ data, context: { db, user, workspaceId } }) => {

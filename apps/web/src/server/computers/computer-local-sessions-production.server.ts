@@ -13,6 +13,7 @@ import {
   daemonControlChannel,
 } from "#src/server/centrifugo/server-api.server";
 import { ComputerLocalSessions } from "./computer-local-sessions.server";
+import { getLocalSessionHandoffCapabilityLease } from "./local-session-capability.server";
 
 /** Production composition for owner-only local-session observations on one local Computer. */
 export function computerLocalSessions(db: Pick<PrismaClient, "computer">) {
@@ -32,6 +33,8 @@ export function computerLocalSessions(db: Pick<PrismaClient, "computer">) {
         }),
       ),
     online: (scope) => getComputerStatusCache().get(scope),
+    supported: ({ workspaceId, computerId }) =>
+      getLocalSessionHandoffCapabilityLease().supports(workspaceId, computerId),
     publishSearch: (request) =>
       centrifugo.publish(
         daemonControlChannel(request.workspaceId, request.computerId),

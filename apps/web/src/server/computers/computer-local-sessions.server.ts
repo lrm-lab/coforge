@@ -23,7 +23,7 @@ export interface LocalSessionExcerptResults {
 
 type Response<Result> =
   | { status: "ready"; result: Result }
-  | { status: "offline" | "timeout" | "unavailable" };
+  | { status: "offline" | "unsupported" | "timeout" | "unavailable" };
 
 export function sameLocalSessionSearchScope(
   request: LocalSessionSearchRequest,
@@ -63,6 +63,7 @@ export class ComputerLocalSessions {
     private readonly dependencies: {
       owned(viewer: LocalSessionViewer, computerId: string): Promise<boolean>;
       online(scope: { workspaceId: string; computerId: string }): Promise<boolean>;
+      supported(scope: { workspaceId: string; computerId: string }): Promise<boolean>;
       publishSearch(request: LocalSessionSearchRequest): Promise<void>;
       publishExcerpt(request: LocalSessionExcerptRequest): Promise<void>;
       searchResults: LocalSessionSearchResults;
@@ -142,6 +143,8 @@ export class ComputerLocalSessions {
     try {
       if (!(await this.dependencies.online({ workspaceId: viewer.workspaceId, computerId })))
         return { status: "offline" };
+      if (!(await this.dependencies.supported({ workspaceId: viewer.workspaceId, computerId })))
+        return { status: "unsupported" };
       await results.begin({ request, userId: viewer.userId });
       await publish();
       const deadline = this.timing.now() + this.timing.timeoutMs;

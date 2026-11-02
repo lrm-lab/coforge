@@ -79,3 +79,31 @@ test("excerpt returns unavailable without leaking errors and fits the wire text 
     recentTurns: [],
   });
 });
+
+test("cross-provider result truncation is reported as incomplete", async () => {
+  const sessions = (prefix: string, from: number) =>
+    Array.from({ length: 60 }, (_, index) => native(`${prefix}-${index}`, from + index));
+  const catalog = new LocalSessionCatalog({
+    claude: {
+      search: async () => ({
+        sessions: sessions("claude", 0),
+        scanComplete: true,
+        contentSearchComplete: true,
+      }),
+      excerpt: async () => undefined,
+    },
+    codex: {
+      search: async () => ({
+        sessions: sessions("codex", 100),
+        scanComplete: true,
+        contentSearchComplete: true,
+      }),
+      excerpt: async () => undefined,
+    },
+    now: () => 0,
+  });
+  const result = await catalog.search("match");
+  expect(result.sessions).toHaveLength(100);
+  expect(result.scanComplete).toBeFalse();
+  expect(result.contentSearchComplete).toBeFalse();
+});

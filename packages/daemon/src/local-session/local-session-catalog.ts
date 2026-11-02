@@ -112,7 +112,7 @@ export class LocalSessionCatalog {
       this.sources.claude.search({ query, limits: this.limits(2) }).catch(() => failed),
       this.sources.codex.search({ query, limits: this.limits(2) }).catch(() => failed),
     ]);
-    const sessions: LocalSessionEntry[] = [
+    const merged: LocalSessionEntry[] = [
       ...claude.sessions.map((session) => ({
         ...session,
         provider: RUNTIME_PROVIDER.CLAUDE_CODE,
@@ -121,13 +121,13 @@ export class LocalSessionCatalog {
         ...session,
         provider: RUNTIME_PROVIDER.CODEX,
       })),
-    ]
-      .sort((a, b) => b.updatedAtMs - a.updatedAtMs)
-      .slice(0, MAX_RESULTS);
+    ].sort((a, b) => b.updatedAtMs - a.updatedAtMs);
+    const truncated = merged.length > MAX_RESULTS;
     return {
-      sessions,
-      scanComplete: claude.scanComplete && codex.scanComplete,
-      contentSearchComplete: claude.contentSearchComplete && codex.contentSearchComplete,
+      sessions: merged.slice(0, MAX_RESULTS),
+      scanComplete: claude.scanComplete && codex.scanComplete && !truncated,
+      contentSearchComplete:
+        claude.contentSearchComplete && codex.contentSearchComplete && (!query || !truncated),
     };
   }
 

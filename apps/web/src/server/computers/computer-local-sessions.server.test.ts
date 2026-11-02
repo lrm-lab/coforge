@@ -12,12 +12,14 @@ const computerId = "computer-1";
 
 test("owner-authorized search publishes, waits, and rechecks ownership", async () => {
   let owned = true;
+  let supported = true;
   let published: LocalSessionSearchRequest | undefined;
   let result: LocalSessionSearchResult | undefined;
   const queries = new ComputerLocalSessions(
     {
       owned: async () => owned,
       online: async () => true,
+      supported: async () => supported,
       publishSearch: async (request) => {
         published = request;
         result = {
@@ -47,6 +49,12 @@ test("owner-authorized search publishes, waits, and rechecks ownership", async (
 
   owned = false;
   expect(await queries.search(viewer, computerId, "compiler")).toEqual({ status: "unavailable" });
+
+  owned = true;
+  supported = false;
+  published = undefined;
+  expect(await queries.search(viewer, computerId, "compiler")).toEqual({ status: "unsupported" });
+  expect(published).toBeUndefined();
 });
 
 test("excerpt request and result are bound to provider, id, cwd, owner, and computer", async () => {
@@ -55,6 +63,7 @@ test("excerpt request and result are bound to provider, id, cwd, owner, and comp
     {
       owned: async () => true,
       online: async () => true,
+      supported: async () => true,
       publishSearch: async () => {},
       publishExcerpt: async (request: LocalSessionExcerptRequest) => {
         result = {

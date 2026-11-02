@@ -2,6 +2,8 @@ import { join } from "node:path";
 import { asRecord } from "#src/json-record";
 import {
   localSessionField,
+  localSessionIo,
+  LocalSessionDeadlineError,
   localSessionSnippet,
   localSessionText,
   readLocalSessionWindows,
@@ -44,8 +46,12 @@ async function candidates(options: LocalSessionSearchOptions, host: CodexHistory
     }
     let entries;
     try {
-      entries = await host.readDirectoryEntries(current.path);
-    } catch {
+      entries = await localSessionIo(host.readDirectoryEntries(current.path), options.limits);
+    } catch (error) {
+      if (error instanceof LocalSessionDeadlineError) {
+        complete = false;
+        break;
+      }
       continue;
     }
     for (const entry of entries) {
@@ -167,7 +173,16 @@ export async function searchCodexLocalSessions(
       if (query) contentSearchComplete = false;
       break;
     }
-    const read = await readDetails(candidate, options, host, budget);
+    let read;
+    try {
+      read = await readDetails(candidate, options, host, budget);
+    } catch (error) {
+      if (error instanceof LocalSessionDeadlineError) {
+        contentSearchComplete = false;
+        break;
+      }
+      throw error;
+    }
     if (!read) {
       if (query) contentSearchComplete = false;
       continue;

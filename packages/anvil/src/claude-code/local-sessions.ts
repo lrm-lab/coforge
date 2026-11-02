@@ -2,6 +2,8 @@ import { isAbsolute, join } from "node:path";
 import { asRecord } from "#src/json-record";
 import {
   localSessionField,
+  localSessionIo,
+  LocalSessionDeadlineError,
   localSessionSnippet,
   localSessionText,
   readLocalSessionWindows,
@@ -32,9 +34,12 @@ async function candidates(options: LocalSessionSearchOptions, host: ClaudeHistor
   let complete = true;
   let projects;
   try {
-    projects = await host.readDirectoryEntries(join(configDirectory(host), "projects"));
-  } catch {
-    return { found, complete: true };
+    projects = await localSessionIo(
+      host.readDirectoryEntries(join(configDirectory(host), "projects")),
+      options.limits,
+    );
+  } catch (error) {
+    return { found, complete: !(error instanceof LocalSessionDeadlineError) };
   }
   for (const project of projects) {
     if (options.limits.now() >= options.limits.deadlineAtMs) {
@@ -49,8 +54,12 @@ async function candidates(options: LocalSessionSearchOptions, host: ClaudeHistor
     const root = join(configDirectory(host), "projects", project.name);
     let entries;
     try {
-      entries = await host.readDirectoryEntries(root);
-    } catch {
+      entries = await localSessionIo(host.readDirectoryEntries(root), options.limits);
+    } catch (error) {
+      if (error instanceof LocalSessionDeadlineError) {
+        complete = false;
+        break;
+      }
       continue;
     }
     for (const entry of entries) {
@@ -66,14 +75,18 @@ async function candidates(options: LocalSessionSearchOptions, host: ClaudeHistor
       }
       const path = join(root, entry.name);
       try {
-        const info = await host.lstat(path);
+        const info = await localSessionIo(host.lstat(path), options.limits);
         if (!info.isFile()) continue;
         found.push({
           path,
           sessionId: match[1]!,
           modifiedAtMs: Number.isFinite(info.mtimeMs) ? Math.max(0, info.mtimeMs) : 0,
         });
-      } catch {
+      } catch (error) {
+        if (error instanceof LocalSessionDeadlineError) {
+          complete = false;
+          break;
+        }
         // A disappearing or unreadable transcript is not a session result.
       }
     }
@@ -165,7 +178,16 @@ export async function searchClaudeLocalSessions(
       if (query) contentSearchComplete = false;
       break;
     }
-    const read = await readDetails(candidate, options, host, budget);
+    let read;
+    try {
+      read = await readDetails(candidate, options, host, budget);
+    } catch (error) {
+      if (error instanceof LocalSessionDeadlineError) {
+        contentSearchComplete = false;
+        break;
+      }
+      throw error;
+    }
     if (!read) {
       if (query) contentSearchComplete = false;
       continue;
