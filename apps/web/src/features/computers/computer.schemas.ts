@@ -53,7 +53,7 @@ export type ComputerAgentWorkspaceScan = {
   name: string;
   displayName: string;
   state: "active" | "deleted";
-  status: "present" | "missing" | "unavailable";
+  status: "present" | "unavailable";
   rootPath: string;
   /** Lower bounds while `statisticsStatus` is "truncated"; 0 until the statistics read answers. */
   fileCount: number;

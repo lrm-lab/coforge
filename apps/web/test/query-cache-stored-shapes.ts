@@ -206,4 +206,18 @@ export const PINNED_SHAPES: Record<number, Record<string, string>> = {
     "chat sections": "b49b26a074dbffb9",
     "chat section order": "fc37a20be1db425d",
   },
+  // A workspace row no longer says its directory is missing: the scan lists only the directories
+  // the Computer has, as Raft's does, so a stored row reading "missing" is not one to open at.
+  17: {
+    "channel window": "eea5d9e2a379995a",
+    "direct window with an Agent": "2fee8267523e1b97",
+    "direct window with a person": "0906fd265d7973a6",
+    "sidebar channels": "71e962a71254dad3",
+    "sidebar directs": "5205999212e744be",
+    "channel names": "292a0fa92b3cbad1",
+    "saved messages": "29e083a65a909ec0",
+    "agent workspace scan": "be4265c651dc4bff",
+    "chat sections": "b49b26a074dbffb9",
+    "chat section order": "fc37a20be1db425d",
+  },
 };

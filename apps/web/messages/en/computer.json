@@ -110,7 +110,6 @@
   "computer_agent_workspace_stats": "{size} · {files} files",
   "computer_agent_workspace_stats_pending": "Counting…",
   "computer_agent_workspace_stats_truncated": "≥ {size} · ≥ {files} files",
-  "computer_agent_workspace_missing": "Workspace directory is missing",
   "computer_agent_workspace_partial": "Workspace found; scan was incomplete",
   "computer_agent_workspace_unavailable": "Computer did not return the workspace",
   "computer_agent_workspaces_deleted_summary": "{count} archived Agent workspaces found — the Agent is archived but its files remain on disk.",

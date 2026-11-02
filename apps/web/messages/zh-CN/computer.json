@@ -111,7 +111,6 @@
   "computer_agent_workspace_stats": "{size} · {files} 个文件",
   "computer_agent_workspace_stats_pending": "统计中…",
   "computer_agent_workspace_stats_truncated": "≥ {size} · ≥ {files} 个文件",
-  "computer_agent_workspace_missing": "工作目录不存在",
   "computer_agent_workspace_partial": "已找到工作目录，但扫描未完成",
   "computer_agent_workspace_unavailable": "电脑未返回工作目录信息",
   "computer_agent_workspaces_deleted_summary": "找到 {count} 个已归档 Agent 的 workspace——Agent 已归档，但文件仍保留在磁盘上。",

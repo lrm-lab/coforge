@@ -101,9 +101,7 @@ export function ComputerDetailWorkspaceInventory({
                     <p className="mt-1 truncate text-xs text-tertiary">
                       {workspace.status === "present"
                         ? workspaceStatistics(workspace)
-                        : workspace.status === "missing"
-                          ? m.computer_agent_workspace_missing()
-                          : m.computer_agent_workspace_unavailable()}
+                        : m.computer_agent_workspace_unavailable()}
                       {hydrated &&
                         workspace.modifiedAtMs > 0 &&
                         ` · ${m.computer_agent_workspace_modified({
@@ -117,12 +115,11 @@ export function ComputerDetailWorkspaceInventory({
                   </div>
                   {canDelete && (
                     // Deleting does not depend on the scan answering, as on an archived Agent's
-                    // profile: only a directory the Computer reported gone has nothing to delete.
+                    // profile.
                     <ButtonUtility
                       color="secondary"
                       icon={Trash01}
                       tooltip={m.computer_agent_workspace_delete()}
-                      isDisabled={workspace.status === "missing"}
                       onClick={() => setDeleteTarget(workspace)}
                     />
                   )}

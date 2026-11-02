@@ -1,4 +1,7 @@
-import type { AgentWorkspaceStatisticsStatus } from "@lrm/coforge-sdk/internal";
+import type {
+  AgentWorkspaceScanEntry,
+  AgentWorkspaceStatisticsStatus,
+} from "@lrm/coforge-sdk/internal";
 import type { ComputerAgentWorkspaceScan } from "#src/features/computers/computer.schemas";
 import {
   computerWorkspaceScanQuery,
@@ -29,14 +32,33 @@ export async function readAgentWorkspaceScan(
     agents.map((agent) => agent.id),
     withStatistics,
   );
-  const summaries =
-    response.status === "ready"
-      ? new Map(response.result.workspaces.map((workspace) => [workspace.agentId, workspace]))
-      : new Map();
-  const known = agents.map((agent) => {
+  return agentWorkspaceRows(
+    agents,
+    response.status === "ready" ? response.result.workspaces : undefined,
+    withStatistics,
+  );
+}
+
+/**
+ * The inventory's rows: one per directory the Computer listed (`entries`), as Raft's scan lists
+ * what its agents directory holds (`scanWorkspaceDirectories`), so an Agent whose directory is
+ * gone has none. A directory no Agent of this Workspace owns follows as an orphan. When the
+ * Computer did not answer (`undefined`), every Agent keeps its row so a directory can still be
+ * deleted.
+ */
+export function agentWorkspaceRows(
+  agents: Array<{ id: string; name: string; displayName: string; deletedAt: Date | null }>,
+  entries: AgentWorkspaceScanEntry[] | undefined,
+  withStatistics: boolean,
+): ComputerAgentWorkspaceScan[] {
+  const summaries = new Map<string, AgentWorkspaceScanEntry>(
+    entries?.map((entry) => [entry.agentId, entry]),
+  );
+  const listed = entries ? agents.filter((agent) => summaries.has(agent.id)) : agents;
+  const known = listed.map((agent) => {
     const summary = summaries.get(agent.id);
     if (summary) summaries.delete(agent.id);
-    const status = summary?.status ?? (response.status === "ready" ? "missing" : "unavailable");
+    const status: ComputerAgentWorkspaceScan["status"] = summary?.status ?? "unavailable";
     return {
       agentId: agent.id,
       name: agent.name,
