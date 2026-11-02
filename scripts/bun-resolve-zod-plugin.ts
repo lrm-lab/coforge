@@ -1,5 +1,7 @@
 import { resolve } from "node:path";
 
+import type { BunPlugin } from "bun";
+
 /**
  * Bun.build resolves bare imports from the *importing file's* package, not the
  * entrypoint package. `@lrm/coforge-sdk` imports `zod`, so when
@@ -9,7 +11,7 @@ import { resolve } from "node:path";
  * Pin the resolve through a package that declares zod so Computer/Daemon
  * fixture and release compiles keep working.
  */
-export function zodResolvePlugin(repoRoot: string): Bun.Plugin {
+export function zodResolvePlugin(repoRoot: string): BunPlugin {
   const fromComputer = resolve(repoRoot, "packages/computer");
   let zodEntry: string;
   try {

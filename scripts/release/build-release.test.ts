@@ -11,7 +11,7 @@ import { buildReleaseTree, isValidReleaseVersion, type ReleaseInputs } from "./b
 // from it. The installer that installs a version is coforge-installer (crates/installer), which
 // has its own tests; this file checks the tree it reads. Both are exercised against small fake
 // binaries (a shell script, a plain string) rather than a real compile, which is slow and
-// intentionally out of scope here - see compile-targets.ts.
+// intentionally out of scope here - see packages/computer/scripts/compile-release.ts.
 
 const temporaryDirectories: string[] = [];
 const servers: Array<ReturnType<typeof Bun.serve>> = [];

@@ -4,11 +4,15 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 
 import { LocalDaemonLauncher } from "@lrm/coforge-daemon";
+import {
+  DARWIN_SIGNING_KEY_ENV,
+  verifyDarwinExecutable,
+} from "../../../scripts/release/darwin-signing";
+import { createThrowawayIdentity } from "../../../scripts/release/fixtures/darwin-signing-identity";
 
-/** The release build these tests run, imported by path in a separate Bun process: the build then
- * runs outside bun:test's module resolver and mocks, and this package's type check stays out of
- * the repository's scripts. The build rejects a host that is not a release target. */
-const COMPILE_TARGETS = join(import.meta.dir, "../../../scripts/release/compile-targets.ts");
+/** The release build these tests run, imported by path in a separate Bun process so it runs
+ * outside bun:test's module resolver and mocks. It rejects a host that is not a release target. */
+const COMPILE_RELEASE = join(import.meta.dir, "../scripts/compile-release.ts");
 
 /** Where a test builds and runs the published executable. macOS needs a short, symlink-free
  * root: `os.tmpdir()` sits under the `/var -> /private/var` link the Daemon's log-path check
@@ -40,7 +44,7 @@ function compileHostComputer(feedUrl: string, outputDirectory: string): string {
     [
       process.execPath,
       "--eval",
-      `import { compileTargetArtifacts } from ${JSON.stringify(COMPILE_TARGETS)}; await compileTargetArtifacts(${JSON.stringify(options)});`,
+      `import { compileTargetArtifacts } from ${JSON.stringify(COMPILE_RELEASE)}; await compileTargetArtifacts(${JSON.stringify(options)});`,
     ],
     { stdout: "pipe", stderr: "pipe" },
   );
@@ -175,6 +179,50 @@ test("published unified Computer runs management, Daemon, and Agent modes from o
     }
     expect(await new Response(daemon.stdout).text()).toBe("");
     expect(await new Response(daemon.stderr).text()).toBe("");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 60_000);
+
+test("a darwin build given a signer returns the bytes of its signed executable", async () => {
+  if (process.platform !== "darwin") return;
+  const target = `darwin-${process.arch}`;
+  const directory = await mkdtemp(join(temporaryRoot(), "coforge-signed-executable-"));
+  try {
+    const identity = await createThrowawayIdentity(directory, "compile");
+    const outputDirectory = join(directory, "artifacts");
+    // The key reaches the build through its environment, like a publish's; the build prints the
+    // digest of the bytes it returned, which a checksum computed later would cover.
+    const build = Bun.spawnSync(
+      [
+        process.execPath,
+        join(import.meta.dir, "fixtures/compile-signed-computer.ts"),
+        target,
+        "9.8.7-rc.6",
+        "https://releases-staging.coforge.cn",
+        outputDirectory,
+        identity.certificatePath,
+      ],
+      {
+        env: { ...Bun.env, [DARWIN_SIGNING_KEY_ENV]: identity.keyPem },
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+    expect(build.stderr.toString()).toBe("");
+    expect(build.exitCode).toBe(0);
+    const executable = join(outputDirectory, `${target}-coforge-computer`);
+    await verifyDarwinExecutable(executable, identity.certificatePem);
+    const digest = new Bun.CryptoHasher("sha256")
+      .update(new Uint8Array(await Bun.file(executable).arrayBuffer()))
+      .digest("hex");
+    expect(build.stdout.toString().trim()).toBe(digest);
+    const version = Bun.spawnSync([executable, "--cli-version"], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(version.exitCode).toBe(0);
+    expect(version.stdout.toString()).toBe("9.8.7-rc.6\n");
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

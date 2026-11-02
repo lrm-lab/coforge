@@ -22,7 +22,7 @@ Staging 不把令牌写进仓库。把它存成 GitHub Environment `staging` 的
 
 放进镜像的 `coforge-computer` 在编译时写死 Daemon 的 HTTP 源。`host` 传给容器的 `COFORGE_SERVER_URL` 必须和这个源的 origin 相同，否则容器拒绝写入绑定（`Binding server does not match this daemon build`）。
 
-按现有发布脚本编译时，`scripts/release/compile-targets.ts` 会把该环境的服务器 URL 写进 `COFORGE_DAEMON_SERVER_URL`。Websocket 由这个 URL 推导为 `wss://<主机>/connection/websocket`（HTTP 部署则是 `ws://`）。标准部署里 Caddy 把 `/connection/*` 转到 Centrifugo，容器使用这个公网源即可。
+按现有发布脚本编译时，`packages/computer/scripts/compile-release.ts` 会把该环境的服务器 URL 写进 `COFORGE_DAEMON_SERVER_URL`。Websocket 由这个 URL 推导为 `wss://<主机>/connection/websocket`（HTTP 部署则是 `ws://`）。标准部署里 Caddy 把 `/connection/*` 转到 Centrifugo，容器使用这个公网源即可。
 
 Web 和 Centrifugo 不在同一个对外地址上时，按 `scripts/e2e/build-computer-fixture.ts` 编译：`COFORGE_E2E_WEB_URL` 是容器能访问的 Web 源，`COFORGE_E2E_CENTRIFUGO_ENDPOINT` 是容器能访问的 Websocket。`host` 的 `COFORGE_SERVER_URL` 用同一个 Web 源。
 

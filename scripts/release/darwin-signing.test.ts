@@ -26,7 +26,7 @@ let identity: Awaited<ReturnType<typeof createThrowawayIdentity>>;
 let other: Awaited<ReturnType<typeof createThrowawayIdentity>>;
 let baseProgram: string;
 
-/** A small Bun-compiled executable, built outside bun:test like compile-targets.test.ts does. */
+/** A small Bun-compiled executable, built outside bun:test like every release build. */
 async function compileProgram(directory: string, name: string, message: string): Promise<string> {
   const source = join(directory, `${name}.ts`);
   const output = join(directory, name);

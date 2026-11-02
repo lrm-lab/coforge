@@ -120,6 +120,8 @@ export function selectChecks(paths: string[], track: "changes" | "web" | "local"
       affected = [path.split("/")[1]!, ...(nativeTestJobs[path] ?? [])];
     } else if (path.startsWith("packages/computer/")) {
       affected = ["computer", "macos-lifecycle", "windows-release"];
+      // The release scripts and their tests (scripts/release/publish.ts) load the release build.
+      if (path === "packages/computer/scripts/compile-release.ts") affected.push("release");
     } else if (/^packages\/(agent|cli|coforge|daemon)\//.test(path)) {
       affected = ["computer", "daemon", "macos-lifecycle", "windows-release"];
       // The installer's tests take the Computer's machine mutation lock through this module.
