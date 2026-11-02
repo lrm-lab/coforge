@@ -107,3 +107,7 @@ Part of [Agents UI](AGENTS.md). Rules for `src/features/agents/`.
   owns how far and how fast the eyes move (a gentle glance that never pins them to a corner,
   `assets/mascots/look.ts`); a mascot under a still pointer looks again at the next
   pointer move (scrolling does not).
+- The New Agent dialog's two pictures (`agent-illustrations.tsx`) are drawn apart from the mascot
+  set above: inline SVG in the brand utility colours around five vector mascots copied from the
+  design file (`illustrations/*.svg`, bundled under hashed names). They are pictures, not
+  identities: no Agent is ever shown with one of them.

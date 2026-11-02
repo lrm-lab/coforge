@@ -1,6 +1,6 @@
 import type { FormEvent, ReactNode } from "react";
 import { Heading, Text } from "react-aria-components";
-import { Plus, XClose as X } from "@untitledui/icons";
+import { XClose as X } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -8,9 +8,11 @@ import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { m } from "#src/paraglide/messages";
 import { useScrollEdges } from "#src/hooks/use-scroll-edges";
 import { cx } from "#src/utils/cx";
+import { AGENT_ILLUSTRATIONS } from "./agent-illustrations";
 
-/** The new-Agent dialog's frame (Figma 3745:7147): a 400px card whose cloud and local forms swap
- * inside it, so switching between them never closes and reopens the dialog. A form is an
+/** The new-Agent dialog's frame: a 400px card whose forms swap inside it, so choosing the other
+ * kind of Agent never closes and reopens the dialog. It hangs from near the top of the screen, not
+ * centred, so a form that grows or shrinks moves only its bottom edge. A form is an
  * `AgentCreateForm`: its intro and footer stay put and only its fields scroll. */
 export function AgentCreateModal({
   open,
@@ -27,6 +29,7 @@ export function AgentCreateModal({
   return (
     <ModalOverlay
       isOpen={open}
+      className="sm:items-start sm:[--modal-pt:12vh]"
       onOpenChange={(next) => {
         if (dismissable) onOpenChange(next);
       }}
@@ -43,20 +46,18 @@ export function AgentCreateForm({
   onSubmit,
   intro,
   footer,
-  switchTo,
   children,
 }: {
   onSubmit?: (event: FormEvent<HTMLFormElement>) => void;
-  intro: ReactNode;
+  /** Absent where the dialog's head sits outside the form (the new-Agent dialog's kind cards). */
+  intro?: ReactNode;
   footer: ReactNode;
-  /** The link to the other kind of Agent, after the last field. */
-  switchTo?: { label: string; onPress: () => void; isDisabled?: boolean };
   children: ReactNode;
 }) {
   const { ref, start: above, end: below } = useScrollEdges("y");
   return (
     <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
-      <div className="shrink-0">{intro}</div>
+      {intro && <div className="shrink-0">{intro}</div>}
       {/* A divider on each side that hides more fields, so a cut-off form reads as one that scrolls. */}
       <div
         ref={ref}
@@ -67,47 +68,28 @@ export function AgentCreateForm({
         )}
       >
         {children}
-        {switchTo && (
-          <div className="px-6 pt-1 pb-3">
-            <Button
-              type="button"
-              color="link-color"
-              size="sm"
-              iconLeading={Plus}
-              isDisabled={switchTo.isDisabled}
-              onPress={switchTo.onPress}
-            >
-              {switchTo.label}
-            </Button>
-          </div>
-        )}
       </div>
       <div className="shrink-0">{footer}</div>
     </form>
   );
 }
 
-/** The dialog's title on one line with the close button at its end, and a line under it only
- * where the form needs one said before its fields (no Computer to create on yet). */
-/** The dialog's two illustrations, one per kind of Agent (design: 智能体插图). */
-const ILLUSTRATIONS = {
-  local: "/illustrations/agent-local.webp",
-  cloud: "/illustrations/agent-cloud.webp",
-} as const;
-
-/** The form's head, centred as in the design: its illustration, title and one line on what this
- * kind of Agent is. */
+/** The dialog's head, centred: the kind's illustration, the title, then a line on what this kind
+ * of Agent is or, in the new-Agent dialog, the switch between kinds (`children`). */
 export function AgentCreateIntro({
   illustration,
   title,
   description,
   onClose,
+  children,
 }: {
-  illustration: keyof typeof ILLUSTRATIONS;
+  illustration: keyof typeof AGENT_ILLUSTRATIONS;
   title: string;
-  description: string;
+  description?: string;
   onClose?: () => void;
+  children?: ReactNode;
 }) {
+  const Illustration = AGENT_ILLUSTRATIONS[illustration];
   return (
     <div className="relative px-6 pt-6 text-center">
       {onClose && (
@@ -121,19 +103,16 @@ export function AgentCreateIntro({
           className="absolute top-3 right-3"
         />
       )}
-      <img
-        src={ILLUSTRATIONS[illustration]}
-        alt=""
-        width={106}
-        height={66}
-        className="mx-auto block h-16.5 w-26.5"
-      />
+      <Illustration className="mx-auto h-16.5 w-26.5" />
       <Heading slot="title" className="mt-3 text-lg font-semibold text-primary">
         {title}
       </Heading>
-      <Text slot="description" className="mt-1 block text-sm text-balance text-tertiary">
-        {description}
-      </Text>
+      {description && (
+        <Text slot="description" className="mt-1 block text-sm text-balance text-tertiary">
+          {description}
+        </Text>
+      )}
+      {children}
     </div>
   );
 }

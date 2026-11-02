@@ -4,7 +4,6 @@ import { parseRuntimeProvider, RUNTIME_PROVIDER } from "@lrm/coforge-sdk/interna
 
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { localizeHref } from "#src/paraglide/runtime";
-import { Button } from "#src/components/base/buttons/button";
 import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 import { Select } from "#src/components/base/select/select";
 import { TextArea } from "#src/components/base/textarea/textarea";
@@ -64,7 +63,8 @@ type LocalAgentFormOptions = {
  * dialog. `defaults` prefills it; `computerLocked` mirrors an action card's `requiredComputer` by
  * disabling the Computer selector; `visibilityLocked` keeps the Agent public, for a caller that
  * adds it to a channel, and `joinsChannelName` says which channel that is. `nameNote` explains a
- * prefilled name. `onCreate` resolves once the caller has done what follows a create. */
+ * prefilled name. `onCreate` resolves once the caller has done what follows a create. `headless`
+ * leaves out its illustrated head, for the new-Agent dialog, whose kind cards head it instead. */
 export function LocalAgentForm({
   computers,
   onCreate,
@@ -77,13 +77,13 @@ export function LocalAgentForm({
   actionCardMessageId,
   submitLabel = m.agent_form_submit(),
   onClose,
-  onSwitchToCloud,
+  headless = false,
   onBusyChange,
 }: LocalAgentFormOptions & {
   onCreate: (input: CreateAgentInput) => Promise<void>;
   submitLabel?: string;
   onClose: () => void;
-  onSwitchToCloud?: () => void;
+  headless?: boolean;
   onBusyChange: (busy: boolean) => void;
 }) {
   const [submitting, guard] = useSubmitGuard();
@@ -142,12 +142,16 @@ export function LocalAgentForm({
   if (!computers.length)
     return (
       <>
-        <AgentCreateIntro
-          illustration="local"
-          title={m.agent_create_local_title()}
-          description={m.agent_empty_computer_description()}
-          onClose={onClose}
-        />
+        {headless ? (
+          <p className="px-6 pt-5 text-sm text-tertiary">{m.agent_empty_computer_description()}</p>
+        ) : (
+          <AgentCreateIntro
+            illustration="local"
+            title={m.agent_create_local_title()}
+            description={m.agent_empty_computer_description()}
+            onClose={onClose}
+          />
+        )}
         <DialogActions className="mt-6 px-6 pb-6">
           <DialogCancel onPress={onClose}>{m.controls_cancel()}</DialogCancel>
           <DialogAction
@@ -157,13 +161,6 @@ export function LocalAgentForm({
             {m.agent_connect_computer()}
           </DialogAction>
         </DialogActions>
-        {onSwitchToCloud && (
-          <div className="-mt-2 px-6 pb-6 text-center">
-            <Button color="link-color" size="sm" onPress={onSwitchToCloud}>
-              {m.agent_create_switch_cloud()}
-            </Button>
-          </div>
-        )}
       </>
     );
 
@@ -171,20 +168,15 @@ export function LocalAgentForm({
     <>
       <AgentCreateForm
         onSubmit={submit}
-        switchTo={
-          onSwitchToCloud && {
-            label: m.agent_create_switch_cloud(),
-            onPress: onSwitchToCloud,
-            isDisabled: submitting,
-          }
-        }
         intro={
-          <AgentCreateIntro
-            illustration="local"
-            title={m.agent_create_local_title()}
-            description={m.agent_create_local_description()}
-            onClose={submitting ? undefined : onClose}
-          />
+          !headless && (
+            <AgentCreateIntro
+              illustration="local"
+              title={m.agent_create_local_title()}
+              description={m.agent_create_local_description()}
+              onClose={submitting ? undefined : onClose}
+            />
+          )
         }
         footer={
           <AgentCreateFooter
@@ -202,11 +194,7 @@ export function LocalAgentForm({
               {m.agent_form_joins_channel({ channel: joinsChannelName })}
             </p>
           )}
-          <AgentUsernameField
-            label={m.agent_create_local_name()}
-            defaultValue={defaults?.name}
-            note={nameNote}
-          />
+          <AgentUsernameField defaultValue={defaults?.name} note={nameNote} />
           <Select
             name="computerId"
             isRequired

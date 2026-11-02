@@ -13,23 +13,27 @@ import { useCurrentWorkspaceId, useRefreshAgentDirectory } from "./workspace-age
 import { AGENT_DISPLAY_NAME_MAX_LENGTH } from "./agent.schemas";
 import { agentCreateErrorMessage } from "./agent-form";
 import { createCloudAgent } from "./cloud-agents.functions";
-import { AgentCreateFooter, AgentCreateForm, AgentCreateIntro } from "./agent-create-frame";
+import { AgentCreateFooter, AgentCreateForm } from "./agent-create-frame";
 import { randomAgentUsername } from "./agent-username";
 
-/** The new-Agent dialog's cloud form: a name, then the Agent is made on the Workspace's cloud
- * Computer and its direct conversation opens. `onBusyChange` keeps the dialog up while it runs. */
+/** The new-Agent dialog's cloud form, under its kind cards: a name, then the Agent is made on the
+ * Workspace's cloud Computer and its direct conversation opens. `onBusyChange` keeps the dialog up
+ * while the conversation opens; `onSubmittingChange` holds the kind cards while a create runs. */
 export function CloudAgentForm({
   open,
   onClose,
-  onSwitchToLocal,
   onBusyChange,
+  onSubmittingChange,
+  autoFocus,
 }: {
   /** False from the moment the dialog closes: a create still waiting stops then, not after the
    * close animation, so a closed dialog never opens a conversation. */
   open: boolean;
   onClose: () => void;
-  onSwitchToLocal?: () => void;
   onBusyChange: (busy: boolean) => void;
+  onSubmittingChange: (submitting: boolean) => void;
+  /** Whether the name takes the focus: as the dialog opens, not when the kind switch shows it. */
+  autoFocus: boolean;
 }) {
   const create = useServerFn(createCloudAgent);
   const refreshDirectory = useRefreshAgentDirectory();
@@ -53,6 +57,10 @@ export function CloudAgentForm({
     onBusyChange(opening);
     return () => onBusyChange(false);
   }, [opening, onBusyChange]);
+  useEffect(() => {
+    onSubmittingChange(submitting);
+    return () => onSubmittingChange(false);
+  }, [submitting, onSubmittingChange]);
 
   function close() {
     if (openingDirect.current) return;
@@ -137,21 +145,6 @@ export function CloudAgentForm({
   return (
     <AgentCreateForm
       onSubmit={submit}
-      switchTo={
-        onSwitchToLocal && {
-          label: m.agent_create_switch_local(),
-          onPress: onSwitchToLocal,
-          isDisabled: submitting,
-        }
-      }
-      intro={
-        <AgentCreateIntro
-          illustration="cloud"
-          title={m.cloud_agent_create_title()}
-          description={m.cloud_agent_create_description()}
-          onClose={opening ? undefined : close}
-        />
-      }
       footer={
         <AgentCreateFooter
           onCancel={close}
@@ -165,7 +158,7 @@ export function CloudAgentForm({
       <div className="flex flex-col gap-3 px-6 pt-5 pb-2">
         <div className="relative min-w-0">
           <Input
-            label={m.cloud_agent_create_name()}
+            label={m.agent_create_name()}
             size="sm"
             value={name}
             onChange={setName}
@@ -173,7 +166,7 @@ export function CloudAgentForm({
             isRequired
             hideRequiredIndicator
             isReadOnly={submitting}
-            autoFocus
+            autoFocus={autoFocus}
           />
           <div className="absolute top-0 right-0 flex h-5 items-center">
             <ButtonUtility
