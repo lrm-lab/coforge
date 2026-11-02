@@ -458,7 +458,8 @@ describe("external Code Agent inventory", () => {
     const coforgeCatalog = inventory.catalogs.find((catalog) => catalog.provider === "coforge");
     expect(coforgeCatalog).toBeDefined();
     expect(coforgeCatalog?.models.length).toBeGreaterThan(0);
-    expect(coforgeCatalog?.models.length).toBeLessThanOrEqual(200);
+    // Every direct-provider model plus the 94 OpenRouter entries still in the released catalog.
+    expect(coforgeCatalog?.models.length).toBeLessThanOrEqual(260);
     expect(new Set(coforgeCatalog?.models.map((model) => model.modelProvider))).toEqual(
       new Set([
         "deepseek",

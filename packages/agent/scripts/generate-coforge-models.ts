@@ -10,7 +10,6 @@ const runtime = await ModelRuntime.create({
   refreshOnCreate: false,
 });
 
-const maximumModels = 200;
 const DATED_SNAPSHOT = /-(\d{4}-\d{2}-\d{2}|\d{8})$/u;
 
 const allModels: CodeAgentModelMetadata[] = runtime
@@ -76,12 +75,15 @@ function compareNewestFirst(left: CodeAgentModelMetadata, right: CodeAgentModelM
 }
 
 // A direct provider's catalog is small and every entry is reachable with its API key, so list the
-// whole line. OpenRouter is a gateway whose catalog duplicates most of the others; it fills what
-// the 200-model cap leaves.
+// whole line. OpenRouter is a gateway whose catalog duplicates most of the others; it keeps the 94
+// entries that still exist upstream from the last released catalog's 95, so no Agent's already
+// selectable model disappears. (The old 200-model cap was an undocumented constant, not a
+// protocol, payload or UI limit: the catalog crosses the wire as a repeated field and the picker
+// renders it.)
+const OPENROUTER_MODEL_LIMIT = 94;
 const directModels = allModels.filter((model) => model.modelProvider !== "openrouter");
-const models = directModels.slice(0, maximumModels);
 const openRouterModels = allModels.filter((model) => model.modelProvider === "openrouter");
-models.push(...openRouterModels.slice(0, Math.max(0, maximumModels - models.length)));
+const models = [...directModels, ...openRouterModels.slice(0, OPENROUTER_MODEL_LIMIT)];
 models.sort((left, right) =>
   `${left.modelProvider}/${left.id}`.localeCompare(`${right.modelProvider}/${right.id}`),
 );
