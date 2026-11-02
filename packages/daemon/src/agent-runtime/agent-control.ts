@@ -12,6 +12,7 @@ import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import { settleLaunchFailure } from "./launch-attempt-failure";
 import type { AgentRuntimeRecord, AgentRuntimeState } from "./agent-runtime-state";
 import type { AgentSessions } from "./agent-session";
+import { replayAgentControlResults } from "./agent-control-replay";
 import { LaunchFailureBackoff } from "./launch-failure-backoff";
 
 const logger = getLogger(["coforge", "daemon", "agent-control"]);
@@ -714,10 +715,6 @@ export class AgentControl {
     });
   }
   async replay() {
-    for (const id of this.#known)
-      await this.state.run(id, async () => {
-        const record = await this.store.read(id);
-        if (record?.lastResult) await this.runtime.result(record.lastResult).catch(() => {});
-      });
+    return replayAgentControlResults(this.#known, this.state, this.runtime);
   }
 }
