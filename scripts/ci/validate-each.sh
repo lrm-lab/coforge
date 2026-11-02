@@ -13,8 +13,10 @@ for name in $names; do
     bun run "test:$name" && bun run "check:$name"
   else
     dir="packages/$name"
+    # Built only when its manifest declares a build (coforge-sdk does not): `bun run --if-present`
+    # is documented for a missing entrypoint file, not a missing script.
     bun run --cwd "$dir" test && bun run --cwd "$dir" check &&
-      bun run --cwd "$dir" --if-present build
+      { ! jq -e '.scripts.build' "$dir/package.json" >/dev/null || bun run --cwd "$dir" build; }
   fi
   status=$?
   echo "::endgroup::"
