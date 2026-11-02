@@ -1,7 +1,7 @@
 -- migration-safety v1
--- checked: 2026-11-02T04:27:01.124Z  pg: 18.0  verdict: ok-with-lock-timeout
+-- checked: 2026-11-02T04:33:46.263Z  pg: 18.0  verdict: ok-with-lock-timeout
 -- snapshot: 2026-11-02T02:44:37.622Z production
--- body-sha256: f6c87041297a04d2d3eab8fc6095285e46d6c57bb26dc70274152b198484d48c
+-- body-sha256: 55b8242eb40f4f4e21d0e848fea51a89896a83f8b9e00034169a22f12b9fb42f
 -- table: "*" rows≈-1 size=0 lock=access-exclusive rewrite=yes statement=unrecognised statement
 SET lock_timeout = '5s';
 
@@ -14,6 +14,30 @@ DECLARE
   unparseable bigint;
   sample text;
 BEGIN
+  EXECUTE $fn$
+    CREATE OR REPLACE FUNCTION public.coforge_sys_person(workspace uuid, handle text, display_name text)
+    RETURNS jsonb AS $body$
+      SELECT jsonb_build_object(
+        'memberId', (
+          SELECT cm.id FROM conversation_members cm
+          LEFT JOIN users u ON u.id = cm."userId"
+          LEFT JOIN agents a ON a.id = cm."agentId"
+          WHERE cm."workspaceId" = workspace
+            AND ((handle <> '' AND (u.username = handle OR a.name = handle))
+              OR (handle = '' AND display_name <> '' AND (u."displayName" = display_name OR a."displayName" = display_name)))
+          GROUP BY cm.id HAVING count(*) = 1 LIMIT 1
+        ),
+        'handle', handle, 'displayName', display_name);
+    $body$ LANGUAGE sql STABLE;
+  $fn$;
+  EXECUTE $fn$
+    CREATE OR REPLACE FUNCTION public.coforge_sys_task(workspace uuid, number int, title text)
+    RETURNS jsonb AS $body$
+      SELECT jsonb_build_object(
+        'taskId', (SELECT t.id FROM tasks t WHERE t."workspaceId" = workspace AND t.number = number LIMIT 1),
+        'number', number, 'title', title);
+    $body$ LANGUAGE sql STABLE;
+  $fn$;
   SELECT count(*) INTO total
   FROM system_messages s JOIN messages m ON m.id = s."messageId"
   WHERE s.params ? 'body' AND s.kind <> 'legacy_text';
@@ -74,6 +98,8 @@ BEGIN
         END END
   FROM _sys_params b
   WHERE s."messageId" = b."messageId";
+
+  EXECUTE 'DROP FUNCTION IF EXISTS public.coforge_sys_person(uuid, text, text), public.coforge_sys_task(uuid, int, text)';
 END $$;
 
 RESET lock_timeout;
