@@ -876,7 +876,6 @@ export class AgentControl {
       ...(result.errorCode || state.errorCode
         ? { errorCode: result.errorCode ?? state.errorCode }
         : {}),
-      updatedAtMs: Date.now(),
     };
     if (!(await this.store.replace(agent, next))) throw new Error("Control result lost its fence");
     // A launch that started with its session binds the Agent's current identity, as an accepted

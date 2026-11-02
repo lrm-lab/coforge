@@ -28,23 +28,9 @@ export interface ComputerRuntimeVisibilityRepository {
     runtimeId: string,
   ): Promise<ComputerRuntimeRecord | undefined>;
   setPublic(runtimeId: string, isPublic: boolean): Promise<unknown>;
-  resetAgentControlStateForRuntime?(
-    workspaceId: string,
-    computerId: string,
-    provider: RuntimeProvider,
-    errorCode: string,
-  ): Promise<void>;
 }
 
 type RuntimePrincipal = { userId: string; workspaceId: string };
-
-export type RuntimeSelectionCheck =
-  | { ok: true }
-  | {
-      ok: false;
-      code: "RUNTIME_NOT_INSTALLED" | "RUNTIME_UNUSABLE" | "RUNTIME_PRIVATE";
-      error: string;
-    };
 
 export class ComputerRuntimeVisibility {
   constructor(private readonly runtimes: ComputerRuntimeVisibilityRepository) {}
@@ -55,46 +41,16 @@ export class ComputerRuntimeVisibility {
     );
   }
 
-  /** Checks why a runtime cannot be selected for an Agent, or returns ok: true when it can. */
-  async checkSelection(
-    principal: RuntimePrincipal,
-    computerId: string,
-    provider: RuntimeProvider,
-  ): Promise<RuntimeSelectionCheck> {
+  /** Whether this person may pick the runtime for an Agent. An unusable runtime is never
+   * selectable, however it is shared. */
+  async canSelect(principal: RuntimePrincipal, computerId: string, provider: RuntimeProvider) {
     const runtime = await this.runtimes.findInWorkspace(
       principal.workspaceId,
       computerId,
       provider,
     );
-    if (!runtime) {
-      return {
-        ok: false,
-        code: "RUNTIME_NOT_INSTALLED",
-        error: "the configured runtime is not installed on this Computer",
-      };
-    }
-    if (runtime.unavailableCode) {
-      return {
-        ok: false,
-        code: "RUNTIME_UNUSABLE",
-        error: `the configured runtime is not usable on this Computer (${runtime.unavailableCode})`,
-      };
-    }
-    if (runtime.ownerId !== principal.userId && !runtime.isPublic) {
-      return {
-        ok: false,
-        code: "RUNTIME_PRIVATE",
-        error: "the configured runtime is private and not shared with this Agent's owner",
-      };
-    }
-    return { ok: true };
-  }
-
-  /** Whether this person may pick the runtime for an Agent. An unusable runtime is never
-   * selectable, however it is shared. */
-  async canSelect(principal: RuntimePrincipal, computerId: string, provider: RuntimeProvider) {
-    const check = await this.checkSelection(principal, computerId, provider);
-    return check.ok;
+    if (!runtime || runtime.unavailableCode) return false;
+    return runtime.ownerId === principal.userId || runtime.isPublic;
   }
 
   /** The runtime row itself, only when the current user owns it — so a caller that also needs
@@ -117,14 +73,6 @@ export class ComputerRuntimeVisibility {
     if (!runtime || runtime.ownerId !== principal.userId)
       throw new Error("runtime is not owned by the current user");
     await this.runtimes.setPublic(runtimeId, isPublic);
-    if (isPublic && this.runtimes.resetAgentControlStateForRuntime) {
-      await this.runtimes.resetAgentControlStateForRuntime(
-        principal.workspaceId,
-        runtime.computerId,
-        runtime.provider,
-        "runtime_private",
-      );
-    }
     return { ...runtime, isPublic };
   }
 }

@@ -5,11 +5,7 @@ import {
   type AgentControlScope,
   type AgentStartIntent,
 } from "@lrm/coforge-sdk/internal";
-import {
-  isNonRetryableLaunchFailure,
-  launchFailureLogFields,
-  launchFailureReason,
-} from "./launch-failure";
+import { isNonRetryableLaunchFailure, launchFailureLogFields } from "./launch-failure";
 import type { AgentRuntimeRecord, AgentRuntimeStateStore } from "./agent-runtime-state";
 import { LAUNCH_FAILURE_MAX_ATTEMPTS, type LaunchFailureBackoff } from "./launch-failure-backoff";
 
@@ -65,14 +61,13 @@ export async function settleLaunchFailure(
   }
   const attempts = ports.failures.reset(intent.agentId);
   ports.clearRetry();
-  const reason = launchFailureReason(error);
   record.phase = "failed";
   record.lastResult = {
     ...ports.scope,
     phase: "failed",
     launchId: ports.launchId,
     sequence: ++record.sequence,
-    errorCode: reason,
+    errorCode: "launch_failed",
   };
   logger.warning("Agent launch failed", {
     event: "agent_control:launch_failed",

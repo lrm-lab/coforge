@@ -105,7 +105,10 @@ export class PrismaAgentControlStore implements AgentControlStore {
     // before the field was removed. `storedControlState` below keeps the raw, unstripped
     // JSON for `replace()`'s compare-and-swap predicate, so a legacy row's extra key does not
     // make that predicate lose against the real stored value.
-    const state = agent.controlState === null ? null : stateSchema.parse(agent.controlState);
+    const state =
+      agent.controlState === null
+        ? null
+        : (({ updatedAtMs: _updatedAtMs, ...rest }) => rest)(stateSchema.parse(agent.controlState));
     const session = agent.currentSession;
     if (session && (session.agentId !== agent.id || session.workspaceId !== agent.workspaceId))
       throw new Error("Agent Session association is invalid");

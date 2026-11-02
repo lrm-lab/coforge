@@ -27,39 +27,24 @@ const OUTCOME_TEXT: Record<Outcome, () => string> = {
 export function AgentProfileStatus({
   agent,
   display,
-  failureReason,
   onActivityTab,
   onViewLogs,
 }: {
   agent: AgentDiagnosticFacts;
   display?: AgentDisplaySnapshot;
-  failureReason?: string | null;
   onActivityTab: boolean;
   onViewLogs?: () => void;
 }) {
   const stalled = display?.detailKind === "runtime_stalled" && display.activityKind !== "offline";
   if (stalled) return <StalledTurnStatus agentId={agent.id} />;
-  if (display?.activityKind === "error") {
-    return (
-      <AgentErrorBanner
-        agent={agent}
-        display={display}
-        onActivityTab={onActivityTab}
-        onViewLogs={onViewLogs}
-      />
-    );
-  }
-  if (failureReason) {
-    return (
-      <AgentErrorBanner
-        agent={agent}
-        failureReason={failureReason}
-        onActivityTab={onActivityTab}
-        onViewLogs={onViewLogs}
-      />
-    );
-  }
-  return null;
+  return display?.activityKind === "error" ? (
+    <AgentErrorBanner
+      agent={agent}
+      display={display}
+      onActivityTab={onActivityTab}
+      onViewLogs={onViewLogs}
+    />
+  ) : null;
 }
 
 /** Unmounting on recovery also discards feedback from the preceding stalled turn. */

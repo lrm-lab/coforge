@@ -88,7 +88,6 @@ export type AgentControlState = AgentControlScope & {
   controlSequence: number;
   sessionSequence: number;
   errorCode?: string;
-  updatedAtMs?: number;
 };
 
 export type AgentControlAgent = {

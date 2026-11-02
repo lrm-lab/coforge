@@ -286,7 +286,6 @@ export function AgentProfilePanel({
           key={agentId}
           agent={diagnosticFacts}
           display={display}
-          failureReason={profile?.failureReason}
           onActivityTab={tab === "activity"}
           onViewLogs={
             tabOrder.tabs.includes("activity") ? () => onTabChange("activity") : undefined

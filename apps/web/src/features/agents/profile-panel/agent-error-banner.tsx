@@ -8,52 +8,29 @@ import { agentDisplay } from "#src/features/agents/agent-activity-presentation";
 import { m } from "#src/paraglide/messages";
 import { CopyDiagnosticsButton } from "./copy-diagnostics-button";
 
-function failureReasonText(reason: string): string {
-  switch (reason) {
-    case "runtime_private":
-      return "运行时已改为私有或不对你公开";
-    case "runtime_not_installed":
-      return "电脑上未安装该运行时";
-    case "runtime_unusable":
-      return "电脑上的运行时不可用";
-    case "runtime_unavailable":
-      return "运行时在电脑上不可用或未公开";
-    case "runtime_login_required":
-      return "运行时需要在电脑上登录";
-    case "runtime_start_failed":
-      return "运行时启动失败";
-    case "agent_authorization_failed":
-      return "Agent 启动鉴权失败";
-    default:
-      return `启动失败：${reason}`;
-  }
-}
-
 /**
  * The Agent's current error, under the panel header on every tab, for as long as the cloud
- * display says `error` or an unrecoverable failure reason is recorded: the provider's own wording
- * after `Error:` (two lines; the whole of it on hover), and, for whoever gets the Activity tab,
- * a copy of its diagnostic block and a way to it, except on the tab itself, whose own band copies
- * it. It leaves on its own once the display moves on or the failure reason is cleared.
+ * display says `error`: the provider's own wording after `Error:` (two lines; the whole of it on
+ * hover), and, for whoever gets the Activity tab, a copy of its diagnostic block and a way to it,
+ * except on the tab itself, whose own band copies it. It leaves on its own once the display moves
+ * on.
  */
 export function AgentErrorBanner({
   agent,
   display,
-  failureReason,
   onActivityTab,
   onViewLogs,
 }: {
   agent: AgentDiagnosticFacts;
-  display?: AgentDisplaySnapshot;
-  failureReason?: string | null;
+  display: AgentDisplaySnapshot;
   /** The Activity tab is open: the banner leaves the copy to its band. */
   onActivityTab: boolean;
   /** Opens the Activity tab; absent when the viewer cannot see it, and the diagnostics copy (which
    * reads the tab's feed) goes with it. */
   onViewLogs?: () => void;
 }) {
-  // "Error: <detail>", or the typed failure reason label when no live error activity snapshot is held.
-  const label = display ? agentDisplay(display).label : failureReasonText(failureReason ?? "");
+  // "Error: <detail>", the same label the DM header and the Activity log give this state.
+  const label = agentDisplay(display).label;
   return (
     <div
       role="status"

@@ -120,7 +120,7 @@ test("an authorization failure naming RUNTIME_UNAVAILABLE explains the unavailab
     ),
     "Kiro",
   );
-  expect(activity.runtimeError.errorReason).toBe("runtime_unavailable");
+  expect(activity.runtimeError.errorReason).toBe("agent_authorization_failed");
   expect(activity.detail).toContain(
     "The configured runtime is not available on this Computer, or is not shared with this Agent's owner.",
   );

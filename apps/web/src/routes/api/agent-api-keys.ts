@@ -132,16 +132,21 @@ export const Route = createFileRoute("/api/agent-api-keys")({
           return Response.json({ error: "forbidden" }, { status: 403 });
         try {
           const visibility = new ComputerRuntimeVisibility(new PrismaComputerRuntimeRepository(db));
-          const selection = await visibility.checkSelection(
-            { userId: agent.ownerId, workspaceId: agent.workspaceId },
-            principal.computerId,
-            parseAgentRuntimeConfig(agent.runtimeConfig).runtime,
-          );
-          if (!selection.ok) {
+          if (
+            !(await visibility.canSelect(
+              { userId: agent.ownerId, workspaceId: agent.workspaceId },
+              principal.computerId,
+              parseAgentRuntimeConfig(agent.runtimeConfig).runtime,
+            ))
+          )
             // The daemon relays this `code` to the Agent: a launch refused because the
-            // Computer's runtime is missing, unusable, or private is not a permissions failure.
-            return errorResponse(selection.code, selection.error, 403, false);
-          }
+            // Computer's runtime is missing or too old is not a permissions failure.
+            return errorResponse(
+              "RUNTIME_UNAVAILABLE",
+              "the configured runtime is not available on this Computer",
+              403,
+              false,
+            );
           await new AgentControl(
             new PrismaAgentControlStore(db),
             createCentrifugoServerApi(),

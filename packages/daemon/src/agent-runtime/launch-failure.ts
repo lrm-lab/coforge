@@ -66,14 +66,6 @@ function ownLaunchFailureTrace(error: unknown): LaunchFailureTrace | undefined {
 export const LAUNCH_FAILURE_REASON = {
   /** The daemon could not obtain the Agent's launch configuration and API key from the server. */
   AGENT_AUTHORIZATION_FAILED: "agent_authorization_failed",
-  /** The configured runtime is marked private and not shared with this Agent's owner. */
-  RUNTIME_PRIVATE: "runtime_private",
-  /** The configured runtime is not installed on this Computer. */
-  RUNTIME_NOT_INSTALLED: "runtime_not_installed",
-  /** The configured runtime is not usable on this Computer. */
-  RUNTIME_UNUSABLE: "runtime_unusable",
-  /** The configured runtime is not available on this Computer (generic fallback). */
-  RUNTIME_UNAVAILABLE: "runtime_unavailable",
   /** The spawner could not find the runtime's executable on the Agent's PATH. */
   RUNTIME_NOT_FOUND: "runtime_not_found",
   /** The runtime's CLI is older than the version CoForge supports. */
@@ -96,10 +88,6 @@ export type LaunchFailureReason =
 
 const TYPED_REASONS: readonly LaunchFailureReason[] = [
   LAUNCH_FAILURE_REASON.AGENT_AUTHORIZATION_FAILED,
-  LAUNCH_FAILURE_REASON.RUNTIME_PRIVATE,
-  LAUNCH_FAILURE_REASON.RUNTIME_NOT_INSTALLED,
-  LAUNCH_FAILURE_REASON.RUNTIME_UNUSABLE,
-  LAUNCH_FAILURE_REASON.RUNTIME_UNAVAILABLE,
   LAUNCH_FAILURE_REASON.RUNTIME_NOT_FOUND,
   LAUNCH_FAILURE_REASON.RUNTIME_VERSION_TOO_OLD,
   LAUNCH_FAILURE_REASON.RUNTIME_START_FAILED,
@@ -116,12 +104,6 @@ const TYPED_REASONS: readonly LaunchFailureReason[] = [
  */
 export const NON_RETRYABLE_LAUNCH_FAILURE_REASONS: readonly LaunchFailureReason[] = [
   LAUNCH_FAILURE_REASON.RUNTIME_LOGIN_REQUIRED,
-  LAUNCH_FAILURE_REASON.RUNTIME_PRIVATE,
-  LAUNCH_FAILURE_REASON.RUNTIME_NOT_INSTALLED,
-  LAUNCH_FAILURE_REASON.RUNTIME_UNUSABLE,
-  LAUNCH_FAILURE_REASON.RUNTIME_UNAVAILABLE,
-  LAUNCH_FAILURE_REASON.AGENT_ENVIRONMENT_INVALID,
-  LAUNCH_FAILURE_REASON.MODEL_PROVIDER_NOT_CONFIGURED,
 ];
 
 /** Whether a failed launch is one no retry can fix. */
@@ -163,22 +145,7 @@ function namesVersionRefusal(error: AgentAuthorizationError): boolean {
 }
 
 /** The launch failure reason a typed error carries, or `runtime_spawn_failed`. */
-export function launchFailureReason(error: unknown): LaunchFailureReason {
-  const upstream =
-    error instanceof AgentAuthorizationError
-      ? error.upstreamCode
-      : error && typeof error === "object" && "upstreamCode" in error
-        ? (error as { upstreamCode?: string }).upstreamCode
-        : error instanceof Error &&
-            error.cause &&
-            typeof error.cause === "object" &&
-            "upstreamCode" in error.cause
-          ? (error.cause as { upstreamCode?: string }).upstreamCode
-          : undefined;
-  if (upstream === "RUNTIME_PRIVATE") return LAUNCH_FAILURE_REASON.RUNTIME_PRIVATE;
-  if (upstream === "RUNTIME_NOT_INSTALLED") return LAUNCH_FAILURE_REASON.RUNTIME_NOT_INSTALLED;
-  if (upstream === "RUNTIME_UNUSABLE") return LAUNCH_FAILURE_REASON.RUNTIME_UNUSABLE;
-  if (upstream === "RUNTIME_UNAVAILABLE") return LAUNCH_FAILURE_REASON.RUNTIME_UNAVAILABLE;
+function launchFailureReason(error: unknown): LaunchFailureReason {
   return (
     TYPED_REASONS.find((reason) => hasErrorCode(error, reason)) ??
     LAUNCH_FAILURE_REASON.RUNTIME_SPAWN_FAILED
@@ -195,28 +162,6 @@ function launchFailureDetail(
   runtimeName: string,
 ): string {
   switch (reason) {
-    case LAUNCH_FAILURE_REASON.RUNTIME_PRIVATE:
-      return (
-        "The configured runtime is marked private on this Computer, and is not shared with this " +
-        "Agent's owner. Make sure the runtime is marked public in Computer settings, or choose a " +
-        "different runtime."
-      );
-    case LAUNCH_FAILURE_REASON.RUNTIME_NOT_INSTALLED:
-      return (
-        `${runtimeName} is not installed on this Computer. Install ${runtimeName}, then start ` +
-        "the Agent again."
-      );
-    case LAUNCH_FAILURE_REASON.RUNTIME_UNUSABLE:
-      return (
-        `${runtimeName} is not usable on this Computer. Check its status in Computer settings, ` +
-        "then start the Agent again."
-      );
-    case LAUNCH_FAILURE_REASON.RUNTIME_UNAVAILABLE:
-      return (
-        "The configured runtime is not available on this Computer, or is not shared with this " +
-        "Agent's owner. Make sure the runtime is installed and marked public on this Computer, " +
-        "or choose a different runtime."
-      );
     case LAUNCH_FAILURE_REASON.AGENT_AUTHORIZATION_FAILED: {
       const authorization = error instanceof AgentAuthorizationError ? error : undefined;
       // One reason code, three different situations (task #155): only the server naming a
