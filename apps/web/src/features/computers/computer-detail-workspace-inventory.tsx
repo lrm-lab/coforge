@@ -33,6 +33,8 @@ export function ComputerDetailWorkspaceInventory({
 }) {
   const hydrated = useHydrated();
   const [deleteTarget, setDeleteTarget] = useState<ComputerAgentWorkspaceScan | undefined>();
+  // The Computer did not answer: every Agent keeps a row without a directory, said once above.
+  const unanswered = snapshot?.workspaces.some((item) => item.status === "unavailable") ?? false;
   // Only a directory the Computer listed is known to remain on disk.
   const deletedCount = snapshot
     ? snapshot.workspaces.filter((item) => item.state === "deleted" && item.status === "present")
@@ -75,10 +77,16 @@ export function ComputerDetailWorkspaceInventory({
       {snapshot &&
         (snapshot.workspaces.length ? (
           <>
-            {deletedCount > 0 && (
+            {unanswered ? (
               <p className="py-3 text-sm text-tertiary">
-                {m.computer_agent_workspaces_deleted_summary({ count: String(deletedCount) })}
+                {m.computer_agent_workspace_unavailable()}
               </p>
+            ) : (
+              deletedCount > 0 && (
+                <p className="py-3 text-sm text-tertiary">
+                  {m.computer_agent_workspaces_deleted_summary({ count: String(deletedCount) })}
+                </p>
+              )
             )}
             <ul className="divide-y divide-secondary">
               {snapshot.workspaces.map((workspace) => (
@@ -97,23 +105,25 @@ export function ComputerDetailWorkspaceInventory({
                           : m.computer_agent_workspace_active()}
                       </span>
                     </div>
-                    <p className="mt-1 truncate font-mono text-xs text-tertiary">
-                      {workspace.rootPath}
-                    </p>
-                    <p className="mt-1 truncate text-xs text-tertiary">
-                      {workspace.status === "present"
-                        ? workspaceStatistics(workspace)
-                        : m.computer_agent_workspace_unavailable()}
-                      {hydrated &&
-                        workspace.modifiedAtMs > 0 &&
-                        ` · ${m.computer_agent_workspace_modified({
-                          date: formatCalendarDate(
-                            new Date(workspace.modifiedAtMs),
-                            timeZone,
-                            getLocale(),
-                          ),
-                        })}`}
-                    </p>
+                    {workspace.status === "present" && (
+                      <>
+                        <p className="mt-1 truncate font-mono text-xs text-tertiary">
+                          {workspace.rootPath}
+                        </p>
+                        <p className="mt-1 truncate text-xs text-tertiary">
+                          {workspaceStatistics(workspace)}
+                          {hydrated &&
+                            workspace.modifiedAtMs > 0 &&
+                            ` · ${m.computer_agent_workspace_modified({
+                              date: formatCalendarDate(
+                                new Date(workspace.modifiedAtMs),
+                                timeZone,
+                                getLocale(),
+                              ),
+                            })}`}
+                        </p>
+                      </>
+                    )}
                   </div>
                   {canDelete && (
                     // Deleting does not depend on the scan answering, as on an archived Agent's
