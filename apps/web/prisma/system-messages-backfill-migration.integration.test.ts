@@ -1,6 +1,7 @@
 import { afterAll, expect, test } from "bun:test";
 import { readdir } from "node:fs/promises";
 import { Pool, type PoolClient } from "pg";
+import { isSystemNotice } from "#src/server/conversations/system-notices.server";
 
 const connectionString =
   Bun.env.MIGRATION_TEST_DATABASE_URL ?? Bun.env.CHANNEL_TEST_DATABASE_URL ?? Bun.env.DATABASE_URL;
@@ -53,10 +54,23 @@ async function withSchema(run: (client: PoolClient) => Promise<void>) {
     await client.query(`CREATE SCHEMA "${schema}"`);
     await client.query(`SET search_path TO "${schema}"`);
     await client.query(
-      `CREATE TABLE messages (id uuid PRIMARY KEY, "conversationId" uuid, "workspaceId" uuid, "senderMemberId" uuid, body text)`,
+      `CREATE TABLE messages (id uuid PRIMARY KEY, "conversationId" uuid, "workspaceId" uuid, "senderMemberId" uuid, "threadRootId" uuid, body text)`,
     );
     await client.query(
       `CREATE TABLE system_messages ("messageId" uuid PRIMARY KEY, "conversationId" uuid, "workspaceId" uuid, kind text, params jsonb, "createdAt" timestamp NOT NULL DEFAULT now())`,
+    );
+    await client.query(
+      `CREATE TABLE users (id uuid PRIMARY KEY, username text, "displayName" text)`,
+    );
+    await client.query(`CREATE TABLE agents (id uuid PRIMARY KEY, name text, "displayName" text)`);
+    await client.query(
+      `CREATE TABLE conversation_members (id uuid PRIMARY KEY, "workspaceId" uuid, "userId" uuid, "agentId" uuid)`,
+    );
+    await client.query(
+      `CREATE TABLE conversations (id uuid PRIMARY KEY, "workspaceId" uuid, "channelName" text)`,
+    );
+    await client.query(
+      `CREATE TABLE tasks (id uuid PRIMARY KEY, "workspaceId" uuid, number int, title text, "messageId" uuid)`,
     );
     await run(client);
   } finally {
@@ -67,7 +81,7 @@ async function withSchema(run: (client: PoolClient) => Promise<void>) {
 
 test("the backfill migration exists and carries its guard", () => {
   expect(migrationName).toBeDefined();
-  expect(migration).toMatch(/unclassified > 50/);
+  expect(migration).toMatch(/unparseable > 50/);
   expect(migration).toMatch(/RAISE EXCEPTION/);
 });
 
@@ -97,6 +111,10 @@ test.skipIf(!connectionString)(
           SYSTEM_ROWS.filter(([, , expected]) => expected === kind).length,
         );
       expect(kinds.unclassified).toBeUndefined();
+      const stored = await client.query<{ kind: string; params: unknown }>(
+        `SELECT kind, params FROM system_messages`,
+      );
+      for (const row of stored.rows) expect(isSystemNotice(row), row.kind).toBe(true);
       const missing = await client.query(
         `SELECT count(*)::int AS count FROM messages m
          LEFT JOIN system_messages s ON s."messageId" = m.id
@@ -117,7 +135,7 @@ test.skipIf(!connectionString)(
            VALUES (gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), NULL, $1)`,
           [`unknown notice ${index}`],
         );
-      await expect(client.query(migration)).rejects.toThrow(/unclassified/);
+      await expect(client.query(migration)).rejects.toThrow(/unparseable/);
       const rows = await client.query(`SELECT count(*)::int AS count FROM system_messages`);
       expect(rows.rows[0]!.count).toBe(0);
     }),

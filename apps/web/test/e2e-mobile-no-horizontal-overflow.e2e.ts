@@ -91,6 +91,19 @@ test("a phone viewport never scrolls the message stream sideways, even with long
           sequence,
         },
       });
+      // A system message without a structured row would fail the backfill's guard on a local
+      // database this e2e seeded. Its body is deliberately unparseable, so it is legacy text.
+      await db.systemMessage.upsert({
+        where: { messageId: id },
+        update: { kind: "legacy_text", params: { body } },
+        create: {
+          messageId: id,
+          conversationId: channel.id,
+          workspaceId: channel.workspaceId,
+          kind: "legacy_text",
+          params: { body },
+        },
+      });
       sequence += 1;
     }
 
