@@ -92,6 +92,9 @@ these modules have their own rules in `src/server/centrifugo/AGENTS.md`.
 - `agent-history-boundary.server.ts` is the one contiguity rule for an Agent
   history page: the `modelSeenUpToSeq` it reports and the read-through it moves.
   A page read from an explicit `fromSequence` never joins.
+- `agent-task-freshness.server.ts` applies the same gate to Agent task writes:
+  `create`/`claim`/`assign` answer `state: "held"` over pending context,
+  `unclaim`/`update`/`amend` execute and carry it in `recentUnread`.
 
 ## Stopped Agents
 

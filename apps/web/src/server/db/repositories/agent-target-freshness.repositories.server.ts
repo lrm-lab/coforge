@@ -27,6 +27,23 @@ export async function agentTargetFreshness(
   target: string,
 ) {
   const resolved = await resolveAgentSendTarget(ports, workspaceId, agentId, target);
+  return agentResolvedTargetFreshness(ports, workspaceId, agentId, resolved);
+}
+
+/** `agentTargetFreshness` for an already-resolved target: the task board's gate resolves through
+ * `resolveTaskScope`, never through the send path that may create a direct conversation or join a
+ * channel. */
+export function agentResolvedTargetFreshness(
+  ports: Pick<DirectConversationPorts, "db">,
+  workspaceId: string,
+  agentId: string,
+  resolved: {
+    conversationId: string;
+    threadRootId: string | null;
+    canonicalTarget: string;
+    isChannel: boolean;
+  },
+) {
   const { conversationId, threadRootId, canonicalTarget, isChannel } = resolved;
   // One membership lookup for every read of this send. Its read-through may predate this send's
   // own advance, which only raises it: the planner takes the larger of the two.

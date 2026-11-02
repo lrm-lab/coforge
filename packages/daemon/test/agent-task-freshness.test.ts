@@ -222,8 +222,8 @@ describe("Agent Task freshness", () => {
     try {
       await harness.deliver(5, "#tasks");
       const command = {
-        operation: "update" as const,
-        idempotencyKey: "update",
+        operation: "claim" as const,
+        idempotencyKey: "claim",
         target: "#tasks",
         number: 7,
       };
@@ -283,6 +283,94 @@ describe("Agent Task freshness", () => {
       );
       expect(result).toBe(upstream);
       expect(messageCalls).toHaveLength(0);
+    } finally {
+      await harness.runtime.stop();
+    }
+  });
+
+  test("an attached write forwards the seen boundary and consumes only after it answers", async () => {
+    const messageCalls: AgentMessageRequest[] = [];
+    const taskCalls: TaskRequest[] = [];
+    const harness = await messageHarness(
+      async (request) => {
+        messageCalls.push(request);
+        return {
+          idempotencyKey: request.idempotencyKey,
+          accepted: true,
+          attentionCount: 0,
+          messages: [],
+        };
+      },
+      async (request) => {
+        taskCalls.push(request);
+        return {
+          idempotencyKey: request.idempotencyKey,
+          tasks: [],
+          ...(taskCalls.length === 1
+            ? { recentUnread: [messageRecord(4, "@alice", "#tasks")], newMessageCount: 1 }
+            : {}),
+        };
+      },
+    );
+    try {
+      await harness.deliver(4, "#tasks");
+      // No local read and no hold: an attached write goes straight through.
+      const first = await harness.runtime.agentTask(
+        harness.context,
+        { operation: "update", idempotencyKey: "update", target: "#tasks", number: 7 },
+        harness.apiKey,
+      );
+      expect(first).toMatchObject({ newMessageCount: 1 });
+      expect(messageCalls).toHaveLength(0);
+      expect(taskCalls[0]).not.toHaveProperty("seenUpToSeq");
+
+      // The attached window was shown and the write answered: the consumed frontier moved over
+      // it, so the next write reports the boundary and the same delivery no longer holds a claim.
+      const second = await harness.runtime.agentTask(
+        harness.context,
+        { operation: "claim", idempotencyKey: "claim", target: "#tasks", number: 7 },
+        harness.apiKey,
+      );
+      expect(second).toMatchObject({ tasks: [] });
+      expect(taskCalls[1]).toMatchObject({ seenUpToSeq: 4 });
+    } finally {
+      await harness.runtime.stop();
+    }
+  });
+
+  test("a failed attached write does not consume what it never showed", async () => {
+    const taskCalls: TaskRequest[] = [];
+    const harness = await messageHarness(
+      async (request) => ({
+        idempotencyKey: request.idempotencyKey,
+        accepted: true,
+        attentionCount: 1,
+        messages: [messageRecord(4, "@alice", request.target)],
+      }),
+      async (request) => {
+        taskCalls.push(request);
+        if (taskCalls.length === 1) throw new Error("upstream 503");
+        return { idempotencyKey: request.idempotencyKey, tasks: [] };
+      },
+    );
+    try {
+      await harness.deliver(4, "#tasks");
+      await expect(
+        harness.runtime.agentTask(
+          harness.context,
+          { operation: "amend", idempotencyKey: "amend", target: "#tasks", number: 7 },
+          harness.apiKey,
+        ),
+      ).rejects.toThrow("upstream 503");
+
+      // The failed write showed nothing: the pending delivery still holds the next claim.
+      const held = await harness.runtime.agentTask(
+        harness.context,
+        { operation: "claim", idempotencyKey: "claim", target: "#tasks", number: 7 },
+        harness.apiKey,
+      );
+      expect(held).toMatchObject({ state: "held" });
+      expect(taskCalls).toHaveLength(1);
     } finally {
       await harness.runtime.stop();
     }

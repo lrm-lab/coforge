@@ -1,6 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type { AgentTaskRequest } from "@lrm/coforge-sdk/agent";
-import { TASK_STATUSES, type TaskPrincipal, type TaskResult } from "@lrm/coforge-sdk/internal";
+import {
+  MAX_MESSAGE_SEQUENCE,
+  SEEN_EXACT_SEQS_LIMIT,
+  TASK_STATUSES,
+  type TaskPrincipal,
+  type TaskResult,
+} from "@lrm/coforge-sdk/internal";
+import {
+  agentTaskBoardFreshness,
+  executeAgentTaskWithFreshness,
+} from "#src/server/agents/agent-task-freshness.server";
 import {
   agentTaskPrincipal,
   type AgentTaskPrincipal,
@@ -84,6 +94,11 @@ const taskRequestSchema = z
       })
       .optional(),
     freshnessContextMode: z.enum(["inline", "withheld"]).optional(),
+    seenUpToSeq: z.number().int().nonnegative().max(MAX_MESSAGE_SEQUENCE).optional(),
+    seenExactSeqs: z
+      .array(z.number().int().positive().max(MAX_MESSAGE_SEQUENCE))
+      .max(SEEN_EXACT_SEQS_LIMIT)
+      .optional(),
     alongside: z.boolean().optional(),
     attachmentId: z.uuid().optional(),
     status: z.enum(taskStatuses).optional(),
@@ -98,10 +113,11 @@ export async function handleAgentTaskPost(
   board: {
     execute(principal: TaskPrincipal, command: AgentTaskRequest): Promise<TaskResult>;
   },
+  freshness?: Parameters<typeof executeAgentTaskWithFreshness>[0]["freshness"],
 ): Promise<Response> {
   try {
     const command = taskRequestSchema.parse(await readAgentJsonBody(request));
-    const result = await board.execute(principal, command);
+    const result = await executeAgentTaskWithFreshness({ board, freshness }, principal, command);
     return Response.json({ ...result, idempotencyKey: command.idempotencyKey });
   } catch (error) {
     if (error instanceof SourceMessageTaken) return agentErrorResponse(error);
@@ -158,6 +174,7 @@ export const Route = createFileRoute("/api/agent/v1/tasks")({
             reader: "agent",
             realtime: new CentrifugoConversationRealtime(createCentrifugoServerApi()),
           }),
+          (command) => agentTaskBoardFreshness(db, agentTaskPrincipal(principal), command),
         ),
     },
   },

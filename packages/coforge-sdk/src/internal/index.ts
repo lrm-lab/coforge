@@ -150,6 +150,7 @@ export {
 export { ACTIVITY_SUBAGENT_TYPE_MAX, parseActivityEntries } from "./activity-entries";
 export {
   HELD_CONTEXT_LIMIT,
+  MAX_MESSAGE_SEQUENCE,
   SEEN_EXACT_SEQS_LIMIT,
   isSeenExactSeqs,
   mergeSeenExactSeqs,

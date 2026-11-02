@@ -101,10 +101,14 @@ Read the [message attention and delivery rules](../../../../docs/agents/daemon-m
   claim/review applies to complex, coordinated, or already-shared Tasks, not
   ordinary requests, and that standing guidance lives once in
   `code-agent/agent-instructions.ts`.
-- Apply the attention/model-visible preflight to Task `claim` and status
-  `update` only; `amend` gets no local preflight. After the preflight, forward
-  without storing Task state or interpreting claims, status transitions, or
-  human approval. Reviewer-isolation holds expose counts only.
+- Apply the attention/model-visible preflight to Task `create`, `claim` and
+  `assign` (`task-write-freshness.ts`); `unclaim`, `update` and `amend` go
+  through and let the server attach what the Agent had not seen. Every gated
+  write forwards the model-visible boundary (`seenUpToSeq`, `seenExactSeqs`)
+  so the route re-decides authoritatively, and the consumed frontier moves
+  over shown context only after the write answered. After the preflight,
+  forward without storing Task state or interpreting claims, status
+  transitions, or human approval. Reviewer-isolation holds expose counts only.
 
 ## Skills metadata
 

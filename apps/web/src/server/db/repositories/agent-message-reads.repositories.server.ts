@@ -63,7 +63,7 @@ export async function advanceAgentReadThrough(
 }
 
 export async function advanceResolvedAgentReadThrough(
-  ports: DirectConversationPorts,
+  ports: Pick<DirectConversationPorts, "db">,
   workspaceId: string,
   agentId: string,
   { conversationId, threadRootId }: ResolvedAgentTarget,
@@ -118,7 +118,7 @@ export async function advanceResolvedAgentReadThrough(
 
 /** These messages, oldest first, as Agent-facing records. */
 export async function agentMessagesByIds(
-  ports: DirectConversationPorts,
+  ports: Pick<DirectConversationPorts, "db">,
   ids: readonly { id: string }[],
   canonicalTarget: string,
   reader: { workspaceId: string; agentId: string },

@@ -1,3 +1,4 @@
+import { isSeenExactSeqs, MAX_MESSAGE_SEQUENCE } from "./freshness-decision";
 import {
   TASK_STATUSES,
   type TaskCommand,
@@ -99,6 +100,15 @@ export function validateTaskRequest(value: TaskRequest): void {
     throw new Error("invalid Task number");
   if (value.expectedRevision !== undefined && !isPgNonnegative(value.expectedRevision))
     throw new Error("invalid Task revision");
+  if (
+    value.seenUpToSeq !== undefined &&
+    (!Number.isSafeInteger(value.seenUpToSeq) ||
+      value.seenUpToSeq < 0 ||
+      value.seenUpToSeq > MAX_MESSAGE_SEQUENCE)
+  )
+    throw new Error("invalid Task seen boundary");
+  if (value.seenExactSeqs !== undefined && !isSeenExactSeqs(value.seenExactSeqs))
+    throw new Error("invalid Task exact seen sequences");
   if (value.messageId !== undefined && !isNonblank(value.messageId))
     throw new Error("invalid Task message");
   if (

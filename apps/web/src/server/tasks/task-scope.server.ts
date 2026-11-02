@@ -8,7 +8,7 @@ import { MEMBER_SELECT, type TaskBoardPorts } from "./task-board-ports.server";
 import { agentDirectKey } from "#src/features/conversations/direct-key";
 
 export async function resolveTaskScope(
-  ports: TaskBoardPorts,
+  ports: Pick<TaskBoardPorts, "db">,
   principal: TaskPrincipal,
   command: TaskCommand,
 ) {

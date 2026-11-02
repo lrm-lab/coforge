@@ -10,7 +10,7 @@ import {
   type TaskView,
 } from "@lrm/coforge-sdk/internal";
 import { CliError } from "#src/cli-error";
-import { formatUtcTimestamp } from "#src/message-format";
+import { formatMessageLine, formatUtcTimestamp } from "#src/message-format";
 import { shortId } from "#src/short-id";
 import { fenceMessageBody } from "#src/message-body-format";
 
@@ -333,6 +333,22 @@ export function claimRefusal(target: string, result: TaskResult): CliError | und
   });
 }
 
+/** The unread context a task write that proceeded anyway (`unclaim`/`update`/`amend`) attached:
+ * withheld mode reports a count, inline mode the messages themselves. */
+function appendTaskRecentContext(result: TaskResult, rendered: string): string {
+  if (result.freshnessContextMode === "withheld") {
+    const count = result.withheldMessageCount ?? result.newMessageCount ?? 0;
+    return `${rendered}\n\nReviewer-isolation: ${count} newer ${count === 1 ? "message" : "messages"} withheld.`;
+  }
+  if (!result.recentUnread?.length) return rendered;
+  return [
+    rendered,
+    "",
+    "--- New messages you may have missed ---",
+    ...result.recentUnread.map(formatMessageLine),
+  ].join("\n");
+}
+
 /** What a `task` subcommand prints for the server's answer. */
 export function formatTaskResult(command: TaskCommand, result: TaskResult): string {
   const target = command.target!;
@@ -354,7 +370,7 @@ export function formatTaskResult(command: TaskCommand, result: TaskResult): stri
     case "receipt":
       return formatResourceReceiptRecorded(target, result);
     case "amend":
-      return formatTaskAmended(result);
+      return appendTaskRecentContext(result, formatTaskAmended(result));
     case "claim": {
       const refusal = claimRefusal(target, result);
       if (refusal) throw refusal;
@@ -366,12 +382,12 @@ export function formatTaskResult(command: TaskCommand, result: TaskResult): stri
     case "convert":
       return formatTaskConverted(target, task);
     case "unclaim":
-      return formatTaskUnclaimed(task);
+      return appendTaskRecentContext(result, formatTaskUnclaimed(task));
     case "assign":
     case "unassign":
       return formatTaskAssigned(task);
     case "update":
-      return formatTaskStatusUpdated(task);
+      return appendTaskRecentContext(result, formatTaskStatusUpdated(task));
     default:
       throw new Error(`no output is defined for task ${command.operation}`);
   }

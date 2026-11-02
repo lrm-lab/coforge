@@ -10,7 +10,7 @@ import type {
   TaskResult,
 } from "@lrm/coforge-sdk/internal";
 import type { MintAppItem } from "#src/agent-app-inbox/agent-app-inbox";
-import { heldTaskResult } from "./held-task-result";
+import { taskWriteWithFreshness } from "./task-write-freshness";
 import { reminderDueItemId } from "#src/agent-app-inbox/registry";
 import { isAgentApiKey } from "#src/credentials/agent-api-key";
 import {
@@ -45,20 +45,20 @@ export async function agentTask(
   const transport = ports.transport();
   if (!transport.agentTask) throw new Error("daemon connection is not connected");
   if (!isAgentApiKey(agentApiKey)) throw new Error("Agent API key is missing");
-  const freshnessAction = command.operation === "claim" || command.operation === "update";
-  if (freshnessAction && command.target) {
-    const held = await heldTaskResult(
+  if (command.target) {
+    const result = await taskWriteWithFreshness(
       {
         messageAttention: ports.messageAttention,
         agentMessage: transport.agentMessage?.bind(transport),
         workspaceId: ports.workspaceId,
+        agentTask: transport.agentTask.bind(transport),
       },
       agentId,
       command,
       command.target,
       agentApiKey,
     );
-    if (held) return held;
+    if (result) return result;
   }
   return transport.agentTask({ ...command }, agentApiKey);
 }
