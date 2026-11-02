@@ -56,6 +56,7 @@
   "channel_settings_description": "描述",
   "channel_settings_description_placeholder": "这个群聊是做什么的？",
   "channel_settings_project": "项目",
+  "channel_settings_project_error": "项目没有改成，请重试。",
   "channel_settings_coordinator_title": "协调模式",
   "channel_settings_coordinator_label": "协调 Agent",
   "channel_settings_coordinator_hint": "新的顶层请求会先发送给此 Agent。",

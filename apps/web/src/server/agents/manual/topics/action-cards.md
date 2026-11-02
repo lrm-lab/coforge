@@ -14,7 +14,7 @@ COFORGEACTION
 Supported kinds include:
 
 - `channel:create` (`name`, `visibility` public or private, `description?`, `initialHumans?`,
-  `initialAgents?`, `draftHint?`)
+  `initialAgents?`, `project?`, `draftHint?`)
 - `agent:create` (`name`, `description?`, `suggestedComputer?`, `requiredComputer?` — at most one
   of the two, `draftHint?`)
 - `channel:add_member` (`channel`, `humans?`, `agents?` — at least one non-empty, `draftHint?`)
@@ -29,6 +29,10 @@ Only set `requiredComputer` when the human explicitly said the new Agent must ru
 Computer; use `suggestedComputer` for a soft preference.
 
 `"visibility": "private"` on `channel:create` makes a channel only its members can read.
+
+`project` on `channel:create` suggests a Project for the channel by its name or slug. It only
+preselects the form a human reviews; they may pick another Project or none. A Project that does not
+exist in the Workspace, or whose name two Projects share (use its slug then), fails the command.
 
 `coforge action prepare` only records the card as a message in the target conversation for a
 human to review; it does not create the channel, Agent, or membership itself. Do not say you

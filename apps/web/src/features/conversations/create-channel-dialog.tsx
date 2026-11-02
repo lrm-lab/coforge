@@ -54,6 +54,9 @@ type CreateChannelDialogProps = {
   /** Opens a channel the dialog created (the picker's result state and success). */
   onOpenChannel?: (channelId: string) => void | Promise<void>;
   projects?: { id: string; name: string; slug: string }[];
+  /** Preselects a Project, e.g. the one an Agent's card suggests; ignored when it is not in
+   * `projects`. */
+  defaultProjectId?: string;
   /** Prefills, but does not force, the channel name — e.g. the project slug when
    * creating a project's first discussion group. */
   defaultName?: string;
@@ -78,6 +81,7 @@ export function CreateChannelDialog({
   onCreate,
   onOpenChannel,
   projects = [],
+  defaultProjectId,
   defaultName = "",
   initialMembers,
   memberPicker = false,
@@ -97,6 +101,7 @@ export function CreateChannelDialog({
     onOpenChannel,
     onOpenChange,
     projects,
+    defaultProjectId,
     defaultName,
     initialMembers,
     minMembers,
@@ -139,6 +144,7 @@ type CreateChannelFormProps = Pick<
   | "onOpenChannel"
   | "onOpenChange"
   | "projects"
+  | "defaultProjectId"
   | "defaultName"
   | "initialMembers"
   | "minMembers"
@@ -158,6 +164,7 @@ function CreateChannelForm({
   onOpenChannel,
   onOpenChange,
   projects = [],
+  defaultProjectId,
   defaultName = "",
   initialMembers,
   minMembers = 0,
@@ -169,7 +176,9 @@ function CreateChannelForm({
   close,
 }: CreateChannelFormProps) {
   const [name, setName] = useState(defaultName);
-  const [projectId, setProjectId] = useState("");
+  const [projectId, setProjectId] = useState(() =>
+    projects.some((project) => project.id === defaultProjectId) ? defaultProjectId! : "",
+  );
   const [makePrivate, setMakePrivate] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string>>(() =>
     initialKeys(initialMembers),

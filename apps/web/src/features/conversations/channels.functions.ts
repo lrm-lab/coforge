@@ -268,6 +268,14 @@ export const setPublicChannelCoordinator = createServerFn({ method: "POST" })
     return channels.setCoordinator(workspaceId, userId, data.channelId, data.coordinatorAgentId);
   });
 
+export const setPublicChannelProject = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(channelInput.extend({ projectId: z.uuid().nullable() }))
+  .handler(async ({ data, context }) => {
+    const { channels, workspaceId, userId } = channelScope(context);
+    return channels.setProject(workspaceId, { userId }, data.channelId, data.projectId);
+  });
+
 export const sendPublicChannelMessage = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(

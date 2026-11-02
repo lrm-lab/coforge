@@ -134,7 +134,14 @@ export async function findChannelById(
 ) {
   const channel = await db.conversation.findFirst({
     where: channelByIdWhere(workspaceId, channelId),
-    select: { id: true, channelName: true, description: true, archivedAt: true, visibility: true },
+    select: {
+      id: true,
+      channelName: true,
+      description: true,
+      archivedAt: true,
+      visibility: true,
+      projectId: true,
+    },
   });
   return requireReadableChannel(db, workspaceId, reader, channel);
 }

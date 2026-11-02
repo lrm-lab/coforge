@@ -47,6 +47,8 @@ import { getCloudDesktopOrigin } from "#src/features/computers/cloud-desktop-ori
 import { cloudDesktopUrl, openCloudDesktopWindow } from "#src/features/computers/cloud-desktop-url";
 import { formatAgentProfileParam } from "#src/features/agents/profile-panel/profile-panel-search";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
+import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
+import { projectsQuery } from "#src/features/projects/project-tree-queries";
 import type { ActionCardRef, ActionCardView } from "#src/server/conversations/action-cards.server";
 
 function chipList(items: ActionCardRef[]) {
@@ -93,6 +95,13 @@ export function ActionCard({ card }: { card: ActionCardView }) {
   const [approving, setApproving] = useState(false);
   const isAppGrant = view.kind === "app:grant_agent";
   const isAppRegister = view.kind === "app:register";
+  // A channel card's dialog offers the Workspace's Projects, with the card's suggestion picked. The
+  // dialog opens once they have been read, so the suggestion is there when its form mounts.
+  const workspaceId = useCurrentWorkspaceId();
+  const projects = useQuery({
+    ...projectsQuery(workspaceId ?? ""),
+    enabled: view.kind === "channel:create" && Boolean(workspaceId),
+  });
   const isRecoverOwner = view.kind === "app:recover_owner";
   const create = useServerFn(createAgent);
   const loadComputers = useServerFn(listComputers);
@@ -427,11 +436,13 @@ export function ActionCard({ card }: { card: ActionCardView }) {
         </p>
       )}
 
-      {dialogOpen && view.kind === "channel:create" && (
+      {dialogOpen && view.kind === "channel:create" && !projects.isPending && (
         <CreateChannelDialog
           open
           onOpenChange={setDialogOpen}
           defaultName={view.name}
+          projects={projects.data}
+          defaultProjectId={view.suggestedProjectId}
           initialMembers={{ humans: view.initialHumans, agents: view.initialAgents }}
           onCreate={async (name, projectId, memberUserIds, memberAgentIds) => {
             await commitChannelCreate({

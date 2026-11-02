@@ -41,6 +41,9 @@ export type ActionCardView =
       description?: string;
       initialHumans: ActionCardRef[];
       initialAgents: ActionCardRef[];
+      /** The Project the Agent suggested, for the confirm dialog to preselect. It may no longer
+       * exist by the time the card is read. */
+      suggestedProjectId?: string;
       result?: { channelId: string };
     })
   | (ActionCardViewBase & {

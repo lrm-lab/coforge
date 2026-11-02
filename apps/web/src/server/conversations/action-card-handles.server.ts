@@ -20,7 +20,7 @@ export function bareHandle(value: string): string {
 
 /** A handle an action names that resolves to nothing in the Workspace (422, `INVALID_HANDLE`). */
 function unknownHandle(
-  kind: "human" | "agent" | "channel" | "computer",
+  kind: "human" | "agent" | "channel" | "computer" | "project",
   value: string,
   field: string,
 ) {
@@ -132,6 +132,33 @@ export class ActionCardHandles {
     });
     if (!channel) throw unknownHandle("channel", value, field);
     return channel.id;
+  }
+
+  /** A Project by slug or name (case-insensitive) or UUID. A name two Projects share is refused
+   * rather than guessed; the slug is unique and wins over a name. */
+  async resolveProject(workspaceId: string, value: string, field: string): Promise<string> {
+    const bare = value.trim();
+    const matches = await this.db.project.findMany({
+      where: {
+        workspaceId,
+        ...(UUID_PATTERN.test(bare)
+          ? { id: bare }
+          : { OR: [{ slug: bare }, { name: { equals: bare, mode: "insensitive" } }] }),
+      },
+      select: { id: true, slug: true },
+      take: 3,
+    });
+    const bySlug = matches.find((project) => project.slug === bare);
+    if (bySlug) return bySlug.id;
+    if (matches.length > 1)
+      throw new ActionCardError(
+        422,
+        "INVALID_HANDLE",
+        `project ${value} is ambiguous; use its slug`,
+        { field },
+      );
+    if (!matches[0]) throw unknownHandle("project", value, field);
+    return matches[0].id;
   }
 
   async resolveComputer(workspaceId: string, value: string, field: string): Promise<string> {

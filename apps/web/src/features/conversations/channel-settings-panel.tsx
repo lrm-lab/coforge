@@ -209,7 +209,11 @@ export function ChannelSettingsPanel({
                             archived={conversation.archived}
                           />
                         )}
-                        {conversation.project && <ProjectField project={conversation.project} />}
+                        <ProjectField
+                          conversation={conversation}
+                          canEdit={capabilities.update && !conversation.archived}
+                          onChanged={onChanged}
+                        />
                       </PanelSection>
                     )}
                     {capabilities.update && (

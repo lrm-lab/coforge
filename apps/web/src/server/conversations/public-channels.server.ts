@@ -25,6 +25,7 @@ import {
   setGeneralHidden,
 } from "./channel-lifecycle.server";
 import { mentionDirectory, mentionOutsiders } from "./channel-mentionables.server";
+import { changeChannelProject } from "./channel-project.server";
 import { channelUpdates, openChannel } from "./channel-page.server";
 import {
   setAgentMuted,
@@ -242,6 +243,15 @@ export class PublicChannels {
     patch: { name?: string; description?: string },
   ) {
     return changeChannelInfo(this.ports, workspaceId, actor, channelId, patch);
+  }
+
+  setProject(
+    workspaceId: string,
+    actor: ChannelActor,
+    channelId: string,
+    projectId: string | null,
+  ) {
+    return changeChannelProject(this.ports, workspaceId, actor, channelId, projectId);
   }
 
   generalHidden(workspaceId: string, userId: string) {
