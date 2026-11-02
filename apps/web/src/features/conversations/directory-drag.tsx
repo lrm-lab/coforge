@@ -402,13 +402,14 @@ export function DirectoryDragOverlay({
       dropAnimation={{ duration: 150, easing: "ease-out" }}
       // Overrides dnd-kit's own `top`/`left`; its transform (the pointer's travel) still applies.
       style={origin ? { top: origin.top, left: origin.left } : undefined}
+      className="pointer-events-none"
     >
       {active ? (
         <div
           aria-hidden="true"
           data-directory-drag-overlay
           style={{ width: origin?.width }}
-          className="pointer-events-none rounded-md bg-primary p-1 shadow-lg ring-1 ring-secondary"
+          className="rounded-md bg-primary p-1 shadow-lg ring-1 ring-secondary"
         >
           {active.group ? (
             // `px-4` + the overlay's `p-1` is the 1.25rem a title row insets its mark by, so the

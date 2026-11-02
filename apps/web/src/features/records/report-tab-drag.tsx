@@ -59,7 +59,7 @@ export function ReportTabDrag({
       }}
     >
       {children}
-      <DragOverlay dropAnimation={null}>
+      <DragOverlay dropAnimation={null} className="pointer-events-none">
         {active ? (
           <div
             aria-hidden="true"

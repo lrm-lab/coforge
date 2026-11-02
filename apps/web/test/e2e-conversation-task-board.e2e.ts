@@ -195,6 +195,15 @@ test("a conversation's Tasks tab is the Tasks page board, claims by moving and p
       `document.querySelector('section[aria-label=${JSON.stringify(column)}]').hasAttribute("data-drop-blocked")`;
     expect(await eval_(blockedColumn("In review"))).toBe(true);
     expect(await eval_(blockedColumn("In progress"))).toBe(false);
+    // The pointer, carrying the card, reads "not allowed" over that column: the card under it
+    // takes no pointer events, so the column's cursor shows through.
+    const cursorAt = ([x, y]: [number, number]) =>
+      eval_(`getComputedStyle(document.elementFromPoint(${x}, ${y})).cursor`);
+    const review = await centre('section[aria-label="In review"]');
+    await browser("mouse", "move", String(review[0]), String(review[1]));
+    expect(await cursorAt(review)).toBe("not-allowed");
+    await browser("mouse", "move", String(toX), String(toY));
+    expect(await cursorAt([toX, toY])).toBe("grabbing");
     await browser("mouse", "up");
     await waitFor(movedAndSaved(dragTitle, "In progress"));
     expect(await eval_(blockedColumn("In review"))).toBe(false);

@@ -218,8 +218,10 @@ export function TaskWorkflow<T extends TaskView>({
         )}
       </div>
       {/* The overlay takes the dragged card's own box: a board card's, or a list row's, so it
-          stays under the pointer either way. */}
-      <DragOverlay dropAnimation={null}>
+          stays under the pointer either way. dnd-kit leaves it hit-testable; it takes no pointer
+          events, so the pointer reads the column beneath it: "not allowed" over one it cannot go
+          to. */}
+      <DragOverlay dropAnimation={null} className="pointer-events-none">
         {active ? (
           <div
             className={cn(

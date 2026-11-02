@@ -5,8 +5,9 @@ let holders = 0;
 
 /**
  * Marks the document root (`html[data-drag-cursor]`) while `dragging` is true, so `styles.css` shows
- * one grabbing cursor over the whole page. A drag overlay takes no pointer events, so without it
- * the cursor follows whatever is under the pointer. Unmounting mid-drag also releases the mark.
+ * one grabbing cursor over the whole page; without it the cursor follows whatever is under the
+ * pointer. Give the DragOverlay `pointer-events-none`, so the place beneath it can say "not
+ * allowed" (`data-drop-blocked`). Unmounting mid-drag also releases the mark.
  * Native HTML5 drags cannot use this: the browser draws their cursor.
  */
 export function useDocumentDragCursor(dragging: boolean) {
