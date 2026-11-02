@@ -180,4 +180,69 @@ describe("ComputerRuntimeVisibility", () => {
       false,
     );
   });
+
+  test("checkSelection returns specific failure codes", async () => {
+    const { visibility } = fixture();
+    const member = { userId: "user-3", workspaceId: "workspace-1" };
+
+    // Not installed
+    expect(await visibility.checkSelection(member, "computer-1", "pi")).toEqual({
+      ok: false,
+      code: "RUNTIME_NOT_INSTALLED",
+      error: "the configured runtime is not installed on this Computer",
+    });
+
+    // Private to another user
+    expect(await visibility.checkSelection(member, "computer-2", "codex")).toEqual({
+      ok: false,
+      code: "RUNTIME_PRIVATE",
+      error: "the configured runtime is private and not shared with this Agent's owner",
+    });
+
+    // Public runtime succeeds
+    expect(await visibility.checkSelection(member, "computer-2", "claude-code")).toEqual({
+      ok: true,
+    });
+  });
+
+  test("setPublic resets affected agents' controlState when made public", async () => {
+    const resetCalls: {
+      workspaceId: string;
+      computerId: string;
+      provider: string;
+      errorCode: string;
+    }[] = [];
+    const base = fixture();
+    const repository: ComputerRuntimeVisibilityRepository = {
+      listInWorkspace: (ws) => base.visibility.list({ userId: "user-2", workspaceId: ws }),
+      findInWorkspace: (ws, comp, prov) =>
+        base.records.find(
+          (r) => r.workspaceId === ws && r.computerId === comp && r.provider === prov,
+        ),
+      findByIdInWorkspace: (ws, id) =>
+        base.records.find((r) => r.workspaceId === ws && r.id === id),
+      setPublic: async (id, isPublic) => {
+        const r = base.records.find((c) => c.id === id);
+        if (r) r.isPublic = isPublic;
+      },
+      resetAgentControlStateForRuntime: async (workspaceId, computerId, provider, errorCode) => {
+        resetCalls.push({ workspaceId, computerId, provider, errorCode });
+      },
+    };
+    const visibility = new ComputerRuntimeVisibility(repository);
+    await visibility.setPublic(
+      { userId: "user-2", workspaceId: "workspace-1" },
+      "other-private",
+      true,
+    );
+
+    expect(resetCalls).toEqual([
+      {
+        workspaceId: "workspace-1",
+        computerId: "computer-2",
+        provider: "codex",
+        errorCode: "runtime_private",
+      },
+    ]);
+  });
 });

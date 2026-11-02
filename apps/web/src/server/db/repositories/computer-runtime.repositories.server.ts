@@ -1,4 +1,4 @@
-import type { PrismaClient } from "#src/generated/prisma/client";
+import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import {
   parseRuntimeUnavailableCode,
   requireRuntimeProvider,
@@ -83,6 +83,27 @@ export class PrismaComputerRuntimeRepository implements ComputerRuntimeVisibilit
     return this.db.computerRuntime.update({
       where: { id: runtimeId },
       data: { isPublic },
+    });
+  }
+
+  async resetAgentControlStateForRuntime(
+    workspaceId: string,
+    computerId: string,
+    _provider: RuntimeProvider,
+    errorCode: string,
+  ) {
+    await this.db.agent.updateMany({
+      where: {
+        workspaceId,
+        computerId,
+        controlState: {
+          path: ["errorCode"],
+          equals: errorCode,
+        },
+      },
+      data: {
+        controlState: Prisma.DbNull,
+      },
     });
   }
 

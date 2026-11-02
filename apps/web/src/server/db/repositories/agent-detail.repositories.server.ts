@@ -43,6 +43,7 @@ export class PrismaAgentDetailSource implements AgentDetailSource {
           },
         },
         runtimeConfig: true,
+        controlState: true,
         stoppedAt: true,
         weeklyReportAssistant: { select: { id: true } },
         owner: {

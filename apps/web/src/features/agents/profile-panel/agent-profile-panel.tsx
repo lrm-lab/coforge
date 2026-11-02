@@ -37,17 +37,11 @@ import {
   saveAgentRuntimeCredential,
   deleteAgentRuntimeCredential,
   saveAgentEnvironment,
-  deleteAgent,
-  changeAgentVisibility,
-  previewAgentVisibilityChange,
 } from "#src/features/agents/agents.functions";
-import { AgentDeleteDialog } from "#src/features/agents/agent-delete-dialog";
 import { AgentArchiveSection } from "./agent-archive-section";
 import { AgentMigrationSection } from "./agent-migration-section";
-import { AgentVisibilityConfirmDialog } from "#src/features/agents/agent-visibility-confirm-dialog";
+import { AgentProfileConfirmationDialogs } from "./agent-profile-confirmation-dialogs";
 import type { AgentVisibility } from "#src/features/agents/agent-visibility";
-import { useAppToast } from "#src/components/ui/toast";
-import { humanLabel } from "#src/lib/human-label";
 import { agentModelsQueryKey } from "#src/features/agents/agent-models";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { AgentProfileHeader } from "./agent-profile-header";
@@ -190,12 +184,8 @@ export function AgentProfilePanel({
   const updateRole = useServerFn(updateAgentRole);
   const saveCredential = useServerFn(saveAgentRuntimeCredential);
   const deleteCredential = useServerFn(deleteAgentRuntimeCredential);
-  const removeAgent = useServerFn(deleteAgent);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const changeVisibility = useServerFn(changeAgentVisibility);
-  const loadVisibilityPreview = useServerFn(previewAgentVisibilityChange);
   const [visibilityTarget, setVisibilityTarget] = useState<AgentVisibility | null>(null);
-  const toast = useAppToast();
   const [runtimeDialogOpen, setRuntimeDialogOpen] = useState(false);
   const [runtimeSaving, guardRuntime] = useSubmitGuard();
   const [runtimeError, setRuntimeError] = useState("");
@@ -296,6 +286,7 @@ export function AgentProfilePanel({
           key={agentId}
           agent={diagnosticFacts}
           display={display}
+          failureReason={profile?.failureReason}
           onActivityTab={tab === "activity"}
           onViewLogs={
             tabOrder.tabs.includes("activity") ? () => onTabChange("activity") : undefined
@@ -496,44 +487,16 @@ export function AgentProfilePanel({
         />
       )}
       <AgentControlDialogs agentName={knownName} control={controls} />
-      {profile && visibilityTarget && (
-        <AgentVisibilityConfirmDialog
-          agentName={profile.displayName || profile.name}
-          creatorName={humanLabel(profile.owner)}
-          viewerIsCreator={profile.ownedByCurrentUser}
-          target={visibilityTarget}
-          open={visibilityTarget !== null}
-          onOpenChange={(nextOpen) => {
-            if (!nextOpen) setVisibilityTarget(null);
-          }}
-          onLoadPreview={() => loadVisibilityPreview({ data: agentId })}
-          onConfirm={async () => {
-            await changeVisibility({ data: { agentId, visibility: visibilityTarget } });
-            setVisibilityTarget(null);
-            await invalidate();
-            const displayName = profile.displayName || profile.name;
-            toast.success(
-              visibilityTarget === "private"
-                ? m.agent_visibility_changed_private_toast({ name: displayName })
-                : m.agent_visibility_changed_public_toast({ name: displayName }),
-            );
-          }}
-        />
-      )}
       {profile && (
-        <AgentDeleteDialog
-          agentName={profile.name}
-          open={deleteDialogOpen}
-          onOpenChange={setDeleteDialogOpen}
-          onDelete={async (confirmation) => {
-            // A protected Agent throws server-side (the dialog shows its own message), so reaching
-            // here means the Agent really was deleted.
-            await removeAgent({ data: { agentId, confirmation } });
-            setDeleteDialogOpen(false);
-            // The Agent is gone from every live view, so the panel has nothing left to show.
-            onClose();
-            await invalidate();
-          }}
+        <AgentProfileConfirmationDialogs
+          profile={profile}
+          agentId={agentId}
+          visibilityTarget={visibilityTarget}
+          setVisibilityTarget={setVisibilityTarget}
+          deleteDialogOpen={deleteDialogOpen}
+          setDeleteDialogOpen={setDeleteDialogOpen}
+          onClose={onClose}
+          invalidate={invalidate}
         />
       )}
     </div>

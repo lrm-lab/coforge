@@ -89,14 +89,44 @@ export class AgentDeliveryRejections {
   }
 }
 
+const NON_RETRYABLE_ERROR_CODES = new Set([
+  "runtime_private",
+  "runtime_not_installed",
+  "runtime_unusable",
+  "runtime_unavailable",
+  "runtime_login_required",
+  "agent_environment_invalid",
+  "model_provider_not_configured",
+]);
+
+/** Minimum wait before a transient launch failure is allowed to retry on incoming message (10 min). */
+export const TRANSIENT_FAILURE_RETRY_INTERVAL_MS = 10 * 60 * 1_000;
+/** Maximum window for automatic low-frequency retry before giving up permanently (24 hours). */
+export const TRANSIENT_FAILURE_MAX_WINDOW_MS = 24 * 60 * 60 * 1_000;
+
+function isEligibleForTransientRetry(agent: AgentControlAgent, now: number): boolean {
+  const state = agent.state;
+  if (!state || state.phase !== "failed") return false;
+  if (state.errorCode && NON_RETRYABLE_ERROR_CODES.has(state.errorCode)) return false;
+  if (!state.updatedAtMs) return false;
+  const elapsed = now - state.updatedAtMs;
+  return (
+    elapsed >= TRANSIENT_FAILURE_RETRY_INTERVAL_MS && elapsed <= TRANSIENT_FAILURE_MAX_WINDOW_MS
+  );
+}
+
 /** The outcome for an Agent this rejection must not start, or `undefined` when it may. */
-function settledOutcome(agent: AgentControlAgent): AgentDeliveryRejectionOutcome | undefined {
+function settledOutcome(
+  agent: AgentControlAgent,
+  now = Date.now(),
+): AgentDeliveryRejectionOutcome | undefined {
   if (agent.deletedAt) return "deleted";
   if (agent.stoppedAt) return "stopped";
   switch (controlOperationState(agent)) {
     case "in_flight":
       return "operation_in_flight";
     case "failed":
+      if (isEligibleForTransientRetry(agent, now)) return undefined;
       return "start_failed";
     case "settled":
       return undefined;
