@@ -111,3 +111,9 @@ test("giving the claims back shows the same text on the next read", () =>
     expect(again.senderDescription).toBe("Staff engineer");
     expect(again.channelCoordination).toBe(ROLE);
   }));
+
+test("both Pi-based runtimes report a finished compaction", () => {
+  expect(reportsCompaction("coforge")).toBe(true);
+  expect(reportsCompaction("pi")).toBe(true);
+  expect(reportsCompaction("devin")).toBe(false);
+});

@@ -11,10 +11,12 @@ import type {
 import { holdClaims } from "./response-claims";
 
 /** The runtimes whose adapters report a finished compaction. For any other the daemon cannot tell
- * when the Agent's context was cut, so it never leaves anything out. */
+ * when the Agent's context was cut, so it never leaves anything out. `coforge` and `pi` are the
+ * same embedded Pi adapter, and `coforge` is the default runtime. */
 const COMPACTION_REPORTING_RUNTIMES: ReadonlySet<string> = new Set<RuntimeProvider>([
   RUNTIME_PROVIDER.CLAUDE_CODE,
   RUNTIME_PROVIDER.CODEX,
+  RUNTIME_PROVIDER.COFORGE,
   RUNTIME_PROVIDER.CURSOR,
   RUNTIME_PROVIDER.GROK,
   RUNTIME_PROVIDER.KIRO,

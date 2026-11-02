@@ -85,6 +85,16 @@ test("`message check` on a runtime that reports compaction tells a sender and a 
   expect((await check()).messages[0]!.senderDescription).toBe("Staff engineer");
 });
 
+test("the default CoForge runtime is elided like the Pi runtime it runs", async () => {
+  const { contexts, check } = setup();
+  contexts.newContext("agent-a", "coforge");
+  const first = (await check()).messages;
+  expect(first.map((m) => m.senderDescription)).toEqual(["Staff engineer", ""]);
+  expect(first.map((m) => m.channelCoordination)).toEqual([ROLE, undefined]);
+  const second = (await check()).messages;
+  expect(second.map((m) => m.senderDescription)).toEqual(["", ""]);
+});
+
 test("a runtime that does not report compaction is never left short", async () => {
   const { contexts, check } = setup();
   contexts.newContext("agent-a", "devin");
