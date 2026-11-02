@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 
 import { readBrowserSession } from "#src/server/auth/browser-login.server";
+import { signValue } from "#src/server/auth/signed-value.server";
 import {
   authorizeDesktopRequest,
   decideDesktopAccess,
@@ -64,19 +65,16 @@ test("the proxy decision reads the session and the ownership answer", async () =
   expect(signedOut.status).toBe(401);
 });
 
+/** Signed the way the app signs sessions: `Bun.CryptoHasher` would throw the error an earlier test
+ * file's failed Web Crypto import left on this thread (src/server/auth/signed-value.server.ts). */
 function sessionCookie(): string {
-  const body = Buffer.from(
-    JSON.stringify({
-      id: "user-1",
-      email: "ada@example.com",
-      name: "Ada",
-      authingSub: "authing-user-1",
-      username: "ada",
-      exp: Math.floor(Date.now() / 1000) + 3600,
-    }),
-  ).toString("base64url");
-  const signature = new Bun.CryptoHasher("sha256", sessionSecret)
-    .update(`session.${body}`)
-    .digest("base64url");
-  return `coforge_session=${body}.${signature}`;
+  const session = {
+    id: "user-1",
+    email: "ada@example.com",
+    name: "Ada",
+    authingSub: "authing-user-1",
+    username: "ada",
+    exp: Math.floor(Date.now() / 1000) + 3600,
+  };
+  return `coforge_session=${signValue("session", session, sessionSecret)}`;
 }

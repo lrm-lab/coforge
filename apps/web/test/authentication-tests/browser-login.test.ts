@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { createHmac } from "node:crypto";
 
 import {
   completeBrowserLogin,
@@ -366,10 +367,13 @@ function sessionCookieWith(fields: Record<string, unknown>): string {
       ...fields,
     }),
   ).toString("base64url");
-  const signature = new Bun.CryptoHasher("sha256", sessionSecret)
-    .update(`session.${body}`)
-    .digest("base64url");
-  return `coforge_session=${body}.${signature}`;
+  return `coforge_session=${body}.${signedOver(`session.${body}`)}`;
+}
+
+/** HMAC-SHA256 with `node:crypto`, as the app signs: `Bun.CryptoHasher` would throw the error an
+ * earlier test file's failed Web Crypto import left on this thread (signed-value.server.ts). */
+function signedOver(input: string): string {
+  return createHmac("sha256", sessionSecret).update(input, "utf8").digest("base64url");
 }
 
 test("a session cookie signed in with an email, or with none, still reads as that session", () => {
@@ -395,8 +399,6 @@ test("only a signature made for a session reads as a session", () => {
       exp: Math.floor(Date.now() / 1000) + 3600,
     }),
   ).toString("base64url");
-  const signedOver = (input: string) =>
-    new Bun.CryptoHasher("sha256", sessionSecret).update(input).digest("base64url");
   const read = (value: string) =>
     readBrowserSession({ sessionSecret, cookieHeader: `coforge_session=${value}` });
 
