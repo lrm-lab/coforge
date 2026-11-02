@@ -26,6 +26,18 @@ describe("page fill", () => {
       { id: "username", selector: "#user", input: "text", value: "ada" },
       { id: "password", selector: "#pass", input: "password", value: "secret" },
     ]);
+    expect(
+      pageFillRequestFields(
+        [
+          { id: "email", label: "Email", input: "text" },
+          { id: "password", label: "Password", input: "password" },
+        ],
+        { email: "ada@example.com", password: "secret" },
+      ),
+    ).toEqual([
+      { id: "email", label: "Email", input: "text", value: "ada@example.com" },
+      { id: "password", label: "Password", input: "password", value: "secret" },
+    ]);
     expect(() => pageFillRequestFields(fields, { username: "ada", password: "" })).toThrow(
       AppError,
     );

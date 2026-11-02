@@ -14,6 +14,9 @@ import {
   isValidMentionSelectorArray,
   isSeenExactSeqs,
   MEMORY_OFFER_REQUIRED_MESSAGE,
+  CREDENTIAL_SOLICITATION_CODE,
+  CREDENTIAL_SOLICITATION_MESSAGE,
+  solicitsCredentialsInChat,
 } from "@lrm/coforge-sdk/internal";
 import { createPrismaMemoryAgentDirectory } from "#src/server/workspace-memory/memory-agent-http.server";
 import { explicitMemoryQuestionRequiresOffer } from "#src/server/workspace-memory/explicit-memory-answer";
@@ -232,6 +235,9 @@ export async function handleAgentMessagesPost(
     !body.content
   )
     return Response.json({ error: "target and content are required" }, { status: 400 });
+  // Refuse before anything is stored: secrets belong in page:fill / desktop:takeover, not chat.
+  if (solicitsCredentialsInChat(body.content))
+    return errorResponse(CREDENTIAL_SOLICITATION_CODE, CREDENTIAL_SOLICITATION_MESSAGE, 400, false);
   const freshnessContextMode = body.freshnessContextMode;
   if (
     freshnessContextMode !== undefined &&

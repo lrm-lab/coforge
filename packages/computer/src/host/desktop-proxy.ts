@@ -40,12 +40,17 @@ export function parseDesktopRoute(
   const suffix = match[2] ?? "/";
   const parts = suffix.split("/").filter((part) => part.length > 0);
   // `/fill` types into the shared desktop. `/<agent>/fill` types into that Agent's screen.
-  // The body is forwarded as-is and is not a desktop asset.
-  if (parts.length === 1 && parts[0] === "fill") {
-    return { computerId, upstreamPath: "/fill" };
+  // `/inspect` lists visible fields. Bodies are forwarded as-is and are not desktop assets.
+  if (parts.length === 1 && (parts[0] === "fill" || parts[0] === "inspect")) {
+    return { computerId, upstreamPath: `/${parts[0]}` };
   }
-  if (parts.length === 2 && parts[1] === "fill" && parts[0] && !DESKTOP_ASSET.has(parts[0])) {
-    return { computerId, upstreamPath: `/screen/${parts[0]}/fill` };
+  if (
+    parts.length === 2 &&
+    (parts[1] === "fill" || parts[1] === "inspect") &&
+    parts[0] &&
+    !DESKTOP_ASSET.has(parts[0])
+  ) {
+    return { computerId, upstreamPath: `/screen/${parts[0]}/${parts[1]}` };
   }
   const agentId = parts[0];
   if (agentId && !DESKTOP_ASSET.has(agentId)) {

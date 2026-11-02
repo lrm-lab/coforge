@@ -10,6 +10,8 @@ import { createAppRegistrationNotices } from "#src/server/apps/app-registration-
 import { AppGrantActionCards } from "#src/server/conversations/app-grant-action-cards.server";
 import { ActionCards } from "#src/server/conversations/action-cards.server";
 import { commitPageFillCard } from "#src/server/conversations/action-card-page-fill.server";
+import { commitDesktopTakeoverCard } from "#src/server/conversations/action-card-desktop-takeover.server";
+import { commitChoiceCard } from "#src/server/conversations/action-card-choice.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { createAppAgentAccess } from "#src/server/app-agent-access/app-agent-access-composition.server";
@@ -143,6 +145,41 @@ export const commitPageFillActionCard = createServerFn({ method: "POST" })
         values: data.values,
         cookie: getRequest().headers.get("cookie") ?? "",
       },
+    );
+  });
+
+/** `desktop:takeover`: the person finished the step on the cloud desktop. */
+export const commitDesktopTakeoverActionCard = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(messageIdInput)
+  .handler(async ({ data, context: { db, workspaceId, user } }) => {
+    const centrifugo = createCentrifugoServerApi();
+    return commitDesktopTakeoverCard(
+      db,
+      new CentrifugoConversationRealtime(centrifugo),
+      { workspaceId, actorUserId: user.id },
+      data.messageId,
+    );
+  });
+
+/** `choice`: the person clicked one option. */
+export const commitChoiceActionCard = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(
+    messageIdInput.extend({
+      optionId: z
+        .string()
+        .trim()
+        .regex(/^[a-z][a-z0-9_]{0,31}$/),
+    }),
+  )
+  .handler(async ({ data, context: { db, workspaceId, user } }) => {
+    const centrifugo = createCentrifugoServerApi();
+    return commitChoiceCard(
+      db,
+      new CentrifugoConversationRealtime(centrifugo),
+      { workspaceId, actorUserId: user.id },
+      { messageId: data.messageId, optionId: data.optionId },
     );
   });
 

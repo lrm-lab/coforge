@@ -17,6 +17,8 @@ import { PublicChannels } from "./public-channels.server";
 import { ConversationHistory } from "./conversation-history.server";
 import { loadPendingActionCard } from "./pending-action-card.server";
 import { resolvePageFillPayload } from "./action-card-page-fill.server";
+import { resolveDesktopTakeoverPayload } from "./action-card-desktop-takeover.server";
+import { resolveChoicePayload } from "./action-card-choice.server";
 import type { ConversationRealtime } from "./conversation-realtime.server";
 import {
   createActionCardMessage,
@@ -298,6 +300,9 @@ export class ActionCards {
   ): Promise<ResolvedActionCardPayload> {
     if (action.type === "page:fill")
       return resolvePageFillPayload(this.db, workspaceId, agentId, action);
+    if (action.type === "desktop:takeover")
+      return resolveDesktopTakeoverPayload(this.db, workspaceId, agentId, action);
+    if (action.type === "choice") return resolveChoicePayload(action);
     if (action.type === "app:register") return resolveAppRegisterPayload(this.db, action);
     if (action.type === "app:recover_owner")
       return resolveAppRecoverOwnerPayload(this.db, { workspaceId, agentId }, action);

@@ -30,9 +30,9 @@ const TASK_METADATA_SELECT = {
   },
 } satisfies NonNullable<Prisma.MessageInclude["task"]>;
 
-/** Just the state an Agent needs to know whether a card it prepared has been acted on. */
+/** State plus choice result so an Agent can read which option was picked. */
 const ACTION_CARD_STATE_SELECT = {
-  select: { state: true },
+  select: { state: true, kind: true, result: true },
 } satisfies NonNullable<Prisma.MessageInclude["actionCard"]>;
 
 /** The snapshot an Agent reads of a forwarded message (`agentForwarded`). */

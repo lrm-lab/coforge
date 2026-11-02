@@ -20,9 +20,11 @@ export * from "./app-recover-owner-card";
 
 /**
  * Agent-prepared action card contract (`coforge action prepare`). An Agent
- * prepares exactly six card kinds: `channel:create`, `agent:create`,
- * `channel:add_member`, `app:register`, `app:recover_owner`, `page:fill`. A seventh, `app:grant_agent`, only the server posts: it
- * asks a person to approve an Agent's use of an app (`coforge app token`).
+ * prepares these card kinds: `channel:create`, `agent:create`,
+ * `channel:add_member`, `app:register`, `app:recover_owner`, `page:fill`,
+ * `desktop:takeover`, `choice`. A further kind, `app:grant_agent`, only the
+ * server posts: it asks a person to approve an Agent's use of an app
+ * (`coforge app token`).
  *
  * An Agent identifies humans, Agents, channels, and computers by handle
  * (`@alice`, `alice`, `#general`, `general`) or UUID. `ActionCards.prepare`
@@ -105,12 +107,17 @@ const pageFillFieldSchema = z.object({
     .regex(/^[a-z][a-z0-9_]{0,31}$/),
   label: z.string().trim().min(1).max(80),
   input: z.enum(["text", "password"]),
-  selector: pageFillSelectorSchema,
+  /**
+   * Optional CSS selector. When omitted, the desktop resolves the field by
+   * `label` and `input` (password fields match `input[type=password]`).
+   */
+  selector: pageFillSelectorSchema.optional(),
 });
 
 /**
  * Ask a person to type into a page on this Agent's computer. The card names the
  * fields only. Values are typed later and are not part of this action.
+ * Prefer `label` + `input`; add `selector` only when the Agent already knows one.
  */
 export const pageFillActionSchema = z.object({
   type: z.literal("page:fill"),
@@ -120,6 +127,41 @@ export const pageFillActionSchema = z.object({
 });
 export type PageFillAction = z.infer<typeof pageFillActionSchema>;
 
+/**
+ * Ask a person to open this Agent's cloud desktop and finish something the Agent
+ * cannot type for them (OAuth, captcha, or a failed `page:fill`).
+ */
+export const desktopTakeoverActionSchema = z.object({
+  type: z.literal("desktop:takeover"),
+  prompt: z.string().trim().min(1).max(200).optional(),
+  draftHint: draftHintSchema,
+});
+export type DesktopTakeoverAction = z.infer<typeof desktopTakeoverActionSchema>;
+
+const choiceOptionIdSchema = z
+  .string()
+  .trim()
+  .regex(/^[a-z][a-z0-9_]{0,31}$/);
+
+const choiceOptionSchema = z.object({
+  id: choiceOptionIdSchema,
+  label: z.string().trim().min(1).max(80),
+});
+
+/**
+ * Offer clickable options. The person may also reply in free text when
+ * `allowFreeText` is true (the default). Choosing records `optionId` on the card;
+ * free-text replies leave the card pending for the Agent to interpret.
+ */
+export const choiceActionSchema = z.object({
+  type: z.literal("choice"),
+  prompt: z.string().trim().min(1).max(200),
+  options: z.array(choiceOptionSchema).min(2).max(8),
+  allowFreeText: z.boolean().default(true),
+  draftHint: draftHintSchema,
+});
+export type ChoiceAction = z.infer<typeof choiceActionSchema>;
+
 export const actionCardActionSchema = z.discriminatedUnion("type", [
   channelCreateActionSchema,
   agentCreateActionSchema,
@@ -127,6 +169,8 @@ export const actionCardActionSchema = z.discriminatedUnion("type", [
   appRegisterActionSchema,
   appRecoverOwnerActionSchema,
   pageFillActionSchema,
+  desktopTakeoverActionSchema,
+  choiceActionSchema,
 ]);
 export type ActionCardAction = z.infer<typeof actionCardActionSchema>;
 /** The server-posted approval card for an Agent's use of an app; never an Agent's action. */
@@ -150,6 +194,10 @@ export function validateActionCardAction(action: ActionCardAction): string | nul
   if (action.type === "page:fill") {
     const ids = action.fields.map((field) => field.id);
     if (new Set(ids).size !== ids.length) return "page:fill field ids must be unique";
+  }
+  if (action.type === "choice") {
+    const ids = action.options.map((option) => option.id);
+    if (new Set(ids).size !== ids.length) return "choice option ids must be unique";
   }
   return null;
 }
@@ -186,12 +234,27 @@ export type ResolvedAppGrantAgentPayload = {
   appName: string;
   scopes: string[];
 };
-/** Selectors stay here so the page can be filled. Values never do. */
+/** Labels (and optional selectors) stay here so the page can be filled. Values never do. */
 export type ResolvedPageFillPayload = {
   type: "page:fill";
   prompt?: string;
   agentId: string;
-  fields: { id: string; label: string; input: "text" | "password"; selector: string }[];
+  computerId: string;
+  fields: { id: string; label: string; input: "text" | "password"; selector?: string }[];
+};
+/** Lets the person open this Agent's cloud desktop; no secret leaves the chat. */
+export type ResolvedDesktopTakeoverPayload = {
+  type: "desktop:takeover";
+  prompt?: string;
+  agentId: string;
+  computerId: string;
+  agentName: string;
+};
+export type ResolvedChoicePayload = {
+  type: "choice";
+  prompt: string;
+  options: { id: string; label: string }[];
+  allowFreeText: boolean;
 };
 export type ResolvedActionCardPayload =
   | ResolvedChannelCreatePayload
@@ -200,7 +263,9 @@ export type ResolvedActionCardPayload =
   | ResolvedAppGrantAgentPayload
   | ResolvedAppRegisterPayload
   | ResolvedAppRecoverOwnerPayload
-  | ResolvedPageFillPayload;
+  | ResolvedPageFillPayload
+  | ResolvedDesktopTakeoverPayload
+  | ResolvedChoicePayload;
 
 /** `POST /api/agent/v1/actions/prepare` request body. */
 export type AgentActionPrepareRequest = {

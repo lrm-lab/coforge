@@ -245,12 +245,56 @@ describe("pageFillActionSchema", () => {
     expect(validateActionCardAction(action)).toBe("page:fill field ids must be unique");
   });
 
-  test("rejects a password field with no selector", () => {
-    const parsed = actionCardActionSchema.safeParse({
+  test("accepts a password field with only a label", () => {
+    const parsed = pageFillActionSchema.parse({
       type: "page:fill",
       fields: [{ id: "password", label: "Password", input: "password" }],
     });
-    expect(parsed.success).toBe(false);
+    expect(parsed.fields[0]).toEqual({
+      id: "password",
+      label: "Password",
+      input: "password",
+    });
+    expect(validateActionCardAction(parsed)).toBeNull();
+  });
+});
+
+describe("desktopTakeoverActionSchema", () => {
+  test("accepts an optional prompt", () => {
+    expect(
+      actionCardActionSchema.parse({ type: "desktop:takeover", prompt: "Finish GitHub sign-in" })
+        .type,
+    ).toBe("desktop:takeover");
+    expect(actionCardActionSchema.parse({ type: "desktop:takeover" }).type).toBe(
+      "desktop:takeover",
+    );
+  });
+});
+
+describe("choiceActionSchema", () => {
+  test("requires at least two options and unique ids", () => {
+    const parsed = actionCardActionSchema.parse({
+      type: "choice",
+      prompt: "How should we sign in?",
+      options: [
+        { id: "password", label: "Password" },
+        { id: "otp", label: "Verification code" },
+      ],
+    });
+    expect(parsed.type).toBe("choice");
+    if (parsed.type !== "choice") throw new Error("expected choice");
+    expect(parsed.allowFreeText).toBe(true);
+    expect(validateActionCardAction(parsed)).toBeNull();
+
+    const duplicate = actionCardActionSchema.parse({
+      type: "choice",
+      prompt: "Pick one",
+      options: [
+        { id: "a", label: "A" },
+        { id: "a", label: "Again" },
+      ],
+    });
+    expect(validateActionCardAction(duplicate)).toBe("choice option ids must be unique");
   });
 });
 

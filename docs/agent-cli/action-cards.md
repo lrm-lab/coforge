@@ -29,10 +29,20 @@ yet:
   UUID; at most one of the two), `draftHint?`. No `runtime`, `model`, or
   `reasoning` field — those stay human-picked.
 - **`page:fill`**: `prompt?`, `fields` (1–8). Each field is `id` (`^[a-z][a-z0-9_]{0,31}$`),
-  `label`, `input` (`text` or `password`), and `selector` (a CSS selector). A `password`
-  selector must match an `input` whose type is `password`. Do not include a value. The person
-  types into the card; the values are written into Chromium on that Agent's screen and are not
-  stored on the card or returned to the Agent. The page has to be open first.
+  `label`, `input` (`text` or `password`), and optional `selector` (a CSS selector). Prefer
+  `label` + `input` and omit `selector` — the desktop resolves password fields and label matches
+  itself. When you do pass a `password` selector, it must match an `input` whose type is
+  `password`. Do not include a value. The person types into the card; the values are written into
+  Chromium on that Agent's screen and are not stored on the card or returned to the Agent. The
+  page has to be open first. Prefer this before asking anyone to open the desktop themselves.
+  On the computer, `page-fill.py --inspect` lists visible fields if you need suggested selectors.
+- **`desktop:takeover`**: `prompt?`, `draftHint?`. Posts a card with an Open desktop control for
+  this Agent's cloud screen when `page:fill` cannot finish the step (OAuth, captcha, unknown
+  selectors). Do not ask for secrets in chat.
+- **`choice`**: `prompt`, `options` (2–8 of `{id,label}` with unique `id`s matching
+  `^[a-z][a-z0-9_]{0,31}$`), `allowFreeText?` (default true), `draftHint?`. The person clicks an
+  option; free text may still answer when allowed. An executed choice reads back as
+  `[action card: executed; choice=<id>]`.
 - **`channel:add_member`**: `channel` (handle or UUID), `humans?`,
   `agents?` (at least one of the two non-empty), `draftHint?`.
 - **`app:register`**: `name`, `clientKey?`, `redirectUrls?`, `homepageUrl?`, `description?`,

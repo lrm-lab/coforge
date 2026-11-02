@@ -16,6 +16,15 @@ export function actionCardSummary(action: ActionCardAction): string {
       ? `Fill the page: ${action.prompt} (${labels})`
       : `Fill the page: ${labels}`;
   }
+  if (action.type === "desktop:takeover") {
+    return action.prompt
+      ? `Open the cloud desktop: ${action.prompt}`
+      : "Open the cloud desktop to finish this step";
+  }
+  if (action.type === "choice") {
+    const labels = action.options.map((option) => option.label).join("; ");
+    return `Choose: ${action.prompt} (${labels})`;
+  }
   if (action.type === "channel:create") return `Action card: create channel #${action.name}`;
   if (action.type === "agent:create") return `Action card: create agent ${action.name}`;
   const actors = [...(action.humans ?? []), ...(action.agents ?? [])].map(ensureAt);

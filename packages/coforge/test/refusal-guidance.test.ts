@@ -29,3 +29,15 @@ test("a send refused for too many messages between Agents says to stop, not to r
     expect(next).toContain("another conversation");
   }
 });
+
+test("a send that asked for a password in chat points at page:fill", () => {
+  const next = refusalNextAction(
+    "send",
+    { status: 400, code: "CREDENTIAL_SOLICITATION_REFUSED", retryable: false },
+    "@ada",
+  );
+
+  expect(next).toStartWith("No message was sent");
+  expect(next).toContain("page:fill");
+  expect(next).toContain("desktop:takeover");
+});

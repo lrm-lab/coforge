@@ -11,13 +11,14 @@ coforge action prepare --target "#general" <<'COFORGEACTION'
 COFORGEACTION
 ```
 
-Three kinds are supported:
+Supported kinds include:
 
 - `channel:create` (`name`, `visibility` public or private, `description?`, `initialHumans?`,
   `initialAgents?`, `draftHint?`)
 - `agent:create` (`name`, `description?`, `suggestedComputer?`, `requiredComputer?` — at most one
   of the two, `draftHint?`)
 - `channel:add_member` (`channel`, `humans?`, `agents?` — at least one non-empty, `draftHint?`)
+- `page:fill`, `desktop:takeover`, and `choice` (below)
 
 Identity references in an action card are handles, not UUIDs: `@alice`, `scout`, `#general`. The
 server resolves each handle at prepare time; an unresolvable handle fails the command before
@@ -41,24 +42,28 @@ CLI command for it.
 
 To check whether a card has been committed, read the card message again, for example
 `coforge message read --target <target> --around <message-id>`. Its body ends with
-`[action card: pending]`, `[action card: executed]`, or `[action card: cancelled]`. Only
-`executed` means the channel, Agent, or membership now exists; `pending` means still waiting on a
-human, and `cancelled` means it was dismissed and nothing was created. Do not claim the resource
-exists on the strength of having posted the card alone.
+`[action card: pending]`, `[action card: executed]`, or `[action card: cancelled]`. A committed
+`choice` card ends with `[action card: executed; choice=<id>]`. Only `executed` means the
+channel, Agent, membership, fill, desktop step, or choice now stands; `pending` means still
+waiting on a human, and `cancelled` means it was dismissed. Do not claim the resource exists on
+the strength of having posted the card alone.
 
 ## Filling a page
 
 When a page on this Agent's computer needs something the person must type, such as a username
-and password, post a `page:fill` card. Do not ask them to paste the value into chat, and do not
-type it yourself.
+and password, post a `page:fill` card. Do not ask them to paste the value into chat — the
+platform refuses outbound messages that solicit passwords or verification codes — and do not
+type a chat-pasted secret yourself; refuse and re-offer the card.
 
-Open the page in Chromium on this Agent's screen first. Every field needs a CSS selector. A
-`password` field's selector must match an `input` whose type is `password`. There is no `value`
-field. Example:
+Open the page in Chromium on this Agent's screen first. Prefer fields with only `id`, `label`,
+and `input` — the desktop finds the control by label / password type. Add a CSS `selector` only
+when you already know a reliable one (a `password` selector must match `input[type=password]`).
+There is no `value` field. To list candidates on the open page:
+`python3 /usr/local/bin/page-fill.py --inspect`. Example:
 
 ```
 coforge action prepare --target "@owner" <<'COFORGEACTION'
-{"type":"page:fill","prompt":"Sign in","fields":[{"id":"username","label":"Username","input":"text","selector":"#user"},{"id":"password","label":"Password","input":"password","selector":"input[type=password]"}]}
+{"type":"page:fill","prompt":"Sign in","fields":[{"id":"username","label":"Username","input":"text"},{"id":"password","label":"Password","input":"password"}]}
 COFORGEACTION
 ```
 
@@ -66,3 +71,32 @@ The person types into the card. The values are written into the page and are not
 card. Read the message again: `[action card: executed]` means the fields were filled. Then
 continue, for example by submitting the form. `[action card: pending]` means they have not
 filled it yet.
+
+## Opening the cloud desktop
+
+When `page:fill` cannot finish the step (OAuth, captcha, unknown selectors, or the person asks
+to type themselves), post a `desktop:takeover` card instead of asking for secrets in chat:
+
+```
+coforge action prepare --target "@owner" <<'COFORGEACTION'
+{"type":"desktop:takeover","prompt":"Finish GitHub sign-in on the cloud desktop"}
+COFORGEACTION
+```
+
+The person opens your screen from the card, finishes the step, then marks it done. Prefer
+`page:fill` first; use takeover only when fill will not work.
+
+## Choices
+
+When several mutually exclusive next steps exist (for example login methods), post a `choice`
+card so the person can click. They may also answer in free text when `allowFreeText` is true
+(the default). Example:
+
+```
+coforge action prepare --target "@owner" <<'COFORGEACTION'
+{"type":"choice","prompt":"How should we sign in?","options":[{"id":"password","label":"Password"},{"id":"otp","label":"Verification code"},{"id":"github","label":"Continue with GitHub"},{"id":"takeover","label":"I will open the cloud desktop myself"}]}
+COFORGEACTION
+```
+
+Read the card again: `[action card: executed; choice=password]` means they clicked that option.
+If they type in chat instead, interpret their reply and continue without waiting for the card.

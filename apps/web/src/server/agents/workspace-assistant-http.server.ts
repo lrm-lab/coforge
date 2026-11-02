@@ -1,6 +1,11 @@
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import type { AgentSendDecisionResponse } from "@lrm/coforge-sdk/agent";
+import {
+  CREDENTIAL_SOLICITATION_CODE,
+  CREDENTIAL_SOLICITATION_MESSAGE,
+  solicitsCredentialsInChat,
+} from "@lrm/coforge-sdk/internal";
 import { toggleUserMessageReaction } from "#src/server/conversations/user-message-reactions.server";
 import { z } from "zod";
 import type { PrismaClient } from "#src/generated/prisma/client";
@@ -13,6 +18,7 @@ import {
   agentIdempotencyKeyFromQuery,
   agentRouteDomainErrorResponse,
 } from "./agent-http-routes.server";
+import { errorResponse } from "./agent-http-error.server";
 import { getMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
 import { MessageRequestInProgressError } from "#src/server/conversations/message-request-idempotency.server";
 
@@ -113,6 +119,13 @@ export async function handleWorkspaceAssistantCommand(
       }
       if (body.content === undefined || (!body.content.trim() && !body.attachmentIds?.length))
         return Response.json({ error: "content is required" }, { status: 400 });
+      if (body.content && solicitsCredentialsInChat(body.content))
+        return errorResponse(
+          CREDENTIAL_SOLICITATION_CODE,
+          CREDENTIAL_SOLICITATION_MESSAGE,
+          400,
+          false,
+        );
       const message = await commands.send(principal, { ...body, content: body.content });
       const response: AgentSendDecisionResponse = {
         idempotencyKey: body.idempotencyKey,

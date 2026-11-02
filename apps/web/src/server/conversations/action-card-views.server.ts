@@ -8,6 +8,8 @@ import { workspaceMemberRole } from "#src/server/workspaces/workspace-membership
 import { ACTIVE_MEMBER_WHERE, VISIBLE_CONVERSATION_WHERE } from "./active-member.server";
 import { canReadChannel, readableConversationWhere } from "./channel-read-access.server";
 import { pageFillActionCardView } from "./action-card-page-fill.server";
+import { desktopTakeoverActionCardView } from "./action-card-desktop-takeover.server";
+import { choiceActionCardView } from "./action-card-choice.server";
 import type {
   ActionCardRef,
   ActionCardState,
@@ -218,6 +220,13 @@ export async function actionCardViews(
       });
     } else if (payload.type === "page:fill") {
       views.set(card.messageId, pageFillActionCardView(base, card, payload, viewerUserId, pending));
+    } else if (payload.type === "desktop:takeover") {
+      views.set(
+        card.messageId,
+        desktopTakeoverActionCardView(base, card, payload, viewerUserId, pending),
+      );
+    } else if (payload.type === "choice") {
+      views.set(card.messageId, choiceActionCardView(base, card, payload, viewerUserId, pending));
     } else if (payload.type === "app:recover_owner") {
       views.set(card.messageId, {
         ...base,
