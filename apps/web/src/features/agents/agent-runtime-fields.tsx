@@ -35,9 +35,7 @@ import {
   type RuntimeOptions,
   type RuntimeSelection,
 } from "./agent-runtime-fields-state";
-import { RUNTIME_PROVIDER_DISPLAY_ORDER, runtimeProviderLabel } from "./runtime-provider-display";
-import { RuntimeProviderMark } from "./runtime-provider-mark";
-import { runtimeUnavailableReason } from "#src/features/computers/runtime-unavailable-reason";
+import { AgentRuntimeProviderSelect } from "./agent-runtime-provider-select";
 import { useCommandCodeEfforts } from "./use-command-code-efforts";
 import { useRuntimeCatalogRefresh } from "./use-runtime-catalog-refresh";
 import { RuntimeRefreshFailure } from "./runtime-refresh-failure";
@@ -270,49 +268,18 @@ export function AgentRuntimeFields({
   return (
     <>
       <input type="hidden" name="provider" value={provider} />
-      <Select
-        label={m.agent_form_provider()}
-        size="md"
+      <AgentRuntimeProviderSelect
+        provider={provider}
+        providers={providers}
+        unusable={options?.unusable}
         className="min-w-0"
-        selectedKey={provider}
-        onSelectionChange={(key) => {
-          if (key === null) return;
+        onChange={(key) => {
           setProvider(parseRuntimeProvider(key) ?? RUNTIME_PROVIDER.COFORGE);
           setModelProvider("");
           setPiProviderChoice("");
           resetModelFields();
         }}
-      >
-        <Select.Item
-          id={RUNTIME_PROVIDER.COFORGE}
-          label={runtimeProviderLabel(RUNTIME_PROVIDER.COFORGE)}
-          icon={<RuntimeProviderMark provider={RUNTIME_PROVIDER.COFORGE} />}
-        />
-        {RUNTIME_PROVIDER_DISPLAY_ORDER.filter((candidate) => providers.has(candidate)).map(
-          (candidate) => (
-            <Select.Item
-              key={candidate}
-              id={candidate}
-              label={runtimeProviderLabel(candidate)}
-              icon={<RuntimeProviderMark provider={candidate} />}
-            />
-          ),
-        )}
-        {(options?.unusable ?? [])
-          .filter((entry) => !providers.has(entry.provider))
-          .map((entry) => (
-            // Shown, never selectable: the person learns why the runtime they know about is
-            // missing from the list instead of finding it gone.
-            <Select.Item
-              key={entry.provider}
-              id={entry.provider}
-              label={runtimeProviderLabel(entry.provider)}
-              supportingText={runtimeUnavailableReason(entry.unavailableCode, entry.diagnostic)}
-              icon={<RuntimeProviderMark provider={entry.provider} />}
-              isDisabled
-            />
-          ))}
-      </Select>
+      />
       {failed ? (
         <Input
           label={m.agent_form_model_provider()}
