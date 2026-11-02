@@ -102,7 +102,7 @@ export function AgentActivityTimeline({
     // A scroll the pane has not handled yet is the reader's: theirs is the row to hold now.
     if (reading.current?.scrollTop === container.scrollTop)
       restoreReadingRow(container, reading.current);
-    reading.current = readingRowOf(container);
+    reading.current = readingRowOf(container, listRef.current);
   }
   useLayoutEffect(() => {
     if (scrollRef.current) holdReadingRow(scrollRef.current);
@@ -113,7 +113,7 @@ export function AgentActivityTimeline({
     const distance = bottomPin.scroll(container);
     // The conversation history's "near enough to follow" distance.
     if (distance !== undefined) following.current = distance <= 48;
-    reading.current = following.current ? undefined : readingRowOf(container);
+    reading.current = following.current ? undefined : readingRowOf(container, listRef.current);
   }
 
   if (!rows.length) return emptyState;
@@ -270,15 +270,22 @@ const ActivityTimelineRow = memo(function ActivityTimelineRow({
  * the second stands in when the first is re-keyed (a merged statement's oldest fragment left). */
 type ReadingRow = { rows: { key: string; offset: number }[]; scrollTop: number } | undefined;
 
-function readingRowOf(container: HTMLElement): ReadingRow {
+function readingRowOf(container: HTMLElement, list: HTMLOListElement | null): ReadingRow {
   const top = container.getBoundingClientRect().top;
-  const rows: { key: string; offset: number }[] = [];
-  for (const row of container.querySelectorAll<HTMLElement>("li[data-activity-row]")) {
-    const box = row.getBoundingClientRect();
-    if (box.bottom <= top) continue;
-    rows.push({ key: row.dataset.activityRow!, offset: box.top - top });
-    if (rows.length === 2) break;
+  const children = list?.children ?? [];
+  // The rows stack top to bottom, so the first one reaching the view is found by bisection: a
+  // scroll event measures about log2(rows) of them, not every row above the view (task #433).
+  let low = 0;
+  let high = children.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (children[middle]!.getBoundingClientRect().bottom <= top) low = middle + 1;
+    else high = middle;
   }
+  const rows: { key: string; offset: number }[] = [];
+  for (const row of [children[low], children[low + 1]])
+    if (row instanceof HTMLElement)
+      rows.push({ key: row.dataset.activityRow!, offset: row.getBoundingClientRect().top - top });
   return rows.length ? { rows, scrollTop: container.scrollTop } : undefined;
 }
 
