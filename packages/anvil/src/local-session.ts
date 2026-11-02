@@ -108,11 +108,13 @@ export function jsonlWindows(head: string, tail: { text: string; startOffset: nu
 }
 
 export async function readLocalSessionWindows(
+  rootPath: string,
   path: string,
   limits: LocalSessionLimits,
   host: {
-    readFileHeadBytes(path: string, bytes: number): Promise<{ bytes: Uint8Array }>;
+    readFileHeadBytes(root: string, path: string, bytes: number): Promise<{ bytes: Uint8Array }>;
     readFileTailBytes(
+      root: string,
       path: string,
       bytes: number,
     ): Promise<{ bytes: Uint8Array; startOffset: number }>;
@@ -127,8 +129,8 @@ export async function readLocalSessionWindows(
     const tailBytes = Math.max(1, allowance - headBytes);
     const [headRead, tailRead] = await localSessionIo(
       Promise.all([
-        host.readFileHeadBytes(path, headBytes),
-        host.readFileTailBytes(path, tailBytes),
+        host.readFileHeadBytes(rootPath, path, headBytes),
+        host.readFileTailBytes(rootPath, path, tailBytes),
       ]),
       limits,
     );

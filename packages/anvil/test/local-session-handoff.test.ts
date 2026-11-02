@@ -42,7 +42,7 @@ function claudeHost(input: Record<string, FileNode>): ClaudeHistoryHost {
   return {
     readHostEnvironment: (name) => (name === "CLAUDE_CONFIG_DIR" ? "/claude" : undefined),
     homeDirectory: () => "/home/test",
-    isDirectoryWithoutSymlinks: async () => true,
+    resolveDirectoryWithoutSymlinks: async (path) => path,
     async readDirectoryEntries(path) {
       return directoryEntries(files, path).map((name): ClaudeDirectoryEntry => ({
         name,
@@ -69,12 +69,12 @@ function claudeHost(input: Record<string, FileNode>): ClaudeHistoryHost {
       const startOffset = Math.max(0, text.length - bytes);
       return { text: text.slice(startOffset), startOffset };
     },
-    async readFileHeadBytes(path, bytes) {
+    async readFileHeadBytes(_root, path, bytes) {
       const text = files.get(path)?.text;
       if (text === undefined) throw new Error("missing");
       return { bytes: Buffer.from(text).subarray(0, bytes) };
     },
-    async readFileTailBytes(path, bytes) {
+    async readFileTailBytes(_root, path, bytes) {
       const text = files.get(path)?.text;
       if (text === undefined) throw new Error("missing");
       const encoded = Buffer.from(text);
@@ -155,7 +155,7 @@ function codexHost(input: Record<string, FileNode>): CodexHistoryHost {
   return {
     readHostEnvironment: (name) => (name === "CODEX_HOME" ? "/codex" : undefined),
     homeDirectory: () => "/home/test",
-    isDirectoryWithoutSymlinks: async () => true,
+    resolveDirectoryWithoutSymlinks: async (path) => path,
     async readDirectoryEntries(path) {
       return directoryEntries(files, path).map((name): CodexDirectoryEntry => {
         const full = `${path}/${name}`;
@@ -175,12 +175,12 @@ function codexHost(input: Record<string, FileNode>): CodexHistoryHost {
       const startOffset = Math.max(0, text.length - bytes);
       return { text: text.slice(startOffset), startOffset };
     },
-    async readFileHeadBytes(path, bytes) {
+    async readFileHeadBytes(_root, path, bytes) {
       const text = files.get(path)?.text;
       if (text === undefined) throw new Error("missing");
       return { bytes: Buffer.from(text).subarray(0, bytes) };
     },
-    async readFileTailBytes(path, bytes) {
+    async readFileTailBytes(_root, path, bytes) {
       const text = files.get(path)?.text;
       if (text === undefined) throw new Error("missing");
       const encoded = Buffer.from(text);
@@ -269,7 +269,7 @@ test("content budget exhaustion is explicit and symlink sessions are ignored", a
   );
   expect(result.sessions).toEqual([]);
   expect(result.contentSearchComplete).toBeFalse();
-  expect(result.scanComplete).toBeTrue();
+  expect(result.scanComplete).toBeFalse();
 });
 
 test("overlapping head and tail windows project a JSONL record only once", async () => {
@@ -281,13 +281,14 @@ test("overlapping head and tail windows project a JSONL record only once", async
     maxContentBytes: 200,
   };
   const read = await readLocalSessionWindows(
+    "/",
     "/session.jsonl",
     overlapLimits,
     {
-      async readFileHeadBytes(_path, bytes) {
+      async readFileHeadBytes(_root, _path, bytes) {
         return { bytes: Buffer.from(text).subarray(0, bytes) };
       },
-      async readFileTailBytes(_path, bytes) {
+      async readFileTailBytes(_root, _path, bytes) {
         const encoded = Buffer.from(text);
         const startOffset = Math.max(0, encoded.byteLength - bytes);
         return { bytes: encoded.subarray(startOffset), startOffset };
@@ -424,13 +425,14 @@ test("a tail starting exactly on a JSONL boundary keeps its first record", async
     maxContentBytes: text.length,
   };
   const read = await readLocalSessionWindows(
+    "/",
     "/session.jsonl",
     boundaryLimits,
     {
-      async readFileHeadBytes(_path, bytes) {
+      async readFileHeadBytes(_root, _path, bytes) {
         return { bytes: Buffer.from(text).subarray(0, bytes) };
       },
-      async readFileTailBytes(_path, bytes) {
+      async readFileTailBytes(_root, _path, bytes) {
         const encoded = Buffer.from(text);
         const startOffset = encoded.byteLength - bytes;
         return { bytes: encoded.subarray(startOffset), startOffset };
@@ -449,13 +451,14 @@ test("complete overlapping windows reconstruct a record crossing their seam", as
   ];
   const text = `${rows.join("\n")}\n`;
   const read = await readLocalSessionWindows(
+    "/",
     "/session.jsonl",
     { ...limits, maxFileBytes: 100, maxContentBytes: 100 },
     {
-      async readFileHeadBytes(_path, bytes) {
+      async readFileHeadBytes(_root, _path, bytes) {
         return { bytes: Buffer.from(text).subarray(0, bytes) };
       },
-      async readFileTailBytes(_path, bytes) {
+      async readFileTailBytes(_root, _path, bytes) {
         const encoded = Buffer.from(text);
         const startOffset = Math.max(0, encoded.byteLength - bytes);
         return { bytes: encoded.subarray(startOffset), startOffset };
@@ -502,13 +505,14 @@ test("complete byte windows decode a multibyte overlap seam only once", async ()
   const seam = Math.floor(encoded.byteLength / 2);
   expect(encoded.subarray(seam - 1, seam + 1).toString("utf8")).toContain("�");
   const read = await readLocalSessionWindows(
+    "/",
     "/session.jsonl",
     { ...limits, maxFileBytes: encoded.byteLength, maxContentBytes: encoded.byteLength },
     {
-      async readFileHeadBytes(_path, bytes) {
+      async readFileHeadBytes(_root, _path, bytes) {
         return { bytes: encoded.subarray(0, bytes) };
       },
-      async readFileTailBytes(_path, bytes) {
+      async readFileTailBytes(_root, _path, bytes) {
         const startOffset = encoded.byteLength - bytes;
         return { bytes: encoded.subarray(startOffset), startOffset };
       },

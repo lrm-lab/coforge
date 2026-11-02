@@ -88,13 +88,14 @@ export interface ClaudeHistoryHost {
   readHostEnvironment(name: "CLAUDE_CONFIG_DIR" | "HOME"): string | undefined;
   homeDirectory(): string;
   readDirectoryEntries(path: string): Promise<readonly ClaudeDirectoryEntry[]>;
-  isDirectoryWithoutSymlinks(path: string): Promise<boolean>;
+  resolveDirectoryWithoutSymlinks(path: string): Promise<string | undefined>;
   readDirectoryNames(path: string): Promise<readonly string[]>;
   lstat(path: string): Promise<ClaudeFileInfo>;
   readFileTail(path: string, tailBytes: number): Promise<{ text: string; startOffset: number }>;
   /** Byte windows used to reconstruct an overlap before the single UTF-8 decode. */
-  readFileHeadBytes(path: string, headBytes: number): Promise<{ bytes: Uint8Array }>;
+  readFileHeadBytes(root: string, path: string, headBytes: number): Promise<{ bytes: Uint8Array }>;
   readFileTailBytes(
+    root: string,
     path: string,
     tailBytes: number,
   ): Promise<{ bytes: Uint8Array; startOffset: number }>;

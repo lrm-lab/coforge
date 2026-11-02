@@ -5,7 +5,7 @@ import {
   readHistoryFileHeadBytes,
   readHistoryFileTail,
   readHistoryFileTailBytes,
-  isDirectoryWithoutSymlinks,
+  resolveDirectoryWithoutSymlinks,
 } from "#src/code-agent/bounded-history-file";
 
 /** File IO for Codex rollout reads. `node:fs/promises` `readdir` supplies the directory types. */
@@ -13,7 +13,7 @@ export const codexHistoryHost: CodexHistoryHost = {
   readHostEnvironment: (name) => Bun.env[name],
   homeDirectory: homedir,
   readDirectoryEntries: (path) => readdir(path, { withFileTypes: true }),
-  isDirectoryWithoutSymlinks,
+  resolveDirectoryWithoutSymlinks,
   readFileTail: readHistoryFileTail,
   readFileHeadBytes: readHistoryFileHeadBytes,
   readFileTailBytes: readHistoryFileTailBytes,

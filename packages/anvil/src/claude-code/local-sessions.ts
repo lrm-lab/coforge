@@ -18,7 +18,7 @@ import type { ClaudeHistoryHost } from "./host";
 
 const SESSION_FILE = /^([A-Za-z0-9][A-Za-z0-9._-]{0,199})\.jsonl$/;
 
-type Candidate = { path: string; sessionId: string; modifiedAtMs: number };
+type Candidate = { rootPath: string; path: string; sessionId: string; modifiedAtMs: number };
 type Details = NativeLocalSessionExcerpt & { cwd: string; title: string; searchable: string };
 
 function configDirectory(host: ClaudeHistoryHost): string {
@@ -34,10 +34,15 @@ async function candidates(options: LocalSessionSearchOptions, host: ClaudeHistor
   let files = 0;
   let complete = true;
   let projects;
+  let rootPath: string;
   const projectsRoot = join(configDirectory(host), "projects");
   try {
-    if (!(await localSessionIo(host.isDirectoryWithoutSymlinks(projectsRoot), options.limits)))
-      return { found, complete: true };
+    const resolved = await localSessionIo(
+      host.resolveDirectoryWithoutSymlinks(projectsRoot),
+      options.limits,
+    );
+    if (!resolved) return { found, complete: true };
+    rootPath = resolved;
     projects = await localSessionIo(host.readDirectoryEntries(projectsRoot), options.limits);
   } catch (error) {
     return { found, complete: !(error instanceof LocalSessionDeadlineError) };
@@ -55,7 +60,8 @@ async function candidates(options: LocalSessionSearchOptions, host: ClaudeHistor
     const root = join(projectsRoot, project.name);
     let entries;
     try {
-      if (!(await localSessionIo(host.isDirectoryWithoutSymlinks(root), options.limits))) continue;
+      if (!(await localSessionIo(host.resolveDirectoryWithoutSymlinks(root), options.limits)))
+        continue;
       entries = await localSessionIo(host.readDirectoryEntries(root), options.limits);
     } catch (error) {
       if (error instanceof LocalSessionDeadlineError) {
@@ -83,6 +89,7 @@ async function candidates(options: LocalSessionSearchOptions, host: ClaudeHistor
             return info.isFile()
               ? {
                   candidate: {
+                    rootPath,
                     path,
                     sessionId: entry.sessionId,
                     modifiedAtMs: Number.isFinite(info.mtimeMs) ? Math.max(0, info.mtimeMs) : 0,
@@ -162,7 +169,13 @@ async function readDetails(
   host: ClaudeHistoryHost,
   budget: { bytes: number },
 ) {
-  const read = await readLocalSessionWindows(candidate.path, options.limits, host, budget);
+  const read = await readLocalSessionWindows(
+    candidate.rootPath,
+    candidate.path,
+    options.limits,
+    host,
+    budget,
+  );
   if (!read) return;
   const parsed = details(read.records, candidate.modifiedAtMs);
   return parsed ? { parsed, complete: read.complete } : undefined;
@@ -201,6 +214,7 @@ export async function searchClaudeLocalSessions(
       throw error;
     }
     if (!read) {
+      hydrationComplete = false;
       if (query) contentSearchComplete = false;
       continue;
     }

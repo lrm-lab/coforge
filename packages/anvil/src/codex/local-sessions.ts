@@ -18,7 +18,13 @@ import type { CodexHistoryHost } from "./host";
 import { codexHomeDirectory, threadIdOfRollout } from "./session-rollout";
 
 const STAMP_LENGTH = 19;
-type Candidate = { path: string; name: string; sessionId: string; modifiedAtMs: number };
+type Candidate = {
+  rootPath: string;
+  path: string;
+  name: string;
+  sessionId: string;
+  modifiedAtMs: number;
+};
 type Details = NativeLocalSessionExcerpt & { cwd: string; title: string; searchable: string };
 
 function rolloutTimestamp(name: string): number {
@@ -30,7 +36,19 @@ function rolloutTimestamp(name: string): number {
 async function candidates(options: LocalSessionSearchOptions, host: CodexHistoryHost) {
   const home = codexHomeDirectory(undefined, host);
   if (!home) return { found: [] as Candidate[], complete: true };
-  const queue = [{ path: join(home, "sessions"), depth: 0 }];
+  const sessionsRoot = join(home, "sessions");
+  let rootPath: string;
+  try {
+    const resolved = await localSessionIo(
+      host.resolveDirectoryWithoutSymlinks(sessionsRoot),
+      options.limits,
+    );
+    if (!resolved) return { found: [] as Candidate[], complete: true };
+    rootPath = resolved;
+  } catch (error) {
+    return { found: [] as Candidate[], complete: !(error instanceof LocalSessionDeadlineError) };
+  }
+  const queue = [{ path: sessionsRoot, depth: 0 }];
   const newest = new Map<string, Candidate>();
   let directories = 0;
   let files = 0;
@@ -51,7 +69,10 @@ async function candidates(options: LocalSessionSearchOptions, host: CodexHistory
       batch.map(async (current) => {
         try {
           if (
-            !(await localSessionIo(host.isDirectoryWithoutSymlinks(current.path), options.limits))
+            !(await localSessionIo(
+              host.resolveDirectoryWithoutSymlinks(current.path),
+              options.limits,
+            ))
           )
             return { current, entries: [] };
           return {
@@ -84,6 +105,7 @@ async function candidates(options: LocalSessionSearchOptions, host: CodexHistory
           break;
         }
         const candidate = {
+          rootPath,
           path,
           name: entry.name,
           sessionId,
@@ -160,7 +182,13 @@ async function readDetails(
   host: CodexHistoryHost,
   budget: { bytes: number },
 ) {
-  const read = await readLocalSessionWindows(candidate.path, options.limits, host, budget);
+  const read = await readLocalSessionWindows(
+    candidate.rootPath,
+    candidate.path,
+    options.limits,
+    host,
+    budget,
+  );
   if (!read) return;
   const parsed = details(read.records, candidate.modifiedAtMs);
   return parsed ? { parsed, complete: read.complete } : undefined;
@@ -199,6 +227,7 @@ export async function searchCodexLocalSessions(
       throw error;
     }
     if (!read) {
+      hydrationComplete = false;
       if (query) contentSearchComplete = false;
       continue;
     }
