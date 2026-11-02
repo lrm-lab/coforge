@@ -23,7 +23,7 @@ import {
   type TaskChanges,
 } from "./conversation-tasks-collection";
 import { UNFINISHED_STATUSES } from "./finished-tasks";
-import { finishedTasksScopeKey } from "./use-finished-tasks";
+import { finishedTasksScopeKey, overviewTaskQuery } from "./use-finished-tasks";
 import { assertBrowserOnly } from "#src/lib/browser-only";
 import { m } from "#src/paraglide/messages";
 
@@ -124,6 +124,16 @@ export function useConversationTaskWrites() {
         void queryClient.invalidateQueries({
           queryKey: finishedTasksScopeKey({ workspaceId, conversationId }),
         });
+      // The detail dialog reads each Task under the workspace scope; a changed Task's open detail
+      // (its blockers' statuses included) reads again.
+      for (const change of changes)
+        for (const task of change.tasks)
+          void queryClient.invalidateQueries({
+            queryKey: overviewTaskQuery(workspaceId, {
+              conversationId: task.conversationId,
+              number: task.number,
+            }).queryKey,
+          });
     },
     [queryClient, workspaceId],
   );
