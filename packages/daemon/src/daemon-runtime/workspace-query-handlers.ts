@@ -4,9 +4,12 @@ import type {
   AgentWorkspaceScanRequest,
   AgentWorkspaceScanResult,
 } from "@lrm/coforge-sdk/internal";
+import { getLogger } from "@logtape/logtape";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import type { AgentWorkspaceQueries } from "./agent-workspace-queries";
 import type { DaemonConfig } from "./runtime";
+
+const logger = getLogger(["coforge", "daemon", "workspace"]);
 
 type Queries = {
   connection: DaemonConfig;
@@ -77,15 +80,50 @@ export function subscribeWorkspaceQueries(
         await transport.sendWorkspaceFileReadResult?.({ ...request, ...result });
     }),
     transport.onWorkspaceDelete?.(async (request) => {
+      const scope = {
+        agent_id: request.agentId,
+        request_id: request.requestId,
+      };
+      // A deletion leaves this log line before anything can throw: without it a request that
+      // never reaches the handler and one that fails inside look identical (task #367).
+      logger.info("Workspace deletion request received", {
+        event: "workspace_delete:received",
+        ...scope,
+        outcome: "received",
+      });
       if (
         queries.isStopping() ||
         request.workspaceId !== connection.workspaceId ||
         request.computerId !== connection.computerId
-      )
+      ) {
+        logger.warning("Workspace deletion request ignored", {
+          event: "workspace_delete:ignored",
+          ...scope,
+          stopping: queries.isStopping(),
+          outcome: "ignored",
+        });
         return;
+      }
       const result = await queries.deleteWorkspace(request);
-      if (!queries.isStopping() && queries.currentTransport() === transport)
-        await transport.sendWorkspaceDeleteResult?.({ ...request, ...result });
+      logger.info("Workspace deletion finished", {
+        event: "workspace_delete:result",
+        ...scope,
+        status: result.status,
+        outcome: "ok",
+      });
+      if (!queries.isStopping() && queries.currentTransport() === transport) {
+        try {
+          await transport.sendWorkspaceDeleteResult?.({ ...request, ...result });
+        } catch (error) {
+          logger.warning("Workspace deletion result was not delivered", {
+            event: "workspace_delete:result_send_failed",
+            ...scope,
+            status: result.status,
+            error_code: error instanceof Error ? error.name : "unknown",
+            outcome: "failed",
+          });
+        }
+      }
     }),
   ];
 }

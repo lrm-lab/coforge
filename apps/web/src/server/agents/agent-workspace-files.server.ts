@@ -99,8 +99,16 @@ export class AgentWorkspaceFilesQuery {
     private readonly timing: {
       now: () => number;
       wait: (ms: number) => Promise<void>;
+      /** Listing one directory answers in well under a second; a deletion removes a whole tree,
+       * so it gets its own, longer deadline. */
       timeoutMs: number;
-    } = { now: Date.now, wait: (ms) => Bun.sleep(ms), timeoutMs: 5_000 },
+      deleteTimeoutMs?: number;
+    } = {
+      now: Date.now,
+      wait: (ms) => Bun.sleep(ms),
+      timeoutMs: 5_000,
+      deleteTimeoutMs: 60_000,
+    },
   ) {}
 
   async list(
@@ -210,7 +218,7 @@ export class AgentWorkspaceFilesQuery {
       if (!(await online(request))) return { status: "offline" };
       await deleteResults.begin({ request, userId: viewer.userId, revision: assignment.revision });
       await publishDelete(request);
-      const deadline = this.timing.now() + this.timing.timeoutMs;
+      const deadline = this.timing.now() + (this.timing.deleteTimeoutMs ?? this.timing.timeoutMs);
       let attempt = 0;
       do {
         const result = await deleteResults.read(request.requestId);

@@ -15,11 +15,14 @@ import {
   encodeAgentWorkspaceDeleteResult,
   AGENT_WORKSPACE_DELETE_RESULT_METHOD,
 } from "@lrm/coforge-sdk/internal";
+import { getLogger } from "@logtape/logtape";
 import {
   decodePiChatRequest,
   encodePiChatFrame,
   PI_CHAT_FRAME_METHOD,
 } from "@lrm/coforge-sdk/internal/pi-chat-wire";
+
+const logger = getLogger(["coforge", "daemon", "queries"]);
 
 type Scope = { workspaceId: string; computerId: string };
 type Rpc = (method: string, bytes: Uint8Array) => Promise<unknown>;
@@ -50,7 +53,17 @@ class DaemonQuery<Request extends Scope, Result> {
       return false;
     }
     if (request.workspaceId === scope.workspaceId && request.computerId === scope.computerId)
-      void this.#listener?.(request).catch(() => {});
+      void this.#listener?.(request).catch((error: unknown) => {
+        // A query handler that throws used to vanish: the caller learned nothing and the log
+        // said nothing (task #367).
+        logger.warning("Workspace query handler failed", {
+          event: "workspace_query:handler_failed",
+          workspace_id: request.workspaceId,
+          computer_id: request.computerId,
+          error_code: error instanceof Error ? error.name : "unknown",
+          outcome: "failed",
+        });
+      });
     return true;
   }
 }
