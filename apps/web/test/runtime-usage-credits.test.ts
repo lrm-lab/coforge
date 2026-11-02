@@ -1,6 +1,9 @@
 import { expect, test } from "bun:test";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
-import { usageWindowLabel } from "#src/features/computers/runtime-usage-windows";
+import {
+  officialBucketLabel,
+  usageWindowLabel,
+} from "#src/features/computers/runtime-usage-windows";
 import {
   accountBand,
   chipStatus,
@@ -36,6 +39,42 @@ test("each runtime names its usage windows the way that runtime reports them", (
   expect(usageWindowLabel(RUNTIME_PROVIDER.CODEX, "primary", session)).toBe("Session");
   expect(usageWindowLabel(RUNTIME_PROVIDER.CODEX, "primary", week)).toBe("Weekly");
   expect(usageWindowLabel(RUNTIME_PROVIDER.CODEX, "secondary", week)).toBe("Weekly");
+});
+
+test("officialBucketLabel localizes Grok bucket names and raw window labels", () => {
+  expect(
+    officialBucketLabel({
+      name: "Weekly included usage",
+      window: "USAGE_PERIOD_TYPE_WEEKLY",
+      windowDurationMinutes: 10_080,
+    }),
+  ).toBe("Weekly");
+  expect(
+    officialBucketLabel({
+      name: "Monthly included usage",
+      window: "USAGE_PERIOD_TYPE_MONTHLY",
+      windowDurationMinutes: 43_200,
+    }),
+  ).toBe("Monthly");
+  expect(
+    officialBucketLabel({
+      name: "Included usage",
+      window: "currentPeriod",
+    }),
+  ).toBe("Current period");
+  expect(
+    officialBucketLabel({
+      name: "Pay-as-you-go",
+      window: "onDemand",
+    }),
+  ).toBe("Pay-as-you-go");
+  // Custom provider-given bucket name is preserved verbatim
+  expect(
+    officialBucketLabel({
+      name: "Claude Sonnet (current session)",
+      windowDurationMinutes: 300,
+    }),
+  ).toBe("Claude Sonnet (current session)");
 });
 
 test("both runtime entry points open the popover on a press, as on Raft", async () => {

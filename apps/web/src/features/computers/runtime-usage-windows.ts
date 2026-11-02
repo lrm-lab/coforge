@@ -48,12 +48,22 @@ export function byDuration({ windowDurationMinutes }: UsageWindowShape): string 
 /** Window keys we store when the provider has no display name. They are not official copy. */
 const RAW_WINDOW_LABELS: Record<string, () => string> = {
   onDemand: () => m.computer_usage_pay_as_you_go(),
+  "Pay-as-you-go": () => m.computer_usage_pay_as_you_go(),
   prepaidBalance: () => m.computer_usage_prepaid_balance(),
   individualLimit: () => m.computer_usage_spend_limit(),
   bonus: () => m.computer_usage_bonus(),
   freeTrial: () => m.computer_usage_free_trial(),
   currentPeriod: () => m.computer_usage_current_period(),
+  "Included usage": () => m.computer_usage_current_period(),
+  "Weekly included usage": () => m.computer_usage_weekly(),
+  "Monthly included usage": () => m.computer_usage_monthly(),
+  USAGE_PERIOD_TYPE_WEEKLY: () => m.computer_usage_weekly(),
+  USAGE_PERIOD_TYPE_MONTHLY: () => m.computer_usage_monthly(),
 };
+
+function isRawWindowLabel(name: string): boolean {
+  return name in RAW_WINDOW_LABELS || /included usage$/iu.test(name);
+}
 
 /** The row label for one official bucket. A provider name wins, except on a bucket the provider
  * counts as a share left (`remainingFraction`): its name says so ("Weekly Limit Remaining") while
@@ -66,14 +76,18 @@ export function officialBucketLabel(bucket: {
   windowDurationMinutes?: number;
 }): string {
   const remainingType = bucket.remainingFraction !== undefined;
-  if (bucket.name && !remainingType && !RAW_WINDOW_LABELS[bucket.name]) return bucket.name;
+  if (bucket.name && !remainingType && !isRawWindowLabel(bucket.name)) return bucket.name;
   const key = remainingType ? bucket.window : (bucket.window ?? bucket.name);
-  const known = key ? RAW_WINDOW_LABELS[key] : undefined;
+  const known =
+    (key ? RAW_WINDOW_LABELS[key] : undefined) ??
+    (bucket.name ? RAW_WINDOW_LABELS[bucket.name] : undefined);
   if (known) return known();
   if (bucket.windowDurationMinutes)
     return byDuration({ windowDurationMinutes: bucket.windowDurationMinutes });
   if (key && /week/iu.test(key)) return m.computer_usage_weekly();
   if (key && /month/iu.test(key)) return m.computer_usage_monthly();
+  if (bucket.name && /week/iu.test(bucket.name)) return m.computer_usage_weekly();
+  if (bucket.name && /month/iu.test(bucket.name)) return m.computer_usage_monthly();
   return key ?? m.computer_usage_available();
 }
 

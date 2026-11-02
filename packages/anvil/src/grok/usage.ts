@@ -117,17 +117,21 @@ function projectBilling(value: unknown, accountLabel?: string): UsageSnapshot {
   const explicit = number(config.creditUsagePercent);
   const used = finiteNumber(config.used);
   const limit = finiteNumber(config.monthlyLimit);
+  const missingMetrics = [config.creditUsagePercent, config.used, config.monthlyLimit].every(
+    (metric) => metric === null || metric === undefined,
+  );
   const percent =
     explicit ??
-    (used !== undefined && limit !== undefined && limit > 0 ? (used / limit) * 100 : undefined);
+    (used !== undefined && limit !== undefined && limit > 0 ? (used / limit) * 100 : undefined) ??
+    (missingMetrics ? 0 : undefined);
   const period = asRecord(config.currentPeriod);
   const reset = instant(period?.end ?? config.billingPeriodEnd);
   const minutes = periodMinutes(period?.type);
-  const officialGroups = billingGroups(config, percent, reset, minutes);
+  const cap = quotaNumber(config.onDemandCap) ?? 0;
+  const legacyOver = used !== undefined && limit !== undefined ? Math.max(0, used - limit) : 0;
+  const over = quotaNumber(config.onDemandUsed) ?? legacyOver;
+  const officialGroups = billingGroups(config, percent, reset, minutes, over);
   if (percent === undefined || percent < 0) {
-    // A unified-billing account may omit the percent. Keep the period, the `{ val }` cap and
-    // used, and the prepaid balance. Do not invent a percent. With none of those fields,
-    // retrying still cannot produce a reading.
     if (config.isUnifiedBillingUser === true && officialGroups.length > 0) {
       return {
         provider: RUNTIME_PROVIDER.GROK,
@@ -143,16 +147,14 @@ function projectBilling(value: unknown, accountLabel?: string): UsageSnapshot {
     throw new Error("Grok returned no usable account usage percentage");
   }
   const primary = window(periodLabel(period?.type), percent, reset, minutes);
-  const cap = quotaNumber(config.onDemandCap);
-  const over =
-    quotaNumber(config.onDemandUsed) ??
-    (used !== undefined && limit !== undefined ? Math.max(0, used - limit) : 0);
+  const prepaidBalance = Math.abs(quotaNumber(config.prepaidBalance) ?? 0);
+  const onDemandRatio = cap > 0 ? Math.max(0, Math.min(1, over / cap)) : null;
   const secondary =
-    cap !== undefined && cap > 0
-      ? window("Pay-as-you-go", (over / cap) * 100, reset, minutes)
+    onDemandRatio !== null
+      ? window("Pay-as-you-go", onDemandRatio * 100, reset, minutes)
       : undefined;
   const rateLimited =
-    percent >= 100 && (secondary === undefined || (secondary.usedPercent ?? 0) >= 100);
+    percent >= 100 && prepaidBalance === 0 && (onDemandRatio === null || onDemandRatio >= 1);
   return {
     provider: RUNTIME_PROVIDER.GROK,
     primary,
@@ -171,6 +173,7 @@ function billingGroups(
   percent: number | undefined,
   reset: string | undefined,
   minutes: number,
+  over?: number,
 ): NonNullable<UsageSnapshot["officialGroups"]> {
   const period = asRecord(config.currentPeriod);
   const periodType = typeof period?.type === "string" ? period.type.trim() : "";
@@ -178,6 +181,7 @@ function billingGroups(
   if (percent !== undefined && percent >= 0) {
     const shown = Math.min(100, percent);
     buckets.push({
+      name: periodLabel(periodType),
       ...(periodType ? { window: periodType } : { window: "currentPeriod" }),
       usedPercent: shown,
       status: shown >= 100 ? "limit_reached" : "ok",
@@ -189,6 +193,7 @@ function billingGroups(
     // unknown type stays a period row without an invented duration.
     const knownMinutes = /week/iu.test(periodType) ? WEEK_MINUTES : undefined;
     buckets.push({
+      name: periodLabel(periodType),
       ...(periodType ? { window: periodType } : { window: "currentPeriod" }),
       status: "parse_unavailable",
       ...(knownMinutes ? { windowDurationMinutes: knownMinutes } : {}),
@@ -196,30 +201,22 @@ function billingGroups(
     });
   }
   const cap = quotaNumber(config.onDemandCap);
-  const onDemandUsed = quotaNumber(config.onDemandUsed);
-  if (cap !== undefined || onDemandUsed !== undefined) {
-    const metered = cap !== undefined && cap > 0 && onDemandUsed !== undefined;
-    const shown = metered ? Math.min(100, (onDemandUsed / cap) * 100) : undefined;
-    const description =
-      !metered && cap !== undefined && onDemandUsed !== undefined
-        ? `${onDemandUsed} / ${cap}`
-        : undefined;
-    // One side alone is not a figure. Omitting it keeps the row from reading as "Available".
-    if (shown !== undefined || description !== undefined) {
-      buckets.push({
-        window: "onDemand",
-        ...(shown !== undefined
-          ? { usedPercent: shown, status: shown >= 100 ? "limit_reached" : "ok" }
-          : {}),
-        ...(metered ? { windowDurationMinutes: minutes } : {}),
-        ...(reset ? { resetsAt: reset } : {}),
-        ...(description ? { description } : {}),
-      });
-    }
-  }
-  const prepaid = quotaNumber(config.prepaidBalance);
-  if (prepaid !== undefined) {
-    buckets.push({ window: "prepaidBalance", description: String(prepaid) });
+  if (cap !== undefined && cap > 0) {
+    const effectiveOver =
+      over ??
+      quotaNumber(config.onDemandUsed) ??
+      (finiteNumber(config.used) !== undefined && finiteNumber(config.monthlyLimit) !== undefined
+        ? Math.max(0, finiteNumber(config.used)! - finiteNumber(config.monthlyLimit)!)
+        : 0);
+    const shown = Math.max(0, Math.min(100, (effectiveOver / cap) * 100));
+    buckets.push({
+      name: "Pay-as-you-go",
+      window: "onDemand",
+      usedPercent: shown,
+      status: shown >= 100 ? "limit_reached" : "ok",
+      windowDurationMinutes: minutes,
+      ...(reset ? { resetsAt: reset } : {}),
+    });
   }
   return buckets.length > 0 ? [{ buckets }] : [];
 }
@@ -247,7 +244,14 @@ function periodMinutes(type: unknown): number {
   return typeof type === "string" && /week/iu.test(type) ? WEEK_MINUTES : MONTH_MINUTES;
 }
 function periodLabel(value: unknown): string {
-  return typeof value === "string" && value.trim() ? value.trim() : "Monthly";
+  if (typeof value !== "string" || !value.trim()) {
+    return "Included usage";
+  }
+  const normalized = value
+    .trim()
+    .replace(/^USAGE_PERIOD_TYPE_/u, "")
+    .toLowerCase();
+  return `${normalized.charAt(0).toUpperCase()}${normalized.slice(1)} included usage`;
 }
 function number(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
