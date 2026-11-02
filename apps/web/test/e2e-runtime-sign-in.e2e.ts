@@ -70,7 +70,7 @@ const step = (body: string) =>
     ${body}
   `);
 const shot = (name: string) =>
-  `await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== "running"), undefined, { timeout: 5000 }); await page.waitForTimeout(200); await page.screenshot({ path: ${JSON.stringify(join(artifacts, `${name}.png`))} });`;
+  `await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== "running" || a.effect?.getComputedTiming().iterations === Infinity), undefined, { timeout: 5000 }); await page.waitForTimeout(200); await page.screenshot({ path: ${JSON.stringify(join(artifacts, `${name}.png`))} });`;
 /** The dialog's own Sign out, not the popover's that opened it. */
 const confirmSignOut = `await page.evaluate(() => [...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent.trim() === "Sign Out").click());`;
 const waitText = (text: string) =>
@@ -206,6 +206,7 @@ test("signing a runtime in shows the device code, takes a pasted code again, and
     ${waitText("Not signed in")}
     await page.click("loc=role:button[name='Sign In']");
     ${waitText("Sign in to Claude Code")}
+    ${shot("starting")}
   `);
   const loginId = await currentLogin("claude-code");
   await report(loginId, 1, {

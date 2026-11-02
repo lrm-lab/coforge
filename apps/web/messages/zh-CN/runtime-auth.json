@@ -10,6 +10,7 @@
   "runtime_auth_code_expires": "验证码 {minutes} 分钟后过期。",
   "runtime_auth_paste_label": "粘贴登录后显示的验证码",
   "runtime_auth_submit": "提交",
+  "runtime_auth_waiting": "等待登录完成…",
   "runtime_auth_checking": "正在核对验证码…",
   "runtime_auth_code_invalid": "请粘贴登录页上的完整验证码。",
   "runtime_auth_code_rejected": "验证码没被接受，请重新粘贴。",

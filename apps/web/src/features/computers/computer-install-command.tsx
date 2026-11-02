@@ -4,6 +4,7 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { ButtonGroup, ButtonGroupItem } from "#src/components/base/button-group/button-group";
 import { StatusDot } from "#src/components/ui/status-dot";
 import { connectionCommands } from "#src/features/install/install-commands";
+import { Spinner } from "#src/components/ui/spinner";
 import { m } from "#src/paraglide/messages";
 
 export function ComputerInstallCommand({
@@ -56,7 +57,11 @@ export function ComputerInstallCommand({
         role="status"
         className="flex items-center gap-3 rounded-lg border border-secondary bg-secondary px-4 py-3"
       >
-        <StatusDot tone={connectedComputerName ? "online" : "unknown"} className="size-2" />
+        {connectedComputerName ? (
+          <StatusDot tone="online" className="size-2" />
+        ) : (
+          <Spinner className="size-4 shrink-0 text-fg-quaternary" />
+        )}
         <p className="text-sm font-medium text-primary">
           {connectedComputerName
             ? m.computer_add_success_description({ name: connectedComputerName })

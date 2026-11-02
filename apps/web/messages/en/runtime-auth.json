@@ -10,6 +10,7 @@
   "runtime_auth_code_expires": "The code expires in {minutes} min.",
   "runtime_auth_paste_label": "Paste the code shown after signing in",
   "runtime_auth_submit": "Submit",
+  "runtime_auth_waiting": "Waiting for sign-in to finish…",
   "runtime_auth_checking": "Checking the code…",
   "runtime_auth_code_invalid": "Paste the whole code from the sign-in page.",
   "runtime_auth_code_rejected": "That code was not accepted. Paste it again.",

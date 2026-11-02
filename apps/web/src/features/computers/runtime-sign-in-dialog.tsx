@@ -25,6 +25,7 @@ import {
 } from "#src/components/ui/dialog-actions";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { copyText } from "#src/lib/clipboard";
+import { Spinner } from "#src/components/ui/spinner";
 import { m } from "#src/paraglide/messages";
 import {
   cancelRuntimeAuthLogin,
@@ -251,7 +252,7 @@ function SignInBody({
 }): ReactNode {
   switch (state.phase) {
     case "starting":
-      return <p role="status">{m.runtime_auth_starting({ computer: computerName })}</p>;
+      return <Waiting>{m.runtime_auth_starting({ computer: computerName })}</Waiting>;
     case "signed_in": {
       const account = [state.account?.maskedLabel, state.account?.planLabel].filter(Boolean);
       return (
@@ -285,13 +286,28 @@ function SignInBody({
               dispatch={dispatch}
             />
           )}
-          {state.checking && <p role="status">{m.runtime_auth_checking()}</p>}
+          {state.checking && <Waiting>{m.runtime_auth_checking()}</Waiting>}
+          {/* Waiting on the browser, not on the person: a code to paste back means the next
+              step is theirs, so no spinner then. */}
+          {state.link && state.prompt === undefined && !state.checking && (
+            <Waiting>{m.runtime_auth_waiting()}</Waiting>
+          )}
           {!state.link && !state.info && state.prompt === undefined && (
-            <p role="status">{m.runtime_auth_starting({ computer: computerName })}</p>
+            <Waiting>{m.runtime_auth_starting({ computer: computerName })}</Waiting>
           )}
         </>
       );
   }
+}
+
+/** A step that waits on something outside the dialog: one small spinner before its line. */
+function Waiting({ children }: { children: ReactNode }) {
+  return (
+    <p role="status" className="flex items-center gap-2 text-tertiary">
+      <Spinner className="size-4 shrink-0" />
+      {children}
+    </p>
+  );
 }
 
 /** One sentence for every runtime, as on Raft: the runtime's own instructions are not shown. */
