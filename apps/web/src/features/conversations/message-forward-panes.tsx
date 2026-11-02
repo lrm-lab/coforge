@@ -1,14 +1,13 @@
 import type { ReactNode } from "react";
-import { Checkbox as AriaCheckbox, Tag, TagGroup, TagList } from "react-aria-components";
+import { Tag, TagGroup, TagList } from "react-aria-components";
 import { SearchLg } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
-import { CheckboxBase } from "#src/components/base/checkbox/checkbox";
 import { Input } from "#src/components/base/input/input";
 import { TagCloseX } from "#src/components/base/tags/base-components/tag-close-x";
 import { TextArea } from "#src/components/base/textarea/textarea";
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
-import { cn } from "#src/lib/utils";
+import { Face } from "#src/features/pickers/entity-picker";
+import { PickerListRow } from "#src/features/pickers/picker-list";
 import { m } from "#src/paraglide/messages";
 import { channelGlyph } from "./channel-name";
 import type { ChannelVisibility } from "./channel-visibility";
@@ -42,54 +41,32 @@ function TargetRow({
   failure: ForwardFailureCode | undefined;
   onToggle: (target: ForwardTarget, on: boolean) => void;
 }) {
-  const label = forwardTargetLabel(target);
-  const tag = failure
+  // A row reads as the menus' rows do: the name, and an Agent's `@handle` after it. A channel's
+  // tag (not joined, refused) takes that place.
+  const addon = failure
     ? failureLabel(failure)
     : isUnjoinedChannel(target)
       ? m.message_forward_not_joined()
-      : undefined;
+      : target.kind === "agent"
+        ? `@${target.handle}`
+        : undefined;
   return (
-    <li>
-      <AriaCheckbox
-        isSelected={selected}
-        isDisabled={!selectable}
-        onChange={(on) => onToggle(target, on)}
-        aria-label={label}
-        className="relative flex w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-2 hover:bg-primary_hover disabled:cursor-not-allowed"
-      >
-        {({ isSelected: on, isDisabled, isFocusVisible }) => (
-          <>
-            <CheckboxBase isSelected={on} isDisabled={isDisabled} isFocusVisible={isFocusVisible} />
-            {target.kind === "channel" ? (
-              <ChannelTargetMark visibility={target.visibility} />
-            ) : (
-              <IdentityAvatar
-                size="xs"
-                className="avatar-square"
-                alt=""
-                src={target.avatarUrl}
-                name={target.name}
-              />
-            )}
-            <span
-              className={cn(
-                "min-w-0 flex-1 truncate text-sm font-medium text-primary",
-                isDisabled && "text-tertiary",
-              )}
-            >
-              {target.kind === "channel" ? target.name : label}
-            </span>
-            {tag && (
-              <span
-                className={cn("shrink-0 text-xs", failure ? "text-error-primary" : "text-tertiary")}
-              >
-                {tag}
-              </span>
-            )}
-          </>
-        )}
-      </AriaCheckbox>
-    </li>
+    <PickerListRow
+      label={target.name}
+      aria-label={forwardTargetLabel(target)}
+      leading={
+        target.kind === "channel" ? (
+          <ChannelTargetMark visibility={target.visibility} />
+        ) : (
+          <Face face={{ kind: "identity", name: target.name, src: target.avatarUrl }} />
+        )
+      }
+      addon={addon}
+      addonError={Boolean(failure)}
+      isSelected={selected}
+      isDisabled={!selectable}
+      onChange={(on) => onToggle(target, on)}
+    />
   );
 }
 
@@ -268,7 +245,7 @@ function ChannelTargetMark({ visibility }: { visibility: ChannelVisibility }) {
   return (
     <span
       aria-hidden="true"
-      className="flex size-6 shrink-0 items-center justify-center rounded-md bg-tertiary text-fg-quaternary"
+      className="flex size-5 shrink-0 items-center justify-center rounded-md bg-tertiary text-fg-quaternary"
     >
       <Glyph className="size-3.5" />
     </span>

@@ -1,8 +1,7 @@
-import { Checkbox as AriaCheckbox } from "react-aria-components";
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { Button } from "#src/components/base/buttons/button";
-import { CheckboxBase } from "#src/components/base/checkbox/checkbox";
 import { Input } from "#src/components/base/input/input";
+import { Face } from "#src/features/pickers/entity-picker";
+import { PickerListRow } from "#src/features/pickers/picker-list";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 import { filterGroupChatCandidates, type GroupChatCandidate } from "./group-chat-picker";
@@ -65,37 +64,17 @@ export function GroupChatPicker({
         )}
         <ul className="flex flex-col">
           {shown.map((entry) => (
-            <li key={entry.key}>
-              <AriaCheckbox
-                isSelected={selectedKeys.has(entry.key)}
-                isDisabled={disabled}
-                onChange={(on) => onToggle(entry.key, on)}
-                aria-label={entry.name}
-                // `relative` keeps React Aria's visually hidden input inside the row. Without it the
-                // input is placed against the dialog, whose scroll area then grows past the list
-                // and scrolls the whole dialog when a lower row is ticked (task #331).
-                className="relative flex w-full cursor-pointer items-center gap-3 rounded-lg px-2 py-2 hover:bg-primary_hover disabled:cursor-not-allowed"
-              >
-                {({ isSelected, isDisabled, isFocusVisible }) => (
-                  <>
-                    <CheckboxBase
-                      isSelected={isSelected}
-                      isDisabled={isDisabled}
-                      isFocusVisible={isFocusVisible}
-                    />
-                    <IdentityAvatar
-                      size="xs"
-                      alt=""
-                      src={entry.avatarUrl ?? undefined}
-                      name={entry.name}
-                    />
-                    <span className="min-w-0 flex-1 truncate text-left text-sm font-medium text-primary">
-                      {entry.name}
-                    </span>
-                  </>
-                )}
-              </AriaCheckbox>
-            </li>
+            <PickerListRow
+              key={entry.key}
+              label={entry.name}
+              leading={<Face face={{ kind: "identity", name: entry.name, src: entry.avatarUrl }} />}
+              // A person is named by their display name alone; an Agent adds the handle it is
+              // mentioned by.
+              addon={entry.search.kind === "agent" ? `@${entry.search.name}` : undefined}
+              isSelected={selectedKeys.has(entry.key)}
+              isDisabled={disabled}
+              onChange={(on) => onToggle(entry.key, on)}
+            />
           ))}
         </ul>
       </div>

@@ -264,12 +264,14 @@ export function MessageForwardDialog({
               </Heading>
             </div>
           )}
+          {/* Each pane may be narrower than its rows' text (`min-w-0`): a long name or `@handle`
+              truncates instead of widening the pane past the dialog. */}
           <div className="flex min-h-0 flex-1 border-t border-secondary lg:grid lg:grid-cols-[2fr_3fr]">
             <div
               className={
                 step === "note"
-                  ? "flex min-h-0 flex-col max-lg:hidden lg:border-r lg:border-secondary"
-                  : "flex min-h-0 flex-1 flex-col lg:border-r lg:border-secondary"
+                  ? "flex min-h-0 min-w-0 flex-col max-lg:hidden lg:border-r lg:border-secondary"
+                  : "flex min-h-0 min-w-0 flex-1 flex-col lg:border-r lg:border-secondary"
               }
             >
               <ForwardTargetPane
@@ -285,8 +287,8 @@ export function MessageForwardDialog({
             <div
               className={
                 step === "destinations"
-                  ? "flex min-h-0 flex-col max-lg:hidden"
-                  : "flex min-h-0 flex-1 flex-col"
+                  ? "flex min-h-0 min-w-0 flex-col max-lg:hidden"
+                  : "flex min-h-0 min-w-0 flex-1 flex-col"
               }
             >
               <ForwardNotePane

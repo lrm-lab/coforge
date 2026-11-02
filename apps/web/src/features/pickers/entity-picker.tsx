@@ -47,7 +47,7 @@ const SEARCH_FROM = 8;
 
 /** A person's or Agent's picture (an Agent's mascot drawn whole, not clipped to a tile), or a
  * Project's image or folder. */
-function Face({ face }: { face: PickerFace }) {
+export function Face({ face }: { face: PickerFace }) {
   if (face.kind === "project")
     return (
       <ProjectImage
@@ -80,12 +80,15 @@ type MenuBase = {
   /** What is being chosen, as a screen reader hears the list and as the search field reads. */
   label: string;
   options: readonly PickerOption[];
+  /** What the search field asks for once the list is long enough to have one. */
+  searchPlaceholder?: string;
 };
 
 /** The popover's content: a search field once the list is long, then the rows. */
 export function PickerMenu({
   label,
   options,
+  searchPlaceholder = m.picker_search(),
   ...choice
 }: MenuBase & (SingleChoice | MultipleChoice)) {
   const { contains } = useFilter({ sensitivity: "base" });
@@ -141,7 +144,7 @@ export function PickerMenu({
           <div className="flex items-center gap-2 px-3 py-2">
             <SearchLg aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
             <AriaInput
-              placeholder={m.picker_search()}
+              placeholder={searchPlaceholder}
               className="w-full bg-transparent text-sm text-primary outline-hidden placeholder:text-placeholder"
             />
           </div>

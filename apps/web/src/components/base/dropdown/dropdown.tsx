@@ -102,14 +102,14 @@ const DropdownItem = ({ label, children, addon, icon: Icon, avatarUrl, leading, 
                     {state.selectionMode !== "none" && !avatarUrl && !Icon && !leading && <SelectionIndicator {...state} className="mr-2" />}
 
                     {avatarUrl && (
-                        <div className="mr-2 flex size-4 items-center justify-center">
+                        <div className="mr-2 flex size-5 shrink-0 items-center justify-center">
                             <Avatar aria-hidden="true" size="xs" src={avatarUrl} alt={label} className="size-5" />
                         </div>
                     )}
 
                     {Icon && <Icon aria-hidden="true" className="mr-2.5 size-4 shrink-0 stroke-[2.25px] text-fg-quaternary" />}
 
-                    {leading && <span className="mr-2.5 flex size-4 shrink-0 items-center justify-center">{leading}</span>}
+                    {leading && <span className="mr-2 flex size-5 shrink-0 items-center justify-center">{leading}</span>}
 
                     <span className={cx("grow truncate text-sm/5.5 font-medium text-secondary", state.isFocused && "text-secondary_hover")}>
                         {label || (typeof children === "function" ? children(state) : children)}

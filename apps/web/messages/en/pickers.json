@@ -1,5 +1,6 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "picker_search": "Search",
+  "picker_find_member": "Find a person or Agent",
   "picker_no_matches": "No matches"
 }

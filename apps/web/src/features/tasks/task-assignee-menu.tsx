@@ -39,6 +39,7 @@ export function AssigneeMenu({
         </EditableTrigger>
       }
       label={m.tasks_change_assignee()}
+      searchPlaceholder={m.picker_find_member()}
       selectedKey={ownerKey}
       options={[{ id: UNASSIGNED, label: m.tasks_unassigned() }, ...members.map(memberOption)]}
       // By id, never by handle: a person and an Agent may share a name.

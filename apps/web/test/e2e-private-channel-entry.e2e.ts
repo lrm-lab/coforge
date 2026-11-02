@@ -115,6 +115,9 @@ test("a channel started private shows its lock, and its settings switch it publi
       `[...document.querySelectorAll('[role="dialog"] input')].find((input) => input.labels?.[0]?.textContent.includes("Channel name")).setAttribute("data-e2e-name", "") ?? true`,
     );
     await browser("fill", "[data-e2e-name]", name);
+    // The member list loads after the dialog opens.
+    for (const peer of peers)
+      await waitFor(`Boolean(document.querySelector('input[aria-label="${peer.displayName}"]'))`);
     for (const peer of peers) await press(`input[aria-label="${peer.displayName}"]`);
     await press('[role="dialog"] input[role="switch"]');
     await waitFor(`document.querySelector('[role="dialog"] input[role="switch"]').checked`);

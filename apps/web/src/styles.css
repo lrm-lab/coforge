@@ -237,11 +237,6 @@ html[data-drag-cursor] [data-drop-blocked] * {
     border-radius: 9999px;
   }
 
-  /* A small avatar among rounded-rectangle ones (the channel member pickers' rows) keeps their shape. */
-  [data-avatar].size-6.avatar-square {
-    border-radius: calc(var(--avatar-size) / 4);
-  }
-
   /* The Direct messages row's avatar: the "sm" step scaled to a 48 × 48px circle. Its status dot
      still follows `--avatar-size`. */
   [data-avatar].avatar-dm {
@@ -326,8 +321,8 @@ html[data-drag-cursor] [data-drop-blocked] * {
 
   /* A round avatar's dot centre sits on the circle at 45°: that point is 0.1464 × the size from
      the right and bottom edges, so the dot's own edge is that minus half its 1/4-size width. */
-  [data-avatar].size-6:not(.avatar-square) > span.ring-bg-primary,
-  [data-avatar].size-6:not(.avatar-square) > .avatar-status-dot,
+  [data-avatar].size-6 > span.ring-bg-primary,
+  [data-avatar].size-6 > .avatar-status-dot,
   [data-avatar].size-8 > span.ring-bg-primary,
   [data-avatar].size-8 > .avatar-status-dot,
   [data-avatar].avatar-dm > span.ring-bg-primary,

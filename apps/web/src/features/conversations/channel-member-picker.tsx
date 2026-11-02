@@ -1,11 +1,9 @@
-import { Checkbox as AriaCheckbox } from "react-aria-components";
-
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import { useVisibleLiveAgents } from "#src/features/agents/workspace-agents-realtime";
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { Face } from "#src/features/pickers/entity-picker";
+import { PickerListRow } from "#src/features/pickers/picker-list";
 import { BadgeWithButton } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
-import { CheckboxBase } from "#src/components/base/checkbox/checkbox";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { memberMatchesSearch, type SearchableMember } from "./channel-member-search";
@@ -244,43 +242,17 @@ function ChannelCandidateRow({
   pad: string;
   onToggle: (key: string, on: boolean) => void;
 }) {
-  const description = entry.description?.trim();
-  // React Aria's checkbox around the official box, so the row can hold an avatar: the official
-  // `Checkbox` puts its label in a `<p>`, which cannot contain the avatar's `<div>`.
   return (
-    <li>
-      <AriaCheckbox
-        isSelected={isSelected}
-        isDisabled={disabled}
-        onChange={(on) => onToggle(entry.key, on)}
-        aria-label={entry.displayName}
-        className={cn(
-          "relative flex w-full cursor-pointer items-center gap-2 py-2 hover:bg-primary_hover disabled:cursor-not-allowed",
-          pad,
-        )}
-      >
-        {({ isSelected: on, isDisabled, isFocusVisible }) => (
-          <>
-            <CheckboxBase isSelected={on} isDisabled={isDisabled} isFocusVisible={isFocusVisible} />
-            <IdentityAvatar
-              size="xs"
-              // A rounded square, as the roster's member avatars (styles.css), in both pickers.
-              className="avatar-square"
-              alt=""
-              src={entry.avatarUrl ?? undefined}
-              name={entry.displayName}
-            />
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-primary">
-                {entry.displayName}
-              </span>
-              {description && (
-                <span className="block truncate text-xs text-tertiary">{description}</span>
-              )}
-            </span>
-          </>
-        )}
-      </AriaCheckbox>
-    </li>
+    <PickerListRow
+      label={entry.displayName}
+      description={entry.description?.trim()}
+      leading={<Face face={{ kind: "identity", name: entry.displayName, src: entry.avatarUrl }} />}
+      // A person is named by their display name alone; an Agent adds the handle it is mentioned by.
+      addon={entry.search.kind === "agent" ? `@${entry.search.name}` : undefined}
+      isSelected={isSelected}
+      isDisabled={disabled}
+      onChange={(on) => onToggle(entry.key, on)}
+      className={pad}
+    />
   );
 }

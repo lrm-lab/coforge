@@ -1,5 +1,6 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "picker_search": "搜索",
+  "picker_find_member": "查找成员或 Agent",
   "picker_no_matches": "没有匹配的结果"
 }

@@ -68,6 +68,7 @@ export function SearchFilterBar({
           <Chip>{sender ? m.search_from_named({ name: sender.label }) : m.search_from()}</Chip>
         }
         label={m.search_find_sender()}
+        searchPlaceholder={m.search_find_sender()}
         selectedKey={sender?.key ?? ANY}
         options={[
           { id: ANY, label: m.search_from_anyone() },
@@ -111,6 +112,7 @@ export function SearchFilterBar({
       <EntityPicker
         trigger={<Chip>{channel ? channelLabel(channel) : m.search_channel()}</Chip>}
         label={m.search_find_channel()}
+        searchPlaceholder={m.search_find_channel()}
         selectedKey={filters.channelId ?? ANY}
         options={[
           { id: ANY, label: m.search_channel_any() },
