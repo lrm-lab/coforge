@@ -4,8 +4,9 @@ import type { TaskStatus } from "@lrm/coforge-sdk/internal";
  * name survive a deleted person. */
 export type SystemPerson = { memberId: string | null; handle: string; displayName: string };
 
-/** A Task a system notice names; the id survives a title change. */
-export type SystemTask = { taskId: string; number: number; title: string };
+/** A Task a system notice names; the id survives a title change. Null in a notice backfilled from
+ * text that named no Task the backfill could find. */
+export type SystemTask = { taskId: string | null; number: number; title: string };
 
 /**
  * A server-authored system message's structured content. `Message.body` is the rendered English

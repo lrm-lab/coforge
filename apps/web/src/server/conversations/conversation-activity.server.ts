@@ -1,6 +1,7 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import type { ConversationActivityEvent } from "#src/features/conversations/conversation-activity-event";
 import { BROWSER_MESSAGE_MENTIONS_SELECT, browserMessageMention } from "./mentions.server";
+import { previewNoticeOf } from "#src/features/conversations/preview-line";
 import { messagePreviewLine } from "./message-preview-line.server";
 import { browserSenderName } from "./sender-display.server";
 import {
@@ -78,6 +79,7 @@ export async function announceMessage(
       },
       mentions: BROWSER_MESSAGE_MENTIONS_SELECT,
       forward: { select: { sourceBody: true } },
+      systemMessage: { select: { kind: true, params: true } },
     },
   });
   if (!stored) {
@@ -100,6 +102,7 @@ export async function announceMessage(
       stored.mentions.map((mention) => browserMessageMention(mention)),
       stored.forward?.sourceBody,
     ),
+    ...previewNoticeOf(stored.systemMessage?.kind ?? null, stored.systemMessage?.params),
     sender: {
       kind: stored.sender?.userId ? "user" : stored.sender?.agentId ? "agent" : "system",
       name: browserSenderName(

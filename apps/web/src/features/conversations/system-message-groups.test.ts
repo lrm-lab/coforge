@@ -6,38 +6,43 @@ import {
   systemMessageKind,
 } from "./system-message-groups";
 
-type Row = { id: string; senderKind: "user" | "agent" | "system"; body: string };
+type Row = {
+  id: string;
+  senderKind: "user" | "agent" | "system";
+  body: string;
+  system?: { kind: string; params: unknown };
+};
 
 const system = (id: string, body = `notice ${id}`): Row => ({ id, senderKind: "system", body });
 const user = (id: string): Row => ({ id, senderKind: "user", body: `hello ${id}` });
+const notice = (id: string, kind: string): Row => ({
+  id,
+  senderKind: "system",
+  body: `notice ${id}`,
+  system: { kind, params: {} },
+});
 
 describe("system message kind", () => {
-  test("task notices in the current wording are task updates", () => {
-    expect(systemMessageKind("@frank-an started task #4.")).toBe("taskUpdate");
-    expect(systemMessageKind("@coder was assigned tasks #3, #4.")).toBe("taskUpdate");
+  test("every task notice is a task update, assignments included", () => {
+    for (const kind of [
+      "task.created",
+      "task.converted",
+      "task.from_message",
+      "task.assigned",
+      "task.claimed",
+      "task.moved",
+      "task.unassigned",
+      "task.unfollowed",
+      "task.assigned_you",
+    ])
+      expect(systemMessageKind(notice("a", kind))).toBe("taskUpdate");
   });
 
-  test("task notices in the emoji-led wording are task updates", () => {
-    expect(systemMessageKind('📌 frank-an claimed #4 "Fix login"')).toBe("taskUpdate");
-    expect(systemMessageKind('🔄 Frank An moved #4 "Fix login" to In Progress')).toBe("taskUpdate");
-    expect(systemMessageKind('📋 1 new task created: #4 "Fix login"')).toBe("taskUpdate");
-    expect(systemMessageKind("📋 3 new tasks created: #4, #5, #6")).toBe("taskUpdate");
-    expect(systemMessageKind("frank-an converted a message to task #7")).toBe("taskUpdate");
-  });
-
-  test("an assignment or unassignment notice is summarized as a system message", () => {
-    expect(systemMessageKind('📌 Frank assigned #3 "Fix login" to @coder')).toBe("system");
-    expect(systemMessageKind('🔓 Frank An unassigned #4 "Fix login"')).toBe("system");
-  });
-
-  test("anything else is a plain system message", () => {
-    expect(systemMessageKind("@frank-an joined the channel.")).toBe("system");
-    expect(systemMessageKind("👋 Welcome to #general")).toBe("system");
-    expect(systemMessageKind("Frank An made @lead the coordinator of #team (replacing @old)")).toBe(
-      "system",
-    );
-    expect(systemMessageKind("Frank An removed @old as coordinator of #team")).toBe("system");
-    expect(systemMessageKind("")).toBe("system");
+  test("anything else is a plain system message, whatever its text says", () => {
+    expect(systemMessageKind(notice("a", "channel.coordinator_changed"))).toBe("system");
+    expect(systemMessageKind(notice("a", "agent_dm.chain_limit"))).toBe("system");
+    expect(systemMessageKind(notice("a", "legacy_text"))).toBe("system");
+    expect(systemMessageKind(system("a", '📌 frank-an claimed #4 "Fix login"'))).toBe("system");
   });
 });
 
@@ -94,8 +99,8 @@ describe("summarizing a group", () => {
   test("counts each kind and lists task updates before other system messages", () => {
     const summary = summarizeSystemGroup([
       system("a", "Frank An joined the channel."),
-      system("b", '📌 frank-an claimed #4 "Fix login"'),
-      system("c", '🔄 Frank An moved #4 "Fix login" to Done'),
+      notice("b", "task.claimed"),
+      notice("c", "task.moved"),
     ]);
 
     expect(summary).toEqual({
@@ -109,8 +114,8 @@ describe("summarizing a group", () => {
 
   test("leaves out the kinds a group does not contain", () => {
     const summary = summarizeSystemGroup([
-      system("a", "@coder started task #1."),
-      system("b", "@coder started task #2."),
+      notice("a", "task.claimed"),
+      notice("b", "task.assigned"),
     ]);
 
     expect(summary).toEqual({ total: 2, parts: [{ kind: "taskUpdate", count: 2 }] });

@@ -1,4 +1,4 @@
-import type { PrismaClient } from "#src/generated/prisma/client";
+import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { FORWARDED_PREVIEW_SOURCE_LENGTH } from "#src/server/conversations/message-preview-line.server";
 
 /** A channel's newest top-level message and the sender member row that wrote it, if any. */
@@ -9,6 +9,9 @@ export type LatestTopLevelRow = {
   /** The start of the `sourceBody` of a forward with a blank body, null for any other message. */
   forwardedBody: string | null;
   createdAt: Date;
+  /** The message's system notice kind and params, null for a message that is not a notice. */
+  noticeKind: string | null;
+  noticeParams: Prisma.JsonValue;
   senderUserId: string | null;
   senderAgentId: string | null;
 };
@@ -36,6 +39,8 @@ export async function latestTopLevelMessageRows(
            CASE WHEN latest."body" ~ '^[[:space:]]*$'
                 THEN left(forward."sourceBody", ${FORWARDED_PREVIEW_SOURCE_LENGTH}::int) END AS "forwardedBody",
            latest."createdAt" AS "createdAt",
+           notice."kind" AS "noticeKind",
+           notice."params" AS "noticeParams",
            sender."userId" AS "senderUserId",
            sender."agentId" AS "senderAgentId"
     FROM "conversations" c
@@ -47,6 +52,7 @@ export async function latestTopLevelMessageRows(
     ) latest
     LEFT JOIN "conversation_members" sender ON sender."id" = latest."senderMemberId"
     LEFT JOIN "message_forwards" forward ON forward."messageId" = latest."id"
+    LEFT JOIN "system_messages" notice ON notice."messageId" = latest."id"
     WHERE c."id" = ANY(${[...conversationIds]}::uuid[])
   `;
 }

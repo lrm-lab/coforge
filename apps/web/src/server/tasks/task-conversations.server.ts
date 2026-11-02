@@ -14,7 +14,7 @@ import type { Transaction, TaskBoardPorts } from "./task-board-ports.server";
 import { publishTaskConversationMessage } from "./task-publication.server";
 import { markHumanRead } from "#src/server/conversations/human-unread.server";
 import { postUnfollowNotice } from "./task-unfollow-notice.server";
-import type { SystemNotice } from "#src/server/conversations/system-notices.server";
+import type { SystemNotice } from "#src/features/conversations/system-notice";
 import { postTaskMessage } from "./task-discussion-send.server";
 import {
   discussionOf,

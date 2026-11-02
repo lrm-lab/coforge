@@ -1,15 +1,10 @@
 import { readableBody } from "@lrm/coforge-sdk/internal";
 import type { MessageMentionRef } from "#src/server/conversations/mentions.server";
+import { MESSAGE_PREVIEW_MAX_LENGTH, oneLine } from "#src/features/conversations/preview-line";
 
 /** A mention as a list preview reads it: `label` is the name a person is shown by
  * (`browserMessageMention`); an Agent reads as its `@handle`, how an Agent is mentioned. */
 export type PreviewMentionRef = MessageMentionRef & { label: string };
-
-/** The longest one-line preview, in grapheme clusters (what a reader sees as characters),
- * including its trailing ellipsis. */
-export const MESSAGE_PREVIEW_MAX_LENGTH = 120;
-
-const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
 /**
  * A stored message body as text for people: a person's mention reads as their name (never their
@@ -57,10 +52,3 @@ const FORWARDED_PREVIEW_PREFIX = "↪ ";
  * shows (`MESSAGE_PREVIEW_MAX_LENGTH`), since whitespace runs collapse and a cluster spans several
  * characters. */
 export const FORWARDED_PREVIEW_SOURCE_LENGTH = MESSAGE_PREVIEW_MAX_LENGTH * 4;
-
-function oneLine(text: string): string {
-  const line = text.replace(/\s+/gu, " ").trim();
-  const characters = Array.from(graphemes.segment(line), (part) => part.segment);
-  if (characters.length <= MESSAGE_PREVIEW_MAX_LENGTH) return line;
-  return `${characters.slice(0, MESSAGE_PREVIEW_MAX_LENGTH - 1).join("")}…`;
-}

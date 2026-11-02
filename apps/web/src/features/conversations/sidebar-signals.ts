@@ -73,6 +73,7 @@ export function applyConversationActivityToRow(
       lastMessage: {
         createdAt: event.createdAt,
         preview: event.preview,
+        ...(event.notice ? { notice: event.notice } : {}),
         sender: {
           kind: event.sender.kind,
           name: event.sender.name,
@@ -87,6 +88,7 @@ export function applyConversationActivityToRow(
     conversationId: id,
     lastMessageAt: event.createdAt,
     lastMessagePreview: event.preview,
+    lastMessageNotice: event.notice ?? null,
   });
   return true;
 }

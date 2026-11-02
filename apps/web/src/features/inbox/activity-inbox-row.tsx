@@ -11,6 +11,7 @@ import { RelativeTime } from "#src/components/ui/relative-time";
 import { collageLayout } from "#src/features/conversations/collage-layout";
 import { GroupAvatar } from "#src/features/conversations/group-avatar";
 import { MessagePreview } from "#src/features/conversations/message-preview";
+import { systemNoticeText } from "#src/features/conversations/system-notice-text";
 import { TASK_STATUS_COLOR } from "#src/features/tasks/task-workflow";
 import { cn } from "#src/lib/utils";
 import { DeletedAgentBadge } from "#src/features/agents/deleted-agent";
@@ -27,6 +28,8 @@ import type { ActivityItemActions } from "./use-activity-item-actions";
 
 /** A message's text rendered as inline Markdown, or its first attachment's name. */
 function Preview({ message }: { message: ActivityInboxItem["latest"] }) {
+  // A system notice reads in the viewer's language, not as its stored English body.
+  if (message.system) return <>{systemNoticeText(message)}</>;
   if (message.body) return <MessagePreview body={message.body} mentions={message.mentions} />;
   // A forward sent without a note previews as what it forwards.
   if (message.forwarded)

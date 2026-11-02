@@ -6,6 +6,7 @@ import {
 } from "#src/server/db/repositories/channel-list-preview.repositories.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
+import { previewNoticeOf, type PreviewNotice } from "#src/features/conversations/preview-line";
 import { browserSenderName } from "#src/server/conversations/sender-display.server";
 import {
   messagePreviewLine,
@@ -29,6 +30,9 @@ export type ChannelListSender = {
 export type ChannelListLastMessage = {
   createdAt: string;
   preview: string;
+  /** Set when the message is a system notice: what the browser renders it from in the viewer's
+   * language, `preview` being its stored English. */
+  notice?: PreviewNotice;
   sender: ChannelListSender;
 };
 
@@ -152,6 +156,7 @@ export async function channelListPreviews(
         mentionsByMessage.get(row.messageId) ?? [],
         row.forwardedBody,
       ),
+      ...previewNoticeOf(row.noticeKind, row.noticeParams),
       sender: previewSenderOf(row, viewerUserId, names),
     };
   }

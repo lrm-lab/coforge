@@ -1,4 +1,5 @@
 import { publicationDataOrUndefined } from "#src/features/realtime/publication-data";
+import type { PreviewNotice } from "./preview-line";
 
 /**
  * One message, to each person it concerns, on their own channel (`chat:user:<id>`): the data the
@@ -23,6 +24,9 @@ export type ConversationActivityEvent = {
   createdAt: string;
   /** The message body as one line for the row, as the list read gives it. */
   preview: string;
+  /** Set when the message is a system notice: what the row renders it from in the viewer's
+   * language, `preview` being its stored English. */
+  notice?: PreviewNotice;
   sender: { kind: "user" | "agent" | "system"; name: string };
   /** The person who wrote it; absent for an Agent's or a system message. */
   senderUserId?: string;
@@ -48,6 +52,7 @@ export function decodeConversationActivityEvent(
   const kind = Reflect.get(value, "kind");
   const createdAt = Reflect.get(value, "createdAt");
   const preview = Reflect.get(value, "preview");
+  const notice = Reflect.get(value, "notice");
   const sender = Reflect.get(value, "sender");
   const senderUserId = Reflect.get(value, "senderUserId");
   const senderAgentId = Reflect.get(value, "senderAgentId");
@@ -66,6 +71,7 @@ export function decodeConversationActivityEvent(
     typeof createdAt !== "string" ||
     !createdAt ||
     typeof preview !== "string" ||
+    (notice !== undefined && !isPreviewNotice(notice)) ||
     !isActivitySender(sender) ||
     (senderUserId !== undefined && (typeof senderUserId !== "string" || !senderUserId)) ||
     (senderAgentId !== undefined && (typeof senderAgentId !== "string" || !senderAgentId)) ||
@@ -81,11 +87,18 @@ export function decodeConversationActivityEvent(
     kind,
     createdAt,
     preview,
+    ...(notice ? { notice } : {}),
     sender,
     ...(senderUserId ? { senderUserId } : {}),
     ...(senderAgentId ? { senderAgentId } : {}),
     ...(threadRootId ? { threadRootId } : {}),
   };
+}
+
+function isPreviewNotice(value: unknown): value is PreviewNotice {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const kind = Reflect.get(value, "kind");
+  return typeof kind === "string" && kind.length > 0 && "params" in value;
 }
 
 function isActivitySender(value: unknown): value is ConversationActivityEvent["sender"] {

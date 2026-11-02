@@ -6,6 +6,7 @@ import { cn } from "#src/lib/utils";
 import { DayDivider, UnreadDivider } from "./message-dividers";
 import { ROW_CLASS } from "./message-row";
 import type { MessageView } from "./message-view";
+import { systemNoticeText } from "./system-notice-text";
 
 /**
  * A system message (task/membership notices, etc.) is not a person talking: it carries no avatar
@@ -31,6 +32,8 @@ export function SystemMessageRow({
 }) {
   const timeFormat = useTimeFormat();
   const timeZone = useTimeZone();
+  // In the viewer's language from the notice's kind; an unstructured one reads as its body.
+  const text = systemNoticeText(message);
   return (
     <li data-message-id={message.id} className={ROW_CLASS}>
       {unreadStartsHere && <UnreadDivider />}
@@ -44,7 +47,7 @@ export function SystemMessageRow({
           highlighted && "bg-tertiary ring-2 ring-brand/50 ring-offset-4 ring-offset-primary",
         )}
       >
-        {/* System bodies are short plain text (task/membership notices, authored with a plain
+        {/* System notices are short plain text (task/membership notices, with a plain
             `@handle`, not a mention token), so they render as a single muted line rather than
             full Markdown. One line, never wrapped: overflow becomes an ellipsis, which lands in a
             task's title since its number comes first. The span is a flex item with min-w-0, so
@@ -54,8 +57,8 @@ export function SystemMessageRow({
             the flex row and this span — so the span's `min-w-0 flex-1` stopped governing the
             row, the row grew past the container, and the whole stream scrolled sideways on a
             phone. As a direct child the span is the flex item again, so `truncate` clips. */}
-        <Tooltip title={message.body}>
-          <span className="min-w-0 flex-1 truncate">{message.body}</span>
+        <Tooltip title={text}>
+          <span className="min-w-0 flex-1 truncate">{text}</span>
         </Tooltip>
         {/* Shown on hover, so a touch screen, which cannot hover, leaves its width to the
             notice. */}

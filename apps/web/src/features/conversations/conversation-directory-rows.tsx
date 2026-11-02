@@ -18,6 +18,7 @@ import { ConversationRowMenu } from "./conversation-row-menu";
 import { DirectAgentAvatar } from "./direct-agent-avatar";
 import { GroupAvatar, type GroupAvatarMember } from "./group-avatar";
 import { lastMessageTime } from "./last-message-time";
+import { previewText } from "./preview-line";
 import type { ListedDirect } from "./sidebar-rows";
 import { useLiveChannelRow, useLiveDirectRow } from "./sidebar-lists";
 import { useUnreadCount } from "./unread-store";
@@ -106,7 +107,7 @@ export const ChannelDirectoryRow = memo(function ChannelDirectoryRow({
           preview: lastMessage
             ? channelPreviewLine({
                 sender: lastMessage.sender,
-                preview: lastMessage.preview,
+                preview: previewText(lastMessage.preview, lastMessage.notice),
                 youLabel: m.conversation_you(),
               })
             : null,
@@ -172,7 +173,10 @@ export const DirectDirectoryRow = memo(function DirectDirectoryRow({
         label={self ? m.conversation_dm_self_name({ name }) : name}
         lastMessage={{
           time,
-          preview: live?.lastMessagePreview ?? null,
+          preview:
+            live?.lastMessagePreview == null
+              ? null
+              : previewText(live.lastMessagePreview, live.lastMessageNotice),
         }}
         icon={
           agent ? (

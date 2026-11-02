@@ -453,4 +453,15 @@ test("each DM's lastMessage is its newest top-level message: its time and one li
     preview: "hello there",
   });
   expect(await lastOf(withSelf.conversationId)).toBeNull();
+
+  // A system notice also carries what the browser renders it from in the viewer's language.
+  const hello = await db.message.findFirstOrThrow({
+    where: { conversationId: withGrace.conversationId },
+    select: { id: true },
+  });
+  const notice = { kind: "agent_dm.chain_limit", params: {} };
+  await db.systemMessage.create({
+    data: { messageId: hello.id, conversationId: withGrace.conversationId, workspaceId, ...notice },
+  });
+  expect((await lastOf(withGrace.conversationId))?.notice).toEqual(notice);
 });

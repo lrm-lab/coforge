@@ -7,7 +7,7 @@ import {
   HUMAN_UNREAD_MESSAGE_SQL,
   markUnreadAnchor,
 } from "#src/server/conversations/human-unread.server";
-import type { PrismaClient } from "#src/generated/prisma/client";
+import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { FORWARDED_PREVIEW_SOURCE_LENGTH } from "#src/server/conversations/message-preview-line.server";
 import {
   viewerDirectConversationSql,
@@ -22,6 +22,7 @@ import {
   browserMessageMention,
 } from "#src/server/conversations/mentions.server";
 import { peopleDirectPeerId } from "#src/features/conversations/direct-key";
+import { previewNoticeOf, type PreviewNotice } from "#src/features/conversations/preview-line";
 import {
   peoplePeer,
   peoplePeerUserFields,
@@ -36,7 +37,14 @@ type LatestMessageRow = {
   /** The start of the `sourceBody` of a forward with a blank body, null for any other message. */
   forwardedBody: string | null;
   createdAt: Date;
+  /** The message's system notice kind and params, null for a message that is not a notice. */
+  noticeKind: string | null;
+  noticeParams: Prisma.JsonValue;
 };
+
+/** A DM's newest top-level message as its list preview: its time, its one-line text, and, for a
+ * system notice, the kind and params the browser renders it from in the viewer's language. */
+type DirectLastMessage = { createdAt: string; preview: string; notice?: PreviewNotice };
 
 /** A direct conversation of the viewer's, by its id, and the viewer's own member row in it. */
 export type ViewerDirectMembership = { conversationId: string; memberId: string };
@@ -150,7 +158,9 @@ export class PrismaDirectConversationPreferences {
                latest."body" AS "body",
                CASE WHEN latest."body" ~ '^[[:space:]]*$'
                     THEN left(forward."sourceBody", ${FORWARDED_PREVIEW_SOURCE_LENGTH}::int) END AS "forwardedBody",
-               latest."createdAt" AS "createdAt"
+               latest."createdAt" AS "createdAt",
+               notice."kind" AS "noticeKind",
+               notice."params" AS "noticeParams"
         FROM "conversation_members" cm
         JOIN "conversations" c
           ON c."id" = cm."conversationId"
@@ -162,6 +172,7 @@ export class PrismaDirectConversationPreferences {
           ORDER BY m."sequence" DESC LIMIT 1
         ) latest
         LEFT JOIN "message_forwards" forward ON forward."messageId" = latest."id"
+        LEFT JOIN "system_messages" notice ON notice."messageId" = latest."id"
         WHERE cm."userId" = ${userId}::uuid
           AND cm."workspaceId" = ${workspaceId}::uuid
           AND cm."leftAt" IS NULL
@@ -237,7 +248,7 @@ export class PrismaDirectConversationPreferences {
   /** Each DM's newest top-level message as its list preview, by conversation id. The mention rows
    * of every previewed message load in one query. */
   private async lastMessagePreviews(latest: LatestMessageRow[]) {
-    if (latest.length === 0) return new Map<string, { createdAt: string; preview: string }>();
+    if (latest.length === 0) return new Map<string, DirectLastMessage>();
     const mentionRows = await this.db.messageMention.findMany({
       where: { messageId: { in: latest.map((row) => row.messageId) } },
       select: { messageId: true, ...BROWSER_MESSAGE_MENTIONS_SELECT.select },
@@ -249,7 +260,7 @@ export class PrismaDirectConversationPreferences {
       mentionsByMessage.set(row.messageId, mentions);
     }
     return new Map(
-      latest.map((row) => [
+      latest.map((row): [string, DirectLastMessage] => [
         row.conversationId,
         {
           createdAt: row.createdAt.toISOString(),
@@ -258,6 +269,7 @@ export class PrismaDirectConversationPreferences {
             mentionsByMessage.get(row.messageId) ?? [],
             row.forwardedBody,
           ),
+          ...previewNoticeOf(row.noticeKind, row.noticeParams),
         },
       ]),
     );

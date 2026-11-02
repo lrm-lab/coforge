@@ -6,32 +6,18 @@
  * system message stays as it is.
  */
 
+import type { SystemNoticeSource } from "./system-notice-text";
+
 export type SystemMessageKind = "taskUpdate" | "system";
 
 /** The order a summary lists its parts in. */
 const SUMMARY_ORDER: readonly SystemMessageKind[] = ["taskUpdate", "system"];
 
-/** A leading word with no letter, digit, `@` or `#` in it: the emoji a notice may open with. */
-const LEADING_SYMBOL_WORD = /^[^\p{L}\p{N}@#]+$/u;
-
-/** The task-update wording, plus CoForge's current `@x started|was assigned task #N.` notice.
- * An assignment (`📌 X assigned #N "…" to @y`) or an unassignment (`X unassigned #N`) is not in
- * this list, so it is summarized as a system message. */
-const TASK_UPDATE =
-  /\b(?:new tasks? created|converted a message to task #\d+|claimed #\d+|moved #\d+|(?:started|was assigned) tasks? #\d+)\b/iu;
-
-function withoutLeadingSymbol(body: string): string {
-  const text = body.trim();
-  const space = text.indexOf(" ");
-  if (space <= 0) return text;
-  return LEADING_SYMBOL_WORD.test(text.slice(0, space)) ? text.slice(space + 1).trimStart() : text;
-}
-
-/** What a system message's text is about, which decides how its group is summarized. */
-export function systemMessageKind(body: string): SystemMessageKind {
-  const text = withoutLeadingSymbol(body);
-  if (TASK_UPDATE.test(text)) return "taskUpdate";
-  return "system";
+/** What a system message is about, which decides how its group is summarized: every task notice
+ * (`task.*`) is a task update, anything else, an unstructured notice included, a system message.
+ * The stored kind alone decides, so a notice whose params a renderer cannot read still counts. */
+export function systemMessageKind(message: SystemNoticeSource): SystemMessageKind {
+  return message.system?.kind.startsWith("task.") ? "taskUpdate" : "system";
 }
 
 type StreamMessage = { id: string; senderKind: string };
@@ -82,10 +68,10 @@ export type SystemGroupSummary = {
   parts: { kind: SystemMessageKind; count: number }[];
 };
 
-export function summarizeSystemGroup(messages: readonly { body: string }[]): SystemGroupSummary {
+export function summarizeSystemGroup(messages: readonly SystemNoticeSource[]): SystemGroupSummary {
   const counts = new Map<SystemMessageKind, number>();
   for (const message of messages) {
-    const kind = systemMessageKind(message.body);
+    const kind = systemMessageKind(message);
     counts.set(kind, (counts.get(kind) ?? 0) + 1);
   }
   return {

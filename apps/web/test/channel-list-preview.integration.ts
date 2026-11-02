@@ -191,7 +191,17 @@ test("the sender is a person, an Agent or the system, and mine is true only for 
   });
   await post(withPerson.id, 1, "from grace", { senderMemberId: graceMember.id });
   await post(withAgent.id, 1, "from the agent", { senderMemberId: helperMember.id });
-  await post(withSystem.id, 1, "a system notice");
+  const notice = await post(withSystem.id, 1, "a system notice");
+  const params = { claimer: { memberId: null, handle: "x", displayName: "X" } };
+  await db.systemMessage.create({
+    data: {
+      messageId: notice.id,
+      conversationId: withSystem.id,
+      workspaceId,
+      kind: "task.claimed",
+      params,
+    },
+  });
 
   const rows = await channels.list(workspaceId, ada.id);
   expect(rowOf(rows, withPerson.id).lastMessage?.sender).toEqual({
@@ -209,6 +219,10 @@ test("the sender is a person, an Agent or the system, and mine is true only for 
     name: "System",
     mine: false,
   });
+  // A notice carries what the browser renders it from in the viewer's language; any other
+  // message carries none.
+  expect(rowOf(rows, withSystem.id).lastMessage?.notice).toEqual({ kind: "task.claimed", params });
+  expect(rowOf(rows, withPerson.id).lastMessage).not.toHaveProperty("notice");
 });
 
 test("members are at most six, active, in join order then member id, mixing people and Agents", async () => {

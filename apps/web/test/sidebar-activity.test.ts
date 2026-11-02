@@ -132,6 +132,26 @@ test("a direct message writes the DM row's time and preview", async () => {
   expect(row?.lastMessagePreview).toBe("hi");
 });
 
+test("a system notice writes its kind and params beside the preview, and the next message clears them", async () => {
+  const sidebar = await sidebarWithChannels();
+  const notice = { kind: "task.claimed", params: {} };
+  const system = { kind: "system" as const, name: "System" };
+  applyConversationActivityToRow(sidebar, activity({ notice, sender: system }), "viewer");
+  expect(sidebar.channels.get("general")?.lastMessage?.notice).toEqual(notice);
+  applyConversationActivityToRow(sidebar, activity({ sequence: 8 }), "viewer");
+  expect(sidebar.channels.get("general")?.lastMessage).not.toHaveProperty("notice");
+
+  const direct = { conversationId: "dm-grace", kind: "direct" as const };
+  applyConversationActivityToRow(
+    sidebar,
+    activity({ ...direct, notice, sender: system }),
+    "viewer",
+  );
+  expect(sidebar.directs.get("dm-grace")?.lastMessageNotice).toEqual(notice);
+  applyConversationActivityToRow(sidebar, activity({ ...direct, sequence: 8 }), "viewer");
+  expect(sidebar.directs.get("dm-grace")?.lastMessageNotice).toBeNull();
+});
+
 test("a row the list does not hold is not written, so the caller re-reads that list", async () => {
   const sidebar = await sidebarWithChannels();
   expect(

@@ -1,7 +1,7 @@
 import { afterAll, expect, test } from "bun:test";
 import { readdir } from "node:fs/promises";
 import { Pool, type PoolClient } from "pg";
-import { isSystemNotice } from "#src/server/conversations/system-notices.server";
+import { isSystemNotice } from "#src/features/conversations/system-notice";
 
 const connectionString =
   Bun.env.MIGRATION_TEST_DATABASE_URL ?? Bun.env.CHANNEL_TEST_DATABASE_URL ?? Bun.env.DATABASE_URL;

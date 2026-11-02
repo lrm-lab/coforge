@@ -94,9 +94,12 @@ export function useSidebarLists() {
   const liveDirects = useLiveQuery({
     queryKey: ["sidebar-directs", workspaceId],
     query: (q) =>
-      q
-        .from({ row: sidebar.directs })
-        .select(({ row }) => ({ ...row, lastMessageAt: null, lastMessagePreview: null })),
+      q.from({ row: sidebar.directs }).select(({ row }) => ({
+        ...row,
+        lastMessageAt: null,
+        lastMessagePreview: null,
+        lastMessageNotice: null,
+      })),
   });
   const channelRows: readonly ListedChannel[] =
     (liveChannels.isReady && liveChannels.data) || cachedChannelRows(queryClient, workspaceId);

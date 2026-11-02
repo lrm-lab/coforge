@@ -7,10 +7,7 @@ import { enrollThreadReplyFollowers } from "#src/server/conversations/channel-th
 import { lockConversation } from "#src/server/conversations/conversation-lock.server";
 import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
 import { noticeText, quotedTask, type NoticeActor, type QuotedTask } from "./task-notices.server";
-import type {
-  SystemNotice,
-  SystemNoticeContent,
-} from "#src/server/conversations/system-notices.server";
+import type { SystemNotice, SystemNoticeContent } from "#src/features/conversations/system-notice";
 import type {
   Transaction,
   TaskBoardPorts,

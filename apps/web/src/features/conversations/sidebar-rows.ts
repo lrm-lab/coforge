@@ -1,4 +1,5 @@
 import type { ChatListValue } from "./chat-lists-reader";
+import type { PreviewNotice } from "./preview-line";
 
 /** What the server says about the viewer's DMs, by conversation id; the stream positions it was
  * read at (`streamPositions`) belong to the list, not to a row. */
@@ -30,11 +31,18 @@ export type DirectRow = {
   /** The start of the DM's last message, for the row's second line. `""` when that message's body
    * is empty; `null` only when the DM has no top-level message. */
   lastMessagePreview: string | null;
+  /** Set when that message is a system notice: what the row renders it from in the viewer's
+   * language, `lastMessagePreview` being its stored English. Absent from a copy stored before
+   * rows carried it, which shows the stored English until the list is read again. */
+  lastMessageNotice?: PreviewNotice | null;
 };
 
 /** A DM row as the list holds it: without its last message, which moves on every message and is
  * read per row (`useLiveDirectRow`), so a message does not render the whole list. */
-export type ListedDirect = Omit<DirectRow, "lastMessageAt" | "lastMessagePreview">;
+export type ListedDirect = Omit<
+  DirectRow,
+  "lastMessageAt" | "lastMessagePreview" | "lastMessageNotice"
+>;
 
 /** One row per DM the preferences list, in their order, with its unread count. */
 export function directRowsOf(
@@ -55,6 +63,7 @@ export function directRowsOf(
       unreadCount: unread[conversationId] ?? 0,
       lastMessageAt: lastMessage?.createdAt ?? null,
       lastMessagePreview: lastMessage?.preview ?? null,
+      lastMessageNotice: lastMessage?.notice ?? null,
     }),
   );
 }
