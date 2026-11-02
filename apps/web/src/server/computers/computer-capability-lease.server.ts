@@ -71,6 +71,8 @@ export class RedisComputerCapabilityLease {
     const value = this.read(raw);
     // Daemons released before the fence report their identity on ready but never on a heartbeat,
     // so only a heartbeat that names a worker is fenced; one without renews as it always did.
+    // Remove the `!identity` branch when the minimum supported Computer version is raised past
+    // those daemons.
     if (
       value?.state === "supported" &&
       (!identity ||
