@@ -112,20 +112,22 @@ export function formatMonthDay(
 
 /** Month, day and time of day, as Raft writes a forwarded original's moment: "Oct 29, 6:06 PM" in
  * English, "10月29日 18:06" in Chinese, in the viewer's hour cycle. A moment from another year
- * than `now`'s writes its year too ("Oct 29, 2025, 6:06 PM", "2025.10.29 18:06"). */
+ * than `now`'s writes its year too ("Oct 29, 2025, 6:06 PM", "2025.10.29 18:06"). `hour:
+ * "2-digit"` writes the clock as `clockLabel` does ("Oct 29, 06:06 PM"), for a line among others
+ * that show the time alone. */
 export function formatMonthDayTime(
   value: Date | string,
   timeZone: string | null | undefined,
   locale: string,
   timeFormat: TimeFormat | null = null,
-  now: Date = new Date(),
+  { now = new Date(), hour = "numeric" }: { now?: Date; hour?: "numeric" | "2-digit" } = {},
 ) {
   const zone = resolveTimeZone(timeZone, browserTimeZone());
   const yearOf = (date: Date) =>
     dateTimeFormat(locale, { year: "numeric", timeZone: zone }).format(date);
   const date = new Date(value);
   const time = dateTimeFormat(locale, {
-    hour: "numeric",
+    hour,
     minute: "2-digit",
     hour12: hour12For(timeFormat),
     timeZone: zone,

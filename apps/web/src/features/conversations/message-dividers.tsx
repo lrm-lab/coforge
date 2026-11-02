@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { useTimeZone } from "#src/lib/time-zone-context";
 import { dateTimeFormat } from "#src/lib/dates";
 import { cn } from "#src/lib/utils";
@@ -50,12 +52,26 @@ export function UnreadDivider() {
 export function DayDivider({ value, locale }: { value: Date | string; locale?: string }) {
   const timeZone = useTimeZone();
   return (
-    <div className={cn(DIVIDER_ROW_CLASS, "gap-0")}>
-      <span aria-hidden="true" className="h-px flex-1 bg-border-secondary" />
-      <span className="flex h-5.5 shrink-0 items-center rounded border border-secondary bg-primary px-2 text-xs text-tertiary tabular-nums">
-        {dayLabel(value, locale, timeZone)}
-      </span>
-      <span aria-hidden="true" className="h-px flex-1 bg-border-secondary" />
+    <div data-day-divider className={cn(DIVIDER_ROW_CLASS, "gap-0")}>
+      <CentredOnRule>
+        <span className="flex h-5.5 shrink-0 items-center rounded border border-secondary bg-primary px-2 text-xs text-tertiary tabular-nums">
+          {dayLabel(value, locale, timeZone)}
+        </span>
+      </CentredOnRule>
     </div>
+  );
+}
+
+/** A line centred on a hairline that runs out to both sides, as Raft draws its notices; the
+ * caller's flex row holds the three. The hairlines keep 16px each at the least, so long content
+ * is cut before they go. */
+export function CentredOnRule({ children }: { children: ReactNode }) {
+  const rule = <span aria-hidden="true" className="h-px min-w-4 flex-1 bg-border-secondary" />;
+  return (
+    <>
+      {rule}
+      {children}
+      {rule}
+    </>
   );
 }

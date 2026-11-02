@@ -57,11 +57,19 @@ describe("month and day", () => {
     const instant = new Date("2026-10-29T10:06:00Z");
     const now = new Date("2026-12-01T00:00:00Z");
     const format = (locale: string, hours: "12h" | "24h", at = now) =>
-      formatMonthDayTime(instant, "Asia/Shanghai", locale, hours, at);
+      formatMonthDayTime(instant, "Asia/Shanghai", locale, hours, { now: at });
     expect(format("zh-CN", "24h")).toBe("10月29日 18:06");
     expect(format("en", "24h")).toBe("Oct 29, 18:06");
     expect(format("en", "12h")).toBe("Oct 29, 6:06 PM");
     // From another year, the year is written.
     expect(format("en", "12h", new Date("2027-01-02T00:00:00Z"))).toBe("Oct 29, 2026, 6:06 PM");
+    // Among lines that show the time alone, the clock is the same two-digit one.
+    const twoDigit = (locale: string, hours: "12h" | "24h") =>
+      formatMonthDayTime("2026-10-29T00:06:00Z", "Asia/Shanghai", locale, hours, {
+        now,
+        hour: "2-digit",
+      });
+    expect(twoDigit("en", "12h")).toBe("Oct 29, 08:06 AM");
+    expect(twoDigit("zh-CN", "24h")).toBe("10月29日 08:06");
   });
 });

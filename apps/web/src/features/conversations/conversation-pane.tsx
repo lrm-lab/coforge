@@ -30,7 +30,7 @@ import { useMessageExpansion } from "./use-message-expansion";
 import { optimisticSavedEntry } from "./saved-messages-collection";
 import { OutboxMessageRow } from "./outbox-message-row";
 import { SystemMessageGroup } from "./system-message-group";
-import { groupSystemMessages } from "./system-message-groups";
+import { groupSystemMessages, itemAnchor } from "./system-message-groups";
 import { usePaneOutbox } from "./use-pane-outbox";
 import { ComposerEdgeOverlay } from "./composer-edge-overlay";
 import { NewerSentinel } from "./conversation-newer-sentinel";
@@ -252,9 +252,10 @@ export function ConversationPane({
   // A window replacement in flight (an "around" read) has no messages yet, but that is not an
   // empty conversation: only a settled read may say so (stream-state.ts, #112/#113).
   const streamLoading = streamState(conversation.messages.length, streamRead) === "loading";
-  // Runs of consecutive system messages fold into one summary line (system-message-groups.ts). A
-  // run never crosses a day divider or the unread divider, so both stay drawn, and the message the
-  // pane opens on (the unread boundary) is always a group's first message or a row of its own.
+  // Runs of consecutive system messages fold into one summary line (system-message-groups.ts),
+  // across days as Raft's do: a notice from a later day than its group's carries its date. A run
+  // never crosses the unread divider, so the message the pane opens on (the unread boundary) is
+  // always a group's first message or a row of its own.
   const visibleMessages = useMemo(
     () => conversation.messages.filter((message) => message.weeklyReportHidden !== true),
     [conversation.messages],
@@ -264,12 +265,9 @@ export function ConversationPane({
     () =>
       groupSystemMessages(
         visibleMessages,
-        (message, previous) =>
-          message.sequence === openBoundary?.sequence ||
-          dayLabel(message.createdAt, dateLocale, timeZone) !==
-            dayLabel(previous.createdAt, dateLocale, timeZone),
+        (message) => message.sequence === openBoundary?.sequence,
       ),
-    [visibleMessages, openBoundary, dateLocale, timeZone],
+    [visibleMessages, openBoundary],
   );
   const {
     openedMessages: openedSystemMessages,
@@ -697,14 +695,13 @@ export function ConversationPane({
                 className={cn("flex flex-col", threadMarker ? "pt-2" : "pt-6")}
               >
                 {streamItems.map((item, index) => {
-                  // The message just above this item: the previous item's last message.
+                  // What the item just above is drawn under (`itemAnchor`).
                   const before = streamItems[index - 1];
                   // A thread's first reply opens under the replies marker, which stands in for the
                   // day divider there; later day changes in the thread still get theirs.
                   const opensThread = threadMarker && index === 0;
-                  const previous =
-                    before?.type === "systemGroup" ? before.messages.at(-1) : before?.message;
-                  const first = item.type === "systemGroup" ? item.messages[0]! : item.message;
+                  const previous = before && itemAnchor(before);
+                  const first = itemAnchor(item);
                   // The unread divider is anchored to the snapshot taken at open: once the
                   // mark-read effect has advanced the cursor, the divider must not jump.
                   const unreadStartsHere = openBoundary?.sequence === first.sequence;

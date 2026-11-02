@@ -26,6 +26,11 @@ export type StreamItem<M extends StreamMessage> =
   | { type: "message"; message: M }
   | { type: "systemGroup"; id: string; messages: M[] };
 
+/** The message a stream item is drawn under: a group's first, whose day the group belongs to. */
+export function itemAnchor<M extends StreamMessage>(item: StreamItem<M>): M {
+  return item.type === "systemGroup" ? item.messages[0]! : item.message;
+}
+
 /**
  * The stream as rendered: every message in order, except that each run of two or more
  * consecutive system messages becomes one group. `breaksRun` lets the caller keep a run from

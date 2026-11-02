@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   groupSystemMessages,
+  itemAnchor,
   summarizeSystemGroup,
   systemMessageKind,
 } from "./system-message-groups";
@@ -47,6 +48,12 @@ describe("system message kind", () => {
 });
 
 describe("grouping system messages", () => {
+  test("a group is drawn under its first notice; a message, under itself", () => {
+    const [message, group] = groupSystemMessages([user("u1"), system("a"), system("b")]);
+    expect(itemAnchor(message!).id).toBe("u1");
+    expect(itemAnchor(group!).id).toBe("a");
+  });
+
   test("a run of two or more consecutive system messages becomes one group", () => {
     const items = groupSystemMessages([user("u1"), system("a"), system("b"), system("c")]);
 
