@@ -1,10 +1,12 @@
 import { expect, test } from "bun:test";
 import { RuntimeLoginRequiredError, RuntimeStartFailedError } from "@lrm/coforge-anvil";
 import {
+  AgentAuthorizationError,
   isNonRetryableLaunchFailure,
   launchFailureActivity,
   launchFailureTrace,
 } from "#src/agent-runtime/launch-failure";
+import { AgentConfigRequestError } from "#src/connection/agent-config-request";
 
 test("launchFailureTrace extracts classified launch evidence from a PiLaunchError", () => {
   const error = {
@@ -81,7 +83,45 @@ test("only a reason no retry can fix skips the launch retries", () => {
   expect(
     isNonRetryableLaunchFailure(new RuntimeLoginRequiredError("Kiro CLI is not logged in")),
   ).toBe(true);
+  const runtimeUnavailable = new AgentAuthorizationError(
+    new AgentConfigRequestError(
+      "refused",
+      403,
+      "RUNTIME_UNAVAILABLE",
+      "the configured runtime is not available on this Computer",
+    ),
+  );
+  expect(isNonRetryableLaunchFailure(runtimeUnavailable)).toBe(true);
+
+  const networkError = new AgentAuthorizationError(
+    new AgentConfigRequestError("network", undefined, undefined, "network timeout"),
+  );
+  expect(isNonRetryableLaunchFailure(networkError)).toBe(false);
+
+  const serverError = new AgentAuthorizationError(
+    new AgentConfigRequestError("server", 503, undefined, "server unavailable"),
+  );
+  expect(isNonRetryableLaunchFailure(serverError)).toBe(false);
+
   // Every other reason keeps the same attempts and backoff.
   expect(isNonRetryableLaunchFailure(new RuntimeStartFailedError("exited 1"))).toBe(false);
   expect(isNonRetryableLaunchFailure(new Error("boom"))).toBe(false);
+});
+
+test("an authorization failure naming RUNTIME_UNAVAILABLE explains the unavailability and sharing", () => {
+  const activity = launchFailureActivity(
+    new AgentAuthorizationError(
+      new AgentConfigRequestError(
+        "refused",
+        403,
+        "RUNTIME_UNAVAILABLE",
+        "the configured runtime is not available on this Computer",
+      ),
+    ),
+    "Kiro",
+  );
+  expect(activity.runtimeError.errorReason).toBe("agent_authorization_failed");
+  expect(activity.detail).toContain(
+    "The configured runtime is not available on this Computer, or is not shared with this Agent's owner.",
+  );
 });

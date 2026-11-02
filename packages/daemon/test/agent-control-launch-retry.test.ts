@@ -9,6 +9,8 @@ import type {
 } from "@lrm/coforge-sdk/internal";
 import { LAUNCH_FAILURE_MAX_ATTEMPTS } from "#src/agent-runtime/launch-failure-backoff";
 import { RuntimeLoginRequiredError, RuntimeModelNotFoundError } from "@lrm/coforge-anvil";
+import { AgentAuthorizationError } from "#src/agent-runtime/launch-failure";
+import { AgentConfigRequestError } from "#src/connection/agent-config-request";
 import { captureDaemonLogs } from "./log-capture";
 
 /** A scheduler that only records what `AgentControl` asked for, so a test drives every retry
@@ -149,6 +151,27 @@ test("a login no retry can fix ends the launch on its first failure, without a c
 
   // One attempt, no retry armed, and the server's Start operation is answered right away instead
   // of staying pending for the whole retry window.
+  expect(h.launches).toEqual([1]);
+  expect(h.timers.delays()).toEqual([]);
+  expect(h.results).toHaveLength(1);
+  expect(h.results[0]).toMatchObject({ phase: "failed", errorCode: "launch_failed" });
+  expect(h.record()?.phase).toBe("failed");
+});
+
+test("an authorization refusal (e.g. RUNTIME_UNAVAILABLE) ends the launch on its first failure, without a cooldown", async () => {
+  const h = harness(async () => {
+    throw new AgentAuthorizationError(
+      new AgentConfigRequestError(
+        "refused",
+        403,
+        "RUNTIME_UNAVAILABLE",
+        "Agent launch config request failed (403): the configured runtime is not available on this Computer",
+      ),
+    );
+  });
+
+  await h.control.start(startIntent);
+
   expect(h.launches).toEqual([1]);
   expect(h.timers.delays()).toEqual([]);
   expect(h.results).toHaveLength(1);

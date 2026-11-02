@@ -108,7 +108,9 @@ export const NON_RETRYABLE_LAUNCH_FAILURE_REASONS: readonly LaunchFailureReason[
 
 /** Whether a failed launch is one no retry can fix. */
 export function isNonRetryableLaunchFailure(error: unknown): boolean {
-  return NON_RETRYABLE_LAUNCH_FAILURE_REASONS.includes(launchFailureReason(error));
+  if (NON_RETRYABLE_LAUNCH_FAILURE_REASONS.includes(launchFailureReason(error))) return true;
+  if (error instanceof AgentAuthorizationError && error.failure === "refused") return true;
+  return false;
 }
 
 /** The server did not hand this launch its configuration and Agent API key. The reason code stays
@@ -172,6 +174,12 @@ function launchFailureDetail(
           "Agent authorization could not be prepared: the server refused this Computer because " +
           "its version is not accepted. Update it with `coforge-computer upgrade`, then start the " +
           "Agent again."
+        );
+      if (authorization?.upstreamCode === "RUNTIME_UNAVAILABLE")
+        return (
+          "The configured runtime is not available on this Computer, or is not shared with this " +
+          "Agent's owner. Make sure the runtime is installed and marked public on this Computer, " +
+          "or choose a different runtime."
         );
       if (authorization?.failure === "refused")
         return (
