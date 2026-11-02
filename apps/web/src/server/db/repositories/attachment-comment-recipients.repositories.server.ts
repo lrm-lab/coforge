@@ -1,5 +1,5 @@
+import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import { canReadChannel } from "#src/server/conversations/channel-read-access.server";
-import { viewerDirectConversationWhere } from "#src/server/conversations/viewer-direct-conversations.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { humanLabel } from "#src/lib/human-label";
 import type {
@@ -39,8 +39,8 @@ export async function readAccess(
 }
 
 /**
- * `readAccess` for several actors of one Workspace at once, in a fixed number of reads (and one
- * per person on a DM) rather than a few per actor: keyed `user:<id>` / `agent:<id>`, or null
+ * `readAccess` for several actors of one Workspace at once, in a fixed number of reads: keyed
+ * `user:<id>` / `agent:<id>`, or null
  * when the attachment is not the Workspace's.
  */
 async function readAccessAmong(
@@ -65,6 +65,7 @@ async function readAccessAmong(
       commentThread: { select: { conversationId: true } },
       conversation: {
         select: {
+          directKey: true,
           channelName: true,
           visibility: true,
           kind: true,
@@ -74,7 +75,7 @@ async function readAccessAmong(
             where: {
               OR: [
                 { userId: { in: userIds } },
-                { agentId: { in: agentIds } },
+                { agentId: { not: null } },
                 { agent: { deletedAt: { not: null } } },
               ],
             },
@@ -82,7 +83,7 @@ async function readAccessAmong(
               userId: true,
               agentId: true,
               leftAt: true,
-              agent: { select: { deletedAt: true } },
+              agent: { select: { deletedAt: true, ownerId: true, visibility: true } },
             },
           },
         },
@@ -113,18 +114,27 @@ async function readAccessAmong(
     ...memberships.map(({ userId }) => keyOf("user", userId)),
     ...agents.map(({ id }) => keyOf("agent", id)),
   ]);
-  // A DM is visible to a person only while `viewerDirectConversationWhere` keeps it in their list:
-  // one read per person, of the few a DM has.
+  // A DM is visible to a person only while `viewerDirectConversationWhere` keeps it in their list.
+  // The attachment query already loaded the conversation and its Agent seats, so derive this
+  // per-viewer state in memory instead of issuing one query for every candidate.
   const directHidden = new Set<string>();
-  if (source.channelName === null)
-    for (const userId of userIds)
-      if (
-        !(await db.conversation.findFirst({
-          where: { id: attachment.conversationId, ...viewerDirectConversationWhere(userId) },
-          select: { id: true },
-        }))
-      )
-        directHidden.add(userId);
+  if (source.channelName === null && source.directKey) {
+    const activeAgents = source.members.flatMap((member) =>
+      member.agent && member.agent.deletedAt === null ? [member.agent] : [],
+    );
+    for (const userId of userIds) {
+      const isPeopleDirect =
+        source.directKey.startsWith("user:") && source.directKey.includes(`user:${userId}`);
+      const isVisibleAgentDirect =
+        source.directKey.endsWith(`|user:${userId}`) &&
+        activeAgents.some(
+          (agent) => agent.visibility === AGENT_VISIBILITY.PUBLIC || agent.ownerId === userId,
+        );
+      if (!isPeopleDirect && !isVisibleAgentDirect) directHidden.add(userId);
+    }
+  } else if (source.channelName === null) {
+    for (const userId of userIds) directHidden.add(userId);
+  }
   const attached = Boolean(attachment.messageId || attachment.commentThread);
   const readOnly =
     source.kind !== null ||
