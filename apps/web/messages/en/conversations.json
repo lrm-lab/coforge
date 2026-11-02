@@ -7,13 +7,8 @@
   "conversation_unread_divider": "New messages",
   "conversation_system_group_task_updates": [
     {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
       "match": {
         "countPlural=one": "{count} task update",
         "countPlural=other": "{count} task updates"
@@ -22,13 +17,8 @@
   ],
   "conversation_system_group_reminders": [
     {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
       "match": {
         "countPlural=one": "{count} reminder update",
         "countPlural=other": "{count} reminder updates"
@@ -37,13 +27,8 @@
   ],
   "conversation_system_group_messages": [
     {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
       "match": {
         "countPlural=one": "{count} system message",
         "countPlural=other": "{count} system messages"
@@ -52,14 +37,8 @@
   ],
   "conversation_system_group_one_part": [
     {
-      "declarations": [
-        "input count",
-        "input part",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
+      "declarations": ["input count", "input part", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
       "match": {
         "countPlural=one": "There is {part}",
         "countPlural=other": "There are {part}"
@@ -145,13 +124,8 @@
   "conversation_thread_following_agents": "Following Agents",
   "conversation_thread_following_agents_count": [
     {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
       "match": {
         "countPlural=one": "{count} following Agent",
         "countPlural=other": "{count} following Agents"
@@ -191,13 +165,8 @@
   "tasks_create_add_another": "Add Another",
   "tasks_create_heading": [
     {
-      "declarations": [
-        "input count",
-        "local p = count: plural"
-      ],
-      "selectors": [
-        "p"
-      ],
+      "declarations": ["input count", "local p = count: plural"],
+      "selectors": ["p"],
       "match": {
         "p=one": "Create Task",
         "p=other": "Create Tasks"
@@ -206,13 +175,8 @@
   ],
   "tasks_create_submit": [
     {
-      "declarations": [
-        "input count",
-        "local p = count: plural"
-      ],
-      "selectors": [
-        "p"
-      ],
+      "declarations": ["input count", "local p = count: plural"],
+      "selectors": ["p"],
       "match": {
         "p=one": "Create Task",
         "p=other": "Create {count} Tasks"
@@ -319,13 +283,8 @@
   "conversation_pinned_empty_hint": "Drag channels or DMs here to pin",
   "conversation_saved_count": [
     {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
       "match": {
         "countPlural=one": "{count} saved item",
         "countPlural=other": "{count} saved items"
@@ -393,13 +352,8 @@
   "chat_drag_over": "Over {name}.",
   "chat_saving_changes": [
     {
-      "declarations": [
-        "input count",
-        "local p = count: plural"
-      ],
-      "selectors": [
-        "p"
-      ],
+      "declarations": ["input count", "local p = count: plural"],
+      "selectors": ["p"],
       "match": {
         "p=one": "Saving {count} change…",
         "p=other": "Saving {count} changes…"

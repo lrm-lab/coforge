@@ -8,13 +8,8 @@
   "conversation_unread_divider": "新消息",
   "conversation_system_group_task_updates": [
     {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
       "match": {
         "countPlural=other": "{count} 条任务更新"
       }
@@ -22,13 +17,8 @@
   ],
   "conversation_system_group_reminders": [
     {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
       "match": {
         "countPlural=other": "{count} 条提醒更新"
       }
@@ -36,13 +26,8 @@
   ],
   "conversation_system_group_messages": [
     {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
       "match": {
         "countPlural=other": "{count} 条系统消息"
       }
@@ -50,14 +35,8 @@
   ],
   "conversation_system_group_one_part": [
     {
-      "declarations": [
-        "input count",
-        "input part",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
+      "declarations": ["input count", "input part", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
       "match": {
         "countPlural=other": "{part}"
       }
@@ -173,13 +152,8 @@
   "tasks_create_add_another": "再加一个",
   "tasks_create_heading": [
     {
-      "declarations": [
-        "input count",
-        "local p = count: plural"
-      ],
-      "selectors": [
-        "p"
-      ],
+      "declarations": ["input count", "local p = count: plural"],
+      "selectors": ["p"],
       "match": {
         "p=one": "创建任务",
         "p=other": "创建任务"
@@ -188,13 +162,8 @@
   ],
   "tasks_create_submit": [
     {
-      "declarations": [
-        "input count",
-        "local p = count: plural"
-      ],
-      "selectors": [
-        "p"
-      ],
+      "declarations": ["input count", "local p = count: plural"],
+      "selectors": ["p"],
       "match": {
         "p=one": "创建任务",
         "p=other": "创建 {count} 个任务"
@@ -301,13 +270,8 @@
   "conversation_pinned_empty_hint": "将群聊或私聊拖到这里置顶",
   "conversation_saved_count": [
     {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
       "match": {
         "countPlural=other": "{count} 项"
       }
@@ -374,13 +338,8 @@
   "chat_drag_over": "移动到{name}附近。",
   "chat_saving_changes": [
     {
-      "declarations": [
-        "input count",
-        "local p = count: plural"
-      ],
-      "selectors": [
-        "p"
-      ],
+      "declarations": ["input count", "local p = count: plural"],
+      "selectors": ["p"],
       "match": {
         "p=one": "正在保存 {count} 项改动…",
         "p=other": "正在保存 {count} 项改动…"
