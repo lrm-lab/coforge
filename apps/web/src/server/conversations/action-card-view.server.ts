@@ -102,6 +102,8 @@ export type ActionCardView =
       prompt: string;
       options: { id: string; label: string }[];
       allowFreeText: boolean;
+      /** The asked person's user id, when the card names one. */
+      to?: string;
       result?: { optionId: string; label: string };
     })
   | (ActionCardViewBase & {

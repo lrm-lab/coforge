@@ -86,7 +86,12 @@ export class ActionCards {
       principal.agentId,
       input.target,
     );
-    const payload = await this.resolvePayload(principal.workspaceId, principal.agentId, action);
+    const payload = await this.resolvePayload(
+      principal.workspaceId,
+      principal.agentId,
+      target.conversationId,
+      action,
+    );
     const body = action.draftHint
       ? `${actionCardSummary(action)}\n${action.draftHint}`
       : actionCardSummary(action);
@@ -296,13 +301,14 @@ export class ActionCards {
   private async resolvePayload(
     workspaceId: string,
     agentId: string,
+    conversationId: string,
     action: ActionCardAction,
   ): Promise<ResolvedActionCardPayload> {
     if (action.type === "page:fill")
       return resolvePageFillPayload(this.db, workspaceId, agentId, action);
     if (action.type === "desktop:takeover")
       return resolveDesktopTakeoverPayload(this.db, workspaceId, agentId, action);
-    if (action.type === "choice") return resolveChoicePayload(action);
+    if (action.type === "choice") return resolveChoicePayload(this.db, conversationId, action);
     if (action.type === "app:register") return resolveAppRegisterPayload(this.db, action);
     if (action.type === "app:recover_owner")
       return resolveAppRecoverOwnerPayload(this.db, { workspaceId, agentId }, action);

@@ -163,6 +163,9 @@ export const choiceActionSchema = z.object({
   prompt: z.string().trim().min(1).max(200),
   options: z.array(choiceOptionSchema).min(2).max(8),
   allowFreeText: z.boolean().default(true),
+  /** The person the card asks: a handle (`@alice` or `alice`) or a UUID. Only they may choose;
+   * without it the Agent's owner chooses. */
+  to: idOrHandleSchema.optional(),
   draftHint: draftHintSchema,
 });
 export type ChoiceAction = z.infer<typeof choiceActionSchema>;
@@ -261,6 +264,8 @@ export type ResolvedChoicePayload = {
   prompt: string;
   options: { id: string; label: string }[];
   allowFreeText: boolean;
+  /** The asked person's user id, when the card names one. */
+  to?: string;
 };
 export type ResolvedActionCardPayload =
   | ResolvedChannelCreatePayload

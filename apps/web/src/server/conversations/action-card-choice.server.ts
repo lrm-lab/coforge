@@ -9,12 +9,44 @@ import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.serv
 import type { ConversationRealtime } from "./conversation-realtime.server";
 import { loadPendingActionCard } from "./pending-action-card.server";
 
-export function resolveChoicePayload(action: ChoiceAction): ResolvedChoicePayload {
+const USER_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** The choice card's payload, with `to` resolved to the asked person's user id: they must be in
+ * the conversation the card is posted in. */
+export async function resolveChoicePayload(
+  db: Pick<PrismaClient, "user" | "conversationMember">,
+  conversationId: string,
+  action: ChoiceAction,
+): Promise<ResolvedChoicePayload> {
+  let to: string | undefined;
+  if (action.to) {
+    const handle = action.to.replace(/^@/, "");
+    const user = await db.user.findFirst({
+      where: USER_ID.test(handle) ? { id: handle } : { username: handle },
+      select: { id: true },
+    });
+    if (!user)
+      throw new AppError("INVALID_INPUT", {
+        errorId: "action_card_choice_to",
+        hint: "the person to ask does not exist",
+      });
+    const member = await db.conversationMember.findFirst({
+      where: { conversationId, userId: user.id, leftAt: null },
+      select: { id: true },
+    });
+    if (!member)
+      throw new AppError("INVALID_INPUT", {
+        errorId: "action_card_choice_to",
+        hint: "the person to ask is not in this conversation",
+      });
+    to = user.id;
+  }
   return {
     type: "choice",
     prompt: action.prompt,
     options: action.options.map((option) => ({ id: option.id, label: option.label })),
     allowFreeText: action.allowFreeText,
+    ...(to ? { to } : {}),
   };
 }
 
@@ -31,7 +63,10 @@ export function choiceActionCardView(
     prompt: payload.prompt,
     options: payload.options,
     allowFreeText: payload.allowFreeText,
-    canCommit: pending && card.preparedByAgent.ownerId === viewerUserId,
+    ...(payload.to ? { to: payload.to } : {}),
+    canCommit:
+      pending &&
+      (payload.to ? payload.to === viewerUserId : card.preparedByAgent.ownerId === viewerUserId),
     result: card.result as { optionId: string; label: string } | undefined,
   };
 }
@@ -51,8 +86,13 @@ export async function commitChoiceCard(
     input.messageId,
     "choice",
   );
-  if (card.preparedByAgent.ownerId !== principal.actorUserId) throw new AppError("ACCESS_DENIED");
   const payload = card.payload as ResolvedChoicePayload;
+  if (
+    payload.to
+      ? payload.to !== principal.actorUserId
+      : card.preparedByAgent.ownerId !== principal.actorUserId
+  )
+    throw new AppError("ACCESS_DENIED");
   const option = payload.options.find((entry) => entry.id === input.optionId);
   if (!option) throw new AppError("INVALID_INPUT");
   const result = { optionId: option.id, label: option.label };

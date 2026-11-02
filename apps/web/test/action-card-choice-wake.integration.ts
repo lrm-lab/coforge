@@ -1,7 +1,11 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
-import { commitChoiceCard } from "#src/server/conversations/action-card-choice.server";
+import {
+  choiceActionCardView,
+  commitChoiceCard,
+  resolveChoicePayload,
+} from "#src/server/conversations/action-card-choice.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 
 const connectionString = Bun.env.DATABASE_URL;
@@ -123,4 +127,26 @@ test("choosing an option wakes the asking Agent with the choice, and posts no me
   );
   const replay = pending.find((row) => row.messageId === messageId);
   expect(replay?.body).toContain("chose a · Red");
+});
+
+test("a choice card names who is asked, and only they may choose", async () => {
+  const action = {
+    type: "choice" as const,
+    prompt: "Which color?",
+    options: [
+      { id: "a", label: "Red" },
+      { id: "b", label: "Blue" },
+    ],
+    allowFreeText: true,
+    to: `choice-${suffix}`,
+  };
+  const payload = await resolveChoicePayload(db, conversationId, action);
+  expect(payload.to).toBe(userId);
+  const base = { messageId, state: "pending" as const, canCommit: false, canCancel: false };
+  const card = { preparedByAgent: { ownerId: "another-user" }, result: null };
+  expect(choiceActionCardView(base, card, payload, userId, true).canCommit).toBe(true);
+  expect(choiceActionCardView(base, card, payload, "another-user", true).canCommit).toBe(false);
+  await expect(
+    resolveChoicePayload(db, conversationId, { ...action, to: "not-a-member" }),
+  ).rejects.toThrow();
 });
