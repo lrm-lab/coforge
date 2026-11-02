@@ -31,6 +31,10 @@ import {
 /** The refusal of `claim --message-id` and `convert` once task conversations are on. */
 export const TASK_V2_USE_CREATE = "task_v2_use_create";
 
+/** `create --message-id` with task conversations off: the CLI tells the caller what to do next. */
+export const TASK_MESSAGE_SOURCE_REQUIRES_CONVERSATIONS =
+  "task_message_source_requires_conversations";
+
 /** Canonical authorization and transaction seam for message-backed Tasks. */
 export class TaskBoard {
   private readonly overviewReads: TaskOverviewReads;
@@ -163,7 +167,9 @@ export class TaskBoard {
       if (conversations) return createConversationTasks(ports, scope, member, principal, command);
       // Naming a source message needs task conversations.
       if (command.messageId !== undefined || command.alongside !== undefined)
-        throw new AppError("INVALID_INPUT");
+        throw new AppError("INVALID_INPUT", {
+          errorId: TASK_MESSAGE_SOURCE_REQUIRES_CONVERSATIONS,
+        });
       return createTasks(ports, scope, member, principal, command);
     }
     if (conversations) {
