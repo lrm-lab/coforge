@@ -20,7 +20,7 @@ test("catalog merges providers by recency and preserves incomplete search flags"
         scanComplete: true,
         contentSearchComplete: false,
       }),
-      excerpt: async () => undefined,
+      excerpt: async () => ({ status: "not_found" }),
     },
     codex: {
       search: async () => ({
@@ -28,7 +28,7 @@ test("catalog merges providers by recency and preserves incomplete search flags"
         scanComplete: false,
         contentSearchComplete: true,
       }),
-      excerpt: async () => undefined,
+      excerpt: async () => ({ status: "not_found" }),
     },
     now: () => 0,
   });
@@ -47,14 +47,17 @@ test("excerpt returns unavailable without leaking errors and fits the wire text 
     claude: {
       search: async () => ({ sessions: [], scanComplete: true, contentSearchComplete: true }),
       excerpt: async () => ({
-        model: "claude-sonnet-4-5",
-        updatedAtMs: 3,
-        initialRequest: "初".repeat(10_000),
-        recentTurns: Array.from({ length: 20 }, (_, index) => ({
-          role: index % 2 ? ("assistant" as const) : ("user" as const),
-          text: "答".repeat(10_000),
-          timestampMs: index,
-        })),
+        status: "ok",
+        excerpt: {
+          model: "claude-sonnet-4-5",
+          updatedAtMs: 3,
+          initialRequest: "初".repeat(10_000),
+          recentTurns: Array.from({ length: 20 }, (_, index) => ({
+            role: index % 2 ? ("assistant" as const) : ("user" as const),
+            text: "答".repeat(10_000),
+            timestampMs: index,
+          })),
+        },
       }),
     },
     codex: {
@@ -91,7 +94,7 @@ test("cross-provider result truncation is reported as incomplete", async () => {
         scanComplete: true,
         contentSearchComplete: true,
       }),
-      excerpt: async () => undefined,
+      excerpt: async () => ({ status: "not_found" }),
     },
     codex: {
       search: async () => ({
@@ -99,7 +102,7 @@ test("cross-provider result truncation is reported as incomplete", async () => {
         scanComplete: true,
         contentSearchComplete: true,
       }),
-      excerpt: async () => undefined,
+      excerpt: async () => ({ status: "not_found" }),
     },
     now: () => 0,
   });
@@ -119,11 +122,11 @@ test("a timed-out filesystem operation blocks another scan instead of accumulati
         await localSessionIo(stalled, options.limits);
         throw new Error("unreachable");
       },
-      excerpt: async () => undefined,
+      excerpt: async () => ({ status: "not_found" }),
     },
     codex: {
       search: async () => ({ sessions: [], scanComplete: true, contentSearchComplete: true }),
-      excerpt: async () => undefined,
+      excerpt: async () => ({ status: "not_found" }),
     },
     now: Date.now,
     timeoutMs: 10,

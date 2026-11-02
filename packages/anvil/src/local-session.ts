@@ -52,6 +52,10 @@ export type NativeLocalSessionExcerpt = {
   recentTurns: NativeLocalSessionTurn[];
 };
 
+export type NativeLocalSessionExcerptRead =
+  | { status: "ok"; excerpt: NativeLocalSessionExcerpt }
+  | { status: "not_found" | "unavailable" };
+
 export type NativeLocalSessionSearch = {
   sessions: NativeLocalSession[];
   scanComplete: boolean;
@@ -85,15 +89,11 @@ export function localSessionSnippet(text: string, query: string): string {
   return flat.slice(Math.max(0, at - 80), at + query.length + 120).slice(0, 1_000);
 }
 
-export function jsonlWindows(
-  head: string,
-  tail: { text: string; startOffset: number },
-  tailStartsAtBoundary = false,
-): unknown[] {
+export function jsonlWindows(head: string, tail: { text: string; startOffset: number }): unknown[] {
   const headLines = head.split("\n");
   if (head.length > 0 && !head.endsWith("\n")) headLines.pop();
   const tailLines = tail.text.split("\n");
-  if (tail.startOffset > 0 && !tailStartsAtBoundary) tailLines.shift();
+  if (tail.startOffset > 0) tailLines.shift();
   const lines = tail.startOffset === 0 ? tailLines : [...headLines, ...tailLines];
   const records: unknown[] = [];
   for (const line of lines) {
@@ -132,15 +132,17 @@ export async function readLocalSessionWindows(
     let prefix = head;
     const prefixBytes = Buffer.from(prefix);
     const windowsCoverFile = tail.startOffset === 0 || tail.startOffset <= prefixBytes.byteLength;
-    const tailStartsAtBoundary =
-      tail.startOffset === 0 ||
-      (tail.startOffset <= prefixBytes.byteLength && prefixBytes[tail.startOffset - 1] === 0x0a);
     if (tail.startOffset > 0 && tail.startOffset < prefixBytes.byteLength)
       prefix = prefixBytes.subarray(0, tail.startOffset).toString("utf8");
     const countedText = tail.startOffset === 0 ? tail.text : prefix + tail.text;
     budget.bytes -= Math.min(allowance, new TextEncoder().encode(countedText).byteLength);
     return {
-      records: jsonlWindows(prefix, tail, tailStartsAtBoundary),
+      records:
+        tail.startOffset === 0
+          ? jsonlWindows("", tail)
+          : windowsCoverFile
+            ? jsonlWindows("", { text: prefix + tail.text, startOffset: 0 })
+            : jsonlWindows(prefix, tail),
       complete: windowsCoverFile,
     };
   } catch (error) {

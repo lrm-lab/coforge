@@ -11,6 +11,7 @@ import {
   type LocalSessionSearchOptions,
   type NativeLocalSession,
   type NativeLocalSessionExcerpt,
+  type NativeLocalSessionExcerptRead,
   type NativeLocalSessionTurn,
 } from "#src/local-session";
 import type { CodexHistoryHost } from "./host";
@@ -231,19 +232,25 @@ export async function searchCodexLocalSessions(
 export async function readCodexLocalSessionExcerpt(
   options: LocalSessionExcerptOptions,
   host: CodexHistoryHost,
-): Promise<NativeLocalSessionExcerpt | undefined> {
+): Promise<NativeLocalSessionExcerptRead> {
   const discovered = await candidates({ query: "", limits: options.limits }, host);
   const candidate = discovered.found.find((item) => item.sessionId === options.sessionId);
-  if (!candidate) return;
-  const read = await readDetails(candidate, options, host, {
-    bytes: options.limits.maxContentBytes,
-  });
-  return read?.parsed.cwd === options.cwd
-    ? {
+  if (!candidate) return { status: discovered.complete ? "not_found" : "unavailable" };
+  try {
+    const read = await readDetails(candidate, options, host, {
+      bytes: options.limits.maxContentBytes,
+    });
+    if (!read || read.parsed.cwd !== options.cwd) return { status: "unavailable" };
+    return {
+      status: "ok",
+      excerpt: {
         model: read.parsed.model,
         updatedAtMs: read.parsed.updatedAtMs,
         initialRequest: read.parsed.initialRequest,
         recentTurns: read.parsed.recentTurns,
-      }
-    : undefined;
+      },
+    };
+  } catch {
+    return { status: "unavailable" };
+  }
 }

@@ -14,6 +14,7 @@ function fakeRedis() {
       },
       async send(_command: "EVAL", args: string[]) {
         const key = args[2]!;
+        if (args[0]!.includes("EXPIRE")) return values.get(key) === args[3] ? 1 : 0;
         const candidate = JSON.parse(args[3]!) as {
           workerInstanceId: string;
           startedAt: number;
@@ -94,5 +95,31 @@ test("a pre-fence supported value stays readable until a ready replaces it", asy
   values.set(key, "supported");
   expect(await lease.supports("w", "computer")).toBeTrue();
   await lease.record("w", "computer", [], identity("worker", 1));
+  expect(await lease.supports("w", "computer")).toBeFalse();
+});
+
+test("an old heartbeat refresh cannot restore a value replaced by a newer ready", async () => {
+  const { redis } = fakeRedis();
+  const refreshStarted = Promise.withResolvers<void>();
+  const releaseRefresh = Promise.withResolvers<void>();
+  const send = redis.send.bind(redis);
+  redis.send = async (command, args) => {
+    if (args[0]!.includes("EXPIRE")) {
+      refreshStarted.resolve();
+      await releaseRefresh.promise;
+    }
+    return send(command, args);
+  };
+  const lease = new RedisComputerCapabilityLease(
+    redis,
+    "local-session-handoff:v1",
+    "local-session-handoff-capability",
+  );
+  await lease.record("w", "computer", ["local-session-handoff:v1"], identity("old", 1));
+  const refreshing = lease.refresh("w", "computer");
+  await refreshStarted.promise;
+  await lease.record("w", "computer", [], identity("new", 2));
+  releaseRefresh.resolve();
+  await refreshing;
   expect(await lease.supports("w", "computer")).toBeFalse();
 });

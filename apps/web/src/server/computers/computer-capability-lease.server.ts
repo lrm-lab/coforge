@@ -15,6 +15,12 @@ end
 redis.call("SET", KEYS[1], ARGV[1], "EX", ARGV[2])
 return 1`;
 
+const REFRESH_IF_CURRENT = `
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+  return redis.call("EXPIRE", KEYS[1], ARGV[2])
+end
+return 0`;
+
 type CapabilityIdentity = { workerInstanceId: string; startedAt: number };
 type CapabilityValue = CapabilityIdentity & { state: "supported" | "unsupported" };
 
@@ -59,7 +65,8 @@ export class RedisComputerCapabilityLease {
   async refresh(workspaceId: string, computerId: string) {
     const key = this.key(workspaceId, computerId);
     const raw = await this.redis.get(key);
-    if (this.read(raw)?.state === "supported") await this.redis.set(key, raw!, "EX", TTL_SECONDS);
+    if (this.read(raw)?.state === "supported")
+      await this.redis.send("EVAL", [REFRESH_IF_CURRENT, "1", key, raw!, TTL_SECONDS]);
   }
 
   private read(raw: string | null): CapabilityValue | undefined {

@@ -15,6 +15,7 @@ import type {
   LocalSessionExcerptOptions,
   LocalSessionSearchOptions,
   NativeLocalSessionExcerpt,
+  NativeLocalSessionExcerptRead,
   NativeLocalSessionSearch,
 } from "@lrm/coforge-anvil";
 
@@ -28,7 +29,7 @@ const EXCERPT_BYTES = 24 * 1024;
 
 type Source = {
   search(options: LocalSessionSearchOptions): Promise<NativeLocalSessionSearch>;
-  excerpt(options: LocalSessionExcerptOptions): Promise<NativeLocalSessionExcerpt | undefined>;
+  excerpt(options: LocalSessionExcerptOptions): Promise<NativeLocalSessionExcerptRead>;
 };
 
 type Sources = { claude: Source; codex: Source; now: () => number; timeoutMs?: number };
@@ -148,11 +149,11 @@ export class LocalSessionCatalog {
     const source =
       provider === RUNTIME_PROVIDER.CLAUDE_CODE ? this.sources.claude : this.sources.codex;
     try {
-      const excerpt = await source.excerpt({ sessionId, cwd, limits: this.limits() });
-      return excerpt
-        ? fitExcerpt(excerpt)
+      const result = await source.excerpt({ sessionId, cwd, limits: this.limits() });
+      return result.status === "ok"
+        ? fitExcerpt(result.excerpt)
         : {
-            status: "not_found" as const,
+            status: result.status,
             model: "",
             updatedAtMs: 0,
             initialRequest: "",
