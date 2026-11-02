@@ -42,6 +42,14 @@ from the repository and a function looked like an untransformed second copy, whe
 commit that had changed it was already on `main`. Two agents reached those two conclusions from the
 same stale checkout within a day of each other.
 
+## Remove the worktree once the change is on main
+
+A worktree is one change's temporary checkout. Once the change is on `main`, remove it with
+`git worktree remove <path>`; do not keep it for a next time. Dependencies come from Bun's shared
+cache, so what each one holds is its own build output and generated code, and a tree left behind
+answers for an older `main`. On 2026-11-02 the main repository registered 113 worktrees, most of
+them for changes already on `main`; removing 64 of them freed about 20 GB.
+
 ## Commit messages
 
 Use concise English Conventional Commit messages: `<type>(optional-scope): imperative summary` (for

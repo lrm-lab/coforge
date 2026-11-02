@@ -59,6 +59,7 @@ Details and the incidents behind these rules are in [delivery](docs/agents/deliv
 - Use the MVP fast lane for ordinary changes; the decision gates still need Frank.
 - Rebase before review; never force-push another contributor's branch; keep `main` linear.
 - Read code from `origin/main` or a fresh worktree, never a long-lived checkout.
+- Remove the worktree you created for a change once that change is on `main` (`git worktree remove <path>`); do not keep it for a next time.
 - Use concise English Conventional Commit messages, as the person running the Agent; never an Agent or bot identity.
 - Keep one concern per branch; claim a task and read the board row back before changing files.
 - A CR or direct-push commit message records scope, decisions, sources, checks, risks, follow-ups and the Agent session.

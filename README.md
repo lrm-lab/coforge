@@ -67,7 +67,7 @@ The architecture invariants every change must respect are in
 | [docs/operations/cdn-certificates/](docs/operations/cdn-certificates/README.md) | CDN certificate renewal runbook |
 | [docs/agents/testing.md](docs/agents/testing.md) | Testing guidance for agents |
 | [docs/agents/module-design.md](docs/agents/module-design.md) | Module ownership, layers, naming, imports and the module map |
-| [docs/agents/delivery.md](docs/agents/delivery.md) | GitHub Flow, direct pushes, CR contents, TDD, review and the incidents behind them |
+| [docs/agents/delivery.md](docs/agents/delivery.md) | GitHub Flow, direct pushes, CR contents, TDD, review, worktree cleanup and the incidents behind them |
 | [docs/agents/web-runtime.md](docs/agents/web-runtime.md) | Web runtime entry point, file naming, import protection and the trailing-blank-line check |
 | [docs/agents/message-references.md](docs/agents/message-references.md) | The send-time recognizer of a message body's references |
 | [docs/agents/architecture-invariants.md](docs/agents/architecture-invariants.md) | Package, process, transport, protocol and storage rules every change keeps |
