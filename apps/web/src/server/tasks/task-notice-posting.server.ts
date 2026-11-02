@@ -165,7 +165,7 @@ async function writeNotice(
   const sequence = await allocateSequence(tx, conversation.conversationId);
   // Named fields only: callers pass wider scope objects that are also a ConversationRef.
   const { conversationId, workspaceId } = conversation;
-  return tx.message.create({
+  const message = await tx.message.create({
     data: {
       id: input.id,
       conversationId,
@@ -173,14 +173,6 @@ async function writeNotice(
       threadRootId: input.threadRootId,
       body: input.body,
       sequence,
-      systemMessage: {
-        create: {
-          kind: input.system.kind,
-          params: input.system.params as Prisma.InputJsonObject,
-          conversationId,
-          workspaceId,
-        },
-      },
       mentions: input.mentions
         ? {
             create: {
@@ -205,6 +197,16 @@ async function writeNotice(
       body: true,
     },
   });
+  await tx.systemMessage.create({
+    data: {
+      messageId: message.id,
+      conversationId,
+      workspaceId,
+      kind: input.system.kind,
+      params: input.system.params as Prisma.InputJsonObject,
+    },
+  });
+  return message;
 }
 
 /**

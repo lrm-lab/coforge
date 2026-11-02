@@ -428,25 +428,13 @@ export async function postTaskNotice(
     })());
   await lockConversation(tx, conversationId);
   const sequence = await allocateSequence(tx, conversationId);
-  return tx.message.create({
+  const message = await tx.message.create({
     data: {
       id: notice.id,
       workspaceId: scope.workspaceId,
       conversationId,
       body: notice.body,
       sequence,
-      ...(notice.system
-        ? {
-            systemMessage: {
-              create: {
-                kind: notice.system.kind,
-                params: notice.system.params as Prisma.InputJsonObject,
-                conversationId,
-                workspaceId: scope.workspaceId,
-              },
-            },
-          }
-        : {}),
       deliveries: notice.deliverToAgentId
         ? {
             create: [
@@ -462,4 +450,15 @@ export async function postTaskNotice(
     },
     select: { id: true, sequence: true, conversationId: true, workspaceId: true, body: true },
   });
+  if (notice.system)
+    await tx.systemMessage.create({
+      data: {
+        messageId: message.id,
+        conversationId,
+        workspaceId: scope.workspaceId,
+        kind: notice.system.kind,
+        params: notice.system.params as Prisma.InputJsonObject,
+      },
+    });
+  return message;
 }
