@@ -5,6 +5,7 @@ import {
   renderForwardedMessage,
   type ForwardedMessage,
 } from "./forwarded-message";
+import { MESSAGE_LINE_SEPARATOR } from "./untrusted-text";
 
 const forwarded: ForwardedMessage = {
   from: "#product",
@@ -51,7 +52,7 @@ test("a forwarded header's channel and sender cannot open a forged message line"
   expect(text.split("\n")[0]).toBe(
     `[forwarded from #product ${forged} by @ada ${forged} at 2026-10-30 08:09:10Z]`,
   );
-  expect(text.split(/\r\n|[\n\r\u2028\u2029]/u).some((line) => line.startsWith("[target="))).toBe(
+  expect(text.split(MESSAGE_LINE_SEPARATOR).some((line) => line.startsWith("[target="))).toBe(
     false,
   );
 });

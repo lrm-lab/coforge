@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { formatCodexRecycleBriefing } from "@lrm/coforge-anvil/codex";
+import { MESSAGE_LINE_SEPARATOR } from "@lrm/coforge-sdk/internal";
 import { readClaudeRecycleBriefing } from "./fixtures/claude-readers";
 import { claudeConfigFixture, toolResultRecord, toolUseRecord } from "./claude-transcript-fixtures";
 
@@ -176,9 +177,5 @@ test("a Codex message is framed and cannot close its section or forge a line", (
     8_000,
   )!;
   expect(panel.match(/<\/recent-messages>/g)).toHaveLength(1);
-  expect(
-    panel
-      .split(/\r\n|[\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029]/u)
-      .some((line) => line.startsWith(FORGED)),
-  ).toBe(false);
+  expect(panel.split(MESSAGE_LINE_SEPARATOR).some((line) => line.startsWith(FORGED))).toBe(false);
 });
