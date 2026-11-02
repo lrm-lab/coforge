@@ -16,9 +16,13 @@ import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
  * NULL marker, leaving the read cursor) so a per-conversation count is an index range on
  * `messages(conversationId, sequence)` over the unread tail, not a scan of every message.
  */
-export const HUMAN_UNREAD_MESSAGE_SQL = Prisma.sql`m."sequence" > LEAST(cm."readThroughSequence", cm."unreadFromSequence" - 1)
+export const HUMAN_UNREAD_BASE_SQL = Prisma.sql`m."sequence" > LEAST(cm."readThroughSequence", cm."unreadFromSequence" - 1)
   AND m."senderMemberId" IS NOT NULL
-  AND m."senderMemberId" <> cm."id"
+  AND m."senderMemberId" <> cm."id"`;
+
+/** The unread count: a muted member has none. The mention badge reads the base rule instead, so a
+ * muted mention still shows. */
+export const HUMAN_UNREAD_MESSAGE_SQL = Prisma.sql`${HUMAN_UNREAD_BASE_SQL}
   AND cm."notificationLevel" <> 'muted'`;
 
 /** Where a person stands in one of their conversations: how many of its top-level messages are

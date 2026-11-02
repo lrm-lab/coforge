@@ -154,10 +154,14 @@ export function createSidebar(
     onMutate: ({ target, muted }) =>
       edit(target, (row) => {
         row.muted = muted;
+        // A muted chat has no unread; the re-read below brings the server's count (and its
+        // mention badge, which a mute keeps).
+        if (muted) row.unreadCount = 0;
       }),
     mutationFn: async ({ target, muted }, { transaction }) => {
       await api.setMuted(target, muted);
       confirm(transaction);
+      reread(target);
     },
   });
 

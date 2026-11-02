@@ -10,7 +10,7 @@ import { isClosedAndUnpinned } from "./channel-closed.server";
 import { visibleChannelWhere } from "./channel-read-access.server";
 import { channelListPreviews } from "./channel-list-preview.server";
 import { channelInfoOf } from "./conversation-realtime.server";
-import { HUMAN_UNREAD_MESSAGE_SQL } from "./human-unread.server";
+import { HUMAN_UNREAD_BASE_SQL } from "./human-unread.server";
 
 /** The Workspace's channels as lists: every name the composer may reference, the viewer's Chat
  * list with unread counts and previews, and the archived ones Workspace settings shows. */
@@ -93,7 +93,7 @@ export async function listChannels(
        AND c."channelName" IS NOT NULL
        AND c."hiddenFromWorkspaceAt" IS NULL
       CROSS JOIN LATERAL (
-        SELECT COUNT(*)::int AS "count",
+        SELECT COUNT(*) FILTER (WHERE cm."notificationLevel" <> 'muted')::int AS "count",
           COUNT(*) FILTER (WHERE m."createdAt" > cm."hiddenAt")::int AS "arrivedSinceClosed",
           COALESCE(BOOL_OR(EXISTS (
             SELECT 1 FROM "message_mentions" mm
@@ -102,7 +102,7 @@ export async function listChannels(
         FROM "messages" m
         WHERE m."conversationId" = cm."conversationId"
           AND m."threadRootId" IS NULL
-          AND ${HUMAN_UNREAD_MESSAGE_SQL}
+          AND ${HUMAN_UNREAD_BASE_SQL}
       ) unread
       WHERE cm."userId" = ${userId}::uuid
         AND cm."leftAt" IS NULL
