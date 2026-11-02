@@ -5,6 +5,7 @@ import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 import { Button } from "#src/components/base/buttons/button";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
+import { POPOVER_MOTION } from "#src/utils/popover-motion";
 
 import { AgentDisplayAvatar } from "./agent-display-avatar";
 import type { AgentMascot } from "./agent-mascot";
@@ -26,16 +27,11 @@ export function AgentListPopover({
     <AriaPopover
       placement="bottom end"
       offset={8}
-      className={(state) =>
-        cn(
-          "origin-(--trigger-anchor-point) overflow-hidden rounded-lg bg-primary shadow-lg ring-1 ring-secondary_alt will-change-transform",
-          state.isEntering &&
-            "duration-150 ease-out animate-in fade-in placement-bottom:slide-in-from-top-0.5",
-          state.isExiting &&
-            "duration-100 ease-in animate-out fade-out placement-bottom:slide-out-to-top-0.5",
-          "w-[min(20rem,calc(100vw-2.5rem))]",
-        )
-      }
+      className={cn(
+        "origin-(--trigger-anchor-point) overflow-hidden rounded-lg bg-primary shadow-lg ring-1 ring-secondary_alt will-change-transform",
+        POPOVER_MOTION,
+        "w-[min(20rem,calc(100vw-2.5rem))]",
+      )}
     >
       <AriaDialog aria-label={label} className="outline-hidden">
         {({ close }) => children(close)}

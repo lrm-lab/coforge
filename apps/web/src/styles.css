@@ -167,17 +167,6 @@ input[type="search"]::-webkit-search-cancel-button {
   }
 }
 
-/* A popover React Aria positions (it sets `data-trigger` and `data-placement`) never transitions.
-   Tailwind's `duration-*` on its entering classes sets transition-duration too, and
-   transition-property defaults to all, so React Aria's reset of the popover's top and max-height
-   would ease instead of applying while it measures: it would read the old clipped height and keep a
-   menu short of room below instead of flipping it above. A `transition-*` utility still wins. */
-@layer base {
-  [data-trigger][data-placement] {
-    transition-property: none;
-  }
-}
-
 /* A dnd-kit drag in progress (`hooks/use-document-drag-cursor.ts`): drag overlays take no pointer
    events, so without this the cursor would flicker between whatever lies under the pointer. */
 html[data-drag-cursor],
