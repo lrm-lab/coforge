@@ -4,7 +4,7 @@ These rules apply to `src/features/conversations/`. Forwarding a message (the Fo
 
 - This feature does not own Agent state. Read Agent status and Activity through the `features/agents/` hooks, and open, close, or switch the right-hand Agent or person profile panel through `features/agents/profile-panel/open-agent-profile.ts` instead of writing `profile`/`agentTab` search params. The channel settings sheet embeds the
   profile with its own state instead (see the members page below).
-- Attachment review (`attachment-review.tsx`), the file with its comments: [attachment-review.md](attachment-review.md). A video plays in its message: [inline-video.md](inline-video.md).
+- Attachment review (`attachment-review.tsx`), the file with its comments: [attachment-review.md](attachment-review.md). A video or audio file plays in its message: [inline-video.md](inline-video.md).
 - `conversation-navigation.tsx` owns Chat list/detail selection, retained list scroll, and mounted conversation drafts on desktop and mobile. At `lg`
   and above, list and detail stay side by side; narrower viewports switch between them. Neither sidebar renders conversation lists or their creation
   actions. `last-conversation.ts` owns which conversation Chat opens on a desktop (the remembered one while listed, else the first joined channel);

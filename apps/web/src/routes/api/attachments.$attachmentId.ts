@@ -76,7 +76,7 @@ export async function handleAttachmentDownload(
   }
   const { attachment } = read;
   const forceDownload = new URL(request.url).searchParams.has("download");
-  // A file that may only render off our own origin (a PDF, a video) is redirected to the signed
+  // A file that may only render off our own origin (a PDF, a video, an audio file) is redirected to the signed
   // delivery URL as well; when there is no delivery to sign with, `signedRedirect` returns null and
   // the bytes stream below as an opaque download, exactly as before.
   const redirect =

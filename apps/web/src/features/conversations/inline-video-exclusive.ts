@@ -1,6 +1,6 @@
-// The page's attachment videos: the messages' players and an open preview's. It runs in the
+// The attachment videos and audio files on the page: the messages' players and a preview's. It runs in the
 // browser alone (a conversation is never server-rendered).
-const videos = new Set<HTMLVideoElement>();
+const videos = new Set<HTMLMediaElement>();
 let observer: IntersectionObserver | undefined;
 
 const pauseOthers = (event: Event) => {
@@ -8,13 +8,13 @@ const pauseOthers = (event: Event) => {
 };
 
 /**
- * Plays `element` as the page's one video: playing it pauses any other, and scrolling it all the
- * way off screen pauses it. The returned function takes it back out.
+ * Plays `element` as the page's one video or audio file: playing it pauses any other, and
+ * scrolling it all the way off screen pauses it. The returned function takes it back out.
  */
-export function joinExclusivePlayback(element: HTMLVideoElement) {
+export function joinExclusivePlayback(element: HTMLMediaElement) {
   observer ??= new IntersectionObserver((changes) => {
     for (const change of changes) {
-      const video = change.target as HTMLVideoElement;
+      const video = change.target as HTMLMediaElement;
       // Picture-in-picture keeps playing once its message has scrolled away.
       const pictureInPicture = document.pictureInPictureElement === video;
       if (!change.isIntersecting && !video.paused && !pictureInPicture) video.pause();

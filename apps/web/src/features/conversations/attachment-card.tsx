@@ -1,11 +1,12 @@
 import { useEffect, useEffectEvent, useState, type CSSProperties } from "react";
-import { Download01, MessageChatSquare } from "@untitledui/icons";
+import { Download01 } from "@untitledui/icons";
 import { getReadableFileSize } from "#src/components/application/file-upload/file-upload-base";
 import { Button } from "#src/components/base/buttons/button";
-import { fileTypeLabel } from "#src/features/files/file-meta";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { attachmentPreviewKind, previewKindFor } from "./attachment-preview-kind";
+import { CommentCountMark, commentsSuffix, FileTypeTag } from "./attachment-meta";
+import { InlineAudio } from "./inline-audio";
 import { AttachmentReviewDialog } from "./attachment-review";
 import { useAttachmentReviewAddressAmong } from "./attachment-review-address";
 import { ImageLightbox } from "./image-lightbox";
@@ -29,11 +30,15 @@ export function attachmentUrl(attachment: { id: string }) {
 type Attachment = MessageView["attachments"][number];
 
 const isImage = (attachment: Attachment) => attachment.contentType.startsWith("image/");
-/** A video plays in the message; without a delivery URL to stream from, only one small enough to
- * read whole (`MEDIA_PREVIEW_MAX_BYTES`), else it is a file card. */
-const isVideo = (attachment: Attachment) =>
-  attachmentPreviewKind(attachment.fileName, attachment.contentType) === "video" &&
-  (attachment.previewUrl !== undefined || attachment.sizeBytes <= MEDIA_PREVIEW_MAX_BYTES);
+/** A video or audio file plays in the message; without a delivery URL to stream from, only one
+ * small enough to read whole (`MEDIA_PREVIEW_MAX_BYTES`), else it is a file card. */
+function playsInline(attachment: Attachment) {
+  const kind = attachmentPreviewKind(attachment.fileName, attachment.contentType);
+  if (kind !== "video" && kind !== "audio") return undefined;
+  return attachment.previewUrl !== undefined || attachment.sizeBytes <= MEDIA_PREVIEW_MAX_BYTES
+    ? kind
+    : undefined;
+}
 
 /** One image as a button opening the lightbox: its thumbnail, else the original, else the route. */
 function ImageThumbnail({
@@ -79,8 +84,9 @@ function ImageThumbnail({
 /**
  * A message's attachments: its images first, laid out as Raft does (`attachment-image-box.ts`), a
  * lone one at its own shape and several in a grid, then each video as a player (`InlineVideo`),
- * then a card for each other file. A lone image that cannot be loaded, and a video too large to
- * play without a delivery URL, fall back to their file cards. The images open one lightbox, which
+ * then each audio file as a card with a player (`InlineAudio`), then a card for each other file. A
+ * lone image that cannot be loaded, and a video or audio file too large to play without a delivery
+ * URL, fall back to their file cards. The images open one lightbox, which
  * pages through all of them, as on Raft. The image shown is in the address (`file`), so a reload or
  * a copied address opens it again; a link into its comments opens it there, at its comments.
  * Closing the lightbox takes the address off.
@@ -113,10 +119,14 @@ export function MessageAttachments({ attachments }: { attachments: readonly Atta
     address.show(id);
   };
   useEffect(() => followAddress(address.fileId), [address.fileId]);
-  const videos = attachments.filter(isVideo);
-  const files = attachments.filter(
-    (attachment) => !isImage(attachment) && !videos.includes(attachment),
-  );
+  const videos: Attachment[] = [];
+  const audios: Attachment[] = [];
+  const files: Attachment[] = [];
+  for (const attachment of attachments) {
+    if (isImage(attachment)) continue;
+    const inline = playsInline(attachment);
+    (inline === "video" ? videos : inline === "audio" ? audios : files).push(attachment);
+  }
   const lone = images.length === 1 ? images[0]! : undefined;
   const broken = lone !== undefined && brokenId === lone.id;
   if (lone && broken) files.unshift(lone);
@@ -182,6 +192,9 @@ export function MessageAttachments({ attachments }: { attachments: readonly Atta
       {videos.map((attachment) => (
         <InlineVideo key={attachment.id} attachment={attachment} href={attachmentUrl(attachment)} />
       ))}
+      {audios.map((attachment) => (
+        <InlineAudio key={attachment.id} attachment={attachment} href={attachmentUrl(attachment)} />
+      ))}
       {files.length > 0 && (
         // Two cards to a row, as wide as the image grid above them.
         <div
@@ -209,20 +222,14 @@ const CARD =
  * "Markdown 预览" repeat the type tag, so they are left out on purpose.
  */
 function AttachmentCard({ attachment }: { attachment: Attachment }) {
-  const typeLabel = fileTypeLabel(attachment.fileName, attachment.contentType);
   const previewable = previewKindFor(attachment);
   const commentCount = attachment.commentCount ?? 0;
   // The count is drawn as a mark; the card's name says it in words.
-  const comments =
-    commentCount > 0 ? `, ${m.conversation_attachment_comment_count({ count: commentCount })}` : "";
+  const comments = commentsSuffix(commentCount);
   const body = (
     <span className="flex min-w-0 flex-col gap-1 text-left">
       <span className="flex min-w-0 items-center gap-1.5">
-        {typeLabel && (
-          <span className="inline-flex shrink-0 items-center rounded-[4px] bg-secondary px-1 font-mono text-xs font-semibold text-tertiary ring-1 ring-secondary ring-inset">
-            {typeLabel}
-          </span>
-        )}
+        <FileTypeTag fileName={attachment.fileName} contentType={attachment.contentType} />
         <span className="min-w-0 flex-1 truncate text-sm font-semibold text-primary">
           {attachment.fileName}
         </span>
@@ -230,12 +237,7 @@ function AttachmentCard({ attachment }: { attachment: Attachment }) {
       <span className="flex min-w-0 items-center justify-between gap-2 text-xs text-tertiary tabular-nums">
         <span className="flex min-w-0 items-center gap-1.5">
           <span className="min-w-0 truncate">{getReadableFileSize(attachment.sizeBytes)}</span>
-          {commentCount > 0 && (
-            <span className="flex shrink-0 items-center gap-0.5" aria-hidden="true">
-              <MessageChatSquare className="size-3.5" />
-              {commentCount}
-            </span>
-          )}
+          <CommentCountMark count={commentCount} />
         </span>
         {!previewable && <Download01 aria-hidden="true" className="size-3.5 shrink-0" />}
       </span>

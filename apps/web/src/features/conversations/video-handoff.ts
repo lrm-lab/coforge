@@ -1,6 +1,6 @@
 /**
- * Where a video is, handed between its two players (task #284): the message's own and the
- * preview's. Expanding a video carries on from here in the preview, playing if it played, and
+ * Where a video (or an audio file, task #419) is, handed between its two players (task #284): the
+ * message's own and the preview's. Expanding a video carries on from here in the preview, playing if it played, and
  * closing the preview carries the preview's place back, as Telegram does: the reader never starts
  * over. Both players stream the same signed URL (signed per window, `FILE_DELIVERY_URL_WINDOW_SECONDS`),
  * which the CDN serves as `private, max-age=1800`, so the browser reuses what it already read.
@@ -8,13 +8,13 @@
 export type VideoPlace = { time: number; playing: boolean };
 
 /** A player's place, or nothing when it never left the start. */
-export function placeOf(video: HTMLVideoElement): VideoPlace | undefined {
+export function placeOf(video: HTMLMediaElement): VideoPlace | undefined {
   const playing = !video.paused && !video.ended;
   return video.currentTime > 0 || playing ? { time: video.currentTime, playing } : undefined;
 }
 
 /** Puts `video` at `place`, once its length is known (a time before that is dropped). */
-export function resumeAt(video: HTMLVideoElement, place: VideoPlace) {
+export function resumeAt(video: HTMLMediaElement, place: VideoPlace) {
   const apply = () => {
     video.currentTime = place.time;
     if (place.playing) video.play().catch(() => {});

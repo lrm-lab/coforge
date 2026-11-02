@@ -74,7 +74,7 @@ export function AttachmentPreview({
   kind: AttachmentPreviewKind;
   /** The authenticated attachment URL; also the download target offered on failure. */
   href: string;
-  /** The signed delivery URL; required for `pdf`, streamed by `video`, unused by the others. */
+  /** The signed delivery URL; required for `pdf`, streamed by `video` and `audio`, unused by the others. */
   previewUrl?: string;
   /** A text kind's content, read before the preview opens (`readPreviewText`). */
   text?: string;
@@ -209,15 +209,6 @@ function MediaPreview({
   const onError = () => (source.fallbackSrc && !onFallback ? setOnFallback(true) : setFailed(true));
 
   if (kind === "audio")
-    return (
-      <AudioPreview
-        fileName={fileName}
-        src={src}
-        onError={onError}
-        anchoring={comments.anchoring}
-        commentsOpen={comments.commentsOpen}
-        pendingAnchor={comments.pendingAnchor}
-      />
-    );
+    return <AudioPreview fileName={fileName} src={src} onError={onError} {...comments} />;
   return <VideoPreview fileName={fileName} src={src} onError={onError} {...comments} />;
 }

@@ -10,6 +10,7 @@ import {
   videoTimeLabel,
   type AttachmentCommentAnchor,
 } from "./attachment-comment-anchors";
+import { NATIVE_CONTROLS_THEME } from "./inline-media";
 import { joinExclusivePlayback } from "./inline-video-exclusive";
 import { resumeAt, type VideoPlace, type VideoStart } from "./video-handoff";
 
@@ -118,6 +119,29 @@ function AddTimestamp({
   );
 }
 
+/** The preview's side of the handoff (`VideoHandoff`): the player joins the page's one-at-a-time
+ * playback, starts where the message's player was, and reports its place as it moves. Returns the
+ * `onPlayer` for `useTimeComments`. */
+function useHandoffPlayer(videoStart?: VideoStart, onVideoPlace?: (place: VideoPlace) => void) {
+  const handoff = useRef({ videoStart, onVideoPlace });
+  handoff.current.onVideoPlace = onVideoPlace;
+  return (element: HTMLMediaElement) => {
+    const leave = joinExclusivePlayback(element);
+    const start = handoff.current.videoStart?.place;
+    if (start) resumeAt(element, start);
+    const place = () =>
+      handoff.current.onVideoPlace?.({
+        time: element.currentTime,
+        playing: !(element.paused || element.ended),
+      });
+    for (const type of PLAYBACK_EVENTS) element.addEventListener(type, place);
+    return () => {
+      for (const type of PLAYBACK_EVENTS) element.removeEventListener(type, place);
+      leave();
+    };
+  };
+}
+
 /** A video attachment in its preview, commented on at a time, as on Raft's page (1.0.53). */
 export function VideoPreview({
   fileName,
@@ -140,28 +164,11 @@ export function VideoPreview({
   /** Hears the preview's place as it moves, for the message's player to carry on from. */
   onVideoPlace?: (place: VideoPlace) => void;
 }) {
-  const handoff = useRef({ videoStart, onVideoPlace });
-  handoff.current.onVideoPlace = onVideoPlace;
-  // The player joins the page's one-video playback and hands its place back as it moves.
   const { track, offer } = useTimeComments<HTMLVideoElement>({
     anchoring,
     commentsOpen,
     pendingAnchor,
-    onPlayer(element) {
-      const leave = joinExclusivePlayback(element);
-      const start = handoff.current.videoStart?.place;
-      if (start) resumeAt(element, start);
-      const place = () =>
-        handoff.current.onVideoPlace?.({
-          time: element.currentTime,
-          playing: !(element.paused || element.ended),
-        });
-      for (const type of PLAYBACK_EVENTS) element.addEventListener(type, place);
-      return () => {
-        for (const type of PLAYBACK_EVENTS) element.removeEventListener(type, place);
-        leave();
-      };
-    },
+    onPlayer: useHandoffPlayer(videoStart, onVideoPlace),
   });
   return (
     <div className="relative flex min-h-0 flex-1 items-center justify-center bg-black/90 p-4">
@@ -183,8 +190,9 @@ export function VideoPreview({
   );
 }
 
-/** An audio attachment in its preview, commented on at a time like a video (task #281). The
- * button sits under the player, which is a single bar with no picture to float it over. */
+/** An audio attachment in its preview, commented on at a time like a video (task #281), and
+ * carrying on from the message's player as a video does (task #419). The button sits under the
+ * player, which is a single bar with no picture to float it over. */
 export function AudioPreview({
   fileName,
   src,
@@ -192,6 +200,8 @@ export function AudioPreview({
   anchoring,
   commentsOpen,
   pendingAnchor,
+  videoStart,
+  onVideoPlace,
 }: {
   fileName: string;
   src: string;
@@ -199,11 +209,14 @@ export function AudioPreview({
   anchoring?: Anchoring;
   commentsOpen?: boolean;
   pendingAnchor?: AttachmentCommentAnchor | null;
+  videoStart?: VideoStart;
+  onVideoPlace?: (place: VideoPlace) => void;
 }) {
   const { track, offer } = useTimeComments<HTMLAudioElement>({
     anchoring,
     commentsOpen,
     pendingAnchor,
+    onPlayer: useHandoffPlayer(videoStart, onVideoPlace),
   });
   return (
     <div className="flex flex-col items-center gap-4 p-4 sm:p-6">
@@ -211,7 +224,7 @@ export function AudioPreview({
         ref={track}
         src={src}
         controls
-        className="w-full"
+        className={`w-full ${NATIVE_CONTROLS_THEME}`}
         aria-label={fileName}
         onError={onError}
       />

@@ -53,30 +53,41 @@ test("omits the preview URL for a non-image content type even when delivery is c
   expect(view).not.toHaveProperty("previewUrl");
 });
 
-test("carries a signed preview URL for a video, stored as a video or as untyped bytes", () => {
+test("carries a signed preview URL for a video or audio file, stored as such or as untyped bytes", () => {
   const delivery = {
     signedUrl: () => ({
       url: "https://files-staging.coforge.cn/v?auth_key=1",
       expiresAt: new Date(0),
     }),
   };
-  for (const contentType of ["video/mp4", "application/octet-stream"]) {
-    const view = attachmentView({ ...row, fileName: "clip.mp4", contentType }, delivery);
+  for (const [fileName, contentType] of [
+    ["clip.mp4", "video/mp4"],
+    ["clip.mp4", "application/octet-stream"],
+    ["memo.mp3", "audio/mpeg"],
+    ["memo.m4a", "application/octet-stream"],
+  ] as const) {
+    const view = attachmentView({ ...row, fileName, contentType }, delivery);
     expect(view.previewUrl).toBe("https://files-staging.coforge.cn/v?auth_key=1");
     expect(view).not.toHaveProperty("thumbnailUrl");
   }
 });
 
-test("never signs a video name stored as a document type", () => {
-  const view = attachmentView(
-    { ...row, fileName: "clip.mp4", contentType: "text/html" },
-    {
-      signedUrl: () => {
-        throw new Error("must not sign a document the delivery origin would render");
+test("never signs a media name stored as a document type or as the other media", () => {
+  for (const [fileName, contentType] of [
+    ["clip.mp4", "text/html"],
+    ["memo.mp3", "text/html"],
+    ["memo.mp3", "video/mp4"],
+  ] as const) {
+    const view = attachmentView(
+      { ...row, fileName, contentType },
+      {
+        signedUrl: () => {
+          throw new Error("must not sign a document the delivery origin would render");
+        },
       },
-    },
-  );
-  expect(view).not.toHaveProperty("previewUrl");
+    );
+    expect(view).not.toHaveProperty("previewUrl");
+  }
 });
 
 test("omits the preview URL when delivery is not configured", () => {

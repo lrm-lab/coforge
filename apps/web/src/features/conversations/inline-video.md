@@ -1,4 +1,4 @@
-# Videos in messages
+# Videos and audio in messages
 
 Part of [Conversations UI](AGENTS.md).
 
@@ -21,3 +21,9 @@ Part of [Conversations UI](AGENTS.md).
   as it is rather than read again.
 - Videos are not transcoded: an MP4 whose index sits at its end (no faststart) still plays, only
   starts later.
+- An audio file plays in its message too (`inline-audio.tsx`, task #419), as on Raft: a card as
+  wide as the image grid, its name on top (opens the preview, like a video's expand button), the
+  download beside it (the player's own menu has none on a phone's Safari), and the browser's own
+  player under it in the app's theme. It streams from delivery under the same rule as a video and
+  shares the video's loading, retry, handoff and one-at-a-time playback (`inline-media.tsx`).
+  Raft's "音频文件" line is left out: the type tag says it.
