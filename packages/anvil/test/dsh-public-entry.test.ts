@@ -5,6 +5,8 @@ test("DSH is available through its named public entry while root stays neutral",
   const runtime = await import("@lrm/coforge-anvil/dsh");
   expect(typeof runtime.DshProvider).toBe("function");
   expect(runtime.DSH_ACP_VERSION).toBe("0.2.1-rc.2");
+  expect(runtime.DSH_ACP_VERSION_RANGE).toBe(">=0.2.1-rc.2 <0.2.2");
+  expect(typeof runtime.isDshVersionSupported).toBe("function");
   expect(typeof runtime.discoverDshCatalog).toBe("function");
   expect("DshProvider" in neutral).toBe(false);
   expect("DSH_INSTRUCTIONS_PLUGIN" in neutral).toBe(false);

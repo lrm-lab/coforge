@@ -78,7 +78,8 @@ function grokInstalledExecutableCandidates(
 
 /** DeepSeek Harness: advertised like any external CLI once it is on PATH. Its key lives in the
  * user's own `~/.dsh`, so the Computer reports no sign-in state for it, as for OpenCode; the
- * version is pinned exactly by the inventory probe (`DSH_ACP_VERSION`). */
+ * version is restricted to the verified 0.2.1 preview line by the inventory probe
+ * (`DSH_ACP_VERSION_RANGE`). */
 export const dshCodeAgent = {
   provider: RUNTIME_PROVIDER.DSH,
   executable: "dsh",

@@ -21,7 +21,11 @@ import {
 } from "@lrm/coforge-anvil";
 import { stderrHint } from "#src/code-agent/version-probe";
 import { isKiroVersionUnsupported, logKiroVersionUnsupported } from "@lrm/coforge-anvil/kiro";
-import { DSH_ACP_VERSION, dshVersionFromOutput } from "@lrm/coforge-anvil/dsh";
+import {
+  DSH_ACP_VERSION_RANGE,
+  dshVersionFromOutput,
+  isDshVersionSupported,
+} from "@lrm/coforge-anvil/dsh";
 import { isGrokVersionUnsupported, logGrokVersionUnsupported } from "@lrm/coforge-anvil/grok";
 import {
   isCommandCodeVersionUnsupported,
@@ -179,14 +183,14 @@ async function probeRuntimeVersion(
     // A refused version is not a probe miss: the cached runtime must be dropped, not restored.
     return { kind: "rejected", version };
   }
-  // The preview ACP is pinned to one release: any other version is refused, never offered.
-  if (provider === RUNTIME_PROVIDER.DSH && version !== DSH_ACP_VERSION) {
-    logger.warning("DeepSeek Harness version is not the pinned release", {
+  // The preview ACP accepts the verified 0.2.1 line only: any other release is refused, never offered.
+  if (provider === RUNTIME_PROVIDER.DSH && !isDshVersionSupported(version)) {
+    logger.warning("DeepSeek Harness version is outside the supported preview line", {
       event: "code_agent_runtime:version_unsupported",
       provider,
       executable_name: name,
       version,
-      required_version: DSH_ACP_VERSION,
+      required_range: DSH_ACP_VERSION_RANGE,
       outcome: "unavailable",
     });
     return { kind: "rejected", version };

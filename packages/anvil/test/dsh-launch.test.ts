@@ -7,12 +7,22 @@ import { RuntimeStartFailedError, RuntimeVersionUnsupportedError } from "#src/co
 import { assertDshVersion, dshVersionFromOutput, DSH_ACP_VERSION } from "#src/dsh/version";
 import { createDshLaunchContents, DSH_INSTRUCTIONS_PLUGIN } from "#src/dsh/launch-contents";
 
-test("DSH accepts only its verified preview and fails closed on unknown versions", async () => {
-  for (const version of [undefined, "", "0.2.1", "0.2.1-rc.1", "0.2.1-rc.3", "garbage"])
+test("DSH accepts the verified 0.2.1 preview line and fails closed outside it", async () => {
+  for (const version of [
+    undefined,
+    "",
+    "0.2.0",
+    "0.2.1-rc.1",
+    "0.2.1-alpha.5",
+    "0.2.2-alpha.2",
+    "0.3.0",
+    "garbage",
+  ])
     await expect(assertDshVersion(["fixture"], async () => version)).rejects.toBeInstanceOf(
       RuntimeVersionUnsupportedError,
     );
-  await expect(assertDshVersion(["fixture"], async () => DSH_ACP_VERSION)).resolves.toBeUndefined();
+  for (const version of [DSH_ACP_VERSION, "0.2.1-rc.5", "0.2.1"])
+    await expect(assertDshVersion(["fixture"], async () => version)).resolves.toBeUndefined();
   // A CLI that cannot start at all is a start failure, not a version judgement.
   await expect(
     assertDshVersion(["fixture"], async () => {

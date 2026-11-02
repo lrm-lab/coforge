@@ -1,12 +1,29 @@
 import { RuntimeStartFailedError, RuntimeVersionUnsupportedError } from "#src/contract";
 import type { CliVersionReader } from "#src/version-gate";
 
-/** Preview ACP is deliberately pinned: unknown/newer releases require native acceptance. */
+/**
+ * The first verified preview of the 0.2.1 line. The adapter accepts 0.2.1-rc.2 through stable
+ * 0.2.1; a newer line takes native acceptance before it is added here.
+ */
 export const DSH_ACP_VERSION = "0.2.1-rc.2";
+
+/** The npm range the adapter accepts, written out for the launch error and the docs. */
+export const DSH_ACP_VERSION_RANGE = ">=0.2.1-rc.2 <0.2.2";
+
+const dshReleaseLine = /^0\.2\.1(?:-rc\.(\d+))?$/;
 
 export function dshVersionFromOutput(output: string): string | undefined {
   const version = output.trim();
   return /^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/.test(version) ? version : undefined;
+}
+
+/** Whether this is a release of the verified 0.2.1 line, from rc.2 through stable 0.2.1. */
+export function isDshVersionSupported(version: string | undefined): boolean {
+  if (!version) return false;
+  const match = dshReleaseLine.exec(version);
+  if (!match) return false;
+  // No prerelease suffix means stable 0.2.1, which is newer than every 0.2.1-rc release.
+  return match[1] === undefined || Number(match[1]) >= 2;
 }
 
 export async function assertDshVersion(
@@ -26,9 +43,9 @@ export async function assertDshVersion(
       { cause: error },
     );
   }
-  if (version === DSH_ACP_VERSION) return;
+  if (isDshVersionSupported(version)) return;
   throw new RuntimeVersionUnsupportedError(
-    `DeepSeek Harness version is unsupported or unknown; requires exactly ${DSH_ACP_VERSION}. ` +
-      `Install @deepseek-ai/dsh@${DSH_ACP_VERSION} before starting this runtime.`,
+    `DeepSeek Harness version is unsupported or unknown; requires 0.2.1-rc.2 or later in the ` +
+      `0.2.1 line (before 0.2.2). Upgrade @deepseek-ai/dsh before starting this runtime.`,
   );
 }

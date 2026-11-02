@@ -157,13 +157,20 @@ test(
   TEST_BUDGET_MS,
 );
 
-test("DSH inventory refuses any release other than the pinned one", async () => {
+test("DSH inventory accepts the verified 0.2.1 line and refuses other releases", async () => {
   const probe = (version: string) => ({
     which: (name: string) => (name === "dsh" ? "/bin/dsh" : undefined),
     spawn: () => ({ stdout: new Blob([`${version}\n`]).stream(), exited: Promise.resolve(0) }),
   });
   await expect(discoverExternalCodeAgents(probe("0.2.1-rc.2"))).resolves.toEqual([
     { provider: "dsh", version: "0.2.1-rc.2", displayName: "DeepSeek Harness" },
+  ]);
+  // npm installs the newest 0.2.1 preview; a new Agent must be able to use it.
+  await expect(discoverExternalCodeAgents(probe("0.2.1-rc.5"))).resolves.toEqual([
+    { provider: "dsh", version: "0.2.1-rc.5", displayName: "DeepSeek Harness" },
+  ]);
+  await expect(discoverExternalCodeAgents(probe("0.2.1"))).resolves.toEqual([
+    { provider: "dsh", version: "0.2.1", displayName: "DeepSeek Harness" },
   ]);
   const refused = (version: string) => ({
     provider: "dsh" as const,
@@ -172,8 +179,14 @@ test("DSH inventory refuses any release other than the pinned one", async () => 
     unavailableCode: "version_unsupported" as const,
   });
   // A refused release stays listed, unusable, so the page can say why.
-  await expect(discoverExternalCodeAgents(probe("0.2.1"))).resolves.toEqual([refused("0.2.1")]);
+  await expect(discoverExternalCodeAgents(probe("0.2.1-rc.1"))).resolves.toEqual([
+    refused("0.2.1-rc.1"),
+  ]);
   await expect(discoverExternalCodeAgents(probe("0.2.0"))).resolves.toEqual([refused("0.2.0")]);
+  // A newer line is not verified yet, so it is refused rather than offered.
+  await expect(discoverExternalCodeAgents(probe("0.2.2-alpha.2"))).resolves.toEqual([
+    refused("0.2.2-alpha.2"),
+  ]);
   // Launch accepts only the bare version, so the inventory must not offer decorated output.
   await expect(discoverExternalCodeAgents(probe("dsh 0.2.1-rc.2"))).resolves.toEqual([
     refused("dsh 0.2.1-rc.2"),

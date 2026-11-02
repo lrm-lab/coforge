@@ -9,17 +9,19 @@ entries and their shared input schema, so direct API calls cannot bypass rollout
 
 ## Compatibility and installation
 
-The verified preview is **`@deepseek-ai/dsh@0.2.1-rc.2`**. Install it separately and
+The verified preview line is **`@deepseek-ai/dsh` 0.2.1**, from `0.2.1-rc.2` onward;
+npm's current `0.2.1-rc.5` was verified against this adapter. Install it separately and
 make `dsh` available on the Computer's PATH. CoForge never invokes npx or installs
 DSH/plugins on the user's behalf. DSH's own first profile startup can prepare its
 plugin dependencies and require network access; the measured cold start was
 about 65 seconds. Startup/config/cancellation exchanges have a 120-second default
 budget. Prompt admission and full turns have no adapter deadline.
 
-The adapter checks `dsh --version` before every launch. Only the exact verified
-preview is accepted; unknown, unreadable, older and newer versions fail closed.
-The shared minimum-version comparator is unchanged. Upgrade the pin only after
-fixture checks and native acceptance of that release.
+The adapter checks `dsh --version` before every launch. Any release of the verified
+0.2.1 line from `0.2.1-rc.2` through stable `0.2.1` (npm: `>=0.2.1-rc.2 <0.2.2`) is
+accepted; unreadable versions, older previews and other lines fail closed. The shared
+minimum-version comparator is unchanged. A newer line (0.2.2 and later) requires
+fixture checks and native acceptance of that release before it is added to the range.
 
 ## Instructions and environment
 
