@@ -32,15 +32,16 @@ const AGENT = "77777777-7777-4777-8777-777777777777";
 /** Who reads `CONVERSATION`; the conversation check throws while the Web is `down`. */
 const readers = new Set([ADA]);
 let down = false;
-/** `AGENT`'s visibility; Grace made it, and Ada is a plain member of `WORKSPACE`. */
+/** `AGENT`'s visibility; Grace made it, and Ada's role in `WORKSPACE`. */
 let agentVisibility = "public";
+let adaRole: "admin" | "member" = "member";
 /** How much sooner than `SUBSCRIPTION_LIFETIME_S` a grant runs out. */
 let shortenBy = 0;
 /** How many times Centrifugo asked the sub-refresh proxy. */
 let refreshes = 0;
 const access: BrowserSubscriptionAccess = {
   workspaceRole: async (workspaceId, userId) =>
-    workspaceId === WORKSPACE && userId === ADA ? "member" : undefined,
+    workspaceId === WORKSPACE && userId === ADA ? adaRole : undefined,
   workspaceAgent: async (workspaceId, agentId) =>
     workspaceId === WORKSPACE && agentId === AGENT
       ? { visibility: agentVisibility, ownerId: GRACE, systemKind: null }
@@ -310,9 +311,36 @@ test("a public Agent's own status channel is refused; the workspace channel carr
     await until(() => workspacePage.subscription.state === SubscriptionState.Subscribed, 5_000);
     expect(ada.state).toBe(State.Connected);
   } finally {
-    readers.add(ADA);
+    agentVisibility = "public";
   }
 }, 30_000);
+
+test("a private Agent's status channel ends at the next refresh when the viewer loses the role", async () => {
+  // Task #348: a page holds the channel through the subscribe proxy; a lost grant ends at its
+  // refresh and is not retried. A private Agent's channel is visible to an admin, not a member.
+  const ada = await connected(ADA);
+  agentVisibility = "private";
+  adaRole = "admin";
+  shortenBy = SUBSCRIPTION_LIFETIME_S - 2;
+  try {
+    const page = watched(ada, `agentstatus:${WORKSPACE}:${AGENT}`);
+    await until(() => page.subscription.state === SubscriptionState.Subscribed, 5_000);
+    adaRole = "member";
+    await until(() => page.subscription.state === SubscriptionState.Unsubscribed, 90_000);
+    await Bun.sleep(2_000);
+    expect(page.states).toEqual([
+      "subscribing 0",
+      "subscribed",
+      "subscribing 2501",
+      "unsubscribed 403",
+    ]);
+    expect(ada.state).toBe(State.Connected);
+  } finally {
+    shortenBy = 0;
+    agentVisibility = "public";
+    adaRole = "member";
+  }
+}, 120_000);
 
 /**
  * Task #348: a page reads its Activity dot with where the viewer's own channel stood, then
