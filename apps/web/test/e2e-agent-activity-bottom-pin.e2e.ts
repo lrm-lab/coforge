@@ -250,6 +250,39 @@ const readingRow = `(() => {
   return { text: row.textContent.slice(0, 60), offset: Math.round(row.getBoundingClientRect().top - top) };
 })()`;
 
+// Task #433 QA: stopped in the middle of a full feed, one new row moved the view up by ~880px.
+// Chromium's own scroll anchoring on ("auto") and off ("none", as in Safari).
+for (const width of [1440, 390])
+  for (const anchor of ["auto", "none"])
+    test(`${width}px, anchoring ${anchor}: a new row leaves the middle of a full feed in place`, async () => {
+      await browser("set", "viewport", String(width), "844");
+      await browser(
+        "open",
+        `${proxy.origin}/en/w/${workspaceSlug}/members?profile=agent:${fullAgentId}&agentTab=activity`,
+      );
+      await browser("wait", "--fn", `${scroller} != null`);
+      await browser("eval", "document.fonts.ready");
+      await settledDistance();
+      await browser(
+        "eval",
+        `(() => { const s=${scroller}; s.style.overflowAnchor = ${JSON.stringify(anchor)}; s.dispatchEvent(new WheelEvent("wheel")); s.scrollTop = Math.round((s.scrollHeight - s.clientHeight) / 2); })()`,
+      );
+      await settledDistance();
+      const before = await evaluate<{ text: string; offset: number }>(readingRow);
+      const topBefore = await evaluate<number>(`Math.round(${scroller}.scrollTop)`);
+      await publishRow(`middle-${width}-${anchor}`, fullAgentId);
+      await settledDistance();
+      const after = await evaluate<{ text: string; offset: number }>(readingRow);
+      const topAfter = await evaluate<number>(`Math.round(${scroller}.scrollTop)`);
+      await browser("screenshot", join(artifacts, `${width}-${anchor}-middle.png`));
+      await Bun.write(
+        join(artifacts, `${width}-${anchor}-middle.json`),
+        JSON.stringify({ before, after, topBefore, topAfter }, null, 2),
+      );
+      expect(after.text).toBe(before.text);
+      expect(Math.abs(after.offset - before.offset)).toBeLessThanOrEqual(1);
+    }, 120_000);
+
 test("390px: rows leaving the top of a full feed leave the row being read in place", async () => {
   await browser("set", "viewport", "390", "844");
   await browser(
