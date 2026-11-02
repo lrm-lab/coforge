@@ -3,8 +3,7 @@ import { onlineManager, useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "#src/components/base/buttons/button";
 import {
-  restoredReadFailures,
-  restoredReadPaused,
+  restoredCopyShown,
   subscribeRestoredReads,
 } from "#src/features/cache-persistence/browser-query-cache";
 import { m } from "#src/paraglide/messages";
@@ -20,8 +19,9 @@ const isOnline = () => onlineManager.isOnline();
 /**
  * Says so when the conversation on screen cannot read its newest messages (task #253), whether
  * its messages came from the browser's stored copy or from this page's memory: the copy may be
- * days old, and without this it reads as the newest. It shows when the stored copy's own read
- * failed `FAILURES_SHOWN` times or was parked offline (`followRestoredReads`), when the catch-up
+ * a day old, and without this it reads as the newest. It shows while the stored copy is still on
+ * screen (`followRestoredReads`) and its read failed `FAILURES_SHOWN` times in a row or waits for
+ * the network (TanStack's own `fetchFailureCount` and `paused`), when the catch-up
  * of this open failed `FAILURES_SHOWN` times, or while the browser is offline and the catch-up has
  * not landed yet (offline, nothing reads it until the network returns). Its retry reads again at
  * once; the reads also go on by themselves, and the notice goes as soon as one lands. Nothing
@@ -44,13 +44,23 @@ export function ConversationUpdateNotice({
   // The conversation is a channel or a DM; only the one opened has a window in the cache.
   const keys = conversationWindowKeys(conversationId);
   const restoredUnreachable = useSyncExternalStore(
-    useCallback((listener) => subscribeRestoredReads(queryClient, listener), [queryClient]),
+    useCallback(
+      (listener) => {
+        const stopReads = subscribeRestoredReads(queryClient, listener);
+        const stopCache = queryClient.getQueryCache().subscribe(listener);
+        return () => {
+          stopReads();
+          stopCache();
+        };
+      },
+      [queryClient],
+    ),
     () =>
-      keys.some(
-        (key) =>
-          restoredReadPaused(queryClient, key) ||
-          restoredReadFailures(queryClient, key) >= FAILURES_SHOWN,
-      ),
+      keys.some((key) => {
+        if (!restoredCopyShown(queryClient, key)) return false;
+        const state = queryClient.getQueryState(key);
+        return state?.fetchStatus === "paused" || (state?.fetchFailureCount ?? 0) >= FAILURES_SHOWN;
+      }),
     () => false,
   );
   const online = useSyncExternalStore(subscribeOnline, isOnline, () => true);

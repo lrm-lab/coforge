@@ -28,27 +28,12 @@ export function installBrowserQueryCachePersistence(
   });
   installed.set(queryClient, persistence);
   current = persistence;
-  // The page's own writes wait up to a second for their burst to end; a hidden page (which may be
-  // discarded without another event) starts them now. On `pagehide` this is best effort: each write
-  // first reads the store's owner, which an unloading page may not finish.
-  // https://developer.chrome.com/docs/web-platform/page-lifecycle-api#developer-recommendations-for-each-state
-  const flush = () => void persistence.flush();
-  window.addEventListener("pagehide", flush);
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "hidden") flush();
-  });
 }
 
-/** Reads of the restored query `queryKey` that failed in a row, and the way to hear them change
- * (`followRestoredReads`); always 0 where nothing is kept. */
-export function restoredReadFailures(queryClient: QueryClient, queryKey: readonly unknown[]) {
-  return installed.get(queryClient)?.restoredReadFailures(queryKey) ?? 0;
-}
-
-/** Whether the read of the restored query `queryKey` was parked offline and has not landed since
- * (`followRestoredReads`); always false where nothing is kept. */
-export function restoredReadPaused(queryClient: QueryClient, queryKey: readonly unknown[]) {
-  return installed.get(queryClient)?.restoredReadPaused(queryKey) ?? false;
+/** Whether the query `queryKey` still shows the copy restored from storage, and the way to hear it
+ * change (`followRestoredReads`); always false where nothing is kept. */
+export function restoredCopyShown(queryClient: QueryClient, queryKey: readonly unknown[]) {
+  return installed.get(queryClient)?.restoredCopyShown(queryKey) ?? false;
 }
 
 /** The query `queryKey` was given data read from the server by hand: it no longer shows its
@@ -61,8 +46,8 @@ export function subscribeRestoredReads(queryClient: QueryClient, listener: () =>
   return installed.get(queryClient)?.subscribeRestoredReads(listener) ?? (() => {});
 }
 
-/** Stores the kept query `queryKey` now, not after the page-write delay (`store`). Resolves at
- * once where nothing is kept. */
+/** Stores the kept query `queryKey` as the page holds it now (`store`). Resolves at once where
+ * nothing is kept. */
 export async function storeQueryNow(queryClient: QueryClient, queryKey: readonly unknown[]) {
   await installed.get(queryClient)?.store(queryKey);
 }

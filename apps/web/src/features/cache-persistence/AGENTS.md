@@ -41,34 +41,38 @@ because the API is experimental.
 - Every way to `/auth/logout` goes through `signOut()` (`features/auth/sign-out.ts`), which removes
   every row and seals the page against writing more before it navigates. Do not link to
   `/auth/logout` directly.
-- A restored query is marked invalidated, and that is what makes the read follow it: any page that
-  shows it reads it again (whatever `staleTime` says: the Chat lists use `Infinity`), and the Chat
-  loader's "marked stale" reads it. The one exception is `readsAfterRestore`: a Computer's Agent
-  workspace scan, whose read is a scan of the Computer's disk that only the Scan button starts, is
-  shown as kept (with when it was taken) and not read again. Do not set the persister's `refetchOnRestore`: it is a bare
-  `query.fetch()` that a page unmounting meanwhile cancels for good. Loading older or newer pages
-  cancels that read and clears the mark, so a restored query is marked again until a read of the
-  query itself succeeds. That read is retried until it succeeds (`restored-reads.ts`, task #253): queries do not retry,
-  and a page opened from its copy hears none of the events that read a conversation again later, so
-  a phone whose first reads failed kept a week-old copy as the newest. It backs off (1 to 30
-  seconds) while the page is visible, reads at once on `online` and on `pageshow` from the
-  back-forward cache, and after two failures in a row, or once the read was parked offline (TanStack
-  parks it as `paused` rather than failing it, so no failure is counted), the stream says it
-  could not load the newest messages, with a retry (`ConversationUpdateNotice`); the notice goes
-  once the read lands. A conversation held in this page's memory says the same when its catch-up
+- A stored copy is only the first paint: the server's read follows at once and replaces it, as
+  TanStack's `refetchOnRestore` does
+  ([docs](https://tanstack.com/query/latest/docs/framework/react/plugins/createPersister)).
+  That option is the persister's, for every kept kind, so `followRestoredReads`
+  (`restored-reads.ts`) starts the read instead, for the kinds that have one (`readsAfterRestore`:
+  a Computer's Agent workspace scan is a scan of the Computer's disk that only the Scan button
+  starts, shown as kept with when it was taken). Until a read of its own lands, the copy stays
+  marked invalidated, so any later trigger reads it whatever its `staleTime` (a page mounting it,
+  focus, the network returning; the Chat lists use `Infinity`). TanStack clears that mark on any
+  success, a write of the page's own included (`setQueryData`: a realtime message, a read position),
+  and a read cancelled meanwhile (the last page showing it going away, loading older pages) then
+  left the copy as the newest: a channel stayed on its stored window of 10-21 (task #382). So the
+  mark is put back whatever cleared it, and loading older or newer pages reads it again.
+- A conversation window's read retries online with TanStack's own backoff (3 times; a phone just
+  unlocked fails its first reads, task #253), and while offline it is parked until the network
+  returns. While the stored copy is on screen and its read failed twice in a row or waits for the
+  network (TanStack's `fetchFailureCount`, `paused`), the stream says it could not load the newest
+  messages, with a retry (`ConversationUpdateNotice`); the notice goes once the read lands. A
+  conversation held in this page's memory says the same when its catch-up
   (`createConversationReconciler`) failed twice in a row, or has not landed while offline.
-- What the page writes itself (`setQueryData`: realtime messages, sends, read positions, the
-  sidebar's TanStack DB writes) is stored too, with the query's newest state, at most once a second
-  per query, and started at once when the page is hidden (`flush`; on `pagehide` it is best effort:
-  the write waits on an ownership read, which an unloading page may not finish). The persister
-  alone stores only after a read. The query is looked up when the write runs: one errored, dropped,
-  or marked stale since is not stored, and a page write whose data is not one to open at leaves
-  the stored copy alone.
+- Only what a read of the server returned is stored, as TanStack's persister does by itself
+  (`setQueryData` is not persisted). What the page writes itself (realtime messages, sends, read
+  positions, the sidebar's TanStack DB writes) stays in this page's memory: storing it with a new
+  time made an old window look new for good (task #382). The next load opens from the last read
+  and reads again. The one write stored by hand is a Computer's Agent workspace scan
+  (`storeQueryNow`), which no query read stands behind.
 - A conversation window keeps no read cursor of its own: where the viewer's unread starts is read
   on every open (`conversationOpenQuery`, task #378), never kept, so a stored or in-memory window
   paints at once and its age cannot move the "New messages" divider.
 - A query the server answers `NOT_FOUND` (deleted, or access lost) is removed from storage.
-- `maxAge` is 7 days and a sweep removes older rows at most once a day.
+- `maxAge` is one day, so a copy older than that is not shown (task #382), and a sweep removes
+  older rows at most once a day.
 - A deploy keeps every stored row: the copy is thrown away only when its shape can no longer be
   read, never because the client changed, so the first Chat open after a deploy still starts from
   it. What decides is `STORED_SHAPE_VERSION` (`persisted-queries.ts`), the persister's `buster`

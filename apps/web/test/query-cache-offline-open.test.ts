@@ -58,7 +58,8 @@ describe("a conversation opened offline, after a page load that held nothing of 
       channelKey("c1"),
       (state) => (state as { fetchStatus?: string }).fetchStatus === "paused",
     );
-    expect(after.persistence.restoredReadPaused(channelKey("c1"))).toBe(true);
+    expect(after.persistence.restoredCopyShown(channelKey("c1"))).toBe(true);
+    expect(after.queryClient.getQueryState(channelKey("c1"))?.fetchStatus).toBe("paused");
 
     onlineManager.setOnline(true);
     await dataBecomes<{ pages: Page[] }>(
@@ -68,7 +69,8 @@ describe("a conversation opened offline, after a page load that held nothing of 
     );
     // The read lands in the batch that hands the page its data.
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(after.persistence.restoredReadPaused(channelKey("c1"))).toBe(false);
+    expect(after.persistence.restoredCopyShown(channelKey("c1"))).toBe(false);
+    expect(after.queryClient.getQueryState(channelKey("c1"))?.fetchStatus).toBe("idle");
     unmount();
     after.queryClient.unmount();
   });

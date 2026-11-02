@@ -134,6 +134,8 @@ describe("a restored conversation whose read was cut short by loading older mess
     await disk.written(1);
 
     const after = pageLoad(disk.store);
+    let askNewest = () => {};
+    const newestAsked = new Promise<void>((resolve) => (askNewest = resolve));
     const query = infiniteQueryOptions({
       queryKey: channelKey("c1"),
       // As the app's window: an older page's cursor, a newer one's cursor after it, and the live
@@ -146,6 +148,7 @@ describe("a restored conversation whose read was cut short by loading older mess
         signal: AbortSignal;
       }) => {
         if (pageParam === "before") return page(["older"]);
+        askNewest();
         // The newest page's read waits long enough to be cancelled by the older one.
         await new Promise((resolve) => setTimeout(resolve, 20));
         signal.throwIfAborted();
@@ -156,13 +159,11 @@ describe("a restored conversation whose read was cut short by loading older mess
       getPreviousPageParam: () => "before",
     });
     await after.queryClient.ensureInfiniteQueryData(query);
-    // The restore has been marked for a read by the time the page mounts it.
-    await queryBecomes(after.queryClient, channelKey("c1"), () =>
-      Boolean(after.queryClient.getQueryState(channelKey("c1"))?.isInvalidated),
-    );
     const observer = new InfiniteQueryObserver(after.queryClient, query);
     const unsubscribe = observer.subscribe(() => {});
-    // The older sentinel is on screen at once: loading older cancels the newest page's read.
+    // The restore's own read of the server is under way when the older sentinel is on screen:
+    // loading older cancels the newest page's read.
+    await newestAsked;
     await observer.fetchPreviousPage();
     await dataBecomes<{ pages: Page[] }>(
       after.queryClient,
@@ -837,16 +838,11 @@ describe("what a stored query must still be to open a page", () => {
   }
   afterEach(() => setSystemTime());
 
-  test("was written under the stored-shape version, however it got there, not under a build id", async () => {
+  test("was written under the stored-shape version, not under a build id", async () => {
     const disk = memoryStore();
     const load = pageLoad(disk.store);
-    await load.queryClient.fetchInfiniteQuery(windowQuery("read", async () => page(["read"])));
-    await disk.written(1);
-    load.queryClient.setQueryData(channelKey("written"), {
-      pages: [page(["written by the page"])],
-      pageParams: [undefined],
-    });
-    await load.persistence.flush();
+    await load.queryClient.fetchInfiniteQuery(windowQuery("c1", async () => page(["one"])));
+    await load.queryClient.fetchInfiniteQuery(windowQuery("c2", async () => page(["two"])));
     await disk.written(2);
     const busters = queryRows(disk.rows).map(
       (key) => (disk.rows.get(key) as { buster: string }).buster,
@@ -867,10 +863,10 @@ describe("what a stored query must still be to open a page", () => {
     expect(await storedThenReopened({})).toEqual(["from storage"]);
   });
 
-  test("is not older than a week", async () => {
-    const day = 24 * 60 * 60 * 1000;
-    expect(await storedThenReopened({ laterBy: 6 * day })).toEqual(["from storage"]);
-    expect(await storedThenReopened({ laterBy: 8 * day })).toEqual(["from the network"]);
+  test("is not older than a day", async () => {
+    const hour = 60 * 60 * 1000;
+    expect(await storedThenReopened({ laterBy: 23 * hour })).toEqual(["from storage"]);
+    expect(await storedThenReopened({ laterBy: 25 * hour })).toEqual(["from the network"]);
   });
 });
 
@@ -1001,179 +997,11 @@ describe("a page that already holds kept queries", () => {
   });
 });
 
-describe("what the page writes itself (realtime, a sent message, the sidebar's changes)", () => {
-  test("is kept too, the newest state once per burst, so the next load opens where this one left off", async () => {
-    const disk = memoryStore();
-    const load = pageLoad(disk.store);
-    await load.queryClient.fetchInfiniteQuery(windowQuery("c1", async () => page(["read"])));
-    await disk.written(1);
-    for (const body of ["realtime one", "realtime two", "my own"])
-      load.queryClient.setQueryData<{ pages: Page[]; pageParams: unknown[] }>(
-        channelKey("c1"),
-        (pages) =>
-          pages && {
-            ...pages,
-            pages: [
-              { ...pages.pages[0]!, messages: [...pages.pages[0]!.messages, { id: body, body }] },
-            ],
-          },
-      );
-    await load.persistence.flush();
-    await disk.written(2);
-    await settle();
-    const [stored] = queryRows(disk.rows).map((key) => disk.rows.get(key)) as Array<{
-      state: { data: { pages: Page[] } };
-    }>;
-    expect(stored?.state.data.pages[0]?.messages.map((m) => m.body)).toEqual([
-      "read",
-      "realtime one",
-      "realtime two",
-      "my own",
-    ]);
-    // One write for the burst, not one per change.
-    expect(disk.writes()).toBe(2);
-
-    const after = pageLoad(disk.store);
-    const network = gatedRead<Page>();
-    const opened = await after.queryClient.ensureInfiniteQueryData(windowQuery("c1", network.read));
-    expect(opened.pages[0]?.messages.map((m) => m.body)).toContain("my own");
-  });
-
-  test("is written by itself shortly after, without a flush", async () => {
-    const disk = memoryStore();
-    const load = pageLoad(disk.store);
-    const channels = { fetchedAt: 1, rows: [{ id: "general", name: "general", unread: 0 }] };
-    load.queryClient.setQueryData(sidebarChannelsQueryKey("w1"), channels);
-    load.queryClient.setQueryData(sidebarChannelsQueryKey("w1"), {
-      ...channels,
-      rows: [{ ...channels.rows[0]!, unread: 3 }],
-    });
-    await disk.written(1);
-    expect(JSON.stringify(queryRows(disk.rows).map((key) => disk.rows.get(key)))).toContain(
-      '"unread":3',
-    );
-  });
-
-  test("keeps nothing a query nobody reviewed for storage holds", async () => {
-    const disk = memoryStore();
-    const load = pageLoad(disk.store);
-    load.queryClient.setQueryData(["agent", "environment", "agent-1"], { API_KEY: "secret" });
-    load.queryClient.setQueryData(channelNamesQueryKey("w1"), {
-      names: [{ id: "general" }],
-      streamPositions: {},
-    });
-    await load.persistence.flush();
-    await disk.written(1);
-    await settle();
-    expect(queryRows(disk.rows)).toEqual([
-      'user-1/tanstack-query-["conversation","channel-names","w1"]',
-    ]);
-  });
-
-  test("leaves the kept copy alone when the window it wrote is not one to open at", async () => {
-    const disk = memoryStore();
-    const load = pageLoad(disk.store);
-    await load.queryClient.fetchInfiniteQuery(windowQuery("c1", async () => page(["live end"])));
-    await disk.written(1);
-    // A jump to an old message replaces the window with one around it.
-    load.queryClient.setQueryData(channelKey("c1"), {
-      pages: [page(["around an old message"], { hasNewer: true })],
-      pageParams: [undefined],
-    });
-    await load.persistence.flush();
-    await settle();
-    expect(JSON.stringify(queryRows(disk.rows).map((key) => disk.rows.get(key)))).toContain(
-      "live end",
-    );
-  });
-
-  test("does not bring back a conversation the server said is gone meanwhile", async () => {
-    const disk = memoryStore();
-    const load = pageLoad(disk.store);
-    await load.queryClient.fetchInfiniteQuery(windowQuery("c1", async () => page(["read"])));
-    await disk.written(1);
-    load.queryClient.setQueryData<{ pages: Page[]; pageParams: unknown[] }>(
-      channelKey("c1"),
-      (pages) => pages && { ...pages, pages: [page(["read", "realtime"])] },
-    );
-    // Its refetch answers NOT_FOUND, and the page drops it from memory.
-    await load.queryClient
-      .fetchInfiniteQuery({
-        ...windowQuery("c1", async () => {
-          throw new AppError("NOT_FOUND");
-        }),
-        staleTime: 0,
-      })
-      .catch(() => {});
-    await disk.settled(() => queryRows(disk.rows).length === 0);
-    load.queryClient.removeQueries({ queryKey: channelKey("c1"), exact: true });
-    await load.persistence.flush();
-    await settle();
-    expect(queryRows(disk.rows)).toEqual([]);
-  });
-
-  test("does not keep a stand-in the page marked stale at once", async () => {
-    const disk = memoryStore();
-    const load = pageLoad(disk.store);
-    const saved = { streamPositions: {}, entries: [{ message: { id: "m1" } }] };
-    await load.queryClient.fetchQuery({
-      queryKey: savedMessagesQuery("w1").queryKey,
-      queryFn: async () => saved,
-    });
-    await disk.written(1);
-    // The Chat loader's stand-in when the Saved read failed: empty, and stale at once.
-    load.queryClient.setQueryData(savedMessagesQuery("w1").queryKey, {
-      streamPositions: {},
-      entries: [],
-    });
-    await load.queryClient.invalidateQueries({
-      queryKey: savedMessagesQuery("w1").queryKey,
-      refetchType: "none",
-    });
-    await load.persistence.flush();
-    await settle();
-    expect(JSON.stringify(queryRows(disk.rows).map((key) => disk.rows.get(key)))).toContain('"m1"');
-  });
-
-  test("keeps the newest state when the query was rebuilt meanwhile (a Workspace switch)", async () => {
-    const disk = memoryStore();
-    const load = pageLoad(disk.store);
-    load.queryClient.setQueryData(channelNamesQueryKey("w1"), {
-      names: [{ id: "old" }],
-      streamPositions: {},
-    });
-    load.queryClient.clear();
-    load.queryClient.setQueryData(channelNamesQueryKey("w1"), {
-      names: [{ id: "newest" }],
-      streamPositions: {},
-    });
-    await load.persistence.flush();
-    await disk.written(1);
-    await settle();
-    expect(JSON.stringify(queryRows(disk.rows).map((key) => disk.rows.get(key)))).toContain(
-      '"newest"',
-    );
-  });
-
-  test("writes nothing once the page has signed out", async () => {
-    const disk = memoryStore();
-    const load = pageLoad(disk.store);
-    load.queryClient.setQueryData(channelNamesQueryKey("w1"), {
-      names: [{ id: "general" }],
-      streamPositions: {},
-    });
-    await load.persistence.purge();
-    await load.persistence.flush();
-    await settle();
-    expect(queryRows(disk.rows)).toEqual([]);
-  });
-});
-
 describe("queries nobody opened again", () => {
   afterEach(() => setSystemTime());
   const day = 24 * 60 * 60 * 1000;
 
-  test("are removed once they are older than a week, at most once a day", async () => {
+  test("are removed once they are older than a day, at most once a day", async () => {
     const disk = memoryStore();
     const scans: string[] = [];
     const watched: PersistedQueryStore = {
@@ -1185,7 +1013,7 @@ describe("queries nobody opened again", () => {
     await first.queryClient.fetchInfiniteQuery(windowQuery("old", async () => page(["old"])));
     await disk.written(1);
 
-    setSystemTime(new Date(start + 8 * day));
+    setSystemTime(new Date(start + 2 * day));
     const later = pageLoad(watched);
     await later.queryClient.fetchInfiniteQuery(windowQuery("new", async () => page(["new"])));
     await disk.written(2);
@@ -1197,7 +1025,7 @@ describe("queries nobody opened again", () => {
 
     await later.persistence.collectGarbage();
     expect(scans).toEqual(["entries"]);
-    setSystemTime(new Date(start + 10 * day));
+    setSystemTime(new Date(start + 3 * day));
     await later.persistence.collectGarbage();
     expect(scans).toEqual(["entries", "entries"]);
   });

@@ -10,10 +10,14 @@ import {
   windowPageLimit,
   type ConversationWindowCursor,
 } from "#src/lib/conversation-window";
+import { isAppErrorCode } from "#src/lib/app-error";
 import type { ActionCardView } from "#src/server/conversations/action-cards.server";
 import type { ReactionSummary } from "./message-reactions";
 import type { ThreadReplyInput, WindowThreadsPage } from "./thread-summary-model";
 
+/** Retries of a failed window read while online: 1 + 2 + 4 seconds, then the page says it could not
+ * load the newest messages (`ConversationUpdateNotice`) and the next focus or reconnect reads it. */
+const WINDOW_READ_RETRIES = 3;
 export type PageMessage = ThreadReplyInput & {
   threadRootId?: string;
   actionCard?: ActionCardView;
@@ -87,11 +91,16 @@ export function conversationPages<M extends PageMessage, T extends ConversationP
     // persister wraps `queryFn`). The app's `online` mode parks a read offline before it starts,
     // so a page reloaded and then cut off never looked at the copy and stayed on its skeleton
     // (task #253). `offlineFirst` runs the read once whatever the network, which serves the copy.
-    // TanStack parks only a retry, and reads do not retry (`retry: false`): a read that fails
-    // offline is retried at once, which parks it until the network returns, as `online` did.
+    // TanStack parks only a retry: a read that fails offline is retried at once, which parks it
+    // until the network returns, as `online` did. Online, a failed read is retried with TanStack's
+    // own backoff (a phone just unlocked fails its first reads, task #253), but not a conversation
+    // the server says is gone.
     networkMode: "offlineFirst",
-    retry: () => !onlineManager.isOnline(),
-    retryDelay: 0,
+    retry: (failures, error) =>
+      !onlineManager.isOnline() ||
+      (failures < WINDOW_READ_RETRIES && !isAppErrorCode(error, "NOT_FOUND")),
+    retryDelay: (failures) =>
+      onlineManager.isOnline() ? Math.min(1000 * 2 ** failures, 30_000) : 0,
     // Pages[0] is the oldest loaded window, the latest is the live end. Each direction derives its
     // cursor from the boundary page, and an honest `hasNewer` tells whether the newest retained page
     // is still the tail.

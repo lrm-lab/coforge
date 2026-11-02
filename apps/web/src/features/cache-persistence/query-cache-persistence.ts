@@ -50,7 +50,6 @@ function isReadableRow(stored: unknown): stored is StoredQuery {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const WEEK_MS = 7 * DAY_MS;
 /** When a person's rows were last swept, next to them (not a query's key, so the sweep skips it). */
 const COLLECTED_AT_KEY = "meta/collected-at";
 
@@ -64,10 +63,6 @@ const STORE_WAIT_MS = 250;
  * once and then answer. */
 const UNANSWERED_READS_LIMIT = 2;
 
-/** How long a write the page makes itself (realtime, a sent message, the sidebar's changes) waits
- * for the rest of its burst: the query is stored once, with its newest state, at most this often. */
-const PAGE_WRITE_DELAY_MS = 1_000;
-
 /** The start of every key one person owns; an id cannot spell another person's. */
 const namespaceOf = (viewer: string) => `${encodeURIComponent(viewer)}/`;
 
@@ -76,7 +71,8 @@ export function installQueryCachePersistence(
   {
     store,
     viewerId,
-    maxAge = WEEK_MS,
+    // A stored copy is a first paint, and one older than a day is not shown (task #382).
+    maxAge = DAY_MS,
   }: {
     store: PersistedQueryStore;
     /** Who is signed in as of now; storage is inert while this is `undefined`. */
@@ -273,8 +269,6 @@ export function installQueryCachePersistence(
     },
   });
   // A restored read is only a first paint: the network read always follows (`followRestoredReads`).
-  // The persister's own `refetchOnRestore` is a bare `query.fetch()` that a page unmounting
-  // meanwhile cancels for good.
   const restoredReads = followRestoredReads(queryClient);
   const persisterFn: typeof persister.persisterFn = async (queryFn, context, query) => {
     const restoring = query.state.data === undefined;
@@ -301,23 +295,11 @@ export function installQueryCachePersistence(
     void storage.removeItem(`${PERSISTER_KEY_PREFIX}-${event.query.queryHash}`);
   });
   /**
-   * The persister stores a query only after its read runs (`setQueryData` is not persisted, the
-   * docs say; they persist such writes with `persistQueryByKey`). What the page writes itself is
-   * most of what a person last saw: realtime messages, their own sends, read positions, the
-   * sidebar's unread counts. So a kept query the page wrote is stored too, with its newest state,
-   * once per `PAGE_WRITE_DELAY_MS`. A write whose data is not one to open at (a window around an
-   * old message) leaves the stored copy as it is.
-   */
-  const pageWrites = new Map<string, ReturnType<typeof setTimeout>>();
-  /**
    * Stores the query as the cache holds it now, if it still does: one the server answered
-   * `NOT_FOUND` for (removed from storage above) or the page dropped is not written back, one that
-   * was rebuilt (a Workspace switch clears the cache) is stored as rebuilt, and a stand-in the page
-   * marked stale at once (the Chat loader's empty Saved list) is not stored as data.
+   * `NOT_FOUND` for (removed from storage above) or the page dropped is not written back, and a
+   * stand-in the page marked stale is not stored as data.
    */
-  const storePageWrite = (queryHash: string) => {
-    clearTimeout(pageWrites.get(queryHash));
-    pageWrites.delete(queryHash);
+  const storeNow = (queryHash: string) => {
     const query = queryClient.getQueryCache().get(queryHash);
     if (!query || query.state.status !== "success" || query.state.isInvalidated) return;
     const stored = toStored({
@@ -329,17 +311,6 @@ export function installQueryCachePersistence(
     if (!stored) return;
     return storage.setItem(`${PERSISTER_KEY_PREFIX}-${queryHash}`, stored);
   };
-  const schedulePageWrite = (queryHash: string) => {
-    if (pageWrites.has(queryHash)) return;
-    pageWrites.set(
-      queryHash,
-      setTimeout(() => void storePageWrite(queryHash), PAGE_WRITE_DELAY_MS),
-    );
-  };
-  queryClient.getQueryCache().subscribe((event) => {
-    if (event.type !== "updated" || event.action.type !== "success" || !event.action.manual) return;
-    if (persistsQuery(event.query.queryKey)) schedulePageWrite(event.query.queryHash);
-  });
   const defaults = queryClient.getDefaultOptions();
   queryClient.setDefaultOptions({
     ...defaults,
@@ -352,10 +323,8 @@ export function installQueryCachePersistence(
     },
   });
   return {
-    /** Reads of the restored query `queryKey` that failed in a row (`followRestoredReads`). */
-    restoredReadFailures: (queryKey: QueryKey) => restoredReads.failures(hashKey(queryKey)),
-    /** Whether the read of the restored query `queryKey` was parked offline and has not landed. */
-    restoredReadPaused: (queryKey: QueryKey) => restoredReads.paused(hashKey(queryKey)),
+    /** Whether the query `queryKey` still shows its restored copy (`followRestoredReads`). */
+    restoredCopyShown: (queryKey: QueryKey) => restoredReads.awaiting(hashKey(queryKey)),
     restoredCopyReplaced: (queryKey: QueryKey) => {
       const query = queryClient.getQueryCache().find({ queryKey, exact: true });
       if (query) restoredReads.replaced(query);
@@ -389,18 +358,15 @@ export function installQueryCachePersistence(
       }, undefined);
     },
     /**
-     * Stores the kept query `queryKey` as the cache holds it now, without waiting out
-     * `PAGE_WRITE_DELAY_MS`: for a write the page must not lose to a reload right after it (a
-     * Computer's Agent workspace scan, which took seconds of the Computer's disk). Resolves once
-     * stored, or once storage declined it by the usual rules (a failing store is a miss).
+     * Stores the kept query `queryKey` as the cache holds it now. Only what a read of the server
+     * returned is stored by itself, as TanStack's persister does (`setQueryData` is not persisted:
+     * a write of the page's own stored with a new time made an old window look new, task #382);
+     * this is for data the page itself read that no query read stands behind: a Computer's Agent
+     * workspace scan. Resolves once stored, or once storage declined it (a failing store is a miss).
      */
     async store(queryKey: QueryKey) {
       if (!persistsQuery(queryKey)) return;
-      await storePageWrite(hashKey(queryKey));
-    },
-    /** Stores the page's own writes still waiting for their burst to end: the page is going away. */
-    async flush() {
-      await Promise.all([...pageWrites.keys()].map((queryHash) => storePageWrite(queryHash)));
+      await storeNow(hashKey(queryKey));
     },
     /** Sign-out: removes every kept query, and keeps this page from writing any more. */
     async purge() {
