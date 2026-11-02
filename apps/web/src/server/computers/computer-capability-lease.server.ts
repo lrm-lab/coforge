@@ -69,11 +69,13 @@ export class RedisComputerCapabilityLease {
     const key = this.key(workspaceId, computerId);
     const raw = await this.redis.get(key);
     const value = this.read(raw);
+    // Daemons released before the fence report their identity on ready but never on a heartbeat,
+    // so only a heartbeat that names a worker is fenced; one without renews as it always did.
     if (
       value?.state === "supported" &&
-      (!value.workerInstanceId ||
-        (identity &&
-          value.workerInstanceId === identity.workerInstanceId &&
+      (!identity ||
+        !value.workerInstanceId ||
+        (value.workerInstanceId === identity.workerInstanceId &&
           value.startedAt === identity.startedAt))
     )
       await this.redis.send("EVAL", [REFRESH_IF_CURRENT, "1", key, raw!, TTL_SECONDS]);

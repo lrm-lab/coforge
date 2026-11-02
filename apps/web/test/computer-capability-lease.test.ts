@@ -143,3 +143,19 @@ test("a stale worker heartbeat cannot renew a newer worker's supported capabilit
   await lease.refresh("w", "computer", identity("new", 2));
   expect(expires).toBe(1);
 });
+
+test("a heartbeat without a worker identity still renews, as daemons before the fence send it", async () => {
+  const { redis } = fakeRedis();
+  let expires = 0;
+  const send = redis.send.bind(redis);
+  redis.send = async (command, args) => {
+    if (args[0]!.includes("EXPIRE")) expires += 1;
+    return send(command, args);
+  };
+  const lease = new RedisComputerCapabilityLease(redis, "reminder:v1", "reminder-capability");
+  // An older daemon's ready already carries its identity; its heartbeat never does.
+  await lease.record("w", "computer", ["reminder:v1"], identity("worker", 1));
+  await lease.refresh("w", "computer", undefined);
+  expect(expires).toBe(1);
+  expect(await lease.supports("w", "computer")).toBeTrue();
+});
