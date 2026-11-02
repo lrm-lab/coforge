@@ -30,10 +30,25 @@ function existsInRevision(revision: string, path: string): boolean {
   );
 }
 
+/** The remote a staged change is judged against: the branch's upstream, else origin/main. A
+ * migration not on the remote has run nowhere, so it may still be edited. */
+function stagedBase(): string {
+  for (const revision of ["@{upstream}", "origin/main"]) {
+    const found = Bun.spawnSync(["git", "rev-parse", "--verify", "--quiet", revision], {
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+    if (found.exitCode === 0) return revision;
+  }
+  return "HEAD";
+}
+
 /** A migration file the base already had may not be edited, renamed or deleted: an environment
  * that ran it skips the new content by name, so only a new migration directory can change data. */
 export function migrationImmutabilityViolations(source: ChangeSource) {
-  const base = source.kind === "staged" ? "HEAD" : source.base;
+  const base = source.kind === "staged" ? stagedBase() : source.base;
+  const baseLabel =
+    source.kind === "staged" ? (base === "HEAD" ? "HEAD (no remote)" : "the upstream") : "the base";
   return changedFiles(source).flatMap((change) => {
     const paths = [change.path, ...(change.from ? [change.from] : [])].filter((path) =>
       MIGRATION_PATH.test(path),
@@ -43,7 +58,7 @@ export function migrationImmutabilityViolations(source: ChangeSource) {
       ? [
           {
             location: existing,
-            found: `changed a migration that already exists on ${source.kind === "staged" ? "HEAD" : "the base"}`,
+            found: `changed a migration that already exists on ${baseLabel}`,
           },
         ]
       : [];

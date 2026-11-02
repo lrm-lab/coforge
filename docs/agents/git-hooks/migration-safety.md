@@ -8,9 +8,10 @@ environment that already applied it records the name and skips it, so the new co
 run there; a database that has not run it would diverge. Change data with a new migration
 directory instead.
 
-The commit-time check uses `HEAD` as its base, so a migration committed locally but not pushed
-cannot be amended either: add a new migration to correct it. Only a migration already on the
-remote can have run in another environment; the local gate is deliberately stricter.
+The commit-time check judges against the branch's upstream (else `origin/main`), so a migration
+not yet pushed may still be edited: it has run nowhere. A migration already on the remote is
+immutable, because an environment that ran it skips the new content by name. A branch with no
+remote falls back to `HEAD`.
 
 Part of [Git hooks](README.md), the rule `migration-safety` of the [hard rules](hard-rules.md).
 
