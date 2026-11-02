@@ -1,10 +1,11 @@
 import { useRef, useState } from "react";
 import { getRouteApi } from "@tanstack/react-router";
-import { MessageSmileCircle, PlusSquare, User01, Users01 } from "@untitledui/icons";
+import { MessageSmileCircle, PlusSquare, Terminal, User01, Users01 } from "@untitledui/icons";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { NewAgentDialog } from "#src/features/agents/new-agent-dialog";
+import { LocalSessionHandoffDialog } from "#src/features/computers/local-session-handoff-dialog";
 import { m } from "#src/paraglide/messages";
 import { StartDirectMessagePopover } from "./start-direct-message-popover";
 
@@ -12,14 +13,14 @@ const workspaceRoute = getRouteApi("/w/$workspaceSlug");
 
 /**
  * The Chat list header's one "+": 新建群聊, 新建私聊 and, for a viewer whose role may create
- * Agents, 新建智能体. 私聊's picker opens under this same "+".
+ * Agents, 新建智能体 and 接手本机会话. 私聊's picker opens under this same "+".
  */
 export function NewConversationMenu({ onCreateChannel }: { onCreateChannel: () => void }) {
   const label = m.conversation_new();
   const trigger = useRef<HTMLButtonElement>(null);
-  const [opened, setOpened] = useState<"direct" | "agent" | null>(null);
+  const [opened, setOpened] = useState<"direct" | "agent" | "handoff" | null>(null);
   const { canCreateAgents } = workspaceRoute.useLoaderData();
-  const openOnly = (target: "direct" | "agent") => (open: boolean) =>
+  const openOnly = (target: "direct" | "agent" | "handoff") => (open: boolean) =>
     setOpened(open ? target : null);
   return (
     <>
@@ -37,13 +38,18 @@ export function NewConversationMenu({ onCreateChannel }: { onCreateChannel: () =
           <Dropdown.Menu
             aria-label={label}
             onAction={(key) =>
-              key === "channel" ? onCreateChannel() : setOpened(key as "direct" | "agent")
+              key === "channel"
+                ? onCreateChannel()
+                : setOpened(key as "direct" | "agent" | "handoff")
             }
           >
             <Dropdown.Item id="channel" icon={Users01} label={m.channel_create()} />
             <Dropdown.Item id="direct" icon={User01} label={m.conversation_start_direct()} />
             {canCreateAgents && (
               <Dropdown.Item id="agent" icon={MessageSmileCircle} label={m.header_new_agent()} />
+            )}
+            {canCreateAgents && (
+              <Dropdown.Item id="handoff" icon={Terminal} label={m.handoff_title()} />
             )}
           </Dropdown.Menu>
         </Dropdown.Popover>
@@ -54,6 +60,9 @@ export function NewConversationMenu({ onCreateChannel }: { onCreateChannel: () =
         onOpenChange={openOnly("direct")}
       />
       <NewAgentDialog open={opened === "agent"} onOpenChange={openOnly("agent")} />
+      {canCreateAgents && (
+        <LocalSessionHandoffDialog open={opened === "handoff"} onOpenChange={openOnly("handoff")} />
+      )}
     </>
   );
 }
