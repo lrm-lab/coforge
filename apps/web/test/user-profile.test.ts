@@ -276,7 +276,7 @@ test("choosing a preset stores its reference, uploads nothing, and drops the rep
     async () => storage.files,
   );
 
-  expect(result).toEqual({ avatarUrl: "/avatars/person-3-1.webp" });
+  expect(result).toEqual({ avatarUrl: "/avatars/person-3-2.webp" });
   expect(writes).toEqual([{ avatarObjectKey: "preset:person-3", avatarContentType: null }]);
   expect(storage.put).toEqual([]);
   expect(storage.removed).toEqual(["users/user-1/avatars/old/original"]);

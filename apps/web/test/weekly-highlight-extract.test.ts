@@ -66,7 +66,7 @@ test("parseRecordAssistantPayload drops a retired stock portrait and keeps the r
     recipients: [
       { displayName: "Ada", userId: "u-1", avatarUrl: null },
       { displayName: "Bo", avatarUrl: "/api/workspaces/w/users/u-2/avatar?v=a" },
-      { displayName: "Cy", userId: "u-3", avatarUrl: "/avatars/person-3-1.webp" },
+      { displayName: "Cy", userId: "u-3", avatarUrl: "/avatars/person-3-2.webp" },
     ],
   });
 });

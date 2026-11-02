@@ -1,6 +1,6 @@
 import { Avatar, type AvatarProps } from "#src/components/base/avatar/avatar";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
-import { personAvatarUrl } from "#src/lib/person-picture";
+import { isPersonPicture, personAvatarUrl } from "#src/lib/person-picture";
 import { cx } from "#src/utils/cx";
 
 import { AvatarSticker, StickerInitial, StickerPicture } from "./avatar-sticker";
@@ -31,8 +31,8 @@ export type IdentityAvatarProps = Pick<
 };
 
 /**
- * The avatar of anyone shown by their picture, a person or an Agent: a platform figure (an Agent's
- * mascot or a cartoon person, `isStickerPicture`) as a sticker, anything else, an uploaded photo,
+ * The avatar of anyone shown by their picture, a person or an Agent: an Agent's mascot
+ * (`isStickerPicture`) as a sticker, anything else, a person's cartoon portrait or uploaded photo,
  * the base `Avatar` on a tone tile. Use it wherever a picture may be either; the base `Avatar`
  * knows nothing of stickers, so a person's face is never drawn through it directly. An Agent known
  * to be one goes through `AgentDisplayAvatar` (status dot) or `AgentMascotAvatar` (moving).
@@ -50,9 +50,14 @@ export function IdentityAvatar({
 }: IdentityAvatarProps) {
   const src = userId ? personAvatarUrl(userId, given) : given;
   if (!src || !isStickerPicture(src)) {
+    // A cartoon person is round artwork: a circle at every size, never the rounded square a
+    // profile-sized photo takes.
+    const portrait = isPersonPicture(src);
     return (
       <Avatar
         {...props}
+        rounded={portrait || props.rounded}
+        className={cx(props.className, portrait && "avatar-portrait")}
         alt={alt}
         src={src}
         initials={initials}

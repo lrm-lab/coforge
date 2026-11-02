@@ -8,7 +8,7 @@ import { isStickerPicture } from "#src/features/avatars/sticker-picture";
 import { cx } from "#src/utils/cx";
 import { collageLayout } from "./collage-layout";
 
-/** One member a channel's group avatar shows: its picture (an Agent's mascot or a person's cartoon, whole; an uploaded photo, round), or its initial when it has none. */
+/** One member a channel's group avatar shows: its picture (an Agent's mascot, whole; a person's picture, round), or its initial when it has none. */
 export type GroupAvatarMember = {
   kind: "user" | "agent";
   id: string;
@@ -19,8 +19,8 @@ export type GroupAvatarMember = {
 /**
  * A channel's group avatar: up to four overlapping member stickers laid out by `collageLayout` on
  * a box with no fill (`.avatar-group` in `styles.css` sets its size). An Agent is its
- * white-edged mascot, unclipped, and so is a person's cartoon (`isStickerPicture`); a person who
- * uploaded a photo is that round photo (or their initial) with a white sticker edge
+ * white-edged mascot, unclipped (`isStickerPicture`); a person is their round picture, a
+ * cartoon portrait or an uploaded photo (or their initial), with a white sticker edge
  * (`.avatar-group-photo`); above four members the fourth sticker is a "…". A lone member is drawn
  * like a single avatar: a sticker as an `AvatarSticker`, a photo filling the circle.
  * Decorative: the row's label names the channel.

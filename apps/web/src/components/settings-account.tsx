@@ -162,7 +162,6 @@ export function AccountSettings({
   if (avatarPicker) {
     return (
       <AvatarPicker
-        name={profile.name}
         currentAvatarUrl={profile.avatarUrl}
         onSave={async (presetId) => {
           await onAvatarPresetChoose(presetId);

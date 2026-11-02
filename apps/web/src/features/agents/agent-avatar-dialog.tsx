@@ -99,7 +99,7 @@ export function AgentAvatarDialog({
                 }}
                 isDisabled={busy}
                 orientation="horizontal"
-                className="mt-5 grid grid-cols-4 gap-x-3 gap-y-4 px-6"
+                className="mt-5 grid grid-cols-4 gap-4 px-6"
               >
                 {AGENT_MASCOTS.map((key) => (
                   <AvatarChoice
@@ -107,6 +107,7 @@ export function AgentAvatarDialog({
                     value={key}
                     src={mascotStaticUrl(key)}
                     label={MASCOT_LABELS[key]()}
+                    hideLabel
                     // The mascots move while choosing: idle, eyes following the cursor, and the
                     // hover reaction under the pointer (a still picture with reduced motion).
                     figure={(hovered) => (

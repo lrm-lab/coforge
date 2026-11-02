@@ -2,41 +2,38 @@ import { useState } from "react";
 import { RadioGroup } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
-import { m } from "#src/paraglide/messages";
 import { AvatarChoice } from "#src/features/avatars/avatar-choice";
+import { m } from "#src/paraglide/messages";
 import { avatarPresets } from "./avatar-presets";
 
 /**
- * Settings → Account → Change avatar: the platform's pictures beside a live preview of the one
- * chosen. Saving stores the chosen preset by id; the picture itself already ships with the app.
+ * Settings → Account → Change avatar: the platform's pictures, five men then five women, a row
+ * each, the current one ringed, as on the first sign-in name step. Saving stores the chosen preset
+ * by id; the picture itself already ships with the app.
  */
 export function AvatarPicker({
-  name,
   currentAvatarUrl,
   onSave,
   onClose,
 }: {
-  /** The name teammates see, shown beside the preview. */
-  name: string;
   currentAvatarUrl: string | null;
   /** Saves the chosen preset as the avatar; rejects when it cannot. */
   onSave: (presetId: string) => Promise<void>;
   /** Back to the profile, saved or not. */
   onClose: () => void;
 }) {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const currentId = avatarPresets.find((preset) => preset.url === currentAvatarUrl)?.id ?? null;
+  const [selectedId, setSelectedId] = useState<string | null>(currentId);
   const [saving, setSaving] = useState(false);
   const [failed, setFailed] = useState(false);
-  const selected = avatarPresets.find((preset) => preset.id === selectedId) ?? null;
-  const previewUrl = selected?.url ?? currentAvatarUrl;
+  const changed = selectedId !== null && selectedId !== currentId;
 
   async function save() {
-    if (!selected) return;
+    if (!changed) return;
     setSaving(true);
     setFailed(false);
     try {
-      await onSave(selected.id);
+      await onSave(selectedId);
       onClose();
     } catch {
       setFailed(true);
@@ -46,79 +43,43 @@ export function AvatarPicker({
 
   return (
     <div className="w-full px-4 pt-4 pb-8 sm:px-8">
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
-        <section className="h-fit rounded-xl border border-secondary p-6">
-          <div className="flex items-center justify-between text-sm">
-            <h2 className="font-semibold text-primary">{m.settings_avatar_current()}</h2>
-            <span className="text-tertiary">{m.settings_avatar_live_preview()}</span>
-          </div>
-          <div className="mt-6 flex flex-col items-center gap-3">
-            <div className="rounded-3xl bg-primary p-1 shadow-lg">
-              <IdentityAvatar size="2xl" className="size-40" name={name} src={previewUrl} />
-            </div>
-            <p className="min-h-5 text-sm font-semibold text-primary">
-              {selected ? m.settings_avatar_preset_label({ number: selected.number }) : ""}
-            </p>
-          </div>
-          <dl className="mt-6 flex flex-col gap-3 border-t border-secondary pt-6 text-sm">
-            <div className="flex items-baseline justify-between gap-4">
-              <dt className="text-tertiary">{m.settings_display_name()}</dt>
-              <dd className="min-w-0 break-words text-right font-medium text-primary">{name}</dd>
-            </div>
-            <div className="flex items-baseline justify-between gap-4">
-              <dt className="text-tertiary">{m.settings_avatar_scope()}</dt>
-              <dd className="font-medium text-primary">{m.settings_avatar_scope_all()}</dd>
-            </div>
-          </dl>
-          <p className="mt-6 rounded-lg bg-secondary px-4 py-3 text-sm text-tertiary">
-            {m.settings_avatar_scope_note()}
-          </p>
-        </section>
+      <header className="flex max-w-2xl flex-wrap items-center justify-between gap-4">
+        <h2 className="text-display-xs font-semibold text-primary">
+          {m.settings_avatar_picker_title()}
+        </h2>
+        <div className="flex items-center gap-3">
+          <Button type="button" color="secondary" isDisabled={saving} onPress={onClose}>
+            {m.settings_profile_cancel()}
+          </Button>
+          <Button type="button" isDisabled={!changed || saving} onPress={save}>
+            {saving ? m.settings_profile_saving() : m.settings_avatar_picker_save()}
+          </Button>
+        </div>
+      </header>
+      {failed && (
+        <p role="alert" className="mt-4 text-sm text-error-primary">
+          {m.settings_avatar_save_error()}
+        </p>
+      )}
 
-        <section className="min-w-0">
-          <header className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h2 className="text-display-xs font-semibold text-primary">
-                {m.settings_avatar_picker_title()}
-              </h2>
-              <p className="text-md text-tertiary">
-                {m.settings_avatar_picker_count({ count: avatarPresets.length })}
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <Button type="button" color="secondary" isDisabled={saving} onPress={onClose}>
-                {m.settings_profile_cancel()}
-              </Button>
-              <Button type="button" isDisabled={!selected || saving} onPress={save}>
-                {saving ? m.settings_profile_saving() : m.settings_avatar_picker_save()}
-              </Button>
-            </div>
-          </header>
-          {failed && (
-            <p role="alert" className="mt-4 text-sm text-error-primary">
-              {m.settings_avatar_save_error()}
-            </p>
-          )}
-
-          <RadioGroup
-            aria-label={m.settings_avatar_picker_title()}
-            value={selectedId}
-            onChange={setSelectedId}
-            isDisabled={saving}
-            orientation="horizontal"
-            className="mt-6 grid grid-cols-3 gap-x-3 gap-y-5 sm:grid-cols-4 xl:grid-cols-6"
-          >
-            {avatarPresets.map((preset) => (
-              <AvatarChoice
-                key={preset.id}
-                value={preset.id}
-                src={preset.url}
-                label={m.settings_avatar_preset_label({ number: preset.number })}
-              />
-            ))}
-          </RadioGroup>
-        </section>
-      </div>
+      <RadioGroup
+        aria-label={m.settings_avatar_picker_title()}
+        value={selectedId}
+        onChange={setSelectedId}
+        isDisabled={saving}
+        orientation="horizontal"
+        className="mt-8 grid max-w-2xl grid-cols-5 gap-4 sm:gap-6"
+      >
+        {avatarPresets.map((preset) => (
+          <AvatarChoice
+            key={preset.id}
+            value={preset.id}
+            src={preset.url}
+            label={m.settings_avatar_preset_label({ number: preset.number })}
+            hideLabel
+          />
+        ))}
+      </RadioGroup>
     </div>
   );
 }

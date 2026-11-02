@@ -24,10 +24,16 @@ export class PrismaFirstSignInNames {
     return row && { displayName: row.welcomedAt ? row.displayName : null };
   }
 
-  async confirm(userId: string, displayName: string) {
+  /** Saves the name, and the avatar chosen beside it (a stored preset reference), once: a later
+   * call returns the name that stands and changes nothing. */
+  async confirm(userId: string, displayName: string, avatarObjectKey?: string) {
     const { count } = await this.db.user.updateMany({
       where: { id: userId, welcomedAt: null },
-      data: { displayName, welcomedAt: new Date() },
+      data: {
+        displayName,
+        welcomedAt: new Date(),
+        ...(avatarObjectKey ? { avatarObjectKey, avatarContentType: null } : {}),
+      },
     });
     if (count === 1) return displayName;
     return (

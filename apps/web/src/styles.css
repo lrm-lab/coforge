@@ -222,6 +222,12 @@ html[data-drag-cursor] * {
     border-radius: 9999px;
   }
 
+  /* So is a cartoon person: the portrait is drawn as a circle (`IdentityAvatar`), where an
+     uploaded photo takes the size's shape. */
+  [data-avatar].avatar-portrait {
+    border-radius: 9999px;
+  }
+
   /* A channel row's group avatar (`group-avatar.tsx`): a 48 × 48px box with no fill
      behind its stickers. The member stickers are placed on it by percentage (`collage-layout.ts`), may pass
      its edge a little, and size their initials from `--avatar-group-size`. */

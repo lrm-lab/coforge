@@ -8,7 +8,7 @@ import {
   isAvatarPresetId,
   isAvatarPresetReference,
 } from "#src/features/profiles/avatar-presets";
-import { isPersonPicture, personAvatarUrl } from "#src/lib/person-picture";
+import { currentPersonPictureUrl, isPersonPicture, personAvatarUrl } from "#src/lib/person-picture";
 import { mascotStaticUrl } from "#src/features/agents/mascot-contract";
 import { isStickerPicture } from "#src/features/avatars/sticker-picture";
 import {
@@ -18,16 +18,23 @@ import {
 } from "#src/server/db/repositories/user-profile.repositories.server";
 
 describe("platform avatar presets", () => {
-  // Frank, 2026-10-24: a person's avatar is one of four cartoon people, not a photo.
-  test("offers four cartoon people, each served from public/avatars", () => {
+  // Frank, 2026-10-29: ten cartoon people, five men then five women; person-1 to person-4 name
+  // the portrait closest to each of the four earlier figures.
+  test("offers ten cartoon people, each served from public/avatars", () => {
     expect(avatarPresets.map((preset) => preset.id)).toEqual([
-      "person-1",
+      "person-5",
       "person-2",
-      "person-3",
       "person-4",
+      "person-6",
+      "person-7",
+      "person-8",
+      "person-3",
+      "person-9",
+      "person-10",
+      "person-1",
     ]);
     for (const preset of avatarPresets) {
-      expect(preset.url).toBe(`/avatars/${preset.id}-1.webp`);
+      expect(preset.url).toBe(`/avatars/${preset.id}-2.webp`);
       expect(existsSync(`public${preset.url}`)).toBeTrue();
       expect(isPersonPicture(preset.url)).toBeTrue();
     }
@@ -37,12 +44,12 @@ describe("platform avatar presets", () => {
     const reference = avatarPresetReference("person-3");
 
     expect(reference).toBe("preset:person-3");
-    expect(avatarPresetUrl(reference)).toBe("/avatars/person-3-1.webp");
+    expect(avatarPresetUrl(reference)).toBe("/avatars/person-3-2.webp");
   });
 
   test("only the platform's own pictures are presets", () => {
-    expect(isAvatarPresetId("person-4")).toBeTrue();
-    expect(isAvatarPresetId("person-5")).toBeFalse();
+    expect(isAvatarPresetId("person-10")).toBeTrue();
+    expect(isAvatarPresetId("person-11")).toBeFalse();
     expect(isAvatarPresetId("portrait-07")).toBeFalse();
     expect(isAvatarPresetId("../person-1")).toBeFalse();
     expect(avatarPresetUrl("users/u/avatars/a/original")).toBeNull();
@@ -52,7 +59,7 @@ describe("platform avatar presets", () => {
   });
 
   test("only the cartoon people's pictures are person pictures", () => {
-    expect(isPersonPicture("/avatars/person-2-1.webp")).toBeTrue();
+    expect(isPersonPicture("/avatars/person-2-2.webp")).toBeTrue();
     expect(isPersonPicture("/agent-avatars/mascot-blue-4.webp")).toBeFalse();
     expect(isPersonPicture("/api/me/avatar?v=a")).toBeFalse();
     expect(isPersonPicture(null)).toBeFalse();
@@ -60,10 +67,10 @@ describe("platform avatar presets", () => {
   });
 });
 
-// Frank, 2026-10-24: a cartoon person is drawn like an Agent's mascot, as a sticker.
-test("a mascot and a cartoon person are sticker pictures; an uploaded photo is not", () => {
+// The cartoon people are round portraits (2026-10-29), drawn like a photo; only a mascot is a sticker.
+test("a mascot is a sticker picture; a person's picture, cartoon or photo, is not", () => {
   expect(isStickerPicture(mascotStaticUrl("blue"))).toBeTrue();
-  expect(isStickerPicture(avatarPresets[0]!.url)).toBeTrue();
+  expect(isStickerPicture(avatarPresets[0]!.url)).toBeFalse();
   expect(isStickerPicture("/api/me/avatar?v=a")).toBeFalse();
   expect(isStickerPicture("https://images.example/users/u/avatars/a/original")).toBeFalse();
   expect(isStickerPicture(null)).toBeFalse();
@@ -72,20 +79,26 @@ test("a mascot and a cartoon person are sticker pictures; an uploaded photo is n
 // Frank, 2026-10-24: someone with no avatar shows the cartoon person their id chooses, resolved
 // by one rule on the server and in the browser, and never written to the database.
 describe("the cartoon person of someone with no avatar", () => {
-  test("is chosen by a stable hash of the user id and spreads over all four people", () => {
+  // Going from four to ten must not hand anyone who never chose an unrelated face: the default
+  // stays among the four that replaced the earlier figures, picked as before.
+  test("is chosen by a stable hash of the user id among the four replacement faces", () => {
     const picked = personAvatarUrl("user-1", null);
     expect(avatarPresets.map((preset) => preset.url)).toContain(picked);
     expect(personAvatarUrl("user-1", null)).toBe(picked);
     const spread = new Set(
       Array.from({ length: 200 }, (_, index) => personAvatarUrl(`user-${index}`, null)),
     );
-    expect(spread.size).toBe(avatarPresets.length);
+    expect([...spread].sort()).toEqual([1, 2, 3, 4].map((n) => `/avatars/person-${n}-2.webp`));
+  });
+
+  test("a stored picture of an earlier figure shows its replacement", () => {
+    expect(currentPersonPictureUrl("/avatars/person-3-2.webp")).toBe("/avatars/person-3-2.webp");
   });
 
   test("uses the same FNV-1a pool order as the Agent mascots", () => {
     // FNV-1a("user-1") mod 4, pinned so a change of hash or pool order is deliberate.
-    expect(personAvatarUrl("user-1", null)).toBe("/avatars/person-1-1.webp");
-    expect(personAvatarUrl("user-2", null)).toBe("/avatars/person-2-1.webp");
+    expect(personAvatarUrl("user-1", null)).toBe("/avatars/person-1-2.webp");
+    expect(personAvatarUrl("user-2", null)).toBe("/avatars/person-2-2.webp");
   });
 
   test("steps aside for any avatar the person has", () => {
@@ -101,9 +114,9 @@ describe("a user's avatar URL", () => {
   const cdn = () => "https://images.example/never";
 
   test("for a preset never goes through the image CDN", () => {
-    expect(avatarUrl("user-1", "preset:person-3", cdn)).toBe("/avatars/person-3-1.webp");
+    expect(avatarUrl("user-1", "preset:person-3", cdn)).toBe("/avatars/person-3-2.webp");
     expect(workspaceUserAvatarUrl("workspace-1", "user-1", "preset:person-3", cdn)).toBe(
-      "/avatars/person-3-1.webp",
+      "/avatars/person-3-2.webp",
     );
   });
 
@@ -124,7 +137,7 @@ describe("the avatar URL an app is given", () => {
   const cdn = (key: string) => `https://images.example/${key}`;
 
   test("is the preset they chose, or the cartoon person their id chooses when they have none", () => {
-    expect(publicAvatarUrl("user-1", "preset:person-3", cdn)).toBe("/avatars/person-3-1.webp");
+    expect(publicAvatarUrl("user-1", "preset:person-3", cdn)).toBe("/avatars/person-3-2.webp");
     expect(publicAvatarUrl("user-1", null, cdn)).toBe(personAvatarUrl("user-1", null));
     expect(publicAvatarUrl("user-1", "preset:portrait-07", cdn)).toBe(
       personAvatarUrl("user-1", null),

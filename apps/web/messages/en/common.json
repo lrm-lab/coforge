@@ -89,6 +89,7 @@
   "navigation_expand_sidebar": "Expand Sidebar",
   "navigation_activity": "Activity",
   "welcome_title": "Enter your display name",
+  "welcome_avatar_label": "Avatar",
   "welcome_display_name_label": "Display name",
   "welcome_workspace_url_label": "Workspace URL",
   "welcome_workspace_url_invalid": "Use lowercase letters, digits and single hyphens, up to 48 characters.",

@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 
 import { FirstSignIn, type FirstSignInStore } from "#src/server/auth/first-sign-in.server";
+import { defaultPersonPictureId } from "#src/lib/person-picture";
 import {
   WorkspaceEnrollment,
   type WorkspaceEnrollmentStore,
@@ -266,6 +267,7 @@ test("a person without one is asked, starting from the provider's name when it r
     status: "ask",
     prefill: "Ada Lovelace",
     slugPrefill: "ada",
+    avatarPrefill: defaultPersonPictureId(ada.id),
     invite: "none",
   });
   expect(
@@ -274,12 +276,14 @@ test("a person without one is asked, starting from the provider's name when it r
     status: "ask",
     prefill: "",
     slugPrefill: "ada",
+    avatarPrefill: defaultPersonPictureId(ada.id),
     invite: "none",
   });
   expect(await firstSignIn.readNameStep({ id: ada.id, name: "", username: "ada" })).toEqual({
     status: "ask",
     prefill: "",
     slugPrefill: "ada",
+    avatarPrefill: defaultPersonPictureId(ada.id),
     invite: "none",
   });
 });

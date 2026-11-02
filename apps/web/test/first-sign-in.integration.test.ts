@@ -2,6 +2,7 @@ import { expect, spyOn, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { completeFirstSignIn, readNameStep } from "#src/server/auth/first-sign-in.server";
+import { defaultPersonPictureId } from "#src/lib/person-picture";
 import { workspaceIdForUser } from "#src/server/workspaces/enrollment.server";
 import { PrismaWorkspaceCatalogStore } from "#src/server/workspaces/catalog.server";
 import { workspaceJoinLinks } from "#src/server/workspaces/join-links-store.server";
@@ -86,6 +87,7 @@ test.skipIf(!connectionString)(
         status: "ask",
         prefill: "Provider Ada",
         slugPrefill: user.username,
+        avatarPrefill: defaultPersonPictureId(user.id),
         invite: "none",
       });
 
@@ -99,6 +101,8 @@ test.skipIf(!connectionString)(
       expect(result.ok).toBe(true);
       const stored = await db.user.findUniqueOrThrow({ where: { id: user.id } });
       expect(stored.displayName).toBe("Ada Lovelace");
+      // No face chosen: none is stored, so the default one the id hashes to stays.
+      expect(stored.avatarObjectKey).toBeNull();
       const [membership, ...others] = await memberships();
       expect(others).toEqual([]);
       expect(membership?.role).toBe("owner");
@@ -120,6 +124,52 @@ test.skipIf(!connectionString)(
 );
 
 test.skipIf(!connectionString)(
+  "the face chosen beside the name is saved with it, once, on either path",
+  async () => {
+    const own = await setup();
+    const invited = await setup();
+    try {
+      await completeFirstSignIn({
+        db: own.db,
+        user: own.user,
+        displayName: "Ada",
+        avatarPresetId: "person-7",
+        acceptLanguage: "en-US",
+      });
+      // A second tab's submit keeps the first name, and the first face with it.
+      await completeFirstSignIn({
+        db: own.db,
+        user: own.user,
+        displayName: "Ada",
+        avatarPresetId: "person-8",
+        acceptLanguage: "en-US",
+      });
+      expect(
+        (await own.db.user.findUniqueOrThrow({ where: { id: own.user.id } })).avatarObjectKey,
+      ).toBe("preset:person-7");
+
+      const returnTo = `/join/${await invited.inviteLink()}`;
+      const result = await completeFirstSignIn({
+        db: invited.db,
+        user: invited.user,
+        displayName: "Grace",
+        avatarPresetId: "person-3",
+        returnTo,
+        acceptLanguage: "en-US",
+      });
+      expect(result).toEqual({ ok: true, workspaceId: null });
+      expect(
+        (await invited.db.user.findUniqueOrThrow({ where: { id: invited.user.id } }))
+          .avatarObjectKey,
+      ).toBe("preset:person-3");
+    } finally {
+      await own.teardown();
+      await invited.teardown();
+    }
+  },
+);
+
+test.skipIf(!connectionString)(
   "a session whose user row is gone is told to sign in again, not asked",
   async () => {
     const { db, user, teardown } = await setup();
@@ -130,7 +180,13 @@ test.skipIf(!connectionString)(
       });
       expect(
         await readNameStep({ db, user: { id: user.id, name: "Ada", username: "ada-lovelace" } }),
-      ).toEqual({ status: "ask", prefill: "Ada", slugPrefill: "ada-lovelace", invite: "none" });
+      ).toEqual({
+        status: "ask",
+        prefill: "Ada",
+        slugPrefill: "ada-lovelace",
+        avatarPrefill: defaultPersonPictureId(user.id),
+        invite: "none",
+      });
     } finally {
       await teardown();
     }

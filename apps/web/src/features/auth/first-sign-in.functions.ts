@@ -5,6 +5,7 @@ import { z } from "zod";
 import { authMiddleware } from "#src/features/auth/function-auth";
 import { joinTokenFromReturnTo } from "#src/features/auth/return-to";
 import { declareNoStore } from "#src/features/no-store-response.server";
+import { isAvatarPresetId } from "#src/features/profiles/avatar-presets";
 import {
   completeFirstSignIn,
   readNameStep,
@@ -37,6 +38,7 @@ export const submitDisplayName = createServerFn({ method: "POST" })
     z.object({
       displayName: z.string(),
       workspaceSlug: z.string().max(200).optional(),
+      avatarPresetId: z.string().max(40).refine(isAvatarPresetId).optional(),
       returnTo: returnToField,
     }),
   )
@@ -50,6 +52,7 @@ export const submitDisplayName = createServerFn({ method: "POST" })
       user: context.user,
       displayName: data.displayName,
       workspaceSlug: data.workspaceSlug,
+      avatarPresetId: data.avatarPresetId,
       returnTo: data.returnTo,
       acceptLanguage: getRequest().headers.get("accept-language") ?? "",
     });

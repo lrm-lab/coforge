@@ -6,7 +6,9 @@ import {
 } from "#src/server/db/repositories/first-sign-in.repositories.server";
 import { joinTokenFromReturnTo } from "#src/features/auth/return-to";
 import { namePrefill } from "#src/features/auth/name-prefill";
+import { avatarPresetReference, isAvatarPresetId } from "#src/features/profiles/avatar-presets";
 import { checkPersonName, type PersonNameProblem } from "#src/features/profiles/person-name";
+import { defaultPersonPictureId } from "#src/lib/person-picture";
 import {
   isReservedWorkspaceSlug,
   isValidWorkspaceSlug,
@@ -33,6 +35,8 @@ export type FirstSignInInput = {
   user: { id: string; username: string };
   displayName: string;
   workspaceSlug?: string;
+  /** The cartoon person chosen beside the name (`avatarPresets`), saved with it. */
+  avatarPresetId?: string;
   /** The page the person is on their way to; an active invite's join page makes the submit a
    * name-only one (see `FirstSignIn.complete`). */
   returnTo?: string;
@@ -51,7 +55,12 @@ export type FirstSignInStore = {
   enroll(input: FirstSignInInput): Promise<ConfirmedEnrollment>;
   /** Saves the display name alone, under the same per-User serialization as `enroll`; returns the
    * name that stands (the first one saved). */
-  confirmName(input: { userId: string; username: string; displayName: string }): Promise<string>;
+  confirmName(input: {
+    userId: string;
+    username: string;
+    displayName: string;
+    avatarPresetId?: string;
+  }): Promise<string>;
 };
 
 /** Whether the invite token names a join link that admits people right now. */
@@ -64,8 +73,15 @@ export type InviteState = "none" | "active" | "unavailable";
 
 export type NameStep =
   | { status: "named" }
-  /** `prefill` starts the name field, `slugPrefill` the Workspace URL field; either may be empty. */
-  | { status: "ask"; prefill: string; slugPrefill: string; invite: InviteState }
+  /** `prefill` starts the name field, `slugPrefill` the Workspace URL field; either may be empty.
+   * `avatarPrefill` is the preset already selected: the face the person has until they choose. */
+  | {
+      status: "ask";
+      prefill: string;
+      slugPrefill: string;
+      avatarPrefill: string;
+      invite: InviteState;
+    }
   /** The session's user is gone: the person has to sign in again. */
   | { status: "account_gone" };
 
@@ -144,6 +160,7 @@ export class FirstSignIn {
       status: "ask",
       prefill: namePrefill(user.name),
       slugPrefill: workspaceSlugPrefill(user.username),
+      avatarPrefill: defaultPersonPictureId(user.id),
       invite: await this.inviteState(returnTo),
     };
   }
@@ -173,6 +190,7 @@ export class FirstSignIn {
           userId: input.user.id,
           username: input.user.username,
           displayName: checked.name,
+          avatarPresetId: input.avatarPresetId,
         });
         return { ok: true, workspaceId: null };
       }
@@ -212,18 +230,34 @@ export class FirstSignIn {
   }
 }
 
+/** What a preset chosen on the name step is stored as; nothing for none or an unknown one. */
+function chosenAvatar(presetId: string | undefined): string | undefined {
+  return presetId !== undefined && isAvatarPresetId(presetId)
+    ? avatarPresetReference(presetId)
+    : undefined;
+}
+
 class PrismaFirstSignInStore implements FirstSignInStore {
   constructor(private readonly db: PrismaClient) {}
 
   /** The name is confirmed after the username is settled, as a taken name aborts a transaction. */
-  async confirmName(input: { userId: string; username: string; displayName: string }) {
+  async confirmName(input: {
+    userId: string;
+    username: string;
+    displayName: string;
+    avatarPresetId?: string;
+  }) {
     await renameFallbackUsername(
       this.db,
       { id: input.userId, username: input.username },
       input.displayName,
     );
     return withFirstSignInUser(this.db, input.userId, (tx) =>
-      new PrismaFirstSignInNames(tx).confirm(input.userId, input.displayName),
+      new PrismaFirstSignInNames(tx).confirm(
+        input.userId,
+        input.displayName,
+        chosenAvatar(input.avatarPresetId),
+      ),
     );
   }
 
@@ -246,7 +280,11 @@ class PrismaFirstSignInStore implements FirstSignInStore {
         input.acceptLanguage,
         input.workspaceSlug,
       );
-      const displayName = await names.confirm(input.user.id, title);
+      const displayName = await names.confirm(
+        input.user.id,
+        title,
+        chosenAvatar(input.avatarPresetId),
+      );
       return {
         workspaceId,
         displayName,
@@ -289,6 +327,7 @@ export function completeFirstSignIn(input: {
   user: { id: string; username: string };
   displayName: string;
   workspaceSlug?: string;
+  avatarPresetId?: string;
   returnTo?: string;
   acceptLanguage: string;
 }): Promise<FirstSignInResult> {

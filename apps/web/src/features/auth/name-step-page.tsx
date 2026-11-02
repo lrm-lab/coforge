@@ -1,15 +1,19 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
+import { RadioGroup } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
+import { Label } from "#src/components/base/input/label";
 import { CoForgeMark } from "#src/components/foundations/logo/coforge-mark";
 import { AuthSplitLayout } from "#src/features/auth/auth-split-layout";
+import { AvatarChoice } from "#src/features/avatars/avatar-choice";
 import { checkWorkspaceSlug, submitDisplayName } from "#src/features/auth/first-sign-in.functions";
 import type { InviteState } from "#src/server/auth/first-sign-in.server";
 import { afterSignInHref, localizedReturnHref } from "#src/features/auth/return-to";
 import { githubStepHref, isDefaultStartPage } from "#src/features/onboarding/github-step";
+import { avatarPresets } from "#src/features/profiles/avatar-presets";
 import {
   checkPersonName,
   PERSON_NAME_MAX_LENGTH,
@@ -55,13 +59,15 @@ function SlugPrefix({ className }: { className?: string }) {
 /**
  * Where a signed-in person who has not been asked for a display name lands once, before anything is
  * created for them. Continuing saves the name, makes their personal Workspace, titled with it, and
- * goes on to `returnTo`, or, with none, to the new Workspace's "Connect GitHub" step. Arriving from
+ * goes on to `returnTo`, or, with none, to the new Workspace's "Connect GitHub" step. The person
+ * also picks their face from the cartoon people, starting from the one they would be given. Arriving from
  * a working invite link (`invite` is "active", as the server confirmed) asks for the name alone:
  * nothing else is made, and the person goes on to the join page to join.
  */
 export function NameStepPage({
   prefill,
   slugPrefill,
+  avatarPrefill,
   invite: initialInvite,
   returnTo,
 }: {
@@ -69,6 +75,8 @@ export function NameStepPage({
   prefill: string;
   /** The URL the personal Workspace starts with: the username, unless it is only the fallback. */
   slugPrefill: string;
+  /** The cartoon person selected at first: the face the person has until they choose. */
+  avatarPrefill: string;
   /** What the server found out about an invite `returnTo`; the name-only form is for "active". */
   invite: InviteState;
   returnTo: string | undefined;
@@ -79,6 +87,7 @@ export function NameStepPage({
   const [invite, setInvite] = useState(initialInvite);
   const nameOnly = invite === "active";
   const [displayName, setDisplayName] = useState(prefill);
+  const [avatarPresetId, setAvatarPresetId] = useState(avatarPrefill);
   const [workspaceSlug, setWorkspaceSlug] = useState(slugPrefill);
   // Until the person edits the URL, it follows the display name, unless the provider's name had
   // already given it a start.
@@ -132,7 +141,9 @@ export function NameStepPage({
     try {
       // The server decides whether the invite still works; the page only sends `returnTo`.
       result = await submit({
-        data: nameOnly ? { displayName, returnTo } : { displayName, workspaceSlug: slug },
+        data: nameOnly
+          ? { displayName, avatarPresetId, returnTo }
+          : { displayName, avatarPresetId, workspaceSlug: slug },
       });
     } catch {
       return stop("save_failed");
@@ -204,6 +215,26 @@ export function NameStepPage({
                 nameProblem ? <span role="alert">{problemText[nameProblem]()}</span> : undefined
               }
             />
+            <RadioGroup
+              value={avatarPresetId}
+              onChange={setAvatarPresetId}
+              isDisabled={submitting}
+              orientation="horizontal"
+              className="flex flex-col gap-1.5"
+            >
+              <Label>{m.welcome_avatar_label()}</Label>
+              <div className="grid grid-cols-5 gap-3">
+                {avatarPresets.map((preset) => (
+                  <AvatarChoice
+                    key={preset.id}
+                    value={preset.id}
+                    src={preset.url}
+                    label={m.settings_avatar_preset_label({ number: preset.number })}
+                    hideLabel
+                  />
+                ))}
+              </div>
+            </RadioGroup>
             {nameOnly ? null : (
               <Input
                 label={m.welcome_workspace_url_label()}

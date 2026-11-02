@@ -25,8 +25,7 @@ Part of [Agents UI](AGENTS.md). Rules for `src/features/agents/`.
   (`mascot-rive.tsx`, the only `@rive-app/*` importer); anything else stays the still picture. A
   moving mascot's eyes follow the cursor (below). Names: `mascot-contract.ts` and
   `mascot-rive-contract.ts`, shared with the generator (`assets/mascots/README.md`).
-- Every Agent mascot and every cartoon person is a sticker (Frank's references, 2026-10-23, for
-  mascots and people): `AvatarSticker` (`features/avatars/avatar-sticker.tsx`) is the one markup
+- Every Agent mascot is a sticker (Frank's references, 2026-10-23): `AvatarSticker` (`features/avatars/avatar-sticker.tsx`) is the one markup
   for it, the bare white-edged figure with no circle or fill behind it (Frank, 2026-10-23) at every
   size, drawn at 110% of the avatar's box, unclipped, so it passes the box by only a few percent
   (`.avatar-sticker`, `.avatar-sticker-figure` in `styles.css`), with the status dot slot (a quarter
@@ -36,12 +35,14 @@ Part of [Agents UI](AGENTS.md). Rules for `src/features/agents/`.
   bubble, which stays inside the box. The moving avatar (`AgentMascotAvatar`), the still one
   (`AgentDisplayAvatar`, `AgentStackFace`), a channel's lone member and the replying line all
   draw through it. A picture is a sticker when `isStickerPicture` (`features/avatars/sticker-picture.ts`) says so: an Agent's mascot
-  (`isMascotPicture`) or a cartoon person (`isPersonPicture`, `src/lib/person-picture.ts`: four WebP
-  stickers (256 px, transparent) `public/avatars/person-<n>-<version>.webp`, the profile avatar
-  presets in `features/profiles/avatar-presets.ts`; a person with no avatar gets the one their id
-  hashes to, `personAvatarUrl`, which the server applies so no read returns a null avatar). Anywhere
+  (`isMascotPicture`). A person's face is round, never a sticker: an uploaded photo or a cartoon
+  person (`isPersonPicture`, `src/lib/person-picture.ts`: Frank's ten round portraits (2026-10-29,
+  256 px WebP, transparent outside the circle) `public/avatars/person-<n>-<version>.webp`, the
+  profile avatar presets in `features/profiles/avatar-presets.ts`, also offered on the first
+  sign-in name step; a person with no avatar gets the default face their id hashes to,
+  `personAvatarUrl`, which the server applies so no read returns a null avatar). Anywhere
   a picture may be a person's or an Agent's, features use `IdentityAvatar`, which sends a sticker
-  picture to the sticker and anything else, a person's uploaded photo, to the base `Avatar` (`name`
+  picture to the sticker and anything else, a person's picture, to the base `Avatar` (`name`
   gives the initial and its tone; `deleted` greys either). Only a face whose picture can be missing
   locally (the settings preview after removing the avatar) passes `userId`, for the default cartoon.
   The base `Avatar` and the other base components know nothing of stickers, so a person's face is

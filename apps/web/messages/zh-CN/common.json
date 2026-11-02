@@ -89,6 +89,7 @@
   "navigation_expand_sidebar": "展开侧栏",
   "navigation_activity": "动态",
   "welcome_title": "输入你的昵称",
+  "welcome_avatar_label": "头像",
   "welcome_display_name_label": "昵称",
   "welcome_workspace_url_label": "工作区网址",
   "welcome_workspace_url_invalid": "只能使用小写字母、数字和单个连字符，最多 48 个字符。",
