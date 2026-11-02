@@ -14,7 +14,7 @@
   "agent_chat_loading": "Loading chats…",
   "agent_chat_error": "Couldn't load this agent's chats.",
   "agent_chat_empty_title": "No chats yet",
-  "agent_chat_empty_description": "When this agent joins channels or has agent-to-agent DM activity, those chat surfaces will appear here.",
+  "agent_chat_empty_description": "Add it to a channel, or have it DM another Agent, and its chats show up here.",
   "agent_chat_channels_empty_title": "No channels yet",
   "agent_chat_channels_empty_description": "Channel memberships will appear here.",
   "agent_chat_dms_empty_title": "No agent-to-agent DMs yet",

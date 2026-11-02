@@ -1,11 +1,12 @@
 import { channelLabel } from "#src/features/conversations/channel-visibility";
 import { useEffect, useState } from "react";
-import { Clock, Link01 as LinkIcon, Repeat01 as Repeat } from "@untitledui/icons";
+import { Bell01 as Bell, Clock, Link01 as LinkIcon, Repeat01 as Repeat } from "@untitledui/icons";
 import { Link } from "@tanstack/react-router";
 import { Button } from "#src/components/base/buttons/button";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { m } from "#src/paraglide/messages";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
+import { AgentTabEmpty } from "./profile-panel/agent-tab-empty";
 import type { AgentReminderListItem } from "#src/server/agents/agent-reminders.server";
 
 type ListResult = Awaited<
@@ -77,7 +78,14 @@ export function AgentReminders({
         </div>
       </div>
     );
-  if (!result.reminders.length) return <State message={m.agent_reminders_empty()} />;
+  if (!result.reminders.length)
+    return (
+      <AgentTabEmpty
+        icon={Bell}
+        title={m.agent_reminders_empty()}
+        description={m.agent_reminders_empty_description()}
+      />
+    );
 
   return (
     <div className="mt-6 space-y-3">

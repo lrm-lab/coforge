@@ -3,12 +3,12 @@ import { useQuery } from "@tanstack/react-query";
 import { Hash01, MessageChatCircle } from "@untitledui/icons";
 
 import { Alert } from "#src/components/ui/alert";
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "#src/components/ui/empty";
 import { m } from "#src/paraglide/messages";
 import { AgentChannelList } from "./agent-chat-channels";
 import { AgentPeerDmList } from "./agent-peer-dms-section";
 import { agentChannelsQuery, agentPeerConversationsQuery } from "./agent-profile-queries";
 import { SECTION_CAPTION_CLASS } from "./inline-edit-field";
+import { AgentTabEmpty } from "./agent-tab-empty";
 
 /**
  * The Chat tab: the channels the Agent is in and its conversations with other Agents, one read
@@ -31,18 +31,11 @@ export function AgentChatTab({ agentId, timeZone }: { agentId: string; timeZone:
       ) : !channels || !peers ? (
         <p className="px-5 py-4 text-sm text-tertiary">{m.agent_chat_loading()}</p>
       ) : channels.length === 0 && peers.length === 0 ? (
-        <Empty className="py-12">
-          <EmptyHeader className="mb-0 items-center">
-            <div className="mb-3 flex items-center gap-3 text-tertiary">
-              <Hash01 aria-hidden="true" className="size-7" />
-              <MessageChatCircle aria-hidden="true" className="size-7" />
-            </div>
-            <EmptyTitle>{m.agent_chat_empty_title()}</EmptyTitle>
-            <EmptyDescription className="max-w-72">
-              {m.agent_chat_empty_description()}
-            </EmptyDescription>
-          </EmptyHeader>
-        </Empty>
+        <AgentTabEmpty
+          icon={MessageChatCircle}
+          title={m.agent_chat_empty_title()}
+          description={m.agent_chat_empty_description()}
+        />
       ) : (
         <>
           <section className="border-b border-secondary">

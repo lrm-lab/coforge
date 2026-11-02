@@ -4,13 +4,6 @@ import { Activity as ActivityIcon, ChevronRight } from "@untitledui/icons";
 import { AGENT_ACTIVITY_DETAIL_KIND, type AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "#src/components/ui/empty";
 import { ClockTime } from "#src/components/ui/relative-time";
 import { ConversationBottomPin } from "#src/features/conversations/conversation-bottom-pin";
 import { cn } from "#src/lib/utils";
@@ -19,6 +12,7 @@ import { getLocale } from "#src/paraglide/runtime";
 import type { ActivityEntry } from "./agent-activity";
 import { ACTIVITY_MARKER_CLASS, ActivityMarker } from "./activity-marker";
 import { ModelResponseWait } from "./model-response-wait";
+import { AgentTabEmpty } from "./profile-panel/agent-tab-empty";
 import {
   presentActivityRows,
   subagentBadgeLabel,
@@ -114,17 +108,11 @@ export function AgentActivityTimeline({
 
   if (!rows.length)
     return (
-      <Empty className="h-full items-center justify-center px-6 text-center">
-        <EmptyHeader className="items-center gap-3">
-          <EmptyMedia>
-            <ActivityIcon aria-hidden="true" className="size-6 text-tertiary" />
-          </EmptyMedia>
-          <EmptyTitle role="heading" aria-level={2}>
-            {m.agent_activity_empty()}
-          </EmptyTitle>
-          <EmptyDescription>{m.agent_activity_empty_description()}</EmptyDescription>
-        </EmptyHeader>
-      </Empty>
+      <AgentTabEmpty
+        icon={ActivityIcon}
+        title={m.agent_activity_empty()}
+        description={m.agent_activity_empty_description()}
+      />
     );
 
   return (

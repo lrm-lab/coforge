@@ -14,7 +14,7 @@
   "agent_chat_loading": "正在加载聊天…",
   "agent_chat_error": "无法加载该 Agent 的聊天。",
   "agent_chat_empty_title": "还没有聊天",
-  "agent_chat_empty_description": "这个 Agent 加入频道或有了 Agent 之间的私信动态后，会显示在这里。",
+  "agent_chat_empty_description": "把它加进频道，或让它私信另一个 Agent，聊天就会显示在这里。",
   "agent_chat_channels_empty_title": "还没有频道",
   "agent_chat_channels_empty_description": "频道成员关系会显示在这里。",
   "agent_chat_dms_empty_title": "还没有 Agent 之间的私信",

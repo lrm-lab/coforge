@@ -30,6 +30,7 @@ import { cn } from "#src/lib/utils";
 import { SECTION_CAPTION_CLASS } from "./inline-edit-field";
 import { PanelMessage } from "./panel-message";
 import { FilePane, loadProjectFileView, type FileState } from "./agent-workspace-file-pane";
+import { AgentTabEmpty } from "./agent-tab-empty";
 
 /** The container width, in CSS px, at and above which the tree and the open file split
  * side-by-side (the wide Members-page pane). Below it, the file replaces the tree and a
@@ -377,7 +378,14 @@ function TreeRoot({
     return <PanelMessage text={m.agent_workspace_timeout()} onRetry={onRetry} />;
   if (state.status !== "ready")
     return <PanelMessage text={m.agent_workspace_unavailable()} onRetry={onRetry} />;
-  if (state.entries.length === 0) return <PanelMessage text={m.agent_workspace_empty()} />;
+  if (state.entries.length === 0)
+    return (
+      <AgentTabEmpty
+        icon={Folder}
+        title={m.agent_workspace_empty()}
+        description={m.agent_workspace_empty_description()}
+      />
+    );
 
   return (
     <WorkspaceTree
