@@ -23,6 +23,13 @@ Rules for the Workspace cloud connection in `src/connection/`. They extend
   message over the size limit) is resumed by the connection after its own
   1 s to 30 s doubling backoff; a disconnect it asked for itself (code 0) is
   not. Add no other retry loop.
+- A proxied RPC can also fail with Centrifugo's `temporary: true` (code 100,
+  `internal server error`) while the Web container is replaced.
+  `temporary-rpc-retry.ts` retries exactly that answer on a bounded 250 ms–15 s
+  backoff and never retries a refusal; each attempt re-reads the client, so a
+  reconnect is used. The Agent session report (`agent-session-report.ts`) uses it,
+  logs `daemon_connection:rpc_retry` per attempt, and logs
+  `agent_session:report_failed` only once the budget is spent.
 - The first connect follows the same rules: `start` settles only on
   connecting, a refusal, `stop`, or its `signal` aborting. A stop or abort
   rejects with `DaemonConnectionStoppedError`, so callers tell a deliberate

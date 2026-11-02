@@ -75,11 +75,9 @@ import {
   decodeAgentWorkspaceResetRequest,
   encodeAgentControlResult,
   encodeAgentTurnInterruptResult,
-  encodeAgentSessionReport,
   encodeAgentSessionInvalidate,
   AGENT_CONTROL_RESULT_METHOD,
   AGENT_TURN_INTERRUPT_RESULT_METHOD,
-  AGENT_SESSION_METHOD,
   AGENT_SESSION_INVALIDATE_METHOD,
   AGENT_CONTEXT_USAGE_METHOD,
   AGENT_SERVICE_TIER_METHOD,
@@ -162,7 +160,6 @@ import {
   type WeeklyReportRequest,
   type WeeklyReportResponse,
   utf8Encoder,
-  refusalText,
   thrownMessage,
 } from "@lrm/coforge-sdk/internal";
 
@@ -181,6 +178,7 @@ import {
 import { controlPayloadShape } from "./control-payload";
 import { connectionLiveness, INBOUND_STALLED_MS } from "./connection-liveness";
 import { DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS } from "./shutdown-notice-timeout";
+import { reportAgentSessionWithRetry } from "./agent-session-report";
 import { getLogger } from "@logtape/logtape";
 import { agentHeaders, channelEndpointFor, sendAgentJson } from "./agent-http-wire";
 import { AgentMigrationHttpClient } from "./agent-migration-http-client";
@@ -1908,27 +1906,15 @@ export class DaemonConnection
   }
 
   async reportAgentSession(report: AgentSessionReport): Promise<void> {
-    // Observed regardless of what follows: this is the daemon's own outbound intent to report
-    // this launch, the signal `#observeLaunchIdentity` needs, independent of whether the RPC
-    // below reaches the server.
-    this.#observeLaunchIdentity(report.agentId, report.launchId);
-    const client = this.#requireClient();
-    try {
-      await client.rpc(AGENT_SESSION_METHOD, encodeAgentSessionReport(report));
-    } catch (error) {
-      logger.error("Agent session report failed", {
-        event: "agent_session:report_failed",
-        request_id: report.requestId,
-        workspace_id: report.workspaceId,
-        computer_id: report.computerId,
-        agent_id: report.agentId,
-        provider: report.provider,
-        error_code: diagnosticErrorCode(error),
-        error_message: refusalText(error).slice(0, 200),
-        outcome: "failed",
-      });
-      throw error;
-    }
+    await reportAgentSessionWithRetry(
+      {
+        observeLaunch: (agentId, launchId) => this.#observeLaunchIdentity(agentId, launchId),
+        rpc: async (method, data) => {
+          await this.#requireClient().rpc(method, data);
+        },
+      },
+      report,
+    );
   }
 
   async #sendReady(
