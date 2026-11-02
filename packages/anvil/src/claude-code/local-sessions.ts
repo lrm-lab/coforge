@@ -44,8 +44,8 @@ async function candidates(options: LocalSessionSearchOptions, host: ClaudeHistor
     if (!resolved) return { found, complete: true };
     rootPath = resolved;
     projects = await localSessionIo(host.readDirectoryEntries(projectsRoot), options.limits);
-  } catch (error) {
-    return { found, complete: !(error instanceof LocalSessionDeadlineError) };
+  } catch {
+    return { found, complete: false };
   }
   for (const project of projects) {
     if (options.limits.now() >= options.limits.deadlineAtMs) {
@@ -63,12 +63,9 @@ async function candidates(options: LocalSessionSearchOptions, host: ClaudeHistor
       if (!(await localSessionIo(host.resolveDirectoryWithoutSymlinks(root), options.limits)))
         continue;
       entries = await localSessionIo(host.readDirectoryEntries(root), options.limits);
-    } catch (error) {
-      if (error instanceof LocalSessionDeadlineError) {
-        complete = false;
-        break;
-      }
-      continue;
+    } catch {
+      complete = false;
+      break;
     }
     const selected: Array<{ name: string; sessionId: string }> = [];
     for (const entry of entries) {
@@ -96,14 +93,14 @@ async function candidates(options: LocalSessionSearchOptions, host: ClaudeHistor
                   },
                 }
               : {};
-          } catch (error) {
-            return { deadline: error instanceof LocalSessionDeadlineError };
+          } catch {
+            return { failure: true };
           }
         }),
       );
       for (const observation of observed) {
         if (observation.candidate) found.push(observation.candidate);
-        if (observation.deadline) complete = false;
+        if (observation.failure) complete = false;
       }
       if (!complete) break;
     }

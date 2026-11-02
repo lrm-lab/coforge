@@ -524,3 +524,41 @@ test("complete byte windows decode a multibyte overlap seam only once", async ()
     complete: true,
   });
 });
+
+test("operational discovery failures mark provider scans incomplete", async () => {
+  const claudeBase = claudeHost({
+    "/claude/projects/-work/session-1.jsonl": {
+      text: claudeRecord("user", "2026-11-02T01:00:00Z", "task"),
+      mtimeMs: NOW,
+    },
+  });
+  expect(
+    await searchClaudeLocalSessions(
+      { query: "", limits },
+      {
+        ...claudeBase,
+        readDirectoryEntries: async (path) => {
+          if (path === "/claude/projects") throw new Error("EACCES");
+          return claudeBase.readDirectoryEntries(path);
+        },
+      },
+    ),
+  ).toMatchObject({ sessions: [], scanComplete: false });
+  expect(
+    await searchClaudeLocalSessions(
+      { query: "", limits },
+      { ...claudeBase, lstat: async () => Promise.reject(new Error("EIO")) },
+    ),
+  ).toMatchObject({ sessions: [], scanComplete: false });
+
+  const codexBase = codexHost({});
+  expect(
+    await searchCodexLocalSessions(
+      { query: "", limits },
+      {
+        ...codexBase,
+        readDirectoryEntries: async () => Promise.reject(new Error("EACCES")),
+      },
+    ),
+  ).toMatchObject({ sessions: [], scanComplete: false });
+});

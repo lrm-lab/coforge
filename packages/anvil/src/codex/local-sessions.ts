@@ -45,8 +45,8 @@ async function candidates(options: LocalSessionSearchOptions, host: CodexHistory
     );
     if (!resolved) return { found: [] as Candidate[], complete: true };
     rootPath = resolved;
-  } catch (error) {
-    return { found: [] as Candidate[], complete: !(error instanceof LocalSessionDeadlineError) };
+  } catch {
+    return { found: [] as Candidate[], complete: false };
   }
   const queue = [{ path: sessionsRoot, depth: 0 }];
   const newest = new Map<string, Candidate>();
@@ -79,13 +79,13 @@ async function candidates(options: LocalSessionSearchOptions, host: CodexHistory
             current,
             entries: await localSessionIo(host.readDirectoryEntries(current.path), options.limits),
           };
-        } catch (error) {
-          return { current, deadline: error instanceof LocalSessionDeadlineError };
+        } catch {
+          return { current, failure: true };
         }
       }),
     );
     for (const observation of observations) {
-      if (observation.deadline) {
+      if (observation.failure) {
         complete = false;
         continue;
       }

@@ -1,4 +1,4 @@
-import { localSessionIo } from "@lrm/coforge-anvil";
+import { localSessionIo, readLocalSessionWindows } from "@lrm/coforge-anvil";
 import { expect, test } from "bun:test";
 import { LocalSessionCatalog } from "#src/local-session/local-session-catalog";
 
@@ -137,5 +137,38 @@ test("a timed-out filesystem operation blocks another scan instead of accumulati
     scanComplete: false,
     contentSearchComplete: false,
   });
+  expect(starts).toBe(1);
+});
+
+test("a failed window keeps its stalled sibling behind the admission fence", async () => {
+  let starts = 0;
+  const stalled = new Promise<{ bytes: Uint8Array; startOffset: number }>(() => {});
+  const catalog = new LocalSessionCatalog({
+    claude: {
+      search: async (options) => {
+        starts += 1;
+        await readLocalSessionWindows(
+          "/",
+          "/session.jsonl",
+          options.limits,
+          {
+            readFileHeadBytes: async () => Promise.reject(new Error("head failed")),
+            readFileTailBytes: async () => stalled,
+          },
+          { bytes: 100 },
+        );
+        return { sessions: [], scanComplete: false, contentSearchComplete: false };
+      },
+      excerpt: async () => ({ status: "not_found" }),
+    },
+    codex: {
+      search: async () => ({ sessions: [], scanComplete: true, contentSearchComplete: true }),
+      excerpt: async () => ({ status: "not_found" }),
+    },
+    now: Date.now,
+    timeoutMs: 20,
+  });
+  expect(await catalog.search("")).toMatchObject({ scanComplete: false });
+  expect(await catalog.search("")).toMatchObject({ scanComplete: false });
   expect(starts).toBe(1);
 });

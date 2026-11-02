@@ -32,7 +32,7 @@ export interface CodexHistoryHost {
   readHostEnvironment(name: "CODEX_HOME" | "HOME" | "USERPROFILE"): string | undefined;
   homeDirectory(): string;
   readDirectoryEntries(path: string): Promise<readonly CodexDirectoryEntry[]>;
-  resolveDirectoryWithoutSymlinks(path: string): Promise<string | undefined>;
+  resolveDirectoryWithoutSymlinks(path: string): Promise<string | null>;
   readFileTail(path: string, tailBytes: number): Promise<{ text: string; startOffset: number }>;
   /** Byte windows used to reconstruct an overlap before the single UTF-8 decode. */
   readFileHeadBytes(root: string, path: string, headBytes: number): Promise<{ bytes: Uint8Array }>;

@@ -50,7 +50,7 @@ export function readHistoryFileTailBytes(root: string, path: string, maxBytes: n
  * The final lstat identity must still match its real path, closing a swap between the walk and
  * realpath. Contained file reads keep this identity and compare their opened file afterward.
  */
-export async function resolveDirectoryWithoutSymlinks(path: string): Promise<string | undefined> {
+export async function resolveDirectoryWithoutSymlinks(path: string): Promise<string | null> {
   const absolute = resolve(path);
   const root = parse(absolute).root;
   const parts = absolute
@@ -63,14 +63,16 @@ export async function resolveDirectoryWithoutSymlinks(path: string): Promise<str
     for (const part of parts) {
       current = resolve(current, part);
       final = await lstat(current);
-      if (!final.isDirectory() || final.isSymbolicLink()) return;
+      if (!final.isDirectory() || final.isSymbolicLink()) return null;
     }
-    if (!final || parts.length === 0) return;
+    if (!final || parts.length === 0) return null;
     const actual = await realpath(absolute);
     const actualInfo = await lstat(actual);
-    if (actualInfo.dev !== final.dev || actualInfo.ino !== final.ino) return;
+    if (actualInfo.dev !== final.dev || actualInfo.ino !== final.ino) return null;
     return actual;
-  } catch {
-    return;
+  } catch (error) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT")
+      return null;
+    throw error;
   }
 }

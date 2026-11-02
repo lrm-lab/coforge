@@ -127,13 +127,10 @@ export async function readLocalSessionWindows(
   try {
     const headBytes = Math.min(256 * 1024, Math.floor(allowance / 2));
     const tailBytes = Math.max(1, allowance - headBytes);
-    const [headRead, tailRead] = await localSessionIo(
-      Promise.all([
-        host.readFileHeadBytes(rootPath, path, headBytes),
-        host.readFileTailBytes(rootPath, path, tailBytes),
-      ]),
-      limits,
-    );
+    const [headRead, tailRead] = await Promise.all([
+      localSessionIo(host.readFileHeadBytes(rootPath, path, headBytes), limits),
+      localSessionIo(host.readFileTailBytes(rootPath, path, tailBytes), limits),
+    ]);
     const head = Buffer.from(headRead.bytes);
     const tail = Buffer.from(tailRead.bytes);
     const windowsCoverFile = tailRead.startOffset === 0 || tailRead.startOffset <= head.byteLength;
