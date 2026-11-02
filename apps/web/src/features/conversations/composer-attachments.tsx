@@ -167,7 +167,7 @@ export function AttachmentTile({
   const tileRef = useRef<HTMLLIElement>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   return (
-    <li ref={tileRef} className="relative shrink-0">
+    <li ref={tileRef} className="group/tile relative shrink-0">
       <Tooltip title={failureDetail} isDisabled={!failure || previewOpen} placement="top start">
         <Button
           onPress={() => setPreviewOpen(true)}
@@ -302,13 +302,21 @@ export function AttachmentTile({
           className="absolute top-1/2 right-2 -translate-y-1/2"
         />
       )}
+      {/* As Slack's composer: the remove button shows while the tile is hovered or holds focus,
+          and stays on a touch screen, which has no hover, and on a tile still uploading or
+          failed, which waits on the person. */}
       <ButtonUtility
         icon={XClose}
         size="xs"
         color="secondary"
         tooltip={m.conversation_attachment_remove_named({ name: file.name })}
         onClick={onRemove}
-        className="absolute -top-2 -right-2 rounded-full bg-primary p-0.5 shadow-xs ring-1 ring-primary"
+        className={cx(
+          "absolute -top-2 -right-2 rounded-full bg-primary p-0.5 shadow-xs ring-1 ring-primary",
+          !uploading &&
+            !failure &&
+            "opacity-0 transition-opacity group-focus-within/tile:opacity-100 group-hover/tile:opacity-100 any-pointer-coarse:opacity-100",
+        )}
       />
     </li>
   );
