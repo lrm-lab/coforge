@@ -1,3 +1,4 @@
+import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import {
   sanitizeRuntimeAuthStatus,
   runtimeAuthAccount,
@@ -144,7 +145,7 @@ export function runtimeAuthChangeAnnouncer(
       select: { userId: true },
       distinct: ["userId"],
     });
-    const signal: RuntimeAuthSignal = { type: "runtime-auth.status.v1", computerId };
+    const signal: RuntimeAuthSignal = { type: REALTIME_EVENTS.runtimeAuthStatus, computerId };
     await api.broadcast(
       members.map(({ userId }) => runtimeAuthChannel(userId)),
       signal,

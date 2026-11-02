@@ -1,3 +1,4 @@
+import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import { workspaceAssistantWelcome } from "#src/server/agents/workspace-assistant-welcome.server";
 import type { ForwardedMessage } from "@lrm/coforge-sdk/internal";
 import type { SentMessageHook } from "./sent-message-hook.server";
@@ -72,7 +73,7 @@ export class DirectConversations {
     if (created)
       await announceViewerEvent(this.realtime, {
         userIds: [...members],
-        event: { type: "dm.created.v1", workspaceId, conversationId },
+        event: { type: REALTIME_EVENTS.dmCreated, workspaceId, conversationId },
       });
     return { conversationId };
   }
@@ -185,7 +186,7 @@ export class DirectConversations {
     if (changed)
       await announceViewerEvent(this.realtime, {
         userIds: [viewerId],
-        event: { type: "pref.changed.v1", workspaceId, name: "pins" },
+        event: { type: REALTIME_EVENTS.prefChanged, workspaceId, name: "pins" },
       });
     return { pinned };
   }
@@ -199,7 +200,7 @@ export class DirectConversations {
     if (changed)
       await announceViewerEvent(this.realtime, {
         userIds: [viewerId],
-        event: { type: "pref.changed.v1", workspaceId, name: "muted" },
+        event: { type: REALTIME_EVENTS.prefChanged, workspaceId, name: "muted" },
       });
     return { muted };
   }
@@ -246,7 +247,11 @@ export class DirectConversations {
     if (changed)
       await announceViewerEvent(this.realtime, {
         userIds: [viewerId],
-        event: { type: hidden ? "dm.closed.v1" : "dm.opened.v1", workspaceId, conversationId },
+        event: {
+          type: hidden ? REALTIME_EVENTS.dmClosed : REALTIME_EVENTS.dmOpened,
+          workspaceId,
+          conversationId,
+        },
       });
     return result;
   }
@@ -321,7 +326,7 @@ export class DirectConversations {
       const { memberId, readThroughAdvanced, ...viewerState } = state;
       await announceViewerEvent(this.realtime, {
         userIds: [viewerId],
-        event: { type: "dm.marked.v1", workspaceId, conversationId, ...viewerState },
+        event: { type: REALTIME_EVENTS.dmMarked, workspaceId, conversationId, ...viewerState },
       });
       if (readThroughAdvanced)
         await announceConversationReadChanged(this.realtime, {

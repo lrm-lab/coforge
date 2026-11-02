@@ -1,3 +1,4 @@
+import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { announceViewerEvent, type ConversationRealtime } from "./conversation-realtime.server";
@@ -27,7 +28,7 @@ export async function markPublicChannelRead(input: {
   await announceViewerEvent(input.realtime, {
     userIds: [input.userId],
     event: {
-      type: "channel.marked.v1",
+      type: REALTIME_EVENTS.channelMarked,
       workspaceId: input.workspaceId,
       conversationId: input.conversationId,
       ...viewerState,

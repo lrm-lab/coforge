@@ -1,3 +1,4 @@
+import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import { workspaceConversationChannel } from "#src/features/conversations/conversation-realtime";
 import type { WorkspaceFeaturesChangedEvent } from "#src/features/workspaces/workspace-realtime";
 import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
@@ -11,7 +12,7 @@ export async function announceFeaturesChanged(
   workspaceId: string,
 ) {
   const event: WorkspaceFeaturesChangedEvent = {
-    type: "workspace.features.changed.v1",
+    type: REALTIME_EVENTS.workspaceFeaturesChanged,
     workspaceId,
   };
   await centrifugo

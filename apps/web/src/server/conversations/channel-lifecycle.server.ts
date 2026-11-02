@@ -1,3 +1,4 @@
+import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError, isAppError } from "#src/lib/app-error";
 import { CHANNEL_NAME_PATTERN } from "@lrm/coforge-sdk/internal";
@@ -101,7 +102,7 @@ export async function createUserChannel(
     }),
     announceViewerEvent(realtime, {
       userIds: [userId],
-      event: { type: "channel.joined.v1", workspaceId, conversationId: created.id },
+      event: { type: REALTIME_EVENTS.channelJoined, workspaceId, conversationId: created.id },
     }),
   ]);
   return { id: created.id };

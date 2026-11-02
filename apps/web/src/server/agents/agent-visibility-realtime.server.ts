@@ -1,3 +1,4 @@
+import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import {
   createCentrifugoServerApi,
   type CentrifugoServerApi,
@@ -12,7 +13,7 @@ export function createAgentDirectoryChangedPublisher(
 ): (workspaceId: string, agentId: string, change: AgentDirectoryChange) => Promise<void> {
   return (workspaceId, agentId, change) =>
     api.publishJson(agentStatusChannel(workspaceId), {
-      type: "agent.changed.v1",
+      type: REALTIME_EVENTS.agentChanged,
       agentId,
       kind: change,
     });

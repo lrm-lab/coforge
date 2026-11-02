@@ -1,3 +1,4 @@
+import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import {
   userConversationChannel,
   type NotificationAvailableEvent,
@@ -17,7 +18,7 @@ export function createCentrifugoNotificationPublisher(
     async notifyRecipients({ messageId, workspaceId, userIds }) {
       if (userIds.length === 0) return;
       const event: NotificationAvailableEvent = {
-        type: "notification.available.v1",
+        type: REALTIME_EVENTS.notificationAvailable,
         messageId,
         workspaceId,
       };

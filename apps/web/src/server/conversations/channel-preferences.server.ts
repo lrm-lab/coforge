@@ -1,3 +1,4 @@
+import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import type { Prisma } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
@@ -89,7 +90,7 @@ export async function setNotificationLevel(
   if (changed)
     await announceViewerEvent(realtime, {
       userIds: [userId],
-      event: { type: "pref.changed.v1", workspaceId, name: "muted" },
+      event: { type: REALTIME_EVENTS.prefChanged, workspaceId, name: "muted" },
     });
   return { notificationLevel: next };
 }
@@ -116,7 +117,7 @@ export async function setUserMuted(
   if (changed)
     await announceViewerEvent(realtime, {
       userIds: [userId],
-      event: { type: "pref.changed.v1", workspaceId, name: "muted" },
+      event: { type: REALTIME_EVENTS.prefChanged, workspaceId, name: "muted" },
     });
   return { muted };
 }
@@ -166,7 +167,7 @@ export async function setUserPinned(
   if (changed)
     await announceViewerEvent(realtime, {
       userIds: [userId],
-      event: { type: "pref.changed.v1", workspaceId, name: "pins" },
+      event: { type: REALTIME_EVENTS.prefChanged, workspaceId, name: "pins" },
     });
   return { pinned };
 }
@@ -234,7 +235,7 @@ export async function setUserHidden(
     await announceViewerEvent(realtime, {
       userIds: [userId],
       event: {
-        type: hidden ? "channel.closed.v1" : "channel.opened.v1",
+        type: hidden ? REALTIME_EVENTS.channelClosed : REALTIME_EVENTS.channelOpened,
         workspaceId,
         conversationId: channel.id,
       },

@@ -1,3 +1,4 @@
+import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import {
   encodeRuntimeAuthIntent,
   runtimeAuthKiroOptions,
@@ -49,10 +50,10 @@ export type RuntimeAuthLogoutView = {
 
 /** What the starter's channel carries; the page reads the same shape once on open. */
 export type RuntimeAuthSignal =
-  | ({ type: "runtime-auth.login.v1"; computerId: string } & RuntimeAuthLoginView)
-  | ({ type: "runtime-auth.logout.v1"; computerId: string } & RuntimeAuthLogoutView)
+  | ({ type: typeof REALTIME_EVENTS.runtimeAuthLogin; computerId: string } & RuntimeAuthLoginView)
+  | ({ type: typeof REALTIME_EVENTS.runtimeAuthLogout; computerId: string } & RuntimeAuthLogoutView)
   /** The Computer stored a newer login status report: whoever shows it reads it again. */
-  | { type: "runtime-auth.status.v1"; computerId: string };
+  | { type: typeof REALTIME_EVENTS.runtimeAuthStatus; computerId: string };
 
 function logoutView(record: RuntimeAuthLogoutRecord): RuntimeAuthLogoutView {
   const { requestId, provider, result } = record;
@@ -258,7 +259,7 @@ export class RuntimeAuth {
     if (applied === "unknown") return false;
     if (applied !== "ignored")
       await this.signal(applied.userId, {
-        type: "runtime-auth.login.v1",
+        type: REALTIME_EVENTS.runtimeAuthLogin,
         computerId: scope.computerId,
         ...loginView(applied),
       });
@@ -272,7 +273,7 @@ export class RuntimeAuth {
     if (applied === "unknown") return false;
     if (applied !== "ignored")
       await this.signal(applied.userId, {
-        type: "runtime-auth.logout.v1",
+        type: REALTIME_EVENTS.runtimeAuthLogout,
         computerId: scope.computerId,
         ...logoutView(applied),
       });

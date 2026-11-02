@@ -5,6 +5,7 @@ import {
   publicationDataOrUndefined,
 } from "#src/features/realtime/publication-data";
 import { streamPositionSchema } from "#src/features/realtime/subscription-gap";
+import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 export const conversationRealtimeChannel = (conversationId: string) => `chat:${conversationId}`;
 
 /**
@@ -290,13 +291,13 @@ const viewerEvent = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.enum([
-      "channel.joined.v1",
-      "channel.left.v1",
-      "channel.closed.v1",
-      "channel.opened.v1",
-      "dm.created.v1",
-      "dm.opened.v1",
-      "dm.closed.v1",
+      REALTIME_EVENTS.channelJoined,
+      REALTIME_EVENTS.channelLeft,
+      REALTIME_EVENTS.channelClosed,
+      REALTIME_EVENTS.channelOpened,
+      REALTIME_EVENTS.dmCreated,
+      REALTIME_EVENTS.dmOpened,
+      REALTIME_EVENTS.dmClosed,
     ]),
     ...viewerEventIds,
   }),

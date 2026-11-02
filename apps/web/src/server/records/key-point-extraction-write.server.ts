@@ -1,3 +1,4 @@
+import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { userConversationChannel } from "#src/features/conversations/conversation-realtime";
 import type { RecordChangedEvent } from "#src/features/records/record-realtime";
@@ -59,7 +60,7 @@ async function announceReportChanged(
     const userIds = [...(await reportReaders(db, report.workspaceId, report))];
     if (userIds.length === 0) return;
     const event: RecordChangedEvent = {
-      type: "record.changed.v1",
+      type: REALTIME_EVENTS.recordChanged,
       workspaceId: report.workspaceId,
       reportId: report.id,
     };

@@ -1,3 +1,4 @@
+import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import {
   announceBestEffort,
@@ -35,7 +36,12 @@ export async function announceJoinedOrLeft(
     announceMemberChanged(realtime, { workspaceId, conversationIds: [conversationId] }),
     announceViewerEvent(realtime, {
       userIds,
-      event: { type: `channel.${input.change}.v1`, workspaceId, conversationId },
+      event: {
+        type:
+          input.change === "joined" ? REALTIME_EVENTS.channelJoined : REALTIME_EVENTS.channelLeft,
+        workspaceId,
+        conversationId,
+      },
     }),
     input.change === "left" && input.private
       ? announceConversationsRevoked(realtime, {

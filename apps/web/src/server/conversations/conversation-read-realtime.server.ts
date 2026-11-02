@@ -1,3 +1,4 @@
+import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { conversationRealtimeChannel } from "#src/features/conversations/conversation-realtime";
@@ -13,7 +14,7 @@ export function publishConversationReadChanged(
   return centrifugo.publishJson(
     conversationRealtimeChannel(input.conversationId),
     {
-      type: "conversation.read.v1",
+      type: REALTIME_EVENTS.conversationRead,
       conversationId: input.conversationId,
       memberId: input.memberId,
       readThroughSequence: input.readThroughSequence,

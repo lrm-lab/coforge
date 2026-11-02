@@ -1,3 +1,4 @@
+import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import { visibleChannelWhere } from "./channel-read-access.server";
 import { viewerDirectConversationWhere } from "./viewer-direct-conversations.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
@@ -142,7 +143,7 @@ export async function arrangeConversationPins(
   if (changed)
     await announceViewerEvent(realtime, {
       userIds: [userId],
-      event: { type: "pref.changed.v1", workspaceId, name: "pins" },
+      event: { type: REALTIME_EVENTS.prefChanged, workspaceId, name: "pins" },
     });
 }
 

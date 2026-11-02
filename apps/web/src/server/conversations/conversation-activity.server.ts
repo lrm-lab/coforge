@@ -1,3 +1,4 @@
+import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import type { ConversationActivityEvent } from "#src/features/conversations/conversation-activity-event";
 import { BROWSER_MESSAGE_MENTIONS_SELECT, browserMessageMention } from "./mentions.server";
@@ -90,7 +91,7 @@ export async function announceMessage(
   // through their Activity (`task-publication.server.ts`).
   if (stored.conversation.kind === "task_thread") return;
   const event: ConversationActivityEvent = {
-    type: "conversation.activity.v1",
+    type: REALTIME_EVENTS.conversationActivity,
     workspaceId: stored.workspaceId,
     conversationId: message.conversationId,
     messageId: message.messageId,

@@ -1,3 +1,4 @@
+import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { attachmentKeys } from "#src/server/attachments/attachment.server";
@@ -76,7 +77,7 @@ export function centrifugoWorkspaceDeletionSignals(
 ): WorkspaceDeletionSignals {
   return {
     async workspaceDeleted(workspaceId) {
-      const event: WorkspaceDeletedEvent = { type: "workspace.deleted.v1", workspaceId };
+      const event: WorkspaceDeletedEvent = { type: REALTIME_EVENTS.workspaceDeleted, workspaceId };
       await centrifugo().publishJson(workspaceConversationChannel(workspaceId), event);
     },
     async reconnectDaemons(workspaceId, computerIds) {

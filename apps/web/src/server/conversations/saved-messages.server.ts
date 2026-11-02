@@ -1,3 +1,4 @@
+import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import {
   channelVisibilityOf,
   type ChannelVisibility,
@@ -67,7 +68,7 @@ export async function saveUserMessage(
   if (count === 0) return;
   await announceViewerEvent(realtime, {
     userIds: [userId],
-    event: { type: "saved.added.v1", workspaceId, conversationId, messageId: message.id },
+    event: { type: REALTIME_EVENTS.savedAdded, workspaceId, conversationId, messageId: message.id },
   });
 }
 
@@ -104,7 +105,12 @@ export async function unsaveUserMessage(
   if (count === 0) return;
   await announceViewerEvent(realtime, {
     userIds: [userId],
-    event: { type: "saved.removed.v1", workspaceId, conversationId, messageId: message.id },
+    event: {
+      type: REALTIME_EVENTS.savedRemoved,
+      workspaceId,
+      conversationId,
+      messageId: message.id,
+    },
   });
 }
 

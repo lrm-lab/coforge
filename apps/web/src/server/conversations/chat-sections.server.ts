@@ -1,3 +1,4 @@
+import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { visibleChannelWhere } from "./channel-read-access.server";
@@ -39,7 +40,7 @@ export class ChatSections {
   private announceChanged() {
     return announceViewerEvent(this.realtime, {
       userIds: [this.userId],
-      event: { type: "pref.changed.v1", workspaceId: this.workspaceId, name: "sections" },
+      event: { type: REALTIME_EVENTS.prefChanged, workspaceId: this.workspaceId, name: "sections" },
     });
   }
 
@@ -241,8 +242,8 @@ export class ChatSections {
       // A closed chat moved into a section is open again in the member's list.
       const opened =
         member.conversation.channelName === null
-          ? ("dm.opened.v1" as const)
-          : ("channel.opened.v1" as const);
+          ? REALTIME_EVENTS.dmOpened
+          : REALTIME_EVENTS.channelOpened;
       return { unpinned, reopened: member.hiddenAt ? opened : undefined };
     });
     await this.announceChanged();
@@ -254,7 +255,7 @@ export class ChatSections {
     if (unpinned)
       await announceViewerEvent(this.realtime, {
         userIds: [this.userId],
-        event: { type: "pref.changed.v1", workspaceId: this.workspaceId, name: "pins" },
+        event: { type: REALTIME_EVENTS.prefChanged, workspaceId: this.workspaceId, name: "pins" },
       });
   }
 }

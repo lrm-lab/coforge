@@ -1,3 +1,4 @@
+import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import {
   conversationRealtimeChannel,
   userConversationChannel,
@@ -171,7 +172,7 @@ export class CentrifugoConversationRealtime implements ConversationRealtime {
     await Promise.all(
       input.conversationIds.map((conversationId) => {
         const event: MemberChangedEvent = {
-          type: "member.changed.v1",
+          type: REALTIME_EVENTS.memberChanged,
           conversationId,
           workspaceId: input.workspaceId,
         };
@@ -185,7 +186,7 @@ export class CentrifugoConversationRealtime implements ConversationRealtime {
   }
 
   async channelUpdated({ memberUserIds, ...input }: ChannelUpdatedSignal) {
-    const event: ChannelUpdatedEvent = { type: "channel.updated.v1", ...input };
+    const event: ChannelUpdatedEvent = { type: REALTIME_EVENTS.channelUpdated, ...input };
     await this.centrifugo.broadcast(
       [
         ...sidebarChannels(input.workspaceId, memberUserIds),
@@ -197,7 +198,7 @@ export class CentrifugoConversationRealtime implements ConversationRealtime {
   }
 
   async channelCreated({ memberUserIds, ...input }: ChannelCreatedSignal) {
-    const event: ChannelCreatedEvent = { type: "channel.created.v1", ...input };
+    const event: ChannelCreatedEvent = { type: REALTIME_EVENTS.channelCreated, ...input };
     await this.centrifugo.broadcast(
       sidebarChannels(input.workspaceId, memberUserIds),
       event,
@@ -211,7 +212,7 @@ export class CentrifugoConversationRealtime implements ConversationRealtime {
     attention?: ActivityAttention;
   }) {
     const event: ActivityChangedEvent = {
-      type: "activity.changed.v1",
+      type: REALTIME_EVENTS.activityChanged,
       workspaceId: input.workspaceId,
       ...(input.attention && { attention: input.attention }),
     };
@@ -230,7 +231,7 @@ export class CentrifugoConversationRealtime implements ConversationRealtime {
     // Only its own channel; a fresh key, as Centrifugo drops a key it saw minutes ago.
     await this.centrifugo.publishJson(
       conversationRealtimeChannel(input.conversationId),
-      { type: "message.reaction.v1", ...input } satisfies MessageReactionEvent,
+      { type: REALTIME_EVENTS.messageReaction, ...input } satisfies MessageReactionEvent,
       `${input.messageId}:reaction:${crypto.randomUUID()}`,
     );
   }
@@ -242,7 +243,7 @@ export class CentrifugoConversationRealtime implements ConversationRealtime {
   async taskChanged(signal: TaskChangedSignal) {
     const { publicationId, userId, agentId, directUserIds, memberUserIds, ...announced } = signal;
     const event: TaskChangedEvent = {
-      type: "task.changed.v1",
+      type: REALTIME_EVENTS.taskChanged,
       workspaceId: announced.workspaceId,
       conversationId: announced.conversationId,
       tasks: announced.tasks,
@@ -275,7 +276,7 @@ export class CentrifugoConversationRealtime implements ConversationRealtime {
     void directUserIds;
     void directPair;
     const event: MessageAvailableEvent = {
-      type: "message.available.v1",
+      type: REALTIME_EVENTS.messageAvailable,
       ...message,
     };
     await this.centrifugo.publishJson(
