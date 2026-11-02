@@ -301,31 +301,44 @@ export class MessageForwards {
     if (!source.attachments.length) return { ids: [], discard };
     try {
       const files = await this.ports.storage();
-      for (const original of source.attachments) {
-        const id = randomUUID();
-        const objectKey = `workspaces/${scope.workspaceId}/attachments/${id}/original`;
-        await files.copyObject(original.objectKey, objectKey);
-        copied.push({ id, objectKey });
-        await db.attachment.create({
-          data: {
-            id,
-            workspaceId: scope.workspaceId,
-            conversationId: scope.destination,
-            uploaderId: scope.userId,
-            objectKey,
-            fileName: original.fileName,
-            contentType: original.contentType,
-            sizeBytes: original.sizeBytes,
-            imageWidth: original.imageWidth,
-            imageHeight: original.imageHeight,
-          },
-        });
-      }
+      // Wait for every copy before discarding on failure: a sibling may finish after the first
+      // error, and `copied` must contain every object and row the cleanup can reach.
+      const results = await Promise.allSettled(
+        source.attachments.map(async (original) => {
+          const id = randomUUID();
+          const objectKey = `workspaces/${scope.workspaceId}/attachments/${id}/original`;
+          await files.copyObject(original.objectKey, objectKey);
+          copied.push({ id, objectKey });
+          await db.attachment.create({
+            data: {
+              id,
+              workspaceId: scope.workspaceId,
+              conversationId: scope.destination,
+              uploaderId: scope.userId,
+              objectKey,
+              fileName: original.fileName,
+              contentType: original.contentType,
+              sizeBytes: original.sizeBytes,
+              imageWidth: original.imageWidth,
+              imageHeight: original.imageHeight,
+            },
+          });
+          return id;
+        }),
+      );
+      const failed = results.find((result) => result.status === "rejected");
+      if (failed?.status === "rejected") throw failed.reason;
+      return {
+        ids: results.map((result) => {
+          if (result.status !== "fulfilled") throw result.reason;
+          return result.value;
+        }),
+        discard,
+      };
     } catch (error) {
       await discard();
       throw error;
     }
-    return { ids: copied.map((copy) => copy.id), discard };
   }
 }
 
