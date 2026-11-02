@@ -226,14 +226,21 @@ test("benchmark changes run the Web job, which checks and tests the benchmarks, 
     expect(selectChecks([path], "web")).toEqual([]);
   }
   const ci = Bun.YAML.parse(await Bun.file(".github/workflows/ci.yml").text());
-  const steps = ci.jobs.web.steps.map((step: { run?: string }) => step.run);
-  const web = steps.indexOf("mise run check:web");
-  const benchmarks = steps.indexOf(
+  const steps = ci.jobs.web.steps as { run?: string; if?: string }[];
+  const runs = steps.map((step) => step.run?.trim());
+  const build = runs.findIndex((run) => run?.startsWith("mise run build:web"));
+  const benchmarks = runs.indexOf(
     "bun run --filter './benchmark/*' check && bun run --filter './benchmark/*' --if-present test",
   );
-  expect(web).toBeGreaterThan(-1);
-  expect(benchmarks).toBeGreaterThan(web);
-  expect(ci.jobs.web.steps[benchmarks].if).toBe("inputs.track != 'web'");
+  // The Web build generates the sources the benchmarks import (Prisma client, Paraglide messages).
+  expect(build).toBeGreaterThan(-1);
+  expect(benchmarks).toBeGreaterThan(build);
+  // The benchmarks run on the build machine, which the Web track does not start.
+  expect(steps[build]!.if).toBe("matrix.part == 'build'");
+  expect(steps[benchmarks]!.if).toBe("matrix.part == 'build'");
+  expect(ci.jobs.web.strategy.matrix.part).toBe(
+    `\${{ fromJSON(inputs.track == 'web' && '["1/3","2/3","3/3"]' || '["1/3","2/3","3/3","build"]') }}`,
+  );
 });
 
 test("Daemon and CLI changes run the Web job, whose tests and benchmarks import them, and deploy nothing", () => {

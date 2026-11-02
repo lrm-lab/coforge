@@ -72,10 +72,17 @@ Markdown assets inside source directories remain code inputs. Documentation-only
 PRs run path selection, changed-line whitespace checks and the
 [hard rules](../agents/git-hooks/hard-rules.md) (size ratchet, relative Markdown
 links, new suppressions, author identity) without installing workspace
-dependencies. CI-policy tests and workflow/static lint run as a parallel script
-suite when shared inputs, CI, or unclassified files change.
+dependencies. A push to `main` that changes only those documentation paths starts
+no CI run (`paths-ignore`). The next run diffs from the last successful one, so
+its whitespace and Markdown rules cover them; their author identity is checked
+only by the git hooks, since a run checks the authors of its own push. Pull requests keep the run, because a required check that never
+reports leaves the PR unmergeable. CI-policy tests and workflow/static lint run in
+the script suite job when shared inputs, CI, or unclassified files change. The
+selected script suites share one job, and the selected library packages another
+(`scripts/ci/validate-each.sh`), so a full run fits GitHub Free's 20 concurrent
+jobs instead of queueing behind them.
 PR diffs use the merge base. A push to `main` diffs from the head of CI's last
-successful push run on `main`, so commits whose runs were superseded, cancelled,
+successful push run on `main`, so commits whose runs were skipped, cancelled,
 or failed stay in scope until a run passes; with no earlier successful push run
 it gets full coverage. Renames include both old and new paths. A dispatched run
 has no diff base and gets its track's full coverage.
@@ -93,8 +100,10 @@ aggregate rather than individual conditional/matrix job names; changing that
 GitHub setting requires separate authorization. The `main` ruleset lets the
 Maintain and Admin roles bypass it, and CI checks their direct pushes only
 after they land, so a maintainer runs the local checks before pushing. A PR
-update or a newer push to `main` cancels the stale CI run; release-track checks
-do not cancel an active publication or deployment.
+update cancels the PR's stale CI run. Every push to `main` runs to completion in
+a concurrency group of its own commit: a shared group keeps only one pending run
+and cancels the rest even without `cancel-in-progress`. Release-track checks do
+not cancel an active publication or deployment.
 The cloud workflow keeps GitHub's default single pending run: a newer dispatch
 replaces a waiting one, and the running deployment is never cancelled.
 
@@ -106,16 +115,29 @@ successful CI" result. Docker image builds and version/feed-specific
 cross-compilation remain artifact builds. Web deployment relies on its Docker
 build instead of also building a disposable host bundle.
 
-Package validation caches Bun's download cache by runner OS, architecture,
-toolchain configuration, and lockfile. Every job still runs a frozen install;
-cache hits never skip dependency validation. The image job installs only Bun on
-the host; workspace dependencies are installed inside Docker. The image build
-uses no build cache, since other jobs on `main` could write one and so supply
-the image's layers. It sets `SOURCE_DATE_EPOCH` to `0` and exports with
-`rewrite-timestamp=true` instead, so the files the build writes get that
-constant timestamp. A layer rebuilt from unchanged inputs then keeps its digest
-when its commands write the same bytes, as the migration toolchain's
-`bun install` does, and deploy hosts do not pull it again.
+On Linux, package validation caches Bun's download cache by architecture,
+toolchain configuration, and lockfile. macOS and Windows jobs install cold:
+restoring the cache there took as long as the install it saves. Every job still
+runs a frozen install; cache hits never skip dependency validation. The Windows
+executable job keeps Bun's cache on the checkout's volume, so Bun hardlinks
+packages instead of copying them. The installer crate job restores its compiled
+dependencies per target with [Swatinem/rust-cache](https://github.com/Swatinem/rust-cache),
+saved only by a push to `main`; no other job reads it.
+
+Web and Daemon tests run one file at a time in one process, so their files are
+split across runners with `bun test --shard`
+([Bun's parallel test runner](https://bun.com/docs/test/parallel)): three for
+Web, two for the Daemon. `bun test --parallel` is not used: it hung a Web worker.
+A fourth Web runner builds and smokes the package and checks the benchmarks.
+
+The image job installs only Bun on the host; workspace dependencies are
+installed inside Docker. The image build uses no build cache, since other jobs
+on `main` could write one and so supply the image's layers. It sets
+`SOURCE_DATE_EPOCH` to `0` and exports with `rewrite-timestamp=true` instead, so
+the files the build writes get that constant timestamp. A layer rebuilt from
+unchanged inputs then keeps its digest when its commands write the same bytes,
+as the migration toolchain's `bun install` does, and deploy hosts do not pull it
+again.
 
 Deploy and release jobs also restore nothing from the Actions cache:
 `cache: false` on `jdx/mise-action` and `cache-binary: false` on
