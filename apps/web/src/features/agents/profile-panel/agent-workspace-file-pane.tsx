@@ -8,9 +8,6 @@ import { Attachment } from "#src/features/records/report-editor/attachment";
 import { m } from "#src/paraglide/messages";
 import { workspaceImageSource } from "./agent-workspace-image";
 
-/** The Working directory tab's open file: the viewer for text, the image renderer for images, or
- * why it cannot be shown. */
-
 /** The file viewer (with the Markdown editor and syntax highlighter it renders with) loads only when
  * a file is opened: this tab is reachable from every chat page through the channel settings and
  * profile panels, and the viewer is the largest code on that path. */
@@ -36,6 +33,8 @@ export type FileState =
       path: string;
     };
 
+/** The Working directory tab's open file: the viewer for text, the image renderer for images, or
+ * why it cannot be shown. */
 export function FilePane({
   state,
   onRetry,

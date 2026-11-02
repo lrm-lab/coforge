@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import type { FormEvent, ReactNode } from "react";
 import { Heading, Text } from "react-aria-components";
 import { Plus, XClose as X } from "@untitledui/icons";
 
@@ -6,6 +6,7 @@ import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { m } from "#src/paraglide/messages";
+import { useScrollEdges } from "#src/hooks/use-scroll-edges";
 import { cx } from "#src/utils/cx";
 
 /** The new-Agent dialog's frame (Figma 3745:7147): a 400px card whose cloud and local forms swap
@@ -52,7 +53,7 @@ export function AgentCreateForm({
   switchTo?: { label: string; onPress: () => void; isDisabled?: boolean };
   children: ReactNode;
 }) {
-  const { ref, above, below } = useScrollEdges();
+  const { ref, start: above, end: below } = useScrollEdges("y");
   return (
     <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
       <div className="shrink-0">{intro}</div>
@@ -84,34 +85,6 @@ export function AgentCreateForm({
       <div className="shrink-0">{footer}</div>
     </form>
   );
-}
-
-/** Whether a scroll box has content above or below what it shows; kept current as it scrolls or
- * its content or height changes. */
-function useScrollEdges() {
-  const ref = useRef<HTMLDivElement>(null);
-  const [edges, setEdges] = useState({ above: false, below: false });
-  useEffect(() => {
-    const box = ref.current;
-    if (!box) return;
-    const measure = () => {
-      const above = box.scrollTop > 0;
-      const below = box.scrollTop + box.clientHeight < box.scrollHeight - 1;
-      setEdges((current) =>
-        current.above === above && current.below === below ? current : { above, below },
-      );
-    };
-    measure();
-    box.addEventListener("scroll", measure, { passive: true });
-    const resize = new ResizeObserver(measure);
-    resize.observe(box);
-    for (const child of box.children) resize.observe(child);
-    return () => {
-      box.removeEventListener("scroll", measure);
-      resize.disconnect();
-    };
-  }, []);
-  return { ref, ...edges };
 }
 
 /** The dialog's title on one line with the close button at its end, and a line under it only

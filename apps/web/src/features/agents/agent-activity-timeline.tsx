@@ -1,18 +1,25 @@
-import { memo, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+  memo,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { replaceEqualDeep } from "@tanstack/react-query";
-import { Activity as ActivityIcon, ChevronRight } from "@untitledui/icons";
+import { ChevronRight } from "@untitledui/icons";
 import { AGENT_ACTIVITY_DETAIL_KIND, type AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
 import { ClockTime } from "#src/components/ui/relative-time";
 import { ConversationBottomPin } from "#src/features/conversations/conversation-bottom-pin";
 import { cn } from "#src/lib/utils";
-import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import type { ActivityEntry } from "./agent-activity";
 import { ACTIVITY_MARKER_CLASS, ActivityMarker } from "./activity-marker";
 import { ModelResponseWait } from "./model-response-wait";
-import { AgentTabEmpty } from "./profile-panel/agent-tab-empty";
 import {
   presentActivityRows,
   subagentBadgeLabel,
@@ -26,10 +33,13 @@ export function AgentActivityTimeline({
   activity,
   display,
   timeZone,
+  emptyState,
 }: {
   activity: ActivityEntry[];
   display?: AgentDisplaySnapshot;
   timeZone: string | null;
+  /** What shows while there is no activity yet: the host's own empty state. */
+  emptyState: ReactNode;
 }) {
   // Each live frame re-presents the whole feed into fresh objects. Handing an unchanged row its
   // previous object back lets `memo` skip it, so a frame re-renders only the rows it added or
@@ -106,15 +116,7 @@ export function AgentActivityTimeline({
     reading.current = following.current ? undefined : readingRowOf(container);
   }
 
-  if (!rows.length)
-    return (
-      <AgentTabEmpty
-        belowBar
-        icon={ActivityIcon}
-        title={m.agent_activity_empty()}
-        description={m.agent_activity_empty_description()}
-      />
-    );
+  if (!rows.length) return emptyState;
 
   return (
     <div

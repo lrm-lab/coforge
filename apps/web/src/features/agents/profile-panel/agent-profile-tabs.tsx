@@ -1,4 +1,3 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   Activity as ActivityIcon,
   AlarmClock,
@@ -10,6 +9,7 @@ import {
 
 import { ReorderableTabStrip } from "#src/components/ui/reorderable-tab-strip";
 import { usePanelTabOrder } from "#src/features/panel-tabs/panel-tab-order-context";
+import { edgeFadeStyle, useScrollEdges } from "#src/hooks/use-scroll-edges";
 import { m } from "#src/paraglide/messages";
 import { visibleAgentProfileTabs, type AgentProfileTab } from "./profile-panel-search";
 
@@ -52,34 +52,13 @@ export function AgentProfileTabs({
   onSelect: (tab: AgentProfileTab) => void;
   onReorder: (order: AgentProfileTab[]) => void;
 }) {
-  const strip = useRef<HTMLDivElement>(null);
-  const [fade, setFade] = useState({ start: false, end: false });
-  const measure = useCallback(() => {
-    const element = strip.current;
-    if (!element) return;
-    const hidden = element.scrollWidth - element.clientWidth;
-    const start = element.scrollLeft > 1;
-    const end = element.scrollLeft < hidden - 1;
-    setFade((current) =>
-      current.start === start && current.end === end ? current : { start, end },
-    );
-  }, []);
-  // The strip's own width and each tab's (a label grows once its font arrives) move the edges.
-  useEffect(() => {
-    const element = strip.current;
-    if (!element) return;
-    const observer = new ResizeObserver(measure);
-    observer.observe(element);
-    for (const tab of element.querySelectorAll('[role="tab"]')) observer.observe(tab);
-    measure();
-    return () => observer.disconnect();
-  }, [measure, tabs]);
+  // Each tab's width (a label grows once its font arrives) moves the edges too.
+  const fade = useScrollEdges("x", { observe: '[role="tab"]', key: tabs.join(" ") });
   return (
     <div className="relative shrink-0 before:absolute before:inset-x-0 before:bottom-0 before:h-px before:bg-border-secondary">
       <div
-        ref={strip}
-        onScroll={measure}
-        style={edgeFade(fade)}
+        ref={fade.ref}
+        style={edgeFadeStyle(fade)}
         className="scrollbar-hide flex items-end overflow-x-auto px-5 pt-1"
       >
         <ReorderableTabStrip
@@ -90,18 +69,9 @@ export function AgentProfileTabs({
           onSelect={onSelect}
           onReorder={onReorder}
           size="sm"
-          scrollRef={strip}
+          scrollRef={fade.ref}
         />
       </div>
     </div>
   );
-}
-
-/** A mask that fades the strip's edges past which more tabs are scrolled out of view. */
-function edgeFade({ start, end }: { start: boolean; end: boolean }): CSSProperties | undefined {
-  if (!start && !end) return undefined;
-  const mask = `linear-gradient(to right, ${start ? "transparent, black 2rem" : "black"}, ${
-    end ? "black calc(100% - 2rem), transparent" : "black"
-  })`;
-  return { maskImage: mask, WebkitMaskImage: mask };
 }

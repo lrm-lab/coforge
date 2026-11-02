@@ -46,6 +46,12 @@
   --spacing-page: var(--page-gutter);
 }
 
+/* The bar across the top of an Agent panel tab (Activity, Chat); an empty state under it starts
+   this much higher, so it sits where it sits in a tab without one (agent-tab-empty.tsx). */
+@theme {
+  --spacing-agent-tab-bar: 2.5rem;
+}
+
 /* A list column beside a conversation pane (Activity, Search): the width its resize handle keeps
    (`LIST_COLUMN` in conversation-list-width.ts, 380px = 23.75rem by default), at most half the
    page so the conversation keeps room (docs/design/sizing-units.md). */

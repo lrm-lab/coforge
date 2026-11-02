@@ -9,9 +9,11 @@ import {
 } from "#src/components/ui/empty";
 import { cn } from "#src/lib/utils";
 
-/** A bar across the top of a tab (Activity's diagnostics, Chat's heading): one height, so an
- * empty state under it can sit where it sits in a tab without one. */
-export const AGENT_TAB_BAR_CLASS = "flex h-10 shrink-0 items-center border-b border-secondary";
+/** A bar across the top of a tab (Activity's diagnostics, Chat's heading). Its height is the
+ * `agent-tab-bar` spacing token, which an empty state under it subtracts, so the empty state sits
+ * where it sits in a tab without a bar. */
+export const AGENT_TAB_BAR_CLASS =
+  "flex h-agent-tab-bar shrink-0 items-center border-b border-secondary";
 
 /**
  * A profile-panel tab with nothing in it yet: the tab's own icon, what will show up here, and how
@@ -35,7 +37,7 @@ export function AgentTabEmpty({
     <Empty
       className={cn(
         "justify-start px-6 pb-12",
-        belowBar ? "pt-[calc(min(22vh,12rem)-2.5rem)]" : "pt-[min(22vh,12rem)]",
+        belowBar ? "pt-[calc(min(22vh,12rem)-var(--spacing-agent-tab-bar))]" : "pt-[min(22vh,12rem)]",
       )}
     >
       <EmptyHeader className="mb-0 max-w-80">

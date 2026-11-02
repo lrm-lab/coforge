@@ -1,3 +1,4 @@
+import { Activity as ActivityIcon } from "@untitledui/icons";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 
 import { Skeleton } from "#src/components/ui/skeleton";
@@ -5,7 +6,7 @@ import type { AgentDiagnosticFacts } from "#src/features/agents/agent-diagnostic
 import { AgentActivityTimeline } from "#src/features/agents/agent-activity-timeline";
 import { useAgentActivityFeed } from "#src/features/agents/workspace-agents-realtime";
 import { cn } from "#src/lib/utils";
-import { AGENT_TAB_BAR_CLASS } from "./agent-tab-empty";
+import { AGENT_TAB_BAR_CLASS, AgentTabEmpty } from "./agent-tab-empty";
 import { m } from "#src/paraglide/messages";
 import { CopyDiagnosticsButton } from "./copy-diagnostics-button";
 import { SECTION_CAPTION_CLASS } from "./inline-edit-field";
@@ -35,6 +36,14 @@ export function AgentActivityTab({
             activity={feed.data}
             display={display}
             timeZone={timeZone}
+            emptyState={
+              <AgentTabEmpty
+                belowBar
+                icon={ActivityIcon}
+                title={m.agent_activity_empty()}
+                description={m.agent_activity_empty_description()}
+              />
+            }
           />
         ) : feed.isError && !feed.isFetching ? (
           <PanelMessage text={m.agent_activity_error()} alert onRetry={() => void feed.refetch()} />
