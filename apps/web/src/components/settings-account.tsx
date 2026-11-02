@@ -1,15 +1,12 @@
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
-import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useState } from "react";
 import { useHydrated } from "@tanstack/react-router";
 import { useReducedMotion } from "motion/react";
-import { Check } from "@untitledui/icons";
+import { Camera01, Check } from "@untitledui/icons";
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import AnimatedGradient from "#src/components/spell/animated-gradient";
 import { heroGradient, useWebGl2 } from "#src/features/landing/landing-brand-panel";
-import { RadioGroup } from "react-aria-components";
-import { AvatarChoice } from "#src/features/avatars/avatar-choice";
-import { avatarPresets } from "#src/features/profiles/avatar-presets";
-import { Label } from "#src/components/base/input/label";
+import { PersonAvatarDialog } from "#src/features/profiles/person-avatar-dialog";
 import { CreatedAgentFaces } from "#src/features/agents/created-agent-faces";
 import profileBanner from "#src/features/profiles/profile-banner.webp?inline";
 import { Button } from "#src/components/base/buttons/button";
@@ -57,7 +54,6 @@ export function AccountSettings({
   onProfileSave,
   onAvatarUpload,
   onAvatarPresetChoose,
-  onAvatarRemove,
 }: SettingsContentProps) {
   const hydrated = useHydrated();
   const gradientReady = useWebGl2();
@@ -66,26 +62,9 @@ export function AccountSettings({
   const [displayName, setDisplayName] = useState(profile.displayName ?? "");
   const [description, setDescription] = useState(profile.description);
   const [saving, guard] = useSubmitGuard();
-  const [pendingAvatar, setPendingAvatar] = useState<File | null>(null);
-  // A platform picture chosen in the form, saved with the rest of it like an uploaded one.
-  const [pendingPresetId, setPendingPresetId] = useState<string | null>(null);
-  const [removeAvatar, setRemoveAvatar] = useState(false);
   const [saveError, setSaveError] = useState<SaveError | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  // Show the just-picked image immediately, before it is uploaded on Save. Without this the
-  // preview keeps showing the saved `profile.avatarUrl` until a save round-trips, which reads as
-  // "the avatar didn't change". Object URLs must be revoked to avoid leaking the blob.
-  const [pendingAvatarPreview, setPendingAvatarPreview] = useState<string | null>(null);
-  useEffect(() => {
-    if (!pendingAvatar) {
-      setPendingAvatarPreview(null);
-      return;
-    }
-    const url = URL.createObjectURL(pendingAvatar);
-    setPendingAvatarPreview(url);
-    return () => URL.revokeObjectURL(url);
-  }, [pendingAvatar]);
-  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const [avatarDialogOpen, setAvatarDialogOpen] = useState(false);
 
   useEffect(() => {
     if (!editing) {
@@ -97,9 +76,6 @@ export function AccountSettings({
   function startEditing() {
     setDisplayName(profile.displayName ?? "");
     setDescription(profile.description);
-    setPendingAvatar(null);
-    setPendingPresetId(null);
-    setRemoveAvatar(false);
     setSaveError(null);
     setSaveSuccess(false);
     setEditing(true);
@@ -108,80 +84,28 @@ export function AccountSettings({
   function cancelEditing() {
     setDisplayName(profile.displayName ?? "");
     setDescription(profile.description);
-    setPendingAvatar(null);
-    setPendingPresetId(null);
-    setRemoveAvatar(false);
     setEditing(false);
   }
 
   async function save() {
     await guard(async () => {
       setSaveError(null);
-      let avatarSaved = false;
       try {
-        if (pendingAvatar) {
-          await onAvatarUpload(pendingAvatar);
-          avatarSaved = true;
-          setPendingAvatar(null);
-        } else if (pendingPresetId) {
-          await onAvatarPresetChoose(pendingPresetId);
-          avatarSaved = true;
-          setPendingPresetId(null);
-        } else if (removeAvatar) {
-          await onAvatarRemove();
-          avatarSaved = true;
-          setRemoveAvatar(false);
-        }
-        if (profileTextChanged) await onProfileSave({ displayName, description });
+        await onProfileSave({ displayName, description });
         setSaveSuccess(true);
         setEditing(false);
       } catch (cause) {
-        const message = avatarSaved
-          ? m.settings_profile_save_partial_error()
-          : avatarChanged
-            ? m.settings_avatar_save_error()
-            : m.settings_profile_save_error();
-        setSaveError(saveErrorFrom(message, cause));
+        setSaveError(saveErrorFrom(m.settings_profile_save_error(), cause));
       }
     });
   }
 
-  function upload(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    setPendingAvatar(file);
-    setPendingPresetId(null);
-    setRemoveAvatar(false);
-  }
-
-  function choosePreset(presetId: string) {
-    setPendingPresetId(presetId);
-    setPendingAvatar(null);
-    setRemoveAvatar(false);
-  }
-
-  const avatarChanged = pendingAvatar !== null || pendingPresetId !== null || removeAvatar;
   const profileTextChanged =
     displayName !== (profile.displayName ?? "") || description !== profile.description;
-  const changed = avatarChanged || profileTextChanged;
+  const changed = profileTextChanged;
   // A name the server would refuse is said so here, where it is typed, not as a failed save.
   const displayNameProblem = nameProblem(displayName);
   const canSave = changed && !saving && !displayNameProblem;
-
-  const pendingPresetUrl = avatarPresets.find((preset) => preset.id === pendingPresetId)?.url;
-  const headerAvatarSrc = editing
-    ? removeAvatar
-      ? undefined
-      : (pendingAvatarPreview ?? pendingPresetUrl ?? profile.avatarUrl)
-    : profile.avatarUrl;
-  // The ringed picture: the one chosen now, else the saved one when it is a platform picture and
-  // no upload or removal is pending.
-  const selectedPresetId =
-    pendingPresetId ??
-    (pendingAvatar || removeAvatar
-      ? null
-      : (avatarPresets.find((preset) => preset.url === profile.avatarUrl)?.id ?? null));
 
   return (
     <div className="w-full pb-8">
@@ -197,16 +121,34 @@ export function AccountSettings({
           )}
         </div>
         <header className="flex min-w-0 items-start gap-4 px-4 sm:gap-6 sm:px-8">
-          <div className="relative -mt-12 shrink-0">
+          {/* The picture is the way to change it, as on an Agent's profile: a camera shows on
+              hover or focus. */}
+          <Button
+            color="link-gray"
+            noTextPadding
+            aria-label={m.settings_avatar_dialog_title()}
+            className="relative -mt-12 shrink-0 rounded-full!"
+            onPress={() => setAvatarDialogOpen(true)}
+          >
             <IdentityAvatar
               size="2xl"
               className="size-24"
               name={profile.name}
-              alt={profile.name}
+              alt=""
               userId={profile.id}
-              src={headerAvatarSrc}
+              src={profile.avatarUrl}
             />
-          </div>
+            <span className="absolute right-0 bottom-0 grid size-7 place-items-center rounded-full bg-primary text-fg-secondary opacity-0 shadow-xs ring-1 ring-secondary transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+              <Camera01 className="size-4" />
+            </span>
+          </Button>
+          <PersonAvatarDialog
+            currentAvatarUrl={profile.avatarUrl}
+            open={avatarDialogOpen}
+            onOpenChange={setAvatarDialogOpen}
+            onSave={onAvatarPresetChoose}
+            onUpload={onAvatarUpload}
+          />
           <div className="min-w-0 flex-1 pt-4">
             <h2 className="break-words text-display-xs font-semibold text-primary">
               {profile.name}
@@ -255,68 +197,6 @@ export function AccountSettings({
                 isDisabled={saving}
                 onChange={setDisplayName}
               />
-
-              <div className="flex flex-col gap-1.5">
-                <RadioGroup
-                  value={selectedPresetId}
-                  onChange={choosePreset}
-                  isDisabled={saving}
-                  orientation="horizontal"
-                  className="flex flex-col gap-1.5"
-                >
-                  <Label>{m.welcome_avatar_label()}</Label>
-                  {/* Fixed tracks: five a row at the name step's size, however wide the column. */}
-                  <div className="grid grid-cols-[repeat(5,3.5rem)] gap-3">
-                    {avatarPresets.map((preset) => (
-                      <AvatarChoice
-                        key={preset.id}
-                        value={preset.id}
-                        src={preset.url}
-                        label={m.settings_avatar_preset_label({ number: preset.number })}
-                        hideLabel
-                      />
-                    ))}
-                  </div>
-                </RadioGroup>
-                <div className="mt-1.5 flex flex-wrap items-center gap-x-4">
-                  <Button
-                    type="button"
-                    color="link-color"
-                    size="sm"
-                    isDisabled={saving}
-                    onPress={() => avatarInputRef.current?.click()}
-                  >
-                    {m.settings_avatar_change()}
-                  </Button>
-                  <input
-                    ref={avatarInputRef}
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    aria-label={m.settings_avatar_change()}
-                    disabled={saving}
-                    className="sr-only"
-                    onChange={upload}
-                  />
-                  <Button
-                    type="button"
-                    color="link-gray"
-                    size="sm"
-                    isDisabled={
-                      saving ||
-                      removeAvatar ||
-                      !(profile.hasAvatar || pendingAvatar || pendingPresetId)
-                    }
-                    onPress={() => {
-                      setPendingAvatar(null);
-                      setPendingPresetId(null);
-                      setRemoveAvatar(profile.hasAvatar);
-                    }}
-                  >
-                    {m.settings_avatar_remove()}
-                  </Button>
-                </div>
-                <p className="text-sm text-tertiary">{m.settings_avatar_help()}</p>
-              </div>
 
               {profile.email || profile.phone ? (
                 <dl className="flex min-w-0 flex-col gap-6">

@@ -329,13 +329,6 @@ function SettingsPage() {
     await queryClient.invalidateQueries({ queryKey: ["conversation"] });
   }
 
-  async function removeAvatar() {
-    const response = await fetch("/api/me/avatar", { method: "DELETE" });
-    if (!response.ok) throw new Error("Profile image removal failed");
-    await refreshOwnProfile();
-    await queryClient.invalidateQueries({ queryKey: ["conversation"] });
-  }
-
   return (
     <SettingsContent
       githubCallbackFailure={github === "connected" ? undefined : github}
@@ -355,7 +348,6 @@ function SettingsPage() {
       onProfileSave={changeProfile}
       onAvatarUpload={uploadAvatar}
       onAvatarPresetChoose={choosePresetAvatar}
-      onAvatarRemove={removeAvatar}
       onLocaleChange={setLocale}
       onThemeChange={changeTheme}
       hideEmptySidebarSections={hideEmptySidebarSections}

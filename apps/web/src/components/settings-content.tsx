@@ -71,7 +71,6 @@ export interface SettingsContentProps {
   onProfileSave: (profile: { displayName: string; description: string }) => Promise<void>;
   onAvatarUpload: (file: File) => Promise<void>;
   onAvatarPresetChoose: (presetId: string) => Promise<void>;
-  onAvatarRemove: () => Promise<void>;
   onLocaleChange: (locale: Locale) => void;
   onThemeChange: (theme: Theme) => void;
   onMessageFullWidthChange: (full: boolean) => void;
