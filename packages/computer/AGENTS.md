@@ -72,17 +72,8 @@ that never ran. It has no pause, runner hold, or resume: an installer upgrade st
 outright and busy Agents are stopped with it. Do not add a control verb without a product decision. The
 product's own upgrade and `__lifecycle status` share `release/supervisor-status.ts`.
 
-`scripts/installer-contract.ts` (outside `src/`, never bundled) generates
-`crates/installer/contract/`, the cross-language contract with the Rust installer:
-JSON Schema via `z.toJSONSchema()` plus golden files. This package is its source
-of truth; each shape's zod schema lives in the module that owns the concept
-(`updater.ts`, `release/installer-contract.ts`, and the upgrade receipt in
-`@lrm/coforge-sdk/internal/upgrade-receipt`, which the Daemon's single receipt reader also uses).
-`scripts/installer-receipt-cases.ts` holds, as literals, the receipts that schema accepts
-and refuses; the Rust crate builds and checks every row.
-After changing a contract shape or a value it exports (paths, service names,
-launchers, lock, feed environments), run `bun run generate:installer-contract`
-and commit the result; `test/installer-contract.test.ts` and CI fail otherwise.
+`scripts/` holds build tooling that is never bundled; its rules are in
+[scripts/AGENTS.md](scripts/AGENTS.md).
 The install root (`<home>/.coforge/computer/install`) and the upgrade receipt reader are
 owned by `@lrm/coforge-daemon` (`resolveComputerInstallDirectory`, `readUpgradeReceipt`);
 the Computer imports them and does not rebuild either path.
