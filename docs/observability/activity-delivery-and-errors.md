@@ -80,10 +80,12 @@ reason），否则退回到通用的 `AgentRuntimeError`/`runtime_failure`。唯
 `providerLimit`：它不是自由格式的提示，而是封闭取值的事实（`quota_exhausted` 或
 `transient_rate_limit`，可带 `resetsAt`），provider 只在确知失败是用量或限流上限时才设置
 （目前只有 Claude Code，依据 assistant 记录的 `error` 和同一会话最近的 `rate_limit_event`）。
-有它时，分类和重试一律按 `RateLimitError` 处理（reason 为 `quota_exhausted`/`rate_limited`），
-退避在回合结束后仍保留；`quota_exhausted` 带 `resetsAt` 时，运行中错误 Activity 的可见文案
-末尾追加 ` (limit resets at <ISO>)`，指纹不含这段后缀，指纹熔断和 `runtime_crashed` 的文案也只
-引用 provider 原文、不带它。没有任何
+有它时一律按 `RateLimitError` 分类（reason 为 `quota_exhausted`/`rate_limited`）。
+`quota_exhausted` 带 `resetsAt` 时退避到该时间，退避在回合结束后仍保留，运行中错误 Activity 的
+可见文案末尾追加 ` (limit resets at <ISO>)`；不带 `resetsAt`（月度配额，或 provider 没说恢复时间）
+则不可重试、Agent 下线（见下节）。同样的分流也适用于 HTTP 402 或额度/余额措辞里带明确 ISO 重置
+时间的失败：视为等待。指纹不含重置后缀，指纹熔断和 `runtime_crashed` 的文案也只引用 provider
+原文、不带它。没有任何
 `code-agent/*/provider.ts` 文件再自行构造 `runtime_error`/`runtime_crashed`/
 `runtime_reconnecting` 的 Activity。
 
@@ -105,12 +107,14 @@ thinking；重试中断当前 thinking，恢复后的文本或 thinking 立即�
 与参考客户端 1.0.51 对齐：`runtime-error-classification.ts` 的分类结果带
 `requiredAction`（`user_reauth`：任何 `AuthError`；`user_model_access`：plan-access 措辞的
 `ModelConfigError`——「plan/subscription 不含该模型」，先排除限流、容量等暂态措辞）和
-`takesAgentOffline`（action-required；`BillingError`——HTTP 402 或额度/余额耗尽措辞，
-`billing_exhausted`；或 sticky 的「model not supported/unsupported model」）。一旦发生
+`takesAgentOffline`（action-required；`BillingError`——HTTP 402 或额度/余额耗尽措辞且没有可预期
+的恢复时间，`billing_exhausted`；`quota_exhausted` 但没有 `resetsAt`——月度配额或 provider 没说，
+视为不可恢复；或 sticky 的「model not supported/unsupported model」）。一旦发生
 ——回合中、启动输入、或启动时 `createAgentSession` 直接抛错——Daemon
 结束进程、发送 `agent:status(inactive)`，并把可见 `detail` 改写为面向人的处理提示
 （重新登录/换模型或升级套餐；billing 文案提示余额已耗尽、等待中的消息在 Agent 重启后
-会送达、充值或为该 Agent 换模型/provider），`entries` 里附诊断子类
+会送达、充值或为该 Agent 换模型/provider；无重置时间的配额用另一份文案说明配额耗尽、没有已知
+恢复时间、等待中的消息会保留），`entries` 里附诊断子类
 （`provider_plan_access_error`、`host_claude_login_required`、
 `custom_provider_missing_key`/`invalid_key`/`auth_error`、
 `builtin_provider_auth_error`、`runtime_auth_error`）和脱敏后的原文摘录。`runtimeError`

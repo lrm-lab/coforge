@@ -41,14 +41,12 @@ export function fingerprintRuntimeError(message: string): string {
 export type RuntimeErrorEvent = Extract<AgentRuntimeEvent, { type: "error" }>;
 export type RuntimeReconnectingEvent = Extract<AgentRuntimeEvent, { type: "reconnecting" }>;
 
-/** When an exhausted quota resets, as a suffix to a live failure's visible wording, if known.
- * Never part of a fingerprint (the same limit is the same failure whatever reset it names), nor
- * of the fence or crash wording, which quote the provider text alone. */
-function limitResetNote(event: RuntimeErrorEvent): string {
-  const limit = event.providerLimit;
-  return limit?.kind === "quota_exhausted" && limit.resetsAt
-    ? ` (limit resets at ${limit.resetsAt})`
-    : "";
+/** When an exhausted quota or billing failure will recover, as a suffix to the live failure's
+ * visible wording, if its classification knows. Never part of a fingerprint (the same limit is
+ * the same failure whatever reset it names), nor of the fence or crash wording, which quote the
+ * provider text alone. */
+function limitResetNote(classified: RuntimeErrorClassification): string {
+  return classified.retryNotBefore ? ` (limit resets at ${classified.retryNotBefore})` : "";
 }
 
 /** The class and reason a failure reports: the classification's for a provider's normalized
@@ -83,7 +81,7 @@ export function buildRuntimeErrorActivity(
 ): AgentActivity {
   // A provider's own error message is shown as reported; only the crash summary built at
   // process exit is redacted and capped.
-  const detail = `${event.message}${limitResetNote(event)}`;
+  const detail = `${event.message}${limitResetNote(classified)}`;
   return {
     detailKind: AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_ERROR,
     level: "error",
@@ -210,17 +208,14 @@ export function buildRuntimeActionRequiredActivity(
   };
 }
 
-/** The Activity an exhausted provider billing/credit balance reports: no `requiredAction`
- * (refilling the balance is a provider-side act, not a client action), but the same offline
- * semantics as an action-required failure — the detail says why retrying stopped and what
- * restores the Agent, followed by a redacted excerpt of the raw message. Mirrors the reference
- * Computer's `formatRuntimeBillingExhaustedMessage`. */
-export function buildRuntimeBillingExhaustedActivity(
+/** An offline limit failure's Activity: the wording that says why retrying stopped and what
+ * restores the Agent, then a redacted excerpt of the raw message. No `requiredAction` is attached:
+ * refilling a balance or waiting for a quota is a provider-side act, not a client action. */
+function offlineLimitActivity(
   event: RuntimeErrorEvent,
   classified: RuntimeErrorClassification,
-  providerLabel: string,
+  detail: string,
 ): AgentActivity {
-  const detail = `${providerLabel} reported that the provider's billing or credit balance is exhausted. CoForge stopped retrying because retries cannot succeed until the balance is restored. Messages that were waiting are kept and will be delivered when the agent starts again. Add credits or switch this agent to another model or provider, then restart the agent.`;
   return {
     detailKind: AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_ERROR,
     level: "error",
@@ -238,6 +233,36 @@ export function buildRuntimeBillingExhaustedActivity(
       fingerprint: fingerprintRuntimeError(event.message),
     },
   };
+}
+
+/** The Activity an exhausted provider billing/credit balance reports: the same offline semantics
+ * as an action-required failure. Mirrors the reference Computer's
+ * `formatRuntimeBillingExhaustedMessage`. */
+export function buildRuntimeBillingExhaustedActivity(
+  event: RuntimeErrorEvent,
+  classified: RuntimeErrorClassification,
+  providerLabel: string,
+): AgentActivity {
+  return offlineLimitActivity(
+    event,
+    classified,
+    `${providerLabel} reported that the provider's billing or credit balance is exhausted. CoForge stopped retrying because retries cannot succeed until the balance is restored. Messages that were waiting are kept and will be delivered when the agent starts again. Add credits or switch this agent to another model or provider, then restart the agent.`,
+  );
+}
+
+/** The Activity an exhausted quota with no known reset reports — a monthly plan quota, or a
+ * provider that does not say when it recovers. Retrying cannot be planned, so the Agent goes
+ * offline and this says why in the conversation. */
+export function buildRuntimeQuotaExhaustedActivity(
+  event: RuntimeErrorEvent,
+  classified: RuntimeErrorClassification,
+  providerLabel: string,
+): AgentActivity {
+  return offlineLimitActivity(
+    event,
+    classified,
+    `${providerLabel} reported that the provider quota for this Agent is exhausted and no reset time is known. CoForge stopped retrying because retries cannot succeed until the quota resets. Messages that were waiting are kept and will be delivered when the agent starts again. Wait for the quota to reset, upgrade the plan, or switch this agent to another model or provider, then restart the agent.`,
+  );
 }
 
 /** Overrides a runtime_error Activity's wording once the fingerprint fence has tripped: same

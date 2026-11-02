@@ -1,17 +1,22 @@
 import { describe, expect, test } from "bun:test";
 import {
   buildRuntimeActionRequiredActivity,
+  buildRuntimeBillingExhaustedActivity,
   buildRuntimeErrorActivity,
   buildRuntimeCrashedActivity,
   buildRuntimeErrorFingerprintFenceActivity,
   buildRuntimeErrorClassFenceActivity,
+  buildRuntimeQuotaExhaustedActivity,
   buildRuntimeReconnectingActivity,
   fingerprintRuntimeError,
   type RuntimeErrorEvent,
 } from "#src/agent-runtime/runtime-error-activity";
 import { scrubRuntimeErrorText } from "@lrm/coforge-anvil";
 import { DSH_MISSING_KEY_MESSAGE } from "@lrm/coforge-anvil/dsh";
-import { classifyRuntimeErrorText } from "#src/agent-runtime/runtime-error-classification";
+import {
+  classifyRuntimeError,
+  classifyRuntimeErrorText,
+} from "#src/agent-runtime/runtime-error-classification";
 
 test("builds a runtime_error activity from the provider's message as reported, with an Error: entry and structured fields", () => {
   const long = "x".repeat(600);
@@ -214,6 +219,35 @@ describe("a provider's usage limit", () => {
       errorClass: "RateLimitError",
       errorReason: "runtime_crashed",
       fingerprint: fingerprintRuntimeError(`Crashed (${message})`),
+    });
+  });
+
+  test("a 402 that names its reset shows the wait time in the conversation", () => {
+    const reset = "2100-01-01T00:00:00Z";
+    const event = {
+      type: "error",
+      message: `HTTP 402: quota exhausted; resets at ${reset}`,
+    } as const;
+    const activity = buildRuntimeErrorActivity(event);
+    expect(activity.detail).toBe(`${event.message} (limit resets at ${reset})`);
+    expect(activity.runtimeError).toMatchObject({
+      errorClass: "RateLimitError",
+      errorReason: "quota_exhausted",
+    });
+  });
+
+  test("an exhausted quota with no reset says why the Agent stopped in the conversation", () => {
+    const event = limitError({ kind: "quota_exhausted" });
+    const classified = classifyRuntimeError(event);
+    expect(classified.takesAgentOffline).toBe(true);
+    const activity = buildRuntimeQuotaExhaustedActivity(event, classified, "Claude Code");
+    expect(activity.detail).toContain(
+      "Claude Code reported that the provider quota for this Agent is exhausted and no reset time is known.",
+    );
+    expect(activity.detail).toContain("Messages that were waiting are kept");
+    expect(activity.runtimeError).toMatchObject({
+      errorClass: "RateLimitError",
+      errorReason: "quota_exhausted",
     });
   });
 });

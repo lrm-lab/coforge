@@ -4,6 +4,7 @@ import type { AgentRuntimeConfig } from "@lrm/coforge-anvil";
 import {
   buildRuntimeActionRequiredActivity,
   buildRuntimeBillingExhaustedActivity,
+  buildRuntimeQuotaExhaustedActivity,
   buildRuntimeErrorActivity,
   type RuntimeErrorEvent,
 } from "#src/agent-runtime/runtime-error-activity";
@@ -104,6 +105,8 @@ export class AgentOfflineResidency {
         providerLabel,
         agentProviderKey: config.providerConfig?.kind === "coforge",
       });
+    if (classification.errorReason === "quota_exhausted")
+      return buildRuntimeQuotaExhaustedActivity(event, classification, providerLabel);
     if (classification.errorClass === RUNTIME_ERROR_CLASS.BILLING)
       return buildRuntimeBillingExhaustedActivity(event, classification, providerLabel);
     return buildRuntimeErrorActivity(event, classification);

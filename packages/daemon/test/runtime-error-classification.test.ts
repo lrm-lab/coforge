@@ -188,17 +188,31 @@ test("model-not-found text is model config, not the generic not-found class", ()
   expect(result.errorClass).toBe(RUNTIME_ERROR_CLASS.MODEL_CONFIG);
 });
 
-test.each([
-  ["quota_exhausted", "quota_exhausted"],
-  ["transient_rate_limit", "rate_limited"],
-] as const)("a provider's %s limit is a retryable rate limit, whatever its text", (kind, why) => {
+test("a provider's transient rate limit is a retryable rate limit, whatever its text", () => {
   // The text alone reads as a terminal timeout; the provider's normalized limit wins.
-  expect(classifyRuntimeError({ message: "request timed out", providerLimit: { kind } })).toEqual({
+  expect(
+    classifyRuntimeError({
+      message: "request timed out",
+      providerLimit: { kind: "transient_rate_limit" },
+    }),
+  ).toEqual({
     errorClass: RUNTIME_ERROR_CLASS.RATE_LIMIT,
-    errorReason: why,
+    errorReason: "rate_limited",
     retryDecision: RUNTIME_ERROR_RETRY_DECISION.RETRY,
     requiredAction: "none",
     takesAgentOffline: false,
+  });
+});
+
+test("an exhausted quota without a reset cannot be retried and takes the Agent offline", () => {
+  expect(
+    classifyRuntimeError({ message: "limit", providerLimit: { kind: "quota_exhausted" } }),
+  ).toEqual({
+    errorClass: RUNTIME_ERROR_CLASS.RATE_LIMIT,
+    errorReason: "quota_exhausted",
+    retryDecision: RUNTIME_ERROR_RETRY_DECISION.TERMINAL,
+    requiredAction: "none",
+    takesAgentOffline: true,
   });
 });
 
@@ -224,6 +238,25 @@ test("an HTTP 402 status is an exhausted billing balance: terminal, offline, no 
     requiredAction: "none",
     takesAgentOffline: true,
   });
+});
+
+test("a 402 that names its reset is a wait, not an unrecoverable balance", () => {
+  const resetsAt = "2100-01-01T00:00:00Z";
+  expect(classifyRuntimeErrorText(`HTTP 402: quota exhausted; resets at ${resetsAt}`)).toEqual({
+    httpStatus: 402,
+    errorClass: RUNTIME_ERROR_CLASS.RATE_LIMIT,
+    errorReason: "quota_exhausted",
+    retryDecision: RUNTIME_ERROR_RETRY_DECISION.RETRY,
+    retryNotBefore: resetsAt,
+    requiredAction: "none",
+    takesAgentOffline: false,
+  });
+});
+
+test("a wall-clock reset is not a recovery time this daemon can wait on", () => {
+  const result = classifyRuntimeErrorText("HTTP 402: quota exhausted, resets 3:45pm");
+  expect(result.errorClass).toBe(RUNTIME_ERROR_CLASS.BILLING);
+  expect(result.takesAgentOffline).toBe(true);
 });
 
 test.each([
