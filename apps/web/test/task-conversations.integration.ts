@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { decodeAgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { handleTaskViewGet } from "#src/server/tasks/task-conversation-routes.server";
@@ -140,6 +141,44 @@ test("the first reply starts the conversation, follows the replier, and wakes th
   const view = await conversations.view(as("peer"), ref, { limit: 5 });
   expect(view.conversation).toEqual({ exists: true, replyCount: 2 });
   expect(view.recentMessages.map((message) => message.body)).toEqual(["Starting on it", "Thanks"]);
+});
+
+test("a task reply wakes a mentioned follower without a tracked mention", async () => {
+  const publications: Array<{ data: Uint8Array }> = [];
+  const publisher = {
+    publishBatch: async (entries: Array<{ data: Uint8Array }>) => {
+      publications.push(...entries);
+      return new Map(entries.map((_, index) => [String(index), { status: "sent" }]));
+    },
+  };
+  const replying = new TaskConversations({
+    db,
+    reader: "agent",
+    dependencies: { publisher: publisher as never },
+  });
+  // A running Agent has a Computer; a delivery to no Computer is not pushed at all.
+  const ownerMembership = await db.workspaceMembership.findFirstOrThrow({
+    where: { workspaceId },
+  });
+  const computer = await db.computer.create({
+    data: { ownerId: ownerMembership.userId, machineId: crypto.randomUUID() },
+  });
+  await db.agent.update({ where: { id: agents.peer.id }, data: { computerId: computer.id } });
+  await conversations.follow(as("peer"), ref);
+  const sent = await replying.reply(as("worker"), ref, {
+    body: `ping @${agents.peer.name}`,
+  });
+  // The mentioned follower is woken by the delivery itself. A tracked mention cannot be verified
+  // against a task ref (`#channel:#N`) and the daemon refuses the whole delivery, so none is sent.
+  const toPeer = publications
+    .map((publication) => decodeAgentMessageDelivery(publication.data))
+    .filter((delivery) => delivery.agentId === agents.peer.id);
+  expect(toPeer.length).toBeGreaterThan(0);
+  for (const delivery of toPeer) expect(delivery.mentionDelivery).toBeUndefined();
+  const row = await db.agentMessageDelivery.findFirst({
+    where: { messageId: sent.messageId, agentId: agents.peer.id },
+  });
+  expect(row).not.toBeNull();
 });
 
 test("an Agent outside the private channel finds no such task", async () => {

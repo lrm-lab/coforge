@@ -47,6 +47,10 @@ export async function publishDeliveries(
   requestId: string,
   target: string,
   sender: AgentMessageSender,
+  /** Issue tracked mentions for the Agents a message mentions. A task conversation's reply is a
+   * direct delivery whose target (`#channel:#N`) a Computer's mention tracker cannot resolve, so
+   * these go out untracked; the delivery itself is the wake. */
+  options: { trackedMentions?: boolean } = {},
 ) {
   const publisher = ports.dependencies.publisher;
   if (!publisher) return;
@@ -54,7 +58,9 @@ export async function publishDeliveries(
   // never surface.
   await new AgentDeliveryPublisher(
     publisher,
-    new MentionDeliveryIssuer(new PrismaMentionDeliveryRepository(ports.db)),
+    options.trackedMentions === false
+      ? undefined
+      : new MentionDeliveryIssuer(new PrismaMentionDeliveryRepository(ports.db)),
   ).publish(
     message.workspaceId,
     message.deliveries.map((delivery) => ({
@@ -123,6 +129,8 @@ export async function publishTaskConversationMessage(
         requestId,
         conversationTarget(message.conversation, targetOf),
         sender,
+        // The target is a task ref (`#channel:#N`); a Computer's mention tracker cannot resolve it.
+        { trackedMentions: false },
       );
     }),
   );
