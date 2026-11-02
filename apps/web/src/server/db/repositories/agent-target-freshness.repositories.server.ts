@@ -27,7 +27,9 @@ export async function agentTargetFreshness(
   target: string,
 ) {
   const resolved = await resolveAgentSendTarget(ports, workspaceId, agentId, target);
-  return agentResolvedTargetFreshness(ports, workspaceId, agentId, resolved);
+  return agentResolvedTargetFreshness(ports, workspaceId, agentId, resolved, {
+    excludeSystemMessages: true,
+  });
 }
 
 /** `agentTargetFreshness` for an already-resolved target: the task board's gate resolves through
@@ -43,6 +45,7 @@ export function agentResolvedTargetFreshness(
     canonicalTarget: string;
     isChannel: boolean;
   },
+  options: { excludeSystemMessages?: boolean } = {},
 ) {
   const { conversationId, threadRootId, canonicalTarget, isChannel } = resolved;
   // One membership lookup for every read of this send. Its read-through may predate this send's
@@ -75,6 +78,7 @@ export function agentResolvedTargetFreshness(
           threadRootId,
           isChannel,
           ownMemberId: own?.id,
+          excludeSystemMessages: options.excludeSystemMessages,
           afterSequence: afterSequence ?? latestOwn?.sequence ?? 0,
         };
       })();

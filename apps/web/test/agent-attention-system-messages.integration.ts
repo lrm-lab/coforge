@@ -64,8 +64,16 @@ test("a delivered system notice is not attention; a human message is", async () 
       { workspaceId, conversationId, agentId, messageId: system.id, sequence: 2 },
     ],
   });
-  const rows = await db.$queryRaw<{ id: string }[]>(
+  const held = await db.$queryRaw<{ id: string }[]>(
+    agentAttentionIdsSql(
+      { agentId, conversationId, threadRootId: null, isChannel: true, excludeSystemMessages: true },
+      10,
+    ),
+  );
+  expect(held.map((row) => row.id)).toEqual([human.id]);
+  // Waking and the inbox still count the system notice.
+  const woken = await db.$queryRaw<{ id: string }[]>(
     agentAttentionIdsSql({ agentId, conversationId, threadRootId: null, isChannel: true }, 10),
   );
-  expect(rows.map((row) => row.id)).toEqual([human.id]);
+  expect(woken.map((row) => row.id).sort()).toEqual([human.id, system.id].sort());
 });

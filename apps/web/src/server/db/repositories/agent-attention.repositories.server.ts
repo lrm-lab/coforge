@@ -29,6 +29,9 @@ export type AgentAttentionScope = {
   afterSequence?: number;
   excludeSequences?: readonly number[];
   ownMemberId?: string;
+  /** Only the send's freshness hold: a system notice never changes what the Agent should say.
+   * Waking and the inbox keep it. */
+  excludeSystemMessages?: boolean;
 };
 
 /**
@@ -59,8 +62,7 @@ function agentAttentionSource(scope: AgentAttentionScope) {
       ? Prisma.sql` AND m."senderMemberId" IS DISTINCT FROM ${scope.ownMemberId}::uuid`
       : Prisma.empty
   }
-  -- A system notice (no sender member) never changes what the Agent should say; it does not hold.
-  AND m."senderMemberId" IS NOT NULL`;
+  ${scope.excludeSystemMessages ? Prisma.sql`AND m."senderMemberId" IS NOT NULL` : Prisma.empty}`;
   if (readsDeliveries)
     return {
       sequence,
