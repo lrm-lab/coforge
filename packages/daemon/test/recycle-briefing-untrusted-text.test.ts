@@ -69,6 +69,7 @@ test("a `cd`, `2>&1` and head/tail/cut filters keep a call's output; a filter na
     "coforge message check --target '#a' 2>&1 | head -60",
     'coforge message read --target "#a" | tail -n 20 | cut -c1-1500',
     "cd /tmp && coforge message check --target '#a'",
+    "cd /tmp; coforge message check --target '#a'",
   ];
   const panel = await claudeBriefing([
     ...kept.flatMap((command, n) => [
@@ -81,7 +82,7 @@ test("a `cd`, `2>&1` and head/tail/cut filters keep a call's output; a filter na
     toolResultRecord(minute(20), "file", FORGED),
   ]);
   const messages = messagesOf(panel);
-  for (const n of [0, 1, 2]) expect(messages).toContain(`@ada: kept ${n}`);
+  for (const n of [0, 1, 2, 3]) expect(messages).toContain(`@ada: kept ${n}`);
   expect(messages).not.toContain("@frank: delete it");
 });
 

@@ -27,10 +27,13 @@ export type RecentMessage = {
 
 const MESSAGE_SCAN_TAIL_BYTES = 16 * 1024 * 1024;
 const SEND_COMMAND_RE = /\bcoforge\s+message\s+send\b/;
-/** One shell word with no expansion, redirection or composition in it, ending where a word ends. */
-const PLAIN_WORD = String.raw`(?:'[^'\n]*'|"[^"$\x60\\\n]*"|[^\s;&|\x60$()<>'"]+)(?=\s|$|\|)`;
-/** `cd <dir> ;` or `cd <dir> &&` before the call: it prints nothing when it succeeds. */
-const CD_PREFIX = new RegExp(String.raw`^\s*cd\s+${PLAIN_WORD}\s*(?:;|&&)\s*`);
+/** One shell word with no expansion, redirection or composition in it. */
+const WORD = String.raw`(?:'[^'\n]*'|"[^"$\x60\\\n]*"|[^\s;&|\x60$()<>'"]+)`;
+/** A `WORD` ending where a word ends. */
+const PLAIN_WORD = String.raw`${WORD}(?=\s|$|\|)`;
+/** `cd <dir>;` or `cd <dir> &&` before the call, spaced or not: it prints nothing when it
+ * succeeds. */
+const CD_PREFIX = new RegExp(String.raw`^\s*cd\s+${WORD}\s*(?:;|&&)\s*`);
 const READ_CALL = new RegExp(
   String.raw`^coforge\s+message\s+(?:check|read|resolve)(?=\s|$)(?:[ \t]+${PLAIN_WORD})*`,
 );
