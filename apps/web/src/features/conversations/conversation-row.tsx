@@ -19,8 +19,11 @@ function rowLabel(
   label: string,
   mentioned: boolean | undefined,
 ): string | undefined {
+  if (mentioned)
+    return unreadCount
+      ? m.channel_unread_mention_accessible({ channel: label, count: unreadCount })
+      : m.channel_mention_accessible({ channel: label });
   if (!unreadCount) return undefined;
-  if (mentioned) return m.channel_unread_mention_accessible({ channel: label, count: unreadCount });
   return m.channel_unread_accessible({ channel: label, count: unreadCount });
 }
 

@@ -165,5 +165,6 @@
   "channel_settings_make_public_action": "Change to Public",
   "channel_settings_changing_visibility": "Changing…",
   "channel_settings_visibility_error": "Could not change the channel. Try again.",
-  "channel_settings_visibility_denied": "Only Workspace owners and admins in this channel can change this."
+  "channel_settings_visibility_denied": "Only Workspace owners and admins in this channel can change this.",
+  "channel_mention_accessible": "{channel}, you were mentioned"
 }

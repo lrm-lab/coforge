@@ -111,7 +111,7 @@ export const ChannelDirectoryRow = memo(function ChannelDirectoryRow({
                 youLabel: m.conversation_you(),
               })
             : null,
-          mentioned: channelMentionShown({ mentioned: channel.mentioned, unreadCount }),
+          mentioned: channelMentionShown({ mentioned: channel.mentioned }),
         }}
         icon={
           faces ? (

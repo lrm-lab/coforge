@@ -61,9 +61,9 @@ test("an empty preview yields no line", () => {
   ).toBeNull();
 });
 
-test("the mention badge shows only while the mention is still unread", () => {
-  expect(channelMentionShown({ mentioned: true, unreadCount: 2 })).toBe(true);
-  expect(channelMentionShown({ mentioned: true, unreadCount: 0 })).toBe(false);
-  expect(channelMentionShown({ mentioned: true, unreadCount: undefined })).toBe(false);
-  expect(channelMentionShown({ mentioned: false, unreadCount: 2 })).toBe(false);
+test("the mention badge shows whenever the server says the viewer is mentioned", () => {
+  expect(channelMentionShown({ mentioned: true })).toBe(true);
+  // A muted channel has no unread count; the mention badge still shows.
+  expect(channelMentionShown({ mentioned: true })).toBe(true);
+  expect(channelMentionShown({ mentioned: false })).toBe(false);
 });
