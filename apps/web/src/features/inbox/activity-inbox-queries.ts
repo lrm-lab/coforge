@@ -2,6 +2,7 @@ import {
   infiniteQueryOptions,
   queryOptions,
   type InfiniteData,
+  replaceEqualDeep,
   type QueryClient,
 } from "@tanstack/react-query";
 
@@ -10,7 +11,11 @@ import {
   type ActivityAttention,
 } from "#src/features/conversations/conversation-realtime";
 import { rereadQueryMissedBySubscribe } from "#src/features/realtime/query-stream-position";
-import type { StreamPosition, SubscribedRecovery } from "#src/features/realtime/subscription-gap";
+import type {
+  StreamPosition,
+  StreamPositions,
+  SubscribedRecovery,
+} from "#src/features/realtime/subscription-gap";
 import type { ActivityInboxItem } from "#src/server/inbox/activity-inbox.server";
 
 import { loadActivityInbox, loadActivityNavAttention } from "./activity-inbox.functions";
@@ -29,7 +34,27 @@ export const activityInboxQuery = (workspaceId: string, filter: ActivityInboxFil
     queryFn: ({ pageParam }) => loadActivityInbox({ data: { filter, cursor: pageParam } }),
     initialPageParam: undefined as ActivityInboxCursor | undefined,
     getNextPageParam: (page) => page.nextCursor ?? undefined,
+    structuralSharing: (held: unknown, next: unknown) =>
+      replaceEqualDeep(held, keepLaterFirstPage(held as ReadPages, next as ReadPages)),
   });
+
+/** A read that knows where it stood in the viewer's channels. */
+type StreamRead = { streamPositions: StreamPositions };
+type ReadPages = InfiniteData<StreamRead> | undefined;
+
+/**
+ * The list's first page is read again on its own for a new message (the view's
+ * `refreshFirstPage`), while a read of the list may be under way: the next page as the viewer
+ * scrolls, or every page again. That read started from the pages held then and writes them back
+ * when it ends, which would put the first page from before the message back. Whatever writes the
+ * list, a first page read earlier than the one held keeps the held one.
+ */
+export function keepLaterFirstPage<Data extends ReadPages>(held: Data, next: Data): Data {
+  const kept = held?.pages[0];
+  const incoming = next?.pages[0];
+  if (!next || !kept || !incoming || !readEarlier(incoming, kept)) return next;
+  return { ...next, pages: [kept, ...next.pages.slice(1)] };
+}
 
 export type ActivityInboxPage = Awaited<ReturnType<typeof loadActivityInbox>>;
 
@@ -94,7 +119,7 @@ export const activityNavAttentionQuery = () =>
   });
 
 /** Whether `answer` was read at an earlier place in a channel than `than`, in the same epoch. */
-function readEarlier(answer: ActivityNavAttention, than: ActivityNavAttention) {
+function readEarlier(answer: StreamRead, than: StreamRead) {
   return Object.entries(answer.streamPositions).some(([channel, at]) => {
     const held = than.streamPositions[channel];
     return held !== undefined && held.epoch === at.epoch && at.offset < held.offset;

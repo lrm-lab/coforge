@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { getRouteApi } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { keepPreviousData, useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
@@ -70,6 +70,11 @@ export function ActivityInboxView({
     project: projectDone,
   } = useActivityDoneProjection();
 
+  // Another view starts at its top, however it was switched to (a tab, "Show all", the address).
+  const listScroll = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    listScroll.current?.scrollTo({ top: 0 });
+  }, [filter]);
   // Switching views keeps the current rows on screen until the next view has loaded.
   const query = useInfiniteQuery({
     ...activityInboxQuery(workspaceId, filter),
@@ -108,7 +113,8 @@ export function ActivityInboxView({
   );
   // A message reads only the first page again: the rows below it keep their place and are read
   // again when the viewer scrolls to them, so a busy channel cannot make every loaded page a
-  // request. Anything else that reaches the inbox still refreshes it whole.
+  // request. Anything else that reaches the inbox still refreshes it whole. A read of the list
+  // under way meanwhile cannot put the older first page back (`keepLaterFirstPage`).
   const loadFirstPage = useServerFn(loadActivityInbox);
   const refreshFirstPage = useCallback(() => {
     const queryKey = activityInboxQuery(workspaceId, filter).queryKey;
@@ -284,7 +290,7 @@ export function ActivityInboxView({
           </Button>
         </div>
       )}
-      <div className="min-h-0 flex-1 overflow-y-auto py-1">
+      <div ref={listScroll} className="min-h-0 flex-1 overflow-y-auto py-1">
         {query.isError && empty ? (
           <ActivityInboxLoadError onRetry={() => void query.refetch()} />
         ) : empty ? (
