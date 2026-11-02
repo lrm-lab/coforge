@@ -42,10 +42,9 @@ test("each library package is tested, checked, and built when it has a build scr
   expect(result.calls).toEqual([
     "run --cwd packages/anvil test",
     "run --cwd packages/anvil check",
-    "run --cwd packages/anvil --if-present build",
+    "run --cwd packages/anvil build",
     "run --cwd packages/coforge-sdk test",
     "run --cwd packages/coforge-sdk check",
-    "run --cwd packages/coforge-sdk --if-present build",
   ]);
   expect(result.exitCode).toBe(0);
 });
