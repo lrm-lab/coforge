@@ -1,6 +1,7 @@
 # Agent mascots
 
-The seven blob mascots (`blue`, `orange`, `pink`, `green`, `purple`, `black`, `yellow`) as one
+The twelve blob mascots (`blue`, `orange`, `pink`, `green`, `purple`, `black`, `yellow`, and
+Frank's five of 2026-10-29: `magenta`, `cyan`, `teal`, `coral`, `lime`) as one
 Rive file with five activities and a hover reaction, plus a static avatar of each mascot's idle
 face. The SVGs in `svg/` are the design source (copied from `public/agent-avatars/`); everything
 else is generated from them by `generate.ts`.
@@ -32,7 +33,7 @@ their users in the same change.
 
 ## Runtime contract
 
-One file, `mascots-<n>.riv`, seven artboards (24 by 24) named `mascot-<color>`. Every artboard has
+One file, `mascots-<n>.riv`, twelve artboards (24 by 24) named `mascot-<color>`. Every artboard has
 the same wiring, so the app drives all of them identically:
 
 | Part          | Name                                                                                |
@@ -69,6 +70,9 @@ auto-bind: it creates a new `Mascot` view model instance for each canvas (`autoB
   the middle of the body's round mass and a little down, short of any front accessory it would
   crowd, and turns it most of the way level (`face.ts`). Every line mouth sits under the eyes.
   Only thinking glances up, a little, toward its bubble.
+- A mascot whose source has blush (lime) keeps it as `cheeks` drawn on the face, so it moves and
+  turns with the face and mutes offline with the body; a source's own eye drawings (closed, starry)
+  give way to the open round eyes every mascot animates, a starry source keeping its stars as glints.
 - Idle: both eyes open round, a quick double blink every 4–5 s at uneven gaps (4.2 s, 4.8 s,
   4.5 s over a 13.5 s loop), a faint float. Thinking ("pondering"): a small white-edged thought bubble within
   the avatar's box, above the head and a little right (`thought.ts`; the build fails if it

@@ -20,6 +20,11 @@ const MASCOT_LABELS: Record<AgentMascot, () => string> = {
   purple: m.agent_mascot_purple,
   black: m.agent_mascot_black,
   yellow: m.agent_mascot_yellow,
+  magenta: m.agent_mascot_magenta,
+  cyan: m.agent_mascot_cyan,
+  teal: m.agent_mascot_teal,
+  coral: m.agent_mascot_coral,
+  lime: m.agent_mascot_lime,
 };
 
 /**

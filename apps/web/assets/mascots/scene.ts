@@ -263,6 +263,19 @@ export function buildScene(spec: MascotSpec, shared: SharedIds): BuiltScene {
   // edge runs around the whole figure and never between its parts.
   const outline = [...front, ...behind].map((a) => a.outline).join("\n");
   const sweat = rig.sweat ? sweatXml(rig.sweatAt, rig.sweat) : "";
+  // Cheeks sit on the face (placed and turned with it) and mute offline like the body.
+  const cheeks = (spec.cheeks ?? [])
+    .map((c, i) => {
+      const at = turn(sub(c.at, face), place.rotation);
+      const id = nextId();
+      rig.tints.push({ id, color: argb(c.color) });
+      return (
+        `<Shape x="${fmt(at[0])}" y="${fmt(at[1])}" name="Cheek ${i + 1}">` +
+        `<Ellipse width="${fmt(c.radius * 2)}" height="${fmt(c.radius * 2)}" name="Path"/>` +
+        `<Fill name="Fill"><SolidColor colorValue="${argb(c.color)}" id="${id}" name="Color"/></Fill></Shape>`
+      );
+    })
+    .join("\n");
 
   const faceAt = rig.faceAt;
   const xml = `${thoughtXml(rig.thought)}
@@ -273,6 +286,7 @@ export function buildScene(spec: MascotSpec, shared: SharedIds): BuiltScene {
 ${sweat}
 <Node name="Face look">
 ${faceLook.binds}
+${cheeks}
 <Node name="Brows look">
 ${browLook.binds}
 ${browXml(rig.brows, "L", rig.eyeL0, spec.browColor)}

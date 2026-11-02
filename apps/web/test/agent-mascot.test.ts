@@ -9,8 +9,9 @@ import {
 } from "#src/features/agents/agent-mascot";
 import { mascotStaticUrl } from "#src/features/agents/mascot-contract";
 
-// Frank, 2026-10-23: every Agent shows one of seven platform mascots. Its creator picks one;
-// until then its id does.
+// Frank, 2026-10-23: every Agent shows one of the platform mascots (seven, five more on
+// 2026-10-29). Its creator picks one; until then its id does, among the first seven only, so the
+// five added later change no Agent's face.
 test("an Agent that has not been given a mascot shows the one its id chooses", () => {
   const picked = agentAvatarUrl("agent-1");
   expect(picked).toStartWith("/agent-avatars/mascot-");
@@ -20,16 +21,32 @@ test("an Agent that has not been given a mascot shows the one its id chooses", (
   const spread = new Set(
     Array.from({ length: 200 }, (_, index) => defaultAgentMascot(`agent-${index}`)),
   );
-  expect(spread.size).toBe(AGENT_MASCOTS.length);
-  expect(AGENT_MASCOTS).toEqual(["blue", "orange", "pink", "green", "purple", "black", "yellow"]);
+  expect(([...spread] as string[]).sort()).toEqual(
+    ["blue", "orange", "pink", "green", "purple", "black", "yellow"].sort(),
+  );
+  expect(AGENT_MASCOTS).toEqual([
+    "blue",
+    "orange",
+    "pink",
+    "green",
+    "purple",
+    "black",
+    "yellow",
+    "magenta",
+    "cyan",
+    "teal",
+    "coral",
+    "lime",
+  ]);
 });
 
 test("the creator's mascot wins over the id's, and an unknown key falls back to the id's", () => {
   const fallback = defaultAgentMascot("agent-1");
   const other = AGENT_MASCOTS.find((mascot) => mascot !== fallback)!;
   expect(agentMascot("agent-1", other)).toBe(other);
-  expect(agentAvatarUrl("agent-1", other)).toBe(`/agent-avatars/mascot-${other}-4.webp`);
-  expect(agentMascot("agent-1", "teal")).toBe(fallback);
-  expect(isAgentMascot("teal")).toBeFalse();
+  expect(agentAvatarUrl("agent-1", "lime")).toBe("/agent-avatars/mascot-lime-5.webp");
+  expect(agentMascot("agent-1", "lime")).toBe("lime");
+  expect(agentMascot("agent-1", "indigo")).toBe(fallback);
+  expect(isAgentMascot("indigo")).toBeFalse();
   expect(AGENT_MASCOTS.every(isAgentMascot)).toBeTrue();
 });

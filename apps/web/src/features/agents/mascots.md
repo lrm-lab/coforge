@@ -13,7 +13,7 @@ Part of [Agents UI](AGENTS.md). Rules for `src/features/agents/`.
   `hovered` through `useRowHovered`, so a hover repaints only the mascot), the Agent's
   Direct-message header (`DirectConversationHeader`), the Agent profile panel header
   (`AgentProfileHeader`), the Agent hover card and the mascot picker (`agent-avatar-dialog.tsx`: all
-  seven idle, the one under the pointer reacting, the selected one still moving). Everything else
+  twelve idle, the one under the pointer reacting, the selected one still moving). Everything else
   is static: the message stream, in channels and Direct messages alike (the still sticker,
   `LiveAgentAvatar`, `IdentityAvatar`), group avatars, search and members lists, and the profile
   card in the Profile tab (the header above it moves instead, so a panel shows one moving mascot).

@@ -4,12 +4,26 @@
  * asset generator (`assets/mascots/`) all read the one definition. The Rive runtime's names are in
  * `mascot-rive-contract.ts`, which the server does not import.
  */
-export const MASCOT_IDS = ["blue", "orange", "pink", "green", "purple", "black", "yellow"] as const;
+export const MASCOT_IDS = [
+  "blue",
+  "orange",
+  "pink",
+  "green",
+  "purple",
+  "black",
+  "yellow",
+  // Frank's five more (2026-10-29).
+  "magenta",
+  "cyan",
+  "teal",
+  "coral",
+  "lime",
+] as const;
 export type MascotId = (typeof MASCOT_IDS)[number];
 
 /** Version of the still avatars (`mascot-<color>-<n>.webp`). A changed picture ships under a new
  * file name because browsers cache by URL: bump it and rebuild with `bun run build:mascots`. */
-export const STATIC_VERSION = 4;
+export const STATIC_VERSION = 5;
 
 const PICTURE_DIR = "/agent-avatars/";
 

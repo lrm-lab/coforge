@@ -53,6 +53,8 @@ export interface MascotSpec {
   dots: { side: "left" | "right"; color: string };
   /** Where an error's sweat drop sits beside the face, if this mascot sweats. */
   sweat?: Point;
+  /** Blush on the cheeks, drawn with the face so it moves and turns with it. */
+  cheeks?: { at: Point; radius: number; color: string }[];
 }
 
 const DIR = join(import.meta.dir, "svg");
@@ -194,6 +196,87 @@ export function loadSpec(id: MascotId): MascotSpec {
           fillPart(at(2), DARK),
         ],
         dots: { side: "right", color: "#E2681A" },
+      };
+    case "magenta":
+      return {
+        ...base,
+        body: { d: at(0).attrs.d ?? "", fill: "#ED579B" },
+        front: [
+          {
+            name: "Flower",
+            parts: [fillPart(at(1))],
+            pivot: centre(at(1).attrs.d ?? ""),
+            hover: { wiggle: 0.12, pulse: 0.15 },
+            // Pondering or startled, the brows rise toward it: it steps down and out of their way.
+            pose: {
+              thinking: { dx: -0.9, dy: 0.8, rotation: -0.2 },
+              error: { dx: -0.9, dy: 0.8, rotation: -0.2 },
+            },
+          },
+        ],
+        eyes: { l: [12.1, 10.3], r: [15.85, 9.45], radius: 1, color: DARK, glints: [] },
+        mouth: [fillPart(at(2))],
+        dots: { side: "left", color: "#B8296B" },
+      };
+    case "cyan":
+      return {
+        ...base,
+        body: { d: at(0).attrs.d ?? "", fill: "#70D9F3" },
+        front: [
+          {
+            name: "Bow tie",
+            parts: [fillPart(at(2))],
+            pivot: centre(at(2).attrs.d ?? ""),
+            hover: { wiggle: 0.1, pulse: 0 },
+          },
+        ],
+        eyes: { l: [12.2, 9.45], r: [16.6, 8.4], radius: 1, color: DARK, glints: [] },
+        mouth: [strokePart(at(3))],
+        dots: { side: "right", color: "#2496B8" },
+      };
+    case "teal":
+      return {
+        ...base,
+        body: { d: at(0).attrs.d ?? "", fill: "#78D5C9" },
+        // Starry eyes: the source's white stars, as one large and one small glint each.
+        eyes: {
+          l: [11.5, 9.5],
+          r: [16.5, 7.5],
+          radius: 1.5,
+          color: DARK,
+          glints: [
+            { offset: [0.15, -0.15], width: 0.75, height: 0.75, rotation: 0 },
+            { offset: [-0.55, 0.6], width: 0.35, height: 0.35, rotation: 0 },
+          ],
+        },
+        mouth: [fillPart(at(4))],
+        dots: { side: "right", color: "#2E9E8F" },
+      };
+    case "coral":
+      return {
+        ...base,
+        body: { d: at(1).attrs.d ?? "", fill: "#FD8558" },
+        eyes: { l: [11.51, 8.9], r: [16.01, 7.0], radius: 1, color: DARK, glints: [] },
+        // The source leaves the stroke width at SVG's default of 1.
+        mouth: [
+          {
+            d: at(4).attrs.d ?? "",
+            paints: [{ stroke: { color: DARK, width: 1, cap: "round", join: "round" } }],
+          },
+        ],
+        dots: { side: "right", color: "#D9542A" },
+      };
+    case "lime":
+      return {
+        ...base,
+        body: { d: at(0).attrs.d ?? "", fill: "#C0D85C" },
+        eyes: { l: [10.1, 10.2], r: [15.4, 8.9], radius: 1, color: DARK, glints: [] },
+        mouth: [strokePart(at(5))],
+        cheeks: [
+          { at: [8, 12.91], radius: 1, color: "#F88989" },
+          { at: [18, 10.41], radius: 1, color: "#F88989" },
+        ],
+        dots: { side: "left", color: "#7E9A1E" },
       };
     case "pink":
       return {

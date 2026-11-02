@@ -6,6 +6,11 @@
   "agent_mascot_purple": "紫色",
   "agent_mascot_black": "黑色",
   "agent_mascot_yellow": "黄色",
+  "agent_mascot_magenta": "玫红色",
+  "agent_mascot_cyan": "天蓝色",
+  "agent_mascot_teal": "青绿色",
+  "agent_mascot_coral": "珊瑚色",
+  "agent_mascot_lime": "黄绿色",
   "agent_busy_agents": "活跃的 Agent",
   "agent_busy_agents_count": "{count} 个活跃的 Agent"
 }

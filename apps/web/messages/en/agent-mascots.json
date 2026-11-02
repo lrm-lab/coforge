@@ -6,6 +6,11 @@
   "agent_mascot_purple": "Purple",
   "agent_mascot_black": "Black",
   "agent_mascot_yellow": "Yellow",
+  "agent_mascot_magenta": "Magenta",
+  "agent_mascot_cyan": "Cyan",
+  "agent_mascot_teal": "Teal",
+  "agent_mascot_coral": "Coral",
+  "agent_mascot_lime": "Lime",
   "agent_busy_agents": "Active Agents",
   "agent_busy_agents_count": [
     {

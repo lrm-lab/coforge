@@ -13,6 +13,10 @@ import { MASCOT_IDS, mascotStaticUrl, type MascotId } from "./mascot-contract";
  */
 export const AGENT_MASCOTS = MASCOT_IDS;
 
+/** The mascots an Agent that has not been given one is shown: the first seven, so the five added
+ * later (2026-10-29) change no Agent's face. They are offered in the picker like the rest. */
+const DEFAULT_MASCOTS = AGENT_MASCOTS.slice(0, 7);
+
 export type AgentMascot = MascotId;
 
 export function isAgentMascot(value: unknown): value is AgentMascot {
@@ -20,9 +24,9 @@ export function isAgentMascot(value: unknown): value is AgentMascot {
 }
 
 /** The mascot of an Agent that has not been given one: a stable FNV-1a hash of its id, taken
- * modulo the pool in `AGENT_MASCOTS` order. */
+ * modulo the default pool in `AGENT_MASCOTS` order. */
 export function defaultAgentMascot(agentId: string): AgentMascot {
-  return AGENT_MASCOTS[fnv1a(agentId) % AGENT_MASCOTS.length]!;
+  return DEFAULT_MASCOTS[fnv1a(agentId) % DEFAULT_MASCOTS.length]!;
 }
 
 /** The mascot one Agent shows: its creator's pick, else the one its id chooses. A stored key this
