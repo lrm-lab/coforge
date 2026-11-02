@@ -10,4 +10,5 @@ export * from "./thread-open";
 export * from "./turn-outcome";
 export * from "./turn-signals";
 export * from "./session-rollout";
+export * from "./local-sessions";
 export * from "./recycle-briefing";

@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+package coforge.rpc.v1;
+
+// Owner-authorized request to list or search Claude Code and Codex sessions on one Computer.
+message LocalSessionSearchRequest {
+  uint32 protocol_major = 1;
+  string request_id = 2;
+  string workspace_id = 3;
+  string computer_id = 4;
+  string query = 5;
+  string message_type = 6;
+}
+
+message LocalSessionEntry {
+  string provider = 1;
+  string session_id = 2;
+  string cwd = 3;
+  string model = 4;
+  string title = 5;
+  uint64 updated_at_ms = 6;
+  string match_kind = 7;
+  string snippet = 8;
+}
+
+message LocalSessionSearchResult {
+  uint32 protocol_major = 1;
+  string request_id = 2;
+  string workspace_id = 3;
+  string computer_id = 4;
+  string query = 5;
+  string message_type = 6;
+  repeated LocalSessionEntry sessions = 7;
+  bool scan_complete = 8;
+  bool content_search_complete = 9;
+}
+
+// Owner-authorized request for the bounded handoff briefing of one discovered session.
+message LocalSessionExcerptRequest {
+  uint32 protocol_major = 1;
+  string request_id = 2;
+  string workspace_id = 3;
+  string computer_id = 4;
+  string provider = 5;
+  string session_id = 6;
+  string cwd = 7;
+  string message_type = 8;
+}
+
+message LocalSessionTurn {
+  string role = 1;
+  string text = 2;
+  uint64 timestamp_ms = 3;
+}
+
+message LocalSessionExcerptResult {
+  uint32 protocol_major = 1;
+  string request_id = 2;
+  string workspace_id = 3;
+  string computer_id = 4;
+  string provider = 5;
+  string session_id = 6;
+  string cwd = 7;
+  string message_type = 8;
+  string status = 9;
+  string model = 10;
+  uint64 updated_at_ms = 11;
+  string initial_request = 12;
+  repeated LocalSessionTurn recent_turns = 13;
+}

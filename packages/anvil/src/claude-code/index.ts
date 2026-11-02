@@ -13,6 +13,7 @@ export * from "./usage-plan";
 export * from "./subagent-lineage";
 export * from "./task-lifecycle";
 export * from "./session-transcript";
+export * from "./local-sessions";
 export * from "./recycle-actions";
 export * from "./recycle-messages";
 export * from "./recycle-briefing";

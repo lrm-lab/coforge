@@ -14,6 +14,12 @@ import {
   decodeAgentWorkspaceDeleteRequest,
   encodeAgentWorkspaceDeleteResult,
   AGENT_WORKSPACE_DELETE_RESULT_METHOD,
+  decodeLocalSessionSearchRequest,
+  encodeLocalSessionSearchResult,
+  LOCAL_SESSION_SEARCH_RESULT_METHOD,
+  decodeLocalSessionExcerptRequest,
+  encodeLocalSessionExcerptResult,
+  LOCAL_SESSION_EXCERPT_RESULT_METHOD,
 } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
 import {
@@ -78,6 +84,8 @@ export class DaemonQueries {
   readonly file;
   readonly scan;
   readonly deletion;
+  readonly localSessionSearch;
+  readonly localSessionExcerpt;
   readonly piChat;
   constructor(rpc: Rpc) {
     this.skills = new DaemonQuery(
@@ -110,6 +118,18 @@ export class DaemonQueries {
       AGENT_WORKSPACE_DELETE_RESULT_METHOD,
       rpc,
     );
+    this.localSessionSearch = new DaemonQuery(
+      decodeLocalSessionSearchRequest,
+      encodeLocalSessionSearchResult,
+      LOCAL_SESSION_SEARCH_RESULT_METHOD,
+      rpc,
+    );
+    this.localSessionExcerpt = new DaemonQuery(
+      decodeLocalSessionExcerptRequest,
+      encodeLocalSessionExcerptResult,
+      LOCAL_SESSION_EXCERPT_RESULT_METHOD,
+      rpc,
+    );
     this.piChat = new DaemonQuery(
       decodePiChatRequest,
       encodePiChatFrame,
@@ -118,8 +138,15 @@ export class DaemonQueries {
     );
   }
   receive(bytes: Uint8Array, scope: Scope) {
-    return [this.piChat, this.skills, this.files, this.scan, this.file, this.deletion].some(
-      (query) => query.receive(bytes, scope),
-    );
+    return [
+      this.piChat,
+      this.skills,
+      this.files,
+      this.scan,
+      this.file,
+      this.deletion,
+      this.localSessionSearch,
+      this.localSessionExcerpt,
+    ].some((query) => query.receive(bytes, scope));
   }
 }

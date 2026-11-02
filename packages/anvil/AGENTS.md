@@ -27,6 +27,7 @@
 | `src/catalog-command.ts`     | Host catalog command execution port                                                                                           |
 | `src/stderr-hint.ts`         | The bounded, credential-redacted single-line stderr excerpt a catalog logs                                                    |
 | `src/transcript-tail.ts`     | The tail-reader capability and the lines of a transcript/rollout tail                                                         |
+| `src/local-session.ts`       | Shared limits and content-only projections for local Session handoff discovery                                                |
 | `src/per-turn/`              | Shared per-turn session and process execution                                                                                 |
 | `src/acp/`                   | Shared ACP connection, session state machine, profile and turn projection contracts                                           |
 | `src/version-gate.ts`        | Shared version policy and required host version-reader port                                                                   |

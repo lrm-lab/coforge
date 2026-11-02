@@ -113,6 +113,7 @@ Directories with their own `AGENTS.md` add rules for that directory only.
 | `src/code-agent/claude-code/`        | Claude environment, prompt/process I/O, executable discovery and read-only secured file capabilities                                                       |
 | `src/code-agent/per-turn-host.ts`    | Host environment composition and platform process-tree injection for Anvil per-turn execution                                                              |
 | `src/code-agent/version-probe.ts`    | Bounded version subprocess reads with the host environment for Anvil gates                                                                                 |
+| `src/local-session/`                 | Bounded, read-only discovery and briefing extraction for local Claude Code and Codex sessions                                                              |
 | `src/agent-migration/`               | Agent migration on this Computer: select, pack and upload a workspace; download, verify, commit                                                            |
 | `src/agent-app-inbox/`               | Typed Agent App items (incl. the transient client-secret notice), apart from chat Message attention                                                        |
 | `src/agent-reminder/`                | Cloud reminder schedule mirror, version-fenced timers, and fire receipts                                                                                   |

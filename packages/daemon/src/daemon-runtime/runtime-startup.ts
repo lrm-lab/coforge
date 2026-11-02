@@ -36,6 +36,8 @@ import { subscribeRuntimeAuth } from "./runtime-auth-subscription";
 import { subscribeRuntimeReconnect } from "./runtime-reconnect";
 import { subscribeProviderScans } from "./provider-scan-handlers";
 import { subscribeWorkspaceQueries } from "./workspace-query-handlers";
+import { subscribeLocalSessionQueries } from "./local-session-query-handlers";
+import { LocalSessionCatalog } from "#src/local-session/local-session-catalog";
 import {
   RuntimePublicationSubscriptions,
   type RuntimePublicationSubscriptionPorts,
@@ -111,6 +113,7 @@ export class RuntimeStartup {
   #subscriptions: Array<() => void> = [];
   #piChat?: PiChatRelay;
   #authControl: RuntimeAuthController | undefined;
+  readonly #localSessions = new LocalSessionCatalog();
 
   constructor(private readonly ports: RuntimeStartupPorts) {}
 
@@ -223,6 +226,13 @@ export class RuntimeStartup {
         connection,
         observations: ports.workspaceQueries,
         deleteWorkspace: (request) => ports.deleteWorkspace(request),
+        currentTransport: () => ports.transport(),
+        isStopping: () => ports.isStopping(),
+      }))
+        this.#subscribe(unsubscribe);
+      for (const unsubscribe of subscribeLocalSessionQueries(transport, {
+        connection,
+        catalog: this.#localSessions,
         currentTransport: () => ports.transport(),
         isStopping: () => ports.isStopping(),
       }))

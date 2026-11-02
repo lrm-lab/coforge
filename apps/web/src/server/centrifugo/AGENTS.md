@@ -14,6 +14,7 @@ mechanics only; domain rules stay in the owning `src/server/` module.
   display read model (`agent-display.server.ts`), never the control record.
 - `agent-skills-cache.server.ts` stores short-lived, request-scoped results,
   not inventory or canonical data.
+- `local-session-results.server.ts` stores owner-bound local Session search/excerpt replies for at most one browser request; Session text is never canonical state.
 - `model-catalog-refresh-cache.server.ts` stores the terminal result of a
   requested model probe, scoped to its request, Workspace and Computer.
 - The connect proxy refuses a Daemon for good only with an HTTP 200

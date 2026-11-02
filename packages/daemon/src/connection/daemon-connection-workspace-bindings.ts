@@ -14,6 +14,10 @@ export abstract class DaemonConnectionWorkspaceBindings implements Pick<
   | "sendWorkspaceFileReadResult"
   | "onWorkspaceDelete"
   | "sendWorkspaceDeleteResult"
+  | "onLocalSessionSearch"
+  | "sendLocalSessionSearchResult"
+  | "onLocalSessionExcerpt"
+  | "sendLocalSessionExcerptResult"
   | "onPiChatRequest"
   | "sendPiChatFrame"
 > {
@@ -48,6 +52,18 @@ export abstract class DaemonConnectionWorkspaceBindings implements Pick<
   }
   get sendWorkspaceDeleteResult() {
     return this.daemonQueries.deletion.sendResult;
+  }
+  get onLocalSessionSearch() {
+    return this.daemonQueries.localSessionSearch.onRequest;
+  }
+  get sendLocalSessionSearchResult() {
+    return this.daemonQueries.localSessionSearch.sendResult;
+  }
+  get onLocalSessionExcerpt() {
+    return this.daemonQueries.localSessionExcerpt.onRequest;
+  }
+  get sendLocalSessionExcerptResult() {
+    return this.daemonQueries.localSessionExcerpt.sendResult;
   }
   get onPiChatRequest() {
     return this.daemonQueries.piChat.onRequest;

@@ -7,6 +7,7 @@ import {
   MEMORY_FILE_RE,
   type ClaudeBriefingHost,
 } from "@lrm/coforge-anvil/claude-code";
+import { readHistoryFileHead, readHistoryFileTail } from "#src/code-agent/bounded-history-file";
 
 const REREAD_FILE_MAX_BYTES = 64 * 1024;
 
@@ -50,12 +51,8 @@ export const claudeHistoryHost: ClaudeBriefingHost = {
   readDirectoryEntries: (path) => readdir(path, { withFileTypes: true }),
   readDirectoryNames: (path) => readdir(path),
   lstat,
-  async readFileTail(path, tailBytes) {
-    const file = Bun.file(path);
-    const { size } = await file.stat();
-    const start = Math.max(0, size - tailBytes);
-    return { text: await file.slice(start, size).text(), startOffset: start };
-  },
+  readFileHead: readHistoryFileHead,
+  readFileTail: readHistoryFileTail,
   realWorkspaceRoot: (path) => realpath(path).catch(() => null),
   rereadFile,
 };

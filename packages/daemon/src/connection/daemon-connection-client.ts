@@ -33,6 +33,10 @@ import type {
   AgentWorkspaceFileReadResult,
   AgentWorkspaceDeleteRequest,
   AgentWorkspaceDeleteResult,
+  LocalSessionSearchRequest,
+  LocalSessionSearchResult,
+  LocalSessionExcerptRequest,
+  LocalSessionExcerptResult,
   ComputerUpgradeResult,
   AgentMentionDeliveryTransition,
   AgentMentionDeliveryTerminalError,
@@ -138,6 +142,14 @@ export interface DaemonConnectionClient extends AgentApiConnectionClient {
   sendWorkspaceFileReadResult?(result: AgentWorkspaceFileReadResult): Promise<void>;
   onWorkspaceDelete?(callback: (request: AgentWorkspaceDeleteRequest) => Promise<void>): () => void;
   sendWorkspaceDeleteResult?(result: AgentWorkspaceDeleteResult): Promise<void>;
+  onLocalSessionSearch?(
+    callback: (request: LocalSessionSearchRequest) => Promise<void>,
+  ): () => void;
+  sendLocalSessionSearchResult?(result: LocalSessionSearchResult): Promise<void>;
+  onLocalSessionExcerpt?(
+    callback: (request: LocalSessionExcerptRequest) => Promise<void>,
+  ): () => void;
+  sendLocalSessionExcerptResult?(result: LocalSessionExcerptResult): Promise<void>;
   onUsageScan?(callback: (request: DaemonRuntimeUsageScanRequest) => Promise<void>): () => void;
   sendUsageScanResult?(response: DaemonRuntimeUsageScanResponse): Promise<void>;
   onProviderModelRefresh?(

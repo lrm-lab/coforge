@@ -33,6 +33,8 @@ export interface CodexHistoryHost {
   homeDirectory(): string;
   readDirectoryEntries(path: string): Promise<readonly CodexDirectoryEntry[]>;
   readFileTail(path: string, tailBytes: number): Promise<{ text: string; startOffset: number }>;
+  /** Bounded prefix read used only for a local-session handoff's original request. */
+  readFileHead?(path: string, headBytes: number): Promise<string>;
 }
 
 /** Native session and usage policies consume distinct host environment compositions. */

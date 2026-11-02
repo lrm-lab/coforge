@@ -36,6 +36,7 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
 - `runtime-stop.ts` owns the closing flow — closing local capabilities, bringing Agent processes down, settling reminders/migrations/Pi chat, reporting the Agents inactive, revoking their keys, the shutdown notice and taking the transport down; `runtime.ts` owns the runner hold and the `stopping` flag it flips around it.
 - `runtime-startup.ts` owns one connection's open sequence — publication and auxiliary listeners, transport start, control/session replay, the ready handshake and the post-ready kickoffs — and the start promise, abort signal, subscriptions, Pi chat relay and runtime auth controller it installs; `runtime.ts` only decides when to open a connection.
 - `runtime-publication-subscriptions.ts` owns pre-ready publication buffering and Agent/control/App/migration event listeners; `runtime.ts` supplies operation handlers and releases buffered work after ready.
+- `local-session-query-handlers.ts` binds owner-authorized local Session list/search/excerpt requests to the bounded catalog and current transport.
 - `agent-stop-coordinator.ts` owns process release/stop ordering after runtime admission closes; `runtime.ts` supplies launch maps and lifecycle collaborators.
 - `agent-launch-coordinator.ts` owns launch identity and launch-state initialization; `runtime.ts` supplies lifecycle ports and start admission.
 - `agent-launch-process.ts` owns the provider process boundary and its Session, Activity, and exit cleanup callbacks for one resolved launch.
