@@ -183,7 +183,7 @@
   "agent_activity_diagnostics": "Activity diagnostics",
   "agent_activity_copy_diagnostics": "Copy Diagnostic Info",
   "agent_activity_diagnostics_copied": "Copied",
-  "agent_activity_empty_description": "Each step the Agent takes on a message is logged here. Try sending it one.",
+  "agent_activity_empty_description": "Once the Agent starts, its status changes and each step it takes on a message are logged here.",
   "agent_activity_loading": "Loading activity…",
   "agent_activity_error": "Activity could not be loaded.",
   "agent_activity_starting": "Starting",
