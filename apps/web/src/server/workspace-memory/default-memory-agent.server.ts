@@ -239,9 +239,9 @@ async function addUnmutedMember(
       workspaceId: input.workspaceId,
       conversationId: input.conversationId,
       agentId,
-      channelMuted: false,
+      notificationLevel: "all",
     },
-    update: { leftAt: null, channelMuted: false },
+    update: { leftAt: null, notificationLevel: "all" },
   });
   if (wasIn === null)
     await recordChannelMembersAdded(tx, input.workspaceId, input.conversationId, [{ agentId }]);

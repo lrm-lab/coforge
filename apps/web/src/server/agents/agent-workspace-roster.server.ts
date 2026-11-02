@@ -1,4 +1,5 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
+import { isMutedLevel } from "#src/server/conversations/notification-level.server";
 import type { WorkspaceInfoChannel, WorkspaceInfoComputer } from "@lrm/coforge-sdk/internal";
 import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
 import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
@@ -34,7 +35,7 @@ export async function listAgentWorkspaceChannels(
       archivedAt: true,
       members: {
         where: { ...channelActorMemberWhere(reader), ...ACTIVE_MEMBER_WHERE },
-        select: { channelRole: true, channelMuted: true },
+        select: { channelRole: true, notificationLevel: true },
         take: 1,
       },
     },
@@ -59,7 +60,7 @@ export async function listAgentWorkspaceChannels(
       description: channel.description,
       visibility: channelVisibilityOf(channel),
       joined: Boolean(member),
-      muted: member?.channelMuted ?? false,
+      muted: isMutedLevel(member?.notificationLevel),
       archived: channel.archivedAt !== null,
       ...(authority.channelRole ? { channelRole: authority.channelRole } : {}),
       ...(authority.adminBasis ? { channelAdminBasis: authority.adminBasis } : {}),

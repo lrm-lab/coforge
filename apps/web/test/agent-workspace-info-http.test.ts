@@ -255,7 +255,7 @@ test("workspace info lists the channels and Computers with the calling Agent's r
           description: "Everyone.",
           visibility: "public",
           archivedAt: null,
-          members: [{ channelRole: "member", channelMuted: true }],
+          members: [{ channelRole: "member", notificationLevel: "muted" }],
         },
         {
           id: "channel-2",

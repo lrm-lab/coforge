@@ -1,4 +1,5 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
+import { isMutedLevel } from "#src/server/conversations/notification-level.server";
 import { windowPageFlags } from "#src/lib/conversation-window";
 import { channelVisibilityOf } from "#src/features/conversations/channel-visibility";
 import { canCreateAgents } from "#src/server/workspaces/member-role.server";
@@ -133,7 +134,7 @@ export async function openChannel(
     coordinatorAgent: activeCoordinator,
     senderMemberId: member?.id ?? "",
     viewerId: member ? userId : undefined,
-    muted: member?.channelMuted ?? false,
+    muted: isMutedLevel(member?.notificationLevel),
     collapseLongMessages: member?.collapseLongMessages ?? false,
     pinned: Boolean(member?.pins.length),
     channelCapabilities: authority.capabilities,

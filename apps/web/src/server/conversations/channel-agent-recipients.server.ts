@@ -68,7 +68,7 @@ export async function channelAgentRecipients(
               ...ACTIVE_MEMBER_WHERE,
               ...(message.threadRootId
                 ? { threadFollows: { some: { rootMessageId: message.threadRootId } } }
-                : { channelMuted: false }),
+                : { notificationLevel: "all" }),
             },
             select: { agentId: true },
           })

@@ -333,6 +333,21 @@ export const setPublicChannelCollapseLongMessages = createServerFn({ method: "PO
     );
   });
 
+export const setPublicChannelNotificationLevel = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(
+    channelInput.extend({ notificationLevel: z.enum(["all", "relevant", "none", "muted"]) }),
+  )
+  .handler(async ({ data, context }) => {
+    const { channels, workspaceId, userId } = channelScope(context);
+    return channels.setNotificationLevel(
+      workspaceId,
+      userId,
+      data.channelId,
+      data.notificationLevel,
+    );
+  });
+
 export const setPublicChannelMuted = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(channelInput.extend({ muted: z.boolean() }))

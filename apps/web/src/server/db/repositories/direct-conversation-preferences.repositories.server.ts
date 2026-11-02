@@ -79,8 +79,8 @@ export class PrismaDirectConversationPreferences {
    * changed. One row's own flag, so it takes no conversation lock. */
   async setMuted({ memberId }: ViewerDirectMembership, muted: boolean) {
     const updated = await this.db.conversationMember.updateMany({
-      where: { id: memberId, channelMuted: { not: muted } },
-      data: { channelMuted: muted },
+      where: { id: memberId, notificationLevel: { not: muted ? "muted" : "all" } },
+      data: { notificationLevel: muted ? "muted" : "all" },
     });
     return { muted, changed: updated.count > 0 };
   }
@@ -140,7 +140,7 @@ export class PrismaDirectConversationPreferences {
         },
         orderBy: [{ conversation: { createdAt: "asc" } }, { conversationId: "asc" }],
         select: {
-          channelMuted: true,
+          notificationLevel: true,
           conversation: {
             select: {
               id: true,
@@ -226,14 +226,14 @@ export class PrismaDirectConversationPreferences {
     const profiles = new Map(people.map((person) => [person.id, person]));
     const lastMessages = await this.lastMessagePreviews(latest);
     return {
-      conversations: memberships.flatMap(({ conversation, channelMuted }) => {
+      conversations: memberships.flatMap(({ conversation, notificationLevel }) => {
         const peer = this.peerOf(workspaceId, conversation, peerIds, profiles);
         return peer
           ? [
               {
                 conversationId: conversation.id,
                 peer,
-                muted: channelMuted,
+                muted: notificationLevel === "muted",
                 lastMessage: lastMessages.get(conversation.id) ?? null,
               },
             ]

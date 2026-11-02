@@ -192,8 +192,9 @@ export class PrismaWebPushSubscriptionStore implements WebPushSubscriptionStore 
       ...(message.senderMemberId ? { id: { not: message.senderMemberId } } : {}),
       userId: userId ?? { not: null },
       ...ACTIVE_MEMBER_WHERE,
+      notificationLevel: { in: ["all", "relevant"] },
       OR: [
-        { channelMuted: false },
+        { notificationLevel: "all" },
         { userId: { in: mentionedUserIds } },
         ...(message.threadRootId
           ? [{ threadFollows: { some: { rootMessageId: message.threadRootId } } }]

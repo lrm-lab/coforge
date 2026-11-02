@@ -243,7 +243,7 @@ export async function commentRecipients(
           await tx.conversationMember.findMany({
             where: {
               conversationId: scope.sourceConversationId,
-              channelMuted: true,
+              notificationLevel: "muted",
               OR: [
                 { userId: { in: [...candidates.keys()] } },
                 { agentId: { in: [...candidates.keys()] } },

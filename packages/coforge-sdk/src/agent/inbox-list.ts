@@ -58,6 +58,8 @@ export type AgentInboxListResponse = {
   totals: AgentInboxTotals;
   hasMore: boolean;
   nextBefore: number | null;
+  /** A one-time suggestion to mute a noisy channel, with the reason and the command. */
+  muteHint?: string;
 };
 
 const isCount = (value: unknown): value is number =>
@@ -88,7 +90,8 @@ export function decodeAgentInboxListResponse(value: unknown): AgentInboxListResp
     !isCount(value.totals.dms) ||
     !isCount(value.totals.mentions) ||
     typeof value.hasMore !== "boolean" ||
-    !(value.nextBefore === null || isCount(value.nextBefore))
+    !(value.nextBefore === null || isCount(value.nextBefore)) ||
+    !(value.muteHint === undefined || typeof value.muteHint === "string")
   )
     throw new Error("invalid Agent inbox list response");
   return {
@@ -102,5 +105,6 @@ export function decodeAgentInboxListResponse(value: unknown): AgentInboxListResp
     },
     hasMore: value.hasMore,
     nextBefore: value.nextBefore as number | null,
+    ...(typeof value.muteHint === "string" ? { muteHint: value.muteHint } : {}),
   };
 }

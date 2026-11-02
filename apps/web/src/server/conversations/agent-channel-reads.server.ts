@@ -1,4 +1,5 @@
 import type { Conversation, PrismaClient } from "#src/generated/prisma/client";
+import { isMutedLevel } from "#src/server/conversations/notification-level.server";
 import { resolveAgentChannelStatuses } from "#src/server/agents/agent-channel-status.server";
 import { getAgentDisplay, type AgentDisplay } from "#src/server/agents/agent-display.server";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
@@ -86,7 +87,7 @@ export async function agentChannelInfo(
   const [member, memberCounts, authority, project] = await Promise.all([
     db.conversationMember.findFirst({
       where: { conversationId: channel.id, ...actor, ...ACTIVE_MEMBER_WHERE },
-      select: { channelMuted: true },
+      select: { notificationLevel: true },
     }),
     countActiveMembers(db, channel.id),
     resolveChannelAuthority(db, workspaceId, actor, channel),
@@ -99,7 +100,7 @@ export async function agentChannelInfo(
     visibility: channelVisibilityOf(channel),
     archived: channel.archivedAt !== null,
     joined: Boolean(member),
-    muted: member?.channelMuted ?? false,
+    muted: isMutedLevel(member?.notificationLevel),
     memberCounts,
     channelRole: authority.channelRole,
     channelAdminBasis: authority.adminBasis,

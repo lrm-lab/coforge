@@ -18,7 +18,8 @@ import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
  */
 export const HUMAN_UNREAD_MESSAGE_SQL = Prisma.sql`m."sequence" > LEAST(cm."readThroughSequence", cm."unreadFromSequence" - 1)
   AND m."senderMemberId" IS NOT NULL
-  AND m."senderMemberId" <> cm."id"`;
+  AND m."senderMemberId" <> cm."id"
+  AND cm."notificationLevel" <> 'muted'`;
 
 /** Where a person stands in one of their conversations: how many of its top-level messages are
  * unread for them (the badge, by the same rule `PublicChannels.list` counts every row's with), and

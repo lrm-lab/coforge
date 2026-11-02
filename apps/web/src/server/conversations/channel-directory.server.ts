@@ -1,4 +1,5 @@
 import { compareChannelNames } from "#src/features/conversations/channel-signals";
+import { isMutedLevel } from "#src/server/conversations/notification-level.server";
 import { channelVisibilityOf } from "#src/features/conversations/channel-visibility";
 import { AppError } from "#src/lib/app-error";
 import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
@@ -51,7 +52,7 @@ export async function listChannels(
         where: { userId, ...ACTIVE_MEMBER_WHERE },
         select: {
           id: true,
-          channelMuted: true,
+          notificationLevel: true,
           // Slack-style unread cursor. Thread replies belong to their thread
           // target and never advance it, so they never count in the channel badge.
           readThroughSequence: true,
@@ -151,7 +152,7 @@ export async function listChannels(
         joined: Boolean(member),
         archived: channel.archivedAt !== null,
         visibility: channelVisibilityOf(channel),
-        muted: member?.channelMuted ?? false,
+        muted: isMutedLevel(member?.notificationLevel),
         unreadCount: member ? (unreadByConversation.get(channel.id) ?? 0) : 0,
         mentioned: member ? mentionedConversations.has(channel.id) : false,
         lastMessage: preview?.lastMessage ?? null,

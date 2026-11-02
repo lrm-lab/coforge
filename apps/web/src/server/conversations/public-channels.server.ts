@@ -31,10 +31,12 @@ import {
   setAgentMuted,
   setCollapseLongMessages,
   setUserHidden,
+  setNotificationLevel,
   setUserMuted,
   setUserPinned,
   setUserUnread,
 } from "./channel-preferences.server";
+import type { NotificationLevel } from "./notification-level.server";
 import { markPublicChannelRead } from "./channel-read.server";
 import {
   addChannelMembers,
@@ -107,6 +109,15 @@ export class PublicChannels {
 
   setUserMuted(workspaceId: string, userId: string, channelId: string, muted: boolean) {
     return setUserMuted(this.ports, workspaceId, userId, channelId, muted);
+  }
+
+  setNotificationLevel(
+    workspaceId: string,
+    userId: string,
+    channelId: string,
+    level: NotificationLevel,
+  ) {
+    return setNotificationLevel(this.ports, workspaceId, userId, channelId, level);
   }
 
   setCollapseLongMessages(

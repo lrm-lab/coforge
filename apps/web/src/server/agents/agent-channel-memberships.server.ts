@@ -1,4 +1,5 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
+import { isMutedLevel } from "#src/server/conversations/notification-level.server";
 import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
 import { visibleChannelWhere } from "#src/server/conversations/channel-read-access.server";
 import { assertAgentChatReadable } from "./agent-chat-access.server";
@@ -36,7 +37,7 @@ export async function listAgentChannels(
       description: true,
       members: {
         where: { agentId, ...ACTIVE_MEMBER_WHERE },
-        select: { channelMuted: true },
+        select: { notificationLevel: true },
         take: 1,
       },
     },
@@ -45,6 +46,6 @@ export async function listAgentChannels(
     id: channel.id,
     name: channel.channelName ?? "",
     description: channel.description,
-    muted: channel.members[0]?.channelMuted ?? false,
+    muted: isMutedLevel(channel.members[0]?.notificationLevel),
   }));
 }

@@ -82,6 +82,9 @@ model ConversationMember {
   /// thread reads never advance the parent cursor.
   readThroughSequence      Int               @default(0)
   channelMuted             Boolean           @default(false)
+  /// all | relevant | none | muted. Humans use all four; Agents and DMs only all | muted.
+  /// The four-level read/write; `channelMuted` stays only until the release after the backfill.
+  notificationLevel        String            @default("all")
   chatSectionId            String?           @db.Uuid
   chatSectionSortOrder     Int               @default(0)
   chatSection              ChatSection?      @relation(fields: [chatSectionId], references: [id], onDelete: SetNull)
@@ -199,4 +202,21 @@ model ConversationPin {
   @@id([conversationId, memberId])
   @@index([workspaceId, memberId, sortOrder])
   @@map("conversation_pins")
+}
+
+/// A one-time suggestion to an Agent that it mute a channel: shown once per Agent and channel,
+/// with whether the Agent muted (`adopted`) or the window passed without it (`ignored`).
+model AgentMuteHint {
+  agentId        String   @db.Uuid
+  conversationId String   @db.Uuid
+  workspaceId    String   @db.Uuid
+  /// The start of the seven-day window the hint counted.
+  windowStart    DateTime
+  shownAt        DateTime @default(now())
+  /// pending | adopted | ignored
+  outcome        String   @default("pending")
+
+  @@id([agentId, conversationId])
+  @@index([workspaceId])
+  @@map("agent_mute_hints")
 }

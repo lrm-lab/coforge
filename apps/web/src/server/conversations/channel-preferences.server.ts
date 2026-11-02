@@ -11,6 +11,8 @@ import { lockConversation } from "./conversation-lock.server";
 import { lockMemberPins, setConversationPin } from "./conversation-pins.server";
 import { announceViewerEvent } from "./conversation-realtime.server";
 import { markUnreadAnchor } from "./human-unread.server";
+import { validateNotificationLevel, type NotificationLevel } from "./notification-level.server";
+import { AgentMuteHints } from "./agent-mute-hint.server";
 import { announceReadMoved } from "#src/server/inbox/activity-attention.server";
 
 /**
@@ -56,10 +58,37 @@ export async function setAgentMuted(
       where: {
         conversationId_agentId: { conversationId: channel.id, agentId },
       },
-      data: { channelMuted: muted },
+      data: { notificationLevel: muted ? "muted" : "all" },
     });
   });
+  if (muted) await new AgentMuteHints(db).adopt(agentId, channel.id);
   return { muted };
+}
+
+/** A person's four-level choice; a DM keeps only the on/off pair. */
+export async function setNotificationLevel(
+  { db, realtime }: PublicChannelPorts,
+  workspaceId: string,
+  userId: string,
+  channelId: string,
+  level: NotificationLevel,
+) {
+  const channel = await memberChannel(db, workspaceId, userId, channelId);
+  const next = validateNotificationLevel(level, Boolean(channel.directKey));
+  const changed = await db.$transaction(async (tx) => {
+    await lockConversation(tx, channel.id);
+    return changeMemberRow(
+      tx,
+      { conversationId: channel.id, userId },
+      { unless: { notificationLevel: next }, data: { notificationLevel: next } },
+    );
+  });
+  if (changed)
+    await announceViewerEvent(realtime, {
+      userIds: [userId],
+      event: { type: "pref.changed.v1", workspaceId, name: "muted" },
+    });
+  return { notificationLevel: next };
 }
 
 export async function setUserMuted(
@@ -76,8 +105,8 @@ export async function setUserMuted(
       tx,
       { conversationId: channel.id, userId },
       {
-        unless: { channelMuted: muted },
-        data: { channelMuted: muted },
+        unless: { notificationLevel: muted ? "muted" : "all" },
+        data: { notificationLevel: muted ? "muted" : "all" },
       },
     );
   });

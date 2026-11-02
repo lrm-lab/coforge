@@ -1,4 +1,5 @@
 import { announceMessageBestEffort } from "#src/server/conversations/conversation-activity.server";
+import { isMutedLevel } from "#src/server/conversations/notification-level.server";
 import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
 import { channelActorOf } from "#src/server/conversations/channel-actor.server";
 import { userUploadedAttachmentWhere } from "#src/server/attachments/message-attachments.server";
@@ -152,7 +153,7 @@ export async function createTasks(
             ...ACTIVE_MEMBER_WHERE,
             agent: ACTIVE_AGENT_WHERE,
           },
-          select: { agentId: true, channelMuted: true },
+          select: { agentId: true, notificationLevel: true },
         })
       : [];
     const coordinator =
@@ -219,11 +220,11 @@ export async function createTasks(
       // Mentions broaden the audience. A muted assignee gets one assignment receipt below,
       // regardless of how many created Tasks it holds.
       const recipients = agentMembers.filter(
-        ({ agentId, channelMuted }) =>
+        ({ agentId, notificationLevel }) =>
           mentionedAgentIds.has(agentId!) ||
           (coordinator?.coordinatorAgentId
             ? agentId === coordinator.coordinatorAgentId
-            : !scope.channel || !channelMuted),
+            : !scope.channel || !isMutedLevel(notificationLevel)),
       );
       // The Task's id is its message's, as for every Task that started as a message.
       const messageId = Bun.randomUUIDv7();

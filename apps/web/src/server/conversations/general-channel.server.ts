@@ -82,9 +82,6 @@ export async function enrollGeneralChannel(db: Prisma.TransactionClient, workspa
       workspaceId,
       conversationId: general.id,
       agentId,
-      // An Agent joins #general muted, so ordinary chatter there does not wake every Agent in the
-      // Workspace; a personal @mention still reaches it, and it may unmute.
-      channelMuted: true,
     })),
     skipDuplicates: true,
     select: { agentId: true },
@@ -156,8 +153,7 @@ export async function joinGeneralChannel(
     : undefined;
   await db.conversationMember.upsert({
     where: { conversationId_agentId: { conversationId: general.id, agentId } },
-    // Muted on first joining, like every Agent in #general; a re-join keeps its own setting.
-    create: { workspaceId, conversationId: general.id, agentId, channelMuted: true },
+    create: { workspaceId, conversationId: general.id, agentId },
     update: { leftAt: null },
   });
   if (wasIn === null) await recordChannelMembersAdded(db, workspaceId, general.id, [{ agentId }]);

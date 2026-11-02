@@ -8,6 +8,7 @@ import {
 import { threadReferenceText } from "@lrm/coforge-sdk/internal";
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import { directRefs } from "#src/server/db/repositories/agent-peer-direct.repositories.server";
+import { AgentMuteHints } from "#src/server/conversations/agent-mute-hint.server";
 
 type UnreadRow = {
   conversationId: string;
@@ -29,7 +30,7 @@ type UnreadRow = {
  * neither archived nor hidden from the Workspace, and not an App event conversation. */
 const activeMemberships = (workspaceId: string, agentId: string) => Prisma.sql`
   SELECT m.id AS "memberId", m."conversationId", c."channelName", c."directKey",
-         m."channelMuted" AS muted, m."agentReadThroughSequence" AS "readSeq",
+         (m."notificationLevel" = 'muted') AS muted, m."agentReadThroughSequence" AS "readSeq",
          m."joinedAt" AS "joinedAt"
   FROM "conversation_members" m
   JOIN "conversations" c ON c.id = m."conversationId" AND c."workspaceId" = m."workspaceId"
@@ -128,7 +129,18 @@ async function unreadThreads(
  *   equal times is extended to the end of the run, so nothing is skipped or repeated.
  */
 export async function listAgentInbox(
-  db: Pick<PrismaClient, "$queryRaw" | "user" | "agent" | "conversation" | "workspaceMembership">,
+  db: Pick<
+    PrismaClient,
+    | "$queryRaw"
+    | "user"
+    | "agent"
+    | "conversation"
+    | "workspaceMembership"
+    | "agentMessageDelivery"
+    | "message"
+    | "conversationMember"
+    | "agentMuteHint"
+  >,
   workspaceId: string,
   agentId: string,
   { view = "unread", before }: { view?: AgentInboxView; before?: number } = {},
@@ -183,6 +195,18 @@ export async function listAgentInbox(
     lastReadSeq: row.readSeq,
   }));
   const hasMore = end < inView.length;
+  const hintRow = page.find(
+    (row) => row.channelName !== null && row.threadRootId === null && !row.muted,
+  );
+  const muteHint = hintRow
+    ? await new AgentMuteHints(db).forInbox({
+        workspaceId,
+        agentId,
+        conversationId: hintRow.conversationId,
+        target: `#${hintRow.channelName}`,
+        muted: hintRow.muted,
+      })
+    : null;
   return {
     ok: true,
     view,
@@ -190,6 +214,7 @@ export async function listAgentInbox(
     totals,
     hasMore,
     nextBefore: hasMore ? page[page.length - 1]!.latestAt.getTime() : null,
+    ...(muteHint ? { muteHint } : {}),
   };
 }
 
