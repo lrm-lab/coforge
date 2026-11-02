@@ -1,4 +1,9 @@
-import { truncateCodePoints, truncateCodePointsWithEllipsis } from "@lrm/coforge-sdk/internal";
+import {
+  frameUntrustedText,
+  truncateCodePoints,
+  truncateCodePointsWithEllipsis,
+} from "@lrm/coforge-sdk/internal";
+import { escapePanelClosingTags } from "#src/briefing-text";
 import { collapseWhitespace } from "#src/inline-text";
 import { asRecord } from "#src/json-record";
 import { readTailLines } from "#src/transcript-tail";
@@ -206,7 +211,10 @@ function collect(records: readonly CodexRolloutRecord[]): {
       const text = contentText(payload.content);
       const role = payload.type === "agent_message" ? "assistant" : payload.role;
       if ((role === "user" || role === "assistant") && text)
-        messages.push(`[${clock(record.timestampMs)}] ${role}: ${messageBody(text)}`);
+        // Someone else may have written it: framed, and unable to close its section.
+        messages.push(
+          `[${clock(record.timestampMs)}] ${role}: ${escapePanelClosingTags(frameUntrustedText(messageBody(text)))}`,
+        );
       continue;
     }
     if (payload.type === "function_call_output" || payload.type === "custom_tool_call_output") {
@@ -264,7 +272,9 @@ export function formatCodexRecycleBriefing(
   const tail = actions.slice(-RECENT_ACTIONS);
   const actionSection = [
     `<recent-actions span="${tail.length} of ${actions.length}" order="oldest first">`,
-    ...tail.map((action, index) => actionLine(action, actions.length - tail.length + index)),
+    ...tail.map((action, index) =>
+      escapePanelClosingTags(actionLine(action, actions.length - tail.length + index)),
+    ),
     "</recent-actions>",
   ].join("\n");
   const panel = [messageSection, actionSection]

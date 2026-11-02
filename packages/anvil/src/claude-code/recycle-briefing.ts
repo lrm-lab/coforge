@@ -12,6 +12,7 @@ import {
   type TranscriptAction,
 } from "./recycle-actions";
 import { collectRecentMessages, type RecentMessage } from "./recycle-messages";
+import { escapePanelClosingTags } from "#src/briefing-text";
 import { findClaudeSessionTranscript } from "./session-transcript";
 
 /**
@@ -53,9 +54,11 @@ function rereadablePath(name: string, root: string): string | undefined {
 }
 
 function messageLine(message: RecentMessage): string {
-  return estimateTokens(message.raw.length) <= MESSAGE_MAX_TOKENS
-    ? message.raw
-    : `${truncateCodePoints(message.raw, MESSAGE_MAX_TOKENS * CHARS_PER_TOKEN)}${MESSAGE_TRUNCATED}`;
+  return escapePanelClosingTags(
+    estimateTokens(message.raw.length) <= MESSAGE_MAX_TOKENS
+      ? message.raw
+      : `${truncateCodePoints(message.raw, MESSAGE_MAX_TOKENS * CHARS_PER_TOKEN)}${MESSAGE_TRUNCATED}`,
+  );
 }
 
 function clip(body: string, tokenLimit: number): string {
@@ -88,7 +91,7 @@ function formatPanel(input: {
   }
   const tailSection = [
     `<recent-actions span="${input.tail.length} of ${input.totalActions}" order="oldest first">`,
-    ...input.tail.map(actionLine),
+    ...input.tail.map((action) => escapePanelClosingTags(actionLine(action))),
     "</recent-actions>",
   ];
   let left =
@@ -125,7 +128,7 @@ function formatPanel(input: {
     left -= estimateTokens(title.length) + 4;
     const cap =
       object.rereadBody !== null ? OBJECT_CONTENT_CAP_TOKENS : STALE_OBJECT_BODY_CAP_TOKENS;
-    const clipped = clip(body, Math.min(cap, left));
+    const clipped = escapePanelClosingTags(clip(body, Math.min(cap, left)));
     objectLines.push(title, clipped, "</object>");
     left -= estimateTokens(clipped.length);
   }

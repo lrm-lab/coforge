@@ -15,6 +15,7 @@ import {
   AGENT_LAUNCH_APPS_SECTION_MAX_BYTES,
   type AgentLaunchApp,
 } from "@lrm/coforge-sdk/internal/agent-launch-apps";
+import { MESSAGE_LINE_SEPARATOR } from "@lrm/coforge-sdk/internal";
 import { WORKSPACE_ASSISTANT_INSTRUCTIONS } from "./workspace-assistant-instructions";
 import { MEMORY_AGENT_RETRIEVAL_GUIDANCE } from "./memory-agent-guidance";
 import { TASK_CONVERSATIONS_SECTION } from "./task-conversations-guidance";
@@ -84,7 +85,7 @@ function sanitizeQuotedName(name: string): string {
  * `agent-memory-seed.ts`. */
 export function stripHeadingMarkers(text: string): string {
   return text
-    .split("\n")
+    .split(MESSAGE_LINE_SEPARATOR)
     .map((line) => line.replace(/^#+/, ""))
     .join("\n");
 }
@@ -134,9 +135,11 @@ function buildAppsSection(apps: readonly AgentLaunchApp[]): string | undefined {
   return [APPS_SECTION_HEAD, ...shown, APPS_SECTION_TAIL].join("\n");
 }
 
+/** A Workspace's or Computer's name, which people wrote, folded to one line beside its id. */
 function labelWithId(label: string | undefined, id: string | undefined): string | undefined {
-  if (label && id) return `${label} (${id})`;
-  return label || id;
+  const name = label ? collapseWhitespace(label) : undefined;
+  if (name && id) return `${name} (${id})`;
+  return name || id;
 }
 
 /**

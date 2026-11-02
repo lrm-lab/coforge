@@ -3,6 +3,7 @@ import { asRecord } from "#src/json-record";
 import { cliClock, toolResultText } from "./recycle-actions";
 import { transcriptRecords } from "./session-transcript";
 import { readTailLines } from "#src/transcript-tail";
+import { COFORGE_MESSAGE_HEADER } from "#src/briefing-text";
 
 /**
  * The CoForge messages a Claude session saw and sent, recovered from its transcript for the
@@ -24,7 +25,6 @@ export type RecentMessage = {
 };
 
 const MESSAGE_SCAN_TAIL_BYTES = 16 * 1024 * 1024;
-const MESSAGE_START_RE = /^\[(?:target=|\d+\/\d+ msg=)/;
 const SEND_COMMAND_RE = /\bcoforge\s+message\s+send\b/;
 const READ_COMMAND_RE = /\bcoforge\s+message\s+(?:check|read|resolve)\b/;
 const MSG_ATTR_RE = /\bmsg=([\w-]+)/;
@@ -66,7 +66,7 @@ function parseMessageChunks(text: string): RecentMessage[] {
   };
   for (const fullLine of text.split("\n")) {
     const line = fullLine.slice(0, MAX_LINE_CHARS);
-    if (MESSAGE_START_RE.test(line)) {
+    if (COFORGE_MESSAGE_HEADER.test(line)) {
       finalize();
       current = [line];
     } else if (/^No more new (?:inbox )?messages\.?$/.test(line.trim())) {
@@ -134,11 +134,8 @@ export async function collectRecentMessages(
   const found: RecentMessage[] = [];
   const handleResult = (id: string | null, text: string) => {
     const attempt = id === null ? undefined : sendAttempts.get(id);
-    if (!attempt) {
-      if (text.includes("[target=") || /^\[\d+\/\d+ msg=/m.test(text))
-        found.push(...parseMessageChunks(text));
-      return;
-    }
+    // Only `coforge message` output holds messages: a file or another tool can print anything.
+    if (!attempt) return;
     const delivered = /Message sent/.test(text);
     if (attempt.message) {
       if (delivered) found.push(attempt.message);
@@ -161,11 +158,13 @@ export async function collectRecentMessages(
         const rawCommand = asRecord(block.input)?.command;
         if (typeof rawCommand !== "string") continue;
         const command = rawCommand.slice(0, MAX_COMMAND_CHARS);
-        if (!SEND_COMMAND_RE.test(command)) continue;
+        const sends = SEND_COMMAND_RE.test(command);
+        const reads = READ_COMMAND_RE.test(command);
+        if (!sends && !reads) continue;
         sendAttempts.set(block.id, {
-          message: parseSentMessage(command, ts),
-          target: sendTarget(sendSegment(command)),
-          reads: READ_COMMAND_RE.test(command),
+          message: sends ? parseSentMessage(command, ts) : null,
+          target: sends ? sendTarget(sendSegment(command)) : null,
+          reads,
         });
       }
     } else if (record.type === "user") {
