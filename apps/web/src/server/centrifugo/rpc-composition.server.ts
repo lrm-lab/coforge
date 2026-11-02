@@ -11,8 +11,6 @@ import {
   AGENT_WORKSPACE_DELETE_RESULT_METHOD,
   AGENT_WORKSPACE_SCAN_RESULT_METHOD,
   AGENT_CONTROL_RESULT_METHOD,
-  REMINDER_FIRE_METHOD,
-  REMINDER_SNAPSHOT_METHOD,
   APP_CONFIG_SNAPSHOT_METHOD,
 } from "@lrm/coforge-sdk/internal";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
@@ -123,28 +121,12 @@ import { daemonControlChannel } from "./server-api.server";
 import { encodeReminderSync } from "@lrm/coforge-sdk/internal";
 import { getAgentDisplay } from "#src/server/agents/agent-display.server";
 import { registerBackgroundSweeps } from "#src/server/sweeps/background-sweeps.server";
+import { reminderCallbackMethods } from "./reminder-callback-methods.server";
 
 const unavailable: CentrifugoRpcError = {
   code: 503,
   message: "protocol method dependencies are unavailable",
 };
-
-/**
- * The reminder callbacks a Computer calls back on, under their current names.
- *
- * The upgrade window that also answered the pre-convention `reminder:v1:*` spellings is closed: the
- * rename to `agent:v1:reminder:*` shipped before 0.1.0, and no supported Computer sends the old
- * names. A Computer that does is unsupported and sees Centrifugo's `104`, not a silent miss.
- */
-export function reminderCallbackMethods(
-  fire: CentrifugoRpcMethod,
-  snapshot: CentrifugoRpcMethod,
-): Record<string, CentrifugoRpcMethod> {
-  return {
-    [REMINDER_FIRE_METHOD]: fire,
-    [REMINDER_SNAPSHOT_METHOD]: snapshot,
-  };
-}
 
 const unavailableMethod: CentrifugoRpcMethod = () => unavailable;
 
