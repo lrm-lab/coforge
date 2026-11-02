@@ -9,7 +9,7 @@ import {
   listUserSavedMessages,
 } from "#src/server/conversations/saved-messages.server";
 import { searchMessages } from "#src/server/conversations/message-search.server";
-import { authorizeConversationRealtime } from "#src/server/conversations/conversation-realtime-access.server";
+import { personConversationAccess } from "#src/server/conversations/channel-read-access.server";
 import { attachmentCommentsFixture } from "./helpers/attachment-comments-fixture";
 
 test("comment reads follow source visibility, while only current source members can write", async () => {
@@ -89,9 +89,13 @@ test("generic read, search and subscription never authorize through comment memb
       offset: 0,
     });
     expect(page.results).toEqual([]);
-    await expect(
-      authorizeConversationRealtime(f.db, { ...f.actor, conversationId: stored.conversationId }),
-    ).rejects.toEqual(new AppError("ACCESS_DENIED"));
+    // Nor may the subscribe proxy hold the comment conversation's channel for them.
+    expect(
+      await personConversationAccess(f.db, f.actor.userId, {
+        id: stored.conversationId,
+        workspaceId: f.actor.workspaceId,
+      }),
+    ).not.toBe("read");
   } finally {
     await f.close();
   }

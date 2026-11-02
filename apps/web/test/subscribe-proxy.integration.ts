@@ -374,7 +374,7 @@ test("a mention published between a read and the subscribe shows as missed, and 
   expect(streamMovedSince(read, await subscribedAt())).toBe(true);
 }, 30_000);
 
-test("an Agent status publication reaches both its names, and the new one keeps a position", async () => {
+test("an Agent status publication keeps a position on its channel", async () => {
   const api = createCentrifugoServerApi({
     COFORGE_CENTRIFUGO_API_URL: `http://127.0.0.1:${centrifugoPort}/api`,
     COFORGE_CENTRIFUGO_API_KEY: API_KEY,
