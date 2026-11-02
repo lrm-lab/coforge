@@ -60,6 +60,9 @@ class DaemonQuery<Request extends Scope, Result> {
           event: "workspace_query:handler_failed",
           workspace_id: request.workspaceId,
           computer_id: request.computerId,
+          ...("requestId" in request && typeof request.requestId === "string"
+            ? { request_id: request.requestId }
+            : {}),
           error_code: error instanceof Error ? error.name : "unknown",
           outcome: "failed",
         });
