@@ -1,6 +1,7 @@
 import { taskSelection } from "./task-view.server";
 import {
   taskStatusMoveAllowed,
+  taskStatusNeedsOwner,
   type TaskCommand,
   type TaskResult,
 } from "@lrm/coforge-sdk/internal";
@@ -51,8 +52,7 @@ export async function updateTaskStatus(
   const manager = await isTaskManager(ports.db, conversation.workspaceId, member);
   if (!taskStatusMoveAllowed(storedTaskStatus(task.status), status, { manager }))
     throw new AppError("ACCESS_DENIED");
-  if (status !== "todo" && status !== "closed" && !task.ownerMemberId)
-    throw new AppError("CONFLICT");
+  if (taskStatusNeedsOwner(status) && !task.ownerMemberId) throw new AppError("CONFLICT");
   if (status === "done" && task.createsResource && !task.resourceReceipt)
     throw new AppError("CONFLICT");
   const updated = await withNotices(ports, conversation, async (tx, notices) => {

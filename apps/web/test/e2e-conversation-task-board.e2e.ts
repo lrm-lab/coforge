@@ -63,11 +63,15 @@ test("a conversation's Tasks tab is the Tasks page board, claims by moving and p
   const byText = (selector: string, text: string) =>
     `[...document.querySelectorAll(${JSON.stringify(selector)})].filter((element) => element.textContent.trim() === ${JSON.stringify(text)}).at(-1)`;
   const bodyHas = (text: string) => `document.body.textContent.includes(${JSON.stringify(text)})`;
-  const cardsIn = (status: string) =>
-    `document.querySelectorAll('section[aria-label=${JSON.stringify(status)}] article').length`;
+  const cardsOf = (column: string) =>
+    `[...document.querySelectorAll('section[aria-label=${JSON.stringify(column)}] article')]`;
+  const cardsIn = (column: string) => `${cardsOf(column)}.length`;
   const cardOf = (title: string) =>
     `[...document.querySelectorAll('article')].find((card) => card.textContent.includes(${JSON.stringify(title)}))`;
   const eval_ = async (expression: string) => JSON.parse(await browser("eval", expression));
+  // A moved card shows in its new column while the move saves (busy), and is saved once it is not.
+  const movedAndSaved = (title: string, column: string) =>
+    `${cardsOf(column)}.some((card) => card.textContent.includes(${JSON.stringify(title)}) && !card.closest('[aria-busy="true"]'))`;
 
   const suffix = `${process.pid}-${Date.now()}`;
   const channelName = `e2e-board-${suffix}`;
@@ -158,13 +162,11 @@ test("a conversation's Tasks tab is the Tasks page board, claims by moving and p
     // Moving the unowned To do Task to In progress claims it for the viewer.
     await browser(
       "eval",
-      `${cardOf(openTitle)}.querySelector('button[aria-label^="More actions"]').click()`,
+      `${cardOf(openTitle)}.querySelector('button[aria-label^="More Actions"]').click()`,
     );
     await waitFor(`${byText('[role="menuitem"]', "In progress")} !== undefined`);
     await browser("eval", `${byText('[role="menuitem"]', "In progress")}.click()`);
-    await waitFor(
-      `[...document.querySelectorAll('section[aria-label="In progress"] article')].some((card) => card.textContent.includes(${JSON.stringify(openTitle)}))`,
-    );
+    await waitFor(movedAndSaved(openTitle, "In progress"));
     // So does dragging one there by its handle, with a real pointer.
     const centre = async (selector: string) =>
       (await eval_(
@@ -187,9 +189,7 @@ test("a conversation's Tasks tab is the Tasks page board, claims by moving and p
         String(Math.round(fromY + ((toY - fromY) * step) / 10)),
       );
     await browser("mouse", "up");
-    await waitFor(
-      `[...document.querySelectorAll('section[aria-label="In progress"] article')].some((card) => card.textContent.includes(${JSON.stringify(dragTitle)}))`,
-    );
+    await waitFor(movedAndSaved(dragTitle, "In progress"));
     const claimed = await db.task.findMany({
       where: { conversationId: channel.id, title: { in: [openTitle, dragTitle] } },
       orderBy: { number: "asc" },

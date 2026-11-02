@@ -1,4 +1,9 @@
-import { taskStatusMoveAllowed, type TaskStatus, type TaskView } from "@lrm/coforge-sdk/internal";
+import {
+  taskStatusMoveAllowed,
+  taskStatusNeedsOwner,
+  type TaskStatus,
+  type TaskView,
+} from "@lrm/coforge-sdk/internal";
 
 export type TaskMoveCommand =
   | { operation: "claim"; number: number }
@@ -30,12 +35,11 @@ export function getTaskMoveCommand(
     return { operation: "claim", number: task.number };
   }
 
+  if (!task.owner && taskStatusNeedsOwner(nextStatus)) return undefined;
   // Only the owner works a task: anyone else may reopen it, finish it or close it. A Workspace
-  // owner or admin may work it too, as the server lets them set any status. A Task nobody owns
-  // still cannot become In progress, In review or Done (the server answers CONFLICT), whoever asks.
+  // owner or admin may work it too, as the server lets them set any status.
   if (!canSetAnyStatus && !own && (nextStatus === "in_progress" || nextStatus === "in_review"))
     return undefined;
-  if (nextStatus === "done" && !task.owner) return undefined;
 
   return {
     operation: "update",

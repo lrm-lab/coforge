@@ -117,6 +117,20 @@ describe("getTaskMoveCommand", () => {
         ).toEqual(update(to));
       }
   });
+
+  test("a Task nobody owns goes only to To do or Closed, a Workspace admin's move included", () => {
+    const manager = { canSetAnyStatus: true };
+    expect(getTaskMoveCommand(task("todo"), "me", "in_review", manager)).toBeUndefined();
+    expect(getTaskMoveCommand(task("todo"), "me", "done", manager)).toBeUndefined();
+    expect(getTaskMoveCommand(task("in_review"), "me", "in_progress", manager)).toBeUndefined();
+    expect(getTaskMoveCommand(task("in_review"), "me", "todo", manager)).toEqual(update("todo"));
+    expect(getTaskMoveCommand(task("todo"), "me", "closed", manager)).toEqual(update("closed"));
+    // Moving it to In progress claims it.
+    expect(getTaskMoveCommand(task("todo"), "me", "in_progress", manager)).toEqual({
+      operation: "claim",
+      number: 7,
+    });
+  });
 });
 
 describe("taskStatusOptions", () => {

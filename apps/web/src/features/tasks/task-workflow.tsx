@@ -4,15 +4,18 @@ import {
   DragOverlay,
   KeyboardSensor,
   PointerSensor,
+  pointerWithin,
+  rectIntersection,
   useDraggable,
   useDroppable,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { useHydrated } from "@tanstack/react-router";
 import { ChevronDown, DotsGrid as GripVertical, DotsHorizontal, EyeOff } from "@untitledui/icons";
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button as AriaButton, Disclosure, DisclosurePanel, Heading } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
@@ -145,6 +148,7 @@ export function TaskWorkflow<T extends TaskView>({
     <DndContext
       id={id}
       sensors={sensors}
+      collisionDetection={dropTarget}
       onDragStart={({ active: item }) => setActive(tasks.find((task) => task.id === item.id))}
       onDragCancel={() => setActive(undefined)}
       onDragEnd={(event) => void dropped(event)}
@@ -178,7 +182,7 @@ export function TaskWorkflow<T extends TaskView>({
             {(shown) => (
               <>
                 {group.tasks.slice(0, shown).map((task) => (
-                  <div key={task.id} aria-busy={pending?.id === task.id}>
+                  <div key={task.id} data-task-drag-node aria-busy={pending?.id === task.id}>
                     {renderTask(task, controls(task))}
                   </div>
                 ))}
@@ -242,13 +246,31 @@ export function TaskWorkflow<T extends TaskView>({
   }
 }
 
+/** A pointer drag drops where the pointer is, not where the dragged card overlaps most; a
+ * keyboard drag, which has no pointer, keeps dnd-kit's default and goes by overlap. */
+const dropTarget: CollisionDetection = (args) =>
+  args.pointerCoordinates ? pointerWithin(args) : rectIntersection(args);
+
+/** The grip that picks a card up. The card around it is what is dragged, so its overlay starts
+ * where the card stood; the grip registers it rather than the card registering itself, so a drag
+ * moving between columns re-renders the grips, not each card's whole content. */
 function DragHandle({ task, disabled }: { task: TaskView; disabled: boolean }) {
-  const drag = useDraggable({ id: task.id, disabled });
+  const { setNodeRef, setActivatorNodeRef, listeners, attributes } = useDraggable({
+    id: task.id,
+    disabled,
+  });
+  const ref = useCallback(
+    (handle: HTMLElement | null) => {
+      setActivatorNodeRef(handle);
+      setNodeRef(handle?.closest<HTMLElement>("[data-task-drag-node]") ?? null);
+    },
+    [setNodeRef, setActivatorNodeRef],
+  );
   return (
     <ButtonUtility
-      ref={drag.setNodeRef}
-      {...drag.listeners}
-      {...drag.attributes}
+      ref={ref}
+      {...listeners}
+      {...attributes}
       size="xs"
       color="tertiary"
       isDisabled={disabled}

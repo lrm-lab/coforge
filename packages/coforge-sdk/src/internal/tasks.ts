@@ -40,6 +40,12 @@ export function taskStatusMoveAllowed(
   return viewer.manager || ordinaryTaskStatusMove(from, to);
 }
 
+/** Whether a Task must have an owner to be in this status: only To do and Closed may be nobody's
+ * (the server answers CONFLICT otherwise). A Task nobody owns reaches In progress by a claim. */
+export function taskStatusNeedsOwner(status: TaskStatus): boolean {
+  return status !== "todo" && status !== "closed";
+}
+
 /** A conversation member named on a Task: its owner or its creator. */
 export type TaskMember = {
   memberId: string;
