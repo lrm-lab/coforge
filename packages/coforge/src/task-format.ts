@@ -343,14 +343,13 @@ function appendTaskRecentContext(
   const target = command.target ?? "the task's board";
   if (result.freshnessContextMode === "withheld") {
     const count = result.withheldMessageCount ?? result.newMessageCount ?? 0;
-    return `${rendered}\n\nMeanwhile ${target} has ${count} ${count === 1 ? "message" : "messages"} you had not seen; reviewer isolation hides their contents.`;
+    return `${rendered}\n\nApplied. Meanwhile ${target} has messages you had not seen; ${count} withheld for reviewer isolation.`;
   }
   if (!result.recentUnread?.length) return rendered;
-  const count = result.newMessageCount ?? result.recentUnread.length;
   return [
     rendered,
     "",
-    `Meanwhile ${target} has ${count} ${count === 1 ? "message" : "messages"} you had not seen:`,
+    `Applied. Meanwhile ${target} has messages you had not seen; if they change what you just did, change it again:`,
     ...result.recentUnread.map(formatMessageLine),
   ].join("\n");
 }
