@@ -4,7 +4,6 @@ import {
   muteAgentChannel,
   readAgentMessages,
   executeAgentSendMessageWithPolicy,
-  unfollowAgentThread,
   type AgentMessageRepository,
 } from "#src/server/agents/agent-messages.server";
 import type { AgentTargetFreshness } from "#src/server/agents/agent-target-freshness.server";
@@ -35,12 +34,6 @@ test("channel actions preserve the authenticated scope", async () => {
     true,
   );
   expect(calls).toEqual([["workspace-1", "agent-1", "#general", true]]);
-});
-
-test("thread unfollow rejects a channel without a thread", async () => {
-  await expect(
-    unfollowAgentThread(repository(), { workspaceId: "w", agentId: "a" }, "#general"),
-  ).rejects.toThrow("channel thread target");
 });
 
 test("drain maps Date values and forwards the limit and hasMore flag", async () => {

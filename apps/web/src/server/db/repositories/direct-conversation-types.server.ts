@@ -127,6 +127,7 @@ export type DirectConversationRepository = {
     agentId: string,
     target: string,
     followed: boolean,
+    reason?: string,
   ): Promise<{ followed: boolean }>;
   getOrCreateUserAgent(
     workspaceId: string,

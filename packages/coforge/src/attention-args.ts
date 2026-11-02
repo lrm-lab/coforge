@@ -14,7 +14,7 @@ export type InboxInvocation = {
 };
 export type ChannelInvocation = { command: "mute" | "unmute"; target: string };
 export type ThreadInvocation =
-  | { command: "thread-unfollow"; target: string }
+  | { command: "thread-unfollow"; target: string; reason?: string }
   | { command: "thread-list" };
 
 const THREAD_TARGET = new RegExp(
@@ -54,15 +54,17 @@ function parseMuteTarget(args: readonly string[], command: string): string {
   return target;
 }
 
-const UNFOLLOW_USAGE = "Usage: coforge thread unfollow --target <thread>";
+const UNFOLLOW_USAGE = "Usage: coforge thread unfollow --target <thread> [--reason <text>]";
 
-/** `thread unfollow --target <#channel:message-id>`. */
+/** `thread unfollow --target <#channel:message-id> [--reason <text>]`. */
 function parseUnfollowArgs(args: readonly string[]): ThreadInvocation {
   let target: string | undefined;
+  let reason: string | undefined;
   for (let index = 0; index < args.length; index += 2) {
     const value = args[index + 1];
     if (value === undefined) throw new Error(UNFOLLOW_USAGE);
     if (args[index] === "--target" && target === undefined) target = value.trim();
+    else if (args[index] === "--reason" && reason === undefined) reason = value.trim();
     else throw new Error(UNFOLLOW_USAGE);
   }
   if (target === undefined) throw new Error(UNFOLLOW_USAGE);
@@ -72,7 +74,7 @@ function parseUnfollowArgs(args: readonly string[]): ThreadInvocation {
       message: "Thread must be a thread target like '#channel:abcd1234'.",
       retryable: false,
     });
-  return { command: "thread-unfollow", target };
+  return { command: "thread-unfollow", target, ...(reason ? { reason } : {}) };
 }
 
 const INBOX_USAGE = "Usage: coforge inbox check [--view unread|mentions] [--before <n>] [--json]";

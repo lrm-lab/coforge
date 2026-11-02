@@ -45,6 +45,8 @@ export type LocalAgentMessageRequest = LocalMessageSearchFields & {
   continueAnyway?: boolean;
   /** `message send` only (daemon-internal): the boundary the sender has already reviewed. */
   seenUpToSeq?: number;
+  /** `thread unfollow` only: the one-line reason the unfollow notice shows in the thread. */
+  reason?: string;
   /** `message send` only (daemon-internal): how many times this draft has already been held. */
   draftReholdCount?: number;
   /** `message send` only (daemon-internal): a normal send that replaced an already-held draft. */

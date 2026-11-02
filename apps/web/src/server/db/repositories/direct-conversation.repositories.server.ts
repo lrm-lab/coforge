@@ -163,8 +163,9 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     agentId: string,
     target: string,
     followed: boolean,
+    reason?: string,
   ) {
-    return setAgentThreadFollowed(this.#ports, workspaceId, agentId, target, followed);
+    return setAgentThreadFollowed(this.#ports, workspaceId, agentId, target, followed, reason);
   }
 
   async resolveAgentTarget(

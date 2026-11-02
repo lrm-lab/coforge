@@ -60,6 +60,7 @@ import {
 } from "@lrm/coforge-sdk/agent";
 import { CliError, MANUAL_NOT_FOUND_NEXT_ACTION } from "./cli-error";
 import type { MessageSearchOptions } from "./message-search-args";
+import type { LocalCallOptions } from "./local-call-options";
 import type { MessageReadOptions } from "./message-read-args";
 import { refusalNextAction } from "./refusal-guidance";
 import { refuseCredentialSolicitationIfNeeded } from "./send-credential-gate";
@@ -171,20 +172,7 @@ export function connectLocal(
       | "unreact",
     target?: string,
     body?: string,
-    options?: MessageSearchOptions & {
-      sendDraft?: boolean;
-      expectedDraftKey?: string;
-      continueAnyway?: boolean;
-      continuationId?: string;
-      continuationChoice?: "a" | "b" | "c" | "d";
-      freshnessContextMode?: "withheld";
-      around?: string;
-      messageId?: string;
-      emoji?: string;
-      attachmentIds?: string[];
-      mentions?: MentionSelector[];
-      targetConfirmed?: boolean;
-    },
+    options?: LocalCallOptions,
   ) => {
     if (conversationTarget) {
       if (operation === "check" || operation === "search") target ??= conversationTarget;
@@ -246,9 +234,9 @@ export function connectLocal(
     inboxList: (request: AgentInboxRequest) =>
       inboxListRequest(proxyEndpoint, context, proxyUrl, request),
     setChannelMuted: (target: string, muted: boolean) => call(muted ? "mute" : "unmute", target),
-    setThreadFollowed: (target: string, followed: boolean) => {
+    setThreadFollowed: (target: string, followed: boolean, reason?: string) => {
       if (followed) throw new Error("Explicit thread follow is unavailable");
-      return call("thread-unfollow", target);
+      return call("thread-unfollow", target, undefined, { reason });
     },
     check: (target?: string) => call("check", target),
     read: (target: string, options?: MessageReadOptions) =>

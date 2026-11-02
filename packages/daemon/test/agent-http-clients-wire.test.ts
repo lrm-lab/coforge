@@ -110,6 +110,15 @@ test("channel mute and thread unfollow POST only the key, without a deadline", a
   expect(calls).toEqual([expected, expected]);
 });
 
+test("thread unfollow adds the optional reason to the body", async () => {
+  const { client, calls } = recordingClient({ accepted: true });
+  await client.requestThreadUnfollow!({
+    ...keys,
+    request: request({ operation: "thread-unfollow", target: "#g:abc", reason: "done here" }),
+  });
+  expect(calls[0]?.body).toBe(JSON.stringify({ idempotencyKey: "key-1", reason: "done here" }));
+});
+
 test("reaction sends the key and the emoji with the caller's method", async () => {
   const { client, calls } = recordingClient({ idempotencyKey: "key-1", messageId: "m-1" });
   for (const method of ["POST", "DELETE"] as const)

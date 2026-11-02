@@ -8,8 +8,6 @@ import type {
   AgentResolveResponse,
   AgentReactionResponse,
   AgentEventsResponse,
-  AgentChannelAttentionResponse,
-  AgentThreadAttentionResponse,
   AgentActionPrepareRequest,
   AgentActionPrepareResponse,
   GitHubCredentialRequest,
@@ -96,12 +94,6 @@ export interface AgentMessageHttpClient extends AgentAttentionHttpClient {
   ): Promise<AgentReactionResponse>;
   /** `check` drains the server-side pending events page; the server advances the read boundary. */
   requestEvents?(input: AgentHttpInput<AgentMessageRequest>): Promise<AgentEventsResponse>;
-  requestChannelMute?(
-    input: AgentHttpInput<AgentMessageRequest & { muted: boolean }>,
-  ): Promise<AgentChannelAttentionResponse>;
-  requestThreadUnfollow?(
-    input: AgentHttpInput<AgentMessageRequest>,
-  ): Promise<AgentThreadAttentionResponse>;
   requestReminder?(
     input: AgentHttpInput<AgentReminderOperationRequest>,
   ): Promise<AgentReminderOperationResponse>;
@@ -282,20 +274,6 @@ export const createAgentMessageHttpClient = (
         ...(request.target ? { target: request.target } : {}),
       },
       validate: validateAgentMessageArrayShape("events"),
-    }),
-  requestChannelMute: ({ request, ...keys }) =>
-    sendAgentJson<AgentChannelAttentionResponse>(httpClient, {
-      ...keys,
-      method: "POST",
-      what: "agent channel attention",
-      body: { idempotencyKey: request.idempotencyKey },
-    }),
-  requestThreadUnfollow: ({ request, ...keys }) =>
-    sendAgentJson<AgentThreadAttentionResponse>(httpClient, {
-      ...keys,
-      method: "POST",
-      what: "agent thread attention",
-      body: { idempotencyKey: request.idempotencyKey },
     }),
   requestResolve: ({ request, ...keys }) =>
     getAgentJson<AgentResolveResponse>(httpClient, {

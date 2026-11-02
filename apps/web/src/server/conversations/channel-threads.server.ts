@@ -7,6 +7,7 @@ import {
   canSeeAgent,
   visibleAgentWhere,
 } from "#src/server/agents/agent-visibility.server";
+import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
 import { AgentMessageValidationError } from "./agent-message-validation-error.server";
 import {
@@ -67,6 +68,7 @@ async function setThreadFollowed(
   conversationId: string,
   rootMessageId: string,
   followed: boolean,
+  unfollowNotice?: string,
 ) {
   await db.$transaction(async (tx) => {
     await lockConversation(tx, conversationId);
@@ -78,8 +80,30 @@ async function setThreadFollowed(
       });
     } else {
       await tx.threadFollow.deleteMany({ where: { memberId, rootMessageId } });
+      if (unfollowNotice) {
+        const sequence = await allocateSequence(tx, conversationId);
+        await tx.message.create({
+          data: { workspaceId, conversationId, sequence, body: unfollowNotice },
+        });
+      }
     }
   });
+}
+
+/**
+ * The thread notice an Agent's unfollow leaves behind: the follow row is deleted, so this is the
+ * record. The reason is one line, trimmed to 200 code points, and defaults to "no longer
+ * following".
+ */
+export function agentUnfollowNotice(
+  displayName: string | null,
+  name: string,
+  reason?: string,
+): string {
+  const reasonLine = reason?.trim().replace(/\s+/gu, " ");
+  return `@${displayName?.trim() || name} unfollowed this thread: ${
+    reasonLine ? reasonLine.slice(0, 200) : "no longer following"
+  }`;
 }
 
 export async function setAgentThreadFollowed(
@@ -88,6 +112,7 @@ export async function setAgentThreadFollowed(
   agentId: string,
   target: string,
   followed: boolean,
+  reason?: string,
 ) {
   const [parentTarget, anchor] = target.split(":");
   if (!parentTarget || !anchor) throw new AppError("INVALID_INPUT");
@@ -96,8 +121,14 @@ export async function setAgentThreadFollowed(
     where: { conversationId_agentId: { conversationId: channel.id, agentId } },
     select: { id: true },
   });
+  const agent = await db.agent.findUniqueOrThrow({
+    where: { id: agentId },
+    select: { displayName: true, name: true },
+  });
   const root = await resolveChannelThreadRoot(db, channel.id, anchor);
-  await setThreadFollowed(db, member.id, workspaceId, channel.id, root.id, followed);
+  const notice =
+    followed === false ? agentUnfollowNotice(agent.displayName, agent.name, reason) : undefined;
+  await setThreadFollowed(db, member.id, workspaceId, channel.id, root.id, followed, notice);
   return { followed };
 }
 

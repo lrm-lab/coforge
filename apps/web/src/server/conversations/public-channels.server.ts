@@ -103,8 +103,14 @@ export class PublicChannels {
     );
   }
 
-  setAgentThreadFollowed(workspaceId: string, agentId: string, target: string, followed: boolean) {
-    return setAgentThreadFollowed(this.ports, workspaceId, agentId, target, followed);
+  setAgentThreadFollowed(
+    workspaceId: string,
+    agentId: string,
+    target: string,
+    followed: boolean,
+    reason?: string,
+  ) {
+    return setAgentThreadFollowed(this.ports, workspaceId, agentId, target, followed, reason);
   }
 
   setUserMuted(workspaceId: string, userId: string, channelId: string, muted: boolean) {

@@ -45,6 +45,7 @@ export type AgentMessageRepository = {
     agentId: string,
     target: string,
     followed: boolean,
+    reason?: string,
   ): Promise<unknown>;
   searchMessages?(
     workspaceId: string,
@@ -380,10 +381,13 @@ export async function unfollowAgentThread(
   repository: AgentMessageRepository,
   scope: { workspaceId: string; agentId: string },
   target: string,
+  reason?: string,
 ) {
   if (!isChannelMessageTarget(target) || isChannelTarget(target))
     throw new Error("unfollow requires a channel thread target");
-  await repository.setAgentThreadFollowed(scope.workspaceId, scope.agentId, target, false);
+  // The notice names the Agent and carries the one-line reason; no reason column on the
+  // follow row (which unfollow deletes) - the notice is the record.
+  await repository.setAgentThreadFollowed(scope.workspaceId, scope.agentId, target, false, reason);
 }
 
 export async function resolveAgentMessage(

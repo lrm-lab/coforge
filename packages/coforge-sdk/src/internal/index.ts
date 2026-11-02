@@ -193,6 +193,8 @@ export type AgentMessageRequest = {
     | "react"
     | "unreact";
   target: string;
+  /** `thread-unfollow` only: the one-line reason the unfollow notice shows. */
+  reason?: string;
   content?: string;
   continueAnyway?: boolean;
   /** `send` only: the boundary the sender has already reviewed. */

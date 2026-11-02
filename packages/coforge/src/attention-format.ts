@@ -41,11 +41,11 @@ async function setChannelMuted(
  * follow comes back through a reply from the Agent or a reply that mentions it.
  */
 async function unfollowThread(
-  unfollow: ((target: string, followed: boolean) => Promise<unknown>) | undefined,
-  { target }: { target: string },
+  unfollow: ((target: string, followed: boolean, reason?: string) => Promise<unknown>) | undefined,
+  { target, reason }: { target: string; reason?: string },
 ): Promise<string> {
   if (!unfollow) throw new Error("Thread settings transport is unavailable");
-  await unfollow(target, false);
+  await unfollow(target, false, reason);
   return [
     `Unfollowed ${target}. Ordinary delivery for this thread has stopped.`,
     `A later reply that mentions you follows the thread again; unfollow it again with: coforge thread unfollow --target "${target}"`,
@@ -71,7 +71,7 @@ function formatThreadList({ threads }: AgentThreadListResponse): string {
 /** The transport calls the attention commands make. */
 type AttentionTransport = {
   setChannelMuted?(target: string, muted: boolean): Promise<unknown>;
-  setThreadFollowed?(target: string, followed: boolean): Promise<unknown>;
+  setThreadFollowed?(target: string, followed: boolean, reason?: string): Promise<unknown>;
   threadList?(): Promise<AgentThreadListResponse>;
 };
 

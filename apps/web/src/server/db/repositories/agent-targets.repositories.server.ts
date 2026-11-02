@@ -425,6 +425,7 @@ export async function setAgentThreadFollowed(
   agentId: string,
   target: string,
   followed: boolean,
+  reason?: string,
 ) {
   const user = await workspaceAssistantUser(ports.db, workspaceId, agentId);
   if (user) {
@@ -446,5 +447,6 @@ export async function setAgentThreadFollowed(
     agentId,
     target,
     followed,
+    reason,
   );
 }

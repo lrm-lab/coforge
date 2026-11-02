@@ -2,6 +2,7 @@ import type {
   AgentAttachmentCommentsErrorCode,
   AgentAttachmentCommentsRequest,
   AgentAttachmentCommentsResponse,
+  AgentChannelAttentionResponse,
   AgentInboxListResponse,
   AgentInboxRequest,
   AgentMentionDeliveryRequest,
@@ -12,14 +13,17 @@ import type {
   AgentMentionDeliveryResponse,
   AgentMentionExecuteResponse,
   AgentMentionPendingResponse,
+  AgentThreadAttentionResponse,
   AgentThreadListResponse,
 } from "@lrm/coforge-sdk/agent";
+import type { AgentMessageRequest } from "@lrm/coforge-sdk/internal";
 import { AgentAttachmentCommentsRequestError } from "./agent-attachment-comments-request-error";
 import { AgentMentionActionRequestError } from "./agent-mention-action-request-error";
 import { AgentMentionDeliveryRequestError } from "./agent-mention-delivery-request-error";
 import {
   getAgentEnvelopeJson,
   postAgentEnvelopeJson,
+  sendAgentJson,
   type AgentHttpInput,
   type HttpFetch,
 } from "./agent-http-wire";
@@ -42,6 +46,12 @@ export interface AgentAttentionHttpClient {
   requestAttachmentComments?(
     input: AgentHttpInput<AgentAttachmentCommentsRequest>,
   ): Promise<AgentAttachmentCommentsResponse>;
+  requestChannelMute?(
+    input: AgentHttpInput<AgentMessageRequest & { muted: boolean }>,
+  ): Promise<AgentChannelAttentionResponse>;
+  requestThreadUnfollow?(
+    input: AgentHttpInput<AgentMessageRequest>,
+  ): Promise<AgentThreadAttentionResponse>;
 }
 
 function mentionActionError(errorCode: string, message: string, status: number): Error {
@@ -112,4 +122,21 @@ export const createAgentAttentionHttpClient = (
           status,
         ),
     ),
+  requestChannelMute: ({ request, ...keys }) =>
+    sendAgentJson<AgentChannelAttentionResponse>(httpClient, {
+      ...keys,
+      method: "POST",
+      what: "agent channel attention",
+      body: { idempotencyKey: request.idempotencyKey },
+    }),
+  requestThreadUnfollow: ({ request, ...keys }) =>
+    sendAgentJson<AgentThreadAttentionResponse>(httpClient, {
+      ...keys,
+      method: "POST",
+      what: "agent thread attention",
+      body: {
+        idempotencyKey: request.idempotencyKey,
+        ...(request.reason ? { reason: request.reason } : {}),
+      },
+    }),
 });

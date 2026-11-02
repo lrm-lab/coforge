@@ -22,8 +22,14 @@ export async function handleAgentThreadUnfollowPost(
 ): Promise<Response> {
   const scope = { workspaceId: principal.workspaceId, agentId: principal.agentId };
   try {
-    const idempotencyKey = agentIdempotencyKey(await readAgentJsonBody(request));
-    await unfollowAgentThread(repository, scope, thread);
+    const body = await readAgentJsonBody(request);
+    const idempotencyKey = agentIdempotencyKey(body);
+    await unfollowAgentThread(
+      repository,
+      scope,
+      thread,
+      typeof body?.reason === "string" ? body.reason : undefined,
+    );
     const response: AgentThreadAttentionResponse = {
       idempotencyKey,
       target: thread,

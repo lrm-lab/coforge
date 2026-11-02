@@ -7,8 +7,8 @@ const transport = (calls: unknown[] = []) => ({
   read: async () => undefined,
   send: async () => undefined,
   view: async () => ({ bytes: new Uint8Array() }),
-  setThreadFollowed: async (target: string, followed: boolean) => {
-    calls.push([target, followed]);
+  setThreadFollowed: async (target: string, followed: boolean, reason?: string) => {
+    calls.push([target, followed, reason]);
     return { accepted: true };
   },
 });
@@ -18,9 +18,12 @@ test("parses the thread and an optional reason in either order", () => {
     command: "thread-unfollow",
     target: "#general:12345678",
   });
-  expect(() =>
+  expect(
     parseArgs(["thread", "unfollow", "--reason", "done here", "--target", "#general:12345678"]),
-  ).toThrow("Usage: coforge thread unfollow --target <thread>");
+  ).toEqual({ command: "thread-unfollow", target: "#general:12345678", reason: "done here" });
+  expect(
+    parseArgs(["thread", "unfollow", "--target", "#general:12345678", "--reason", "done here"]),
+  ).toEqual({ command: "thread-unfollow", target: "#general:12345678", reason: "done here" });
 });
 
 test("anything but a channel thread is INVALID_TARGET, and a malformed command gets the usage", () => {
@@ -39,13 +42,13 @@ test("anything but a channel thread is INVALID_TARGET, and a malformed command g
   ).toThrow("Usage:");
 });
 
-test("unfollowing prints what stopped, the reason, and what follows the thread again", async () => {
+test("unfollowing prints what stopped and what follows, without echoing the reason", async () => {
   const calls: unknown[] = [];
   const output = await run(
-    ["thread", "unfollow", "--target", "#general:12345678"],
+    ["thread", "unfollow", "--target", "#general:12345678", "--reason", "done here"],
     transport(calls),
   );
-  expect(calls).toEqual([["#general:12345678", false]]);
+  expect(calls).toEqual([["#general:12345678", false, "done here"]]);
   expect(output).toBe(
     [
       "Unfollowed #general:12345678. Ordinary delivery for this thread has stopped.",
@@ -53,6 +56,7 @@ test("unfollowing prints what stopped, the reason, and what follows the thread a
       "Replying in this thread follows it again automatically.",
     ].join("\n"),
   );
+  expect(output).not.toContain("done here");
   expect(
     await run(["thread", "unfollow", "--target", "#general:12345678"], transport()),
   ).not.toContain("Reason:");
