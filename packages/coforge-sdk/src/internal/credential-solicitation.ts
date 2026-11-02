@@ -17,11 +17,13 @@ const ENGLISH_ASK =
 const CHINESE_ASK =
   /(?:把)?(?:密码|口令|验证码|动态码|校验码).{0,10}(?:发|告诉|粘贴|输入|打).{0,8}(?:我|聊天|对话|对话框|这里)|(?:发|告诉|粘贴).{0,6}(?:我)?.{0,4}(?:密码|口令|验证码|动态码|校验码)|(?:密码|验证码|口令).{0,6}(?:发过来|发到聊天|发到对话|发到对话框)/g;
 
-const NEGATION_BEFORE =
-  /(?:don'?t|do\s+not|never|不要|别|勿|禁止|请勿|切勿)\s*$/i;
+const NEGATION_BEFORE = /(?:don'?t|do\s+not|never|不要|别|勿|禁止|请勿|切勿)\s*$/i;
 
 function hasUnnegatedMatch(text: string, pattern: RegExp): boolean {
-  const re = new RegExp(pattern.source, pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`);
+  const re = new RegExp(
+    pattern.source,
+    pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`,
+  );
   let match: RegExpExecArray | null;
   while ((match = re.exec(text)) !== null) {
     const before = text.slice(Math.max(0, match.index - 16), match.index);
