@@ -43,10 +43,13 @@ export class AgentSessions {
 
   async replay(agentId?: string) {
     const ids = agentId ? [agentId] : await this.state.store.listAgentIds();
-    for (const id of ids)
-      await this.state.run(id, async () => {
-        const record = await this.state.store.read(id);
-        if (record?.report) await this.send(record.report).catch(() => {});
-      });
+    await Promise.all(
+      ids.map((id) =>
+        this.state.run(id, async () => {
+          const record = await this.state.store.read(id);
+          if (record?.report) await this.send(record.report).catch(() => {});
+        }),
+      ),
+    );
   }
 }

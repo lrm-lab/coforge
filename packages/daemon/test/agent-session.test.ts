@@ -68,3 +68,46 @@ test("Session reporting persists before sending and replays the same snapshot af
   expect(record.phase).toBe("stopped");
   expect(snapshots).toHaveLength(2);
 });
+
+test("Session replay sends different Agents concurrently", async () => {
+  const recordFor = (agentId: string): AgentRuntimeRecord => ({
+    version: 1,
+    scope: {
+      protocolMajor: 1,
+      requestId: `request-${agentId}`,
+      workspaceId: "w",
+      computerId: "c",
+      agentId,
+      provider: "pi",
+      epoch: 1,
+    },
+    action: "start",
+    phase: "running",
+    daemonInstanceId: "daemon",
+    sequence: 1,
+    launchId: `launch-${agentId}`,
+    report: {} as AgentSessionSnapshot,
+  });
+  const records = new Map([
+    ["a", recordFor("a")],
+    ["b", recordFor("b")],
+  ]);
+  const state = new AgentRuntimeState({
+    listAgentIds: async () => [...records.keys()],
+    read: async (agentId) => structuredClone(records.get(agentId)),
+    write: async () => {},
+    clearWorkspace: async () => {},
+  });
+  let active = 0;
+  let maximum = 0;
+  const sessions = new AgentSessions(state, async () => {
+    active += 1;
+    maximum = Math.max(maximum, active);
+    await Promise.resolve();
+    active -= 1;
+  });
+
+  await sessions.replay();
+
+  expect(maximum).toBe(2);
+});
