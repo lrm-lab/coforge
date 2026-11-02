@@ -3,6 +3,7 @@ import type { AgentStatusCache } from "./agent-status.server";
 import type { AgentDisplay } from "./agent-display.server";
 import { appLogoUrl } from "#src/server/apps/app-logo.server";
 import { canDirectMessageAgent } from "./agent-visibility.server";
+import { agentControlRevision } from "./agent-control-types.server";
 
 type DetailComputer = {
   id: string;
@@ -34,6 +35,7 @@ type DetailAgent = {
     avatarObjectKey?: string | null;
   };
   runtimeConfig: Prisma.JsonValue;
+  controlState?: Prisma.JsonValue | null;
   weeklyReportAssistant?: { id: string } | null;
   /** Set when a user stopped this Agent. */
   stoppedAt?: Date | null;
@@ -115,6 +117,13 @@ export class AgentDetailQuery {
     ]);
     const assigned = assignedComputer(agent);
     const bot = agent.appBot && appBotIdentity(agent.appBot);
+    const control = (
+      agent.controlState && typeof agent.controlState === "object" ? agent.controlState : undefined
+    ) as { phase?: string; errorCode?: string; configRevision?: string } | undefined;
+    const isFailed =
+      control?.phase === "failed" &&
+      control.configRevision === agentControlRevision(agent.runtimeConfig);
+    const failureReason = isFailed ? (control?.errorCode ?? "launch_failed") : null;
     return {
       id: agent.id,
       workspaceId: agent.workspaceId,
@@ -154,6 +163,7 @@ export class AgentDetailQuery {
           : null,
       },
       computer: assigned,
+      failureReason,
     };
   }
 }

@@ -357,3 +357,41 @@ test("ready recovery reads the Agent's control record once to start it", async (
   expect(agent.current().state).toMatchObject({ action: "start", phase: "starting" });
   expect(agent.reads()).toBe(1);
 });
+
+test("a transient failure retries on message rejection after 10 minutes but not before", async () => {
+  const agent = fixture();
+  await agent.reject();
+  await agent.failLatestStart("runtime_start_failed");
+
+  // Immediately after failure (< 10 min): rejected as start_failed
+  await expect(agent.reject()).resolves.toBe("start_failed");
+  expect(agent.starts).toHaveLength(1);
+
+  // After 10 minutes: retry is allowed and wakes the agent
+  const tenMinutesAgo = Date.now() - 11 * 60 * 1_000;
+  agent.current().state!.failedAtMs = tenMinutesAgo;
+  await expect(agent.reject()).resolves.toBe("woken");
+  expect(agent.starts).toHaveLength(2);
+});
+
+test("a non-retryable failure (runtime_private) never retries on message rejection even after 10 minutes", async () => {
+  const agent = fixture();
+  await agent.reject();
+  await agent.failLatestStart("runtime_private");
+
+  const tenMinutesAgo = Date.now() - 15 * 60 * 1_000;
+  agent.current().state!.failedAtMs = tenMinutesAgo;
+  await expect(agent.reject()).resolves.toBe("start_failed");
+  expect(agent.starts).toHaveLength(1);
+});
+
+test("a transient failure stops retrying after 24 hours", async () => {
+  const agent = fixture();
+  await agent.reject();
+  await agent.failLatestStart("runtime_start_failed");
+
+  const over24HoursAgo = Date.now() - 25 * 60 * 60 * 1_000;
+  agent.current().state!.failedAtMs = over24HoursAgo;
+  await expect(agent.reject()).resolves.toBe("start_failed");
+  expect(agent.starts).toHaveLength(1);
+});

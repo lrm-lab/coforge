@@ -45,6 +45,7 @@ const stateSchema = z
     controlSequence: z.number().int().nonnegative(),
     sessionSequence: z.number().int().nonnegative(),
     errorCode: z.string().optional(),
+    failedAtMs: z.number().int().nonnegative().optional(),
     /** Legacy field, since removed (latest command wins, no abandonment).
      * Accepted here only so a row persisted before this change still parses; ignored by every
      * reader and never written by `controlState()` below, since `AgentControlState` no longer

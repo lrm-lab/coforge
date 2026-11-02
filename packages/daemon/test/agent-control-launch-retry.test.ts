@@ -135,9 +135,9 @@ test("consecutive failures back off 1s, 2s, 4s... 30s and then report launch_fai
 
   expect(h.launches).toHaveLength(LAUNCH_FAILURE_MAX_ATTEMPTS);
   expect(h.timers.delays()).toEqual([1_000, 2_000, 4_000, 8_000, 16_000, 30_000]);
-  // Only after every attempt is used up does the operation end exactly as it used to.
+  // Only after every attempt is used up does the operation end with the typed failure reason.
   expect(h.results).toHaveLength(1);
-  expect(h.results[0]).toMatchObject({ phase: "failed", errorCode: "launch_failed" });
+  expect(h.results[0]).toMatchObject({ phase: "failed", errorCode: "runtime_spawn_failed" });
   expect(h.record()?.phase).toBe("failed");
   expect(h.record()?.lastResult?.phase).toBe("failed");
 });
@@ -154,7 +154,7 @@ test("a login no retry can fix ends the launch on its first failure, without a c
   expect(h.launches).toEqual([1]);
   expect(h.timers.delays()).toEqual([]);
   expect(h.results).toHaveLength(1);
-  expect(h.results[0]).toMatchObject({ phase: "failed", errorCode: "launch_failed" });
+  expect(h.results[0]).toMatchObject({ phase: "failed", errorCode: "runtime_login_required" });
   expect(h.record()?.phase).toBe("failed");
 });
 
@@ -175,7 +175,7 @@ test("an authorization refusal (e.g. RUNTIME_UNAVAILABLE) ends the launch on its
   expect(h.launches).toEqual([1]);
   expect(h.timers.delays()).toEqual([]);
   expect(h.results).toHaveLength(1);
-  expect(h.results[0]).toMatchObject({ phase: "failed", errorCode: "launch_failed" });
+  expect(h.results[0]).toMatchObject({ phase: "failed", errorCode: "runtime_unavailable" });
   expect(h.record()?.phase).toBe("failed");
 });
 
@@ -425,7 +425,7 @@ test("a Start whose attempts run out settles once, after the terminal launch_fai
     await h.timers.fireLatest();
   }
 
-  expect(h.results.at(-1)).toMatchObject({ phase: "failed", errorCode: "launch_failed" });
+  expect(h.results.at(-1)).toMatchObject({ phase: "failed", errorCode: "runtime_spawn_failed" });
   expect(h.control.startPending("a")).toBe(false);
   expect(h.settled).toEqual(["a"]);
 });

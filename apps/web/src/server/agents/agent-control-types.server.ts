@@ -88,6 +88,7 @@ export type AgentControlState = AgentControlScope & {
   controlSequence: number;
   sessionSequence: number;
   errorCode?: string;
+  failedAtMs?: number;
 };
 
 export type AgentControlAgent = {
@@ -233,4 +234,24 @@ export function operationFence(state: AgentControlState | null) {
     ...fence
   } = state;
   return fence;
+}
+
+/** Shared authorization for control results and independent Session snapshots. */
+export async function requireCurrentAgentScope(
+  store: AgentControlStore,
+  claim: { workspaceId: string; computerId: string },
+  input: AgentControlScope,
+) {
+  const agent = await store.get(input.agentId);
+  const state = agent?.state;
+  if (
+    !agent ||
+    !state ||
+    claim.workspaceId !== input.workspaceId ||
+    claim.computerId !== input.computerId ||
+    !sameScope(state, input) ||
+    !current(agent, state)
+  )
+    throw new Error("Stale Agent scope");
+  return { ...agent, state };
 }

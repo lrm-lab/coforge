@@ -132,21 +132,29 @@ export const Route = createFileRoute("/api/agent-api-keys")({
           return Response.json({ error: "forbidden" }, { status: 403 });
         try {
           const visibility = new ComputerRuntimeVisibility(new PrismaComputerRuntimeRepository(db));
-          if (
-            !(await visibility.canSelect(
-              { userId: agent.ownerId, workspaceId: agent.workspaceId },
-              principal.computerId,
-              parseAgentRuntimeConfig(agent.runtimeConfig).runtime,
-            ))
-          )
+          const selection =
+            typeof visibility.checkSelection === "function"
+              ? await visibility.checkSelection(
+                  { userId: agent.ownerId, workspaceId: agent.workspaceId },
+                  principal.computerId,
+                  parseAgentRuntimeConfig(agent.runtimeConfig).runtime,
+                )
+              : (await visibility.canSelect(
+                    { userId: agent.ownerId, workspaceId: agent.workspaceId },
+                    principal.computerId,
+                    parseAgentRuntimeConfig(agent.runtimeConfig).runtime,
+                  ))
+                ? { ok: true as const }
+                : {
+                    ok: false as const,
+                    code: "RUNTIME_UNAVAILABLE" as const,
+                    error: "the configured runtime is not available on this Computer",
+                  };
+          if (!selection.ok) {
             // The daemon relays this `code` to the Agent: a launch refused because the
-            // Computer's runtime is missing or too old is not a permissions failure.
-            return errorResponse(
-              "RUNTIME_UNAVAILABLE",
-              "the configured runtime is not available on this Computer",
-              403,
-              false,
-            );
+            // Computer's runtime is missing, unusable, or private is not a permissions failure.
+            return errorResponse(selection.code, selection.error, 403, false);
+          }
           await new AgentControl(
             new PrismaAgentControlStore(db),
             createCentrifugoServerApi(),

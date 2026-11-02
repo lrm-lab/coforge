@@ -3,7 +3,6 @@ import {
   encodeAgentStartIntent,
   encodeAgentStopIntent,
   type AgentControlResult,
-  type AgentControlScope,
   type AgentStartIntent,
 } from "@lrm/coforge-sdk/internal";
 import {
@@ -47,6 +46,7 @@ import {
   controlOperationState,
   sameScope,
   operationFence,
+  requireCurrentAgentScope,
 } from "./agent-control-types.server";
 
 export {
@@ -72,27 +72,8 @@ export {
   controlOperationState,
   sameScope,
   operationFence,
+  requireCurrentAgentScope,
 };
-
-/** Shared authorization for control results and independent Session snapshots. */
-export async function requireCurrentAgentScope(
-  store: AgentControlStore,
-  claim: { workspaceId: string; computerId: string },
-  input: AgentControlScope,
-) {
-  const agent = await store.get(input.agentId);
-  const state = agent?.state;
-  if (
-    !agent ||
-    !state ||
-    claim.workspaceId !== input.workspaceId ||
-    claim.computerId !== input.computerId ||
-    !sameScope(state, input) ||
-    !current(agent, state)
-  )
-    throw new Error("Stale Agent scope");
-  return { ...agent, state };
-}
 
 /** The Agent, when `userId` owns it in `workspaceId`; the internal control paths' authorization. */
 function authorizedAgent(
@@ -875,6 +856,9 @@ export class AgentControl {
       ...(identity ? { identity } : {}),
       ...(result.errorCode || state.errorCode
         ? { errorCode: result.errorCode ?? state.errorCode }
+        : {}),
+      ...((command?.completed ?? "failed") === "failed"
+        ? { failedAtMs: state.failedAtMs ?? Date.now() }
         : {}),
     };
     if (!(await this.store.replace(agent, next))) throw new Error("Control result lost its fence");
