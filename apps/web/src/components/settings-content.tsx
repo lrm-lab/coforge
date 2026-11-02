@@ -1,6 +1,6 @@
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { useEffect, useId, useState } from "react";
-import { ChevronLeft, ChevronRight, Share01 } from "@untitledui/icons";
+import { ChevronLeft, Share01 } from "@untitledui/icons";
 import { PageHeader } from "#src/components/layout/page-header";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -72,9 +72,6 @@ export interface SettingsContentProps {
   onAvatarUpload: (file: File) => Promise<void>;
   onAvatarPresetChoose: (presetId: string) => Promise<void>;
   onAvatarRemove: () => Promise<void>;
-  /** Whether Settings → Account shows the platform avatar picker instead of the profile. */
-  avatarPicker: boolean;
-  onAvatarPickerChange: (open: boolean) => void;
   onLocaleChange: (locale: Locale) => void;
   onThemeChange: (theme: Theme) => void;
   onMessageFullWidthChange: (full: boolean) => void;
@@ -158,31 +155,7 @@ export function SettingsContent(props: SettingsContentProps) {
         <div>
           <PageHeader
             icon={current.icon}
-            heading={
-              section === "account" && props.avatarPicker
-                ? m.settings_avatar_choose()
-                : sectionLabel
-            }
-            breadcrumb={
-              section === "account" && props.avatarPicker ? (
-                /* Settings → Account › Change avatar: the Account crumb is the only one before
-                   the heading, so narrow screens drop the whole nav (project-tree's pattern). */
-                <nav
-                  aria-label={m.settings_breadcrumb()}
-                  className="hidden min-w-0 items-center gap-1 text-sm text-tertiary sm:flex"
-                >
-                  <Button
-                    type="button"
-                    color="link-gray"
-                    size="sm"
-                    onPress={() => props.onAvatarPickerChange(false)}
-                  >
-                    {sectionLabel}
-                  </Button>
-                  <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 text-quaternary" />
-                </nav>
-              ) : undefined
-            }
+            heading={sectionLabel}
             leading={
               <ButtonUtility
                 icon={ChevronLeft}

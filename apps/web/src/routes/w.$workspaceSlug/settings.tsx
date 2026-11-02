@@ -70,8 +70,6 @@ export const Route = createFileRoute("/w/$workspaceSlug/settings")({
       .enum(["connected", ...GITHUB_CALLBACK_FAILURES])
       .optional()
       .catch(undefined),
-    // Settings → Account shows the platform avatar picker instead of the profile.
-    avatar: z.literal("choose").optional().catch(undefined),
     ...APPS_SETTINGS_SEARCH,
   }),
   // The loader reads nothing from the search. A navigation that stays on Settings (a section, the
@@ -114,7 +112,7 @@ function SettingsPage() {
   const [theme, setTheme] = useState<Theme>("system");
   const [hideEmptySidebarSections, setHideEmptySidebarSections] = useState(false);
   const [messageFullWidth, setMessageFullWidth] = useState(false);
-  const { section, github, avatar } = Route.useSearch();
+  const { section, github } = Route.useSearch();
   const { workspaceSlug } = Route.useParams();
   const navigate = Route.useNavigate();
   const {
@@ -358,12 +356,6 @@ function SettingsPage() {
       onAvatarUpload={uploadAvatar}
       onAvatarPresetChoose={choosePresetAvatar}
       onAvatarRemove={removeAvatar}
-      avatarPicker={avatar === "choose"}
-      onAvatarPickerChange={(open) =>
-        void navigate({
-          search: { section: "account", avatar: open ? "choose" : undefined },
-        })
-      }
       onLocaleChange={setLocale}
       onThemeChange={changeTheme}
       hideEmptySidebarSections={hideEmptySidebarSections}

@@ -37,9 +37,7 @@ export function AvatarChoice({
           <span
             className={cx(
               "block aspect-square w-full rounded-full ring-offset-2 ring-offset-primary transition-shadow",
-              isSelected
-                ? "ring-2 ring-brand-solid"
-                : "group-hover:ring-2 group-hover:ring-secondary",
+              isSelected ? "ring-2 ring-brand" : "group-hover:ring-2 group-hover:ring-secondary",
               isFocusVisible && "outline-2 outline-offset-4 outline-focus-ring",
             )}
           >
