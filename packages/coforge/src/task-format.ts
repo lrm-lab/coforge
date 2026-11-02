@@ -127,7 +127,7 @@ export function formatTasksCreated(target: string, result: TaskResult): string {
     `Assignment receipt (msg=${shortId(receipt.messageId)}):`,
     receipt.content,
   ]);
-  if (result.state === "held")
+  if (result.state === "duplicate")
     return [
       `Existing task found in ${target}; no duplicate was created:`,
       ...rows,
@@ -335,16 +335,22 @@ export function claimRefusal(target: string, result: TaskResult): CliError | und
 
 /** The unread context a task write that proceeded anyway (`unclaim`/`update`/`amend`) attached:
  * withheld mode reports a count, inline mode the messages themselves. */
-function appendTaskRecentContext(result: TaskResult, rendered: string): string {
+function appendTaskRecentContext(
+  command: TaskCommand,
+  result: TaskResult,
+  rendered: string,
+): string {
+  const target = command.target ?? "the task's board";
   if (result.freshnessContextMode === "withheld") {
     const count = result.withheldMessageCount ?? result.newMessageCount ?? 0;
-    return `${rendered}\n\nReviewer-isolation: ${count} newer ${count === 1 ? "message" : "messages"} withheld.`;
+    return `${rendered}\n\nMeanwhile ${target} has ${count} ${count === 1 ? "message" : "messages"} you had not seen; reviewer isolation hides their contents.`;
   }
   if (!result.recentUnread?.length) return rendered;
+  const count = result.newMessageCount ?? result.recentUnread.length;
   return [
     rendered,
     "",
-    "--- New messages you may have missed ---",
+    `Meanwhile ${target} has ${count} ${count === 1 ? "message" : "messages"} you had not seen:`,
     ...result.recentUnread.map(formatMessageLine),
   ].join("\n");
 }
@@ -370,7 +376,7 @@ export function formatTaskResult(command: TaskCommand, result: TaskResult): stri
     case "receipt":
       return formatResourceReceiptRecorded(target, result);
     case "amend":
-      return appendTaskRecentContext(result, formatTaskAmended(result));
+      return appendTaskRecentContext(command, result, formatTaskAmended(result));
     case "claim": {
       const refusal = claimRefusal(target, result);
       if (refusal) throw refusal;
@@ -382,12 +388,12 @@ export function formatTaskResult(command: TaskCommand, result: TaskResult): stri
     case "convert":
       return formatTaskConverted(target, task);
     case "unclaim":
-      return appendTaskRecentContext(result, formatTaskUnclaimed(task));
+      return appendTaskRecentContext(command, result, formatTaskUnclaimed(task));
     case "assign":
     case "unassign":
       return formatTaskAssigned(task);
     case "update":
-      return appendTaskRecentContext(result, formatTaskStatusUpdated(task));
+      return appendTaskRecentContext(command, result, formatTaskStatusUpdated(task));
     default:
       throw new Error(`no output is defined for task ${command.operation}`);
   }

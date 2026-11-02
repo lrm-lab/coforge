@@ -218,7 +218,10 @@ test("A create receipt lists each new Task, each assignment receipt and each thr
 
 test("A duplicate create reports the existing Task instead of inviting duplicate work", () => {
   expect(
-    formatTasksCreated("#general", { state: "held", tasks: [task(8, { title: "Fix login" })] }),
+    formatTasksCreated("#general", {
+      state: "duplicate",
+      tasks: [task(8, { title: "Fix login" })],
+    }),
   ).toBe(
     [
       "Existing task found in #general; no duplicate was created:",

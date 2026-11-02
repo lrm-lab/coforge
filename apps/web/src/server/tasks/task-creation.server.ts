@@ -411,7 +411,7 @@ export async function createTasks(
   const { receipts } = result;
   return {
     tasks: result.tasks.map((task) => taskView(task, ports.reader)),
-    ...(result.held ? { state: "held" as const } : {}),
+    ...(result.held ? { state: "duplicate" as const } : {}),
     ...(receipts.length > 0 && {
       assignmentReceipts: receipts.map((receipt) => ({
         messageId: receipt.id,

@@ -235,7 +235,9 @@ export type TaskResult = {
     messageId: string;
     targetChannelId: string;
   };
-  state?: "held";
+  /** `held`: unread target context stopped the write; `duplicate`: an existing Task answered a
+   * repeated create without a new one. */
+  state?: "held" | "duplicate";
   freshnessContextMode?: "inline" | "withheld";
   withheldMessageCount?: number;
   heldMessages?: AgentMessageRecord[];

@@ -3,6 +3,7 @@ import type { AgentMessageRecord, TaskCommand, TaskResult } from "@lrm/coforge-s
 import type { PrismaClient } from "#src/generated/prisma/client";
 import type { AgentTaskPrincipal } from "#src/server/tasks/task-principal.server";
 import { resolveTaskScope } from "#src/server/tasks/task-scope.server";
+import type { TaskBoard } from "#src/server/tasks/task-board.server";
 import { workspaceAssistantUser } from "./workspace-assistant-authority.server";
 import { agentResolvedTargetFreshness } from "#src/server/db/repositories/agent-target-freshness.repositories.server";
 import type { AgentTargetFreshness } from "./agent-target-freshness.server";
@@ -27,16 +28,27 @@ export async function agentTaskBoardFreshness(
   db: PrismaClient,
   principal: AgentTaskPrincipal,
   command: TaskCommand,
-): Promise<AgentTargetFreshness | undefined> {
+): Promise<
+  | {
+      freshness: AgentTargetFreshness;
+      /** The scope `resolveTaskScope` already produced, handed to the write itself so the board
+       * resolves it once. */
+      scope: Awaited<ReturnType<typeof resolveTaskScope>>;
+    }
+  | undefined
+> {
   if (await workspaceAssistantUser(db, principal.workspaceId, principal.agentId)) return undefined;
   const scope = await resolveTaskScope({ db }, principal, command);
   if (!scope.member) return undefined;
-  return agentResolvedTargetFreshness({ db }, principal.workspaceId, principal.agentId, {
-    conversationId: scope.conversationId,
-    threadRootId: null,
-    canonicalTarget: command.target!,
-    isChannel: scope.channel,
-  });
+  return {
+    freshness: agentResolvedTargetFreshness({ db }, principal.workspaceId, principal.agentId, {
+      conversationId: scope.conversationId,
+      threadRootId: null,
+      canonicalTarget: command.target!,
+      isChannel: scope.channel,
+    }),
+    scope,
+  };
 }
 
 /**
@@ -49,10 +61,14 @@ export async function agentTaskBoardFreshness(
  */
 export async function executeAgentTaskWithFreshness(
   deps: {
-    board: {
-      execute(principal: AgentTaskPrincipal, command: TaskCommand): Promise<TaskResult>;
-    };
-    freshness?(command: TaskCommand): Promise<AgentTargetFreshness | undefined>;
+    board: Pick<TaskBoard, "execute">;
+    freshness?(command: TaskCommand): Promise<
+      | {
+          freshness: AgentTargetFreshness;
+          scope: Awaited<ReturnType<typeof resolveTaskScope>>;
+        }
+      | undefined
+    >;
   },
   principal: AgentTaskPrincipal,
   command: TaskCommand,
@@ -61,8 +77,10 @@ export async function executeAgentTaskWithFreshness(
   const attachOperation = FRESHNESS_ATTACH_OPERATIONS.includes(command.operation);
   if ((!heldOperation && !attachOperation) || !command.target || !deps.freshness)
     return deps.board.execute(principal, command);
-  const freshness = await deps.freshness(command);
-  if (!freshness) return deps.board.execute(principal, command);
+  const resolved = await deps.freshness(command);
+  if (!resolved) return deps.board.execute(principal, command);
+  const { freshness, scope } = resolved;
+  const execute = () => deps.board.execute(principal, command, scope);
 
   const withheld = command.freshnessContextMode === "withheld";
   const excluded = command.seenExactSeqs?.length ? command.seenExactSeqs : undefined;
@@ -105,17 +123,17 @@ export async function executeAgentTaskWithFreshness(
     if (unconsumed.length > 0) return held(unconsumed, await pendingCount());
     if (seen > 0 || excluded?.length) {
       await advanceSeenPending();
-      return deps.board.execute(principal, command);
+      return execute();
     }
     // A first touch: no boundary at all. The target's recent context decides, exactly as a send's
     // syncing hold does.
     const recent = await freshness.readRecent?.(HELD_CONTEXT_LIMIT, excluded);
     if (recent?.unseen.length) return held(recent.unseen, recent.unseen.length);
     if (recent?.maxSequence !== undefined) await freshness.advanceReadThrough?.(recent.maxSequence);
-    return deps.board.execute(principal, command);
+    return execute();
   }
 
-  const result = await deps.board.execute(principal, command);
+  const result = await execute();
   const unconsumed = await pending();
   if (unconsumed.length === 0) {
     await advanceSeenPending();

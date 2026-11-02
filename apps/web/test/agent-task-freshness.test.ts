@@ -42,7 +42,7 @@ describe("Agent task write freshness", () => {
               return { tasks: [] };
             },
           },
-          freshness: async () => freshness([4]),
+          freshness: async () => ({ freshness: freshness([4]), scope: {} as never }),
         },
         principal,
         { operation, idempotencyKey: operation, target: "#tasks" },
@@ -60,7 +60,7 @@ describe("Agent task write freshness", () => {
     const result = await executeAgentTaskWithFreshness(
       {
         board: { execute: async () => ({ tasks: [] }) },
-        freshness: async () => freshness([4, 5]),
+        freshness: async () => ({ freshness: freshness([4, 5]), scope: {} as never }),
       },
       principal,
       {
@@ -83,7 +83,7 @@ describe("Agent task write freshness", () => {
       const result = await executeAgentTaskWithFreshness(
         {
           board: { execute: async () => ({ tasks: [] }) },
-          freshness: async () => freshness([4, 5, 6, 7]),
+          freshness: async () => ({ freshness: freshness([4, 5, 6, 7]), scope: {} as never }),
         },
         principal,
         { operation, idempotencyKey: operation, target: "#tasks", number: 7 },
@@ -107,7 +107,7 @@ describe("Agent task write freshness", () => {
             return { tasks: [] };
           },
         },
-        freshness: async () => freshness([]),
+        freshness: async () => ({ freshness: freshness([]), scope: {} as never }),
       },
       principal,
       {
@@ -132,7 +132,7 @@ describe("Agent task write freshness", () => {
             return { tasks: [] };
           },
         },
-        freshness: async () => freshness([], [2, 3]),
+        freshness: async () => ({ freshness: freshness([], [2, 3]), scope: {} as never }),
       },
       principal,
       { operation: "create", idempotencyKey: "create", target: "#tasks", title: "t" },
@@ -150,7 +150,7 @@ describe("Agent task write freshness", () => {
       },
     };
     await executeAgentTaskWithFreshness(
-      { board, freshness: async () => freshness([9]) },
+      { board, freshness: async () => ({ freshness: freshness([9]), scope: {} as never }) },
       principal,
       { operation: "delete", idempotencyKey: "delete", target: "#tasks", number: 7 },
     );

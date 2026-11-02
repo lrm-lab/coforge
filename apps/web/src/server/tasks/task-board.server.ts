@@ -113,7 +113,13 @@ export class TaskBoard {
     return conversation.conversationId;
   }
 
-  async execute(principal: TaskPrincipal, command: TaskCommand): Promise<TaskResult> {
+  async execute(
+    principal: TaskPrincipal,
+    command: TaskCommand,
+    /** An already-resolved acting scope (the Agent freshness gate resolves it once and passes it
+     * down); absent, the command resolves its own. */
+    presolvedScope?: Awaited<ReturnType<typeof resolveTaskScope>>,
+  ): Promise<TaskResult> {
     validateTaskCommand(command);
     if (principal.agentId) {
       const user = await workspaceAssistantUser(this.db, principal.workspaceId, principal.agentId);
@@ -134,7 +140,7 @@ export class TaskBoard {
     }
     if (command.operation === "list" && command.mine && (principal.agentId || principal.userId))
       return listOwnTasks(this.ports, principal, command);
-    const scope = await resolveTaskScope(this.ports, principal, command);
+    const scope = presolvedScope ?? (await resolveTaskScope(this.ports, principal, command));
     if (scope.channel && !scope.member && command.operation !== "list")
       throw new AppError("ACCESS_DENIED");
     if (!scope.member && !scope.channel) throw new AppError("ACCESS_DENIED");
