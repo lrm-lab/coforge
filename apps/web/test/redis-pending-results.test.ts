@@ -21,7 +21,7 @@ import { RedisAgentSkillsResults } from "#src/server/centrifugo/agent-skills-cac
 type Call = [command: string, ...args: string[]];
 
 const ACCEPT_SCRIPT = `if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
-return redis.call('SET', KEYS[2], ARGV[2], 'EX', 30, 'NX') and 1 or 0`;
+return redis.call('SET', KEYS[2], ARGV[2], 'EX', ARGV[3], 'NX') and 1 or 0`;
 
 function fakeRedis() {
   const values = new Map<string, string>();

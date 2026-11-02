@@ -141,10 +141,13 @@ export class ComputerLocalSessions {
   ): Promise<Response<Result>> {
     if (!(await this.dependencies.owned(viewer, computerId))) return { status: "unavailable" };
     try {
-      if (!(await this.dependencies.online({ workspaceId: viewer.workspaceId, computerId })))
-        return { status: "offline" };
-      if (!(await this.dependencies.supported({ workspaceId: viewer.workspaceId, computerId })))
-        return { status: "unsupported" };
+      const availability = { workspaceId: viewer.workspaceId, computerId };
+      const [online, supported] = await Promise.all([
+        this.dependencies.online(availability),
+        this.dependencies.supported(availability),
+      ]);
+      if (!online) return { status: "offline" };
+      if (!supported) return { status: "unsupported" };
       await results.begin({ request, userId: viewer.userId });
       await publish();
       const deadline = this.timing.now() + this.timing.timeoutMs;

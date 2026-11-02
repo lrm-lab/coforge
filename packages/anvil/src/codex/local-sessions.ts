@@ -39,47 +39,55 @@ async function candidates(options: LocalSessionSearchOptions, host: CodexHistory
       complete = false;
       break;
     }
-    const current = queue.shift()!;
-    if (++directories > options.limits.maxDirectories) {
+    const remaining = options.limits.maxDirectories - directories;
+    if (remaining <= 0) {
       complete = false;
       break;
     }
-    let entries;
-    try {
-      entries = await localSessionIo(host.readDirectoryEntries(current.path), options.limits);
-    } catch (error) {
-      if (error instanceof LocalSessionDeadlineError) {
+    const batch = queue.splice(0, Math.min(8, remaining));
+    directories += batch.length;
+    const observations = await Promise.all(
+      batch.map(async (current) => {
+        try {
+          return {
+            current,
+            entries: await localSessionIo(host.readDirectoryEntries(current.path), options.limits),
+          };
+        } catch (error) {
+          return { current, deadline: error instanceof LocalSessionDeadlineError };
+        }
+      }),
+    );
+    for (const observation of observations) {
+      if (observation.deadline) {
         complete = false;
-        break;
-      }
-      continue;
-    }
-    for (const entry of entries) {
-      if (options.limits.now() >= options.limits.deadlineAtMs) {
-        complete = false;
-        break;
-      }
-      if (entry.isSymbolicLink()) continue;
-      const path = join(current.path, entry.name);
-      if (entry.isDirectory()) {
-        if (current.depth < 8) queue.push({ path, depth: current.depth + 1 });
         continue;
       }
-      if (!entry.isFile()) continue;
-      const sessionId = threadIdOfRollout(entry.name);
-      if (!sessionId) continue;
-      if (++files > options.limits.maxFiles) {
-        complete = false;
-        break;
+      for (const entry of observation.entries ?? []) {
+        if (entry.isSymbolicLink()) continue;
+        const path = join(observation.current.path, entry.name);
+        if (entry.isDirectory()) {
+          if (observation.current.depth < 8)
+            queue.push({ path, depth: observation.current.depth + 1 });
+          continue;
+        }
+        if (!entry.isFile()) continue;
+        const sessionId = threadIdOfRollout(entry.name);
+        if (!sessionId) continue;
+        if (++files > options.limits.maxFiles) {
+          complete = false;
+          break;
+        }
+        const candidate = {
+          path,
+          name: entry.name,
+          sessionId,
+          modifiedAtMs: rolloutTimestamp(entry.name),
+        };
+        const old = newest.get(sessionId);
+        if (!old || candidate.name > old.name) newest.set(sessionId, candidate);
       }
-      const candidate = {
-        path,
-        name: entry.name,
-        sessionId,
-        modifiedAtMs: rolloutTimestamp(entry.name),
-      };
-      const old = newest.get(sessionId);
-      if (!old || candidate.name > old.name) newest.set(sessionId, candidate);
+      if (!complete) break;
     }
     if (!complete) break;
   }
@@ -162,6 +170,7 @@ export async function searchCodexLocalSessions(
   const budget = { bytes: options.limits.maxContentBytes };
   const sessions: NativeLocalSession[] = [];
   let contentSearchComplete = true;
+  let hydrationComplete = true;
   let examined = 0;
   for (const candidate of discovered.found.sort((a, b) => b.modifiedAtMs - a.modifiedAtMs)) {
     if (sessions.length >= options.limits.maxResults) {
@@ -178,6 +187,7 @@ export async function searchCodexLocalSessions(
       read = await readDetails(candidate, options, host, budget);
     } catch (error) {
       if (error instanceof LocalSessionDeadlineError) {
+        hydrationComplete = false;
         contentSearchComplete = false;
         break;
       }
@@ -213,7 +223,7 @@ export async function searchCodexLocalSessions(
   }
   return {
     sessions: sessions.sort((a, b) => b.updatedAtMs - a.updatedAtMs),
-    scanComplete: discovered.complete && examined === discovered.found.length,
+    scanComplete: discovered.complete && hydrationComplete && examined === discovered.found.length,
     contentSearchComplete: query ? contentSearchComplete : true,
   };
 }

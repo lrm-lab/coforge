@@ -3,7 +3,7 @@ import type { RedisClient } from "bun";
 // Compare the entire pending value atomically: expiry/cancellation cannot race the result write.
 // First valid result wins; duplicates do not extend its TTL.
 const ACCEPT = `if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
-return redis.call('SET', KEYS[2], ARGV[2], 'EX', 30, 'NX') and 1 or 0`;
+return redis.call('SET', KEYS[2], ARGV[2], 'EX', ARGV[3], 'NX') and 1 or 0`;
 
 /** What one kind of Daemon query stores: its key prefix, its protobuf result codec, and the scope
  * rule a result must match against the pending request it answers. */
@@ -11,6 +11,8 @@ export type PendingResultsKind<Request extends { requestId: string }, Result> = 
   prefix: string;
   /** Default 30 seconds; longer probes retain their pending scope until their own deadline. */
   pendingTtlSeconds?: number;
+  /** Default 30 seconds; private result kinds may retain less. */
+  resultTtlSeconds?: number;
   encode(result: Result): Uint8Array;
   decode(bytes: Uint8Array): Result;
   sameScope(pending: Request, result: Result): boolean;
@@ -18,8 +20,7 @@ export type PendingResultsKind<Request extends { requestId: string }, Result> = 
 
 /**
  * A browser query the Daemon answers over Centrifugo: `begin` records the pending request for the
- * kind's lifetime (30 seconds by default), `accept` stores the first result whose scope matches it (base64 protobuf, 30
- * seconds), `read` returns that result and `clear` drops both. Keys are
+ * kind's lifetime (30 seconds by default), `accept` stores the first result whose scope matches it (base64 protobuf, the kind's result TTL, 30 seconds by default), `read` returns that result and `clear` drops both. Keys are
  * `<prefix>:<requestId>:pending` and `<prefix>:<requestId>:result`.
  *
  * The Workspace Files list/read/delete queries and the Skills query each wrote this class out in
@@ -69,6 +70,7 @@ export class RedisPendingResults<
       ...keys,
       value,
       Buffer.from(this.kind.encode(result)).toString("base64"),
+      String(this.kind.resultTtlSeconds ?? 30),
     ]);
   }
 }

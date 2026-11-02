@@ -5,6 +5,9 @@ export class LocalSessionDeadlineError extends Error {
 }
 
 export async function localSessionIo<T>(work: Promise<T>, limits: LocalSessionLimits): Promise<T> {
+  const outstanding = limits.outstandingIo;
+  outstanding?.add(work);
+  void work.finally(() => outstanding?.delete(work)).catch(() => {});
   const remaining = Math.floor(limits.deadlineAtMs - limits.now());
   if (remaining <= 0) throw new LocalSessionDeadlineError("Local session scan deadline exceeded");
   return withDeadline(
@@ -22,6 +25,8 @@ export type LocalSessionLimits = {
   maxFileBytes: number;
   deadlineAtMs: number;
   now(): number;
+  /** Still-running I/O from a timed-out scan; shared by one catalog to prevent accumulation. */
+  outstandingIo?: Set<Promise<unknown>>;
 };
 
 export type NativeLocalSession = {

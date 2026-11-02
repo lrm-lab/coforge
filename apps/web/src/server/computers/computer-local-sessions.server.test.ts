@@ -94,3 +94,32 @@ test("excerpt request and result are bound to provider, id, cwd, owner, and comp
     }),
   });
 });
+
+test("online and capability eligibility are read concurrently with offline precedence", async () => {
+  const onlineStarted = Promise.withResolvers<void>();
+  const supportedStarted = Promise.withResolvers<void>();
+  const online = Promise.withResolvers<boolean>();
+  const supported = Promise.withResolvers<boolean>();
+  let published = false;
+  const queries = new ComputerLocalSessions({
+    owned: async () => true,
+    online: async () => {
+      onlineStarted.resolve();
+      return online.promise;
+    },
+    supported: async () => {
+      supportedStarted.resolve();
+      return supported.promise;
+    },
+    publishSearch: async () => void (published = true),
+    publishExcerpt: async () => {},
+    searchResults: { begin: async () => {}, read: async () => undefined, clear: async () => {} },
+    excerptResults: { begin: async () => {}, read: async () => undefined, clear: async () => {} },
+  });
+  const response = queries.search(viewer, computerId, "");
+  await Promise.all([onlineStarted.promise, supportedStarted.promise]);
+  online.resolve(false);
+  supported.resolve(false);
+  expect(await response).toEqual({ status: "offline" });
+  expect(published).toBeFalse();
+});

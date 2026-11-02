@@ -1,3 +1,4 @@
+import { localSessionIo } from "@lrm/coforge-anvil";
 import { expect, test } from "bun:test";
 import { LocalSessionCatalog } from "#src/local-session/local-session-catalog";
 
@@ -106,4 +107,32 @@ test("cross-provider result truncation is reported as incomplete", async () => {
   expect(result.sessions).toHaveLength(100);
   expect(result.scanComplete).toBeFalse();
   expect(result.contentSearchComplete).toBeFalse();
+});
+
+test("a timed-out filesystem operation blocks another scan instead of accumulating", async () => {
+  let starts = 0;
+  const stalled = new Promise<never>(() => {});
+  const catalog = new LocalSessionCatalog({
+    claude: {
+      search: async (options) => {
+        starts += 1;
+        await localSessionIo(stalled, options.limits);
+        throw new Error("unreachable");
+      },
+      excerpt: async () => undefined,
+    },
+    codex: {
+      search: async () => ({ sessions: [], scanComplete: true, contentSearchComplete: true }),
+      excerpt: async () => undefined,
+    },
+    now: Date.now,
+    timeoutMs: 10,
+  });
+  expect(await catalog.search("")).toMatchObject({ scanComplete: false });
+  expect(await catalog.search("")).toEqual({
+    sessions: [],
+    scanComplete: false,
+    contentSearchComplete: false,
+  });
+  expect(starts).toBe(1);
 });

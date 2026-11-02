@@ -36,7 +36,7 @@ function fakeRedis() {
         return args.length;
       }
       const [script, numKeys, pendingKey, resultKey, pendingValue, resultValue] = args;
-      calls.push(["EVAL", script!, numKeys!, pendingKey!, resultKey!]);
+      calls.push(["EVAL", script!, numKeys!, pendingKey!, resultKey!, args[6]!]);
       if (values.get(pendingKey!) !== pendingValue || values.has(resultKey!)) return 0;
       values.set(resultKey!, resultValue!);
       return 1;
@@ -84,6 +84,7 @@ test("local session Redis correlation rejects mismatches, keeps the first result
   await store.accept({ ...search, query: "other" });
   expect(await store.read(search.requestId)).toBeUndefined();
   await store.accept(search);
+  expect(redis.calls.find(([command]) => command === "EVAL")?.at(-1)).toBe("15");
   const first = await store.read(search.requestId);
   await store.accept({ ...search, scanComplete: false });
   expect(await store.read(search.requestId)).toEqual(first);

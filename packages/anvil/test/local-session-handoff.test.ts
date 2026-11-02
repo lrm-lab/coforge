@@ -295,3 +295,96 @@ test("a stalled filesystem read returns an incomplete search at the deadline", a
   });
   expect(Date.now() - started).toBeLessThan(100);
 });
+
+test("a final candidate hydration timeout marks the listing incomplete", async () => {
+  const path = "/claude/projects/-work/session-1.jsonl";
+  const base = claudeHost({
+    [path]: {
+      text: claudeRecord("user", "2026-11-02T01:00:00Z", "unfinished"),
+      mtimeMs: NOW,
+    },
+  });
+  const started = Date.now();
+  const result = await searchClaudeLocalSessions(
+    {
+      query: "",
+      limits: { ...limits, deadlineAtMs: started + 10, now: Date.now },
+    },
+    {
+      ...base,
+      readFileHead: () => new Promise<string>(() => {}),
+    },
+  );
+  expect(result.sessions).toEqual([]);
+  expect(result.scanComplete).toBeFalse();
+});
+
+test("Claude stats and Codex directory observations use bounded concurrency", async () => {
+  const claudeFiles: Record<string, FileNode> = {};
+  for (let index = 0; index < 16; index++)
+    claudeFiles[`/claude/projects/-work/session-${index}.jsonl`] = {
+      text: claudeRecord("user", "2026-11-02T01:00:00Z", `task ${index}`),
+      mtimeMs: index,
+    };
+  const claudeBase = claudeHost(claudeFiles);
+  let activeClaude = 0;
+  let maxClaude = 0;
+  await searchClaudeLocalSessions(
+    { query: "", limits },
+    {
+      ...claudeBase,
+      async lstat(path) {
+        activeClaude += 1;
+        maxClaude = Math.max(maxClaude, activeClaude);
+        await Promise.resolve();
+        try {
+          return await claudeBase.lstat(path);
+        } finally {
+          activeClaude -= 1;
+        }
+      },
+    },
+  );
+  expect(maxClaude).toBeGreaterThan(1);
+  expect(maxClaude).toBeLessThanOrEqual(16);
+
+  const codexFiles: Record<string, FileNode> = {};
+  for (let index = 0; index < 8; index++) {
+    const id = `${String(index).padStart(8, "0")}-2222-4333-8444-555555555555`;
+    codexFiles[`/codex/sessions/day-${index}/rollout-2026-11-02T01-00-0${index}-${id}.jsonl`] = {
+      text: [
+        codexLine("2026-11-02T01:00:00Z", "session_meta", { id, cwd: `/work/${index}` }),
+        codexLine("2026-11-02T01:00:01Z", "response_item", {
+          type: "message",
+          role: "user",
+          content: [{ type: "input_text", text: `task ${index}` }],
+        }),
+      ].join("\n"),
+      mtimeMs: index,
+    };
+  }
+  const codexBase = codexHost(codexFiles);
+  let activeCodex = 0;
+  let maxCodex = 0;
+  await searchCodexLocalSessions(
+    { query: "", limits },
+    {
+      ...codexBase,
+      async readDirectoryEntries(path) {
+        const root = path === "/codex/sessions";
+        if (!root) {
+          activeCodex += 1;
+          maxCodex = Math.max(maxCodex, activeCodex);
+          await Promise.resolve();
+        }
+        try {
+          return await codexBase.readDirectoryEntries(path);
+        } finally {
+          if (!root) activeCodex -= 1;
+        }
+      },
+    },
+  );
+  expect(maxCodex).toBeGreaterThan(1);
+  expect(maxCodex).toBeLessThanOrEqual(8);
+});

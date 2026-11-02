@@ -62,33 +62,41 @@ async function candidates(options: LocalSessionSearchOptions, host: ClaudeHistor
       }
       continue;
     }
+    const selected: Array<{ name: string; sessionId: string }> = [];
     for (const entry of entries) {
-      if (options.limits.now() >= options.limits.deadlineAtMs) {
-        complete = false;
-        break;
-      }
       const match = SESSION_FILE.exec(entry.name);
       if (!match) continue;
       if (++files > options.limits.maxFiles) {
         complete = false;
         break;
       }
-      const path = join(root, entry.name);
-      try {
-        const info = await localSessionIo(host.lstat(path), options.limits);
-        if (!info.isFile()) continue;
-        found.push({
-          path,
-          sessionId: match[1]!,
-          modifiedAtMs: Number.isFinite(info.mtimeMs) ? Math.max(0, info.mtimeMs) : 0,
-        });
-      } catch (error) {
-        if (error instanceof LocalSessionDeadlineError) {
-          complete = false;
-          break;
-        }
-        // A disappearing or unreadable transcript is not a session result.
+      selected.push({ name: entry.name, sessionId: match[1]! });
+    }
+    for (let offset = 0; offset < selected.length; offset += 16) {
+      const observed = await Promise.all(
+        selected.slice(offset, offset + 16).map(async (entry) => {
+          const path = join(root, entry.name);
+          try {
+            const info = await localSessionIo(host.lstat(path), options.limits);
+            return info.isFile()
+              ? {
+                  candidate: {
+                    path,
+                    sessionId: entry.sessionId,
+                    modifiedAtMs: Number.isFinite(info.mtimeMs) ? Math.max(0, info.mtimeMs) : 0,
+                  },
+                }
+              : {};
+          } catch (error) {
+            return { deadline: error instanceof LocalSessionDeadlineError };
+          }
+        }),
+      );
+      for (const observation of observed) {
+        if (observation.candidate) found.push(observation.candidate);
+        if (observation.deadline) complete = false;
       }
+      if (!complete) break;
     }
     if (!complete) break;
   }
@@ -167,6 +175,7 @@ export async function searchClaudeLocalSessions(
   const budget = { bytes: options.limits.maxContentBytes };
   const sessions: NativeLocalSession[] = [];
   let contentSearchComplete = true;
+  let hydrationComplete = true;
   let examined = 0;
   for (const candidate of discovered.found.sort((a, b) => b.modifiedAtMs - a.modifiedAtMs)) {
     if (sessions.length >= options.limits.maxResults) {
@@ -183,6 +192,7 @@ export async function searchClaudeLocalSessions(
       read = await readDetails(candidate, options, host, budget);
     } catch (error) {
       if (error instanceof LocalSessionDeadlineError) {
+        hydrationComplete = false;
         contentSearchComplete = false;
         break;
       }
@@ -218,7 +228,7 @@ export async function searchClaudeLocalSessions(
   }
   return {
     sessions: sessions.sort((a, b) => b.updatedAtMs - a.updatedAtMs),
-    scanComplete: discovered.complete && examined === discovered.found.length,
+    scanComplete: discovered.complete && hydrationComplete && examined === discovered.found.length,
     contentSearchComplete: query ? contentSearchComplete : true,
   };
 }

@@ -39,6 +39,7 @@ export class RedisLocalSessionSearchResults
     super(redis, {
       prefix: `${PREFIX}:search`,
       pendingTtlSeconds: 15,
+      resultTtlSeconds: 15,
       encode: encodeLocalSessionSearchResult,
       decode: decodeLocalSessionSearchResult,
       sameScope: sameLocalSessionSearchScope,
@@ -58,6 +59,7 @@ export class RedisLocalSessionExcerptResults
     super(redis, {
       prefix: `${PREFIX}:excerpt`,
       pendingTtlSeconds: 15,
+      resultTtlSeconds: 15,
       encode: encodeLocalSessionExcerptResult,
       decode: decodeLocalSessionExcerptResult,
       sameScope: sameLocalSessionExcerptScope,

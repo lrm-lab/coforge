@@ -31,7 +31,7 @@ type Source = {
   excerpt(options: LocalSessionExcerptOptions): Promise<NativeLocalSessionExcerpt | undefined>;
 };
 
-type Sources = { claude: Source; codex: Source; now: () => number };
+type Sources = { claude: Source; codex: Source; now: () => number; timeoutMs?: number };
 
 function defaultSources(): Sources {
   return {
@@ -87,6 +87,8 @@ function fitExcerpt(
 }
 
 export class LocalSessionCatalog {
+  readonly #outstandingIo = new Set<Promise<unknown>>();
+
   constructor(private readonly sources: Sources = defaultSources()) {}
 
   private limits(divisor = 1) {
@@ -97,12 +99,15 @@ export class LocalSessionCatalog {
       maxFiles: Math.floor(LOCAL_SESSION_MAX_FILES / divisor),
       maxContentBytes: Math.floor(LOCAL_SESSION_MAX_CONTENT_BYTES / divisor),
       maxFileBytes: LOCAL_SESSION_MAX_FILE_BYTES,
-      deadlineAtMs: now() + LOCAL_SESSION_SEARCH_TIMEOUT_MS,
+      deadlineAtMs: now() + (this.sources.timeoutMs ?? LOCAL_SESSION_SEARCH_TIMEOUT_MS),
       now,
+      outstandingIo: this.#outstandingIo,
     };
   }
 
   async search(query: string) {
+    if (this.#outstandingIo.size > 0)
+      return { sessions: [], scanComplete: false, contentSearchComplete: false };
     const failed = {
       sessions: [],
       scanComplete: false,
@@ -132,6 +137,14 @@ export class LocalSessionCatalog {
   }
 
   async excerpt(provider: HandoffRuntimeProvider, sessionId: string, cwd: string) {
+    if (this.#outstandingIo.size > 0)
+      return {
+        status: "unavailable" as const,
+        model: "",
+        updatedAtMs: 0,
+        initialRequest: "",
+        recentTurns: [],
+      };
     const source =
       provider === RUNTIME_PROVIDER.CLAUDE_CODE ? this.sources.claude : this.sources.codex;
     try {
