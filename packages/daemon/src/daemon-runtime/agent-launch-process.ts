@@ -7,6 +7,7 @@ import { parseAssignedSkillPacks } from "#src/code-agent/assigned-skills";
 import { agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
 import { ProviderProgress } from "./stalled-recovery";
 import { LaunchPhaseTiming } from "./launch-phase-timing";
+import { inferredReplacedSession, replacedSessionFor } from "./session-replacement";
 import {
   StalledTurnTracker,
   stalledTurnNotice,
@@ -137,22 +138,38 @@ export async function launchAgentProcess(
           ? async (reportedSessionId, driverReplacedSessionId) => {
               if (!current() || ports.isStopping())
                 throw new Error("Agent session launch was superseded");
-              // Kept for compat on the session report's own `replacedSessionId` field only
-              // (unrelated to whether an invalidate is sent below): either a driver-reported
-              // replacement just now, or one carried over from AgentControl's own retry.
-              const replaced =
-                driverReplacedSessionId ?? recycledSessionId ?? request.replacedSessionId;
-              if (driverReplacedSessionId) {
-                // Claude Code/Codex replace a missing native session inside the driver: only a
-                // driver-reported replacement (not AgentControl's carried-over
-                // `request.replacedSessionId`, already reported once) emits here. Sent BEFORE
-                // the session report below, fire-and-forget, so the server can still match the
-                // stale session; after the report lands this would be a no-op.
+              // The session report names what it replaces whenever the driver reported a
+              // different session than the one this launch was told to resume, even when the
+              // driver did not say so itself: the server refuses an unnamed identity swap.
+              // The mode the provider was actually handed: a wake recycle always starts fresh,
+              // whatever session this launch was originally asked to continue.
+              const requestedSessionMode = recycled ? "create" : reference.sessionMode;
+              const requestedSessionId = request.sessionId ?? reference.sessionId;
+              const inferred = inferredReplacedSession({
+                requestedSessionId,
+                requestedSessionMode,
+                reportedSessionId,
+              });
+              const replaced = replacedSessionFor({
+                driverReplacedSessionId,
+                recycledSessionId,
+                requestedReplacedSessionId: request.replacedSessionId,
+                requestedSessionId,
+                requestedSessionMode,
+                reportedSessionId,
+              });
+              const replacementToInvalidate = driverReplacedSessionId ?? inferred;
+              if (replacementToInvalidate) {
+                // A session replaced inside the driver, or one whose resume the driver turned
+                // into a fresh session: only these emit here (not AgentControl's carried-over
+                // `request.replacedSessionId`, already reported once). Sent BEFORE the session
+                // report below, fire-and-forget, so the server can still match the stale
+                // session; after the report lands this would be a no-op.
                 ports.transport().sendSessionInvalidate?.(
                   connectionSessionInvalidate(ports.connection, ports.runtimeInstanceId, {
                     agentId,
                     provider: config.provider,
-                    sessionId: driverReplacedSessionId,
+                    sessionId: replacementToInvalidate,
                     launchId: launch.launchId,
                     reason: "missing",
                   }),
@@ -179,13 +196,13 @@ export async function launchAgentProcess(
               reference.sessionId = reportedSessionId;
               reference.sessionMode = "resume";
               reference.launchId = launch.launchId;
-              if (driverReplacedSessionId)
+              if (replacementToInvalidate)
                 ports.narrateUnavailable(
                   agentId,
                   launch,
                   sessionInvalidateActivityText(
                     runtimeDisplayName(config.provider),
-                    driverReplacedSessionId,
+                    replacementToInvalidate,
                     "missing",
                   ),
                 );

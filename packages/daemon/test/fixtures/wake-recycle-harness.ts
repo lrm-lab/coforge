@@ -140,7 +140,10 @@ export async function harness(options: HarnessOptions = {}) {
         },
       };
       sessions.push(record);
-      await sessionOptions.onSessionId?.(`native-${sessions.length}`);
+      // A resumed launch keeps the session it was told to continue, as a real driver does; only
+      // a fresh launch mints an id. A resume that reported a different id would be a replaced
+      // session, which these tests do not model.
+      await sessionOptions.onSessionId?.(sessionOptions.sessionId ?? `native-${sessions.length}`);
       return {
         async sendMessage(text: string) {
           record.inputs.push(text);
