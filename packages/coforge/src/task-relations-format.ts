@@ -1,3 +1,4 @@
+import { foldUntrustedLine } from "@lrm/coforge-sdk/internal";
 import {
   isBlockerSatisfied,
   taskNameLabel,
@@ -34,8 +35,8 @@ function treeLines(nodes: readonly TaskTreeNode[], depth: number): string[] {
   return nodes.flatMap((node) => [
     node.hidden
       ? `${"  ".repeat(depth)}- ${hiddenLine(node.status)}`
-      : `${"  ".repeat(depth)}- ${taskNameLabel(node)} [${node.status}] ${node.title.replace(/\s+/g, " ").trim()}${
-          node.owner ? ` → @${node.owner.handle}` : ""
+      : `${"  ".repeat(depth)}- ${taskNameLabel(node)} [${node.status}] ${foldUntrustedLine(node.title)}${
+          node.owner ? ` → @${foldUntrustedLine(node.owner.handle)}` : ""
         }${node.blocked ? ` (blocked by ${names(node.blockedBy)})` : ""}`,
     ...treeLines(node.children, depth + 1),
   ]);

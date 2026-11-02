@@ -1,3 +1,4 @@
+import { foldUntrustedLine } from "@lrm/coforge-sdk/internal";
 import { stat } from "node:fs/promises";
 import { extname } from "node:path";
 import { APP_LOGO_MAX_BYTES, type AppManagedSummary } from "@lrm/coforge-sdk/agent";
@@ -30,7 +31,7 @@ function usage(message: string, json: boolean): CliError {
 
 function formatApp(app: AppManagedSummary): string {
   return [
-    `${app.clientKey} — ${app.name} (${app.publishStatus})`,
+    `${app.clientKey} — ${foldUntrustedLine(app.name)} (${app.publishStatus})`,
     `  Category: ${app.category}`,
     `  Homepage: ${app.homepageUrl ?? "none"}`,
     `  Redirect URLs: ${app.redirectUrls.join(", ") || "none"}`,

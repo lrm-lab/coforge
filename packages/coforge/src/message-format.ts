@@ -1,3 +1,4 @@
+import { foldUntrustedLine } from "@lrm/coforge-sdk/internal";
 import { CliError } from "./cli-error";
 import { channelSummaryBody } from "./message-summary";
 import { fenceMessageBody } from "./message-body-format";
@@ -42,7 +43,9 @@ export function attachmentSuffix(message: AgentMessageRecord): string {
   const attachments = message.attachments ?? [];
   if (attachments.length === 0) return "";
   const noun = attachments.length === 1 ? "attachment" : "attachments";
-  const list = attachments.map(({ fileName, id }) => `${fileName} (id:${id})`).join(", ");
+  const list = attachments
+    .map(({ fileName, id }) => `${foldUntrustedLine(fileName)} (id:${id})`)
+    .join(", ");
   return ` [${attachments.length} ${noun}: ${list} — use \`coforge attachment view --id <attachmentId> --output <path>\` to download]`;
 }
 
@@ -55,7 +58,7 @@ export function forwardedSuffix(message: AgentMessageRecord): string {
 export function taskSuffix(message: AgentMessageRecord): string {
   if (!message.task) return "";
   const owner = message.task.owner
-    ? ` assignee=@${message.task.owner.handle}${message.task.owner.deleted ? " [deleted]" : ""}`
+    ? ` assignee=@${foldUntrustedLine(message.task.owner.handle)}${message.task.owner.deleted ? " [deleted]" : ""}`
     : "";
   return ` [task #${message.task.number} status=${message.task.status}${owner}]`;
 }
@@ -210,7 +213,7 @@ type AttachmentUploadResponse = {
 export function formatAttachmentUploadSuccess(response: AttachmentUploadResponse): string {
   const sizeKB = (response.sizeBytes / 1024).toFixed(1);
   return (
-    `File uploaded: ${response.fileName} (${sizeKB}KB)\n` +
+    `File uploaded: ${foldUntrustedLine(response.fileName)} (${sizeKB}KB)\n` +
     `Attachment ID: ${response.id}\n\n` +
     `Use this ID with coforge message send --attachment-id ${response.id} to include it in a message.`
   );

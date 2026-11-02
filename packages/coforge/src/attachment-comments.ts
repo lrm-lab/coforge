@@ -1,3 +1,4 @@
+import { foldUntrustedLine } from "@lrm/coforge-sdk/internal";
 import {
   AGENT_ATTACHMENT_COMMENTS_MAX_LIMIT,
   type AgentAttachmentComment,
@@ -108,7 +109,7 @@ function anchorSummary({ type, data }: AgentAttachmentCommentAnchor): string {
 function commentLine(comment: AgentAttachmentComment): string {
   const sender = renderMessageSender(
     comment.senderKind,
-    comment.senderHandle ?? comment.senderName,
+    foldUntrustedLine(comment.senderHandle ?? comment.senderName),
   );
   const resolved = comment.resolved ? " ✅" : "";
   const anchor = comment.anchor ? ` [anchor: ${anchorSummary(comment.anchor)}]` : "";

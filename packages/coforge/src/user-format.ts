@@ -1,3 +1,4 @@
+import { foldUntrustedLine, frameUntrustedText } from "@lrm/coforge-sdk/internal";
 import type { AgentProfileView, AgentUserInfoResponse } from "@lrm/coforge-sdk/agent";
 
 /** `coforge user info <name>`: narrow visible facts for a human or Agent and the visible channels
@@ -13,13 +14,13 @@ export function formatUserInfo(
   lines.push(`Kind: ${user.kind}`);
   if (user.kind === "agent" && user.status) lines.push(`Status: ${user.status}`);
   if (user.role && user.role !== "member") lines.push(`Role: ${user.role}`);
-  if (user.description) lines.push(`Description: ${user.description}`);
-  lines.push(`Display name: ${user.displayName}`);
+  if (user.description) lines.push(`Description: ${frameUntrustedText(user.description)}`);
+  lines.push(`Display name: ${foldUntrustedLine(user.displayName)}`);
   if (user.kind === "agent") {
-    if (user.computerName) lines.push(`Computer: ${user.computerName}`);
-    if (user.runtime) lines.push(`Provider: ${user.runtime}`);
-    if (user.model) lines.push(`Model: ${user.model}`);
-    if (user.availability) lines.push(`Availability: ${user.availability}`);
+    if (user.computerName) lines.push(`Computer: ${foldUntrustedLine(user.computerName)}`);
+    if (user.runtime) lines.push(`Provider: ${foldUntrustedLine(user.runtime)}`);
+    if (user.model) lines.push(`Model: ${foldUntrustedLine(user.model)}`);
+    if (user.availability) lines.push(`Availability: ${foldUntrustedLine(user.availability)}`);
   }
   if (user.isSelf) lines.push("Self: yes");
   lines.push("");
@@ -54,15 +55,16 @@ export function formatProfile(response: { profile: AgentProfileView }): string {
   const lines = ["## Profile", ""];
   lines.push(`Username: @${profile.name}`);
   lines.push(`Kind: ${profile.kind}`);
-  lines.push(`Display name: ${profile.displayName}`);
-  if (profile.description) lines.push(`Description: ${profile.description}`);
+  lines.push(`Display name: ${foldUntrustedLine(profile.displayName)}`);
+  if (profile.description) lines.push(`Description: ${frameUntrustedText(profile.description)}`);
   if (profile.role) lines.push(`Role: ${profile.role}`);
   if (profile.kind === "agent") {
     lines.push(`Status: ${profile.status}`);
-    if (profile.computerName) lines.push(`Computer: ${profile.computerName}`);
-    if (profile.runtime) lines.push(`Provider: ${profile.runtime}`);
-    if (profile.model) lines.push(`Model: ${profile.model}`);
-    if (profile.availability) lines.push(`Availability: ${profile.availability}`);
+    if (profile.computerName) lines.push(`Computer: ${foldUntrustedLine(profile.computerName)}`);
+    if (profile.runtime) lines.push(`Provider: ${foldUntrustedLine(profile.runtime)}`);
+    if (profile.model) lines.push(`Model: ${foldUntrustedLine(profile.model)}`);
+    if (profile.availability)
+      lines.push(`Availability: ${foldUntrustedLine(profile.availability)}`);
   }
   if (profile.isSelf) lines.push("Self: yes");
   lines.push("");
@@ -74,7 +76,7 @@ export function formatProfile(response: { profile: AgentProfileView }): string {
   } else {
     lines.push(
       profile.creator
-        ? `Creator: @${profile.creator.name} (${profile.creator.displayName})`
+        ? `Creator: @${profile.creator.name} (${foldUntrustedLine(profile.creator.displayName)})`
         : "Creator: (unknown)",
     );
   }

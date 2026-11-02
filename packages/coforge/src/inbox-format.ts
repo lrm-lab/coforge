@@ -1,3 +1,4 @@
+import { foldUntrustedLine, frameUntrustedText } from "@lrm/coforge-sdk/internal";
 import { agoLabel } from "./workspace-info-format";
 import type {
   AgentInboxItem,
@@ -68,7 +69,7 @@ function conversationRow(
   if (pending && pending.pendingCount > 0)
     parts.push(`${pending.pendingCount} new, not yet delivered`);
   const latest = [
-    item.latestSenderName ? `@${item.latestSenderName}` : null,
+    item.latestSenderName ? `@${foldUntrustedLine(item.latestSenderName)}` : null,
     formatAgo(item.latestAt, nowMs),
   ].filter(Boolean);
   if (latest.length > 0) parts.push(`latest ${latest.join(" ")}`);
@@ -80,7 +81,7 @@ function pendingOnlyRow(row: InboxPendingRow, nowMs: number): Row {
   const parts = [row.target, `${row.pendingCount} new, not yet delivered`];
   if (mentionsYou(row.flags)) parts.push("mentions you");
   const latest = [
-    row.latestSenderHandle ? `@${row.latestSenderHandle}` : null,
+    row.latestSenderHandle ? `@${foldUntrustedLine(row.latestSenderHandle)}` : null,
     row.latestCreatedAtMs === undefined ? null : agoLabel(new Date(row.latestCreatedAtMs), nowMs),
   ].filter(Boolean);
   if (latest.length > 0) parts.push(`latest ${latest.join(" ")}`);
@@ -150,12 +151,15 @@ export function formatInboxCheck(result: InboxCheckResult, nowMs: number): strin
       [
         `App items pending: ${result.appItems.length}.`,
         ...result.appItems.flatMap((app) => {
-          const id = [app.appId ? `[${app.appId}]` : "", app.itemId ?? ""]
+          const id = [
+            app.appId ? `[${foldUntrustedLine(app.appId)}]` : "",
+            foldUntrustedLine(app.itemId ?? ""),
+          ]
             .filter(Boolean)
             .join(" ");
           const line =
-            `- ${id ? `${id} ` : ""}${app.title ?? "App item"}: ${app.summary ?? ""}`.trimEnd();
-          return app.command ? [line, `  Run: ${app.command}`] : [line];
+            `- ${id ? `${id} ` : ""}${foldUntrustedLine(app.title ?? "App item")}: ${frameUntrustedText(app.summary ?? "")}`.trimEnd();
+          return app.command ? [line, `  Run: ${foldUntrustedLine(app.command)}`] : [line];
         }),
       ].join("\n"),
     );

@@ -1,3 +1,4 @@
+import { foldUntrustedLine } from "@lrm/coforge-sdk/internal";
 import type {
   AgentTaskFollowResponse,
   AgentTaskFollowingResponse,
@@ -8,7 +9,7 @@ import { fenceMessageBody } from "./message-body-format";
 import { formatUtcTimestamp } from "./message-format";
 import { shortId } from "./short-id";
 
-const oneLine = (text: string) => text.replace(/\s+/g, " ").trim();
+const oneLine = foldUntrustedLine;
 
 function followingLine(view: AgentTaskViewResponse): string {
   return view.following
@@ -27,7 +28,7 @@ function discussion(view: AgentTaskViewResponse): string[] {
     `Discussion (latest ${messages.length}${total}, oldest first):`,
     ...messages.map(
       (message) =>
-        `- [msg=${message.id} seq=${message.sequence} time=${formatUtcTimestamp(message.createdAt)}] ${message.sender ? `@${message.sender}` : "system"}: ${fenceMessageBody(message.body)}`,
+        `- [msg=${message.id} seq=${message.sequence} time=${formatUtcTimestamp(message.createdAt)}] ${message.sender ? `@${foldUntrustedLine(message.sender)}` : "system"}: ${fenceMessageBody(message.body)}`,
     ),
   ];
 }

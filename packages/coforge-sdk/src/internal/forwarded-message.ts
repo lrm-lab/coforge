@@ -1,3 +1,5 @@
+import { foldUntrustedLine, MESSAGE_LINE_SEPARATOR } from "./untrusted-text";
+
 /**
  * The original a forwarded message carries, as an Agent reads it (`AgentMessageRecord.forwarded`).
  * The message's own `body` stays the forwarder's note; this is the frozen snapshot beside it.
@@ -28,9 +30,6 @@ export function formatUtcTimestamp(iso: string): string {
   );
 }
 
-/** Every separator a terminal or a Markdown reader breaks a line on; CRLF is one. */
-export const MESSAGE_LINE_SEPARATOR = /\r\n|[\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029]/u;
-
 /**
  * A forwarded message as text: `[forwarded from #x by @y at <time>]`, then the snapshot as a
  * quote block, every line behind `> ` so quoted text cannot pass for output of its own. The
@@ -41,9 +40,11 @@ export function renderForwardedMessage(
   forwarded: ForwardedMessage,
   options: { withAttachmentIds?: boolean } = {},
 ): string {
-  const where = forwarded.thread ? `${forwarded.from} (thread)` : forwarded.from;
+  const from = foldUntrustedLine(forwarded.from);
+  const where = forwarded.thread ? `${from} (thread)` : from;
+  const sender = foldUntrustedLine(forwarded.sender);
   const lines = [
-    `[forwarded from ${where} by ${forwarded.sender} at ${formatUtcTimestamp(forwarded.sentAt)}]`,
+    `[forwarded from ${where} by ${sender} at ${formatUtcTimestamp(forwarded.sentAt)}]`,
   ];
   if (forwarded.body)
     lines.push(...forwarded.body.split(MESSAGE_LINE_SEPARATOR).map((line) => `> ${line}`));

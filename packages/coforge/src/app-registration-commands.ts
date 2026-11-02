@@ -1,3 +1,4 @@
+import { foldUntrustedLine } from "@lrm/coforge-sdk/internal";
 import { unlink } from "node:fs/promises";
 import type { AppOwnedListResponse, AppRegistrationStatusResponse } from "@lrm/coforge-sdk/agent";
 import { toActionCardAction } from "./action-prepare-input";
@@ -31,10 +32,12 @@ function formatOwned(list: AppOwnedListResponse): string {
   const lines: string[] = [];
   for (const card of list.pending)
     lines.push(
-      `pending card ${card.cardMessageId}: ${card.name}${card.clientKey ? ` (${card.clientKey})` : ""}`,
+      `pending card ${card.cardMessageId}: ${foldUntrustedLine(card.name)}${card.clientKey ? ` (${card.clientKey})` : ""}`,
     );
   for (const app of list.apps)
-    lines.push(`${app.clientKey} — ${app.name} (${app.role === "owner" ? "you own it" : "admin"})`);
+    lines.push(
+      `${app.clientKey} — ${foldUntrustedLine(app.name)} (${app.role === "owner" ? "you own it" : "admin"})`,
+    );
   return lines.length > 0
     ? lines.join("\n")
     : "You have no pending register cards and own no apps. Run coforge app prepare register to ask for one.";

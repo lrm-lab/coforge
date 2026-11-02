@@ -1,3 +1,4 @@
+import { foldUntrustedLine } from "@lrm/coforge-sdk/internal";
 import type {
   AgentReminderOperationResponse,
   ReminderLogEvent,
@@ -21,7 +22,7 @@ export function formatReminderRow(
   const cadence = reminder.repeat ? `recurring · ${reminder.repeat}` : "one-time";
   const overdue =
     reminder.status === "scheduled" && Date.parse(reminder.fireAt) < now ? " [OVERDUE]" : "";
-  return `#${shortId(reminder.reminderId)} [${reminder.status}] (${cadence}) next=${reminder.fireAt}${overdue} ${JSON.stringify(reminder.title)}`;
+  return `#${shortId(reminder.reminderId)} [${reminder.status}] (${cadence}) next=${reminder.fireAt}${overdue} ${JSON.stringify(foldUntrustedLine(reminder.title))}`;
 }
 
 function formatLogEvent(event: ReminderLogEvent): string {

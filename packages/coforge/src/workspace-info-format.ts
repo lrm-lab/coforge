@@ -1,3 +1,4 @@
+import { foldUntrustedLine, frameUntrustedText } from "@lrm/coforge-sdk/internal";
 import type {
   WorkspaceInfoChannel,
   WorkspaceInfoComputer,
@@ -124,7 +125,7 @@ function channelStatus(channel: WorkspaceInfoChannel, now: number, withArchived:
 
 function withDescription(line: string, description: string | undefined): string {
   const text = description?.trim();
-  return text ? `${line} \u2014 ${text}` : line;
+  return text ? `${line} \u2014 ${frameUntrustedText(text)}` : line;
 }
 
 const channelRow = (channel: WorkspaceInfoChannel, now: number, withArchived: boolean) =>
@@ -140,7 +141,7 @@ const agentRow = (agent: Agent) =>
 const humanRow = (human: Human) =>
   withDescription(`@${human.name}${roleLabel(human.role)}`, human.description);
 const projectRow = (project: Project) =>
-  `${project.name} (${project.slug})${project.githubFullName ? ` github=${project.githubFullName}` : ""}`;
+  `${foldUntrustedLine(project.name)} (${foldUntrustedLine(project.slug)})${project.githubFullName ? ` github=${foldUntrustedLine(project.githubFullName)}` : ""}`;
 function computerRow(computer: WorkspaceInfoComputer): string {
   const system = [computer.platform, computer.osVersion].filter(Boolean).join(" ");
   const parts = [
@@ -148,9 +149,9 @@ function computerRow(computer: WorkspaceInfoComputer): string {
     ...(system ? [system] : []),
     ...(computer.computerVersion ? [`v${computer.computerVersion}`] : []),
   ];
-  const line = `${computer.name} [${parts.join(", ")}]`;
+  const line = `${foldUntrustedLine(computer.name)} [${foldUntrustedLine(parts.join(", "))}]`;
   return computer.displayName && computer.displayName !== computer.name
-    ? `${line} \u2014 ${computer.displayName}`
+    ? `${line} \u2014 ${foldUntrustedLine(computer.displayName)}`
     : line;
 }
 

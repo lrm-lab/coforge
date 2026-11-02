@@ -1,3 +1,4 @@
+import { foldUntrustedLine, frameUntrustedText } from "@lrm/coforge-sdk/internal";
 /** Text renderers for `coforge channel info|members|join|leave|create|update|lifecycle|
  * add-member|remove-member`. CoForge has no `attention` block on leave/remove-member, so none
  * is rendered. Every subcommand's `--json` mode prints the
@@ -118,13 +119,13 @@ export function formatChannelInfo(response: { channel: ChannelInfoLike }): strin
   lines.push(
     `Muted: ${yesNo(channel.muted)}`,
     `Archived: ${yesNo(channel.archived)}`,
-    `Description: ${channel.description || "(none)"}`,
+    `Description: ${channel.description ? frameUntrustedText(channel.description) : "(none)"}`,
   );
   // Same rendering as `workspace info --projects`'s project line, so an Agent can match this
   // channel's Project up against that list. Absent for a channel with no bound Project.
   if (channel.project)
     lines.push(
-      `Project: ${channel.project.name} (${channel.project.slug})${channel.project.githubFullName ? ` github=${channel.project.githubFullName}` : ""}`,
+      `Project: ${foldUntrustedLine(channel.project.name)} (${foldUntrustedLine(channel.project.slug)})${channel.project.githubFullName ? ` github=${foldUntrustedLine(channel.project.githubFullName)}` : ""}`,
     );
   lines.push(
     // Always plural — never singularized for a count of 1.
@@ -157,7 +158,7 @@ export function formatChannelMembers(response: {
       const status = `(${agentStatusLabel(agent)})`;
       const role = roleSuffix(agent.serverRole);
       const detail = channelMemberRoleDetail(agent);
-      const description = agent.description ? ` — ${agent.description}` : "";
+      const description = agent.description ? ` — ${frameUntrustedText(agent.description)}` : "";
       lines.push(`  - @${agent.name} ${status}${role}${detail}${description}`);
     }
   lines.push(

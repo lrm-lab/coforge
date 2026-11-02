@@ -1,3 +1,4 @@
+import { foldUntrustedLine, frameUntrustedText } from "@lrm/coforge-sdk/internal";
 import { APP_IDENTITY_SCOPES as APP_SCOPES } from "@lrm/coforge-sdk/internal/app-scopes";
 import type { AgentAppAccessState, AgentAppView } from "@lrm/coforge-sdk/agent";
 import type { AppClient } from "./app-client";
@@ -133,9 +134,11 @@ function formatAppList(shown: readonly AgentAppView[], all: boolean): string {
   if (shown.length === 0)
     return "No apps are installed in this Workspace. Run coforge app list --all to see the built-in ones.";
   const blocks = shown.map((app) => {
-    const lines = [`${app.key} — ${app.name}${app.builtIn ? " (built in)" : ""}`];
-    if (app.whenToUse) lines.push(`  When to use: ${app.whenToUse}`);
-    if (app.description) lines.push(`  ${app.description.replaceAll("\n", "\n  ")}`);
+    const lines = [
+      `${app.key} — ${foldUntrustedLine(app.name)}${app.builtIn ? " (built in)" : ""}`,
+    ];
+    if (app.whenToUse) lines.push(`  When to use: ${frameUntrustedText(app.whenToUse)}`);
+    if (app.description) lines.push(`  ${frameUntrustedText(app.description)}`);
     if (app.homepageUrl) lines.push(`  Homepage: ${app.homepageUrl}`);
     if (app.agentManifestUrl)
       lines.push(

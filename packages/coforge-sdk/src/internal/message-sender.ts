@@ -1,3 +1,4 @@
+import { frameUntrustedText } from "./untrusted-text";
 import { codePointLength } from "./truncate";
 import { AGENT_NAME_MAX_LENGTH } from "./agent-name";
 import { MENTION_HANDLE_PATTERN } from "./mentions";
@@ -83,5 +84,5 @@ export function renderMessageSender(
   description?: string,
 ): string {
   if (kind === "system") return "system";
-  return description ? `@${handle} — ${description}` : `@${handle}`;
+  return description ? `@${handle} — ${frameUntrustedText(description)}` : `@${handle}`;
 }
