@@ -1,6 +1,11 @@
 import { getLogger } from "@logtape/logtape";
 import { isMemoryAgentRuntime } from "@coforge/agent";
-import { AGENT_ACTIVITY_DETAIL_KIND, thrownMessage } from "@lrm/coforge-sdk/internal";
+import {
+  AGENT_ACTIVITY_DETAIL_KIND,
+  STALLED_RESTART_LIMIT_ERROR,
+  thrownMessage,
+  type AgentActivityRuntimeError,
+} from "@lrm/coforge-sdk/internal";
 import type { AgentSession } from "@lrm/coforge-anvil";
 import type { AgentRestartConfig, AgentRuntime } from "#src/agent-runtime/agent-process-manager";
 import type { OutstandingBackgroundTasks } from "#src/agent-runtime/subagent-progress-activity";
@@ -9,6 +14,7 @@ import {
   describeRecycledSession,
   type ColdIdleStop,
 } from "#src/agent-runtime/wake-session-recycle";
+import { fingerprintRuntimeError } from "#src/agent-runtime/runtime-error-activity";
 import { runtimeDisplayName } from "./session-invalidate-activity";
 import { idleBlocker, type AgentIdleFacts, type ColdIdleAgent } from "./cold-idle-sweep";
 import type { BusyActivity } from "./agent-activity-publisher";
@@ -107,13 +113,14 @@ export type RuntimeReleasePorts<L extends ReleasableLaunch> = Readonly<{
   flushParked(agentId: string): void;
   /** Launches the Agent again from its remembered restart config. */
   wake(agentId: string, restart: WakeRestart): Promise<unknown>;
-  /** Publishes an Activity for `launch`. */
+  /** Publishes an Activity for `launch`, its draft built from the rest as `activityDraft` does. */
   publish(
     agentId: string,
     launch: L,
-    level: "info" | "error",
     detailKind: string,
+    level: "info" | "error",
     text: string,
+    extra?: Readonly<{ runtimeError?: AgentActivityRuntimeError }>,
   ): void;
   /** Hands the old turn's tracked mentions back as unknown before the process goes. */
   handBackMentions(agentId: string): Promise<void>;
@@ -201,12 +208,20 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
    * and restart it. */
   #reportUnattendedLimit(agentId: string, launch: L, restart: AgentRestartConfig): void {
     const runtimeName = runtimeDisplayName(restart.config.provider);
+    const text = `The ${runtimeName} runtime stalled again after ${UNATTENDED_RECOVERY_LIMIT} automatic restarts with no message waiting. It is not restarted again until a message arrives or someone restarts it.`;
+    // The reason the profile shows while the process lives (`failureReason`, task #418).
     this.#ports.publish(
       agentId,
       launch,
-      "error",
       AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_STALLED,
-      `The ${runtimeName} runtime stalled again after ${UNATTENDED_RECOVERY_LIMIT} automatic restarts with no message waiting. It is not restarted again until a message arrives or someone restarts it.`,
+      "error",
+      text,
+      {
+        runtimeError: {
+          ...STALLED_RESTART_LIMIT_ERROR,
+          fingerprint: fingerprintRuntimeError(text),
+        },
+      },
     );
     logger.warn("Agent runtime stalled past its unattended restart limit", {
       event: "agent.runtime.stalled_recovery_limit",
@@ -318,7 +333,7 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
     plan: RuntimeReleasePlan,
   ): Promise<boolean> {
     // Before `stopping`, which mutes everything but stopped/interrupted/error Activity.
-    this.#ports.publish(agentId, launch, "info", plan.announce.detailKind, plan.announce.text);
+    this.#ports.publish(agentId, launch, plan.announce.detailKind, "info", plan.announce.text);
     plan.log();
     launch.stopping = true;
     try {
@@ -341,8 +356,8 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
       this.#ports.publish(
         agentId,
         launch,
-        "error",
         AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_ERROR,
+        "error",
         plan.failure.text,
       );
       logger.error(plan.failure.message, {

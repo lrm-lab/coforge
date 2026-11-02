@@ -11,6 +11,14 @@ export function isRuntimeErrorAction(value: string): value is RuntimeErrorAction
   );
 }
 
+/** The classification on the `runtime_stalled` Activity a daemon sends when a turn stalls again
+ * past its unattended restarts (task #404). The process still runs, so this, not a launch error
+ * code, is the reason the web shows for the stuck Agent (`failureReason`, task #418). */
+export const STALLED_RESTART_LIMIT_ERROR = {
+  errorClass: "TurnStallError",
+  errorReason: "stalled_restart_limit",
+} as const;
+
 /** `AgentActivity.runtimeError`: the classified runtime failure this row narrates. */
 export type AgentActivityRuntimeError = Readonly<{
   errorClass: string;

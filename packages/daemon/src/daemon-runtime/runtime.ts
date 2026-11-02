@@ -296,12 +296,8 @@ export class DaemonRuntime {
       this.#deliveryQueue.hasQueued(agentId) || this.#deliveryQueue.hasHeldAppItems(agentId),
     flushParked: (agentId) => this.#releaseSurvivingHolds(agentId),
     wake: (agentId, restart) => this.#wakeAgent(agentId, restart),
-    publish: (agentId, launch, level, detailKind, text) =>
-      this.#activityPublisher.publish(
-        agentId,
-        launch,
-        this.#activity(agentId, detailKind, level, text),
-      ),
+    publish: (agentId, launch, ...draft) =>
+      this.#activityPublisher.publish(agentId, launch, this.#activity(agentId, ...draft)),
     handBackMentions: (agentId) => this.#mentionDeliveries.handBackForRelaunch(agentId),
     release: (agentId, timeoutMs) => this.#agentProcessManager.release(agentId, timeoutMs),
   });

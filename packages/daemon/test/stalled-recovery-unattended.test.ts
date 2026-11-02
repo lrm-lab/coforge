@@ -25,7 +25,12 @@ function release() {
     sessionId: "native-1",
   };
   const woken: WakeRestart[] = [];
-  const published: Array<{ level: string; detailKind: string; text: string }> = [];
+  const published: Array<{
+    level: string;
+    detailKind: string;
+    text: string;
+    runtimeError?: unknown;
+  }> = [];
   const ports: RuntimeReleasePorts<Launch> = {
     launch: () => launch,
     runtime: () => ({ session }) as never,
@@ -49,8 +54,8 @@ function release() {
     wake: async (_agentId, next) => {
       woken.push(next);
     },
-    publish: (_agentId, _launch, level, detailKind, text) => {
-      published.push({ level, detailKind, text });
+    publish: (_agentId, _launch, detailKind, level, text, extra) => {
+      published.push({ level, detailKind, text, ...extra });
     },
     handBackMentions: async () => {},
     release: async () => {},
@@ -98,6 +103,12 @@ test("restarts with nothing waiting stop at the limit, tell the owner once, and 
       // A stall, not a turn-ending kind: the hung turn must still read as stalled.
       detailKind: "runtime_stalled",
       text: expect.stringContaining(`after ${UNATTENDED_RECOVERY_LIMIT} automatic restarts`),
+      // What the profile reads as the reason (`failureReason`, task #418) while the process lives.
+      runtimeError: {
+        errorClass: "TurnStallError",
+        errorReason: "stalled_restart_limit",
+        fingerprint: expect.stringMatching(/^[0-9a-f]{8}$/),
+      },
     }),
   ]);
 
@@ -132,15 +143,20 @@ test("with the real publisher, the limit notice leaves the hung turn judged stal
     stopping: false,
     progress: new ProviderProgress(),
   };
+  const sent: Array<{ detailKind: string; runtimeError?: unknown }> = [];
   const publisher = new AgentActivityPublisher<typeof launch>({
     currentLaunch: () => launch,
-    transport: { sendAgentActivity() {} },
+    transport: { sendAgentActivity: (activity) => void sent.push(activity) },
     recordClientSeq() {},
     reconcileIdleTurn: () => false,
   });
   publisher.enable();
-  const draft = (detailKind: string, level: "info" | "error", detail: string) =>
-    activityDraft("workspace-a", "agent-a", detailKind, level, detail);
+  const draft = (
+    detailKind: string,
+    level: "info" | "error",
+    detail: string,
+    extra?: Parameters<typeof activityDraft>[5],
+  ) => activityDraft("workspace-a", "agent-a", detailKind, level, detail, extra);
   publisher.publish(
     "agent-a",
     launch,
@@ -165,8 +181,8 @@ test("with the real publisher, the limit notice leaves the hung turn judged stal
     flushParked: () => {},
     // The stalled launch stays current: no relaunch replaces it in this test.
     wake: async () => {},
-    publish: (agentId, current, level, detailKind, text) =>
-      publisher.publish(agentId, current, draft(detailKind, level, text)),
+    // As the daemon's runtime wires it.
+    publish: (agentId, current, ...rest) => publisher.publish(agentId, current, draft(...rest)),
     handBackMentions: async () => {},
     release: async () => {},
   });
@@ -182,6 +198,10 @@ test("with the real publisher, the limit notice leaves the hung turn judged stal
     launch.stopping = false;
     // A message arriving now still finds a stalled turn to restart.
     expect(runtimeRelease.stalled("agent-a")).toBeDefined();
+    // The limit notice reaches the server with the reason the profile reads (task #418).
+    expect(sent.find((activity) => activity.detailKind === "runtime_stalled")).toMatchObject({
+      runtimeError: { errorClass: "TurnStallError", errorReason: "stalled_restart_limit" },
+    });
   } finally {
     setSystemTime();
     publisher.forgetBusy("agent-a");
