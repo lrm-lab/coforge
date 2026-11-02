@@ -1,7 +1,7 @@
 /**
  * The one send-time recognizer of a message body's references. It reads the Markdown syntax tree
  * the renderer reads — the same dialect (`parseMessageSyntax`) over the same input
- * (`escapeLiteralHtml(body)`) — so only what the renderer shows as prose is ever a reference:
+ * (`messageSource(body)`) — so only what the renderer shows as prose is ever a reference:
  * nothing under code, a code block, a link (a GFM autolink included), a link reference, a
  * definition or HTML is read.
  *
@@ -61,7 +61,7 @@ import { decodeNamedCharacterReference } from "decode-named-character-reference"
 import type { Nodes, Text } from "mdast";
 import { decodeNumericCharacterReference } from "micromark-util-decode-numeric-character-reference";
 
-import { escapeLiteralHtml, parseMessageSyntax } from "./message-syntax";
+import { messageSource, parseMessageSyntax } from "./message-syntax";
 
 type Reference =
   | { kind: "mention"; handle: string }
@@ -275,7 +275,7 @@ function proseReferences(body: string): { reference: Reference; start: number; e
   // Every reference starts with a literal `@` or `#` (`task #N` included): without one there is
   // nothing to parse for.
   if (!body.includes("@") && !body.includes("#")) return [];
-  const source = escapeLiteralHtml(body);
+  const source = messageSource(body);
   const toBody = source === body ? undefined : bodyOffsets(body, source);
   const references: { reference: Reference; start: number; end: number }[] = [];
   // Where the last aligned text ended: a text node with no position is looked for after it.

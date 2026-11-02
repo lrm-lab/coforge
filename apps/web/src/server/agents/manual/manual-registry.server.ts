@@ -58,7 +58,7 @@ export const MANUAL_TOPICS: readonly AgentManualTopic[] = [
     slug: "etiquette",
     title: "Mentions, formatting, conversation etiquette, and live constraints",
     summary:
-      "How @mentions resolve, why backticks make them inert, channel reply etiquette, and the four live seats a hold needs.",
+      "How @mentions resolve, why backticks make them inert, how to write formulas, channel reply etiquette, and the four live seats a hold needs.",
     body: etiquetteBody,
   },
   {

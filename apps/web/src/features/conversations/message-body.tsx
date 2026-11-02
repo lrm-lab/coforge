@@ -10,7 +10,8 @@ import Markdown, { type Components, type ExtraProps, type Options } from "react-
 import rehypeSanitize from "rehype-sanitize";
 import type { Element } from "hast";
 
-import { MESSAGE_REMARK_PLUGINS, escapeLiteralHtml } from "#src/lib/message-syntax";
+import { MESSAGE_REMARK_PLUGINS, messageSource } from "#src/lib/message-syntax";
+import { MessageFormula } from "./message-formula";
 import { AgentMentionChip, PersonMentionChip } from "./mention-chip-hover";
 import { followInternalLinkClick, internalAppHref } from "./internal-app-href";
 import {
@@ -31,7 +32,7 @@ import "./message-markdown.css";
 /**
  * A message body rendered as Markdown with mentions highlighted as inline chips.
  *
- * The source is prepared by `escapeLiteralHtml`, then parsed in the message dialect
+ * The source is prepared by `messageSource`, then parsed in the message dialect
  * (`MESSAGE_REMARK_PLUGINS`, shared with the send-time reference recognizer: GFM tables, task
  * lists, strikethrough, autolinks, and single-newline breaks), so a body written as plain text keeps its
  * line structure. `rehype-sanitize` runs before the chip pass: message bodies are untrusted, and
@@ -83,7 +84,7 @@ export function MessageBody({
    * `rehypeTrailingSlot`. */
   trailing?: ReactNode;
 }) {
-  const source = useMemo(() => escapeLiteralHtml(body), [body]);
+  const source = useMemo(() => messageSource(body), [body]);
   const handles = useMemo(() => mentionHandlesByToken(mentions), [mentions]);
   // A body with no token and no plain `@handle` to resolve skips the chip pass entirely.
   const hasReference =
@@ -142,6 +143,7 @@ const MARKDOWN_COMPONENTS = {
   // `react-markdown` renders a fenced block as <pre><code class="language-x">. The `pre`
   // override owns the block: it reads the language for the label and renders the code itself.
   pre: CodeBlock,
+  code: InlineCode,
   // Images are surfaced as a link, not fetched. See the component doc comment.
   img: ImageLink,
   a: ExternalLink,
@@ -301,6 +303,8 @@ function CodeBlock({ node, children, ...props }: ComponentPropsWithoutRef<"pre">
   const language = Array.isArray(className)
     ? className.find((name) => name.startsWith("language-"))?.slice("language-".length)
     : undefined;
+  // A `$$` block, a `\[…\]` one and a ```math fence are all `language-math` (`message-math.ts`).
+  if (language === "math") return <MessageFormula source={textOf(code)} display />;
 
   return (
     <div className="message-markdown-code">
@@ -309,6 +313,27 @@ function CodeBlock({ node, children, ...props }: ComponentPropsWithoutRef<"pre">
       <pre {...props}>{children}</pre>
     </div>
   );
+}
+
+/** A formula in text is `code.language-math` (`message-math.ts`); any other code passes through. */
+function InlineCode({
+  node,
+  className,
+  children,
+  ...props
+}: ComponentPropsWithoutRef<"code"> & ExtraProps) {
+  if (className?.split(" ").includes("language-math"))
+    return <MessageFormula source={textOf(node)} display={false} />;
+  return (
+    <code className={className} {...props}>
+      {children}
+    </code>
+  );
+}
+
+/** The text of a hast element: a formula's source. */
+function textOf(node: Element | undefined): string {
+  return (node?.children ?? []).map((child) => (child.type === "text" ? child.value : "")).join("");
 }
 
 function ExternalLink({

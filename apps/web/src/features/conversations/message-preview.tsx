@@ -2,7 +2,7 @@ import { useMemo, type ComponentPropsWithoutRef } from "react";
 import Markdown, { type Components, type Options } from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 
-import { MESSAGE_REMARK_PLUGINS, escapeLiteralHtml } from "#src/lib/message-syntax";
+import { MESSAGE_REMARK_PLUGINS, messageSource } from "#src/lib/message-syntax";
 import { mentionHandlesByToken, rehypeReferenceChips } from "./message-markdown";
 import type { MentionRef } from "./mention-text";
 
@@ -21,7 +21,7 @@ export function MessagePreview({
   body: string;
   mentions?: readonly MentionRef[];
 }) {
-  const source = useMemo(() => escapeLiteralHtml(body), [body]);
+  const source = useMemo(() => messageSource(body), [body]);
   const handles = useMemo(() => mentionHandlesByToken(mentions), [mentions]);
   const hasReference = source.includes("<@");
   const rehypePlugins = useMemo<NonNullable<Options["rehypePlugins"]>>(

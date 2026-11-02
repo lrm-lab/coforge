@@ -4,27 +4,37 @@ import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
+import { remarkMessageMath, rewriteLatexDelimiters } from "./message-math";
 
 /** A URI scheme right after `<` means a GFM autolink, not an HTML tag. */
 const URI_SCHEME = /^[a-zA-Z][a-zA-Z0-9+.-]*:/;
 
 /**
- * The Markdown dialect of a message body: GFM (tables, task lists, strikethrough, autolinks) and
- * single-newline breaks, read from `escapeLiteralHtml(body)`. The single definition shared by the
+ * The Markdown dialect of a message body: GFM (tables, task lists, strikethrough, autolinks),
+ * single-newline breaks and formulas (`message-math.ts`), read from `messageSource(body)`. The single definition shared by the
  * renderer (`message-body.tsx`) and the send-time reference recognizer (`message-references.ts`),
  * so the two can never disagree about what is a link, a code span or prose.
  */
-export const MESSAGE_REMARK_PLUGINS = [remarkGfm, remarkBreaks];
+export const MESSAGE_REMARK_PLUGINS = [remarkGfm, remarkBreaks, remarkMessageMath];
 
 const parser = unified().use(remarkParse).use(MESSAGE_REMARK_PLUGINS);
 
 /**
- * The Markdown syntax tree of a Markdown source (`escapeLiteralHtml(body)`, the renderer's input).
+ * The Markdown syntax tree of a Markdown source (`messageSource(body)`, the renderer's input).
  * Parsing only reads syntax (GFM's autolinks included); every node keeps its `position` offsets
  * into `source`.
  */
 export function parseMessageSyntax(source: string): Root {
   return parser.parse(source);
+}
+
+/**
+ * A body as the Markdown the renderer and the reference recognizer read: `\(…\)` and `\[…\]`
+ * written as `$$…$$`, then HTML-looking text escaped. Only `<` changes length, so an offset in the
+ * source maps back to the body as `escapeLiteralHtml` alone would.
+ */
+export function messageSource(body: string): string {
+  return escapeLiteralHtml(rewriteLatexDelimiters(body));
 }
 
 /**

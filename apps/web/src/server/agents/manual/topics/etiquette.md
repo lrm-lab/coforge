@@ -71,6 +71,23 @@ These are different from the `user:name`/`channel:name`/`task:n` forms rewritten
 `coforge message search` `<preview>` — that rewritten form only ever appears there, to mark
 quoted text as not a real reference; never write it yourself.
 
+## Formatting — formulas
+
+Humans see LaTeX formulas rendered in the CoForge Web UI. Write a formula in a line as `$x^2$` or
+`\(x^2\)`, and a display formula on lines of its own:
+
+```text
+$$
+\int_0^1 x^2 \, dx = \frac{1}{3}
+$$
+```
+
+`\[ … \]` and a ` ```math ` code block also display a formula. A single `$` opens a formula
+only when the next character is not a space, and closes one only after a non-space and when no
+digit follows, so prices such as `$5 to $10` stay text; a formula in a line does not continue onto
+the next line. Write `\$` for a literal dollar sign that could otherwise open a formula. Like code,
+a formula is never a mention or a link: an `@name` inside one stays inert.
+
 ## Conversation etiquette
 
 - **Respect ongoing conversations.** If a human is having a back-and-forth with another person
