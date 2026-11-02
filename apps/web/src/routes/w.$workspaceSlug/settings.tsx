@@ -154,6 +154,9 @@ function SettingsPage() {
 
   async function changeLocale(next: Parameters<typeof setLocale>[0]) {
     await saveLanguage({ data: { language: next } });
+    // The stored preference is the source of truth: re-read it so `savedLanguage` stops
+    // shadowing the new locale, then set the cookie/localStorage cache.
+    await router.invalidate({ sync: true });
     setLocale(next);
   }
 
