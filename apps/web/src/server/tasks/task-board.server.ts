@@ -7,7 +7,12 @@ import type { TaskCommand, TaskPrincipal, TaskResult } from "@lrm/coforge-sdk/in
 import { createTasks, announceSentMessageTask } from "./task-creation.server";
 import { announceSpawnedTask } from "./sent-as-conversation-task.server";
 import { createConversationTasks } from "./task-conversation-creation.server";
-import { taskConversationsEnabled } from "./task-conversations-gate.server";
+import {
+  relationsOffRefusal,
+  taskConversationsEnabled,
+  taskRelationsEnabled,
+  withExperimentRead,
+} from "./task-conversations-gate.server";
 import { assignTask, unassignTask } from "./task-assignment.server";
 import { amendTask, deleteTask, taskHistory, updateTaskStatus } from "./task-amendments.server";
 import { claimTasks, convertOrClaim, unclaimTask } from "./task-claims.server";
@@ -117,14 +122,30 @@ export class TaskBoard {
     return conversation.conversationId;
   }
 
-  async execute(
+  /** Run one command; the Workspace's experiment is read once for all of it (`withExperimentRead`). */
+  execute(
     principal: TaskPrincipal,
     command: TaskCommand,
     /** An already-resolved acting scope (the Agent freshness gate resolves it once and passes it
      * down); absent, the command resolves its own. */
     presolvedScope?: Awaited<ReturnType<typeof resolveTaskScope>>,
   ): Promise<TaskResult> {
+    return withExperimentRead(() => this.run(principal, command, presolvedScope));
+  }
+
+  private async run(
+    principal: TaskPrincipal,
+    command: TaskCommand,
+    presolvedScope?: Awaited<ReturnType<typeof resolveTaskScope>>,
+  ): Promise<TaskResult> {
     validateTaskCommand(command);
+    if (
+      (command.blockedBy !== undefined ||
+        command.parent !== undefined ||
+        command.ready !== undefined) &&
+      !(await taskRelationsEnabled(this.db, principal.workspaceId))
+    )
+      throw relationsOffRefusal();
     if (principal.agentId) {
       const user = await workspaceAssistantUser(this.db, principal.workspaceId, principal.agentId);
       if (user) {
@@ -186,8 +207,7 @@ export class TaskBoard {
       return unclaimTask(ports, scope.conversationId, member, command);
     if (command.operation === "assign") return assignTask(ports, scope, member, command);
     if (command.operation === "unassign") return unassignTask(ports, scope, member, command);
-    if (command.operation === "amend")
-      return amendTask(ports, scope.conversationId, member, command);
+    if (command.operation === "amend") return amendTask(ports, scope, member, command);
     if (command.operation === "history") return taskHistory(ports, scope.conversationId, command);
     if (command.operation === "delete")
       return deleteTask(ports, scope.conversationId, scope.workspaceId, member, command);

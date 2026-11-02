@@ -1,6 +1,8 @@
 import {
+  CHANNEL_NAME_PATTERN,
   TASK_STATUSES,
   type TaskCommand,
+  type TaskRef,
   type TaskResourceReceipt,
   type TaskStatus,
 } from "@lrm/coforge-sdk/internal";
@@ -36,7 +38,7 @@ type TaskOperation = (typeof TASK_OPERATIONS)[number];
 
 /** The flags each `task` subcommand takes. */
 const TASK_FLAGS: Record<TaskOperation, readonly string[]> = {
-  list: ["--target", "--mine", "--status", "--json"],
+  list: ["--target", "--mine", "--status", "--ready", "--json"],
   show: ["--target", "--peer-kind", "--number", "--json"],
   create: [
     "--target",
@@ -47,6 +49,8 @@ const TASK_FLAGS: Record<TaskOperation, readonly string[]> = {
     "--description",
     "--message-id",
     "--alongside",
+    "--blocked-by",
+    "--parent",
     "--json",
   ],
   convert: ["--target", "--peer-kind", "--message-id", "--json"],
@@ -70,6 +74,8 @@ const TASK_FLAGS: Record<TaskOperation, readonly string[]> = {
     "--title",
     "--description",
     "--clear-description",
+    "--blocked-by",
+    "--parent",
     "--expected-revision",
     "--reviewer-isolation",
     "--json",
@@ -103,6 +109,7 @@ const TASK_SWITCHES = new Set([
   "--clear-description",
   "--reviewer-isolation",
   "--mine",
+  "--ready",
   "--creates-resource",
   "--alongside",
   "--json",
@@ -114,12 +121,17 @@ function invalidTaskArg(message: string): CliError {
   return new CliError({ code: "INVALID_ARG", message, retryable: false });
 }
 
-function taskNumber(raw: string | undefined): number {
-  const value = Number(raw);
-  if (raw === undefined) throw invalidTaskArg("--number is required");
-  if (raw.trim() === "" || !Number.isSafeInteger(value) || value <= 0)
-    throw invalidTaskArg(`--number must be a positive integer; got ${raw}`);
+/** A positive integer, or an invalid-argument refusal saying `message`. */
+function positiveInt(raw: string, message: string): number {
+  // Digits only: `Number()` would also take `1e1`, `0x10` and `1.0`.
+  const value = /^[0-9]+$/.test(raw.trim()) ? Number(raw) : 0;
+  if (!Number.isSafeInteger(value) || value <= 0) throw invalidTaskArg(message);
   return value;
+}
+
+function taskNumber(raw: string | undefined): number {
+  if (raw === undefined) throw invalidTaskArg("--number is required");
+  return positiveInt(raw, `--number must be a positive integer; got ${raw}`);
 }
 
 function expectedRevisionOption(raw: string | undefined): number | undefined {
@@ -128,6 +140,39 @@ function expectedRevisionOption(raw: string | undefined): number | undefined {
   if (raw.trim() === "" || !Number.isSafeInteger(value) || value < 0)
     throw invalidTaskArg(`--expected-revision must be a non-negative integer; got ${raw}`);
   return value;
+}
+
+/**
+ * A task by number: `7` in the target's own conversation, or `#channel/7` (the `#` optional) in a
+ * channel of the Workspace.
+ */
+function taskRefOption(raw: string, message: string): TaskRef {
+  const part = raw.trim().replace(/^#/, "");
+  const slash = part.lastIndexOf("/");
+  if (slash === -1) return { number: positiveInt(part, message) };
+  const channel = part.slice(0, slash).replace(/^#/, "");
+  if (!CHANNEL_NAME_PATTERN.test(channel)) throw invalidTaskArg(message);
+  return { number: positiveInt(part.slice(slash + 1), message), channel };
+}
+
+/** `--blocked-by 3,#coforge/388`: the tasks a task waits for. An amendment may pass `''` to clear them. */
+function blockedByOption(raw: string, clearable: boolean): TaskRef[] {
+  if (raw.trim() === "") {
+    if (clearable) return [];
+    throw invalidTaskArg("--blocked-by must list tasks, like 3,5 or 3,#channel/7");
+  }
+  return raw
+    .split(",")
+    .map((part) => taskRefOption(part, `--blocked-by must be tasks like 3,#channel/7; got ${raw}`));
+}
+
+/** `--parent 7` or `--parent '#coforge/7'`. An amendment may pass `''` to make the task top level. */
+function parentOption(raw: string, clearable: boolean): TaskRef | null {
+  if (raw.trim() === "" && clearable) return null;
+  return taskRefOption(
+    raw,
+    `--parent must be a task like 7 or #channel/7${clearable ? " (or '' for none)" : ""}; got ${raw}`,
+  );
 }
 
 /** A handle the server can resolve: `@`, then a lowercase username or Agent name. */
@@ -177,6 +222,10 @@ export function parseTaskArgs(
   if (peerKind !== undefined && !target?.startsWith("@"))
     throw invalidTaskArg("--peer-kind can only be used with a direct @peer target");
   if (operation === "list") validateTaskListScope(target, mine, one("--status"));
+  if (values.has("--ready") && (mine || one("--status") !== undefined))
+    throw invalidTaskArg(
+      "--ready lists a conversation's todo tasks; do not combine it with --mine or --status",
+    );
   if (!mine) {
     if (!target?.trim()) throw invalidTaskArg("--target is required");
     if (!TASK_TARGET.test(target))
@@ -193,6 +242,7 @@ export function parseTaskArgs(
   };
   if (operation === "list") {
     task.status = one("--status") as TaskStatus | "all" | undefined;
+    if (values.has("--ready")) task.ready = true;
   } else if (operation === "create") {
     const titles = values.get("--title") ?? [];
     if (!titles.length) throw invalidTaskArg("--title is required (at least one)");
@@ -214,6 +264,10 @@ export function parseTaskArgs(
     if (sourceMessage === "") throw invalidTaskArg("--message-id must not be empty");
     if (sourceMessage) task.messageId = sourceMessage;
     if (values.has("--alongside")) task.alongside = true;
+    const blockedBy = one("--blocked-by");
+    if (blockedBy !== undefined) task.blockedBy = blockedByOption(blockedBy, false);
+    const parent = one("--parent");
+    if (parent !== undefined) task.parent = parentOption(parent, false);
   } else if (operation === "convert") {
     const messageId = one("--message-id")?.trim();
     if (!messageId) throw invalidTaskArg("--message-id is required");
@@ -262,10 +316,20 @@ export function parseTaskArgs(
     if (description !== undefined && clear)
       throw invalidTaskArg("Use either --description or --clear-description, not both");
     const title = one("--title");
-    if (title === undefined && description === undefined && !clear)
+    const blockedBy = one("--blocked-by");
+    const parent = one("--parent");
+    if (
+      title === undefined &&
+      description === undefined &&
+      !clear &&
+      blockedBy === undefined &&
+      parent === undefined
+    )
       throw invalidTaskArg(
-        "At least one amendment is required: --title, --description, or --clear-description",
+        "At least one amendment is required: --title, --description, --clear-description, --blocked-by, or --parent",
       );
+    if (blockedBy !== undefined) task.blockedBy = blockedByOption(blockedBy, true);
+    if (parent !== undefined) task.parent = parentOption(parent, true);
     if (title !== undefined) task.title = title;
     if (clear) task.description = null;
     else if (description !== undefined) task.description = description;

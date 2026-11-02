@@ -30,6 +30,14 @@ model Task {
   history                      TaskHistoryEvent[]
   executionSessions            TaskExecutionSession[]
   follows                      TaskFollow[]
+  /// The rows naming the Tasks this one waits for, and those naming the Tasks that wait for it
+  /// (`TaskDependency`).
+  dependencies                 TaskDependency[]    @relation("TaskBlockedBy")
+  dependents                   TaskDependency[]    @relation("TaskBlocks")
+  /// This Task's parent link when it is a subtask (at most one: `TaskParent.taskId` is its key),
+  /// and the links of its own subtasks (`TaskParent`).
+  parentLinks                  TaskParent[]        @relation("TaskChild")
+  childLinks                   TaskParent[]        @relation("TaskParentOf")
   /// The channel message a task made under task conversations was made from, when it names one.
   /// A message may have several tasks; the message is not the task's.
   sourceMessageId              String?             @db.Uuid
@@ -146,4 +154,47 @@ model TaskFollow {
   @@id([memberId, taskId])
   @@index([taskId])
   @@map("task_follows")
+}
+
+/// `taskId` waits for `blockedByTaskId`: it may not be claimed until the blocker is done or closed.
+/// The two Tasks may be in different conversations of one Workspace; `conversationId` is the
+/// dependent's, `workspaceId` is both. TaskBoard keeps them in one Workspace, the graph acyclic and
+/// the blocker readable by whoever adds it, under the conversation lock and the Workspace's
+/// relation lock. Deleting either Task deletes the row; the other Task survives.
+model TaskDependency {
+  taskId          String   @db.Uuid
+  blockedByTaskId String   @db.Uuid
+  conversationId  String   @db.Uuid
+  workspaceId     String   @db.Uuid
+  /// The conversation member who added the dependency.
+  creatorMemberId String   @db.Uuid
+  createdAt       DateTime @default(now())
+  task            Task     @relation("TaskBlockedBy", fields: [taskId], references: [id], onDelete: Cascade)
+  blocker         Task     @relation("TaskBlocks", fields: [blockedByTaskId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, blockedByTaskId])
+  @@index([blockedByTaskId])
+  /// Serves the Workspace-wide read the graph checks make.
+  @@index([workspaceId])
+  @@map("task_dependencies")
+}
+
+/// `taskId` is a subtask of `parentTaskId`; the two may be in different conversations of one
+/// Workspace (`conversationId` is the child's). A Task has at most one parent (the primary key).
+/// The tree is acyclic and at most five levels deep, checked by TaskBoard under the conversation
+/// lock and the Workspace's relation lock. Deleting the parent deletes the link only: its children
+/// survive, unparented. Kept apart from `Task` so linking never rewrites a Task row.
+model TaskParent {
+  taskId         String   @id @db.Uuid
+  parentTaskId   String   @db.Uuid
+  conversationId String   @db.Uuid
+  workspaceId    String   @db.Uuid
+  createdAt      DateTime @default(now())
+  task           Task     @relation("TaskChild", fields: [taskId], references: [id], onDelete: Cascade)
+  parent         Task     @relation("TaskParentOf", fields: [parentTaskId], references: [id], onDelete: Cascade)
+
+  @@index([parentTaskId])
+  /// Serves the Workspace-wide read the graph checks and `show`'s subtree make.
+  @@index([workspaceId])
+  @@map("task_parents")
 }

@@ -22,7 +22,8 @@ import {
   TARGET_CONVERSATION_SELECT,
 } from "#src/server/db/repositories/direct-conversation-agent-message.server";
 import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
-import { taskView, type SelectedTask } from "./task-view.server";
+import type { SelectedTask } from "./task-view.server";
+import { groupBy, taskViewsOf } from "./task-relations.server";
 import type { TaskBoardPorts } from "./task-board-ports.server";
 
 /** Push a committed message to every Agent it was delivered to. Failures never surface. */
@@ -232,12 +233,23 @@ export async function publishAssignmentReceipt(
   ]);
 }
 
-export async function signalTaskChange(ports: TaskBoardPorts, task: SelectedTask) {
+/**
+ * Announce a written Task's new copy. `view` is the copy the write answers with, reused when it is
+ * the one pages read; `neighbours` are other Tasks whose views read from this one
+ * (`relatedTasks`), announced in the same change.
+ */
+export async function signalTaskChange(
+  ports: TaskBoardPorts,
+  task: SelectedTask,
+  { view, neighbours = [] }: { view?: TaskView; neighbours?: readonly SelectedTask[] } = {},
+) {
   const realtime = ports.dependencies.realtime;
   if (!realtime) return;
   try {
     const scopes = await conversationSignalScopes(ports.db, task.conversationId, task.workspaceId);
+    const here = neighbours.filter((other) => other.conversationId === task.conversationId);
     await Promise.allSettled([
+      announceNeighbours(ports, task.conversationId, neighbours, `${task.id}:${task.revision}`),
       // A Task's metadata change is a top-level message signal; one with no message has none.
       Promise.resolve().then(() =>
         task.messageId && task.message
@@ -251,13 +263,47 @@ export async function signalTaskChange(ports: TaskBoardPorts, task: SelectedTask
           : undefined,
       ),
       announceTasks(ports, task, async () => scopes.task, {
-        tasks: [taskView(task, "people")],
+        tasks:
+          view && ports.reader === "people"
+            ? [view, ...(await taskViewsOf(ports.db, "people", here))]
+            : await taskViewsOf(ports.db, "people", [task, ...here]),
         publicationId: `${task.id}:task-changed:${task.revision}`,
       }),
     ]);
   } catch {
     // PostgreSQL is canonical; normal reconciliation repairs a missed metadata event.
   }
+}
+
+/**
+ * Announce the new copies of `neighbours` that are in a conversation other than `home`, each to
+ * its own conversation's audience: a Task is announced only to those who may read it, never to the
+ * audience of the Task whose change it follows (which may be a private channel).
+ */
+export async function announceNeighbours(
+  ports: TaskBoardPorts,
+  home: string,
+  neighbours: readonly SelectedTask[],
+  key: string,
+) {
+  const elsewhere = groupBy(
+    neighbours.filter((other) => other.conversationId !== home),
+    (other) => other.conversationId,
+  );
+  await Promise.allSettled(
+    [...elsewhere].map(async ([conversationId, tasks]) => {
+      const { workspaceId } = tasks[0]!;
+      await announceTasks(
+        ports,
+        { conversationId, workspaceId },
+        async () => (await conversationSignalScopes(ports.db, conversationId, workspaceId)).task,
+        {
+          tasks: await taskViewsOf(ports.db, "people", tasks),
+          publicationId: `${key}:neighbours:${conversationId}`,
+        },
+      );
+    }),
+  );
 }
 
 /**

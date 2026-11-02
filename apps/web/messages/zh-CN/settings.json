@@ -207,8 +207,8 @@
   "experiments_save_error": "保存失败，请重试。",
   "experiments_computers_need_upgrade": "请先把 {computers} 升级到 CoForge {version} 或更高版本。",
   "experiments_reload": "刷新页面后生效",
-  "experiments_task_conversations": "任务对话",
-  "experiments_task_conversations_description": "每个任务是一段独立的对话，可以单独关注和回复。对整个工作区生效，包括所有智能体。",
+  "experiments_task_conversations": "任务 v2",
+  "experiments_task_conversations_description": "每个任务是一段独立的对话，可以单独关注和回复，任务之间还能互相阻塞、拆分子任务。对整个工作区生效，包括所有智能体。",
   "experiments_drafts": "草稿",
   "experiments_drafts_description": "在任何会话里写了但没发出去的消息集中到一个页面，在「已保存」下面。草稿只存在各自设备上。"
 }

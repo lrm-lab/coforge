@@ -17,3 +17,14 @@ export function lockConversation(tx: Prisma.TransactionClient, conversationId: s
 export function lockWorkspaceConversations(tx: Prisma.TransactionClient, workspaceId: string) {
   return tx.$queryRaw`SELECT "id" FROM "conversations" WHERE "workspaceId" = ${workspaceId}::uuid ORDER BY "id" FOR NO KEY UPDATE`;
 }
+
+/**
+ * Serialize every Task write of a Workspace that has Tasks v2 on. A Task write there can post a
+ * notice in another conversation (finishing a Task wakes one that waits for it in another channel)
+ * and checks a graph that spans conversations. Taken before any conversation lock and never after
+ * one, so every Task writer acquires in the same order and none waits in a circle: a plain message
+ * send holds one conversation lock and waits for no other lock while holding it.
+ */
+export function lockWorkspaceTaskWrites(tx: Prisma.TransactionClient, workspaceId: string) {
+  return tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`task-writes:${workspaceId}`}, 0))::text`;
+}

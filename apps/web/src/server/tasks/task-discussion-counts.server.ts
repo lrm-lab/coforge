@@ -1,6 +1,12 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { taskConversationsEnabled } from "./task-conversations-gate.server";
-import type { DiscussionCounts, SelectedTask } from "./task-view.server";
+import { loadTaskRelations, relationsOf } from "./task-relations.server";
+import type {
+  DiscussionCounts,
+  SelectedTask,
+  TaskReader,
+  TaskViewExtras,
+} from "./task-view.server";
 
 /**
  * The replies in each task's own conversation, and in the thread it had before (the thread under
@@ -49,13 +55,19 @@ export async function discussionCounts(
   );
 }
 
-/** `taskView` for each of `tasks`, counted once. */
+/** `taskView` for each of `tasks`: discussions counted once and relations read once for the page. */
 export async function viewsWithCounts<Task extends SelectedTask, View>(
   db: PrismaClient,
+  reader: TaskReader,
   workspaceId: string,
   tasks: readonly Task[],
-  view: (task: Task, counts: DiscussionCounts | undefined) => View,
+  view: (task: Task, extras: TaskViewExtras) => View,
 ) {
-  const counts = await discussionCounts(db, workspaceId, tasks);
-  return tasks.map((task) => view(task, counts.get(task.id)));
+  const [counts, relations] = await Promise.all([
+    discussionCounts(db, workspaceId, tasks),
+    loadTaskRelations(db, reader, tasks),
+  ]);
+  return tasks.map((task) =>
+    view(task, { counts: counts.get(task.id), relations: relationsOf(relations, task.id) }),
+  );
 }

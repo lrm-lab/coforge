@@ -10,6 +10,10 @@ const task = (status: TaskStatus, owner: TaskView["owner"] = null): TaskView => 
   title: "Move me",
   status,
   revision: 4,
+  blockedBy: [],
+  blocked: false,
+  parent: null,
+  subtasks: null,
   owner,
   creator: {
     memberId: "member-creator",

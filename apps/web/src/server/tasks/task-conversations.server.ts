@@ -23,7 +23,8 @@ import {
   type TaskFollowReason,
 } from "./task-discussion-store.server";
 import { resolveTaskScope } from "./task-scope.server";
-import { TASK_SCOPE_WHERE, taskSelection, taskView } from "./task-view.server";
+import { TASK_SCOPE_WHERE, taskSelection } from "./task-view.server";
+import { taskViewOf } from "./task-relations.server";
 
 /** Names a task by the board it is on (`target`, an Agent's `#channel`, or `conversationId`, a
  * person's page) and its number. */
@@ -75,7 +76,7 @@ export class TaskConversations {
     ]);
     return {
       taskRef: `${boardName}:#${task.number}`,
-      task: taskView(full, "agent"),
+      task: await taskViewOf(this.ports.db, "agent", full),
       following: follow !== null,
       followReason: follow?.reason ?? null,
       conversation: { exists: discussion !== null, replyCount: discussion?.total ?? 0 },

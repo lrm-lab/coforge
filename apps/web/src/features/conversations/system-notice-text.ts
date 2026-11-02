@@ -26,6 +26,10 @@ const KIND_EMOJI: Partial<Record<SystemNotice["kind"], string>> = {
   "task.assigned": "📌",
   "task.claimed": "📌",
   "task.unassigned": "🔓",
+  "task.unblocked": "🚦",
+  "task.released": "🚦",
+  "task.blocked": "⛔",
+  "task.subtasks_finished": "✅",
 };
 
 const STATUS_EMOJI: Record<TaskStatus, string> = {
@@ -50,10 +54,18 @@ const STATUS_LABEL: Record<TaskStatus, (locale?: Locale) => string> = {
 const shown = (person: SystemPerson) => person.displayName || person.handle;
 const mention = (person: SystemPerson) => `@${person.handle}`;
 
-const reference = (task: SystemTask, locale?: Locale) =>
-  task.title
-    ? m.system_notice_task_reference({ number: task.number, title: task.title }, { locale })
-    : m.system_notice_task_number({ number: task.number }, { locale });
+const reference = (task: SystemTask, locale?: Locale) => {
+  if (task.hidden) return m.system_notice_task_hidden({}, { locale });
+  // A Task in another channel is named `channel/number`.
+  const number = task.channel ? `${task.channel}/${task.number}` : task.number;
+  return task.title
+    ? m.system_notice_task_reference({ number, title: task.title }, { locale })
+    : m.system_notice_task_number({ number }, { locale });
+};
+
+/** A notice's text, followed by the owner it addresses when it names one. */
+const addressed = (text: string, owner: SystemPerson | null | undefined, locale?: Locale) =>
+  owner ? m.system_notice_addressed({ text, owner: mention(owner) }, { locale }) : text;
 
 function noticeText(notice: SystemNotice, locale?: Locale): string {
   switch (notice.kind) {
@@ -130,6 +142,47 @@ function noticeText(notice: SystemNotice, locale?: Locale): string {
         ? m.system_notice_task_unfollowed_reason({ actor: shown(actor), reason }, { locale })
         : m.system_notice_task_unfollowed({ actor: shown(actor) }, { locale });
     }
+    case "task.blocked":
+      return addressed(
+        m.system_notice_task_blocked(
+          {
+            task: reference(notice.params.task, locale),
+            blockers: notice.params.blockers
+              .map((blocker) => reference(blocker, locale))
+              .join(m.system_notice_list_separator({}, { locale })),
+          },
+          { locale },
+        ),
+        notice.params.owner,
+        locale,
+      );
+    case "task.released":
+      return addressed(
+        m.system_notice_task_released({ task: reference(notice.params.task, locale) }, { locale }),
+        notice.params.owner,
+        locale,
+      );
+    case "task.subtasks_finished":
+      return addressed(
+        m.system_notice_task_subtasks_finished(
+          { task: reference(notice.params.task, locale) },
+          { locale },
+        ),
+        notice.params.owner,
+        locale,
+      );
+    case "task.unblocked":
+      return addressed(
+        m.system_notice_task_unblocked(
+          {
+            blocker: reference(notice.params.blocker, locale),
+            task: reference(notice.params.task, locale),
+          },
+          { locale },
+        ),
+        notice.params.owner,
+        locale,
+      );
     case "task.assigned_you":
       return m.system_notice_task_assigned_you(
         {

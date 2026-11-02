@@ -54,10 +54,18 @@ export function assigneeMention(member: {
 
 /** A Task as a notice quotes it; build it with `quotedTask`, never from a raw title. */
 export type QuotedTask = {
-  taskId: string;
+  /** Null for a hidden Task: nothing but that it exists is shown. */
+  taskId: string | null;
   number: number;
   title: string & { readonly [brand]: "quotedTitle" };
+  /** The channel it is in, when that is not the conversation the notice is posted in. */
+  channel?: string;
+  /** In a channel the notice's readers may not be able to read: named by nothing else. */
+  hidden?: true;
 };
+
+/** Where a Task is, as the conversation a notice is posted in sees it (`placeFrom`). */
+export type QuotedPlace = { channel: string } | { hidden: true };
 
 const QUOTED_TITLE_LIMIT = 80;
 const BLOCK_MARKER = /^(?:#{1,6}\s+|>\s*|[-*+]\s+|\d+[.)]\s+)/;
@@ -71,7 +79,10 @@ const BLOCK_MARKER = /^(?:#{1,6}\s+|>\s*|[-*+]\s+|\d+[.)]\s+)/;
 export function quotedTask(
   task: { id: string; number: number; title: string },
   mentions: readonly MessageMentionRef[],
+  place?: QuotedPlace,
 ): QuotedTask {
+  if (place && "hidden" in place)
+    return { taskId: null, number: 0, title: "" as QuotedTask["title"], hidden: true };
   let inFence = false;
   const firstLine =
     agentReadableBody(task.title, mentions)
@@ -91,7 +102,12 @@ export function quotedTask(
           .join("")
           .trimEnd()}…`
       : text;
-  return { taskId: task.id, number: task.number, title: title as QuotedTask["title"] };
+  return {
+    taskId: task.id,
+    number: task.number,
+    title: title as QuotedTask["title"],
+    ...(place && { channel: place.channel }),
+  };
 }
 
 const STATUS_WORDING: Record<TaskStatus, { emoji: string; label: string }> = {
@@ -102,9 +118,15 @@ const STATUS_WORDING: Record<TaskStatus, { emoji: string; label: string }> = {
   closed: { emoji: "🚫", label: "Closed" },
 };
 
-const reference = (task: QuotedTask) =>
-  task.title ? `#${task.number} "${task.title}"` : `#${task.number}`;
+const reference = (task: QuotedTask) => {
+  if (task.hidden) return "a task in another channel";
+  const name = task.channel ? `#${task.channel}/${task.number}` : `#${task.number}`;
+  return task.title ? `${name} "${task.title}"` : name;
+};
 const references = (tasks: readonly QuotedTask[]) => tasks.map(reference).join(", ");
+/** A notice's text, followed by the owner it addresses when it names one. */
+const addressed = (text: string, owner: AssigneeMention | null) =>
+  owner ? `${text}: ${owner}` : text;
 const plural = (tasks: readonly QuotedTask[], noun: string) =>
   tasks.length === 1 ? noun : `${noun}s`;
 
@@ -121,11 +143,24 @@ export const noticeText = {
   moved: (actor: DisplayName, task: QuotedTask, status: TaskStatus) =>
     `${STATUS_WORDING[status].emoji} ${actor} moved ${reference(task)} to ${STATUS_WORDING[status].label}`,
   unassigned: (actor: DisplayName, task: QuotedTask) => `🔓 ${actor} unassigned ${reference(task)}`,
+  /** The notice that a Task's last unfinished blocker finished; it names the owner when there is one. */
+  unblocked: (blocker: QuotedTask, task: QuotedTask, owner: AssigneeMention | null) =>
+    addressed(`🚦 ${reference(blocker)} is finished, so ${reference(task)} can start`, owner),
+  /** The last blocker of a Task went away without finishing: it was removed or deleted. */
+  released: (task: QuotedTask, owner: AssigneeMention | null) =>
+    addressed(`🚦 ${reference(task)} is no longer blocked and can start`, owner),
+  /** A Task under way gained blockers that are not finished: it waits now. */
+  blocked: (task: QuotedTask, blockers: readonly QuotedTask[], owner: AssigneeMention | null) =>
+    addressed(`⛔ ${reference(task)} is now blocked by ${references(blockers)}`, owner),
+  /** The last open sub-task of a Task finished. */
+  subtasksFinished: (task: QuotedTask, owner: AssigneeMention | null) =>
+    addressed(`✅ All sub-tasks of ${reference(task)} are finished`, owner),
 };
 
 /**
  * The kind a rendered notice has, by the same templates above. The backfill migration embeds
- * these pattern sources; `task-notice-classification.test.ts` renders every template and checks
+ * these pattern sources, so a notice written after it (`unblocked`, which carries its kind from
+ * the start) has no pattern here; `task-notice-classification.test.ts` renders every template and checks
  * that it classifies back to its kind.
  */
 export const NOTICE_PATTERNS = [

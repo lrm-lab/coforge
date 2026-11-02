@@ -8,7 +8,8 @@ import {
 import { conversationSignalScopes } from "#src/server/conversations/conversation-signal-scope.server";
 import { indexedRequestId } from "./task-request-ids.server";
 import { announceTasks } from "./task-publication.server";
-import { taskSelection, taskView } from "./task-view.server";
+import { taskSelection } from "./task-view.server";
+import { taskViewOf } from "./task-relations.server";
 import {
   allocateTaskNumbers,
   insertConversationTask,
@@ -70,7 +71,7 @@ export async function announceSpawnedTask(
     conversation.workspaceId,
   );
   await announceTasks(ports, conversation, async () => scopes.task, {
-    tasks: [taskView(task, "people")],
+    tasks: [await taskViewOf(ports.db, "people", task)],
     publicationId: `${task.id}:task-created`,
   }).catch(() => undefined);
   return true;

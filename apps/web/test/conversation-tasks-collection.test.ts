@@ -28,6 +28,10 @@ const task = (number: number, fields: Partial<ConversationTask> = {}): Conversat
   title: `Task ${number}`,
   status: "todo",
   revision: 1,
+  blockedBy: [],
+  blocked: false,
+  parent: null,
+  subtasks: null,
   owner: null,
   creator: {
     memberId: "member-creator",
@@ -292,6 +296,23 @@ test("an older copy never replaces a newer one", async () => {
   const older = tasks.apply([{ tasks: [task(1, { status: "todo", revision: 2 })], deleted: [] }]);
   expect(tasks.store.state.byNumber.get(1)?.status).toBe("in_review");
   expect(older.finishedChanged).toBe(false);
+});
+
+test("a neighbour re-announced at the held revision replaces the held copy and reads nothing", async () => {
+  const { tasks } = fixture();
+  await unfinishedQuery(tasks).preload();
+  tasks.apply([{ tasks: [task(1, { revision: 3 })], deleted: [] }]);
+  const same = tasks.apply([
+    {
+      tasks: [task(1, { revision: 3, blocked: true, subtasks: { total: 2, finished: 1 } })],
+      deleted: [],
+    },
+  ]);
+  expect(tasks.store.state.byNumber.get(1)).toMatchObject({
+    blocked: true,
+    subtasks: { total: 2, finished: 1 },
+  });
+  expect(same.finishedChanged).toBe(false);
 });
 
 test("a Task that leaves Done and comes back within one burst ends Done, and Done is read again", async () => {

@@ -13,6 +13,7 @@ import { CliError } from "#src/cli-error";
 import { formatMessageLine, formatUtcTimestamp } from "#src/message-format";
 import { shortId } from "#src/short-id";
 import { fenceMessageBody } from "#src/message-body-format";
+import { blockedClaimRow, relationMarks, showRelationLines } from "#src/task-relations-format";
 
 /** The status filter a `task list` was given; `undefined` when none was passed. */
 export type TaskListStatus = TaskStatus | "all" | undefined;
@@ -46,7 +47,7 @@ function boardRow(task: TaskView): string {
   const creatorMark = departure(task.creator);
   const creator = ` (by @${task.creator.handle}${creatorMark ? ` [${creatorMark}]` : ""})`;
   const details = task.description ? `\n  details: ${fenceMessageBody(task.description)}` : "";
-  return `#${task.number} [${task.status}] ${fenceMessageBody(task.title)}${owner}${creator} ${messageField(task)} rev=${task.revision}${resourceReceipt(task)}${times(task)}${details}`;
+  return `#${task.number} [${task.status}] ${fenceMessageBody(task.title)}${owner}${creator} ${messageField(task)} rev=${task.revision}${resourceReceipt(task)}${relationMarks(task)}${times(task)}${details}`;
 }
 
 /** One conversation's Tasks, in board order, as `coforge task list --target` prints them. */
@@ -64,7 +65,7 @@ function ownRow(task: TaskView): string {
   const mark = departure(task.creator);
   const creator = ` by=@${task.creator.handle}${mark ? ` creator=${mark}` : ""}`;
   const title = task.title.replace(/\s+/g, " ").trim();
-  return `- ${task.channelRef ?? "<unknown conversation>"} task #${task.number} [${task.status}]${creator} ${messageField(task)}${resourceReceipt(task)}${times(task)} ${title}`;
+  return `- ${task.channelRef ?? "<unknown conversation>"} task #${task.number} [${task.status}]${creator} ${messageField(task)}${resourceReceipt(task)}${relationMarks(task)}${times(task)} ${title}`;
 }
 
 /**
@@ -174,11 +175,15 @@ export function formatTaskDeleted(number: number): string {
 }
 
 /** The current title and description of one board Task. */
-export function formatTaskShow(task: TaskView): string {
+export function formatTaskShow(
+  task: TaskView,
+  relations?: Pick<TaskResult, "blocking" | "subtree">,
+): string {
   return [
     `## Task #${task.number} [${task.status}]`,
     `Title: ${fenceMessageBody(task.title)}`,
     `Description: ${task.description ? fenceMessageBody(task.description) : "(none set)"}`,
+    ...showRelationLines(task, relations),
   ].join("\n");
 }
 
@@ -241,6 +246,7 @@ export function formatTaskAmended(result: TaskResult): string {
     `title: ${fenceMessageBody(task.title)}`,
     details,
     ...superseded,
+    ...showRelationLines(task),
   ].join("\n");
 }
 
@@ -286,6 +292,7 @@ function claimRow(claim: TaskClaimResult): string {
       "  This is not a ruling on who owns or leads this lane. If you are its canonical owner or believe it is misrouted, correct the routing in the original thread.",
     ].join("\n");
   }
+  if (claim.reason === "blocked" && claim.blockedBy) return blockedClaimRow(label, claim);
   return `${label}: FAILED — ${claim.reason || "refused"}. Do not start conflicting execution on this task or take over its scope without a redirect; a failed claim is a concurrency lock, not a ruling on lane ownership.`;
 }
 
@@ -365,7 +372,7 @@ export function formatTaskResult(command: TaskCommand, result: TaskResult): stri
         : formatTaskBoard(target, result, command.status);
     case "show":
       if (!task) throw new Error(`the server returned no task for task ${command.operation}`);
-      return formatTaskShow(task);
+      return formatTaskShow(task, result);
     case "history":
       return formatTaskHistory(result);
     case "create":

@@ -21,6 +21,10 @@ const task = (number: number, fields: Partial<TaskView> = {}): TaskView => ({
   title: `Task ${number}`,
   status: "todo",
   revision: 1,
+  blockedBy: [],
+  blocked: false,
+  parent: null,
+  subtasks: null,
   owner: null,
   creator: {
     memberId: "member-creator",
@@ -153,9 +157,16 @@ test("an announced change updates its row in place, without reading the list aga
   expect(reads()).toBe(1);
 });
 
-test("an announced copy no newer than the row on screen is ignored", async () => {
+test("an announced copy at the row's revision (a re-announced neighbour) updates it", async () => {
   const { overview } = await overviewWith(async () => ({ tasks: [] }));
-  overview.apply([announced([task(2, { status: "todo", revision: 1 })])]);
+  const held = overview.tasks.get("message-2")!;
+  overview.apply([announced([task(2, { ...held, blocked: true, revision: held.revision })])]);
+  expect(overview.tasks.get("message-2")).toMatchObject({ blocked: true, revision: held.revision });
+});
+
+test("an announced copy older than the row on screen is ignored", async () => {
+  const { overview } = await overviewWith(async () => ({ tasks: [] }));
+  overview.apply([announced([task(2, { status: "todo", revision: 0 })])]);
   expect(overview.tasks.get("message-2")?.status).toBe("in_progress");
 });
 

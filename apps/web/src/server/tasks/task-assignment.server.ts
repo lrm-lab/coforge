@@ -2,7 +2,7 @@ import { assertCanAssignOther } from "./task-assignment-authority.server";
 import type { TaskCommand, TaskResult } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
 import { assigneeMention, noticeActor, noticeText } from "./task-notices.server";
-import { taskView } from "./task-view.server";
+import { taskViewOf } from "./task-relations.server";
 import type { TaskBoardPorts, Member, ConversationRef } from "./task-board-ports.server";
 import {
   findTaskByNumber,
@@ -99,11 +99,12 @@ export async function assignTask(
     };
   });
   const { task, receipt } = result;
-  if (task && result.changed) await signalTaskChange(ports, task);
+  const view = task && (await taskViewOf(ports.db, ports.reader, task));
+  if (task && result.changed) await signalTaskChange(ports, task, { view: view ?? undefined });
   if (receipt && result.changed)
     await publishAssignmentReceipt(ports, receipt.id, command.idempotencyKey);
   return {
-    tasks: task ? [taskView(task, ports.reader)] : [],
+    tasks: view ? [view] : [],
     ...(receipt && {
       assignmentReceipts: [
         {
@@ -148,6 +149,7 @@ export async function unassignTask(
     }));
     return { task, changed: true };
   });
-  if (result.changed) await signalTaskChange(ports, result.task);
-  return { tasks: [taskView(result.task, ports.reader)] };
+  const view = await taskViewOf(ports.db, ports.reader, result.task);
+  if (result.changed) await signalTaskChange(ports, result.task, { view });
+  return { tasks: [view] };
 }

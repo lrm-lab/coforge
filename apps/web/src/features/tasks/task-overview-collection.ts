@@ -153,7 +153,9 @@ export function createTaskOverview(
       const row = tasks.get(view.id);
       // A finished Task the rows do not hold stays out: Done and Closed are read on their own.
       if (!row) needsRead ||= !isFinishedStatus(view.status);
-      else if (view.revision > row.revision) updates.push(view);
+      // Equal revisions too: a neighbour re-announced (blocked, parent progress changed) keeps its
+      // revision, so that an Agent's `--expected-revision` stays valid.
+      else if (view.revision >= row.revision) updates.push(view);
     }
     for (const view of newest.values()) if (!deleted.has(view.id)) announced.changed(view);
     for (const messageId of deleted) announced.deleted(messageId);

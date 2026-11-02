@@ -213,10 +213,16 @@ export function createConversationTasks(
     for (const { tasks, deleted } of bursts) {
       for (const copy of tasks) {
         const held = current(copy.id);
-        if (held && copy.revision <= held.revision) continue;
+        if (held && copy.revision < held.revision) continue;
+        // A copy at the held revision is a neighbour re-announced: its own row did not change, but
+        // what it shows of another Task (blocked, parent progress) did, and a write never bumps a
+        // neighbour's revision (an Agent's `--expected-revision` would break). It replaces the
+        // held one, and says nothing new about Done or Closed.
+        const refreshed = held !== undefined && copy.revision === held.revision;
         if (
-          isFinishedStatus(copy.status) ||
-          (held ? isFinishedStatus(held.status) : copy.revision > 0)
+          !refreshed &&
+          (isFinishedStatus(copy.status) ||
+            (held ? isFinishedStatus(held.status) : copy.revision > 0))
         )
           finishedChanged = true;
         next.set(copy.id, copy);

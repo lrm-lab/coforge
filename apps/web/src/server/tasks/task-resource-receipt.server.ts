@@ -1,5 +1,6 @@
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { taskSelection } from "./task-view.server";
+import { taskViewOf } from "./task-relations.server";
 import {
   REMINDER_SYNC_MESSAGE_TYPE,
   WORKSPACE_PROTOCOL_MAJOR,
@@ -10,7 +11,7 @@ import {
 import { AppError } from "#src/lib/app-error";
 import { daemonControlChannel } from "#src/server/centrifugo/server-api.server";
 import { MAX_ACTIVE_REMINDERS } from "#src/server/reminders/reminders.server";
-import { hostMessageId, taskView } from "./task-view.server";
+import { hostMessageId, storedResourceReceipt } from "./task-view.server";
 import type { TaskBoardPorts, Member } from "./task-board-ports.server";
 import { commitTaskChange } from "./task-change.server";
 import { signalTaskChange } from "./task-publication.server";
@@ -69,7 +70,7 @@ export async function recordResourceReceipt(
     });
     if (!workspaceComputer) throw new AppError("ACCESS_DENIED");
     if (task.resourceExpiryFollowupId) {
-      const recorded = taskView(task).resourceReceipt;
+      const recorded = storedResourceReceipt(task);
       if (
         !recorded ||
         Object.entries(receipt).some(([key, value]) => Reflect.get(recorded, key) !== value)
@@ -167,7 +168,7 @@ export async function recordResourceReceipt(
       // Reminder snapshot reconciliation repairs a missed upsert.
     }
   return {
-    tasks: [taskView(result.task, ports.reader)],
+    tasks: [await taskViewOf(ports.db, ports.reader, result.task)],
     resourceFollowup: {
       id: result.reminder.id,
       ownerAgentId: result.owner.id,

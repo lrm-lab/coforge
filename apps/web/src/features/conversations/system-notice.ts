@@ -6,7 +6,18 @@ export type SystemPerson = { memberId: string | null; handle: string; displayNam
 
 /** A Task a system notice names; the id survives a title change. Null in a notice backfilled from
  * text that named no Task the backfill could find. */
-export type SystemTask = { taskId: string | null; number: number; title: string };
+export type SystemTask = {
+  taskId: string | null;
+  number: number;
+  title: string;
+  /** The channel the Task is in, when that is not the conversation the notice is in. */
+  channel?: string;
+  /** In a channel the reader may not be able to read: named by nothing else (`number` is 0). */
+  hidden?: true;
+};
+
+/** The notices that address a Task's owner name them here, when someone holds the Task. */
+type OwnerParam = { owner?: SystemPerson | null };
 
 /**
  * A server-authored system message's structured content. `Message.body` is the rendered English
@@ -29,6 +40,22 @@ export type SystemNotice =
       params: { actor: SystemPerson; task: SystemTask; reason?: string };
     }
   | { kind: "task.assigned_you"; params: { actor: SystemPerson; task: SystemTask } }
+  | {
+      kind: "task.blocked";
+      /** `task`, already under way, now waits for `blockers`. */
+      params: { task: SystemTask; blockers: SystemTask[] } & OwnerParam;
+    }
+  | { kind: "task.subtasks_finished"; params: { task: SystemTask } & OwnerParam }
+  | {
+      kind: "task.released";
+      /** `task`'s last blocker was removed or deleted, so it can start. */
+      params: { task: SystemTask } & OwnerParam;
+    }
+  | {
+      kind: "task.unblocked";
+      /** `task` can start now that `blocker` is finished. */
+      params: { task: SystemTask; blocker: SystemTask } & OwnerParam;
+    }
   | {
       kind: "channel.coordinator_changed";
       params: {
@@ -65,6 +92,11 @@ const task = (value: unknown): value is SystemTask => {
   );
 };
 
+/** A notice about `params.task` that may name the owner it addresses. */
+const ownerAddressed = (params: Record<string, unknown>) =>
+  task(params.task) &&
+  (params.owner === null || params.owner === undefined || person(params.owner));
+
 const STATUSES = new Set(["todo", "in_progress", "in_review", "done", "closed"]);
 
 /** Whether a stored `kind`/`params` pair is one a renderer can trust. The backfill test runs it
@@ -82,6 +114,15 @@ export function isSystemNotice(value: { kind: string; params: unknown }): value 
       return person(params.actor) && task(params.task);
     case "task.assigned":
       return person(params.actor) && task(params.task) && person(params.assignee);
+    case "task.blocked":
+      return (
+        ownerAddressed(params) && Array.isArray(params.blockers) && params.blockers.every(task)
+      );
+    case "task.released":
+    case "task.subtasks_finished":
+      return ownerAddressed(params);
+    case "task.unblocked":
+      return ownerAddressed(params) && task(params.blocker);
     case "task.claimed":
       return person(params.claimer) && task(params.task);
     case "task.moved":

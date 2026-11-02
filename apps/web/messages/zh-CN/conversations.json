@@ -344,32 +344,5 @@
   "conversation_seen_count": "{count} 人已看",
   "conversation_seen_none": "无人查看",
   "conversation_seen_loading": "加载中…",
-  "conversation_seen_by": "已看的人",
-  "system_notice_task_reference": "任务 #{number}「{title}」",
-  "system_notice_task_list_item": "#{number}「{title}」",
-  "system_notice_task_number": "任务 #{number}",
-  "system_notice_list_separator": "、",
-  "system_notice_task_created": [
-    {
-      "declarations": ["input count", "input tasks", "local countPlural = count: plural"],
-      "selectors": ["countPlural"],
-      "match": {
-        "countPlural=other": "新建了 {count} 个任务：{tasks}"
-      }
-    }
-  ],
-  "system_notice_task_converted": "{actor} 把一条消息转成了{task}",
-  "system_notice_task_from_message": "{actor} 用这条消息建了{task}",
-  "system_notice_task_assigned": "{actor} 把{task}指派给了 {assignee}",
-  "system_notice_task_claimed": "{actor} 认领了{task}",
-  "system_notice_task_moved": "{actor} 把{task}移到了{status}",
-  "system_notice_task_unassigned": "{actor} 取消了{task}的指派",
-  "system_notice_task_unfollowed": "{actor} 不再关注这个任务",
-  "system_notice_task_unfollowed_reason": "{actor} 不再关注这个任务：{reason}",
-  "system_notice_task_assigned_you": "{actor} 给你指派了{task}",
-  "system_notice_coordinator_set": "{actor} 把 {next} 设为 #{channel} 的协调员",
-  "system_notice_coordinator_replaced": "{actor} 把 {next} 设为 #{channel} 的协调员（替换 {previous}）",
-  "system_notice_coordinator_removed": "{actor} 取消了 {previous} 在 #{channel} 的协调员身份",
-  "system_notice_agent_dm_chain_limit": "[CoForge 已暂停] 这些 Agent 连续互发的消息太多了，连续 10 分钟没有新消息后可以继续。",
-  "system_notice_agent_dm_rate_limit": "[CoForge 已暂停] 这里有个 Agent 过去一小时给其他 Agent 发的私信太多了，等这一小时的总数降到上限以下就能再发。"
+  "conversation_seen_by": "已看的人"
 }

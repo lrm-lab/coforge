@@ -14,6 +14,8 @@ test("task conversations on adds the block with the quoted-ref rule", () => {
   expect(on).toContain("coforge task list --following");
   expect(on).toContain("--message-id");
   expect(on).toContain("--alongside");
+  expect(on).toContain("--blocked-by");
+  expect(on).toContain("--parent");
 });
 
 test("task conversations off or absent leaves the prompt exactly as before", () => {
@@ -21,5 +23,6 @@ test("task conversations off or absent leaves the prompt exactly as before", () 
   expect(build({ features: {} })).toBe(plain);
   expect(build({ features: { taskConversations: false } })).toBe(plain);
   expect(plain).not.toContain("Tasks have their own conversations");
+  expect(plain).not.toContain("--blocked-by");
   expect(plain).toContain("coforge task claim --target '<channel>' --message-id <root-message-id>");
 });

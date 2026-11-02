@@ -9,6 +9,10 @@ export const taskView = (number: number, fields: Partial<TaskView> = {}): TaskVi
   title: `Task ${number}`,
   status: "todo",
   revision: 1,
+  blockedBy: [],
+  blocked: false,
+  parent: null,
+  subtasks: null,
   owner: null,
   creator: {
     memberId: "member-creator",

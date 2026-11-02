@@ -78,7 +78,8 @@ export function creationChanges(task: SelectedTask): TaskHistoryChange[] {
   return changes;
 }
 
-/** What one write changed on a Task, in the order history lists it. */
+/** What one write changed on a Task's own columns, in the order history lists it. Its blockers and
+ * parent are not columns: `planRelationAmend` plans those events and `commitTaskChange` appends them. */
 export function taskChanges(before: SelectedTask, after: SelectedTask): TaskHistoryChange[] {
   const changes: TaskHistoryChange[] = [];
   if (before.ownerMemberId !== after.ownerMemberId) changes.push(assigneeChange(after));

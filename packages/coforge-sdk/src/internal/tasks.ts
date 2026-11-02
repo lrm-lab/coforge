@@ -1,5 +1,6 @@
 /** Message-backed Task contract shared by browser, Agent RPC and backend. */
 import type { AgentMessageRecord } from "./local-daemon";
+import { CHANNEL_NAME_PATTERN } from "./channel-references";
 
 export const TASK_STATUSES = ["todo", "in_progress", "in_review", "done", "closed"] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
@@ -56,6 +57,71 @@ export type TaskMember = {
   avatarUrl?: string | null;
 };
 
+/**
+ * How a command names a Task: `number` in the command's own conversation, or in the Workspace
+ * channel `channel` (its name, without `#`).
+ */
+export type TaskRef = { number: number; channel?: string };
+
+/** Whether `value` is a well-formed `TaskRef`: a positive whole number and, when given, a valid channel name. */
+export function isTaskRef(value: unknown): value is TaskRef {
+  if (typeof value !== "object" || value === null) return false;
+  const { number, channel, ...rest } = value as Record<string, unknown>;
+  return (
+    Object.keys(rest).length === 0 &&
+    typeof number === "number" &&
+    Number.isSafeInteger(number) &&
+    number >= 1 &&
+    (channel === undefined || (typeof channel === "string" && CHANNEL_NAME_PATTERN.test(channel)))
+  );
+}
+
+/**
+ * A Task as a view or a history event names it, from the conversation of the Task being read.
+ * `channel` is null for a Task in that same conversation and the channel's name otherwise. A Task
+ * in another conversation is `hidden` unless that is a public channel: the reader may not be able
+ * to read it, so nothing but its status shows.
+ */
+export type TaskName = { hidden: false; number: number; channel: string | null } | { hidden: true };
+
+/** How text writes a Task's name: `#3`, `#channel/3`, or, for one the reader may not name, that. */
+export function taskNameLabel(name: TaskName): string {
+  if (name.hidden) return "a task in another channel";
+  return name.channel === null ? `#${name.number}` : `#${name.channel}/${name.number}`;
+}
+
+/** A Task as another Task's card names it: a blocker, a dependent or a parent. */
+export type TaskLink =
+  | (Extract<TaskName, { hidden: false }> & { title: string; status: TaskStatus })
+  | { hidden: true; status: TaskStatus };
+
+/** A Task waiting for a blocker is blocked until the blocker is finished: done or closed. */
+export const TASK_BLOCKER_SATISFIED_STATUSES = ["done", "closed"] as const;
+
+/** Whether a Task in this status no longer holds back the Tasks that wait for it. */
+export function isBlockerSatisfied(status: string): boolean {
+  return (TASK_BLOCKER_SATISFIED_STATUSES as readonly string[]).includes(status);
+}
+
+/** The most blockers one Task may wait for. */
+export const MAX_TASK_BLOCKERS = 20;
+/** The deepest a subtask tree may nest: a top-level Task is level 1. */
+export const MAX_TASK_TREE_DEPTH = 5;
+
+/** One node of a Task's subtask tree as `task show` reads it. A hidden node has no children read. */
+export type TaskTreeNode =
+  | (Extract<TaskName, { hidden: false }> & {
+      title: string;
+      status: TaskStatus;
+      owner: TaskMember | null;
+      /** Whether any of its blockers is unfinished. */
+      blocked: boolean;
+      /** The unfinished Tasks it still waits for. */
+      blockedBy: TaskName[];
+      children: TaskTreeNode[];
+    })
+  | { hidden: true; status: TaskStatus; children: [] };
+
 export type TaskView = {
   /** The task's own id; for a task that started as a message it equals that message's id. */
   id: string;
@@ -67,6 +133,14 @@ export type TaskView = {
   description?: string | null;
   status: TaskStatus;
   revision: number;
+  /** The Tasks this one waits for, in this Workspace, by number. */
+  blockedBy: TaskLink[];
+  /** Whether any of `blockedBy` is not done or closed; derived on read, never stored. */
+  blocked: boolean;
+  /** The Task this one is a subtask of; null at the top level. */
+  parent: TaskLink | null;
+  /** The progress of this Task's subtasks (`finished` counts done and closed); null with none. */
+  subtasks: { total: number; finished: number } | null;
   owner: TaskMember | null;
   creator: TaskMember;
   createdAt: string;
@@ -116,6 +190,8 @@ export type TaskClaimResult = {
   success: boolean;
   reason?: string;
   conflict?: TaskClaimConflict;
+  /** With reason `blocked`: the blockers that are not done or closed yet. */
+  blockedBy?: TaskName[];
 };
 
 /** One Task change as history records it: `payload` carries the facts its `eventType` names. */
@@ -137,6 +213,16 @@ export type TaskHistoryChange =
         /** The Task revision this amendment produced; absent on amendments recorded before it. */
         revision?: number;
       };
+    }
+  | {
+      eventType: "dependencies_changed";
+      /** The blockers added and removed. */
+      payload: { added: TaskName[]; removed: TaskName[] };
+    }
+  | {
+      eventType: "parent_changed";
+      /** The parent before and after; null for none. */
+      payload: { from: TaskName | null; to: TaskName | null };
     };
 
 export type TaskHistoryEvent = {
@@ -176,6 +262,12 @@ export type TaskCommand = {
   title?: string;
   titles?: string[];
   description?: string | null;
+  /** `create`: the Tasks the new Tasks wait for. `amend`: the whole set, replacing the old one; empty clears. */
+  blockedBy?: TaskRef[];
+  /** `create`: the parent of the new Tasks. `amend`: the new parent; null makes the Task top level. */
+  parent?: TaskRef | null;
+  /** `list`: only Tasks ready to start: todo, unowned and not blocked. */
+  ready?: boolean;
   assignee?: string | null;
   mine?: boolean;
   createsResource?: boolean;
@@ -220,6 +312,10 @@ export type TaskResult = {
   pagination?: TaskListPagination;
   claims?: TaskClaimResult[];
   history?: TaskHistoryEvent[];
+  /** `show` only: the Tasks waiting for the shown one. */
+  blocking?: TaskLink[];
+  /** `show` only: the shown Task's subtasks, nested at most `MAX_TASK_TREE_DEPTH` levels. */
+  subtree?: TaskTreeNode[];
   /** One per assigned Task, each posted in that Task's own thread. */
   assignmentReceipts?: Array<{
     messageId: string;

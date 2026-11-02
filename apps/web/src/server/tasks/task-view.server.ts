@@ -1,12 +1,16 @@
+import { CHANNEL_VISIBILITY } from "#src/features/conversations/channel-visibility";
 import {
   TARGETABLE_CONVERSATION_WHERE,
   VISIBLE_CONVERSATION_WHERE,
 } from "#src/server/conversations/active-member.server";
 import {
   isRecord,
+  TASK_BLOCKER_SATISFIED_STATUSES,
   TASK_STATUSES,
   type TaskConversationKind,
   type TaskMember,
+  type TaskName,
+  type TaskResourceReceipt,
   type TaskStatus,
   type TaskView,
 } from "@lrm/coforge-sdk/internal";
@@ -108,7 +112,7 @@ export function taskMentions(task: Pick<SelectedTask, "message">) {
 }
 
 /** The statuses a Task finishes in. The board counts and pages them apart from the work in flight. */
-export const FINISHED_TASK_STATUSES = ["done", "closed"] as const;
+export const FINISHED_TASK_STATUSES = TASK_BLOCKER_SATISFIED_STATUSES;
 export type FinishedTaskStatus = (typeof FINISHED_TASK_STATUSES)[number];
 /**
  * The statuses of work in flight. Reads of unfinished Tasks match these rather than excluding the
@@ -191,18 +195,90 @@ export function readTaskText(
  * count leaves both out, and a page keeps what it had. */
 export type DiscussionCounts = { replyCount: number; earlierReplies: number };
 
+/** What names the conversation of a Task that another Task's view, history or notice mentions. */
+export const NAMED_CONVERSATION_SELECT = {
+  id: true,
+  channelName: true,
+  visibility: true,
+  hiddenFromWorkspaceAt: true,
+} satisfies Prisma.ConversationSelect;
+
+export type NamedConversation = Prisma.ConversationGetPayload<{
+  select: typeof NAMED_CONVERSATION_SELECT;
+}>;
+
+/**
+ * Where a Task in `conversation` is named from the conversation `from`: null for that same
+ * conversation, the channel's name for a public channel, and undefined for anything else (a
+ * private channel, a DM), which the reader may not be able to read and is not named to.
+ */
+export function placeFrom(
+  conversation: NamedConversation,
+  from: string,
+): string | null | undefined {
+  if (conversation.id === from) return null;
+  return conversation.channelName !== null &&
+    conversation.visibility === CHANNEL_VISIBILITY.PUBLIC &&
+    conversation.hiddenFromWorkspaceAt === null
+    ? conversation.channelName
+    : undefined;
+}
+
+/** A Task as a view or history event names it from the conversation `from`. */
+export function taskName(
+  task: { number: number; conversation: NamedConversation },
+  from: string,
+): TaskName {
+  const channel = placeFrom(task.conversation, from);
+  return channel === undefined ? { hidden: true } : { hidden: false, number: task.number, channel };
+}
+
 /** The first line of a source message, cut for a card or a `task show` line. */
 function sourcePreview(text: string) {
   const line = text.replace(/\s+/g, " ").trim();
   return line.length > 160 ? `${line.slice(0, 159)}…` : line;
 }
 
+/** What a Task's view adds to its row: the Tasks it waits for, its parent and its subtask progress
+ * (`loadTaskRelations`, read for a whole page at once). */
+export type TaskRelations = Pick<TaskView, "blockedBy" | "blocked" | "parent" | "subtasks">;
+
+/** The resource receipt a Task recorded, as its view shows it; undefined when none is stored. */
+export function storedResourceReceipt(
+  task: Pick<SelectedTask, "resourceReceipt">,
+): TaskResourceReceipt | undefined {
+  const stored = task.resourceReceipt;
+  if (!isRecord(stored)) return undefined;
+  return {
+    object: String(stored.object ?? ""),
+    purpose: String(stored.purpose ?? ""),
+    teardownOwner: String(stored.teardownOwner ?? ""),
+    securityPrivacy: String(stored.securityPrivacy ?? ""),
+    expiry: String(stored.expiry ?? ""),
+    runbook: String(stored.runbook ?? ""),
+    tracking: String(stored.tracking ?? ""),
+  };
+}
+
+/** The relations of a Task that waits for nothing and has no parent or subtasks. A fresh object
+ * each time: a reader fills its arrays in. */
+export const emptyRelations = (): TaskRelations => ({
+  blockedBy: [],
+  blocked: false,
+  parent: null,
+  subtasks: null,
+});
+
+/** What `taskView` takes besides the row. A reader that did not count discussions leaves `counts`
+ * out; the relations are always read, so a view never claims a Task waits for nothing unread. */
+export type TaskViewExtras = { relations: TaskRelations; counts?: DiscussionCounts };
+
 export function taskView(
   task: SelectedTask,
-  reader: TaskReader = "people",
-  counts?: DiscussionCounts,
+  reader: TaskReader,
+  { relations, counts }: TaskViewExtras,
 ): TaskView {
-  const resourceReceipt = task.resourceReceipt;
+  const resourceReceipt = storedResourceReceipt(task);
   return {
     id: task.id,
     messageId: task.messageId,
@@ -214,21 +290,12 @@ export function taskView(
     description: task.description,
     status: storedTaskStatus(task.status),
     revision: task.revision,
+    ...relations,
     claimedAt: task.claimedAt?.toISOString() ?? null,
     executionSessionId: task.executionSessions[0]?.id ?? null,
     requiresResourceReceipt: task.createsResource,
     resourceReceiptRecordedAt: task.resourceReceiptRecordedAt?.toISOString() ?? null,
-    ...(isRecord(resourceReceipt) && {
-      resourceReceipt: {
-        object: String(resourceReceipt.object ?? ""),
-        purpose: String(resourceReceipt.purpose ?? ""),
-        teardownOwner: String(resourceReceipt.teardownOwner ?? ""),
-        securityPrivacy: String(resourceReceipt.securityPrivacy ?? ""),
-        expiry: String(resourceReceipt.expiry ?? ""),
-        runbook: String(resourceReceipt.runbook ?? ""),
-        tracking: String(resourceReceipt.tracking ?? ""),
-      },
-    }),
+    ...(resourceReceipt && { resourceReceipt }),
     owner: task.owner && taskMember(task.workspaceId, task.owner),
     creator: taskMember(task.workspaceId, task.creator),
     ...(task.discussionConversationId && {

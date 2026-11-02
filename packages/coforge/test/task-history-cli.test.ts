@@ -16,6 +16,10 @@ test("Task history lists current and superseded card state", async () => {
     title: "Ship it",
     status: "in_progress" as const,
     revision: 3,
+    blockedBy: [],
+    blocked: false,
+    parent: null,
+    subtasks: null,
     ...taskStamps,
     owner: null,
   };

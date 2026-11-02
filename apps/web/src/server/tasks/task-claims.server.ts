@@ -6,6 +6,7 @@ import {
   type TaskClaimConflict,
   type TaskClaimResult,
   type TaskCommand,
+  type TaskName,
   type TaskResult,
   type TaskView,
 } from "@lrm/coforge-sdk/internal";
@@ -13,13 +14,9 @@ import { channelThreadRootWhere } from "#src/server/db/message-anchor.server";
 import { AppError } from "#src/lib/app-error";
 import { noticeActor, noticeText } from "./task-notices.server";
 import { createMessageTask } from "./sent-as-task.server";
-import {
-  storedTaskStatus,
-  taskMember,
-  taskSelection,
-  taskView,
-  type SelectedTask,
-} from "./task-view.server";
+import { storedTaskStatus, taskMember, taskSelection, type SelectedTask } from "./task-view.server";
+import { taskViewOf } from "./task-relations.server";
+import { TASK_BLOCKED } from "./task-gates.server";
 import type {
   Transaction,
   TaskBoardPorts,
@@ -45,6 +42,7 @@ const CLAIM_REFUSAL = {
   messageNotFound: "message not found",
   ambiguousMessage: "message id matches more than one message",
   held: "already claimed",
+  blocked: "blocked",
   changed: "the task changed while it was being claimed; read it again",
 } as const;
 
@@ -210,8 +208,9 @@ export async function convertOrClaim(
     }));
     return claimed;
   });
-  await signalTaskChange(ports, task);
-  return { tasks: [taskView(task, ports.reader)] };
+  const view = await taskViewOf(ports.db, ports.reader, task);
+  await signalTaskChange(ports, task, { view });
+  return { tasks: [view] };
 }
 
 export async function claimTasks(
@@ -261,6 +260,15 @@ export async function claimTasks(
           reason: error.reason,
           ...(error.conflict && { conflict: error.conflict }),
         });
+      // The Task waits for blockers: the status write refused it (a manager is not refused).
+      else if (error instanceof AppError && error.errorId === TASK_BLOCKED)
+        claims.push({
+          ...selector,
+          number: Number(error.details?.number),
+          success: false,
+          reason: CLAIM_REFUSAL.blocked,
+          blockedBy: JSON.parse(String(error.details?.blockedBy)) as TaskName[],
+        });
       // The guarded write lost a race with another change to the same Task.
       else if (error instanceof AppError && error.code === "CONFLICT")
         claims.push({ ...selector, success: false, reason: CLAIM_REFUSAL.changed });
@@ -293,6 +301,7 @@ export async function unclaimTask(
       withoutAssignee(task),
     ),
   );
-  await signalTaskChange(ports, updated);
-  return { tasks: [taskView(updated, ports.reader)] };
+  const view = await taskViewOf(ports.db, ports.reader, updated);
+  await signalTaskChange(ports, updated, { view });
+  return { tasks: [view] };
 }

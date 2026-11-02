@@ -16,11 +16,12 @@ import {
   taskSelection,
   taskView,
   UNFINISHED_TASK_STATUSES,
-  type DiscussionCounts,
   type FinishedTaskStatus,
+  type TaskViewExtras,
 } from "./task-view.server";
 import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
 import { viewsWithCounts } from "./task-discussion-counts.server";
+import { loadTaskRelations, relationsOf } from "./task-relations.server";
 
 export type TaskOverview = {
   tasks: Array<
@@ -147,10 +148,22 @@ function overviewSelection(userId: string) {
   } satisfies Prisma.TaskSelect;
 }
 
+/** The page's rows: their relations read together, their discussions not counted. */
+async function overviewRows(
+  db: PrismaClient,
+  userId: string,
+  tasks: Array<Prisma.TaskGetPayload<{ select: ReturnType<typeof overviewSelection> }>>,
+) {
+  const relations = await loadTaskRelations(db, "people", tasks);
+  return tasks.map((task) =>
+    overviewRow(task, userId, { relations: relationsOf(relations, task.id) }),
+  );
+}
+
 function overviewRow(
   task: Prisma.TaskGetPayload<{ select: ReturnType<typeof overviewSelection> }>,
   userId: string,
-  counts?: DiscussionCounts,
+  extras: TaskViewExtras,
 ): TaskOverview["tasks"][number] {
   const channelName = task.conversation.channelName;
   const agent = task.conversation.members.find((member) => member.agent !== null)?.agent ?? null;
@@ -158,7 +171,7 @@ function overviewRow(
     task.conversation.members.find((member) => member.userId === userId)?.id ?? null;
   if (channelName === null && agent === null) throw new AppError("INTERNAL_ERROR");
   return {
-    ...taskView(task, "people", counts),
+    ...taskView(task, "people", extras),
     currentMemberId,
     source: channelName
       ? {
@@ -209,7 +222,7 @@ export class TaskOverviewReads {
       orderBy: [{ createdAt: "desc" }, { id: "asc" }],
       select: overviewSelection(userId),
     });
-    return { tasks: tasks.map((task) => overviewRow(task, userId)) };
+    return { tasks: await overviewRows(this.db, userId, tasks) };
   }
 
   /**
@@ -232,8 +245,14 @@ export class TaskOverviewReads {
       select: overviewSelection(userId),
     });
     if (!task) return null;
-    const [counts] = await viewsWithCounts(this.db, workspaceId, [task], (_, counted) => counted);
-    return overviewRow(task, userId, counts);
+    const [extras] = await viewsWithCounts(
+      this.db,
+      "people",
+      workspaceId,
+      [task],
+      (_, viewExtras) => viewExtras,
+    );
+    return overviewRow(task, userId, extras!);
   }
 
   /**
@@ -268,10 +287,16 @@ export class TaskOverviewReads {
       select: taskSelection,
     });
     return {
-      tasks: await viewsWithCounts(this.db, viewer.workspaceId, tasks, (task, counts) => ({
-        ...taskView(task, "people", counts),
-        sequence: task.message?.sequence ?? 0,
-      })),
+      tasks: await viewsWithCounts(
+        this.db,
+        "people",
+        viewer.workspaceId,
+        tasks,
+        (task, extras) => ({
+          ...taskView(task, "people", extras),
+          sequence: task.message?.sequence ?? 0,
+        }),
+      ),
     };
   }
 
@@ -320,7 +345,7 @@ export class TaskOverviewReads {
     const rows = tasks.slice(0, limit);
     const last = rows.at(-1);
     return {
-      tasks: rows.map((task) => overviewRow(task, userId)),
+      tasks: await overviewRows(this.db, userId, rows),
       nextCursor: tasks.length > limit && last ? finishedCursor(last.updatedAt, last.id) : null,
     };
   }

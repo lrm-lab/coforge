@@ -357,33 +357,5 @@
   "conversation_seen_count": "{count} seen",
   "conversation_seen_none": "Nobody viewed",
   "conversation_seen_loading": "Loading…",
-  "conversation_seen_by": "Seen by",
-  "system_notice_task_reference": "#{number} \"{title}\"",
-  "system_notice_task_list_item": "#{number} \"{title}\"",
-  "system_notice_task_number": "#{number}",
-  "system_notice_list_separator": ", ",
-  "system_notice_task_created": [
-    {
-      "declarations": ["input count", "input tasks", "local countPlural = count: plural"],
-      "selectors": ["countPlural"],
-      "match": {
-        "countPlural=one": "{count} new task created: {tasks}",
-        "countPlural=other": "{count} new tasks created: {tasks}"
-      }
-    }
-  ],
-  "system_notice_task_converted": "{actor} converted a message to task {task}",
-  "system_notice_task_from_message": "{actor} made task {task} from this message",
-  "system_notice_task_assigned": "{actor} assigned {task} to {assignee}",
-  "system_notice_task_claimed": "{actor} claimed {task}",
-  "system_notice_task_moved": "{actor} moved {task} to {status}",
-  "system_notice_task_unassigned": "{actor} unassigned {task}",
-  "system_notice_task_unfollowed": "{actor} stopped following this task.",
-  "system_notice_task_unfollowed_reason": "{actor} stopped following this task: {reason}.",
-  "system_notice_task_assigned_you": "{actor} assigned you task {task}",
-  "system_notice_coordinator_set": "{actor} made {next} the coordinator of #{channel}",
-  "system_notice_coordinator_replaced": "{actor} made {next} the coordinator of #{channel} (replacing {previous})",
-  "system_notice_coordinator_removed": "{actor} removed {previous} as coordinator of #{channel}",
-  "system_notice_agent_dm_chain_limit": "[CoForge paused] These Agents have exchanged too many messages in a row. They can continue after 10 minutes without a message.",
-  "system_notice_agent_dm_rate_limit": "[CoForge paused] An Agent here has sent too many direct messages to other Agents in the last hour. It can send again when the hour's total drops below the limit."
+  "conversation_seen_by": "Seen by"
 }

@@ -19,12 +19,13 @@ import { creationChanges, historyRows } from "./task-history.server";
 import {
   hostMessageId,
   taskSelection,
-  taskView,
   UNFINISHED_TASK_STATUSES,
   type SelectedTask,
 } from "./task-view.server";
 import type { TaskBoardPorts, Member, ConversationRef } from "./task-board-ports.server";
 import { ensureTaskExecutionSession } from "./task-change.server";
+import { linkCreatedTasks } from "./task-gates.server";
+import { taskViewsOf } from "./task-relations.server";
 import { withNotices } from "./task-notice-posting.server";
 import {
   signalTaskChange,
@@ -294,6 +295,7 @@ export async function createTasks(
     await tx.taskHistoryEvent.createMany({
       data: tasks.flatMap((task) => historyRows(task.id, member, creationChanges(task), 0)),
     });
+    await linkCreatedTasks(tx, scope, member, tasks, command);
     const quoted = await notices.quote(tasks);
     await notices.inConversation({
       body: noticeText.created(quoted),
@@ -359,7 +361,7 @@ export async function createTasks(
     const signalScope = scopes.message;
     const effects: Promise<unknown>[] = [
       announceTasks(ports, scope, async () => scopes.task, {
-        tasks: result.tasks.map((task) => taskView(task, "people")),
+        tasks: await taskViewsOf(ports.db, "people", result.tasks),
         publicationId: `${result.tasks[0]!.id}:task-created`,
       }),
     ];
@@ -410,7 +412,7 @@ export async function createTasks(
   }
   const { receipts } = result;
   return {
-    tasks: result.tasks.map((task) => taskView(task, ports.reader)),
+    tasks: await taskViewsOf(ports.db, ports.reader, result.tasks),
     ...(result.held ? { state: "duplicate" as const } : {}),
     ...(receipts.length > 0 && {
       assignmentReceipts: receipts.map((receipt) => ({

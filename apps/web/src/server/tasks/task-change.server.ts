@@ -1,7 +1,10 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { historyRows, taskChanges } from "./task-history.server";
-import { taskSelection, type SelectedTask } from "./task-view.server";
+import { storedTaskStatus, taskSelection, type SelectedTask } from "./task-view.server";
+import { assertMayEnter } from "./task-gates.server";
+import { isTaskManager } from "./task-assignees.server";
+import type { TaskHistoryChange } from "@lrm/coforge-sdk/internal";
 import type { Transaction, Member } from "./task-board-ports.server";
 
 /** The conversation's Task numbered `number`, read as `taskSelection`, or null. */
@@ -41,7 +44,21 @@ export async function commitTaskChange(
   before: SelectedTask,
   guard: Prisma.TaskWhereInput,
   data: Prisma.TaskUncheckedUpdateManyInput,
+  options: {
+    /** Changes beyond the Task's own columns (its blockers, its parent), recorded after them. */
+    relationChanges?: readonly TaskHistoryChange[];
+    /** Whether the actor manages Tasks, when the caller already knows; read here otherwise. */
+    manager?: boolean;
+  } = {},
 ) {
+  // Every status write passes here, so what blockers and subtasks hold back is decided once.
+  if (typeof data.status === "string" && data.status !== before.status)
+    await assertMayEnter(
+      tx,
+      before,
+      storedTaskStatus(data.status),
+      options.manager ?? (await isTaskManager(tx, before.workspaceId, actor)),
+    );
   const changed = await tx.task.updateMany({
     where: { id: before.id, revision: before.revision, ...guard },
     data: { ...data, revision: { increment: 1 } },
@@ -79,7 +96,7 @@ export async function commitTaskChange(
       select: taskSelection,
     });
   }
-  const changes = taskChanges(before, task);
+  const changes = [...taskChanges(before, task), ...(options.relationChanges ?? [])];
   if (!changes.length) return { task, events: [] };
   const latest = await tx.taskHistoryEvent.findFirst({
     where: { taskId: task.id },

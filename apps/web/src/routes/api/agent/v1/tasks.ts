@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type { AgentTaskRequest } from "@lrm/coforge-sdk/agent";
 import {
+  CHANNEL_NAME_PATTERN,
   MAX_MESSAGE_SEQUENCE,
   SEEN_EXACT_SEQS_LIMIT,
   TASK_STATUSES,
@@ -28,6 +29,7 @@ import {
   TASK_V2_USE_CREATE,
   TaskBoard,
 } from "#src/server/tasks/task-board.server";
+import { AGENT_FACING_ERROR_IDS } from "#src/server/tasks/task-gates.server";
 import { taskComputerRefusal } from "#src/server/tasks/task-computer-gate.server";
 import { SourceMessageTaken } from "#src/server/tasks/task-conversation-creation.server";
 import { TASK_ASSIGNMENT_MANAGER_REQUIRED } from "#src/features/tasks/task-assignment";
@@ -69,6 +71,18 @@ const TASK_REFUSAL_TEXT: Record<string, string> = {
   TEMPORARILY_UNAVAILABLE: "the server is temporarily unavailable; retry",
 };
 
+/** A board refusal's own sentence for the Agent, when it is one written for Agents. */
+const agentFacingHint = (error: AppError) =>
+  error.errorId && AGENT_FACING_ERROR_IDS.has(error.errorId) ? error.hint : undefined;
+
+/** A Task by number, in this conversation or in the Workspace channel named. */
+const taskRefSchema = z
+  .object({
+    number: z.number().int().positive(),
+    channel: z.string().regex(CHANNEL_NAME_PATTERN).optional(),
+  })
+  .strict();
+
 const taskRequestSchema = z
   .object({
     operation: z.enum(taskOperations),
@@ -84,6 +98,9 @@ const taskRequestSchema = z
     titles: z.array(z.string().min(1).max(10_000)).min(1).optional(),
     description: z.string().max(50_000).nullable().optional(),
     assignee: z.string().nullable().optional(),
+    blockedBy: z.array(taskRefSchema).max(100).optional(),
+    parent: taskRefSchema.nullable().optional(),
+    ready: z.boolean().optional(),
     mine: z.boolean().optional(),
     createsResource: z.boolean().optional(),
     receipt: z
@@ -153,7 +170,7 @@ export async function handleAgentTaskPost(
           error:
             error.errorId === TASK_ASSIGNMENT_MANAGER_REQUIRED
               ? "Assigning or unassigning someone else requires a Workspace owner or admin."
-              : (TASK_REFUSAL_TEXT[error.code] ?? "task request refused"),
+              : (agentFacingHint(error) ?? TASK_REFUSAL_TEXT[error.code] ?? "task request refused"),
           code: error.code,
         },
         { status },

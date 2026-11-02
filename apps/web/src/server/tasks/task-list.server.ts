@@ -12,6 +12,7 @@ import type {
   TaskResult,
 } from "@lrm/coforge-sdk/internal";
 import type { TaskBoardPorts } from "./task-board-ports.server";
+import { NOT_BLOCKED_WHERE, showRelations } from "./task-relations.server";
 import {
   CONVERSATION_KIND_WHERE,
   TASK_SCOPE_WHERE,
@@ -19,6 +20,13 @@ import {
   taskSelection,
   taskView,
 } from "./task-view.server";
+
+/** A Task ready to start: Todo, held by nobody, and waiting for no unfinished blocker. */
+const READY_TASK_WHERE = {
+  status: "todo",
+  ownerMemberId: null,
+  ...NOT_BLOCKED_WHERE,
+} satisfies Prisma.TaskWhereInput;
 
 /** What an Agent's own Task list reads: every kind, archived channels included. */
 const AGENT_OWN_TASK_READ = {
@@ -89,12 +97,18 @@ export async function listOwnTasks(
     },
   });
   return {
-    tasks: await viewsWithCounts(ports.db, principal.workspaceId, tasks, (task, counts) => ({
-      ...taskView(task, ports.reader, counts),
-      channelRef: task.conversation.channelName
-        ? `#${task.conversation.channelName}`
-        : `@${task.conversation.members[0]!.user!.username}`,
-    })),
+    tasks: await viewsWithCounts(
+      ports.db,
+      ports.reader,
+      principal.workspaceId,
+      tasks,
+      (task, extras) => ({
+        ...taskView(task, ports.reader, extras),
+        channelRef: task.conversation.channelName
+          ? `#${task.conversation.channelName}`
+          : `@${task.conversation.members[0]!.user!.username}`,
+      }),
+    ),
     coverage: scope.coverage,
     pagination: { mode: "complete", truncated: false },
   };
@@ -113,9 +127,10 @@ export async function showTask(
   });
   if (!task) throw new AppError("NOT_FOUND");
   return {
-    tasks: await viewsWithCounts(ports.db, workspaceId, [task], (row, counts) =>
-      taskView(row, ports.reader, counts),
+    tasks: await viewsWithCounts(ports.db, ports.reader, workspaceId, [task], (row, extras) =>
+      taskView(row, ports.reader, extras),
     ),
+    ...(await showRelations(ports.db, ports.reader, task)),
   };
 }
 
@@ -129,14 +144,18 @@ export async function listConversationTasks(
   const tasks = await ports.db.task.findMany({
     where: {
       conversationId: conversationId,
-      status: command.status === "all" ? undefined : command.status,
+      ...(command.ready
+        ? READY_TASK_WHERE
+        : {
+            status: command.status === "all" ? undefined : command.status,
+          }),
     },
     orderBy: { number: "asc" },
     select: taskSelection,
   });
   return {
-    tasks: await viewsWithCounts(ports.db, workspaceId, tasks, (task, counts) =>
-      taskView(task, ports.reader, counts),
+    tasks: await viewsWithCounts(ports.db, ports.reader, workspaceId, tasks, (task, extras) =>
+      taskView(task, ports.reader, extras),
     ),
   };
 }

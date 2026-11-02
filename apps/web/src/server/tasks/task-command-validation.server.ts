@@ -1,4 +1,4 @@
-import type { TaskCommand } from "@lrm/coforge-sdk/internal";
+import { isTaskRef, type TaskCommand } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
 
 /**
@@ -77,6 +77,25 @@ export function validateTaskCommand(command: TaskCommand) {
     // they are off.
     if (command.number !== undefined) throw new AppError("INVALID_INPUT");
   }
+  const relational = command.operation === "create" || command.operation === "amend";
+  if (command.blockedBy !== undefined) {
+    if (
+      !relational ||
+      !Array.isArray(command.blockedBy) ||
+      command.blockedBy.length > 100 ||
+      !command.blockedBy.every(isTaskRef)
+    )
+      throw new AppError("INVALID_INPUT");
+  }
+  if (command.parent !== undefined) {
+    // Only an amendment detaches (null); a new Task is made under a parent or at the top.
+    const detaching = command.parent === null && command.operation === "amend";
+    if (!relational || (!detaching && !isTaskRef(command.parent)))
+      throw new AppError("INVALID_INPUT");
+  }
+  if (command.ready !== undefined && (command.operation !== "list" || command.mine))
+    throw new AppError("INVALID_INPUT");
+  if (command.ready && command.status !== undefined) throw new AppError("INVALID_INPUT");
   if (
     command.alongside !== undefined &&
     command.operation !== "create" &&

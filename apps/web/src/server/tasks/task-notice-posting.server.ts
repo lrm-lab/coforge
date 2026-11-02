@@ -2,11 +2,23 @@ import type { Prisma } from "#src/generated/prisma/client";
 import { announceMessageBestEffort } from "#src/server/conversations/conversation-activity.server";
 import { hostMessageId } from "./task-view.server";
 import { postTaskNotice } from "./task-conversations.server";
+import { taskRelationsEnabled } from "./task-conversations-gate.server";
 import { followTask } from "./task-discussion-store.server";
 import { enrollThreadReplyFollowers } from "#src/server/conversations/channel-threads.server";
-import { lockConversation } from "#src/server/conversations/conversation-lock.server";
+import {
+  lockConversation,
+  lockWorkspaceTaskWrites,
+} from "#src/server/conversations/conversation-lock.server";
 import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
-import { noticeText, quotedTask, type NoticeActor, type QuotedTask } from "./task-notices.server";
+import { publishAssignmentReceipt } from "./task-publication.server";
+import {
+  noticeText,
+  quotedTask,
+  type NoticeActor,
+  type QuotedPlace,
+  type QuotedTask,
+} from "./task-notices.server";
+import { NAMED_CONVERSATION_SELECT, placeFrom } from "./task-view.server";
 import type { SystemNotice, SystemNoticeContent } from "#src/features/conversations/system-notice";
 import type {
   Transaction,
@@ -31,13 +43,28 @@ type NoticeInput = {
   /** The member the notice personally mentions: its one mention row. */
   mentions?: Assignee;
 };
-/** The Task fields a notice quotes; `messageId` is also the root of the Task's thread. */
-type NoticeSubject = { id: string; messageId: string | null; number: number; title: string };
+/**
+ * The Task fields a notice quotes; `messageId` is also the root of the Task's thread. A Task in
+ * another conversation than the notice's names it, so a notice quotes it with its channel, or
+ * hidden when the notice's readers may not read that channel.
+ */
+export type NoticeSubject = {
+  id: string;
+  messageId: string | null;
+  number: number;
+  title: string;
+  conversationId?: string;
+};
 /**
  * Write notices under the withNotices conversation lock; signal after commit. Assignment
  * receipts are delivered/pushed separately by the caller through publishAssignmentReceipt.
  */
-type NoticeWriter = {
+export type NoticeWriter = {
+  /**
+   * Lock the other conversations this write is about to post notices into, in ascending id order.
+   * Call it once the Tasks to tell are known and before telling any, so they are locked together.
+   */
+  prepare(conversationIds: readonly string[]): Promise<void>;
   /** The Tasks as notices quote them: clean titles, in the given order. */
   quote(tasks: readonly NoticeSubject[]): Promise<QuotedTask[]>;
   /** A top-level notice in the conversation; `id` fixes it, for a notice written at most once. */
@@ -60,6 +87,24 @@ type NoticeWriter = {
     assignee: Assignee;
     actor: Member;
   }): Promise<PostedNotice>;
+  /**
+   * A notice in the Task's own thread addressed to its owner or reserved assignee: it mentions
+   * them (a person hears of it as an Activity mention) and is delivered to `deliverTo`, an Agent
+   * owner, and nobody else. With no owner it is an ordinary thread notice, delivered to no one.
+   * `content` is given the quoted Task and the quoted `related` Tasks, as the Task's own
+   * conversation names them. A Task in another conversation than this writer's is told in its own, in this same transaction: its conversation is
+   * locked here if `prepare` did not already. Delivery and push follow the commit.
+   */
+  toOwner(input: ToOwnerInput): Promise<void>;
+};
+
+type ToOwnerInput = {
+  id: string;
+  task: NoticeSubject;
+  related?: readonly NoticeSubject[];
+  content: (task: QuotedTask, related: QuotedTask[]) => SystemNoticeContent;
+  owner: Assignee | null;
+  deliverTo: string | null;
 };
 
 /**
@@ -72,83 +117,155 @@ export async function withNotices<T>(
   change: (tx: Transaction, notices: NoticeWriter) => Promise<T>,
 ): Promise<T> {
   const posted: PostedNotice[] = [];
+  const addressed: PostedNotice[] = [];
+  // In a Workspace with Tasks v2 on, a Task write can wake a Task in another conversation, so every
+  // Task write takes the Workspace's lock before any conversation lock (see `AGENTS.md`).
+  const lockedWorkspace = await taskRelationsEnabled(ports.db, conversation.workspaceId);
   const result = await ports.db.$transaction(async (tx) => {
+    if (lockedWorkspace) await lockWorkspaceTaskWrites(tx, conversation.workspaceId);
     await lockConversation(tx, conversation.conversationId);
-    const post = (input: NoticeInput) => writeNotice(tx, conversation, input);
-    const postAndSignal = async (input: NoticeInput) => {
-      const notice = await post(input);
-      posted.push(notice);
-      return notice;
+    const writers = new Map<string, NoticeWriter>();
+    /** The writer of another conversation of the Workspace, which it locks the first time. */
+    const writerIn = async (conversationId: string) => {
+      const known = writers.get(conversationId);
+      if (known) return known;
+      await lockConversation(tx, conversationId);
+      return writerFor({ conversationId, workspaceId: conversation.workspaceId });
     };
-    const quote = async (tasks: readonly NoticeSubject[]) => {
-      const mentions = await tx.messageMention.findMany({
-        where: {
-          messageId: { in: tasks.flatMap((task) => (task.messageId ? [task.messageId] : [])) },
-        },
-        select: { messageId: true, kind: true, actorId: true, handle: true },
-      });
-      return tasks.map((task) =>
-        quotedTask(
-          task,
-          mentions.filter((mention) => mention.messageId === task.messageId),
-        ),
-      );
+    const writerFor = (conversation: ConversationRef): NoticeWriter => {
+      const writer = createWriter(conversation);
+      writers.set(conversation.conversationId, writer);
+      return writer;
     };
-    return change(tx, {
-      quote,
-      inConversation: (notice, id) => postAndSignal({ ...notice, id }),
-      inThread: async (task, body) => {
-        const [quoted] = await quote([task]);
-        // A task with no message in the channel keeps its notices in its own conversation.
-        if (!task.messageId) {
-          const posted = await postTaskNotice(tx, conversation, task.id, body(quoted!));
-          return { ...posted, threadRootId: null };
-        }
-        return postAndSignal({ ...body(quoted!), threadRootId: task.messageId });
-      },
-      receipt: async ({ id, task, body, assignee, actor }) => {
-        const [quoted] = await quote([task]);
-        // A task with no message in the channel: the receipt is its conversation's notice, and the
-        // assignee follows the task.
-        if (!task.messageId) {
-          const posted = await postTaskNotice(tx, conversation, task.id, {
-            ...body(quoted!),
-            id,
-            deliverToAgentId: assignee.id === actor.id ? null : assignee.agentId,
-          });
-          await followTask(
-            tx,
-            conversation,
-            task.id,
-            assignee.id,
-            assignee.id === actor.id ? "claimed" : "assigned",
-          );
-          return { ...posted, threadRootId: null };
-        }
-        const notice = await post({
-          ...body(quoted!),
-          id,
-          threadRootId: hostMessageId(task),
-          deliverTo: assignee.id === actor.id ? null : assignee.agentId,
-          mentions: assignee,
-        });
-        // The receipt is the thread's first reply when it starts the thread, so it enrolls as a
-        // reply does: the assignee, and the root's author while nobody follows yet.
-        const root = await tx.message.findUniqueOrThrow({
-          where: { id: hostMessageId(task) },
-          select: { senderMemberId: true },
-        });
-        await enrollThreadReplyFollowers(tx, {
-          workspaceId: conversation.workspaceId,
-          conversationId: conversation.conversationId,
-          root: { id: hostMessageId(task), senderMemberId: root.senderMemberId },
-          participantMemberIds: [assignee.id],
-        });
+    const createWriter = (conversation: ConversationRef): NoticeWriter => {
+      const post = (input: NoticeInput) => writeNotice(tx, conversation, input);
+      const postAndSignal = async (input: NoticeInput) => {
+        const notice = await post(input);
+        posted.push(notice);
         return notice;
-      },
-    });
+      };
+      const quote = async (tasks: readonly NoticeSubject[]) => {
+        const others = [
+          ...new Set(
+            tasks.flatMap((task) =>
+              task.conversationId && task.conversationId !== conversation.conversationId
+                ? [task.conversationId]
+                : [],
+            ),
+          ),
+        ];
+        const [mentions, places] = await Promise.all([
+          tx.messageMention.findMany({
+            where: {
+              messageId: { in: tasks.flatMap((task) => (task.messageId ? [task.messageId] : [])) },
+            },
+            select: { messageId: true, kind: true, actorId: true, handle: true },
+          }),
+          others.length
+            ? tx.conversation.findMany({
+                where: { id: { in: others } },
+                select: NAMED_CONVERSATION_SELECT,
+              })
+            : [],
+        ]);
+        const placeOf = (task: NoticeSubject): QuotedPlace | undefined => {
+          if (!task.conversationId || task.conversationId === conversation.conversationId)
+            return undefined;
+          const named = places.find((place) => place.id === task.conversationId);
+          const channel = named && placeFrom(named, conversation.conversationId);
+          return typeof channel === "string" ? { channel } : { hidden: true };
+        };
+        return tasks.map((task) =>
+          quotedTask(
+            task,
+            mentions.filter((mention) => mention.messageId === task.messageId),
+            placeOf(task),
+          ),
+        );
+      };
+      /**
+       * A notice in a Task's own thread: a reply to its message, or, for a Task with no message in
+       * the channel, a notice in its own conversation (which has no mentions). `id` fixes it.
+       */
+      const inTaskThread = async (
+        task: NoticeSubject,
+        content: SystemNoticeContent & { id?: string },
+        to: { deliverTo?: string | null; mentions?: Assignee } = {},
+      ): Promise<PostedNotice> => {
+        if (!task.messageId) {
+          const { id, body, system } = content;
+          const placed = await postTaskNotice(tx, conversation, task.id, {
+            id,
+            body,
+            system,
+            deliverToAgentId: to.deliverTo,
+          });
+          return { ...placed, threadRootId: null };
+        }
+        return post({ ...content, threadRootId: task.messageId, ...to });
+      };
+      return {
+        prepare: async (conversationIds) => {
+          for (const id of [...new Set(conversationIds)].sort()) await writerIn(id);
+        },
+        quote,
+        inConversation: (notice, id) => postAndSignal({ ...notice, id }),
+        inThread: async (task, body) => {
+          const [quoted] = await quote([task]);
+          const notice = await inTaskThread(task, body(quoted!));
+          // A task with no message in the channel keeps its notices in its own conversation.
+          if (task.messageId) posted.push(notice);
+          return notice;
+        },
+        toOwner: async (input) => {
+          const { id, task, owner, deliverTo } = input;
+          if (task.conversationId && task.conversationId !== conversation.conversationId)
+            return (await writerIn(task.conversationId)).toOwner(input);
+          const [quoted, ...related] = await quote([task, ...(input.related ?? [])]);
+          const notice = await inTaskThread(
+            task,
+            { ...input.content(quoted!, related), id },
+            owner ? { deliverTo, mentions: owner } : {},
+          );
+          if (owner) addressed.push(notice);
+          else if (task.messageId) posted.push(notice);
+        },
+        receipt: async ({ id, task, body, assignee, actor }) => {
+          const [quoted] = await quote([task]);
+          const self = assignee.id === actor.id;
+          const notice = await inTaskThread(
+            task,
+            { ...body(quoted!), id },
+            { deliverTo: self ? null : assignee.agentId, mentions: assignee },
+          );
+          // A task with no message in the channel: the assignee follows the task.
+          if (!task.messageId) {
+            await followTask(tx, conversation, task.id, assignee.id, self ? "claimed" : "assigned");
+            return notice;
+          }
+          // The receipt is the thread's first reply when it starts the thread, so it enrolls as a
+          // reply does: the assignee, and the root's author while nobody follows yet.
+          const root = await tx.message.findUniqueOrThrow({
+            where: { id: hostMessageId(task) },
+            select: { senderMemberId: true },
+          });
+          await enrollThreadReplyFollowers(tx, {
+            workspaceId: conversation.workspaceId,
+            conversationId: conversation.conversationId,
+            root: { id: hostMessageId(task), senderMemberId: root.senderMemberId },
+            participantMemberIds: [assignee.id],
+          });
+          return notice;
+        },
+      };
+    };
+    return change(tx, writerFor(conversation));
   });
   await signalNotices(ports, posted);
+  // A failed push or delivery never rolls back or misreports a committed write.
+  await Promise.allSettled(
+    addressed.map((notice) => publishAssignmentReceipt(ports, notice.id, notice.id)),
+  );
   return result;
 }
 

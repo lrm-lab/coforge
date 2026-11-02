@@ -136,8 +136,9 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
   },
   "task list": {
     syntax:
-      "coforge task list (--target <channel> | --mine | --following) [--status all|todo|in_progress|in_review|done|closed] [--json]",
+      "coforge task list (--target <channel> | --mine | --following) [--status all|todo|in_progress|in_review|done|closed] [--ready] [--json]",
     flags: [
+      "--ready  todo tasks nobody holds and no open blocker waits on (with --target)",
       "--following  the task conversations you follow, with their unread counts (no other flag combines with it)",
     ],
     example: "coforge task list --mine",
@@ -149,7 +150,8 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
       "--peer-kind  for a direct @peer target, whether the peer is human or Agent",
       "--number  the task number",
     ],
-    guidance: "Reads one task's current title and description.",
+    guidance:
+      "Reads one task's title, description, Blocked by, Blocking, Parent task and Sub-tasks.",
     example: "coforge task show --target '#general' --number 7",
   },
   "task view": {
@@ -194,8 +196,9 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
   },
   "task create": {
     syntax:
-      "coforge task create --target <channel> [--peer-kind human|agent] --title <title>... [--assignee @handle] [--creates-resource] [--description <text>] [--message-id <id>] [--alongside] [--json]",
+      "coforge task create --target <channel> [--peer-kind human|agent] --title <title>... [--assignee @handle] [--creates-resource] [--description <text>] [--message-id <id>] [--alongside] [--blocked-by <task>,...] [--parent <task>] [--json]",
     flags: [
+      "--blocked-by  tasks that must be done or closed before this one can start; --parent  the parent task this one is a sub-task of. A <task> is a number in --target's conversation, or #channel/<n> in another channel of the Workspace",
       "--description  details for the task; only with a single --title",
       "--message-id  the channel message the task is made from (full id or its short form); requires task conversations, otherwise use `coforge task convert`; applies to every --title",
       "--alongside  with --message-id, create beside someone else's live task on that message",
@@ -351,7 +354,10 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
   },
   "task amend": {
     syntax:
-      "coforge task amend --target <channel> [--peer-kind human|agent] --number <n> [--title <title>] [--description <text>|--clear-description] [--reviewer-isolation] [--json]",
+      "coforge task amend --target <channel> [--peer-kind human|agent] --number <n> [--title <title>] [--description <text>|--clear-description] [--blocked-by <task>,...|''] [--parent <task>|''] [--reviewer-isolation] [--json]",
+    flags: [
+      "--blocked-by  replaces the whole set ('' clears it); --parent  the new parent ('' makes it top level)",
+    ],
   },
   "task history": {
     syntax:

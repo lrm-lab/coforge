@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { historyEventView, taskChanges } from "#src/server/tasks/task-history.server";
-import { taskView, type SelectedTask } from "#src/server/tasks/task-view.server";
+import { emptyRelations, taskView, type SelectedTask } from "#src/server/tasks/task-view.server";
 
 const GRACE_ID = "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b";
 const graceMention = {
@@ -48,9 +48,12 @@ const converted = `Ask <@human:${GRACE_ID}> about the deploy`;
 
 describe("a Task's title", () => {
   test("names a mentioned person for people, and keeps the @handle for an Agent", () => {
-    expect(taskView(task(converted)).title).toBe("Ask @Grace Hopper about the deploy");
-    expect(taskView(task(converted), "people").title).toBe("Ask @Grace Hopper about the deploy");
-    expect(taskView(task(converted), "agent").title).toBe("Ask @grace-hopper-4k2 about the deploy");
+    expect(taskView(task(converted), "people", { relations: emptyRelations() }).title).toBe(
+      "Ask @Grace Hopper about the deploy",
+    );
+    expect(taskView(task(converted), "agent", { relations: emptyRelations() }).title).toBe(
+      "Ask @grace-hopper-4k2 about the deploy",
+    );
   });
 });
 

@@ -235,3 +235,23 @@ test("a message another task holds is refused with the holder, the task and the 
   expect(body.error).toContain("--alongside");
   expect(body.error).not.toContain("\n");
 });
+
+test("a refusal's hint reaches the Agent only when it is one written for Agents", async () => {
+  const refuse = async (error: AppError) =>
+    (
+      await handleAgentTaskPost(
+        request({ idempotencyKey: "k", operation: "list", target: "#g" }),
+        principal,
+        {
+          execute: async () => {
+            throw error;
+          },
+        },
+      )
+    ).json();
+  expect(
+    await refuse(new AppError("CONFLICT", { errorId: "task_blocked", hint: "waiting for #3" })),
+  ).toMatchObject({ error: "waiting for #3", code: "CONFLICT" });
+  const internal = await refuse(new AppError("CONFLICT", { hint: "internal detail" }));
+  expect(JSON.stringify(internal)).not.toContain("internal detail");
+});

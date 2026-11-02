@@ -1,7 +1,10 @@
 import type { TaskCommand, TaskPrincipal } from "@lrm/coforge-sdk/internal";
 
 import { AppError } from "#src/lib/app-error";
-import { lockConversation } from "#src/server/conversations/conversation-lock.server";
+import {
+  lockConversation,
+  lockWorkspaceTaskWrites,
+} from "#src/server/conversations/conversation-lock.server";
 import { assertCanAssignOther } from "./task-assignment-authority.server";
 import { assigneeMember } from "./task-assignees.server";
 import type { Member, Transaction, TaskBoardPorts } from "./task-board-ports.server";
@@ -13,11 +16,12 @@ import { noticeActor } from "./task-notices.server";
 import { announceTasks } from "./task-publication.server";
 import { conversationSignalScopes } from "#src/server/conversations/conversation-signal-scope.server";
 import { indexedRequestId } from "./task-request-ids.server";
+import { linkCreatedTasks } from "./task-gates.server";
+import { taskViewsOf } from "./task-relations.server";
 import { postTaskNotice } from "./task-conversations.server";
 import { followTask } from "./task-discussion-store.server";
 import {
   taskSelection,
-  taskView,
   UNFINISHED_TASK_STATUSES,
   readTaskText,
   type SelectedTask,
@@ -79,6 +83,8 @@ export async function createConversationTasks(
     titles.map((_, index) => indexedRequestId(command.idempotencyKey, index)),
   );
   const result = await ports.db.$transaction(async (tx) => {
+    // Task conversations are on, so this is a Tasks v2 write: the Workspace's lock comes first.
+    await lockWorkspaceTaskWrites(tx, scope.workspaceId);
     await lockConversation(tx, scope.conversationId);
     const retried = await tx.task.findMany({
       where: {
@@ -122,6 +128,7 @@ export async function createConversationTasks(
       tasks.push(task);
       if (notice) notices.push(notice);
     }
+    await linkCreatedTasks(tx, scope, member, tasks, command);
     return { tasks, created: true, notices };
   });
   if (result.created) {
@@ -132,11 +139,11 @@ export async function createConversationTasks(
       scope.workspaceId,
     );
     await announceTasks(ports, scope, async () => scopes.task, {
-      tasks: result.tasks.map((task) => taskView(task, "people")),
+      tasks: await taskViewsOf(ports.db, "people", result.tasks),
       publicationId: `${result.tasks[0]!.id}:task-created`,
     }).catch(() => undefined);
   }
-  return { tasks: result.tasks.map((task) => taskView(task, ports.reader)) };
+  return { tasks: await taskViewsOf(ports.db, ports.reader, result.tasks) };
 }
 
 /** The numbers a conversation's next `count` tasks take; the caller holds its lock. */
