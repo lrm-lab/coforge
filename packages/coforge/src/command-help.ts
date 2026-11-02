@@ -197,7 +197,7 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
       "coforge task create --target <channel> [--peer-kind human|agent] --title <title>... [--assignee @handle] [--creates-resource] [--description <text>] [--message-id <id>] [--alongside] [--json]",
     flags: [
       "--description  details for the task; only with a single --title",
-      "--message-id  the channel message the task is made from (full id or its short form); applies to every --title",
+      "--message-id  the channel message the task is made from (full id or its short form); requires task conversations, otherwise use `coforge task convert`; applies to every --title",
       "--alongside  with --message-id, create beside someone else's live task on that message",
     ],
     guidance: [

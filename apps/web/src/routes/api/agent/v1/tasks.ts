@@ -129,7 +129,7 @@ export async function handleAgentTaskPost(
       return Response.json(
         {
           error:
-            "`--message-id` needs task conversations, which are off in this Workspace. Create the task without it (`coforge task create --title ...`), or ask a Workspace owner to turn task conversations on.",
+            "`--message-id` needs task conversations. With them off, run `coforge task convert --target <channel> --message-id <id>` to make this message a task; or ask a Workspace owner to turn task conversations on.",
           code: "INVALID_INPUT",
         },
         { status: 400 },
