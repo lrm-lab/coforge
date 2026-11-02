@@ -220,6 +220,29 @@ export async function relatedTasks(db: Client, task: { id: string; workspaceId: 
   });
 }
 
+async function descendantParentLinks(
+  db: Client,
+  task: { id: string; workspaceId: string },
+): Promise<{ taskId: string; parentTaskId: string }[]> {
+  return db.$queryRaw<{ taskId: string; parentTaskId: string }[]>`
+    WITH RECURSIVE descendants("taskId", "parentTaskId", depth, path) AS (
+      SELECT "taskId", "parentTaskId", 1, ARRAY["taskId"]
+      FROM "task_parents"
+      WHERE "parentTaskId" = ${task.id}::uuid
+        AND "workspaceId" = ${task.workspaceId}::uuid
+      UNION ALL
+      SELECT child."taskId", child."parentTaskId", descendants.depth + 1,
+             descendants.path || child."taskId"
+      FROM "task_parents" child
+      JOIN descendants ON child."parentTaskId" = descendants."taskId"
+      WHERE child."workspaceId" = ${task.workspaceId}::uuid
+        AND descendants.depth < ${MAX_TASK_TREE_DEPTH}
+        AND NOT (child."taskId" = ANY(descendants.path))
+    )
+    SELECT "taskId", "parentTaskId"
+    FROM descendants`;
+}
+
 /** The Tasks waiting for `task`, and its subtasks as a tree: what `show` adds to the card. */
 export async function showRelations(
   db: Client,
@@ -233,11 +256,7 @@ export async function showRelations(
       where: { blockedByTaskId: task.id },
       select: { task: { select: LINK_SELECT } },
     }),
-    // Subtasks may be in any channel of the Workspace, so the whole Workspace's links are read.
-    db.taskParent.findMany({
-      where: { workspaceId: task.workspaceId },
-      select: { taskId: true, parentTaskId: true },
-    }),
+    descendantParentLinks(db, task),
   ]);
   const blocking = dependents.map((row) => link(row.task, reader, from)).sort(byName);
   const childrenOf = new Map(
