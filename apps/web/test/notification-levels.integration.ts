@@ -3,6 +3,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { AgentMuteHints } from "#src/server/conversations/agent-mute-hint.server";
 import { humanReadState } from "#src/server/conversations/human-unread.server";
+import { PublicChannels } from "#src/server/conversations/public-channels.server";
 
 const connectionString = Bun.env.DATABASE_URL;
 if (!connectionString) throw new Error("DATABASE_URL must point to local PostgreSQL");
@@ -162,4 +163,45 @@ test("mentions do not argue for muting: 50 mentioned deliveries make no hint", a
       muted: false,
     }),
   ).toBeNull();
+});
+
+test("the channel list counts no unread for a muted member but keeps its mention", async () => {
+  const member = await db.conversationMember.findUniqueOrThrow({
+    where: { conversationId_userId: { conversationId: channelId, userId } },
+  });
+  const senderUser = await db.user.create({
+    data: { username: `levels-sender2-${suffix}`, displayName: "Sender 2" },
+  });
+  const sender = await db.conversationMember.create({
+    data: { workspaceId, conversationId: channelId, userId: senderUser.id },
+  });
+  const message = await db.message.create({
+    data: {
+      workspaceId,
+      conversationId: channelId,
+      sequence: 500,
+      senderMemberId: sender.id,
+      body: "@levels please review",
+    },
+  });
+  await db.messageMention.create({
+    data: {
+      messageId: message.id,
+      memberId: member.id,
+      conversationId: channelId,
+      workspaceId,
+      kind: "user",
+      actorId: userId,
+      handle: `levels-${suffix}`,
+    },
+  });
+  await db.conversationMember.update({
+    where: { id: member.id },
+    data: { notificationLevel: "muted", channelMuted: true },
+  });
+  const rows = await new PublicChannels(db, {} as never).list(workspaceId, userId);
+  const row = rows.find((channel) => channel.id === channelId);
+  expect(row?.muted).toBe(true);
+  expect(row?.unreadCount).toBe(0);
+  expect(row?.mentioned).toBe(true);
 });
