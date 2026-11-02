@@ -105,25 +105,16 @@ function defaultMemoryProxy(env?: Readonly<Record<string, string | undefined>>):
 }
 
 /**
- * Models pass numeric tool arguments as strings often enough that the
- * resulting server-side decode failure burned the turn's read budget before
- * any real call went out. Coerce the numeric fence-tool parameters before the
- * command is built so a well-formed intent is never lost to formatting.
+ * A bare "viking://" root is the model's shorthand for "everywhere"; the
+ * server schema requires a real target, so omit it rather than burn a read.
+ * Numeric strings arrive already coerced by Pi's schema validation.
  */
-function coerceNumericToolParams<P extends Record<string, unknown>>(params: P): P {
-  const coerced = { ...params };
-  for (const key of ["limit", "tokenBudget"]) {
-    const value = coerced[key];
-    if (typeof value === "string" && value.trim() !== "" && Number.isInteger(Number(value))) {
-      (coerced as Record<string, unknown>)[key] = Number(value);
-    }
+function normalizeFenceToolParams<P extends Record<string, unknown>>(params: P): P {
+  const normalized = { ...params };
+  if (typeof normalized.targetUri === "string" && /^viking:\/\/\s*$/.test(normalized.targetUri)) {
+    delete (normalized as Record<string, unknown>).targetUri;
   }
-  // A bare "viking://" root is the model's shorthand for "everywhere"; the
-  // server schema requires a real target, so omit it rather than burn a read.
-  if (typeof coerced.targetUri === "string" && /^viking:\/\/\s*$/.test(coerced.targetUri)) {
-    delete (coerced as Record<string, unknown>).targetUri;
-  }
-  return coerced;
+  return normalized;
 }
 
 const FENCE_ARGUMENTS_SENTENCE = "所有参数必须放进 arguments JSON，不能空对象。";
@@ -163,7 +154,7 @@ function prepareFenceArguments(input: {
   if (input.aliasMessage && record.content == null && typeof record.message === "string")
     record.content = record.message;
   if (input.aliasMessage) delete record.message;
-  return coerceNumericToolParams(record);
+  return normalizeFenceToolParams(record);
 }
 
 function openVikingEmptyArgumentsError(op: OpenVikingAgentOperation): string {
@@ -213,7 +204,7 @@ export function createMemoryFenceTools(
         const command = decodeOpenVikingAgentCommand({
           protocol: OPENVIKING_AGENT_PROTOCOL,
           op,
-          ...coerceNumericToolParams(params as Params),
+          ...normalizeFenceToolParams(params as Params),
         });
         const settle = budget.consume(command);
         let decoded;
@@ -292,9 +283,8 @@ export function createMemoryFenceTools(
       execute: async (_toolCallId, params) => {
         // The post-merge message contract keys a request by `idempotencyKey`
         // (`requestId` is not read anywhere: daemon parseMessageRequest and the web
-        // send route both reject its absence as 400). Some models pass the schema's
-        // Integer `limit` as a numeric string; the daemon only accepts a number.
-        // `message` is an alias of `content` only when content was omitted.
+        // send route both reject its absence as 400). `message` is an alias of
+        // `content` only when content was omitted.
         const raw = { ...(params as Record<string, unknown>) };
         if (options.conversation) {
           const parent = options.conversation.target.split(":")[0]!;
@@ -310,8 +300,6 @@ export function createMemoryFenceTools(
           operation,
           ...raw,
         };
-        if (typeof request.limit === "string" && /^\d+$/.test(request.limit))
-          request.limit = Number(request.limit);
         if (
           operation === "send" &&
           typeof request.target === "string" &&

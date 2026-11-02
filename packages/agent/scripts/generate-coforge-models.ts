@@ -11,13 +11,15 @@ const runtime = await ModelRuntime.create({
 });
 
 const maximumModels = 200;
+const DATED_SNAPSHOT = /-(\d{4}-\d{2}-\d{2}|\d{8})$/u;
+
 const allModels: CodeAgentModelMetadata[] = runtime
   .getModels()
   .filter((model) => Object.hasOwn(API_KEY_ENV_BY_PROVIDER, model.provider))
-  // A dated snapshot (`claude-haiku-4-5-20251001`) duplicates its undated alias; listing both
-  // spends the provider's quota on one model twice.
+  // A dated snapshot (`claude-haiku-4-5-20251001`, `gpt-4o-2024-11-20`) duplicates its undated
+  // alias; listing both spends the provider's quota on one model twice.
   .filter((model, _, catalog) => {
-    const alias = model.id.replace(/-\d{8}$/u, "");
+    const alias = model.id.replace(DATED_SNAPSHOT, "");
     return (
       alias === model.id ||
       !catalog.some((other) => other.provider === model.provider && other.id === alias)
@@ -32,31 +34,50 @@ const allModels: CodeAgentModelMetadata[] = runtime
     defaultReasoning: "",
     recommended: false,
   }))
-  .sort((left, right) =>
-    `${left.modelProvider}/${left.id}`.localeCompare(`${right.modelProvider}/${right.id}`),
-  );
+  .sort((left, right) => {
+    const byProvider = left.modelProvider.localeCompare(right.modelProvider);
+    return byProvider !== 0 ? byProvider : compareNewestFirst(left, right);
+  });
 
-// Rounded up so a direct provider with one model past an even share (Anthropic's 13 undated models
-// against 200 / 16) keeps its whole line, newest included; OpenRouter still fills what remains.
-const providerQuota = Math.ceil(maximumModels / Object.keys(API_KEY_ENV_BY_PROVIDER).length);
-const providerCounts = new Map<string, number>();
-const models: CodeAgentModelMetadata[] = [];
-const overflow: CodeAgentModelMetadata[] = [];
-for (const model of allModels) {
-  const count = providerCounts.get(model.modelProvider) ?? 0;
-  if (count < providerQuota) {
-    models.push(model);
-    providerCounts.set(model.modelProvider, count + 1);
-  } else {
-    overflow.push(model);
-  }
+/** The first version-shaped number in an id: `gpt-5.4-mini` -> `[5, 4]`, `gemini-3.7-flash` -> `[3, 7]`. */
+function modelVersion(id: string): number[] {
+  const withoutDate = id.replace(/-(\d{4}-\d{2}-\d{2}|\d{2}-\d{4}|\d{8})$/u, "");
+  const match = /(\d+(?:\.\d+)*)/u.exec(withoutDate);
+  return match ? match[1]!.split(".").map(Number) : [];
 }
-overflow.sort((left, right) => {
-  const leftPriority = left.modelProvider === "openrouter" ? 0 : 1;
-  const rightPriority = right.modelProvider === "openrouter" ? 0 : 1;
-  return leftPriority - rightPriority;
-});
-models.push(...overflow.slice(0, maximumModels - models.length));
+
+/** A release date embedded in a snapshot id, for models a version cannot separate. */
+function modelDate(id: string): number {
+  const match = /(\d{4})-(\d{2})-(\d{2})$|(\d{4})(\d{2})(\d{2})$/u.exec(id);
+  if (!match) return 0;
+  const [year, month, day] = match[1]
+    ? [match[1], match[2], match[3]]
+    : [match[4], match[5], match[6]];
+  return Date.UTC(Number(year), Number(month) - 1, Number(day));
+}
+/**
+ * Newest first, so a provider's quota goes to the models people can actually pick today instead
+ * of whatever sorts first alphabetically. Pi exposes no release date, so the version in the id is
+ * the primary signal and a snapshot date breaks ties.
+ */
+function compareNewestFirst(left: CodeAgentModelMetadata, right: CodeAgentModelMetadata): number {
+  const a = modelVersion(left.id);
+  const b = modelVersion(right.id);
+  for (let index = 0; index < Math.max(a.length, b.length); index++) {
+    const delta = (b[index] ?? 0) - (a[index] ?? 0);
+    if (delta !== 0) return delta;
+  }
+  const byDate = modelDate(right.id) - modelDate(left.id);
+  return byDate !== 0 ? byDate : left.id.localeCompare(right.id);
+}
+
+// A direct provider's catalog is small and every entry is reachable with its API key, so list the
+// whole line. OpenRouter is a gateway whose catalog duplicates most of the others; it fills what
+// the 200-model cap leaves.
+const directModels = allModels.filter((model) => model.modelProvider !== "openrouter");
+const models = directModels.slice(0, maximumModels);
+const openRouterModels = allModels.filter((model) => model.modelProvider === "openrouter");
+models.push(...openRouterModels.slice(0, Math.max(0, maximumModels - models.length)));
 models.sort((left, right) =>
   `${left.modelProvider}/${left.id}`.localeCompare(`${right.modelProvider}/${right.id}`),
 );

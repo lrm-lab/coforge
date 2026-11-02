@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { validateToolArguments } from "@earendil-works/pi-ai";
 import {
   OPENVIKING_AGENT_PROTOCOL,
   OPENVIKING_TOOL_NAMES,
@@ -236,6 +237,32 @@ test("empty ov_fork_find arguments return an example error and do not spend the 
   const described = find?.parameters as { properties?: Record<string, { description?: string }> };
   expect(described.properties?.operationId?.description).toContain("find-1");
   expect(find?.description).toContain("不能空对象");
+});
+
+test("Pi's schema validation coerces numeric params and leaves the viking root to us", () => {
+  const tools = createMemoryFenceTools(
+    OPENVIKING_TOOL_PROFILE,
+    new MemoryAgentTurnBudget(),
+    fakeProxy(),
+  );
+  const find = tools.find((tool) => tool.name === OPENVIKING_TOOL_NAMES.forkFind);
+  if (!find?.prepareArguments) throw new Error("missing fork find tool");
+  const prepared = find.prepareArguments({
+    operationId: "find-1",
+    query: "budget",
+    limit: "5",
+    targetUri: "viking://",
+  }) as Record<string, string>;
+  // We only drop the bare root; the numeric string is Pi's to coerce.
+  expect(prepared).toEqual({ operationId: "find-1", query: "budget", limit: "5" });
+  expect(
+    validateToolArguments(find, {
+      type: "toolCall",
+      id: "call-1",
+      name: find.name,
+      arguments: prepared,
+    }),
+  ).toMatchObject({ limit: 5 });
 });
 
 test("send_channel_message accepts message only as an alias of a missing content", async () => {
