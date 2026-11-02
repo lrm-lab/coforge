@@ -78,10 +78,13 @@ function noticeText(notice: SystemNotice, locale?: Locale): string {
           tasks: tasks
             .map((task) =>
               task.title
-                ? m.system_notice_task_list_item({ number: task.number, title: task.title })
+                ? m.system_notice_task_list_item(
+                    { number: task.number, title: task.title },
+                    { locale },
+                  )
                 : `#${task.number}`,
             )
-            .join(m.system_notice_list_separator()),
+            .join(m.system_notice_list_separator({}, { locale })),
         },
         { locale },
       );

@@ -149,3 +149,25 @@ describe("a system notice in the viewer's language", () => {
     );
   });
 });
+
+test("a Chinese recipient reads a list of newly created tasks in Chinese", () => {
+  const text = systemNoticeText(
+    {
+      body: '📋 2 new tasks created: #1 "A", #2 "B"',
+      system: {
+        kind: "task.created",
+        params: {
+          tasks: [
+            { taskId: null, number: 1, title: "A" },
+            { taskId: null, number: 2, title: "B" },
+          ],
+        },
+      },
+    },
+    "zh-CN",
+  );
+  expect(text).toMatch(/\p{Script=Han}/u);
+  expect(text).not.toContain("new tasks");
+  expect(text).toContain("A");
+  expect(text).toContain("B");
+});
