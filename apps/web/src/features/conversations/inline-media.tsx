@@ -12,11 +12,11 @@ import { Download01, RefreshCw01 } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { useNearViewport } from "#src/hooks/use-near-viewport";
 import { m } from "#src/paraglide/messages";
-import { joinExclusivePlayback } from "./inline-video-exclusive";
+import { joinExclusivePlayback } from "./media-exclusive";
 import { inlineVideoErrorOutcome } from "./inline-video-playback";
 import { useMediaSource } from "./media-source";
 import type { MessageView } from "./message-view";
-import { placeOf, resumeAt, type VideoHandoff, type VideoPlace } from "./video-handoff";
+import { placeOf, resumeAt, type MediaHandoff, type MediaPlace } from "./media-handoff";
 
 type Attachment = MessageView["attachments"][number];
 
@@ -34,7 +34,7 @@ const LOAD_MARGIN = "160px";
  * What a message's video or audio player is built on (`InlineVideo`, `InlineAudio`): nothing is
  * read until it comes within `LOAD_MARGIN` of the screen, and once read it stays loaded; a failure
  * is held until `retry`, which starts again from the route (it signs a fresh delivery URL, or reads
- * the file again); and the `handoff` lets the preview carry on from the player (`VideoHandoff`).
+ * the file again); and the `handoff` lets the preview carry on from the player (`MediaHandoff`).
  * `player` is what to play once the source is known; `element` is the player's ref.
  */
 export function useInlineMedia<E extends HTMLMediaElement>(attachment: Attachment, href: string) {
@@ -54,7 +54,7 @@ export function useInlineMedia<E extends HTMLMediaElement>(attachment: Attachmen
   // Without delivery the player holds the whole file in memory: the preview plays that copy.
   const heldCopy = useRef<string | undefined>(undefined);
   heldCopy.current = !attachment.previewUrl && source.status === "ready" ? source.src : undefined;
-  const handoff = useMemo<VideoHandoff>(
+  const handoff = useMemo<MediaHandoff>(
     () => ({
       take() {
         const media = element.current;
@@ -112,7 +112,7 @@ export function useMediaFallback<E extends HTMLMediaElement>({
   const [onFallback, setOnFallback] = useState(false);
   const metadataLoaded = useRef(false);
   // Where to pick up after a move to the fallback.
-  const resume = useRef<VideoPlace | null>(null);
+  const resume = useRef<MediaPlace | null>(null);
 
   const onError = () => {
     const media = element.current;

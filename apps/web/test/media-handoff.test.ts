@@ -1,6 +1,6 @@
 import { beforeAll, expect, test } from "bun:test";
 
-import { placeOf, resumeAt } from "#src/features/conversations/video-handoff";
+import { placeOf, resumeAt } from "#src/features/conversations/media-handoff";
 
 beforeAll(() => {
   // Outside a browser: only the ready-state constant is read.

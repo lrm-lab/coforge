@@ -1,10 +1,11 @@
-// The attachment videos and audio files on the page: the messages' players and a preview's. It runs in the
-// browser alone (a conversation is never server-rendered).
-const videos = new Set<HTMLMediaElement>();
+// The attachment players on the page, video and audio: the messages' players and a preview's. It
+// runs in the browser alone (a conversation is never server-rendered).
+const players = new Set<HTMLMediaElement>();
 let observer: IntersectionObserver | undefined;
 
 const pauseOthers = (event: Event) => {
-  for (const video of videos) if (video !== event.currentTarget && !video.paused) video.pause();
+  for (const player of players)
+    if (player !== event.currentTarget && !player.paused) player.pause();
 };
 
 /**
@@ -14,20 +15,20 @@ const pauseOthers = (event: Event) => {
 export function joinExclusivePlayback(element: HTMLMediaElement) {
   observer ??= new IntersectionObserver((changes) => {
     for (const change of changes) {
-      const video = change.target as HTMLMediaElement;
+      const player = change.target as HTMLMediaElement;
       // Picture-in-picture keeps playing once its message has scrolled away.
-      const pictureInPicture = document.pictureInPictureElement === video;
-      if (!change.isIntersecting && !video.paused && !pictureInPicture) video.pause();
+      const pictureInPicture = document.pictureInPictureElement === player;
+      if (!change.isIntersecting && !player.paused && !pictureInPicture) player.pause();
     }
   });
-  videos.add(element);
+  players.add(element);
   observer.observe(element);
   element.addEventListener("play", pauseOthers);
   return () => {
     element.removeEventListener("play", pauseOthers);
     observer?.unobserve(element);
-    videos.delete(element);
-    if (videos.size > 0) return;
+    players.delete(element);
+    if (players.size > 0) return;
     observer?.disconnect();
     observer = undefined;
   };

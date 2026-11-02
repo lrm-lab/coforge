@@ -5,16 +5,16 @@
  * over. Both players stream the same signed URL (signed per window, `FILE_DELIVERY_URL_WINDOW_SECONDS`),
  * which the CDN serves as `private, max-age=1800`, so the browser reuses what it already read.
  */
-export type VideoPlace = { time: number; playing: boolean };
+export type MediaPlace = { time: number; playing: boolean };
 
 /** A player's place, or nothing when it never left the start. */
-export function placeOf(video: HTMLMediaElement): VideoPlace | undefined {
+export function placeOf(video: HTMLMediaElement): MediaPlace | undefined {
   const playing = !video.paused && !video.ended;
   return video.currentTime > 0 || playing ? { time: video.currentTime, playing } : undefined;
 }
 
 /** Puts `video` at `place`, once its length is known (a time before that is dropped). */
-export function resumeAt(video: HTMLMediaElement, place: VideoPlace) {
+export function resumeAt(video: HTMLMediaElement, place: MediaPlace) {
   const apply = () => {
     video.currentTime = place.time;
     if (place.playing) video.play().catch(() => {});
@@ -30,11 +30,11 @@ export function resumeAt(video: HTMLMediaElement, place: VideoPlace) {
  * plays that copy rather than reading the file again; it is the message's to release, and the
  * preview, opened from the message, closes before it.
  */
-export type VideoStart = { place?: VideoPlace; src?: string };
+export type MediaStart = { place?: MediaPlace; src?: string };
 
 /** A video's two players: the message's `take`s its place as the preview opens (and pauses), and
  * `give`s it back the preview's as it closes. */
-export type VideoHandoff = {
-  take: () => VideoStart | undefined;
-  give: (place: VideoPlace) => void;
+export type MediaHandoff = {
+  take: () => MediaStart | undefined;
+  give: (place: MediaPlace) => void;
 };

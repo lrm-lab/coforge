@@ -11,8 +11,8 @@ import {
   type AttachmentCommentAnchor,
 } from "./attachment-comment-anchors";
 import { NATIVE_CONTROLS_THEME } from "./inline-media";
-import { joinExclusivePlayback } from "./inline-video-exclusive";
-import { resumeAt, type VideoPlace, type VideoStart } from "./video-handoff";
+import { joinExclusivePlayback } from "./media-exclusive";
+import { resumeAt, type MediaPlace, type MediaStart } from "./media-handoff";
 
 /** The events after which the video's paused state or time may read differently. */
 const PLAYBACK_EVENTS = ["loadedmetadata", "timeupdate", "pause", "play", "seeked", "ended"];
@@ -119,18 +119,18 @@ function AddTimestamp({
   );
 }
 
-/** The preview's side of the handoff (`VideoHandoff`): the player joins the page's one-at-a-time
+/** The preview's side of the handoff (`MediaHandoff`): the player joins the page's one-at-a-time
  * playback, starts where the message's player was, and reports its place as it moves. Returns the
  * `onPlayer` for `useTimeComments`. */
-function useHandoffPlayer(videoStart?: VideoStart, onVideoPlace?: (place: VideoPlace) => void) {
-  const handoff = useRef({ videoStart, onVideoPlace });
-  handoff.current.onVideoPlace = onVideoPlace;
+function useHandoffPlayer(mediaStart?: MediaStart, onMediaPlace?: (place: MediaPlace) => void) {
+  const handoff = useRef({ mediaStart, onMediaPlace });
+  handoff.current.onMediaPlace = onMediaPlace;
   return (element: HTMLMediaElement) => {
     const leave = joinExclusivePlayback(element);
-    const start = handoff.current.videoStart?.place;
+    const start = handoff.current.mediaStart?.place;
     if (start) resumeAt(element, start);
     const place = () =>
-      handoff.current.onVideoPlace?.({
+      handoff.current.onMediaPlace?.({
         time: element.currentTime,
         playing: !(element.paused || element.ended),
       });
@@ -150,8 +150,8 @@ export function VideoPreview({
   anchoring,
   commentsOpen,
   pendingAnchor,
-  videoStart,
-  onVideoPlace,
+  mediaStart,
+  onMediaPlace,
 }: {
   fileName: string;
   src: string;
@@ -159,16 +159,16 @@ export function VideoPreview({
   anchoring?: Anchoring;
   commentsOpen?: boolean;
   pendingAnchor?: AttachmentCommentAnchor | null;
-  /** Where the message's player was: the preview carries on from there (`VideoHandoff`). */
-  videoStart?: VideoStart;
+  /** Where the message's player was: the preview carries on from there (`MediaHandoff`). */
+  mediaStart?: MediaStart;
   /** Hears the preview's place as it moves, for the message's player to carry on from. */
-  onVideoPlace?: (place: VideoPlace) => void;
+  onMediaPlace?: (place: MediaPlace) => void;
 }) {
   const { track, offer } = useTimeComments<HTMLVideoElement>({
     anchoring,
     commentsOpen,
     pendingAnchor,
-    onPlayer: useHandoffPlayer(videoStart, onVideoPlace),
+    onPlayer: useHandoffPlayer(mediaStart, onMediaPlace),
   });
   return (
     <div className="relative flex min-h-0 flex-1 items-center justify-center bg-black/90 p-4">
@@ -200,8 +200,8 @@ export function AudioPreview({
   anchoring,
   commentsOpen,
   pendingAnchor,
-  videoStart,
-  onVideoPlace,
+  mediaStart,
+  onMediaPlace,
 }: {
   fileName: string;
   src: string;
@@ -209,14 +209,14 @@ export function AudioPreview({
   anchoring?: Anchoring;
   commentsOpen?: boolean;
   pendingAnchor?: AttachmentCommentAnchor | null;
-  videoStart?: VideoStart;
-  onVideoPlace?: (place: VideoPlace) => void;
+  mediaStart?: MediaStart;
+  onMediaPlace?: (place: MediaPlace) => void;
 }) {
   const { track, offer } = useTimeComments<HTMLAudioElement>({
     anchoring,
     commentsOpen,
     pendingAnchor,
-    onPlayer: useHandoffPlayer(videoStart, onVideoPlace),
+    onPlayer: useHandoffPlayer(mediaStart, onMediaPlace),
   });
   return (
     <div className="flex flex-col items-center gap-4 p-4 sm:p-6">

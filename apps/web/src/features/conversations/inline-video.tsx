@@ -18,7 +18,7 @@ type Attachment = MessageView["attachments"][number];
  * holds its box until the video is known. A file the
  * browser cannot play, or one that failed to load, says so in its box and offers the download (and
  * a retry for a failed load). The top-right button opens the attachment's preview with its
- * comments, as the file card does, carrying on from where this player is (`VideoHandoff`).
+ * comments, as the file card does, carrying on from where this player is (`MediaHandoff`).
  * `href` is the authenticated attachment route.
  */
 export function InlineVideo({ attachment, href }: { attachment: Attachment; href: string }) {
@@ -55,7 +55,7 @@ export function InlineVideo({ attachment, href }: { attachment: Attachment; href
       ) : (
         <InlineVideoSpinner />
       )}
-      <AttachmentReviewDialog file={attachment} videoHandoff={media.handoff}>
+      <AttachmentReviewDialog file={attachment} mediaHandoff={media.handoff}>
         {() => (
           <ButtonUtility
             icon={Expand01}

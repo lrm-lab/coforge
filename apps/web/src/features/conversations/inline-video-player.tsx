@@ -7,7 +7,7 @@ import { InlineVideoSpinner } from "./inline-video-spinner";
  * A message's video in the browser's own player, as on Raft: its controls give play, the time,
  * seeking, volume, speed, picture-in-picture and full screen, in the browser's language. It shows
  * its first frame and plays when the reader presses play; the page plays one video at a time
- * (`inline-video-exclusive.ts`). An error on `src` moves to `fallbackSrc`, playing on from where it
+ * (`media-exclusive.ts`). An error on `src` moves to `fallbackSrc`, playing on from where it
  * was, and one with nothing left to try goes to `onFailed`, which replaces the player
  * (`useMediaFallback`).
  */
@@ -24,7 +24,7 @@ export function InlineVideoPlayer({
   label: string;
   onSize: (size: { width: number; height: number }) => void;
   onFailed: (outcome: MediaFailure) => void;
-  /** The element, for the preview to take its place from (`VideoHandoff`). */
+  /** The element, for the preview to take its place from (`MediaHandoff`). */
   videoRef?: RefObject<HTMLVideoElement | null>;
 }) {
   const ownRef = useRef<HTMLVideoElement>(null);

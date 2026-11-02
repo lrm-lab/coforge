@@ -12,7 +12,7 @@ import type { AttachmentCommentAnchor } from "./attachment-comment-anchors";
 import { AttachmentCommentsPane } from "./attachment-comments";
 import { useAttachmentReviewAddress } from "./attachment-review-address";
 import { AttachmentPreview } from "./attachment-preview";
-import type { VideoHandoff, VideoPlace, VideoStart } from "./video-handoff";
+import type { MediaHandoff, MediaPlace, MediaStart } from "./media-handoff";
 import {
   TEXT_PREVIEW_MAX_BYTES,
   isTextPreviewKind,
@@ -55,18 +55,18 @@ type ReviewFile = {
 export function AttachmentReviewDialog({
   file,
   children,
-  videoHandoff,
+  mediaHandoff,
 }: {
   file: ReviewFile;
   children: (state: { loading: boolean }) => ReactNode;
   /** A video's player in the message: the preview carries on from its place, and back. */
-  videoHandoff?: VideoHandoff;
+  mediaHandoff?: MediaHandoff;
 }) {
   // Where the message's player was as the preview opened, and where the preview's is now: closing
   // hands that back, or the start again if the preview never got going (closed before it loaded,
   // or failed).
-  const [videoStart, setVideoStart] = useState<VideoStart>();
-  const videoPlace = useRef<VideoPlace | undefined>(undefined);
+  const [mediaStart, setMediaStart] = useState<MediaStart>();
+  const mediaPlace = useRef<MediaPlace | undefined>(undefined);
   // A preview opens on the file alone; on an HTML page showing the comments also marks regions.
   const comments = useReviewComments();
   const [pendingAnchor, setPendingAnchor] = useState<AttachmentCommentAnchor | null>(null);
@@ -123,8 +123,8 @@ export function AttachmentReviewDialog({
       comments.hide();
       // Also when the address has yet to show what opening wrote.
       if (address.requested || holdsAddress.current) address.clear();
-      const place = videoPlace.current ?? videoStart?.place;
-      if (place) videoHandoff?.give(place);
+      const place = mediaPlace.current ?? mediaStart?.place;
+      if (place) mediaHandoff?.give(place);
       return;
     }
     // A file found to have no preview after all (past the limit, or no text) downloads instead,
@@ -132,8 +132,8 @@ export function AttachmentReviewDialog({
     if (read === "too-large" || read === "unavailable") return noPreview();
     if (!isTextPreviewKind(kind) || read !== undefined) {
       // Only an opening preview takes the message's player's place (and pauses it).
-      videoPlace.current = undefined;
-      setVideoStart(videoHandoff?.take());
+      mediaPlace.current = undefined;
+      setMediaStart(mediaHandoff?.take());
       return reveal(viaAddress);
     }
     if (loading) return;
@@ -239,8 +239,8 @@ export function AttachmentReviewDialog({
                         anchoring={anchoring}
                         commentsOpen={comments.expanded}
                         pendingAnchor={pendingAnchor}
-                        videoStart={videoStart}
-                        onVideoPlace={(place) => (videoPlace.current = place)}
+                        mediaStart={mediaStart}
+                        onMediaPlace={(place) => (mediaPlace.current = place)}
                       />
                     ) : (
                       <Empty>

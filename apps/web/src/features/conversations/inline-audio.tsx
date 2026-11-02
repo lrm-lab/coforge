@@ -43,7 +43,7 @@ export function InlineAudio({ attachment, href }: { attachment: Attachment; href
       style={{ maxWidth: `min(${MESSAGE_GALLERY_MAX_WIDTH_PX}px, 100%)` }}
     >
       <div className="flex min-w-0 items-center gap-1">
-        <AttachmentReviewDialog file={attachment} videoHandoff={media.handoff}>
+        <AttachmentReviewDialog file={attachment} mediaHandoff={media.handoff}>
           {({ loading }) => (
             <Button
               color="tertiary"
