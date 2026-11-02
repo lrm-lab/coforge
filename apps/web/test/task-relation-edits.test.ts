@@ -14,11 +14,15 @@ import {
   canAddBlocker,
   canEditTaskRelations,
   canRemoveBlockers,
+  parentCandidates,
   parentPickerRules,
   pickable,
   relationRefusal,
   taskRefOf,
 } from "#src/features/tasks/task-relation-edits";
+
+const person = (memberId: string) =>
+  ({ memberId, kind: "user", id: memberId, name: memberId, handle: memberId }) as const;
 
 const link = (number: number, channel: string | null = null, status = "todo"): TaskLink => ({
   hidden: false,
@@ -104,22 +108,25 @@ test("the parent picker leaves out the Task and its parent, and refuses its own 
 });
 
 test("candidates are the unfinished Tasks, the conversation's first and the others by channel name", () => {
-  const row = (conversationId: string, number: number, status: string) => ({
+  const row = (conversationId: string, number: number, status: string, owner = "me") => ({
     conversationId,
     number,
     title: `T${number}`,
     status: status as "todo",
+    owner: person(owner),
+    creator: person("creator"),
   });
   const found = candidateLinks(
     "here",
     [row("here", 2, "todo"), row("here", 1, "in_progress"), row("here", 3, "done")],
     [
-      { ...row("there", 4, "todo"), source: { channelName: "design" } },
+      { ...row("there", 4, "todo"), currentMemberId: "me", source: { channelName: "design" } },
       // The Workspace read lists this conversation's Tasks too: no second copy.
-      { ...row("here", 2, "todo"), source: { channelName: "general" } },
-      { ...row("else", 1, "closed"), source: { channelName: "ops" } },
-      { ...row("dm", 9, "todo"), source: { channelName: null } },
+      { ...row("here", 2, "todo"), currentMemberId: "me", source: { channelName: "general" } },
+      { ...row("else", 1, "closed"), currentMemberId: "me", source: { channelName: "ops" } },
+      { ...row("dm", 9, "todo"), currentMemberId: "me", source: { channelName: null } },
     ],
+    { memberId: "me", manager: false },
   );
   expect(found.map(taskNameLabel)).toEqual(["#1", "#2", "#design/4"]);
   const rules = blockerPickerRules(
@@ -129,9 +136,47 @@ test("candidates are the unfinished Tasks, the conversation's first and the othe
   expect(pickable(found, rules).map(taskNameLabel)).toEqual(["#design/4"]);
 });
 
+test("a candidate may be a parent only where the viewer may add a sub-task", () => {
+  const row = (conversationId: string, number: number, owner = "me-here") => ({
+    conversationId,
+    number,
+    title: `T${number}`,
+    status: "todo" as const,
+    owner: person(owner),
+    creator: person("creator"),
+  });
+  const own = [row("here", 1), row("here", 2, "them"), row("here", 3, "nobody")];
+  const workspace = [
+    // Its owner there is the viewer, under that conversation's own member id.
+    {
+      ...row("there", 4, "me-there"),
+      currentMemberId: "me-there",
+      source: { channelName: "design" },
+    },
+    // The viewer has a seat there but is neither its owner nor its creator.
+    { ...row("other", 5, "them"), currentMemberId: "me-there", source: { channelName: "ops" } },
+    // No seat there is known: nothing is offered rather than guessing from another conversation's.
+    { ...row("else", 6, "me-here"), currentMemberId: null, source: { channelName: "ops" } },
+  ];
+  const rules = parentPickerRules({ number: 9, parent: null }, { subtree: [] });
+  const found = candidateLinks("here", own, workspace, { memberId: "me-here", manager: false });
+  expect(parentCandidates(pickable(found, rules)).map(taskNameLabel)).toEqual(["#1", "#design/4"]);
+  // A Workspace owner or admin may add sub-tasks under any of them.
+  const manager = candidateLinks("here", own, workspace, { memberId: "me-here", manager: true });
+  expect(parentCandidates(pickable(manager, rules)).map(taskNameLabel)).toEqual([
+    "#1",
+    "#2",
+    "#3",
+    "#design/4",
+    "#ops/5",
+    "#ops/6",
+  ]);
+  // Without a member in the conversation there is no Task to add a sub-task under.
+  const anonymous = candidateLinks("here", own, [], { memberId: null, manager: false });
+  expect(parentCandidates(anonymous)).toEqual([]);
+});
+
 test("an owner, a creator or a manager may change a Task's relations", () => {
-  const person = (memberId: string) =>
-    ({ memberId, kind: "user", id: memberId, name: memberId, handle: memberId }) as const;
   const task = { owner: person("owner"), creator: person("creator") };
   expect(canEditTaskRelations(task, "owner", false)).toBe(true);
   expect(canEditTaskRelations(task, "creator", false)).toBe(true);

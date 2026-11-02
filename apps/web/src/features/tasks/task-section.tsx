@@ -182,6 +182,7 @@ export function TaskSection({
             task={task}
             rules={relations.parentRules}
             label={m.tasks_pick_parent()}
+            parentsFor={currentMemberId}
             disabled={pending}
             onPick={(parent) => void relations.setParent(parent)}
           />

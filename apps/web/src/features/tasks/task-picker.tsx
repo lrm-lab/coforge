@@ -14,7 +14,12 @@ import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { m } from "#src/paraglide/messages";
 
-import { pickable, type PickerRules, type VisibleTaskName } from "./task-relation-edits";
+import {
+  parentCandidates,
+  pickable,
+  type PickerRules,
+  type VisibleTaskName,
+} from "./task-relation-edits";
 import { TaskStatusIcon } from "./task-status-icon";
 import { useTaskCandidates } from "./use-task-candidates";
 
@@ -34,6 +39,9 @@ const STATUS_ICON: Record<TaskStatus, () => ReactElement> = {
 type PickerProps = {
   task: Pick<TaskView, "conversationId">;
   rules: PickerRules;
+  /** Set for the parent picker: the viewer's member id in the Task's conversation (null when
+   * unknown). The list then offers only the Tasks they may add a sub-task under. */
+  parentsFor?: string | null;
   /** What the list is for, as a screen reader hears it. */
   label: string;
   onPick: (task: VisibleTaskName) => void;
@@ -45,16 +53,17 @@ type PickerProps = {
  * Unfinished Tasks the reader can see, this conversation's first. Until something is typed it lists
  * only this conversation's; a search (by number, title, or a name such as `#design/31`) reaches
  * other channels too. What the rules leave out is not listed; a Task that would make the chain loop
- * back stays listed but cannot be picked, so its absence is not a mystery. It reads its Tasks when
- * it mounts, so it belongs inside a popover or dialog that renders only while open.
+ * back stays listed but cannot be picked, so its absence is not a mystery. A parent picker lists
+ * only the Tasks the viewer may add a sub-task under, so it never offers one the server refuses.
+ * It reads its Tasks when it mounts, so it belongs inside a popover or dialog that renders only
+ * while open.
  */
-function TaskPickerList({ task, rules, label, onPick, disabled }: PickerProps) {
+function TaskPickerList({ task, rules, parentsFor, label, onPick, disabled }: PickerProps) {
   const { contains } = useFilter({ sensitivity: "base" });
   const [search, setSearch] = useState("");
-  const candidates = pickable(useTaskCandidates(task), rules);
-  const shown = search.trim()
-    ? candidates
-    : candidates.filter((candidate) => candidate.channel === null);
+  const candidates = pickable(useTaskCandidates(task, parentsFor ?? null), rules);
+  const listed = parentsFor === undefined ? candidates : parentCandidates(candidates);
+  const shown = search.trim() ? listed : listed.filter((candidate) => candidate.channel === null);
   return (
     <AriaAutocomplete filter={contains} inputValue={search} onInputChange={setSearch}>
       <div className="border-b border-secondary py-1">

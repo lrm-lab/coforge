@@ -147,5 +147,8 @@ workspaceId]` Query its loader fills (`task-overview-collection.ts`,
   so a Task waiting for one can be read but its blockers are neither removed nor added to
   (`blockerRefs`): the amendment would drop it. Pickers (`task-picker.tsx`) list this conversation's
   unfinished Tasks, and a search reaches other channels' from the Tasks page's read
-  (`useTaskCandidates`, read only while a picker is open). A refusal's sentence never reaches the
+  (`useTaskCandidates`, read only while a picker is open). The parent picker lists only the Tasks the
+  viewer may add a sub-task under (`canBeParent`: its owner, its creator, or a Workspace owner or
+  admin, decided with the viewer's member id in that Task's conversation), so it never offers one the
+  server would refuse. A refusal's sentence never reaches the
   browser; the popup's error line words only `relationRefusal`'s two kinds.

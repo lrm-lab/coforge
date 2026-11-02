@@ -118,34 +118,58 @@ export function parentPickerRules(
   };
 }
 
-type CandidateTask = Pick<TaskView, "conversationId" | "number" | "title" | "status">;
+/** What a picker knows of the viewer: their member in the Task's own conversation, and whether
+ * they are a Workspace owner or admin. */
+export type CandidateViewer = { memberId: string | null; manager: boolean };
+
+/** A candidate, and whether the viewer may put a Task under it: that is its owner's, its creator's
+ * or a manager's call, as the server's `assertMayAddSubtasks` decides. */
+export type TaskCandidate = VisibleTaskLink & { canBeParent: boolean };
+
+type CandidateRow = Pick<
+  TaskView,
+  "conversationId" | "number" | "title" | "status" | "owner" | "creator"
+>;
+
+/** The Workspace-wide read also says which member of that Task's conversation is the viewer. */
+type WorkspaceCandidateRow = CandidateRow & {
+  currentMemberId: string | null;
+  source: { channelName: string | null };
+};
+
+const mayAddSubtasks = (row: CandidateRow, memberId: string | null, manager: boolean) =>
+  manager ||
+  (memberId !== null && (row.owner?.memberId === memberId || row.creator.memberId === memberId));
 
 /**
  * The unfinished Tasks a picker can offer for a Task of `conversationId`, named as that conversation
  * names them: those of the conversation (any kind, a direct message's too) first, then channels' by name.
- * `workspace` is the Workspace-wide read, which lists channel Tasks only.
+ * `workspace` is the Workspace-wide read, which lists channel Tasks only. Each candidate also says
+ * whether the viewer may add a sub-task under it, which only the parent picker needs.
  */
 export function candidateLinks(
   conversationId: string,
-  own: readonly CandidateTask[],
-  workspace: readonly (CandidateTask & { source: { channelName: string | null } })[],
-): VisibleTaskLink[] {
-  const named = new Map<string, VisibleTaskLink>();
-  const add = (row: CandidateTask, channel: string | null) => {
+  own: readonly CandidateRow[],
+  workspace: readonly WorkspaceCandidateRow[],
+  viewer: CandidateViewer,
+): TaskCandidate[] {
+  const named = new Map<string, TaskCandidate>();
+  const add = (row: CandidateRow, channel: string | null, memberId: string | null) => {
     if (isBlockerSatisfied(row.status)) return;
-    const link: VisibleTaskLink = {
+    const link: TaskCandidate = {
       hidden: false,
       number: row.number,
       channel,
       title: row.title,
       status: row.status,
+      canBeParent: mayAddSubtasks(row, memberId, viewer.manager),
     };
     named.set(taskNameLabel(link), link);
   };
-  for (const row of [...own].sort((a, b) => a.number - b.number)) add(row, null);
+  for (const row of [...own].sort((a, b) => a.number - b.number)) add(row, null, viewer.memberId);
   for (const row of workspace) {
-    if (row.conversationId === conversationId) add(row, null);
-    else if (row.source.channelName) add(row, row.source.channelName);
+    if (row.conversationId === conversationId) add(row, null, row.currentMemberId ?? null);
+    else if (row.source.channelName) add(row, row.source.channelName, row.currentMemberId ?? null);
   }
   return [...named.values()].sort(
     (a, b) =>
@@ -156,8 +180,14 @@ export function candidateLinks(
 }
 
 /** The candidates a picker lists, without those its rules leave out. */
-export const pickable = (candidates: readonly VisibleTaskLink[], rules: PickerRules) =>
-  candidates.filter((candidate) => !rules.excluded.has(taskNameLabel(candidate)));
+export const pickable = <T extends VisibleTaskLink>(
+  candidates: readonly T[],
+  rules: PickerRules,
+): T[] => candidates.filter((candidate) => !rules.excluded.has(taskNameLabel(candidate)));
+
+/** The candidates the parent picker offers: the Tasks the viewer may add sub-tasks under. */
+export const parentCandidates = (candidates: readonly TaskCandidate[]) =>
+  candidates.filter((candidate) => candidate.canBeParent);
 
 /** Whether the viewer may change what the Task waits for, its parent and its sub-tasks, as the
  * server allows: its owner, its creator, or a Workspace owner or admin. Only an affordance. */
