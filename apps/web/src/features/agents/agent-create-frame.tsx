@@ -1,11 +1,9 @@
-import { useEffect, useRef, useState, type FC, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Heading, Text } from "react-aria-components";
 import { Plus, XClose as X } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
-import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
@@ -39,8 +37,7 @@ export function AgentCreateModal({
   );
 }
 
-/** Art, title and one line of what the form makes, centred above it; the close button sits in the
- * card's corner. The art is a placeholder icon until the illustrations are final. */
+/** A form in the dialog: its intro and footer stay put and only its fields scroll. */
 export function AgentCreateForm({
   onSubmit,
   intro,
@@ -117,13 +114,23 @@ function useScrollEdges() {
   return { ref, ...edges };
 }
 
+/** The dialog's title on one line with the close button at its end, and a line under it only
+ * where the form needs one said before its fields (no Computer to create on yet). */
+/** The dialog's two illustrations, one per kind of Agent (design: 智能体插图). */
+const ILLUSTRATIONS = {
+  local: "/illustrations/agent-local.webp",
+  cloud: "/illustrations/agent-cloud.webp",
+} as const;
+
+/** The form's head, centred as in the design: its illustration, title and one line on what this
+ * kind of Agent is. */
 export function AgentCreateIntro({
-  icon,
+  illustration,
   title,
   description,
   onClose,
 }: {
-  icon: FC<{ className?: string }>;
+  illustration: keyof typeof ILLUSTRATIONS;
   title: string;
   description: string;
   onClose?: () => void;
@@ -141,20 +148,24 @@ export function AgentCreateIntro({
           className="absolute top-3 right-3"
         />
       )}
-      <div aria-hidden="true" className="flex h-16.5 items-center justify-center">
-        <FeaturedIcon icon={icon} color="brand" theme="light" size="xl" />
-      </div>
-      <Heading slot="title" className="mt-2.5 text-lg font-semibold text-primary">
+      <img
+        src={ILLUSTRATIONS[illustration]}
+        alt=""
+        width={106}
+        height={66}
+        className="mx-auto block h-16.5 w-26.5"
+      />
+      <Heading slot="title" className="mt-3 text-lg font-semibold text-primary">
         {title}
       </Heading>
-      <Text slot="description" className="mt-2 block text-sm text-tertiary">
+      <Text slot="description" className="mt-1 block text-sm text-balance text-tertiary">
         {description}
       </Text>
     </div>
   );
 }
 
-/** Cancel and the create button side by side. */
+/** Cancel and the create button side by side, each half the width. */
 export function AgentCreateFooter({
   onCancel,
   cancelDisabled,
@@ -168,20 +179,29 @@ export function AgentCreateFooter({
   submitting: boolean;
   submitDisabled?: boolean;
 }) {
+  // Two equal halves, as in the design.
   return (
-    <DialogActions className="px-6 pt-4 pb-6">
-      <DialogCancel type="button" isDisabled={cancelDisabled} onPress={onCancel}>
+    <div className="grid grid-cols-2 gap-3 px-6 pt-4 pb-6">
+      <Button
+        type="button"
+        color="secondary"
+        size="md"
+        isDisabled={cancelDisabled}
+        onPress={onCancel}
+      >
         {m.controls_cancel()}
-      </DialogCancel>
-      <DialogAction
+      </Button>
+      <Button
         type="submit"
+        color="primary"
+        size="md"
         // Pending, not disabled, while it runs: focus stays on it, so Escape still reaches the dialog.
         isDisabled={submitDisabled}
         isLoading={submitting}
         showTextWhileLoading
       >
         {submitLabel}
-      </DialogAction>
-    </DialogActions>
+      </Button>
+    </div>
   );
 }

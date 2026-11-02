@@ -14,7 +14,7 @@ export function AgentOptionCard({
   onChange,
 }: {
   label: string;
-  hint: ReactNode;
+  hint?: ReactNode;
   isSelected: boolean;
   isDisabled?: boolean;
   onChange: (selected: boolean) => void;

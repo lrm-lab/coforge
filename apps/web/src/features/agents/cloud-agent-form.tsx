@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQueryClient } from "@tanstack/react-query";
-import { Cloud01, RefreshCw01 } from "@untitledui/icons";
+import { RefreshCw01 } from "@untitledui/icons";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
@@ -146,7 +146,7 @@ export function CloudAgentForm({
       }
       intro={
         <AgentCreateIntro
-          icon={Cloud01}
+          illustration="cloud"
           title={m.cloud_agent_create_title()}
           description={m.cloud_agent_create_description()}
           onClose={opening ? undefined : close}
@@ -166,6 +166,7 @@ export function CloudAgentForm({
         <div className="relative min-w-0">
           <Input
             label={m.cloud_agent_create_name()}
+            size="sm"
             value={name}
             onChange={setName}
             maxLength={AGENT_DISPLAY_NAME_MAX_LENGTH}

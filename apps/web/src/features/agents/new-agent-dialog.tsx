@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Monitor01 } from "@untitledui/icons";
 
 import {
   getComputerRuntimeCatalog,
@@ -103,7 +102,7 @@ function NewLocalAgent({
         switchTo={{ label: m.agent_create_switch_cloud(), onPress: onSwitchToCloud }}
         intro={
           <AgentCreateIntro
-            icon={Monitor01}
+            illustration="local"
             title={m.agent_create_local_title()}
             description={m.agent_create_local_description()}
             onClose={onClose}

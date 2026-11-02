@@ -90,7 +90,7 @@ export function ModelComboBox({
   return (
     <ComboBox
       label={label}
-      size="md"
+      size="sm"
       shortcut={false}
       icon={<ListToggle searching={query !== null} />}
       placeholder={m.agent_form_model_search()}

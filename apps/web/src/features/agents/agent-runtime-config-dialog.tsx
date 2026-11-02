@@ -115,7 +115,7 @@ export function AgentRuntimeConfigForm({
             name="computerId"
             isRequired
             isDisabled={computerLocked || saving}
-            size="md"
+            size="sm"
             label={m.agent_form_computer()}
             className="min-w-0"
             selectedKey={selectedComputerId || null}

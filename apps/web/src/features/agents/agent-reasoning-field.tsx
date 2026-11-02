@@ -15,7 +15,7 @@ export function AgentReasoningField({
   return (
     <Select
       label={m.agent_form_reasoning()}
-      size="md"
+      size="sm"
       className="min-w-0"
       selectedKey={value}
       onSelectionChange={(key) => key !== null && onChange(String(key))}

@@ -1,6 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { parseRuntimeProvider, RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
-import { Monitor01 as Monitor } from "@untitledui/icons";
 
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { localizeHref } from "#src/paraglide/runtime";
@@ -13,7 +12,7 @@ import { m } from "#src/paraglide/messages";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { AGENT_VISIBILITY } from "./agent-visibility";
 import { agentCreateErrorMessage } from "./agent-form";
-import { Checkbox } from "#src/components/base/checkbox/checkbox";
+import { AgentOptionCard } from "./agent-option-card";
 import { AgentRuntimeFields, type RuntimeCatalog } from "./agent-runtime-fields";
 import { finishedAgentUsername } from "./agent-username";
 import { AgentUsernameField } from "./agent-username-field";
@@ -122,7 +121,7 @@ export function LocalAgentForm({
     return (
       <>
         <AgentCreateIntro
-          icon={Monitor}
+          illustration="local"
           title={m.agent_create_local_title()}
           description={m.agent_empty_computer_description()}
           onClose={onClose}
@@ -158,7 +157,7 @@ export function LocalAgentForm({
       }
       intro={
         <AgentCreateIntro
-          icon={Monitor}
+          illustration="local"
           title={m.agent_create_local_title()}
           description={m.agent_create_local_description()}
           onClose={submitting ? undefined : onClose}
@@ -173,7 +172,8 @@ export function LocalAgentForm({
         />
       }
     >
-      <div className="grid gap-5 px-6 pt-5 pb-4">
+      {/* One column, in the design's order: who it is, where it runs, then how it runs. */}
+      <div className="flex flex-col gap-4 px-6 pt-5 pb-3">
         {joinsChannelName && (
           <p className="text-sm text-secondary">
             {m.agent_form_joins_channel({ channel: joinsChannelName })}
@@ -189,7 +189,7 @@ export function LocalAgentForm({
           isRequired
           hideRequiredIndicator
           isDisabled={computerLocked}
-          size="md"
+          size="sm"
           label={m.agent_create_computer()}
           className="min-w-0"
           selectedKey={computerId}
@@ -213,13 +213,16 @@ export function LocalAgentForm({
             />
           ))}
         </Select>
+        {/* Three lines until more is written in: the field grows with what is typed. */}
         <TextArea
           label={m.agent_create_description()}
           name="description"
+          size="sm"
           rows={3}
           defaultValue={defaults?.description}
           placeholder={m.agent_form_description_placeholder()}
           className="min-w-0"
+          textAreaClassName="field-sizing-content max-h-40 min-h-20"
         />
         <AgentRuntimeFields
           key={computerId}
@@ -232,7 +235,7 @@ export function LocalAgentForm({
             catalogs: await onLoadRuntimeCatalog(id),
           })}
         />
-        <Checkbox
+        <AgentOptionCard
           label={m.agent_form_visibility_private()}
           isDisabled={visibilityLocked}
           isSelected={isPrivate}

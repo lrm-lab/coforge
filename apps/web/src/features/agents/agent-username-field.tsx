@@ -32,6 +32,7 @@ export function AgentUsernameField({
         name="name"
         isRequired
         hideRequiredIndicator
+        size="sm"
         icon={AtSign}
         value={username}
         onChange={(text) => setUsername(typedAgentUsername(text))}

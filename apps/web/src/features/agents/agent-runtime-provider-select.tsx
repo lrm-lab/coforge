@@ -25,7 +25,7 @@ export function AgentRuntimeProviderSelect({
   return (
     <Select
       label={m.agent_form_provider()}
-      size="md"
+      size="sm"
       className={className}
       selectedKey={provider}
       onSelectionChange={(key) => {

@@ -284,7 +284,7 @@ export function AgentRuntimeFields({
         <Input
           label={m.agent_form_model_provider()}
           name="modelProvider"
-          size="md"
+          size="sm"
           isRequired={provider === RUNTIME_PROVIDER.COFORGE}
           maxLength={100}
           defaultValue={modelProvider}
@@ -299,7 +299,7 @@ export function AgentRuntimeFields({
       {!failed && !RUNTIME_PROVIDER_USES_EXTERNAL_CLI[provider] && (
         <Select
           label={m.agent_form_model_provider()}
-          size="md"
+          size="sm"
           className="min-w-0"
           isDisabled={!options}
           // The Pi provider picker carries no hint: the sentence that used to sit here explained
@@ -338,7 +338,7 @@ export function AgentRuntimeFields({
         <Input
           label={m.agent_form_model()}
           name="model"
-          size="md"
+          size="sm"
           isRequired
           maxLength={200}
           defaultValue={initial?.model}
@@ -396,7 +396,7 @@ export function AgentRuntimeFields({
       {piConfigured && customModelActive && (
         <Input
           label={m.agent_form_model_custom_id()}
-          size="md"
+          size="sm"
           className="min-w-0"
           placeholder="provider/model-id"
           value={customModelText}
@@ -412,7 +412,7 @@ export function AgentRuntimeFields({
       {showApiKeyField && (
         <Input
           label={m.agent_runtime_api_key({ provider: apiKeyProviderId })}
-          size="md"
+          size="sm"
           className="min-w-0"
           name="apiKey"
           type="password"
