@@ -24,7 +24,11 @@ test("a user who never saved a preference reads the defaults, and saving keeps t
   try {
     const preferences = new UserPreferences(new PrismaUserPreferencesRepository(db));
 
-    expect(await preferences.read(user.id)).toEqual({ timeZone: null, timeFormat: null });
+    expect(await preferences.read(user.id)).toEqual({
+      timeZone: null,
+      timeFormat: null,
+      language: null,
+    });
     expect(await preferences.getBrowserNotificationsEnabled(user.id)).toBeFalse();
 
     expect(await preferences.set(user.id, "Asia/Tokyo")).toBe("Asia/Tokyo");
@@ -39,13 +43,19 @@ test("a user who never saved a preference reads the defaults, and saving keeps t
     expect(await preferences.read(user.id)).toEqual({
       timeZone: "Asia/Tokyo",
       timeFormat: null,
+      language: null,
     });
 
     expect(await preferences.setTimeFormat(user.id, "24h")).toBe("24h");
+    expect(await preferences.setLanguage(user.id, "zh-CN")).toBe("zh-CN");
     expect((await preferences.read(user.id)).timeFormat).toBe("24h");
 
     expect(await preferences.set(user.id, null)).toBeNull();
-    expect(await preferences.read(user.id)).toEqual({ timeZone: null, timeFormat: "24h" });
+    expect(await preferences.read(user.id)).toEqual({
+      timeZone: null,
+      timeFormat: "24h",
+      language: "zh-CN",
+    });
   } finally {
     await db.user.delete({ where: { id: user.id } });
     await db.$disconnect();

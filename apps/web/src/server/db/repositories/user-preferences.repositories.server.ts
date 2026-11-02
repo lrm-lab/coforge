@@ -8,7 +8,12 @@ import { isTimeFormat } from "#src/lib/time-format";
 export type StoredUserPreferences = {
   timeZone: string | null;
   timeFormat: string | null;
+  language: string | null;
 };
+
+/** The interface languages the server renders outbound text in. */
+export const USER_LANGUAGES = ["en", "zh-CN"] as const;
+export type UserLanguage = (typeof USER_LANGUAGES)[number];
 
 export type UserPreferencesRepository = {
   read(userId: string): Promise<StoredUserPreferences>;
@@ -16,6 +21,7 @@ export type UserPreferencesRepository = {
   getBrowserNotificationsEnabled(userId: string): Promise<boolean>;
   setBrowserNotificationsEnabled(userId: string, enabled: boolean): Promise<boolean>;
   setTimeFormat(userId: string, timeFormat: string | null): Promise<string | null>;
+  setLanguage(userId: string, language: UserLanguage | null): Promise<string | null>;
 };
 
 type PreferenceValues = Omit<
@@ -36,6 +42,7 @@ export class PrismaUserPreferencesRepository implements UserPreferencesRepositor
     return {
       timeZone: row?.timeZone ?? null,
       timeFormat: row?.timeFormat ?? null,
+      language: row?.language ?? null,
     };
   }
 
@@ -65,6 +72,10 @@ export class PrismaUserPreferencesRepository implements UserPreferencesRepositor
   async setTimeFormat(userId: string, timeFormat: string | null) {
     return (await this.write(userId, { timeFormat })).timeFormat;
   }
+
+  async setLanguage(userId: string, language: UserLanguage | null) {
+    return (await this.write(userId, { language })).language;
+  }
 }
 
 export class UserPreferences {
@@ -76,6 +87,7 @@ export class UserPreferences {
     return {
       timeZone: stored.timeZone,
       timeFormat: isTimeFormat(stored.timeFormat) ? stored.timeFormat : null,
+      language: isUserLanguage(stored.language) ? stored.language : null,
     };
   }
 
@@ -98,4 +110,13 @@ export class UserPreferences {
     if (timeFormat !== null && !isTimeFormat(timeFormat)) throw new AppError("INVALID_INPUT");
     return this.repository.setTimeFormat(userId, timeFormat);
   }
+
+  async setLanguage(userId: string, language: UserLanguage | null) {
+    if (language !== null && !isUserLanguage(language)) throw new AppError("INVALID_INPUT");
+    return this.repository.setLanguage(userId, language);
+  }
+}
+
+export function isUserLanguage(value: unknown): value is UserLanguage {
+  return USER_LANGUAGES.includes(value as UserLanguage);
 }

@@ -1,5 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
-import { saveDateTimePreferencesInputSchema } from "./settings.schemas";
+import {
+  saveDateTimePreferencesInputSchema,
+  saveLanguagePreferencesInputSchema,
+} from "./settings.schemas";
 
 import { authMiddleware } from "#src/features/auth/function-auth";
 import { requireDatabaseClient } from "#src/server/db/client.server";
@@ -28,3 +31,9 @@ export const saveDateTimePreferences = createServerFn({ method: "POST" })
       timeFormat: await preferences().setTimeFormat(userId, data.timeFormat),
     };
   });
+
+/** The Language & region page's language switch: the one stored source for outbound text too. */
+export const saveLanguagePreference = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(saveLanguagePreferencesInputSchema)
+  .handler(async ({ data, context }) => preferences().setLanguage(context.user.id, data.language));

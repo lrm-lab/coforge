@@ -26,6 +26,7 @@ import {
 } from "#src/features/notifications/notifications.functions";
 import {
   getUserPreferences,
+  saveLanguagePreference,
   saveDateTimePreferences,
 } from "#src/features/settings/settings.functions";
 import { loadWorkspaceMembers } from "#src/features/workspaces/members.functions";
@@ -118,6 +119,7 @@ function SettingsPage() {
   const {
     timeZone: savedTimeZone,
     timeFormat: savedTimeFormat,
+    language: savedLanguage,
     members,
     createdAgents,
     generalChannelHidden,
@@ -143,7 +145,17 @@ function SettingsPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const toast = useAppToast();
-  const locale = getLocale();
+  const locale = savedLanguage ?? getLocale();
+  const saveLanguage = useServerFn(saveLanguagePreference);
+  // The stored preference is the source of truth; the cookie/localStorage is only its cache.
+  useEffect(() => {
+    if (savedLanguage && savedLanguage !== getLocale()) setLocale(savedLanguage);
+  }, [savedLanguage]);
+
+  async function changeLocale(next: Parameters<typeof setLocale>[0]) {
+    await saveLanguage({ data: { language: next } });
+    setLocale(next);
+  }
 
   useEffect(() => {
     const storedTheme = localStorage.getItem("coforge-theme");
@@ -348,7 +360,7 @@ function SettingsPage() {
       onProfileSave={changeProfile}
       onAvatarUpload={uploadAvatar}
       onAvatarPresetChoose={choosePresetAvatar}
-      onLocaleChange={setLocale}
+      onLocaleChange={changeLocale}
       onThemeChange={changeTheme}
       hideEmptySidebarSections={hideEmptySidebarSections}
       onHideEmptySidebarSectionsChange={changeHideEmptySidebarSections}

@@ -35,6 +35,7 @@ describe("user time zone preferences", () => {
       read: async () => ({
         timeZone: saved,
         timeFormat: null,
+        language: null,
       }),
       setTimeZone: async (_userId, timeZone) => {
         saved = timeZone;
@@ -46,6 +47,7 @@ describe("user time zone preferences", () => {
         return enabled;
       },
       setTimeFormat: async (_userId, timeFormat) => timeFormat,
+      setLanguage: async (_userId, language) => language,
     };
     const preferences = new UserPreferences(repository);
 
@@ -61,11 +63,12 @@ describe("user time zone preferences", () => {
   test("saves the global browser notification preference", async () => {
     let enabled = false;
     const repository: UserPreferencesRepository = {
-      read: async () => ({ timeZone: null, timeFormat: null }),
+      read: async () => ({ timeZone: null, timeFormat: null, language: null }),
       setTimeZone: async () => null,
       getBrowserNotificationsEnabled: async () => enabled,
       setBrowserNotificationsEnabled: async (_userId, next) => (enabled = next),
       setTimeFormat: async (_userId, timeFormat) => timeFormat,
+      setLanguage: async (_userId, language) => language,
     };
     const preferences = new UserPreferences(repository);
 
@@ -120,11 +123,13 @@ describe("user time zone preferences", () => {
       read: async () => ({
         timeZone: null,
         timeFormat: saved,
+        language: null,
       }),
       setTimeZone: async () => null,
       getBrowserNotificationsEnabled: async () => false,
       setBrowserNotificationsEnabled: async (_userId, enabled) => enabled,
       setTimeFormat: async (_userId, timeFormat) => (saved = timeFormat),
+      setLanguage: async (_userId, language) => language,
     });
 
     expect((await preferences.read("user-1")).timeFormat).toBeNull();
@@ -139,18 +144,20 @@ describe("user time zone preferences", () => {
     const preferences = new UserPreferences({
       read: async () => {
         reads += 1;
-        return { timeZone: "Asia/Tokyo", timeFormat: "25h" };
+        return { timeZone: "Asia/Tokyo", timeFormat: "25h", language: null };
       },
       setTimeZone: async () => null,
       getBrowserNotificationsEnabled: async () => false,
       setBrowserNotificationsEnabled: async (_userId, enabled) => enabled,
       setTimeFormat: async (_userId, timeFormat) => timeFormat,
+      setLanguage: async (_userId, language) => language,
     });
 
     // A stored time format outside the known set reads as no choice, as the column's own read did.
     expect(await preferences.read("user-1")).toEqual({
       timeZone: "Asia/Tokyo",
       timeFormat: null,
+      language: null,
     });
     expect(reads).toBe(1);
   });

@@ -6,3 +6,7 @@ export const saveDateTimePreferencesInputSchema = z.object({
   timeZone: z.string().nullable(),
   timeFormat: z.enum(TIME_FORMATS).nullable(),
 });
+
+export const saveLanguagePreferencesInputSchema = z.object({
+  language: z.enum(["en", "zh-CN"]).nullable(),
+});

@@ -93,6 +93,9 @@ model UserPreference {
   conversationOpenMode        String?
   /// Clock display: 12h or 24h. NULL follows the display language. Display only.
   timeFormat                  String?
+  /// Interface language ("en" or "zh-CN"); NULL means the code's default. The server renders
+  /// pushes and other outbound text in it, and the browser uses it as the source of truth.
+  language                    String?
   createdAt                   DateTime @default(now())
   updatedAt                   DateTime @updatedAt
 
