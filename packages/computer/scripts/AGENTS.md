@@ -3,8 +3,11 @@
 These files live outside `src/` and are never bundled into the Computer. Paths are relative to
 the package.
 
-`scripts/compile-release.ts`, the release build, imports only relative paths and `#src/`: CI's
-native jobs run it from an install of this workspace alone, with no root `node_modules`.
+`scripts/build-executable.ts` is the one Computer build: entrypoint, splitting and every inlined
+value. `scripts/compile-release.ts` (one release target, signed) and `scripts/build.ts` (this
+host, `bun run build`) only call it, so a new inlined value goes there and reaches both. These
+import only relative paths and `#src/`: CI's native jobs run the release build from an install
+of this workspace alone, with no root `node_modules`.
 
 `scripts/installer-contract.ts` (outside `src/`, never bundled) generates
 `crates/installer/contract/`, the cross-language contract with the Rust installer:

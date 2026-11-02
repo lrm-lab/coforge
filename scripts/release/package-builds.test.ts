@@ -123,7 +123,7 @@ test.each([
 
     const computerManifest = require(join(computerDirectory, "package.json"));
     const daemonManifest = require(join(daemonDirectory, "package.json"));
-    expect(computerManifest.scripts.build).toContain("build-package.ts computer");
+    expect(computerManifest.scripts.build).toBe("bun scripts/build.ts");
     expect(daemonManifest.scripts.build).toContain("build-package.ts daemon");
     expect(daemonManifest.scripts.build).not.toContain("COFORGE_DAEMON_SERVER_URL");
   },

@@ -8,7 +8,7 @@ import { e2eDevice, e2eToken, oauthDiscovery as e2eDiscovery } from "./e2e-devic
  * against a fixed code, which no real device flow can offer. It selects the test double rather
  * than gating the feature: before this existed the flag was the only way to have a device
  * endpoint at all, which is why staging - where it is correctly unset - answered `login` with a
- * 404. Release builds inline it as "0" (scripts/release/build-package.ts).
+ * 404. Computer builds inline it as "0" (packages/computer/scripts/build-executable.ts).
  */
 function useE2EDouble(environment: Record<string, string | undefined>): boolean {
   return environment.COFORGE_E2E_ALLOW_DEVICE_AUTH === "1";

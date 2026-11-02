@@ -37,9 +37,9 @@ test("rejects a feed URL that is unusable rather than deferring the failure", ()
   expect(() => resolveReleaseFeedUrl("http://releases.coforge.cn/")).toThrow(/must use HTTPS/);
 });
 
-test("the package build delegates environment selection to the release build owner", async () => {
+test("the package build is this package's own, sharing the release build's configuration", async () => {
   const manifest = await Bun.file(new URL("../package.json", import.meta.url)).json();
   const build: string = manifest.scripts.build;
 
-  expect(build).toBe("bun ../../scripts/release/build-package.ts computer");
+  expect(build).toBe("bun scripts/build.ts");
 });

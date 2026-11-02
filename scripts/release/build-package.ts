@@ -3,45 +3,25 @@ import { join, resolve } from "node:path";
 import { resolveReleaseFeedUrl, resolveServerUrl } from "@coforge/computer/src/release-channel";
 import { zodResolvePlugin } from "../bun-resolve-zod-plugin";
 
+// The Daemon package's build. The Computer builds itself (packages/computer/scripts/build.ts).
 const REPO_ROOT = resolve(import.meta.dir, "../..");
 
-const packageName = Bun.argv[2];
-if (packageName !== "computer" && packageName !== "daemon") {
-  throw new Error("usage: bun scripts/release/build-package.ts <computer|daemon>");
+if (Bun.argv[2] !== "daemon") {
+  throw new Error("usage: bun scripts/release/build-package.ts daemon");
 }
 
 const feedUrl = resolveReleaseFeedUrl(Bun.env.COFORGE_RELEASE_FEED_URL);
-const serverUrl = resolveServerUrl(feedUrl);
-const packageDirectory = join(REPO_ROOT, "packages", packageName);
+const packageDirectory = join(REPO_ROOT, "packages/daemon");
 const manifest = await Bun.file(join(packageDirectory, "package.json")).json();
-const entrypoint = join(packageDirectory, packageName === "computer" ? "src/main.ts" : "index.ts");
-const outfile = join(packageDirectory, "dist", `coforge-${packageName}`);
-
-const define =
-  packageName === "computer"
-    ? {
-        "process.env.COFORGE_RELEASE_FEED_URL": JSON.stringify(feedUrl),
-        "process.env.COFORGE_E2E_ALLOW_DEVICE_AUTH": JSON.stringify("0"),
-        "Bun.env.COFORGE_COMPUTER_VERSION": JSON.stringify(manifest.version),
-        "process.env.COFORGE_DAEMON_VERSION": JSON.stringify(manifest.version),
-        "process.env.COFORGE_DAEMON_SERVER_URL": JSON.stringify(serverUrl),
-        // Bundled `@lrm/coforge/runner` (`__agent-cli` dispatch) needs the same real version
-        // inlined for `coforge version`/`coforge --version`.
-        "Bun.env.COFORGE_CLI_VERSION": JSON.stringify(manifest.version),
-      }
-    : {
-        "process.env.COFORGE_DAEMON_VERSION": JSON.stringify(manifest.version),
-        "process.env.COFORGE_DAEMON_SERVER_URL": JSON.stringify(serverUrl),
-      };
 
 const result = await Bun.build({
-  entrypoints: [entrypoint],
-  ...(packageName === "computer"
-    ? // Split like the release build (packages/computer/scripts/compile-release.ts), so each
-      // role loads only its own code.
-      { compile: { outfile }, splitting: true }
-    : { target: "bun" as const, outdir: join(packageDirectory, "dist") }),
-  define,
+  entrypoints: [join(packageDirectory, "index.ts")],
+  target: "bun",
+  outdir: join(packageDirectory, "dist"),
+  define: {
+    "process.env.COFORGE_DAEMON_VERSION": JSON.stringify(manifest.version),
+    "process.env.COFORGE_DAEMON_SERVER_URL": JSON.stringify(resolveServerUrl(feedUrl)),
+  },
   plugins: [zodResolvePlugin(REPO_ROOT)],
 });
 
