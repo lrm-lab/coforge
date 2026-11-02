@@ -53,7 +53,11 @@ because the API is experimental.
   success, a write of the page's own included (`setQueryData`: a realtime message, a read position),
   and a read cancelled meanwhile (the last page showing it going away, loading older pages) then
   left the copy as the newest: a channel stayed on its stored window of 10-21 (task #382). So the
-  mark is put back whatever cleared it, and loading older or newer pages reads it again.
+  mark is put back whatever cleared it, and loading older or newer pages reads it again. A
+  restored copy's read that fails is tried again by itself until one lands (1 to 30 seconds, every
+  kept kind: the Chat lists do not retry on their own, and a sidebar whose first read failed once
+  stayed on its copy with nothing saying so); offline TanStack parks it until the network returns,
+  and a hidden page reads the stale copy on its return.
 - A conversation window's read retries online with TanStack's own backoff (3 times; a phone just
   unlocked fails its first reads, task #253), and while offline it is parked until the network
   returns. While the stored copy is on screen and its read failed twice in a row or waits for the

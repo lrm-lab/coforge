@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { InfiniteQueryObserver, QueryClient, QueryObserver } from "@tanstack/react-query";
 
 import { followRestoredReads } from "#src/features/cache-persistence/restored-reads";
+import { AppError } from "#src/lib/app-error";
 
 import { gatedRead } from "./helpers/query-cache-harness";
 
@@ -14,9 +15,9 @@ const KEY = ["conversation", "channel", "c1"];
 
 /** A query that takes its stored copy on its first read, as the persister hands it over, and reads
  * the server with `read` after that. */
-function setup(read: () => Promise<string>) {
+function setup(read: () => Promise<string>, options?: Parameters<typeof followRestoredReads>[1]) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const restoredReads = followRestoredReads(queryClient);
+  const restoredReads = followRestoredReads(queryClient, options);
   const observer = new QueryObserver(queryClient, {
     queryKey: KEY,
     queryFn: read,
@@ -205,4 +206,49 @@ test("loading an older page while the copy is awaited reads the query again", as
   });
   expect(queryClient.getQueryData<{ pages: string[] }>(KEY)?.pages).toContain("newest");
   unsubscribe();
+});
+
+/** A read of the server that fails `failing` times, then answers "newest". */
+function flaky(failing: number, error: () => Error = () => new Error("network not ready")) {
+  let reads = 0;
+  return {
+    reads: () => reads,
+    read: async () => {
+      reads += 1;
+      if (reads <= failing) throw error();
+      return "newest";
+    },
+  };
+}
+
+const FAST_RETRY = { firstMs: 5, maxMs: 20 };
+
+test("a restored read that fails is tried again by itself until one lands, though queries do not retry", async () => {
+  const network = flaky(2);
+  const page = setup(network.read, { retry: FAST_RETRY, visible: () => true });
+  await page.landed();
+  expect(page.data()).toBe("newest");
+  expect(network.reads()).toBe(3);
+  expect(page.invalidated()).toBe(false);
+  page.unsubscribe();
+});
+
+test("a hidden page does not try again by itself: the stale copy is read when it comes back", async () => {
+  const network = flaky(1);
+  const page = setup(network.read, { retry: FAST_RETRY, visible: () => false });
+  await page.until(() => network.reads() === 1 && page.query().state.status === "error");
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  expect(network.reads()).toBe(1);
+  expect(page.awaiting()).toBe(true);
+  expect(page.invalidated()).toBe(true);
+  page.unsubscribe();
+});
+
+test("a conversation the server says is gone is not read again", async () => {
+  const network = flaky(1, () => new AppError("NOT_FOUND"));
+  const page = setup(network.read, { retry: FAST_RETRY, visible: () => true });
+  await page.until(() => network.reads() === 1 && page.query().state.status === "error");
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  expect(network.reads()).toBe(1);
+  page.unsubscribe();
 });

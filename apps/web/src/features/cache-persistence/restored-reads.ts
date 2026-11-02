@@ -1,5 +1,11 @@
 import type { Query, QueryClient } from "@tanstack/react-query";
 
+import { isAppErrorCode } from "#src/lib/app-error";
+
+/** How long a failed read of a restored copy waits before it is tried again: TanStack's own retry
+ * curve, doubling from `firstMs` up to `maxMs`. */
+export const RESTORED_READ_RETRY = { firstMs: 1_000, maxMs: 30_000 };
+
 /**
  * A restored copy is only a first paint: the server's read of the query follows at once and
  * replaces it, as TanStack's own `refetchOnRestore` does
@@ -16,12 +22,29 @@ import type { Query, QueryClient } from "@tanstack/react-query";
  * then leave the copy as the newest (task #382: a channel stayed on its stored copy of 10-21). So
  * the mark is put back whatever cleared it, and loading older pages, which cancels the read in
  * flight, reads it again.
+ *
+ * A read that fails is tried again until one lands, whatever the query's own `retry` (the app's
+ * default is none): a sidebar whose first read after a restore failed once otherwise stayed on its
+ * copy with nothing on screen saying so. Offline the read is parked by TanStack until the network
+ * returns; a hidden page waits for its return, when the stale copy is read on focus.
  */
-export function followRestoredReads(queryClient: QueryClient) {
+export function followRestoredReads(
+  queryClient: QueryClient,
+  {
+    retry = RESTORED_READ_RETRY,
+    visible = () => typeof document === "undefined" || document.visibilityState === "visible",
+  }: { retry?: typeof RESTORED_READ_RETRY; visible?: () => boolean } = {},
+) {
   /** Restored queries whose own read has not landed yet. */
   const awaiting = new Set<string>();
   /** Of those, the ones whose restore has not been handed to them yet: its success is the copy. */
   const restoring = new Set<string>();
+  /** Failed reads in a row of an awaited query, and the timer of its next try. */
+  const retries = new Map<string, { failures: number; timer?: ReturnType<typeof setTimeout> }>();
+  const stopRetrying = (queryHash: string) => {
+    clearTimeout(retries.get(queryHash)?.timer);
+    retries.delete(queryHash);
+  };
   const listeners = new Set<() => void>();
   const notify = () => listeners.forEach((listener) => listener());
   const read = (query: Query) => void query.fetch().catch(() => {});
@@ -29,6 +52,7 @@ export function followRestoredReads(queryClient: QueryClient) {
     const { query } = event;
     if (event.type === "removed") {
       restoring.delete(query.queryHash);
+      stopRetrying(query.queryHash);
       if (awaiting.delete(query.queryHash)) notify();
       return;
     }
@@ -45,8 +69,24 @@ export function followRestoredReads(queryClient: QueryClient) {
         return;
       }
       awaiting.delete(query.queryHash);
+      stopRetrying(query.queryHash);
       notify();
       return;
+    }
+    if (action.type === "error") {
+      // Gone (deleted, or access lost): storage drops it, and no read will bring it back.
+      if (isAppErrorCode(action.error, "NOT_FOUND")) return;
+      const entry = retries.get(query.queryHash) ?? { failures: 0 };
+      entry.failures += 1;
+      clearTimeout(entry.timer);
+      entry.timer = setTimeout(
+        () => {
+          entry.timer = undefined;
+          if (awaiting.has(query.queryHash) && visible()) read(query);
+        },
+        Math.min(retry.maxMs, retry.firstMs * 2 ** (entry.failures - 1)),
+      );
+      retries.set(query.queryHash, entry);
     }
     // A write of the page's own, or a read cancelled back to such a write: still the copy.
     if (!query.state.isInvalidated) query.invalidate();
@@ -62,6 +102,7 @@ export function followRestoredReads(queryClient: QueryClient) {
     },
     /** `query` was given data its caller read from the server (`setQueryData`): its copy is gone. */
     replaced(query: Query) {
+      stopRetrying(query.queryHash);
       if (awaiting.delete(query.queryHash)) notify();
     },
     /** Whether the restored query `queryHash` still shows its copy: no read of its own landed. */
