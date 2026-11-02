@@ -89,8 +89,7 @@ export function createAgentSessionMethod(
           category: "session_mismatch",
         };
       }
-      const isKnown =
-        error instanceof Error && KNOWN_REJECTION_REASONS.has(error.message);
+      const isKnown = error instanceof Error && KNOWN_REJECTION_REASONS.has(error.message);
       console.warn(
         JSON.stringify({
           event: "agent_session:snapshot_rejected",
