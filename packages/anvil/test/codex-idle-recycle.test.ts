@@ -64,6 +64,12 @@ function rolloutHost(options: {
       if (!node || node.kind !== "file") throw new Error(`not a file: ${path}`);
       return { text: node.text, startOffset: 0 };
     },
+    async readFileHeadBytes() {
+      throw new Error("local session reads are not part of this fixture");
+    },
+    async readFileTailBytes() {
+      throw new Error("local session reads are not part of this fixture");
+    },
   };
 }
 

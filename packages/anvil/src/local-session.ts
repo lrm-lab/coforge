@@ -111,8 +111,11 @@ export async function readLocalSessionWindows(
   path: string,
   limits: LocalSessionLimits,
   host: {
-    readFileTail(path: string, bytes: number): Promise<{ text: string; startOffset: number }>;
-    readFileHead?(path: string, bytes: number): Promise<string>;
+    readFileHeadBytes(path: string, bytes: number): Promise<{ bytes: Uint8Array }>;
+    readFileTailBytes(
+      path: string,
+      bytes: number,
+    ): Promise<{ bytes: Uint8Array; startOffset: number }>;
   },
   budget: { bytes: number },
 ): Promise<{ records: unknown[]; complete: boolean } | undefined> {
@@ -122,27 +125,34 @@ export async function readLocalSessionWindows(
   try {
     const headBytes = Math.min(256 * 1024, Math.floor(allowance / 2));
     const tailBytes = Math.max(1, allowance - headBytes);
-    const [head, tail] = await localSessionIo(
+    const [headRead, tailRead] = await localSessionIo(
       Promise.all([
-        host.readFileHead?.(path, headBytes) ?? Promise.resolve(""),
-        host.readFileTail(path, tailBytes),
+        host.readFileHeadBytes(path, headBytes),
+        host.readFileTailBytes(path, tailBytes),
       ]),
       limits,
     );
-    let prefix = head;
-    const prefixBytes = Buffer.from(prefix);
-    const windowsCoverFile = tail.startOffset === 0 || tail.startOffset <= prefixBytes.byteLength;
-    if (tail.startOffset > 0 && tail.startOffset < prefixBytes.byteLength)
-      prefix = prefixBytes.subarray(0, tail.startOffset).toString("utf8");
-    const countedText = tail.startOffset === 0 ? tail.text : prefix + tail.text;
-    budget.bytes -= Math.min(allowance, new TextEncoder().encode(countedText).byteLength);
+    const head = Buffer.from(headRead.bytes);
+    const tail = Buffer.from(tailRead.bytes);
+    const windowsCoverFile = tailRead.startOffset === 0 || tailRead.startOffset <= head.byteLength;
+    const prefix = head.subarray(0, Math.min(head.byteLength, tailRead.startOffset));
+    const decoder = new TextDecoder();
+    const bytesRead =
+      tailRead.startOffset === 0 ? tail.byteLength : prefix.byteLength + tail.byteLength;
+    budget.bytes -= Math.min(allowance, bytesRead);
     return {
       records:
-        tail.startOffset === 0
-          ? jsonlWindows("", tail)
+        tailRead.startOffset === 0
+          ? jsonlWindows("", { text: decoder.decode(tail), startOffset: 0 })
           : windowsCoverFile
-            ? jsonlWindows("", { text: prefix + tail.text, startOffset: 0 })
-            : jsonlWindows(prefix, tail),
+            ? jsonlWindows("", {
+                text: decoder.decode(Buffer.concat([prefix, tail])),
+                startOffset: 0,
+              })
+            : jsonlWindows(decoder.decode(prefix), {
+                text: decoder.decode(tail),
+                startOffset: tailRead.startOffset,
+              }),
       complete: windowsCoverFile,
     };
   } catch (error) {

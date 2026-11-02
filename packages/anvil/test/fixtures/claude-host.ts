@@ -99,6 +99,8 @@ export const fixtureClaudeHost: ClaudeRuntimeHost = {
   readDirectoryNames: unexpected,
   lstat: unexpected,
   readFileTail: unexpected,
+  readFileHeadBytes: unexpected,
+  readFileTailBytes: unexpected,
   realWorkspaceRoot: unexpected,
   rereadFile: unexpected,
 };

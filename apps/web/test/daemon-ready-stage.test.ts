@@ -173,7 +173,12 @@ test("a superseded daemon cannot overwrite the current daemon capability leases"
 
 test("overlapping ready calls cannot let the older worker write capabilities last", async () => {
   let current = { workerInstanceId: "old", startedAt: 1, daemonVersion: "1" };
-  let capability = { workerInstanceId: "", startedAt: 0, values: [] as readonly string[] };
+  let capability: {
+    workerInstanceId: string;
+    startedAt: number;
+    connectionId?: string;
+    values: readonly string[];
+  } = { workerInstanceId: "", startedAt: 0, values: [] };
   const oldRecordStarted = Promise.withResolvers<void>();
   const releaseOldRecord = Promise.withResolvers<void>();
   const method = createDaemonRuntimeReadyMethod({
@@ -204,11 +209,15 @@ test("overlapping ready calls cannot let the older worker write capabilities las
       capabilities,
     });
 
-  const oldReady = method(payload("old", 1, []), { principal: principal() });
+  const oldReady = method(payload("old", 1, []), {
+    principal: principal(),
+    client: "client-old",
+  });
   await oldRecordStarted.promise;
   expect(
     await method(payload("new", 2, ["local-session-handoff:v1"]), {
       principal: principal(),
+      client: "client-new",
     }),
   ).toBeInstanceOf(Uint8Array);
   releaseOldRecord.resolve();
@@ -216,6 +225,7 @@ test("overlapping ready calls cannot let the older worker write capabilities las
   expect(capability).toEqual({
     workerInstanceId: "new",
     startedAt: 2,
+    connectionId: "client-new",
     values: ["local-session-handoff:v1"],
   });
 });

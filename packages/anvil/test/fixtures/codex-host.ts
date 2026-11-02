@@ -23,6 +23,12 @@ export const fixtureCodexHistory = {
   async readFileTail(): Promise<{ text: string; startOffset: number }> {
     throw new Error("fixture has no rollout");
   },
+  async readFileHeadBytes(): Promise<{ bytes: Uint8Array }> {
+    throw new Error("fixture has no rollout");
+  },
+  async readFileTailBytes(): Promise<{ bytes: Uint8Array; startOffset: number }> {
+    throw new Error("fixture has no rollout");
+  },
 };
 
 /** Fixture subprocesses only; daemon tests exercise real environment and masking policies. */

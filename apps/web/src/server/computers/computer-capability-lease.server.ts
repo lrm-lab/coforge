@@ -21,7 +21,11 @@ if redis.call("GET", KEYS[1]) == ARGV[1] then
 end
 return 0`;
 
-type CapabilityIdentity = { workerInstanceId: string; startedAt: number };
+type CapabilityIdentity = {
+  workerInstanceId: string;
+  startedAt: number;
+  connectionId?: string;
+};
 type CapabilityValue = CapabilityIdentity & { state: "supported" | "unsupported" };
 
 /**
@@ -62,17 +66,21 @@ export class RedisComputerCapabilityLease {
     );
   }
 
-  async refresh(workspaceId: string, computerId: string) {
+  async refresh(workspaceId: string, computerId: string, connectionId?: string) {
     const key = this.key(workspaceId, computerId);
     const raw = await this.redis.get(key);
-    if (this.read(raw)?.state === "supported")
+    const value = this.read(raw);
+    if (
+      value?.state === "supported" &&
+      (!value.workerInstanceId || (connectionId && value.connectionId === connectionId))
+    )
       await this.redis.send("EVAL", [REFRESH_IF_CURRENT, "1", key, raw!, TTL_SECONDS]);
   }
 
   private read(raw: string | null): CapabilityValue | undefined {
     if (!raw) return;
     if (raw === "supported" || raw === "unsupported")
-      return { state: raw, workerInstanceId: "", startedAt: 0 };
+      return { state: raw, workerInstanceId: "", startedAt: 0, connectionId: "" };
     try {
       const value = JSON.parse(raw) as Partial<CapabilityValue>;
       if (

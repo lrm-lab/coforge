@@ -10,16 +10,21 @@ async function readAt(path: string, start: (size: number) => number, maxBytes: n
     const length = Math.max(0, Math.min(maxBytes, info.size - offset));
     const buffer = Buffer.allocUnsafe(length);
     const { bytesRead } = await handle.read(buffer, 0, length, offset);
-    return { text: buffer.subarray(0, bytesRead).toString("utf8"), startOffset: offset };
+    return { bytes: buffer.subarray(0, bytesRead), startOffset: offset };
   } finally {
     await handle.close();
   }
 }
 
-export async function readHistoryFileHead(path: string, maxBytes: number): Promise<string> {
-  return (await readAt(path, () => 0, maxBytes)).text;
+export async function readHistoryFileTail(path: string, maxBytes: number) {
+  const read = await readHistoryFileTailBytes(path, maxBytes);
+  return { text: new TextDecoder().decode(read.bytes), startOffset: read.startOffset };
 }
 
-export function readHistoryFileTail(path: string, maxBytes: number) {
+export function readHistoryFileHeadBytes(path: string, maxBytes: number) {
+  return readAt(path, () => 0, maxBytes);
+}
+
+export function readHistoryFileTailBytes(path: string, maxBytes: number) {
   return readAt(path, (size) => Math.max(0, size - maxBytes), maxBytes);
 }

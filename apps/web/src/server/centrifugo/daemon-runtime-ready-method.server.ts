@@ -28,7 +28,7 @@ export type DaemonRuntimeReadyPorts = {
       workspaceId: string,
       computerId: string,
       values: readonly string[],
-      identity: { workerInstanceId: string; startedAt: number },
+      identity: { workerInstanceId: string; startedAt: number; connectionId?: string },
     ): Promise<unknown>;
   };
   reminderRecovery?: { snapshotAssigned(workspaceId: string, computerId: string): Promise<void> };
@@ -97,7 +97,11 @@ export const createDaemonRuntimeReadyMethod =
         request.workspaceId,
         request.computerId,
         request.capabilities ?? [],
-        { workerInstanceId: request.workerInstanceId, startedAt: request.startedAt },
+        {
+          workerInstanceId: request.workerInstanceId,
+          startedAt: request.startedAt,
+          connectionId: metadata.client,
+        },
       );
       stage = "computer_observation";
       await observe?.(

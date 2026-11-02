@@ -68,10 +68,17 @@ function claudeHost(input: Record<string, FileNode>): ClaudeHistoryHost {
       const startOffset = Math.max(0, text.length - bytes);
       return { text: text.slice(startOffset), startOffset };
     },
-    async readFileHead(path, bytes) {
+    async readFileHeadBytes(path, bytes) {
       const text = files.get(path)?.text;
       if (text === undefined) throw new Error("missing");
-      return text.slice(0, bytes);
+      return { bytes: Buffer.from(text).subarray(0, bytes) };
+    },
+    async readFileTailBytes(path, bytes) {
+      const text = files.get(path)?.text;
+      if (text === undefined) throw new Error("missing");
+      const encoded = Buffer.from(text);
+      const startOffset = Math.max(0, encoded.byteLength - bytes);
+      return { bytes: encoded.subarray(startOffset), startOffset };
     },
   };
 }
@@ -166,10 +173,17 @@ function codexHost(input: Record<string, FileNode>): CodexHistoryHost {
       const startOffset = Math.max(0, text.length - bytes);
       return { text: text.slice(startOffset), startOffset };
     },
-    async readFileHead(path, bytes) {
+    async readFileHeadBytes(path, bytes) {
       const text = files.get(path)?.text;
       if (text === undefined) throw new Error("missing");
-      return text.slice(0, bytes);
+      return { bytes: Buffer.from(text).subarray(0, bytes) };
+    },
+    async readFileTailBytes(path, bytes) {
+      const text = files.get(path)?.text;
+      if (text === undefined) throw new Error("missing");
+      const encoded = Buffer.from(text);
+      const startOffset = Math.max(0, encoded.byteLength - bytes);
+      return { bytes: encoded.subarray(startOffset), startOffset };
     },
   };
 }
@@ -268,12 +282,13 @@ test("overlapping head and tail windows project a JSONL record only once", async
     "/session.jsonl",
     overlapLimits,
     {
-      async readFileHead(_path, bytes) {
-        return text.slice(0, bytes);
+      async readFileHeadBytes(_path, bytes) {
+        return { bytes: Buffer.from(text).subarray(0, bytes) };
       },
-      async readFileTail(_path, bytes) {
-        const startOffset = Math.max(0, text.length - bytes);
-        return { text: text.slice(startOffset), startOffset };
+      async readFileTailBytes(_path, bytes) {
+        const encoded = Buffer.from(text);
+        const startOffset = Math.max(0, encoded.byteLength - bytes);
+        return { bytes: encoded.subarray(startOffset), startOffset };
       },
     },
     { bytes: 200 },
@@ -319,7 +334,7 @@ test("a final candidate hydration timeout marks the listing incomplete", async (
     },
     {
       ...base,
-      readFileHead: () => new Promise<string>(() => {}),
+      readFileHeadBytes: () => new Promise<{ bytes: Uint8Array }>(() => {}),
     },
   );
   expect(result.sessions).toEqual([]);
@@ -410,12 +425,13 @@ test("a tail starting exactly on a JSONL boundary keeps its first record", async
     "/session.jsonl",
     boundaryLimits,
     {
-      async readFileHead(_path, bytes) {
-        return text.slice(0, bytes);
+      async readFileHeadBytes(_path, bytes) {
+        return { bytes: Buffer.from(text).subarray(0, bytes) };
       },
-      async readFileTail(_path, bytes) {
-        const startOffset = text.length - bytes;
-        return { text: text.slice(startOffset), startOffset };
+      async readFileTailBytes(_path, bytes) {
+        const encoded = Buffer.from(text);
+        const startOffset = encoded.byteLength - bytes;
+        return { bytes: encoded.subarray(startOffset), startOffset };
       },
     },
     { bytes: text.length },
@@ -434,12 +450,13 @@ test("complete overlapping windows reconstruct a record crossing their seam", as
     "/session.jsonl",
     { ...limits, maxFileBytes: 100, maxContentBytes: 100 },
     {
-      async readFileHead(_path, bytes) {
-        return text.slice(0, bytes);
+      async readFileHeadBytes(_path, bytes) {
+        return { bytes: Buffer.from(text).subarray(0, bytes) };
       },
-      async readFileTail(_path, bytes) {
-        const startOffset = Math.max(0, text.length - bytes);
-        return { text: text.slice(startOffset), startOffset };
+      async readFileTailBytes(_path, bytes) {
+        const encoded = Buffer.from(text);
+        const startOffset = Math.max(0, encoded.byteLength - bytes);
+        return { bytes: encoded.subarray(startOffset), startOffset };
       },
     },
     { bytes: 100 },
@@ -469,10 +486,35 @@ test("excerpt distinguishes a missing session from an unreadable existing transc
       { sessionId: "session-1", cwd: "/work/project", limits },
       {
         ...base,
-        readFileHead: async () => {
+        readFileHeadBytes: async () => {
           throw new Error("unreadable");
         },
       },
     ),
   ).toEqual({ status: "unavailable" });
+});
+
+test("complete byte windows decode a multibyte overlap seam only once", async () => {
+  const text = '{"id":1}\n{"text":"😀tail"}\n{"id":3}\n';
+  const encoded = Buffer.from(text);
+  const seam = Math.floor(encoded.byteLength / 2);
+  expect(encoded.subarray(seam - 1, seam + 1).toString("utf8")).toContain("�");
+  const read = await readLocalSessionWindows(
+    "/session.jsonl",
+    { ...limits, maxFileBytes: encoded.byteLength, maxContentBytes: encoded.byteLength },
+    {
+      async readFileHeadBytes(_path, bytes) {
+        return { bytes: encoded.subarray(0, bytes) };
+      },
+      async readFileTailBytes(_path, bytes) {
+        const startOffset = encoded.byteLength - bytes;
+        return { bytes: encoded.subarray(startOffset), startOffset };
+      },
+    },
+    { bytes: encoded.byteLength },
+  );
+  expect(read).toEqual({
+    records: [{ id: 1 }, { text: "😀tail" }, { id: 3 }],
+    complete: true,
+  });
 });
