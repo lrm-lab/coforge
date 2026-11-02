@@ -83,7 +83,8 @@ export async function listChannels(
       mentioned: boolean;
     }[]
   >`
-      SELECT cm."conversationId" AS "conversationId", unread."count" AS "unread",
+      SELECT cm."conversationId" AS "conversationId",
+        CASE WHEN cm."notificationLevel" = 'muted' THEN 0 ELSE unread."count" END AS "unread",
         unread."arrivedSinceClosed" AS "arrivedSinceClosed",
         unread."mentioned" AS "mentioned"
       FROM "conversation_members" cm
@@ -93,7 +94,7 @@ export async function listChannels(
        AND c."channelName" IS NOT NULL
        AND c."hiddenFromWorkspaceAt" IS NULL
       CROSS JOIN LATERAL (
-        SELECT COUNT(*) FILTER (WHERE cm."notificationLevel" <> 'muted')::int AS "count",
+        SELECT COUNT(*)::int AS "count",
           COUNT(*) FILTER (WHERE m."createdAt" > cm."hiddenAt")::int AS "arrivedSinceClosed",
           COALESCE(BOOL_OR(EXISTS (
             SELECT 1 FROM "message_mentions" mm
