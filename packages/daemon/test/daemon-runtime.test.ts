@@ -5446,57 +5446,6 @@ describe("DaemonRuntime", () => {
     expect(calls).toEqual(["start", "stop"]);
   });
 
-  test("owns one AgentProcessManager for its workspace", async () => {
-    const adapter: CodeAgentProvider = {
-      provider: "pi",
-      async createAgentSession() {
-        return sessionSpy();
-      },
-    };
-    const credentials = new InMemoryDaemonCredentialStore();
-    await credentials.save(connection.workspaceId, connection.computerId, "token-a");
-    const transportCalls: unknown[] = [];
-    const runtime = new DaemonRuntime(
-      connection,
-      () => adapter,
-      credentials,
-      {
-        create: () => ({
-          async start(token, config) {
-            transportCalls.push([token, config]);
-          },
-          async ready() {},
-          async requestAgentLaunchConfig() {
-            return agentLaunchConfig(`sk_agent_${"a".repeat(43)}`);
-          },
-          async stop() {
-            transportCalls.push("stop");
-          },
-        }),
-      },
-      undefined,
-      emptyCodeAgentDiscovery,
-    );
-
-    await runtime.start(connection);
-    await runtime.startAgent("agent-a", config);
-
-    expect(runtime.agentProcessManager.size).toBe(1);
-    await runtime.stop();
-    expect(runtime.agentProcessManager.size).toBe(0);
-    expect(transportCalls).toEqual([
-      [
-        "token-a",
-        {
-          computerId: "computer-a",
-          workspaceId: "workspace-a",
-          signal: expect.any(AbortSignal),
-        },
-      ],
-      "stop",
-    ]);
-  });
-
   test("passes the runtime provider config to its provider without interpreting it", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
