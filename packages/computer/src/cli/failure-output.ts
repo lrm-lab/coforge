@@ -5,6 +5,7 @@ import {
   safeErrorDetail,
   setupError,
 } from "#src/errors";
+import { describeNetworkError, NETWORK_FAILURE_HINT } from "#src/network-error";
 import { UpgradeFailedError } from "#src/release/upgrade-receipt";
 import { UpdateError } from "#src/updater";
 
@@ -69,6 +70,11 @@ function failureCode(error: unknown): string {
 
 function failureMessage(error: unknown): string {
   if (error instanceof UpdateError || error instanceof UpgradeFailedError) return error.message;
+  if (error instanceof TypeError && error.message.includes("fetch failed")) {
+    const cause = (error as { cause?: unknown }).cause;
+    const causeText = cause ? ` (${describeNetworkError(cause)})` : "";
+    return `the request to the server never got an answer${causeText}. ${NETWORK_FAILURE_HINT} Then run the same command again.`;
+  }
   return error instanceof Error ? error.message : "coforge-computer failed";
 }
 

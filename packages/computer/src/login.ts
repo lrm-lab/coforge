@@ -3,6 +3,12 @@ import pc from "picocolors";
 import { normalizeServerUrl } from "./oauth-device-client";
 import { loginError } from "./errors";
 import { terminalText } from "./terminal-output";
+import {
+  describeNetworkError,
+  isTransientNetworkError,
+  lostConnectionMessage,
+  MAX_CONSECUTIVE_POLL_FAILURES,
+} from "./network-error";
 
 export type DeviceAuthorization = {
   deviceCode: string;
@@ -87,21 +93,64 @@ export class ComputerLogin {
     const deadline = now() + authorization.expiresInSeconds * 1_000;
     let intervalMilliseconds = authorization.intervalSeconds * 1_000;
     let token: TokenPollResult;
+    const host = new URL(serverUrl).host;
+    let consecutiveNetworkFailures = 0;
+    let lastNetworkError: unknown = null;
     do {
       let remainingMilliseconds = deadline - now();
       if (intervalMilliseconds >= remainingMilliseconds) {
+        if (consecutiveNetworkFailures > 0) {
+          const cause = describeNetworkError(lastNetworkError);
+          throw loginError("AUTH_NETWORK_ERROR", lostConnectionMessage(host, cause), {
+            cause: lastNetworkError,
+          });
+        }
         throw loginError("AUTH_DEVICE_CODE_EXPIRED", "The device authorization code expired.");
       }
       await this.options.sleep(intervalMilliseconds);
       remainingMilliseconds = deadline - now();
       if (remainingMilliseconds <= 0) {
+        if (consecutiveNetworkFailures > 0) {
+          const cause = describeNetworkError(lastNetworkError);
+          throw loginError("AUTH_NETWORK_ERROR", lostConnectionMessage(host, cause), {
+            cause: lastNetworkError,
+          });
+        }
         throw loginError("AUTH_DEVICE_CODE_EXPIRED", "The device authorization code expired.");
       }
-      token = await this.options.client.pollToken(authorization.deviceCode, remainingMilliseconds);
-      if (token.status === "slow_down" || token.status === "network_timeout") {
-        intervalMilliseconds += 5_000;
+      try {
+        token = await this.options.client.pollToken(
+          authorization.deviceCode,
+          remainingMilliseconds,
+        );
+        consecutiveNetworkFailures = 0;
+        lastNetworkError = null;
+        if (token.status === "slow_down" || token.status === "network_timeout") {
+          intervalMilliseconds += 5_000;
+        }
+      } catch (error) {
+        if (isTransientNetworkError(error)) {
+          consecutiveNetworkFailures++;
+          lastNetworkError = error;
+          if (consecutiveNetworkFailures >= MAX_CONSECUTIVE_POLL_FAILURES) {
+            const cause = describeNetworkError(error);
+            throw loginError("AUTH_NETWORK_ERROR", lostConnectionMessage(host, cause), {
+              cause: error,
+            });
+          }
+          intervalMilliseconds += 5_000;
+          token = { status: "pending" };
+        } else {
+          throw error;
+        }
       }
       if (token.status !== "authorized" && deadline - now() <= 0) {
+        if (consecutiveNetworkFailures > 0) {
+          const cause = describeNetworkError(lastNetworkError);
+          throw loginError("AUTH_NETWORK_ERROR", lostConnectionMessage(host, cause), {
+            cause: lastNetworkError,
+          });
+        }
         throw loginError("AUTH_DEVICE_CODE_EXPIRED", "The device authorization code expired.");
       }
     } while (token.status !== "authorized");

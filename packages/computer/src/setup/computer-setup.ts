@@ -13,6 +13,7 @@ export type ComputerPlatformName = "darwin" | "linux" | "win32";
 export type SetupResult = {
   workspace: AccessibleWorkspace;
   configPath: string;
+  serverUrl?: string;
   /** The Daemon took the configuration, but the Workspace was still starting when it answered. */
   daemonStillStarting?: true;
 };
@@ -209,7 +210,12 @@ export class ComputerSetup {
       );
     }
 
-    return { workspace, configPath, ...(daemonStillStarting ? { daemonStillStarting: true } : {}) };
+    return {
+      workspace,
+      configPath,
+      serverUrl,
+      ...(daemonStillStarting ? { daemonStillStarting: true } : {}),
+    };
   }
 }
 

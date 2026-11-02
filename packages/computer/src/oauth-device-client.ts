@@ -134,8 +134,10 @@ export class OAuthDeviceClient implements DeviceAuthorizationClient {
   async #request(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
     try {
       return await this.#fetch(input, init);
-    } catch {
-      throw loginError("AUTH_NETWORK_ERROR", "Could not reach the CoForge server.");
+    } catch (error) {
+      throw loginError("AUTH_NETWORK_ERROR", "Could not reach the CoForge server.", {
+        cause: error,
+      });
     }
   }
 
@@ -151,7 +153,9 @@ export class OAuthDeviceClient implements DeviceAuthorizationClient {
       });
     } catch (error) {
       if (isRequestTimeout(error)) return null;
-      throw loginError("AUTH_NETWORK_ERROR", "Could not reach the CoForge server.");
+      throw loginError("AUTH_NETWORK_ERROR", "Could not reach the CoForge server.", {
+        cause: error,
+      });
     }
   }
 }

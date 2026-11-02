@@ -108,7 +108,8 @@ export const LOGIN_HINTS = {
   AUTH_BUILD_ENVIRONMENT_MISMATCH:
     "Install the build matching the existing environment. Do not delete the profile to switch environments.",
   AUTH_INVALID_SERVER: "Use an HTTPS server URL without credentials, a query, or a fragment.",
-  AUTH_NETWORK_ERROR: "Check the server URL and network connection, then rerun login.",
+  AUTH_NETWORK_ERROR:
+    "Check your network/VPN; if you need a proxy, set HTTPS_PROXY / HTTP_PROXY / NO_PROXY. Then run `coforge-computer login` again.",
   AUTH_PROFILE_WRITE_FAILED: "Check the configuration directory permissions, then rerun login.",
   AUTH_PROFILE_READ_FAILED:
     "Repair the Computer profile without changing its environment, then rerun login.",
@@ -118,8 +119,12 @@ export const LOGIN_HINTS = {
 
 export type LoginErrorCode = keyof typeof LOGIN_HINTS;
 
-export function loginError(code: LoginErrorCode, message: string): CliError {
-  return new CliError(code, message, LOGIN_HINTS[code]);
+export function loginError(
+  code: LoginErrorCode,
+  message: string,
+  options?: { cause?: unknown },
+): CliError {
+  return new CliError(code, message, LOGIN_HINTS[code], options);
 }
 
 export const SETUP_HINTS = {
