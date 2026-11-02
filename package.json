@@ -19,7 +19,7 @@
     "test:release": "bun run --cwd packages/coforge-sdk generate && bun scripts/test/isolated-test-run.ts bun test scripts/release",
     "check:release": "bunx oxfmt --check scripts/release && bunx oxlint scripts/release && mise exec -- shellcheck scripts/release/install.sh",
     "test:ci": "bun scripts/test/isolated-test-run.ts bun test scripts/ci scripts/audit ./scripts/test scripts/git-hooks ./scripts/migration-safety scripts/e2e/computer-setup-harness.test.ts",
-    "check:ci": "actionlint && bunx oxfmt --check scripts/ci scripts/audit scripts/test scripts/git-hooks && bunx oxlint scripts/ci scripts/audit scripts/test scripts/git-hooks && mise exec -- shellcheck .githooks/pre-commit .githooks/pre-push",
+    "check:ci": "actionlint && bunx oxfmt --check scripts/ci scripts/audit scripts/test scripts/git-hooks && bunx oxlint scripts/ci scripts/audit scripts/test scripts/git-hooks && mise exec -- shellcheck .githooks/pre-commit .githooks/pre-push scripts/ci/check-installer-binary.sh scripts/ci/require-committed.sh",
     "test:cdn-certs": "bun scripts/test/isolated-test-run.ts bun test scripts/ops",
     "check:cdn-certs": "bunx oxfmt --check scripts/ops && bunx oxlint scripts/ops && mise exec -- shellcheck scripts/ops/acme-dns-hook.sh",
     "test:reference-computer": "bun scripts/test/isolated-test-run.ts bun test ./scripts/reference-computer",
