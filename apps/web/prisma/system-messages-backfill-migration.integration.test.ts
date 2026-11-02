@@ -14,6 +14,13 @@ const migrationName = (await readdir(migrationsDirectory)).find((name) =>
 const migration = migrationName
   ? await Bun.file(new URL(`${migrationName}/migration.sql`, migrationsDirectory)).text()
   : "";
+const readMigration = async (suffix: string) => {
+  const name = (await readdir(migrationsDirectory)).find((entry) => entry.endsWith(suffix));
+  return name ? await Bun.file(new URL(`${name}/migration.sql`, migrationsDirectory)).text() : "";
+};
+const helperPerson = await readMigration("_helper_person");
+const helperTask = await readMigration("_helper_task");
+const helperDrop = await readMigration("_helper_drop");
 
 afterAll(async () => {
   await pool?.end();
@@ -101,7 +108,10 @@ test.skipIf(!connectionString)(
            VALUES (gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), NULL, $1)`,
           [body],
         );
+      await client.query(helperPerson);
+      await client.query(helperTask);
       await client.query(migration);
+      await client.query(helperDrop);
       const rows = await client.query<{ kind: string; count: string }>(
         `SELECT kind, count(*)::text AS count FROM system_messages GROUP BY kind`,
       );
@@ -135,6 +145,8 @@ test.skipIf(!connectionString)(
            VALUES (gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), NULL, $1)`,
           [`unknown notice ${index}`],
         );
+      await client.query(helperPerson);
+      await client.query(helperTask);
       await expect(client.query(migration)).rejects.toThrow(/unparseable/);
       const rows = await client.query(`SELECT count(*)::int AS count FROM system_messages`);
       expect(rows.rows[0]!.count).toBe(0);
