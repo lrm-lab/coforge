@@ -64,7 +64,8 @@ Read this overview first, then the topic files the task needs.
 | [Installer command line](installer-commands.md) | The `coforge-installer` commands, their output, and exit status |
 | [Per-user installation](per-user-installation.md)                   | Installation paths, PATH shims, version store, launchers, selection modes, and environment-bound builds    |
 | [Release notes](release-notes.md)                                   | The required English and Chinese notes of every Computer publication, the release catalog, and editing them later |
-| [Reading GitHub Actions](github-actions.md)                         | The CI, Web deploy, and Computer publish workflows, check selection, and version naming                    |
+| [Reading GitHub Actions](github-actions.md)                         | The CI, Web deploy, and Computer publish workflows, and check selection                                    |
+| [Computer versions](computer-versions.md) | The staging dev-build and stable production version rule, and the publication lock that numbers them |
 | [Main to staging](main-to-staging.md)                               | The operator-dispatched cloud deployment and local publication paths to staging                            |
 | [Staging to production](staging-to-production.md)                   | The two-party production promotion for each track                                                          |
 | [Health verification](health-verification.md)                       | Cloud health checks, diagnostics, local readiness gates, and upgrade health checks                         |
