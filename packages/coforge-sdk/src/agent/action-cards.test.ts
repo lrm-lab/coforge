@@ -284,9 +284,12 @@ describe("choiceActionSchema", () => {
     });
     expect(parsed.type).toBe("choice");
     if (parsed.type !== "choice") throw new Error("expected choice");
-    expect(parsed.allowFreeText).toBe(true);
     expect(parsed.to).toBe("@alice");
     expect(validateActionCardAction(parsed)).toBeNull();
+    // Older CLIs still send the retired `allowFreeText`; it parses and is ignored.
+    expect(actionCardActionSchema.safeParse({ ...parsed, allowFreeText: false }).success).toBe(
+      true,
+    );
 
     const duplicate = actionCardActionSchema.parse({
       type: "choice",

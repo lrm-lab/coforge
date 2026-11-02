@@ -18,6 +18,7 @@
   "action_card_desktop_takeover_done": "Finished on the desktop",
   "action_card_denied_desktop_takeover": "Only this Agent's owner can mark this done.",
   "action_card_choice_waiting": "Waiting for {name}",
+  "action_card_choice_chosen": "Chose {option}",
   "action_card_commit_channel_create": "Create Channel",
   "action_card_commit_agent_create": "Create Agent",
   "action_card_commit_add_member": "Add Members",

@@ -95,8 +95,7 @@ The person opens your screen from the card, finishes the step, then marks it don
 When several mutually exclusive next steps exist (for example login methods), post a `choice`
 card so the person can click. The card must name who it asks: `to` is required, is a handle
 (`@alice`) or user id, and that person must be a member of the conversation. Replace `@alice`
-with the handle of the person you want to ask; there is no default owner. They may also answer
-in free text when `allowFreeText` is true (the default). Example:
+with the handle of the person you want to ask; there is no default owner. Example:
 
 ```
 coforge action prepare --target "@alice" <<'COFORGEACTION'

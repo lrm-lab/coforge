@@ -18,6 +18,7 @@
   "action_card_desktop_takeover_done": "已在云电脑上完成",
   "action_card_denied_desktop_takeover": "只有这个 Agent 的所有者可以确认完成。",
   "action_card_choice_waiting": "等 {name} 选择",
+  "action_card_choice_chosen": "已选 {option}",
   "action_card_commit_channel_create": "创建群聊",
   "action_card_commit_agent_create": "创建 Agent",
   "action_card_commit_add_member": "添加成员",

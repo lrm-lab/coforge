@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button as AriaButton } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
@@ -34,6 +34,24 @@ export function ChoiceActionCard({
   const [picking, setPicking] = useState<string>();
   const executed = view.state === "executed";
   const chosen = executed ? view.result?.optionId : picking;
+  // The asked person's pick closes the card and removes the pressed option: focus, left on
+  // nothing, moves to the card, and the status line tells a screen reader what was chosen.
+  const cardRef = useRef<HTMLDivElement>(null);
+  const wasExecuted = useRef(executed);
+  const [announcement, setAnnouncement] = useState("");
+  const chosenIndex = view.options.findIndex((option) => option.id === view.result?.optionId);
+  const isAsked = view.asked?.isViewer === true;
+  useEffect(() => {
+    const closed = executed && !wasExecuted.current;
+    wasExecuted.current = executed;
+    if (!closed || !isAsked || chosenIndex < 0) return;
+    if (document.activeElement === document.body) cardRef.current?.focus();
+    setAnnouncement(
+      m.action_card_choice_chosen({
+        option: `${letter(chosenIndex)}. ${view.options[chosenIndex]!.label}`,
+      }),
+    );
+  }, [executed, isAsked, chosenIndex, view.options]);
   // Whom it waits on, for anyone but the asked person; whom it was answered by, likewise.
   const waitingOn =
     view.state === "pending" && !view.canCommit ? view.asked?.displayName : undefined;
@@ -42,8 +60,12 @@ export function ChoiceActionCard({
   const withdrawable = view.canCancel && !view.canCommit;
   return (
     <div
+      ref={cardRef}
+      role="group"
+      aria-label={view.prompt}
+      tabIndex={-1}
       className={cn(
-        "mt-1 flex max-w-md flex-col gap-2 rounded-xl border border-secondary bg-primary p-3 shadow-xs",
+        "mt-1 flex max-w-md flex-col gap-2 rounded-xl border border-secondary bg-primary p-3 shadow-xs outline-focus-ring focus-visible:outline-2",
         view.state === "cancelled" && "opacity-60",
       )}
     >
@@ -122,6 +144,9 @@ export function ChoiceActionCard({
           )}
         </div>
       )}
+      <p role="status" className="sr-only">
+        {announcement}
+      </p>
       {view.state === "cancelled" && (
         <p className="px-1 text-xs text-tertiary">{m.action_card_cancelled()}</p>
       )}

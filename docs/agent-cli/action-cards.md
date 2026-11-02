@@ -43,8 +43,7 @@ yet:
 - **`choice`**: `prompt`, `options` (2–8 of `{id,label}` with unique `id`s matching
   `^[a-z][a-z0-9_]{0,31}$`), `to` (required: the handle or user id of the person who may
   answer, and who must be a member of the conversation; there is no default owner),
-  `allowFreeText?` (default true), `draftHint?`. The person clicks an option; free text may still
-  answer when allowed. An executed choice reads back as
+  `draftHint?`. The person clicks an option or types a reply. An executed choice reads back as
   `[action card: executed; choice=<id>]`. The asking Agent is told who answered and what they
   chose.
 - **`channel:add_member`**: `channel` (handle or UUID), `humans?`,

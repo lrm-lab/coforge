@@ -154,15 +154,15 @@ const choiceOptionSchema = z.object({
 });
 
 /**
- * Offer clickable options. The person may also reply in free text when
- * `allowFreeText` is true (the default). Choosing records `optionId` on the card;
- * free-text replies leave the card pending for the Agent to interpret.
+ * Offer clickable options. Choosing records `optionId` on the card; a typed reply leaves the
+ * card pending for the Agent to interpret.
  */
 export const choiceActionSchema = z.object({
   type: z.literal("choice"),
   prompt: z.string().trim().min(1).max(200),
   options: z.array(choiceOptionSchema).min(2).max(8),
-  allowFreeText: z.boolean().default(true),
+  /** Deprecated and ignored: accepted only so older CLIs that still send it keep working. */
+  allowFreeText: z.boolean().optional(),
   /** The person the card asks: a handle (`@alice` or `alice`) or a UUID. Required: a choice
    * always names who may answer it; there is no default owner. */
   to: idOrHandleSchema,
@@ -263,7 +263,6 @@ export type ResolvedChoicePayload = {
   type: "choice";
   prompt: string;
   options: { id: string; label: string }[];
-  allowFreeText: boolean;
   /** The asked person's user id; every choice card names one. */
   to: string;
 };

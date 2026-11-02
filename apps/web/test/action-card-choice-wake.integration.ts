@@ -88,7 +88,6 @@ beforeAll(async () => {
           { id: "a", label: "Red" },
           { id: "b", label: "Blue" },
         ],
-        allowFreeText: true,
         to: userId,
       },
       preparedByAgentId: agentId,
@@ -151,7 +150,6 @@ test("a choice card names who is asked, and only they may choose", async () => {
       { id: "a", label: "Red" },
       { id: "b", label: "Blue" },
     ],
-    allowFreeText: true,
     to: `choice-${suffix}`,
   };
   const payload = await resolveChoicePayload(db, conversationId, action);
@@ -213,7 +211,6 @@ test("the waiting list shows the cards this person may answer", async () => {
             { id: "a", label: "Red" },
             { id: "b", label: "Blue" },
           ],
-          allowFreeText: true,
           ...extra,
         },
         preparedByAgentId: agentId,

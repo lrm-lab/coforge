@@ -52,7 +52,6 @@ export async function resolveChoicePayload(
     type: "choice",
     prompt: action.prompt,
     options: action.options.map((option) => ({ id: option.id, label: option.label })),
-    allowFreeText: action.allowFreeText,
     to: user.id,
   };
 }
