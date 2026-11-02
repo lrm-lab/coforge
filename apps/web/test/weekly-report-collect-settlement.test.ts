@@ -228,11 +228,12 @@ test("settleStaleCollectRun checks and marks offline computers in parallel", asy
     await import("#src/server/records/weekly-report-collect-run.server");
 
   const startedAt = new Date("2026-10-08T07:14:12.680Z");
-  const slotStatuses = new Map([
+  // Widened to string: the fake database below writes whatever status it is given.
+  const slotStatuses = new Map<string, string>([
     ["computer-1", COLLECT_SLOT_STATUS.running],
     ["computer-2", COLLECT_SLOT_STATUS.running],
   ]);
-  let runStatus = COLLECT_RUN_STATUS.collecting;
+  let runStatus: string = COLLECT_RUN_STATUS.collecting;
   let activePresenceChecks = 0;
   let maxPresenceChecks = 0;
   let activeSlotUpdates = 0;
