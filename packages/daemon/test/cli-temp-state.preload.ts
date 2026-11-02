@@ -13,7 +13,7 @@
  * It also removes the variables a Daemon sets on the processes it launches, which a run inside a
  * CoForge Agent inherits, and points `COFORGE_DAEMON_HOME` here: a defense for a file run without
  * the mise test tasks, which remove them before bun starts. A child spawned without `env` still
- * gets this process's startup environment.
+ * gets this process's startup environment. Last, it sets NODE_ENV=test (below).
  */
 import { afterAll } from "bun:test";
 import { mkdtempSync, realpathSync } from "node:fs";
@@ -29,5 +29,11 @@ process.env.COFORGE_CLI_CONSUMED_SEQ_STATE_DIR = root;
 
 for (const name of DAEMON_LAUNCH_ENV_KEYS) delete process.env[name];
 process.env.COFORGE_DAEMON_HOME = root;
+
+// The tests run under NODE_ENV=test, as on CI, whatever the shell exports: `bun test` sets it only
+// when it is unset, and a module may read it once as it loads. TanStack Router's server build,
+// which Bun resolves, decides `isServer` that way, so under an exported NODE_ENV=production every
+// test router behaved as a server one and reloaded every route. A test about NODE_ENV sets its own.
+process.env.NODE_ENV = "test";
 
 afterAll(() => rm(root, { recursive: true, force: true }));
