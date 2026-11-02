@@ -112,16 +112,25 @@ export async function publishTaskConversationMessage(
   await announceToPeople(ports, message).catch(() => undefined);
   if (!ports.dependencies.publisher) return;
   const sender = agentMessageSender(message.sender);
+  const board = message.conversation.taskDiscussionOf?.conversation;
+  const sharedTarget = board?.channelName
+    ? conversationTarget(message.conversation, () => undefined)
+    : undefined;
   await Promise.allSettled(
     message.deliveries.map(async (delivery) => {
-      const targetOf = await directTargets(ports.db, message.workspaceId, delivery.agentId, [
-        message.conversation,
-      ]);
+      const target =
+        sharedTarget ??
+        conversationTarget(
+          message.conversation,
+          await directTargets(ports.db, message.workspaceId, delivery.agentId, [
+            message.conversation,
+          ]),
+        );
       await publishDeliveries(
         ports,
         { ...message, deliveries: [delivery] },
         requestId,
-        conversationTarget(message.conversation, targetOf),
+        target,
         sender,
       );
     }),
