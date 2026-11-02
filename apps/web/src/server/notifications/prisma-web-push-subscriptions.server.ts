@@ -53,6 +53,7 @@ type MessageContext = {
   mentionedUserIds: string[];
   title: string;
   body: string;
+  system?: { kind: string; params: unknown };
   url: string;
   /** The un-anchored target: what `notificationForRecipient` hands the browser to compare against
    * the conversation it may already be looking at. */
@@ -95,6 +96,7 @@ export class PrismaWebPushSubscriptionStore implements WebPushSubscriptionStore 
         },
         mentions: BROWSER_MESSAGE_MENTIONS_SELECT,
         forward: { select: { sourceBody: true } },
+        systemMessage: { select: { kind: true, params: true } },
         attachmentComment: { select: { attachmentId: true } },
         conversation: {
           include: { workspace: { select: { slug: true } } },
@@ -167,6 +169,9 @@ export class PrismaWebPushSubscriptionStore implements WebPushSubscriptionStore 
       },
       channelName,
       mentionedUserIds,
+      ...(message.systemMessage
+        ? { system: { kind: message.systemMessage.kind, params: message.systemMessage.params } }
+        : {}),
       title: channelName ? `#${channelName}` : sender,
       body: channelName ? `${sender}: ${preview}` : preview,
       url,
@@ -223,6 +228,7 @@ export class PrismaWebPushSubscriptionStore implements WebPushSubscriptionStore 
         userId: true,
         user: {
           select: {
+            preferences: { select: { language: true } },
             webPushSubscriptions: {
               select: { id: true, endpoint: true, p256dh: true, auth: true },
             },
@@ -234,10 +240,12 @@ export class PrismaWebPushSubscriptionStore implements WebPushSubscriptionStore 
     return {
       title: context.title,
       body: context.body,
+      ...(context.system ? { system: context.system } : {}),
       url: context.url,
       workspaceId: context.message.workspaceId,
       recipients: rows.map((row) => ({
         userId: row.userId!,
+        language: row.user?.preferences?.language ?? null,
         subscriptions: row.user?.webPushSubscriptions ?? [],
       })),
     };

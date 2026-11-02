@@ -365,3 +365,40 @@ describe("WebPushNotifications", () => {
     expect(repository.removed).toEqual([`user-a:${first.endpoint}`]);
   });
 });
+
+describe("a system notice push", () => {
+  test("renders in each recipient's stored language", async () => {
+    const sent: Array<{ id: string; payload: { body: string } }> = [];
+    const repository = store({
+      message: {
+        title: "#team",
+        body: 'System: Ada assigned you task #4 "Fix"',
+        system: {
+          kind: "task.assigned_you",
+          params: {
+            actor: { memberId: null, handle: "ada", displayName: "Ada" },
+            task: { taskId: null, number: 4, title: "Fix" },
+          },
+        },
+        url: "/w/acme/channel/channel-a",
+        workspaceId: "workspace-a",
+        recipients: [
+          { userId: "alice", language: "zh-CN", subscriptions: [first] },
+          { userId: "bob", language: "en", subscriptions: [second] },
+        ],
+      },
+    });
+    const transport: WebPushTransport = {
+      send: async (subscription, payload) => {
+        sent.push({ id: subscription.id, payload });
+      },
+    };
+    await new WebPushNotifications(repository.value, transport).notifyMessage("message-a");
+    const chinese = sent.find((row) => row.id === first.id)!.payload.body;
+    const english = sent.find((row) => row.id === second.id)!.payload.body;
+    expect(chinese).not.toBe(english);
+    expect(chinese).toMatch(/\p{Script=Han}/u);
+    expect(chinese).toContain("Ada");
+    expect(english).toContain("Ada");
+  });
+});

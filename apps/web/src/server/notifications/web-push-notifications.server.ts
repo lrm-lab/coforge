@@ -1,4 +1,5 @@
 import { m } from "#src/paraglide/messages";
+import { systemNoticeText } from "#src/features/conversations/system-notice-text";
 import { workspacePath } from "#src/features/workspaces/workspace-url";
 
 export type StoredWebPushSubscription = {
@@ -24,12 +25,16 @@ export type WebPushPayload = {
  * may be none — a recipient with zero subscriptions still belongs here, for the in-page path). */
 export type MessageRecipient = {
   userId: string;
+  /** The recipient's stored interface language, if they chose one. */
+  language?: string | null;
   subscriptions: StoredWebPushSubscription[];
 };
 
 export type MessageWebPushNotification = {
   title: string;
   body: string;
+  /** The structured notice, when the message has one; each recipient's language renders it. */
+  system?: { kind: string; params: unknown };
   url: string;
   /** The message's Workspace, so the in-page publication can scope its event. */
   workspaceId: string;
@@ -144,18 +149,40 @@ export class WebPushNotifications {
   async notifyMessage(messageId: string): Promise<DeliveryResult> {
     const notification = await this.subscriptions.notificationForMessage(messageId);
     if (!notification) return { sent: 0, failed: 0, removed: 0, unreachable: 0 };
-    const subscriptions = notification.recipients.flatMap((recipient) => recipient.subscriptions);
     const userIds = notification.recipients.map((recipient) => recipient.userId);
-    const [delivery] = await Promise.all([
+    const byLanguage = new Map<string, StoredWebPushSubscription[]>();
+    for (const recipient of notification.recipients) {
+      const language = recipient.language === "zh-CN" ? "zh-CN" : "en";
+      byLanguage.set(language, [...(byLanguage.get(language) ?? []), ...recipient.subscriptions]);
+    }
+    const deliveries = [...byLanguage].map(([language, subscriptions]) =>
       this.deliver(subscriptions, {
         title: notification.title,
-        body: notification.body,
+        body: notification.system
+          ? systemNoticeText(
+              { body: notification.body, system: notification.system },
+              language as Locale,
+            )
+          : notification.body,
         url: notification.url,
         tag: messageNotificationTag(messageId),
       }),
+    );
+    const [results] = await Promise.all([
+      Promise.all(deliveries),
       this.publishAvailable(messageId, notification.workspaceId, userIds),
     ]);
-    return delivery;
+    const totals = results.reduce(
+      (total, result) => ({
+        sent: total.sent + result.sent,
+        failed: total.failed + result.failed,
+        removed: total.removed + result.removed,
+        unreachable: total.unreachable + result.unreachable,
+      }),
+      { sent: 0, failed: 0, removed: 0, unreachable: 0 },
+    );
+    const errorId = results.find((result) => result.errorId)?.errorId;
+    return errorId ? { ...totals, errorId } : totals;
   }
 
   private async publishAvailable(
