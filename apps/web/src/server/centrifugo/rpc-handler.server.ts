@@ -11,7 +11,6 @@ import {
   handleRequestError,
   RequestAuthenticationError,
 } from "#src/server/errors/request-error-handler.server";
-import { getComputerStatusCache, type ComputerStatusCache } from "./computer-status.server";
 import { requireDaemonPrincipal } from "./daemon-rpc-principal.server";
 import { validModelCatalogs } from "./rpc-handler-catalog-validation.server";
 import { WorkspaceQueryError, WorkspaceQueryUseCase } from "#src/server/workspaces/query.server";
@@ -49,7 +48,6 @@ import {
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import type { CentrifugoServerApi } from "./server-api.server";
 import type { AgentDisplay } from "#src/server/agents/agent-display.server";
-import type { RedisComputerUpgradeStore } from "#src/server/computers/computer-upgrade-store.server";
 import { decodeDaemonRuntimeShutdown, type DaemonRuntimeShutdown } from "@lrm/coforge-sdk/internal";
 import type { ComputerLifecycleActivity } from "#src/server/agents/computer-lifecycle-activity.server";
 import type { MentionDeliveryEnvelope } from "@lrm/coforge-sdk/internal";
@@ -297,42 +295,7 @@ export function createDaemonRuntimeShutdownMethod(
   };
 }
 
-export function createDaemonConnectionStatusMethod(
-  statusCache?: ComputerStatusCache,
-  reminderCapabilities?: { refresh(workspaceId: string, computerId: string): Promise<void> },
-  upgrades?: Pick<RedisComputerUpgradeStore, "touchIdentity">,
-): CentrifugoRpcMethod {
-  return async (payload, metadata) => {
-    const request = JSON.parse(utf8Decoder.decode(payload)) as {
-      workspaceId?: string;
-      computerId?: string;
-      online?: boolean;
-    };
-    if (
-      request.workspaceId !== metadata.principal.workspaceId ||
-      request.computerId !== metadata.principal.computerId ||
-      typeof request.online !== "boolean"
-    )
-      return { code: 403, message: "invalid daemon connection status" };
-    await (statusCache ?? getComputerStatusCache()).put(
-      { workspaceId: request.workspaceId, computerId: request.computerId },
-      request.online,
-    );
-    if (request.online) {
-      await reminderCapabilities?.refresh(request.workspaceId, request.computerId);
-      // Transitional: identity keys are durable now (only `ready` writes one, with no expiry),
-      // so this cannot create an identity for a Computer that never reported one. It only clears
-      // a leftover 90s lease that a pre-durable-identity Web deploy left on an already-connected
-      // Computer's identity key - Daemons do not reconnect just because Web deployed, so without
-      // this the stale lease would otherwise sit there until the Daemon happened to reconnect.
-      await upgrades?.touchIdentity({
-        workspaceId: request.workspaceId,
-        computerId: request.computerId,
-      });
-    }
-    return new Uint8Array();
-  };
-}
+export { createDaemonConnectionStatusMethod } from "./daemon-connection-status-method.server";
 
 export function createDaemonRuntimeCodeAgentsUpdateMethod(inventory: {
   replace(
