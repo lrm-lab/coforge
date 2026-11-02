@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { Checkbox as AriaCheckbox } from "react-aria-components";
 
 import { CheckboxBase } from "#src/components/base/checkbox/checkbox";
@@ -38,6 +38,8 @@ export function PickerListRow({
   className?: string;
   "aria-label"?: string;
 }) {
+  const descriptionId = useId();
+  const shownDescription = description?.trim();
   return (
     <li>
       <AriaCheckbox
@@ -46,6 +48,7 @@ export function PickerListRow({
         onChange={onChange}
         // The addon is part of the name: it tells a person from an Agent who shares their name.
         aria-label={ariaLabel ?? (addon ? `${label} ${addon}` : label)}
+        aria-describedby={shownDescription ? descriptionId : undefined}
         // `relative` keeps React Aria's visually hidden input inside the row. Without it the input
         // is placed against the dialog, whose scroll area then grows past the list and scrolls the
         // whole dialog when a lower row is ticked (task #331).
@@ -68,8 +71,10 @@ export function PickerListRow({
               >
                 {label}
               </span>
-              {description && (
-                <span className="block truncate text-xs text-tertiary">{description}</span>
+              {shownDescription && (
+                <span id={descriptionId} className="block truncate text-xs text-tertiary">
+                  {shownDescription}
+                </span>
               )}
             </span>
             {addon && (

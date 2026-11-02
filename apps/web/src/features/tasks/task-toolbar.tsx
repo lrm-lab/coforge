@@ -18,7 +18,12 @@ import { cn } from "#src/lib/utils";
 import { TagCloseX } from "#src/components/base/tags/base-components/tag-close-x";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Select } from "#src/components/base/select/select";
-import { PickerMenu, projectOption, type PickerOption } from "#src/features/pickers/entity-picker";
+import {
+  agentHandle,
+  PickerMenu,
+  projectOption,
+  type PickerOption,
+} from "#src/features/pickers/entity-picker";
 import { m } from "#src/paraglide/messages";
 import {
   TASK_DISPLAY_FIELDS,
@@ -82,7 +87,8 @@ export function TaskToolbar({
           option.kind === "none"
             ? undefined
             : { kind: "identity", name: option.name, src: option.avatarUrl },
-        addon: String(option.count),
+        ...(option.handle !== undefined && agentHandle(option.handle)),
+        count: option.count,
       })),
     [tasks],
   );
@@ -92,7 +98,7 @@ export function TaskToolbar({
         ...(option.id === NO_PROJECT
           ? { id: option.id, label: m.tasks_overview_no_project() }
           : projectOption(option)),
-        addon: String(option.count),
+        count: option.count,
       })),
     [tasks],
   );

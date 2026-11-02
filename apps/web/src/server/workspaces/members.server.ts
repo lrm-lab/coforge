@@ -270,6 +270,7 @@ export class WorkspaceMembers {
           id: true,
           name: true,
           displayName: true,
+          description: true,
           avatarMascot: true,
           ownerId: true,
           visibility: true,
@@ -320,6 +321,7 @@ export class WorkspaceMembers {
         id: agent.id,
         handle: agent.name,
         name: shownAgentName(agent),
+        description: agent.description,
         avatarUrl: agentAvatarUrl(agent.id, agent.avatarMascot),
         /** Whether the viewer may open a direct conversation with it (`DirectConversations.open`). */
         canMessage: canDirectMessageAgent(userId, agent),

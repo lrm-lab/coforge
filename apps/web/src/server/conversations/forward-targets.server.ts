@@ -82,7 +82,7 @@ export async function searchForwardTargets(
       },
       orderBy: { name: "asc" },
       take: limit,
-      select: { id: true, name: true, displayName: true, avatarMascot: true },
+      select: { id: true, name: true, displayName: true, description: true, avatarMascot: true },
     }),
   ]);
   const directKeys = [
@@ -123,6 +123,7 @@ export async function searchForwardTargets(
       agentId: agent.id,
       name: agent.displayName.trim() || agent.name,
       handle: agent.name,
+      description: agent.description,
       avatarUrl: agentAvatarUrl(agent.id, agent.avatarMascot),
       ...(conversationId ? { conversationId } : {}),
       joined: true,

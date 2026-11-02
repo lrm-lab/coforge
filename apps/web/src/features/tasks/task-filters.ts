@@ -43,6 +43,8 @@ export type OwnerOption = {
   id: string;
   kind: "me" | "none" | "user" | "agent";
   name: string;
+  /** An Agent's handle; people are picked by name. */
+  handle?: string;
   avatarUrl?: string | null;
   count: number;
 };
@@ -68,6 +70,7 @@ export function ownerOptions(tasks: readonly FilterableTask[]): OwnerOption[] {
       id,
       kind,
       name: owner?.name ?? "",
+      ...(owner?.kind === "agent" && { handle: owner.handle }),
       avatarUrl: owner?.avatarUrl,
       count: task.count ?? 1,
     });

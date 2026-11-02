@@ -9,6 +9,8 @@ export type GroupChatCandidate = {
   name: string;
   search: SearchableMember;
   avatarUrl: string | null;
+  /** An Agent's description, a quieter line under its name. */
+  description?: string;
 };
 
 /** The part of `loadWorkspaceDirectory` the picker reads. */
@@ -19,6 +21,7 @@ export type GroupChatDirectory = {
     id: string;
     handle: string;
     name: string;
+    description: string;
     avatarUrl: string | null;
     visibility: string;
     weeklyReportAssistant: boolean;
@@ -38,6 +41,7 @@ export function buildGroupChatCandidates(directory: GroupChatDirectory): GroupCh
       name: agent.name,
       search: { kind: "agent", displayName: agent.name, name: agent.handle },
       avatarUrl: agent.avatarUrl,
+      description: agent.description,
     }));
   const people: GroupChatCandidate[] = directory.people
     .filter((person) => person.id !== directory.viewerId)

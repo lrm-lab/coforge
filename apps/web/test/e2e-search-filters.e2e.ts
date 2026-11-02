@@ -292,7 +292,8 @@ test("search filters narrow results, survive a reload, and clear together", asyn
     await browser("eval", `${chip("Clear All")}.click()`);
 
     // Channel, then no query: the filter alone searches, and Sort waits for a query.
-    await pick("Channel", "#e2e-filter-b");
+    // The row shows the channel's mark (`#` or a lock) as an icon, not in its text.
+    await pick("Channel", "e2e-filter-b");
     await waitFor(`${param("channelId")} === ${JSON.stringify(channelB)}`);
     await waitForResults(1);
     await browser(

@@ -67,6 +67,7 @@ export function GroupChatPicker({
             <PickerListRow
               key={entry.key}
               label={entry.name}
+              description={entry.description}
               leading={<Face face={{ kind: "identity", name: entry.name, src: entry.avatarUrl }} />}
               // A person is named by their display name alone; an Agent adds the handle it is
               // mentioned by.

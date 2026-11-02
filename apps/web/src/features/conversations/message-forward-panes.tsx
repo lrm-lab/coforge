@@ -9,8 +9,6 @@ import { TextArea } from "#src/components/base/textarea/textarea";
 import { Face } from "#src/features/pickers/entity-picker";
 import { PickerListRow } from "#src/features/pickers/picker-list";
 import { m } from "#src/paraglide/messages";
-import { channelGlyph } from "./channel-name";
-import type { ChannelVisibility } from "./channel-visibility";
 import { FORWARD_NOTE_MAX_LENGTH } from "./message-forward";
 import type { ForwardFailureCode, ForwardTarget, ForwardedMessageView } from "./message-forward";
 import { ForwardedMessageCard } from "./message-forward-card";
@@ -53,10 +51,11 @@ function TargetRow({
   return (
     <PickerListRow
       label={target.name}
+      description={target.kind === "agent" ? target.description : undefined}
       aria-label={forwardTargetLabel(target)}
       leading={
         target.kind === "channel" ? (
-          <ChannelTargetMark visibility={target.visibility} />
+          <Face face={{ kind: "channel", visibility: target.visibility }} />
         ) : (
           <Face face={{ kind: "identity", name: target.name, src: target.avatarUrl }} />
         )
@@ -236,18 +235,5 @@ export function ForwardNotePane({
         </div>
       </div>
     </div>
-  );
-}
-
-/** A channel target's mark: `#`, or a lock for a private channel. */
-function ChannelTargetMark({ visibility }: { visibility: ChannelVisibility }) {
-  const Glyph = channelGlyph({ visibility });
-  return (
-    <span
-      aria-hidden="true"
-      className="flex size-5 shrink-0 items-center justify-center rounded-md bg-tertiary text-fg-quaternary"
-    >
-      <Glyph className="size-3.5" />
-    </span>
   );
 }

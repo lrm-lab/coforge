@@ -63,8 +63,8 @@ test("owner choices: the viewer and Unassigned first, then people, then Agents, 
     { id: VIEWER, kind: "me", name: "Dev User", count: 1 },
     { id: NO_OWNER, kind: "none", name: "", count: 1 },
     { id: "user-jordan", kind: "user", name: "Jordan Lee", count: 1 },
-    { id: "agent-atlas", kind: "agent", name: "Atlas", count: 1 },
-    { id: "agent-nova", kind: "agent", name: "Nova", count: 1 },
+    { id: "agent-atlas", kind: "agent", name: "Atlas", handle: "atlas", count: 1 },
+    { id: "agent-nova", kind: "agent", name: "Nova", handle: "nova", count: 1 },
   ]);
 });
 

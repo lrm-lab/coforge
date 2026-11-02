@@ -245,7 +245,7 @@ function ChannelCandidateRow({
   return (
     <PickerListRow
       label={entry.displayName}
-      description={entry.description?.trim()}
+      description={entry.description}
       leading={<Face face={{ kind: "identity", name: entry.displayName, src: entry.avatarUrl }} />}
       // A person is named by their display name alone; an Agent adds the handle it is mentioned by.
       addon={entry.search.kind === "agent" ? `@${entry.search.name}` : undefined}

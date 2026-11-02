@@ -101,6 +101,8 @@ export type ForwardTarget =
       agentId: string;
       name: string;
       handle: string;
+      /** What it does, a quieter line under its name, as the add-members list shows it. */
+      description: string;
       avatarUrl: string;
       conversationId?: string;
       joined: true;

@@ -30,6 +30,8 @@ interface DropdownItemProps extends AriaMenuItemProps {
     label?: string;
     /** An addon to be displayed on the right side of the item. */
     addon?: string;
+    /** A count after the addon (a filter's matching items), in tabular figures. */
+    count?: number;
     /** If true, the item will not have any styles. */
     unstyled?: boolean;
     /** An icon to be displayed on the left side of the item. */
@@ -42,7 +44,7 @@ interface DropdownItemProps extends AriaMenuItemProps {
     selectionIndicator?: "checkmark" | "checkbox" | "radio" | "toggle" | "none";
 }
 
-const DropdownItem = ({ label, children, addon, icon: Icon, avatarUrl, leading, unstyled, selectionIndicator = "checkmark", ...props }: DropdownItemProps) => {
+const DropdownItem = ({ label, children, addon, count, icon: Icon, avatarUrl, leading, unstyled, selectionIndicator = "checkmark", ...props }: DropdownItemProps) => {
     const SelectionIndicator = useCallback(
         (state: MenuItemRenderProps & { className?: string }) => {
             if (selectionIndicator === "checkmark") {
@@ -117,6 +119,8 @@ const DropdownItem = ({ label, children, addon, icon: Icon, avatarUrl, leading, 
 
                     {/* A long addon (an Agent's generated @handle) gives way to the label past half the row. */}
                     {addon && <span className="ml-1 max-w-1/2 shrink-0 truncate pr-1 text-xs font-medium text-quaternary">{addon}</span>}
+
+                    {count !== undefined && <span className="ml-1 shrink-0 pr-1 text-xs font-medium text-quaternary tabular-nums">{count}</span>}
 
                     {state.selectionMode !== "none" && (avatarUrl || Icon || leading) && <SelectionIndicator {...state} className="ml-1" />}
 

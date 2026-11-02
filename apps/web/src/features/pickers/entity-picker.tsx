@@ -12,6 +12,8 @@ import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { HintText } from "#src/components/base/input/hint-text";
 import { Label } from "#src/components/base/input/label";
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { channelGlyph } from "#src/features/conversations/channel-name";
+import type { ChannelVisibility } from "#src/features/conversations/channel-visibility";
 import { ProjectImage } from "#src/features/projects/project-image";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
@@ -27,7 +29,8 @@ import { m } from "#src/paraglide/messages";
 /** What a row shows on its left. */
 export type PickerFace =
   | { kind: "identity"; name: string; src?: string | null }
-  | { kind: "project"; name: string; src?: string | null };
+  | { kind: "project"; name: string; src?: string | null }
+  | { kind: "channel"; visibility: ChannelVisibility };
 
 export type PickerOption = {
   /** Unique in the list. Namespace ids by kind (`user:…`, `agent:…`): ids of different kinds may
@@ -37,6 +40,10 @@ export type PickerOption = {
   face?: PickerFace;
   /** Faint at the end of the row: an Agent's `@handle`. */
   addon?: string;
+  /** The row's accessible name, when its face carries meaning the label lacks (a channel's `#`). */
+  ariaLabel?: string;
+  /** How many there are of it (a filter's Tasks), after the addon. */
+  count?: number;
   /** Matched by the search besides the label: an Agent's handle, a Project's slug. */
   keywords?: string;
   isDisabled?: boolean;
@@ -45,9 +52,20 @@ export type PickerOption = {
 /** Up to this many rows are read at a glance; past it the list gets a search field. */
 const SEARCH_FROM = 8;
 
-/** A person's or Agent's picture (an Agent's mascot drawn whole, not clipped to a tile), or a
- * Project's image or folder. */
+/** A person's or Agent's picture (an Agent's mascot drawn whole, not clipped to a tile), a
+ * Project's image or folder, or a channel's `#` (a lock when it is private). */
 export function Face({ face }: { face: PickerFace }) {
+  if (face.kind === "channel") {
+    const Glyph = channelGlyph(face);
+    return (
+      <span
+        aria-hidden="true"
+        className="flex size-5 shrink-0 items-center justify-center rounded-md bg-tertiary text-fg-quaternary"
+      >
+        <Glyph className="size-3.5" />
+      </span>
+    );
+  }
   if (face.kind === "project")
     return (
       <ProjectImage
@@ -128,9 +146,11 @@ export function PickerMenu({
           key={option.id}
           id={option.id}
           label={option.label}
+          aria-label={option.ariaLabel}
           textValue={option.keywords ? `${option.label} ${option.keywords}` : option.label}
           leading={option.face ? <Face face={option.face} /> : faced && <span aria-hidden="true" />}
           addon={option.addon}
+          count={option.count}
           selectionIndicator={multiple ? "checkbox" : undefined}
         />
       ))}
@@ -232,6 +252,11 @@ export function EntityPickerField({
   );
 }
 
+/** How an Agent shows and is found in a picker: its `@handle` at the row's end, searched by it. */
+export function agentHandle(handle: string) {
+  return { addon: `@${handle}`, keywords: handle };
+}
+
 /** A member as a picker row: keyed `user:<id>` or `agent:<id>`; an Agent shows and is searched by
  * its `@handle`, a person by name only. */
 export function memberOption(member: {
@@ -245,7 +270,7 @@ export function memberOption(member: {
     id: `${member.kind}:${member.id}`,
     label: member.label,
     face: { kind: "identity", name: member.label, src: member.avatarUrl },
-    ...(member.kind === "agent" && { addon: `@${member.handle}`, keywords: member.handle }),
+    ...(member.kind === "agent" && agentHandle(member.handle)),
   };
 }
 

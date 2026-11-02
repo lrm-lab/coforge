@@ -118,8 +118,11 @@ export function SearchFilterBar({
           { id: ANY, label: m.search_channel_any() },
           ...(directory?.channels ?? []).map((candidate) => ({
             id: candidate.id,
-            label: channelLabel(candidate),
-            keywords: `${candidate.name} ${candidate.description}`,
+            label: candidate.name,
+            ariaLabel: channelLabel(candidate),
+            face: { kind: "channel" as const, visibility: candidate.visibility },
+            // The row's `#` is an icon; typing it still finds the channel.
+            keywords: `#${candidate.name} ${candidate.description}`,
             addon: candidate.archived ? m.search_archived() : undefined,
           })),
         ]}

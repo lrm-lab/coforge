@@ -21,6 +21,7 @@ const directory = {
       id: "atlas",
       handle: "atlas",
       name: "Atlas Bot",
+      description: "Ships the weekly release notes",
       avatarUrl: null,
       visibility: "public",
       weeklyReportAssistant: false,
@@ -29,6 +30,7 @@ const directory = {
       id: "scout",
       handle: "scout",
       name: "Scout",
+      description: "  ",
       avatarUrl: null,
       visibility: "public",
       weeklyReportAssistant: false,
@@ -60,6 +62,14 @@ describe("buildGroupChatCandidates", () => {
     expect(byKey.get("agent:atlas")).toBe("Atlas Bot");
   });
 
+  test("gives an Agent its description for the row's second line", () => {
+    const byKey = new Map(
+      buildGroupChatCandidates(directory).map((entry) => [entry.key, entry.description]),
+    );
+    expect(byKey.get("agent:atlas")).toBe("Ships the weekly release notes");
+    expect(byKey.get("user:bob")).toBeUndefined();
+  });
+
   test("keeps the avatar of each candidate", () => {
     const bob = buildGroupChatCandidates(directory).find((entry) => entry.key === "user:bob");
     expect(bob?.avatarUrl).toBe("https://cdn.example/bob.png");
@@ -76,6 +86,7 @@ describe("buildGroupChatCandidates offers only the Agents a channel can take", (
           id: "vault",
           handle: "vault",
           name: "Vault",
+          description: "",
           avatarUrl: null,
           visibility: "private",
           weeklyReportAssistant: false,
@@ -95,6 +106,7 @@ describe("buildGroupChatCandidates offers only the Agents a channel can take", (
           id: "weekly",
           handle: "weekly",
           name: "Weekly",
+          description: "",
           avatarUrl: null,
           visibility: "public",
           weeklyReportAssistant: true,
