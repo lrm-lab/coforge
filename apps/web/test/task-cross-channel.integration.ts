@@ -7,7 +7,7 @@ import { setup } from "./fixtures/task-dependencies";
 const visible = (link: TaskLink | null | undefined) => (link && !link.hidden ? link : undefined);
 
 test("a blocker and a parent in another channel are named by channel, from both ends", async () => {
-  const { db, run, make, show, channel, other, refusal } = await setup();
+  const { db, board, principals, run, make, show, channel, other, refusal } = await setup();
   try {
     const [blocker, parent] = await make("alice", 2, {}, other.id);
     const [waiting] = await make("alice", 1, {
@@ -26,6 +26,15 @@ test("a blocker and a parent in another channel are named by channel, from both 
     // The other end sees this channel's tasks by this channel's name.
     const blocking = (await show(blocker!, other.id)).blocking!;
     expect(visible(blocking[0])).toMatchObject({ number: waiting, channel: channel.channelName });
+    // The browser detail reads the same downstream list.
+    const overview = await board.overviewTask(
+      { workspaceId: principals.alice.workspaceId, userId: principals.alice.userId! },
+      { conversationId: other.id, number: blocker! },
+    );
+    expect(visible(overview?.blocking?.[0])).toMatchObject({
+      number: waiting,
+      channel: channel.channelName,
+    });
     const subtree = (await show(parent!, other.id)).subtree!;
     expect(subtree).toMatchObject([{ number: waiting, channel: channel.channelName }]);
     expect((await show(parent!, other.id)).tasks[0]!.subtasks).toEqual({ total: 1, finished: 0 });
@@ -211,4 +220,20 @@ test("finishing a blocker in another channel tells the dependent's owner in the 
   } finally {
     await db.$disconnect();
   }
+});
+
+test("a task cannot wait for its parent or its child", async () => {
+  const { run, make, refusal } = await setup();
+  const [parent] = await make("alice", 1);
+  const [child] = await make("alice", 1, { parent: { number: parent! } });
+  const upward = await refusal(
+    run("alice", { operation: "amend", number: child!, blockedBy: [{ number: parent! }] }),
+  );
+  expect(upward.code).toBe("INVALID_INPUT");
+  expect(upward.hint).toContain("ancestor");
+  const downward = await refusal(
+    run("alice", { operation: "amend", number: parent!, blockedBy: [{ number: child! }] }),
+  );
+  expect(downward.code).toBe("INVALID_INPUT");
+  expect(downward.hint).toContain("descendant");
 });

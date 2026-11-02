@@ -193,6 +193,8 @@ export async function setup({ tasksV2 = true } = {}) {
   };
   return {
     db,
+    board,
+    principals,
     run,
     make,
     show,

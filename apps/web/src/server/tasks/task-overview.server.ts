@@ -1,5 +1,5 @@
 import { channelLabel, channelVisibilityOf } from "#src/features/conversations/channel-visibility";
-import type { TaskMember, TaskView } from "@lrm/coforge-sdk/internal";
+import type { TaskLink, TaskMember, TaskTreeNode, TaskView } from "@lrm/coforge-sdk/internal";
 import {
   CONVERSATION_TASK_NUMBERS_MAX,
   type ConversationTaskSubset,
@@ -21,7 +21,7 @@ import {
 } from "./task-view.server";
 import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
 import { viewsWithCounts } from "./task-discussion-counts.server";
-import { loadTaskRelations, relationsOf } from "./task-relations.server";
+import { loadTaskRelations, relationsOf, showRelations } from "./task-relations.server";
 
 export type TaskOverview = {
   tasks: Array<
@@ -37,6 +37,9 @@ export type TaskOverview = {
        * icon, null when it has none.
        */
       project: { id: string; name: string; slug: string; iconUrl: string | null } | null;
+      /** The Tasks waiting for this one, and its subtasks as a tree, as `show` reads them. */
+      blocking?: TaskLink[];
+      subtree?: TaskTreeNode[];
     }
   >;
 };
@@ -252,7 +255,9 @@ export class TaskOverviewReads {
       [task],
       (_, viewExtras) => viewExtras,
     );
-    return overviewRow(task, userId, extras!);
+    // The detail also names the Tasks waiting for this one, whichever channel they are in.
+    const relations = await showRelations(this.db, "people", task);
+    return { ...overviewRow(task, userId, extras!), ...relations };
   }
 
   /**

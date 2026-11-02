@@ -1,6 +1,7 @@
 import {
   isBlockerSatisfied,
   MAX_TASK_BLOCKERS,
+  MAX_TASK_TREE_DEPTH,
   type TaskHistoryChange,
   type TaskName,
   type TaskRef,
@@ -291,7 +292,7 @@ export async function planRelationAmend(
     const blockers = distinctTasks(await resolve(tx, scope, member, asked));
     if (blockers.some((blocker) => blocker.id === task.id))
       throw invalid(`task #${task.number} cannot wait for itself`);
-    const [waitsFor, own] = await Promise.all([
+    const [waitsFor, own, tree] = await Promise.all([
       loadWaitsFor(tx, scope.workspaceId),
       tx.taskDependency.findMany({
         where: { taskId: task.id },
@@ -306,11 +307,28 @@ export async function planRelationAmend(
           },
         },
       }),
+      loadParentTree(tx, scope.workspaceId),
     ]);
     const current = new Set(own.map((edge) => edge.blockedByTaskId));
     const wantedIds = new Set(blockers.map((blocker) => blocker.id));
     const added = blockers.filter((blocker) => !current.has(blocker.id));
     const removed = own.filter((edge) => !wantedIds.has(edge.blockedByTaskId));
+    // A Task may not wait for an ancestor or a descendant: the tree's completion order already
+    // relates them, so the edge would deadlock.
+    const ancestors = new Set<string>();
+    for (
+      let up = tree.parentOf.get(task.id);
+      up && ancestors.size <= MAX_TASK_TREE_DEPTH;
+      up = tree.parentOf.get(up)
+    )
+      ancestors.add(up);
+    const descendants = new Set(descend(task.id, tree.childrenOf, MAX_TASK_TREE_DEPTH).flat());
+    for (const blocker of added) {
+      if (ancestors.has(blocker.id) || descendants.has(blocker.id))
+        throw invalid(
+          `#${task.number} cannot wait for ${refLabel(blocker.ref)}: it is ${ancestors.has(blocker.id) ? "an ancestor" : "a descendant"} in the task tree`,
+        );
+    }
     // The Task's own edges are replaced, so the graph the new ones must not close is without them.
     waitsFor.delete(task.id);
     for (const blocker of added) {
