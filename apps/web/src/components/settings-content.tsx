@@ -106,12 +106,11 @@ export function SettingsContent(props: SettingsContentProps) {
   const [internalSection, setInternalSection] = useState<SettingsSection>("account");
   const canAdminister = canManageWorkspaceSettings(props.members.actorRole);
   const experiments = useWorkspaceExperiments(canAdminister);
-  // Administration appears once there is something to manage; asking for it otherwise, or as
+  // Experiments appears once there is something to manage; asking for it otherwise, or as
   // anyone but an owner or admin, gets the account.
-  const administration = canAdminister && hasExperiments(experiments);
+  const experimentsShown = canAdminister && hasExperiments(experiments);
   const requested = props.section ?? internalSection;
-  const section =
-    requested === "administration" && administration === false ? "account" : requested;
+  const section = requested === "experiments" && experimentsShown === false ? "account" : requested;
   const [showList, setShowList] = useState(props.section !== "integrations");
   const current = settingsSection(section);
   const sectionLabel = current.label();
@@ -136,7 +135,7 @@ export function SettingsContent(props: SettingsContentProps) {
           {SETTINGS_SECTION_GROUPS.map((group) => (
             <SettingsNavigationGroup key={group.label()} label={group.label()}>
               {group.sections
-                .filter((item) => item.id !== "administration" || administration === true)
+                .filter((item) => item.id !== "experiments" || experimentsShown === true)
                 .map((item) => (
                   <SettingsNavigationButton
                     key={item.id}
@@ -239,7 +238,7 @@ export function SettingsContent(props: SettingsContentProps) {
               <ServerConnectionSettings />
             ) : section === "integrations" ? (
               <GitHubSettings callbackFailure={props.githubCallbackFailure} />
-            ) : section === "administration" ? (
+            ) : section === "experiments" ? (
               <ExperimentsSettings experiments={experiments} />
             ) : (
               <NotificationSettings {...props} />

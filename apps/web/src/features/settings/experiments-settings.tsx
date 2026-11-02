@@ -1,16 +1,10 @@
 import { useCallback, useState } from "react";
-import { Beaker01 } from "@untitledui/icons";
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Toggle } from "#src/components/base/toggle/toggle";
-import {
-  SettingsCard,
-  SettingsField,
-  SettingsGroup,
-  SettingsPage,
-} from "#src/components/settings-layout";
+import { SettingsCard, SettingsField, SettingsPage } from "#src/components/settings-layout";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { workspaceConversationChannel } from "#src/features/conversations/conversation-realtime";
 import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime";
@@ -74,7 +68,7 @@ export function hasExperiments({ data }: UseQueryResult<ExperimentsData>) {
 }
 
 /**
- * Settings → Administration → Experiments: the features this Workspace may try, one switch each,
+ * Settings → Experiments: the features this Workspace may try, one switch each,
  * for the whole Workspace. Settings shows it only while `hasExperiments` holds.
  */
 export function ExperimentsSettings({
@@ -117,47 +111,41 @@ export function ExperimentsSettings({
           </Button>
         </div>
       ) : (
-        <SettingsGroup icon={Beaker01} label={m.settings_experiments()}>
-          <SettingsCard>
-            {experiments.data.experiments.map((experiment) => {
-              const text = EXPERIMENT_TEXT[experiment.key];
-              const failed = toggle.isError && toggle.variables.key === experiment.key;
-              return (
-                <div key={experiment.key} className="flex flex-col gap-2">
-                  <SettingsField inline label={text.name()} description={text.description()}>
-                    <div className="flex shrink-0 items-center gap-3">
-                      {experiment.reload && changed.has(experiment.key) && (
-                        <Button
-                          color="link-color"
-                          size="sm"
-                          onPress={() => window.location.reload()}
-                        >
-                          {m.experiments_reload()}
-                        </Button>
-                      )}
-                      <Toggle
-                        size="md"
-                        aria-label={text.name()}
-                        isSelected={
-                          toggle.isPending && toggle.variables.key === experiment.key
-                            ? toggle.variables.enabled
-                            : experiment.enabled
-                        }
-                        isDisabled={toggle.isPending}
-                        onChange={(enabled) => toggle.mutate({ key: experiment.key, enabled })}
-                      />
-                    </div>
-                  </SettingsField>
-                  {failed && (
-                    <p role="alert" className="text-sm text-error-primary">
-                      {saveErrorText(toggle.error)}
-                    </p>
-                  )}
-                </div>
-              );
-            })}
-          </SettingsCard>
-        </SettingsGroup>
+        <SettingsCard>
+          {experiments.data.experiments.map((experiment) => {
+            const text = EXPERIMENT_TEXT[experiment.key];
+            const failed = toggle.isError && toggle.variables.key === experiment.key;
+            return (
+              <div key={experiment.key} className="flex flex-col gap-2">
+                <SettingsField inline label={text.name()} description={text.description()}>
+                  <div className="flex shrink-0 items-center gap-3">
+                    {experiment.reload && changed.has(experiment.key) && (
+                      <Button color="link-color" size="sm" onPress={() => window.location.reload()}>
+                        {m.experiments_reload()}
+                      </Button>
+                    )}
+                    <Toggle
+                      size="md"
+                      aria-label={text.name()}
+                      isSelected={
+                        toggle.isPending && toggle.variables.key === experiment.key
+                          ? toggle.variables.enabled
+                          : experiment.enabled
+                      }
+                      isDisabled={toggle.isPending}
+                      onChange={(enabled) => toggle.mutate({ key: experiment.key, enabled })}
+                    />
+                  </div>
+                </SettingsField>
+                {failed && (
+                  <p role="alert" className="text-sm text-error-primary">
+                    {saveErrorText(toggle.error)}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </SettingsCard>
       )}
     </SettingsPage>
   );

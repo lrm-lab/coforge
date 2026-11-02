@@ -100,7 +100,7 @@ those keys.
 ## Experiments
 
 An experiment is a flag a Workspace owner or admin switches on for the whole Workspace in Settings
-(Workspace settings → Manage): it applies to every member and every Agent at once. The flag still
+→ Experiments (shown only to them, and only while the Workspace offers one): it applies to every member and every Agent at once. The flag still
 decides which Workspaces offer it; the Workspace's own switch (`workspaces.experiments`, a sparse
 key → boolean map, off by default) decides whether it applies. Members see no switch; the server
 refuses a change from anyone but an owner or admin.
