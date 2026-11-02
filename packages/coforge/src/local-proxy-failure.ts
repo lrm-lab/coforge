@@ -1,8 +1,4 @@
-import {
-  CliError,
-  NO_MESSAGE_SENT_NEXT_ACTION,
-  unknownDeliveryNextAction,
-} from "./cli-error";
+import { CliError, NO_MESSAGE_SENT_NEXT_ACTION, unknownDeliveryNextAction } from "./cli-error";
 import { proxyFailureCode } from "./proxy-failure-code";
 import { operationFailedCode, type AgentProxyErrorBody } from "./proxy-request";
 import { refusalNextAction } from "./refusal-guidance";

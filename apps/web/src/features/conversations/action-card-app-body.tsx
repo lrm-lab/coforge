@@ -5,10 +5,7 @@ import type { ActionCardView } from "#src/server/conversations/action-cards.serv
 export function ActionCardAppBody({
   view,
 }: {
-  view: Extract<
-    ActionCardView,
-    { kind: "app:grant_agent" | "app:recover_owner" | "app:register" }
-  >;
+  view: Extract<ActionCardView, { kind: "app:grant_agent" | "app:recover_owner" | "app:register" }>;
 }) {
   if (view.kind === "app:grant_agent") {
     return (

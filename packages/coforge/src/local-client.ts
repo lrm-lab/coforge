@@ -58,10 +58,7 @@ import {
   type AgentAttachmentCommentsRequest,
   type AgentUserInfoResponse,
 } from "@lrm/coforge-sdk/agent";
-import {
-  CliError,
-  MANUAL_NOT_FOUND_NEXT_ACTION,
-} from "./cli-error";
+import { CliError, MANUAL_NOT_FOUND_NEXT_ACTION } from "./cli-error";
 import type { MessageSearchOptions } from "./message-search-args";
 import type { MessageReadOptions } from "./message-read-args";
 import { refusalNextAction } from "./refusal-guidance";
