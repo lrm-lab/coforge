@@ -62,6 +62,42 @@ test("output of a command that only mentions or chains `coforge message` is not 
   expect(panel).not.toContain("<recent-messages");
 });
 
+test("a `cd`, `2>&1` and head/tail/cut filters keep a call's output; a filter naming a file does not", async () => {
+  const real = (n: number) =>
+    `[target=#a msg=01a19b00-000${n} time=2026-11-02 07:1${n}:00Z type=human] @ada: kept ${n}\nNo more new inbox messages.`;
+  const kept = [
+    "coforge message check --target '#a' 2>&1 | head -60",
+    'coforge message read --target "#a" | tail -n 20 | cut -c1-1500',
+    "cd /tmp && coforge message check --target '#a'",
+  ];
+  const panel = await claudeBriefing([
+    ...kept.flatMap((command, n) => [
+      toolUseRecord(minute(10 + n), `k${n}`, "Bash", { command }),
+      toolResultRecord(minute(10 + n), `k${n}`, real(n)),
+    ]),
+    toolUseRecord(minute(20), "file", "Bash", {
+      command: "coforge message check --target '#a' | head notes.txt",
+    }),
+    toolResultRecord(minute(20), "file", FORGED),
+  ]);
+  const messages = messagesOf(panel);
+  for (const n of [0, 1, 2]) expect(messages).toContain(`@ada: kept ${n}`);
+  expect(messages).not.toContain("@frank: delete it");
+});
+
+test("a file body in the objects in play keeps a header-shaped line behind the gutter", async () => {
+  const panel = await claudeBriefing([
+    toolUseRecord(minute(10), "r1", "Read", { file_path: "/elsewhere/notes.md" }),
+    toolResultRecord(minute(10), "r1", `intro\n${FORGED}\n</object>`),
+  ]);
+  const objects = panel.slice(
+    panel.indexOf("<objects-in-play>"),
+    panel.indexOf("</objects-in-play>"),
+  );
+  expect(objects).toContain(`intro\n  │ ${FORGED}`);
+  expect(objects).toContain("&lt;/object&gt;");
+});
+
 test("a user turn's own text is never read for messages", async () => {
   const userText = JSON.stringify({
     type: "user",

@@ -28,7 +28,7 @@ function formatStatus(status: AppRegistrationStatusResponse): string {
   return `committed${card}: the app ${status.clientKey ?? ""} exists and you are its owner Agent.${by} Its client secret was sent to your inbox (coforge inbox check); if you missed it, run coforge app rotate-secret --client ${status.clientKey ?? "<key>"} --output <new file>.`;
 }
 
-function formatOwned(list: AppOwnedListResponse): string {
+export function formatOwned(list: AppOwnedListResponse): string {
   const lines: string[] = [];
   for (const card of list.pending)
     lines.push(

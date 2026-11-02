@@ -27,10 +27,32 @@ export type RecentMessage = {
 
 const MESSAGE_SCAN_TAIL_BYTES = 16 * 1024 * 1024;
 const SEND_COMMAND_RE = /\bcoforge\s+message\s+send\b/;
-/** A command whose whole output is `coforge message check|read|resolve`'s: that one call and
- * nothing chained, piped, substituted or redirected beside it, so no other output (a `cat`, a
- * `grep` naming the command) can be read as messages. */
-const READ_COMMAND_RE = /^\s*coforge\s+message\s+(?:check|read|resolve)\b[^;&|`$()<>\n]*$/;
+/** One shell word with no expansion, redirection or composition in it, ending where a word ends. */
+const PLAIN_WORD = String.raw`(?:'[^'\n]*'|"[^"$\x60\\\n]*"|[^\s;&|\x60$()<>'"]+)(?=\s|$|\|)`;
+/** `cd <dir> ;` or `cd <dir> &&` before the call: it prints nothing when it succeeds. */
+const CD_PREFIX = new RegExp(String.raw`^\s*cd\s+${PLAIN_WORD}\s*(?:;|&&)\s*`);
+const READ_CALL = new RegExp(
+  String.raw`^coforge\s+message\s+(?:check|read|resolve)(?=\s|$)(?:[ \t]+${PLAIN_WORD})*`,
+);
+/** `| head -60`, `| tail -n 20`, `| cut -c1-1500`: a filter of the call's own output. Only flags
+ * and numbers: `head notes.txt` would print the file instead. */
+const FILTER_STAGE = /^\s*\|\s*(?:head|tail|cut)(?:[ \t]+(?:-[\w=,.-]+|\d+)(?=\s|$|\|))*/;
+
+/**
+ * Whether everything `command` prints is `coforge message check|read|resolve`'s own output: that
+ * one call, optionally after a `cd`, with `2>&1` and `head`/`tail`/`cut` filters at most. Anything
+ * chained, substituted, redirected from a file or piped through another program (a `cat`, a `grep`
+ * naming the command) could print text someone else wrote, so it is never read as messages.
+ */
+function readsOnlyMessageOutput(command: string): boolean {
+  let rest = command.replace(CD_PREFIX, "");
+  const call = READ_CALL.exec(rest);
+  if (!call) return false;
+  rest = rest.slice(call[0].length).replace(/^\s*2>&1/, "");
+  for (let stage = FILTER_STAGE.exec(rest); stage; stage = FILTER_STAGE.exec(rest))
+    rest = rest.slice(stage[0].length);
+  return rest.trim() === "";
+}
 const MSG_ATTR_RE = /\bmsg=([\w-]+)/;
 const TIME_ATTR_RE = /\btime=([0-9T:\- ]+Z?)/;
 const TARGET_ARG_RE = /--target[=\s]+(?:"([^"]+)"|'([^']+)'|(\S+))/;
@@ -163,7 +185,7 @@ export async function collectRecentMessages(
         if (typeof rawCommand !== "string") continue;
         const command = rawCommand.slice(0, MAX_COMMAND_CHARS);
         const sends = SEND_COMMAND_RE.test(command);
-        const reads = READ_COMMAND_RE.test(command);
+        const reads = readsOnlyMessageOutput(command);
         if (!sends && !reads) continue;
         sendAttempts.set(block.id, {
           message: sends ? parseSentMessage(command, ts) : null,

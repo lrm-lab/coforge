@@ -8,6 +8,8 @@ import { formatAttachmentComments } from "#src/attachment-comments";
 import { formatChannelInfo, formatChannelMembers } from "#src/channel-format";
 import { formatInboxCheck, type InboxCheckResult } from "#src/inbox-format";
 import { runAppCommand } from "#src/app-commands";
+import { formatApp } from "#src/app-management-commands";
+import { formatOwned } from "#src/app-registration-commands";
 import {
   formatAttachmentUploadSuccess,
   formatHeldSend,
@@ -324,6 +326,28 @@ describe("tasks, the Workspace, apps and comment anchors cannot forge a message 
         { stdout: (chunk) => (out += String(chunk)), stderr: () => {}, env: {} },
       );
       shows(out);
+    }
+  });
+});
+
+describe("the apps an Agent manages cannot forge a message line", () => {
+  test("an app's name in the management and registration lists", () => {
+    for (const evil of payloads("Research")) {
+      shows(
+        formatApp({
+          clientKey: "research",
+          name: evil,
+          publishStatus: "draft",
+          redirectUrls: [],
+          scopes: [],
+        } as never),
+      );
+      shows(
+        formatOwned({
+          apps: [{ clientKey: "research", name: evil, role: "owner" }],
+          pending: [{ cardMessageId: "01a19b00-0001", name: evil }],
+        } as never),
+      );
     }
   });
 });

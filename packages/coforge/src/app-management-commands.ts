@@ -29,7 +29,7 @@ function usage(message: string, json: boolean): CliError {
   });
 }
 
-function formatApp(app: AppManagedSummary): string {
+export function formatApp(app: AppManagedSummary): string {
   return [
     `${app.clientKey} — ${foldUntrustedLine(app.name)} (${app.publishStatus})`,
     `  Category: ${app.category}`,
