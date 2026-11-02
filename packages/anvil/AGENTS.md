@@ -8,6 +8,7 @@
 - The host supplies per-turn environment composition through `PerTurnSessionHost.buildEnvironment`. Preserve when it runs and each provider's sanitization and overrides; Anvil never assembles the daemon's launch environment.
 - Agent instructions, assigned Skills, Git hooks, runtime inventory and caches stay with the host. Adapters consume the prepared session options; they do not coordinate those policies.
 - `src/per-turn/` owns the one Session state machine, input queue, interrupt/dispose, identity reports and child-process wrapper shared by per-turn adapters. Provider differences belong to `TurnProtocol` fields or `TurnReader` hooks; do not copy the Session or parse provider output there.
+- `src/acp/` owns the one ACP connection and session state machine shared by the ACP adapters. A runtime declares its differences in `AcpRuntimeProfile` (arguments, notifications, configuration, wording) and `AcpSessionProfile` (authentication, session open, turn projection, insertion, admission deadline); do not copy the connection or the session into an adapter.
 - Preserve provider behavior while migrating one contract or runtime slice at a time. Run the package checks and the daemon checks for every slice.
 
 ## Module map
@@ -26,6 +27,7 @@
 | `src/stderr-hint.ts`         | The bounded, credential-redacted single-line stderr excerpt a catalog logs                                                    |
 | `src/transcript-tail.ts`     | The tail-reader capability and the lines of a transcript/rollout tail                                                         |
 | `src/per-turn/`              | Shared per-turn session and process execution                                                                                 |
+| `src/acp/`                   | Shared ACP connection, session state machine, profile and turn projection contracts                                           |
 | `src/version-gate.ts`        | Shared version policy and required host version-reader port                                                                   |
 | `src/pi/`                    | Embedded Pi provider, native event/catalog projection and shared SDK Session factory with host capabilities                   |
 | `src/antigravity/`           | Antigravity per-turn protocol, tool events, version/catalog policy and usage parsing                                          |

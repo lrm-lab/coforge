@@ -8,7 +8,8 @@ import type {
 } from "@coforge/agent";
 import { RuntimeModelNotFoundError } from "#src/contract";
 import { asRecord } from "#src/json-record";
-import { AcpSession, type AcpSessionProfile } from "#src/acp/session";
+import type { AcpSessionProfile } from "#src/acp/profile";
+import { AcpSession } from "#src/acp/session";
 import type { AcpConnection } from "#src/acp/connection";
 import { devinConnection, DEVIN_ACP_TIMEOUT_MS, devinBounded } from "./connection";
 import { DevinTurnEvents } from "./update-events";

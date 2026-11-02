@@ -5,6 +5,8 @@ if (process.argv.includes("--version")) {
 }
 const log = Bun.env.COFORGE_GROK_ACP_LOG!;
 const sessionId = "0195d5a0-4b2e-7c11-9a53-3f2f6b1d7e10";
+/** The turn Grok runs itself when an accepted interjection races its previous turn's end. */
+const fallbackId = "interject-fallback-fixture";
 const write = (record: unknown) => console.log(JSON.stringify(record));
 const note = (method: string, params: unknown) => write({ jsonrpc: "2.0", method, params });
 const update = (value: unknown) => note("session/update", { sessionId, update: value });
@@ -139,28 +141,38 @@ for await (const line of console) {
         break;
       }
       if (params.text === "exit before reply") process.exit(9);
+      const raced = !!pending;
       if (pending) {
         terminal(pending.promptId);
         write({ jsonrpc: "2.0", id: pending.id, result: { stopReason: "end_turn" } });
         pending = undefined;
-        note("_x.ai/queue/changed", { sessionId, entries: [], runningPromptId: "background-1" });
+      }
+      reply({ result: { status: "queued" } });
+      // The measured race: the turn ends before the interjection is injected, Grok confirms it
+      // holds the notice, then runs it as its own fallback turn.
+      if (raced) {
+        note("_x.ai/session/interjection", {
+          sessionId,
+          text: params.text,
+          interjectionId: params.interjectionId,
+        });
+        note("_x.ai/queue/changed", { sessionId, entries: [], runningPromptId: fallbackId });
         update({
           sessionUpdate: "agent_message_chunk",
           content: { type: "text", text: "background started" },
         });
-      } else terminal("background-1");
-      reply({ result: { status: "queued" } });
+      } else terminal(fallbackId);
       if (params.text === "crash background") process.exit(7);
       break;
     }
     case "session/prompt": {
       const promptId = params._meta.promptId;
-      // Unadmitted: the observable sync point is an unrelated autonomous turn's update.
+      // Unadmitted: queue ownership is not acceptance, and the sync point carries no output.
       if (params.prompt[0].text === "hold admission") {
-        note("_x.ai/queue/changed", { sessionId, entries: [], runningPromptId: "background-hold" });
-        update({
-          sessionUpdate: "agent_message_chunk",
-          content: { type: "text", text: "waiting for admission" },
+        note("_x.ai/queue/changed", { sessionId, entries: [], runningPromptId: promptId });
+        note("_x.ai/session_notification", {
+          sessionId,
+          update: { sessionUpdate: "auto_compact_started" },
         });
         break;
       }
@@ -265,8 +277,9 @@ for await (const line of console) {
         });
         break;
       }
-      terminal(promptId, params.prompt[0].text === "max tokens" ? "max_tokens" : "end_turn");
-      reply({ stopReason: "end_turn", _meta: { promptId } });
+      const stopReason = params.prompt[0].text === "max tokens" ? "max_tokens" : "end_turn";
+      terminal(promptId, stopReason);
+      reply({ stopReason, _meta: { promptId } });
       break;
     }
   }

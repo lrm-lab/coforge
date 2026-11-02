@@ -1,28 +1,16 @@
-import {
-  RequestError,
-  type RequestPermissionRequest,
-  type InitializeRequest,
-} from "@agentclientprotocol/sdk";
-import type {
-  AgentNoticeOptions,
-  AgentRuntimeEvent,
-  AgentSession,
-  AgentSessionIdentity,
-  AgentSessionOptions,
-} from "@coforge/agent";
-import { withDeadline } from "#src/deadline";
+import type { InitializeResponse } from "@agentclientprotocol/sdk";
+import type { AgentSession, AgentSessionOptions } from "@coforge/agent";
+import { acpBounded, type AcpConnection } from "#src/acp/connection";
+import type { AcpSessionProfile } from "#src/acp/profile";
+import { AcpSession } from "#src/acp/session";
 import { asRecord, nonEmptyString } from "#src/json-record";
-import { grokConnection, type GrokConnection } from "./connection";
+import { grokConnection, GROK_PROFILE } from "./connection";
 import { GrokTurnEvents } from "./update-events";
 import type { GrokRuntimeHost } from "./host";
 
 /** How long a production session waits for each ACP answer. */
 export const ACP_TIMEOUT_MS = 30_000;
-class GrokAcpTimeoutError extends Error {
-  constructor() {
-    super("Grok ACP operation timed out");
-  }
-}
+
 // Stop reasons that end a turn normally; `cancelled` is an interruption and any other one failed.
 const COMPLETED_STOP_REASONS = new Set<unknown>([
   "end_turn",
@@ -30,21 +18,6 @@ const COMPLETED_STOP_REASONS = new Set<unknown>([
   "max_turn_requests",
   "refusal",
 ]);
-const SEEN_LIMIT = 256;
-/** Adds `value`, evicting the oldest entry once the set exceeds its bound. */
-function remember(seen: Set<string>, value: string) {
-  seen.add(value);
-  if (seen.size > SEEN_LIMIT) seen.delete(seen.values().next().value!);
-}
-/** The prompt a native `turn_completed` update ends, when the update is one. */
-function completedPromptId(update: Readonly<Record<string, unknown>> | undefined) {
-  return update?.sessionUpdate === "turn_completed" ? nonEmptyString(update.prompt_id) : undefined;
-}
-type Turn = {
-  updates: GrokTurnEvents;
-  admitted?: ReturnType<typeof Promise.withResolvers<void>>;
-  options?: AgentNoticeOptions;
-};
 
 export async function createGrokSession(
   options: AgentSessionOptions,
@@ -52,7 +25,12 @@ export async function createGrokSession(
   acpTimeoutMs: number,
   host: GrokRuntimeHost,
 ): Promise<AgentSession> {
-  const session = new GrokSession(options, command, acpTimeoutMs, host);
+  const session = new AcpSession(
+    grokSessionProfile(options, command, acpTimeoutMs, host),
+    options,
+    acpTimeoutMs,
+    (work) => acpBounded(work, acpTimeoutMs, GROK_PROFILE.messages.timedOut),
+  );
   try {
     await session.open();
     return session;
@@ -62,417 +40,203 @@ export async function createGrokSession(
   }
 }
 
-class GrokSession implements AgentSession {
-  readonly #transport: GrokConnection;
-  readonly #listeners = new Set<(event: AgentRuntimeEvent) => void>();
-  readonly #turns = new Map<string, Turn>();
-  readonly #completed = new Set<string>();
-  readonly #seenEvents = new Set<string>();
-  #identity: AgentSessionIdentity | undefined;
-  #admissions = Promise.resolve();
-  #generation = 0;
-  readonly #pendingAdmissions = new Set<{ reject: (reason: unknown) => void }>();
-  #disposed = false;
-  #failed = false;
-  #ready = false;
-  #openingQueue: Readonly<Record<string, unknown>> | undefined;
-  #runningId: string | undefined;
-  #interrupting = false;
-  readonly #turnChanged = new Set<() => void>();
-  #dispose: Promise<void> | undefined;
+function grokSessionProfile(
+  options: AgentSessionOptions,
+  command: readonly string[],
+  acpTimeoutMs: number,
+  host: GrokRuntimeHost,
+): AcpSessionProfile {
+  const argv = [...command, "--trust", "agent", "--no-leader", "--always-approve"];
+  if (options.runtime?.model && options.runtime.model !== "default")
+    argv.push("--model", options.runtime.model);
+  if (options.runtime?.reasoning) argv.push("--reasoning-effort", options.runtime.reasoning);
+  argv.push("stdio");
+  return {
+    label: "Grok",
+    openTransport: (sink) =>
+      grokConnection(
+        argv,
+        options.agentWorkspaceDirectory,
+        host.buildSessionEnvironment(options),
+        host,
+        (method, params) => {
+          if (method !== "session/update") {
+            sink.notification(method, params);
+            return;
+          }
+          const sessionId = nonEmptyString(params.sessionId);
+          const update = asRecord(params.update);
+          if (sessionId && update) sink.update(sessionId, update);
+        },
+        (request) => sink.permission(request),
+        () => sink.promptWritten(),
+      ),
+    // Grok authenticates before a session exists, and only the methods its initialize answer
+    // advertised can be used.
+    beforeSession: async (transport, initialized) => {
+      const methods = initialized.authMethods ?? [];
+      const preferred = nonEmptyString(asRecord(initialized._meta)?.defaultAuthMethodId);
+      const method =
+        methods.find(
+          (m) => m.id === preferred && (m.id === "cached_token" || m.id === "x.ai.api_key"),
+        ) ??
+        methods.find((m) => m.id === "cached_token") ??
+        methods.find((m) => m.id === "x.ai.api_key");
+      if (!method) throw new Error("Grok noninteractive authentication is unavailable");
+      await acpBounded(
+        transport.connection.agent.request("authenticate", {
+          methodId: method.id,
+          _meta: { headless: true },
+        }),
+        acpTimeoutMs,
+        GROK_PROFILE.messages.timedOut,
+      );
+    },
+    openSession: (transport, sessionId, initialized) =>
+      openGrokSession(transport, sessionId, initialized, options, acpTimeoutMs),
+    turn: () => new GrokTurnEvents(host),
+    // Grok names the prompt it runs, and its queue notifications carry that same id.
+    promptMeta: (turnId) => ({ promptId: turnId }),
+    // A turn that stops at its token limit or a native turn limit is a normal end for Grok.
+    stopStatus: (reason) =>
+      COMPLETED_STOP_REASONS.has(reason)
+        ? { status: "completed" }
+        : reason === "cancelled"
+          ? { status: "interrupted" }
+          : { status: "failed", error: `Grok stopped the turn (${reason})` },
+    admissionTimeoutMs: acpTimeoutMs,
+    steer: {
+      request: (text, sessionId) => ({
+        method: "_x.ai/interject",
+        params: { sessionId, text, interjectionId: crypto.randomUUID() },
+      }),
+      // Measured on grok 1.0.70: an interjection Grok holds answers `status: "queued"`; the only
+      // refusal is a JSON-RPC error, which the session reports undelivered.
+      accepted: (response) => ({
+        accepted: asRecord(asRecord(response)?.result)?.status === "queued",
+      }),
+      // A queued interjection whose turn ends before injection is run by Grok as its own
+      // `interject-fallback-<uuid>` turn. That turn carries no `session/prompt` answer, so it is
+      // adopted here and settled by its own `turn_completed`.
+      nativeTurn: (method, params, ownPromptId) => grokNativeTurn(method, params, ownPromptId),
+    },
+  };
+}
 
-  constructor(
-    private readonly options: AgentSessionOptions,
-    command: readonly string[],
-    private readonly acpTimeoutMs: number,
-    private readonly host: GrokRuntimeHost,
-  ) {
-    const argv = [...command, "--trust", "agent", "--no-leader", "--always-approve"];
-    if (options.runtime?.model && options.runtime.model !== "default")
-      argv.push("--model", options.runtime.model);
-    if (options.runtime?.reasoning) argv.push("--reasoning-effort", options.runtime.reasoning);
-    argv.push("stdio");
-    this.#transport = grokConnection(
-      argv,
-      options.agentWorkspaceDirectory,
-      host.buildSessionEnvironment(options),
-      host,
-      (method, params) => this.#update(method, params),
-      (request) => this.#permission(request),
+async function openGrokSession(
+  transport: AcpConnection,
+  sessionId: string | undefined,
+  initialized: InitializeResponse,
+  options: AgentSessionOptions,
+  acpTimeoutMs: number,
+) {
+  const agent = transport.connection.agent;
+  const canLoad = initialized.agentCapabilities?.loadSession === true;
+  const params = { cwd: options.agentWorkspaceDirectory, mcpServers: [] };
+  // The instructions replace Grok's native system prompt on new and on load, so a resumed
+  // session runs the current ones. Grok ignores a blank override, so none is sent.
+  const meta = {
+    yoloMode: true,
+    ...(options.instructions.trim() ? { systemPromptOverride: options.instructions } : {}),
+  };
+  let resuming = !!sessionId && options.sessionMode !== "create";
+  let replaced: string | undefined;
+  const create = () =>
+    acpBounded(
+      agent.request("session/new", {
+        ...params,
+        _meta: {
+          ...meta,
+          ...(!replaced && sessionId ? { sessionId } : {}),
+        },
+      }),
+      acpTimeoutMs,
+      GROK_PROFILE.messages.timedOut,
     );
-    this.#transport.process.onFailure((error) => {
-      if (this.#disposed || this.#failed) return;
-      this.cancelPendingNotices();
-      if (!this.#turns.size)
-        this.#emit({ type: "error", message: error.message, providerErrorReason: "process_exit" });
-      for (const id of this.#turns.keys())
-        this.#finish(id, "error", {
-          type: "error",
-          message: error.message,
-          providerErrorReason: "process_exit",
-        });
-      this.#failed = true;
-    });
-  }
-
-  #bounded<T>(work: Promise<T>) {
-    return withDeadline(work, this.acpTimeoutMs, () => new GrokAcpTimeoutError());
-  }
-
-  async open() {
-    const agent = this.#transport.connection.agent;
-    const request: InitializeRequest = {
-      protocolVersion: 1,
-      clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
-      clientInfo: this.host.sessionClientInfo,
-    };
-    const initialized = await this.#bounded(agent.request("initialize", request));
-    if (initialized.protocolVersion !== 1) throw new Error("Unsupported Grok ACP version");
-    const canLoad = initialized.agentCapabilities?.loadSession === true;
-    const methods = initialized.authMethods ?? [];
-    const preferred = nonEmptyString(asRecord(initialized._meta)?.defaultAuthMethodId);
-    const method =
-      methods.find(
-        (m) => m.id === preferred && (m.id === "cached_token" || m.id === "xai.api_key"),
-      ) ??
-      methods.find((m) => m.id === "cached_token") ??
-      methods.find((m) => m.id === "xai.api_key");
-    if (!method) throw new Error("Grok noninteractive authentication is unavailable");
-    await this.#bounded(
-      agent.request("authenticate", { methodId: method.id, _meta: { headless: true } }),
-    );
-    const params = { cwd: this.options.agentWorkspaceDirectory, mcpServers: [] };
-    // The instructions replace Grok's native system prompt on new and on load, so a resumed
-    // session runs the current ones. Grok ignores a blank override, so none is sent.
-    const meta = {
-      yoloMode: true,
-      ...(this.options.instructions.trim()
-        ? { systemPromptOverride: this.options.instructions }
-        : {}),
-    };
-    let resuming = !!this.options.sessionId && this.options.sessionMode !== "create";
-    let replaced: string | undefined;
-    const create = () =>
-      this.#bounded(
-        agent.request("session/new", {
+  const load = async () => {
+    if (!canLoad) throw new Error("Grok cannot resume sessions: ACP loadSession is unavailable");
+    try {
+      return await acpBounded(
+        agent.request("session/load", {
           ...params,
-          _meta: {
-            ...meta,
-            ...(!replaced && this.options.sessionId ? { sessionId: this.options.sessionId } : {}),
-          },
+          sessionId: sessionId!,
+          _meta: meta,
         }),
+        acpTimeoutMs,
+        GROK_PROFILE.messages.timedOut,
       );
-    const load = async () => {
-      if (!canLoad) throw new Error("Grok cannot resume sessions: ACP loadSession is unavailable");
-      try {
-        return await this.#bounded(
-          agent.request("session/load", {
-            ...params,
-            sessionId: this.options.sessionId!,
-            _meta: meta,
-          }),
-        );
-      } catch (error) {
-        // Only a missing session is replaced. Grok reports a local miss whose remote pull 404s,
-        // fails or is not configured as -32603 with data.code FS_NOT_FOUND. Other I/O failures
-        // carry another data.code; any failure but that one keeps the identity and fails launch.
-        const native = asRecord(error);
-        if (native?.code !== -32603 || asRecord(native.data)?.code !== "FS_NOT_FOUND") throw error;
-        replaced = this.options.sessionId;
-        resuming = false;
-        return create();
-      }
-    };
-    const state = resuming ? await load() : await create();
-    const sessionId = resuming
-      ? this.options.sessionId!
-      : "sessionId" in state
-        ? state.sessionId
-        : undefined;
-    if (typeof sessionId !== "string" || !sessionId.trim())
-      throw new Error("Grok did not create a session");
-    this.#identity = { sessionId, state: resuming ? "resumable" : "empty" };
-    const selected = this.options.runtime?.model;
-    const modelId =
-      selected && selected !== "default"
-        ? selected
-        : nonEmptyString(asRecord(asRecord(state)?.models)?.currentModelId);
-    if ((selected && selected !== "default") || this.options.runtime?.reasoning) {
-      if (!modelId) throw new Error("Grok current model is unavailable");
-      await this.#bounded(
-        agent.request("session/set_model", {
-          sessionId,
-          modelId,
-          ...(this.options.runtime?.reasoning
-            ? { _meta: { reasoningEffort: this.options.runtime.reasoning } }
-            : {}),
-        }),
-      );
-    }
-    await this.options.onSessionId?.(sessionId, replaced);
-    this.#ready = true;
-    if (this.#openingQueue) this.#update("_x.ai/queue/changed", this.#openingQueue);
-    this.#openingQueue = undefined;
-  }
-
-  get hasLiveTurn() {
-    return !this.#disposed && this.#turns.size > 0;
-  }
-  async readSessionIdentity() {
-    return this.#identity;
-  }
-  sendMessage(text: string) {
-    return this.notify(text);
-  }
-  notify(text: string, options?: AgentNoticeOptions): Promise<void> {
-    const generation = this.#generation;
-    const accepted = this.#admissions.then(() => {
-      if (this.#noticeCancelled(generation)) throw new Error("Grok notice cancelled");
-      return this.hasLiveTurn
-        ? this.#interject(text, options, generation)
-        : this.#prompt(text, options);
-    });
-    this.#admissions = accepted.catch(() => {});
-    return accepted;
-  }
-
-  #noticeCancelled(generation: number) {
-    return generation !== this.#generation || this.#disposed || this.#failed || this.#interrupting;
-  }
-
-  async #interject(text: string, options: AgentNoticeOptions | undefined, generation: number) {
-    if (this.#disposed || !this.#identity) throw new Error("Grok cannot accept input");
-    const queued = Promise.withResolvers<boolean>();
-    const pending = this.#waitForAdmission(queued);
-    void this.#transport.connection.agent
-      .request<
-        { result?: { status?: string }; error?: unknown },
-        { sessionId: string; text: string; interjectionId: string }
-      >("_x.ai/interject", {
-        sessionId: this.#identity.sessionId,
-        text,
-        interjectionId: crypto.randomUUID(),
-      })
-      .then(
-        (response) => {
-          if (this.#disposed) queued.reject(new Error("Grok rejected interjection"));
-          else queued.resolve(!response.error && response.result?.status === "queued");
-        },
-        // Grok answers `queued` whenever it holds the session; its only refusal is a JSON-RPC
-        // error (extensions/interject.rs: invalid_params for an unknown session or malformed
-        // params). A closed transport is no answer: the notice may be queued, so never resend it.
-        (error: unknown) => {
-          if (error instanceof RequestError && !this.#disposed) queued.resolve(false);
-          else queued.reject(new Error("Grok rejected interjection"));
-        },
-      );
-    // A queued interjection racing turn end becomes Grok's own fallback prompt, so it stays
-    // accepted: a daemon retry would deliver the same notice twice. Only a refusal is resent.
-    if (await pending) return;
-    if (this.#noticeCancelled(generation)) throw new Error("Grok notice cancelled");
-    await this.#prompt(text, options);
-  }
-
-  async #prompt(text: string, options?: AgentNoticeOptions) {
-    if (this.#disposed || !this.#identity) throw new Error("Grok cannot accept input");
-    const id = crypto.randomUUID();
-    const admitted = Promise.withResolvers<void>();
-    this.#turns.set(id, { admitted, options, updates: new GrokTurnEvents(this.host) });
-    void this.#transport.connection.agent
-      .request("session/prompt", {
-        sessionId: this.#identity.sessionId,
-        prompt: [{ type: "text", text }],
-        _meta: { promptId: id },
-      })
-      .then(
-        (response) => this.#finish(id, response.stopReason),
-        (error: unknown) => {
-          admitted.reject(new Error("Grok rejected input"));
-          const native = asRecord(error);
-          // Grok's JSON-RPC error data is `{detail, code}`; older shapes carry a string.
-          const message =
-            nonEmptyString(asRecord(native?.data)?.detail) ??
-            nonEmptyString(native?.data) ??
-            (error instanceof Error ? error.message : "Grok request failed");
-          this.#finish(id, "error", {
-            type: "error",
-            message,
-            ...(typeof native?.code === "number" ? { providerErrorCode: String(native.code) } : {}),
-          });
-        },
-      );
-    await this.#waitForAdmission(admitted);
-  }
-
-  async #waitForAdmission<T>(admitted: ReturnType<typeof Promise.withResolvers<T>>) {
-    this.#pendingAdmissions.add(admitted);
-    try {
-      return await this.#bounded(admitted.promise);
     } catch (error) {
-      // An unanswered admission has an unknown delivery outcome. Close its native request
-      // before rejecting, so neither a late acceptance nor queued retries can escape the fence.
-      if (error instanceof GrokAcpTimeoutError) await this.dispose();
-      throw error;
-    } finally {
-      this.#pendingAdmissions.delete(admitted);
+      // Only a missing session is replaced. Grok reports a local miss whose remote pull 404s,
+      // fails or is not configured as -32603 with data.code FS_NOT_FOUND. Other I/O failures
+      // carry another data.code; any failure but that one keeps the identity and fails launch.
+      const native = asRecord(error);
+      if (native?.code !== -32603 || asRecord(native.data)?.code !== "FS_NOT_FOUND") throw error;
+      replaced = sessionId;
+      resuming = false;
+      return create();
     }
+  };
+  const state = resuming ? await load() : await create();
+  const created = resuming ? sessionId! : "sessionId" in state ? state.sessionId : undefined;
+  if (typeof created !== "string" || !created.trim())
+    throw new Error("Grok did not create a session");
+  const selected = options.runtime?.model;
+  const modelId =
+    selected && selected !== "default"
+      ? selected
+      : nonEmptyString(asRecord(asRecord(state)?.models)?.currentModelId);
+  if ((selected && selected !== "default") || options.runtime?.reasoning) {
+    if (!modelId) throw new Error("Grok current model is unavailable");
+    await acpBounded(
+      agent.request("session/set_model", {
+        sessionId: created,
+        modelId,
+        ...(options.runtime?.reasoning
+          ? { _meta: { reasoningEffort: options.runtime.reasoning } }
+          : {}),
+      }),
+      acpTimeoutMs,
+      GROK_PROFILE.messages.timedOut,
+    );
   }
+  return { sessionId: created, resumable: resuming, replacedSessionId: replaced };
+}
 
-  cancelPendingNotices() {
-    this.#generation++;
-    for (const pending of this.#pendingAdmissions)
-      pending.reject(new Error("Grok notice cancelled"));
-    this.#pendingAdmissions.clear();
+/** The turn Grok started itself for an accepted interjection whose previous turn had ended. */
+function grokNativeTurn(
+  method: string,
+  params: Readonly<Record<string, unknown>>,
+  ownPromptId: string | undefined,
+) {
+  if (method === "_x.ai/queue/changed") {
+    const running = nonEmptyString(params.runningPromptId);
+    return running && running !== ownPromptId ? { promptId: running } : undefined;
   }
-
-  /** Grok asks only when always-approve is off; a request outside the live session is cancelled,
-   * as ACP requires for every pending request once its turn is being cancelled. */
-  #permission(request: RequestPermissionRequest) {
-    const allow =
-      !this.#disposed && !this.#interrupting && request.sessionId === this.#identity?.sessionId
-        ? (request.options.find((option) => option.kind === "allow_once") ??
-          request.options.find((option) => option.kind === "allow_always"))
-        : undefined;
-    return {
-      outcome: allow
-        ? { outcome: "selected" as const, optionId: allow.optionId }
-        : { outcome: "cancelled" as const },
-    };
-  }
-
-  #update(method: string, params: Readonly<Record<string, unknown>>) {
-    if (this.#disposed) return;
-    if (!this.#ready) {
-      if (method === "_x.ai/queue/changed") this.#openingQueue = params;
-      // A turn that finished before the session was reported must not be revived by the
-      // queue snapshot replayed once it is ready. Only Grok's own notification carries it, so
-      // replayed `session/update` history is skipped.
-      const finished =
-        method === "_x.ai/session_notification"
-          ? completedPromptId(asRecord(params.update))
-          : undefined;
-      if (finished) remember(this.#completed, finished);
-      return;
-    }
-    if (params.sessionId !== this.#identity?.sessionId) return;
-    if (method === "_x.ai/queue/changed") {
-      const running = nonEmptyString(params.runningPromptId);
-      for (const entry of Array.isArray(params.entries) ? params.entries : []) {
-        const id = nonEmptyString(asRecord(entry)?.id);
-        if (id) this.#turns.get(id)?.admitted?.resolve();
-      }
-      this.#runningId = running;
-      if (running && !this.#completed.has(running)) {
-        if (!this.#turns.has(running))
-          this.#turns.set(running, { updates: new GrokTurnEvents(this.host) });
-        this.#turns.get(running)?.admitted?.resolve();
-        this.#emit({ type: "progress", source: "grok_turn_started" });
-      }
-      return;
-    }
-    const eventId = nonEmptyString(asRecord(params._meta)?.eventId);
-    if (eventId) {
-      if (this.#seenEvents.has(eventId)) return;
-      remember(this.#seenEvents, eventId);
-    }
-    const update = asRecord(params.update);
-    const finished = completedPromptId(update);
-    if (finished) {
-      // A failed turn's error text rides `agent_result`, and this update arrives before the
-      // prompt rejection that repeats it, so it is the one that reports the failure.
-      const detail = nonEmptyString(update?.agent_result);
-      const reason = update?.stop_reason;
-      this.#finish(
-        finished,
-        reason,
-        detail
-          ? {
-              type: "error",
-              message: detail,
+  if (method !== "_x.ai/session_notification") return undefined;
+  const update = asRecord(params.update);
+  if (update?.sessionUpdate !== "turn_completed") return undefined;
+  const promptId = nonEmptyString(update.prompt_id);
+  if (!promptId || promptId === ownPromptId) return undefined;
+  const reason = update.stop_reason;
+  const detail = nonEmptyString(update.agent_result);
+  const status = COMPLETED_STOP_REASONS.has(reason)
+    ? ("completed" as const)
+    : reason === "cancelled"
+      ? ("interrupted" as const)
+      : ("failed" as const);
+  return {
+    promptId,
+    end: {
+      status,
+      ...(status === "failed"
+        ? {
+            error: {
+              type: "error" as const,
+              message: detail ?? `Grok stopped the turn (${String(reason)})`,
               providerErrorReason: typeof reason === "string" ? reason : "unknown_stop_reason",
-            }
-          : undefined,
-      );
-    } else if (update && update.sessionUpdate !== "turn_completed") {
-      const promptId = nonEmptyString(asRecord(params._meta)?.promptId) ?? this.#runningId;
-      const turn = promptId ? this.#turns.get(promptId) : undefined;
-      // Grok streams only a prompt it is already running, so its own update also admits it.
-      turn?.admitted?.resolve();
-      for (const event of turn?.updates.read(update) ?? []) this.#emit(event, turn?.options);
-    }
-  }
-
-  #finish(id: string, reason: unknown, error?: Extract<AgentRuntimeEvent, { type: "error" }>) {
-    const turn = this.#turns.get(id);
-    if (!turn || this.#disposed) return;
-    turn.admitted?.resolve();
-    for (const event of turn.updates.end()) this.#emit(event, turn.options);
-    this.#turns.delete(id);
-    if (this.#runningId === id) this.#runningId = undefined;
-    for (const changed of this.#turnChanged) changed();
-    remember(this.#completed, id);
-    if (this.#identity && this.#identity.state !== "resumable") {
-      this.#identity = { ...this.#identity, state: "resumable" };
-      this.#emit({ type: "session", identity: this.#identity });
-    }
-    const status = COMPLETED_STOP_REASONS.has(reason)
-      ? "completed"
-      : reason === "cancelled"
-        ? "interrupted"
-        : "failed";
-    if (status === "failed")
-      this.#emit(
-        error ?? {
-          type: "error",
-          message: `Grok stopped the turn (${String(reason)})`,
-          providerErrorReason: typeof reason === "string" ? reason : "unknown_stop_reason",
-        },
-      );
-    this.#emit({ type: "completed", status });
-  }
-
-  subscribe(listener: (event: AgentRuntimeEvent) => void) {
-    this.#listeners.add(listener);
-    return () => this.#listeners.delete(listener);
-  }
-  #emit(event: AgentRuntimeEvent, options?: AgentNoticeOptions) {
-    const conversation = options?.conversation ?? this.options.conversation;
-    for (const listener of this.#listeners)
-      listener(conversation ? { ...event, conversation } : event);
-  }
-  async interrupt() {
-    if (this.#disposed || !this.#identity || !this.hasLiveTurn) return;
-    this.#interrupting = true;
-    this.cancelPendingNotices();
-    const turns = new Set(this.#turns.keys());
-    const stopped = Promise.withResolvers<void>();
-    const check = () => {
-      if (![...turns].some((id) => this.#turns.has(id))) stopped.resolve();
-    };
-    this.#turnChanged.add(check);
-    try {
-      await this.#transport.connection.agent.notify("session/cancel", {
-        sessionId: this.#identity.sessionId,
-      });
-      check();
-      await this.#bounded(stopped.promise);
-    } finally {
-      this.#turnChanged.delete(check);
-      this.#interrupting = false;
-    }
-  }
-  onExit(listener: () => void) {
-    return this.#transport.process.onClose(listener);
-  }
-  dispose(options?: Readonly<{ cutoffAtMs?: number }>): Promise<void> {
-    if (this.#dispose) return this.#dispose;
-    this.#disposed = true;
-    this.cancelPendingNotices();
-    for (const turn of this.#turns.values())
-      turn.admitted?.reject(new Error("Grok session stopped"));
-    this.#turns.clear();
-    for (const changed of this.#turnChanged) changed();
-    this.#dispose = this.#transport.dispose(options);
-    return this.#dispose;
-  }
+            },
+          }
+        : {}),
+    },
+  };
 }

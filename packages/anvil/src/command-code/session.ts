@@ -7,7 +7,8 @@ import type {
   AgentSessionOptions,
 } from "@coforge/agent";
 import { RuntimeModelNotFoundError } from "#src/contract";
-import { AcpSession, type AcpSessionProfile } from "#src/acp/session";
+import type { AcpSessionProfile } from "#src/acp/profile";
+import { AcpSession } from "#src/acp/session";
 import type { AcpConnection } from "#src/acp/connection";
 import {
   commandCodeConnection,

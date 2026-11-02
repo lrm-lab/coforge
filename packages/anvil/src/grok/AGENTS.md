@@ -12,10 +12,15 @@ Behavior, compatibility and native verification: [`docs/agents/grok-acp.md`](../
 - `--trust` covers only the Agent workspace: project skills and instructions load only from trusted
   folders; assigned skills live in `<Agent workspace>/.grok/skills`. Folder trust is a security
   boundary: get Frank's approval before widening it past the Agent workspace or dropping it.
-- Idle input uses `session/prompt`; busy input uses `_x.ai/interject`. Native admission settles
-  delivery. Only a refused interjection is resent as a prompt, never one whose answer was lost.
+- Idle input uses `session/prompt` with `_meta.promptId`; busy input uses `_x.ai/interject`.
+  Admission follows the shared ACP rule (first output event or `end_turn`), and an input that
+  waits past the ACP deadline closes the session before rejecting delivery. A refused
+  interjection is `notice-undelivered` for the daemon to redeliver when idle; only an
+  unanswered one leaves delivery unknown. A queued interjection whose turn ends first runs as
+  Grok's own `interject-fallback-*` turn, adopted from `_x.ai/queue/changed`.
 - `_x.ai/queue/changed` observes autonomous turn admission but never ends a turn; only
-  `_x.ai/session_notification` `turn_completed` does. Ignore load replay for live Activity.
+  `_x.ai/session_notification` `turn_completed` does. A running prompt id that is not the
+  prompt this session wrote is projected as its own turn. Ignore load replay for live Activity.
 - Tool events carry native `toolName` and `rawInput`; `read_file.target_file` becomes `file_path`.
   Only terminal update `content` text is display output, never the `rawOutput` object. `cancelled`
   ends a call as an error; a `completed` shell call can fail via `rawOutput.exit_code`/`timed_out`.

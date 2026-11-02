@@ -5,20 +5,27 @@ The Grok provider requires **Grok Build 1.0.62 or newer**. A session owns one
 including terminal cleanup's five-second graceful-exit allowance and forced-exit
 fallback.
 
-Idle input uses `session/prompt`. Its native admission acknowledges input: a
-`_x.ai/queue/changed` entry or running ID for the prompt, or a streamed
-`session/update` whose `_meta.promptId` is that prompt. The long-running prompt
-response does not delay acknowledgement. Busy input uses `_x.ai/interject` and
-waits for its `result.status: queued` response. If turn end races the interjection,
-Grok itself runs the notice as a fallback prompt. CoForge must not independently
-resend that accepted notice. Grok refuses an interjection only with a JSON-RPC
-error (`invalid_params` for an unknown session or malformed params); a refusal, or
-any result but `queued`, was not queued, so CoForge delivers that notice through
-`session/prompt` instead. A closed transport or a timeout leaves the outcome
-unknown: delivery rejects and the notice is not resent.
+Idle input uses `session/prompt`, with the prompt id the session assigns as
+`_meta.promptId`. Native admission follows the shared ACP rule: writing the prompt
+is only attempted, and the turn's first output event (or its `end_turn` answer)
+accepts it. An input that waits past the ACP deadline closes the session before
+rejecting delivery, so a late native acceptance cannot race a retry. Busy input
+uses `_x.ai/interject` and waits for its `result.status: queued` answer. If turn
+end races the interjection, Grok itself runs the notice as its own
+`interject-fallback-<uuid>` turn; the session adopts that turn from
+`_x.ai/queue/changed.runningPromptId` (the `_x.ai/session/interjection`
+notification only confirms Grok holds the notice, not that it was injected),
+routes its updates, and ends it on its own `turn_completed`. CoForge must not
+independently resend that accepted notice. Grok refuses an interjection only with
+a JSON-RPC error (`invalid_params` for an unknown session or malformed params); a
+refusal, or any result but `queued`, was not queued, so the notice is reported as
+`notice-undelivered` and the daemon redelivers it once the Agent is idle. A closed
+transport or a timeout leaves the outcome unknown: delivery rejects and the notice
+is not resent.
 
 Native `_x.ai/queue/changed` running IDs establish live turns, including autonomous
-turns from background commands, monitors, and other native background work.
+turns from background commands, monitors, and other native background work; a
+running ID that is not the prompt this session wrote is projected as its own turn.
 `_x.ai/session_notification` with `turn_completed` ends the matching prompt ID,
 including a turn that ends before the session is reported, so the queue snapshot
 replayed once it is ready cannot revive it. The prompt response can also settle
@@ -31,9 +38,10 @@ Stop reasons `end_turn`, `max_tokens`, `max_turn_requests` and `refusal` complet
 turn without an error; `cancelled` interrupts it; any other reason (Grok reports
 `error`) fails it with an error event. Grok sends a failed turn's error text as
 `turn_completed.agent_result` (a string) before it rejects the prompt, so that text
-is the error message; without it the message names the stop reason. A process
-failure or a prompt rejected before its turn ends fails the turn with its own error;
-a rejected prompt reports Grok's `data.detail`.
+is the error message; the event carries the prompt answer's JSON-RPC code rather
+than the free-form stop reason. Without that text the message names the stop
+reason. A process failure or a prompt rejected before its turn ends fails the turn
+with its own error; a rejected prompt reports Grok's `data.detail`.
 A `tool_call_update` ending `cancelled` ends the call as an error, with any
 `content` text as its output.
 
