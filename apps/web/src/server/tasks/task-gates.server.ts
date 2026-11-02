@@ -12,9 +12,9 @@ import {
   isActor,
   linkNewTasks,
   TASK_RELATION_DENIED,
-  TASK_RELATION_INVALID,
   type RelationPlan,
 } from "./task-relations-write.server";
+import { TASK_RELATION_INVALID } from "./task-relation-graph.server";
 import { isTaskManager } from "./task-assignees.server";
 import { TASK_RELATIONS_OFF, taskRelationsEnabled } from "./task-conversations-gate.server";
 import type { NoticeSubject, NoticeWriter } from "./task-notice-posting.server";

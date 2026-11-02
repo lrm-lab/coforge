@@ -9,6 +9,7 @@ import { AppError } from "#src/lib/app-error";
 import { readFeatureFlagsConfiguration } from "#src/server/feature-flags/configuration.server";
 import { installFeatureFlags } from "#src/server/feature-flags/feature-flags.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
+import type { TaskBoardDependencies } from "#src/server/tasks/task-board-ports.server";
 
 /** The Workspace flag that offers the `taskConversations` experiment, on for the whole process. */
 async function offerTasksV2() {
@@ -38,7 +39,10 @@ async function offerTasksV2() {
  * and a board to drive. Task relations are part of Tasks v2, the `taskConversations` experiment:
  * on unless `tasksV2` is false.
  */
-export async function setup({ tasksV2 = true } = {}) {
+export async function setup({
+  tasksV2 = true,
+  dependencies,
+}: { tasksV2?: boolean; dependencies?: TaskBoardDependencies } = {}) {
   await offerTasksV2();
   const connectionString = Bun.env.TASK_TEST_DATABASE_URL ?? Bun.env.DATABASE_URL;
   if (!connectionString)
@@ -106,7 +110,7 @@ export async function setup({ tasksV2 = true } = {}) {
       members: { create: [{ userId: alice.id }, { agentId: one.id }] },
     },
   });
-  const board = new TaskBoard(db);
+  const board = new TaskBoard(db, dependencies);
   const principals = {
     alice: { workspaceId: workspace.id, userId: alice.id } as TaskPrincipal,
     bob: { workspaceId: workspace.id, userId: bob.id } as TaskPrincipal,

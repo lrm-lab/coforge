@@ -1,5 +1,6 @@
 import { test, expect } from "bun:test";
 import type { TaskLink } from "@lrm/coforge-sdk/internal";
+import type { TaskChangedSignal } from "#src/server/conversations/conversation-realtime.server";
 import { setup } from "./fixtures/task-dependencies";
 
 /** Blockers and parents across the channels of one Workspace, against real PostgreSQL. */
@@ -220,6 +221,41 @@ test("finishing a blocker in another channel tells the dependent's owner in the 
         where: { conversationId: other.id, systemMessage: { kind: "task.unblocked" } },
       }),
     ).toBe(0);
+  } finally {
+    await db.$disconnect();
+  }
+});
+
+test("a blocker's change announces its dependent to the dependent's own conversation", async () => {
+  const announced: TaskChangedSignal[] = [];
+  const { db, run, make, channel, other } = await setup({
+    dependencies: {
+      realtime: {
+        async memberChanged() {},
+        async messageAvailable() {},
+        async taskChanged(signal) {
+          announced.push(signal);
+        },
+      },
+    },
+  });
+  try {
+    const [blocker] = await make("alice", 1, {}, other.id);
+    const [waiting] = await make("alice", 1, {
+      blockedBy: [{ number: blocker!, channel: other.channelName! }],
+    });
+    await run("alice", { operation: "claim", number: blocker! }, other.id);
+    announced.length = 0;
+    await run("alice", { operation: "update", number: blocker!, status: "in_review" }, other.id);
+    // The page open on the dependent's conversation hears of the blocker's change, with the new
+    // status in the dependent's copy: its open detail refreshes without reading its list again.
+    const toWaiting = announced.filter((signal) => signal.conversationId === channel.id);
+    expect(toWaiting).toHaveLength(1);
+    const [view] = toWaiting[0]!.tasks;
+    expect(view).toMatchObject({ number: waiting, conversationId: channel.id });
+    expect(view!.blockedBy).toMatchObject([
+      { number: blocker, channel: other.channelName, status: "in_review" },
+    ]);
   } finally {
     await db.$disconnect();
   }

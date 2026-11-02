@@ -1,7 +1,6 @@
 import {
   isBlockerSatisfied,
   MAX_TASK_BLOCKERS,
-  MAX_TASK_TREE_DEPTH,
   type TaskHistoryChange,
   type TaskName,
   type TaskRef,
@@ -12,10 +11,14 @@ import type { ChannelActor } from "#src/server/conversations/channel-actor.serve
 import { visibleChannelWhere } from "#src/server/conversations/channel-read-access.server";
 import {
   assertDepth,
+  assertNoTreeDependency,
   describe,
   loadParentTree,
   loadWaitsFor,
   pathBetween,
+  TASK_RELATION_INVALID,
+  treeWithChildren,
+  treeWithParent,
 } from "./task-relation-graph.server";
 import type { Member, Transaction } from "./task-board-ports.server";
 import { historyRows } from "./task-history.server";
@@ -25,13 +28,14 @@ import { NAMED_CONVERSATION_SELECT, taskName } from "./task-view.server";
 /**
  * Writes a Task's blockers and parent (`task_dependencies`, `task_parents`) and decides whether a
  * change keeps them valid: the Tasks are in this Workspace and readable by whoever names them, no
- * self edge, no cycle across the Workspace, at most `MAX_TASK_BLOCKERS` blockers and
- * `MAX_TASK_TREE_DEPTH` levels. The caller holds the conversation lock; every write here also
- * runs under the Workspace's task-write lock (`lockWorkspaceTaskWrites`), taken before any conversation lock, which is what makes the graph
- * checks race-free across conversations.
+ * self edge, no dependency cycle across the Workspace, no Task waiting for its own ancestor or
+ * descendant in the tree, at most `MAX_TASK_BLOCKERS` blockers and `MAX_TASK_TREE_DEPTH` levels.
+ * The tree rule is judged on the tree and edges the write produces, whichever way it changes them.
+ * The caller holds the conversation lock; every write here also runs under the Workspace's
+ * task-write lock (`lockWorkspaceTaskWrites`), taken before any conversation lock, which is what
+ * makes the graph checks race-free across conversations.
  */
 
-export const TASK_RELATION_INVALID = "task_relation_invalid";
 export const TASK_RELATION_DENIED = "task_relation_denied";
 
 const invalid = (hint: string) =>
@@ -206,7 +210,31 @@ export async function linkNewTasks(
   const [parent] =
     input.parent == null ? [] : await resolve(tx, scope, member, [input.parent], created);
   if (parent) assertMayAddSubtasks(parent, member, manager);
-  if (parent) assertDepth((await loadParentTree(tx, scope.workspaceId)).parentOf, parent.id);
+  if (parent) {
+    const tree = await loadParentTree(tx, scope.workspaceId);
+    assertDepth(tree.parentOf, parent.id);
+    // Judge what the write produces: each new Task joins the tree under `parent` and waits for
+    // `blockers`, so a blocker that is the parent (or above it) is refused.
+    const withNew = treeWithChildren(
+      tree,
+      created.map((task) => task.id),
+      parent.id,
+    );
+    await assertNoTreeDependency(
+      tx,
+      scope,
+      withNew,
+      new Map(),
+      created.flatMap((task) =>
+        blockers.map((blocker) => ({ taskId: task.id, blockerId: blocker.id })),
+      ),
+      undefined,
+      new Map([
+        ...created.map((task) => [task.id, `#${task.number}`] as const),
+        ...blockers.map((blocker) => [blocker.id, refLabel(blocker.ref)] as const),
+      ]),
+    );
+  }
   const common = { conversationId: scope.conversationId, workspaceId: scope.workspaceId };
   await tx.taskDependency.createMany({
     data: created.flatMap((task) =>
@@ -265,7 +293,8 @@ export type RelationPlan = {
 /**
  * Check an amendment of a Task's blockers (the whole new set) and parent (a ref, or null to
  * detach) against the Workspace's graph. Throws `INVALID_INPUT` naming the Tasks when the change
- * is not valid. Only the graph the input touches is read.
+ * is not valid. The Workspace's parent tree and dependency edges are read once; the checks judge
+ * the graph the write produces, so a change to both in one command is judged together.
  */
 export async function planRelationAmend(
   tx: Transaction,
@@ -285,6 +314,16 @@ export async function planRelationAmend(
     parents: [],
   };
   const here = (target: Target) => taskName(target, scope.conversationId);
+  // Read both graphs once: the checks below judge the tree and the edges the write produces.
+  const [waitsFor, tree] = await Promise.all([
+    loadWaitsFor(tx, scope.workspaceId),
+    loadParentTree(tx, scope.workspaceId),
+  ]);
+  /** The blockers the write leaves the Task with, when it changes them. */
+  let finalBlockers: string[] | undefined;
+  let addedBlockers: Target[] = [];
+  /** The Task whose subtree joins a new parent, when the write moves it. */
+  let moved: string | undefined;
 
   if (input.blockedBy !== undefined) {
     const asked = distinct(input.blockedBy);
@@ -292,47 +331,28 @@ export async function planRelationAmend(
     const blockers = distinctTasks(await resolve(tx, scope, member, asked));
     if (blockers.some((blocker) => blocker.id === task.id))
       throw invalid(`task #${task.number} cannot wait for itself`);
-    const [waitsFor, own, tree] = await Promise.all([
-      loadWaitsFor(tx, scope.workspaceId),
-      tx.taskDependency.findMany({
-        where: { taskId: task.id },
-        select: {
-          blockedByTaskId: true,
-          blocker: {
-            select: {
-              number: true,
-              status: true,
-              conversation: { select: NAMED_CONVERSATION_SELECT },
-            },
+    const own = await tx.taskDependency.findMany({
+      where: { taskId: task.id },
+      select: {
+        blockedByTaskId: true,
+        blocker: {
+          select: {
+            number: true,
+            status: true,
+            conversation: { select: NAMED_CONVERSATION_SELECT },
           },
         },
-      }),
-      loadParentTree(tx, scope.workspaceId),
-    ]);
+      },
+    });
     const current = new Set(own.map((edge) => edge.blockedByTaskId));
     const wantedIds = new Set(blockers.map((blocker) => blocker.id));
     const added = blockers.filter((blocker) => !current.has(blocker.id));
     const removed = own.filter((edge) => !wantedIds.has(edge.blockedByTaskId));
-    // A Task may not wait for an ancestor or a descendant: the tree's completion order already
-    // relates them, so the edge would deadlock.
-    const ancestors = new Set<string>();
-    for (
-      let up = tree.parentOf.get(task.id);
-      up && ancestors.size <= MAX_TASK_TREE_DEPTH;
-      up = tree.parentOf.get(up)
-    )
-      ancestors.add(up);
-    const descendants = new Set(descend(task.id, tree.childrenOf, MAX_TASK_TREE_DEPTH).flat());
-    for (const blocker of added) {
-      if (ancestors.has(blocker.id) || descendants.has(blocker.id))
-        throw invalid(
-          `#${task.number} cannot wait for ${refLabel(blocker.ref)}: it is ${ancestors.has(blocker.id) ? "an ancestor" : "a descendant"} in the task tree`,
-        );
-    }
     // The Task's own edges are replaced, so the graph the new ones must not close is without them.
-    waitsFor.delete(task.id);
+    const cycleGraph = new Map(waitsFor);
+    cycleGraph.delete(task.id);
     for (const blocker of added) {
-      const path = pathBetween(blocker.id, task.id, (id) => waitsFor.get(id) ?? []);
+      const path = pathBetween(blocker.id, task.id, (id) => cycleGraph.get(id) ?? []);
       if (path)
         throw invalid(
           `${refLabel(blocker.ref)} cannot block #${task.number}: that would make a dependency cycle (${(
@@ -362,11 +382,12 @@ export async function planRelationAmend(
         .map((blocker) => blocker.id);
       plan.removedOpenBlocker = removed.some((edge) => !isBlockerSatisfied(edge.blocker.status));
     }
+    finalBlockers = blockers.map((blocker) => blocker.id);
+    addedBlockers = added;
   }
 
   if (input.parent !== undefined) {
-    const [tree, ownParent, requested] = await Promise.all([
-      loadParentTree(tx, scope.workspaceId),
+    const [ownParent, requested] = await Promise.all([
       tx.taskParent.findUnique({
         where: { taskId: task.id },
         select: {
@@ -408,7 +429,30 @@ export async function planRelationAmend(
       );
       plan.parentTo = parent?.id ?? null;
       plan.parents = [from?.id, parent?.id].filter((id): id is string => !!id);
+      // Detaching removes ancestor relations; joining a real parent can create them.
+      if (parent) moved = task.id;
     }
+  }
+
+  // Judge what the write produces, whichever of the tree and the edges it changed: an added
+  // blocker against the post-write tree, and a moved subtree against its new ancestors.
+  if (addedBlockers.length || moved) {
+    const postTree =
+      plan.parentTo !== undefined ? treeWithParent(tree, task.id, plan.parentTo) : tree;
+    const postWaits = new Map(waitsFor);
+    if (finalBlockers) postWaits.set(task.id, finalBlockers);
+    await assertNoTreeDependency(
+      tx,
+      scope,
+      postTree,
+      postWaits,
+      addedBlockers.map((blocker) => ({ taskId: task.id, blockerId: blocker.id })),
+      moved,
+      new Map<string, string>([
+        [task.id, `#${task.number}`],
+        ...addedBlockers.map((blocker) => [blocker.id, refLabel(blocker.ref)] as const),
+      ]),
+    );
   }
   return plan;
 }

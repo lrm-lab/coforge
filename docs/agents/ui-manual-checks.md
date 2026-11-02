@@ -75,6 +75,11 @@
 - [ ] 会话内的 Task 引用显示对应状态 badge；已有 Task 且允许打开时可操作，未知编号或会话外引用保持普通文字，不跳到其他会话的 Task。
 - [ ] 能打开 Profile 的人/Agent mention 作为行内 hover-card 触发器，并验证键盘和触摸入口；没有可打开 Profile 的 mention 仅保留非交互高亮。
 
+## 任务关系
+
+- [ ] 父任务选择器只列出查看者能加子任务的 Task（其 owner、creator，或 Workspace owner/admin）。查看者不是该 Task 所在频道的成员、也不是 Workspace owner/admin 时，那个频道的 Task 不出现在候选里；管理员仍能看到。
+- [ ] 先让 A 等 B，再把 A 的父任务设成 B（或创建子任务时同时写 `--parent P --blocked-by P`）：服务端拒绝并说明是祖先/后代关系，任务不被修改。
+
 ## 头像与 Settings
 
 原范围：`avatar-breadcrumb.test.tsx`、`avatar-sticker.test.tsx`。
