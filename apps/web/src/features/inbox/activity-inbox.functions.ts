@@ -19,7 +19,7 @@ export const loadActivityInbox = createServerFn({ method: "GET" })
   .handler(async ({ context, data }) => {
     const { db, workspaceId, user } = context;
     const { streamPositions, data: page } = await readAfterStreamPositions(
-      data.offset ? [] : [userConversationChannel(user.id)],
+      data.cursor ? [] : [userConversationChannel(user.id)],
       () => browserActivityInbox(db).list(workspaceId, user.id, data),
     );
     return { ...page, streamPositions };

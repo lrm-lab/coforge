@@ -14,7 +14,7 @@ import type { StreamPosition, SubscribedRecovery } from "#src/features/realtime/
 import type { ActivityInboxItem } from "#src/server/inbox/activity-inbox.server";
 
 import { loadActivityInbox, loadActivityNavAttention } from "./activity-inbox.functions";
-import type { ActivityInboxFilter } from "./activity-inbox.schemas";
+import type { ActivityInboxCursor, ActivityInboxFilter } from "./activity-inbox.schemas";
 
 /** Every cached page of every view shares this prefix, so one invalidation refreshes them all. */
 export const ACTIVITY_INBOX_QUERY_PREFIX = ["activity-inbox"] as const;
@@ -22,13 +22,13 @@ export const ACTIVITY_INBOX_QUERY_PREFIX = ["activity-inbox"] as const;
 /** Every paged list view, and nothing else under the prefix (the nav dot is not paged). */
 export const ACTIVITY_INBOX_LISTS_KEY = [...ACTIVITY_INBOX_QUERY_PREFIX, "list"] as const;
 
-/** One view of the viewer's Activity inbox, paged by list offset. */
+/** One view of the viewer's Activity inbox, each page after the last item of the one before. */
 export const activityInboxQuery = (workspaceId: string, filter: ActivityInboxFilter) =>
   infiniteQueryOptions({
     queryKey: [...ACTIVITY_INBOX_LISTS_KEY, workspaceId, filter],
-    queryFn: ({ pageParam }) => loadActivityInbox({ data: { filter, offset: pageParam } }),
-    initialPageParam: 0,
-    getNextPageParam: (page) => page.nextOffset ?? undefined,
+    queryFn: ({ pageParam }) => loadActivityInbox({ data: { filter, cursor: pageParam } }),
+    initialPageParam: undefined as ActivityInboxCursor | undefined,
+    getNextPageParam: (page) => page.nextCursor ?? undefined,
   });
 
 export type ActivityInboxPage = Awaited<ReturnType<typeof loadActivityInbox>>;

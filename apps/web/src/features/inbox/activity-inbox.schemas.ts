@@ -5,9 +5,23 @@ import { z } from "zod";
 export const ACTIVITY_INBOX_FILTERS = ["all", "unread", "mentions"] as const;
 export type ActivityInboxFilter = (typeof ACTIVITY_INBOX_FILTERS)[number];
 
+/**
+ * Where a page starts: after the last item the previous page showed, in list order (newest
+ * activity first: its newest message's instant in epoch milliseconds, then its sequence, then the
+ * item's key).
+ */
+export const activityInboxCursorSchema = z.object({
+  // The end of year 9999: the last instant PostgreSQL reads back from an ISO timestamp.
+  at: z.number().int().min(0).max(253_402_300_799_999),
+  // A message sequence is a PostgreSQL `integer`.
+  sequence: z.number().int().min(0).max(2_147_483_647),
+  key: z.string().min(1).max(64),
+});
+export type ActivityInboxCursor = z.infer<typeof activityInboxCursorSchema>;
+
 export const activityInboxPageSchema = z.object({
   filter: z.enum(ACTIVITY_INBOX_FILTERS),
-  offset: z.number().int().min(0).optional(),
+  cursor: activityInboxCursorSchema.optional(),
 });
 
 /** Marks one item Done through the newest message the viewer saw in it. */

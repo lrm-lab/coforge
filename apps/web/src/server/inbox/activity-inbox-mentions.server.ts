@@ -1,191 +1,95 @@
-import type { PrismaClient } from "#src/generated/prisma/client";
-import { visibleChannelWhere } from "#src/server/conversations/channel-read-access.server";
-import type { ActivityCandidate } from "./activity-inbox.server";
+import { Prisma } from "#src/generated/prisma/client";
+import { readableChannelSql } from "#src/server/conversations/channel-read-access.server";
+import {
+  commentSourceReadableSql,
+  noTaskColumns,
+  pendingNoticeSql,
+} from "./activity-inbox-items-sql.server";
 
 /**
- * Each message whose sender had the viewer notified of a mention from outside its channel, until
- * the viewer marks it Done: one mention item per notification, listed from when it was sent,
- * unread until the viewer reads it. Not in a hidden or archived channel.
+ * The mention notifications the Activity inbox lists, as item rows of its page statement: one item
+ * per notification, until the viewer marks it Done.
  */
-export async function mentionCandidates(
-  db: PrismaClient,
-  workspaceId: string,
-  userId: string,
-): Promise<ActivityCandidate[]> {
-  const [rows, commentRows] = await Promise.all([
-    db.pendingMentionAction.findMany({
-      where: {
-        workspaceId,
-        targetUserId: userId,
-        // Sender-actionable rows only: a comment notification (reason set) renders through the
-        // second read — its own key is the same mention:<id>, so admitting it here would
-        // shadow the attachment-comment item whenever the comment lives in a visible channel.
-        reason: null,
-        notifiedAt: { not: null },
-        dismissedAt: null,
-        message: {
-          conversation: { archivedAt: null, ...visibleChannelWhere(workspaceId, { userId }) },
-        },
-      },
-      select: {
-        id: true,
-        conversationId: true,
-        messageId: true,
-        notifiedAt: true,
-        targetReadAt: true,
-        message: {
-          select: {
-            sequence: true,
-            threadRootId: true,
-            conversation: { select: { channelName: true, visibility: true } },
-          },
-        },
-      },
-    }),
-    // A comment notification names its file's source conversation, not the comment
-    // conversation (a comment conversation is no channel and no DM). The recheck reaches the
-    // source through `attachment_comments.attachmentId → attachments` rather than the comment
-    // thread row — comment migration deletes `attachment_comment_threads`, so the `thread`
-    // relation resolves null on migrated data.
-    db.pendingMentionAction.findMany({
-      where: {
-        workspaceId,
-        targetUserId: userId,
-        notifiedAt: { not: null },
-        dismissedAt: null,
-        message: { attachmentComment: { isNot: null } },
-      },
-      select: {
-        id: true,
-        conversationId: true,
-        messageId: true,
-        notifiedAt: true,
-        targetReadAt: true,
-        message: {
-          select: {
-            sequence: true,
-            threadRootId: true,
-            attachmentComment: { select: { attachmentId: true } },
-          },
-        },
-      },
-    }),
-  ]);
-  // The same recheck the post applied: the viewer still reads the source — a channel by
-  // canReadChannel, a DM as its active member — and neither hidden nor archived.
-  const commentAttachments = commentRows.length
-    ? await db.attachment.findMany({
-        where: {
-          workspaceId,
-          id: {
-            in: [
-              ...new Set(
-                commentRows.flatMap((row) =>
-                  row.message.attachmentComment ? [row.message.attachmentComment.attachmentId] : [],
-                ),
-              ),
-            ],
-          },
-          conversation: {
-            hiddenFromWorkspaceAt: null,
-            archivedAt: null,
-            OR: [
-              {
-                channelName: { not: null },
-                OR: [
-                  { visibility: "public" },
-                  {
-                    members: {
-                      some: { workspaceId, userId, leftAt: null },
-                    },
-                  },
-                ],
-              },
-              {
-                channelName: null,
-                members: { some: { workspaceId, userId, leftAt: null } },
-              },
-            ],
-          },
-        },
-        select: {
-          id: true,
-          fileName: true,
-          messageId: true,
-          conversation: {
-            select: {
-              id: true,
-              channelName: true,
-              visibility: true,
-              directKey: true,
-              members: {
-                where: { agentId: { not: null } },
-                select: { agentId: true },
-                take: 1,
-              },
-            },
-          },
-        },
-      })
-    : [];
-  const attachmentById = new Map(
-    commentAttachments.map((attachment) => [attachment.id, attachment]),
-  );
-  return rows
-    .map((row): ActivityCandidate => ({
-      kind: "channel",
-      memberId: "",
-      conversationId: row.conversationId,
-      rootMessageId: null,
-      channelName: row.message.conversation.channelName,
-      visibility: row.message.conversation.visibility,
-      directKey: null,
-      agentId: null,
-      latestMessageId: row.messageId,
-      latestSequence: row.message.sequence,
-      latestAt: row.notifiedAt!,
-      unreadCount: row.targetReadAt ? 0 : 1,
-      firstUnreadMessageId: row.targetReadAt ? null : row.messageId,
-      unreadMention: !row.targetReadAt,
-      firstMentionMessageId: row.messageId,
-      mentionAction: { resolutionId: row.id, threadRootId: row.message.threadRootId },
-      pastDone: true,
-      pin: null,
-    }))
-    .concat(
-      commentRows.flatMap((row): ActivityCandidate[] => {
-        const comment = row.message.attachmentComment;
-        const attachment = comment && attachmentById.get(comment.attachmentId);
-        if (!comment || !attachment) return [];
-        const source = attachment.conversation;
-        return [
-          {
-            kind: source.channelName ? "channel" : "direct",
-            memberId: "",
-            conversationId: source.id,
-            rootMessageId: null,
-            channelName: source.channelName,
-            visibility: source.visibility,
-            directKey: source.directKey,
-            agentId: source.members[0]?.agentId ?? null,
-            latestMessageId: row.messageId,
-            latestSequence: row.message.sequence,
-            latestAt: row.notifiedAt!,
-            unreadCount: row.targetReadAt ? 0 : 1,
-            firstUnreadMessageId: row.targetReadAt ? null : row.messageId,
-            unreadMention: !row.targetReadAt,
-            firstMentionMessageId: row.messageId,
-            mentionAction: { resolutionId: row.id, threadRootId: null },
-            attachmentComment: {
-              attachmentId: comment.attachmentId,
-              fileName: attachment.fileName,
-              threadRootId: row.message.threadRootId,
-              sourceMessageId: attachment.messageId,
-            },
-            pastDone: true,
-            pin: null,
-          },
-        ];
-      }),
-    );
+
+/**
+ * The columns a notice item takes from its notification (`pma`) and message (`m`): listed from when
+ * it was sent, unread until the viewer reads it.
+ */
+const noticeColumns = Prisma.sql`
+      'mention:' || pma."id" AS "key",
+      NULL::uuid AS "memberId",
+      NULL::uuid AS "rootMessageId",
+      pma."messageId" AS "latestMessageId",
+      m."sequence" AS "latestSequence",
+      pma."notifiedAt" AS "latestAt",
+      TRUE AS "pastDone",
+      NULL::int AS "pinOrder",
+      NULL::timestamp AS "pinnedAt",
+      pma."targetReadAt" IS NULL AS "hasUnread",
+      pma."targetReadAt" IS NULL AS "unreadMention",
+      pma."messageId" AS "firstMentionMessageId",
+      ${noTaskColumns},
+      pma."id" AS "mentionId",
+      m."threadRootId" AS "noticeThreadRootId"`;
+
+/**
+ * Each message whose sender had the viewer notified of a mention from outside its channel. Not in
+ * a hidden or archived channel, nor one the viewer can no longer read. Sender-actionable rows only:
+ * a comment notification (reason set) is `commentNoticeRowsSql`'s, under the same `mention:<id>`
+ * key, so admitting it here would shadow the attachment-comment item.
+ */
+export function mentionNoticeRowsSql(workspaceId: string, userId: string) {
+  return Prisma.sql`
+    SELECT ${noticeColumns},
+      'channel' AS "kind",
+      pma."conversationId" AS "conversationId",
+      pc."channelName" AS "channelName",
+      pc."visibility" AS "visibility",
+      NULL::text AS "directKey",
+      NULL::uuid AS "agentId",
+      NULL::uuid AS "attachmentId",
+      NULL::text AS "attachmentFileName",
+      NULL::uuid AS "attachmentSourceMessageId"
+    FROM "pending_mention_actions" pma
+    JOIN "messages" m ON m."id" = pma."messageId" AND m."conversationId" = pma."conversationId"
+    JOIN "conversations" pc
+      ON pc."id" = m."conversationId"
+     AND pc."archivedAt" IS NULL
+     AND ${readableChannelSql("pc", workspaceId, { userId })}
+    WHERE ${pendingNoticeSql(workspaceId, userId)}
+      AND pma."reason" IS NULL`;
+}
+
+/**
+ * Each comment on a file that notified the viewer. It names the file's source conversation, not
+ * the comment conversation, and is listed while the viewer still reads that source
+ * (`commentSourceReadableSql`). The source is reached through `attachment_comments.attachmentId →
+ * attachments` rather than the comment thread row: comment migration deletes
+ * `attachment_comment_threads`.
+ */
+export function commentNoticeRowsSql(workspaceId: string, userId: string) {
+  return Prisma.sql`
+    SELECT ${noticeColumns},
+      CASE WHEN src."channelName" IS NOT NULL THEN 'channel' ELSE 'direct' END AS "kind",
+      src."id" AS "conversationId",
+      src."channelName" AS "channelName",
+      src."visibility" AS "visibility",
+      src."directKey" AS "directKey",
+      peer."agentId" AS "agentId",
+      att."id" AS "attachmentId",
+      att."fileName" AS "attachmentFileName",
+      att."messageId" AS "attachmentSourceMessageId"
+    FROM "pending_mention_actions" pma
+    JOIN "messages" m ON m."id" = pma."messageId" AND m."conversationId" = pma."conversationId"
+    JOIN "attachment_comments" ac ON ac."messageId" = pma."messageId"
+    JOIN "attachments" att ON att."id" = ac."attachmentId" AND att."workspaceId" = ${workspaceId}::uuid
+    JOIN "conversations" src
+      ON src."id" = att."conversationId"
+     AND ${commentSourceReadableSql(userId)}
+    LEFT JOIN LATERAL (
+      SELECT am."agentId" FROM "conversation_members" am
+      WHERE am."conversationId" = src."id" AND am."agentId" IS NOT NULL
+      LIMIT 1
+    ) peer ON TRUE
+    WHERE ${pendingNoticeSql(workspaceId, userId)}`;
 }

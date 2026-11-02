@@ -82,8 +82,8 @@ export function ActivityInboxView({
 
   const firstPage = projectedData?.pages[0];
   const pinned = useMemo(() => firstPage?.pinned ?? [], [firstPage]);
-  // Pages are offsets into a list that can move between fetches; an item that slid onto the next
-  // page is shown once, and never again below Pinned.
+  // Pages are read at different times from a list that moves: a first page read again can hold an
+  // item a later page still holds. It is shown once, and never again below Pinned.
   const items = useMemo(() => {
     const seen = new Set(pinned.map((item) => item.key));
     return (projectedData?.pages ?? [])
@@ -111,7 +111,7 @@ export function ActivityInboxView({
   const loadFirstPage = useServerFn(loadActivityInbox);
   const refreshFirstPage = useCallback(() => {
     const queryKey = activityInboxQuery(workspaceId, filter).queryKey;
-    void loadFirstPage({ data: { filter, offset: 0 } })
+    void loadFirstPage({ data: { filter } })
       .then((page) =>
         queryClient.setQueryData<{ pages: ActivityInboxPage[]; pageParams: unknown[] }>(
           queryKey,

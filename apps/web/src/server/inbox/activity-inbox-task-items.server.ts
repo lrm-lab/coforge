@@ -3,8 +3,9 @@ import { CHANNEL_VISIBILITY } from "#src/features/conversations/channel-visibili
 import {
   conversationMentionLateral,
   conversationPastDoneSql,
-  conversationUnreadLateral,
   conversationUnreadMessageSql,
+  conversationUnreadProbeLateral,
+  noNoticeColumns,
 } from "./activity-inbox-items-sql.server";
 
 /**
@@ -46,10 +47,11 @@ const taskItemListedSql = (mentionFirstId: Prisma.Sql) => Prisma.sql`${taskBoard
   AND ${conversationPastDoneSql}
   AND (tf."taskId" IS NOT NULL OR ${mentionFirstId} IS NOT NULL)`;
 
-/** The list's task candidates, shaped as the conversation candidates are, plus the task. */
-export function taskCandidatesSql(workspaceId: string, userId: string) {
+/** The list's task items, shaped as the conversation items are, plus the task. */
+export function taskItemRowsSql(workspaceId: string, userId: string) {
   return Prisma.sql`
     SELECT
+      'task:' || cm."conversationId" AS "key",
       'channel' AS "kind",
       cm."id" AS "memberId",
       cm."conversationId" AS "conversationId",
@@ -61,18 +63,18 @@ export function taskCandidatesSql(workspaceId: string, userId: string) {
       latest."id" AS "latestMessageId",
       latest."sequence" AS "latestSequence",
       latest."createdAt" AS "latestAt",
-      unread."count" AS "unreadCount",
-      unread."firstId" AS "firstUnreadMessageId",
-      mention."unread" AS "unreadMention",
-      mention."firstId" AS "firstMentionMessageId",
       TRUE AS "pastDone",
       NULL::int AS "pinOrder",
       NULL::timestamp AS "pinnedAt",
+      unread."found" IS NOT NULL AS "hasUnread",
+      mention."unread" AS "unreadMention",
+      mention."firstId" AS "firstMentionMessageId",
       b."id" AS "taskBoardId",
       t."number" AS "taskNumber",
-      t."title" AS "taskTitle"
+      t."title" AS "taskTitle",
+      ${noNoticeColumns}
     FROM ${taskItemsSql(workspaceId, userId)}
-    ${conversationUnreadLateral}
+    ${conversationUnreadProbeLateral}
     ${conversationMentionLateral}
     WHERE ${taskItemListedSql(Prisma.sql`mention."firstId"`)}`;
 }

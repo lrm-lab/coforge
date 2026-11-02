@@ -74,7 +74,7 @@ test("lists joined conversations and followed threads with activity, newest firs
     expect(thread!.unreadMention).toBe(true);
     expect(page.unreadItemCount).toBe(3);
     expect(page.unreadMentionItemCount).toBe(1);
-    expect(page.nextOffset).toBe(null);
+    expect(page.nextCursor).toBe(null);
 
     const unread = await inbox.list(workspace.id, alice.id, { filter: "unread" });
     expect(unread.items.map((item) => item.key)).toEqual(page.items.map((item) => item.key));
@@ -83,11 +83,11 @@ test("lists joined conversations and followed threads with activity, newest firs
 
     const firstPage = await inbox.list(workspace.id, alice.id, { filter: "all", limit: 2 });
     expect(firstPage.items).toHaveLength(2);
-    expect(firstPage.nextOffset).toBe(2);
+    expect(firstPage.nextCursor).not.toBe(null);
     const secondPage = await inbox.list(workspace.id, alice.id, {
       filter: "all",
       limit: 2,
-      offset: 2,
+      cursor: firstPage.nextCursor!,
     });
     expect(secondPage.items.map((item) => item.key)).toEqual([channelItem!.key]);
   } finally {

@@ -70,7 +70,7 @@ test("a thread counts only the unread replies past its read cursor, on any page"
     expect(firstPage.items.map((item) => item.thread?.root.body)).toEqual(["newer"]);
     const secondPage = await inbox.list(workspace.id, alice.id, {
       filter: "all",
-      offset: firstPage.nextOffset!,
+      cursor: firstPage.nextCursor!,
       limit: 1,
     });
     expect(secondPage.items).toHaveLength(1);

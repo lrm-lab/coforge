@@ -170,10 +170,15 @@ test("Pinned follows the pin order and leaves a pinned channel's threads and the
     expect(all.activeItemCount).toBe(4);
 
     // A later page lists no pins, and none of the pinned conversations either.
-    const second = await inbox.list(workspace.id, alice.id, { filter: "all", limit: 1, offset: 1 });
+    const first = await inbox.list(workspace.id, alice.id, { filter: "all", limit: 1 });
+    const second = await inbox.list(workspace.id, alice.id, {
+      filter: "all",
+      limit: 1,
+      cursor: first.nextCursor!,
+    });
     expect(second.pinned).toEqual([]);
     expect(second.items.map((item) => item.key)).toEqual([`thread:${root.id}`]);
-    expect(second.nextOffset).toBe(null);
+    expect(second.nextCursor).toBe(null);
 
     // Unread and Mentions have no Pinned section: a pinned conversation lists among their items.
     const unread = await inbox.list(workspace.id, alice.id, { filter: "unread" });

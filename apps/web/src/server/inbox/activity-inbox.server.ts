@@ -1,6 +1,7 @@
 import { channelVisibilityOf } from "#src/features/conversations/channel-visibility";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import type {
+  ActivityInboxCursor,
   ActivityInboxFilter,
   ActivityItemDone,
 } from "#src/features/inbox/activity-inbox.schemas";
@@ -25,9 +26,7 @@ import { peopleDirectPeerId } from "#src/features/conversations/direct-key";
 import { storedTaskStatus } from "#src/server/tasks/task-view.server";
 import { clampPageLimit } from "#src/server/db/page-limit.server";
 import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
-import { taskCandidatesSql } from "./activity-inbox-task-items.server";
-import { mentionCandidates } from "./activity-inbox-mentions.server";
-import { conversationCandidatesSql, threadCandidatesSql } from "./activity-inbox-items-sql.server";
+import { activityPageSql, type ActivityPageRow } from "./activity-inbox-page-sql.server";
 import { announceActivityAttention, navHasUnread } from "./activity-attention.server";
 
 /**
@@ -47,10 +46,14 @@ import { announceActivityAttention, navHasUnread } from "./activity-attention.se
  * shared SQL (`human-unread.server.ts`).
  */
 
-/** One conversation or thread with activity, as the candidate query returns it. */
+/** One listed item, from its page row (`activity-inbox-page-sql.server.ts`). */
 export type ActivityCandidate = {
+  /** The item's key on the page, the list order's last tiebreaker: its mention notification, its
+   * thread, its task conversation or its conversation. */
+  key: string;
   kind: "channel" | "direct";
-  memberId: string;
+  /** The viewer's member row the item is read through; none for a notification. */
+  memberId: string | null;
   conversationId: string;
   rootMessageId: string | null;
   channelName: string | null;
@@ -81,23 +84,10 @@ export type ActivityCandidate = {
     threadRootId: string | null;
     sourceMessageId: string | null;
   };
-  /** Whether the item has activity past Done; a pinned conversation is returned without it. */
-  pastDone: boolean;
   /** A conversation's own item the viewer pinned: its place among their pins. Null otherwise. */
   pin: { order: number; at: Date } | null;
   /** A task conversation's item: its channel board, which is where the item lives, and the task. */
   task?: { boardId: string; number: number; title: string };
-};
-
-type PinnedCandidate = ActivityCandidate & { pin: NonNullable<ActivityCandidate["pin"]> };
-
-/** A candidate as the grouped statements return it, with the pin as its two columns. */
-type ActivityCandidateRow = Omit<ActivityCandidate, "pin" | "task"> & {
-  pinOrder: number | null;
-  pinnedAt: Date | null;
-  taskBoardId?: string;
-  taskNumber?: number;
-  taskTitle?: string;
 };
 
 const DEFAULT_PAGE_SIZE = 30;
@@ -117,43 +107,31 @@ export class ActivityInbox {
   async list(
     workspaceId: string,
     userId: string,
-    options: { filter: ActivityInboxFilter; offset?: number; limit?: number },
+    options: { filter: ActivityInboxFilter; cursor?: ActivityInboxCursor; limit?: number },
   ) {
     await this.authorize(workspaceId, userId);
     // Read before the list, on the clock message `createdAt` values come from: Prisma fills them in
     // this process (`@default(now())` is generated client-side).
     const loadedAt = new Date();
-    // Every candidate carries its unread and mention state: the filters select on them and the
-    // Unread and Mentions counts cover every item, whichever filter is showing.
-    const all = await this.candidates(workspaceId, userId);
-    const inboxCandidates = all.filter((candidate) => candidate.pastDone);
-    const candidates = inboxCandidates.filter((candidate) =>
-      options.filter === "unread"
-        ? candidate.unreadCount > 0
-        : options.filter === "mentions"
-          ? candidate.firstMentionMessageId !== null
-          : candidate.pin === null,
-    );
-    candidates.sort(
-      (left, right) =>
-        right.latestAt.getTime() - left.latestAt.getTime() ||
-        right.latestSequence - left.latestSequence,
-    );
-    const offset = Math.max(0, options.offset ?? 0);
     const limit = clampPageLimit(options.limit ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
-    const end = offset + limit;
-    const pins =
-      options.filter === "all" && offset === 0
-        ? all
-            .filter((candidate): candidate is PinnedCandidate => candidate.pin !== null)
-            .sort(
-              (left, right) =>
-                left.pin.order - right.pin.order || left.pin.at.getTime() - right.pin.at.getTime(),
-            )
-        : [];
+    const rows = await this.db.$queryRaw<ActivityPageRow[]>(
+      activityPageSql(workspaceId, userId, {
+        filter: options.filter,
+        cursor: options.cursor,
+        limit,
+      }),
+    );
+    const counts = rows[0]!;
+    const listed = rows.filter((row) => row.key !== null);
+    const pins = listed.filter((row) => row.isPin);
+    const page = listed.filter((row) => !row.isPin);
+    const shown = page.slice(0, limit);
+    // The cursor is the last item the page shows, read from the candidates rather than the
+    // hydrated items: one deleted between the two reads must not move where the next page starts.
+    const last = page.length > limit ? shown.at(-1)! : null;
     const [items, pinned] = await Promise.all([
-      this.hydrate(workspaceId, userId, candidates.slice(offset, end)),
-      pins.length > 0 ? this.hydrate(workspaceId, userId, pins) : [],
+      this.hydrate(workspaceId, userId, shown.map(activityCandidate)),
+      pins.length > 0 ? this.hydrate(workspaceId, userId, pins.map(activityCandidate)) : [],
     ]);
     return {
       items,
@@ -163,17 +141,22 @@ export class ActivityInbox {
        */
       pinned,
       /** How many items have something unread, whatever the filter: the Unread tab's count. */
-      unreadItemCount: inboxCandidates.filter((candidate) => candidate.unreadCount > 0).length,
+      unreadItemCount: counts.unreadItemCount,
       /** How many items have an unread mention, whatever the filter: the Mentions tab's count. */
-      unreadMentionItemCount: inboxCandidates.filter((candidate) => candidate.unreadMention).length,
+      unreadMentionItemCount: counts.unreadMentionItemCount,
       /**
        * How many items the All view lists, pinned conversations included, whatever the filter:
        * the header's "N active".
        */
-      activeItemCount: all.filter((candidate) => candidate.pin !== null || candidate.pastDone)
-        .length,
-      /** Where the next page starts in the list, or null on the last page. */
-      nextOffset: end < candidates.length ? end : null,
+      activeItemCount: counts.activeItemCount,
+      /** Where the next page starts, or null on the last page. */
+      nextCursor: last
+        ? ({
+            at: last.latestAt.getTime(),
+            sequence: last.latestSequence,
+            key: last.key!,
+          } satisfies ActivityInboxCursor)
+        : null,
       /** When this list was read: Mark all read reads through it, and no further. */
       loadedAt: loadedAt.getTime(),
     };
@@ -219,32 +202,6 @@ export class ActivityInbox {
     return requireWorkspaceMember(this.db, workspaceId, userId);
   }
 
-  /**
-   * Every listed item, and every pinned conversation, with its counts, in grouped statements
-   * driven from the viewer's own memberships, so each message range is an index condition on
-   * `messages(conversationId, threadRootId, sequence)` rather than a Workspace-wide scan.
-   */
-  private async candidates(workspaceId: string, userId: string): Promise<ActivityCandidate[]> {
-    // Four independent reads: a list is built from top-level items, thread items, task items and
-    // mention items, and none of them depends on the others. Starting them together means the page waits
-    // for the slowest instead of for two waves.
-    const [conversations, threads, tasks, mentions] = await Promise.all([
-      this.db.$queryRaw<ActivityCandidateRow[]>(conversationCandidatesSql(workspaceId, userId)),
-      this.db.$queryRaw<ActivityCandidateRow[]>(threadCandidatesSql(workspaceId, userId)),
-      this.db.$queryRaw<ActivityCandidateRow[]>(taskCandidatesSql(workspaceId, userId)),
-      this.mentionCandidates(workspaceId, userId),
-    ]);
-    return [...conversations, ...threads, ...tasks].map(activityCandidate).concat(mentions);
-  }
-
-  /**
-   * Each message whose sender had the viewer notified of a mention from outside its channel, until
-   * the viewer marks it Done: one mention item per notification, listed from when it was sent,
-   * unread until the viewer reads it. Not in a hidden or archived channel.
-   */
-  private async mentionCandidates(workspaceId: string, userId: string) {
-    return mentionCandidates(this.db, workspaceId, userId);
-  }
   /** Loads the messages, DM peers (Agents and members), channel avatar members and tasks one page
    * of items renders, in a fixed number of queries. */
   private async hydrate(workspaceId: string, userId: string, page: readonly ActivityCandidate[]) {
@@ -357,7 +314,7 @@ export class ActivityInbox {
       if (!latest || !place || root === undefined) return [];
       return [
         {
-          key: activityItemKey(candidate),
+          key: candidate.key,
           place,
           // A channel thread is listed because the viewer follows it; a direct-message thread
           // has no follow switch.
@@ -383,31 +340,48 @@ export class ActivityInbox {
   }
 }
 
-/** A candidate from its statement row, its two pin columns joined into one pin. */
+/** A candidate from its page row. */
 function activityCandidate({
+  key,
+  unreadItemCount: _unreadItemCount,
+  unreadMentionItemCount: _unreadMentionItemCount,
+  activeItemCount: _activeItemCount,
+  isPin: _isPin,
+  pastDone: _pastDone,
+  hasUnread: _hasUnread,
   pinOrder,
   pinnedAt,
   taskBoardId,
   taskNumber,
   taskTitle,
+  mentionId,
+  noticeThreadRootId,
+  attachmentId,
+  attachmentFileName,
+  attachmentSourceMessageId,
   ...row
-}: ActivityCandidateRow): ActivityCandidate {
+}: ActivityPageRow): ActivityCandidate {
   return {
     ...row,
+    key: key!,
+    ...(mentionId && {
+      mentionAction: {
+        resolutionId: mentionId,
+        // A comment notification opens its file's comment thread, not a thread of the source.
+        threadRootId: attachmentId ? null : noticeThreadRootId,
+      },
+    }),
+    ...(attachmentId && {
+      attachmentComment: {
+        attachmentId,
+        fileName: attachmentFileName!,
+        threadRootId: noticeThreadRootId,
+        sourceMessageId: attachmentSourceMessageId,
+      },
+    }),
     pin: pinOrder !== null && pinnedAt !== null ? { order: pinOrder, at: pinnedAt } : null,
     ...(taskBoardId && {
       task: { boardId: taskBoardId, number: taskNumber!, title: taskTitle! },
     }),
   };
-}
-
-/** An item's key on the page: its mention notification, its thread, or its conversation. */
-function activityItemKey(candidate: ActivityCandidate) {
-  return candidate.mentionAction
-    ? `mention:${candidate.mentionAction.resolutionId}`
-    : candidate.rootMessageId
-      ? `thread:${candidate.rootMessageId}`
-      : candidate.task
-        ? `task:${candidate.conversationId}`
-        : `conversation:${candidate.conversationId}`;
 }
