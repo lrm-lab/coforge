@@ -1,0 +1,79 @@
+/// A versioned page or set of files. Its `homeKey` is the only ACL:
+/// `conversation:<id>`, `workspace`, or `public`.
+model Artifact {
+  id              String            @id @default(uuid(7)) @db.Uuid
+  workspaceId     String            @db.Uuid
+  /// conversation:<conversationId> | workspace | public
+  homeKey         String
+  /// Unique within its home; the web URL uses a separate short id.
+  name            String
+  title           String            @default("")
+  description     String            @default("")
+  /// html | markdown | text | csv | image | pdf | video | other
+  kind            String
+  entryPath       String
+  authorUserId    String?           @db.Uuid
+  authorAgentId   String?           @db.Uuid
+  currentVersion  Int               @default(0)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  deletedAt       DateTime?
+  deletedByUserId String?           @db.Uuid
+  deletedByAgentId String?          @db.Uuid
+  workspace       Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  versions        ArtifactVersion[]
+
+  @@unique([workspaceId, homeKey, name])
+  @@index([workspaceId, homeKey])
+  @@map("artifacts")
+}
+
+/// One immutable published version. A push sends only changed files; unlisted ones carry over
+/// from the base version. `changedPaths` names what this version changed or removed.
+model ArtifactVersion {
+  id               String         @id @default(uuid(7)) @db.Uuid
+  artifactId       String         @db.Uuid
+  number           Int
+  publisherUserId  String?        @db.Uuid
+  publisherAgentId String?        @db.Uuid
+  note             String         @default("")
+  label            String         @default("")
+  entryPath        String
+  changedPaths     Json
+  merged           Json?
+  idempotencyKey   String
+  createdAt        DateTime       @default(now())
+  artifact         Artifact       @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  files            ArtifactFile[]
+
+  @@unique([artifactId, number])
+  @@unique([artifactId, idempotencyKey])
+  @@map("artifact_versions")
+}
+
+/// One file of one version, by content-addressed blob.
+model ArtifactFile {
+  versionId  String          @db.Uuid
+  artifactId String          @db.Uuid
+  path       String
+  sha256     String
+  sizeBytes  Int
+  kind       String
+  version    ArtifactVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  @@id([versionId, path])
+  @@index([artifactId, sha256])
+  @@map("artifact_files")
+}
+
+/// A stored content-addressed blob, shared by every version that uses the same bytes.
+model ArtifactBlob {
+  workspaceId String    @db.Uuid
+  sha256      String
+  sizeBytes   Int
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@id([workspaceId, sha256])
+  @@map("artifact_blobs")
+}

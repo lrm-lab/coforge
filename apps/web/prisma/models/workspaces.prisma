@@ -16,6 +16,8 @@ model Workspace {
   computerRuntimes       ComputerRuntime[]
   modelCatalogs          ComputerModelCatalog[]
   agents                 Agent[]
+  artifacts              Artifact[]
+  artifactBlobs          ArtifactBlob[]
   weeklyReportAssistants       WeeklyReportAssistant[]
   weeklyReportAssistantChatSessions WeeklyReportAssistantChatSession[]
   weeklyReportAssistantRuntimeSessions WeeklyReportAssistantRuntimeSession[]
