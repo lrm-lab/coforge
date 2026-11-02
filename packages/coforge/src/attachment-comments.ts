@@ -90,12 +90,12 @@ function videoTime(seconds: number): string {
 function anchorSummary({ type, data }: AgentAttachmentCommentAnchor): string {
   if (type === "md-section") {
     const title = data.headingTitle ?? data.headingId;
-    return typeof title === "string" && title ? `§ ${title}` : "§ section";
+    return typeof title === "string" && title ? `§ ${foldUntrustedLine(title)}` : "§ section";
   }
   if (type === "lines") return range(data.start, data.end, "L") ?? type;
   if (type === "csv-rows") return range(data.start, data.end, "rows ") ?? type;
   if (type === "html-region") {
-    const quote = typeof data.quote === "string" ? data.quote.replace(/\s+/g, " ").trim() : "";
+    const quote = typeof data.quote === "string" ? foldUntrustedLine(data.quote) : "";
     if (!quote) return "HTML region";
     return quote.length > HTML_QUOTE_LIMIT ? `${quote.slice(0, HTML_QUOTE_LIMIT)}…` : quote;
   }

@@ -1,5 +1,5 @@
 import type { ClaudeBriefingHost } from "./host";
-import { truncateCodePoints } from "@lrm/coforge-sdk/internal";
+import { frameUntrustedText, truncateCodePoints } from "@lrm/coforge-sdk/internal";
 import { resolve, sep } from "node:path";
 import { CHARS_PER_TOKEN, estimateTokens } from "#src/token-estimate";
 import { escapeXmlText } from "@lrm/coforge-sdk/internal";
@@ -128,7 +128,7 @@ function formatPanel(input: {
     left -= estimateTokens(title.length) + 4;
     const cap =
       object.rereadBody !== null ? OBJECT_CONTENT_CAP_TOKENS : STALE_OBJECT_BODY_CAP_TOKENS;
-    const clipped = escapePanelClosingTags(clip(body, Math.min(cap, left)));
+    const clipped = escapePanelClosingTags(frameUntrustedText(clip(body, Math.min(cap, left))));
     objectLines.push(title, clipped, "</object>");
     left -= estimateTokens(clipped.length);
   }

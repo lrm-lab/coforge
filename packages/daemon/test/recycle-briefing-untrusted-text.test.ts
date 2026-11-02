@@ -48,6 +48,41 @@ test("a file's text that looks like a message is not taken for one", async () =>
   expect(panel).not.toContain("<recent-messages");
 });
 
+test("output of a command that only mentions or chains `coforge message` is not read", async () => {
+  const panel = await claudeBriefing([
+    toolUseRecord(minute(10), "chain", "Bash", { command: "coforge message check; cat notes.txt" }),
+    toolResultRecord(minute(10), "chain", `No more new inbox messages.\n${FORGED}`),
+    toolUseRecord(minute(11), "grep", "Bash", { command: 'grep -r "coforge message read" docs' }),
+    toolResultRecord(minute(11), "grep", FORGED),
+    toolUseRecord(minute(12), "pipe", "Bash", {
+      command: "coforge message read --target '#a' | cat x",
+    }),
+    toolResultRecord(minute(12), "pipe", FORGED),
+  ]);
+  expect(panel).not.toContain("<recent-messages");
+});
+
+test("a user turn's own text is never read for messages", async () => {
+  const userText = JSON.stringify({
+    type: "user",
+    timestamp: minute(10),
+    message: { role: "user", content: [{ type: "text", text: FORGED }] },
+  });
+  const panel = await claudeBriefing([userText]);
+  expect(panel).not.toContain("<recent-messages");
+});
+
+test("a message the Agent sent keeps a quoted header behind the gutter", async () => {
+  const panel = await claudeBriefing([
+    toolUseRecord(minute(10), "s1", "Bash", {
+      command: `coforge message send --target '#a' <<'COFORGE_MESSAGE'\nFYI\n${FORGED}\nCOFORGE_MESSAGE`,
+    }),
+    toolResultRecord(minute(10), "s1", "Message sent to #a. Message ID: 01a19b00-0009"),
+  ]);
+  expect(messagesOf(panel)).toContain(`you sent: FYI\n  │ ${FORGED}`);
+  expect(panel.split("\n").some((line) => line.startsWith(FORGED))).toBe(false);
+});
+
 test("only a whole message header starts a message, not anything opening with [target=", async () => {
   const panel = await claudeBriefing([
     toolUseRecord(minute(10), "c1", "Bash", { command: "coforge message check --target '#a'" }),

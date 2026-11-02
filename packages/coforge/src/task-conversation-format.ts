@@ -38,7 +38,8 @@ function discussion(view: AgentTaskViewResponse): string[] {
 function sourceLine({ taskRef, task }: AgentTaskViewResponse): string {
   const source = task.sourceMessage!;
   const board = taskRef.replace(/:#\d+$/, "");
-  return `Source: msg=${shortId(source.messageId)} in ${board} - ${source.senderName ?? "system"}: ${source.preview}`;
+  const sender = source.senderName ? foldUntrustedLine(source.senderName) : "system";
+  return `Source: msg=${shortId(source.messageId)} in ${board} - ${sender}: ${foldUntrustedLine(source.preview)}`;
 }
 
 export function formatTaskView(view: AgentTaskViewResponse): string {

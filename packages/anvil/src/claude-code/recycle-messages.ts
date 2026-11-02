@@ -3,6 +3,7 @@ import { asRecord } from "#src/json-record";
 import { cliClock, toolResultText } from "./recycle-actions";
 import { transcriptRecords } from "./session-transcript";
 import { readTailLines } from "#src/transcript-tail";
+import { frameUntrustedText } from "@lrm/coforge-sdk/internal";
 import { COFORGE_MESSAGE_HEADER } from "#src/briefing-text";
 
 /**
@@ -26,7 +27,10 @@ export type RecentMessage = {
 
 const MESSAGE_SCAN_TAIL_BYTES = 16 * 1024 * 1024;
 const SEND_COMMAND_RE = /\bcoforge\s+message\s+send\b/;
-const READ_COMMAND_RE = /\bcoforge\s+message\s+(?:check|read|resolve)\b/;
+/** A command whose whole output is `coforge message check|read|resolve`'s: that one call and
+ * nothing chained, piped, substituted or redirected beside it, so no other output (a `cat`, a
+ * `grep` naming the command) can be read as messages. */
+const READ_COMMAND_RE = /^\s*coforge\s+message\s+(?:check|read|resolve)\b[^;&|`$()<>\n]*$/;
 const MSG_ATTR_RE = /\bmsg=([\w-]+)/;
 const TIME_ATTR_RE = /\btime=([0-9T:\- ]+Z?)/;
 const TARGET_ARG_RE = /--target[=\s]+(?:"([^"]+)"|'([^']+)'|(\S+))/;
@@ -112,7 +116,7 @@ function parseSentMessage(command: string, ts: string | null): RecentMessage | n
   if (!body) return null;
   const when = cliClock(ts) ?? ts;
   return {
-    raw: `[target=${target}${when ? ` time=${when}` : ""}] you sent: ${body}`,
+    raw: `[target=${target}${when ? ` time=${when}` : ""}] you sent: ${frameUntrustedText(body)}`,
     msgId: null,
     ts,
     self: true,
@@ -167,24 +171,14 @@ export async function collectRecentMessages(
           reads,
         });
       }
-    } else if (record.type === "user") {
-      if (Array.isArray(content)) {
-        for (const block of content.map(asRecord)) {
-          if (block?.type === "tool_result")
-            handleResult(
-              typeof block.tool_use_id === "string" ? block.tool_use_id : null,
-              toolResultText(block.content, "\n"),
-            );
-          else if (
-            block?.type === "text" &&
-            typeof block.text === "string" &&
-            block.text.includes("[target=")
-          )
-            found.push(...parseMessageChunks(block.text));
-        }
-      } else if (typeof content === "string" && content.includes("[target=")) {
-        found.push(...parseMessageChunks(content));
-      }
+    } else if (record.type === "user" && Array.isArray(content)) {
+      // A user turn's own text is never read for messages: it may quote anything.
+      for (const block of content.map(asRecord))
+        if (block?.type === "tool_result")
+          handleResult(
+            typeof block.tool_use_id === "string" ? block.tool_use_id : null,
+            toolResultText(block.content, "\n"),
+          );
     }
   }
   const byKey = new Map<string, { message: RecentMessage; order: number }>();

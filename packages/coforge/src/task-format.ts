@@ -1,4 +1,5 @@
 import {
+  foldUntrustedLine,
   TASK_STATUSES,
   type TaskClaimConflict,
   type TaskClaimResult,
@@ -64,7 +65,7 @@ export function formatTaskBoard(
 function ownRow(task: TaskView): string {
   const mark = departure(task.creator);
   const creator = ` by=@${task.creator.handle}${mark ? ` creator=${mark}` : ""}`;
-  const title = task.title.replace(/\s+/g, " ").trim();
+  const title = foldUntrustedLine(task.title);
   return `- ${task.channelRef ?? "<unknown conversation>"} task #${task.number} [${task.status}]${creator} ${messageField(task)}${resourceReceipt(task)}${relationMarks(task)}${times(task)} ${title}`;
 }
 

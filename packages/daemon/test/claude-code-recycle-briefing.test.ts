@@ -113,7 +113,7 @@ test("CoForge messages: check results come in, sends go out, repeats are merged"
   expect(section).toContain("type=human");
   expect(section).toContain("@user: ship it\nsecond line");
   expect(section).toContain(
-    "[target=#coforge:01a16774-5cc3 time=2026-10-23 06:02:00Z] you sent: On it.\nWill report.",
+    "[target=#coforge:01a16774-5cc3 time=2026-10-23 06:02:00Z] you sent: On it.\n  │ Will report.",
   );
   expect(section.match(/msg=01a16779-a316/g)).toHaveLength(1);
   expect(section.indexOf("ship it")).toBeLessThan(section.indexOf("you sent"));

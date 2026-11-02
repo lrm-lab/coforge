@@ -240,7 +240,7 @@ function formatUtcHourMinute(createdAt: string): string {
 }
 
 function heldPreviewLine(message: AgentMessageRecord): string {
-  const collapsed = message.body.replace(/\s+/g, " ").trim();
+  const collapsed = foldUntrustedLine(message.body);
   const points = Array.from(collapsed);
   const shown = points.slice(0, HELD_PREVIEW_CHARS).join("");
   const hidden = points.length - Math.min(points.length, HELD_PREVIEW_CHARS);
