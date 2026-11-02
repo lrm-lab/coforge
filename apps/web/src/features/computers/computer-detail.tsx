@@ -389,6 +389,10 @@ export function ComputerDetail({
               name: computer.name,
               displayName: computer.displayName,
               online: computer.online,
+              platform: computer.platform,
+              ownedByCurrentUser: computer.ownedByCurrentUser,
+              canManageAgents: computer.canManageAgents,
+              runtimeAuth: computer.runtimeAuth,
               runtimes: computer.runtimes.map((runtime) => ({
                 provider: runtime.provider,
                 unavailableCode: runtime.unavailableCode,

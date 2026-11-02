@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { RefreshCw01 } from "@untitledui/icons";
 import { Spinner } from "#src/components/ui/spinner";
 import {
   parseRuntimeProvider,
   RUNTIME_PROVIDER,
   RUNTIME_PROVIDER_USES_EXTERNAL_CLI,
+  type RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
 
 import { Button } from "#src/components/base/buttons/button";
@@ -57,6 +58,7 @@ export function AgentRuntimeFields({
   credentialConfigured = false,
   onLoad,
   onDirtyChange,
+  providerNotice,
 }: {
   open: boolean;
   computerId: string;
@@ -68,6 +70,9 @@ export function AgentRuntimeFields({
    * every field's state; this is only a notification, not a hook for the caller to drive values
    * (the Profile panel's edit dialog uses it to disable Save until something changed). */
   onDirtyChange?: (dirty: boolean) => void;
+  /** What to say under the runtime picker about the runtime picked (the create dialog's
+   * not-signed-in notice). */
+  providerNotice?: (provider: RuntimeProvider) => ReactNode;
 }) {
   const [provider, setProvider] = useState(initial?.provider ?? RUNTIME_PROVIDER.COFORGE);
   const [modelProvider, setModelProvider] = useState(initial?.modelProvider ?? "");
@@ -280,6 +285,7 @@ export function AgentRuntimeFields({
           resetModelFields();
         }}
       />
+      {providerNotice?.(provider)}
       {failed ? (
         <Input
           label={m.agent_form_model_provider()}

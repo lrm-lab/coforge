@@ -14,6 +14,11 @@ import { AGENT_VISIBILITY } from "./agent-visibility";
 import { agentCreateErrorMessage } from "./agent-form";
 import { AgentOptionCard } from "./agent-option-card";
 import { AgentRuntimeFields, type RuntimeCatalog } from "./agent-runtime-fields";
+import { AgentRuntimeSignInNotice } from "./agent-runtime-sign-in-notice";
+import type { RuntimeSignInComputer } from "./agent-runtime-sign-in-state";
+import { RuntimeSignInDialog } from "#src/features/computers/runtime-sign-in-dialog";
+import { useRuntimeAuthSignals } from "#src/features/computers/use-runtime-auth-signals";
+import { runtimeProviderLabel } from "./runtime-provider-display";
 import { finishedAgentUsername } from "./agent-username";
 import { AgentUsernameField } from "./agent-username-field";
 import type { CreateAgentInput } from "./agent.schemas";
@@ -24,10 +29,14 @@ import {
   AgentCreateIntro,
   AgentCreateModal,
 } from "./agent-create-frame";
-import type { RuntimeProvider, RuntimeUnavailableCode } from "@lrm/coforge-sdk/internal";
+import type {
+  RuntimeAuthProvider,
+  RuntimeProvider,
+  RuntimeUnavailableCode,
+} from "@lrm/coforge-sdk/internal";
 import { workspacePath } from "#src/features/workspaces/workspace-url";
 
-type AgentCreateComputerOption = {
+type AgentCreateComputerOption = RuntimeSignInComputer & {
   id: string;
   name: string;
   displayName: string;
@@ -81,6 +90,18 @@ export function LocalAgentForm({
   const [error, setError] = useState("");
   const [computerId, setComputerId] = useState(defaults?.computerId ?? computers[0]?.id ?? "");
   const [isPrivate, setIsPrivate] = useState(false);
+  // Signing a runtime in from the not-signed-in notice: the flow's dialog, and the runtimes this
+  // dialog has seen signed in since, whose stored report the Computer list may not have yet.
+  const [signingIn, setSigningIn] = useState<RuntimeAuthProvider>();
+  const [signedIn, setSignedIn] = useState<ReadonlySet<string>>(new Set());
+  useRuntimeAuthSignals(computerId, {
+    onSubscribed: () => {},
+    onSignal: (signal) => {
+      if (signal.type === "runtime-auth.login.v1" && signal.result?.kind === "logged_in")
+        setSignedIn((current) => new Set(current).add(`${signal.computerId}:${signal.provider}`));
+    },
+  });
+  const computer = computers.find((candidate) => candidate.id === computerId);
   useEffect(() => {
     onBusyChange(submitting);
     return () => onBusyChange(false);
@@ -146,110 +167,134 @@ export function LocalAgentForm({
     );
 
   return (
-    <AgentCreateForm
-      onSubmit={submit}
-      switchTo={
-        onSwitchToCloud && {
-          label: m.agent_create_switch_cloud(),
-          onPress: onSwitchToCloud,
-          isDisabled: submitting,
+    <>
+      <AgentCreateForm
+        onSubmit={submit}
+        switchTo={
+          onSwitchToCloud && {
+            label: m.agent_create_switch_cloud(),
+            onPress: onSwitchToCloud,
+            isDisabled: submitting,
+          }
         }
-      }
-      intro={
-        <AgentCreateIntro
-          illustration="local"
-          title={m.agent_create_local_title()}
-          description={m.agent_create_local_description()}
-          onClose={submitting ? undefined : onClose}
-        />
-      }
-      footer={
-        <AgentCreateFooter
-          onCancel={onClose}
-          cancelDisabled={submitting}
-          submitLabel={submitLabel}
-          submitting={submitting}
-        />
-      }
-    >
-      {/* One column, in the design's order: who it is, where it runs, then how it runs. */}
-      <div className="flex flex-col gap-4 px-6 pt-5 pb-3">
-        {joinsChannelName && (
-          <p className="text-sm text-secondary">
-            {m.agent_form_joins_channel({ channel: joinsChannelName })}
-          </p>
-        )}
-        <AgentUsernameField
-          label={m.agent_create_local_name()}
-          defaultValue={defaults?.name}
-          note={nameNote}
-        />
-        <Select
-          name="computerId"
-          isRequired
-          hideRequiredIndicator
-          isDisabled={computerLocked}
-          size="sm"
-          label={m.agent_create_computer()}
-          className="min-w-0"
-          selectedKey={computerId}
-          onSelectionChange={(key) => {
-            if (key !== null) setComputerId(String(key));
-          }}
-        >
-          {computers.map((computer) => (
-            <Select.Item
-              key={computer.id}
-              id={computer.id}
-              label={computer.displayName}
-              aria-label={`${computer.displayName}, ${computer.online ? m.computer_status_online() : m.computer_status_offline()}`}
-              icon={
-                <StatusDot
-                  tone={computer.online ? "online" : "offline"}
-                  label={computer.online ? m.computer_status_online() : m.computer_status_offline()}
-                  className="size-2"
+        intro={
+          <AgentCreateIntro
+            illustration="local"
+            title={m.agent_create_local_title()}
+            description={m.agent_create_local_description()}
+            onClose={submitting ? undefined : onClose}
+          />
+        }
+        footer={
+          <AgentCreateFooter
+            onCancel={onClose}
+            cancelDisabled={submitting}
+            submitLabel={submitLabel}
+            submitting={submitting}
+          />
+        }
+      >
+        {/* One column, in the design's order: who it is, where it runs, then how it runs. */}
+        <div className="flex flex-col gap-4 px-6 pt-5 pb-3">
+          {joinsChannelName && (
+            <p className="text-sm text-secondary">
+              {m.agent_form_joins_channel({ channel: joinsChannelName })}
+            </p>
+          )}
+          <AgentUsernameField
+            label={m.agent_create_local_name()}
+            defaultValue={defaults?.name}
+            note={nameNote}
+          />
+          <Select
+            name="computerId"
+            isRequired
+            hideRequiredIndicator
+            isDisabled={computerLocked}
+            size="sm"
+            label={m.agent_create_computer()}
+            className="min-w-0"
+            selectedKey={computerId}
+            onSelectionChange={(key) => {
+              if (key !== null) setComputerId(String(key));
+            }}
+          >
+            {computers.map((computer) => (
+              <Select.Item
+                key={computer.id}
+                id={computer.id}
+                label={computer.displayName}
+                aria-label={`${computer.displayName}, ${computer.online ? m.computer_status_online() : m.computer_status_offline()}`}
+                icon={
+                  <StatusDot
+                    tone={computer.online ? "online" : "offline"}
+                    label={
+                      computer.online ? m.computer_status_online() : m.computer_status_offline()
+                    }
+                    className="size-2"
+                  />
+                }
+              />
+            ))}
+          </Select>
+          {/* Three lines until more is written in: the field grows with what is typed. */}
+          <TextArea
+            label={m.agent_create_description()}
+            name="description"
+            size="sm"
+            rows={3}
+            defaultValue={defaults?.description}
+            placeholder={m.agent_form_description_placeholder()}
+            className="min-w-0"
+            textAreaClassName="field-sizing-content max-h-40 min-h-20"
+          />
+          <AgentRuntimeFields
+            key={computerId}
+            open
+            computerId={computerId}
+            providerNotice={(provider) =>
+              computer &&
+              !signedIn.has(`${computerId}:${provider}`) && (
+                <AgentRuntimeSignInNotice
+                  computer={computer}
+                  provider={provider}
+                  onSignIn={setSigningIn}
                 />
-              }
-            />
-          ))}
-        </Select>
-        {/* Three lines until more is written in: the field grows with what is typed. */}
-        <TextArea
-          label={m.agent_create_description()}
-          name="description"
-          size="sm"
-          rows={3}
-          defaultValue={defaults?.description}
-          placeholder={m.agent_form_description_placeholder()}
-          className="min-w-0"
-          textAreaClassName="field-sizing-content max-h-40 min-h-20"
-        />
-        <AgentRuntimeFields
-          key={computerId}
-          open
-          computerId={computerId}
-          onLoad={async (id) => ({
-            ...runtimeOptionsFromRuntimes(
-              computers.find((computer) => computer.id === id)?.runtimes ?? [],
-            ),
-            catalogs: await onLoadRuntimeCatalog(id),
-          })}
-        />
-        <AgentOptionCard
-          label={m.agent_form_visibility_private()}
-          isDisabled={visibilityLocked}
-          isSelected={isPrivate}
-          onChange={setIsPrivate}
-        />
-        {/* A plain alert, not `HintText`: outside a field its "errorMessage" slot is not
+              )
+            }
+            onLoad={async (id) => ({
+              ...runtimeOptionsFromRuntimes(
+                computers.find((computer) => computer.id === id)?.runtimes ?? [],
+              ),
+              catalogs: await onLoadRuntimeCatalog(id),
+            })}
+          />
+          <AgentOptionCard
+            label={m.agent_form_visibility_private()}
+            isDisabled={visibilityLocked}
+            isSelected={isPrivate}
+            onChange={setIsPrivate}
+          />
+          {/* A plain alert, not `HintText`: outside a field its "errorMessage" slot is not
             one the enclosing Dialog offers, and rendering it crashes the page. */}
-        {error && (
-          <p role="alert" className="text-sm text-error-primary">
-            {error}
-          </p>
-        )}
-      </div>
-    </AgentCreateForm>
+          {error && (
+            <p role="alert" className="text-sm text-error-primary">
+              {error}
+            </p>
+          )}
+        </div>
+      </AgentCreateForm>
+      {/* Outside the form: a submit inside the sign-in flow must not reach the create form. */}
+      {signingIn && computer && (
+        <RuntimeSignInDialog
+          computerId={computer.id}
+          computerName={computer.displayName}
+          provider={signingIn}
+          runtimeName={runtimeProviderLabel(signingIn)}
+          onClose={() => setSigningIn(undefined)}
+        />
+      )}
+    </>
   );
 }
 
