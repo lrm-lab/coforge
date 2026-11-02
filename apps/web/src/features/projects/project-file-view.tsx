@@ -41,6 +41,7 @@ import { m } from "#src/paraglide/messages";
 import { FIND_MATCH_CAP } from "./find-in-text";
 import { splitHighlightedLines, type HastRoot } from "./split-highlighted-lines";
 import { useFindInFile } from "./use-find-in-file";
+import { ZEN_LAYER } from "./zen-layer";
 import "./project-file-view.css";
 
 const MARKDOWN_EXTENSIONS = new Set(["md", "markdown"]);
@@ -58,13 +59,6 @@ const LINE_HEIGHT_PX = 20;
 const MAX_HIGHLIGHT_CHARS = 512_000;
 
 const WRAP_STORAGE_KEY = "coforge-file-wrap";
-
-// Zen mode's fullscreen overlay sits below every existing overlay layer in
-// this codebase (Modal, Tooltip, the slim sidebar nav, bubble-menu — all
-// z-50) so a tooltip or popover opened while in zen mode still renders above
-// it, without relying on DOM/portal paint order to break the tie at an equal
-// z-index.
-const ZEN_Z_INDEX = "z-40";
 
 export function ProjectFileView({
   path,
@@ -218,10 +212,7 @@ export function ProjectFileView({
   return (
     <div
       ref={rootRef}
-      className={cn(
-        "flex min-h-0 flex-1 flex-col",
-        zen && `fixed inset-0 ${ZEN_Z_INDEX} bg-primary`,
-      )}
+      className={cn("flex min-h-0 flex-1 flex-col", zen && ZEN_LAYER)}
       {...keyboardProps}
     >
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-secondary px-4 py-2">
