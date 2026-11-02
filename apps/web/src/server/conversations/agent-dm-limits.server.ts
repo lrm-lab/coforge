@@ -139,7 +139,20 @@ export async function noteAgentDmLimit(
     if (told) return;
     const sequence = await allocateSequence(tx, conversationId);
     await tx.message.create({
-      data: { workspaceId, conversationId, sequence, body },
+      data: {
+        workspaceId,
+        conversationId,
+        sequence,
+        body,
+        systemMessage: {
+          create: {
+            kind: code === "AGENT_DM_CHAIN_LIMIT" ? "agent_dm.chain_limit" : "agent_dm.rate_limit",
+            params: {},
+            conversationId,
+            workspaceId,
+          },
+        },
+      },
     });
   });
 }

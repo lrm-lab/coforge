@@ -111,9 +111,16 @@ export async function changeChannelCoordinator(
         ...ACTIVE_MEMBER_WHERE,
         agent: { ...ACTIVE_AGENT_WHERE, workspaceId },
       },
-      select: { agent: { select: { id: true, name: true, computerId: true, stoppedAt: true } } },
+      select: {
+        id: true,
+        agent: { select: { id: true, name: true, computerId: true, stoppedAt: true } },
+      },
     });
-    const next = members.find((member) => member.agent?.id === coordinatorAgentId)?.agent;
+    const nextMember = members.find((member) => member.agent?.id === coordinatorAgentId);
+    const next = nextMember?.agent;
+    const previousMember = members.find(
+      (member) => member.agent?.id === current.coordinatorAgentId,
+    );
     if (coordinatorAgentId && !next) throw new AppError("NOT_FOUND");
     if (current.coordinatorAgentId === coordinatorAgentId) return;
     await tx.conversation.update({
@@ -124,6 +131,10 @@ export async function changeChannelCoordinator(
     const actor = await tx.user.findUniqueOrThrow({
       where: { id: userId },
       select: { displayName: true, username: true },
+    });
+    const actorMember = await tx.conversationMember.findFirstOrThrow({
+      where: { conversationId: channelId, userId, workspaceId },
+      select: { id: true },
     });
     const message = await tx.message.create({
       data: {
@@ -136,6 +147,40 @@ export async function changeChannelCoordinator(
           current.coordinatorAgent?.name,
           next?.name,
         ),
+        systemMessage: {
+          create: {
+            kind: "channel.coordinator_changed",
+            params: {
+              channelId,
+              channelName: current.channelName!,
+              actor: {
+                memberId: actorMember.id,
+                handle: actor.username,
+                displayName: humanLabel(actor),
+              },
+              ...(current.coordinatorAgentId && current.coordinatorAgent
+                ? {
+                    previous: {
+                      memberId: previousMember?.id ?? "",
+                      handle: current.coordinatorAgent.name,
+                      displayName: current.coordinatorAgent.name,
+                    },
+                  }
+                : {}),
+              ...(next
+                ? {
+                    next: {
+                      memberId: nextMember!.id,
+                      handle: next.name,
+                      displayName: next.name,
+                    },
+                  }
+                : {}),
+            },
+            conversationId: channelId,
+            workspaceId,
+          },
+        },
         deliveries: {
           create: members.flatMap(({ agent }) =>
             agent ? [{ workspaceId, conversationId: channelId, agentId: agent.id, sequence }] : [],
