@@ -11,6 +11,7 @@ import type { PublishedActivityLaunch } from "./agent-activity-publisher";
 import type { ReplyIntentTracker } from "./reply-intent-tracker";
 import type { ProviderProgress } from "./stalled-recovery";
 import type { StalledTurnTracker } from "./stalled-turn-indicator";
+import type { LaunchPhaseTiming } from "./launch-phase-timing";
 
 /** What the runtime tracks about one Agent launch's Activity, from start-up to exit. */
 export type ActivityLaunch = PublishedActivityLaunch & {
@@ -18,6 +19,8 @@ export type ActivityLaunch = PublishedActivityLaunch & {
   trajectory?: Pick<ActivityTrajectory, "flush" | "dispose">;
   /** When the provider last reported anything (`stalled-recovery.ts`). */
   progress?: ProviderProgress;
+  /** This launch's phase clock: one elapsed-time log per stage (`launch-phase-timing.ts`). */
+  timing?: LaunchPhaseTiming;
   /** The launch's open tool calls, and the outcome each one's end reports. */
   toolCalls?: ToolCallLedger;
   /** The busy turn's silence clock: one visible stalled notice per turn. */

@@ -6,6 +6,7 @@ import { agentRuntimeContextEnvironment } from "#src/code-agent/environment";
 import { parseAssignedSkillPacks } from "#src/code-agent/assigned-skills";
 import { agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
 import { ProviderProgress } from "./stalled-recovery";
+import { LaunchPhaseTiming } from "./launch-phase-timing";
 import {
   StalledTurnTracker,
   stalledTurnNotice,
@@ -51,6 +52,13 @@ export async function launchAgentProcess(
 ): Promise<AgentRuntime> {
   const { control } = request;
   const current = () => ports.currentActivityLaunches.get(agentId) === launch && !launch.stopping;
+  const timing = new LaunchPhaseTiming({
+    agentId,
+    launchId: launch.launchId,
+    provider: config.provider,
+  });
+  launch.timing = timing;
+  timing.phase("admitted");
   let agentApiKey: string | undefined;
   try {
     const launchConfig = await requestAgentLaunchConfig(
@@ -62,6 +70,7 @@ export async function launchAgentProcess(
       throw new AgentAuthorizationError(error);
     });
     agentApiKey = launchConfig.agentApiKey;
+    timing.phase("config");
     ports.sync.launched(agentId, launchConfig.identity);
     ports.assertRunning();
     ports.assertAgentNotStopping(agentId);
@@ -98,6 +107,7 @@ export async function launchAgentProcess(
     // `reference.sessionId` is overwritten by the next report.
     const recycledSessionId = recycled ? reference.sessionId : undefined;
     if (recycled) ports.narrateUnavailable(agentId, launch, { detail: recycled.activityText });
+    // The adapter's own spawn + ACP initialize complete with this call; one phase covers both.
     const runtime = await ports.agentProcessManager.start(
       agentId,
       {
@@ -164,6 +174,7 @@ export async function launchAgentProcess(
                 ...(reference.controlEpoch ? { controlEpoch: reference.controlEpoch } : {}),
                 ...(previousLaunchId ? { previousLaunchId } : {}),
               });
+              timing.phase("session_reported");
               if (!current()) return;
               reference.sessionId = reportedSessionId;
               reference.sessionMode = "resume";
@@ -192,6 +203,7 @@ export async function launchAgentProcess(
           : undefined,
       },
     );
+    timing.phase("provider_session");
     if (parseAssignedSkillPacks(launchConfig.assignedSkillPacks).includes("weekly-report-collect"))
       ports.collectSkillAgents.add(agentId);
     if (ports.stops.stopping(agentId)) {
