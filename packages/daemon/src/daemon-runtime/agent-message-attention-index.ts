@@ -23,6 +23,7 @@ import { attentionFlags, hasDeliveryScope, latestCreatedAtField } from "./messag
 import { isTrackedMention } from "./mention-delivery-tracker";
 import { inboxNoticeText } from "./inbox-notice-text";
 import { MemoryChannelUpdates, type MemoryChannelUpdateSchedule } from "./memory-channel-updates";
+import { LatestThreadReadIndex } from "./latest-thread-read-index";
 import type {
   AgentConsumedSeqEntry,
   AgentConsumedSeqPort,
@@ -131,6 +132,7 @@ export class AgentMessageAttentionIndex {
    * its frontier, exact sequences, conversation and review together; aliases and review order
    * belong to the Agent. Message operations update this state and pending attention together. */
   readonly #consumedByAgent = new Map<string, ConsumedAgent>();
+  readonly #latestThreadReads = new LatestThreadReadIndex();
   /** The targets with attention in each conversation, learned from their deliveries and pruned with
    * the attention, so a history read's consumption scope settles a conversation's targets however
    * each is spelled. `#attentionConversation` is the way back, for the pruning. */
@@ -915,6 +917,7 @@ export class AgentMessageAttentionIndex {
       delete entry.seq;
       delete entry.exactSeqs;
       delete entry.reviewedSeq;
+      this.#latestThreadReads.clear(agentId);
     }
     this.#persist(agentId);
   }
@@ -1064,6 +1067,7 @@ export class AgentMessageAttentionIndex {
       entry.reviewedSeq = Math.max(entry.reviewedSeq ?? 0, sequence);
     // A review orders this target against all others; loading resumes above every saved order.
     entry.readOrder = ++state.lastReadOrder;
+    this.#latestThreadReads.record(agentId, target, entry);
   }
 
   /** Writes one snapshot of the Agent's durable consumed state. */
@@ -1172,19 +1176,7 @@ export class AgentMessageAttentionIndex {
     agentId: string,
     parentTarget: string,
   ): { target: string; order: number } | undefined {
-    const prefix = `${parentTarget}:`;
-    let latest: { target: string; order: number } | undefined;
-    for (const [target, entry] of this.#consumedState(agentId).targets) {
-      const order = entry.readOrder;
-      if (
-        order !== undefined &&
-        target.startsWith(prefix) &&
-        (entry.reviewedSeq ?? 0) > 0 &&
-        (!latest || order > latest.order)
-      )
-        latest = { target, order };
-    }
-    return latest;
+    return this.#latestThreadReads.get(agentId, parentTarget, this.#consumedState(agentId).targets);
   }
 
   /** Load once; aggregate presence is the hydration marker. Clearing the Agent forgets only
@@ -1216,6 +1208,7 @@ export class AgentMessageAttentionIndex {
   clearAgent(agentId: string, { cancelNotices = false }: { cancelNotices?: boolean } = {}): void {
     this.#memoryUpdates.clearAgent(agentId);
     this.#consumedByAgent.delete(agentId);
+    this.#latestThreadReads.clear(agentId);
     if (cancelNotices)
       this.#generations.get(agentId)?.cancellation.abort(new Error("Agent notice was cancelled"));
     this.#generations.delete(agentId);
