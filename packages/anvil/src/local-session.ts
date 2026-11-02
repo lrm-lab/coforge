@@ -124,6 +124,9 @@ export async function readLocalSessionWindows(
   if (budget.bytes <= 0 || limits.now() >= limits.deadlineAtMs) return;
   const allowance = Math.min(limits.maxFileBytes, budget.bytes);
   if (allowance <= 0) return;
+  // Reserve the whole pair before either read starts. A failed sibling still consumed the bytes
+  // returned by the other one, and repeated failures must not bypass the aggregate budget.
+  budget.bytes -= allowance;
   try {
     const headBytes = Math.min(256 * 1024, Math.floor(allowance / 2));
     const tailBytes = Math.max(1, allowance - headBytes);
@@ -136,9 +139,6 @@ export async function readLocalSessionWindows(
     const windowsCoverFile = tailRead.startOffset === 0 || tailRead.startOffset <= head.byteLength;
     const prefix = head.subarray(0, Math.min(head.byteLength, tailRead.startOffset));
     const decoder = new TextDecoder();
-    const bytesRead =
-      tailRead.startOffset === 0 ? tail.byteLength : prefix.byteLength + tail.byteLength;
-    budget.bytes -= Math.min(allowance, bytesRead);
     return {
       records:
         tailRead.startOffset === 0

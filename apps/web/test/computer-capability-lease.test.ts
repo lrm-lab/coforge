@@ -43,7 +43,6 @@ function fakeRedis() {
 const identity = (workerInstanceId: string, startedAt: number) => ({
   workerInstanceId,
   startedAt,
-  connectionId: `client-${workerInstanceId}`,
 });
 
 test("a Computer supports a capability while its daemon last said so, and keeps it alive", async () => {
@@ -117,7 +116,7 @@ test("an old heartbeat refresh cannot restore a value replaced by a newer ready"
     "local-session-handoff-capability",
   );
   await lease.record("w", "computer", ["local-session-handoff:v1"], identity("old", 1));
-  const refreshing = lease.refresh("w", "computer", "client-old");
+  const refreshing = lease.refresh("w", "computer", identity("old", 1));
   await refreshStarted.promise;
   await lease.record("w", "computer", [], identity("new", 2));
   releaseRefresh.resolve();
@@ -125,7 +124,7 @@ test("an old heartbeat refresh cannot restore a value replaced by a newer ready"
   expect(await lease.supports("w", "computer")).toBeFalse();
 });
 
-test("a stale connection cannot renew a newer worker's supported capability", async () => {
+test("a stale worker heartbeat cannot renew a newer worker's supported capability", async () => {
   const { redis } = fakeRedis();
   let expires = 0;
   const send = redis.send.bind(redis);
@@ -139,8 +138,8 @@ test("a stale connection cannot renew a newer worker's supported capability", as
     "local-session-handoff-capability",
   );
   await lease.record("w", "computer", ["local-session-handoff:v1"], identity("new", 2));
-  await lease.refresh("w", "computer", "client-old");
+  await lease.refresh("w", "computer", identity("old", 1));
   expect(expires).toBe(0);
-  await lease.refresh("w", "computer", "client-new");
+  await lease.refresh("w", "computer", identity("new", 2));
   expect(expires).toBe(1);
 });

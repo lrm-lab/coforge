@@ -176,7 +176,6 @@ test("overlapping ready calls cannot let the older worker write capabilities las
   let capability: {
     workerInstanceId: string;
     startedAt: number;
-    connectionId?: string;
     values: readonly string[];
   } = { workerInstanceId: "", startedAt: 0, values: [] };
   const oldRecordStarted = Promise.withResolvers<void>();
@@ -225,7 +224,6 @@ test("overlapping ready calls cannot let the older worker write capabilities las
   expect(capability).toEqual({
     workerInstanceId: "new",
     startedAt: 2,
-    connectionId: "client-new",
     values: ["local-session-handoff:v1"],
   });
 });

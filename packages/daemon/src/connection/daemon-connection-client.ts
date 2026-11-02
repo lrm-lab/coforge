@@ -101,6 +101,9 @@ export type AgentLaunchConfig = {
 export interface DaemonConnectionConfig {
   workspaceId: string;
   computerId: string;
+  /** Stable process identity carried on connection heartbeats for capability fencing. */
+  workerInstanceId?: string;
+  startedAt?: number;
   /** Server HTTP origin used only for Agent read/send RPCs. */
   serverHttpUrl?: string;
   /** Requests replacement of only this Workspace runtime. The supervisor supplies recovery evidence. */

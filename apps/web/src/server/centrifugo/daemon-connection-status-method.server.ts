@@ -6,7 +6,11 @@ import type { CentrifugoRpcMethod } from "./rpc-handler.server";
 export function createDaemonConnectionStatusMethod(
   statusCache?: ComputerStatusCache,
   capabilities?: {
-    refresh(workspaceId: string, computerId: string, connectionId?: string): Promise<void>;
+    refresh(
+      workspaceId: string,
+      computerId: string,
+      identity?: { workerInstanceId: string; startedAt: number },
+    ): Promise<void>;
   },
   upgrades?: Pick<RedisComputerUpgradeStore, "touchIdentity">,
 ): CentrifugoRpcMethod {
@@ -15,6 +19,8 @@ export function createDaemonConnectionStatusMethod(
       workspaceId?: string;
       computerId?: string;
       online?: boolean;
+      workerInstanceId?: string;
+      startedAt?: number;
     };
     if (
       request.workspaceId !== metadata.principal.workspaceId ||
@@ -27,7 +33,13 @@ export function createDaemonConnectionStatusMethod(
       request.online,
     );
     if (request.online) {
-      await capabilities?.refresh(request.workspaceId, request.computerId, metadata.client);
+      await capabilities?.refresh(
+        request.workspaceId,
+        request.computerId,
+        request.workerInstanceId && typeof request.startedAt === "number"
+          ? { workerInstanceId: request.workerInstanceId, startedAt: request.startedAt }
+          : undefined,
+      );
       // Transitional: identity keys are durable now, so this cannot create an identity for a
       // Computer that never reported one. It only clears a pre-durable-identity 90s lease.
       await upgrades?.touchIdentity({

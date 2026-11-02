@@ -67,6 +67,7 @@ import {
 import { DaemonConnectionRefusedError } from "./daemon-connection-refused-error";
 import { DaemonConnectionStoppedError } from "./daemon-connection-stopped-error";
 import { HELD_NOTICE_CAP, HeldPublications } from "./held-publications";
+import { encodeDaemonConnectionStatus } from "./connection-status-payload";
 import { AgentObservationPublisher } from "./agent-observation-publisher";
 import {
   daemonConnectRejectionReason,
@@ -735,16 +736,7 @@ export class DaemonConnection
 
   #reportOnline(client: CentrifugeWorkspaceClient, config: DaemonConnectionConfig): void {
     void client
-      .rpc(
-        DAEMON_CONNECTION_STATUS_METHOD,
-        utf8Encoder.encode(
-          JSON.stringify({
-            workspaceId: config.workspaceId,
-            computerId: config.computerId,
-            online: true,
-          }),
-        ),
-      )
+      .rpc(DAEMON_CONNECTION_STATUS_METHOD, encodeDaemonConnectionStatus(config))
       .catch(() => {});
   }
 
@@ -767,10 +759,7 @@ export class DaemonConnection
       if (!this.#connected || !client) return;
       this.#checkInboundLiveness(client, config);
       void client
-        .rpc(
-          DAEMON_CONNECTION_STATUS_METHOD,
-          utf8Encoder.encode(JSON.stringify({ ...config, online: true })),
-        )
+        .rpc(DAEMON_CONNECTION_STATUS_METHOD, encodeDaemonConnectionStatus(config))
         .then(() => {
           // An answered round trip is the only inbound traffic a Workspace with nothing to say
           // produces, so it is what keeps a legitimately quiet connection alive.

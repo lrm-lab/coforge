@@ -1,19 +1,25 @@
 import { expect, test } from "bun:test";
 import { createDaemonConnectionStatusMethod } from "#src/server/centrifugo/daemon-connection-status-method.server";
 
-test("an online status refreshes capabilities only for its Centrifugo connection", async () => {
+test("an online status refreshes capabilities for its daemon worker identity", async () => {
   const refreshed: unknown[] = [];
   const method = createDaemonConnectionStatusMethod(
     { put: async () => {}, get: async () => true, getMany: async () => [] },
     {
-      refresh: async (workspaceId, computerId, connectionId) => {
-        refreshed.push({ workspaceId, computerId, connectionId });
+      refresh: async (workspaceId, computerId, identity) => {
+        refreshed.push({ workspaceId, computerId, identity });
       },
     },
   );
   await method(
     new TextEncoder().encode(
-      JSON.stringify({ workspaceId: "workspace-1", computerId: "computer-1", online: true }),
+      JSON.stringify({
+        workspaceId: "workspace-1",
+        computerId: "computer-1",
+        workerInstanceId: "worker-current",
+        startedAt: 10,
+        online: true,
+      }),
     ),
     {
       principal: {
@@ -28,7 +34,7 @@ test("an online status refreshes capabilities only for its Centrifugo connection
     {
       workspaceId: "workspace-1",
       computerId: "computer-1",
-      connectionId: "client-current",
+      identity: { workerInstanceId: "worker-current", startedAt: 10 },
     },
   ]);
 });

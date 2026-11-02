@@ -252,6 +252,8 @@ export class RuntimeStartup {
       await transport.start(token, {
         workspaceId: connection.workspaceId,
         computerId: connection.computerId,
+        workerInstanceId: ports.runtimeInstanceId,
+        startedAt: ports.startedAtMs,
         serverHttpUrl: connection.serverHttpUrl,
         requestRestart: ports.lifecycle.requestRestart,
         requestUpgrade: ports.lifecycle.requestUpgrade,

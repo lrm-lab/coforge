@@ -39,15 +39,17 @@ export function daemonCapabilityLeases() {
         workspaceId: string,
         computerId: string,
         capabilities: readonly string[],
-        identity: { workerInstanceId: string; startedAt: number; connectionId?: string },
+        identity: { workerInstanceId: string; startedAt: number },
       ) =>
         Promise.all(
           leases.map((lease) => lease.record(workspaceId, computerId, capabilities, identity)),
         ),
-      refresh: async (workspaceId: string, computerId: string, connectionId?: string) => {
-        await Promise.all(
-          leases.map((lease) => lease.refresh(workspaceId, computerId, connectionId)),
-        );
+      refresh: async (
+        workspaceId: string,
+        computerId: string,
+        identity?: { workerInstanceId: string; startedAt: number },
+      ) => {
+        await Promise.all(leases.map((lease) => lease.refresh(workspaceId, computerId, identity)));
       },
     },
   };
