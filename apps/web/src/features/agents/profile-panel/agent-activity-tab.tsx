@@ -29,7 +29,8 @@ export function AgentActivityTab({
         <p className={SECTION_CAPTION_CLASS}>{m.agent_activity_diagnostics()}</p>
         <CopyDiagnosticsButton agent={agent} display={display} />
       </div>
-      <div className="min-h-0 flex-1">
+      {/* Scrolls only for an empty state taller than a short screen; the timeline scrolls itself. */}
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {feed.data ? (
           <AgentActivityTimeline
             key={agent.id}

@@ -24,30 +24,37 @@ export function useScrollEdges<T extends HTMLElement = HTMLDivElement>(
         current.start === start && current.end === end ? current : { start, end },
       );
     };
-    measure();
     box.addEventListener("scroll", measure, { passive: true });
     const resize = new ResizeObserver(measure);
-    resize.observe(box);
-    for (const element of box.querySelectorAll(observe)) resize.observe(element);
+    // Content a collection renders after this effect (a tab strip's tabs) is observed once it
+    // appears, so its width moves the edges too.
+    const watch = () => {
+      resize.disconnect();
+      resize.observe(box);
+      for (const element of box.querySelectorAll(observe)) resize.observe(element);
+      measure();
+    };
+    const added = new MutationObserver(watch);
+    added.observe(box, { childList: true, subtree: true });
+    watch();
     return () => {
       box.removeEventListener("scroll", measure);
       resize.disconnect();
+      added.disconnect();
     };
   }, [axis, observe, key]);
   return { ref, ...edges };
 }
 
-/** A mask fading a horizontal scroller's edges past which content is scrolled out of view. */
-export function edgeFadeStyle({
-  start,
-  end,
-}: {
-  start: boolean;
-  end: boolean;
-}): CSSProperties | undefined {
+/** A mask fading a horizontal scroller's edges past which content is scrolled out of view, over
+ * `width` (the scroller's own inline padding, so a tab scrolled into view sits clear of it). */
+export function edgeFadeStyle(
+  { start, end }: { start: boolean; end: boolean },
+  width = "1.25rem",
+): CSSProperties | undefined {
   if (!start && !end) return undefined;
-  const mask = `linear-gradient(to right, ${start ? "transparent, black 2rem" : "black"}, ${
-    end ? "black calc(100% - 2rem), transparent" : "black"
+  const mask = `linear-gradient(to right, ${start ? `transparent, black ${width}` : "black"}, ${
+    end ? `black calc(100% - ${width}), transparent` : "black"
   })`;
   return { maskImage: mask, WebkitMaskImage: mask };
 }

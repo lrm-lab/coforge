@@ -24,6 +24,7 @@ export function AgentTabEmpty({
   title,
   description,
   belowBar = false,
+  level = 2,
 }: {
   icon: ComponentType<SVGProps<SVGSVGElement>>;
   title: string;
@@ -31,20 +32,24 @@ export function AgentTabEmpty({
   /** The tab draws an `AGENT_TAB_BAR_CLASS` bar above it: start that much higher, so the empty
    * state stays put when the viewer switches tabs. */
   belowBar?: boolean;
+  /** The title's heading level: one below a bar that is itself a heading. */
+  level?: number;
 }) {
   return (
     // Upper middle of the panel, a fixed distance under the tab strip in every tab.
     <Empty
       className={cn(
         "justify-start px-6 pb-12",
-        belowBar ? "pt-[calc(min(22vh,12rem)-var(--spacing-agent-tab-bar))]" : "pt-[min(22vh,12rem)]",
+        belowBar
+          ? "pt-[calc(min(22vh,12rem)-var(--spacing-agent-tab-bar))]"
+          : "pt-[min(22vh,12rem)]",
       )}
     >
       <EmptyHeader className="mb-0 max-w-80">
         <EmptyMedia className="mb-2">
           <Icon aria-hidden="true" className="size-8 text-fg-quaternary" />
         </EmptyMedia>
-        <EmptyTitle role="heading" aria-level={2}>
+        <EmptyTitle role="heading" aria-level={level}>
           {title}
         </EmptyTitle>
         <EmptyDescription>{description}</EmptyDescription>

@@ -34,6 +34,7 @@ export function AgentChatTab({ agentId, timeZone }: { agentId: string; timeZone:
       ) : channels.length === 0 && peers.length === 0 ? (
         <AgentTabEmpty
           belowBar
+          level={3}
           icon={MessageChatCircle}
           title={m.agent_chat_empty_title()}
           description={m.agent_chat_empty_description()}
