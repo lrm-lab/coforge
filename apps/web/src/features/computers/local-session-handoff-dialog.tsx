@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Heading } from "react-aria-components";
@@ -8,19 +8,19 @@ import type { LocalSessionEntry } from "@lrm/coforge-sdk/internal";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Select } from "#src/components/base/select/select";
-import { Alert } from "#src/components/ui/alert";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
-import { Spinner } from "#src/components/ui/spinner";
 import { StatusDot } from "#src/components/ui/status-dot";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { workspacePath } from "#src/features/workspaces/workspace-url";
 import { m } from "#src/paraglide/messages";
 import { localizeHref } from "#src/paraglide/runtime";
+import { listComputers } from "./computers.functions";
 import { HandoffForm } from "./handoff-form";
 import { HandoffSessionPicker, type HandoffPickerState } from "./handoff-session-picker";
-import { preferredComputerId } from "./handoff-briefing";
-import { listComputers } from "./computers.functions";
+import { HandoffProgress, HandoffRefusal } from "./handoff-states";
+import { sessionKey } from "./local-session-list";
+import { useLocalSessionSearch } from "./use-local-session-handoff";
 
 /**
  * "接手本机会话" from the Chat list's + menu: pick one of the viewer's own Computers, pick a Claude
@@ -71,19 +71,15 @@ function HandoffContent({
     gcTime: 0,
   });
   // A cloud Computer has no one's own sessions to hand off.
-  const own = useMemo(
-    () =>
-      (computers.data ?? []).filter(
-        (computer) => computer.ownedByCurrentUser && computer.kind !== "cloud",
-      ),
-    [computers.data],
+  const own = (computers.data ?? []).filter(
+    (computer) => computer.ownedByCurrentUser && computer.kind !== "cloud",
   );
   const [chosenId, setChosenId] = useState<string>();
+  // The one chosen, else the first that is online, else the first.
   const computerId = own.some((computer) => computer.id === chosenId)
     ? chosenId
-    : preferredComputerId(own);
+    : (own.find((computer) => computer.online) ?? own[0])?.id;
   const [session, setSession] = useState<LocalSessionEntry>();
-  const [picker, setPicker] = useState<HandoffPickerState>({ query: "" });
 
   return (
     <>
@@ -106,19 +102,12 @@ function HandoffContent({
         )}
       </div>
       {computers.isPending ? (
-        <div role="status" className="flex justify-center py-6 text-tertiary">
-          <Spinner />
-          <span className="sr-only">{m.handoff_loading()}</span>
-        </div>
+        <HandoffProgress label={m.handoff_loading()} />
       ) : computers.isError ? (
-        <Alert
+        <HandoffRefusal
           color="warning"
-          description={m.channel_members_computers_error()}
-          actions={
-            <Button color="secondary" size="sm" onPress={() => void computers.refetch()}>
-              {m.handoff_retry()}
-            </Button>
-          }
+          text={m.channel_members_computers_error()}
+          onRetry={() => void computers.refetch()}
         />
       ) : !computerId ? (
         <NoComputers onClose={onClose} />
@@ -132,7 +121,6 @@ function HandoffContent({
             onSelectionChange={(key) => {
               if (key === null) return;
               setChosenId(String(key));
-              setPicker({ query: "" });
             }}
           >
             {own.map((computer) => (
@@ -153,29 +141,59 @@ function HandoffContent({
               />
             ))}
           </Select>
-          {session ? (
-            <HandoffForm
-              // Another session starts the form afresh.
-              key={`${session.provider}:${session.sessionId}`}
-              computerId={computerId}
-              session={session}
-              onChooseAnother={() => setSession(undefined)}
-              onClose={onClose}
-              onBusyChange={onBusyChange}
-            />
-          ) : (
-            <HandoffSessionPicker
-              // Another Computer has another list: nothing of the last one carries over.
-              key={computerId}
-              computerId={computerId}
-              picker={picker}
-              onPickerChange={setPicker}
-              onSelect={setSession}
-            />
-          )}
+          <HandoffSteps
+            // Another Computer has another list and search: nothing of the last one carries over.
+            key={computerId}
+            computerId={computerId}
+            session={session}
+            onSessionChange={setSession}
+            onBusyChange={onBusyChange}
+            onClose={onClose}
+          />
         </>
       )}
     </>
+  );
+}
+
+/**
+ * The wizard on one Computer. The search lives here, not in the picker, so the list it found is
+ * still there when the person comes back from the form to choose another session.
+ */
+function HandoffSteps({
+  computerId,
+  session,
+  onSessionChange,
+  onBusyChange,
+  onClose,
+}: {
+  computerId: string;
+  session: LocalSessionEntry | undefined;
+  onSessionChange: (session: LocalSessionEntry | undefined) => void;
+  onBusyChange: (busy: boolean) => void;
+  onClose: () => void;
+}) {
+  const [picker, setPicker] = useState<HandoffPickerState>({ query: "" });
+  const { state, searching, retry } = useLocalSessionSearch(computerId, picker.query);
+  return session ? (
+    <HandoffForm
+      // Another session starts the form afresh.
+      key={sessionKey(session)}
+      computerId={computerId}
+      session={session}
+      onChooseAnother={() => onSessionChange(undefined)}
+      onClose={onClose}
+      onBusyChange={onBusyChange}
+    />
+  ) : (
+    <HandoffSessionPicker
+      state={state}
+      searching={searching}
+      onRetry={retry}
+      picker={picker}
+      onPickerChange={setPicker}
+      onSelect={onSessionChange}
+    />
   );
 }
 

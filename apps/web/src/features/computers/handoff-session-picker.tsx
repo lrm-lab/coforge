@@ -1,50 +1,55 @@
-import type { Key } from "react";
+import { memo, useMemo, type Key } from "react";
 import { ListBox, ListBoxItem } from "react-aria-components";
 import { SearchLg } from "@untitledui/icons";
-import type { HandoffRuntimeProvider, LocalSessionEntry } from "@lrm/coforge-sdk/internal";
+import {
+  HANDOFF_RUNTIME_PROVIDERS,
+  type HandoffRuntimeProvider,
+  type LocalSessionEntry,
+} from "@lrm/coforge-sdk/internal";
 
 import { Tab, TabList, TabPanel, Tabs } from "#src/components/application/tabs/tabs";
 import { Badge } from "#src/components/base/badges/badges";
-import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
-import { Alert } from "#src/components/ui/alert";
 import { RelativeTime } from "#src/components/ui/relative-time";
-import { Spinner } from "#src/components/ui/spinner";
 import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
+import { HandoffProgress, HandoffRefusal } from "./handoff-states";
 import {
   defaultProvider,
-  HANDOFF_PROVIDERS,
   isRecentlyActive,
   sessionKey,
+  sessionSummary,
   sessionsByProvider,
-  shortenPath,
-  sortSessions,
-} from "./handoff-briefing";
+} from "./local-session-list";
 import type { SessionListState } from "./local-session-state";
-import { useLocalSessionSearch } from "./use-local-session-handoff";
 
 export type HandoffPickerState = { query: string; tool?: HandoffRuntimeProvider };
 
+const NO_SESSIONS: LocalSessionEntry[] = [];
+
 /**
  * The handoff dialog's first step: the sessions on one Computer, a tab per tool, searchable by id,
- * folder or content. The search state is the dialog's, so choosing another session comes back to
- * the same list.
+ * folder or content. The search and its state are the dialog's, so choosing another session comes
+ * back to the same list.
  */
 export function HandoffSessionPicker({
-  computerId,
+  state,
+  searching,
+  onRetry,
   picker,
   onPickerChange,
   onSelect,
 }: {
-  computerId: string;
+  state: SessionListState;
+  searching: boolean;
+  onRetry: () => void;
   picker: HandoffPickerState;
   onPickerChange: (picker: HandoffPickerState) => void;
   onSelect: (session: LocalSessionEntry) => void;
 }) {
-  const { state, searching, retry } = useLocalSessionSearch(computerId, picker.query);
-  const sessions = state.kind === "ready" ? sortSessions(state.sessions) : [];
+  const sessions = state.kind === "ready" ? state.sessions : NO_SESSIONS;
+  const byTool = useMemo(() => sessionsByProvider(sessions), [sessions]);
   const tool = picker.tool ?? defaultProvider(sessions);
   return (
     <div className="flex flex-col gap-3">
@@ -60,13 +65,13 @@ export function HandoffSessionPicker({
       <Tabs
         selectedKey={tool}
         onSelectionChange={(key: Key) => {
-          const next = HANDOFF_PROVIDERS.find((provider) => provider === key);
+          const next = HANDOFF_RUNTIME_PROVIDERS.find((provider) => provider === key);
           if (next) onPickerChange({ ...picker, tool: next });
         }}
       >
         <TabList aria-label={m.handoff_source()} type="underline" className="gap-4">
-          {HANDOFF_PROVIDERS.map((provider) => {
-            const count = sessionsByProvider(sessions, provider).length;
+          {HANDOFF_RUNTIME_PROVIDERS.map((provider) => {
+            const count = byTool[provider].length;
             return (
               <Tab key={provider} id={provider} badge={count > 0 ? count : undefined}>
                 {runtimeProviderLabel(provider)}
@@ -77,11 +82,11 @@ export function HandoffSessionPicker({
         <TabPanel id={tool} className="pt-3">
           <SessionListBody
             state={state}
-            sessions={sessions}
+            listed={byTool[tool]}
             tool={tool}
             searching={searching}
             onSelect={onSelect}
-            onRetry={retry}
+            onRetry={onRetry}
           />
         </TabPanel>
       </Tabs>
@@ -91,37 +96,36 @@ export function HandoffSessionPicker({
 
 function SessionListBody({
   state,
-  sessions,
+  listed,
   tool,
   searching,
   onSelect,
   onRetry,
 }: {
   state: SessionListState;
-  sessions: LocalSessionEntry[];
+  listed: LocalSessionEntry[];
   tool: HandoffRuntimeProvider;
   searching: boolean;
   onSelect: (session: LocalSessionEntry) => void;
   onRetry: () => void;
 }) {
-  if (state.kind === "loading") return <Progress label={m.handoff_loading()} />;
+  if (state.kind === "loading") return <HandoffProgress label={m.handoff_loading()} />;
   if (state.kind !== "ready") {
     if (state.kind === "unsupported")
-      return <Refusal color="warning" text={m.handoff_unsupported()} />;
+      return <HandoffRefusal color="warning" text={m.handoff_unsupported()} />;
     return state.kind === "offline" ? (
-      <Refusal color="warning" text={m.handoff_offline()} onRetry={onRetry} />
+      <HandoffRefusal color="warning" text={m.handoff_offline()} onRetry={onRetry} />
     ) : (
-      <Refusal color="gray" text={m.handoff_busy()} onRetry={onRetry} />
+      <HandoffRefusal color="gray" text={m.handoff_busy()} onRetry={onRetry} />
     );
   }
 
-  const listed = sessionsByProvider(sessions, tool);
   return (
     <div className="flex flex-col gap-2">
-      {searching && <Progress label={m.handoff_searching()} />}
+      {searching && <HandoffProgress label={m.handoff_searching()} />}
       {listed.length === 0 ? (
         <p className="py-8 text-center text-sm text-tertiary">
-          {sessions.length === 0
+          {state.sessions.length === 0
             ? m.handoff_empty()
             : m.handoff_tool_empty({ tool: runtimeProviderLabel(tool) })}
         </p>
@@ -130,42 +134,6 @@ function SessionListBody({
       )}
       {state.incomplete && <p className="text-sm text-tertiary">{m.handoff_incomplete()}</p>}
     </div>
-  );
-}
-
-function Progress({ label }: { label: string }) {
-  return (
-    <div
-      role="status"
-      className="flex items-center justify-center gap-2 py-6 text-sm text-tertiary"
-    >
-      <Spinner className="size-4" />
-      {label}
-    </div>
-  );
-}
-
-function Refusal({
-  color,
-  text,
-  onRetry,
-}: {
-  color: "gray" | "warning";
-  text: string;
-  onRetry?: () => void;
-}) {
-  return (
-    <Alert
-      color={color}
-      description={text}
-      actions={
-        onRetry && (
-          <Button color="secondary" size="sm" onPress={onRetry}>
-            {m.handoff_retry()}
-          </Button>
-        )
-      }
-    />
   );
 }
 
@@ -198,9 +166,15 @@ function SessionList({
   );
 }
 
-function SessionRow({ session, active }: { session: LocalSessionEntry; active: boolean }) {
-  const title = session.title.trim() || m.handoff_untitled();
-  const place = [shortenPath(session.cwd), session.model].filter(Boolean).join(" · ");
+const SessionRow = memo(function SessionRow({
+  session,
+  active,
+}: {
+  session: LocalSessionEntry;
+  active: boolean;
+}) {
+  const summary = sessionSummary(session);
+  const title = summary.title || m.handoff_untitled();
   return (
     <ListBoxItem
       id={sessionKey(session)}
@@ -222,7 +196,7 @@ function SessionRow({ session, active }: { session: LocalSessionEntry; active: b
             </Badge>
           )}
         </div>
-        <div className="truncate text-xs text-tertiary">{place}</div>
+        <div className="truncate text-xs text-tertiary">{summary.place}</div>
         {session.matchKind === "content" && session.snippet && (
           <div className="truncate text-xs text-tertiary">{session.snippet}</div>
         )}
@@ -234,4 +208,4 @@ function SessionRow({ session, active }: { session: LocalSessionEntry; active: b
       />
     </ListBoxItem>
   );
-}
+});

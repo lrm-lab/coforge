@@ -22,15 +22,18 @@ const EXCERPT_REQUEST_TYPE = "coforge.rpc.v1.LocalSessionExcerptRequest";
 const EXCERPT_RESULT_TYPE = "coforge.rpc.v1.LocalSessionExcerptResult";
 const ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/;
-const PROVIDERS = new Set([RUNTIME_PROVIDER.CLAUDE_CODE, RUNTIME_PROVIDER.CODEX]);
 const MATCH_KINDS = new Set(["recent", "id", "cwd", "content"]);
 const STATUSES = new Set(["ok", "not_found", "unavailable"]);
 const ROLES = new Set(["user", "assistant"]);
 const encoder = new TextEncoder();
 
-export type HandoffRuntimeProvider =
-  | typeof RUNTIME_PROVIDER.CLAUDE_CODE
-  | typeof RUNTIME_PROVIDER.CODEX;
+/** The runtimes whose local sessions can be handed off, in tab order. */
+export const HANDOFF_RUNTIME_PROVIDERS = [
+  RUNTIME_PROVIDER.CLAUDE_CODE,
+  RUNTIME_PROVIDER.CODEX,
+] as const;
+export type HandoffRuntimeProvider = (typeof HANDOFF_RUNTIME_PROVIDERS)[number];
+const PROVIDERS: ReadonlySet<string> = new Set(HANDOFF_RUNTIME_PROVIDERS);
 export type LocalSessionMatchKind = "recent" | "id" | "cwd" | "content";
 export type LocalSessionExcerptStatus = "ok" | "not_found" | "unavailable";
 

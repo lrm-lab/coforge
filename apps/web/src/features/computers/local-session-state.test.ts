@@ -47,6 +47,15 @@ describe("sessionListState", () => {
       incomplete: false,
     });
   });
+  test("lists the newest session first", () => {
+    const older = { ...session, sessionId: "old", updatedAtMs: 1 };
+    const newer = { ...session, sessionId: "new", updatedAtMs: 5 };
+    const state = sessionListState(search([older, newer], true, true), false);
+    expect(state.kind === "ready" && state.sessions.map((s) => s.sessionId)).toEqual([
+      "new",
+      "old",
+    ]);
+  });
   test("a partial list is shown and marked incomplete", () => {
     expect(sessionListState(search([session], true, false), false)).toEqual({
       kind: "ready",

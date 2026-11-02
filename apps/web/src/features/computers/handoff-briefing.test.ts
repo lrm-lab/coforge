@@ -1,50 +1,16 @@
 import { describe, expect, test } from "bun:test";
-import { RUNTIME_PROVIDER, type LocalSessionEntry } from "@lrm/coforge-sdk/internal";
 
+import { DIRECT_MESSAGE_MAX_LENGTH } from "#src/features/conversations/conversation.schemas";
 import {
-  freeAgentName,
-  BRIEFING_MAX_LENGTH,
   briefingFirstMessage,
   buildBriefing,
   defaultAgentName,
-  defaultProvider,
-  isRecentlyActive,
-  lastFolder,
-  preferredComputerId,
-  shortenPath,
-  sortSessions,
-  truncateText,
+  freeAgentName,
 } from "./handoff-briefing";
 
 const roles = { user: "User", assistant: "Assistant" };
 const render = ({ firstMessage, recent }: { firstMessage: string; recent: string }) =>
   `Opening:\n${firstMessage}\n\nRecent:\n${recent}\n\nCarry on.`;
-
-function entry(over: Partial<LocalSessionEntry>): LocalSessionEntry {
-  return {
-    provider: RUNTIME_PROVIDER.CLAUDE_CODE,
-    sessionId: "s1",
-    cwd: "/Users/frank/Code/app",
-    model: "",
-    title: "",
-    updatedAtMs: 0,
-    matchKind: "recent",
-    snippet: "",
-    ...over,
-  };
-}
-
-describe("isRecentlyActive", () => {
-  const now = 10_000_000;
-  test("is active inside five minutes, idle from five minutes on", () => {
-    expect(isRecentlyActive(now - 4 * 60_000, now)).toBe(true);
-    expect(isRecentlyActive(now - 5 * 60_000, now)).toBe(false);
-    expect(isRecentlyActive(now - 60 * 60_000, now)).toBe(false);
-  });
-  test("treats a timestamp ahead of the clock as active", () => {
-    expect(isRecentlyActive(now + 30_000, now)).toBe(true);
-  });
-});
 
 describe("defaultAgentName", () => {
   test("is the last folder in username form", () => {
@@ -55,67 +21,40 @@ describe("defaultAgentName", () => {
     expect(defaultAgentName("/Users/frank/代码", "Claude Code")).toBe("claude-code");
     expect(defaultAgentName("/", "Codex")).toBe("codex");
   });
-  test("lastFolder ignores trailing separators", () => {
-    expect(lastFolder("/a/b//")).toBe("b");
-    expect(lastFolder("")).toBe("");
+  test("ignores trailing separators", () => {
+    expect(defaultAgentName("/a/b//", "Codex")).toBe("b");
+    expect(defaultAgentName("", "Codex")).toBe("codex");
   });
 });
 
-describe("shortenPath", () => {
-  test("shows the home folder as ~", () => {
-    expect(shortenPath("/Users/frank")).toBe("~");
-    expect(shortenPath("/home/frank/app")).toBe("~/app");
-    expect(shortenPath("C:\\Users\\frank\\app")).toBe("~/app");
-  });
-  test("keeps the last two folders of a long path", () => {
-    expect(shortenPath("/Users/frank/Code/coforge/apps/web")).toBe("…/apps/web");
-    expect(shortenPath("/var/lib/app")).toBe("/var/lib/app");
-    expect(shortenPath("/srv/a/b/c")).toBe("…/b/c");
-  });
-  test("keeps a short path whole", () => {
-    expect(shortenPath("/")).toBe("/");
-    expect(shortenPath("/tmp/")).toBe("/tmp");
-  });
-});
+describe("truncation", () => {
+  const turn = (text: string) => ({ role: "user" as const, text, timestampMs: 1 });
+  const echo = ({ firstMessage }: { firstMessage: string; recent: string }) => firstMessage;
 
-describe("sessions", () => {
-  test("sorts the newest first without touching the input", () => {
-    const input = [
-      entry({ sessionId: "a", updatedAtMs: 1 }),
-      entry({ sessionId: "b", updatedAtMs: 3 }),
-    ];
-    expect(sortSessions(input).map((s) => s.sessionId)).toEqual(["b", "a"]);
-    expect(input[0]!.sessionId).toBe("a");
+  test("cuts a long opening request to the limit with an ellipsis", () => {
+    const text = buildBriefing({
+      firstMessage: `  ${"a".repeat(3000)}  `,
+      turns: [],
+      roles,
+      render: echo,
+    });
+    expect(text).toBe(`${"a".repeat(1999)}…`);
   });
-  test("opens on the tool of the newest session, else Claude Code", () => {
-    expect(
-      defaultProvider([
-        entry({ updatedAtMs: 1 }),
-        entry({ provider: RUNTIME_PROVIDER.CODEX, sessionId: "c", updatedAtMs: 2 }),
-      ]),
-    ).toBe(RUNTIME_PROVIDER.CODEX);
-    expect(defaultProvider([])).toBe(RUNTIME_PROVIDER.CLAUDE_CODE);
-  });
-  test("prefers the only Computer, then an online one", () => {
-    expect(preferredComputerId([])).toBeUndefined();
-    expect(preferredComputerId([{ id: "a", online: false }])).toBe("a");
-    expect(
-      preferredComputerId([
-        { id: "a", online: false },
-        { id: "b", online: true },
-      ]),
-    ).toBe("b");
-  });
-});
-
-describe("truncateText", () => {
-  test("cuts to the limit with an ellipsis", () => {
-    expect(truncateText("  abcdef  ", 4)).toBe("abc…");
-    expect(truncateText("abc", 3)).toBe("abc");
-    expect(truncateText("abc", 0)).toBe("");
+  test("keeps a request within the limit whole, trimmed", () => {
+    expect(buildBriefing({ firstMessage: "  abc  ", turns: [], roles, render: echo })).toBe("abc");
   });
   test("does not split a surrogate pair", () => {
-    expect(truncateText("ab😀cd", 4)).toBe("ab…");
+    const text = buildBriefing({ firstMessage: "😀".repeat(2500), turns: [], roles, render: echo });
+    expect(text).toBe(`${"😀".repeat(1999)}…`);
+  });
+  test("cuts a long turn to the turn limit", () => {
+    const text = buildBriefing({
+      firstMessage: "x",
+      turns: [turn("b".repeat(900))],
+      roles,
+      render: ({ recent }) => recent,
+    });
+    expect(text).toBe(`User: ${"b".repeat(799)}…`);
   });
 });
 
@@ -167,7 +106,7 @@ describe("buildBriefing", () => {
       render: ({ firstMessage, recent }) =>
         `${"t".repeat(700)}\n${firstMessage}\n${recent}\n${"/Users/frank/Code/app".repeat(2)}`,
     });
-    expect(text.length).toBeLessThanOrEqual(BRIEFING_MAX_LENGTH);
+    expect(text.length).toBeLessThanOrEqual(DIRECT_MESSAGE_MAX_LENGTH);
     expect(text.endsWith("/Users/frank/Code/app/Users/frank/Code/app")).toBe(true);
   });
 
@@ -178,7 +117,7 @@ describe("buildBriefing", () => {
       roles,
       render: ({ firstMessage, recent }) => `${"t".repeat(6000)}\n${firstMessage}\n${recent}`,
     });
-    expect(text.length).toBeLessThanOrEqual(BRIEFING_MAX_LENGTH);
+    expect(text.length).toBeLessThanOrEqual(DIRECT_MESSAGE_MAX_LENGTH);
   });
 });
 

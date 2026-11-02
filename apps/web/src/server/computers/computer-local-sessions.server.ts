@@ -24,6 +24,7 @@ export interface LocalSessionExcerptResults {
 type Response<Result> =
   | { status: "ready"; result: Result }
   | { status: "offline" | "unsupported" | "timeout" | "unavailable" };
+export type { Response as LocalSessionResponse };
 
 export function sameLocalSessionSearchScope(
   request: LocalSessionSearchRequest,

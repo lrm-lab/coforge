@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { setResponseHeader } from "@tanstack/react-start/server";
 import { z } from "zod";
-import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
+import { HANDOFF_RUNTIME_PROVIDERS } from "@lrm/coforge-sdk/internal";
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { computerLocalSessions } from "#src/server/computers/computer-local-sessions-production.server";
 import { assertCanCreateAgents } from "#src/server/workspaces/member-role.server";
@@ -13,7 +13,7 @@ const searchInput = z.object({
 });
 const excerptInput = z.object({
   computerId: z.uuid(),
-  provider: z.enum([RUNTIME_PROVIDER.CLAUDE_CODE, RUNTIME_PROVIDER.CODEX]),
+  provider: z.enum(HANDOFF_RUNTIME_PROVIDERS),
   sessionId: z
     .string()
     .min(1)

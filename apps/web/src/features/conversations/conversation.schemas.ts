@@ -78,9 +78,11 @@ export const conversationUpdatesCursorSchema = z.object({
 export const directConversationUpdatesInputSchema = directConversationInputSchema.extend(
   conversationUpdatesCursorSchema.shape,
 );
+/** The longest direct message body, in characters. */
+export const DIRECT_MESSAGE_MAX_LENGTH = 8_000;
 export const sendConversationMessageInputSchema = directConversationInputSchema.extend({
   idempotencyKey: uuid,
-  body: z.string().trim().min(1).max(8_000),
+  body: z.string().trim().min(1).max(DIRECT_MESSAGE_MAX_LENGTH),
   attachmentIds: attachmentIdsSchema,
   threadRootId: uuid.optional(),
   /** "As task": the message is a Task from the moment it exists (top-level only). */

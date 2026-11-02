@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import type { HandoffRuntimeProvider } from "@lrm/coforge-sdk/internal";
@@ -24,45 +25,45 @@ const FRESH = {
   refetchOnReconnect: false,
 } as const;
 
-export type LocalSessionSearch = {
+const LOADING = { kind: "loading" } as const;
+
+/** The sessions on one Computer matching `query` (all recent ones when empty), as the picker lists them. */
+export function useLocalSessionSearch(
+  computerId: string,
+  query: string,
+): {
   state: SessionListState;
   /** The typed query is not the one the list shows yet. */
   searching: boolean;
   retry: () => void;
-};
-
-/** The sessions on one Computer matching `query` (all recent ones when empty), as the picker lists them. */
-export function useLocalSessionSearch(
-  computerId: string | undefined,
-  query: string,
-): LocalSessionSearch {
+} {
   const workspaceId = useCurrentWorkspaceId();
   const search = useServerFn(searchLocalSessions);
   const settled = useDebouncedValue(query.trim(), SEARCH_DEBOUNCE_MS);
   const result = useQuery({
     ...FRESH,
     queryKey: ["local-session-handoff", "search", workspaceId, computerId, settled],
-    queryFn: () => search({ data: { computerId: computerId!, query: settled } }),
-    enabled: Boolean(computerId),
+    queryFn: () => search({ data: { computerId, query: settled } }),
     // The list stays while the next query loads, so typing does not blank it.
     placeholderData: keepPreviousData,
   });
-  const state = sessionListState(result.data, result.isError);
+  const state = useMemo(
+    () => sessionListState(result.data, result.isError),
+    [result.data, result.isError],
+  );
   return {
     // A read in flight replaces a refusal (Retry), not a list: a list stays while the next loads.
-    state: result.isFetching && state.kind !== "ready" ? { kind: "loading" } : state,
+    state: result.isFetching && state.kind !== "ready" ? LOADING : state,
     searching: query.trim() !== settled || (result.isFetching && settled !== ""),
     retry: () => void result.refetch(),
   };
 }
 
-export type LocalSessionExcerpt = { state: SessionExcerptState; retry: () => void };
-
 /** The opening request and recent turns of one session, for its briefing. */
 export function useLocalSessionExcerpt(
   computerId: string,
   session: { provider: HandoffRuntimeProvider; sessionId: string; cwd: string },
-): LocalSessionExcerpt {
+): { state: SessionExcerptState; retry: () => void } {
   const workspaceId = useCurrentWorkspaceId();
   const read = useServerFn(readLocalSessionExcerpt);
   const result = useQuery({
@@ -86,11 +87,13 @@ export function useLocalSessionExcerpt(
         },
       }),
   });
+  const answer = useMemo(
+    () => sessionExcerptState(result.data, result.isError),
+    [result.data, result.isError],
+  );
   return {
     // A refetch in flight (Retry) reads as loading again, not as the answer it replaces.
-    state: result.isFetching
-      ? { kind: "loading" }
-      : sessionExcerptState(result.data, result.isError),
+    state: result.isFetching ? LOADING : answer,
     retry: () => void result.refetch(),
   };
 }

@@ -4,20 +4,15 @@ import type {
   LocalSessionSearchResult,
 } from "@lrm/coforge-sdk/internal";
 
-/** What the Computer's daemon answers, as the Server Functions pass it on. */
-export type HandoffResponse<Result> =
-  | { status: "ready"; result: Result }
-  | { status: "offline" | "unsupported" | "timeout" | "unavailable" };
+import type { LocalSessionResponse } from "#src/server/computers/computer-local-sessions.server";
+import { sortSessions } from "./local-session-list";
 
 export type SessionListState =
   | { kind: "loading" }
   | { kind: "ready"; sessions: LocalSessionEntry[]; incomplete: boolean }
   | { kind: "busy" | "offline" | "unsupported" };
 
-export type SessionExcerpt = Pick<
-  LocalSessionExcerptResult,
-  "model" | "initialRequest" | "recentTurns"
->;
+type SessionExcerpt = Pick<LocalSessionExcerptResult, "model" | "initialRequest" | "recentTurns">;
 
 export type SessionExcerptState =
   | { kind: "loading" }
@@ -30,23 +25,42 @@ type SearchResult = Pick<
 >;
 type ExcerptResult = SessionExcerpt & Pick<LocalSessionExcerptResult, "status">;
 
+type Refusal = { kind: "loading" | "busy" | "offline" | "unsupported" };
+
 /**
- * The picker's state for a search. A timeout, a failed call, or an empty list from a scan that did
- * not finish all mean the Computer is still reading (its previous scan may still be running after
- * a timeout), so none of them may read as "no sessions": they offer a retry.
+ * What every answer shares: none yet is loading (busy once the call failed), an offline or
+ * unsupported Computer is named, any other non-ready answer (a timeout, a daemon still scanning)
+ * means the Computer is still reading, so it is busy and offers a retry. Only a ready answer
+ * carries its result on to the caller.
+ */
+function triage<Result>(
+  response: LocalSessionResponse<Result> | undefined,
+  failed: boolean,
+): Refusal | { kind: "ready"; result: Result } {
+  if (!response) return { kind: failed ? "busy" : "loading" };
+  if (response.status === "ready") return { kind: "ready", result: response.result };
+  return {
+    kind:
+      response.status === "offline" || response.status === "unsupported" ? response.status : "busy",
+  };
+}
+
+/**
+ * The picker's state for a search, its sessions newest first. A timeout, a failed call, or an
+ * empty list from a scan that did not finish all mean the Computer is still reading (its previous
+ * scan may still be running after a timeout), so none of them may read as "no sessions": they
+ * offer a retry.
  */
 export function sessionListState(
-  response: HandoffResponse<SearchResult> | undefined,
+  response: LocalSessionResponse<SearchResult> | undefined,
   failed: boolean,
 ): SessionListState {
-  if (!response) return failed ? { kind: "busy" } : { kind: "loading" };
-  if (response.status === "offline" || response.status === "unsupported")
-    return { kind: response.status };
-  if (response.status !== "ready") return { kind: "busy" };
-  const { sessions, scanComplete, contentSearchComplete } = response.result;
+  const answer = triage(response, failed);
+  if (answer.kind !== "ready") return answer;
+  const { sessions, scanComplete, contentSearchComplete } = answer.result;
   const incomplete = !scanComplete || !contentSearchComplete;
   if (sessions.length === 0 && incomplete) return { kind: "busy" };
-  return { kind: "ready", sessions, incomplete };
+  return { kind: "ready", sessions: sortSessions(sessions), incomplete };
 }
 
 /**
@@ -55,16 +69,14 @@ export function sessionListState(
  * is a definite failure.
  */
 export function sessionExcerptState(
-  response: HandoffResponse<ExcerptResult> | undefined,
+  response: LocalSessionResponse<ExcerptResult> | undefined,
   failed: boolean,
 ): SessionExcerptState {
-  if (!response) return failed ? { kind: "busy" } : { kind: "loading" };
-  if (response.status === "offline" || response.status === "unsupported")
-    return { kind: response.status };
-  if (response.status !== "ready") return { kind: "busy" };
-  switch (response.result.status) {
+  const answer = triage(response, failed);
+  if (answer.kind !== "ready") return answer;
+  switch (answer.result.status) {
     case "ok": {
-      const { model, initialRequest, recentTurns } = response.result;
+      const { model, initialRequest, recentTurns } = answer.result;
       return { kind: "ready", excerpt: { model, initialRequest, recentTurns } };
     }
     case "not_found":

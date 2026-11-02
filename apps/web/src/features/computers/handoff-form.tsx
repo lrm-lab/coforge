@@ -1,12 +1,11 @@
 import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
 import { AtSign } from "@untitledui/icons";
-import type { LocalSessionEntry } from "@lrm/coforge-sdk/internal";
+import { truncateCodePointsWithEllipsis, type LocalSessionEntry } from "@lrm/coforge-sdk/internal";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
 import { Alert } from "#src/components/ui/alert";
 import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
-import { Spinner } from "#src/components/ui/spinner";
 import { finishedAgentUsername, typedAgentUsername } from "#src/features/agents/agent-username";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import { useWorkspaceDirectory } from "#src/features/conversations/workspace-directory-query";
@@ -17,10 +16,9 @@ import {
   buildBriefing,
   defaultAgentName,
   freeAgentName,
-  isRecentlyActive,
-  shortenPath,
-  truncateText,
 } from "./handoff-briefing";
+import { HandoffProgress, HandoffRefusal } from "./handoff-states";
+import { isRecentlyActive, sessionSummary } from "./local-session-list";
 import type { SessionExcerptState } from "./local-session-state";
 import { useHandoffCreate } from "./use-handoff-create";
 import { useLocalSessionExcerpt } from "./use-local-session-handoff";
@@ -46,8 +44,8 @@ export function HandoffForm({
   onBusyChange: (busy: boolean) => void;
 }) {
   const tool = runtimeProviderLabel(session.provider);
-  const [name, setName] = useState(() => defaultAgentName(session.cwd, tool));
-  const [edited, setEdited] = useState(false);
+  // What the person typed; until they do, the Agent's name is the default.
+  const [typed, setTyped] = useState<string>();
   const directory = useWorkspaceDirectory();
   // Agent names are unique in a Workspace; the ones the viewer can see are checked before submit.
   const taken = useMemo(
@@ -67,24 +65,38 @@ export function HandoffForm({
   const model = session.model.trim();
   const ready = excerpt.state.kind === "ready" ? excerpt.state.excerpt : undefined;
   const modelLabel = model || ready?.model.trim() || m.handoff_model_default();
-  const briefing = buildBriefing({
-    firstMessage: briefingFirstMessage(ready?.initialRequest, session.title),
-    turns: ready?.recentTurns ?? [],
-    roles: { user: m.handoff_role_user(), assistant: m.handoff_role_assistant() },
-    render: ({ firstMessage, recent }) =>
-      m.handoff_briefing({ tool, model: modelLabel, cwd: session.cwd, firstMessage, recent }),
-  });
-
-  const locked = pending || createdName !== undefined;
-  // Until the person types a name, the default steps past names already taken; once the Agent
-  // exists its name stays, so a resend can never be read as a second Agent.
-  const shownName = createdName ?? (edited ? name : freeAgentName(name, taken));
-  const username = finishedAgentUsername(shownName);
-  const nameTaken = createdName === undefined && taken.has(username.toLowerCase());
   const blocked =
     excerpt.state.kind === "loading" ||
     excerpt.state.kind === "offline" ||
     excerpt.state.kind === "unsupported";
+  // Nothing is sent while the excerpt is blocked, so there is nothing to build then.
+  const briefing = useMemo(
+    () =>
+      blocked
+        ? ""
+        : buildBriefing({
+            firstMessage: briefingFirstMessage(ready?.initialRequest, session.title),
+            turns: ready?.recentTurns ?? [],
+            roles: { user: m.handoff_role_user(), assistant: m.handoff_role_assistant() },
+            render: ({ firstMessage, recent }) =>
+              m.handoff_briefing({
+                tool,
+                model: modelLabel,
+                cwd: session.cwd,
+                firstMessage,
+                recent,
+              }),
+          }),
+    [blocked, ready, session.title, session.cwd, tool, modelLabel],
+  );
+
+  const locked = pending || createdName !== undefined;
+  // Until the person types a name, the default steps past names already taken; once the Agent
+  // exists its name stays, so a resend can never be read as a second Agent.
+  const shownName =
+    createdName ?? typed ?? freeAgentName(defaultAgentName(session.cwd, tool), taken);
+  const username = finishedAgentUsername(shownName);
+  const nameTaken = createdName === undefined && taken.has(username.toLowerCase());
   const canSubmit = createdName !== undefined || (username !== "" && !nameTaken && !blocked);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -95,7 +107,7 @@ export function HandoffForm({
         name: username,
         description: m.handoff_agent_description({
           tool,
-          cwd: truncateText(session.cwd, DESCRIPTION_CWD_MAX),
+          cwd: truncateCodePointsWithEllipsis(session.cwd.trim(), DESCRIPTION_CWD_MAX - 1),
         }),
         provider: session.provider,
         model: model || undefined,
@@ -120,25 +132,17 @@ export function HandoffForm({
         value={shownName}
         isInvalid={nameTaken}
         hint={nameTaken ? m.agent_form_name_taken() : undefined}
-        onChange={(text) => {
-          setEdited(true);
-          setName(typedAgentUsername(text));
-        }}
-        onBlur={() => setName(finishedAgentUsername)}
+        onChange={(text) => setTyped(typedAgentUsername(text))}
+        onBlur={() =>
+          setTyped((current) => (current === undefined ? current : finishedAgentUsername(current)))
+        }
       />
       <ExcerptNotice state={excerpt.state} onRetry={excerpt.retry} />
-      {excerpt.state.kind === "loading" ? (
-        <Progress />
-      ) : (
-        !blocked && <BriefingPreview text={briefing} />
-      )}
-      {error && (
-        <p role="alert" className="text-sm text-error-primary">
-          {error}
-        </p>
-      )}
-      {briefingFailed && createdName !== undefined && (
-        <Alert color="error" description={m.handoff_briefing_failed({ name: createdName })} />
+      {excerpt.state.kind === "loading" && <HandoffProgress label={m.handoff_loading()} />}
+      {!blocked && <BriefingPreview text={briefing} />}
+      {error && <Alert color="error" description={error} />}
+      {briefingFailed && (
+        <Alert color="error" description={m.handoff_briefing_failed({ name: shownName })} />
       )}
       <DialogActions>
         <DialogCancel type="button" isDisabled={pending} onPress={onClose}>
@@ -171,12 +175,12 @@ function SelectedSession({
   disabled: boolean;
 }) {
   // The session's directory and model, once: the briefing below repeats them in full.
-  const place = [shortenPath(session.cwd), session.model].filter(Boolean).join(" · ");
+  const { title, place } = sessionSummary(session);
   return (
     <div className="flex items-start gap-3 rounded-xl border border-secondary p-3">
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-medium text-primary">
-          {session.title.trim() || m.handoff_untitled()}
+          {title || m.handoff_untitled()}
         </div>
         <div className="truncate text-xs text-tertiary">{place}</div>
       </div>
@@ -196,48 +200,16 @@ function SelectedSession({
 function ExcerptNotice({ state, onRetry }: { state: SessionExcerptState; onRetry: () => void }) {
   switch (state.kind) {
     case "failed":
-      return <Alert color="warning" description={m.handoff_excerpt_failed()} />;
+      return <HandoffRefusal color="warning" text={m.handoff_excerpt_failed()} />;
     case "busy":
-      return (
-        <Alert
-          color="gray"
-          description={m.handoff_excerpt_busy()}
-          actions={<Retry onPress={onRetry} />}
-        />
-      );
+      return <HandoffRefusal color="gray" text={m.handoff_excerpt_busy()} onRetry={onRetry} />;
     case "offline":
-      return (
-        <Alert
-          color="warning"
-          description={m.handoff_offline()}
-          actions={<Retry onPress={onRetry} />}
-        />
-      );
+      return <HandoffRefusal color="warning" text={m.handoff_offline()} onRetry={onRetry} />;
     case "unsupported":
-      return <Alert color="warning" description={m.handoff_unsupported()} />;
+      return <HandoffRefusal color="warning" text={m.handoff_unsupported()} />;
     default:
       return null;
   }
-}
-
-function Retry({ onPress }: { onPress: () => void }) {
-  return (
-    <Button type="button" color="secondary" size="sm" onPress={onPress}>
-      {m.handoff_retry()}
-    </Button>
-  );
-}
-
-function Progress() {
-  return (
-    <div
-      role="status"
-      className="flex items-center justify-center gap-2 py-6 text-sm text-tertiary"
-    >
-      <Spinner className="size-4" />
-      {m.handoff_loading()}
-    </div>
-  );
 }
 
 function BriefingPreview({ text }: { text: string }) {

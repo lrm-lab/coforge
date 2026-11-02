@@ -8,13 +8,15 @@ These rules apply to `src/features/computers/`.
 - `computer-connection.functions.ts` — minimal connection state for installation completion
 - `computer-release.functions.ts` — the latest released version and one release's catalog notes
 - `local-session-handoff.functions.ts` — owner-only local Session list/search/excerpt Server Functions for the handoff wizard
-- `local-session-handoff-dialog.tsx` — the Chat + menu's 接手本机会话 dialog: own Computer select, then picker or form
-- `handoff-session-picker.tsx` — step 1: tool tabs with counts, search, session list and its busy/offline/unsupported states
-- `handoff-form.tsx` — step 2: selected session, Agent name, read-only model/directory, briefing preview, create and resend
+- `local-session-handoff-dialog.tsx` — the Chat + menu's 接手本机会话 dialog (loaded lazily by the menu): own Computer select, then picker or form; owns the session search so "换一个会话" returns to the same list
+- `handoff-session-picker.tsx` — step 1: tool tabs with counts, search box, session list (state comes from the dialog)
+- `handoff-form.tsx` — step 2: selected session, Agent name, briefing preview, create and resend
+- `handoff-states.tsx` — the wizard's shared progress line and refusal alert (with Retry)
 - `use-handoff-create.ts` — creates the Agent, opens its DM, sends the briefing under one idempotency key; resend never recreates
 - `use-local-session-handoff.ts` — the search and excerpt queries behind the dialog (the one place to swap in fixture data)
-- `local-session-state.ts` — pure mapping of a daemon response to the picker/form state (an unfinished empty list is busy, never empty)
-- `handoff-briefing.ts` — pure: briefing text bounded to a message, default Agent name, active-in-5-minutes check, path shortening
+- `local-session-state.ts` — pure mapping of a daemon response to the picker/form state (an unfinished empty list is busy, never empty; sessions come out newest first)
+- `local-session-list.ts` — pure session list helpers: sort, per-tool split, default tab, recently-active check, path shortening, row summary
+- `handoff-briefing.ts` — pure: briefing text bounded to a direct message, default Agent name and its free-name stepping
 - `computer-detail.tsx` — one Computer's panel composition and owner actions
 - `computer-detail-view.ts` — detail panel view type and restart poll constants
 - `use-computer-detail-lifecycle.ts` — upgrade slots and restart polling
