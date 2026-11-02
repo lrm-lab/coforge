@@ -7,6 +7,7 @@ import { AtSign, CheckDone01, Inbox01, Mail01, Pin01 } from "@untitledui/icons";
 import { Tab, TabList, Tabs } from "#src/components/application/tabs/tabs";
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
+import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { PageHeader } from "#src/components/layout/page-header";
 import { LIST_BESIDE_CLASSES } from "#src/features/conversations/conversation-list-button";
 import { ConversationListResizeHandle } from "#src/features/conversations/conversation-list-resize-handle";
@@ -223,9 +224,10 @@ export function ActivityInboxView({
         heading={m.navigation_activity()}
         meta={
           activeCount !== undefined && (
+            // Gives way before the heading does when the column is narrow.
             <span
               data-activity-active-count
-              className="shrink-0 text-sm text-tertiary tabular-nums"
+              className="min-w-0 truncate text-sm text-tertiary tabular-nums"
             >
               {m.activity_inbox_active_count({ count: activeCount })}
             </span>
@@ -244,9 +246,27 @@ export function ActivityInboxView({
         actions={
           firstPage &&
           firstPage.unreadItemCount > 0 && (
-            <Button size="sm" color="secondary" iconLeading={CheckDone01} onClick={readAll}>
-              {m.activity_inbox_mark_all_read()}
-            </Button>
+            // A list column dragged narrow keeps the button as its icon, named in a tooltip, so
+            // it never covers the heading.
+            <>
+              <Button
+                size="sm"
+                color="secondary"
+                iconLeading={CheckDone01}
+                className="hidden @[22rem]/tabbed-header:inline-flex"
+                onClick={readAll}
+              >
+                {m.activity_inbox_mark_all_read()}
+              </Button>
+              <ButtonUtility
+                size="sm"
+                color="secondary"
+                icon={CheckDone01}
+                tooltip={m.activity_inbox_mark_all_read()}
+                className="@[22rem]/tabbed-header:hidden"
+                onClick={readAll}
+              />
+            </>
           )
         }
       />
@@ -343,7 +363,13 @@ function ActivityInboxTabs({
       }}
       className="w-max shrink-0"
     >
-      <TabList type="underline" size="md" aria-label={m.activity_inbox_filter_label()}>
+      {/* In a list column dragged narrow the tabs drop their icons, so the three still fit. */}
+      <TabList
+        type="underline"
+        size="md"
+        aria-label={m.activity_inbox_filter_label()}
+        className="@max-[22rem]/tabbed-header:**:data-icon:hidden"
+      >
         {FILTER_TABS.map((tab) => (
           <Tab key={tab.id} id={tab.id} icon={tab.icon}>
             {/* The official `badge` prop hides below `md`; the count must show on phones too. */}

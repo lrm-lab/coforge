@@ -11,20 +11,20 @@ import { MessageNavigationGroup } from "./message-navigation-group";
  * under it.
  */
 export function ComposerEdgeOverlay({
-  narrow,
+  column,
   conversationId,
   threadRootId,
   navigation,
 }: {
-  /** A narrow pane keeps no message column, as its composer does. */
-  narrow: boolean;
+  /** Lines up with the message column, as the composer does. */
+  column: boolean;
   conversationId: string;
   threadRootId: string | null;
   navigation: ComponentProps<typeof MessageNavigationGroup>;
 }) {
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10">
-      <div className={narrow ? undefined : MESSAGE_COLUMN_CLASS}>
+      <div className={column ? MESSAGE_COLUMN_CLASS : undefined}>
         <div className="flex items-end gap-2 px-4 md:px-6">
           <ReplyingAgentsLine
             conversationId={conversationId}

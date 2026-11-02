@@ -43,6 +43,7 @@ import type { ConversationPaneProps } from "./conversation-pane-props";
 import { MESSAGE_COLUMN_CLASS } from "#src/features/settings/message-width";
 import { ConversationStreamPlaceholder } from "./conversation-stream-placeholder";
 import { ThreadRepliesMarker } from "./thread-replies-marker";
+import { ThreadRootMessage } from "./thread-root-message";
 
 export function ConversationPane({
   conversation,
@@ -241,8 +242,13 @@ export function ConversationPane({
    * expanded message must not re-collapse behind the reader. */
   const { expandedMessages, toggleExpandedMessage } = useMessageExpansion();
   const collapsible = conversation.collapseLongMessages === true;
-  // A thread, or the Task popup's discussion: a narrow pane that keeps no message column.
+  // A thread, or the Task popup's discussion: a reply's composer and no stream notices.
   const narrow = Boolean(root ?? rootSlot);
+  // The message column's side room follows the pane's own width (`MESSAGE_COLUMN_CLASS` gives it
+  // up in a narrow pane), so a thread beside a channel keeps none while one that fills the page, as
+  // on Activity, lines up as a channel does. Only the Task popup's discussion goes without: its
+  // dialog has margins of its own.
+  const column = !rootSlot;
   // A window replacement in flight (an "around" read) has no messages yet, but that is not an
   // empty conversation: only a settled read may say so (stream-state.ts, #112/#113).
   const streamLoading = streamState(conversation.messages.length, streamRead) === "loading";
@@ -645,44 +651,27 @@ export function ConversationPane({
           onKeyDown={bottomPin.read}
           className="h-full overflow-y-auto pb-9 [scrollbar-width:thin]"
         >
-          {/* The side room sits inside the scroller, so the scrollbar stays on the pane edge. A
-              thread pane is already narrow and keeps none. */}
-          <div className={narrow ? undefined : MESSAGE_COLUMN_CLASS}>
+          {/* The side room sits inside the scroller, so the scrollbar stays on the pane edge. */}
+          <div className={column ? MESSAGE_COLUMN_CLASS : undefined}>
             {root && !rootSlot && root.weeklyReportHidden !== true && (
-              <div
-                aria-label={m.conversation_thread_root()}
-                className="border-b border-secondary py-3"
-              >
-                {/* The root is an ordinary message row so it keeps every message affordance
-                  (hover toolbar on wide shells, tap action sheet below `lg`, reactions, action
-                  cards, quote-selection) instead of being a bespoke display-only block. Only the
-                  thread entry is held back: this pane already is that message's thread. The one-
-                  item list keeps the li valid; the rule under it separates the root from its
-                  replies. */}
-                <ol className="flex flex-col">
-                  <MessageRow
-                    conversationId={conversation.conversationId}
-                    message={root}
-                    own={isOwn(root)}
-                    dayChanged={false}
-                    grouped={false}
-                    unreadStartsHere={false}
-                    expanded={expandedMessages.has(root.id)}
-                    onToggleExpanded={toggleExpandedMessage}
-                    collapsible={collapsible}
-                    dateLocale={dateLocale}
-                    onToggleReaction={toggleReaction}
-                    onToggleSave={onToggleSave}
-                    onOpenAgentProfile={openAgentProfile}
-                    onOpenPersonProfile={openPersonProfile}
-                    viewerId={conversation.viewerId}
-                    plainMentions={plainMentions}
-                    onOpenTask={openTaskReference}
-                    channelNames={channelNames}
-                    onQuoteSelection={canCompose ? quoteSelection : undefined}
-                  />
-                </ol>
-              </div>
+              <ThreadRootMessage
+                conversationId={conversation.conversationId}
+                message={root}
+                own={isOwn(root)}
+                expanded={expandedMessages.has(root.id)}
+                onToggleExpanded={toggleExpandedMessage}
+                collapsible={collapsible}
+                dateLocale={dateLocale}
+                onToggleReaction={toggleReaction}
+                onToggleSave={onToggleSave}
+                onOpenAgentProfile={openAgentProfile}
+                onOpenPersonProfile={openPersonProfile}
+                viewerId={conversation.viewerId}
+                plainMentions={plainMentions}
+                onOpenTask={openTaskReference}
+                channelNames={channelNames}
+                onQuoteSelection={canCompose ? quoteSelection : undefined}
+              />
             )}
             {threadMarker && (
               <ThreadRepliesMarker count={visibleMessages.length + shownOutbox.length} />
@@ -828,7 +817,7 @@ export function ConversationPane({
           </div>
         </div>
         <ComposerEdgeOverlay
-          narrow={narrow}
+          column={column}
           conversationId={conversation.conversationId}
           threadRootId={root?.id ?? null}
           navigation={{
@@ -846,6 +835,7 @@ export function ConversationPane({
         conversation={conversation}
         root={root}
         narrow={narrow}
+        column={column}
         readOnlyNotice={readOnlyNotice}
         mentionCompletion={mentionCompletion}
         composerTarget={composerTarget}

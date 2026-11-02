@@ -20,6 +20,7 @@ export function ConversationComposerFooter({
   conversation,
   root,
   narrow,
+  column,
   readOnlyNotice,
   mentionCompletion,
   composerTarget,
@@ -32,8 +33,10 @@ export function ConversationComposerFooter({
   conversation: Omit<DirectConversationView, "agent">;
   /** The thread root this pane replies to; absent for the main stream. */
   root?: { id: string };
-  /** A thread or the Task popup: no message column, no stream notices, a reply's placeholder. */
+  /** A thread or the Task popup: no stream notices, a reply's placeholder. */
   narrow: boolean;
+  /** Lines up with the message column above, as the history does. */
+  column: boolean;
   readOnlyNotice?: ReactNode;
   mentionCompletion: boolean;
   composerTarget?: string;
@@ -53,7 +56,7 @@ export function ConversationComposerFooter({
   // handle so the same person's older messages don't push their own recent one down.
   const recentHandles = useRecentConversationHandles(conversation.messages);
   return (
-    <div className={narrow ? undefined : MESSAGE_COLUMN_CLASS}>
+    <div className={column ? MESSAGE_COLUMN_CLASS : undefined}>
       {!narrow && <ConversationUpdateNotice conversation={conversation} />}
       {!readOnlyNotice && !narrow && <NotificationActivationBanner />}
       {readOnlyNotice ?? (
