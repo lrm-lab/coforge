@@ -72,6 +72,19 @@ test("test-only client changes validate their owner without rebuilding native ex
     "daemon",
     "web",
   ]);
+  // A test a native job runs selects that job: the Windows executable job runs the code-agent
+  // search path, and both native jobs run the published executable.
+  expect(selectChecks(["packages/daemon/test/code-agent-path.test.ts"], "changes")).toEqual([
+    "daemon",
+    "web",
+    "windows-release",
+  ]);
+  expect(selectChecks(["packages/computer/test/release-executable.test.ts"], "changes")).toEqual([
+    "computer",
+    "macos-lifecycle",
+    "web",
+    "windows-release",
+  ]);
 });
 
 test("workspace manifests validate their consumers and the image that copies them", () => {
