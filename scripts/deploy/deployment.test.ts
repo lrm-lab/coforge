@@ -1683,12 +1683,10 @@ describe("GitHub validation workflow contract", () => {
       new URL("../../.github/workflows/ci.yml", import.meta.url),
     ).text();
 
-    // The selector's behavioral tests cover which packages enter this matrix.
-    // Each selected library must still execute its full package-owned gates.
-    for (const command of ["test", "check", "build"]) {
-      expect(workflow).toContain(`bun run --cwd packages/\${{ matrix.package }} ${command}`);
-    }
-    expect(workflow).toContain("if: matrix.package != 'coforge-sdk'");
+    // The selector's behavioral tests cover which packages are selected, and
+    // scripts/ci/validate-each.test.ts that each one runs its package-owned test, check, and build.
+    expect(workflow).toContain("SELECTED: ${{ needs.changes.outputs.libraries }}");
+    expect(workflow).toContain('bash scripts/ci/validate-each.sh libraries "$SELECTED"');
     expect(workflow).toContain("bun run --cwd packages/coforge-sdk generate");
   });
 });

@@ -3,6 +3,7 @@ import { chmod, mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { selectChecks } from "./selection";
 import { type Job, type Step, parse } from "./workflow-helpers";
 
 const ci = await parse("ci.yml");
@@ -102,17 +103,55 @@ test("the aggregate gate executes even after failure and rejects missing, skippe
   }
 });
 
-test("CI validates every pull request and every push to main, and a newer run replaces a stale one", () => {
+test("CI validates every pull request and every push to main; a newer PR update replaces a stale run, and every push runs to completion", () => {
   // A push to main, a maintainer's or a merged PR's, is validated afterwards; docs/release/github-actions.md.
   expect(Object.keys(ci.on).sort()).toEqual(["pull_request", "push", "workflow_call"]);
-  expect(ci.on.push).toEqual({ branches: ["main"] });
-  // A superseded run is safe to cancel: a push diffs from the last successful push run, so the
-  // cancelled push stays in scope. A caller's gates (workflow_dispatch) are never cancelled.
+  expect(ci.on.push.branches).toEqual(["main"]);
+  expect(ci.on.pull_request).toBeNull();
+  // A shared group keeps one pending run and cancels the rest even without cancel-in-progress
+  // (https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency),
+  // so each push gets its own. A caller's gates (workflow_dispatch) are never cancelled.
   expect(ci.concurrency).toEqual({
-    group: "ci-${{ github.workflow }}-${{ github.ref }}",
-    "cancel-in-progress":
-      "${{ github.event_name == 'pull_request' || github.event_name == 'push' }}",
+    group:
+      "ci-${{ github.workflow }}-${{ github.event_name == 'push' && github.sha || github.ref }}",
+    "cancel-in-progress": "${{ github.event_name == 'pull_request' }}",
   });
+});
+
+test("a documentation-only push starts no run, and its filter skips exactly what Plan checks would select nothing for", () => {
+  const ignored = (ci.on.push["paths-ignore"] as string[]).map((pattern) => new Bun.Glob(pattern));
+  for (const path of [
+    "README.md",
+    "AGENTS.md",
+    "REVIEW.md",
+    "docs/release/github-actions.md",
+    "docs/agents/git-hooks/diagram.png",
+    "apps/web/AGENTS.md",
+    "packages/daemon/README.md",
+    "crates/installer/AGENTS.md",
+    "apps/web/src/prompts/system.md",
+    "packages/anvil/src/prompt.md",
+    "apps/web/src/index.ts",
+    "scripts/ci/selection.ts",
+    ".github/workflows/ci.yml",
+  ]) {
+    const skipped = ignored.some((glob) => glob.match(path));
+    expect(skipped, path).toBe(selectChecks([path], "changes").length === 0);
+  }
+});
+
+test("only the installer crate restores the Rust cache, and only a push to main saves it", () => {
+  for (const [name, job] of Object.entries(ci.jobs as Record<string, Job>)) {
+    for (const step of job.steps ?? []) {
+      if (step.uses?.split("@")[0] !== "Swatinem/rust-cache") continue;
+      expect(name).toBe("installer-crate");
+      expect(step.with?.["save-if"]).toBe("${{ github.event_name == 'push' }}");
+      // One cache per target: the job id alone would let the six matrix entries overwrite it.
+      expect(step.with?.key).toBe("${{ matrix.release_target }}");
+    }
+  }
+  const actions = (ci.jobs["installer-crate"].steps as Step[]).map((step) => step.uses);
+  expect(actions.some((uses) => uses?.startsWith("Swatinem/rust-cache@"))).toBe(true);
 });
 
 test("CI holds nothing that can deploy or publish", async () => {
