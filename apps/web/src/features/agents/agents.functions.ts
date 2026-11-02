@@ -6,7 +6,6 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { setResponseHeader } from "@tanstack/react-start/server";
 import {
-  agentIdInputSchema,
   agentIdSchema,
   changeAgentVisibilityInputSchema,
   createAgentInputSchema,
@@ -48,7 +47,6 @@ import { humanLabel } from "#src/lib/human-label";
 import { PrismaAgentDetailSource } from "#src/server/db/repositories/agent-detail.repositories.server";
 import {
   agentVisibilityViewerForUser,
-  assertAgentVisible,
   type AgentVisibilityViewer,
 } from "#src/server/agents/agent-visibility.server";
 import { workspaceMemberRole } from "#src/server/workspaces/workspace-membership.server";
@@ -72,12 +70,6 @@ import { readAgentRoster } from "#src/server/agents/agent-roster.server";
 import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
 import { getAgentDisplay } from "#src/server/agents/agent-display.server";
 import { AgentEnvironment } from "#src/server/agents/agent-environment.server";
-import {
-  issueAgentActivitySubscriptionToken,
-  issueAgentActivitySubscriptionTokenForAgent,
-  issueAgentStatusSubscriptionToken,
-  issueAgentStatusSubscriptionTokenForAgent,
-} from "#src/server/auth/browser-realtime-token.server";
 
 type Database = ReturnType<typeof requireDatabaseClient>;
 
@@ -136,71 +128,6 @@ export const ensureWeeklyReportAssistantMember = createServerFn({ method: "POST"
       userId: user.id,
     });
     return { agentId: row.agentId };
-  });
-
-export const getAgentStatusSubscriptionToken = createServerFn({
-  method: "GET",
-})
-  .middleware([workspaceUserMiddleware])
-  .handler(async ({ context }) => {
-    const { user, workspaceId } = context;
-    return issueAgentStatusSubscriptionToken({ userId: user.id, workspaceId });
-  });
-
-export const getAgentActivitySubscriptionToken = createServerFn({
-  method: "GET",
-})
-  .middleware([workspaceUserMiddleware])
-  .handler(async ({ context }) => {
-    const { user, workspaceId } = context;
-    return issueAgentActivitySubscriptionToken({ userId: user.id, workspaceId });
-  });
-
-/** The minimal row `assertAgentVisible` needs for the per-Agent subscription-token
- * endpoints below — never the full `AgentRecord`, and never cached. */
-async function agentVisibilityRow(db: Database, agentId: string) {
-  return db.agent.findUnique({
-    where: { id: agentId },
-    select: { workspaceId: true, ownerId: true, visibility: true, systemKind: true },
-  });
-}
-
-/**
- * A per-Agent realtime subscription token is only ever issued to a viewer who can
- * currently see that Agent — an unrecognized/missing Agent and an invisible one answer the same
- * `AGENT_NOT_VISIBLE`, so neither leaks which case applies.
- */
-export const getAgentActivitySubscriptionTokenForAgent = createServerFn({ method: "GET" })
-  .middleware([workspaceUserMiddleware])
-  .validator(agentIdInputSchema)
-  .handler(async ({ data, context }) => {
-    const { user, workspaceId, db } = context;
-    const agent = await agentVisibilityRow(db, data.agentId);
-    if (!agent || agent.workspaceId !== workspaceId) throw new AppError("AGENT_NOT_VISIBLE");
-    const viewer = await agentVisibilityViewerForUser(db, workspaceId, user.id);
-    assertAgentVisible(viewer, agent);
-    return issueAgentActivitySubscriptionTokenForAgent({
-      userId: user.id,
-      workspaceId,
-      agentId: data.agentId,
-    });
-  });
-
-/** The per-Agent status-channel sibling of `getAgentActivitySubscriptionTokenForAgent`. */
-export const getAgentStatusSubscriptionTokenForAgent = createServerFn({ method: "GET" })
-  .middleware([workspaceUserMiddleware])
-  .validator(agentIdInputSchema)
-  .handler(async ({ data, context }) => {
-    const { user, workspaceId, db } = context;
-    const agent = await agentVisibilityRow(db, data.agentId);
-    if (!agent || agent.workspaceId !== workspaceId) throw new AppError("AGENT_NOT_VISIBLE");
-    const viewer = await agentVisibilityViewerForUser(db, workspaceId, user.id);
-    assertAgentVisible(viewer, agent);
-    return issueAgentStatusSubscriptionTokenForAgent({
-      userId: user.id,
-      workspaceId,
-      agentId: data.agentId,
-    });
   });
 
 /** The configured model of every Agent the viewer may see in the Workspace, by Agent id, for the

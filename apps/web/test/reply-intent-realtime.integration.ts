@@ -7,7 +7,7 @@ import { expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { exportJWK, generateKeyPair } from "jose";
+import { exportJWK, generateKeyPair, SignJWT } from "jose";
 import { Centrifuge } from "centrifuge/build/protobuf";
 import {
   encodeAgentReplyIntent,
@@ -15,11 +15,7 @@ import {
 } from "@lrm/coforge-sdk/internal/reply-intent";
 import { handleAgentActivityPublication } from "#src/server/agents/agent-activity-publish.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
-import {
-  issueBrowserRealtimeToken,
-  issueConversationRealtimeToken,
-  issueAgentActivitySubscriptionToken,
-} from "#src/server/auth/browser-realtime-token.server";
+import { issueBrowserRealtimeToken } from "#src/server/auth/browser-realtime-token.server";
 
 async function docker(...args: string[]) {
   const child = Bun.spawn(["docker", ...args], { stdout: "pipe", stderr: "pipe", timeout: 30_000 });
@@ -76,6 +72,18 @@ test("real routing delivers start/end only to the conversation, with no history 
       COFORGE_WORKER_JWT_PRIVATE_JWK: JSON.stringify(await exportJWK(privateKey)),
       COFORGE_WORKER_JWT_KEY_ID: kid,
     };
+    // The product no longer issues subscription tokens (a page subscribes through the subscribe
+    // proxy, task #369). This Centrifugo has no subscribe proxy, so the test grants its own
+    // channels with the token claims Centrifugo still verifies.
+    const subscriptionToken = (userId: string, channel: string) =>
+      new SignJWT({ channel })
+        .setProtectedHeader({ alg: "EdDSA", kid, typ: "JWT" })
+        .setSubject(userId)
+        .setIssuer("coforge")
+        .setAudience("coforge-centrifugo")
+        .setIssuedAt()
+        .setExpirationTime("5m")
+        .sign(privateKey);
     const jwks = { keys: [{ ...(await exportJWK(publicKey)), kid, use: "sig", alg: "EdDSA" }] };
     const secret = crypto.randomUUID();
     const apiKey = crypto.randomUUID();
@@ -235,10 +243,7 @@ test("real routing delivers start/end only to the conversation, with no history 
     }
     const viewer = await connection("viewer");
     const conversation = viewer.newSubscription("chat:c", {
-      token: await issueConversationRealtimeToken(
-        { userId: "viewer", conversationId: "c" },
-        environment,
-      ),
+      token: await subscriptionToken("viewer", "chat:c"),
       recoverable: true,
       positioned: true,
     });
@@ -252,10 +257,7 @@ test("real routing delivers start/end only to the conversation, with no history 
     await conversation.ready();
     stage = "conversation-ready";
     const activity = viewer.newSubscription("agent:activity:w", {
-      token: await issueAgentActivitySubscriptionToken(
-        { userId: "viewer", workspaceId: "w" },
-        environment,
-      ),
+      token: await subscriptionToken("viewer", "agent:activity:w"),
     });
     const activityFrames: unknown[] = [];
     let activityMarker: (() => void) | undefined;
@@ -328,10 +330,7 @@ test("real routing delivers start/end only to the conversation, with no history 
     let userDenial = 0;
     {
       const outsider = viewer.newSubscription("chat:another", {
-        token: await issueConversationRealtimeToken(
-          { userId: "viewer", conversationId: "c" },
-          environment,
-        ),
+        token: await subscriptionToken("viewer", "chat:c"),
       });
       const rejectedChannel = event<number>((resolve) => {
         outsider.once("unsubscribed", ({ code }) => resolve(code));
@@ -345,10 +344,7 @@ test("real routing delivers start/end only to the conversation, with no history 
       const otherUser = await connection("other");
       stage = "other-connected";
       const stolen = otherUser.newSubscription("chat:c", {
-        token: await issueConversationRealtimeToken(
-          { userId: "viewer", conversationId: "c" },
-          environment,
-        ),
+        token: await subscriptionToken("viewer", "chat:c"),
       });
       const rejectedUser = event<number>((resolve) => {
         stolen.once("unsubscribed", ({ code }) => resolve(code));

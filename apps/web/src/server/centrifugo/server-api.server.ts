@@ -4,10 +4,6 @@ import {
   encodeDaemonRuntimeUsageScanRequest,
   type RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
-import {
-  isAgentStatusChannel,
-  legacyAgentStatusChannel,
-} from "#src/features/agents/agent-status-channel";
 import type { StreamPosition } from "#src/features/realtime/subscription-gap";
 import { getUsageCache, type UsageCache } from "./usage-cache.server";
 
@@ -118,15 +114,8 @@ export function createCentrifugoServerApi(
     if (error) throw failure("batch", error);
     return replies ?? [];
   }
-  /** One publication. An Agent status one goes to the channel's old name too, in one broadcast
-   * (`legacyAgentStatusChannel`); `publishBatch` does not, and no status publisher uses it. */
   async function send(channel: string, publication: Record<string, unknown>) {
-    await (isAgentStatusChannel(channel)
-      ? call("broadcast", {
-          channels: [channel, legacyAgentStatusChannel(channel)],
-          ...publication,
-        })
-      : call("publish", { channel, ...publication }));
+    await call("publish", { channel, ...publication });
   }
   return {
     async publish(channel, data, options) {

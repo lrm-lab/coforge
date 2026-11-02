@@ -68,6 +68,6 @@ Agent 消息到达时的清除：会话的消息进入缓存的地方（`useConv
 
 ## 授权与开销
 
-会话订阅沿用 `getConversationRealtimeToken` → `authorizeConversationRealtime`：普通频道对本 Workspace 成员可读，退出频道不撤销读取；非参与者私信、隐藏会话、其他 Workspace 不授权。订阅 JWT 绑定用户与频道，5 分钟有效，续期时重新检查权限。当前版本不保证活跃订阅即时撤销，最长续期窗口仍存在；跨聊天流的主动撤销属于独立任务 #183。
+会话订阅不带令牌，由 Centrifugo 的订阅代理（`server/centrifugo/subscribe-proxy.server.ts`）检查：普通频道对本 Workspace 成员可读，退出频道不撤销读取；非参与者私信、隐藏会话、其他 Workspace 不授权。授权 5 分钟有效，续期时代理重新检查权限。当前版本不保证活跃订阅即时撤销，最长续期窗口仍存在；跨聊天流的主动撤销属于独立任务 #183。
 
 只有实际挂载的会话窗格订阅提示，不订阅侧栏所有频道，不增加 WebSocket。设提示频率为 F，原分发约为 F × Workspace 订阅者，新分发约为 F × 该会话已打开订阅者；这只是提示分发模型，不是总流量测量。公开 Agent 的频道提示新增一次服务端 Publish HTTP 请求（沿用 5 秒请求上限），不增加按成员查询、逐人 fanout 或队列。关闭设备的“实时 Agent 动态”会清空并停止读取提示；消息订阅继续工作。

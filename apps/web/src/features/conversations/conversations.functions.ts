@@ -1,4 +1,3 @@
-import { workspaceAssistantOnboarding } from "#src/server/agents/workspace-assistant-onboarding.server";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { humanLabel } from "#src/lib/human-label";
@@ -15,7 +14,6 @@ import {
   sendConversationMessageInputSchema,
   toggleMessageReactionInputSchema,
 } from "./conversation.schemas";
-import type { StreamPositions } from "#src/features/realtime/subscription-gap";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { TaskConversationPages } from "#src/server/conversations/task-conversation-page.server";
 import { sentAsTaskHook } from "#src/server/tasks/sent-as-task.server";
@@ -24,7 +22,7 @@ import {
   readAfterStreamPositions,
   readWindowAfterStreamPosition,
 } from "#src/server/conversations/chat-stream-positions.server";
-import { conversationRealtimeChannel, userConversationChannel } from "./conversation-realtime";
+import { conversationRealtimeChannel } from "./conversation-realtime";
 import { DirectConversations } from "#src/server/conversations/direct-conversations.server";
 import { toggleDirectReaction } from "#src/server/conversations/reaction-toggles.server";
 import { WorkspaceAssistants } from "#src/server/agents/workspace-assistants.server";
@@ -157,38 +155,6 @@ export const markDirectThreadRead = createServerFn({ method: "POST" })
     );
   });
 
-/** Per-DM unread for the sidebar, by conversation id: the key a DM's realtime signal carries
- * too, for a DM with an Agent and one between members alike. */
-export type DirectConversationUnread = Record<string, number>;
-
-export type DirectConversationBadges = {
-  /** The signed-in user's id, for their own direct-message signal channel. */
-  viewerId: string;
-  /** Unread counts by conversation id. */
-  unread: DirectConversationUnread;
-  /** Where the viewer's own signal channel stood before the counts were read. */
-  streamPositions: StreamPositions;
-};
-
-/**
- * Everything the Chat sidebar needs about direct-message badges in one round trip: the viewer's
- * own id (their personal signal channel) and the unread counts seeded into the badges. The
- * counts change with the viewer's reads and their DMs' messages, both on that channel, whose
- * position is read first.
- */
-export const loadDirectConversationBadges = createServerFn({ method: "GET" })
-  .middleware([workspaceUserMiddleware])
-  .handler(async ({ context }): Promise<DirectConversationBadges> => {
-    const { user, db, workspaceId } = context;
-    const { streamPositions, data: rows } = await readAfterStreamPositions(
-      [userConversationChannel(user.id)],
-      () => new DirectConversations(db).unreadCounts(workspaceId, user.id),
-    );
-    const unread: DirectConversationUnread = {};
-    for (const row of rows) unread[row.conversationId] = row.unread;
-    return { viewerId: user.id, unread, streamPositions };
-  });
-
 /** Advances the DM read cursor for the sidebar badge; monotone and clamped. */
 export const markDirectConversationRead = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
@@ -246,22 +212,6 @@ export const setDirectConversationHidden = createServerFn({ method: "POST" })
   .handler(({ context: { user, db, workspaceId }, data }) =>
     new DirectConversations(db).setHidden(workspaceId, user.id, data.conversationId, data.hidden),
   );
-
-/**
- * The sidebar's Direct messages, by conversation id: the viewer's DMs (the sidebar lists only
- * these) and who each is with, which are pinned (with their order) and which are closed, read
- * with the position of the viewer's own signal channel, which keeps them live.
- */
-export const loadDirectConversationPreferences = createServerFn({ method: "GET" })
-  .middleware([workspaceUserMiddleware])
-  .handler(async ({ context: { user, db, workspaceId } }) => {
-    await workspaceAssistantOnboarding(db).ensure(workspaceId, user.id);
-    const { streamPositions, data } = await readAfterStreamPositions(
-      [userConversationChannel(user.id)],
-      () => new DirectConversations(db).list(workspaceId, user.id),
-    );
-    return { ...data, streamPositions };
-  });
 
 export const sendDirectConversationMessage = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])

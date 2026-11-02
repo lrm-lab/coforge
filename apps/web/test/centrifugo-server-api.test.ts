@@ -472,7 +472,7 @@ test("a batch Centrifugo refused as a whole fails each publication with its erro
   ]);
 });
 
-test("an Agent status publication reaches the old channel name too, in one broadcast (task #348)", async () => {
+test("an Agent status publication goes to its own channel only, the old name retired (task #369)", async () => {
   const requests: unknown[] = [];
   globalThis.fetch = Object.assign(
     async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
@@ -492,18 +492,12 @@ test("an Agent status publication reaches the old channel name too, in one broad
 
   expect(requests).toEqual([
     {
-      method: "broadcast",
-      params: {
-        channels: ["agentstatus:workspace-1", "agent:status:workspace-1"],
-        data: { type: "agent:display" },
-      },
+      method: "publish",
+      params: { channel: "agentstatus:workspace-1", data: { type: "agent:display" } },
     },
     {
-      method: "broadcast",
-      params: {
-        channels: ["agentstatus:workspace-1:agent-1", "agent:status:workspace-1:agent-1"],
-        b64data: "Kg==",
-      },
+      method: "publish",
+      params: { channel: "agentstatus:workspace-1:agent-1", b64data: "Kg==" },
     },
     {
       method: "publish",

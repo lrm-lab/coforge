@@ -5,18 +5,6 @@ import { ChatSections } from "#src/server/conversations/chat-sections.server";
 import { chatSectionFields, chatSectionPatch } from "./chat-section.schemas";
 import { BUILT_IN_SECTIONS } from "./directory-section-order";
 
-export const listChatSections = createServerFn({ method: "GET" })
-  .middleware([workspaceUserMiddleware])
-  .handler(({ context: { db, workspaceId, user } }) =>
-    new ChatSections(db, workspaceId, user.id).list(),
-  );
-
-export const getChatSectionOrder = createServerFn({ method: "GET" })
-  .middleware([workspaceUserMiddleware])
-  .handler(({ context: { db, workspaceId, user } }) =>
-    new ChatSections(db, workspaceId, user.id).order(),
-  );
-
 export const createChatSection = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(chatSectionFields)

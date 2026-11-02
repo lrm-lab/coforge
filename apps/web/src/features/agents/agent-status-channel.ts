@@ -36,18 +36,6 @@ export const agentStatusChannelFor = (workspaceId: string, agentId: string, visi
     ? agentStatusChannel(workspaceId)
     : agentStatusChannelForAgent(workspaceId, agentId);
 
-/** Whether `channel` is one of the status channels. */
-export const isAgentStatusChannel = (channel: string) => channel.startsWith(AGENT_STATUS_NAMESPACE);
-
-/**
- * The name status channel `channel` had before `agentstatus` (task #348). A page loaded before the
- * move still listens on it with a token for it (`issueAgentStatusSubscriptionToken`), so until
- * pages stop fetching subscription tokens (task #348, the page's own subscribe), whose change
- * removes this, the server API publishes every status publication to both names.
- */
-export const legacyAgentStatusChannel = (channel: string) =>
-  `agent:status:${channel.slice(AGENT_STATUS_NAMESPACE.length)}`;
-
 /**
  * The id-only event a visibility change publishes on the shared status channel. A
  * browser that receives it refetches its Agent list, drops the Agent from caches if it can no

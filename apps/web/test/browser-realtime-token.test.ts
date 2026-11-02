@@ -1,12 +1,6 @@
 import { expect, test } from "bun:test";
 import { exportJWK, generateKeyPair, jwtVerify } from "jose";
 import {
-  issueAgentActivitySubscriptionToken,
-  issueAgentActivitySubscriptionTokenForAgent,
-  issueAgentStatusSubscriptionToken,
-  issueAgentStatusSubscriptionTokenForAgent,
-  issueConversationRealtimeToken,
-  issueRuntimeAuthSubscriptionToken,
   issueBrowserRealtimeToken,
   BROWSER_PAGE_META,
 } from "#src/server/auth/browser-realtime-token.server";
@@ -40,101 +34,4 @@ test("connection token carries no channel grants of its own", async () => {
   expect(payload.channel).toBeUndefined();
   // The subscribe proxy answers only a page's connection.
   expect(payload.meta).toEqual(BROWSER_PAGE_META);
-});
-
-test("subscription token authorizes one User for the Workspace Activity channel", async () => {
-  const { environment, publicKey } = await signingFixture();
-  const token = await issueAgentActivitySubscriptionToken(
-    { userId: "user-1", workspaceId: "workspace-1" },
-    environment,
-  );
-  const { payload } = await jwtVerify(token, publicKey, {
-    issuer: "coforge-test",
-    audience: "coforge-test-centrifugo",
-  });
-
-  expect(payload.sub).toBe("user-1");
-  expect(payload.channel).toBe("agent:activity:workspace-1");
-  expect(payload.channels).toBeUndefined();
-});
-
-test("subscription token authorizes one User for the Workspace Agent status channel", async () => {
-  const { environment, publicKey } = await signingFixture();
-  const token = await issueAgentStatusSubscriptionToken(
-    { userId: "user-1", workspaceId: "workspace-1" },
-    environment,
-  );
-  const { payload } = await jwtVerify(token, publicKey, {
-    issuer: "coforge-test",
-    audience: "coforge-test-centrifugo",
-  });
-
-  expect(payload.sub).toBe("user-1");
-  expect(payload.channel).toBe("agent:status:workspace-1");
-  expect(payload.channels).toBeUndefined();
-});
-
-test("subscription token authorizes one User for one private Agent's per-Agent Activity channel", async () => {
-  const { environment, publicKey } = await signingFixture();
-  const token = await issueAgentActivitySubscriptionTokenForAgent(
-    { userId: "user-1", workspaceId: "workspace-1", agentId: "agent-1" },
-    environment,
-  );
-  const { payload } = await jwtVerify(token, publicKey, {
-    issuer: "coforge-test",
-    audience: "coforge-test-centrifugo",
-  });
-
-  expect(payload.sub).toBe("user-1");
-  expect(payload.channel).toBe("agent:activity:workspace-1:agent-1");
-  expect(payload.channels).toBeUndefined();
-});
-
-test("subscription token authorizes one User for one private Agent's per-Agent status channel", async () => {
-  const { environment, publicKey } = await signingFixture();
-  const token = await issueAgentStatusSubscriptionTokenForAgent(
-    { userId: "user-1", workspaceId: "workspace-1", agentId: "agent-1" },
-    environment,
-  );
-  const { payload } = await jwtVerify(token, publicKey, {
-    issuer: "coforge-test",
-    audience: "coforge-test-centrifugo",
-  });
-
-  expect(payload.sub).toBe("user-1");
-  expect(payload.channel).toBe("agent:status:workspace-1:agent-1");
-  expect(payload.channels).toBeUndefined();
-});
-
-test("subscription token authorizes one User for one conversation channel", async () => {
-  const { environment, publicKey } = await signingFixture();
-  const token = await issueConversationRealtimeToken(
-    {
-      userId: "user-1",
-      conversationId: "12345678-0000-4000-8000-000000000001",
-    },
-    environment,
-  );
-  const { payload } = await jwtVerify(token, publicKey, {
-    issuer: "coforge-test",
-    audience: "coforge-test-centrifugo",
-  });
-
-  expect(payload.sub).toBe("user-1");
-  expect(payload.channel).toBe("chat:12345678-0000-4000-8000-000000000001");
-  expect(payload.channels).toBeUndefined();
-  expect((payload.exp ?? 0) - (payload.iat ?? 0)).toBe(300);
-});
-
-test("runtime sign-in subscription token authorizes only the caller's own channel", async () => {
-  const { environment, publicKey } = await signingFixture();
-  const token = await issueRuntimeAuthSubscriptionToken({ userId: "user-1" }, environment);
-  const { payload } = await jwtVerify(token, publicKey, {
-    issuer: "coforge-test",
-    audience: "coforge-test-centrifugo",
-  });
-
-  expect(payload.sub).toBe("user-1");
-  expect(payload.channel).toBe("runtimeauth:user:user-1");
-  expect(payload.channels).toBeUndefined();
 });

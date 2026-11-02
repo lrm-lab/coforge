@@ -137,8 +137,8 @@ export const updateAgentInputSchema = z
 export type UpdateAgentInput = z.infer<typeof updateAgentInputSchema>;
 
 export const agentIdSchema = z.uuid();
-/** The per-Agent realtime subscription token endpoints; any Server Function that only
- * needs an authorized Agent id shares this shape rather than repeating the object literal. */
+/** Any Server Function that only needs an authorized Agent id shares this shape rather than
+ * repeating the object literal. */
 export const agentIdInputSchema = z.object({ agentId: agentIdSchema });
 /** The extras read's input: the Agents whose display it must answer beyond the busy ones. Bounded
  * only against abuse; the read itself dedupes and keeps the first `HELD_AGENT_IDS_LIMIT`. */

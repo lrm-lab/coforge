@@ -17,15 +17,8 @@ import {
   mentionSelectorsSchema,
 } from "./conversation.schemas";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
-import {
-  readAfterStreamPositions,
-  readWindowAfterStreamPosition,
-} from "#src/server/conversations/chat-stream-positions.server";
-import {
-  conversationRealtimeChannel,
-  userConversationChannel,
-  workspaceConversationChannel,
-} from "./conversation-realtime";
+import { readWindowAfterStreamPosition } from "#src/server/conversations/chat-stream-positions.server";
+import { conversationRealtimeChannel } from "./conversation-realtime";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { sentAsTaskHook } from "#src/server/tasks/sent-as-task.server";
 import { announceSentTask } from "#src/server/tasks/browser-task-board.server";
@@ -35,34 +28,6 @@ import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile
 
 const channelPageInput = channelInput.extend(conversationPageInputSchema);
 const channelUpdatesInput = channelInput.extend(conversationUpdatesCursorSchema.shape);
-
-export const listPublicChannels = createServerFn({ method: "GET" })
-  .middleware([workspaceUserMiddleware])
-  .handler(async ({ context }) => {
-    const { channels, workspaceId, userId } = channelScope(context);
-    // Both signal channels keep the list live (messages on the Workspace's, the viewer's own
-    // read and membership changes on theirs); their positions are read first.
-    const { streamPositions, data } = await readAfterStreamPositions(
-      [workspaceConversationChannel(workspaceId), userConversationChannel(userId)],
-      () => channels.list(workspaceId, userId),
-    );
-    return { streamPositions, channels: data };
-  });
-
-/** Every channel's id and current name, closed ones included: what a body's channel references
- * link by, read with the stream positions of the channels that keep it live with
- * `channel.created.v1` and `channel.updated.v1`: the Workspace's for public channels, the
- * viewer's own for their private ones. */
-export const listChannelNames = createServerFn({ method: "GET" })
-  .middleware([workspaceUserMiddleware])
-  .handler(async ({ context }) => {
-    const { channels, workspaceId, userId } = channelScope(context);
-    const { streamPositions, data } = await readAfterStreamPositions(
-      [workspaceConversationChannel(workspaceId), userConversationChannel(userId)],
-      () => channels.names(workspaceId, userId),
-    );
-    return { streamPositions, names: data };
-  });
 
 /** Creates a channel, public unless asked private, then adds the people and Agents picked for it
  * (`PublicChannels.createWithMembers`). `membersAddFailed` says the channel exists but the picked
