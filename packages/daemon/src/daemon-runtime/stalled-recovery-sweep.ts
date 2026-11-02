@@ -68,8 +68,7 @@ export class StalledRecoverySweep<L extends ReleasableLaunch> {
   }
 
   async #sweep(): Promise<void> {
-    let judged = 0;
-    let recoveries = 0;
+    const candidates: { agentId: string; stalled: StalledRuntime<L> }[] = [];
     for (const agentId of this.#ports.agentIds()) {
       if (
         this.#ports.runnerHold() ||
@@ -80,25 +79,28 @@ export class StalledRecoverySweep<L extends ReleasableLaunch> {
       if (!this.#ports.hasQueuedDeliveries(agentId)) continue;
       const stalled = this.#ports.stalled(agentId);
       if (!stalled) continue;
-      judged++;
-      await this.#ports
-        .recover(agentId, stalled)
-        .then(() => {
-          recoveries++;
-        })
-        .catch((error: unknown) =>
+      candidates.push({ agentId, stalled });
+    }
+    const results = await Promise.all(
+      candidates.map(async ({ agentId, stalled }) => {
+        try {
+          await this.#ports.recover(agentId, stalled);
+          return true;
+        } catch (error: unknown) {
           logger.warn("Agent stalled recovery restart failed", {
             event: "agent.runtime.stalled_recovery_sweep_agent_failed",
             agent_id: agentId,
             error: thrownMessage(error),
-          }),
-        );
-    }
-    if (judged > 0)
+          });
+          return false;
+        }
+      }),
+    );
+    if (candidates.length > 0)
       logger.info("Agent stalled recovery sweep", {
         event: "agent.runtime.stalled_recovery_sweep",
-        agents_judged: judged,
-        recoveries,
+        agents_judged: candidates.length,
+        recoveries: results.filter(Boolean).length,
       });
   }
 }

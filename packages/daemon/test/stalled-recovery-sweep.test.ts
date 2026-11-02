@@ -93,6 +93,28 @@ test("one Agent's failed recovery does not stop the sweep or reject it", async (
   expect(recovered).toEqual(["agent-b"]);
 });
 
+test("multiple stalled Agents recover concurrently", async () => {
+  const stalled = stalledRuntime("agent-a");
+  const started = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const recovered: string[] = [];
+  const { p } = ports({
+    agentIds: () => ["agent-a", "agent-b"],
+    stalled: () => stalled,
+    recover: async (agentId) => {
+      recovered.push(agentId);
+      if (recovered.length === 2) started.resolve();
+      await release.promise;
+    },
+  });
+  const sweep = new StalledRecoverySweep(p).sweep();
+
+  await started.promise;
+  expect(new Set(recovered)).toEqual(new Set(["agent-a", "agent-b"]));
+  release.resolve();
+  await sweep;
+});
+
 test("concurrent sweeps join rather than repeat", async () => {
   const stalled = stalledRuntime("agent-a");
   let calls = 0;
