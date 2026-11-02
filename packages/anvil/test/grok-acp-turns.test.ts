@@ -349,6 +349,25 @@ test(
 );
 
 test(
+  "a Grok prompt that Grok queues or starts is admitted before any output",
+  async () => {
+    const { session, close } = await openFixtureSession();
+    try {
+      const events: AgentRuntimeEvent[] = [];
+      session.subscribe((event) => events.push(event));
+      const started = performance.now();
+      await session.notify!("queue admission");
+      expect(performance.now() - started).toBeLessThan(ACP_TIMEOUT_MS / 2);
+      expect(session.hasLiveTurn).toBe(true);
+      expect(events.filter((event) => event.type === "text-delta")).toEqual([]);
+    } finally {
+      await close();
+    }
+  },
+  BUDGET,
+);
+
+test(
   "a streamed update for an idle Grok prompt admits it",
   async () => {
     const { session, close } = await openFixtureSession();

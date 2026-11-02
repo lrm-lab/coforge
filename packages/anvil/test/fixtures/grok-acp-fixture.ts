@@ -169,11 +169,19 @@ for await (const line of console) {
       const promptId = params._meta.promptId;
       // Unadmitted: queue ownership is not acceptance, and the sync point carries no output.
       if (params.prompt[0].text === "hold admission") {
-        note("_x.ai/queue/changed", { sessionId, entries: [], runningPromptId: promptId });
         note("_x.ai/session_notification", {
           sessionId,
           update: { sessionUpdate: "auto_compact_started" },
         });
+        break;
+      }
+      // Grok queues the prompt and starts it without producing any output yet.
+      if (params.prompt[0].text === "queue admission") {
+        note("_x.ai/queue/changed", {
+          sessionId,
+          entries: [{ id: promptId, version: 0, kind: "prompt", text: "queue admission" }],
+        });
+        note("_x.ai/queue/changed", { sessionId, entries: [], runningPromptId: promptId });
         break;
       }
       // Grok streams the prompt's own updates without any queue notification.

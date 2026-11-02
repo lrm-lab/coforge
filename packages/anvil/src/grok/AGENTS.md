@@ -13,8 +13,9 @@ Behavior, compatibility and native verification: [`docs/agents/grok-acp.md`](../
   folders; assigned skills live in `<Agent workspace>/.grok/skills`. Folder trust is a security
   boundary: get Frank's approval before widening it past the Agent workspace or dropping it.
 - Idle input uses `session/prompt` with `_meta.promptId`; busy input uses `_x.ai/interject`.
-  Admission follows the shared ACP rule (first output event or `end_turn`), and an input that
-  waits past the ACP deadline closes the session before rejecting delivery. A refused
+  Grok listing or starting the prompt in `_x.ai/queue/changed` admits it, as does the first
+  output event or `end_turn`; an input that waits past the ACP deadline closes the session
+  before rejecting delivery. A refused
   interjection is `notice-undelivered` for the daemon to redeliver when idle; only an
   unanswered one leaves delivery unknown. A queued interjection whose turn ends first runs as
   Grok's own `interject-fallback-*` turn, adopted from `_x.ai/queue/changed`.

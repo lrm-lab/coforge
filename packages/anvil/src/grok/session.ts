@@ -97,6 +97,14 @@ function grokSessionProfile(
     turn: () => new GrokTurnEvents(host),
     // Grok names the prompt it runs, and its queue notifications carry that same id.
     promptMeta: (turnId) => ({ promptId: turnId }),
+    // A prompt Grok queues or starts is delivered before its first output arrives.
+    promptAdmitted: (method, params, promptId) => {
+      if (method !== "_x.ai/queue/changed") return false;
+      if (nonEmptyString(params.runningPromptId) === promptId) return true;
+      return (Array.isArray(params.entries) ? params.entries : []).some(
+        (entry) => nonEmptyString(asRecord(entry)?.id) === promptId,
+      );
+    },
     // A turn that stops at its token limit or a native turn limit is a normal end for Grok.
     stopStatus: (reason) =>
       COMPLETED_STOP_REASONS.has(reason)

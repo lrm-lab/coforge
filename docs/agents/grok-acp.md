@@ -6,9 +6,10 @@ including terminal cleanup's five-second graceful-exit allowance and forced-exit
 fallback.
 
 Idle input uses `session/prompt`, with the prompt id the session assigns as
-`_meta.promptId`. Native admission follows the shared ACP rule: writing the prompt
-is only attempted, and the turn's first output event (or its `end_turn` answer)
-accepts it. An input that waits past the ACP deadline closes the session before
+`_meta.promptId`. Writing the prompt is only attempted. Grok listing the prompt
+in `_x.ai/queue/changed` (`entries`) or starting it (`runningPromptId`) accepts
+it, as does the turn's first output event or its `end_turn` answer, so a slow
+first token is not mistaken for an unanswered input. An input that waits past the ACP deadline closes the session before
 rejecting delivery, so a late native acceptance cannot race a retry. Busy input
 uses `_x.ai/interject` and waits for its `result.status: queued` answer. If turn
 end races the interjection, Grok itself runs the notice as its own

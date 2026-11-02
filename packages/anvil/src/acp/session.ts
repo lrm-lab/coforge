@@ -290,6 +290,12 @@ export class AcpSession implements AgentSession {
   #dispatch(method: string, params: Readonly<Record<string, unknown>>) {
     if (typeof params.sessionId === "string" && params.sessionId !== this.#identity?.sessionId)
       return;
+    const promptId = this.#active?.promptId;
+    if (promptId && this.profile.promptAdmitted?.(method, params, promptId)) {
+      // The runtime listed or started the prompt it was given: native acceptance, before any
+      // output. Without it a slow first token would look like an unanswered input.
+      this.#accept(this.#active!);
+    }
     const update = asRecord(params.update);
     if (update) this.#project(update);
     const steer = this.profile.steer;

@@ -104,6 +104,13 @@ export type AcpSessionProfile = Readonly<{
   turn(): AcpTurnReader;
   /** Extra `_meta` for each `session/prompt`, keyed by the turn id this session assigns. */
   promptMeta?(turnId: string): Readonly<Record<string, unknown>>;
+  /** Reads a native notification that proves the runtime took the prompt this session wrote,
+   * before the turn produced any output. */
+  promptAdmitted?(
+    method: string,
+    params: Readonly<Record<string, unknown>>,
+    promptId: string,
+  ): boolean;
   /** Reads a prompt answer's stop reason into the turn's status; absent for the shared rule:
    * `end_turn` completes, `cancelled` interrupts, and every other reason fails with an error
    * naming it. */
