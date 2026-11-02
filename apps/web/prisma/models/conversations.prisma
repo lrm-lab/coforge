@@ -55,6 +55,7 @@ model Conversation {
   tasks          Task[]
   taskDiscussionOf Task?                @relation("TaskDiscussion")
   actionCards    ActionCard[]
+  systemMessages SystemMessage[]
   savedMessages  SavedMessage[]
   messageReads   MessageRead[]
   pins           ConversationPin[]

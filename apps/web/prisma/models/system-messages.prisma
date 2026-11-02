@@ -1,0 +1,21 @@
+/// The structured kind and parameters of a server-authored system message (`Message.senderMemberId`
+/// is null). `Message.body` keeps the rendered English text the Agent API, CLI and search read.
+/// `params` never holds display text: the web renders it in the viewer's language.
+model SystemMessage {
+  messageId      String       @id @db.Uuid
+  conversationId String       @db.Uuid
+  workspaceId    String       @db.Uuid
+  /// task.created | task.converted | task.from_message | task.assigned | task.claimed |
+  /// task.moved | task.unassigned | task.assigned_you | channel.coordinator_changed |
+  /// agent_dm.chain_limit | agent_dm.rate_limit | legacy.released | legacy.deleted |
+  /// legacy.reminder | legacy_text
+  kind           String
+  params         Json
+  createdAt      DateTime     @default(now())
+  message        Message      @relation(fields: [messageId, conversationId], references: [id, conversationId], onDelete: Cascade)
+  conversation   Conversation @relation(fields: [conversationId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+
+  @@unique([messageId, conversationId])
+  @@index([conversationId, workspaceId])
+  @@map("system_messages")
+}

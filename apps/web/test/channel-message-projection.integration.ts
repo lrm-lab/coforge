@@ -252,6 +252,7 @@ test("a channel message reaches the browser in one shape from open, updates and 
       threadRootId: null,
       senderMemberId: aliceMemberId,
       body: `hello <@human:${bob.id}>`,
+      systemMessage: sent.systemMessage,
       createdAt: sent.createdAt,
       sender: {
         agentId: null,

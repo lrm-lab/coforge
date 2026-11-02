@@ -61,9 +61,10 @@ export async function assignTask(
       owner ? { ownerMemberId: owner.id, claimedAt: null } : withoutAssignee(current),
     );
     if (!owner) {
-      await notices.inThread(task, (quoted) =>
-        noticeText.unassigned(noticeActor(member).displayName, quoted),
-      );
+      await notices.inThread(task, (quoted) => ({
+        body: noticeText.unassigned(noticeActor(member).displayName, quoted),
+        system: { kind: "task.unassigned", params: { actor: noticeActor(member), task: quoted } },
+      }));
       return { task, changed: true, receipt: null, assigneeHandle: null };
     }
     return {
@@ -73,8 +74,25 @@ export async function assignTask(
       receipt: await notices.receipt({
         id: receiptId,
         task,
-        body: (quoted) =>
-          noticeText.assigned(noticeActor(member).displayName, quoted, assigneeMention(owner)),
+        body: (quoted) => ({
+          body: noticeText.assigned(
+            noticeActor(member).displayName,
+            quoted,
+            assigneeMention(owner),
+          ),
+          system: {
+            kind: "task.assigned",
+            params: {
+              actor: noticeActor(member),
+              task: quoted,
+              assignee: {
+                memberId: owner.id,
+                handle: assigneeMention(owner).slice(1),
+                displayName: assigneeMention(owner).slice(1),
+              },
+            },
+          },
+        }),
         assignee: owner,
         actor: member,
       }),
@@ -124,9 +142,10 @@ export async function unassignTask(
       { ownerMemberId: current.ownerMemberId },
       withoutAssignee(current),
     );
-    await notices.inThread(task, (quoted) =>
-      noticeText.unassigned(noticeActor(member).displayName, quoted),
-    );
+    await notices.inThread(task, (quoted) => ({
+      body: noticeText.unassigned(noticeActor(member).displayName, quoted),
+      system: { kind: "task.unassigned", params: { actor: noticeActor(member), task: quoted } },
+    }));
     return { task, changed: true };
   });
   if (result.changed) await signalTaskChange(ports, result.task);

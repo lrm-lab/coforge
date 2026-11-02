@@ -1,3 +1,4 @@
+import type { Prisma } from "#src/generated/prisma/client";
 import { announceMessageBestEffort } from "#src/server/conversations/conversation-activity.server";
 import { hostMessageId } from "./task-view.server";
 import { postTaskNotice } from "./task-conversations.server";
@@ -6,6 +7,10 @@ import { enrollThreadReplyFollowers } from "#src/server/conversations/channel-th
 import { lockConversation } from "#src/server/conversations/conversation-lock.server";
 import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
 import { noticeText, quotedTask, type NoticeActor, type QuotedTask } from "./task-notices.server";
+import type {
+  SystemNotice,
+  SystemNoticeContent,
+} from "#src/server/conversations/system-notices.server";
 import type {
   Transaction,
   TaskBoardPorts,
@@ -24,6 +29,7 @@ type NoticeInput = {
   id?: string;
   threadRootId?: string;
   body: string;
+  system: SystemNotice;
   deliverTo?: string | null;
   /** The member the notice personally mentions: its one mention row. */
   mentions?: Assignee;
@@ -38,9 +44,12 @@ type NoticeWriter = {
   /** The Tasks as notices quote them: clean titles, in the given order. */
   quote(tasks: readonly NoticeSubject[]): Promise<QuotedTask[]>;
   /** A top-level notice in the conversation; `id` fixes it, for a notice written at most once. */
-  inConversation(body: string, id?: string): Promise<PostedNotice>;
+  inConversation(notice: SystemNoticeContent, id?: string): Promise<PostedNotice>;
   /** A reply in the Task's own thread. */
-  inThread(task: NoticeSubject, body: (task: QuotedTask) => string): Promise<PostedNotice>;
+  inThread(
+    task: NoticeSubject,
+    body: (task: QuotedTask) => SystemNoticeContent,
+  ): Promise<PostedNotice>;
   /**
    * Fixed-id receipt in the Task's own thread, with an assignee mention (overrides human mute)
    * and one delivery to an Agent assignee other than the actor, whose target is that thread.
@@ -50,7 +59,7 @@ type NoticeWriter = {
   receipt(input: {
     id: string;
     task: NoticeSubject;
-    body: (task: QuotedTask) => string;
+    body: (task: QuotedTask) => SystemNoticeContent;
     assignee: Assignee;
     actor: Member;
   }): Promise<PostedNotice>;
@@ -90,15 +99,15 @@ export async function withNotices<T>(
     };
     return change(tx, {
       quote,
-      inConversation: (body, id) => postAndSignal({ body, id }),
+      inConversation: (notice, id) => postAndSignal({ ...notice, id }),
       inThread: async (task, body) => {
         const [quoted] = await quote([task]);
         // A task with no message in the channel keeps its notices in its own conversation.
         if (!task.messageId) {
-          const posted = await postTaskNotice(tx, conversation, task.id, { body: body(quoted!) });
+          const posted = await postTaskNotice(tx, conversation, task.id, body(quoted!));
           return { ...posted, threadRootId: null };
         }
-        return postAndSignal({ body: body(quoted!), threadRootId: task.messageId });
+        return postAndSignal({ ...body(quoted!), threadRootId: task.messageId });
       },
       receipt: async ({ id, task, body, assignee, actor }) => {
         const [quoted] = await quote([task]);
@@ -106,8 +115,8 @@ export async function withNotices<T>(
         // assignee follows the task.
         if (!task.messageId) {
           const posted = await postTaskNotice(tx, conversation, task.id, {
+            ...body(quoted!),
             id,
-            body: body(quoted!),
             deliverToAgentId: assignee.id === actor.id ? null : assignee.agentId,
           });
           await followTask(
@@ -120,8 +129,8 @@ export async function withNotices<T>(
           return { ...posted, threadRootId: null };
         }
         const notice = await post({
+          ...body(quoted!),
           id,
-          body: body(quoted!),
           threadRootId: hostMessageId(task),
           deliverTo: assignee.id === actor.id ? null : assignee.agentId,
           mentions: assignee,
@@ -164,6 +173,14 @@ async function writeNotice(
       threadRootId: input.threadRootId,
       body: input.body,
       sequence,
+      systemMessage: {
+        create: {
+          kind: input.system.kind,
+          params: input.system.params as Prisma.InputJsonObject,
+          conversationId,
+          workspaceId,
+        },
+      },
       mentions: input.mentions
         ? {
             create: {
@@ -219,11 +236,16 @@ export function postSourceNotice(
   tx: Transaction,
   conversation: ConversationRef,
   rootId: string,
-  task: { number: number; title: string },
+  task: { id: string; number: number; title: string },
   actor: NoticeActor,
 ) {
+  const quoted = quotedTask(task, []);
   return writeNotice(tx, conversation, {
     threadRootId: rootId,
-    body: noticeText.fromMessage(actor.displayName, quotedTask(task, [])),
+    body: noticeText.fromMessage(actor.displayName, quoted),
+    system: {
+      kind: "task.from_message",
+      params: { actor, task: quoted },
+    },
   });
 }

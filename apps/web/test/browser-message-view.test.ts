@@ -175,6 +175,7 @@ function row(overrides: Partial<BrowserMessageRow>): BrowserMessageRow {
     reactionVersion: 0,
     reactions: [],
     forward: null,
+    systemMessage: null,
     ...overrides,
   };
 }
@@ -357,4 +358,20 @@ test("an Agent's message carries its own member row and no user id, so it is nev
   expect(view.senderMemberId).toBe("member-agent");
   expect(view.senderUserId).toBeUndefined();
   expect(mapBrowserMessage(row({ senderMemberId: null }), WORKSPACE_ID).senderMemberId).toBeNull();
+});
+
+test("a server notice carries its structured kind and parameters", () => {
+  const systemMessage = {
+    kind: "task.created",
+    params: { tasks: [{ taskId: "task-1", number: 4, title: "Fix login" }] },
+  };
+  const view = mapBrowserMessage(
+    row({ body: '📋 1 new task created: #4 "Fix login"', systemMessage }),
+    WORKSPACE_ID,
+  );
+  expect(view.system).toEqual(systemMessage);
+});
+
+test("an ordinary message carries no structured system content", () => {
+  expect(mapBrowserMessage(row({ body: "hello" }), WORKSPACE_ID).system).toBeUndefined();
 });

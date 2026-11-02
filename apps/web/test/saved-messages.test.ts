@@ -27,6 +27,7 @@ function row(overrides: {
       threadRootId: null,
       senderMemberId: "44444444-4444-4444-8444-444444444444",
       body: "hello **world**",
+      systemMessage: null,
       createdAt: new Date("2026-09-23T01:00:00Z"),
       attachments: [],
       sender: {

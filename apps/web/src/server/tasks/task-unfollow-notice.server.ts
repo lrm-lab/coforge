@@ -39,6 +39,20 @@ export async function postUnfollowNotice(
     ? humanLabel(member.user)
     : member?.agent?.displayName?.trim() || member?.agent?.name || "Someone";
   await withNotices(ports, scope, (_tx, notices) =>
-    notices.inThread(task, () => unfollowNoticeBody(name, reason)),
+    notices.inThread(task, () => ({
+      body: unfollowNoticeBody(name, reason),
+      system: {
+        kind: "task.unfollowed",
+        params: {
+          actor: {
+            memberId,
+            handle: member?.user?.username ?? member?.agent?.name ?? "",
+            displayName: name,
+          },
+          task: { taskId: task.id, number: task.number, title: task.title },
+          ...(reason ? { reason } : {}),
+        },
+      },
+    })),
   );
 }

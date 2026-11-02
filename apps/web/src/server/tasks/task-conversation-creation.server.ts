@@ -209,6 +209,13 @@ export async function insertConversationTask(
   if (assigned)
     await postTaskNotice(tx, scope, task.id, {
       body: `${actorHandle(member)} assigned you task #${task.number}: ${input.title}`,
+      system: {
+        kind: "task.assigned_you",
+        params: {
+          actor: noticeActor(member),
+          task: { taskId: task.id, number: task.number, title: input.title },
+        },
+      },
       deliverToAgentId: assignee.agentId,
     });
   const notice =
@@ -217,7 +224,7 @@ export async function insertConversationTask(
           tx,
           scope,
           source.id,
-          { number: task.number, title: input.title },
+          { id: task.id, number: task.number, title: input.title },
           noticeActor(member),
         )
       : undefined;

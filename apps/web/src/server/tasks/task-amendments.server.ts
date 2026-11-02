@@ -48,9 +48,21 @@ export async function updateTaskStatus(
       { status },
     );
     if (updated.status !== task.status)
-      await notices.inThread(updated, (quoted) =>
-        noticeText.moved(noticeActor(member).displayName, quoted, storedTaskStatus(updated.status)),
-      );
+      await notices.inThread(updated, (quoted) => ({
+        body: noticeText.moved(
+          noticeActor(member).displayName,
+          quoted,
+          storedTaskStatus(updated.status),
+        ),
+        system: {
+          kind: "task.moved",
+          params: {
+            actor: noticeActor(member),
+            task: quoted,
+            status: storedTaskStatus(updated.status),
+          },
+        },
+      }));
     return updated;
   });
   await signalTaskChange(ports, updated);

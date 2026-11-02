@@ -9,10 +9,12 @@ import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.ser
 import type { MessageRequestIdempotency } from "#src/server/conversations/message-request-idempotency.server";
 import { lockConversation } from "#src/server/conversations/conversation-lock.server";
 import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
+import type { Prisma } from "#src/generated/prisma/client";
 import type { Transaction, TaskBoardPorts } from "./task-board-ports.server";
 import { publishTaskConversationMessage } from "./task-publication.server";
 import { markHumanRead } from "#src/server/conversations/human-unread.server";
 import { postUnfollowNotice } from "./task-unfollow-notice.server";
+import type { SystemNotice } from "#src/server/conversations/system-notices.server";
 import { postTaskMessage } from "./task-discussion-send.server";
 import {
   discussionOf,
@@ -405,7 +407,7 @@ export async function postTaskNotice(
   tx: Transaction,
   scope: { conversationId: string; workspaceId: string },
   taskId: string,
-  notice: { id?: string; body: string; deliverToAgentId?: string | null },
+  notice: { id?: string; body: string; system?: SystemNotice; deliverToAgentId?: string | null },
 ) {
   const task = await tx.task.findUniqueOrThrow({
     where: { id: taskId },
@@ -433,6 +435,18 @@ export async function postTaskNotice(
       conversationId,
       body: notice.body,
       sequence,
+      ...(notice.system
+        ? {
+            systemMessage: {
+              create: {
+                kind: notice.system.kind,
+                params: notice.system.params as Prisma.InputJsonObject,
+                conversationId,
+                workspaceId: scope.workspaceId,
+              },
+            },
+          }
+        : {}),
       deliveries: notice.deliverToAgentId
         ? {
             create: [

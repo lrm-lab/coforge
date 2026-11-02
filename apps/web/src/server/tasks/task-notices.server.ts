@@ -24,9 +24,10 @@ export type AssigneeMention = `@${string}` & { readonly [brand]: "mention" };
 export type DisplayName = string & { readonly [brand]: "displayName" };
 
 /** How a notice may name the member who made a change. */
-export type NoticeActor = { handle: Handle; displayName: DisplayName };
+export type NoticeActor = { memberId: string; handle: Handle; displayName: DisplayName };
 
 type NamedMember = {
+  id: string;
   user?: HumanNames | null;
   agent?: { name: string; displayName?: string | null } | null;
 };
@@ -35,7 +36,11 @@ type NamedMember = {
 export function noticeActor(member: NamedMember): NoticeActor {
   const handle = member.user?.username ?? member.agent?.name;
   if (!handle) throw new AppError("INTERNAL_ERROR");
-  return { handle: handle as Handle, displayName: browserSenderName(member) as DisplayName };
+  return {
+    memberId: member.id,
+    handle: handle as Handle,
+    displayName: browserSenderName(member) as DisplayName,
+  };
 }
 
 export function assigneeMention(member: {
@@ -48,7 +53,11 @@ export function assigneeMention(member: {
 }
 
 /** A Task as a notice quotes it; build it with `quotedTask`, never from a raw title. */
-export type QuotedTask = { number: number; title: string & { readonly [brand]: "quotedTitle" } };
+export type QuotedTask = {
+  taskId: string;
+  number: number;
+  title: string & { readonly [brand]: "quotedTitle" };
+};
 
 const QUOTED_TITLE_LIMIT = 80;
 const BLOCK_MARKER = /^(?:#{1,6}\s+|>\s*|[-*+]\s+|\d+[.)]\s+)/;
@@ -60,7 +69,7 @@ const BLOCK_MARKER = /^(?:#{1,6}\s+|>\s*|[-*+]\s+|\d+[.)]\s+)/;
  * at most 80 characters. A title with no such line quotes as empty and is named by number alone.
  */
 export function quotedTask(
-  task: { number: number; title: string },
+  task: { id: string; number: number; title: string },
   mentions: readonly MessageMentionRef[],
 ): QuotedTask {
   let inFence = false;
@@ -82,7 +91,7 @@ export function quotedTask(
           .join("")
           .trimEnd()}…`
       : text;
-  return { number: task.number, title: title as QuotedTask["title"] };
+  return { taskId: task.id, number: task.number, title: title as QuotedTask["title"] };
 }
 
 const STATUS_WORDING: Record<TaskStatus, { emoji: string; label: string }> = {

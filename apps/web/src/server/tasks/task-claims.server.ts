@@ -165,7 +165,13 @@ export async function convertOrClaim(
       }
       existing = await createMessageTask(tx, { ...message, conversationId, workspaceId }, member);
       const [quoted] = await notices.quote([existing]);
-      await notices.inConversation(noticeText.converted(noticeActor(member).displayName, quoted!));
+      await notices.inConversation({
+        body: noticeText.converted(noticeActor(member).displayName, quoted!),
+        system: {
+          kind: "task.converted",
+          params: { actor: noticeActor(member), task: quoted! },
+        },
+      });
     }
     if (!claim) return existing;
     if (
@@ -198,9 +204,10 @@ export async function convertOrClaim(
       },
     );
     // Claiming a Todo Task also moves it to In Progress; the claim notice says both.
-    await notices.inThread(claimed, (quoted) =>
-      noticeText.claimed(noticeActor(member).handle, quoted),
-    );
+    await notices.inThread(claimed, (quoted) => ({
+      body: noticeText.claimed(noticeActor(member).handle, quoted),
+      system: { kind: "task.claimed", params: { claimer: noticeActor(member), task: quoted } },
+    }));
     return claimed;
   });
   await signalTaskChange(ports, task);

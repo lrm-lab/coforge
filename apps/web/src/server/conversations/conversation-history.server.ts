@@ -60,11 +60,17 @@ export const browserMessageFields = {
   reactions: MESSAGE_REACTIONS_SELECT,
   // The snapshot a forwarded message carries; null for every other message.
   forward: BROWSER_FORWARD_SELECT,
+  // A server notice's structured kind and parameters; null for every other message.
+  systemMessage: { select: { kind: true, params: true } },
 } satisfies Prisma.MessageSelect;
 
-export type BrowserMessageRow = Prisma.MessageGetPayload<{
-  select: typeof browserMessageFields;
-}>;
+export type BrowserMessageRow = Omit<
+  Prisma.MessageGetPayload<{ select: typeof browserMessageFields }>,
+  "systemMessage"
+> & {
+  /** Optional so a test fixture written before the field still fits; a database row always has it. */
+  systemMessage?: { kind: string; params: Prisma.JsonValue } | null;
+};
 
 /** Exported for a pure unit test of this projection (no database needed). Channels and direct
  * conversations share it whole: `senderMemberId` is how a pane tells the viewer's own messages. */
@@ -113,6 +119,13 @@ export function mapBrowserMessage(message: BrowserMessageRow, workspaceId: strin
     senderDeleted: Boolean(message.sender?.agent?.deletedAt),
     senderAvatarUrl: browserSenderAvatarUrl(message.sender, workspaceId),
     body: message.body,
+    /** A server notice's structured content, for the web to render in the viewer's language.
+     * Absent for every other message and for a notice written before the backfill. */
+    ...(message.systemMessage
+      ? {
+          system: { kind: message.systemMessage.kind, params: message.systemMessage.params },
+        }
+      : {}),
     // An ISO string, not a `Date`: TanStack Query's structural sharing keeps an unchanged
     // message's cached object across a re-read only for JSON-compatible values, and a new object
     // re-renders its memoized row.

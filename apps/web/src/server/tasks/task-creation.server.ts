@@ -295,7 +295,13 @@ export async function createTasks(
       data: tasks.flatMap((task) => historyRows(task.id, member, creationChanges(task), 0)),
     });
     const quoted = await notices.quote(tasks);
-    await notices.inConversation(noticeText.created(quoted));
+    await notices.inConversation({
+      body: noticeText.created(quoted),
+      system: {
+        kind: "task.created",
+        params: { tasks: quoted.map(({ taskId, number, title }) => ({ taskId, number, title })) },
+      },
+    });
     // The assignee's receipts, started or only reserved: one assignment notice in each Task's
     // thread, with its fixed id and its one delivery to an Agent assignee that is not the
     // creator.
@@ -306,12 +312,25 @@ export async function createTasks(
           await notices.receipt({
             id: receiptIds[index]!,
             task,
-            body: (subject) =>
-              noticeText.assigned(
+            body: (subject) => ({
+              body: noticeText.assigned(
                 noticeActor(member).displayName,
                 subject,
                 assigneeMention(assignee),
               ),
+              system: {
+                kind: "task.assigned",
+                params: {
+                  actor: noticeActor(member),
+                  task: subject,
+                  assignee: {
+                    memberId: assignee.id,
+                    handle: assigneeMention(assignee).slice(1),
+                    displayName: assigneeMention(assignee).slice(1),
+                  },
+                },
+              },
+            }),
             assignee,
             actor: member,
           }),
@@ -418,8 +437,21 @@ export async function announceSentMessageTask(
     const task = await tx.task.findUnique({ where: { messageId }, select: taskSelection });
     if (!task || task.conversationId !== conversation.conversationId)
       throw new AppError("NOT_FOUND");
-    if (!(await tx.message.findUnique({ where: { id: noticeId }, select: { id: true } })))
-      await notices.inConversation(noticeText.created(await notices.quote([task])), noticeId);
+    if (!(await tx.message.findUnique({ where: { id: noticeId }, select: { id: true } }))) {
+      const quoted = await notices.quote([task]);
+      await notices.inConversation(
+        {
+          body: noticeText.created(quoted),
+          system: {
+            kind: "task.created",
+            params: {
+              tasks: quoted.map(({ taskId, number, title }) => ({ taskId, number, title })),
+            },
+          },
+        },
+        noticeId,
+      );
+    }
     return task;
   });
   await signalTaskChange(ports, task);
