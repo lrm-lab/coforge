@@ -219,11 +219,8 @@ test("Workspace humans enrolled in general see one general channel; outsiders ca
     expect(await pushSubscriptions.notificationForRecipient(mutedOrdinary.id, alice.id)).toBeNull();
     const mutedMention = await send(alice.id, `@${bob.username} please review this`);
     const mentionNotification = await pushSubscriptions.notificationForMessage(mutedMention.id);
-    expect(subscriptionsOf(mentionNotification)).toEqual([
-      expect.objectContaining({
-        endpoint: `https://fcm.googleapis.com/wp/bob-${suffix}`,
-      }),
-    ]);
+    // Muted means no push even when @mentioned; the mention still shows as a badge.
+    expect(subscriptionsOf(mentionNotification)).toEqual([]);
     // The target names the Chat tab: a member's own tab order can put another tab first.
     expect(mentionNotification?.url).toBe(
       `/notifications/open?workspace=${workspace.slug}&target=${encodeURIComponent(`/w/${workspace.slug}/channel/${engineering.id}?view=chat#message-${mutedMention.id}`)}`,

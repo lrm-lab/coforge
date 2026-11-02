@@ -228,15 +228,12 @@ test("Agent channel mute suppresses ordinary notices, preserves mentions and rea
     expect(reply.state).toBe("sent");
     expect(published.length).toBe(beforeReply);
     if (!reply.messageId) throw new Error("Agent reply did not return its message identity");
+    // A muted human keeps the @mention badge but receives no Web Push.
     expect(
       subscriptionsOf(
         await new PrismaWebPushSubscriptionStore(db).notificationForMessage(reply.messageId),
       ),
-    ).toEqual([
-      expect.objectContaining({
-        endpoint: `https://fcm.googleapis.com/wp/agent-mention-${workspace.id}`,
-      }),
-    ]);
+    ).toEqual([]);
     const opened = await channels.open(workspace.id, user.id, general.id);
     expect(opened.messages.at(-1)).toMatchObject({
       senderKind: "agent",
@@ -521,8 +518,8 @@ test("an Agent's channel message reaches other Agents without an @mention: unmut
       });
     const helper = await agent("helper");
     const scout = await agent("scout");
-    // Muted in #general like every Agent joining it, so it never hears the unaddressed chatter.
-    await agent("quiet");
+    // Muted explicitly: Agents join unmuted now.
+    const quiet = await agent("quiet");
     await enrollGeneral(db, workspace.id);
     const channels = new PublicChannels(
       db,
@@ -530,6 +527,7 @@ test("an Agent's channel message reaches other Agents without an @mention: unmut
       quietCentrifugo(),
     );
     const general = (await channels.list(workspace.id, user.id))[0]!;
+    await channels.setAgentMuted(workspace.id, quiet.id, "#general", true);
     await channels.setAgentMuted(workspace.id, helper.id, "#general", false);
     await channels.setAgentMuted(workspace.id, scout.id, "#general", false);
     const repo = new PrismaDirectConversationRepository(db);
@@ -1641,13 +1639,10 @@ test("channel threads enforce channel scope and isolate reads, recovery, notific
       threadRootId: root.id,
     });
     const pushSubscriptions = new PrismaWebPushSubscriptionStore(db);
+    // Muted: no push, even for a followed thread.
     expect(
       subscriptionsOf(await pushSubscriptions.notificationForMessage(followerNotice.id)),
-    ).toEqual([
-      expect.objectContaining({
-        endpoint: `https://fcm.googleapis.com/wp/channel-thread-${suffix}`,
-      }),
-    ]);
+    ).toEqual([]);
     await channels.setUserThreadFollowed(workspace.id, bob.id, general.id, root.id, false);
     const unfollowedNotice = await channels.send({
       workspaceId: workspace.id,
@@ -2697,8 +2692,9 @@ test("a mention pierces a muted member's push only through the message's stored 
       );
 
     const mentioned = await send(`@${bob.username} please review`);
-    expect(await recipientsOf(mentioned.id)).toEqual([bob.id]);
-    expect(await pushSubscriptions.notificationForRecipient(mentioned.id, bob.id)).not.toBeNull();
+    // Muted means no push even when @mentioned; the mention still shows as a badge.
+    expect(await recipientsOf(mentioned.id)).toEqual([]);
+    expect(await pushSubscriptions.notificationForRecipient(mentioned.id, bob.id)).toBeNull();
 
     const notMentioned = await send(
       `see \`@${bob.username}\` and [ask @${bob.username}](https://example.com)`,

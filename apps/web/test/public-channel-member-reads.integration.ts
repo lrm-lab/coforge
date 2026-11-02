@@ -170,6 +170,12 @@ test("an Agent's channel send reads only its own member row and the members it n
     const general = await db.conversation.findFirstOrThrow({
       where: { workspaceId: workspace.id, channelName: "general" },
     });
+    // Agents join #general unmuted now; mute the other one so a plain send has no recipients to
+    // read, which is what this test measures.
+    await db.conversationMember.updateMany({
+      where: { conversationId: general.id, agentId: scout.id },
+      data: { notificationLevel: "muted", channelMuted: true },
+    });
     // Every conversation member row the send reads, whether as a top-level query or as the
     // `members` relation of the conversation it loads.
     let memberRowsRead = 0;
