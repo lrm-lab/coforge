@@ -5,7 +5,7 @@ import {
   utf8Encoder,
   utf8Decoder,
 } from "@lrm/coforge-sdk/internal";
-import { AGENT_MIGRATION_CAPABILITY, isRecord } from "@lrm/coforge-sdk/internal";
+import { isRecord } from "@lrm/coforge-sdk/internal";
 import { ComputerRegistrationError } from "#src/server/computers/registration.server";
 import {
   handleRequestError,
@@ -20,7 +20,6 @@ import {
   decodeAgentStartIntent,
   decodeAgentStatus,
   decodeDaemonRuntimeCodeAgentsUpdateRequest,
-  decodeDaemonRuntimeReadyRequest,
   decodeDaemonRuntimeUsageScanResponse,
   type CodeAgentModelCatalog,
   type RuntimeMetadata,
@@ -50,14 +49,9 @@ import {
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import type { CentrifugoServerApi } from "./server-api.server";
 import type { AgentDisplay } from "#src/server/agents/agent-display.server";
-import type { ComputerRestartStore } from "#src/server/computers/computer-restart-store.server";
 import type { RedisComputerUpgradeStore } from "#src/server/computers/computer-upgrade-store.server";
 import { decodeDaemonRuntimeShutdown, type DaemonRuntimeShutdown } from "@lrm/coforge-sdk/internal";
 import type { ComputerLifecycleActivity } from "#src/server/agents/computer-lifecycle-activity.server";
-import {
-  computerObservationSchema,
-  type ComputerObservation,
-} from "#src/server/computers/computer-metadata.server";
 import type { MentionDeliveryEnvelope } from "@lrm/coforge-sdk/internal";
 import { errorType } from "#src/server/errors/error-type.server";
 export {
@@ -229,174 +223,10 @@ export function createAgentStatusMethod(
   };
 }
 
-/** What a daemon's ready updates, each optional so a test composes only the step it covers. */
-export type DaemonRuntimeReadyPorts = {
-  recovery?: {
-    recoverWorkspace(
-      workspaceId: string,
-      computerId: string,
-      runningAgentIds: readonly string[],
-    ): Promise<void>;
-  };
-  restarts?: ComputerRestartStore;
-  capabilities?: {
-    record(workspaceId: string, computerId: string, values: readonly string[]): Promise<unknown>;
-  };
-  reminderRecovery?: { snapshotAssigned(workspaceId: string, computerId: string): Promise<void> };
-  /** Moves on the Computer's Agent migrations after it was away (`AgentMigrationOrchestrator.recover`). */
-  migrationRecovery?: { recover(workspaceId: string, computerId: string): Promise<void> };
-  observe?: (
-    scope: { workspaceId: string; computerId: string },
-    metadata: ComputerObservation,
-  ) => Promise<void>;
-  upgrades?: RedisComputerUpgradeStore;
-  /** Started after the ready succeeds, never awaited: Activity rows must not hold the reply. */
-  lifecycle?: Pick<ComputerLifecycleActivity, "ready">;
-};
-
-export const createDaemonRuntimeReadyMethod =
-  ({
-    recovery,
-    restarts,
-    capabilities,
-    reminderRecovery,
-    migrationRecovery,
-    observe,
-    upgrades,
-    lifecycle,
-  }: DaemonRuntimeReadyPorts = {}): CentrifugoRpcMethod =>
-  async (payload, metadata) => {
-    const request = decodeDaemonRuntimeReadyRequest(payload);
-    const denied = requireDaemonPrincipal(metadata, request);
-    if (denied) return denied;
-    if (
-      !request.workspaceId ||
-      !request.computerId ||
-      !request.workerInstanceId ||
-      !request.daemonVersion?.trim() ||
-      !request.recoveredRestartRequestIds ||
-      new Set(request.recoveredRestartRequestIds).size !==
-        request.recoveredRestartRequestIds.length ||
-      !request.recoveredUpgradeRequestIds ||
-      new Set(request.recoveredUpgradeRequestIds).size !==
-        request.recoveredUpgradeRequestIds.length ||
-      !request.requestId
-    )
-      return { code: 400, message: "invalid daemon runtime ready request" };
-    const observation = computerObservationSchema.safeParse(request);
-    if (!observation.success) return { code: 400, message: "invalid Computer metadata" };
-    // Every awaited step below sets this first, so a failure names the step that failed. It used to
-    // advance only before the last two, which made the four steps in between — capability record,
-    // identity check, Computer observation, Agent recovery — all report as `restart_recovery`; a
-    // 13-hour outage on 2026-09-18 was in Agent recovery and reported as restart recovery.
-    let stage = "restart_recovery";
-    try {
-      await restarts?.ready(
-        { workspaceId: request.workspaceId, computerId: request.computerId },
-        {
-          workerInstanceId: request.workerInstanceId,
-          daemonVersion: request.daemonVersion,
-          startedAt: request.startedAt,
-        },
-        request.recoveredRestartRequestIds,
-      );
-      stage = "identity_check";
-      const current = await restarts?.identity?.({
-        workspaceId: request.workspaceId,
-        computerId: request.computerId,
-      });
-      if (current && current.workerInstanceId !== request.workerInstanceId)
-        return { code: 409, message: "daemon runtime was superseded" };
-      stage = "capability_record";
-      await capabilities?.record(
-        request.workspaceId,
-        request.computerId,
-        request.capabilities ?? [],
-      );
-      stage = "computer_observation";
-      await observe?.(
-        { workspaceId: request.workspaceId, computerId: request.computerId },
-        observation.data,
-      );
-      stage = "agent_recovery";
-      await recovery?.recoverWorkspace(
-        request.workspaceId,
-        request.computerId,
-        request.runningAgentIds,
-      );
-      stage = "reminder_recovery";
-      if (request.capabilities?.includes("reminder:v1"))
-        await reminderRecovery?.snapshotAssigned(request.workspaceId, request.computerId);
-      // Not a stage, and not awaited: moving the Computer's migrations on takes Agent locks and
-      // publishes, and none of that may keep the whole Computer from coming back. A recovery
-      // that fails is tried again on the next reconnect.
-      if (request.capabilities?.includes(AGENT_MIGRATION_CAPABILITY))
-        void migrationRecovery?.recover(request.workspaceId, request.computerId).catch((error) =>
-          console.warn(
-            JSON.stringify({
-              event: "agent_migration:recovery_failed",
-              request_id: request.requestId,
-              workspace_id: request.workspaceId,
-              computer_id: request.computerId,
-              outcome: "failed",
-              error_type: errorType(error),
-            }),
-          ),
-        );
-      stage = "upgrade_recovery";
-      if (upgrades && request.computerVersion?.trim())
-        await upgrades.ready(
-          { workspaceId: request.workspaceId, computerId: request.computerId },
-          {
-            workerInstanceId: request.workerInstanceId,
-            computerVersion: request.computerVersion,
-            daemonVersion: request.daemonVersion,
-            startedAt: request.startedAt,
-          },
-          request.recoveredUpgradeRequestIds,
-        );
-      void lifecycle
-        ?.ready(
-          { workspaceId: request.workspaceId, computerId: request.computerId },
-          {
-            requestId: request.requestId,
-            workerInstanceId: request.workerInstanceId,
-            ...(request.computerVersion ? { computerVersion: request.computerVersion } : {}),
-            recoveredUpgradeRequestIds: request.recoveredUpgradeRequestIds,
-            recoveredRestartRequestIds: request.recoveredRestartRequestIds,
-          },
-        )
-        .catch((error: unknown) =>
-          console.error(
-            JSON.stringify({
-              event: "daemon_ready.lifecycle_activity_failed",
-              outcome: "failed",
-              request_id: request.requestId,
-              workspace_id: request.workspaceId,
-              computer_id: request.computerId,
-              error_type: errorType(error),
-            }),
-          ),
-        );
-      return new Uint8Array();
-    } catch (error) {
-      console.error(
-        JSON.stringify({
-          event: "daemon_ready.failed",
-          stage,
-          request_id: request.requestId,
-          workspace_id: request.workspaceId,
-          computer_id: request.computerId,
-          error_type: errorType(error),
-        }),
-      );
-      // The stage travels in the error, not only in this server's console: the Daemon logs what it
-      // was told, and until now that was one fixed sentence for every possible failure, so the
-      // machine that is failing could not say why without someone reading server logs. A stage is
-      // a fixed internal token — never a message, name, or other request content.
-      return { code: 503, message: `daemon ready failed at ${stage}` };
-    }
-  };
+export {
+  createDaemonRuntimeReadyMethod,
+  type DaemonRuntimeReadyPorts,
+} from "./daemon-runtime-ready-method.server";
 
 /**
  * A Workspace daemon's notice that it is going down on purpose, and why. Refusals answer like a
