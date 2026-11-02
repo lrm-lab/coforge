@@ -23,11 +23,12 @@ import {
 } from "#src/server/workspaces/member-role.server";
 import { errorType } from "#src/server/errors/error-type.server";
 
+export * from "./agent-control-types.server";
+
 import {
   type AgentRecoveryFields,
   type AgentControlRecoveryReader,
   type AgentControlAction,
-  type AgentControlStep,
   carriesRecovery,
   chains,
   commands,
@@ -43,54 +44,10 @@ import {
   view,
   supersededView,
   current,
-  controlOperationState,
-  sameScope,
   operationFence,
   requireCurrentAgentScope,
+  authorizedAgent,
 } from "./agent-control-types.server";
-
-export {
-  type AgentRecoveryFields,
-  type AgentControlRecoveryReader,
-  type AgentControlAction,
-  type AgentControlStep,
-  carriesRecovery,
-  chains,
-  commands,
-  CONTROL_MANY_CONCURRENCY,
-  EXECUTE_CAPABILITY,
-  type AgentControlState,
-  type AgentControlAgent,
-  type AgentControlMentions,
-  type AgentControlStore,
-  type AgentControlView,
-  agentControlRevision,
-  terminal,
-  view,
-  supersededView,
-  current,
-  controlOperationState,
-  sameScope,
-  operationFence,
-  requireCurrentAgentScope,
-};
-
-/** The Agent, when `userId` owns it in `workspaceId`; the internal control paths' authorization. */
-function authorizedAgent(
-  agent: AgentControlAgent | undefined,
-  userId: string,
-  workspaceId: string,
-  agentId: string,
-): AgentControlAgent {
-  if (
-    !agent ||
-    agent.id !== agentId ||
-    agent.ownerId !== userId ||
-    agent.workspaceId !== workspaceId
-  )
-    throw new Error("Agent is not authorized or assigned");
-  return agent;
-}
 
 /** One current control operation on the Agent record, not a durable command queue. */
 export class AgentControl {
@@ -167,6 +124,21 @@ export class AgentControl {
     // `begin` built `state` from `agent` (a retry only after checking the Computer and
     // configuration it publishes did not change), so it is published without reading it back.
     await this.#publish(agent, state, intent);
+  }
+  /** Clears a terminal launch failure on an Agent using CAS and notifying subscribers. */
+  async clearLaunchFailure(agentId: string, expectedErrorCode?: string): Promise<boolean> {
+    const agent = await this.store.get(agentId);
+    if (!agent || !agent.state || agent.state.phase !== "failed") return false;
+    if (expectedErrorCode && agent.state.errorCode !== expectedErrorCode) return false;
+    const { errorCode: _err, failedAtMs: _failedAt, ...fields } = agent.state;
+    const next: AgentControlState = {
+      ...fields,
+      controlSequence: agent.state.controlSequence + 1,
+      phase: "completed",
+    };
+    if (!(await this.store.replace(agent, next))) return false;
+    await this.signal.notify(agent.id).catch(() => {});
+    return true;
   }
   private async advance(agentId: string, requestId: string, recovery?: AgentRecoveryFields) {
     const agent = await this.store.get(agentId);

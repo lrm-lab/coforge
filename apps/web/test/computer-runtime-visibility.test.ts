@@ -77,6 +77,7 @@ function fixture() {
       if (!record) throw new Error("runtime is not available");
       record.isPublic = isPublic;
     },
+    findFailedAgentIdsForRuntime: async () => [],
   };
   return { records, visibility: new ComputerRuntimeVisibility(repository) };
 }
@@ -205,13 +206,8 @@ describe("ComputerRuntimeVisibility", () => {
     });
   });
 
-  test("setPublic resets affected agents' controlState when made public", async () => {
-    const resetCalls: {
-      workspaceId: string;
-      computerId: string;
-      provider: string;
-      errorCode: string;
-    }[] = [];
+  test("setPublic clears launch failure via control for affected agents when made public", async () => {
+    const cleared: { agentId: string; errorCode?: string }[] = [];
     const base = fixture();
     const repository: ComputerRuntimeVisibilityRepository = {
       listInWorkspace: (ws) => base.visibility.list({ userId: "user-2", workspaceId: ws }),
@@ -225,22 +221,34 @@ describe("ComputerRuntimeVisibility", () => {
         const r = base.records.find((c) => c.id === id);
         if (r) r.isPublic = isPublic;
       },
-      resetAgentControlStateForRuntime: async (workspaceId, computerId, provider, errorCode) => {
-        resetCalls.push({ workspaceId, computerId, provider, errorCode });
+      findFailedAgentIdsForRuntime: async (workspaceId, computerId, provider, errorCode) => {
+        if (
+          workspaceId === "workspace-1" &&
+          computerId === "computer-2" &&
+          provider === "codex" &&
+          errorCode === "runtime_private"
+        ) {
+          return ["agent-123"];
+        }
+        return [];
       },
     };
-    const visibility = new ComputerRuntimeVisibility(repository);
+    const control = {
+      clearLaunchFailure: async (agentId: string, errorCode?: string) => {
+        cleared.push({ agentId, errorCode });
+        return true;
+      },
+    };
+    const visibility = new ComputerRuntimeVisibility(repository, control);
     await visibility.setPublic(
       { userId: "user-2", workspaceId: "workspace-1" },
       "other-private",
       true,
     );
 
-    expect(resetCalls).toEqual([
+    expect(cleared).toEqual([
       {
-        workspaceId: "workspace-1",
-        computerId: "computer-2",
-        provider: "codex",
+        agentId: "agent-123",
         errorCode: "runtime_private",
       },
     ]);

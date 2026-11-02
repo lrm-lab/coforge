@@ -255,3 +255,20 @@ export async function requireCurrentAgentScope(
     throw new Error("Stale Agent scope");
   return { ...agent, state };
 }
+
+/** The Agent, when `userId` owns it in `workspaceId`; the internal control paths' authorization. */
+export function authorizedAgent(
+  agent: AgentControlAgent | undefined,
+  userId: string,
+  workspaceId: string,
+  agentId: string,
+): AgentControlAgent {
+  if (
+    !agent ||
+    agent.id !== agentId ||
+    agent.ownerId !== userId ||
+    agent.workspaceId !== workspaceId
+  )
+    throw new Error("Agent is not authorized or assigned");
+  return agent;
+}

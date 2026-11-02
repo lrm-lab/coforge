@@ -132,24 +132,11 @@ export const Route = createFileRoute("/api/agent-api-keys")({
           return Response.json({ error: "forbidden" }, { status: 403 });
         try {
           const visibility = new ComputerRuntimeVisibility(new PrismaComputerRuntimeRepository(db));
-          const selection =
-            typeof visibility.checkSelection === "function"
-              ? await visibility.checkSelection(
-                  { userId: agent.ownerId, workspaceId: agent.workspaceId },
-                  principal.computerId,
-                  parseAgentRuntimeConfig(agent.runtimeConfig).runtime,
-                )
-              : (await visibility.canSelect(
-                    { userId: agent.ownerId, workspaceId: agent.workspaceId },
-                    principal.computerId,
-                    parseAgentRuntimeConfig(agent.runtimeConfig).runtime,
-                  ))
-                ? { ok: true as const }
-                : {
-                    ok: false as const,
-                    code: "RUNTIME_UNAVAILABLE" as const,
-                    error: "the configured runtime is not available on this Computer",
-                  };
+          const selection = await visibility.checkSelection(
+            { userId: agent.ownerId, workspaceId: agent.workspaceId },
+            principal.computerId,
+            parseAgentRuntimeConfig(agent.runtimeConfig).runtime,
+          );
           if (!selection.ok) {
             // The daemon relays this `code` to the Agent: a launch refused because the
             // Computer's runtime is missing, unusable, or private is not a permissions failure.

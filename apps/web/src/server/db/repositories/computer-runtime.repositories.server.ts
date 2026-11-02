@@ -1,4 +1,4 @@
-import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
+import type { PrismaClient } from "#src/generated/prisma/client";
 import {
   parseRuntimeUnavailableCode,
   requireRuntimeProvider,
@@ -86,25 +86,28 @@ export class PrismaComputerRuntimeRepository implements ComputerRuntimeVisibilit
     });
   }
 
-  async resetAgentControlStateForRuntime(
+  async findFailedAgentIdsForRuntime(
     workspaceId: string,
     computerId: string,
-    _provider: RuntimeProvider,
+    provider: RuntimeProvider,
     errorCode: string,
-  ) {
-    await this.db.agent.updateMany({
+  ): Promise<string[]> {
+    const agents = await this.db.agent.findMany({
       where: {
         workspaceId,
         computerId,
+        runtimeConfig: {
+          path: ["runtime"],
+          equals: provider,
+        },
         controlState: {
           path: ["errorCode"],
           equals: errorCode,
         },
       },
-      data: {
-        controlState: Prisma.DbNull,
-      },
+      select: { id: true },
     });
+    return agents.map((agent) => agent.id);
   }
 
   async replace(

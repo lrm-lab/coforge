@@ -43,6 +43,9 @@ import { isWorkspaceMemberComputer } from "#src/server/computers/computer-member
 import { listedWorkspaceComputerWhere } from "#src/server/computers/computer-list-visibility.server";
 import { ComputerRuntimeVisibility } from "#src/server/computers/computer-runtime-visibility.server";
 import { PrismaComputerRuntimeRepository } from "#src/server/db/repositories/computer-runtime.repositories.server";
+import { AgentControl } from "#src/server/agents/agent-control.server";
+import { PrismaAgentControlStore } from "#src/server/db/repositories/agent-control.repositories.server";
+import { getAgentRuntimeLock } from "#src/server/agents/agent-runtime-lock.server";
 import { getComputerUpgradeStore } from "#src/server/computers/computer-upgrade-store.server";
 import { runtimeAuthView } from "#src/server/computers/computer-runtime-auth.server";
 import { runUpgradeComputerAction } from "#src/server/computers/upgrade-computer-action.server";
@@ -62,7 +65,12 @@ import { DaemonCredentialRevocations } from "#src/server/db/repositories/daemon-
 import { getWorkspaceComputerInvalidation } from "#src/server/agents/workspace-computer-invalidation.server";
 
 function runtimeVisibility(db: WorkspaceUserContext["db"]) {
-  return new ComputerRuntimeVisibility(new PrismaComputerRuntimeRepository(db));
+  const control = new AgentControl(
+    new PrismaAgentControlStore(db),
+    createCentrifugoServerApi(),
+    getAgentRuntimeLock(),
+  );
+  return new ComputerRuntimeVisibility(new PrismaComputerRuntimeRepository(db), control);
 }
 
 export { listComputerNames } from "./computer-list-names.functions";

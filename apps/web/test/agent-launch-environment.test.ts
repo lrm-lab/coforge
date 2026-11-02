@@ -84,6 +84,15 @@ await mockModuleForFile("#src/server/agents/agent-control.server", () => ({
 }));
 await mockModuleForFile("#src/server/computers/computer-runtime-visibility.server", () => ({
   ComputerRuntimeVisibility: class {
+    async checkSelection() {
+      return runtimeAllowed
+        ? { ok: true as const }
+        : {
+            ok: false as const,
+            code: "RUNTIME_UNAVAILABLE" as const,
+            error: "the configured runtime is not available on this Computer",
+          };
+    }
     async canSelect() {
       return runtimeAllowed;
     }

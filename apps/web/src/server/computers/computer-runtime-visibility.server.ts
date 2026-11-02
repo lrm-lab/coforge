@@ -28,12 +28,12 @@ export interface ComputerRuntimeVisibilityRepository {
     runtimeId: string,
   ): Promise<ComputerRuntimeRecord | undefined>;
   setPublic(runtimeId: string, isPublic: boolean): Promise<unknown>;
-  resetAgentControlStateForRuntime?(
+  findFailedAgentIdsForRuntime(
     workspaceId: string,
     computerId: string,
     provider: RuntimeProvider,
     errorCode: string,
-  ): Promise<void>;
+  ): Promise<string[]>;
 }
 
 type RuntimePrincipal = { userId: string; workspaceId: string };
@@ -46,8 +46,15 @@ export type RuntimeSelectionCheck =
       error: string;
     };
 
+export type AgentFailureResetControl = {
+  clearLaunchFailure(agentId: string, expectedErrorCode?: string): Promise<boolean>;
+};
+
 export class ComputerRuntimeVisibility {
-  constructor(private readonly runtimes: ComputerRuntimeVisibilityRepository) {}
+  constructor(
+    private readonly runtimes: ComputerRuntimeVisibilityRepository,
+    private readonly control?: AgentFailureResetControl,
+  ) {}
 
   async list(principal: RuntimePrincipal) {
     return (await this.runtimes.listInWorkspace(principal.workspaceId)).filter(
@@ -117,13 +124,16 @@ export class ComputerRuntimeVisibility {
     if (!runtime || runtime.ownerId !== principal.userId)
       throw new Error("runtime is not owned by the current user");
     await this.runtimes.setPublic(runtimeId, isPublic);
-    if (isPublic && this.runtimes.resetAgentControlStateForRuntime) {
-      await this.runtimes.resetAgentControlStateForRuntime(
+    if (isPublic && this.control) {
+      const agentIds = await this.runtimes.findFailedAgentIdsForRuntime(
         principal.workspaceId,
         runtime.computerId,
         runtime.provider,
         "runtime_private",
       );
+      for (const agentId of agentIds) {
+        await this.control.clearLaunchFailure(agentId, "runtime_private");
+      }
     }
     return { ...runtime, isPublic };
   }
