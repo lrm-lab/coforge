@@ -1,3 +1,5 @@
+import type { PreviewCard } from "#src/features/conversations/action-card-preview";
+
 /** What the browser sees of an action card (`ActionCards.viewsFor`), one shape per kind. */
 import type { AgentActionPrepareResponse } from "@lrm/coforge-sdk/agent";
 
@@ -13,6 +15,9 @@ export type ActionCardViewBase = {
   messageId: string;
   state: ActionCardState;
   draftHint?: string;
+  /** What the card's one line is written from in the viewer's language, for the text that stands
+   * for it (a screen reader's, a thread's reply preview). Absent for a choice card. */
+  preview?: PreviewCard;
   committedBy?: { displayName: string };
   committedAt?: string;
   /** Whether the viewer may commit this card right now (implies `state === "pending"`). */

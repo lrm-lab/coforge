@@ -107,7 +107,7 @@ export const ChannelDirectoryRow = memo(function ChannelDirectoryRow({
           preview: lastMessage
             ? channelPreviewLine({
                 sender: lastMessage.sender,
-                preview: previewText(lastMessage.preview, lastMessage.notice),
+                preview: previewText(lastMessage.preview, lastMessage.notice, lastMessage.card),
                 youLabel: m.conversation_you(),
               })
             : null,
@@ -176,7 +176,7 @@ export const DirectDirectoryRow = memo(function DirectDirectoryRow({
           preview:
             live?.lastMessagePreview == null
               ? null
-              : previewText(live.lastMessagePreview, live.lastMessageNotice),
+              : previewText(live.lastMessagePreview, live.lastMessageNotice, live.lastMessageCard),
         }}
         icon={
           agent ? (

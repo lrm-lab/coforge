@@ -1,3 +1,7 @@
+import {
+  ACTION_CARD_PREVIEW_SELECT,
+  previewCardFieldOf,
+} from "#src/server/conversations/action-card-preview.server";
 import { channelVisibilityOf } from "#src/features/conversations/channel-visibility";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import type {
@@ -226,7 +230,8 @@ export class ActivityInbox {
     const [messages, agents, people, channelMembers, tasks] = await Promise.all([
       this.db.message.findMany({
         where: { id: { in: [...messageIds] }, workspaceId },
-        select: browserMessageFields,
+        // A card's row reads in the viewer's language, not as its stored English body.
+        select: { ...browserMessageFields, actionCard: ACTION_CARD_PREVIEW_SELECT },
       }),
       this.db.agent.findMany({
         where: { id: { in: [...agentIds] }, workspaceId },
@@ -258,7 +263,10 @@ export class ActivityInbox {
       this.db,
       workspaceId,
       userId,
-      messages.map((message) => mapBrowserMessage(message, workspaceId)),
+      messages.map((message) => ({
+        ...mapBrowserMessage(message, workspaceId),
+        ...previewCardFieldOf(message.actionCard),
+      })),
     );
     const messageById = new Map(settledMessages.map((message) => [message.id, message]));
     const agentById = new Map(

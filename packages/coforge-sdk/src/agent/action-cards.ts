@@ -233,6 +233,11 @@ export type ResolvedChannelAddMemberPayload = {
   channelId: string;
   humanIds?: string[];
   agentIds?: string[];
+  /** Snapshot at send time, for display only (发送时的快照，仅用于显示): the channel and members
+   * as the Agent named them, which the card's preview line reads. Committing uses the ids. Absent
+   * from cards sent before it was stored. */
+  channelHandle?: string;
+  memberHandles?: string[];
 };
 /** Approving it approves the Agent's waiting request `requestId` for the app `appKey`, granting
  * `scopes`; denying it denies the request. */

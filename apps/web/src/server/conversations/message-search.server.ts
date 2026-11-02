@@ -1,3 +1,5 @@
+import { ACTION_CARD_PREVIEW_SELECT, previewCardFieldOf } from "./action-card-preview.server";
+import type { PreviewCard } from "#src/features/conversations/action-card-preview";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import {
   channelVisibilityOf,
@@ -37,6 +39,7 @@ export type MessageSearchInput = {
 
 const searchHitSelect = {
   ...browserMessageFields,
+  actionCard: ACTION_CARD_PREVIEW_SELECT,
   conversation: {
     select: {
       id: true,
@@ -70,7 +73,9 @@ export type MessageSearchHit = {
       | { kind: "people"; peer: { id: string; username: string; displayName: string } }
       | null;
   };
-  message: ReturnType<typeof mapBrowserMessage>;
+  /** `card` is set when the message is an action card: what its excerpt is written from in the
+   * viewer's language. Matching stays on the stored English body. */
+  message: ReturnType<typeof mapBrowserMessage> & { card?: PreviewCard };
 };
 
 export type MessageSearchPage = {
@@ -148,7 +153,10 @@ export async function searchMessages(
           archived: conversation.archivedAt !== null,
           direct: agent ? { kind: "agent", agent } : peer ? { kind: "people", peer } : null,
         },
-        message: mapBrowserMessage(message, input.workspaceId),
+        message: {
+          ...mapBrowserMessage(message, input.workspaceId),
+          ...previewCardFieldOf(message.actionCard),
+        },
       },
     ];
   });

@@ -33,5 +33,15 @@
   "action_card_cancelled": "已取消",
   "action_card_required_computer": "必须运行在 {name}",
   "action_card_suggested_computer": "建议的电脑：{name}",
-  "action_card_initial_members": "初始成员"
+  "action_card_initial_members": "初始成员",
+  "action_card_preview_channel_create": "操作卡片：创建群聊 #{name}",
+  "action_card_preview_agent_create": "操作卡片：创建 Agent {name}",
+  "action_card_preview_add_member": "操作卡片：把 {members} 加入 #{channel}",
+  "action_card_preview_app_register": "操作卡片：注册应用 {name}",
+  "action_card_preview_app_recover_owner": "操作卡片：将 {agent} 设为应用 {app} 的负责智能体",
+  "action_card_preview_app_grant_agent": "操作卡片：批准我使用应用 {app}（{key}）",
+  "action_card_preview_page_fill": "填入网页：{labels}",
+  "action_card_preview_page_fill_prompt": "填入网页：{prompt}（{labels}）",
+  "action_card_preview_desktop_takeover": "打开云电脑，完成这一步",
+  "action_card_preview_desktop_takeover_prompt": "打开云电脑：{prompt}"
 }

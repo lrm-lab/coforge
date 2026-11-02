@@ -1,3 +1,4 @@
+import { actionCardPreviewText } from "./action-card-preview";
 import { channelLabel } from "./channel-visibility";
 import { Link, useRouter } from "@tanstack/react-router";
 import { Bookmark, BookmarkCheck, Copy01, Link01, MessageTextSquare01 } from "@untitledui/icons";
@@ -153,11 +154,12 @@ function SavedMessageCard({
           {/* Every card is the same size: a plain-text excerpt in one type size, always two lines
               tall, the rest hidden. */}
           <p className="mt-1 line-clamp-2 h-10 text-sm break-words text-secondary">
-            {message.body
-              ? messagePlainText({ body: message.body, mentions: message.mentions })
-              : message.forwarded
-                ? m.message_forward_preview({ text: message.forwarded.sourceBody })
-                : (attachmentName ?? "")}
+            {actionCardPreviewText(message.card) ||
+              (message.body
+                ? messagePlainText({ body: message.body, mentions: message.mentions })
+                : message.forwarded
+                  ? m.message_forward_preview({ text: message.forwarded.sourceBody })
+                  : (attachmentName ?? ""))}
           </p>
         </AriaLink>
         <Dropdown.Popover placement="bottom start">

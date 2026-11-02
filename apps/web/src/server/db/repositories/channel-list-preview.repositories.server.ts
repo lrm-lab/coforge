@@ -1,4 +1,8 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
+import {
+  ACTION_CARD_PREVIEW_COLUMN,
+  type StoredActionCard,
+} from "#src/server/conversations/action-card-preview.server";
 import { FORWARDED_PREVIEW_SOURCE_LENGTH } from "#src/server/conversations/message-preview-line.server";
 
 /** A channel's newest top-level message and the sender member row that wrote it, if any. */
@@ -12,6 +16,8 @@ export type LatestTopLevelRow = {
   /** The message's system notice kind and params, null for a message that is not a notice. */
   noticeKind: string | null;
   noticeParams: Prisma.JsonValue;
+  /** The message's action card, null for a message that is not one (`previewCardOf`). */
+  card: StoredActionCard | null;
   senderUserId: string | null;
   senderAgentId: string | null;
 };
@@ -41,6 +47,7 @@ export async function latestTopLevelMessageRows(
            latest."createdAt" AS "createdAt",
            notice."kind" AS "noticeKind",
            notice."params" AS "noticeParams",
+           ${ACTION_CARD_PREVIEW_COLUMN} AS "card",
            sender."userId" AS "senderUserId",
            sender."agentId" AS "senderAgentId"
     FROM "conversations" c
@@ -53,6 +60,7 @@ export async function latestTopLevelMessageRows(
     LEFT JOIN "conversation_members" sender ON sender."id" = latest."senderMemberId"
     LEFT JOIN "message_forwards" forward ON forward."messageId" = latest."id"
     LEFT JOIN "system_messages" notice ON notice."messageId" = latest."id"
+    LEFT JOIN "action_cards" card ON card."messageId" = latest."id"
     WHERE c."id" = ANY(${[...conversationIds]}::uuid[])
   `;
 }

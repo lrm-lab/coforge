@@ -18,6 +18,7 @@ import type {
 } from "./action-card-view.server";
 import { appRecoverOwnerView } from "./app-recover-owner-action-cards.server";
 import { appRegisterView } from "./app-register-action-cards.server";
+import { previewCardOf } from "./action-card-preview.server";
 
 /** The person's Workspace role, or `undefined` when they are no longer a member. */
 export async function safeWorkspaceRole(db: PrismaClient, workspaceId: string, userId: string) {
@@ -163,6 +164,7 @@ export async function actionCardViews(
       messageId: card.messageId,
       state,
       draftHint: card.draftHint ?? undefined,
+      preview: previewCardOf(card),
       committedBy: card.committedByUserId
         ? { displayName: userName.get(card.committedByUserId) ?? "unknown" }
         : undefined,

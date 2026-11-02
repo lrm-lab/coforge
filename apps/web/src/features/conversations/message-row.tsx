@@ -1,3 +1,4 @@
+import { actionCardPreviewText } from "./action-card-preview";
 import { memo } from "react";
 import { WeeklyReportMessageCard } from "#src/features/records/weekly-report-message-card";
 
@@ -278,8 +279,17 @@ export const MessageRow = memo(function MessageRow({
           )}
           {message.actionCard ? (
             <>
-              {/* The raw summary (and draft hint) stay accessible; the card renders them. */}
-              <span className="sr-only">{message.body}</span>
+              {/* The summary (and draft hint) stay accessible, in the viewer's language as the
+                  lists write it; the card renders them. */}
+              <span className="sr-only">
+                {actionCardPreviewText(
+                  message.actionCard.preview && {
+                    ...message.actionCard.preview,
+                    // The whole note, which the preview cuts for lists.
+                    hint: message.actionCard.draftHint,
+                  },
+                ) || message.body}
+              </span>
               <ActionCard card={message.actionCard} />
             </>
           ) : showsBody ? (

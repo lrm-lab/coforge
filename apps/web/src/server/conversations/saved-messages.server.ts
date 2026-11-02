@@ -1,3 +1,5 @@
+import { ACTION_CARD_PREVIEW_SELECT, previewCardFieldOf } from "./action-card-preview.server";
+import type { PreviewCard } from "#src/features/conversations/action-card-preview";
 import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import {
   channelVisibilityOf,
@@ -119,7 +121,7 @@ const savedMessageSelect = {
   conversation: { select: { id: true, channelName: true, visibility: true, directKey: true } },
   // The exact row shape the message stream renders with, so the Saved view reuses the same
   // projection (sender, attachments, mentions, reactions) instead of a near-copy.
-  message: { select: browserMessageFields },
+  message: { select: { ...browserMessageFields, actionCard: ACTION_CARD_PREVIEW_SELECT } },
 } as const;
 
 export type SavedMessageRow = Prisma.SavedMessageGetPayload<{ select: typeof savedMessageSelect }>;
@@ -134,7 +136,9 @@ export type SavedMessageView = {
     visibility: ChannelVisibility;
     directKey: string | null;
   };
-  message: ReturnType<typeof mapBrowserMessage>;
+  /** `card` is set when the message is an action card: what its line is written from in the
+   * viewer's language. */
+  message: ReturnType<typeof mapBrowserMessage> & { card?: PreviewCard };
 };
 
 /** Pure projection of one saved row (unit-tested without a database), like `mapBrowserMessage`. */
@@ -147,7 +151,10 @@ export function savedMessageView(row: SavedMessageRow, workspaceId: string): Sav
       visibility: channelVisibilityOf(row.conversation),
       directKey: row.conversation.directKey,
     },
-    message: mapBrowserMessage(row.message, workspaceId),
+    message: {
+      ...mapBrowserMessage(row.message, workspaceId),
+      ...previewCardFieldOf(row.message.actionCard),
+    },
   };
 }
 

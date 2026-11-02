@@ -99,6 +99,7 @@ export function useSidebarLists() {
         lastMessageAt: null,
         lastMessagePreview: null,
         lastMessageNotice: null,
+        lastMessageCard: null,
       })),
   });
   const channelRows: readonly ListedChannel[] =

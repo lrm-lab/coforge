@@ -54,6 +54,7 @@ test("DM preferences and unread counts become one row per conversation", () => {
       lastMessageAt: null,
       lastMessagePreview: null,
       lastMessageNotice: null,
+      lastMessageCard: null,
     },
     {
       conversationId: "dm-grace",
@@ -67,6 +68,7 @@ test("DM preferences and unread counts become one row per conversation", () => {
       lastMessageAt: null,
       lastMessagePreview: null,
       lastMessageNotice: null,
+      lastMessageCard: null,
     },
     {
       conversationId: "dm-scout",
@@ -80,6 +82,7 @@ test("DM preferences and unread counts become one row per conversation", () => {
       lastMessageAt: null,
       lastMessagePreview: null,
       lastMessageNotice: null,
+      lastMessageCard: null,
     },
   ]);
 });

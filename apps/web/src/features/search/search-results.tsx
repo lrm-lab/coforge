@@ -1,3 +1,4 @@
+import { actionCardPreviewText } from "#src/features/conversations/action-card-preview";
 import { channelLabel } from "#src/features/conversations/channel-visibility";
 import { useMemo } from "react";
 import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
@@ -309,11 +310,14 @@ function SearchResultRow({
   const place = conversation.channelName
     ? channelLabel({ name: conversation.channelName, visibility: conversation.visibility })
     : `@${directName(conversation.direct) ?? message.senderName}`;
-  const text = message.body
-    ? messagePlainText({ body: message.body, mentions: message.mentions })
-    : message.forwarded
-      ? m.message_forward_preview({ text: message.forwarded.sourceBody })
-      : (message.attachments[0]?.fileName ?? "");
+  // An action card's excerpt is written in the viewer's language; it matched on its English body.
+  const text =
+    actionCardPreviewText(message.card) ||
+    (message.body
+      ? messagePlainText({ body: message.body, mentions: message.mentions })
+      : message.forwarded
+        ? m.message_forward_preview({ text: message.forwarded.sourceBody })
+        : (message.attachments[0]?.fileName ?? ""));
   const target = messagePreviewTarget(conversation, message);
   const onClick = useResultClick({
     onPreview: preview && target ? () => preview(target) : undefined,

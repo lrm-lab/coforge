@@ -1,11 +1,10 @@
-import type { ActionCardAction } from "@lrm/coforge-sdk/agent";
+import type { ActionCardAction, ChannelAddMemberAction } from "@lrm/coforge-sdk/agent";
 import { choiceLetter } from "#src/features/conversations/choice-letter";
 import { bareHandle } from "./action-card-handles.server";
 import { appRecoverOwnerSummary } from "./app-recover-owner-action-cards.server";
 import { appRegisterSummary } from "./app-register-action-cards.server";
 
 const ensureAt = (value: string) => (value.startsWith("@") ? value : `@${value}`);
-const ensureHash = (value: string) => (value.startsWith("#") ? value : `#${value}`);
 
 /** The one-line, human-readable summary that becomes the posted Message body. */
 export function actionCardSummary(action: ActionCardAction): string {
@@ -32,6 +31,15 @@ export function actionCardSummary(action: ActionCardAction): string {
   }
   if (action.type === "channel:create") return `Action card: create channel #${action.name}`;
   if (action.type === "agent:create") return `Action card: create agent ${action.name}`;
-  const actors = [...(action.humans ?? []), ...(action.agents ?? [])].map(ensureAt);
-  return `Action card: add ${actors.join(", ")} to ${ensureHash(bareHandle(action.channel))}`;
+  const { channelHandle, memberHandles } = addMemberHandles(action);
+  return `Action card: add ${memberHandles.join(", ")} to #${channelHandle}`;
+}
+
+/** The channel (bare) and members (`@handle`) an `add_member` card names, as the Agent wrote them:
+ * its body, and the snapshot its payload keeps for the preview line. */
+export function addMemberHandles(action: ChannelAddMemberAction) {
+  return {
+    channelHandle: bareHandle(action.channel),
+    memberHandles: [...(action.humans ?? []), ...(action.agents ?? [])].map(ensureAt),
+  };
 }

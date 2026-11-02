@@ -5,6 +5,7 @@
  * and the unread mark. JSON-compatible values only, so an unchanged summary keeps its object across
  * a re-read (see `features/conversations/AGENTS.md`).
  */
+import type { PreviewCard } from "./action-card-preview";
 import type { MentionRef } from "./mention-text";
 
 /** The stream's thread preview lists this many of a thread's newest replies. */
@@ -25,6 +26,9 @@ export type ThreadPreviewReply = {
   /** The reply's own mentions, which name a mentioned Agent even once it is deleted. Absent from a
    * summary the browser kept from before previews carried them. */
   mentions?: MentionRef[];
+  /** Set when the reply is an action card: what its line is written from in the viewer's
+   * language, `body` being its stored English. */
+  card?: PreviewCard;
   createdAt: string;
 };
 
@@ -63,6 +67,8 @@ export type ThreadReplyInput = {
   senderDeleted?: boolean;
   body: string;
   mentions?: MentionRef[];
+  /** A loaded reply's card, whose view carries its preview line (`ActionCardViewBase.preview`). */
+  actionCard?: { preview?: PreviewCard };
   createdAt: Date | string;
 };
 
@@ -91,6 +97,7 @@ export function withReply(
           senderDeleted: reply.senderDeleted ?? false,
           body: previewBody(reply.body),
           mentions: reply.mentions ?? [],
+          ...(reply.actionCard?.preview ? { card: reply.actionCard.preview } : {}),
           createdAt,
         },
       ].slice(-THREAD_PREVIEW_REPLIES)

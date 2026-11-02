@@ -40,12 +40,31 @@ function row(overrides: {
       reactionVersion: 0,
       reactions: [],
       forward: null,
+      actionCard: null,
       ...overrides.message,
     },
   };
 }
 
 describe("savedMessageView", () => {
+  test("an action card carries what its line is written from; any other message carries none", () => {
+    const card = savedMessageView(
+      row({
+        message: {
+          body: "Action card: create channel #launch",
+          actionCard: {
+            kind: "channel:create",
+            payload: { type: "channel:create", name: "launch", visibility: "public" },
+            draftHint: null,
+          },
+        },
+      }),
+      WORKSPACE_ID,
+    );
+    expect(card.message.card).toEqual({ kind: "channel:create", params: { name: "launch" } });
+    expect(savedMessageView(row({}), WORKSPACE_ID).message).not.toHaveProperty("card");
+  });
+
   test("carries savedAt and conversation context beside the browser message", () => {
     const savedAt = new Date("2026-09-23T02:34:56Z");
     const view = savedMessageView(row({ savedAt }), WORKSPACE_ID);

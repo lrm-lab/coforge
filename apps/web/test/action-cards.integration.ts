@@ -111,6 +111,9 @@ test("prepare persists channel:add_member resolving the channel by bare name and
       channelId: ctx.hub.id,
       humanIds: [ctx.bob.id],
       agentIds: [ctx.existingAgent.id],
+      // The names as the Agent wrote them, kept for the preview line only.
+      channelHandle: ctx.hub.channelName,
+      memberHandles: [`@${ctx.bob.username}`, `@${ctx.existingAgent.name}`],
     });
     const message = await ctx.db.message.findUniqueOrThrow({ where: { id: result.messageId } });
     expect(message.body).toBe(
@@ -160,6 +163,8 @@ test("prepare resolves every handle kind by UUID as well as by name, and names t
       channelId: ctx.hub.id,
       humanIds: [ctx.bob.id],
       agentIds: [ctx.existingAgent.id],
+      channelHandle: ctx.hub.id,
+      memberHandles: [`@${ctx.bob.id}`, `@${ctx.existingAgent.id}`],
     });
     const placed = await ctx.actionCards.prepare(ctx.principal, {
       target: `#${ctx.hub.channelName}`,

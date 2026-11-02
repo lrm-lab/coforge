@@ -10,7 +10,7 @@ import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { ActionCardError } from "./action-card-error.server";
 import { ActionCardHandles } from "./action-card-handles.server";
-import { actionCardSummary } from "./action-card-summary.server";
+import { actionCardSummary, addMemberHandles } from "./action-card-summary.server";
 import { resolveAppRecoverOwnerPayload } from "./app-recover-owner-action-cards.server";
 import { resolveAppRegisterPayload } from "./app-register-action-cards.server";
 import { PublicChannels } from "./public-channels.server";
@@ -415,6 +415,7 @@ export class ActionCards {
       channelId,
       ...(humanIds ? { humanIds } : {}),
       ...(agentIds ? { agentIds } : {}),
+      ...addMemberHandles(action),
     };
   }
 }

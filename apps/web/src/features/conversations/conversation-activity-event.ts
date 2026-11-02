@@ -1,4 +1,6 @@
+import { isRecord } from "@lrm/coforge-sdk/internal";
 import { publicationDataOrUndefined } from "#src/features/realtime/publication-data";
+import type { PreviewCard } from "./action-card-preview";
 import type { PreviewNotice } from "./preview-line";
 
 /**
@@ -27,6 +29,8 @@ export type ConversationActivityEvent = {
   /** Set when the message is a system notice: what the row renders it from in the viewer's
    * language, `preview` being its stored English. */
   notice?: PreviewNotice;
+  /** Set when the message is an action card, likewise. */
+  card?: PreviewCard;
   sender: { kind: "user" | "agent" | "system"; name: string };
   /** The person who wrote it; absent for an Agent's or a system message. */
   senderUserId?: string;
@@ -53,6 +57,7 @@ export function decodeConversationActivityEvent(
   const createdAt = Reflect.get(value, "createdAt");
   const preview = Reflect.get(value, "preview");
   const notice = Reflect.get(value, "notice");
+  const card = Reflect.get(value, "card");
   const sender = Reflect.get(value, "sender");
   const senderUserId = Reflect.get(value, "senderUserId");
   const senderAgentId = Reflect.get(value, "senderAgentId");
@@ -72,6 +77,7 @@ export function decodeConversationActivityEvent(
     !createdAt ||
     typeof preview !== "string" ||
     (notice !== undefined && !isPreviewNotice(notice)) ||
+    (card !== undefined && !isPreviewCard(card)) ||
     !isActivitySender(sender) ||
     (senderUserId !== undefined && (typeof senderUserId !== "string" || !senderUserId)) ||
     (senderAgentId !== undefined && (typeof senderAgentId !== "string" || !senderAgentId)) ||
@@ -88,6 +94,7 @@ export function decodeConversationActivityEvent(
     createdAt,
     preview,
     ...(notice ? { notice } : {}),
+    ...(card ? { card } : {}),
     sender,
     ...(senderUserId ? { senderUserId } : {}),
     ...(senderAgentId ? { senderAgentId } : {}),
@@ -99,6 +106,16 @@ function isPreviewNotice(value: unknown): value is PreviewNotice {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const kind = Reflect.get(value, "kind");
   return typeof kind === "string" && kind.length > 0 && "params" in value;
+}
+
+function isPreviewCard(value: unknown): value is PreviewCard {
+  return (
+    isRecord(value) &&
+    typeof value.kind === "string" &&
+    value.kind.length > 0 &&
+    isRecord(value.params) &&
+    (value.hint === undefined || typeof value.hint === "string")
+  );
 }
 
 function isActivitySender(value: unknown): value is ConversationActivityEvent["sender"] {

@@ -249,6 +249,7 @@ export function optimisticSavedEntry(message: StreamMessage, conversationId: str
       attachments: message.attachments,
       reactions: message.reactions,
       actionCard: message.actionCard,
+      ...(message.actionCard?.preview ? { card: message.actionCard.preview } : {}),
       ...(message.weeklyReportSuggestion
         ? {
             weeklyReportSuggestion: message.weeklyReportSuggestion,

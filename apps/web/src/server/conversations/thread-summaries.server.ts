@@ -1,3 +1,4 @@
+import { ACTION_CARD_PREVIEW_SELECT, previewCardFieldOf } from "./action-card-preview.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import {
   THREAD_PREVIEW_REPLIES,
@@ -97,6 +98,7 @@ export async function readWindowThreads(
           body: true,
           createdAt: true,
           mentions: BROWSER_MESSAGE_MENTIONS_SELECT,
+          actionCard: ACTION_CARD_PREVIEW_SELECT,
           sender: {
             select: {
               userId: true,
@@ -127,6 +129,7 @@ export async function readWindowThreads(
       senderDeleted: Boolean(message.sender?.agent?.deletedAt),
       body: previewBody(message.body),
       mentions: message.mentions.map(browserMessageMention),
+      ...previewCardFieldOf(message.actionCard),
       createdAt: message.createdAt.toISOString(),
     });
     latestByRoot.set(message.threadRootId!, list);

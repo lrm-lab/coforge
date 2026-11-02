@@ -33,5 +33,15 @@
   "action_card_cancelled": "Cancelled",
   "action_card_required_computer": "Must run on {name}",
   "action_card_suggested_computer": "Suggested computer: {name}",
-  "action_card_initial_members": "Initial members"
+  "action_card_initial_members": "Initial members",
+  "action_card_preview_channel_create": "Action card: create channel #{name}",
+  "action_card_preview_agent_create": "Action card: create agent {name}",
+  "action_card_preview_add_member": "Action card: add {members} to #{channel}",
+  "action_card_preview_app_register": "Action card: register app {name}",
+  "action_card_preview_app_recover_owner": "Action card: make {agent} the owner Agent of app {app}",
+  "action_card_preview_app_grant_agent": "Action card: approve my use of the app {app} ({key})",
+  "action_card_preview_page_fill": "Fill the page: {labels}",
+  "action_card_preview_page_fill_prompt": "Fill the page: {prompt} ({labels})",
+  "action_card_preview_desktop_takeover": "Open the cloud desktop to finish this step",
+  "action_card_preview_desktop_takeover_prompt": "Open the cloud desktop: {prompt}"
 }

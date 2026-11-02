@@ -3,6 +3,7 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import type { ConversationActivityEvent } from "#src/features/conversations/conversation-activity-event";
 import { BROWSER_MESSAGE_MENTIONS_SELECT, browserMessageMention } from "./mentions.server";
 import { previewNoticeOf } from "#src/features/conversations/preview-line";
+import { ACTION_CARD_PREVIEW_SELECT, previewCardFieldOf } from "./action-card-preview.server";
 import { messagePreviewLine } from "./message-preview-line.server";
 import { browserSenderName } from "./sender-display.server";
 import {
@@ -81,6 +82,7 @@ export async function announceMessage(
       mentions: BROWSER_MESSAGE_MENTIONS_SELECT,
       forward: { select: { sourceBody: true } },
       systemMessage: { select: { kind: true, params: true } },
+      actionCard: ACTION_CARD_PREVIEW_SELECT,
     },
   });
   if (!stored) {
@@ -104,6 +106,7 @@ export async function announceMessage(
       stored.forward?.sourceBody,
     ),
     ...previewNoticeOf(stored.systemMessage?.kind ?? null, stored.systemMessage?.params),
+    ...previewCardFieldOf(stored.actionCard),
     sender: {
       kind: stored.sender?.userId ? "user" : stored.sender?.agentId ? "agent" : "system",
       name: browserSenderName(

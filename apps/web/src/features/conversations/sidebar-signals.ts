@@ -74,6 +74,7 @@ export function applyConversationActivityToRow(
         createdAt: event.createdAt,
         preview: event.preview,
         ...(event.notice ? { notice: event.notice } : {}),
+        ...(event.card ? { card: event.card } : {}),
         sender: {
           kind: event.sender.kind,
           name: event.sender.name,
@@ -89,6 +90,7 @@ export function applyConversationActivityToRow(
     lastMessageAt: event.createdAt,
     lastMessagePreview: event.preview,
     lastMessageNotice: event.notice ?? null,
+    lastMessageCard: event.card ?? null,
   });
   return true;
 }

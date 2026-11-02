@@ -6,7 +6,9 @@ import {
 } from "#src/server/db/repositories/channel-list-preview.repositories.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
+import type { PreviewCard } from "#src/features/conversations/action-card-preview";
 import { previewNoticeOf, type PreviewNotice } from "#src/features/conversations/preview-line";
+import { previewCardFieldOf } from "#src/server/conversations/action-card-preview.server";
 import { browserSenderName } from "#src/server/conversations/sender-display.server";
 import {
   messagePreviewLine,
@@ -33,6 +35,9 @@ export type ChannelListLastMessage = {
   /** Set when the message is a system notice: what the browser renders it from in the viewer's
    * language, `preview` being its stored English. */
   notice?: PreviewNotice;
+  /** Set when the message is an action card: what the browser writes its line from in the
+   * viewer's language, `preview` being its stored English. */
+  card?: PreviewCard;
   sender: ChannelListSender;
 };
 
@@ -157,6 +162,7 @@ export async function channelListPreviews(
         row.forwardedBody,
       ),
       ...previewNoticeOf(row.noticeKind, row.noticeParams),
+      ...previewCardFieldOf(row.card),
       sender: previewSenderOf(row, viewerUserId, names),
     };
   }

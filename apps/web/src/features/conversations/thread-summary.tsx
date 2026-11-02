@@ -1,3 +1,4 @@
+import { actionCardPreviewText } from "./action-card-preview";
 import { ChevronRight, MessageSquare01 as MessageSquare } from "@untitledui/icons";
 
 import { ThreadReplyingLine } from "#src/features/agents/replying-agents-line";
@@ -116,7 +117,7 @@ export function ThreadPreview({ rootId, onOpen }: ThreadPartProps) {
               {reply.senderName}
             </span>
             <span className="message-text min-w-0 flex-1 truncate text-md text-secondary">
-              {formatBody(reply.body, reply.mentions)}
+              {actionCardPreviewText(reply.card) || formatBody(reply.body, reply.mentions)}
             </span>
             <RelativeTime
               value={reply.createdAt}

@@ -22,7 +22,13 @@ import {
   browserMessageMention,
 } from "#src/server/conversations/mentions.server";
 import { peopleDirectPeerId } from "#src/features/conversations/direct-key";
+import type { PreviewCard } from "#src/features/conversations/action-card-preview";
 import { previewNoticeOf, type PreviewNotice } from "#src/features/conversations/preview-line";
+import {
+  ACTION_CARD_PREVIEW_COLUMN,
+  previewCardFieldOf,
+  type StoredActionCard,
+} from "#src/server/conversations/action-card-preview.server";
 import {
   peoplePeer,
   peoplePeerUserFields,
@@ -40,11 +46,18 @@ type LatestMessageRow = {
   /** The message's system notice kind and params, null for a message that is not a notice. */
   noticeKind: string | null;
   noticeParams: Prisma.JsonValue;
+  /** The message's action card, null for a message that is not one (`previewCardOf`). */
+  card: StoredActionCard | null;
 };
 
 /** A DM's newest top-level message as its list preview: its time, its one-line text, and, for a
  * system notice, the kind and params the browser renders it from in the viewer's language. */
-type DirectLastMessage = { createdAt: string; preview: string; notice?: PreviewNotice };
+type DirectLastMessage = {
+  createdAt: string;
+  preview: string;
+  notice?: PreviewNotice;
+  card?: PreviewCard;
+};
 
 /** A direct conversation of the viewer's, by its id, and the viewer's own member row in it. */
 export type ViewerDirectMembership = { conversationId: string; memberId: string };
@@ -160,7 +173,8 @@ export class PrismaDirectConversationPreferences {
                     THEN left(forward."sourceBody", ${FORWARDED_PREVIEW_SOURCE_LENGTH}::int) END AS "forwardedBody",
                latest."createdAt" AS "createdAt",
                notice."kind" AS "noticeKind",
-               notice."params" AS "noticeParams"
+               notice."params" AS "noticeParams",
+               ${ACTION_CARD_PREVIEW_COLUMN} AS "card"
         FROM "conversation_members" cm
         JOIN "conversations" c
           ON c."id" = cm."conversationId"
@@ -173,6 +187,7 @@ export class PrismaDirectConversationPreferences {
         ) latest
         LEFT JOIN "message_forwards" forward ON forward."messageId" = latest."id"
         LEFT JOIN "system_messages" notice ON notice."messageId" = latest."id"
+        LEFT JOIN "action_cards" card ON card."messageId" = latest."id"
         WHERE cm."userId" = ${userId}::uuid
           AND cm."workspaceId" = ${workspaceId}::uuid
           AND cm."leftAt" IS NULL
@@ -270,6 +285,7 @@ export class PrismaDirectConversationPreferences {
             row.forwardedBody,
           ),
           ...previewNoticeOf(row.noticeKind, row.noticeParams),
+          ...previewCardFieldOf(row.card),
         },
       ]),
     );

@@ -1,4 +1,5 @@
 import type { ChatListValue } from "./chat-lists-reader";
+import type { PreviewCard } from "./action-card-preview";
 import type { PreviewNotice } from "./preview-line";
 
 /** What the server says about the viewer's DMs, by conversation id; the stream positions it was
@@ -35,13 +36,15 @@ export type DirectRow = {
    * language, `lastMessagePreview` being its stored English. Absent from a copy stored before
    * rows carried it, which shows the stored English until the list is read again. */
   lastMessageNotice?: PreviewNotice | null;
+  /** Set when that message is an action card, likewise. */
+  lastMessageCard?: PreviewCard | null;
 };
 
 /** A DM row as the list holds it: without its last message, which moves on every message and is
  * read per row (`useLiveDirectRow`), so a message does not render the whole list. */
 export type ListedDirect = Omit<
   DirectRow,
-  "lastMessageAt" | "lastMessagePreview" | "lastMessageNotice"
+  "lastMessageAt" | "lastMessagePreview" | "lastMessageNotice" | "lastMessageCard"
 >;
 
 /** One row per DM the preferences list, in their order, with its unread count. */
@@ -64,6 +67,7 @@ export function directRowsOf(
       lastMessageAt: lastMessage?.createdAt ?? null,
       lastMessagePreview: lastMessage?.preview ?? null,
       lastMessageNotice: lastMessage?.notice ?? null,
+      lastMessageCard: lastMessage?.card ?? null,
     }),
   );
 }

@@ -1,4 +1,5 @@
 import type { Prisma } from "#src/generated/prisma/client";
+import { actionCardPreviewText, type PreviewCard } from "./action-card-preview";
 import { systemNoticeText } from "./system-notice-text";
 
 /** The longest one-line preview, in grapheme clusters (what a reader sees as characters),
@@ -21,10 +22,16 @@ export function oneLine(text: string): string {
  * stored kind and params, which a server function returns as they are read. */
 export type PreviewNotice = { kind: string; params: Prisma.JsonValue };
 
-/** A list's preview as the viewer reads it: a system notice rendered in their language, cut to
- * one line like any preview; any other message as the server wrote it. */
-export function previewText(preview: string, notice?: PreviewNotice | null): string {
-  return notice ? oneLine(systemNoticeText({ body: preview, system: notice })) : preview;
+/** A list's preview as the viewer reads it: a system notice or an action card written in their
+ * language, cut to one line like any preview; any other message as the server wrote it. */
+export function previewText(
+  preview: string,
+  notice?: PreviewNotice | null,
+  card?: PreviewCard | null,
+): string {
+  if (notice) return oneLine(systemNoticeText({ body: preview, system: notice }));
+  const cardText = actionCardPreviewText(card);
+  return cardText ? oneLine(cardText) : preview;
 }
 
 /** The `notice` field a list's last message carries, from a read's joined notice columns: present
