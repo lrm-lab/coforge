@@ -134,6 +134,7 @@ function browserRow(forward: BrowserMessageRow["forward"]): BrowserMessageRow {
     threadRootId: null,
     senderMemberId: "member-1",
     body: "note",
+    systemMessage: null,
     createdAt: new Date("2026-10-30T09:00:00.000Z"),
     sender: null,
     attachments: [],

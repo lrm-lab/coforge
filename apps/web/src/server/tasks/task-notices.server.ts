@@ -122,3 +122,35 @@ export const noticeText = {
     `${STATUS_WORDING[status].emoji} ${actor} moved ${reference(task)} to ${STATUS_WORDING[status].label}`,
   unassigned: (actor: DisplayName, task: QuotedTask) => `🔓 ${actor} unassigned ${reference(task)}`,
 };
+
+/**
+ * The kind a rendered notice has, by the same templates above. The backfill migration embeds
+ * these pattern sources; `task-notice-classification.test.ts` renders every template and checks
+ * that it classifies back to its kind.
+ */
+export const NOTICE_PATTERNS = [
+  { kind: "task.created", pattern: "^📋 [0-9]+ new tasks? created: " },
+  { kind: "task.converted", pattern: "^📋 .+ converted a message to task #[0-9]+" },
+  { kind: "task.from_message", pattern: "^📋 .+ made task #[0-9]+ .*from this message" },
+  { kind: "task.assigned", pattern: "^📌 .+ assigned #[0-9]+ .+ to @" },
+  { kind: "task.assigned", pattern: "^📌 Assigned @[^ ]+ to tasks? #[0-9]+" },
+  { kind: "task.claimed", pattern: "^📌 .+ claimed #[0-9]+" },
+  {
+    kind: "task.moved",
+    pattern: "^.+ moved #[0-9]+ .+ to (Todo|In Progress|In Review|Done|Closed)$",
+  },
+  { kind: "task.unassigned", pattern: "^🔓 .+ unassigned #[0-9]+" },
+  { kind: "task.assigned_you", pattern: "^@?[^ ]+ assigned you task #[0-9]+: " },
+  { kind: "task.unfollowed", pattern: "^.+ stopped following this task" },
+  {
+    kind: "channel.coordinator_changed",
+    pattern: "^.+ (made @[^ ]+ the coordinator of #|removed @[^ ]+ as coordinator of #)",
+  },
+  { kind: "channel.coordinator_changed", pattern: "^\\[CoForge coordinator change\\] #" },
+  { kind: "agent_dm.chain_limit", pattern: "^\\[CoForge paused\\] These Agents have exchanged" },
+  { kind: "agent_dm.rate_limit", pattern: "^\\[CoForge paused\\] An Agent here has sent" },
+] as const;
+
+export function noticeKind(body: string): (typeof NOTICE_PATTERNS)[number]["kind"] | undefined {
+  return NOTICE_PATTERNS.find((entry) => new RegExp(entry.pattern).test(body))?.kind;
+}

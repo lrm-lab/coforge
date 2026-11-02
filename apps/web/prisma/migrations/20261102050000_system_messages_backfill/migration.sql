@@ -1,7 +1,7 @@
 -- migration-safety v1
--- checked: 2026-11-02T03:21:56.003Z  pg: 18.0  verdict: ok-with-lock-timeout
+-- checked: 2026-11-02T03:24:20.272Z  pg: 18.0  verdict: ok-with-lock-timeout
 -- snapshot: 2026-11-02T02:44:37.622Z production
--- body-sha256: 12f43c7ec3e8a82a84a81585552dd6a71e1a0dc96e0cb92afbaa1f11d1240f71
+-- body-sha256: ad293883c2fddce7caacfe4a15402801e7d3357aa7e67c5dee8fc7880279ca76
 -- table: "*" rows≈-1 size=0 lock=access-exclusive rewrite=yes statement=unrecognised statement
 SET lock_timeout = '5s';
 
@@ -27,7 +27,7 @@ BEGIN
     CASE
       WHEN m.body ~ '^📋 [0-9]+ new tasks? created: ' THEN 'task.created'
       WHEN m.body ~ '^📋 .+ converted a message to task #[0-9]+' THEN 'task.converted'
-      WHEN m.body ~ '^📋 .+ made task #[0-9]+ from this message' THEN 'task.from_message'
+      WHEN m.body ~ '^📋 .+ made task #[0-9]+ .*from this message' THEN 'task.from_message'
       WHEN m.body ~ '^📌 .+ assigned #[0-9]+ .+ to @' THEN 'task.assigned'
       WHEN m.body ~ '^📌 Assigned @[^ ]+ to tasks? #[0-9]+' THEN 'task.assigned'
       WHEN m.body ~ '^📌 .+ claimed #[0-9]+' THEN 'task.claimed'
@@ -37,11 +37,8 @@ BEGIN
       WHEN m.body ~ '^.+ stopped following this task' THEN 'task.unfollowed'
       WHEN m.body ~ '^.+ (made @[^ ]+ the coordinator of #|removed @[^ ]+ as coordinator of #)' THEN 'channel.coordinator_changed'
       WHEN m.body ~ '^\[CoForge coordinator change\] #' THEN 'channel.coordinator_changed'
-      WHEN m.body = '[CoForge paused] These Agents have exchanged too many messages in a row. They can continue after 10 minutes without a message.' THEN 'agent_dm.chain_limit'
-      WHEN m.body = '[CoForge paused] An Agent here has sent too many direct messages to other Agents in the last hour. It can send again when the hour''s total drops below the limit.' THEN 'agent_dm.rate_limit'
-      WHEN m.body ~ '^.+ released #[0-9]+' THEN 'legacy.released'
-      WHEN m.body ~ '^.+ deleted #[0-9]+' THEN 'legacy.deleted'
-      WHEN m.body ~ '^(Reminder #[^ ]+|Reminder( \([^)]+\))?:|.+? (scheduled|canceled|cancelled) (a )?reminder)' THEN 'legacy.reminder'
+      WHEN m.body ~ '^\[CoForge paused\] These Agents have exchanged' THEN 'agent_dm.chain_limit'
+      WHEN m.body ~ '^\[CoForge paused\] An Agent here has sent' THEN 'agent_dm.rate_limit'
       ELSE 'unclassified'
     END AS kind
   FROM messages m

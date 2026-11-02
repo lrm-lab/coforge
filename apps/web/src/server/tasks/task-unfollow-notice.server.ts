@@ -1,5 +1,6 @@
 import { humanLabel } from "#src/lib/human-label";
 import { withNotices } from "./task-notice-posting.server";
+import { noticeActor } from "./task-notices.server";
 import type { TaskBoardPorts } from "./task-board-ports.server";
 import { TASK_MEMBER_SELECT } from "./task-view.server";
 
@@ -38,20 +39,13 @@ export async function postUnfollowNotice(
   const name = member?.user
     ? humanLabel(member.user)
     : member?.agent?.displayName?.trim() || member?.agent?.name || "Someone";
+  const actor = member ? noticeActor(member) : { memberId, handle: "", displayName: "Someone" };
   await withNotices(ports, scope, (_tx, notices) =>
-    notices.inThread(task, () => ({
+    notices.inThread(task, (quoted) => ({
       body: unfollowNoticeBody(name, reason),
       system: {
         kind: "task.unfollowed",
-        params: {
-          actor: {
-            memberId,
-            handle: member?.user?.username ?? member?.agent?.name ?? "",
-            displayName: name,
-          },
-          task: { taskId: task.id, number: task.number, title: task.title },
-          ...(reason ? { reason } : {}),
-        },
+        params: { actor, task: quoted, ...(reason ? { reason } : {}) },
       },
     })),
   );

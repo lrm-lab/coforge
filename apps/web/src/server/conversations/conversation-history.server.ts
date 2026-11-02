@@ -64,13 +64,9 @@ export const browserMessageFields = {
   systemMessage: { select: { kind: true, params: true } },
 } satisfies Prisma.MessageSelect;
 
-export type BrowserMessageRow = Omit<
-  Prisma.MessageGetPayload<{ select: typeof browserMessageFields }>,
-  "systemMessage"
-> & {
-  /** Optional so a test fixture written before the field still fits; a database row always has it. */
-  systemMessage?: { kind: string; params: Prisma.JsonValue } | null;
-};
+export type BrowserMessageRow = Prisma.MessageGetPayload<{
+  select: typeof browserMessageFields;
+}>;
 
 /** Exported for a pure unit test of this projection (no database needed). Channels and direct
  * conversations share it whole: `senderMemberId` is how a pane tells the viewer's own messages. */

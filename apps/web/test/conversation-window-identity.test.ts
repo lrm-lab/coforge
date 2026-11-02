@@ -25,6 +25,7 @@ function row(sequence: number, overrides: Partial<BrowserMessageRow> = {}): Brow
     threadRootId: null,
     senderMemberId: "member-1",
     body: `message ${sequence}`,
+    systemMessage: null,
     createdAt: new Date(`2026-09-17T10:0${sequence}:00Z`),
     sender: null,
     attachments: [],

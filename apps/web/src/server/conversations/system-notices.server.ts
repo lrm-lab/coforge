@@ -38,10 +38,7 @@ export type SystemNotice =
       };
     }
   | { kind: "agent_dm.chain_limit" | "agent_dm.rate_limit"; params: Record<string, never> }
-  | {
-      kind: "legacy.released" | "legacy.deleted" | "legacy.reminder" | "legacy_text";
-      params: { body: string };
-    };
+  | { kind: "legacy_text"; params: { body: string } };
 
 /** The body and structured content one notice carries. */
 export type SystemNoticeContent = { body: string; system: SystemNotice };
