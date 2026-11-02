@@ -5,7 +5,14 @@ import type {
   AgentSessionOptions,
   UsageSnapshot,
 } from "@coforge/agent";
-import { type CodeAgentProvider, JsonlRequestError, asRecord, eventTime } from "@lrm/coforge-anvil";
+import {
+  AGENT_RUNTIME_EVENT_TYPE,
+  type CodeAgentProvider,
+  JsonlRequestError,
+  asRecord,
+  eventTime,
+} from "@lrm/coforge-anvil";
+import { codexContextUsage } from "./context-usage";
 import { JsonlProcess } from "@lrm/coforge-anvil/execution";
 import { CodexItemEvents } from "./item-events";
 import { rejectServerRequests } from "./server-requests";
@@ -308,7 +315,11 @@ class CodexAgentSession implements AgentSession {
     ) {
       if (!this.#acceptsTurnItem(params)) return;
       this.#signals.markEvidence();
-      if (record.method === "thread/tokenUsage/updated") return;
+      if (record.method === "thread/tokenUsage/updated") {
+        const usage = codexContextUsage(params);
+        if (usage) this.#emitAll([{ type: AGENT_RUNTIME_EVENT_TYPE.CONTEXT_USAGE, ...usage }]);
+        return;
+      }
     }
     const signalEvents = this.#signals.notification(record, params);
     if (signalEvents) {

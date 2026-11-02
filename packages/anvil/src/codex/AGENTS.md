@@ -40,3 +40,5 @@
   Anything unreadable resumes the old session. The cold gap is 30 minutes
   (`CODEX_IDLE_RECYCLE_MIN_COLD_GAP_MS`). The JSONL shape is Codex's internal rollout
   (`RolloutLine` / `RolloutItemWire`, openai/codex main on 2026-10-28), not a stable API.
+- Context usage (`context-usage.ts`): `thread/tokenUsage/updated`'s `tokenUsage.last.totalTokens`
+  against `modelContextWindow`, as Raft 1.0.59 reads it. Never `total`, which is cumulative.

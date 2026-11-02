@@ -162,6 +162,19 @@ function turnScenario(input: string | undefined, turnId: string): void {
     write({ method, params: { threadId, ...params } });
   const say = (delta: string) => notify("item/agentMessage/delta", { turnId, itemId: "m1", delta });
   if (input === "token-usage-only") notify("thread/tokenUsage/updated", { turnId, tokenUsage: {} });
+  if (input === "token-usage") {
+    // A real reading: the last request against the window, the cumulative total far past it.
+    const breakdown = (totalTokens: number) => ({ totalTokens, inputTokens: totalTokens });
+    notify("thread/tokenUsage/updated", {
+      turnId,
+      tokenUsage: {
+        last: breakdown(120_000),
+        total: breakdown(6_900_000),
+        modelContextWindow: 258_400,
+      },
+    });
+    say("Done");
+  }
   if (input === "plan-only") {
     // An item kind that maps to no runtime event.
     const item = { type: "plan", id: "p1", text: "" };
