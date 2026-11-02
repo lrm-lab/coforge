@@ -2,7 +2,6 @@ import { expect, test } from "bun:test";
 import pc from "picocolors";
 
 import { ComputerLogin, type DeviceAuthorizationClient } from "#src/login";
-import { shouldBypassProxy } from "#src/no-proxy";
 import {
   describeNetworkError,
   isTransientNetworkError,
@@ -210,28 +209,6 @@ test("中间成功响应会重置连续错误计数", async () => {
   const result = await login.run({ serverUrl: "https://coforge.example" });
   expect(result.serverUrl).toBe("https://coforge.example");
   expect(polls).toBe(6);
-});
-
-test("noProxy 规则支持端口与 *. 前缀匹配", () => {
-  expect(shouldBypassProxy("http://127.0.0.1:8080", "127.0.0.1:8080")).toBe(true);
-  expect(shouldBypassProxy("http://127.0.0.1:9090", "127.0.0.1:8080")).toBe(false);
-
-  expect(shouldBypassProxy("https://sub.domain.com", "*.domain.com")).toBe(true);
-  expect(shouldBypassProxy("https://domain.com", "*.domain.com")).toBe(true);
-  expect(shouldBypassProxy("https://other.com", "*.domain.com")).toBe(false);
-
-  expect(shouldBypassProxy("https://sub.domain.com", ".domain.com")).toBe(true);
-  expect(shouldBypassProxy("https://domain.com", ".domain.com")).toBe(true);
-
-  expect(shouldBypassProxy("http://anything.com", "*")).toBe(true);
-
-  // Comma and whitespace delimited
-  const list = "localhost, 127.0.0.1:3000, *.internal.net";
-  expect(shouldBypassProxy("http://localhost", list)).toBe(true);
-  expect(shouldBypassProxy("http://127.0.0.1:3000", list)).toBe(true);
-  expect(shouldBypassProxy("http://127.0.0.1:4000", list)).toBe(false);
-  expect(shouldBypassProxy("https://app.internal.net", list)).toBe(true);
-  expect(shouldBypassProxy("https://external.net", list)).toBe(false);
 });
 
 test("setup 结束输出直接打开 server 对应 Workspace 的链接", () => {

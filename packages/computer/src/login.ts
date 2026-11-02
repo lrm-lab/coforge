@@ -63,6 +63,20 @@ export type ComputerLoginOptions = {
   colors?: Pick<typeof pc, "bold" | "cyan" | "green">;
 };
 
+function throwExpiredOrNetworkFailure(
+  consecutiveNetworkFailures: number,
+  lastNetworkError: unknown,
+  host: string,
+): never {
+  if (consecutiveNetworkFailures > 0) {
+    const cause = describeNetworkError(lastNetworkError);
+    throw loginError("AUTH_NETWORK_ERROR", lostConnectionMessage(host, cause), {
+      cause: lastNetworkError,
+    });
+  }
+  throw loginError("AUTH_DEVICE_CODE_EXPIRED", "The device authorization code expired.");
+}
+
 export class ComputerLogin {
   constructor(private readonly options: ComputerLoginOptions) {}
 
@@ -99,24 +113,12 @@ export class ComputerLogin {
     do {
       let remainingMilliseconds = deadline - now();
       if (intervalMilliseconds >= remainingMilliseconds) {
-        if (consecutiveNetworkFailures > 0) {
-          const cause = describeNetworkError(lastNetworkError);
-          throw loginError("AUTH_NETWORK_ERROR", lostConnectionMessage(host, cause), {
-            cause: lastNetworkError,
-          });
-        }
-        throw loginError("AUTH_DEVICE_CODE_EXPIRED", "The device authorization code expired.");
+        throwExpiredOrNetworkFailure(consecutiveNetworkFailures, lastNetworkError, host);
       }
       await this.options.sleep(intervalMilliseconds);
       remainingMilliseconds = deadline - now();
       if (remainingMilliseconds <= 0) {
-        if (consecutiveNetworkFailures > 0) {
-          const cause = describeNetworkError(lastNetworkError);
-          throw loginError("AUTH_NETWORK_ERROR", lostConnectionMessage(host, cause), {
-            cause: lastNetworkError,
-          });
-        }
-        throw loginError("AUTH_DEVICE_CODE_EXPIRED", "The device authorization code expired.");
+        throwExpiredOrNetworkFailure(consecutiveNetworkFailures, lastNetworkError, host);
       }
       try {
         token = await this.options.client.pollToken(
@@ -145,13 +147,7 @@ export class ComputerLogin {
         }
       }
       if (token.status !== "authorized" && deadline - now() <= 0) {
-        if (consecutiveNetworkFailures > 0) {
-          const cause = describeNetworkError(lastNetworkError);
-          throw loginError("AUTH_NETWORK_ERROR", lostConnectionMessage(host, cause), {
-            cause: lastNetworkError,
-          });
-        }
-        throw loginError("AUTH_DEVICE_CODE_EXPIRED", "The device authorization code expired.");
+        throwExpiredOrNetworkFailure(consecutiveNetworkFailures, lastNetworkError, host);
       }
     } while (token.status !== "authorized");
 
