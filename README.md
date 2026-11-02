@@ -45,6 +45,7 @@ The architecture invariants every change must respect are in
 | [Attachment comment maintenance](docs/database-schema/attachment-comment-migration.md) | Read-only preflight, private local-copy rehearsal, journal recovery and integration checks |
 | [docs/memory-disposition.md](docs/memory-disposition.md) | Target-only Memory Hint receipts, configuration, and validation |
 | [docs/reliable-message-delivery.md](docs/reliable-message-delivery.md) | Message delivery guarantees |
+| [docs/realtime-events.md](docs/realtime-events.md) | Realtime events: who publishes each `*.v1` event and who receives it |
 | [docs/workspace-deletion.md](docs/workspace-deletion.md) | What deleting a Workspace removes, and when |
 | [docs/authorization-server/](docs/authorization-server/README.md) | "Login with CoForge": the OpenID Connect authorization server for third-party apps, its configuration and endpoints |
 | [docs/app-bot/](docs/app-bot/README.md) | App Bot: an app's managed Agent per Workspace - declare, grant, the bot key and status line, what the key may call |
