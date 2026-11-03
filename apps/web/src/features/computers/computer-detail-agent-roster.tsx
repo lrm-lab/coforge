@@ -169,15 +169,17 @@ export function ComputerDetailAgentRoster({
           </p>
         )}
         {agents.length ? (
-          <>
+          // One grid for the heads and every row, which share its columns through `subgrid`: a
+          // column is as wide as its widest cell, so the name and runtime take what they need.
+          <div className={cn(ROSTER_COLUMNS, "@2xl:grid")}>
             {/* The table's column heads, set in by a row's checkbox while selecting; below `@2xl` a
                 row stacks its runtime under its name and its status is a dot, so there are no
                 columns to head. */}
             <div
               aria-hidden="true"
               className={cn(
-                ROSTER_COLUMNS,
-                "hidden pb-2 text-xs text-tertiary @2xl:grid",
+                ROSTER_ROW,
+                "hidden pb-2 text-xs text-tertiary",
                 selecting && ROSTER_SELECT_INSET,
               )}
             >
@@ -185,7 +187,7 @@ export function ComputerDetailAgentRoster({
               <span>{m.computer_agents_column_runtime()}</span>
               <span>{m.computer_agents_column_status()}</span>
             </div>
-            <ul className="divide-y divide-secondary border-y border-secondary">
+            <ul className={cn(ROSTER_ROW, "divide-y divide-secondary border-y border-secondary")}>
               {agents.map((agent) => {
                 const toggle = (selected: boolean) =>
                   setSelectedIds((current) => {
@@ -195,7 +197,7 @@ export function ComputerDetailAgentRoster({
                     return next;
                   });
                 return (
-                  <li key={agent.id}>
+                  <li key={agent.id} className={ROSTER_ROW}>
                     <AgentRosterEntry
                       agent={agent}
                       selecting={selecting}
@@ -208,7 +210,7 @@ export function ComputerDetailAgentRoster({
                 );
               })}
             </ul>
-          </>
+          </div>
         ) : (
           <p className="py-2 text-sm text-tertiary">{m.computer_no_agents_on_computer()}</p>
         )}
@@ -250,21 +252,29 @@ function AgentRosterEntry({
         isDisabled={locked}
         isSelected={selected}
         onChange={onToggle}
-        className="relative flex w-full cursor-pointer items-center gap-3 py-3 text-sm hover:bg-primary_hover disabled:cursor-not-allowed"
+        className={cn(
+          ROSTER_ROW,
+          ROSTER_SELECT_INSET,
+          "relative flex w-full cursor-pointer items-center gap-3 py-3 text-sm hover:bg-primary_hover disabled:cursor-not-allowed",
+        )}
       >
         {({ isSelected, isDisabled, isFocusVisible }) => (
           <>
-            <CheckboxBase
-              isSelected={isSelected}
-              isDisabled={isDisabled}
-              isFocusVisible={isFocusVisible}
-            />
+            {/* In the inset the heads are set in by, so the cells stay on the columns. */}
+            <span className="absolute top-1/2 left-0 flex -translate-y-1/2">
+              <CheckboxBase
+                isSelected={isSelected}
+                isDisabled={isDisabled}
+                isFocusVisible={isFocusVisible}
+              />
+            </span>
             {identity}
           </>
         )}
       </AriaCheckbox>
     );
-  if (!onSelectAgent) return <span className="block w-full py-3 text-sm">{identity}</span>;
+  if (!onSelectAgent)
+    return <span className={cn(ROSTER_ROW, "block w-full py-3 text-sm")}>{identity}</span>;
   // The official Button carries the row: `h-auto`/`py-3` keep the table's rhythm, `rounded-none
   // px-0` keep its cells on the column heads, and `font-normal` leaves the cells at their own weight
   // instead of the Button's semibold.
@@ -274,7 +284,12 @@ function AgentRosterEntry({
       color="tertiary"
       size="sm"
       onPress={() => onSelectAgent(agent.id)}
-      className="h-auto w-full justify-start rounded-none px-0 py-3 text-left font-normal *:data-text:w-full *:data-text:min-w-0"
+      className={cn(
+        ROSTER_ROW,
+        "h-auto w-full justify-start rounded-none px-0 py-3 text-left font-normal *:data-text:w-full *:data-text:min-w-0",
+        // The Button's text wrapper is one more level between the row and its cells.
+        "@2xl:*:data-text:col-span-3 @2xl:*:data-text:grid @2xl:*:data-text:grid-cols-subgrid",
+      )}
     >
       {identity}
     </Button>
@@ -288,9 +303,14 @@ function AgentRosterEntry({
   );
 }
 
-/** The table's columns, shared by its heads and its rows: name, runtime, status. Status shares the
- * spare width with runtime (task #450): an error is a sentence, not a word. */
-const ROSTER_COLUMNS = "grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(10rem,1fr)] gap-x-4";
+/** The table's columns: name, runtime, status. The name and runtime are as wide as their widest
+ * cell (cut when there is no room); status takes all the rest, never under 12rem (task #450): an
+ * error is a sentence. From `@2xl`; below it a row is a stack, with no columns. */
+const ROSTER_COLUMNS =
+  "@2xl:grid-cols-[minmax(0,max-content)_minmax(0,max-content)_minmax(12rem,1fr)] @2xl:gap-x-4";
+/** Each level between the table's grid and a row's cells passes the columns down, and sets the
+ * columns' gap itself: a subgrid takes its own gap, which the row's Button sets small. */
+const ROSTER_ROW = "@2xl:col-span-3 @2xl:grid @2xl:grid-cols-subgrid @2xl:gap-x-4";
 /** How far a selecting row's checkbox sets its cells in: the `sm` checkbox (16px) and the row's
  * `gap-3`. The heads move by the same amount to stay over their cells. */
 const ROSTER_SELECT_INSET = "pl-7";
@@ -319,7 +339,7 @@ function AgentRosterIdentity({
     </>
   );
   return (
-    <span className={cn(ROSTER_COLUMNS, "grid w-full min-w-0 items-center @max-2xl:flex")}>
+    <span className={cn(ROSTER_ROW, "flex w-full min-w-0 items-center")}>
       <span className="flex min-w-0 flex-1 items-center gap-3">
         <AgentDisplayAvatar
           agentId={agent.id}

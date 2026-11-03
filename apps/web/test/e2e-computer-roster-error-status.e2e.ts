@@ -21,7 +21,7 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/computer-roster-error-status");
 const ERROR =
-  "Access denied: the runtime could not read ~/.kiro/credentials.json because its permissions changed after the last login";
+  "Access denied: the runtime could not read ~/.kiro/credentials.json because its permissions changed after the last login. Sign in again with `kiro-cli login`, or restore read access for the daemon's user, then restart this Agent.";
 
 test("an Agent's error on the Computer roster wraps to two lines and stays readable on a phone", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
@@ -38,18 +38,19 @@ test("an Agent's error on the Computer roster wraps to two lines and stays reada
       workspaces: { create: { workspaceId: workspace.id } },
     },
   });
-  const make = (name: string, runtime: string) =>
+  const make = (name: string, runtime: string, model = "") =>
     db.agent.create({
       data: {
         workspaceId: workspace.id,
         computerId: computer.id,
-        name: `${name}-${suffix}`,
+        // A short tail keeps the handle near a real one's length; the Computer is per run.
+        name: `${name}-${suffix.slice(-4)}`,
         displayName: name,
         ownerId: DEV_BROWSER_USER.id,
         runtimeConfig: {
           runtime,
           provider: { kind: "default" },
-          model: "",
+          model,
           modelProvider: "",
           reasoning: "",
         },
@@ -60,6 +61,12 @@ test("an Agent's error on the Computer roster wraps to two lines and stays reada
     const failing = await make("kiro-failing", "kiro");
     await make("pi-helper", "pi");
     await make("codex-helper", "codex");
+    // The longest runtime line Raft named: the runtime column is as wide as it, uncut.
+    const longRuntime = await make(
+      "antigravity-helper",
+      "antigravity",
+      "Gemini 3.8 Flash (Medium)",
+    );
     const scope = { workspaceId: workspace.id, computerId: computer.id, agentId: failing.id };
     const daemonInstanceId = `e2e-daemon-${suffix}`;
     const launchId = `e2e-launch-${suffix}`;
@@ -133,7 +140,24 @@ test("an Agent's error on the Computer roster wraps to two lines and stays reada
       "--fn",
       `document.querySelector('[role="tooltip"]')?.textContent.includes(${JSON.stringify(ERROR)}) === true`,
     );
+    // The runtime column is as wide as its longest line, uncut.
+    expect(
+      await evaluate<{ runtimeCut: boolean }>(`(() => {
+        const row = [...${section}.querySelectorAll("li")].find((li) => li.textContent.includes("antigravity-helper"));
+        const runtime = [...row.querySelectorAll("span")].find((el) => el.children.length === 0 && el.textContent.startsWith("Antigravity CLI") && el.getBoundingClientRect().width > 0);
+        return { runtimeCut: runtime.scrollWidth > runtime.clientWidth };
+      })()`),
+    ).toEqual({ runtimeCut: false });
     await browser("screenshot", join(artifacts, "1440.png"));
+    // Without the longest runtime line, the runtime column narrows and status takes the room.
+    await db.agent.delete({ where: { id: longRuntime.id } });
+    await open();
+    await evaluate(
+      `${row}.querySelector("button").setAttribute("data-e2e-failing-row", "") ?? true`,
+    );
+    await browser("click", "#computer-agents-on-computer");
+    await browser("hover", "[data-e2e-failing-row]");
+    await browser("screenshot", join(artifacts, "1440-typical.png"));
     // Untitled UI's dark theme is `.dark-mode` on <html>; the light theme is its absence.
     expect(
       await evaluate<boolean>(
@@ -142,6 +166,19 @@ test("an Agent's error on the Computer roster wraps to two lines and stays reada
     ).toBe(true);
     await browser("screenshot", join(artifacts, "1440-dark.png"));
     await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
+
+    // A narrower desktop: still columns, the error still two lines at most.
+    await browser("set", "viewport", "1024", "800");
+    await open();
+    expect(
+      await evaluate<number>(
+        `Math.round(${label}.getBoundingClientRect().height / parseFloat(getComputedStyle(${label}).lineHeight))`,
+      ),
+    ).toBeLessThanOrEqual(2);
+    expect(await evaluate<boolean>(`document.documentElement.scrollWidth <= innerWidth`)).toBe(
+      true,
+    );
+    await browser("screenshot", join(artifacts, "1024.png"));
 
     // Phone: the status is a dot, and the error's sentence stacks under the runtime line.
     await browser("set", "viewport", "390", "844");
