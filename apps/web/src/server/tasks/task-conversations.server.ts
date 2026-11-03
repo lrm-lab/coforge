@@ -7,6 +7,7 @@ import type { AgentMessagesPage } from "#src/server/agents/agent-messages.server
 import { AppError } from "#src/lib/app-error";
 import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
 import type { MessageRequestIdempotency } from "#src/server/conversations/message-request-idempotency.server";
+import { publishActionCardUpdate } from "#src/server/conversations/action-card-message.server";
 import { lockConversation } from "#src/server/conversations/conversation-lock.server";
 import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
 import type { Prisma } from "#src/generated/prisma/client";
@@ -117,6 +118,14 @@ export class TaskConversations {
       await publishTaskConversationMessage(this.ports, posted.messageId, posted.messageId).catch(
         () => undefined,
       );
+      // The cards this reply answered in chat refresh for everyone looking at them.
+      for (const cardMessageId of posted.answeredCardIds)
+        await publishActionCardUpdate(
+          this.ports.db,
+          this.ports.dependencies.realtime,
+          posted.conversationId,
+          cardMessageId,
+        );
       return {
         id: posted.messageId,
         sequence: posted.sequence,

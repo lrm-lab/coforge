@@ -126,7 +126,7 @@ export async function sendMessage(
         deliveries: { select: { deliveryId: true } },
       },
     });
-    await markChoiceCardsAnsweredInChat(tx, {
+    const answeredCardIds = await markChoiceCardsAnsweredInChat(tx, {
       workspaceId: conversation.workspaceId,
       conversationId,
       userId: senderUserId,
@@ -150,7 +150,7 @@ export async function sendMessage(
       senderMemberId,
       threadRootId: created.threadRootId,
     });
-    return { ...created, attachments };
+    return { ...created, attachments, answeredCardIds };
   });
   const senderIdentity = agentMessageSender({ agentId: null, agent: null, user: sender.user });
   const senderRef = await humanRef(

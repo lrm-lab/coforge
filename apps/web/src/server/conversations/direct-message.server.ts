@@ -18,6 +18,7 @@ import { dmParentTarget } from "#src/server/db/repositories/agent-peer-direct.re
 import type { MentionDeliveryIssuer } from "./mention-deliveries.server";
 import type { MessageNotifier } from "#src/server/notifications/web-push-composition.server";
 import { announceMessageBestEffort } from "./conversation-activity.server";
+import { publishActionCardUpdate } from "./action-card-message.server";
 
 export class ReadDirectMessages {
   constructor(private readonly conversations: DirectConversationRepository) {}
@@ -66,7 +67,7 @@ export class SendDirectMessage {
   }) {
     if (!input.idempotencyKey || (!input.body && !input.allowEmptyBody))
       throw new Error("invalid direct message");
-    const message = await this.idempotency.execute(
+    const sent = await this.idempotency.execute(
       {
         workspaceId: input.workspaceId,
         senderKind: "user",
@@ -84,6 +85,7 @@ export class SendDirectMessage {
           input.withinSend,
         ),
     );
+    const { answeredCardIds = [], ...message } = sent;
     if (!message.agentId) throw new Error("message is not an Agent direct message");
     // The sender is the only human in a DM with an Agent: their own channel carries the signal so
     // their other tabs and devices refresh the DM row. The message names the sender, so it never
@@ -94,6 +96,14 @@ export class SendDirectMessage {
       { userId: input.senderUserId, agentId: message.agentId, senderUserId: input.senderUserId },
       input.idempotencyKey,
     );
+    // The cards this message answered in chat refresh for everyone looking at them.
+    for (const cardMessageId of answeredCardIds)
+      await publishActionCardUpdate(
+        this.conversations.database,
+        this.realtime,
+        input.conversationId,
+        cardMessageId,
+      );
     await this.publishUserMessageToAgent(
       input.idempotencyKey,
       input.conversationId,

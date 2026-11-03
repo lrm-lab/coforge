@@ -50,7 +50,16 @@ export async function expireActionCards(db: PrismaClient, now: Date = new Date()
       await publishActionCardUpdate(db, realtime, card.conversationId, card.messageId).catch(
         () => undefined,
       );
-    await deliverExpired(db, publisher, card).catch(() => undefined);
+    await deliverExpired(db, publisher, card).catch((error: unknown) => {
+      // The state is already expired; a lost wake-up would leave the Agent unaware, so name it.
+      console.warn(
+        JSON.stringify({
+          event: "action_card_expiry_delivery_failed",
+          messageId: card.messageId,
+          error: error instanceof Error ? error.name : typeof error,
+        }),
+      );
+    });
   }
   return expired.length;
 }

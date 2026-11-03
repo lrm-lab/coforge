@@ -4,6 +4,8 @@ import { actionCardViews } from "#src/server/conversations/action-card-views.ser
 import { waitingChoiceCards } from "#src/server/conversations/waiting-choice-cards.server";
 import { expireActionCards } from "#src/server/conversations/action-card-expiry.server";
 import { markChoiceCardsAnsweredInChat } from "#src/server/conversations/action-card-answered.server";
+import { sendChannel } from "#src/server/conversations/channel-send.server";
+import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { ACTION_CARD_TTL_MS } from "#src/server/conversations/action-card-view.server";
 
 const choice = (to: string, prompt = "Which color?") => ({
@@ -214,6 +216,52 @@ test("cancelling records who did it, and the view names them", async () => {
       await actionCardViews(ctx.db, ctx.workspace.id, ctx.alice.id, [prepared.messageId])
     ).get(prepared.messageId);
     expect(view).toMatchObject({ state: "cancelled", committedBy: { isViewer: true } });
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test("answering a card in chat refreshes it on screen", async () => {
+  const ctx = await setupActionCards();
+  try {
+    const prepared = await ctx.actionCards.prepare(ctx.principal, {
+      target: `#${ctx.hub.channelName}`,
+      action: choice(ctx.alice.username),
+    });
+    const events: Array<{ conversationId: string; messageId: string }> = [];
+    const publisher = {
+      publish: async () => {},
+      publishJson: async () => {},
+      broadcast: async () => {},
+      publishBatch: async () => [],
+      unsubscribe: async () => {},
+    } satisfies CentrifugoServerApi;
+    await sendChannel(
+      {
+        db: ctx.db,
+        realtime: {
+          async messageAvailable(event) {
+            events.push(event);
+          },
+          async memberChanged() {},
+        },
+        publisher,
+        idempotency: { execute: async (_scope, persist) => persist() },
+      },
+      {
+        workspaceId: ctx.workspace.id,
+        userId: ctx.alice.id,
+        channelId: ctx.hub.id,
+        idempotencyKey: crypto.randomUUID(),
+        body: "Red",
+      },
+    );
+    expect(
+      (await ctx.db.actionCard.findUniqueOrThrow({ where: { messageId: prepared.messageId } }))
+        .state,
+    ).toBe("answered_in_chat");
+    // The card's own page hears the change; without it the card stays open until a reload.
+    expect(events.some((event) => event.messageId === prepared.messageId)).toBe(true);
   } finally {
     await ctx.cleanup();
   }

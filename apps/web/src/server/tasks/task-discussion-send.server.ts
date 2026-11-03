@@ -157,15 +157,16 @@ export async function postTaskMessage(
     select: { id: true, sequence: true, createdAt: true, body: true },
   });
   // A card posted in this conversation waits for the person; their reply here answers it.
-  if (member.userId)
-    await markChoiceCardsAnsweredInChat(tx, {
-      workspaceId,
-      conversationId,
-      userId: member.userId,
-      messageId: message.id,
-      sequence,
-      threadRootId: null,
-    });
+  const answeredCardIds = member.userId
+    ? await markChoiceCardsAnsweredInChat(tx, {
+        workspaceId,
+        conversationId,
+        userId: member.userId,
+        messageId: message.id,
+        sequence,
+        threadRootId: null,
+      })
+    : [];
   await Promise.all(
     attachmentIds.map((id, position) =>
       tx.attachment.update({ where: { id }, data: { messageId: message.id, position } }),
@@ -173,8 +174,10 @@ export async function postTaskMessage(
   );
   return {
     messageId: message.id,
+    conversationId,
     sequence: message.sequence,
     createdAt: message.createdAt,
     body: message.body,
+    answeredCardIds,
   };
 }

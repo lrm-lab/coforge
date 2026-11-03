@@ -32,6 +32,7 @@ import { getMessageRequestIdempotency } from "./redis-message-request-idempotenc
 import { agentMessageSender } from "./sender-display.server";
 import { taskReferenceView } from "./task-reference-view.server";
 import { markChoiceCardsAnsweredInChat } from "./action-card-answered.server";
+import { publishActionCardUpdate } from "./action-card-message.server";
 import type { SentMessageHook } from "./sent-message-hook.server";
 import { unresolvedMentionHandles } from "./unresolved-mentions.server";
 
@@ -176,15 +177,16 @@ export async function sendChannel(
             },
           },
         });
-        if (member.userId)
-          await markChoiceCardsAnsweredInChat(tx, {
-            workspaceId,
-            conversationId: channelId,
-            userId: member.userId,
-            messageId: message.id,
-            sequence,
-            threadRootId: message.threadRootId ?? null,
-          });
+        const answeredCardIds = member.userId
+          ? await markChoiceCardsAnsweredInChat(tx, {
+              workspaceId,
+              conversationId: channelId,
+              userId: member.userId,
+              messageId: message.id,
+              sequence,
+              threadRootId: message.threadRootId ?? null,
+            })
+          : [];
         if (root)
           await recordThreadCreatedByReply(tx, {
             workspaceId,
@@ -226,6 +228,7 @@ export async function sendChannel(
         created = true;
         return {
           ...message,
+          answeredCardIds,
           target: `#${channel.channelName}${root ? `:${root.id}` : ""}`,
           // Never read back: only `saved.id` is used below (the post-transaction reload via
           // browserMessageFields is the real attachments source). Present only to satisfy
@@ -273,6 +276,9 @@ export async function sendChannel(
     },
   });
   if (created) await ctx.notifications?.notifyMessage(message.id);
+  // The cards this message answered in chat refresh for everyone looking at them.
+  for (const cardMessageId of saved.answeredCardIds ?? [])
+    await publishActionCardUpdate(ctx.db, ctx.realtime, channelId, cardMessageId);
   await announceMessageBestEffort(ctx.db, ctx.realtime, {
     conversationId: channelId,
     messageId: message.id,

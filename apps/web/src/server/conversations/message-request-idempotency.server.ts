@@ -26,6 +26,9 @@ export type PersistedDirectMessage = {
   /** Present when the send joined the channel it posted to, as `#name`. Carried here so a retried
    * key returns the same answer, not one that lost the fact on the way through storage. */
   joinedChannel?: string;
+  /** The choice cards this message answered in chat, whose pages the send refreshes after commit.
+   * Round-trips so a retried key republishes the same (idempotent) update. */
+  answeredCardIds?: string[];
 } & Partial<LatestSenderFields>;
 
 export type MessageRequestScope = {
