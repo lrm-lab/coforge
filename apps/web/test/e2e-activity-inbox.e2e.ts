@@ -13,6 +13,7 @@ import {
   openParam,
   pane,
   paneTabsShown,
+  rightClickRow,
   rowItems,
   seedChannel,
   shownInPane,
@@ -179,16 +180,7 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     await browser("wait", "--fn", `${seededRows}.length === 2`);
 
     // The row menu opens on a right click (a long press on touch).
-    await evaluate(`(() => {
-      const row = [...document.querySelectorAll(${rowItems})].find((item) =>
-        item.textContent.includes("E2E activity root"));
-      const link = row.querySelector("a");
-      const box = link.getBoundingClientRect();
-      link.dispatchEvent(new MouseEvent("contextmenu", {
-        bubbles: true, cancelable: true, clientX: box.x + 20, clientY: box.y + 10,
-      }));
-      return true;
-    })()`);
+    await evaluate(rightClickRow("E2E activity root"));
     await browser("wait", "--fn", `document.querySelectorAll('[role="menuitem"]').length > 0`);
     const menu = await evaluate<string[]>(
       `[...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent.trim())`,
@@ -199,16 +191,7 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
 
     // Read and unread from the row menu move the badge both ways.
     const channelMenu = (label: string) =>
-      evaluate(`(() => {
-        const row = [...document.querySelectorAll(${rowItems})].find((item) =>
-          item.textContent.includes("E2E activity unread"));
-        const link = row.querySelector("a");
-        const box = link.getBoundingClientRect();
-        link.dispatchEvent(new MouseEvent("contextmenu", {
-          bubbles: true, cancelable: true, clientX: box.x + 20, clientY: box.y + 10,
-        }));
-        return true;
-      })()`)
+      evaluate(rightClickRow("E2E activity unread"))
         .then(() =>
           // This menu's own item: the previous menu may still be closing.
           browser(

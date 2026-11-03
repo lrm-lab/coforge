@@ -49,6 +49,20 @@ export async function waitFor(observe: () => Promise<boolean>) {
   }
 }
 
+/** Right-clicks the Activity row that shows `text`, which opens its row menu (a long press on touch). */
+export function rightClickRow(text: string) {
+  return `(() => {
+    const row = [...document.querySelectorAll(${rowItems})].find((item) =>
+      item.textContent.includes(${JSON.stringify(text)}));
+    const link = row.querySelector("a");
+    const box = link.getBoundingClientRect();
+    link.dispatchEvent(new MouseEvent("contextmenu", {
+      bubbles: true, cancelable: true, clientX: box.x + 20, clientY: box.y + 10,
+    }));
+    return true;
+  })()`;
+}
+
 /** The text of the row marked as the one open in the pane, or null when none is. */
 export const currentRow = `[...document.querySelectorAll(${rowItems})].find((item) => item.querySelector("a")?.getAttribute("aria-current") === "true")?.textContent ?? null`;
 
