@@ -8,3 +8,9 @@
  * two copies of "10 MiB" in step by hand.
  */
 export const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
+
+/**
+ * Ceiling for owner uploads that land in a Computer's `uploads/` directory via OSS direct upload
+ * + Daemon pull. Larger than chat attachments because bytes never transit the web process.
+ */
+export const COMPUTER_FILE_MAX_BYTES = 500 * 1024 * 1024;

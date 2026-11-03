@@ -25,6 +25,7 @@ import {
   createAgentWorkspaceScanResultMethod,
 } from "./agent-workspace-files-cache.server";
 import { localSessionResultMethods } from "./local-session-results.server";
+import { computerFilePullResultMethods } from "./computer-file-upload-results.server";
 
 import {
   CentrifugoRpcHandler,
@@ -346,6 +347,7 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
         [AGENT_WORKSPACE_DELETE_RESULT_METHOD]: createAgentWorkspaceDeleteResultMethod(),
         [AGENT_WORKSPACE_SCAN_RESULT_METHOD]: createAgentWorkspaceScanResultMethod(),
         ...localSessionResultMethods(),
+        ...computerFilePullResultMethods(),
         [AGENT_CONTROL_RESULT_METHOD]: createAgentControlResultMethod(control),
         ...daemonReportMethods(db),
         [AGENT_START_METHOD]: createAgentStartMethod(
@@ -402,6 +404,7 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
       [AGENT_WORKSPACE_FILE_READ_RESULT_METHOD]: unavailableMethod,
       [AGENT_WORKSPACE_DELETE_RESULT_METHOD]: unavailableMethod,
       ...localSessionResultMethods(false),
+      ...computerFilePullResultMethods(false),
       [AGENT_CONTROL_RESULT_METHOD]: unavailableMethod,
       ...daemonReportMethods(null),
       [AGENT_SESSION_METHOD]: unavailableMethod,

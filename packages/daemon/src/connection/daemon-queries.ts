@@ -20,6 +20,9 @@ import {
   decodeLocalSessionExcerptRequest,
   encodeLocalSessionExcerptResult,
   LOCAL_SESSION_EXCERPT_RESULT_METHOD,
+  decodeComputerFilePullRequest,
+  encodeComputerFilePullResult,
+  COMPUTER_FILE_PULL_RESULT_METHOD,
 } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
 import {
@@ -86,6 +89,7 @@ export class DaemonQueries {
   readonly deletion;
   readonly localSessionSearch;
   readonly localSessionExcerpt;
+  readonly computerFilePull;
   readonly piChat;
   constructor(rpc: Rpc) {
     this.skills = new DaemonQuery(
@@ -130,6 +134,12 @@ export class DaemonQueries {
       LOCAL_SESSION_EXCERPT_RESULT_METHOD,
       rpc,
     );
+    this.computerFilePull = new DaemonQuery(
+      decodeComputerFilePullRequest,
+      encodeComputerFilePullResult,
+      COMPUTER_FILE_PULL_RESULT_METHOD,
+      rpc,
+    );
     this.piChat = new DaemonQuery(
       decodePiChatRequest,
       encodePiChatFrame,
@@ -147,6 +157,7 @@ export class DaemonQueries {
       this.deletion,
       this.localSessionSearch,
       this.localSessionExcerpt,
+      this.computerFilePull,
     ].some((query) => query.receive(bytes, scope));
   }
 }

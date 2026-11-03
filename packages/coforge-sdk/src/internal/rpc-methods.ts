@@ -49,6 +49,8 @@ export const RPC_METHODS = {
   daemonLocalSessionSearchResult: "daemon:v1:local_session:search_result",
   daemonLocalSessionExcerpt: "daemon:v1:local_session:excerpt",
   daemonLocalSessionExcerptResult: "daemon:v1:local_session:excerpt_result",
+  daemonComputerFilePull: "daemon:v1:computer_file:pull",
+  daemonComputerFilePullResult: "daemon:v1:computer_file:pull_result",
   computerRestart: "computer:v1:lifecycle:restart",
   computerUpgrade: "computer:v1:lifecycle:upgrade",
   computerUpgradeResult: "computer:v1:lifecycle:upgrade_result",

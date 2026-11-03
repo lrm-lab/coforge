@@ -29,6 +29,7 @@ import {
   type RuntimeRescanResult,
 } from "./computer-detail-view";
 import { ComputerDetailWorkspaceInventory } from "./computer-detail-workspace-inventory";
+import { ComputerFileUploadPanel } from "./computer-file-upload-panel";
 import { runtimeRescanNotice } from "./runtime-rescan-notice";
 import { useComputerDetailLifecycle } from "./use-computer-detail-lifecycle";
 
@@ -266,6 +267,9 @@ export function ComputerDetail({
           />
           {/* Two one-line tools in one box: the workspace scan and terminal troubleshooting. */}
           <div className="divide-y divide-secondary rounded-xl border border-secondary [&>*]:px-4">
+            {computer.ownedByCurrentUser && (
+              <ComputerFileUploadPanel computerId={computer.id} />
+            )}
             <div className="py-2">
               <ComputerDetailWorkspaceInventory
                 snapshot={onScanAgentWorkspaces ? agentWorkspaceScan : null}

@@ -34,6 +34,7 @@
       "./messages/{locale}/workspace-assistant.json",
       "./messages/{locale}/settings.json",
       "./messages/{locale}/computer.json",
+      "./messages/{locale}/computer-file-upload.json",
       "./messages/{locale}/local-session-handoff.json",
       "./messages/{locale}/workspace.json",
       "./messages/{locale}/landing.json",
