@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { Link as AriaLink } from "react-aria-components";
+import { BellOff01 } from "@untitledui/icons";
 
 import { UnreadBadge } from "#src/components/ui/unread-marker";
 import { cx } from "#src/utils/cx";
@@ -48,6 +49,16 @@ export type LastMessageLines = {
  * message's selected row is a card (`card`). A face that reacts to the pointer over the whole row
  * reads it with `useRowHovered`.
  */
+/** A muted row's unread count is a quiet gray number, not the near-black badge. */
+function UnreadCount({ count, muted }: { count: number; muted?: boolean }) {
+  if (!muted) return <UnreadBadge count={count} />;
+  return (
+    <span aria-hidden="true" className="shrink-0 text-xs tabular-nums text-tertiary">
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
+
 export function ConversationRow({
   target,
   current,
@@ -137,10 +148,17 @@ export function ConversationRow({
                     : pinned
                       ? "text-sidebar-fg"
                       : "text-secondary",
+                muted && "font-normal",
               )}
             >
               {children}
             </span>
+            {muted ? (
+              <BellOff01
+                aria-label={m.conversation_muted_dynamics()}
+                className="size-3.5 shrink-0 text-quaternary"
+              />
+            ) : null}
             {lastMessage.time ? (
               <span className="shrink-0 text-xs text-quaternary tabular-nums">
                 {lastMessage.time}
@@ -157,7 +175,7 @@ export function ConversationRow({
                 <span className="flex-1" />
               )}
               {lastMessage.mentioned ? <MentionBadge /> : null}
-              {unreadCount ? <UnreadBadge count={unreadCount} /> : null}
+              {unreadCount ? <UnreadCount count={unreadCount} muted={muted} /> : null}
             </span>
           ) : null}
         </span>
@@ -172,7 +190,7 @@ export function ConversationRow({
           {children}
         </span>
       )}
-      {!lastMessage && unreadCount ? <UnreadBadge count={unreadCount} /> : null}
+      {!lastMessage && unreadCount ? <UnreadCount count={unreadCount} muted={muted} /> : null}
       {count ? (
         <span aria-hidden="true" className="shrink-0 text-xs text-quaternary tabular-nums">
           {count.value}

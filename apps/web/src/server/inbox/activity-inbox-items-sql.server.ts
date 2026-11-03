@@ -214,7 +214,10 @@ export function navHasUnreadSql(workspaceId: string, userId: string, taskTerm: P
     ) OR EXISTS (
       SELECT 1 FROM ${conversationItemsSql(workspaceId, userId)}
       CROSS JOIN LATERAL (
-        SELECT 1 FROM "messages" m WHERE ${conversationUnreadMessageSql}
+        -- A muted channel stops pushing, so its unread does not light the Workspace dot; its own
+        -- row still shows the count (task #420).
+        SELECT 1 FROM "messages" m
+        WHERE ${conversationUnreadMessageSql} AND cm."notificationLevel" <> 'muted'
         ORDER BY m."sequence" LIMIT 1
       ) message
       WHERE ${conversationItemListedSql(userId)}
