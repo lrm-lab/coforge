@@ -50,6 +50,20 @@ cache, so what each one holds is its own build output and generated code, and a 
 answers for an older `main`. On 2026-11-02 the main repository registered 113 worktrees, most of
 them for changes already on `main`; removing 64 of them freed about 20 GB.
 
+`mise run cleanup` lists the worktrees whose change is already on `main` and the `bun`/`node`
+processes left in a directory that no longer exists, such as a forwarder holding ports 5432 and
+6379. `mise run cleanup -- --apply` stops those processes, removes those worktrees and deletes the
+branches whose tip is already in `main` or whose own commits are all on it (never `main`, `master` or the remote's default). A
+worktree is removed only when it is clean, every commit on it has a patch-equivalent on
+`origin/main` (a squash of several commits is not detected), it holds no merge commit and, when
+detached, no commit only its reflog keeps. It must also have been quiet for an hour, and for a day
+(`--idle-hours`) when it never committed, so a worktree another session just created stays. No
+process of yours may run inside it. Removing a worktree deletes its ignored files too (`.env`,
+copied `infra/secrets`, local data). macOS and Linux find the processes inside a worktree
+(`lsof`, `/proc`) and the orphans left in a removed one; Windows cannot, so it moves each worktree aside and back right before removing it
+(Windows refuses while a process uses it), keeps one it cannot move, and has no orphan cleanup. On
+another platform, or when the scan fails, `--apply` removes no worktree.
+
 ## Commit messages
 
 Use concise English Conventional Commit messages: `<type>(optional-scope): imperative summary` (for

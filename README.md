@@ -134,6 +134,9 @@ mise run check
 mise run build
 ```
 
+Once a change is on `main`, `mise run cleanup` lists the worktrees and left-over dev processes to
+clean up after it; `mise run cleanup -- --apply` removes them.
+
 Every change goes through a short-lived branch and an approved PR; see
 [AGENTS.md](AGENTS.md#collaboration-and-delivery).
 
