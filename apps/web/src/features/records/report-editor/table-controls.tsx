@@ -9,26 +9,23 @@ import {
   type RefObject,
 } from "react";
 import type { Editor } from "@tiptap/react";
-import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
-import { Fragment } from "@tiptap/pm/model";
 import { NodeSelection } from "@tiptap/pm/state";
-import {
-  ArrowDown,
-  ArrowLeft,
-  ArrowRight,
-  ArrowUp,
-  Plus,
-  Trash01 as Trash2,
-} from "@untitledui/icons";
+import { Plus, Trash01 as Trash2 } from "@untitledui/icons";
 import { Button as AriaButton } from "react-aria-components";
-import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { useDocumentDragCursor } from "#src/hooks/use-document-drag-cursor";
 import { cn } from "#src/lib/utils";
 import { useT } from "./i18n";
+import { ColumnHandle, RowHandle } from "./table-axis-handle";
 import {
-  deleteColumnAt,
-  deleteRowAt,
+  findActiveTable,
+  measureTable,
+  type ActiveTable,
+  type Axis,
+  type OpenMenu,
+} from "./table-geometry";
+import { destinationFromGap, moveTableColumn, moveTableRow } from "./table-move";
+import {
   deleteTableAt,
   insertColumnAt,
   insertRowAt,
@@ -36,21 +33,6 @@ import {
   selectColumnAt,
   selectRowAt,
 } from "./table-ops";
-
-type ActiveTable = {
-  node: ProseMirrorNode;
-  pos: number;
-  rows: number;
-  cols: number;
-  wrapperRect: DOMRect;
-  rect: DOMRect;
-  rowRects: DOMRect[];
-  colRects: DOMRect[];
-  selectionRect: DOMRect | null;
-  selected: boolean;
-};
-
-type Axis = "row" | "column";
 
 type DragState = {
   type: Axis;
@@ -61,144 +43,9 @@ type DragState = {
   dragging: boolean;
 };
 
-type OpenMenu = { type: Axis; index: number; tablePos: number };
-
 const DRAG_THRESHOLD_PX = 4;
 const ROW_HANDLE_OUTSET = 18;
 const COL_HANDLE_OUTSET = 14;
-
-function findActiveTable(
-  editor: Editor,
-): { node: ProseMirrorNode; pos: number; selected: boolean } | null {
-  const { selection, doc } = editor.state;
-  if (!selection) return null;
-  if (selection instanceof NodeSelection && selection.node.type.name === "table") {
-    return { node: selection.node, pos: selection.from, selected: true };
-  }
-  const { $from } = selection;
-  // Partial editor mocks (and briefly-unready views) may omit ResolvedPos.
-  if (!$from) return null;
-  for (let depth = $from.depth; depth > 0; depth -= 1) {
-    const node = $from.node(depth);
-    if (node.type.name === "table") return { node, pos: $from.before(depth), selected: false };
-  }
-  const maybeTable = doc.nodeAt(selection.from);
-  return maybeTable?.type.name === "table"
-    ? { node: maybeTable, pos: selection.from, selected: false }
-    : null;
-}
-
-function getTableDom(editor: Editor, tablePos: number): HTMLTableElement | null {
-  const dom = editor.view.nodeDOM(tablePos);
-  if (!(dom instanceof HTMLElement)) return null;
-  if (dom instanceof HTMLTableElement) return dom;
-  return dom.querySelector("table");
-}
-
-function relativeRect(rect: DOMRect, root: DOMRect): DOMRect {
-  return new DOMRect(rect.left - root.left, rect.top - root.top, rect.width, rect.height);
-}
-
-function unionClientRects(elements: Element[]): DOMRect | null {
-  if (elements.length === 0) return null;
-  let left = Number.POSITIVE_INFINITY;
-  let top = Number.POSITIVE_INFINITY;
-  let right = Number.NEGATIVE_INFINITY;
-  let bottom = Number.NEGATIVE_INFINITY;
-  for (const el of elements) {
-    const rect = el.getBoundingClientRect();
-    left = Math.min(left, rect.left);
-    top = Math.min(top, rect.top);
-    right = Math.max(right, rect.right);
-    bottom = Math.max(bottom, rect.bottom);
-  }
-  if (!Number.isFinite(left)) return null;
-  return new DOMRect(left, top, right - left, bottom - top);
-}
-
-function measureTable(
-  editor: Editor,
-  root: HTMLElement,
-  tableInfo: { node: ProseMirrorNode; pos: number; selected: boolean },
-): ActiveTable | null {
-  const tableDom = getTableDom(editor, tableInfo.pos);
-  if (!tableDom) return null;
-  const rootRect = root.getBoundingClientRect();
-  const wrapperDom =
-    tableDom.closest(".tableWrapper") instanceof HTMLElement
-      ? (tableDom.closest(".tableWrapper") as HTMLElement)
-      : tableDom;
-  const rows = Array.from(tableDom.querySelectorAll(":scope > tbody > tr"));
-  const firstRowCells = rows[0] ? Array.from(rows[0].children) : [];
-  const selectedUnion = unionClientRects(Array.from(tableDom.querySelectorAll(".selectedCell")));
-  const live = editor.state.doc.nodeAt(tableInfo.pos);
-  const node = live?.type.name === "table" ? live : tableInfo.node;
-  return {
-    node,
-    pos: tableInfo.pos,
-    selected: tableInfo.selected,
-    rows: node.childCount,
-    cols: node.firstChild?.childCount ?? 0,
-    wrapperRect: relativeRect(wrapperDom.getBoundingClientRect(), rootRect),
-    rect: relativeRect(tableDom.getBoundingClientRect(), rootRect),
-    rowRects: rows.map((row) => relativeRect(row.getBoundingClientRect(), rootRect)),
-    colRects: firstRowCells.map((cell) => relativeRect(cell.getBoundingClientRect(), rootRect)),
-    selectionRect: selectedUnion ? relativeRect(selectedUnion, rootRect) : null,
-  };
-}
-
-function moveArrayItem<T>(items: T[], from: number, to: number) {
-  if (from === to || from < 0 || to < 0 || from >= items.length || to >= items.length) return items;
-  const next = [...items];
-  const [item] = next.splice(from, 1);
-  if (!item) return items;
-  next.splice(to, 0, item);
-  return next;
-}
-
-function destinationFromGap(from: number, gap: number): number {
-  return gap > from ? gap - 1 : gap;
-}
-
-function replaceTable(editor: Editor, table: ActiveTable, nextTable: ProseMirrorNode) {
-  const tr = editor.state.tr.replaceWith(table.pos, table.pos + table.node.nodeSize, nextTable);
-  tr.setSelection(NodeSelection.create(tr.doc, table.pos));
-  editor.view.dispatch(tr.scrollIntoView());
-  editor.view.focus();
-}
-
-function moveTableRow(editor: Editor, table: ActiveTable, from: number, to: number) {
-  const rows = Array.from({ length: table.node.childCount }, (_, index) => table.node.child(index));
-  const movedRows = moveArrayItem(rows, from, to);
-  if (movedRows === rows) return;
-  replaceTable(editor, table, table.node.copy(Fragment.fromArray(movedRows)));
-}
-
-function moveTableColumn(editor: Editor, table: ActiveTable, from: number, to: number) {
-  const rows: ProseMirrorNode[] = [];
-  for (let rowIndex = 0; rowIndex < table.node.childCount; rowIndex += 1) {
-    const row = table.node.child(rowIndex);
-    const cells = Array.from({ length: row.childCount }, (_, index) => row.child(index));
-    rows.push(row.copy(Fragment.fromArray(moveArrayItem(cells, from, to))));
-  }
-  replaceTable(editor, table, table.node.copy(Fragment.fromArray(rows)));
-}
-
-function AxisHandle({ axis, active }: { axis: Axis; active?: boolean }) {
-  return (
-    <span
-      aria-hidden
-      className={cn(
-        "flex items-center justify-center rounded-sm bg-quaternary transition-colors",
-        axis === "row" ? "h-5 w-2 flex-col gap-[2px]" : "h-2 w-5 flex-row gap-[2px]",
-        active ? "bg-secondary-solid" : "group-hover/handle:bg-secondary-solid",
-      )}
-    >
-      <span className="size-[3px] rounded-full bg-white" />
-      <span className="size-[3px] rounded-full bg-white" />
-    </span>
-  );
-}
 
 function edgeAddClass() {
   return cn(
@@ -567,66 +414,19 @@ export function TableControls({
               height: COL_HANDLE_OUTSET,
             }}
           >
-            <Dropdown.Root
-              isOpen={menuOpen}
-              onOpenChange={(open) => {
-                if (!open) setOpenMenu(null);
-              }}
-            >
-              <AriaButton
-                type="button"
-                className={cn(
-                  "group/handle pointer-events-auto absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center opacity-0 transition-opacity",
-                  "hover:opacity-100 focus-visible:opacity-100",
-                  (menuOpen || dropTarget) && "opacity-100",
-                )}
-                aria-label={t(($) => $.table_controls.column_menu)}
-                onPointerDown={(event) => onHandlePointerDown(event, "column", col)}
-                onPointerMove={onHandlePointerMove}
-                onPointerUp={(event) => onHandlePointerUp(event, "column", col)}
-                onPress={(event) => {
-                  if (event.pointerType === "keyboard" || event.pointerType === "virtual") {
-                    setOpenMenu({ type: "column", index: col, tablePos: activeTable.pos });
-                  }
-                }}
-                onClick={(event) => {
-                  event.preventDefault();
-                }}
-              >
-                <AxisHandle axis="column" active={menuOpen || Boolean(dropTarget)} />
-              </AriaButton>
-              <Dropdown.Popover
-                placement="bottom"
-                offset={6}
-                onMouseDown={(event) => event.preventDefault()}
-              >
-                <Dropdown.Menu>
-                  <Dropdown.Item
-                    label={t(($) => $.table_controls.insert_column_left)}
-                    icon={ArrowLeft}
-                    onAction={() => {
-                      runMenuAction(() => insertColumnAt(editor, menuTablePos, col));
-                    }}
-                  />
-                  <Dropdown.Item
-                    label={t(($) => $.table_controls.insert_column_right)}
-                    icon={ArrowRight}
-                    onAction={() => {
-                      runMenuAction(() => insertColumnAt(editor, menuTablePos, col + 1));
-                    }}
-                  />
-                  <Dropdown.Separator />
-                  <Dropdown.Item
-                    label={t(($) => $.table_controls.delete_column)}
-                    icon={Trash2}
-                    className="text-error-primary"
-                    onAction={() => {
-                      runMenuAction(() => deleteColumnAt(editor, menuTablePos, col));
-                    }}
-                  />
-                </Dropdown.Menu>
-              </Dropdown.Popover>
-            </Dropdown.Root>
+            <ColumnHandle
+              editor={editor}
+              activeTable={activeTable}
+              col={col}
+              menuOpen={menuOpen}
+              dropTarget={dropTarget}
+              menuTablePos={menuTablePos}
+              setOpenMenu={setOpenMenu}
+              runMenuAction={runMenuAction}
+              onHandlePointerDown={onHandlePointerDown}
+              onHandlePointerMove={onHandlePointerMove}
+              onHandlePointerUp={onHandlePointerUp}
+            />
           </div>
         );
       })}
@@ -651,66 +451,19 @@ export function TableControls({
               height: rect.height,
             }}
           >
-            <Dropdown.Root
-              isOpen={menuOpen}
-              onOpenChange={(open) => {
-                if (!open) setOpenMenu(null);
-              }}
-            >
-              <AriaButton
-                type="button"
-                className={cn(
-                  "group/handle pointer-events-auto absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center opacity-0 transition-opacity",
-                  "hover:opacity-100 focus-visible:opacity-100",
-                  (menuOpen || dropTarget) && "opacity-100",
-                )}
-                aria-label={t(($) => $.table_controls.row_menu)}
-                onPointerDown={(event) => onHandlePointerDown(event, "row", row)}
-                onPointerMove={onHandlePointerMove}
-                onPointerUp={(event) => onHandlePointerUp(event, "row", row)}
-                onPress={(event) => {
-                  if (event.pointerType === "keyboard" || event.pointerType === "virtual") {
-                    setOpenMenu({ type: "row", index: row, tablePos: activeTable.pos });
-                  }
-                }}
-                onClick={(event) => {
-                  event.preventDefault();
-                }}
-              >
-                <AxisHandle axis="row" active={menuOpen || Boolean(dropTarget)} />
-              </AriaButton>
-              <Dropdown.Popover
-                placement="left top"
-                offset={6}
-                onMouseDown={(event) => event.preventDefault()}
-              >
-                <Dropdown.Menu>
-                  <Dropdown.Item
-                    label={t(($) => $.table_controls.insert_row_above)}
-                    icon={ArrowUp}
-                    onAction={() => {
-                      runMenuAction(() => insertRowAt(editor, menuTablePos, row));
-                    }}
-                  />
-                  <Dropdown.Item
-                    label={t(($) => $.table_controls.insert_row_below)}
-                    icon={ArrowDown}
-                    onAction={() => {
-                      runMenuAction(() => insertRowAt(editor, menuTablePos, row + 1));
-                    }}
-                  />
-                  <Dropdown.Separator />
-                  <Dropdown.Item
-                    label={t(($) => $.table_controls.delete_row)}
-                    icon={Trash2}
-                    className="text-error-primary"
-                    onAction={() => {
-                      runMenuAction(() => deleteRowAt(editor, menuTablePos, row));
-                    }}
-                  />
-                </Dropdown.Menu>
-              </Dropdown.Popover>
-            </Dropdown.Root>
+            <RowHandle
+              editor={editor}
+              activeTable={activeTable}
+              row={row}
+              menuOpen={menuOpen}
+              dropTarget={dropTarget}
+              menuTablePos={menuTablePos}
+              setOpenMenu={setOpenMenu}
+              runMenuAction={runMenuAction}
+              onHandlePointerDown={onHandlePointerDown}
+              onHandlePointerMove={onHandlePointerMove}
+              onHandlePointerUp={onHandlePointerUp}
+            />
           </div>
         );
       })}

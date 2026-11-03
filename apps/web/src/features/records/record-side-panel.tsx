@@ -11,21 +11,13 @@ import {
 import { Link, getRouteApi } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
-  ChevronDown,
-  ChevronRightDouble,
-  DotsHorizontal,
-  Edit01 as Edit,
   Microphone02 as Microphone,
   Paperclip,
-  Pin01 as Pin,
-  Plus,
   RefreshCcw01 as Refresh,
   Send01 as Send,
-  Trash01 as Trash,
 } from "@untitledui/icons";
 import { Spinner } from "#src/components/ui/spinner";
 
-import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { TextArea } from "#src/components/base/textarea/textarea";
@@ -57,9 +49,7 @@ import {
 import {
   addRecordComment,
   acceptMemberGenerateHelp,
-  archiveWeeklyReportAssistantChatSessionFn,
   confirmMemberReportIntent,
-  createWeeklyReportAssistantChatSessionFn,
   declineMemberReportIntent,
   ensureRecordAssistantIntro,
   ensureWeeklyReportAssistantChatSessions,
@@ -67,7 +57,6 @@ import {
   loadWeeklyReportAssistantMessages,
   loadWeeklyReportAssistantStatus,
   postWeeklyReportAssistantRequest,
-  renameWeeklyReportAssistantChatSessionFn,
 } from "./records-side-chat.functions";
 import {
   shouldUseMemberReportRulePath,
@@ -92,11 +81,8 @@ import {
 } from "./weekly-template-detail-dialog";
 import type { TemplateMemberOption } from "./weekly-template-members";
 import { useRecordRefresh } from "./use-record-refresh";
-import { RecordSideRenameDialog } from "./record-side-rename-dialog";
-
-type ChatSessionRow = Awaited<
-  ReturnType<typeof ensureWeeklyReportAssistantChatSessions>
->["sessions"][number];
+import { RecordSideChatHeader } from "./record-side-chat-header";
+import { useRecordSideChatSessions, type ChatSessionRow } from "./use-record-side-chat-sessions";
 
 export type { RecordSideSurface };
 
@@ -160,9 +146,6 @@ export function RecordSidePanel({
   const post = useServerFn(addRecordComment);
   const ensureIntro = useServerFn(ensureRecordAssistantIntro);
   const ensureSessions = useServerFn(ensureWeeklyReportAssistantChatSessions);
-  const createSession = useServerFn(createWeeklyReportAssistantChatSessionFn);
-  const renameSession = useServerFn(renameWeeklyReportAssistantChatSessionFn);
-  const archiveSession = useServerFn(archiveWeeklyReportAssistantChatSessionFn);
   const acceptGenerateHelp = useServerFn(acceptMemberGenerateHelp);
   const confirmIntent = useServerFn(confirmMemberReportIntent);
   const declineIntent = useServerFn(declineMemberReportIntent);
@@ -181,8 +164,6 @@ export function RecordSidePanel({
   const [pinned, setPinned] = useState(() => readSidePanelPinned(subjectType, subjectId, surface));
   const [templateDetail, setTemplateDetail] = useState<WeeklyTemplateDetail | null>(null);
   const [templateMembers, setTemplateMembers] = useState<TemplateMemberOption[]>([]);
-  const [renameOpen, setRenameOpen] = useState(false);
-  const [renameDraft, setRenameDraft] = useState("");
   const [chatSessions, setChatSessions] = useState<ChatSessionRow[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [legacySessionId, setLegacySessionId] = useState<string | null>(null);
@@ -336,39 +317,22 @@ export function RecordSidePanel({
     };
   }, [awaitingSynthesis, activeSessionId, legacySessionId]);
 
-  async function onNewChat() {
-    if (busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const created = await createSession({ data: { subjectType, subjectId } });
-      const ensured = await ensureSessions({ data: { subjectType, subjectId } });
-      setChatSessions(ensured.sessions);
-      setLegacySessionId(ensured.legacySessionId);
-      setActiveSessionId(created.id);
-      session.draft = "";
-      setDraft("");
-      await loadThread(created.id, ensured.legacySessionId);
-    } catch {
-      setError(m.records_weekly_ai_request_failed());
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function onSelectSession(sessionId: string) {
-    if (busy || sessionId === activeSessionId) return;
-    setBusy(true);
-    setError(null);
-    try {
-      setActiveSessionId(sessionId);
-      session.draft = "";
-      setDraft("");
-      await loadThread(sessionId, legacySessionId);
-    } finally {
-      setBusy(false);
-    }
-  }
+  const sessionActions = useRecordSideChatSessions({
+    subjectType,
+    subjectId,
+    session,
+    busy,
+    setBusy,
+    setError,
+    setDraft,
+    chatSessions,
+    setChatSessions,
+    activeSessionId,
+    setActiveSessionId,
+    legacySessionId,
+    setLegacySessionId,
+    loadThread,
+  });
 
   function togglePinned() {
     const next = !pinned;
@@ -378,54 +342,6 @@ export function RecordSidePanel({
 
   function requestCollapse() {
     onOpenChange(false);
-  }
-
-  function openRename() {
-    if (!activeSessionId) return;
-    const current = chatSessions.find((row) => row.id === activeSessionId);
-    const title = current?.title.trim() ?? "";
-    setRenameDraft(title);
-    setRenameOpen(true);
-  }
-
-  async function submitRename() {
-    if (!activeSessionId || busy) return;
-    const title = renameDraft.trim();
-    if (!title) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const updated = await renameSession({ data: { sessionId: activeSessionId, title } });
-      setChatSessions((rows) =>
-        rows.map((row) => (row.id === updated.id ? { ...row, title: updated.title } : row)),
-      );
-      setRenameOpen(false);
-    } catch {
-      setError(m.records_weekly_ai_request_failed());
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function onDeleteSession() {
-    if (!activeSessionId || busy) return;
-    if (!window.confirm(m.records_side_chat_delete_confirm())) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await archiveSession({ data: { sessionId: activeSessionId } });
-      const ensured = await ensureSessions({ data: { subjectType, subjectId } });
-      setChatSessions(ensured.sessions);
-      setLegacySessionId(ensured.legacySessionId);
-      setActiveSessionId(ensured.activeSessionId);
-      session.draft = "";
-      setDraft("");
-      await loadThread(ensured.activeSessionId, ensured.legacySessionId);
-    } catch {
-      setError(m.records_weekly_ai_request_failed());
-    } finally {
-      setBusy(false);
-    }
   }
 
   async function onDismissWeekSend() {
@@ -812,95 +728,17 @@ export function RecordSidePanel({
           {...resizeHandle}
           className="absolute inset-y-0 -left-1 z-10 w-2 cursor-col-resize touch-none hover:bg-brand-solid/20 active:bg-brand-solid/30"
         />
-        <div className="flex items-center gap-1 border-b border-secondary px-3 py-2.5">
-          <ButtonUtility
-            size="sm"
-            color="tertiary"
-            icon={Plus}
-            aria-label={m.records_side_chat_new()}
-            tooltip={m.records_side_chat_new()}
-            isDisabled={busy}
-            onClick={() => void onNewChat()}
-          />
-          <Dropdown.Root>
-            <Button
-              size="sm"
-              color="tertiary"
-              className="min-w-0 flex-1 justify-start"
-              iconTrailing={ChevronDown}
-              isDisabled={busy || chatSessions.length === 0}
-              aria-label={m.records_side_chat_history()}
-            >
-              <span className="truncate">{sessionTitle}</span>
-            </Button>
-            <Dropdown.Popover placement="bottom start" className="w-64">
-              <Dropdown.Menu
-                aria-label={m.records_side_chat_history()}
-                selectedKeys={activeSessionId ? [activeSessionId] : []}
-                selectionMode="single"
-                onAction={(key) => {
-                  if (typeof key === "string") void onSelectSession(key);
-                }}
-              >
-                {chatSessions.length === 0 ? (
-                  <Dropdown.Item id="empty" isDisabled label={m.records_side_chat_no_history()} />
-                ) : (
-                  chatSessions.map((row) => (
-                    <Dropdown.Item
-                      key={row.id}
-                      id={row.id}
-                      label={row.title.trim() || m.records_side_chat_untitled()}
-                      addon={new Date(row.updatedAt).toLocaleString()}
-                    />
-                  ))
-                )}
-              </Dropdown.Menu>
-            </Dropdown.Popover>
-          </Dropdown.Root>
-          <span className="shrink-0 text-xs text-tertiary">
-            {m.records_side_chat_count({ count: totalCount })}
-          </span>
-          <Dropdown.Root>
-            <ButtonUtility
-              size="sm"
-              color="tertiary"
-              icon={DotsHorizontal}
-              aria-label={m.records_side_chat_menu()}
-              tooltip={m.records_side_chat_menu()}
-              isDisabled={busy || !activeSessionId}
-            />
-            <Dropdown.Popover placement="bottom end" className="w-40">
-              <Dropdown.Menu
-                aria-label={m.records_side_chat_menu()}
-                onAction={(key) => {
-                  if (key === "rename") openRename();
-                  if (key === "delete") void onDeleteSession();
-                }}
-              >
-                <Dropdown.Item id="rename" icon={Edit} label={m.records_side_chat_rename()} />
-                <Dropdown.Item id="delete" icon={Trash} label={m.records_side_chat_delete()} />
-              </Dropdown.Menu>
-            </Dropdown.Popover>
-          </Dropdown.Root>
-          <ButtonUtility
-            size="sm"
-            color="tertiary"
-            icon={Pin}
-            aria-label={pinned ? m.records_side_chat_unpin() : m.records_side_chat_pin()}
-            tooltip={pinned ? m.records_side_chat_unpin() : m.records_side_chat_pin()}
-            aria-pressed={pinned}
-            className={pinned ? "text-brand-secondary" : undefined}
-            onClick={togglePinned}
-          />
-          <ButtonUtility
-            size="sm"
-            color="tertiary"
-            icon={ChevronRightDouble}
-            aria-label={m.controls_hide_sidebar()}
-            tooltip={m.controls_hide_sidebar()}
-            onClick={requestCollapse}
-          />
-        </div>
+        <RecordSideChatHeader
+          busy={busy}
+          chatSessions={chatSessions}
+          activeSessionId={activeSessionId}
+          sessionTitle={sessionTitle}
+          totalCount={totalCount}
+          pinned={pinned}
+          actions={sessionActions}
+          onTogglePinned={togglePinned}
+          onCollapse={requestCollapse}
+        />
 
         <div
           ref={scrollRef}
@@ -1073,15 +911,6 @@ export function RecordSidePanel({
           </div>
         </form>
       </div>
-
-      <RecordSideRenameDialog
-        open={renameOpen}
-        draft={renameDraft}
-        busy={busy}
-        onDraftChange={setRenameDraft}
-        onClose={() => setRenameOpen(false)}
-        onSubmit={() => void submitRename()}
-      />
 
       <WeeklyTemplateDetailDialog
         template={templateDetail}

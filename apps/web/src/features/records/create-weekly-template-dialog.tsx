@@ -14,29 +14,20 @@ import { PickerMenu, type PickerOption } from "#src/features/pickers/entity-pick
 import { m } from "#src/paraglide/messages";
 import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
 import { isValidTemplateName, hourlySendTimes } from "./records-content";
-import {
-  FOUNDATION_MODELS_WEEKLY_SECTIONS,
-  FOUNDATION_MODELS_WEEKLY_TEMPLATE_NAME,
-} from "./foundation-models-weekly";
+import { FOUNDATION_MODELS_WEEKLY_TEMPLATE_NAME } from "./foundation-models-weekly";
 import { parseTemplateSections, type TemplateOutlineSection } from "./template-outline-sections";
 import { memberLabel, weekdayLabel, type TemplateMemberOption } from "./weekly-template-members";
 import type { WeeklyTemplateList } from "./weekly-report-settings";
 import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 import { Field, OutlineRow } from "./weekly-template-fields";
+import {
+  emptySection,
+  foundationModelsSections,
+  useTemplateOutlineDraft,
+} from "./use-template-outline-draft";
 
 const SEND_TIMES = hourlySendTimes();
 const SEND_WEEKDAYS = [1, 2, 3, 4, 5, 6, 7] as const;
-
-function emptySection(): TemplateOutlineSection {
-  return { title: "", children: [] };
-}
-
-function foundationModelsSections(): TemplateOutlineSection[] {
-  return FOUNDATION_MODELS_WEEKLY_SECTIONS.map((section) => ({
-    ...section,
-    children: [...section.children],
-  }));
-}
 
 export type CreateWeeklyTemplateInput = {
   name: string;
@@ -66,7 +57,16 @@ export function CreateWeeklyTemplateDialog({
 }) {
   const editing = Boolean(initial);
   const [name, setName] = useState(FOUNDATION_MODELS_WEEKLY_TEMPLATE_NAME);
-  const [sections, setSections] = useState<TemplateOutlineSection[]>(foundationModelsSections);
+  const {
+    sections,
+    setSections,
+    updateSectionTitle,
+    updateChildTitle,
+    addSection,
+    removeSection,
+    addChild,
+    removeChild,
+  } = useTemplateOutlineDraft();
   const [allMembers, setAllMembers] = useState(true);
   const [recipientIds, setRecipientIds] = useState<string[]>([]);
   const [frequency] = useState<"weekly">("weekly");
@@ -124,60 +124,6 @@ export function CreateWeeklyTemplateDialog({
   useLayoutEffect(() => {
     if (open) resetDraft();
   }, [open, initialId]);
-
-  function updateSectionTitle(index: number, title: string) {
-    setSections((current) =>
-      current.map((section, sectionIndex) =>
-        sectionIndex === index ? { ...section, title } : section,
-      ),
-    );
-  }
-
-  function updateChildTitle(sectionIndex: number, childIndex: number, title: string) {
-    setSections((current) =>
-      current.map((section, index) => {
-        if (index !== sectionIndex) return section;
-        return {
-          ...section,
-          children: section.children.map((child, offset) =>
-            offset === childIndex ? title : child,
-          ),
-        };
-      }),
-    );
-  }
-
-  function addSection() {
-    setSections((current) => [...current, emptySection()]);
-  }
-
-  function removeSection(index: number) {
-    setSections((current) => {
-      const next = current.filter((_, sectionIndex) => sectionIndex !== index);
-      return next.length > 0 ? next : [emptySection()];
-    });
-  }
-
-  function addChild(sectionIndex: number) {
-    setSections((current) =>
-      current.map((section, index) =>
-        index === sectionIndex ? { ...section, children: [...section.children, ""] } : section,
-      ),
-    );
-  }
-
-  function removeChild(sectionIndex: number, childIndex: number) {
-    setSections((current) =>
-      current.map((section, index) =>
-        index === sectionIndex
-          ? {
-              ...section,
-              children: section.children.filter((_, offset) => offset !== childIndex),
-            }
-          : section,
-      ),
-    );
-  }
 
   const selectedRecipientKeys = allMembers
     ? ["all", ...members.map((member) => member.userId)]
