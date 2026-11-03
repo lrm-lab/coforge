@@ -11,7 +11,6 @@ import {
   type ReminderClock,
   type ReminderReceipt,
   type ReminderReceiptStore,
-  reminderAppInboxSummary,
 } from "#src/agent-reminder/reminder-scheduler";
 import { captureDaemonLogs } from "./log-capture";
 
@@ -880,16 +879,6 @@ test("a delivered or declined occurrence ends without an exhausted record", asyn
     expect(store.receipts[0]).not.toHaveProperty("retryExhausted");
     expect(exhaustedLogs(records)).toHaveLength(0);
   }
-});
-
-test("a reminder that fired on time says it is due", () => {
-  expect(reminderAppInboxSummary(job, false)).toBe("Reminder due");
-});
-
-test("a reminder that fired late says so and when it was due", () => {
-  expect(reminderAppInboxSummary(job, true)).toBe(
-    "Overdue: was due 2026-09-08T12:00:01.000Z, delivered late",
-  );
 });
 
 test("a wake on time is not late, even when the cloud calls the fire a catch-up", async () => {

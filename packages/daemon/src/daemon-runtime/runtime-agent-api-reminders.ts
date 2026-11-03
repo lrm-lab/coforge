@@ -16,7 +16,7 @@ import { isAgentApiKey } from "#src/credentials/agent-api-key";
 import {
   reminderAppInboxPreview,
   reminderAppInboxSummary,
-} from "#src/agent-reminder/reminder-scheduler";
+} from "#src/agent-reminder/reminder-app-inbox-text";
 import { getLogger } from "@logtape/logtape";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
