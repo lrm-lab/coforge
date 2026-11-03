@@ -46,7 +46,7 @@ export type ReplyingNames =
 /**
  * The names as a list for up to three Agents, as Raft writes it: "Atlas, Ben and Cam" (no serial
  * comma) and "Atlas，Ben，Cam". More than three name the first two and count the others; how that
- * reads is the message's ("Atlas, Ben and 2 other agents", "Atlas，Ben 等 4 个智能体").
+ * reads is the message's ("Atlas, Ben and 2 other agents", "Atlas，Ben 等 4 个 Agent").
  */
 export function replyingNames(names: readonly string[], locale: string): ReplyingNames {
   if (names.length > MAX_NAMES_SPELLED)

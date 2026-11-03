@@ -10,7 +10,7 @@
   "agent_workspace_empty": "还没有文件",
   "agent_workspace_directory_empty": "空目录",
   "agent_workspace_directory_error": "无法加载此目录。",
-  "agent_workspace_offline": "智能体的 Computer 当前离线，请在其重新连接后刷新。",
+  "agent_workspace_offline": "Agent 所在的电脑当前离线，请在其重新连接后刷新。",
   "agent_workspace_timeout": "工作目录请求超时，请刷新重试。",
   "agent_workspace_unavailable": "工作目录暂时无法加载，请刷新重试。",
   "agent_workspace_retry": "重试",

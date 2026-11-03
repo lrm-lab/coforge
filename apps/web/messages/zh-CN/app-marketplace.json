@@ -95,7 +95,7 @@
   "apps_uninstalling": "正在卸载…",
   "apps_uninstall_summary": "移除此应用会撤销它在本工作区现有的“使用 CoForge 登录”访问权限。",
   "apps_uninstall_title": "卸载 {name}？",
-  "apps_uninstall_description": "这会把 {name} 从本工作区移除，并撤销它在这里现有的“使用 CoForge 登录”访问权限、授权和令牌。智能体再次使用它之前需要重新获得批准。",
+  "apps_uninstall_description": "这会把 {name} 从本工作区移除，并撤销它在这里现有的“使用 CoForge 登录”访问权限、授权和令牌。Agent 再次使用它之前需要重新获得批准。",
   "apps_uninstall_confirm": "卸载应用",
   "apps_uninstall_error": "无法卸载此应用。",
   "apps_by_developer": "开发者 {developer}",

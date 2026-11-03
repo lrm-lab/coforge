@@ -22,7 +22,7 @@ const OPENED: readonly Opened[] = ["direct", "agent", "handoff"];
 
 /**
  * The Chat list header's one "+": 新建群聊, 新建私聊 and, for a viewer whose role may create
- * Agents, 新建智能体 and 接手本机会话. 私聊's picker opens under this same "+".
+ * Agents, 新建 Agent and 接手本机会话. 私聊's picker opens under this same "+".
  */
 export function NewConversationMenu({ onCreateChannel }: { onCreateChannel: () => void }) {
   const label = m.conversation_new();

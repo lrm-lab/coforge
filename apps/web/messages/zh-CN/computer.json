@@ -18,7 +18,7 @@
   "computer_add_success_title": "电脑已连接",
   "computer_add_success_description": "{name} 已连接到此工作区。",
   "computer_your_computer": "你的电脑",
-  "computer_your_computer_description": "在你控制的电脑上运行智能体。",
+  "computer_your_computer_description": "在你控制的电脑上运行 Agent。",
   "computer_cloud_computer": "云电脑",
   "computer_cloud_computer_description": "账号上的一台云电脑，所有工作区共用。",
   "computer_cloud_host_description": "默认云电脑按账号创建，所有工作区共用。它运行起来之后，可以再添加一台。",

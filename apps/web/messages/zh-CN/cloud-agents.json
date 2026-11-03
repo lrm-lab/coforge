@@ -5,10 +5,10 @@
   "cloud_agent_create_start_deferred": "助手已创建，但暂时无法启动。请重试，将继续启动同一个助手。",
   "cloud_agent_create_refresh_error": "助手已创建，但列表暂时未能更新。请重试，将打开同一个助手。",
   "agent_create_submit_chat": "创建并聊天",
-  "agent_create_local_title": "新建本地智能体",
-  "agent_create_local_description": "使用自己的本地电脑运行智能体，新建后即可私聊，使用时需保持电脑在线。",
+  "agent_create_local_title": "新建本地 Agent",
+  "agent_create_local_description": "使用自己的本地电脑运行 Agent，新建后即可私聊，使用时需保持电脑在线。",
   "agent_create_computer": "选择电脑",
-  "agent_create_description": "智能体描述",
+  "agent_create_description": "Agent 描述",
   "agent_create_kind_label": "运行位置",
   "agent_create_kind_cloud": "云端",
   "agent_create_kind_local": "本地电脑"

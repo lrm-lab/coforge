@@ -57,7 +57,7 @@ test("the typing sentence counts the other agents in English and drops the ellip
     "Olivia, Ben and 2 other agents are typing…",
   );
   expect(String(m.agent_replying_overflow(overflow, { locale: "zh-CN" }))).toBe(
-    "Olivia，Ben 等 4 个智能体正在输入",
+    "Olivia，Ben 等 4 个 Agent 正在输入",
   );
   expect(String(m.agent_replying_many({ names: "Olivia，Ben" }, { locale: "zh-CN" }))).toBe(
     "Olivia，Ben正在输入",

@@ -45,7 +45,7 @@
   "messages_empty_description": "从列表选择群聊或私聊，查看消息。",
   "conversation_history": "消息记录",
   "conversation_empty_title": "与 {name} 的对话",
-  "conversation_empty_description": "这是你与智能体的私聊。在下方描述任务、提出问题，或发送第一条消息。",
+  "conversation_empty_description": "这是你与 Agent 的私聊。在下方描述任务、提出问题，或发送第一条消息。",
   "people_dm_empty_description": "这是你与 {name} 的私聊。在下方发送第一条消息。",
   "people_dm_self_empty_title": "只有你自己",
   "people_dm_self_empty_description": "这段对话只有你能看到，可以用来记笔记、存草稿或放链接。",
