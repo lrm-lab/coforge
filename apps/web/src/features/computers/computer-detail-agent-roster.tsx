@@ -15,6 +15,7 @@ import {
   type AgentControlExecute,
 } from "#src/features/agents/agent-runtime-controls";
 import { StatusDot } from "#src/components/ui/status-dot";
+import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { agentDisplay } from "#src/features/agents/agent-activity-presentation";
 import { cn } from "#src/lib/utils";
 import { DetailGroup } from "./computer-detail-rows";
@@ -195,48 +196,14 @@ export function ComputerDetailAgentRoster({
                   });
                 return (
                   <li key={agent.id}>
-                    {selecting ? (
-                      // While selecting, the whole row is the checkbox's own label: one control, so a
-                      // click anywhere toggles selection and nothing interactive nests inside
-                      // anything else interactive. Same shape as the channel member picker.
-                      <AriaCheckbox
-                        aria-label={m.computer_agent_select_named({ name: agent.displayName })}
-                        isDisabled={locked}
-                        isSelected={selectedIds.has(agent.id)}
-                        onChange={toggle}
-                        className="relative flex w-full cursor-pointer items-center gap-3 py-3 text-sm hover:bg-primary_hover disabled:cursor-not-allowed"
-                      >
-                        {({ isSelected, isDisabled, isFocusVisible }) => (
-                          <>
-                            <CheckboxBase
-                              isSelected={isSelected}
-                              isDisabled={isDisabled}
-                              isFocusVisible={isFocusVisible}
-                            />
-                            <AgentRosterIdentity agent={agent} />
-                          </>
-                        )}
-                      </AriaCheckbox>
-                    ) : onSelectAgent ? (
-                      // Otherwise the row itself opens the Agent — no trailing "Open" button to aim
-                      // at. Its accessible name is its own content (name, runtime, handle). The
-                      // official Button carries the row: `h-auto`/`py-3` keep the table's rhythm,
-                      // `rounded-none px-0` keep its cells on the column heads, and `font-normal`
-                      // leaves the cells at their own weight instead of the Button's semibold.
-                      <Button
-                        noTextPadding
-                        color="tertiary"
-                        size="sm"
-                        onPress={() => onSelectAgent(agent.id)}
-                        className="h-auto w-full justify-start rounded-none px-0 py-3 text-left font-normal *:data-text:w-full *:data-text:min-w-0"
-                      >
-                        <AgentRosterIdentity agent={agent} />
-                      </Button>
-                    ) : (
-                      <span className="block w-full py-3 text-sm">
-                        <AgentRosterIdentity agent={agent} />
-                      </span>
-                    )}
+                    <AgentRosterEntry
+                      agent={agent}
+                      selecting={selecting}
+                      selected={selectedIds.has(agent.id)}
+                      locked={locked}
+                      onToggle={toggle}
+                      onSelectAgent={onSelectAgent}
+                    />
                   </li>
                 );
               })}
@@ -251,19 +218,97 @@ export function ComputerDetailAgentRoster({
   );
 }
 
-/** The table's columns, shared by its heads and its rows: name, runtime, status. */
-const ROSTER_COLUMNS = "grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_9rem] gap-x-4";
+/**
+ * One Agent's row: while selecting, the whole row is the checkbox's own label: one control, so a
+ * click anywhere toggles selection and nothing interactive nests inside anything else interactive
+ * (the channel member picker's shape). Otherwise the row itself opens the Agent, with no trailing
+ * "Open" button to aim at; its accessible name is its own content. An error's whole sentence, cut
+ * to two lines in the row, is the row's tooltip: the row is the one button there is to hover.
+ */
+function AgentRosterEntry({
+  agent,
+  selecting,
+  selected,
+  locked,
+  onToggle,
+  onSelectAgent,
+}: {
+  agent: ComputerDetailView["agents"][number];
+  selecting: boolean;
+  selected: boolean;
+  locked: boolean;
+  onToggle: (selected: boolean) => void;
+  onSelectAgent?: (agentId: string) => void;
+}) {
+  const display = useLiveAgentDisplay(agent.id) ?? agent.display;
+  const status = agentDisplay(display);
+  const identity = <AgentRosterIdentity agent={agent} display={display} status={status} />;
+  if (selecting)
+    return (
+      <AriaCheckbox
+        aria-label={m.computer_agent_select_named({ name: agent.displayName })}
+        isDisabled={locked}
+        isSelected={selected}
+        onChange={onToggle}
+        className="relative flex w-full cursor-pointer items-center gap-3 py-3 text-sm hover:bg-primary_hover disabled:cursor-not-allowed"
+      >
+        {({ isSelected, isDisabled, isFocusVisible }) => (
+          <>
+            <CheckboxBase
+              isSelected={isSelected}
+              isDisabled={isDisabled}
+              isFocusVisible={isFocusVisible}
+            />
+            {identity}
+          </>
+        )}
+      </AriaCheckbox>
+    );
+  if (!onSelectAgent) return <span className="block w-full py-3 text-sm">{identity}</span>;
+  // The official Button carries the row: `h-auto`/`py-3` keep the table's rhythm, `rounded-none
+  // px-0` keep its cells on the column heads, and `font-normal` leaves the cells at their own weight
+  // instead of the Button's semibold.
+  const row = (
+    <Button
+      noTextPadding
+      color="tertiary"
+      size="sm"
+      onPress={() => onSelectAgent(agent.id)}
+      className="h-auto w-full justify-start rounded-none px-0 py-3 text-left font-normal *:data-text:w-full *:data-text:min-w-0"
+    >
+      {identity}
+    </Button>
+  );
+  return status.kind === "error" ? (
+    <Tooltip title={status.label} placement="bottom end">
+      {row}
+    </Tooltip>
+  ) : (
+    row
+  );
+}
+
+/** The table's columns, shared by its heads and its rows: name, runtime, status. Status shares the
+ * spare width with runtime (task #450): an error is a sentence, not a word. */
+const ROSTER_COLUMNS = "grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(10rem,1fr)] gap-x-4";
 /** How far a selecting row's checkbox sets its cells in: the `sm` checkbox (16px) and the row's
  * `gap-3`. The heads move by the same amount to stay over their cells. */
 const ROSTER_SELECT_INSET = "pl-7";
 
-/** One Agent's cells: avatar, name and @handle; its runtime and model; its status. Below `@2xl`
- * the runtime stacks under the name and the status is a dot at the row's end, its words for screen
- * readers only. */
-function AgentRosterIdentity({ agent }: { agent: ComputerDetailView["agents"][number] }) {
-  const display = useLiveAgentDisplay(agent.id) ?? agent.display;
+/** One Agent's cells: avatar, name and @handle; its runtime and model; its status, an error's up
+ * to two lines (the row's tooltip has the whole of it). Below `@2xl` the runtime stacks under the name and the status is a
+ * dot at the row's end, its words for screen readers only, except an error's, which stacks under
+ * the runtime so it can still be read. */
+function AgentRosterIdentity({
+  agent,
+  display,
+  status,
+}: {
+  agent: ComputerDetailView["agents"][number];
+  display: ComputerDetailView["agents"][number]["display"];
+  status: ReturnType<typeof agentDisplay>;
+}) {
   const modelLabel = useAgentModelName(agent.id, agent.runtimeConfig.model ?? "");
-  const status = agentDisplay(display);
   const runtime = (
     <>
       <RuntimeProviderMark provider={agent.provider} className="size-3.5" />
@@ -289,14 +334,30 @@ function AgentRosterIdentity({ agent }: { agent: ComputerDetailView["agents"][nu
           <span className="flex min-w-0 items-center gap-1.5 text-xs text-tertiary @2xl:hidden">
             {runtime}
           </span>
+          {status.kind === "error" && (
+            <span
+              aria-hidden="true"
+              className="line-clamp-2 text-xs break-words whitespace-normal text-error-primary @2xl:hidden"
+            >
+              {status.label}
+            </span>
+          )}
         </span>
       </span>
       <span className="hidden min-w-0 items-center gap-1.5 text-sm text-secondary @2xl:flex">
         {runtime}
       </span>
-      <span className="flex min-w-0 shrink-0 items-center gap-1.5 text-sm text-secondary">
-        <StatusDot tone={status.tone} pulse={status.pulse} className="size-2" />
-        <span className="truncate @max-2xl:sr-only">{status.label}</span>
+      <span className="flex min-w-0 shrink-0 items-center gap-1.5 text-sm text-secondary @2xl:items-start">
+        {/* On a wrapped error the dot stays on its first line (text-sm is 20px tall). */}
+        <StatusDot tone={status.tone} pulse={status.pulse} className="size-2 @2xl:mt-1.5" />
+        <span
+          className={cn(
+            "@max-2xl:sr-only",
+            status.kind === "error" ? "line-clamp-2 break-words whitespace-normal" : "truncate",
+          )}
+        >
+          {status.label}
+        </span>
       </span>
     </span>
   );
