@@ -51,12 +51,24 @@ const agentRequestLogger = createMiddleware().server(async ({ next, request }) =
   console.info(JSON.stringify({ event: "agent_http.request_started", ...fields }));
   try {
     const result = await next();
+    // A task route answers a TaskResult; its `state` tells a refusal (`held`) from a write.
+    let resultState: unknown;
+    if (result instanceof Response && url.pathname.startsWith("/api/agent/v1/tasks")) {
+      try {
+        const body = (await result.clone().json()) as { state?: unknown } | null;
+        resultState = body?.state;
+      } catch {
+        resultState = "unreadable";
+      }
+    }
     console.info(
       JSON.stringify({
         event: "agent_http.request_finished",
         ...fields,
         duration_ms: Math.round(performance.now() - startedAt),
         result_type: result === undefined ? "undefined" : typeof result,
+        ...(result instanceof Response ? { http_status: result.status } : {}),
+        ...(resultState !== undefined ? { result_state: resultState } : {}),
       }),
     );
     return result;
