@@ -188,10 +188,15 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     expect(menu).toEqual(["Mark as Read", "Done", "Unfollow Thread"]);
     await browser("screenshot", join(artifacts, "row-menu.png"));
     await browser("press", "Escape");
+    // Gone, not just closing: a menu still animating out keeps its items, and the next row's
+    // menu would otherwise find and press this one's "Mark as Read" (task #479).
+    const noMenu = `document.querySelectorAll('[role="menu"]').length === 0`;
+    await browser("wait", "--fn", noMenu);
 
     // Read and unread from the row menu move the badge both ways.
     const channelMenu = (label: string) =>
-      evaluate(rightClickRow("E2E activity unread"))
+      browser("wait", "--fn", noMenu)
+        .then(() => evaluate(rightClickRow("E2E activity unread")))
         .then(() =>
           // This menu's own item: the previous menu may still be closing.
           browser(
