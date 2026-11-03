@@ -11,6 +11,8 @@ import type {
   AgentActionPrepareResponse,
   AgentAppRequest,
   AgentTaskConversationRequest,
+  AgentTaskIdleNudgeRequest,
+  AgentTaskIdleNudgeResponse,
   AgentSendReconciliationResponse,
 } from "@lrm/coforge-sdk/agent";
 import type { OpenVikingAgentProxyCommand } from "#src/openviking-read-proxy";
@@ -230,6 +232,11 @@ export interface DaemonConnectionClient extends AgentApiConnectionClient {
     agentApiKey: string,
   ): Promise<AgentSendReconciliationResponse>;
   agentTask?(request: TaskRequest, agentApiKey: string): Promise<TaskResponse>;
+  /** The task idle reminder's question; `undefined` when this server has no such route (404). */
+  agentTaskIdleNudge?(
+    request: AgentTaskIdleNudgeRequest,
+    agentApiKey: string,
+  ): Promise<AgentTaskIdleNudgeResponse | undefined>;
   agentChannel?(
     request: AgentChannelRequest,
     agentApiKey: string,

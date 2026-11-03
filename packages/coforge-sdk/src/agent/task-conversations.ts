@@ -193,3 +193,71 @@ export type AgentTaskIdleNudgeResponse = {
   backlog: { ref: string; title: string }[];
   text: string;
 };
+
+const IDLE_REASONS: ReadonlySet<string> = new Set<AgentTaskIdleReason>([
+  "new_session",
+  "newly_assigned",
+  "others_acted",
+  "stale",
+]);
+const IDLE_SKIP_REASONS: ReadonlySet<string> = new Set<AgentTaskIdleSkipReason>([
+  "disabled",
+  "no_open_tasks",
+  "no_change",
+  "hourly_cap",
+]);
+const TASK_STATUS_VALUES: ReadonlySet<string> = new Set<TaskStatus>([
+  "todo",
+  "in_progress",
+  "in_review",
+  "done",
+  "closed",
+]);
+const TASK_PRIORITY_VALUES: ReadonlySet<string> = new Set<TaskPriority>([
+  "urgent",
+  "high",
+  "medium",
+  "low",
+  "none",
+]);
+
+function isIdleItem(value: unknown): value is AgentTaskIdleItem {
+  return (
+    isRecord(value) &&
+    isString(value.ref) &&
+    typeof value.taskNumber === "number" &&
+    isString(value.channel) &&
+    isString(value.title) &&
+    isString(value.status) &&
+    TASK_STATUS_VALUES.has(value.status) &&
+    isString(value.priority) &&
+    TASK_PRIORITY_VALUES.has(value.priority) &&
+    isString(value.reason) &&
+    IDLE_REASONS.has(value.reason) &&
+    isString(value.why)
+  );
+}
+
+function isIdleBacklogItem(value: unknown): value is { ref: string; title: string } {
+  return isRecord(value) && isString(value.ref) && isString(value.title);
+}
+
+/**
+ * Validates `POST /api/agent/v1/tasks/idle-nudge`'s answer before the daemon writes its `text` as
+ * input: an unknown reason or a malformed item would otherwise reach the Agent as a broken
+ * reminder.
+ */
+export function decodeAgentTaskIdleNudgeResponse(value: unknown): AgentTaskIdleNudgeResponse {
+  if (
+    !isRecord(value) ||
+    typeof value.send !== "boolean" ||
+    !Array.isArray(value.items) ||
+    !value.items.every(isIdleItem) ||
+    !Array.isArray(value.backlog) ||
+    !value.backlog.every(isIdleBacklogItem) ||
+    !isString(value.text) ||
+    (value.reason !== undefined && !(isString(value.reason) && IDLE_SKIP_REASONS.has(value.reason)))
+  )
+    throw new Error("invalid Agent task idle-nudge response");
+  return value as AgentTaskIdleNudgeResponse;
+}

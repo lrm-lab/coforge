@@ -35,7 +35,7 @@ import { DaemonProviderPublications } from "./daemon-provider-publications";
 import { rpcData } from "./rpc-data";
 import { DaemonQueries } from "./daemon-queries";
 import { DaemonConnectionWorkspaceBindings } from "./daemon-connection-workspace-bindings";
-import { agentApiRoutes, taskConversationHttpRequest } from "@lrm/coforge-sdk/agent";
+import { agentApiRoutes } from "@lrm/coforge-sdk/agent";
 import type {
   AgentActionPrepareRequest,
   AgentActionPrepareResponse,
@@ -170,7 +170,6 @@ import {
   decodeAppRegistrationNotice,
   type AppRegistrationNotice,
 } from "@lrm/coforge-sdk/internal/app-registration-notice";
-import { agentAppCloudRequest } from "./agent-app-cloud-request";
 import {
   parseAgentApiKey,
   parseAgentEnvironment,
@@ -181,7 +180,7 @@ import { connectionLiveness, INBOUND_STALLED_MS } from "./connection-liveness";
 import { DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS } from "./shutdown-notice-timeout";
 import { reportAgentSessionWithRetry } from "./agent-session-report";
 import { getLogger } from "@logtape/logtape";
-import { agentHeaders, channelEndpointFor, sendAgentJson } from "./agent-http-wire";
+import { AGENT_RPC_TIMEOUT_MS, channelEndpointFor, sendAgentJson } from "./agent-http-wire";
 import { AgentMigrationHttpClient } from "./agent-migration-http-client";
 import type { AgentMigrationServer } from "#src/agent-migration/transfer-ports";
 import { adaptAgentHistoryResponse } from "./agent-history-response";
@@ -192,13 +191,40 @@ import {
   adaptAgentSendResponse,
 } from "./agent-message-adapters";
 import { requestAgentConfig } from "./agent-config-request";
+import {
+  agentApp,
+  agentAttachment,
+  agentAttachmentUpload,
+  agentAttachmentUploadSessionCancel,
+  agentAttachmentUploadSessionComplete,
+  agentAttachmentUploadSessionCreate,
+  agentAttachmentUploadSessionGet,
+  agentTaskConversation,
+  type ForwardPorts,
+} from "./agent-forwarded-routes";
+import {
+  weeklyReport,
+  weeklyReportCollect,
+  weeklyReportKeyPoints,
+  weeklyReportMemory,
+  type WeeklyReportCollectCommand,
+  type WeeklyReportCollectFailRunningCommand,
+  type WeeklyReportCollectResult,
+  type WeeklyReportKeyPointsCommand,
+  type WeeklyReportKeyPointsResult,
+  type WeeklyReportMemoryCommand,
+  type WeeklyReportMemoryResult,
+} from "./agent-weekly-report";
+import {
+  createAgentTaskIdleNudgeHttpClient,
+  taskIdleNudge,
+  type AgentTaskIdleNudgeHttpClient,
+} from "./agent-task-idle-nudge-client";
+import type { AgentTaskIdleNudgeRequest, AgentTaskIdleNudgeResponse } from "@lrm/coforge-sdk/agent";
 import type { AgentHttpInput } from "./agent-http-wire";
 import {
   defaultAgentMessageHttpClient,
   defaultAgentWeeklyReportHttpClient,
-  defaultAgentWeeklyReportCollectHttpClient,
-  defaultAgentWeeklyReportKeyPointsHttpClient,
-  defaultAgentWeeklyReportMemoryHttpClient,
   defaultAgentTaskHttpClient,
   defaultAgentChannelHttpClient,
   defaultAgentActionPrepareHttpClient,
@@ -331,6 +357,9 @@ export class DaemonConnection
     private readonly agentWeeklyReportHttpClient: AgentWeeklyReportHttpClient = defaultAgentWeeklyReportHttpClient,
     private readonly agentChannelHttpClient: AgentChannelHttpClient = defaultAgentChannelHttpClient,
     private readonly agentActionPrepareHttpClient: AgentActionPrepareHttpClient = defaultAgentActionPrepareHttpClient,
+    private readonly agentTaskIdleNudgeHttpClient: AgentTaskIdleNudgeHttpClient = createAgentTaskIdleNudgeHttpClient(
+      AGENT_RPC_TIMEOUT_MS,
+    ),
   ) {
     super();
     if (!endpoint) throw new Error("cloud endpoint not configured");
@@ -1331,158 +1360,105 @@ export class DaemonConnection
     });
   }
 
+  /** The endpoint, keys and liveness one Agent HTTP client needs. */
+  #agentPorts<T>(client: T) {
+    return {
+      assertConnected: () => this.#assertConnected(),
+      endpoint: (what: string, path: string) => this.#serverEndpoint(what, path),
+      keys: (agentApiKey: string) => this.#agentKeys(agentApiKey),
+      client,
+    };
+  }
+
   async agentWeeklyReport(
     request: WeeklyReportRequest,
     agentApiKey: string,
   ): Promise<WeeklyReportResponse> {
-    this.#assertConnected();
-    return this.agentWeeklyReportHttpClient.request({
-      url: this.#serverEndpoint(
-        "Agent weekly-report HTTP",
-        agentApiRoutes.cloud.weeklyReports.path,
-      ),
-      ...this.#agentKeys(agentApiKey),
-      request,
-    });
+    return weeklyReport(this.#agentPorts(this.agentWeeklyReportHttpClient), request, agentApiKey);
   }
 
   async agentWeeklyReportCollect(
-    request:
-      | import("./weekly-report-collect").WeeklyReportCollectCommand
-      | import("./weekly-report-collect").WeeklyReportCollectFailRunningCommand,
+    request: WeeklyReportCollectCommand | WeeklyReportCollectFailRunningCommand,
     agentApiKey: string,
-  ): Promise<import("./weekly-report-collect").WeeklyReportCollectResult> {
-    this.#assertConnected();
-    return defaultAgentWeeklyReportCollectHttpClient.execute({
-      url: this.#serverEndpoint(
-        "Agent weekly-report-collect HTTP",
-        agentApiRoutes.cloud.weeklyReportCollect.path,
-      ),
-      ...this.#agentKeys(agentApiKey),
+  ): Promise<WeeklyReportCollectResult> {
+    return weeklyReportCollect(
+      this.#agentPorts(this.agentWeeklyReportHttpClient),
       request,
-    });
-  }
-
-  async agentWeeklyReportKeyPoints(
-    request: import("./weekly-report-key-points").WeeklyReportKeyPointsCommand,
-    agentApiKey: string,
-  ): Promise<import("./weekly-report-key-points").WeeklyReportKeyPointsResult> {
-    this.#assertConnected();
-    return defaultAgentWeeklyReportKeyPointsHttpClient.execute({
-      url: this.#serverEndpoint(
-        "Agent weekly-report-key-points HTTP",
-        agentApiRoutes.cloud.weeklyReportKeyPoints.path,
-      ),
-      ...this.#agentKeys(agentApiKey),
-      request,
-    });
-  }
-
-  async agentWeeklyReportMemory(
-    request: import("./weekly-report-memory").WeeklyReportMemoryCommand,
-    agentApiKey: string,
-  ): Promise<import("./weekly-report-memory").WeeklyReportMemoryResult> {
-    if (!this.#connected) throw new Error("daemon connection is not connected");
-    return defaultAgentWeeklyReportMemoryHttpClient.execute({
-      url: this.#serverEndpoint(
-        "Agent weekly-report-memory HTTP",
-        agentApiRoutes.cloud.weeklyReportMemory.path,
-      ),
-      ...this.#agentKeys(agentApiKey),
-      request,
-    });
-  }
-
-  async agentAttachment(attachmentId: string, agentApiKey: string): Promise<Response> {
-    // The local proxy forwards these bytes and their encoding/length headers unchanged.
-    const path = agentApiRoutes.cloud.attachments.path(attachmentId);
-    return this.#forwardAgentRequest("Agent attachment", { path }, agentApiKey);
-  }
-
-  /**
-   * Forwards a multipart upload to the cloud attachment-upload route. Buffered to a `Blob`
-   * rather than streamed: the local proxy already caps the body well under the size the daemon
-   * can hold in memory, and buffering avoids depending on `duplex: "half"` for a streamed
-   * `fetch` body. The original request's `content-type` (its multipart boundary) is forwarded
-   * unchanged; only the Agent-scoped authorization headers are added.
-   */
-  async agentAttachmentUpload(request: Request, agentApiKey: string): Promise<Response> {
-    this.#assertConnected();
-    const contentType = request.headers.get("content-type");
-    if (!contentType) throw new Error("multipart content-type is missing");
-    const body = await request.blob();
-    return fetch(
-      this.#serverEndpoint("Agent attachment upload", agentApiRoutes.cloud.attachments.upload.path),
-      {
-        decompress: false,
-        method: agentApiRoutes.cloud.attachments.upload.method,
-        headers: { ...agentHeaders(this.#agentKeys(agentApiKey)), "content-type": contentType },
-        body,
-      },
+      agentApiKey,
     );
   }
 
-  /**
-   * The direct-upload session routes are plain JSON, unlike the multipart upload
-   * above; each simply forwards its body (if any) to the matching cloud route with the same
-   * Agent-scoped headers `agentAttachment`/`agentAttachmentUpload` already add.
-   */
-  async agentAttachmentUploadSessionCreate(body: unknown, agentApiKey: string): Promise<Response> {
-    const { create } = agentApiRoutes.cloud.attachmentUploadSessions;
-    const request = { method: create.method, path: create.path, body: JSON.stringify(body) };
-    return this.#forwardAgentRequest("Agent upload session create", request, agentApiKey);
-  }
-
-  async agentAttachmentUploadSessionComplete(
-    uploadId: string,
+  async agentWeeklyReportKeyPoints(
+    request: WeeklyReportKeyPointsCommand,
     agentApiKey: string,
-  ): Promise<Response> {
-    const { complete } = agentApiRoutes.cloud.attachmentUploadSessions;
-    const request = { method: complete.method, path: complete.path(uploadId) };
-    return this.#forwardAgentRequest("Agent upload session complete", request, agentApiKey);
+  ): Promise<WeeklyReportKeyPointsResult> {
+    return weeklyReportKeyPoints(
+      this.#agentPorts(this.agentWeeklyReportHttpClient),
+      request,
+      agentApiKey,
+    );
   }
 
-  async agentAttachmentUploadSessionCancel(
-    uploadId: string,
+  async agentWeeklyReportMemory(
+    request: WeeklyReportMemoryCommand,
     agentApiKey: string,
-  ): Promise<Response> {
-    const { cancel } = agentApiRoutes.cloud.attachmentUploadSessions;
-    const request = { method: cancel.method, path: cancel.path(uploadId) };
-    return this.#forwardAgentRequest("Agent upload session cancel", request, agentApiKey);
+  ): Promise<WeeklyReportMemoryResult> {
+    return weeklyReportMemory(
+      this.#agentPorts(this.agentWeeklyReportHttpClient),
+      request,
+      agentApiKey,
+    );
   }
 
-  async agentAttachmentUploadSessionGet(uploadId: string, agentApiKey: string): Promise<Response> {
-    const { get } = agentApiRoutes.cloud.attachmentUploadSessions;
-    const request = { path: get.path(uploadId) };
-    return this.#forwardAgentRequest("Agent upload session get", request, agentApiKey);
-  }
-
-  /** One cloud request for an Agent, sent on as it is; the cloud's response is the Agent's answer. */
-  #forwardAgentRequest(
-    what: string,
-    { method, path, body }: { method?: string; path: string; body?: string },
+  /** The task idle reminder's question; `undefined` when this server has no such route (404). */
+  async agentTaskIdleNudge(
+    request: AgentTaskIdleNudgeRequest,
     agentApiKey: string,
-  ): Promise<Response> {
-    this.#assertConnected();
-    return fetch(this.#serverEndpoint(what, path), {
-      decompress: false,
-      method,
-      headers: agentHeaders(this.#agentKeys(agentApiKey), body !== undefined),
-      ...(body === undefined ? {} : { body }),
-    });
+  ): Promise<AgentTaskIdleNudgeResponse | undefined> {
+    return taskIdleNudge(this.#agentPorts(this.agentTaskIdleNudgeHttpClient), request, agentApiKey);
   }
 
-  async agentApp(request: AgentAppRequest, agentApiKey: string): Promise<Response> {
-    const cloud = agentAppCloudRequest(request);
-    return this.#forwardAgentRequest(`Agent app ${request.operation}`, cloud, agentApiKey);
+  #forwardPorts(): ForwardPorts {
+    return {
+      assertConnected: () => this.#assertConnected(),
+      endpoint: (what, path) => this.#serverEndpoint(what, path),
+      keys: (agentApiKey) => this.#agentKeys(agentApiKey),
+    };
   }
 
-  async agentTaskConversation(
+  agentAttachment(attachmentId: string, agentApiKey: string): Promise<Response> {
+    return agentAttachment(this.#forwardPorts(), attachmentId, agentApiKey);
+  }
+
+  agentAttachmentUpload(request: Request, agentApiKey: string): Promise<Response> {
+    return agentAttachmentUpload(this.#forwardPorts(), request, agentApiKey);
+  }
+
+  agentAttachmentUploadSessionCreate(body: unknown, agentApiKey: string): Promise<Response> {
+    return agentAttachmentUploadSessionCreate(this.#forwardPorts(), body, agentApiKey);
+  }
+
+  agentAttachmentUploadSessionComplete(uploadId: string, agentApiKey: string): Promise<Response> {
+    return agentAttachmentUploadSessionComplete(this.#forwardPorts(), uploadId, agentApiKey);
+  }
+
+  agentAttachmentUploadSessionCancel(uploadId: string, agentApiKey: string): Promise<Response> {
+    return agentAttachmentUploadSessionCancel(this.#forwardPorts(), uploadId, agentApiKey);
+  }
+
+  agentAttachmentUploadSessionGet(uploadId: string, agentApiKey: string): Promise<Response> {
+    return agentAttachmentUploadSessionGet(this.#forwardPorts(), uploadId, agentApiKey);
+  }
+
+  agentApp(request: AgentAppRequest, agentApiKey: string): Promise<Response> {
+    return agentApp(this.#forwardPorts(), request, agentApiKey);
+  }
+
+  agentTaskConversation(
     request: AgentTaskConversationRequest,
     agentApiKey: string,
   ): Promise<Response> {
-    const cloud = taskConversationHttpRequest(agentApiRoutes.cloud.taskConversations, request);
-    return this.#forwardAgentRequest(`Agent task ${request.route}`, cloud, agentApiKey);
+    return agentTaskConversation(this.#forwardPorts(), request, agentApiKey);
   }
 
   /** One request against the Agent API key endpoint; `what` names the caller in errors. */
