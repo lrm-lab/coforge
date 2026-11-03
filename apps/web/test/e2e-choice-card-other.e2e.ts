@@ -59,8 +59,9 @@ test("the asked person answers a choice card in its own last row", async () => {
   });
   const agentMember = channel.members.find((member) => member.agentId === agent.id)!;
   let sequence = 0;
-  /** A choice card from the Agent, asking `to`, with its own-answer row. */
-  const ask = async (prompt: string, to: string) => {
+  /** A choice card from the Agent, asking `to`, with its own-answer row unless `withOther` is
+   * false (the Agent turned it off). */
+  const ask = async (prompt: string, to: string, withOther = true) => {
     sequence += 1;
     const message = await db.message.create({
       data: {
@@ -85,7 +86,7 @@ test("the asked person answers a choice card in its own last row", async () => {
             { id: "blue", label: "Blue" },
           ],
           to,
-          other: {},
+          ...(withOther && { other: {} }),
         },
         preparedByAgentId: agent.id,
       },
@@ -95,6 +96,7 @@ test("the asked person answers a choice card in its own last row", async () => {
   const shown = await ask(`Which colour? ${suffix}`, DEV_BROWSER_USER.id);
   const answered = await ask(`Which shade? ${suffix}`, DEV_BROWSER_USER.id);
   const others = await ask(`Which one, peer? ${suffix}`, peer.id);
+  const closed = await ask(`Red or blue only? ${suffix}`, DEV_BROWSER_USER.id, false);
   await db.conversation.update({ where: { id: channel.id }, data: { lastSequence: sequence } });
 
   const card = (id: string) => `[data-message-id="${id}"] [role="group"]`;
@@ -125,6 +127,31 @@ test("the asked person answers a choice card in its own last row", async () => {
     );
     expect(await evaluate<boolean>(`${cardText(others)}.includes("Something else")`)).toBe(true);
     await browser("screenshot", join(artifacts, "light.png"));
+
+    // Without that row, the asked person is pointed at the chat: the hint puts the caret in the
+    // composer, and the card still waits. Someone else's card never shows the hint.
+    const hint = `${card(closed)} > button`;
+    expect(await evaluate<boolean>(`document.querySelector('${input(closed)}') === null`)).toBe(
+      true,
+    );
+    expect(await evaluate<string>(`document.querySelector('${hint}').textContent`)).toBe(
+      "or answer in the chat below",
+    );
+    expect(
+      await evaluate<boolean>(`document.querySelector('${card(others)} > button') === null`),
+    ).toBe(true);
+    // Four cards overflow the pane; the last one's hint starts under the composer.
+    await browser("eval", `document.querySelector('${hint}').scrollIntoView({ block: "center" })`);
+    await browser("click", hint);
+    await browser(
+      "wait",
+      "--fn",
+      `document.activeElement?.matches("textarea[data-composer]") === true`,
+    );
+    expect((await db.actionCard.findUniqueOrThrow({ where: { messageId: closed } })).state).toBe(
+      "pending",
+    );
+    await browser("screenshot", join(artifacts, "chat-hint.png"));
 
     // A blank Enter sends nothing.
     await browser("click", input(answered));

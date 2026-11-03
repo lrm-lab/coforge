@@ -146,6 +146,7 @@ export function ComposerField({
       <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-end gap-x-1">
         <textarea
           id={id}
+          data-composer
           ref={completion.textareaRef}
           rows={1}
           value={value}

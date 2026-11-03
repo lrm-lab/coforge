@@ -618,7 +618,7 @@ export function ConversationPane({
   }, [jumpMessage, onJumpMessageConsumed]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div data-conversation-pane className="flex min-h-0 flex-1 flex-col">
       {inTaskPopup ? null : root ? (
         <ThreadPaneHeader
           context={threadContext}
@@ -695,7 +695,7 @@ export function ConversationPane({
                 className={cn("flex flex-col", threadMarker ? "pt-2" : "pt-6")}
               >
                 {streamItems.map((item, index) => {
-                  // What the item just above is drawn under (`itemAnchor`).
+                  // The item above's anchor.
                   const before = streamItems[index - 1];
                   // A thread's first reply opens under the replies marker, which stands in for the
                   // day divider there; later day changes in the thread still get theirs.

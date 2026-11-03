@@ -7,6 +7,7 @@ import type { ActionCardView } from "#src/server/conversations/action-cards.serv
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { choiceLetter } from "./choice-letter";
+import { focusDraftEnd } from "./composer-field";
 import { shouldSendOnEnter } from "./composer-behavior";
 
 type ChoiceView = Extract<ActionCardView, { kind: "choice" }>;
@@ -135,6 +136,16 @@ export function ChoiceActionCard({
           />
         )}
       </ul>
+      {/* With no row of their own (the Agent turned it off), the asked person is pointed at the
+          chat: the hint puts the caret in this conversation's composer, and the card waits on. */}
+      {!view.other && view.canCommit && (
+        <AriaButton
+          onPress={() => focusComposerOf(cardRef.current)}
+          className="self-start rounded-sm px-1 text-left text-xs text-quaternary outline-focus-ring hover:text-tertiary focus-visible:outline-2"
+        >
+          {m.action_card_choice_chat_hint()}
+        </AriaButton>
+      )}
       {error && (
         <p role="alert" className="px-1 text-sm text-error-primary">
           {error}
@@ -311,5 +322,15 @@ function OtherRow({
         />
       </label>
     </li>
+  );
+}
+
+/** The composer of the conversation a card is in: the pane holding the card holds it too (a thread
+ * pane beside the channel has its own). */
+function focusComposerOf(card: HTMLElement | null) {
+  focusDraftEnd(
+    card
+      ?.closest("[data-conversation-pane]")
+      ?.querySelector<HTMLTextAreaElement>("textarea[data-composer]") ?? null,
   );
 }
