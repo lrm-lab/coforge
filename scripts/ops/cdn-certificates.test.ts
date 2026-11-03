@@ -11,6 +11,7 @@ import {
   parseEndDate,
   retry,
 } from "./cdn-certificate-plan";
+import { probeTarget, resolveCandidateTargets } from "./renew-cdn-certificates";
 
 const DAY = 24 * 60 * 60 * 1000;
 const now = new Date("2026-10-23T00:00:00Z");
@@ -50,6 +51,19 @@ describe("edge expiry and issuance guards", () => {
     expect(isRateLimited("urn:ietf:params:acme:error:rateLimited: too many")).toBe(true);
     expect(isRateLimited("too many certificates (5) already issued")).toBe(true);
     expect(isRateLimited("Verification finished, beginning signing.")).toBe(false);
+  });
+
+  test("resolves candidate targets including the domain name and deduplicates", async () => {
+    const targets = await resolveCandidateTargets("releases.coforge.cn");
+    expect(targets).toContain("releases.coforge.cn");
+    expect(targets.length).toBeGreaterThan(0);
+    expect(new Set(targets).size).toBe(targets.length);
+  });
+
+  test("probeTarget throws on an unreachable host", async () => {
+    await expect(probeTarget("releases.coforge.cn", "192.0.2.1", 500)).rejects.toThrow(
+      "releases.coforge.cn via 192.0.2.1",
+    );
   });
 
   test("retry re-runs the same work a bounded number of times", async () => {

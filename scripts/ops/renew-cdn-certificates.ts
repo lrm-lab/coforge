@@ -17,6 +17,7 @@
  * limit skips the domain and fails the run, and a failed upload is retried with the SAME certificate.
  */
 import { X509Certificate } from "node:crypto";
+import dns from "node:dns/promises";
 import { copyFile, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -41,29 +42,91 @@ import {
   retry,
 } from "./cdn-certificate-plan";
 
-/** The notAfter of the certificate the CDN edge serves for a domain, read the way an operator
- * would: `openssl s_client` then `openssl x509 -noout -enddate`. Both steps are time-limited, and
- * anything unreadable throws: an unknown expiry must never read as "renew" or "fine". */
-export async function readEdgeNotAfter(domain: string): Promise<Date> {
+/** Resolves candidate connect targets for a CDN domain. Domestic CDN domains (Scope: domestic)
+ * terminate TLS on mainland edge nodes. Overseas runners (e.g. GitHub Actions in Azure US) may
+ * resolve to nodes that throttle or drop cross-border TLS handshakes; querying Alibaba Cloud's own
+ * public DNS (AliDNS) returns optimal edge nodes, supplemented by local resolution and the domain. */
+export async function resolveCandidateTargets(domain: string): Promise<string[]> {
+  const targets = new Set<string>();
+  try {
+    const ali = new dns.Resolver();
+    ali.setServers(["223.5.5.5", "223.6.6.6"]);
+    const aliPromise = ali.resolve4(domain);
+    const timeoutPromise = new Promise<string[]>((_, reject) =>
+      setTimeout(() => reject(new Error("dns timeout")), 2_000),
+    );
+    const aliIps = await Promise.race([aliPromise, timeoutPromise]);
+    for (const ip of aliIps) targets.add(ip);
+  } catch {}
+  try {
+    const lookups = await dns.lookup(domain, { all: true });
+    for (const entry of lookups) {
+      if (entry.family === 4) targets.add(entry.address);
+    }
+  } catch {}
+  try {
+    const ips = await dns.resolve4(domain);
+    for (const ip of ips) targets.add(ip);
+  } catch {}
+  targets.add(domain);
+  return Array.from(targets);
+}
+
+/** Probes a single connect target for a domain's edge certificate. */
+export async function probeTarget(
+  domain: string,
+  target: string,
+  timeoutMs: number = 8_000,
+): Promise<Date> {
   const handshake = Bun.spawn(
-    ["openssl", "s_client", "-servername", domain, "-connect", `${domain}:443`],
-    { stdin: "ignore", stdout: "pipe", stderr: "ignore", timeout: 20_000 },
+    ["openssl", "s_client", "-servername", domain, "-connect", `${target}:443`],
+    { stdin: "ignore", stdout: "pipe", stderr: "ignore", timeout: timeoutMs },
   );
   const pem = await new Response(handshake.stdout).text();
-  await handshake.exited;
+  const exitCode = await handshake.exited;
+  if (exitCode !== 0 && !pem.includes("BEGIN CERTIFICATE")) {
+    throw new Error(`${domain} via ${target}: handshake failed (exit ${exitCode})`);
+  }
   const parse = Bun.spawn(["openssl", "x509", "-noout", "-enddate"], {
     stdin: new Blob([pem]),
     stdout: "pipe",
     stderr: "ignore",
-    timeout: 10_000,
+    timeout: 5_000,
   });
   const line = await new Response(parse.stdout).text();
-  if ((await parse.exited) !== 0) throw new Error(`${domain}: could not read the edge certificate`);
+  if ((await parse.exited) !== 0)
+    throw new Error(`${domain} via ${target}: could not read the edge certificate`);
   try {
     return parseEndDate(line);
   } catch (error) {
-    throw new Error(`${domain}: ${error instanceof Error ? error.message : "unreadable expiry"}`);
+    throw new Error(
+      `${domain} via ${target}: ${error instanceof Error ? error.message : "unreadable expiry"}`,
+    );
   }
+}
+
+/** The notAfter of the certificate the CDN edge serves for a domain, read the way an operator
+ * would: `openssl s_client` then `openssl x509 -noout -enddate`. Tries candidate edge targets with
+ * a bounded timeout and retries across rounds so cross-border packet drops do not fail the run.
+ * Anything unreadable throws: an unknown expiry must never read as "renew" or "fine". */
+export async function readEdgeNotAfter(domain: string): Promise<Date> {
+  const targets = await resolveCandidateTargets(domain);
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    for (const target of targets) {
+      try {
+        return await probeTarget(domain, target, 8_000);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    if (attempt < 3) {
+      await Bun.sleep(1_000 * attempt);
+    }
+  }
+  throw new Error(
+    `${domain}: could not read the edge certificate${lastError instanceof Error ? ` (${lastError.message})` : ""}`,
+  );
 }
 
 /** Adds the challenge TXT record; one that already exists counts as added. */
