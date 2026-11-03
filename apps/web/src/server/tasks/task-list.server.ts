@@ -40,7 +40,7 @@ const AGENT_OWN_TASK_READ = {
  * AGENT_OWN_TASK_READ supplies both query scope and reported coverage; read every match
  * without pagination so the two cannot drift.
  */
-function ownTaskScope(actor: { agentId: string } | { userId: string }): {
+export function ownTaskScope(actor: { agentId: string } | { userId: string }): {
   conversations: Prisma.ConversationWhereInput;
   coverage: TaskListCoverage;
 } {

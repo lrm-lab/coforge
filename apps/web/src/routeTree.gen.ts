@@ -130,6 +130,7 @@ import { Route as ApiAgentV1MentionActionsPendingRouteImport } from './routes/ap
 import { Route as ApiAgentV1MessagesSearchRouteImport } from './routes/api/agent/v1/messages_.search'
 import { Route as ApiAgentV1TasksFollowRouteImport } from './routes/api/agent/v1/tasks_.follow'
 import { Route as ApiAgentV1TasksFollowingRouteImport } from './routes/api/agent/v1/tasks_.following'
+import { Route as ApiAgentV1TasksIdleNudgeRouteImport } from './routes/api/agent/v1/tasks_.idle-nudge'
 import { Route as ApiAgentV1TasksReadRouteImport } from './routes/api/agent/v1/tasks_.read'
 import { Route as ApiAgentV1TasksReplyRouteImport } from './routes/api/agent/v1/tasks_.reply'
 import { Route as ApiAgentV1TasksUnfollowRouteImport } from './routes/api/agent/v1/tasks_.unfollow'
@@ -833,6 +834,12 @@ const ApiAgentV1TasksFollowingRoute =
     path: '/api/agent/v1/tasks/following',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiAgentV1TasksIdleNudgeRoute =
+  ApiAgentV1TasksIdleNudgeRouteImport.update({
+    id: '/api/agent/v1/tasks_/idle-nudge',
+    path: '/api/agent/v1/tasks/idle-nudge',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiAgentV1TasksReadRoute = ApiAgentV1TasksReadRouteImport.update({
   id: '/api/agent/v1/tasks_/read',
   path: '/api/agent/v1/tasks/read',
@@ -1204,6 +1211,7 @@ export interface FileRoutesByFullPath {
   '/api/agent/v1/messages/search': typeof ApiAgentV1MessagesSearchRoute
   '/api/agent/v1/tasks/follow': typeof ApiAgentV1TasksFollowRoute
   '/api/agent/v1/tasks/following': typeof ApiAgentV1TasksFollowingRoute
+  '/api/agent/v1/tasks/idle-nudge': typeof ApiAgentV1TasksIdleNudgeRoute
   '/api/agent/v1/tasks/read': typeof ApiAgentV1TasksReadRoute
   '/api/agent/v1/tasks/reply': typeof ApiAgentV1TasksReplyRoute
   '/api/agent/v1/tasks/unfollow': typeof ApiAgentV1TasksUnfollowRoute
@@ -1366,6 +1374,7 @@ export interface FileRoutesByTo {
   '/api/agent/v1/messages/search': typeof ApiAgentV1MessagesSearchRoute
   '/api/agent/v1/tasks/follow': typeof ApiAgentV1TasksFollowRoute
   '/api/agent/v1/tasks/following': typeof ApiAgentV1TasksFollowingRoute
+  '/api/agent/v1/tasks/idle-nudge': typeof ApiAgentV1TasksIdleNudgeRoute
   '/api/agent/v1/tasks/read': typeof ApiAgentV1TasksReadRoute
   '/api/agent/v1/tasks/reply': typeof ApiAgentV1TasksReplyRoute
   '/api/agent/v1/tasks/unfollow': typeof ApiAgentV1TasksUnfollowRoute
@@ -1533,6 +1542,7 @@ export interface FileRoutesById {
   '/api/agent/v1/messages_/search': typeof ApiAgentV1MessagesSearchRoute
   '/api/agent/v1/tasks_/follow': typeof ApiAgentV1TasksFollowRoute
   '/api/agent/v1/tasks_/following': typeof ApiAgentV1TasksFollowingRoute
+  '/api/agent/v1/tasks_/idle-nudge': typeof ApiAgentV1TasksIdleNudgeRoute
   '/api/agent/v1/tasks_/read': typeof ApiAgentV1TasksReadRoute
   '/api/agent/v1/tasks_/reply': typeof ApiAgentV1TasksReplyRoute
   '/api/agent/v1/tasks_/unfollow': typeof ApiAgentV1TasksUnfollowRoute
@@ -1699,6 +1709,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/messages/search'
     | '/api/agent/v1/tasks/follow'
     | '/api/agent/v1/tasks/following'
+    | '/api/agent/v1/tasks/idle-nudge'
     | '/api/agent/v1/tasks/read'
     | '/api/agent/v1/tasks/reply'
     | '/api/agent/v1/tasks/unfollow'
@@ -1861,6 +1872,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/messages/search'
     | '/api/agent/v1/tasks/follow'
     | '/api/agent/v1/tasks/following'
+    | '/api/agent/v1/tasks/idle-nudge'
     | '/api/agent/v1/tasks/read'
     | '/api/agent/v1/tasks/reply'
     | '/api/agent/v1/tasks/unfollow'
@@ -2027,6 +2039,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/messages_/search'
     | '/api/agent/v1/tasks_/follow'
     | '/api/agent/v1/tasks_/following'
+    | '/api/agent/v1/tasks_/idle-nudge'
     | '/api/agent/v1/tasks_/read'
     | '/api/agent/v1/tasks_/reply'
     | '/api/agent/v1/tasks_/unfollow'
@@ -2168,6 +2181,7 @@ export interface RootRouteChildren {
   ApiAgentV1MessagesSearchRoute: typeof ApiAgentV1MessagesSearchRoute
   ApiAgentV1TasksFollowRoute: typeof ApiAgentV1TasksFollowRoute
   ApiAgentV1TasksFollowingRoute: typeof ApiAgentV1TasksFollowingRoute
+  ApiAgentV1TasksIdleNudgeRoute: typeof ApiAgentV1TasksIdleNudgeRoute
   ApiAgentV1TasksReadRoute: typeof ApiAgentV1TasksReadRoute
   ApiAgentV1TasksReplyRoute: typeof ApiAgentV1TasksReplyRoute
   ApiAgentV1TasksUnfollowRoute: typeof ApiAgentV1TasksUnfollowRoute
@@ -3050,6 +3064,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentV1TasksFollowingRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/agent/v1/tasks_/idle-nudge': {
+      id: '/api/agent/v1/tasks_/idle-nudge'
+      path: '/api/agent/v1/tasks/idle-nudge'
+      fullPath: '/api/agent/v1/tasks/idle-nudge'
+      preLoaderRoute: typeof ApiAgentV1TasksIdleNudgeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/agent/v1/tasks_/read': {
       id: '/api/agent/v1/tasks_/read'
       path: '/api/agent/v1/tasks/read'
@@ -3672,6 +3693,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAgentV1MessagesSearchRoute: ApiAgentV1MessagesSearchRoute,
   ApiAgentV1TasksFollowRoute: ApiAgentV1TasksFollowRoute,
   ApiAgentV1TasksFollowingRoute: ApiAgentV1TasksFollowingRoute,
+  ApiAgentV1TasksIdleNudgeRoute: ApiAgentV1TasksIdleNudgeRoute,
   ApiAgentV1TasksReadRoute: ApiAgentV1TasksReadRoute,
   ApiAgentV1TasksReplyRoute: ApiAgentV1TasksReplyRoute,
   ApiAgentV1TasksUnfollowRoute: ApiAgentV1TasksUnfollowRoute,

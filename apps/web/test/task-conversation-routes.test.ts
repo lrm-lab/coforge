@@ -8,6 +8,7 @@ import {
   handleTaskReplyPost,
   handleTaskUnfollowPost,
   handleTaskViewGet,
+  handleTaskIdleNudgePost,
 } from "#src/server/tasks/task-conversation-routes.server";
 
 const principal = { workspaceId: "w", agentId: "a" };
@@ -199,4 +200,22 @@ test("read passes the page window and the unread flag, and bounds the limit", as
     on,
   );
   expect(tooMany.status).toBe(400);
+});
+
+test("idle-nudge passes the request on; an empty body is no options, a bad one is 400", async () => {
+  const asked: unknown[] = [];
+  const nudge = async (input: unknown) => {
+    asked.push(input);
+    return { send: false, reason: "no_change" as const, items: [], backlog: [], text: "" };
+  };
+  const empty = new Request("http://x/", { method: "POST" });
+  expect(await (await handleTaskIdleNudgePost(empty, nudge)).json()).toMatchObject({
+    send: false,
+    reason: "no_change",
+  });
+  await handleTaskIdleNudgePost(post({ freshSession: true, backgroundTasks: 2 }), nudge);
+  expect(asked).toEqual([{}, { freshSession: true, backgroundTasks: 2 }]);
+  for (const body of [{ backgroundTasks: 10_001 }, { backgroundTasks: -1 }, { fresh: true }])
+    expect((await handleTaskIdleNudgePost(post(body), nudge)).status).toBe(400);
+  expect(asked).toHaveLength(2);
 });

@@ -1,0 +1,21 @@
+/// The last time an idle reminder (`POST /api/agent/v1/tasks/idle-nudge`) named a Task to the
+/// Agent it is assigned to, and why. A reminder is recorded as soon as the server answers with
+/// it. The Agent's newest `remindedAt` is when it was last reminded at all, which the hourly cap
+/// reads; `staleRemindedAt` keeps the 24-hour gap between two "no activity" reminders of one Task
+/// when another reason reminded it in between.
+model TaskIdleReminder {
+  agentId         String    @db.Uuid
+  taskId          String    @db.Uuid
+  workspaceId     String    @db.Uuid
+  /// new_session | newly_assigned | others_acted | stale
+  reason          String
+  remindedAt      DateTime
+  staleRemindedAt DateTime?
+  agent           Agent     @relation(fields: [agentId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  task            Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@id([agentId, taskId])
+  @@index([agentId, remindedAt(sort: Desc)])
+  @@index([taskId])
+  @@map("task_idle_reminders")
+}

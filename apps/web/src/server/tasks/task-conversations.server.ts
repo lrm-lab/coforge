@@ -406,7 +406,7 @@ export class TaskConversations {
 }
 
 /** `#channel`, or `dm:@peer` for a task on a direct board. */
-function boardLabel(channelName: string | null, peer?: string | null) {
+export function boardLabel(channelName: string | null, peer?: string | null) {
   return channelName ? `#${channelName}` : `dm:@${peer ?? "?"}`;
 }
 

@@ -53,6 +53,7 @@ model Agent {
   conversations             ConversationMember[]
   coordinatedConversations Conversation[]         @relation("ConversationCoordinator")
   taskExecutionSessions    TaskExecutionSession[]
+  taskIdleReminders        TaskIdleReminder[]
   pendingMentionActions     PendingMentionAction[]
   deliveries                AgentMessageDelivery[]
   apiKeys                   AgentApiKey[]

@@ -43,6 +43,10 @@ const TASK_CONVERSATION_ROUTES = {
   unfollow: { method: "POST", path: "/api/agent/v1/tasks/unfollow" },
 } as const;
 
+/** The Computer asks, when an Agent goes idle, which of its open Tasks to remind it of (task #421).
+ * Same route under `proxy`, `local` and `cloud`. */
+const TASK_IDLE_NUDGE_ROUTE = { method: "POST", path: "/api/agent/v1/tasks/idle-nudge" } as const;
+
 const THREAD_LIST_ROUTE = { method: "GET", path: "/api/agent/v1/threads" } as const;
 
 /** `coforge mention pending|execute`. Same routes under `proxy`, `local` and `cloud`. */
@@ -178,6 +182,7 @@ export const agentApiRoutes = {
     attachmentComments: ATTACHMENT_COMMENTS_ROUTE,
     profile: PROFILE_ROUTES,
     taskConversations: TASK_CONVERSATION_ROUTES,
+    taskIdleNudge: TASK_IDLE_NUDGE_ROUTE,
     threadList: THREAD_LIST_ROUTE,
     inboxList: INBOX_LIST_ROUTE,
     labels: LABELS_ROUTE,
@@ -221,6 +226,7 @@ export const agentApiRoutes = {
     attachmentComments: ATTACHMENT_COMMENTS_ROUTE,
     profile: PROFILE_ROUTES,
     taskConversations: TASK_CONVERSATION_ROUTES,
+    taskIdleNudge: TASK_IDLE_NUDGE_ROUTE,
     threadList: THREAD_LIST_ROUTE,
     inboxList: INBOX_LIST_ROUTE,
     labels: LABELS_ROUTE,
@@ -339,6 +345,7 @@ export const agentApiRoutes = {
     attachmentComments: ATTACHMENT_COMMENTS_ROUTE,
     profile: PROFILE_ROUTES,
     taskConversations: TASK_CONVERSATION_ROUTES,
+    taskIdleNudge: TASK_IDLE_NUDGE_ROUTE,
     threadList: THREAD_LIST_ROUTE,
     inboxList: INBOX_LIST_ROUTE,
     labels: LABELS_ROUTE,

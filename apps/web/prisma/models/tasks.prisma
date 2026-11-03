@@ -37,6 +37,7 @@ model Task {
   labels                       TaskLabel[]
   history                      TaskHistoryEvent[]
   executionSessions            TaskExecutionSession[]
+  idleReminders                TaskIdleReminder[]
   follows                      TaskFollow[]
   /// The rows naming the Tasks this one waits for, and those naming the Tasks that wait for it
   /// (`TaskDependency`).

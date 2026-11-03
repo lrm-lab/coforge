@@ -5,7 +5,7 @@
  * description of it serves both.
  */
 
-import { isRecord } from "../internal";
+import { isRecord, type TaskPriority, type TaskStatus } from "../internal";
 import type { agentApiRoutes } from "./routes";
 
 export type AgentTaskConversationRoutes = typeof agentApiRoutes.cloud.taskConversations;
@@ -166,3 +166,30 @@ export function decodeAgentTaskFollowingResponse(value: unknown): AgentTaskFollo
     throw new Error("invalid Agent followed tasks response");
   return value as AgentTaskFollowingResponse;
 }
+
+/** Request of `POST /api/agent/v1/tasks/idle-nudge`: a fresh session's first idle, and how many
+ * background tasks the Agent still runs (0 to 10000). */
+export type AgentTaskIdleNudgeRequest = { freshSession?: boolean; backgroundTasks?: number };
+/** Why a Task is in an idle reminder. */
+export type AgentTaskIdleReason = "new_session" | "newly_assigned" | "others_acted" | "stale";
+/** Why no idle reminder is sent. */
+export type AgentTaskIdleSkipReason = "disabled" | "no_open_tasks" | "no_change" | "hourly_cap";
+export type AgentTaskIdleItem = {
+  ref: string;
+  taskNumber: number;
+  channel: string;
+  title: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  reason: AgentTaskIdleReason;
+  /** Why, in English, as the text says it. */
+  why: string;
+};
+/** Response of `POST /api/agent/v1/tasks/idle-nudge`: with `send`, give the Agent `text`. */
+export type AgentTaskIdleNudgeResponse = {
+  send: boolean;
+  reason?: AgentTaskIdleSkipReason;
+  items: AgentTaskIdleItem[];
+  backlog: { ref: string; title: string }[];
+  text: string;
+};

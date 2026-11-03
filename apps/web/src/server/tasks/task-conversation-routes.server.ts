@@ -11,6 +11,7 @@ import {
   agentRouteDomainErrorResponse,
 } from "#src/server/agents/agent-http-routes.server";
 import type { TaskConversations } from "./task-conversations.server";
+import type { AgentTaskIdleNudgeRequest, AgentTaskIdleNudgeResponse } from "@lrm/coforge-sdk/agent";
 import type { AgentTaskPrincipal } from "./task-principal.server";
 
 /**
@@ -191,6 +192,29 @@ export async function handleTaskUnfollowPost(
       ok: true,
       ...(await service.unfollow(principal, asRef(body), body.reason)),
     });
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+const idleNudgeSchema = z
+  .object({
+    freshSession: z.boolean().optional(),
+    backgroundTasks: z.number().int().min(0).max(10_000).optional(),
+  })
+  .strict();
+
+/**
+ * The idle task reminder. Tasks v2 off answers `send: false, reason: "disabled"`, not 404: a
+ * Computer reads 404 as a server without the route and stops asking until it restarts.
+ */
+export async function handleTaskIdleNudgePost(
+  request: Request,
+  nudge: (input: AgentTaskIdleNudgeRequest) => Promise<AgentTaskIdleNudgeResponse>,
+) {
+  try {
+    const body = idleNudgeSchema.parse((await readAgentJsonBody(request)) ?? {});
+    return Response.json(await nudge(body));
   } catch (error) {
     return failure(error);
   }
