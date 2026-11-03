@@ -1,23 +1,17 @@
 import { useRef, useState } from "react";
-import { useServerFn } from "@tanstack/react-start";
 import { Upload01 } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { formatFileSize } from "#src/features/files/file-meta";
+import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { m } from "#src/paraglide/messages";
 import { COMPUTER_FILE_MAX_BYTES } from "@lrm/coforge-sdk/internal";
-import {
-  completeComputerFileUpload,
-  createComputerFileUpload,
-} from "./computer-file-upload.functions";
+import type { ComputerFileUploadRefusal } from "#src/routes/api/computers/$computerId/file-uploads";
 
-type UploadStatus = "idle" | "uploading" | "placing" | "ready" | "error";
+type UploadStatus = "idle" | "uploading" | "ready" | "error";
 
-function statusMessage(
-  status: Exclude<UploadStatus, "idle" | "uploading" | "placing" | "ready"> | string,
-  detail?: string,
-) {
-  switch (status) {
+function statusMessage(reason: string, detail?: string) {
+  switch (reason as ComputerFileUploadRefusal | "signed_out") {
     case "offline":
       return m.computer_file_upload_offline();
     case "unsupported":
@@ -32,38 +26,76 @@ function statusMessage(
       return m.computer_file_upload_invalid_name();
     case "unavailable":
       return m.computer_file_upload_unavailable();
+    case "signed_out":
+      return m.computer_file_upload_signed_out();
     default:
       return detail || m.computer_file_upload_failed();
   }
 }
 
-async function putToStorage(upload: { url: string; headers: Record<string, string> }, file: File) {
-  const response = await fetch(upload.url, {
-    method: "PUT",
-    headers: upload.headers,
-    body: file,
+function uploadComputerFile(
+  computerId: string,
+  workspaceSlug: string,
+  file: File,
+  onProgress: (percent: number) => void,
+) {
+  return new Promise<{ path: string; fileName: string; sizeBytes: number }>((resolve, reject) => {
+    const form = new FormData();
+    form.set("file", file);
+    form.set("workspaceSlug", workspaceSlug);
+    const request = new XMLHttpRequest();
+    request.open("POST", `/api/computers/${computerId}/file-uploads`);
+    request.responseType = "json";
+    request.upload.onprogress = (event) => {
+      if (!event.lengthComputable || event.total <= 0) return;
+      onProgress(Math.min(99, Math.round((event.loaded / event.total) * 100)));
+    };
+    request.onload = () => {
+      const body = request.response as {
+        status?: string;
+        path?: string;
+        fileName?: string;
+        sizeBytes?: number;
+        reason?: string;
+        message?: string;
+      } | null;
+      if (request.status >= 200 && request.status < 300 && body?.status === "ready" && body.path) {
+        onProgress(100);
+        resolve({
+          path: body.path,
+          fileName: body.fileName ?? file.name,
+          sizeBytes: body.sizeBytes ?? file.size,
+        });
+        return;
+      }
+      const reason = body?.reason ?? (request.status === 401 ? "signed_out" : "failed");
+      reject(Object.assign(new Error(body?.message || reason), { reason }));
+    };
+    request.onerror = () => reject(Object.assign(new Error("network"), { reason: "failed" }));
+    request.onabort = () => reject(Object.assign(new Error("aborted"), { reason: "failed" }));
+    request.send(form);
   });
-  if (!response.ok) throw new Error(`storage PUT ${response.status}`);
 }
 
 /**
- * Minimal owner control: pick a local file, PUT it to storage, then have the Computer pull it
- * into `/workspace/uploads` (or the Computer's workspaceRoot/uploads).
+ * Owner control: POST the file to the web server (attachments-style), which stores it and asks
+ * the Computer to pull into uploads/.
  */
 export function ComputerFileUploadPanel({ computerId }: { computerId: string }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const createUpload = useServerFn(createComputerFileUpload);
-  const completeUpload = useServerFn(completeComputerFileUpload);
+  const workspaceSlug = useWorkspaceSlug();
   const [status, setStatus] = useState<UploadStatus>("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [placedPath, setPlacedPath] = useState<string | null>(null);
-  const busy = status === "uploading" || status === "placing";
+  const [progress, setProgress] = useState(0);
+  const busy = status === "uploading";
 
   const onPick = async (fileList: FileList | null) => {
     const file = fileList?.[0];
     if (!file || busy) return;
     setPlacedPath(null);
     setMessage(null);
+    setProgress(0);
     if (file.size <= 0 || file.size > COMPUTER_FILE_MAX_BYTES) {
       setStatus("error");
       setMessage(statusMessage("too_large"));
@@ -71,39 +103,18 @@ export function ComputerFileUploadPanel({ computerId }: { computerId: string }) 
     }
     setStatus("uploading");
     try {
-      const created = await createUpload({
-        data: {
-          computerId,
-          fileName: file.name,
-          contentType: file.type || "application/octet-stream",
-          sizeBytes: file.size,
-        },
-      });
-      if ("status" in created) {
-        setStatus("error");
-        setMessage(statusMessage(created.status));
-        return;
-      }
-      await putToStorage(created.upload, file);
-      setStatus("placing");
-      const completed = await completeUpload({
-        data: { computerId, uploadId: created.uploadId },
-      });
-      if (completed.status === "ready") {
-        setStatus("ready");
-        setPlacedPath(completed.path);
-        setMessage(m.computer_file_upload_ready({ path: completed.path }));
-        return;
-      }
+      const placed = await uploadComputerFile(computerId, workspaceSlug, file, setProgress);
+      setStatus("ready");
+      setPlacedPath(placed.path);
+      setMessage(m.computer_file_upload_ready({ path: placed.path }));
+    } catch (error) {
       setStatus("error");
-      setMessage(
-        completed.status === "failed"
-          ? statusMessage("failed", completed.message)
-          : statusMessage(completed.status),
-      );
-    } catch {
-      setStatus("error");
-      setMessage(m.computer_file_upload_failed());
+      const reason =
+        error && typeof error === "object" && "reason" in error
+          ? String((error as { reason: unknown }).reason)
+          : "failed";
+      const detail = error instanceof Error && error.message !== reason ? error.message : undefined;
+      setMessage(statusMessage(reason, detail));
     } finally {
       if (inputRef.current) inputRef.current.value = "";
     }
@@ -126,11 +137,9 @@ export function ComputerFileUploadPanel({ computerId }: { computerId: string }) 
           isDisabled={busy}
           onPress={() => inputRef.current?.click()}
         >
-          {status === "uploading"
-            ? m.computer_file_upload_uploading()
-            : status === "placing"
-              ? m.computer_file_upload_placing()
-              : m.computer_file_upload_choose()}
+          {busy
+            ? m.computer_file_upload_uploading_progress({ percent: String(progress) })
+            : m.computer_file_upload_choose()}
         </Button>
         <input
           ref={inputRef}
