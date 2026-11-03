@@ -4,6 +4,7 @@ import {
   encodeAgentMessageDelivery,
   type ForwardedMessage,
   type MentionDeliveryEnvelope,
+  type TaskReference,
 } from "@lrm/coforge-sdk/internal";
 import {
   daemonControlChannel,
@@ -36,18 +37,12 @@ export function encodeAgentDelivery(
     forwarded?: ForwardedMessage;
     /** When the message was created: every path that delivers one knows it, so none may omit it. */
     createdAtMs: number;
+    /** A task reference as this recipient reads it (see `dmTaskReferenceView`). */
+    taskView?: (reference: TaskReference) => string | undefined;
   },
 ): Uint8Array {
-  const { mentions, body, forwarded, ...rest } = delivery;
-  const readable = agentReadableBody(body, mentions, (reference) =>
-    // A DM task reference whose conversation is this delivery's: the sender wrote the other side,
-    // so the Agent reading it is that peer and sees the sender.
-    reference.kind === "dm" &&
-    reference.conversationId === delivery.conversationId &&
-    delivery.latestSenderHandle
-      ? `dm:@${delivery.latestSenderHandle}:#${reference.number}`
-      : undefined,
-  );
+  const { mentions, body, forwarded, taskView, ...rest } = delivery;
+  const readable = agentReadableBody(body, mentions, taskView);
   return encodeAgentMessageDelivery({
     ...rest,
     protocolMajor: WORKSPACE_PROTOCOL_MAJOR,

@@ -30,6 +30,7 @@ import {
 } from "./pending-mention-action-recording.server";
 import { getMessageRequestIdempotency } from "./redis-message-request-idempotency.server";
 import { agentMessageSender } from "./sender-display.server";
+import { dmTaskReferenceView } from "./task-reference-view.server";
 import type { SentMessageHook } from "./sent-message-hook.server";
 import { unresolvedMentionHandles } from "./unresolved-mentions.server";
 
@@ -278,6 +279,24 @@ export async function sendChannel(
   // Routed through the shared projection rather than two non-null assertions on
   // `sender.user`, which broke for an Agent-authored channel delivery.
   const sender = agentMessageSender(message.sender);
+  // A direct message's task names the DM's other party; each recipient reads it from their seat.
+  const taskViews = new Map(
+    await Promise.all(
+      message.deliveries.map(
+        async (delivery) =>
+          [
+            delivery.agentId,
+            await dmTaskReferenceView(
+              ctx.db,
+              workspaceId,
+              delivery.agentId,
+              channelId,
+              message.body,
+            ),
+          ] as const,
+      ),
+    ),
+  );
   const pushed = await new AgentDeliveryPublisher(
     publisher,
     new MentionDeliveryIssuer(new PrismaMentionDeliveryRepository(ctx.db)),
@@ -300,6 +319,7 @@ export async function sendChannel(
       latestSenderHandle: sender.handle,
       latestSenderDescription: sender.description,
       mentionsAgent: deliveryMentionsAgent(message.mentions, delivery.agentId),
+      taskView: taskViews.get(delivery.agentId),
     })),
   );
   const failed = pushed.find((result) => result.status === "rejected");

@@ -15,6 +15,7 @@ import {
   choiceResultBody,
   type AgentReadableBody,
 } from "#src/server/conversations/agent-message-view.server";
+import { dmTaskReferenceView } from "#src/server/conversations/task-reference-view.server";
 import {
   agentMessageSender,
   MESSAGE_SENDER_SELECT,
@@ -125,6 +126,23 @@ export async function readPendingAgentDeliveries(
   ]);
   const memberOf = new Set(memberRows.map((member) => member.conversationId));
   const choosers = new Map(chooserRows.map((user) => [user.id, user.username]));
+  const taskViews = new Map(
+    await Promise.all(
+      deliveries.map(
+        async (delivery) =>
+          [
+            delivery.deliveryId,
+            await dmTaskReferenceView(
+              ports.db,
+              workspaceId,
+              agentId,
+              delivery.conversationId,
+              delivery.message.body,
+            ),
+          ] as const,
+      ),
+    ),
+  );
   return deliveries.map((delivery) => {
     const { actionCard, ...message } = delivery.message;
     // agentMessageSender handles both human and Agent authors and validates the handle;
@@ -144,10 +162,7 @@ export async function readPendingAgentDeliveries(
       latestSenderKind: sender.kind,
       latestSenderHandle: sender.handle,
       latestSenderDescription: sender.description,
-      ...agentDeliveryView(message, agentId, {
-        conversationId: delivery.conversationId,
-        senderHandle: sender.handle,
-      }),
+      ...agentDeliveryView(message, agentId, taskViews.get(delivery.deliveryId)),
       // A choice delivery replays the answer, not the Agent's own card question.
       ...(delivery.reason === "choice"
         ? {
@@ -269,7 +284,7 @@ export async function readAgentRecoveryContext(
           attachments: forwardsByMessage.get(row.id)?.message.attachments,
         },
         agentId,
-        { conversationId: row.conversationId, senderHandle: sender.handle },
+        await dmTaskReferenceView(ports.db, workspaceId, agentId, row.conversationId, row.body),
       ),
       ...(row.nonMemberMention ? { nonMemberMention: true } : {}),
       ...(hintsByMessage.has(row.id)

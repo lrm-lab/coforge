@@ -2,6 +2,7 @@ import {
   MESSAGE_LINE_SEPARATOR,
   renderForwardedMessage,
   type ForwardedMessage,
+  type TaskReference,
 } from "@lrm/coforge-sdk/internal";
 import { CHOICE_OTHER_DEFAULT_LABEL, CHOICE_OTHER_OPTION_ID } from "@lrm/coforge-sdk/agent";
 import {
@@ -155,10 +156,10 @@ export function agentMessageView(
 export function agentDeliveryView(
   message: StoredAgentMessage,
   readerAgentId?: string,
-  /** The delivery's conversation and sender, for reading a DM task from the reader's seat. */
-  seat?: { conversationId: string; senderHandle: string },
+  /** How this reader sees a task reference (see `dmTaskReferenceView`). */
+  taskView?: (reference: TaskReference) => string | undefined,
 ): { body: AgentReadableBody; mentionsAgent?: true } {
-  const { text, mentionsAgent, forwarded } = projectMessage(message, readerAgentId, seat);
+  const { text, mentionsAgent, forwarded } = projectMessage(message, readerAgentId, taskView);
   return {
     body: (forwarded ? withForwarded(text, forwarded) : text) as AgentReadableBody,
     ...(mentionsAgent ? { mentionsAgent } : {}),
@@ -168,17 +169,9 @@ export function agentDeliveryView(
 function projectMessage(
   message: StoredAgentMessage,
   readerAgentId?: string,
-  seat?: { conversationId: string; senderHandle: string },
+  taskView?: (reference: TaskReference) => string | undefined,
 ): { text: string; mentionsAgent?: true; forwarded?: ForwardedMessage } {
-  const readable = agentReadableBody(
-    message.body,
-    message.mentions,
-    seat &&
-      ((reference) =>
-        reference.kind === "dm" && reference.conversationId === seat.conversationId
-          ? `dm:@${seat.senderHandle}:#${reference.number}`
-          : undefined),
-  );
+  const readable = agentReadableBody(message.body, message.mentions, taskView);
   return {
     text: message.actionCard ? `${readable} ${actionCardBodySuffix(message.actionCard)}` : readable,
     ...(readerAgentId && deliveryMentionsAgent(message.mentions, readerAgentId)
