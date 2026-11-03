@@ -61,3 +61,74 @@ test("a DM task reads from each reader's seat: sender, peer, and an outsider", a
     await db.$disconnect();
   }
 });
+
+test("a DM's other party carries a kind suffix when a person and an Agent share the handle", async () => {
+  const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
+  if (!connectionString) throw new Error("CHANNEL_TEST_DATABASE_URL is required");
+  const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
+  const suffix = crypto.randomUUID().slice(0, 8);
+  const handle = `shared-${suffix}`;
+  const owner = await db.user.create({
+    data: { username: `owner-${suffix}`, displayName: "Owner" },
+  });
+  const workspace = await db.workspace.create({
+    data: {
+      slug: `dmamb-${suffix}`,
+      name: "DM ambiguity",
+      members: { create: { userId: owner.id } },
+    },
+  });
+  const twinUser = await db.user.create({ data: { username: handle, displayName: "Twin" } });
+  try {
+    const reader = await db.agent.create({
+      data: {
+        workspaceId: workspace.id,
+        ownerId: owner.id,
+        name: `reader-${suffix}`,
+        displayName: "Reader",
+        runtimeConfig: {},
+      },
+    });
+    const twinAgent = await db.agent.create({
+      data: {
+        workspaceId: workspace.id,
+        ownerId: owner.id,
+        name: handle,
+        displayName: "Twin",
+        runtimeConfig: {},
+      },
+    });
+    await db.workspaceMembership.create({
+      data: { workspaceId: workspace.id, userId: twinUser.id },
+    });
+    const channel = await db.conversation.create({
+      data: { workspaceId: workspace.id, channelName: "general" },
+    });
+    const dm = (peer: { agentId: string } | { userId: string }) =>
+      db.conversation.create({
+        data: {
+          workspaceId: workspace.id,
+          directKey: `agent:${reader.id}|${"agentId" in peer ? `agent:${peer.agentId}` : `user:${peer.userId}`}`,
+          members: {
+            create: [
+              { agentId: reader.id },
+              "agentId" in peer ? { agentId: peer.agentId } : { userId: peer.userId },
+            ],
+          },
+        },
+      });
+    const agentDm = await dm({ agentId: twinAgent.id });
+    const userDm = await dm({ userId: twinUser.id });
+    const read = async (conversationId: string, dmId: string) => {
+      const body = dmTaskReferenceToken(dmId, handle, 9);
+      const view = await dmTaskReferenceView(db, workspace.id, reader.id, conversationId, body);
+      return readableBody(body, { mention: () => undefined, ...(view ? { task: view } : {}) });
+    };
+    expect(await read(channel.id, agentDm.id)).toBe(`dm:@${handle}~agent:#9`);
+    expect(await read(channel.id, userDm.id)).toBe(`dm:@${handle}~human:#9`);
+  } finally {
+    await db.workspace.delete({ where: { id: workspace.id } });
+    await db.user.deleteMany({ where: { id: { in: [owner.id, twinUser.id] } } });
+    await db.$disconnect();
+  }
+});

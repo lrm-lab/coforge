@@ -41,7 +41,8 @@ export async function dmTaskReferenceView(
     where: {
       conversationId: { in: [...readable] },
       leftAt: null,
-      NOT: { agentId: readerAgentId },
+      // A person's row has a null agentId; `NOT { agentId }` would drop it with SQL's NULL.
+      OR: [{ agentId: null }, { agentId: { not: readerAgentId } }],
     },
     select: { conversationId: true, userId: true, agentId: true },
   });
@@ -60,16 +61,35 @@ export async function dmTaskReferenceView(
   ]);
   const usernameOf = new Map(users.map((user) => [user.id, user.username]));
   const agentNameOf = new Map(agents.map((agent) => [agent.id, agent.name]));
-  const peerOf = new Map<string, string>();
+  const peerOf = new Map<string, { handle: string; kind: "user" | "agent" }>();
   for (const other of others) {
     const handle = other.userId ? usernameOf.get(other.userId) : agentNameOf.get(other.agentId!);
-    if (handle) peerOf.set(other.conversationId, handle);
+    if (handle) peerOf.set(other.conversationId, { handle, kind: other.userId ? "user" : "agent" });
   }
+  // A handle that names both a person and an Agent needs Raft's kind suffix to be exact.
+  const handles = [...new Set([...peerOf.values()].map((peer) => peer.handle))];
+  const [userHandles, agentHandles] = handles.length
+    ? await Promise.all([
+        db.user.findMany({ where: { username: { in: handles } }, select: { username: true } }),
+        db.agent.findMany({
+          where: { workspaceId, name: { in: handles } },
+          select: { name: true },
+        }),
+      ])
+    : [[], []];
+  const agentNames = new Set(agentHandles.map((agent) => agent.name));
+  const ambiguous = new Set(
+    userHandles.map((user) => user.username).filter((name) => agentNames.has(name)),
+  );
   return (reference) => {
     if (reference.kind !== "dm") return canonicalTaskReference(reference);
     // A DM's own task reads as this conversation's task.
     if (reference.conversationId === currentConversationId) return `#${reference.number}`;
     const peer = peerOf.get(reference.conversationId);
-    return peer ? `dm:@${peer}:#${reference.number}` : canonicalTaskReference(reference);
+    if (!peer) return canonicalTaskReference(reference);
+    const handle = ambiguous.has(peer.handle)
+      ? `${peer.handle}~${peer.kind === "agent" ? "agent" : "human"}`
+      : peer.handle;
+    return `dm:@${handle}:#${reference.number}`;
   };
 }
