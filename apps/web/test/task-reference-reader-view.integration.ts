@@ -1,8 +1,12 @@
 import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
-import { dmTaskReferenceToken, readableBody } from "@lrm/coforge-sdk/internal";
-import { dmTaskReferenceView } from "#src/server/conversations/task-reference-view.server";
+import {
+  channelTaskReferenceToken,
+  dmTaskReferenceToken,
+  readableBody,
+} from "@lrm/coforge-sdk/internal";
+import { taskReferenceView } from "#src/server/conversations/task-reference-view.server";
 
 test("a DM task reads from each reader's seat: sender, peer, and an outsider", async () => {
   const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
@@ -46,7 +50,7 @@ test("a DM task reads from each reader's seat: sender, peer, and an outsider", a
     });
     const body = dmTaskReferenceToken(dm.id, b!.name, 9);
     const read = async (agentId: string, conversationId: string) => {
-      const view = await dmTaskReferenceView(db, workspace.id, agentId, conversationId, body);
+      const view = await taskReferenceView(db, workspace.id, agentId, conversationId, body);
       return readableBody(body, { mention: () => undefined, ...(view ? { task: view } : {}) });
     };
     // In another conversation: each member reads the DM's other party; an outsider the token.
@@ -121,7 +125,7 @@ test("a DM's other party carries a kind suffix when a person and an Agent share 
     const userDm = await dm({ userId: twinUser.id });
     const read = async (conversationId: string, dmId: string) => {
       const body = dmTaskReferenceToken(dmId, handle, 9);
-      const view = await dmTaskReferenceView(db, workspace.id, reader.id, conversationId, body);
+      const view = await taskReferenceView(db, workspace.id, reader.id, conversationId, body);
       return readableBody(body, { mention: () => undefined, ...(view ? { task: view } : {}) });
     };
     expect(await read(channel.id, agentDm.id)).toBe(`dm:@${handle}~agent:#9`);
@@ -129,6 +133,48 @@ test("a DM's other party carries a kind suffix when a person and an Agent share 
   } finally {
     await db.workspace.delete({ where: { id: workspace.id } });
     await db.user.deleteMany({ where: { id: { in: [owner.id, twinUser.id] } } });
+    await db.$disconnect();
+  }
+});
+
+test("a channel task the reader may not read degrades to the hidden wording", async () => {
+  const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
+  if (!connectionString) throw new Error("CHANNEL_TEST_DATABASE_URL is required");
+  const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
+  const suffix = crypto.randomUUID().slice(0, 8);
+  const owner = await db.user.create({
+    data: { username: `owner-${suffix}`, displayName: "Owner" },
+  });
+  const workspace = await db.workspace.create({
+    data: { slug: `hid-${suffix}`, name: "Hidden", members: { create: { userId: owner.id } } },
+  });
+  try {
+    const reader = await db.agent.create({
+      data: {
+        workspaceId: workspace.id,
+        ownerId: owner.id,
+        name: `reader-${suffix}`,
+        displayName: "Reader",
+        runtimeConfig: {},
+      },
+    });
+    const publicChannel = await db.conversation.create({
+      data: { workspaceId: workspace.id, channelName: `public-${suffix}`, visibility: "public" },
+    });
+    const secret = await db.conversation.create({
+      data: { workspaceId: workspace.id, channelName: `secret-${suffix}`, visibility: "private" },
+    });
+    const body = [
+      channelTaskReferenceToken(publicChannel.id, publicChannel.channelName!, 7),
+      channelTaskReferenceToken(secret.id, secret.channelName!, 9),
+    ].join(" and ");
+    const view = await taskReferenceView(db, workspace.id, reader.id, secret.id, body);
+    expect(readableBody(body, { mention: () => undefined, ...(view ? { task: view } : {}) })).toBe(
+      `#${publicChannel.channelName}:#7 and a task you cannot view`,
+    );
+  } finally {
+    await db.workspace.delete({ where: { id: workspace.id } });
+    await db.user.delete({ where: { id: owner.id } });
     await db.$disconnect();
   }
 });

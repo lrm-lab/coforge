@@ -37,7 +37,7 @@ export function encodeAgentDelivery(
     forwarded?: ForwardedMessage;
     /** When the message was created: every path that delivers one knows it, so none may omit it. */
     createdAtMs: number;
-    /** A task reference as this recipient reads it (see `dmTaskReferenceView`). */
+    /** A task reference as this recipient reads it (see `taskReferenceView`). */
     taskView?: (reference: TaskReference) => string | undefined;
   },
 ): Uint8Array {

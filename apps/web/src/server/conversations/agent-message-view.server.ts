@@ -156,7 +156,7 @@ export function agentMessageView(
 export function agentDeliveryView(
   message: StoredAgentMessage,
   readerAgentId?: string,
-  /** How this reader sees a task reference (see `dmTaskReferenceView`). */
+  /** How this reader sees a task reference (see `taskReferenceView`). */
   taskView?: (reference: TaskReference) => string | undefined,
 ): { body: AgentReadableBody; mentionsAgent?: true } {
   const { text, mentionsAgent, forwarded } = projectMessage(message, readerAgentId, taskView);

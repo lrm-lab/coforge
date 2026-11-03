@@ -30,7 +30,7 @@ import {
 } from "./pending-mention-action-recording.server";
 import { getMessageRequestIdempotency } from "./redis-message-request-idempotency.server";
 import { agentMessageSender } from "./sender-display.server";
-import { dmTaskReferenceView } from "./task-reference-view.server";
+import { taskReferenceView } from "./task-reference-view.server";
 import type { SentMessageHook } from "./sent-message-hook.server";
 import { unresolvedMentionHandles } from "./unresolved-mentions.server";
 
@@ -286,7 +286,7 @@ export async function sendChannel(
         async (delivery) =>
           [
             delivery.agentId,
-            await dmTaskReferenceView(
+            await taskReferenceView(
               ctx.db,
               workspaceId,
               delivery.agentId,

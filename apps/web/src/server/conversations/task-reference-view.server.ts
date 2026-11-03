@@ -6,14 +6,22 @@ import {
   type TaskReference,
 } from "@lrm/coforge-sdk/internal";
 
-/** The direct messages a body references as tasks, deduped. */
-export function dmTaskConversationIds(body: string): string[] {
-  const ids = new Set<string>();
+/** What a reference to a task the reader may not see reads as: no name, number or status. */
+export const HIDDEN_TASK_REFERENCE = "a task you cannot view";
+
+/** The conversations a body references as tasks, by kind, deduped. */
+export function taskReferenceConversations(body: string): {
+  channel: string[];
+  dm: string[];
+} {
+  const channel = new Set<string>();
+  const dm = new Set<string>();
   for (const match of body.matchAll(TASK_REFERENCE_TOKEN_PATTERN)) {
     const reference = readTaskReferenceToken(match as unknown as RegExpExecArray);
-    if (reference?.kind === "dm") ids.add(reference.conversationId);
+    if (reference?.kind === "channel") channel.add(reference.conversationId);
+    else if (reference?.kind === "dm") dm.add(reference.conversationId);
   }
-  return [...ids];
+  return { channel: [...channel], dm: [...dm] };
 }
 
 /**
@@ -22,16 +30,33 @@ export function dmTaskConversationIds(body: string): string[] {
  * DM the reader is not in stays canonical. Undefined when the body has no DM reference, so callers
  * skip the read.
  */
-export async function dmTaskReferenceView(
-  db: Pick<PrismaClient, "conversationMember" | "user" | "agent">,
+export async function taskReferenceView(
+  db: Pick<PrismaClient, "conversationMember" | "conversation" | "user" | "agent">,
   workspaceId: string,
   readerAgentId: string,
   currentConversationId: string,
   body: string,
 ): Promise<((reference: TaskReference) => string | undefined) | undefined> {
-  const all = dmTaskConversationIds(body);
+  const referenced = taskReferenceConversations(body);
+  const all = [...referenced.channel, ...referenced.dm];
   if (all.length === 0) return undefined;
-  const conversations = all.filter((conversationId) => conversationId !== currentConversationId);
+  const channels = referenced.channel.length
+    ? await db.conversation.findMany({
+        where: {
+          id: { in: referenced.channel },
+          workspaceId,
+          OR: [
+            { visibility: "public" },
+            { members: { some: { agentId: readerAgentId, leftAt: null } } },
+          ],
+        },
+        select: { id: true },
+      })
+    : [];
+  const readableChannels = new Set(channels.map((channel) => channel.id));
+  const conversations = referenced.dm.filter(
+    (conversationId) => conversationId !== currentConversationId,
+  );
   const mine = await db.conversationMember.findMany({
     where: { conversationId: { in: conversations }, agentId: readerAgentId, leftAt: null },
     select: { conversationId: true },
@@ -82,6 +107,10 @@ export async function dmTaskReferenceView(
     userHandles.map((user) => user.username).filter((name) => agentNames.has(name)),
   );
   return (reference) => {
+    if (reference.kind === "channel")
+      return readableChannels.has(reference.conversationId)
+        ? canonicalTaskReference(reference)
+        : HIDDEN_TASK_REFERENCE;
     if (reference.kind !== "dm") return canonicalTaskReference(reference);
     // A DM's own task reads as this conversation's task.
     if (reference.conversationId === currentConversationId) return `#${reference.number}`;

@@ -15,7 +15,7 @@ import {
   choiceResultBody,
   type AgentReadableBody,
 } from "#src/server/conversations/agent-message-view.server";
-import { dmTaskReferenceView } from "#src/server/conversations/task-reference-view.server";
+import { taskReferenceView } from "#src/server/conversations/task-reference-view.server";
 import {
   agentMessageSender,
   MESSAGE_SENDER_SELECT,
@@ -132,7 +132,7 @@ export async function readPendingAgentDeliveries(
         async (delivery) =>
           [
             delivery.deliveryId,
-            await dmTaskReferenceView(
+            await taskReferenceView(
               ports.db,
               workspaceId,
               agentId,
@@ -284,7 +284,7 @@ export async function readAgentRecoveryContext(
           attachments: forwardsByMessage.get(row.id)?.message.attachments,
         },
         agentId,
-        await dmTaskReferenceView(ports.db, workspaceId, agentId, row.conversationId, row.body),
+        await taskReferenceView(ports.db, workspaceId, agentId, row.conversationId, row.body),
       ),
       ...(row.nonMemberMention ? { nonMemberMention: true } : {}),
       ...(hintsByMessage.has(row.id)
