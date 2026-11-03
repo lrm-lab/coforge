@@ -306,7 +306,7 @@ test("Task list prints a conversation's board and an Agent's own list", async ()
   };
   expect(await run(["task", "list", "--target", "#general"], transport)).toBe(
     "## Task Board for #general (1 tasks)\n\n" +
-      "#46 [in_progress] Half-done work → @kiro [deleted] (by @ada) msg=46abcdef-0000 rev=3 created=2026-09-23 05:00:00Z updated=2026-09-23 06:00:00Z",
+      "#46 [in_progress] prio=none Half-done work → @kiro [deleted] (by @ada) msg=46abcdef-0000 rev=3 created=2026-09-23 05:00:00Z updated=2026-09-23 06:00:00Z",
   );
   expect(await run(["task", "list", "--mine", "--status", "all"], transport)).toBe(
     [
@@ -316,7 +316,7 @@ test("Task list prints a conversation's board and an Agent's own list", async ()
       "Output: showing 1 of 1 visible matches · mode=complete · truncated=false",
       "",
       "### in_progress (1)",
-      "- #general task #46 [in_progress] by=@ada msg=46abcdef-0000 created=2026-09-23 05:00:00Z updated=2026-09-23 06:00:00Z Half-done work",
+      "- #general task #46 [in_progress] prio=none by=@ada msg=46abcdef-0000 created=2026-09-23 05:00:00Z updated=2026-09-23 06:00:00Z Half-done work",
     ].join("\n"),
   );
   expect(calls[1]).toMatchObject({ operation: "list", mine: true, status: "all" });

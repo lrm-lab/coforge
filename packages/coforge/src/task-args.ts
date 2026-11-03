@@ -1,9 +1,11 @@
 import {
   CHANNEL_NAME_PATTERN,
+  TASK_PRIORITIES,
   TASK_STATUSES,
   type TaskCommand,
   type TaskRef,
   type TaskResourceReceipt,
+  type TaskPriority,
   type TaskStatus,
 } from "@lrm/coforge-sdk/internal";
 import { CliError } from "#src/cli-error";
@@ -53,6 +55,7 @@ const TASK_FLAGS: Record<TaskOperation, readonly string[]> = {
     "--parent",
     "--label",
     "--anyway",
+    "--priority",
     "--json",
   ],
   convert: ["--target", "--peer-kind", "--message-id", "--json"],
@@ -81,6 +84,7 @@ const TASK_FLAGS: Record<TaskOperation, readonly string[]> = {
     "--peer-kind",
     "--number",
     "--status",
+    "--priority",
     "--expected-revision",
     "--reviewer-isolation",
     "--json",
@@ -331,11 +335,24 @@ export function parseTaskArgs(
       );
     task.number = taskNumber(numbers[0]);
     const status = one("--status");
-    if (!status || !(TASK_STATUSES as readonly string[]).includes(status))
-      throw invalidTaskArg(`--status must be one of: ${TASK_STATUSES.join(", ")}; got ${status}`);
-    task.status = status as TaskStatus;
+    if (status === undefined && !values.has("--priority"))
+      throw invalidTaskArg("task update needs --status or --priority (or both)");
+    if (status !== undefined) {
+      if (!(TASK_STATUSES as readonly string[]).includes(status))
+        throw invalidTaskArg(`--status must be one of: ${TASK_STATUSES.join(", ")}; got ${status}`);
+      task.status = status as TaskStatus;
+    }
   } else {
     task.number = taskNumber(one("--number"));
+  }
+
+  const priority = one("--priority");
+  if (priority !== undefined) {
+    if (!(TASK_PRIORITIES as readonly string[]).includes(priority))
+      throw invalidTaskArg(
+        `--priority must be one of: ${TASK_PRIORITIES.join(", ")}; got ${priority}`,
+      );
+    task.priority = priority as TaskPriority;
   }
 
   if (operation === "assign") {

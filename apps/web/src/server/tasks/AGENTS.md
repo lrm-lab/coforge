@@ -17,6 +17,7 @@ contract is `packages/coforge-sdk/src/internal/tasks.ts`.
   a malformed one is `INVALID_INPUT`. It reads no database and decides no
   authorization; who may act on which conversation stays in TaskBoard.
 - `labels.server.ts` owns Workspace task labels: the rows (a name unique case-insensitively per Workspace and one Badge color), resolution by name for a Task command (an unknown name is refused, never created), the five-per-task cap, and who creates (any member) or renames and deletes (owner or admin) one. `TaskView.labels` carries them; a Task write records `labels_changed`.
+- `task-priority.server.ts` owns who sets a Task's priority (`urgent|high|medium|low|none`, default `none`; a CHECK holds the five): anyone who may speak in the conversation, an Agent only on a Task it created or in a channel it coordinates (`coordinatorAgentId`), a Workspace owner or admin always (`task_priority_denied`). `create` takes it, `update` sets it with or without a status (the same priority again writes nothing), history records `priority_changed`, and both `list` forms sort by it, highest first, then oldest first (`byPriority`).
 - `task-view.server.ts` owns how a stored Task reads: its selection, its
   `TaskView`, and its stored status. `task-history.server.ts` owns which
   history events a Task write records and how they read back. TaskBoard and

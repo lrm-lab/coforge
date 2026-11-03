@@ -125,3 +125,39 @@ test("labels: create attaches, amend adds and takes off, list filters", () => {
   expect(() => parseTaskArgs(["create", ...target, "--title", "A", "--label", "-Bug"])).toThrow();
   expect(() => parseTaskArgs(["amend", ...target, "--number", "7", "--label", "-"])).toThrow();
 });
+
+// Task #470: a priority on create, and an update of the priority, the status, or both.
+test("--priority sets a new task's priority and an update's, with or without --status", () => {
+  const target = ["--target", "#general"];
+  expect(
+    parseTaskArgs(["create", ...target, "--title", "A", "--priority", "urgent"]),
+  ).toMatchObject({ task: { operation: "create", priority: "urgent" } });
+  expect(parseTaskArgs(["update", ...target, "--number", "7", "--priority", "low"])).toEqual({
+    command: "task",
+    task: { operation: "update", target: "#general", number: 7, priority: "low" },
+  });
+  expect(
+    parseTaskArgs([
+      "update",
+      ...target,
+      "--number",
+      "7",
+      "--status",
+      "in_review",
+      "--priority",
+      "high",
+    ]),
+  ).toMatchObject({ task: { status: "in_review", priority: "high" } });
+  expect(() => parseTaskArgs(["update", ...target, "--number", "7"])).toThrow(
+    "--status or --priority",
+  );
+  expect(() => parseTaskArgs(["update", ...target, "--number", "7", "--priority", "asap"])).toThrow(
+    "--priority must be one of: urgent, high, medium, low, none; got asap",
+  );
+  expect(() => parseTaskArgs(["create", ...target, "--title", "A", "--priority", "p1"])).toThrow(
+    "--priority must be one of",
+  );
+  expect(() =>
+    parseTaskArgs(["amend", ...target, "--number", "7", "--title", "B", "--priority", "high"]),
+  ).toThrow();
+});

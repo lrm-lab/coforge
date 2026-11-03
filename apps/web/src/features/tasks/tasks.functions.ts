@@ -1,6 +1,7 @@
 import { canAssignOther } from "#src/server/tasks/task-assignment-authority.server";
 import {
   isTaskRef,
+  TASK_PRIORITIES,
   TASK_STATUSES,
   type TaskCommand,
   type TaskRef,
@@ -64,6 +65,7 @@ const taskCommand = z
       .optional(),
     attachmentId: z.uuid().optional(),
     status: z.enum(TASK_STATUSES).optional(),
+    priority: z.enum(TASK_PRIORITIES).optional(),
     expectedRevision: z.number().int().nonnegative().optional(),
   })
   .strict();

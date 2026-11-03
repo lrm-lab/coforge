@@ -39,6 +39,8 @@ model Task {
   /// and the links of its own subtasks (`TaskParent`).
   parentLinks                  TaskParent[]        @relation("TaskChild")
   childLinks                   TaskParent[]        @relation("TaskParentOf")
+  /// urgent | high | medium | low | none (`TASK_PRIORITIES`); a CHECK holds the five.
+  priority                     String              @default("none")
   /// The channel message a task made under task conversations was made from, when it names one.
   /// A message may have several tasks; the message is not the task's.
   sourceMessageId              String?             @db.Uuid

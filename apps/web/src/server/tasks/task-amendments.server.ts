@@ -35,6 +35,7 @@ import { findTaskByNumber, assertExpectedRevision, commitTaskChange } from "./ta
 import { withNotices, type NoticeWriter } from "./task-notice-posting.server";
 import { signalTaskChange, announceTasks, announceNeighbours } from "./task-publication.server";
 import { requireManager, isTaskManager } from "./task-assignees.server";
+import { assertCanSetPriority } from "./task-priority.server";
 import { LABELS_PER_TASK_MAX, labelsChange, labelView, resolveTaskLabels } from "./labels.server";
 
 export async function updateTaskStatus(
@@ -44,24 +45,33 @@ export async function updateTaskStatus(
   command: TaskCommand,
 ) {
   const { conversationId } = conversation;
-  const status = command.status;
-  if (status === undefined || status === "all") throw new AppError("INVALID_INPUT");
+  // A status, a priority, or both.
+  const { status } = command;
+  if ((status === undefined && command.priority === undefined) || status === "all")
+    throw new AppError("INVALID_INPUT");
   const task = await findTaskByNumber(ports.db, conversationId, command.number!);
   if (!task) throw new AppError("NOT_FOUND");
   assertExpectedRevision(task, command.expectedRevision);
+  const priority = command.priority !== task.priority ? command.priority : undefined;
+  if (priority !== undefined) await assertCanSetPriority(ports.db, conversation, member, task);
+  // The priority it already has, alone, writes nothing.
+  if (status === undefined && priority === undefined)
+    return { tasks: [await taskViewOf(ports.db, ports.reader, task)] };
   // Anyone who may speak in this conversation moves a Task, an Agent included; a Workspace owner
   // or admin may set any status, everyone else only along the board's own transitions.
   const manager = await isTaskManager(ports.db, conversation.workspaceId, member);
-  if (!taskStatusMoveAllowed(storedTaskStatus(task.status), status, { manager }))
-    throw new AppError("ACCESS_DENIED");
-  if (taskStatusNeedsOwner(status) && !task.ownerMemberId) throw new AppError("CONFLICT");
-  if (
-    taskStatusAwaitsReceipt(status, {
-      requiresReceipt: task.createsResource,
-      hasReceipt: Boolean(task.resourceReceipt),
-    })
-  )
-    throw new AppError("CONFLICT");
+  if (status !== undefined) {
+    if (!taskStatusMoveAllowed(storedTaskStatus(task.status), status, { manager }))
+      throw new AppError("ACCESS_DENIED");
+    if (taskStatusNeedsOwner(status) && !task.ownerMemberId) throw new AppError("CONFLICT");
+    if (
+      taskStatusAwaitsReceipt(status, {
+        requiresReceipt: task.createsResource,
+        hasReceipt: Boolean(task.resourceReceipt),
+      })
+    )
+      throw new AppError("CONFLICT");
+  }
   const updated = await withNotices(ports, conversation, async (tx, notices) => {
     // Under the conversation lock, so a blocker finishing at the same time is seen either way.
     const { task: updated } = await commitTaskChange(
@@ -69,7 +79,7 @@ export async function updateTaskStatus(
       member,
       task,
       { ownerMemberId: task.ownerMemberId },
-      { status },
+      { ...(status !== undefined && { status }), ...(priority !== undefined && { priority }) },
       { manager },
     );
     if (updated.status !== task.status)

@@ -1,4 +1,4 @@
-import type { TaskCommand, TaskPrincipal } from "@lrm/coforge-sdk/internal";
+import type { TaskCommand, TaskPrincipal, TaskPriority } from "@lrm/coforge-sdk/internal";
 
 import { AppError } from "#src/lib/app-error";
 import {
@@ -134,6 +134,7 @@ export async function createConversationTasks(
         title,
         description: command.description,
         createsResource: command.createsResource ?? false,
+        priority: command.priority,
         assignee,
         requestId: requestIds[index]!,
         source,
@@ -193,6 +194,7 @@ export async function insertConversationTask(
     title: string;
     description?: string | null;
     createsResource?: boolean;
+    priority?: TaskPriority;
     assignee: Awaited<ReturnType<typeof assigneeMember>>;
     requestId: string;
     source: SourceMessage | null;
@@ -211,6 +213,7 @@ export async function insertConversationTask(
       title: input.title,
       description: input.description,
       createsResource: input.createsResource ?? false,
+      priority: input.priority,
       ownerMemberId: assignee?.id,
       status: started ? "in_progress" : "todo",
       claimedAt: started ? new Date() : null,

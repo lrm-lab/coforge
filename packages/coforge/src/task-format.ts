@@ -49,6 +49,11 @@ function labelsField(task: TaskView): string {
   return ` · ${shown.join(", ")}${labels.length > LABELS_SHOWN ? ` +${labels.length - LABELS_SHOWN}` : ""}`;
 }
 
+/** A row's priority, `none` included; an older server sends none, which reads as `none`. */
+function priorityField(task: TaskView): string {
+  return `prio=${task.priority ?? "none"}`;
+}
+
 function times(task: TaskView): string {
   return ` created=${formatUtcTimestamp(task.createdAt)} updated=${formatUtcTimestamp(task.updatedAt)}`;
 }
@@ -59,7 +64,7 @@ function boardRow(task: TaskView): string {
   const creatorMark = departure(task.creator);
   const creator = ` (by @${task.creator.handle}${creatorMark ? ` [${creatorMark}]` : ""})`;
   const details = task.description ? `\n  details: ${fenceMessageBody(task.description)}` : "";
-  return `#${task.number} [${task.status}] ${fenceMessageBody(task.title)}${owner}${creator} ${messageField(task)} rev=${task.revision}${resourceReceipt(task)}${relationMarks(task)}${labelsField(task)}${times(task)}${details}`;
+  return `#${task.number} [${task.status}] ${priorityField(task)} ${fenceMessageBody(task.title)}${owner}${creator} ${messageField(task)} rev=${task.revision}${resourceReceipt(task)}${relationMarks(task)}${labelsField(task)}${times(task)}${details}`;
 }
 
 /** One conversation's Tasks, in board order, as `coforge task list --target` prints them. */
@@ -77,7 +82,7 @@ function ownRow(task: TaskView): string {
   const mark = departure(task.creator);
   const creator = ` by=@${task.creator.handle}${mark ? ` creator=${mark}` : ""}`;
   const title = foldUntrustedLine(task.title);
-  return `- ${task.channelRef ?? "<unknown conversation>"} task #${task.number} [${task.status}]${creator} ${messageField(task)}${resourceReceipt(task)}${relationMarks(task)}${labelsField(task)}${times(task)} ${title}`;
+  return `- ${task.channelRef ?? "<unknown conversation>"} task #${task.number} [${task.status}] ${priorityField(task)}${creator} ${messageField(task)}${resourceReceipt(task)}${relationMarks(task)}${labelsField(task)}${times(task)} ${title}`;
 }
 
 /**
@@ -198,8 +203,16 @@ export function formatTaskAssigned(task: TaskView): string {
     : `#${task.number} unassigned — now open.`;
 }
 
-export function formatTaskStatusUpdated(task: TaskView): string {
-  return `#${task.number} moved to ${task.status}.`;
+/** `coforge task update`: the status and priority it set, as the server now holds them. */
+export function formatTaskStatusUpdated(
+  task: TaskView,
+  asked: Pick<TaskCommand, "status" | "priority"> = { status: task.status },
+): string {
+  const parts = [
+    ...(asked.status !== undefined ? [`moved to ${task.status}`] : []),
+    ...(asked.priority !== undefined ? [`priority set to ${task.priority ?? "none"}`] : []),
+  ];
+  return `#${task.number} ${parts.join(", ")}.`;
 }
 
 export function formatTaskDeleted(number: number): string {
@@ -216,6 +229,7 @@ export function formatTaskShow(
     `Title: ${fenceMessageBody(task.title)}`,
     `Description: ${task.description ? fenceMessageBody(task.description) : "(none set)"}`,
     `Labels: ${(task.labels ?? []).map((label) => label.name).join(", ") || "(none)"}`,
+    `Priority: ${task.priority ?? "none"}`,
     ...showRelationLines(task, relations),
   ].join("\n");
 }
@@ -432,7 +446,7 @@ export function formatTaskResult(command: TaskCommand, result: TaskResult): stri
     case "unassign":
       return formatTaskAssigned(task);
     case "update":
-      return appendTaskRecentContext(command, result, formatTaskStatusUpdated(task));
+      return appendTaskRecentContext(command, result, formatTaskStatusUpdated(task, command));
     default:
       throw new Error(`no output is defined for task ${command.operation}`);
   }

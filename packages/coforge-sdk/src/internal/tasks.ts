@@ -4,6 +4,14 @@ import { CHANNEL_NAME_PATTERN } from "./channel-references";
 
 export const TASK_STATUSES = ["todo", "in_progress", "in_review", "done", "closed"] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
+
+/** A Task's priority, highest first (Linear's five levels); a new Task is `none`. */
+export const TASK_PRIORITIES = ["urgent", "high", "medium", "low", "none"] as const;
+export type TaskPriority = (typeof TASK_PRIORITIES)[number];
+
+/** Where a priority sorts: 0 for `urgent`, and so on. A missing one (an older server) is `none`. */
+export const taskPriorityRank = (priority: TaskPriority | undefined) =>
+  TASK_PRIORITIES.indexOf(priority ?? "none");
 export type TaskPeerKind = "human" | "agent";
 
 /**
@@ -165,6 +173,8 @@ export type TaskView = {
   /** The Workspace labels on this Task, by name. At most five; absent reads as none (an older
    * server does not send it). */
   labels?: TaskLabel[];
+  /** Absent reads as `none` (an older server does not send it). */
+  priority?: TaskPriority;
   createdAt: string;
   updatedAt: string;
   /** The conversation's target (`#channel` or `@user`); an Agent's own cross-conversation list sets it. */
@@ -246,6 +256,7 @@ export type TaskHistoryChange =
       /** The parent before and after; null for none. */
       payload: { from: TaskName | null; to: TaskName | null };
     }
+  | { eventType: "priority_changed"; payload: { from: TaskPriority; to: TaskPriority } }
   | {
       eventType: "labels_changed";
       /** The labels added and removed. */
@@ -297,6 +308,9 @@ export type TaskCommand = {
   labels?: string[];
   /** `amend`: labels to take off, by name. */
   removeLabels?: string[];
+  /** `create`: the new Tasks' priority (default `none`). `update`: the new priority, with or
+   * without a `status`. */
+  priority?: TaskPriority;
   /** `list`: only Tasks ready to start: todo, unowned and not blocked. */
   ready?: boolean;
   assignee?: string | null;

@@ -1,6 +1,7 @@
-import { isTaskRef, type TaskCommand } from "@lrm/coforge-sdk/internal";
+import { isTaskRef, TASK_PRIORITIES, type TaskCommand } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
 import { LABEL_NAME_MAX, LABELS_PER_TASK_MAX } from "./labels.server";
+import { TASK_PRIORITY_INVALID } from "./task-priority.server";
 
 /**
  * The shape a Task command must have before `TaskBoard.execute` reads anything: its operation,
@@ -78,6 +79,16 @@ export function validateTaskCommand(command: TaskCommand) {
     // they are off.
     if (command.number !== undefined) throw new AppError("INVALID_INPUT");
   }
+  // A priority is one of five, set on create or by an update (with or without a status).
+  if (
+    command.priority !== undefined &&
+    (!(TASK_PRIORITIES as readonly unknown[]).includes(command.priority) ||
+      (command.operation !== "create" && command.operation !== "update"))
+  )
+    throw new AppError("INVALID_INPUT", {
+      errorId: TASK_PRIORITY_INVALID,
+      hint: `the priority must be one of ${TASK_PRIORITIES.join(", ")}, on create or update`,
+    });
   const relational = command.operation === "create" || command.operation === "amend";
   const labelsAllowed =
     command.operation === "create" || command.operation === "amend" || command.operation === "list";
@@ -151,7 +162,9 @@ export function validateTaskCommand(command: TaskCommand) {
     !command.number
   )
     throw new AppError("INVALID_INPUT");
-  if (command.operation === "update" && !command.status) throw new AppError("INVALID_INPUT");
+  // An update moves the status, sets the priority, or both.
+  if (command.operation === "update" && !command.status && command.priority === undefined)
+    throw new AppError("INVALID_INPUT");
   if (
     ["convert", "claim"].includes(command.operation) &&
     !command.number &&

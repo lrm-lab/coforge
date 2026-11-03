@@ -108,3 +108,22 @@ test("validateTaskRequest accepts a create from a source message, alongside anot
     "invalid Task request",
   );
 });
+
+// Task #470: a priority on create, and an update that changes only the priority.
+test("validateTaskRequest accepts a priority on create and update, and an update of it alone", () => {
+  const update = { ...base, operation: "update" as const, number: 4 };
+  expect(() => validateTaskRequest({ ...update, priority: "high" })).not.toThrow();
+  expect(() =>
+    validateTaskRequest({ ...update, priority: "low", status: "in_review" }),
+  ).not.toThrow();
+  expect(() =>
+    validateTaskRequest({ ...base, operation: "create", title: "x", priority: "urgent" }),
+  ).not.toThrow();
+  expect(() => validateTaskRequest(update)).toThrow("missing Task operation argument");
+  expect(() => validateTaskRequest({ ...update, priority: "asap" as "high" })).toThrow(
+    "invalid Task priority",
+  );
+  expect(() =>
+    validateTaskRequest({ ...base, operation: "amend", number: 4, title: "x", priority: "high" }),
+  ).toThrow("invalid Task priority");
+});

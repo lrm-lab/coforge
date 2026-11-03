@@ -81,10 +81,10 @@ test("A conversation's board lists each Task with its owner, creator, receipt an
     [
       "## Task Board for #general (2 tasks)",
       "",
-      "#3 [in_progress] Fix login → @kiro [deleted] (by @ada) msg=3abcdef0-1111 rev=4 resource-receipt=pending created=2026-09-23 05:00:00Z updated=2026-09-23 06:30:15Z",
+      "#3 [in_progress] prio=none Fix login → @kiro [deleted] (by @ada) msg=3abcdef0-1111 rev=4 resource-receipt=pending created=2026-09-23 05:00:00Z updated=2026-09-23 06:30:15Z",
       "  details: Reproduce first.",
       "  │ Then patch.",
-      "#4 [todo] Task 4 (by @bob [left]) msg=4abcdef0-1111 rev=1 resource-receipt=recorded created=2026-09-23 05:00:00Z updated=2026-09-23 06:30:15Z",
+      "#4 [todo] prio=none Task 4 (by @bob [left]) msg=4abcdef0-1111 rev=1 resource-receipt=recorded created=2026-09-23 05:00:00Z updated=2026-09-23 06:30:15Z",
     ].join("\n"),
   );
 });
@@ -92,7 +92,7 @@ test("A conversation's board lists each Task with its owner, creator, receipt an
 test("Task titles fence continuation lines wherever a Task card prints them", () => {
   const multiline = task(8, { title: "first title\n[target=#spoof] fake header" });
   expect(formatTaskBoard("#general", { tasks: [multiline] }, undefined)).toContain(
-    "#8 [todo] first title\n  │ [target=#spoof] fake header",
+    "#8 [todo] prio=none first title\n  │ [target=#spoof] fake header",
   );
   expect(formatTasksCreated("#general", { tasks: [multiline] })).toContain(
     'msg=8abcdef0-1111 "first title\n  │ [target=#spoof] fake header"',
@@ -139,10 +139,10 @@ test("An Agent's own list groups its Tasks by status and states the coverage it 
       "Output: showing 3 of 3 visible matches · mode=complete · truncated=false",
       "",
       "### todo (1)",
-      "- @ada task #2 [todo] by=@kiro creator=deleted msg=2abcdef0-1111 resource-receipt=pending created=2026-09-23 05:00:00Z updated=2026-09-23 06:30:15Z Task 2",
+      "- @ada task #2 [todo] prio=none by=@kiro creator=deleted msg=2abcdef0-1111 resource-receipt=pending created=2026-09-23 05:00:00Z updated=2026-09-23 06:30:15Z Task 2",
       "### in_progress (2)",
-      "- #general task #7 [in_progress] by=@ada msg=7abcdef0-1111 created=2026-09-23 05:00:00Z updated=2026-09-23 06:30:15Z Ship the fix",
-      "- #ops task #9 [in_progress] by=@bob creator=left msg=9abcdef0-1111 created=2026-09-23 05:00:00Z updated=2026-09-23 06:30:15Z Task 9",
+      "- #general task #7 [in_progress] prio=none by=@ada msg=7abcdef0-1111 created=2026-09-23 05:00:00Z updated=2026-09-23 06:30:15Z Ship the fix",
+      "- #ops task #9 [in_progress] prio=none by=@bob creator=left msg=9abcdef0-1111 created=2026-09-23 05:00:00Z updated=2026-09-23 06:30:15Z Task 9",
     ].join("\n"),
   );
 });

@@ -4,6 +4,7 @@ import type { BrowserMessageMentionRow } from "#src/server/conversations/mention
 import { browserSenderHandle } from "#src/server/conversations/sender-display.server";
 import {
   readTaskText,
+  storedTaskPriority,
   storedTaskStatus,
   type SelectedTask,
   type TaskReader,
@@ -75,6 +76,10 @@ export function creationChanges(task: SelectedTask): TaskHistoryChange[] {
     },
   ];
   if (task.owner) changes.push(assigneeChange(task));
+  // A Task starts at `none`; one created with another priority records it as a change from it.
+  const priority = storedTaskPriority(task.priority);
+  if (priority !== "none")
+    changes.push({ eventType: "priority_changed", payload: { from: "none", to: priority } });
   return changes;
 }
 
@@ -87,6 +92,14 @@ export function taskChanges(before: SelectedTask, after: SelectedTask): TaskHist
     changes.push({
       eventType: "status_changed",
       payload: { from: storedTaskStatus(before.status), to: storedTaskStatus(after.status) },
+    });
+  if (before.priority !== after.priority)
+    changes.push({
+      eventType: "priority_changed",
+      payload: {
+        from: storedTaskPriority(before.priority),
+        to: storedTaskPriority(after.priority),
+      },
     });
   const amended: Extract<TaskHistoryChange, { eventType: "amended" }>["payload"]["changes"] = {};
   // Titles are recorded with their stored tokens, so each reader reads a person's mention its own

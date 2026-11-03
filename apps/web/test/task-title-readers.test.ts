@@ -31,6 +31,7 @@ function task(title: string, revision = 1): SelectedTask {
     resourceReceipt: null,
     resourceReceiptRecordedAt: null,
     status: "todo",
+    priority: "none",
     revision,
     claimedAt: null,
     createdAt: new Date("2026-10-15T00:00:00Z"),

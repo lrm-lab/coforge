@@ -4,6 +4,7 @@ import {
   CHANNEL_NAME_PATTERN,
   MAX_MESSAGE_SEQUENCE,
   SEEN_EXACT_SEQS_LIMIT,
+  TASK_PRIORITIES,
   TASK_STATUSES,
   type TaskPrincipal,
   type TaskResult,
@@ -123,6 +124,7 @@ const taskRequestSchema = z
     alongside: z.boolean().optional(),
     attachmentId: z.uuid().optional(),
     status: z.enum(taskStatuses).optional(),
+    priority: z.enum(TASK_PRIORITIES).optional(),
     expectedRevision: z.number().int().nonnegative().optional(),
   })
   .strict();

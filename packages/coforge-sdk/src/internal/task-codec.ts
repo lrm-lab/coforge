@@ -1,5 +1,6 @@
 import { isSeenExactSeqs, MAX_MESSAGE_SEQUENCE } from "./freshness-decision";
 import {
+  TASK_PRIORITIES,
   TASK_STATUSES,
   type TaskCommand,
   type TaskResourceReceipt,
@@ -35,6 +36,7 @@ const operations = new Set<TaskCommand["operation"]>([
   "receipt",
 ]);
 const statuses = new Set<string>(TASK_STATUSES);
+const priorities = new Set<string>(TASK_PRIORITIES);
 const modes = new Set(["inline", "withheld"]);
 /** The largest PostgreSQL `integer`, the column type of a task's number and revision: a larger
  * value names no task and cannot be stored or queried. */
@@ -138,6 +140,11 @@ export function validateTaskRequest(value: TaskRequest): void {
     !(statuses.has(value.status) || (value.operation === "list" && value.status === "all"))
   )
     throw new Error("invalid Task status");
+  if (
+    value.priority !== undefined &&
+    (!priorities.has(value.priority) || !["create", "update"].includes(value.operation))
+  )
+    throw new Error("invalid Task priority");
   if (value.freshnessContextMode !== undefined && !modes.has(value.freshnessContextMode))
     throw new Error("invalid Task mode");
   if (value.createsResource !== undefined && typeof value.createsResource !== "boolean")
@@ -188,7 +195,8 @@ export function validateTaskRequest(value: TaskRequest): void {
       value.number !== undefined &&
       value.numbers === undefined &&
       !messages &&
-      value.status !== undefined &&
+      // A status, a priority, or both.
+      (value.status !== undefined || value.priority !== undefined) &&
       value.status !== "all") ||
     (value.operation === "assign" &&
       value.number !== undefined &&

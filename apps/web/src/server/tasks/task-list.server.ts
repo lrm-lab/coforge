@@ -14,6 +14,7 @@ import type {
 import type { TaskBoardPorts } from "./task-board-ports.server";
 import { NOT_BLOCKED_WHERE, showRelations } from "./task-relations.server";
 import { labelFilterWhere } from "./labels.server";
+import { byPriority } from "./task-priority.server";
 import {
   CONVERSATION_KIND_WHERE,
   TASK_SCOPE_WHERE,
@@ -99,18 +100,23 @@ export async function listOwnTasks(
       },
     },
   });
+  // Highest priority first; within a level, oldest first across conversations.
   return {
-    tasks: await viewsWithCounts(
-      ports.db,
-      ports.reader,
-      principal.workspaceId,
-      tasks,
-      (task, extras) => ({
-        ...taskView(task, ports.reader, extras),
-        channelRef: task.conversation.channelName
-          ? `#${task.conversation.channelName}`
-          : `@${task.conversation.members[0]!.user!.username}`,
-      }),
+    tasks: byPriority(
+      await viewsWithCounts(
+        ports.db,
+        ports.reader,
+        principal.workspaceId,
+        tasks,
+        (task, extras) => ({
+          ...taskView(task, ports.reader, extras),
+          channelRef: task.conversation.channelName
+            ? `#${task.conversation.channelName}`
+            : `@${task.conversation.members[0]!.user!.username}`,
+        }),
+      ),
+      (left, right) =>
+        left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
     ),
     coverage: scope.coverage,
     pagination: { mode: "complete", truncated: false },
@@ -158,9 +164,12 @@ export async function listConversationTasks(
     orderBy: { number: "asc" },
     select: taskSelection,
   });
+  // Highest priority first; within a level, by number (oldest first), as read.
   return {
-    tasks: await viewsWithCounts(ports.db, ports.reader, workspaceId, tasks, (task, extras) =>
-      taskView(task, ports.reader, extras),
+    tasks: byPriority(
+      await viewsWithCounts(ports.db, ports.reader, workspaceId, tasks, (task, extras) =>
+        taskView(task, ports.reader, extras),
+      ),
     ),
   };
 }

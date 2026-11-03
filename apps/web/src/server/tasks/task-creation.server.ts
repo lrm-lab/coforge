@@ -274,6 +274,7 @@ export async function createTasks(
               title: stored.body,
               description: command.description,
               createsResource: command.createsResource ?? false,
+              priority: command.priority,
               ownerMemberId: assignee?.id,
               status: started ? "in_progress" : "todo",
               claimedAt: started ? new Date() : null,

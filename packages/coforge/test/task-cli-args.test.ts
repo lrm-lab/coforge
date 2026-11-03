@@ -131,9 +131,7 @@ test("Task update, assign, convert, amend and receipt name what is wrong with th
     invalidArg("--status must be one of: todo, in_progress, in_review, done, closed; got open"),
   );
   expect(refusal([...update, "--number", "1"])).toEqual(
-    invalidArg(
-      "--status must be one of: todo, in_progress, in_review, done, closed; got undefined",
-    ),
+    invalidArg("task update needs --status or --priority (or both)"),
   );
   expect(
     refusal([...update, "--number", "1", "--status", "done", "--expected-revision", "-1"]),

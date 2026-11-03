@@ -6,11 +6,13 @@ import {
 import {
   isRecord,
   TASK_BLOCKER_SATISFIED_STATUSES,
+  TASK_PRIORITIES,
   TASK_STATUSES,
   type TaskConversationKind,
   type TaskMember,
   type TaskName,
   type TaskResourceReceipt,
+  type TaskPriority,
   type TaskStatus,
   type TaskView,
 } from "@lrm/coforge-sdk/internal";
@@ -61,6 +63,7 @@ export const taskSelection = {
   resourceReceipt: true,
   resourceReceiptRecordedAt: true,
   status: true,
+  priority: true,
   revision: true,
   claimedAt: true,
   createdAt: true,
@@ -133,6 +136,12 @@ export const CONVERSATION_KIND_WHERE = {
   channel: { channelName: { not: null } },
   dm: { directKey: { not: null } },
 } satisfies Record<TaskConversationKind, Prisma.ConversationWhereInput>;
+
+/** A stored priority; the CHECK on `tasks.priority` holds the five, so anything else is a bug. */
+export function storedTaskPriority(value: string): TaskPriority {
+  if (!(TASK_PRIORITIES as readonly string[]).includes(value)) throw new AppError("INTERNAL_ERROR");
+  return value as TaskPriority;
+}
 
 export function storedTaskStatus(value: string): TaskStatus {
   switch (value) {
@@ -294,6 +303,7 @@ export function taskView(
     title: readTaskText(task.title, reader, taskMentions(task)),
     description: task.description,
     status: storedTaskStatus(task.status),
+    priority: storedTaskPriority(task.priority),
     revision: task.revision,
     ...relations,
     claimedAt: task.claimedAt?.toISOString() ?? null,
