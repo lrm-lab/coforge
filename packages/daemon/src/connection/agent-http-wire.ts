@@ -82,23 +82,25 @@ async function readAgentResponseText(response: Response, what: string): Promise<
   }
 }
 
+/** Logs a bounded snippet of a 5xx body for local diagnosis. The field is not named `body`:
+ * LogTape's JSON sink redacts that key, which hid every prior probe. */
+export function logUpstream5xxBody(what: string, status: number, body: string): void {
+  if (status < 500) return;
+  logger.error("Upstream agent HTTP 5xx body", {
+    event: "agent.http.upstream_5xx_body",
+    what,
+    status,
+    upstream_body_length: body.length,
+    upstream_body_snippet: body.length > 0 ? body.slice(0, 2000) : "<empty>",
+  });
+}
+
 /** Throws when the response is a non-2xx: the server's explained refusal, a safe validation
  * message, or a typed transport error. */
 export async function assertAgentResponseOk(response: Response, what: string): Promise<void> {
   if (response.ok) return;
   const body = await readAgentResponseText(response, what);
-  // Temporary diagnostics: HTTP 5xx bodies are otherwise discarded by fromRpc, which leaves only
-  // SERVER_5XX at the Agent. Log a bounded snippet so the web exception can be recovered locally.
-  // Field name must not be `body` — LogTape's JSON sink redacts that key, which hid every prior probe.
-  if (response.status >= 500) {
-    logger.error("Upstream agent HTTP 5xx body", {
-      event: "agent.http.upstream_5xx_body",
-      what,
-      status: response.status,
-      upstream_body_length: body.length,
-      upstream_body_snippet: body.length > 0 ? body.slice(0, 2000) : "<empty>",
-    });
-  }
+  logUpstream5xxBody(what, response.status, body);
   // A 5xx whose body is exactly the Agent API's refusal shape named its own reason; the caller
   // gets that reason and code instead of a generic proxy failure. Any other 5xx body (a stack
   // trace, a gateway page) stays opaque.

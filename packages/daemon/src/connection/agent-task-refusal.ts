@@ -1,5 +1,5 @@
 import { AgentExplainedRefusalError } from "./agent-explained-refusal-error";
-import { readUpstreamErrorCode } from "./agent-http-wire";
+import { logUpstream5xxBody, readUpstreamErrorCode } from "./agent-http-wire";
 import { AgentUpstreamRefusalError } from "./agent-upstream-refusal-error";
 
 /**
@@ -10,6 +10,9 @@ import { AgentUpstreamRefusalError } from "./agent-upstream-refusal-error";
  */
 export async function taskRefusalError(response: Response) {
   const text = await response.text();
+  // Task requests use their own client, so a 5xx here would otherwise lose the body the same way
+  // the message clients used to before `logUpstream5xxBody`.
+  logUpstream5xxBody("Agent Task", response.status, text);
   return (
     AgentExplainedRefusalError.fromResponse(response.status, text) ??
     new AgentUpstreamRefusalError(
