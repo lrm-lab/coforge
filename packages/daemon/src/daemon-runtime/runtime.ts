@@ -15,10 +15,7 @@ import { rebindAgent } from "./agent-rebind";
 import { AgentLaunchCustody } from "./agent-launch-custody";
 import { AgentContexts } from "./agent-contexts";
 import { PhaseBookkeeping } from "./phase-bookkeeping";
-import {
-  observeRuntimeEvent,
-  type RuntimeEventObservationPorts,
-} from "./runtime-event-observation";
+import { type RuntimeEventObservationPorts } from "./runtime-event-observation";
 import {
   canonicalAgentMessageTarget,
   observeLaunchEvent,
@@ -134,7 +131,6 @@ import { WakeRecycle } from "./wake-recycle";
 import { AgentMessageOperations } from "./agent-message-operations";
 import { AgentRequestForwarder } from "./agent-request-forwarder";
 import { AgentDeliveryQueue } from "./agent-delivery-queue";
-import { canonicalThreadTarget } from "./thread-target";
 import { ReplyIntentPublisher } from "./reply-intent-publisher";
 import {
   AgentActivityPublisher,
