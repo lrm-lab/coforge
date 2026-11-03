@@ -3,8 +3,12 @@ import { z } from "zod";
 
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
-import { announceLabelChanged } from "#src/server/tasks/label-signal.server";
+import {
+  announceLabelChanged,
+  announceLabelGroupChanged,
+} from "#src/server/tasks/label-signal.server";
 import { LABEL_COLORS, LABEL_NAME_MAX, Labels } from "#src/server/tasks/labels.server";
+import { LABEL_GROUP_SELECTIONS, LabelGroups } from "#src/server/tasks/label-groups.server";
 
 const labelName = z.string().trim().min(1).max(LABEL_NAME_MAX);
 const labelColor = z.enum(LABEL_COLORS);
@@ -52,5 +56,58 @@ export const deleteTaskLabel = createServerFn({ method: "POST" })
     await announceLabelChanged(createCentrifugoServerApi(), workspaceId, {
       label: null,
       deletedLabelId: data.id,
+    });
+  });
+
+const groupName = z.string().trim().min(1).max(LABEL_NAME_MAX);
+const groupSelection = z.enum(LABEL_GROUP_SELECTIONS);
+
+/** The Workspace's label groups, for the picker's grouping. Any member may read them. */
+export const loadWorkspaceLabelGroups = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .handler(async ({ context }) => {
+    const { user, db, workspaceId } = context;
+    return new LabelGroups(db).list(workspaceId, user.id);
+  });
+
+/** Creates a group (default single); a name that already exists returns that group. Any member. */
+export const createLabelGroup = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(z.object({ name: groupName, selection: groupSelection.optional() }).strict())
+  .handler(async ({ context, data }) => {
+    const { user, db, workspaceId } = context;
+    const group = await new LabelGroups(db).create(workspaceId, user.id, data);
+    await announceLabelGroupChanged(createCentrifugoServerApi(), workspaceId, { group });
+    return group;
+  });
+
+/** Renames a group or changes its selection; an owner or admin only. */
+export const updateLabelGroup = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(
+    z
+      .object({ id: z.uuid(), name: groupName.optional(), selection: groupSelection.optional() })
+      .strict(),
+  )
+  .handler(async ({ context, data }) => {
+    const { id, ...input } = data;
+    const { user, db, workspaceId } = context;
+    const result = await new LabelGroups(db).update(workspaceId, user.id, id, input);
+    await announceLabelGroupChanged(createCentrifugoServerApi(), workspaceId, {
+      group: result.group,
+    });
+    return result;
+  });
+
+/** Deletes a group; its labels stay, ungrouped. An owner or admin only. */
+export const deleteLabelGroup = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(z.object({ id: z.uuid() }).strict())
+  .handler(async ({ context, data }) => {
+    const { user, db, workspaceId } = context;
+    await new LabelGroups(db).delete(workspaceId, user.id, data.id);
+    await announceLabelGroupChanged(createCentrifugoServerApi(), workspaceId, {
+      group: null,
+      deletedGroupId: data.id,
     });
   });
