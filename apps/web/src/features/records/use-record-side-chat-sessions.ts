@@ -50,6 +50,7 @@ export function useRecordSideChatSessions({
   const archiveSession = useServerFn(archiveWeeklyReportAssistantChatSessionFn);
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameDraft, setRenameDraft] = useState("");
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   async function onNewChat() {
     if (busy) return;
@@ -112,9 +113,9 @@ export function useRecordSideChatSessions({
     }
   }
 
+  /** Archives the active chat and opens another; throws when refused, for the confirm dialog. */
   async function onDeleteSession() {
-    if (!activeSessionId || busy) return;
-    if (!window.confirm(m.records_side_chat_delete_confirm())) return;
+    if (!activeSessionId || busy) throw new Error("No chat to delete right now");
     setBusy(true);
     setError(null);
     try {
@@ -125,9 +126,11 @@ export function useRecordSideChatSessions({
       setActiveSessionId(ensured.activeSessionId);
       session.draft = "";
       setDraft("");
-      await loadThread(ensured.activeSessionId, ensured.legacySessionId);
-    } catch {
-      setError(m.records_weekly_ai_request_failed());
+      setDeleteOpen(false);
+      // The chat is gone by now; a failed reload is the panel's own error, not a refused delete.
+      await loadThread(ensured.activeSessionId, ensured.legacySessionId).catch(() =>
+        setError(m.records_weekly_ai_request_failed()),
+      );
     } finally {
       setBusy(false);
     }
@@ -142,6 +145,8 @@ export function useRecordSideChatSessions({
     setRenameDraft,
     openRename,
     submitRename,
+    deleteOpen,
+    setDeleteOpen,
     onDeleteSession,
   };
 }

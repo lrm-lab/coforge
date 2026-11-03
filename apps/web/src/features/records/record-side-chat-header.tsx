@@ -7,6 +7,7 @@ import {
   Plus,
   Trash01 as Trash,
 } from "@untitledui/icons";
+import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -44,6 +45,8 @@ export function RecordSideChatHeader({
     setRenameDraft,
     openRename,
     submitRename,
+    deleteOpen,
+    setDeleteOpen,
     onDeleteSession,
   } = actions;
   return (
@@ -110,7 +113,7 @@ export function RecordSideChatHeader({
               aria-label={m.records_side_chat_menu()}
               onAction={(key) => {
                 if (key === "rename") openRename();
-                if (key === "delete") void onDeleteSession();
+                if (key === "delete") setDeleteOpen(true);
               }}
             >
               <Dropdown.Item id="rename" icon={Edit} label={m.records_side_chat_rename()} />
@@ -145,6 +148,17 @@ export function RecordSideChatHeader({
         onDraftChange={setRenameDraft}
         onClose={() => setRenameOpen(false)}
         onSubmit={() => void submitRename()}
+      />
+
+      <ConfirmDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title={m.records_side_chat_delete_title()}
+        description={m.records_side_chat_delete_confirm()}
+        confirmLabel={m.records_side_chat_delete_action()}
+        pendingLabel={m.records_delete_pending()}
+        errorMessage={m.records_delete_error()}
+        onConfirm={onDeleteSession}
       />
     </>
   );

@@ -27,7 +27,7 @@ import {
   type ReportContent,
 } from "./records-content";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
-import { RecordsDeleteConfirmDialog } from "./records-delete-confirm-dialog";
+import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { RecordSidePanel } from "./record-side-panel";
 import { fileToDataUrlUpload } from "./file-data-url-upload";
 import { ReportDetailHeader } from "./report-detail-header";
@@ -210,10 +210,10 @@ export function ReportDetail({
     }, 900);
   }
 
+  /** Waits out an autosave in flight, so a delete pressed mid-save still goes through. */
   async function removeCurrentReport() {
-    if (!editable || saving) return;
+    if (!editable) throw new Error("This report cannot be deleted");
     setSaving(true);
-    deleteDialog.setError("");
     try {
       clearScheduledPersist();
       await waitForReportSave(report.id);
@@ -221,8 +221,6 @@ export function ReportDetail({
       clearReportDraft(report.id);
       deleteDialog.close();
       await leaveToRecordsList();
-    } catch {
-      deleteDialog.setError(m.records_delete_error());
     } finally {
       setSaving(false);
     }
@@ -397,14 +395,15 @@ export function ReportDetail({
         </div>
       </div>
 
-      <RecordsDeleteConfirmDialog
+      <ConfirmDialog
         open={deleteDialog.open}
+        onOpenChange={deleteDialog.setOpen}
         title={m.records_report_delete_confirm_title({ name: report.title })}
         description={m.records_report_delete_confirm_body()}
-        busy={saving}
-        error={deleteDialog.error}
-        onOpenChange={deleteDialog.onOpenChange}
-        onConfirm={() => void removeCurrentReport()}
+        confirmLabel={m.records_report_delete_action()}
+        pendingLabel={m.records_delete_pending()}
+        errorMessage={m.records_delete_error()}
+        onConfirm={removeCurrentReport}
       />
 
       <RecordSidePanel

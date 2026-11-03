@@ -13,7 +13,7 @@ import { readReportDraft, trackReportSave, writeReportDraft } from "./report-dra
 import { deleteRecordNote, saveRecordNote } from "./records.functions";
 import { BackToRecords } from "./records-layout";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
-import { RecordsDeleteConfirmDialog } from "./records-delete-confirm-dialog";
+import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { RecordsReadingColumn } from "./records-reading-column";
 import { fileToDataUrlUpload } from "./file-data-url-upload";
 import type { NoteSubject } from "./record-subject";
@@ -37,7 +37,6 @@ export function NoteDetail({ note }: { note: NoteSubject["note"] }) {
   const [saving, setSaving] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const deleteDialog = useRecordDeleteDialog();
-  const [deleting, setDeleting] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   async function persist(next: { title?: string; body?: string }, noteId = noteIdRef.current) {
@@ -92,22 +91,14 @@ export function NoteDetail({ note }: { note: NoteSubject["note"] }) {
   }
 
   async function removeNote() {
-    setDeleting(true);
-    deleteDialog.setError("");
-    try {
-      await remove({ data: { noteId: note.id } });
-      deleteDialog.close();
-      await refresh.records();
-      void router.navigate({
-        to: "/w/$workspaceSlug/records",
-        params: { workspaceSlug },
-        search: { tab: "notes" },
-      });
-    } catch {
-      deleteDialog.setError(m.records_delete_error());
-    } finally {
-      setDeleting(false);
-    }
+    await remove({ data: { noteId: note.id } });
+    deleteDialog.close();
+    await refresh.records();
+    void router.navigate({
+      to: "/w/$workspaceSlug/records",
+      params: { workspaceSlug },
+      search: { tab: "notes" },
+    });
   }
 
   useEffect(() => {
@@ -212,14 +203,15 @@ export function NoteDetail({ note }: { note: NoteSubject["note"] }) {
           </RecordsReadingColumn>
         </div>
       </div>
-      <RecordsDeleteConfirmDialog
+      <ConfirmDialog
         open={deleteDialog.open}
+        onOpenChange={deleteDialog.setOpen}
         title={m.records_note_delete_confirm_title({ name: title })}
         description={m.records_note_delete_confirm_body()}
-        busy={deleting}
-        error={deleteDialog.error}
-        onOpenChange={deleteDialog.onOpenChange}
-        onConfirm={() => void removeNote()}
+        confirmLabel={m.records_note_delete_action()}
+        pendingLabel={m.records_delete_pending()}
+        errorMessage={m.records_delete_error()}
+        onConfirm={removeNote}
       />
     </div>
   );

@@ -9,8 +9,8 @@ import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { m } from "#src/paraglide/messages";
 
-/** Confirms an irreversible change (a delete, or rotating an app's secret); a refusal stays in the
- * dialog. Used by the Computer page, an archived Agent's profile and Settings → Applications. */
+/** Confirms an irreversible change (a delete, removing a member, or rotating an app's secret); a
+ * refusal stays in the dialog. Every such confirmation uses it. */
 export function ConfirmDialog({
   open,
   onOpenChange,
@@ -35,6 +35,13 @@ export function ConfirmDialog({
 }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, guard] = useSubmitGuard();
+  // Each opening starts clean: a refusal that landed after the dialog closed (a caller's trailing
+  // refresh) must not greet the next one.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) setError(null);
+  }
   return (
     <ModalOverlay
       isOpen={open}

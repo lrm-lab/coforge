@@ -7,6 +7,7 @@ import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
+import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { useAppToast } from "#src/components/ui/toast";
 import { humanLabel } from "#src/lib/human-label";
 import { m } from "#src/paraglide/messages";
@@ -33,6 +34,9 @@ export function WorkspaceMembersPanel(props: {
 }) {
   const canManage = canManageMembers(props.actorRole);
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [removeOpen, setRemoveOpen] = useState(false);
+  // Kept after the dialog closes so its title does not empty while it fades out.
+  const [removeTarget, setRemoveTarget] = useState<{ userId: string; name: string }>();
   const updateRole = useServerFn(updateWorkspaceMemberRole);
   const remove = useServerFn(removeWorkspaceMember);
   const router = useRouter();
@@ -122,7 +126,8 @@ export function WorkspaceMembersPanel(props: {
                                   }),
                                 );
                               } else if (key === "remove") {
-                                void run(() => remove({ data: { userId: member.userId } }));
+                                setRemoveTarget({ userId: member.userId, name: displayName });
+                                setRemoveOpen(true);
                               }
                             }}
                           >
@@ -159,6 +164,20 @@ export function WorkspaceMembersPanel(props: {
       </div>
 
       <InviteMemberDialog open={inviteOpen} onOpenChange={setInviteOpen} />
+      <ConfirmDialog
+        open={removeOpen}
+        onOpenChange={setRemoveOpen}
+        title={m.member_person_remove_confirm_title({ name: removeTarget?.name ?? "" })}
+        description={m.member_person_remove_confirm_description()}
+        confirmLabel={m.member_person_remove()}
+        errorMessage={m.workspace_members_action_failed()}
+        onConfirm={async () => {
+          if (!removeTarget) return;
+          await remove({ data: { userId: removeTarget.userId } });
+          setRemoveOpen(false);
+          await refresh();
+        }}
+      />
     </div>
   );
 }

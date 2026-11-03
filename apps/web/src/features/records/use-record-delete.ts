@@ -4,23 +4,14 @@ import { useNavigate } from "@tanstack/react-router";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { useRecordRefresh } from "./use-record-refresh";
 
-/** State for a `RecordsDeleteConfirmDialog`: closing the dialog also drops a stale error. */
+/** Open state for a `ConfirmDialog` that confirms a Records delete. */
 export function useRecordDeleteDialog() {
   const [open, setOpen] = useState(false);
-  const [error, setError] = useState("");
   return {
     open,
-    error,
-    setError,
-    request() {
-      setError("");
-      setOpen(true);
-    },
+    setOpen,
+    request: () => setOpen(true),
     close: () => setOpen(false),
-    onOpenChange(next: boolean) {
-      setOpen(next);
-      setError("");
-    },
   };
 }
 

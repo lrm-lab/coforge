@@ -36,7 +36,7 @@ import {
 } from "./records-content";
 import { BackToRecords, RecordsKeyPointReturnBack, useFormatEditHint } from "./records-layout";
 import { WeekBadge } from "./records-sidebar-parts";
-import { RecordsDeleteConfirmDialog } from "./records-delete-confirm-dialog";
+import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { RecordsReadingColumn } from "./records-reading-column";
 import { RecordSidePanel } from "./record-side-panel";
 import { TemplateChildrenTable } from "./template-children-table";
@@ -296,16 +296,14 @@ export function TemplateReportDetail({
   useRecordChangedRefresh(report.id, streamPositions, isOverviewLeader);
 
   async function removeOverviewNode() {
-    if (!isOverviewLeader || saving || sending) return;
+    // Throwing keeps the confirm open with its refusal; a quiet return would look like a dead button.
+    if (!isOverviewLeader || saving || sending) throw new Error("The summary is busy");
     setSaving(true);
-    deleteDialog.setError("");
     try {
       await removeOverview({ data: { reportId: report.id } });
       clearReportDraft(report.id);
       deleteDialog.close();
       await leaveToRecordsList();
-    } catch {
-      deleteDialog.setError(m.records_week_delete_failed());
     } finally {
       setSaving(false);
     }
@@ -500,14 +498,15 @@ export function TemplateReportDetail({
         onConfirm={() => void onSendAssignments()}
       />
 
-      <RecordsDeleteConfirmDialog
+      <ConfirmDialog
         open={deleteDialog.open}
+        onOpenChange={deleteDialog.setOpen}
         title={m.records_week_delete_confirm_title({ name: titleDraft.trim() || report.title })}
         description={m.records_week_delete_confirm_body()}
-        busy={saving}
-        error={deleteDialog.error}
-        onOpenChange={deleteDialog.onOpenChange}
-        onConfirm={() => void removeOverviewNode()}
+        confirmLabel={m.records_week_delete_action()}
+        pendingLabel={m.records_delete_pending()}
+        errorMessage={m.records_week_delete_failed()}
+        onConfirm={removeOverviewNode}
       />
     </div>
   );

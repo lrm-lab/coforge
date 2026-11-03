@@ -6,11 +6,10 @@ import { useServerFn } from "@tanstack/react-start";
 import { Tab, TabList, TabPanel, Tabs } from "#src/components/application/tabs/tabs";
 import { Button } from "#src/components/base/buttons/button";
 import { Empty, EmptyHeader, EmptyTitle } from "#src/components/ui/empty";
-import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { m } from "#src/paraglide/messages";
 import { CreateWeeklyTemplateDialog } from "./create-weekly-template-dialog";
 import { KeyPointPromptEditor } from "./key-point-prompt-editor";
-import { RecordsDeleteConfirmDialog } from "./records-delete-confirm-dialog";
+import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
 import {
   emptyKeyPointPrompts,
@@ -95,15 +94,11 @@ export function WeeklyReportSettings({
   const [templatePendingDelete, setTemplatePendingDelete] = useState<
     WeeklyTemplateList[number] | null
   >(null);
-  const [templateDeleteError, setTemplateDeleteError] = useState("");
-  const [deletingTemplate, guardTemplateDelete] = useSubmitGuard();
   const [historyDeleteOpen, setHistoryDeleteOpen] = useState(false);
   const [historyPendingDelete, setHistoryPendingDelete] = useState<{
     slot: KeyPointSlot;
     entry: KeyPointPromptHistoryEntry;
   } | null>(null);
-  const [historyDeleteError, setHistoryDeleteError] = useState("");
-  const [deletingHistory, guardHistoryDelete] = useSubmitGuard();
 
   function readEditorText(): string {
     return textareaRef.current?.value ?? draftText;
@@ -174,24 +169,16 @@ export function WeeklyReportSettings({
 
   function askDeleteTemplate(template: WeeklyTemplateList[number]) {
     setTemplatePendingDelete(template);
-    setTemplateDeleteError("");
     setTemplateDeleteOpen(true);
   }
 
-  function confirmDeleteTemplate() {
+  async function confirmDeleteTemplate() {
     const template = templatePendingDelete;
     if (!template) return;
-    void guardTemplateDelete(async () => {
-      setTemplateDeleteError("");
-      try {
-        await remove({ data: { templateId: template.id } });
-        if (detail?.id === template.id) setDetail(null);
-        setTemplateDeleteOpen(false);
-        await refresh.records();
-      } catch {
-        setTemplateDeleteError(m.records_delete_error());
-      }
-    });
+    await remove({ data: { templateId: template.id } });
+    if (detail?.id === template.id) setDetail(null);
+    setTemplateDeleteOpen(false);
+    await refresh.records();
   }
 
   async function onSavePrompt() {
@@ -216,32 +203,24 @@ export function WeeklyReportSettings({
 
   function askDeleteHistory(entry: KeyPointPromptHistoryEntry) {
     setHistoryPendingDelete({ slot: keyPointSlot, entry });
-    setHistoryDeleteError("");
     setHistoryDeleteOpen(true);
   }
 
-  function confirmDeleteHistory() {
+  async function confirmDeleteHistory() {
     const target = historyPendingDelete;
     if (!target) return;
-    void guardHistoryDelete(async () => {
-      setHistoryDeleteError("");
-      // Resolve the entry's position in the latest snapshot: a history that changed while the
-      // dialog was open must not make this delete a different entry.
-      const historyIndex = keyPointHistoryIndexOf(prompts[target.slot].history, target.entry);
-      if (historyIndex < 0) {
-        setHistoryDeleteOpen(false);
-        return;
-      }
-      try {
-        const saved = await deleteHistory({ data: { slot: target.slot, historyIndex } });
-        setPrompts(saved);
-        setHistoryDeleteOpen(false);
-        await refresh.records();
-        setPrompts(saved);
-      } catch {
-        setHistoryDeleteError(m.records_delete_error());
-      }
-    });
+    // Resolve the entry's position in the latest snapshot: a history that changed while the
+    // dialog was open must not make this delete a different entry.
+    const historyIndex = keyPointHistoryIndexOf(prompts[target.slot].history, target.entry);
+    if (historyIndex < 0) {
+      setHistoryDeleteOpen(false);
+      return;
+    }
+    const saved = await deleteHistory({ data: { slot: target.slot, historyIndex } });
+    setPrompts(saved);
+    setHistoryDeleteOpen(false);
+    await refresh.records();
+    setPrompts(saved);
   }
 
   const activePrompt = prompts[keyPointSlot];
@@ -436,31 +415,27 @@ export function WeeklyReportSettings({
       </Tabs>
 
       {/* ModalOverlay must stay outside Tabs — CollectionBuilder's Hidden tree would remount it. */}
-      <RecordsDeleteConfirmDialog
+      <ConfirmDialog
         open={templateDeleteOpen}
+        onOpenChange={setTemplateDeleteOpen}
         title={m.records_template_delete_confirm_title({
           name: templatePendingDelete?.name ?? "",
         })}
         description={m.records_template_delete_confirm_body()}
-        busy={deletingTemplate}
-        error={templateDeleteError}
-        onOpenChange={(open) => {
-          setTemplateDeleteOpen(open);
-          setTemplateDeleteError("");
-        }}
+        confirmLabel={m.records_template_delete_action()}
+        pendingLabel={m.records_delete_pending()}
+        errorMessage={m.records_delete_error()}
         onConfirm={confirmDeleteTemplate}
       />
 
-      <RecordsDeleteConfirmDialog
+      <ConfirmDialog
         open={historyDeleteOpen}
+        onOpenChange={setHistoryDeleteOpen}
         title={m.records_key_points_prompt_history_delete_confirm_title()}
         description={m.records_key_points_prompt_history_delete_confirm_body()}
-        busy={deletingHistory}
-        error={historyDeleteError}
-        onOpenChange={(open) => {
-          setHistoryDeleteOpen(open);
-          setHistoryDeleteError("");
-        }}
+        confirmLabel={m.records_key_points_prompt_history_delete_action()}
+        pendingLabel={m.records_delete_pending()}
+        errorMessage={m.records_delete_error()}
         onConfirm={confirmDeleteHistory}
       />
 

@@ -3,18 +3,15 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, Link, useHydrated, useNavigate, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
-  AlertCircle,
   ArrowLeft,
   MessageSquare01 as MessageSquare,
   UserMinus01,
   UserX01,
   XClose as X,
 } from "@untitledui/icons";
-import { Button as AriaButton, Heading, Text } from "react-aria-components";
+import { Button as AriaButton } from "react-aria-components";
 
-import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
-import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
-import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
+import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Button } from "#src/components/base/buttons/button";
 import {
@@ -197,16 +194,8 @@ function PersonProfileBody({
   onRemoved: () => void;
 }) {
   const workspaceSlug = useWorkspaceSlug();
-  const {
-    changeRole,
-    changingRole,
-    roleError,
-    remove,
-    removeOpen,
-    setRemoveOpen,
-    removing,
-    removeError,
-  } = useMemberActions(profile, onRemoved);
+  const { changeRole, changingRole, roleError, remove, removeOpen, setRemoveOpen } =
+    useMemberActions(profile, onRemoved);
   const navigate = useNavigate();
   const timeZone = appRoute.useLoaderData().timeZone;
   const locale = getLocale();
@@ -358,12 +347,13 @@ function PersonProfileBody({
           >
             {m.member_person_remove()}
           </Button>
-          <RemoveMemberDialog
-            name={profile.displayName}
+          <ConfirmDialog
             open={removeOpen}
-            busy={removing}
-            error={removeError}
             onOpenChange={setRemoveOpen}
+            title={m.member_person_remove_confirm_title({ name: profile.displayName })}
+            description={m.member_person_remove_confirm_description()}
+            confirmLabel={m.member_person_remove()}
+            errorMessage={m.workspace_members_action_failed()}
             onConfirm={remove}
           />
         </section>
@@ -386,8 +376,6 @@ function useMemberActions(profile: MemberPersonProfile, onRemoved: () => void) {
   const [changingRole, guardRole] = useSubmitGuard();
   const [roleError, setRoleError] = useState<string>();
   const [removeOpen, setRemoveOpen] = useState(false);
-  const [removing, guardRemove] = useSubmitGuard();
-  const [removeError, setRemoveError] = useState<string>();
   const refresh = () =>
     Promise.all([
       queryClient.invalidateQueries({ queryKey: MEMBER_DIRECTORY_KEY }),
@@ -404,22 +392,11 @@ function useMemberActions(profile: MemberPersonProfile, onRemoved: () => void) {
       }
       await refresh();
     });
-  const remove = () =>
-    void guardRemove(async () => {
-      setRemoveError(undefined);
-      try {
-        await removeMember({ data: { userId: profile.id } });
-      } catch {
-        setRemoveError(m.workspace_members_action_failed());
-        return;
-      }
-      setRemoveOpen(false);
-      onRemoved();
-      await refresh();
-    });
-  const openRemove = (open: boolean) => {
-    setRemoveError(undefined);
-    setRemoveOpen(open);
+  const remove = async () => {
+    await removeMember({ data: { userId: profile.id } });
+    setRemoveOpen(false);
+    onRemoved();
+    await refresh();
   };
   return {
     changeRole,
@@ -427,9 +404,7 @@ function useMemberActions(profile: MemberPersonProfile, onRemoved: () => void) {
     roleError,
     remove,
     removeOpen,
-    setRemoveOpen: openRemove,
-    removing,
-    removeError,
+    setRemoveOpen,
   };
 }
 
@@ -465,64 +440,6 @@ function FactRow({
         </p>
       )}
     </div>
-  );
-}
-
-/** Confirms removing a person from the Workspace; the confirm is the dialog's one red button. */
-function RemoveMemberDialog({
-  name,
-  open,
-  busy,
-  error,
-  onOpenChange,
-  onConfirm,
-}: {
-  name: string;
-  open: boolean;
-  busy: boolean;
-  /** Why the last attempt failed; shown under the description. */
-  error?: string;
-  onOpenChange: (open: boolean) => void;
-  onConfirm: () => void;
-}) {
-  return (
-    <ModalOverlay isOpen={open} onOpenChange={(value) => !busy && onOpenChange(value)}>
-      <Modal className="w-[calc(100vw-2rem)] max-w-md">
-        <Dialog className="p-6">
-          {({ close }) => (
-            <>
-              <div className="flex items-start gap-3">
-                <FeaturedIcon color="error" theme="light" size="sm" icon={AlertCircle} />
-                <div className="min-w-0 space-y-2">
-                  <Heading
-                    slot="title"
-                    className="text-md font-semibold text-primary wrap-anywhere"
-                  >
-                    {m.member_person_remove_confirm_title({ name })}
-                  </Heading>
-                  <Text slot="description" className="text-sm text-secondary">
-                    {m.member_person_remove_confirm_description()}
-                  </Text>
-                  {error && (
-                    <p role="alert" className="text-sm text-error-primary">
-                      {error}
-                    </p>
-                  )}
-                </div>
-              </div>
-              <DialogActions className="mt-6">
-                <DialogCancel isDisabled={busy} onPress={close}>
-                  {m.controls_cancel()}
-                </DialogCancel>
-                <DialogAction color="primary-destructive" isLoading={busy} onPress={onConfirm}>
-                  {m.member_person_remove()}
-                </DialogAction>
-              </DialogActions>
-            </>
-          )}
-        </Dialog>
-      </Modal>
-    </ModalOverlay>
   );
 }
 
