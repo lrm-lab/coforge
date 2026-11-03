@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 
-import type { LiveAgent } from "#src/features/agents/workspace-agents-realtime";
+import type { AgentDirectoryEntry } from "#src/features/agents/workspace-agents-realtime";
 import { getLocale } from "#src/paraglide/runtime";
 import type { ChatSection } from "./chat-section.schemas";
 import { sortSectionRows, type SortableRow } from "./chat-section-sort";
@@ -17,7 +17,7 @@ import { useLastMessageTimes } from "./sidebar-lists";
 /** What the directory lays out: its lists, the live Agents its DMs are with, and its sections. */
 type LayoutInput = {
   channels: readonly DirectoryChannel[];
-  agents: readonly LiveAgent[];
+  agents: readonly AgentDirectoryEntry[];
   directRows: readonly ListedDirect[];
   viewerId?: string;
   sections: readonly ChatSection[];
@@ -52,7 +52,7 @@ export function useDirectoryLayout(input: LayoutInput) {
  */
 export function directEntries(
   directRows: readonly ListedDirect[],
-  agents: readonly LiveAgent[],
+  agents: readonly AgentDirectoryEntry[],
   viewerId?: string,
 ): DirectEntry[] {
   const agentsById = new Map(agents.map((agent) => [agent.id, agent]));

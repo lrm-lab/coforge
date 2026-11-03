@@ -11,13 +11,13 @@ These rules apply to `src/features/agents/`.
 - `WorkspaceAgentsProvider` (`workspace-agents-realtime.tsx`) is the app
   shell's one Agent status subscription and one Activity subscription.
   Avatars, pages, and panels read through its hooks (`useLiveAgents`,
-  `useLiveAgent`, `useLiveAgentDisplay`, `useAgentRecentActivity`,
-  `useAgentActivityFeed`, `usePrefetchAgentActivityFeed`,
-  `useReadAgentActivityFeed`) and never
+  `useLiveAgent`, `useLiveAgentDisplay`, `useAgentRecentActivity`, `useAgentActivityFeed`,
+  `usePrefetchAgentActivityFeed`, `useReadAgentActivityFeed`) and never
   open connections or subscribe themselves. The conversations feature does not
   own Agent state. The live Agents are a TanStack Store: a reader of one Agent
   (`useLiveAgent`, `useLiveAgentDisplay`) re-renders only when that Agent
-  changes, so a list row reads its own Agent rather than the whole list.
+  changes, so a list row reads its own Agent rather than the whole list. The sidebar reads
+  `useVisibleAgentDirectory` (who, never status); a DM row's face reads `useVisibleAgentDisplay`.
   `useRefreshAgentDirectory` re-reads that store after a committed write; a failed read preserves the snapshot and rejects to the caller without replacing the Workspace route.
 - The Agents beyond the viewer's roster (`loadExtraAgents`, scoped like the Members directory,
   without the viewer's own) are one query in the provider; each is a named `isExtra` entry of

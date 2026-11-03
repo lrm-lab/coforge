@@ -3,7 +3,7 @@ import { useSuspenseQuery } from "@tanstack/react-query";
 
 import {
   useCurrentWorkspaceId,
-  useVisibleLiveAgents,
+  useVisibleAgentDirectory,
 } from "#src/features/agents/workspace-agents-realtime";
 import { useTaskConversationsOn } from "#src/features/tasks/use-task-conversations-on";
 import { m } from "#src/paraglide/messages";
@@ -40,7 +40,7 @@ function useDraftHomes(): ReadonlyMap<string, DraftHome> {
   const workspaceId = useCurrentWorkspaceId() ?? "";
   const channelNames = useSuspenseQuery(channelNamesQuery(workspaceId)).data;
   const { directs, viewerId } = useSidebarLists();
-  const agents = useVisibleLiveAgents();
+  const agents = useVisibleAgentDirectory();
   const channelHomes = useMemo(
     () =>
       channelNames

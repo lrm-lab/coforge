@@ -5,7 +5,7 @@ import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable"
 
 import { Button } from "#src/components/base/buttons/button";
 import { useAppToast } from "#src/components/ui/toast";
-import type { LiveAgent } from "#src/features/agents/workspace-agents-realtime";
+import type { AgentDirectoryEntry } from "#src/features/agents/workspace-agents-realtime";
 import { cx } from "#src/utils/cx";
 import { m } from "#src/paraglide/messages";
 import {
@@ -58,7 +58,7 @@ export function ConversationDirectory({
   selectedDrafts,
 }: {
   channels: DirectoryChannel[];
-  agents: LiveAgent[];
+  agents: AgentDirectoryEntry[];
   /** The viewer's DMs, with their Agents and with members, in the list's order: who each is with,
    * which are pinned (and in what order), and which are closed. */
   directRows: readonly ListedDirect[];

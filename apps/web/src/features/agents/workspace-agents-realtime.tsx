@@ -288,6 +288,49 @@ export function useVisibleLiveAgents(): LiveAgent[] {
   return useSelector(useContext(LiveAgentStoreContext), (state) => state);
 }
 
+/** Who an Agent is, without what it is doing: a live Agent less its status and display. */
+export type AgentDirectoryEntry = Omit<LiveAgent, "status" | "display">;
+
+// Named fields only: a live Agent object also carries bookkeeping its type does not name (the
+// display revision high-water mark), which changes with every display.
+function directoryEntry(agent: LiveAgent): AgentDirectoryEntry {
+  const { id, name, displayName, avatarUrl, mascot, visibility, isExtra } = agent;
+  return {
+    id,
+    name,
+    displayName,
+    ...(avatarUrl !== undefined ? { avatarUrl } : {}),
+    ...(mascot !== undefined ? { mascot } : {}),
+    ...(visibility !== undefined ? { visibility } : {}),
+    ...(isExtra ? { isExtra } : {}),
+  };
+}
+
+function sameEntries(a: readonly AgentDirectoryEntry[], b: readonly AgentDirectoryEntry[]) {
+  return (
+    a.length === b.length &&
+    a.every((entry, index) => {
+      const other = b[index]!;
+      const keys = Object.keys(entry) as (keyof AgentDirectoryEntry)[];
+      return (
+        keys.length === Object.keys(other).length && keys.every((key) => entry[key] === other[key])
+      );
+    })
+  );
+}
+
+/**
+ * Every Agent the viewer may see, as `useVisibleLiveAgents` lists them, but only who each is: it
+ * repaints when an Agent comes, goes or is renamed, never on a status heartbeat or a display
+ * update, which arrive several times a second while Agents work (task #433). The sidebar's
+ * directory reads this; a row that shows live state reads its own Agent (`useVisibleAgentDisplay`).
+ */
+export function useVisibleAgentDirectory(): AgentDirectoryEntry[] {
+  return useSelector(useContext(LiveAgentStoreContext), (agents) => agents.map(directoryEntry), {
+    compare: sameEntries,
+  });
+}
+
 /**
  * The Agents of the Workspace the viewer may see — their own roster and the others' — picked by
  * `pick`, which must give the same Agents the same objects. Repaints only when the picked list
@@ -337,6 +380,17 @@ export function liveAgentDisplay(
   agentId: string,
 ): AgentDisplaySnapshot | undefined {
   return agents.find((agent) => agent.id === agentId && inRoster(agent))?.display;
+}
+
+/**
+ * One visible Agent's display, another member's (`isExtra`) included, for the sidebar's DM face:
+ * a DM with another member's public Agent is listed there too. Repaints like `useLiveAgentDisplay`.
+ */
+export function useVisibleAgentDisplay(agentId: string): AgentDisplaySnapshot | undefined {
+  return useSelector(
+    useContext(LiveAgentStoreContext),
+    (agents) => agents.find((agent) => agent.id === agentId)?.display,
+  );
 }
 
 /**

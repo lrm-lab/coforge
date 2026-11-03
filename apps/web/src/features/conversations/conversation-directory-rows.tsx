@@ -1,6 +1,6 @@
 import { memo } from "react";
 
-import type { LiveAgent } from "#src/features/agents/workspace-agents-realtime";
+import type { AgentDirectoryEntry } from "#src/features/agents/workspace-agents-realtime";
 import { MemberAvatar } from "#src/features/workspaces/member-avatar";
 import { useStartOfToday } from "#src/lib/start-of-today";
 import { useTimeFormat } from "#src/lib/time-format-context";
@@ -43,7 +43,11 @@ export type DirectoryChannel = {
 
 /** A DM row as the directory shows it: its row, the name it goes by, and its live Agent when it is
  * one with an Agent. */
-export type DirectEntry = ListedDirect & { name: string; agent?: LiveAgent; self: boolean };
+export type DirectEntry = ListedDirect & {
+  name: string;
+  agent?: AgentDirectoryEntry;
+  self: boolean;
+};
 
 /** What every row's menu offers beside its own actions: the viewer's Chat sections to move it to,
  * and where a section change that failed goes to be retried. */

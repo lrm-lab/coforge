@@ -18,7 +18,7 @@ import { createPublicChannel } from "./channels.functions";
 import { ConversationHostProvider } from "./conversation-host";
 import {
   useCurrentWorkspaceId,
-  useVisibleLiveAgents,
+  useVisibleAgentDirectory,
   useRefreshAgentDirectory,
 } from "#src/features/agents/workspace-agents-realtime";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
@@ -54,7 +54,7 @@ export function useCloseConversationList(): () => void {
 /** Keep both panels mounted so returning to the list preserves scroll and drafts. */
 export function ConversationNavigation({ children }: { children: ReactNode }) {
   const { channels, directs, viewerId, readAt } = useSidebarLists();
-  const agents = useVisibleLiveAgents();
+  const agents = useVisibleAgentDirectory();
   const refreshAgentDirectory = useRefreshAgentDirectory();
   const workspaceId = useCurrentWorkspaceId();
   // Every channel by id, from the Query cache the chat loader filled; kept live by

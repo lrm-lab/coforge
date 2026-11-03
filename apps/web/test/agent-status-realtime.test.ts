@@ -445,3 +445,18 @@ test("catch-ups asked while a read runs share one later read", async () => {
   catchUp();
   expect(reads).toHaveLength(3);
 });
+
+// Task #433: every reader of the live Agents repaints on a new list, so a publication that
+// changes no Agent (a stale or repeated one, or one for an Agent this viewer does not hold) must
+// hand back the very list it was given.
+test("a status event or display snapshot that changes no Agent keeps the same list", () => {
+  expect(applyAgentStatusEvent(agents, event({ clientSeq: 1 }))).toBe(agents);
+  expect(applyAgentStatusEvent(agents, event({ agentId: "someone-else" }))).toBe(agents);
+  const shown = applyAgentDisplaySnapshot(agents, display(), "workspace-1");
+  expect(shown).not.toBe(agents);
+  expect(applyAgentDisplaySnapshot(shown, display(), "workspace-1")).toBe(shown);
+  expect(applyAgentDisplaySnapshot(shown, display({ revision: 1 }), "workspace-1")).toBe(shown);
+  expect(
+    applyAgentDisplaySnapshot(agents, display({ agentId: "someone-else" }), "workspace-1"),
+  ).toBe(agents);
+});

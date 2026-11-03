@@ -66,6 +66,9 @@ export function applyAgentStatusEvent<T extends StatusTrackedAgent>(
   agents: T[],
   event: AgentStatusEvent,
 ): T[] {
+  // The same list when no Agent changes: every reader of the live Agents repaints on a new one.
+  if (!agents.some((agent) => agent.id === event.agentId && eventIsNewer(agent, event)))
+    return agents;
   return agents.map((agent) =>
     agent.id === event.agentId && eventIsNewer(agent, event)
       ? {
@@ -93,7 +96,8 @@ export function applyAgentDisplaySnapshot<T extends StatusTrackedAgent>(
   workspaceId?: string,
 ): T[] {
   if (workspaceId && snapshot.workspaceId !== workspaceId) return agents;
-  return agents.map((agent) => {
+  let changed = false;
+  const next = agents.map((agent) => {
     if (
       agent.id !== snapshot.agentId ||
       (agent.workspaceId && agent.workspaceId !== snapshot.workspaceId) ||
@@ -104,8 +108,11 @@ export function applyAgentDisplaySnapshot<T extends StatusTrackedAgent>(
     if (snapshot.revision < highWater || (!agent.display && snapshot.revision === highWater))
       return agent;
     if (agent.display?.revision === snapshot.revision) return agent;
+    changed = true;
     return { ...agent, display: snapshot, displayRevisionHighWater: snapshot.revision };
   });
+  // The same list when no Agent changes: every reader of the live Agents repaints on a new one.
+  return changed ? next : agents;
 }
 
 export function mergeAgentStatusSnapshot<T extends StatusTrackedAgent>(
