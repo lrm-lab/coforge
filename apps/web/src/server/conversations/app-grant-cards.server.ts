@@ -28,7 +28,7 @@ const requestCard = (workspaceId: string, requestId: string) => ({
 
 /**
  * Settles, in the transaction that decides the request `requestId`, the card that asks for it:
- * `executed` by `userId` when approved, `cancelled` when denied. However the request was decided
+ * `executed` by `userId` when approved, `cancelled` by them when denied. However the request was decided
  * (its card, the Agent's Apps tab, or a person's grant), the card never stays pending.
  */
 export async function settleAppGrantCard(
@@ -49,7 +49,8 @@ export async function settleAppGrantCard(
           committedAt: new Date(),
           result: { requestId },
         }
-      : { state: "cancelled" },
+      : // Who denied it and when, which its closed line's tooltip says (task #478).
+        { state: "cancelled", committedByUserId: decision.userId, committedAt: new Date() },
   });
 }
 
