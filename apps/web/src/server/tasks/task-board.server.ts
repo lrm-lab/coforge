@@ -226,10 +226,7 @@ export class TaskBoard {
     return updateTaskStatus(ports, scope, member, command);
   }
 
-  /**
-   * Publish a sentMessageBecomesTask notice and Task change like create; its fixed notice id
-   * makes retries idempotent.
-   */
+  /** Announce the Task a send made ("Send as Task"); as on Raft, no notice is posted. */
   async announceSentTask(conversation: ConversationRef, messageId: string) {
     if (await announceSpawnedTask(this.ports, conversation, messageId)) return;
     return announceSentMessageTask(this.ports, conversation, messageId);

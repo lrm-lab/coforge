@@ -427,35 +427,15 @@ export async function createTasks(
 }
 
 /**
- * Publish a sentMessageBecomesTask notice and Task change like create; its fixed notice id
- * makes retries idempotent.
+ * Announces the Task a sent message became (`sentMessageBecomesTask`). As on Raft it posts no
+ * notice: the message itself shows as the Task in the stream.
  */
 export async function announceSentMessageTask(
   ports: TaskBoardPorts,
   conversation: ConversationRef,
   messageId: string,
 ) {
-  const noticeId = await indexedRequestId(`${messageId}:sent-as-task`, 1);
-  const task = await withNotices(ports, conversation, async (tx, notices) => {
-    const task = await tx.task.findUnique({ where: { messageId }, select: taskSelection });
-    if (!task || task.conversationId !== conversation.conversationId)
-      throw new AppError("NOT_FOUND");
-    if (!(await tx.message.findUnique({ where: { id: noticeId }, select: { id: true } }))) {
-      const quoted = await notices.quote([task]);
-      await notices.inConversation(
-        {
-          body: noticeText.created(quoted),
-          system: {
-            kind: "task.created",
-            params: {
-              tasks: quoted.map(({ taskId, number, title }) => ({ taskId, number, title })),
-            },
-          },
-        },
-        noticeId,
-      );
-    }
-    return task;
-  });
+  const task = await ports.db.task.findUnique({ where: { messageId }, select: taskSelection });
+  if (!task || task.conversationId !== conversation.conversationId) throw new AppError("NOT_FOUND");
   await signalTaskChange(ports, task);
 }

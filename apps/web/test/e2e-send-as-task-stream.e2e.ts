@@ -158,6 +158,11 @@ test("a message sent as a Task shows its Task in the stream, with task conversat
       // At once, from the announced Task.
       await waitFor(shows);
       await browser("screenshot", join(artifacts, `stream-${mode}.png`));
+      // As on Raft, no "task created" notice is posted beside the message.
+      expect(
+        await db.message.count({ where: { conversationId: channel.id, senderMemberId: null } }),
+      ).toBe(0);
+      expect(await eval_(`document.body.textContent.includes("new task created")`)).toBe(false);
       // After a reload, from the message window's read.
       await browser("open", channelPath);
       await waitFor(shows, 60_000);

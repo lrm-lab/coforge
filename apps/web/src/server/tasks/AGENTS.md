@@ -47,7 +47,8 @@ contract is `packages/coforge-sdk/src/internal/tasks.ts`.
 - Task writes post their server notice (wording in `task-notices.server.ts`)
   through `withNotices`, which holds the conversation lock and signals open
   pages after the commit. Creation, conversion and assignment post in the
-  conversation; claims, status moves and unassignment post in the Task's own
+  conversation, except a composer's "Send as Task", which posts none (as on
+  Raft: the message shows as its Task); claims, status moves and unassignment post in the Task's own
   thread. `unclaim`, `delete`, `amend`, the resource `receipt`, `history`,
   `list` and no-op writes post nothing, except that an `amend` which gives a started Task an
   unfinished blocker posts the notice below. Delivered and pushed notices, each to one member only

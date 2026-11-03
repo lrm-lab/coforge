@@ -65,7 +65,8 @@ test("a message sent as a task is one message that is a Task and keeps all its u
       { conversationId: general.id, workspaceId: workspace.id },
       sent.id,
     );
-    // A retried send (same key) replays the stored message; its announcement is not repeated.
+    // A retried send (same key) replays the stored message and posts nothing; announcing again
+    // only re-signals the Task.
     const replayed = await channels.send(request);
     await board.announceSentTask(
       { conversationId: general.id, workspaceId: workspace.id },
@@ -88,12 +89,11 @@ test("a message sent as a task is one message that is a Task and keeps all its u
       ],
     });
     expect(await db.task.count({ where: { conversationId: general.id } })).toBe(1);
-    const notices = await db.message.findMany({
-      where: { conversationId: general.id, senderMemberId: null },
-      select: { body: true },
-    });
-    expect(notices).toHaveLength(1);
-    expect(notices[0]!.body).toContain("created");
+    // As on Raft, the message is the Task, shown as one in the stream: no "task created" notice
+    // beside it (task #452).
+    expect(
+      await db.message.count({ where: { conversationId: general.id, senderMemberId: null } }),
+    ).toBe(0);
 
     // A thread reply is never a Task, as `convert` refuses one.
     await expect(
