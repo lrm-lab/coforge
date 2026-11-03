@@ -105,10 +105,34 @@ export class AgentDeliveryPublisher {
         return [{ refused: { status: "rejected", reason } }];
       }
     });
-    const settled = (
-      await this.api.publishBatch(entries.flatMap((entry) => entry.publication ?? []))
-    ).values();
-    return entries.map((entry) => entry.refused ?? settled.next().value!);
+    const publications = entries.flatMap((entry) => entry.publication ?? []);
+    const results = await publishWithRetry(this.api, publications);
+    let resultIndex = 0;
+    return entries.map((entry) => entry.refused ?? results[resultIndex++]!);
+  }
+}
+
+const DELIVERY_RETRY_DELAYS_MS = [50, 150, 300] as const;
+
+async function publishWithRetry(
+  api: Pick<CentrifugoServerApi, "publishBatch">,
+  publications: readonly { channel: string; data: Uint8Array }[],
+): Promise<PromiseSettledResult<void>[]> {
+  if (!publications.length) return [];
+  let pending = publications.map((publication, index) => ({ publication, index }));
+  const results: PromiseSettledResult<void>[] = [];
+  for (let attempt = 0; ; attempt++) {
+    const settled = await api.publishBatch(pending.map(({ publication }) => publication));
+    const retry: typeof pending = [];
+    settled.forEach((result, offset) => {
+      const item = pending[offset]!;
+      if (result.status === "rejected" && attempt < DELIVERY_RETRY_DELAYS_MS.length)
+        retry.push(item);
+      else results[item.index] = result;
+    });
+    if (!retry.length) return results;
+    await new Promise((resolve) => setTimeout(resolve, DELIVERY_RETRY_DELAYS_MS[attempt]!));
+    pending = retry;
   }
 }
 

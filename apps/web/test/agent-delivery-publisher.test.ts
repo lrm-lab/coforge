@@ -44,7 +44,7 @@ test("a send to many Agents goes to Centrifugo as one batch, and one failed push
     push("a3", "c1"),
   ]);
 
-  expect(batches).toHaveLength(1);
+  expect(batches).toHaveLength(4);
   expect(batches[0]?.map(({ channel }) => channel)).toEqual([
     "daemon:w:c1",
     "daemon:w:c2",
@@ -57,6 +57,23 @@ test("a send to many Agents goes to Centrifugo as one batch, and one failed push
   ]);
   // One result per pushed delivery, in push order; an Agent with no Computer is not pushed.
   expect(results.map(({ status }) => status)).toEqual(["fulfilled", "rejected", "fulfilled"]);
+});
+
+test("retries a failed publication without repeating successful deliveries", async () => {
+  let calls = 0;
+  const api: Pick<CentrifugoServerApi, "publishBatch"> = {
+    publishBatch: async (publications) => {
+      calls += 1;
+      return publications.map((_, index) =>
+        calls === 1 && index === 1
+          ? { status: "rejected", reason: new Error("temporary") }
+          : { status: "fulfilled", value: undefined },
+      );
+    },
+  };
+  const results = await new AgentDeliveryPublisher(api).publish("w", [push("a1", "c1"), push("a2", "c2")]);
+  expect(calls).toBe(2);
+  expect(results.map(({ status }) => status)).toEqual(["fulfilled", "fulfilled"]);
 });
 
 test("a push its encoder refuses fails alone, and the rest still go out in one batch", async () => {

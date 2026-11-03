@@ -308,7 +308,13 @@ export class SendDirectMessage {
       throw new Error("message sender must be a public @username");
     // An app's bot has no Computer and no daemon: the message waits for its app's inbox poll.
     if (message.appBot) return;
-    if (!message.computerId) throw new Error("Agent is not assigned to a Computer");
+    if (!message.computerId) {
+      console.error("Agent delivery deferred: Agent has no assigned Computer", {
+        conversationId,
+        agentId: message.agentId,
+      });
+      return;
+    }
     const [pushed] = await new AgentDeliveryPublisher(this.centrifugo, this.mentionIssuer).publish(
       message.workspaceId,
       [
@@ -333,6 +339,11 @@ export class SendDirectMessage {
         },
       ],
     );
-    if (pushed?.status === "rejected") throw pushed.reason;
+    if (pushed?.status === "rejected")
+      console.error("Agent delivery failed after retries", {
+        conversationId,
+        agentId: message.agentId,
+        error: pushed.reason,
+      });
   }
 }

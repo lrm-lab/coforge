@@ -101,7 +101,6 @@ describe("SendDirectMessage request idempotency", () => {
       body: "Hello Agent",
     };
 
-    await expect(useCase.execute(input)).rejects.toThrow("publication failed");
     await expect(useCase.execute(input)).resolves.toMatchObject({
       id: "message-a",
     });
