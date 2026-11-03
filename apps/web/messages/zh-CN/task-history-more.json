@@ -1,0 +1,12 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "tasks_history_labels_changed": "修改标签",
+  "tasks_history_priority_changed": "修改优先级",
+  "tasks_history_project_changed": "修改项目",
+  "tasks_priority": "优先级",
+  "tasks_priority_urgent": "紧急",
+  "tasks_priority_high": "高",
+  "tasks_priority_medium": "中",
+  "tasks_priority_low": "低",
+  "tasks_priority_none": "无"
+}

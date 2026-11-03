@@ -1,0 +1,12 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "tasks_history_labels_changed": "Changed labels",
+  "tasks_history_priority_changed": "Changed priority",
+  "tasks_history_project_changed": "Changed project",
+  "tasks_priority": "Priority",
+  "tasks_priority_urgent": "Urgent",
+  "tasks_priority_high": "High",
+  "tasks_priority_medium": "Medium",
+  "tasks_priority_low": "Low",
+  "tasks_priority_none": "None"
+}

@@ -13,6 +13,7 @@ import { useTimeFormat } from "#src/lib/time-format-context";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
+import { LaterEventDetail, laterEventTitle } from "./task-history-more";
 import { taskTimeline } from "./task-history-timeline";
 import { statusLabel, TASK_STATUS_COLOR } from "./task-workflow";
 
@@ -111,6 +112,8 @@ function eventTitle(event: TaskHistoryEvent) {
       return m.tasks_history_blockers_changed();
     case "parent_changed":
       return m.tasks_history_parent_changed();
+    default:
+      return laterEventTitle(event);
   }
 }
 
@@ -205,5 +208,7 @@ function EventDetail({ event, names }: { event: TaskHistoryEvent; names: Timelin
         </p>
       );
     }
+    default:
+      return <LaterEventDetail event={event} />;
   }
 }
