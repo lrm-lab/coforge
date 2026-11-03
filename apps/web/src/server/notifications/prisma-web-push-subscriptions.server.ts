@@ -365,6 +365,7 @@ export class PrismaWebPushSubscriptionStore implements WebPushSubscriptionStore 
     const settings = await new NotificationSettingsStore(this.db).read(userId);
     return {
       conversationId: context.message.conversationId,
+      mentioned: context.mentionedUserIds.includes(userId),
       title: context.title,
       body: context.body,
       sender: context.sender,

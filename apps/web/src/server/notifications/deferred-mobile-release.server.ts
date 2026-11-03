@@ -15,9 +15,10 @@ export type PhoneRelease = { messageId: string; waiting: DeferredNotification };
 /**
  * A person whose phone notifications were waiting, looked at again (task #467). While they still
  * use the computer the check reads only their settings and activity, and looks again when that
- * would end. Once they stop, their phones get the newest unread message of each conversation (one
- * each, not one per message). A pause or quiet hours drop everything waiting; so does reading a
- * message, losing it, or 12 hours of waiting. `send` rings the phones and says how many took it.
+ * would end. Once they stop, their phones get one unread message per conversation, not one per
+ * message: the newest that @mentions them, else the newest. A pause or quiet hours drop everything
+ * waiting; so does reading a message, losing it, or 12 hours of waiting. `send` rings the phones
+ * and says how many took it.
  */
 export async function releaseDeferred(
   input: {
@@ -50,7 +51,12 @@ export async function releaseDeferred(
     const waiting = await store.deferredNotification(entry.messageId, userId);
     if (!waiting || waiting.read) continue;
     const kept = newest.get(waiting.conversationId);
-    if (!kept || entry.firstQueuedAt > kept.queuedAt)
+    // A message that @mentions the person wins over a plain one; among equals, the newest.
+    const wins =
+      !kept ||
+      (waiting.mentioned && !kept.waiting.mentioned) ||
+      (waiting.mentioned === kept.waiting.mentioned && entry.firstQueuedAt > kept.queuedAt);
+    if (wins)
       newest.set(waiting.conversationId, {
         messageId: entry.messageId,
         waiting,

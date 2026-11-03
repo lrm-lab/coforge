@@ -86,6 +86,8 @@ export type DeferredNotification = Omit<
 > & {
   /** The conversation it is in: a person leaving the computer gets one per conversation. */
   conversationId: string;
+  /** It @mentions this person: on release it wins over a newer plain message. */
+  mentioned: boolean;
   recipient: MessageRecipient;
   read: boolean;
 };

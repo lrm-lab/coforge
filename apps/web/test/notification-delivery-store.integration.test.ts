@@ -98,6 +98,25 @@ test.skipIf(!ready)(
         read: false,
       });
       expect(waiting?.recipient).toMatchObject({ userId: s.bob.id, timeZone: "UTC" });
+      expect(waiting?.mentioned).toBe(false);
+      // A message whose stored mention rows name Bob is a mention of Bob, of nobody else.
+      const asked = await s.send("can you look?");
+      const bobMember = await db!.conversationMember.findFirstOrThrow({
+        where: { conversationId: s.room.id, userId: s.bob.id },
+        select: { id: true, workspaceId: true },
+      });
+      await db!.messageMention.create({
+        data: {
+          messageId: asked.id,
+          memberId: bobMember.id,
+          conversationId: s.room.id,
+          workspaceId: bobMember.workspaceId,
+          kind: "user",
+          actorId: s.bob.id,
+          handle: s.bob.username,
+        },
+      });
+      expect((await s.store.deferredNotification(asked.id, s.bob.id))?.mentioned).toBe(true);
       // A non-recipient (the sender) has nothing waiting.
       expect(await s.store.deferredNotification(root.id, s.alice.id)).toBeNull();
 

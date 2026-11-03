@@ -21,7 +21,7 @@ These rules apply to `src/server/notifications/`.
   CoForge input counts. Waiting
   notifications are kept per person (`deferred-mobile-pushes.server.ts`, Redis); the 15 s sweep
   (`deferred-mobile-push-sweep.server.ts`, in `registerBackgroundSweeps`) looks at a due person with
-  their settings and activity only, and once they leave the computer their phones get the newest
-  unread message of each conversation; read, gone, paused or 12 h old ones are dropped. Without
-  `REDIS_URL` every device is sent at once.
+  their settings and activity only, and once they leave the computer their phones get one unread
+  message per conversation (the newest @mention of them, else the newest); read, gone, paused or
+  12 h old ones are dropped. Without `REDIS_URL` every device is sent at once.
 - The Settings test goes to every device and is never held back by these settings.

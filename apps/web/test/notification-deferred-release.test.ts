@@ -19,8 +19,9 @@ import {
 /**
  * A person's waiting phone notifications when their wait ends (task #467). While the computer is
  * in use the check reads only their settings and activity, never the messages. Once they leave
- * it, their phones get the newest unread message of each conversation, not one per message; read,
- * gone and 12-hour-old ones are dropped, and so is everything during a pause or quiet hours.
+ * it, their phones get one unread message per conversation, not one per message: the newest that
+ * @mentions them, else the newest. Read, gone and 12-hour-old ones are dropped, and so is
+ * everything during a pause or quiet hours.
  */
 
 const NOW = new Date("2026-11-03T10:00:00Z");
@@ -46,9 +47,10 @@ const settings = (changes: Partial<NotificationSettings> = {}) => ({
 
 const waitingMessage = (
   messageId: string,
-  changes: { conversationId?: string; read?: boolean } = {},
+  changes: { conversationId?: string; read?: boolean; mentioned?: boolean } = {},
 ): DeferredNotification => ({
   conversationId: changes.conversationId ?? "general",
+  mentioned: changes.mentioned ?? false,
   title: "#general",
   body: `Alice: ${messageId}`,
   sender: "Alice",
@@ -147,6 +149,25 @@ describe("a person's waiting phone notifications", () => {
       ["phone", "/open/d1"],
       ["phone", "/open/m2"],
     ]);
+  });
+
+  test("in a conversation, the newest message that @mentions the person wins over a newer plain one", async () => {
+    const h = harness({
+      entries: [
+        entry("plain-old", 9),
+        entry("mention-old", 8),
+        entry("mention", 7),
+        entry("plain-new", 6),
+      ],
+      messages: {
+        "plain-old": waitingMessage("plain-old"),
+        "mention-old": waitingMessage("mention-old", { mentioned: true }),
+        mention: waitingMessage("mention", { mentioned: true }),
+        "plain-new": waitingMessage("plain-new"),
+      },
+    });
+    expect(await h.release()).toEqual({ outcome: "sent", sent: 1 });
+    expect(h.sent.map((delivery) => delivery.payload.url)).toEqual(["/open/mention"]);
   });
 
   test("read, gone, or waiting longer than 12 hours: dropped", async () => {
