@@ -1,5 +1,6 @@
 import { RPC_METHODS } from "./rpc-methods";
 import { RECURRENCE } from "./reminder-grammar";
+import { SEAL_OWNER_MAX_CHARS, SEAL_UNTIL_MAX_CHARS, sealText } from "./reminder-seal-text";
 import { isScopeId } from "./scope-id";
 import { boundedPayload } from "./codec";
 import { MESSAGE_ANCHOR_SOURCE, RFC_UUID_PATTERN } from "./uuid";
@@ -503,14 +504,6 @@ export function decodeReminderSnapshotRequest(bytes: Uint8Array): ReminderSnapsh
   );
 }
 
-/** A seal's owner and release condition: one bounded line each, never empty. */
-function sealText(value: string | undefined, field: string): string | undefined {
-  if (value === undefined) return undefined;
-  if (!value.trim() || value.length > 200 || /[\u0000-\u001f\u007f]/.test(value))
-    throw new Error(`invalid reminder seal ${field}`);
-  return value;
-}
-
 function local(value: LocalReminderRequest): LocalReminderRequest {
   if (
     !isScopeId(value.idempotencyKey) ||
@@ -519,8 +512,8 @@ function local(value: LocalReminderRequest): LocalReminderRequest {
   )
     throw new Error("invalid local reminder request");
   fields(value);
-  sealText(value.owner, "owner");
-  sealText(value.until, "condition");
+  sealText(value.owner, "owner", SEAL_OWNER_MAX_CHARS);
+  sealText(value.until, "condition", SEAL_UNTIL_MAX_CHARS);
   if (value.operation === "seal" || value.operation === "unseal") {
     const businessFields = [
       "title",

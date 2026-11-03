@@ -11,6 +11,7 @@ import {
   sealReminder,
   sealedReminderConflict,
 } from "#src/daemon-runtime/runtime-agent-api-reminder-seals";
+import { reminder } from "#src/daemon-runtime/runtime-agent-api-reminders";
 import type { LocalReminderRequest } from "@lrm/coforge-sdk/internal";
 
 const roots: string[] = [];
@@ -92,6 +93,11 @@ describe("AgentAppInboxSeals", () => {
     await expect(seals.seal([{ ...entry, owner: " " }])).rejects.toThrow("owner");
     await expect(seals.seal([{ ...entry, until: "" }])).rejects.toThrow("condition");
     await expect(seals.seal([{ ...entry, sourceRevision: "0" }])).rejects.toThrow("revision");
+    // Raft's bounds: an owner is one short line (120), the release condition may be longer (500).
+    expect(await seals.seal([{ ...entry, owner: "o".repeat(120) }])).toBe(1);
+    await expect(seals.seal([{ ...entry, owner: "o".repeat(121) }])).rejects.toThrow("owner");
+    expect(await seals.seal([{ ...entry, until: "u".repeat(500) }])).toBe(1);
+    await expect(seals.seal([{ ...entry, until: "u".repeat(501) }])).rejects.toThrow("condition");
   });
 });
 
@@ -148,6 +154,39 @@ describe("reminder seals", () => {
     expect(
       await sealReminder(daemon, "agent-a", sealRequest({ operation: "unseal", allPending: true })),
     ).toEqual({ accepted: false, reason: "no-matching-seal", reminderId });
+  });
+
+  test("ack and dismiss are refused by a seal too, before the receipt is touched", async () => {
+    const { ports: daemon } = ports();
+    await sealReminder(daemon, "agent-a", sealRequest({ revision: 3 }));
+    let acknowledged = 0;
+    const full = {
+      ...daemon,
+      assertRunning: () => {},
+      agentIdForContext: () => "agent-a",
+      transport: () => ({}) as never,
+      workspaceId: "workspace-a",
+      computerId: "computer-a",
+      messageAttention: {} as never,
+      reminders: {
+        acknowledge: async () => {
+          acknowledged++;
+          return true;
+        },
+      } as never,
+    };
+    const key = `sk_agent_${"a".repeat(43)}`;
+    for (const operation of ["ack", "dismiss"] as const) {
+      expect(
+        await reminder(
+          full as never,
+          "context",
+          { idempotencyKey: "request", context: "context", operation, reminderId, revision: 3 },
+          key,
+        ),
+      ).toMatchObject({ accepted: false, reason: "sealed", owner: "@ada" });
+    }
+    expect(acknowledged).toBe(0);
   });
 
   test("a sealed reminder's lifecycle change is refused with who sealed it and until when", async () => {

@@ -86,7 +86,9 @@ export async function reminder(
     request.reminderId &&
     (request.operation === "cancel" ||
       request.operation === "snooze" ||
-      request.operation === "update")
+      request.operation === "update" ||
+      request.operation === "ack" ||
+      request.operation === "dismiss")
   ) {
     const sealed = await sealedReminderConflict(ports, agentId, request.reminderId);
     if (sealed) return sealed;

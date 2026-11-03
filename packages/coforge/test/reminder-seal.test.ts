@@ -100,22 +100,38 @@ test("an unseal with no matching seal is NOT_FOUND", async () => {
   expect((error as CliError).message).toBe("No matching local reminder seal exists");
 });
 
-test("a sealed reminder's cancel is UPDATE_FAILED and names the unseal", async () => {
-  const error = await run(
-    ["reminder", "cancel", "--id", reminderId],
-    transport(() => ({
-      accepted: false,
-      reason: "sealed",
-      owner: "@ada",
-      until: "the deploy lands",
-      reminderId,
-    })),
-  ).catch((caught: unknown) => caught);
-  expect(error).toBeInstanceOf(CliError);
-  expect((error as CliError).code).toBe("UPDATE_FAILED");
-  expect((error as CliError).message).toBe(
-    "sealed by @ada until the deploy lands; run coforge reminder unseal explicitly first",
-  );
+test("a sealed reminder's cancel, ack and dismiss are UPDATE_FAILED and name the unseal", async () => {
+  for (const operation of ["cancel", "ack", "dismiss"]) {
+    const error = await run(
+      [
+        "reminder",
+        operation,
+        "--id",
+        reminderId,
+        ...(operation === "cancel" ? [] : ["--revision", "3"]),
+      ],
+      transport(() => ({
+        accepted: false,
+        reason: "sealed",
+        owner: "@ada",
+        until: "the deploy lands",
+        reminderId,
+      })),
+    ).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(CliError);
+    expect((error as CliError).code).toBe("UPDATE_FAILED");
+    expect((error as CliError).message).toBe(
+      "sealed by @ada until the deploy lands; run coforge reminder unseal explicitly first",
+    );
+  }
+});
+
+test("the owner is at most 120 characters and the release condition at most 500", () => {
+  const seal = (owner: string, until: string) =>
+    parseArgs(["reminder", "seal", "--id", reminderId, "--owner", owner, "--until", until]);
+  expect(seal("o".repeat(120), "u".repeat(500))).toMatchObject({ operation: "seal" });
+  expect(() => seal("o".repeat(121), "u")).toThrow("invalid reminder seal owner");
+  expect(() => seal("o", "u".repeat(501))).toThrow("invalid reminder seal condition");
 });
 
 test("an ambiguous --id prefix is INVALID_ARG for a seal, not a second lookup", async () => {

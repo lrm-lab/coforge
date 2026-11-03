@@ -17,12 +17,15 @@ export type AppInboxSeal = Readonly<{
 export type SealRequest = Omit<AppInboxSeal, "sealedAt">;
 
 const MAX_TEXT = 200;
+/** Who sealed it is one short line; the release condition may be one or two sentences. */
+const MAX_OWNER = 120;
+const MAX_UNTIL = 500;
 
-function bounded(value: unknown, field: string): string {
+function bounded(value: unknown, field: string, maxChars = MAX_TEXT): string {
   if (
     typeof value !== "string" ||
     !value.trim() ||
-    value.length > MAX_TEXT ||
+    value.length > maxChars ||
     [...value].some((character) => character.charCodeAt(0) <= 31 || character.charCodeAt(0) === 127)
   )
     throw new Error(`App Inbox seal ${field} must be bounded single-line text`);
@@ -79,8 +82,8 @@ function normalizeSeal(value: unknown): AppInboxSeal {
     sourceKind: bounded(input.sourceKind, "source kind"),
     sourceId: bounded(input.sourceId, "source id"),
     ...(input.sourceRevision === undefined ? {} : { sourceRevision: input.sourceRevision }),
-    owner: bounded(input.owner, "owner"),
-    until: bounded(input.until, "condition"),
+    owner: bounded(input.owner, "owner", MAX_OWNER),
+    until: bounded(input.until, "condition", MAX_UNTIL),
     sealedAt: input.sealedAt,
   });
 }
@@ -131,8 +134,8 @@ export class AgentAppInboxSeals {
           ...(entry.sourceRevision === undefined
             ? {}
             : { sourceRevision: revisionText(entry.sourceRevision) }),
-          owner: bounded(entry.owner, "owner"),
-          until: bounded(entry.until, "condition"),
+          owner: bounded(entry.owner, "owner", MAX_OWNER),
+          until: bounded(entry.until, "condition", MAX_UNTIL),
           sealedAt,
         });
         this.#seals.set(sealKey(seal), seal);
