@@ -188,3 +188,69 @@ test("the connection sends each task conversation request to the cloud with the 
     },
   ]);
 });
+
+test("the connection forwards channel thread reads and sends to the cloud", async () => {
+  const seen: Array<{ method: string; path: string; body?: unknown }> = [];
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(request) {
+      const url = new URL(request.url);
+      seen.push({
+        method: request.method,
+        path: `${url.pathname}${url.search}`,
+        ...(request.method === "POST" ? { body: await request.json() } : {}),
+      });
+      return request.method === "GET"
+        ? Response.json({ idempotencyKey: "read-1", messages: [] })
+        : Response.json({ idempotencyKey: "send-1", state: "sent", decision: "forward" });
+    },
+  });
+  const transport = new DaemonConnection("wss://cloud.example", fakeClient);
+  try {
+    await transport.start("daemon-token", {
+      computerId: "computer-a",
+      workspaceId: "workspace-a",
+      serverHttpUrl: server.url.origin,
+    });
+    await transport.agentMessage(
+      {
+        idempotencyKey: "read-1",
+        workspaceId: "workspace-a",
+        agentId: "agent-1",
+        operation: "read",
+        target: "#general:12345678-1234-4234-8234-123456789abc",
+      },
+      AGENT_API_KEY,
+    );
+    await transport.agentMessage(
+      {
+        idempotencyKey: "send-1",
+        workspaceId: "workspace-a",
+        agentId: "agent-1",
+        operation: "send",
+        target: "#general:12345678-1234-4234-8234-123456789abc",
+        content: "reply",
+      },
+      AGENT_API_KEY,
+    );
+    expect(seen).toEqual([
+      {
+        method: "GET",
+        path: "/api/agent/v1/messages?target=%23general%3A12345678-1234-4234-8234-123456789abc&idempotencyKey=read-1",
+      },
+      {
+        method: "POST",
+        path: "/api/agent/v1/messages",
+        body: {
+          idempotencyKey: "send-1",
+          target: "#general:12345678-1234-4234-8234-123456789abc",
+          content: "reply",
+        },
+      },
+    ]);
+  } finally {
+    await transport.stop();
+    await server.stop(true);
+  }
+});

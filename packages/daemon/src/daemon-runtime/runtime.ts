@@ -825,7 +825,15 @@ export class DaemonRuntime {
       assertOwnIntent: (probe) => this.#assertOwnIntent(probe),
       agentIdForContext: (context) => this.#agentIdForContext(context),
       canonicalAgentMessageTarget: (agentId, target, agentApiKey) =>
-        this.#canonicalAgentMessageTarget(agentId, target, agentApiKey),
+        canonicalAgentMessageTarget(
+          {
+            workspaceId: this.#connection.workspaceId,
+            readMessage: this.#transport.agentMessage!.bind(this.#transport),
+          },
+          agentId,
+          target,
+          agentApiKey,
+        ),
       currentActivityLaunch: (agentId) => this.#currentActivityLaunches.get(agentId),
       activityPublisher: this.#activityPublisher,
       drafts: this.#drafts,
@@ -1431,22 +1439,6 @@ export class DaemonRuntime {
   /** Dispatches one task command to the cloud task route over its HTTPS path. */
   async agentTask(context: string, command: TaskCommand, agentApiKey: string): Promise<TaskResult> {
     return agentTask(this.#agentApiRemindersPorts(), context, command, agentApiKey);
-  }
-
-  #canonicalAgentMessageTarget(
-    agentId: string,
-    target: string,
-    agentApiKey: string,
-  ): Promise<string> {
-    return canonicalAgentMessageTarget(
-      {
-        workspaceId: this.#connection.workspaceId,
-        readMessage: this.#transport.agentMessage!,
-      },
-      agentId,
-      target,
-      agentApiKey,
-    );
   }
 
   async mintAppItem(agentId: string, input: MintAppItem) {
