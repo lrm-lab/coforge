@@ -115,17 +115,43 @@ export async function drainAgentEvents(
         // A comment notification can reach an Agent that never sat in the comment conversation
         // (the uploader, say): seat it where it owes a read position so the cursor has a row to
         // live on. Anything else without a member row fails below, as it always did.
-        for (const row of messageRows) {
-          if (memberIdByConversation.has(row.conversationId)) continue;
-          if (!row.conversation.attachmentCommentThread) continue;
-          const seat = await tx.conversationMember.upsert({
-            where: {
-              conversationId_agentId: { conversationId: row.conversationId, agentId },
-            },
-            create: { workspaceId, conversationId: row.conversationId, agentId },
-            update: { leftAt: null },
+        const missingAttachmentCommentConversationIds = [
+          ...new Set(
+            messageRows
+              .filter(
+                (row) =>
+                  row.conversation.attachmentCommentThread &&
+                  !memberIdByConversation.has(row.conversationId),
+              )
+              .map((row) => row.conversationId),
+          ),
+        ];
+        if (missingAttachmentCommentConversationIds.length <= 1) {
+          for (const conversationId of missingAttachmentCommentConversationIds) {
+            const seat = await tx.conversationMember.upsert({
+              where: { conversationId_agentId: { conversationId, agentId } },
+              create: { workspaceId, conversationId, agentId },
+              update: { leftAt: null },
+            });
+            memberIdByConversation.set(conversationId, seat.id);
+          }
+        } else {
+          await tx.conversationMember.createMany({
+            data: missingAttachmentCommentConversationIds.map((conversationId) => ({
+              workspaceId,
+              conversationId,
+              agentId,
+            })),
+            skipDuplicates: true,
           });
-          memberIdByConversation.set(row.conversationId, seat.id);
+          const seated = await tx.conversationMember.findMany({
+            where: {
+              agentId,
+              conversationId: { in: missingAttachmentCommentConversationIds },
+            },
+            select: { id: true, conversationId: true },
+          });
+          for (const member of seated) memberIdByConversation.set(member.conversationId, member.id);
         }
         const changes = await advanceAgentReadGroups({
           db: tx,
