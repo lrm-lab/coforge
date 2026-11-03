@@ -155,8 +155,10 @@ export function agentMessageView(
 export function agentDeliveryView(
   message: StoredAgentMessage,
   readerAgentId?: string,
+  /** The delivery's conversation and sender, for reading a DM task from the reader's seat. */
+  seat?: { conversationId: string; senderHandle: string },
 ): { body: AgentReadableBody; mentionsAgent?: true } {
-  const { text, mentionsAgent, forwarded } = projectMessage(message, readerAgentId);
+  const { text, mentionsAgent, forwarded } = projectMessage(message, readerAgentId, seat);
   return {
     body: (forwarded ? withForwarded(text, forwarded) : text) as AgentReadableBody,
     ...(mentionsAgent ? { mentionsAgent } : {}),
@@ -166,8 +168,17 @@ export function agentDeliveryView(
 function projectMessage(
   message: StoredAgentMessage,
   readerAgentId?: string,
+  seat?: { conversationId: string; senderHandle: string },
 ): { text: string; mentionsAgent?: true; forwarded?: ForwardedMessage } {
-  const readable = agentReadableBody(message.body, message.mentions);
+  const readable = agentReadableBody(
+    message.body,
+    message.mentions,
+    seat &&
+      ((reference) =>
+        reference.kind === "dm" && reference.conversationId === seat.conversationId
+          ? `dm:@${seat.senderHandle}:#${reference.number}`
+          : undefined),
+  );
   return {
     text: message.actionCard ? `${readable} ${actionCardBodySuffix(message.actionCard)}` : readable,
     ...(readerAgentId && deliveryMentionsAgent(message.mentions, readerAgentId)

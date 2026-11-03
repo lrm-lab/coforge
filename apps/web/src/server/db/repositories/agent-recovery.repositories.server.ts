@@ -144,7 +144,10 @@ export async function readPendingAgentDeliveries(
       latestSenderKind: sender.kind,
       latestSenderHandle: sender.handle,
       latestSenderDescription: sender.description,
-      ...agentDeliveryView(message, agentId),
+      ...agentDeliveryView(message, agentId, {
+        conversationId: delivery.conversationId,
+        senderHandle: sender.handle,
+      }),
       // A choice delivery replays the answer, not the Agent's own card question.
       ...(delivery.reason === "choice"
         ? {
@@ -266,6 +269,7 @@ export async function readAgentRecoveryContext(
           attachments: forwardsByMessage.get(row.id)?.message.attachments,
         },
         agentId,
+        { conversationId: row.conversationId, senderHandle: sender.handle },
       ),
       ...(row.nonMemberMention ? { nonMemberMention: true } : {}),
       ...(hintsByMessage.has(row.id)
