@@ -389,3 +389,48 @@ test("Task unassign submits its own protocol operation with no assignee", async 
   expect(calls[0]).not.toHaveProperty("assignee");
   expect(output).toBe("#2 unassigned — now open.");
 });
+
+test("Task amend may change only a relation, through the daemon's own validation", async () => {
+  const calls: TaskCommand[] = [];
+  const transport = {
+    ...idleTransport,
+    task: async (command: TaskCommand) => {
+      validateTaskRequest(command);
+      calls.push(command);
+      return {
+        tasks: [
+          {
+            messageId: "message-7",
+            conversationId: "conversation",
+            number: 7,
+            title: "Fix it",
+            status: "todo" as const,
+            revision: 2,
+            ...NO_RELATIONS,
+            ...taskStamps,
+            owner: null,
+          },
+        ],
+      };
+    },
+  };
+  await run(
+    ["task", "amend", "--target", "#general", "--number", "7", "--blocked-by", "#qa-other/2"],
+    transport,
+  );
+  await run(
+    ["task", "amend", "--target", "#general", "--number", "7", "--parent", "#general/5"],
+    transport,
+  );
+  expect(calls[0]).toMatchObject({
+    operation: "amend",
+    number: 7,
+    blockedBy: [{ number: 2, channel: "qa-other" }],
+  });
+  expect(calls[0]).not.toHaveProperty("title");
+  expect(calls[1]).toMatchObject({
+    operation: "amend",
+    number: 7,
+    parent: { number: 5, channel: "general" },
+  });
+});
