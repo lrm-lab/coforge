@@ -27,8 +27,9 @@ const store: ArtifactBlobStore = {
       sha256s.flatMap((sha256) => (blobs.has(sha256) ? [[sha256, blobs.get(sha256)!]] : [])),
     );
   },
+  use: async (_tx, _workspaceId, sha256s) => sha256s.filter((sha256) => !blobs.has(sha256)),
 };
-const artifacts = new Artifacts(db, store);
+const artifacts = new Artifacts(db, store, { enabled: async () => true });
 
 const blob = (sha256: string, kind = "text", sizeBytes = 10) =>
   blobs.set(sha256, { kind, sizeBytes });
@@ -40,7 +41,11 @@ beforeAll(async () => {
   });
   userId = user.id;
   const workspace = await db.workspace.create({
-    data: { slug: `artifacts-${handle}`, name: "Artifacts" },
+    data: {
+      slug: `artifacts-${handle}`,
+      name: "Artifacts",
+      members: { create: { userId, role: "owner" } },
+    },
   });
   workspaceId = workspace.id;
 });
@@ -51,12 +56,12 @@ afterAll(async () => {
   await db.$disconnect();
 });
 
-const create = (name: string, entryPath = "index.md") =>
+const create = (name: string, entryPath = "index.md", kind = "markdown") =>
   artifacts.create({
     workspaceId,
     home: { kind: "workspace" },
     name: `${name}-${handle}`,
-    kind: "markdown",
+    kind,
     entryPath,
     author: { userId },
   });
@@ -98,10 +103,15 @@ test("a push inherits unlisted files and records what changed", async () => {
   });
   expect(second).toMatchObject({ status: "created", number: 2 });
 
-  const read = await artifacts.read({ workspaceId, artifactId: artifact.id });
+  const read = await artifacts.read({ workspaceId, reader: { userId }, artifactId: artifact.id });
   expect(read.files.map((entry) => entry.path)).toEqual(["index.md"]);
   expect(read.files[0]!.sha256).toBe("sha-c");
-  const old = await artifacts.read({ workspaceId, artifactId: artifact.id, version: 1 });
+  const old = await artifacts.read({
+    workspaceId,
+    reader: { userId },
+    artifactId: artifact.id,
+    version: 1,
+  });
   expect(old.files.map((entry) => entry.path)).toEqual(["index.md", "notes.txt"]);
 });
 
@@ -138,7 +148,7 @@ test("a push over an older base merges others' files, and conflicts on the same 
     files: [file("index.md", "sha-3")],
   });
   expect(merged).toMatchObject({ status: "created", number: 3, merged: ["notes.txt"] });
-  const read = await artifacts.read({ workspaceId, artifactId: artifact.id });
+  const read = await artifacts.read({ workspaceId, reader: { userId }, artifactId: artifact.id });
   expect(read.files.map((entry) => entry.path)).toEqual(["index.md", "notes.txt"]);
 
   // The same file on both sides cannot be merged.
@@ -197,7 +207,7 @@ test("concurrent pushes serialize: each gets its version, or a replay — never 
   ]);
   const statuses = [first.status, second.status].sort();
   expect(statuses).toEqual(["created", "replayed"]);
-  const read = await artifacts.read({ workspaceId, artifactId: artifact.id });
+  const read = await artifacts.read({ workspaceId, reader: { userId }, artifactId: artifact.id });
   expect(read.files.map((entry) => entry.path).sort()).toEqual(["a.txt", "index.md"]);
 });
 
@@ -205,7 +215,8 @@ test("size and kind come from the blob, not the request", async () => {
   blob("sha-big-text", "text", ARTIFACT_TEXT_LIMIT + 1);
   blob("sha-big-image", "image", ARTIFACT_BINARY_LIMIT + 1);
   blob("sha-ok-image", "image", ARTIFACT_BINARY_LIMIT);
-  const artifact = await create("sizes");
+  // Not a document: a file set keeps the general limits (a document's own file has 2 MiB).
+  const artifact = await create("sizes", "index.md", "other");
   await expect(
     artifacts.push({
       workspaceId,
@@ -235,7 +246,7 @@ test("size and kind come from the blob, not the request", async () => {
     files: [file("index.md", "sha-ok-image")],
   });
   expect(ok.status).toBe("created");
-  const read = await artifacts.read({ workspaceId, artifactId: artifact.id });
+  const read = await artifacts.read({ workspaceId, reader: { userId }, artifactId: artifact.id });
   expect(read.files[0]).toMatchObject({ kind: "image", sizeBytes: ARTIFACT_BINARY_LIMIT });
 });
 

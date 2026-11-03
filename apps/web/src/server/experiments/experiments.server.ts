@@ -18,6 +18,7 @@ import type {
 export const EXPERIMENTS = {
   taskConversations: { flag: "task-conversations", defaultEnabled: false, reload: false },
   drafts: { flag: null, defaultEnabled: true, reload: false },
+  artifacts: { flag: "artifacts", defaultEnabled: false, reload: false },
 } as const satisfies Record<
   string,
   { flag: FeatureFlag | null; defaultEnabled: boolean; reload: boolean }

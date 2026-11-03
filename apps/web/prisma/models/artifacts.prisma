@@ -67,6 +67,8 @@ model ArtifactFile {
 
   @@id([versionId, path])
   @@index([artifactId, sha256])
+  /// The blob sweep's question: does any version still name these bytes?
+  @@index([sha256])
   @@map("artifact_files")
 }
 
@@ -75,9 +77,25 @@ model ArtifactBlob {
   workspaceId String    @db.Uuid
   sha256      String
   sizeBytes   Int
+  /// `text` (UTF-8 without a NUL) or `binary`, decided by the server from the bytes at upload;
+  /// it picks the size limit. A CHECK constraint in the migration holds the two values.
+  kind        String
+  /// The object holding the bytes (`artifactBlobKey`), one per upload that made this row: the
+  /// sweep removes the object of the row it removed, never one a later upload of the same bytes
+  /// wrote.
+  objectKey   String
   createdAt   DateTime  @default(now())
+  /// The last upload of these bytes, or the last save that put them in a version: a blob no
+  /// version names is removed a day after it (`StoredArtifactBlobs.removeUnreferenced`). A save
+  /// sets it in its transaction, which is also what keeps the sweep off the blob meanwhile.
+  lastUsedAt  DateTime  @default(now())
+  /// Whether a saved version has named these bytes. Versions are immutable and stay while their
+  /// artifact does, so a named blob never becomes unused: the sweep reads only the others
+  /// (`artifact_blobs_unused_idx`, a partial index in the migration).
+  referenced  Boolean   @default(false)
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@id([workspaceId, sha256])
+  @@index([lastUsedAt], map: "artifact_blobs_unused_idx", where: raw("\"referenced\" = false"))
   @@map("artifact_blobs")
 }

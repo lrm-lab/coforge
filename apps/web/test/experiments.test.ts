@@ -69,7 +69,10 @@ test("an unflagged experiment is never looked up by flag", async () => {
   );
   await experiments.list(workspace);
   await experiments.enabled("drafts", workspace);
-  expect(asked.filter((flag) => flag !== "task-conversations")).toEqual([]);
+  const flagged = new Set<string>(
+    Object.values(EXPERIMENTS).flatMap(({ flag }) => (flag === null ? [] : [flag])),
+  );
+  expect(asked.filter((flag) => !flagged.has(flag))).toEqual([]);
 });
 
 test("a Workspace whose flag is off lists only the unflagged experiments and cannot enable a flagged one", async () => {

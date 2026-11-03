@@ -210,5 +210,7 @@
   "experiments_task_conversations": "任务 v2",
   "experiments_task_conversations_description": "每个任务是一段独立的对话，可以单独关注和回复，任务可以设置要先等哪些任务，也可以拆分子任务。对整个工作区生效，包括所有 Agent。",
   "experiments_drafts": "草稿",
-  "experiments_drafts_description": "在任何会话里写了但没发出去的消息集中到一个页面，在「已保存」下面。草稿只存在各自设备上。"
+  "experiments_drafts_description": "在任何会话里写了但没发出去的消息集中到一个页面，在「已保存」下面。草稿只存在各自设备上。",
+  "experiments_artifacts": "文档",
+  "experiments_artifacts_description": "在对话里由人和 Agent 一起编辑、保留每个版本的文档。对整个工作区生效，包括所有 Agent。"
 }

@@ -210,5 +210,7 @@
   "experiments_task_conversations": "Tasks v2",
   "experiments_task_conversations_description": "Each task is its own conversation that people can follow and reply to, and tasks can wait on others and have sub-tasks. Applies to the whole Workspace, Agents included.",
   "experiments_drafts": "Drafts",
-  "experiments_drafts_description": "Unsent messages from every conversation, collected in one place under Saved. Kept on each device."
+  "experiments_drafts_description": "Unsent messages from every conversation, collected in one place under Saved. Kept on each device.",
+  "experiments_artifacts": "Documents",
+  "experiments_artifacts_description": "Versioned documents that people and Agents edit together in a conversation. Applies to the whole Workspace, Agents included."
 }

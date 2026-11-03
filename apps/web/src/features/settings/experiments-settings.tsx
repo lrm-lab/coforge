@@ -27,6 +27,10 @@ const EXPERIMENT_TEXT: Record<
     name: () => m.experiments_drafts(),
     description: () => m.experiments_drafts_description(),
   },
+  artifacts: {
+    name: () => m.experiments_artifacts(),
+    description: () => m.experiments_artifacts_description(),
+  },
 };
 
 /** The Workspace's cache is cleared on a Workspace switch, so the key needs no Workspace id. */

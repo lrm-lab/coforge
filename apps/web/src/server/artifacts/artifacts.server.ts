@@ -1,5 +1,12 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
+import {
+  artifactHomeAccess,
+  artifactsDisabled,
+  artifactsEnabled,
+  canDeleteArtifact,
+  type ArtifactActor,
+} from "./artifact-access.server";
 
 /** Where an artifact lives; its home is its only access rule. */
 export type ArtifactHome =
@@ -7,7 +14,7 @@ export type ArtifactHome =
   | { kind: "workspace" }
   | { kind: "public" };
 
-export type ArtifactActor = { userId?: string; agentId?: string };
+export type { ArtifactActor };
 
 /** One file a push adds or replaces: bytes already uploaded under `sha256`. Its size and kind
  * come from the blob, never from the client. */
@@ -26,6 +33,13 @@ export interface ArtifactBlobStore {
     workspaceId: string,
     sha256s: readonly string[],
   ): Promise<Map<string, ArtifactBlobInfo>>;
+  /** Marks the blobs a save names as used, in the save's transaction; returns those no longer
+   * stored. */
+  use(
+    tx: Prisma.TransactionClient,
+    workspaceId: string,
+    sha256s: readonly string[],
+  ): Promise<string[]>;
 }
 
 const NAME = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
@@ -35,6 +49,8 @@ export const ARTIFACT_BINARY_LIMIT = 15 * 1024 * 1024;
 export const ARTIFACT_FILE_LIMIT = 200;
 export const ARTIFACT_NOTE_LIMIT = 500;
 export const ARTIFACT_LABEL_LIMIT = 60;
+/** A document's (a `markdown` artifact's) own file: what a person edits in one page. */
+export const ARTIFACT_DOCUMENT_LIMIT = 2 * 1024 * 1024;
 
 export function artifactHomeKey(home: ArtifactHome): string {
   return home.kind === "conversation" ? `conversation:${home.conversationId}` : home.kind;
@@ -47,7 +63,7 @@ function invalid(errorId: string): never {
 function actorColumns(actor: ArtifactActor) {
   return actor.agentId
     ? { authorAgentId: actor.agentId, authorUserId: null }
-    : { authorUserId: actor.userId ?? null, authorAgentId: null };
+    : { authorUserId: actor.userId, authorAgentId: null };
 }
 
 /**
@@ -90,10 +106,40 @@ type FileRow = { path: string; sha256: string; sizeBytes: number; kind: string }
  * uses.
  */
 export class Artifacts {
+  private readonly enabled: (workspaceId: string) => Promise<boolean>;
+
   constructor(
     private readonly db: PrismaClient,
     private readonly blobs: ArtifactBlobStore,
-  ) {}
+    /** Whether the Workspace has the `artifacts` experiment on; every operation asks first. */
+    options: { enabled?: (workspaceId: string) => Promise<boolean> } = {},
+  ) {
+    this.enabled = options.enabled ?? ((workspaceId) => artifactsEnabled(db, workspaceId));
+  }
+
+  /** The actor's access to a home: `NOT_FOUND` where it cannot read, as if nothing were there,
+   * and `ACCESS_DENIED` where it reads but may not write. */
+  private async requireHome(
+    workspaceId: string,
+    actor: ArtifactActor,
+    homeKey: string,
+    need: "read" | "write",
+  ) {
+    const access = await artifactHomeAccess(this.db, workspaceId, actor, homeKey);
+    if (!access.read) throw new AppError("NOT_FOUND");
+    if (need === "write" && !access.write) throw new AppError("ACCESS_DENIED");
+  }
+
+  /** A live artifact's home and author, after the experiment check: what every access needs. */
+  private async live(workspaceId: string, artifactId: string) {
+    if (!(await this.enabled(workspaceId))) throw artifactsDisabled();
+    const artifact = await this.db.artifact.findFirst({
+      where: { id: artifactId, workspaceId, deletedAt: null },
+      select: { homeKey: true, authorUserId: true, authorAgentId: true },
+    });
+    if (!artifact) throw new AppError("NOT_FOUND");
+    return artifact;
+  }
 
   async create(input: {
     workspaceId: string;
@@ -105,9 +151,14 @@ export class Artifacts {
     entryPath: string;
     author: ArtifactActor;
   }) {
+    // The experiment first: a Workspace without it hears only that, whatever it sent.
+    if (!(await this.enabled(input.workspaceId))) throw artifactsDisabled();
     if (!NAME.test(input.name)) invalid("artifact-name");
     if (!KINDS.has(input.kind)) invalid("artifact-kind");
     if (input.description && input.description.length > 1000) invalid("artifact-description");
+    // Anyone with the link is a home a later step adds, with its own switch and refusals.
+    if (input.home.kind === "public") invalid("artifact-home");
+    await this.requireHome(input.workspaceId, input.author, artifactHomeKey(input.home), "write");
     try {
       return await this.db.artifact.create({
         data: {
@@ -148,8 +199,10 @@ export class Artifacts {
     | { status: "nothing" }
     | { status: "missing"; missing: string[] }
   > {
+    const { homeKey } = await this.live(input.workspaceId, input.artifactId);
     if ((input.note?.length ?? 0) > ARTIFACT_NOTE_LIMIT) invalid("artifact-note");
     if ((input.label?.length ?? 0) > ARTIFACT_LABEL_LIMIT) invalid("artifact-label");
+    await this.requireHome(input.workspaceId, input.publisher, homeKey, "write");
     const added = [...(input.files ?? [])];
     const deleted = [...new Set(input.deletedPaths ?? [])];
     for (const file of added) if (!artifactPathValid(file.path)) invalid("artifact-file-path");
@@ -255,6 +308,11 @@ export class Artifacts {
       if (result.size > ARTIFACT_FILE_LIMIT) invalid("artifact-too-many-files");
       const entryPath = input.entryPath ?? locked.entryPath;
       if (result.size && !result.has(entryPath)) invalid("artifact-entry-missing");
+      if (
+        locked.kind === "markdown" &&
+        (result.get(entryPath)?.sizeBytes ?? 0) > ARTIFACT_DOCUMENT_LIMIT
+      )
+        invalid("artifact-file-too-large");
 
       const merged = [...othersChanged].sort();
       const settingsChanged =
@@ -264,6 +322,12 @@ export class Artifacts {
       if (added.length === 0 && deleted.length === 0 && !settingsChanged)
         // Nothing of the pusher's own: "Nothing to push", even when others moved the artifact.
         return { status: "nothing" } as const;
+      // In this transaction, so the sweep of unused blobs leaves them; one it removed since the
+      // inspection above is uploaded again.
+      const gone = await this.blobs.use(tx, input.workspaceId, [
+        ...new Set(added.map((file) => file.sha256)),
+      ]);
+      if (gone.length) return { status: "missing", missing: gone } as const;
 
       const version = await tx.artifactVersion.create({
         data: {
@@ -307,7 +371,31 @@ export class Artifacts {
     });
   }
 
-  async read(input: { workspaceId: string; artifactId: string; version?: number }) {
+  /** Soft-deletes the artifact (its name is free again at once); its author's, or a Workspace
+   * owner's or admin's, among those who can read it. An Agent deletes only its own. */
+  async delete(input: { workspaceId: string; artifactId: string; actor: ArtifactActor }) {
+    const artifact = await this.live(input.workspaceId, input.artifactId);
+    await this.requireHome(input.workspaceId, input.actor, artifact.homeKey, "read");
+    if (!(await canDeleteArtifact(this.db, input.workspaceId, input.actor, artifact)))
+      throw new AppError("ACCESS_DENIED");
+    await this.db.artifact.updateMany({
+      where: { id: input.artifactId, workspaceId: input.workspaceId, deletedAt: null },
+      data: {
+        deletedAt: new Date(),
+        ...(input.actor.agentId
+          ? { deletedByAgentId: input.actor.agentId }
+          : { deletedByUserId: input.actor.userId }),
+      },
+    });
+  }
+
+  async read(input: {
+    workspaceId: string;
+    artifactId: string;
+    reader: ArtifactActor;
+    version?: number;
+  }) {
+    if (!(await this.enabled(input.workspaceId))) throw artifactsDisabled();
     const artifact = await this.db.artifact.findFirst({
       where: { id: input.artifactId, workspaceId: input.workspaceId, deletedAt: null },
       select: {
@@ -322,6 +410,7 @@ export class Artifacts {
       },
     });
     if (!artifact) throw new AppError("NOT_FOUND");
+    await this.requireHome(input.workspaceId, input.reader, artifact.homeKey, "read");
     const number = input.version ?? artifact.currentVersion;
     if (number <= 0) return { artifact, version: null, files: [] };
     const version = await this.db.artifactVersion.findUnique({
