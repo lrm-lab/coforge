@@ -1,12 +1,14 @@
 // The side-effecting half of `mise run cleanup` (scripts/dev/cleanup.ts): it reads the repository
 // and the process table into the facts scripts/dev/cleanup-plan.ts decides on, and carries out a
 // plan. Every git command runs in the main checkout, which outlives the worktrees removed here.
+import { fileTime, indexTime, readActivity } from "./cleanup-activity";
 import { commandOf, discoverProcesses, type DiscoveryOptions } from "./cleanup-discovery";
 import { probeInUse, type Rename, type SignalHooks } from "./cleanup-windows";
-import { firstLine, run, type RunOptions, type Runner } from "./cleanup-exec";
+import { firstLine, run, type Runner } from "./cleanup-exec";
+import { git, inBatches, MAIN_REF, mustGit, STATUS_ARGS } from "./cleanup-git";
 import {
+  isInside,
   parseCherry,
-  parseReflog,
   parseWorktreeList,
   type Plan,
   type ProcessInfo,
@@ -14,45 +16,17 @@ import {
   type WorktreeState,
 } from "./cleanup-plan";
 
-const MAIN_REF = "refs/remotes/origin/main";
 export const FETCH_TIMEOUT_MILLISECONDS = 30_000;
 const TERMINATE_WAIT_MILLISECONDS = 3000;
 const TERMINATE_POLL_MILLISECONDS = 100;
-/** `--untracked-files=all` overrides a user's `status.showUntrackedFiles=no`. */
-const STATUS_ARGS = ["--no-optional-locks", "status", "--porcelain", "--untracked-files=all"];
 /** Branches that are never deleted, whatever their commits. */
 const PROTECTED_BRANCHES = ["main", "master"];
-
-const git = (args: string[], cwd: string, options: Omit<RunOptions, "cwd"> = {}) =>
-  run(["git", "-c", "core.quotePath=false", ...args], { cwd, ...options });
-
-/** The stdout of a git command that must succeed. */
-async function mustGit(args: string[], cwd: string): Promise<string> {
-  const result = await git(args, cwd);
-  if (!result.ok) throw new Error(`git ${args[0]} failed: ${firstLine(result.stderr)}`);
-  return result.stdout;
-}
-
-async function inBatches<T, R>(items: T[], size: number, work: (item: T) => Promise<R>) {
-  const results: R[] = [];
-  for (let start = 0; start < items.length; start += size)
-    results.push(...(await Promise.all(items.slice(start, start + size).map(work))));
-  return results;
-}
-
-/** The mtime of the worktree's index, which a worktree in use keeps writing. */
-async function indexTime(path: string): Promise<number | undefined> {
-  const index = await git(["rev-parse", "--path-format=absolute", "--git-path", "index"], path);
-  if (!index.ok) return undefined;
-  const file = Bun.file(index.stdout.trim());
-  return (await file.exists()) ? file.lastModified : undefined;
-}
 
 /** What git says about one worktree; a failure of any command is kept as the worktree's error. */
 async function inspect(worktree: Worktree, mainPath: string): Promise<WorktreeState> {
   const state: WorktreeState = {
     ...worktree,
-    dirty: false,
+    changedFiles: 0,
     onMain: 0,
     notOnMain: 0,
     hasMerges: false,
@@ -63,19 +37,10 @@ async function inspect(worktree: Worktree, mainPath: string): Promise<WorktreeSt
   try {
     let committed: string[] = [];
     if (!worktree.prunable) {
-      // The index time is read before `git status`, which would otherwise be able to rewrite it.
-      const touched = await indexTime(worktree.path);
-      const reflog = parseReflog(
-        await mustGit(
-          ["reflog", "show", "HEAD", "--date=unix", "--format=%gd|%H|%gs"],
-          worktree.path,
-        ),
-      );
-      committed = reflog.committed;
-      const times = [reflog.lastActivityMs, touched].filter((time) => time !== undefined);
-      state.lastActivityMs = times.length === 0 ? undefined : Math.max(...times);
-      const status = await mustGit(STATUS_ARGS, worktree.path);
-      state.dirty = status.trim() !== "";
+      const activity = await readActivity(worktree.path);
+      committed = activity.committed;
+      state.lastActivityMs = activity.lastActivityMs;
+      state.changedFiles = activity.changedFiles;
     }
     Object.assign(state, parseCherry(await mustGit(["cherry", MAIN_REF, worktree.head], mainPath)));
     const merges = await mustGit(
@@ -119,6 +84,8 @@ export async function gatherState(options: GatherOptions): Promise<{
   warnings: string[];
   processDiscoveryError?: string;
   platform: string;
+  /** The newest timestamp seen anywhere in the repository, for the clock check. */
+  newestSeenMs: number | undefined;
 }> {
   const warnings: string[] = [];
   const listed = await git(["worktree", "list", "--porcelain"], options.cwd);
@@ -128,12 +95,14 @@ export async function gatherState(options: GatherOptions): Promise<{
   const mainPath = main.path;
   const exec = options.run ?? run;
 
+  let fetchedOk = false;
   if (options.fetch) {
     const fetched = await exec(["git", "fetch", "--quiet", "origin", "main"], {
       cwd: mainPath,
       env: { ...(Bun.env as Record<string, string>), GIT_TERMINAL_PROMPT: "0" },
       timeout: FETCH_TIMEOUT_MILLISECONDS,
     });
+    fetchedOk = fetched.ok;
     if (!fetched.ok)
       warnings.push(
         `could not fetch origin main (${fetched.timedOut ? `timed out after ${FETCH_TIMEOUT_MILLISECONDS / 1000} s` : firstLine(fetched.stderr)}); using the last known origin/main, which can only keep more worktrees`,
@@ -156,6 +125,17 @@ export async function gatherState(options: GatherOptions): Promise<{
     } catch (error) {
       processDiscoveryError = (error as Error).message;
     }
+  // What a clock that jumped forward cannot fake: the main checkout's index and, after a fetch,
+  // the time the fetch just wrote.
+  const fetchHead = await git(
+    ["rev-parse", "--path-format=absolute", "--git-path", "FETCH_HEAD"],
+    mainPath,
+  );
+  const seen = [
+    ...worktrees.map((worktree) => worktree.lastActivityMs),
+    await indexTime(mainPath),
+    fetchedOk && fetchHead.ok ? await fileTime(fetchHead.stdout.trim()) : undefined,
+  ].filter((time) => time !== undefined);
   return {
     mainPath,
     worktrees,
@@ -164,6 +144,7 @@ export async function gatherState(options: GatherOptions): Promise<{
     warnings,
     processDiscoveryError,
     platform: options.platform ?? process.platform,
+    newestSeenMs: seen.length === 0 ? undefined : Math.max(...seen),
   };
 }
 
@@ -193,7 +174,23 @@ export type ApplyOverrides = Partial<ProcessOps> & {
   signals?: SignalHooks;
   /** Runs after a branch is verified and before it is deleted; tests move the branch here. */
   beforeBranchDelete?: (branch: string) => Promise<void>;
+  /** Lists the processes again before the first stale removal; the platform's scan by default. */
+  rediscover?: () => Promise<ProcessInfo[]>;
 };
+
+/** One more look at the processes, once, right before work is thrown away. */
+async function rediscoverProcesses(
+  plan: Plan,
+  worktrees: string[],
+  overrides: ApplyOverrides,
+): Promise<ProcessInfo[] | Error> {
+  try {
+    return await (overrides.rediscover?.() ??
+      discoverProcesses([plan.mainPath, ...worktrees], { platform: plan.platform }));
+  } catch (error) {
+    return error as Error;
+  }
+}
 
 export type StepResult = { step: string; ok: boolean; detail?: string };
 
@@ -264,7 +261,7 @@ async function deleteBranch(
   branch: string,
   protectedBranches: Set<string>,
   mainPath: string,
-  beforeDelete?: (branch: string) => Promise<void>,
+  options: { forced: boolean; beforeDelete?: (branch: string) => Promise<void> },
 ): Promise<StepResult> {
   const keep = (detail: string): StepResult => ({
     step: `keep branch ${branch}`,
@@ -279,7 +276,10 @@ async function deleteBranch(
   const listed = await git(["worktree", "list", "--porcelain"], mainPath);
   if (parseWorktreeList(listed.stdout).some((worktree) => worktree.branch === branch))
     return keep("checked out elsewhere");
-  const ancestor = await git(["merge-base", "--is-ancestor", tip, MAIN_REF], mainPath);
+  // A stale worktree's branch goes with it, whatever is on it; the checks above still apply.
+  const ancestor = options.forced
+    ? { ok: true }
+    : await git(["merge-base", "--is-ancestor", tip, MAIN_REF], mainPath);
   if (!ancestor.ok) {
     const cherry = await git(["cherry", MAIN_REF, tip], mainPath);
     const merges = await git(["rev-list", "--merges", `${MAIN_REF}..${tip}`], mainPath);
@@ -287,7 +287,7 @@ async function deleteBranch(
     if (parseCherry(cherry.stdout).notOnMain > 0 || merges.stdout.trim() !== "")
       return keep("has commits without an equivalent on origin/main");
   }
-  await beforeDelete?.(branch);
+  await options.beforeDelete?.(branch);
   const deleted = await git(["update-ref", "-d", ref, tip], mainPath);
   if (!deleted.ok) {
     const now = await git(["rev-parse", "--verify", "--quiet", ref], mainPath);
@@ -307,7 +307,9 @@ async function deleteBranch(
  */
 export async function applyPlan(plan: Plan, overrides: ApplyOverrides = {}): Promise<StepResult[]> {
   const results: StepResult[] = [];
-  const gone: WorktreeState[] = [];
+  const gone: { worktree: WorktreeState; forced: boolean }[] = [];
+  const worktrees = plan.remove.map((entry) => entry.worktree.path);
+  let live: ProcessInfo[] | Error | undefined;
 
   // Without the live-process check a worktree under someone's shell could be removed.
   if (plan.blocked)
@@ -318,7 +320,7 @@ export async function applyPlan(plan: Plan, overrides: ApplyOverrides = {}): Pro
   if (plan.orphans.length > 0)
     results.push(...(await terminateOrphans(plan.orphans, { ...systemProcessOps, ...overrides })));
 
-  for (const { worktree } of plan.remove) {
+  for (const { worktree, forced } of plan.remove) {
     const step = `remove ${worktree.path}`;
     if (!worktree.prunable) {
       const head = await git(["rev-parse", "HEAD"], worktree.path);
@@ -331,15 +333,47 @@ export async function applyPlan(plan: Plan, overrides: ApplyOverrides = {}): Pro
         });
         continue;
       }
-      // `git worktree remove` honours `status.showUntrackedFiles=no` and would delete such files.
-      const status = await git(STATUS_ARGS, worktree.path);
-      if (!status.ok || status.stdout.trim() !== "") {
-        results.push({
-          step,
-          ok: false,
-          detail: "kept, changed since the plan (uncommitted changes)",
-        });
-        continue;
+      if (forced) {
+        // A stale worktree is removed with its work, so it must still be as idle as when planned,
+        // with nobody in it now.
+        live ??= await rediscoverProcesses(plan, worktrees, overrides);
+        const occupied =
+          live instanceof Error
+            ? undefined
+            : live.find(
+                (process) =>
+                  process.cwdExists && isInside(process.cwd, worktree.path, plan.platform),
+              );
+        if (live instanceof Error || occupied) {
+          results.push({
+            step,
+            ok: occupied !== undefined,
+            detail:
+              live instanceof Error
+                ? `kept, could not look for processes again: ${live.message}`
+                : `kept, in use since the plan (pid ${occupied!.pid}, ${occupied!.command})`,
+          });
+          continue;
+        }
+        const activity = await readActivity(worktree.path).catch(() => undefined);
+        if (
+          activity?.lastActivityMs === undefined ||
+          activity.lastActivityMs > (worktree.lastActivityMs ?? 0)
+        ) {
+          results.push({ step, ok: false, detail: "kept, changed since the plan (new activity)" });
+          continue;
+        }
+      } else {
+        // `git worktree remove` honours `status.showUntrackedFiles=no` and would delete such files.
+        const status = await git(STATUS_ARGS, worktree.path);
+        if (!status.ok || status.stdout.trim() !== "") {
+          results.push({
+            step,
+            ok: false,
+            detail: "kept, changed since the plan (uncommitted changes)",
+          });
+          continue;
+        }
       }
     }
     if (plan.platform === "win32" && !worktree.prunable) {
@@ -363,22 +397,28 @@ export async function applyPlan(plan: Plan, overrides: ApplyOverrides = {}): Pro
         continue;
       }
     }
-    const removed = await git(["worktree", "remove", worktree.path], plan.mainPath);
+    const removed = await git(
+      ["worktree", "remove", ...(forced ? ["--force"] : []), worktree.path],
+      plan.mainPath,
+    );
     results.push({
       step,
       ok: removed.ok,
       detail: removed.ok ? undefined : `kept, git refused: ${firstLine(removed.stderr)}`,
     });
-    if (removed.ok) gone.push(worktree);
+    if (removed.ok) gone.push({ worktree, forced });
   }
 
   const protectedBranches = new Set(PROTECTED_BRANCHES);
   const pointer = await git(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], plan.mainPath);
   if (pointer.ok) protectedBranches.add(pointer.stdout.trim().replace(/^origin\//, ""));
-  for (const { branch } of gone)
-    if (branch !== undefined)
+  for (const { worktree, forced } of gone)
+    if (worktree.branch !== undefined)
       results.push(
-        await deleteBranch(branch, protectedBranches, plan.mainPath, overrides.beforeBranchDelete),
+        await deleteBranch(worktree.branch, protectedBranches, plan.mainPath, {
+          forced,
+          beforeDelete: overrides.beforeBranchDelete,
+        }),
       );
   return results;
 }

@@ -50,19 +50,31 @@ cache, so what each one holds is its own build output and generated code, and a 
 answers for an older `main`. On 2026-11-02 the main repository registered 113 worktrees, most of
 them for changes already on `main`; removing 64 of them freed about 20 GB.
 
-`mise run cleanup` lists the worktrees whose change is already on `main` and the `bun`/`node`
+`mise run cleanup` removes the worktrees whose change is already on `main` and stops the `bun`/`node`
 processes left in a directory that no longer exists, such as a forwarder holding ports 5432 and
-6379. `mise run cleanup -- --apply` stops those processes, removes those worktrees and deletes the
-branches whose tip is already in `main` or whose own commits are all on it (never `main`, `master` or the remote's default). A
-worktree is removed only when it is clean, every commit on it has a patch-equivalent on
+6379; `mise run cleanup -- --dry-run` (or `-n`) only lists them. It deletes the branches whose tip is
+already in `main` or whose own commits are all on it (never `main`, `master` or the remote's
+default). A worktree is removed when it is clean, every commit on it has a patch-equivalent on
 `origin/main` (a squash of several commits is not detected), it holds no merge commit and, when
 detached, no commit only its reflog keeps. It must also have been quiet for an hour, and for a day
-(`--idle-hours`) when it never committed, so a worktree another session just created stays. No
-process of yours may run inside it. Removing a worktree deletes its ignored files too (`.env`,
-copied `infra/secrets`, local data). macOS and Linux find the processes inside a worktree
-(`lsof`, `/proc`) and the orphans left in a removed one; Windows cannot, so it moves each worktree aside and back right before removing it
+(`--idle-hours`) when it never committed, so a worktree another session just created stays. Quiet
+counts the newest of its reflog, its index and everything that can show use without a commit: the
+files `git status` lists (ignored ones too, an ignored directory by its top level) and the
+directory each sits in, and the files `--skip-worktree` or `--assume-unchanged` hide.
+
+A worktree idle for a week (`--stale-days`, 7 by default, at least an hour) is removed whatever it
+holds: uncommitted files, commits not on `main`, merge commits, commits only a detached reflog
+keeps. That work is lost, and the output says how much per worktree. Its branch goes too, except
+`main`, `master` and the remote's default. A worktree with a running process in it (checked again
+right before the first such removal), a lock, or the directory the command runs in is never
+removed. If nothing in the repository is recent (no fetch, no busy worktree, a stale main
+checkout), the clock may have jumped, so no worktree is removed for being stale. Removing a
+worktree deletes its ignored files too (`.env`, copied `infra/secrets`, local data).
+
+macOS and Linux find the processes inside a worktree (`lsof`, `/proc`) and the orphans left in a
+removed one; Windows cannot, so it moves each worktree aside and back right before removing it
 (Windows refuses while a process uses it), keeps one it cannot move, and has no orphan cleanup. On
-another platform, or when the scan fails, `--apply` removes no worktree.
+another platform, or when the scan fails, no worktree is removed.
 
 ## Commit messages
 

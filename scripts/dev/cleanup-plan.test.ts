@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 
-import { main as cleanupMain } from "./cleanup";
 import {
   DEFAULT_IDLE_HOURS,
   formatPlan,
@@ -13,11 +12,8 @@ import {
   parseProcessTable,
   parseReflog,
   parseWorktreeList,
-  planCleanup,
-  type PlanInput,
-  type ProcessInfo,
-  type WorktreeState,
 } from "./cleanup-plan";
+import { HOUR, NOW, planAt, processAt, reasonsOf, state } from "./cleanup-test-state";
 
 describe("parseWorktreeList", () => {
   test("reads branches, detached heads, locks and prunable entries; the first is the main checkout", () => {
@@ -173,37 +169,8 @@ describe("Windows paths", () => {
   });
 });
 
-const NOW = Date.UTC(2026, 10, 3, 12);
-const HOUR = 3_600_000;
-const planAt = (input: Omit<PlanInput, "now">) => planCleanup({ now: NOW, ...input });
-
-const state = (path: string, overrides: Partial<WorktreeState> = {}): WorktreeState => ({
-  path,
-  head: "h",
-  branch: `b-${path.split("/").pop()}`,
-  locked: false,
-  prunable: false,
-  dirty: false,
-  onMain: 1,
-  notOnMain: 0,
-  hasMerges: false,
-  madeCommits: true,
-  lastActivityMs: NOW - (MIN_QUIET_HOURS + 1) * HOUR,
-  reflogOnlyCommits: 0,
-  ...overrides,
-});
-
-const processAt = (
-  pid: number,
-  cwd: string,
-  cwdExists: boolean,
-  command = "bun server.ts",
-): ProcessInfo => ({ pid, command, cwd, cwdExists });
-
 describe("planCleanup", () => {
   const main = "/repo";
-  const reasonsOf = (plan: ReturnType<typeof planAt>, name: string) =>
-    plan.keep.find((entry) => entry.worktree.path.endsWith(`/${name}`))?.reasons.join(" | ");
 
   test("removes a clean, quiet worktree whose commits are all on main", () => {
     const plan = planAt({
@@ -266,7 +233,7 @@ describe("planCleanup", () => {
     const plan = planAt({
       mainPath: main,
       worktrees: [
-        state("/repo/.worktrees/dirty", { dirty: true }),
+        state("/repo/.worktrees/dirty", { changedFiles: 2 }),
         state("/repo/.worktrees/unmerged", { notOnMain: 2 }),
         state("/repo/.worktrees/locked", { locked: true }),
         state("/repo/.worktrees/busy"),
@@ -274,7 +241,7 @@ describe("planCleanup", () => {
         state("/repo/.worktrees/lost", { branch: undefined, reflogOnlyCommits: 2 }),
         state("/repo/.worktrees/broken", { error: "git status failed: boom" }),
         state("/repo/.worktrees/here"),
-        state("/repo/.worktrees/many", { dirty: true, notOnMain: 1 }),
+        state("/repo/.worktrees/many", { changedFiles: 2, notOnMain: 1 }),
       ],
       processes: [
         processAt(7, "/repo/.worktrees/busy/apps/web", true, "/bin/zsh -l"),
@@ -392,20 +359,5 @@ describe("planCleanup", () => {
   test("formats an empty plan", () => {
     const text = formatPlan(planAt({ mainPath: main, worktrees: [], processes: [] }));
     expect(text).toContain("Nothing to clean up");
-  });
-});
-
-describe("--idle-hours", () => {
-  test("rejects a value that is not a positive number", async () => {
-    const errors: unknown[] = [];
-    const original = console.error;
-    console.error = (...args: unknown[]) => void errors.push(args);
-    try {
-      for (const value of ["0", "-1", "abc", ""])
-        expect(await cleanupMain(["--idle-hours", value])).toBe(2);
-    } finally {
-      console.error = original;
-    }
-    expect(errors).toHaveLength(4);
   });
 });

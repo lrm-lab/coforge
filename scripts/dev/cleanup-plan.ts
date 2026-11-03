@@ -17,8 +17,8 @@ export type Worktree = {
 
 /** A worktree and what git says about its content. */
 export type WorktreeState = Worktree & {
-  /** `git status --porcelain --untracked-files=all` is not empty (ignored files do not count). */
-  dirty: boolean;
+  /** Paths `git status --porcelain --untracked-files=all` lists (ignored files do not count). */
+  changedFiles: number;
   /** Commits of HEAD that have a patch-equivalent commit on origin/main (`-` in `git cherry`). */
   onMain: number;
   /** Commits of HEAD that do not (`+` in `git cherry`). */
@@ -47,17 +47,23 @@ export type ProcessInfo = {
 
 export type Plan = {
   mainPath: string;
-  remove: { worktree: WorktreeState; why: string }[];
+  /** `forced`: stale, so removed with `--force` and its work lost; `why` says what is lost. */
+  remove: { worktree: WorktreeState; why: string; forced: boolean }[];
   /** `busy`: a live process runs inside it, which is worth telling the user to stop. */
   keep: { worktree: WorktreeState; reasons: string[]; busy: boolean }[];
   orphans: ProcessInfo[];
   platform: string;
+  /** Set when every worktree looks idle at once, so no stale removal is planned. */
+  clockNote?: string;
   /** Why no worktree may be removed: the live-process check could not run. */
   blocked?: string;
 };
 
 /** A worktree that never committed is left alone this long after its last activity. */
 export const DEFAULT_IDLE_HOURS = 24;
+
+/** A worktree idle this long is removed whatever its state: its work is lost. */
+export const STALE_DAYS = 7;
 
 /** No worktree is removed sooner than this after its last activity: someone may be working in it. */
 export const MIN_QUIET_HOURS = 1;
@@ -69,15 +75,19 @@ export type PlanInput = {
   /** Epoch milliseconds the idle time is measured to. */
   now: number;
   idleHours?: number;
+  staleDays?: number;
+  /** The newest timestamp seen anywhere in the repository; undefined when unknown. */
+  newestSeenMs?: number;
   /** The directory the command runs in; the worktree holding it is never removed. */
   currentDirectory?: string;
-  /** Set when the processes could not be listed; `--apply` then removes no worktree. */
+  /** Set when the processes could not be listed; nothing removes a worktree. */
   processDiscoveryError?: string;
   /** `process.platform` unless a test says otherwise; on win32 a worktree's use is probed at apply. */
   platform?: string;
 };
 
 const HOUR_MS = 3_600_000;
+const DAY_MS = 24 * HOUR_MS;
 
 // Reflog subjects of HEAD movements that create a commit in the worktree. Creating, `reset`,
 // `checkout`, a fast-forward `merge` and `rebase (start|finish)` move HEAD without authoring one.
@@ -116,6 +126,29 @@ export function parseCherry(output: string): { onMain: number; notOnMain: number
     else if (line.startsWith("+ ")) notOnMain++;
   }
   return { onMain, notOnMain };
+}
+
+export type StatusEntry = { path: string; ignored: boolean };
+
+/** `git status --porcelain -z --ignored=matching`: each entry once (a rename's source is skipped). */
+export function parseStatus(output: string): StatusEntry[] {
+  const entries: StatusEntry[] = [];
+  const fields = output.split("\0").filter(Boolean);
+  for (let index = 0; index < fields.length; index++) {
+    const field = fields[index]!;
+    entries.push({ path: field.slice(3), ignored: field.startsWith("!!") });
+    if (field[0] === "R" || field[0] === "C" || field[1] === "R" || field[1] === "C") index++;
+  }
+  return entries;
+}
+
+/** `git ls-files -v -z`: the files hidden from `git status` by assume-unchanged or skip-worktree. */
+export function parseHiddenFiles(output: string): string[] {
+  return output
+    .split("\0")
+    .filter((field) => field.length > 2)
+    .filter((field) => field[0] === "S" || field[0] !== field[0]!.toUpperCase())
+    .map((field) => field.slice(2));
 }
 
 /**
@@ -207,14 +240,14 @@ function keepReasons(
   input: PlanInput,
   idle: number | undefined,
   never: boolean,
-): { reasons: string[]; busy: boolean } {
+): { reasons: string[]; busy: boolean; hard: boolean } {
   const reasons: string[] = [];
   const busyWith = input.processes.filter(
     (process) => process.cwdExists && isInside(process.cwd, worktree.path, input.platform),
   );
   if (worktree.error) reasons.push(`could not inspect it (${worktree.error})`);
   if (worktree.locked) reasons.push("locked");
-  if (worktree.dirty) reasons.push("uncommitted changes");
+  if (worktree.changedFiles > 0) reasons.push("uncommitted changes");
   if (worktree.notOnMain > 0)
     reasons.push(
       `not on main (${plural(worktree.notOnMain, "commit")} without an equivalent on origin/main; a squash merge of several commits is not detected)`,
@@ -232,14 +265,34 @@ function keepReasons(
   if (current !== undefined && isInside(current, worktree.path, input.platform))
     reasons.push("the command runs inside it");
 
-  if (reasons.length > 0 || worktree.prunable) return { reasons, busy: busyWith.length > 0 };
+  // Nothing overrides these, however stale the worktree is.
+  const hard =
+    worktree.locked ||
+    busyWith.length > 0 ||
+    reasons.includes("the command runs inside it") ||
+    !!worktree.error;
+  if (reasons.length > 0 || worktree.prunable) return { reasons, busy: busyWith.length > 0, hard };
   const idleLimit = (input.idleHours ?? DEFAULT_IDLE_HOURS) * HOUR_MS;
   if (idle === undefined) reasons.push("last activity unknown");
   else if (never && idle < idleLimit)
     reasons.push(`new worktree, no commits yet (last activity ${formatAge(idle)} ago)`);
   else if (idle < MIN_QUIET_HOURS * HOUR_MS)
     reasons.push(`recently active (last activity ${formatAge(idle)} ago)`);
-  return { reasons, busy: false };
+  return { reasons, busy: false, hard };
+}
+
+const listOf = (items: string[]) =>
+  items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
+
+/** What removing a stale worktree loses, in plain words; none when everything is on main. */
+function lostWork(worktree: WorktreeState): string[] {
+  const lost: string[] = [];
+  if (worktree.changedFiles > 0) lost.push(plural(worktree.changedFiles, "uncommitted file"));
+  if (worktree.notOnMain > 0) lost.push(`${plural(worktree.notOnMain, "commit")} not on main`);
+  if (worktree.hasMerges) lost.push("merge commits not on main");
+  if (worktree.reflogOnlyCommits > 0)
+    lost.push(`${plural(worktree.reflogOnlyCommits, "commit")} only in its reflog`);
+  return lost;
 }
 
 function removalReason(worktree: WorktreeState, idle: number | undefined, never: boolean) {
@@ -257,15 +310,35 @@ function removalReason(worktree: WorktreeState, idle: number | undefined, never:
 export function planCleanup(input: PlanInput): Plan {
   const remove: Plan["remove"] = [];
   const keep: Plan["keep"] = [];
+  const staleLimit = Math.max((input.staleDays ?? STALE_DAYS) * DAY_MS, MIN_QUIET_HOURS * HOUR_MS);
+  // Everything idle at once, with nothing recent anywhere (not even a fetch), is more likely a
+  // clock that jumped forward than a week of nobody working: do not delete work on that evidence.
+  const sinceNewest = input.newestSeenMs === undefined ? 0 : input.now - input.newestSeenMs;
+  const clockSuspect = sinceNewest > DAY_MS && sinceNewest >= staleLimit;
 
   for (const worktree of input.worktrees) {
     // A prunable worktree has no directory left to hold work, so it cannot be a new one.
     const never = !worktree.prunable && !worktree.madeCommits && worktree.onMain === 0;
     const idle =
       worktree.lastActivityMs === undefined ? undefined : input.now - worktree.lastActivityMs;
-    const { reasons, busy } = keepReasons(worktree, input, idle, never);
-    if (reasons.length > 0) keep.push({ worktree, reasons, busy });
-    else remove.push({ worktree, why: removalReason(worktree, idle, never) });
+    const { reasons, busy, hard } = keepReasons(worktree, input, idle, never);
+    const lost = lostWork(worktree);
+    const stale =
+      !hard && !worktree.prunable && idle !== undefined && idle >= staleLimit && lost.length > 0;
+    if (stale && !clockSuspect)
+      remove.push({
+        worktree,
+        why: `idle ${formatAge(idle!)} \u2014 removed with ${listOf(lost)} (lost)`,
+        forced: true,
+      });
+    else {
+      if (stale)
+        reasons.push(
+          `idle ${formatAge(idle!)}, but every worktree looks idle; check the system clock`,
+        );
+      if (reasons.length > 0) keep.push({ worktree, reasons, busy });
+      else remove.push({ worktree, why: removalReason(worktree, idle, never), forced: false });
+    }
   }
 
   const roots = [input.mainPath, ...input.worktrees.map((worktree) => worktree.path)];
@@ -281,6 +354,9 @@ export function planCleanup(input: PlanInput): Plan {
     keep,
     orphans,
     platform: input.platform ?? process.platform,
+    clockNote: clockSuspect
+      ? `Every worktree looks idle: the newest activity in the repository is ${formatAge(sinceNewest)} old. Check the system clock; no worktree is removed for being stale.`
+      : undefined,
     blocked: input.processDiscoveryError,
   };
 }
@@ -329,9 +405,10 @@ export function formatPlan(plan: Plan): string {
           ),
         ].join("\n"),
   );
+  if (plan.clockNote) sections.push(plan.clockNote);
   if (plan.blocked)
     sections.push(
-      `Cannot check for live processes (${plan.blocked}).\n  --apply will not remove any worktree until it can.`,
+      `Cannot check for live processes (${plan.blocked}).\n  No worktree will be removed until it can.`,
     );
   return sections.join("\n\n");
 }

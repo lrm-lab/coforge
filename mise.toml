@@ -32,7 +32,7 @@ dir = "{{cwd}}"
 run = 'bun "{{config_root}}/scripts/test/isolated-test-run.ts" bun test'
 
 [tasks.cleanup]
-description = "List the worktrees already on main and the orphan dev processes to clean up (mise run cleanup -- --apply removes them)"
+description = "Remove the worktrees already on main (or idle for a week) and the orphan dev processes (mise run cleanup -- --dry-run only lists them)"
 run = 'bun "{{config_root}}/scripts/dev/cleanup.ts"'
 
 [tasks.check]

@@ -107,13 +107,13 @@ describe("processes against a real repository", () => {
     ]);
   });
 
-  gitTest("refuses --apply, and says why, when the platform cannot be scanned", async () => {
+  gitTest("refuses to remove, and says why, when the platform cannot be scanned", async () => {
     const { main, wt } = await fixture();
     const result = await plan(main, { platform: "plan9", processes: undefined });
 
     expect(result.remove.length).toBeGreaterThan(0);
     expect(result.blocked).toContain("supports macOS, Linux and Windows only");
-    expect(formatPlan(result)).toContain("--apply will not remove any worktree");
+    expect(formatPlan(result)).toContain("No worktree will be removed");
     const results = await applyPlan(result, {});
 
     expect(failed(results)).toHaveLength(1);
