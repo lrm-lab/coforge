@@ -48,7 +48,7 @@ const CASES: [string, Record<string, unknown>, string, string][] = [
     "app:recover_owner",
     { clientKey: "notes", appName: "Notes", toAgentId: "a-1", toAgentName: "scout" },
     "Action card: make scout the owner Agent of app notes",
-    "操作卡片：将 scout 设为应用 notes 的负责智能体",
+    "操作卡片：将 scout 设为应用 notes 的负责 Agent",
   ],
   [
     "app:grant_agent",

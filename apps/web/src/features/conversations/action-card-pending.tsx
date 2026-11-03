@@ -9,9 +9,9 @@ import {
   actionCardCommitLabel,
   actionCardDeniedReason,
   actionCardEditable,
-  actionCardIcon,
   actionCardTitle,
 } from "./action-card-labels";
+import { actionCardIcon } from "./action-card-icons";
 import { ActionCardObject } from "./action-card-object";
 
 /** Why the last request failed. A cancel that failed leaves the card's own button as it was; a

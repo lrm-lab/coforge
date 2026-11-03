@@ -167,16 +167,15 @@ test("an action card commits in one press and closes to one line", async () => {
     await browser("press", "Escape");
     await browser("wait", "--fn", `document.querySelector('[role="dialog"]') == null`);
 
-    // Create, Add and Dismiss each close their card to one line.
-    await press(createCard.messageId, "Create");
-    await press(addCard.messageId, "Add");
-    await press(agentCard.messageId, "Dismiss");
+    // Create, Add and Dismiss each close their card to one line. Each is pressed once the one
+    // before has closed: a card closing moves the ones below it, under a click on its way.
     const link = `[...${message(createCard.messageId)}.querySelectorAll("a")].find((el) => el.textContent === ${JSON.stringify(`#${launch}`)})`;
-    await browser(
-      "wait",
-      "--fn",
-      `${link} !== undefined && ${card(addCard.messageId)} == null && ${card(agentCard.messageId)} == null`,
-    );
+    await press(createCard.messageId, "Create");
+    await browser("wait", "--fn", `${link} !== undefined`);
+    await press(addCard.messageId, "Add");
+    await browser("wait", "--fn", `${card(addCard.messageId)} == null`);
+    await press(agentCard.messageId, "Dismiss");
+    await browser("wait", "--fn", `${card(agentCard.messageId)} == null`);
     const made = await db.conversation.findFirstOrThrow({
       where: { workspaceId, channelName: launch },
       select: { id: true, members: { select: { agentId: true } } },

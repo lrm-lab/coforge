@@ -39,7 +39,7 @@
   "action_card_preview_agent_create": "操作卡片：创建 Agent {name}",
   "action_card_preview_add_member": "操作卡片：把 {members} 加入 #{channel}",
   "action_card_preview_app_register": "操作卡片：注册应用 {name}",
-  "action_card_preview_app_recover_owner": "操作卡片：将 {agent} 设为应用 {app} 的负责智能体",
+  "action_card_preview_app_recover_owner": "操作卡片：将 {agent} 设为应用 {app} 的负责 Agent",
   "action_card_preview_app_grant_agent": "操作卡片：批准我使用应用 {app}（{key}）",
   "action_card_preview_page_fill": "填入网页：{labels}",
   "action_card_preview_page_fill_prompt": "填入网页：{prompt}（{labels}）",
@@ -55,7 +55,7 @@
   "action_card_handled_add_member": "已添加成员",
   "action_card_handled_app_grant": "已批准应用访问",
   "action_card_handled_app_register": "已注册应用",
-  "action_card_handled_app_recover": "已设置负责智能体",
+  "action_card_handled_app_recover": "已设为负责 Agent",
   "action_card_channel_taken": "已经有叫 #{name} 的群聊了",
   "action_card_rename": "改个名字…",
   "action_card_refused": "按卡片上的内容做不了。"

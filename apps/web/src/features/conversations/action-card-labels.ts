@@ -1,32 +1,5 @@
-import {
-  CpuChip01 as Cpu,
-  Hash01 as Hash,
-  Key01 as Key,
-  Monitor01 as Monitor,
-  UserPlus01 as UserPlus,
-} from "@untitledui/icons";
-
 import { m } from "#src/paraglide/messages";
 import type { ActionCardView } from "#src/server/conversations/action-cards.server";
-
-/** Icon for the card header by kind. */
-export function actionCardIcon(kind: ActionCardView["kind"]) {
-  switch (kind) {
-    case "channel:create":
-      return Hash;
-    case "agent:create":
-      return Cpu;
-    case "desktop:takeover":
-      return Monitor;
-    case "page:fill":
-    case "app:grant_agent":
-    case "app:register":
-    case "app:recover_owner":
-      return Key;
-    default:
-      return UserPlus;
-  }
-}
 
 /** Title shown in the card header. */
 export function actionCardTitle(view: ActionCardView): string {

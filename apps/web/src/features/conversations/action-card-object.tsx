@@ -1,5 +1,4 @@
 import type { Dispatch, ReactNode, SetStateAction } from "react";
-import { CpuChip01 as Cpu } from "@untitledui/icons";
 
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { m } from "#src/paraglide/messages";
@@ -78,10 +77,7 @@ export function ActionCardObject({
     const computer = view.requiredComputer ?? view.suggestedComputer;
     body = (
       <>
-        <p className="flex items-center gap-1.5 font-semibold text-primary">
-          <Cpu aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
-          <span className="min-w-0 wrap-anywhere">{view.name}</span>
-        </p>
+        <p className="font-semibold wrap-anywhere text-primary">{view.name}</p>
         {view.description ? <p className="text-tertiary">{view.description}</p> : note}
         {computer && (
           <p className="text-tertiary">
