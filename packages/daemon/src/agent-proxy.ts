@@ -60,6 +60,9 @@ export type AgentProxy = {
 import type { AgentProxyRuntime } from "./agent-proxy-runtime";
 import {
   defineRoute,
+  findProxyRoute,
+  operationFamily,
+  parseRouteRequest,
   type JsonObject,
   type ProxyRoute,
   type TokenBinding,
@@ -98,12 +101,6 @@ const LOCAL_APP_CONFIG_ROUTE_PREFIX = LOCAL_PROXY_ROUTES.appConfig.get
  * same number as that character cap — see `internal/weekly-report-limits.ts`. */
 const WEEKLY_REPORT_COLLECT_MAX_BODY_BYTES = 512 * 1024;
 const logger = getLogger(["coforge", "daemon", "agent-proxy"]);
-
-/** A family that names the payload's `operation`, e.g. `agent-api/channel-info`. */
-function operationFamily(prefix: string, fallback: string) {
-  return (fields: JsonObject) =>
-    `${prefix}${typeof fields.operation === "string" ? fields.operation : fallback}`;
-}
 
 /** The local Agent proxy's routes. Looking up the runtime method, passing context/key, the missing-
  * handler 404, response wrapping and failure classification are written exactly once, in the
@@ -497,19 +494,6 @@ const ROUTE_TABLE: readonly ProxyRoute[] = [
   ...TASK_CONVERSATION_PROXY_ROUTES,
 ];
 
-/** The first route whose method and pathname match, along with the path param `match` found. */
-function findRoute(
-  method: string,
-  pathname: string,
-): { route: ProxyRoute; param: string } | undefined {
-  for (const route of ROUTE_TABLE) {
-    if (route.method !== method) continue;
-    const param = route.match(pathname);
-    if (param !== undefined) return { route, param };
-  }
-  return undefined;
-}
-
 /** One daemon-local HTTP boundary shared by all Agent child processes. */
 export function startAgentProxy(input: {
   onRequest?: (request: { method: string; path: string }) => void;
@@ -537,7 +521,7 @@ export function startAgentProxy(input: {
         path: requestUrl.pathname,
       });
 
-      const found = findRoute(request.method, requestUrl.pathname);
+      const found = findProxyRoute(ROUTE_TABLE, request.method, requestUrl.pathname);
       if (!found) return new Response("not found", { status: 404 });
       const { route, param } = found;
 
@@ -576,7 +560,14 @@ export function startAgentProxy(input: {
             redact = fields.freshnessContextMode === "withheld";
           }
         }
-        const parsed = route.parse({ request, url: requestUrl, param, payload, fields, binding });
+        const parsed = parseRouteRequest(route.parse, {
+          request,
+          url: requestUrl,
+          param,
+          payload,
+          fields,
+          binding,
+        });
         if (parsed instanceof Response) return parsed;
         // Identity is exclusively the token binding, and the Agent API key stays in this trusted
         // registration: neither is ever read from, or serialized into, the child's request.
