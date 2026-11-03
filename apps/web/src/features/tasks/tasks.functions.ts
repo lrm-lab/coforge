@@ -80,6 +80,8 @@ export const loadConversationTasks = createServerFn({ method: "GET" })
 const finishedScope = {
   conversationId: z.uuid().optional(),
   window: z.enum(["week", "month", "all"]),
+  // Label ids all on a Task, or `none` for the Tasks with no label.
+  labels: z.array(z.string().min(1).max(64)).max(5).optional(),
 };
 
 /** Finished Tasks counted by status, owner and Project for the chosen window. */
@@ -90,7 +92,7 @@ export const loadFinishedTaskSummary = createServerFn({ method: "GET" })
     const { user, db, workspaceId } = context;
     return new TaskBoard(db).finishedSummary(
       { workspaceId, userId: user.id, conversationId: data.conversationId },
-      { window: data.window },
+      { window: data.window, labels: data.labels },
     );
   });
 

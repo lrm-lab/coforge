@@ -8,6 +8,8 @@ import type { TaskMember } from "@lrm/coforge-sdk/internal";
  */
 export const NO_OWNER = "none";
 export const NO_PROJECT = "none";
+/** The label pick for "no label at all"; it stands alone (task #455). */
+export const NO_LABEL = "none";
 
 export type FilterableTask = {
   owner: TaskMember | null;
@@ -20,9 +22,23 @@ export type FilterableTask = {
   currentMemberId?: string | null;
   /** How many Tasks this entry stands for: a counted group of finished Tasks; one when absent. */
   count?: number;
+  /** Its labels; absent on a counted group, which the server already read for the label pick. */
+  labels?: readonly { id: string; name: string; color: string }[];
 };
 
-export type TaskFilter = { owners: readonly string[]; projects: readonly string[] };
+export type TaskFilter = {
+  owners: readonly string[];
+  projects: readonly string[];
+  /** Label ids a Task must all carry, or `none` for the Tasks with no label. */
+  labels: readonly string[];
+};
+
+/** Whether a Task passes the label pick. A counted group (no labels of its own) was read for it. */
+function labelsMatch(task: FilterableTask, picked: readonly string[]) {
+  if (picked.length === 0 || task.labels === undefined) return true;
+  if (picked.includes(NO_LABEL)) return task.labels.length === 0;
+  return picked.every((id) => task.labels!.some((label) => label.id === id));
+}
 
 function ownerKey(task: FilterableTask) {
   return task.owner?.id ?? NO_OWNER;
@@ -35,7 +51,8 @@ function projectKey(task: FilterableTask) {
 export function taskMatches(task: FilterableTask, filter: TaskFilter) {
   return (
     (filter.owners.length === 0 || filter.owners.includes(ownerKey(task))) &&
-    (filter.projects.length === 0 || filter.projects.includes(projectKey(task)))
+    (filter.projects.length === 0 || filter.projects.includes(projectKey(task))) &&
+    labelsMatch(task, filter.labels)
   );
 }
 
@@ -110,4 +127,23 @@ export function filterParam(values: readonly string[]): string | undefined {
 
 export function parseFilterParam(value: string | undefined): string[] {
   return value ? value.split(",").filter(Boolean) : [];
+}
+
+export type LabelOption = { id: string; name: string; color: string; count: number };
+
+/** The labels to pick from by name, after "No label", with how many Tasks carry each. */
+export function labelOptions(tasks: readonly FilterableTask[]): LabelOption[] {
+  const byId = new Map<string, LabelOption>();
+  let unlabelled = 0;
+  for (const task of tasks) {
+    if (!task.labels) continue;
+    if (task.labels.length === 0) unlabelled += task.count ?? 1;
+    for (const label of task.labels) {
+      const known = byId.get(label.id);
+      if (known) known.count += task.count ?? 1;
+      else byId.set(label.id, { ...label, count: task.count ?? 1 });
+    }
+  }
+  const named = [...byId.values()].sort((left, right) => left.name.localeCompare(right.name));
+  return [{ id: NO_LABEL, name: "", color: "gray", count: unlabelled }, ...named];
 }

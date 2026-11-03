@@ -107,7 +107,10 @@ export class TaskBoard {
     return this.overviewReads.finishedPage(scope, query);
   }
 
-  finishedSummary(scope: FinishedTaskScope, query: { window: FinishedTaskWindow }) {
+  finishedSummary(
+    scope: FinishedTaskScope,
+    query: { window: FinishedTaskWindow; labels?: readonly string[] },
+  ) {
     return this.overviewReads.finishedSummary(scope, query);
   }
 

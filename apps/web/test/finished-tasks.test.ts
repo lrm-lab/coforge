@@ -36,7 +36,7 @@ test("a finished group's count adds the counted groups matching the owner and Pr
       count: 2,
     },
   ];
-  expect(finishedCount(groups, "done", { owners: [], projects: [] })).toBe(10);
-  expect(finishedCount(groups, "done", { owners: ["ada"], projects: [] })).toBe(7);
-  expect(finishedCount(groups, "closed", { owners: [], projects: ["none"] })).toBe(0);
+  expect(finishedCount(groups, "done", { owners: [], projects: [], labels: [] })).toBe(10);
+  expect(finishedCount(groups, "done", { owners: ["ada"], projects: [], labels: [] })).toBe(7);
+  expect(finishedCount(groups, "closed", { owners: [], projects: ["none"], labels: [] })).toBe(0);
 });

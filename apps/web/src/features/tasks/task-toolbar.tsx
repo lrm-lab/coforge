@@ -33,6 +33,8 @@ import {
 import {
   NO_OWNER,
   NO_PROJECT,
+  labelOptions,
+  NO_LABEL,
   ownerOptions,
   projectOptions,
   type FilterableTask,
@@ -102,12 +104,21 @@ export function TaskToolbar({
       })),
     [tasks],
   );
+  const labels = useMemo(
+    () =>
+      labelOptions(tasks).map((option): PickerOption => ({
+        id: option.id,
+        label: option.id === NO_LABEL ? m.tasks_labels_none() : option.name,
+        count: option.count,
+      })),
+    [tasks],
+  );
   // A pick no listed Task has (a saved link, an older finished Task's owner) has no name here.
   const labelsOf = (options: readonly PickerOption[], picked: readonly string[], none: string) =>
     picked.map(
       (id) =>
         options.find((option) => option.id === id)?.label ??
-        (id === NO_OWNER || id === NO_PROJECT ? none : m.tasks_filter_other()),
+        (id === NO_OWNER || id === NO_PROJECT || id === NO_LABEL ? none : m.tasks_filter_other()),
     );
   const chips = [
     filter.owners.length > 0 && {
@@ -125,6 +136,13 @@ export function TaskToolbar({
         }),
         remove: () => onFilterChange({ ...filter, projects: [] }),
       },
+    filter.labels.length > 0 && {
+      id: "labels",
+      label: m.tasks_filter_labels_are({
+        names: namesLabel(labelsOf(labels, filter.labels, m.tasks_labels_none())),
+      }),
+      remove: () => onFilterChange({ ...filter, labels: [] }),
+    },
     status && {
       id: "status",
       label: m.tasks_filter_status_is({ name: statusLabel(status) }),
@@ -155,6 +173,21 @@ export function TaskToolbar({
                   onChange={(picked) => onFilterChange({ ...filter, projects: picked })}
                 />
               )}
+              <FilterSubmenu
+                name={m.tasks_labels()}
+                options={labels}
+                picked={filter.labels}
+                // "No label" stands alone: it cannot be had together with a label.
+                onChange={(picked) => {
+                  const fresh = picked.filter((id) => !filter.labels.includes(id));
+                  onFilterChange({
+                    ...filter,
+                    labels: fresh.includes(NO_LABEL)
+                      ? [NO_LABEL]
+                      : picked.filter((id) => id !== NO_LABEL),
+                  });
+                }}
+              />
               <SubmenuTrigger>
                 <Dropdown.Item label={m.tasks_overview_status()} />
                 <Dropdown.SubmenuPopover className="w-52">

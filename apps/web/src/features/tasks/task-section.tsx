@@ -15,6 +15,7 @@ import { TaskProperty } from "./task-property";
 import { openBlockers, relationRefusal, type VisibleTaskName } from "./task-relation-edits";
 import { TaskBlockedByValue, TaskBlockingValue, TaskParentValue } from "./task-relation-lines";
 import { TaskProjectMenu } from "./task-project-menu";
+import { TaskLabelsField } from "./task-labels";
 import { StatusMenu } from "./task-status-menu";
 import { executeTask } from "./tasks.functions";
 import { useTaskAssignmentAccess } from "./use-task-assignment-access";
@@ -152,6 +153,20 @@ export function TaskSection({
             />
           </TaskProperty>
         )}
+        <TaskProperty label={m.tasks_labels()}>
+          <TaskLabelsField
+            task={task}
+            disabled={pending}
+            onChange={({ add, remove }) =>
+              void run({
+                operation: "amend",
+                number: task.number,
+                ...(add && { labels: add }),
+                ...(remove && { removeLabels: remove }),
+              })
+            }
+          />
+        </TaskProperty>
         {relations.on && task.parent && (
           <TaskProperty label={m.tasks_parent()}>
             <TaskParentValue

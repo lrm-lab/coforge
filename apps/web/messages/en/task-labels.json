@@ -1,0 +1,13 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "tasks_labels": "Labels",
+  "tasks_labels_add": "Add labels",
+  "tasks_labels_edit": "Edit labels",
+  "tasks_labels_search": "Add or create a label…",
+  "tasks_labels_create": "Create label “{name}”",
+  "tasks_labels_count": "{count} / {max} chosen",
+  "tasks_labels_full": "At most {max}: take one off first",
+  "tasks_labels_create_failed": "Couldn’t create that label.",
+  "tasks_labels_none": "No labels",
+  "tasks_filter_labels_are": "Labels include {names}"
+}

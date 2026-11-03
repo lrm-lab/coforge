@@ -98,11 +98,23 @@ function parseFinishedCursor(cursor: string) {
  * for no owner or no Project, as the page's `owners` and `projects` search params carry them. An
  * empty pick keeps every Task.
  */
-export type FinishedTaskFilter = { owners?: readonly string[]; projects?: readonly string[] };
+export type FinishedTaskFilter = {
+  owners?: readonly string[];
+  projects?: readonly string[];
+  /** Label ids a Task must all carry, or `none` alone for the Tasks with no label (task #455). */
+  labels?: readonly string[];
+};
 const NONE = "none";
 
-function finishedFilterWhere({ owners = [], projects = [] }: FinishedTaskFilter) {
-  const where: Prisma.TaskWhereInput[] = [];
+/** The label pick as a Task filter: every picked label, or none at all for `none`. */
+export function labelPickWhere(labels: readonly string[]): Prisma.TaskWhereInput[] {
+  if (labels.length === 0) return [];
+  if (labels.includes(NONE)) return [{ labels: { none: {} } }];
+  return labels.map((labelId) => ({ labels: { some: { labelId } } }));
+}
+
+function finishedFilterWhere({ owners = [], projects = [], labels = [] }: FinishedTaskFilter) {
+  const where: Prisma.TaskWhereInput[] = [...labelPickWhere(labels)];
   if (owners.length > 0) {
     const ids = owners.filter((id) => id !== NONE);
     where.push({
@@ -422,7 +434,8 @@ export class TaskOverviewReads {
    */
   async finishedSummary(
     scope: FinishedTaskScope,
-    query: { window: FinishedTaskWindow },
+    // The label pick narrows the counts; owners and Projects are counted per group, as before.
+    query: { window: FinishedTaskWindow; labels?: readonly string[] },
   ): Promise<FinishedTaskSummary> {
     const { workspaceId, userId } = scope;
     const readable = await this.finishedTaskWhere(scope);
@@ -432,6 +445,7 @@ export class TaskOverviewReads {
         ...readable,
         status: { in: [...FINISHED_TASK_STATUSES] },
         updatedAt: { gte: finishedWindowStart(query.window) },
+        AND: labelPickWhere(query.labels ?? []),
       },
       _count: { _all: true },
     });

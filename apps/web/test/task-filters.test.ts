@@ -1,9 +1,11 @@
 import { expect, test } from "bun:test";
 
 import {
+  NO_LABEL,
   NO_OWNER,
   NO_PROJECT,
   filterParam,
+  labelOptions,
   ownerOptions,
   parseFilterParam,
   projectOptions,
@@ -48,13 +50,15 @@ const tasks: FilterableTask[] = [
 ];
 
 test("an empty pick keeps every Task", () => {
-  expect(tasks.filter((task) => taskMatches(task, { owners: [], projects: [] }))).toEqual(tasks);
+  expect(
+    tasks.filter((task) => taskMatches(task, { owners: [], projects: [], labels: [] })),
+  ).toEqual(tasks);
 });
 
 test("owners and Projects each match any picked value, and the two narrow together", () => {
-  const picked = { owners: [VIEWER, "user-jordan", NO_OWNER], projects: [launch.id] };
+  const picked = { owners: [VIEWER, "user-jordan", NO_OWNER], projects: [launch.id], labels: [] };
   expect(tasks.filter((task) => taskMatches(task, picked))).toEqual([tasks[0], tasks[1]]);
-  const noProject = { owners: [], projects: [NO_PROJECT] };
+  const noProject = { owners: [], projects: [NO_PROJECT], labels: [] };
   expect(tasks.filter((task) => taskMatches(task, noProject))).toEqual([tasks[3], tasks[4]]);
 });
 
@@ -101,5 +105,34 @@ test("a counted group of finished Tasks adds its count to its owner and Project 
   expect(projectOptions([tasks[1]!, finished])).toEqual([
     { id: infra.id, name: "Infra", count: 40 },
     { id: launch.id, name: "Launch", count: 1 },
+  ]);
+});
+
+// Task #455: a board picks labels; every picked label must be on the Task, and "none" picks the
+// Tasks with no label. A counted group of finished Tasks has no labels of its own: the server read
+// it for the pick, so it passes.
+test("a label pick keeps the Tasks carrying all of them, or none for no label", () => {
+  const bug = { id: "bug", name: "Bug", color: "error" };
+  const ui = { id: "ui", name: "UI", color: "sky" };
+  const both = { owner: null, labels: [bug, ui] };
+  const onlyBug = { owner: null, labels: [bug] };
+  const bare = { owner: null, labels: [] };
+  const group = { owner: null, count: 3 };
+  const pick = (labels: string[]) => ({ owners: [], projects: [], labels });
+  expect([both, onlyBug, bare].map((task) => taskMatches(task, pick(["bug", "ui"])))).toEqual([
+    true,
+    false,
+    false,
+  ]);
+  expect([both, onlyBug, bare].map((task) => taskMatches(task, pick([NO_LABEL])))).toEqual([
+    false,
+    false,
+    true,
+  ]);
+  expect(taskMatches(group, pick(["bug"]))).toBe(true);
+  expect(labelOptions([both, onlyBug, bare])).toEqual([
+    { id: NO_LABEL, name: "", color: "gray", count: 1 },
+    { ...bug, count: 2 },
+    { ...ui, count: 1 },
   ]);
 });

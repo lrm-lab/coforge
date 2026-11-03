@@ -17,6 +17,8 @@ export const conversationTaskBoardSearchShape = {
   status: z.enum(TASK_STATUSES).optional().catch(undefined),
   layout: z.enum(["board", "list"]).optional().catch(undefined),
   owners: z.string().optional().catch(undefined),
+  /** Label ids, comma-separated, or `none` for the Tasks with no label (task #455). */
+  labels: z.string().optional().catch(undefined),
   completed: z.enum(["month", "all"]).optional().catch(undefined),
 };
 
@@ -41,10 +43,14 @@ export type TaskBoardView = ReturnType<typeof useTaskBoardSearch>;
 export function useTaskBoardSearch(search: TaskBoardSearch) {
   const router = useRouter();
   const layout = useTaskLayout(search.layout);
-  const { owners, projects, status, completed } = search;
+  const { owners, projects, labels, status, completed } = search;
   const filter = useMemo<TaskFilter>(
-    () => ({ owners: parseFilterParam(owners), projects: parseFilterParam(projects) }),
-    [owners, projects],
+    () => ({
+      owners: parseFilterParam(owners),
+      projects: parseFilterParam(projects),
+      labels: parseFilterParam(labels),
+    }),
+    [owners, projects, labels],
   );
   const completedWindow: FinishedWindow = completed ?? "week";
   return useMemo(() => {
@@ -65,7 +71,14 @@ export function useTaskBoardSearch(search: TaskBoardSearch) {
       changeStatus: (next?: TaskStatus) => update({ status: next }, false),
       changeLayout: (next: TaskLayout) => update({ layout: next }, false),
       changeFilter: (next: TaskFilter) =>
-        update({ owners: filterParam(next.owners), projects: filterParam(next.projects) }, true),
+        update(
+          {
+            owners: filterParam(next.owners),
+            projects: filterParam(next.projects),
+            labels: filterParam(next.labels),
+          },
+          true,
+        ),
       changeWindow: (next: FinishedWindow) =>
         update({ completed: next === "week" ? undefined : next }, true),
     };

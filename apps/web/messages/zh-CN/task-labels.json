@@ -1,0 +1,13 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "tasks_labels": "标签",
+  "tasks_labels_add": "加标签",
+  "tasks_labels_edit": "改标签",
+  "tasks_labels_search": "加标签或新建…",
+  "tasks_labels_create": "新建标签“{name}”",
+  "tasks_labels_count": "已选 {count} / {max}",
+  "tasks_labels_full": "最多 {max} 个，先去掉一个",
+  "tasks_labels_create_failed": "没能新建这个标签。",
+  "tasks_labels_none": "无标签",
+  "tasks_filter_labels_are": "标签包含 {names}"
+}

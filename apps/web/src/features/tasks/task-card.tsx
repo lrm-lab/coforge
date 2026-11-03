@@ -8,6 +8,7 @@ import { Folder } from "@untitledui/icons";
 import type { FilterableTask } from "./task-filters";
 import { TaskParentMark, TaskSubtaskMark, TaskBlockedMark } from "./task-relations";
 import type { TaskRelations } from "./task-relation-edits";
+import { TaskCardLabels } from "./task-labels";
 import { TaskOwnerAvatar } from "./task-owner";
 import { TaskStatusIcon } from "./task-status-icon";
 import type { TaskControls } from "./task-workflow";
@@ -141,6 +142,11 @@ export function TaskCard({
             <span className="truncate">{source}</span>
           </Pill>
         )}
+        {task.labels?.length ? (
+          <span className="hidden shrink-0 sm:inline-flex">
+            <TaskCardLabels labels={task.labels} />
+          </span>
+        ) : null}
         {project && (
           <ProjectPill
             project={project}
@@ -195,6 +201,12 @@ export function TaskCard({
           {subtasks}
         </div>
       )}
+      {/* Its labels, two and then +N, as Linear's card shows them (task #455). */}
+      {task.labels?.length ? (
+        <div className="mt-2">
+          <TaskCardLabels labels={task.labels} />
+        </div>
+      ) : null}
       {(project || tools) && (
         <div
           className={cn(

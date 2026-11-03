@@ -69,11 +69,28 @@ export const conversationTaskReadsKey = (workspaceId: string, conversationId: st
  */
 export const FINISHED_TASKS_STALE_MS = 60_000;
 
-export const finishedSummaryQuery = (scope: FinishedTasksScope, window: FinishedWindow) =>
+/** The counts of Done and Closed in the window; a label pick narrows them on the server, which
+ * still counts per owner and Project for those picks to be applied here. */
+export const finishedSummaryQuery = (
+  scope: FinishedTasksScope,
+  window: FinishedWindow,
+  labels: readonly string[] = [],
+) =>
   queryOptions({
-    queryKey: [...finishedTasksScopeKey(scope), "summary", window],
+    queryKey: [
+      ...finishedTasksScopeKey(scope),
+      "summary",
+      window,
+      ...(labels.length ? [labels] : []),
+    ],
     queryFn: () =>
-      loadFinishedTaskSummary({ data: { window, conversationId: scope.conversationId } }),
+      loadFinishedTaskSummary({
+        data: {
+          window,
+          conversationId: scope.conversationId,
+          ...(labels.length > 0 && { labels: [...labels] }),
+        },
+      }),
     staleTime: FINISHED_TASKS_STALE_MS,
     refetchOnReconnect: "always",
   });
@@ -120,7 +137,7 @@ export function useFinishedTasks<T extends TaskView>({
 }): FinishedTasks<T | OverviewTaskRow> {
   const queryClient = useQueryClient();
   const summary = useQuery({
-    ...finishedSummaryQuery(scope, window),
+    ...finishedSummaryQuery(scope, window, filter.labels),
     // Another window keeps the old counts on screen until its own arrive.
     placeholderData: keepPreviousData,
   });
@@ -167,6 +184,7 @@ function useFinishedColumn<T extends TaskView>(
       window,
       filter.owners,
       filter.projects,
+      filter.labels,
     ],
     queryFn: ({ pageParam }) =>
       loadFinishedTasks({
@@ -177,6 +195,7 @@ function useFinishedColumn<T extends TaskView>(
           cursor: pageParam,
           owners: [...filter.owners],
           projects: [...filter.projects],
+          ...(filter.labels.length > 0 && { labels: [...filter.labels] }),
         },
       }),
     initialPageParam: null as string | null,

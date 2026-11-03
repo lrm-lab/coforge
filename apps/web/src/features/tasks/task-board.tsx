@@ -85,7 +85,11 @@ export function TaskBoard<T extends BoardTask>({
   const { status, filter, layout, completedWindow, changeWindow: onWindowChange } = view;
   const [hiddenColumns, setColumnHidden] = useTaskHiddenColumns();
   const [createOpen, setCreateOpen] = useState(false);
-  const filtered = status !== undefined || filter.owners.length > 0 || filter.projects.length > 0;
+  const filtered =
+    status !== undefined ||
+    filter.owners.length > 0 ||
+    filter.projects.length > 0 ||
+    filter.labels.length > 0;
   const { done, closed } = finished.columns;
   const unfinished = useMemo(() => tasks.filter((task) => !isFinishedStatus(task.status)), [tasks]);
   const visible = useMemo(
