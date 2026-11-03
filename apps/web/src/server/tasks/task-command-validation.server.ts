@@ -108,6 +108,14 @@ export function validateTaskCommand(command: TaskCommand) {
   // filters by them.
   if (command.operation !== "amend" && command.removeLabels !== undefined)
     throw new AppError("INVALID_INPUT");
+  if (command.project !== undefined) {
+    const clearing = command.project === null && command.operation === "amend";
+    if (
+      (command.operation !== "create" && command.operation !== "amend") ||
+      (!clearing && (typeof command.project !== "string" || !command.project.trim()))
+    )
+      throw new AppError("INVALID_INPUT");
+  }
   if (command.blockedBy !== undefined) {
     if (
       !relational ||

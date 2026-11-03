@@ -117,12 +117,10 @@ function finishedFilterWhere({ owners = [], projects = [] }: FinishedTaskFilter)
   if (projects.length > 0) {
     const ids = projects.filter((id) => id !== NONE);
     where.push({
-      conversation: {
-        OR: [
-          ...(projects.includes(NONE) ? [{ projectId: null }] : []),
-          ...(ids.length > 0 ? [{ projectId: { in: ids } }] : []),
-        ],
-      },
+      OR: [
+        ...(projects.includes(NONE) ? [{ projectId: null }] : []),
+        ...(ids.length > 0 ? [{ projectId: { in: ids } }] : []),
+      ],
     });
   }
   return where;
@@ -144,11 +142,11 @@ function overviewConversationWhere(
 function overviewSelection(userId: string) {
   return {
     ...taskSelection,
+    project: { select: { id: true, name: true, slug: true, iconObjectKey: true } },
     conversation: {
       select: {
         channelName: true,
         visibility: true,
-        project: { select: { id: true, name: true, slug: true, iconObjectKey: true } },
         members: {
           where: { OR: [{ userId }, { agentId: { not: null } }] },
           select: {
@@ -197,7 +195,7 @@ function overviewRow(
           }),
         }
       : { channelName: null, agentId: agent!.id, label: agent!.displayName || agent!.name },
-    project: task.conversation.project && withProjectIconUrl(task.conversation.project),
+    project: task.project && withProjectIconUrl(task.project),
   };
 }
 
@@ -388,7 +386,7 @@ export class TaskOverviewReads {
     const { workspaceId, userId } = scope;
     const readable = await this.finishedTaskWhere(scope);
     const rows = await this.db.task.groupBy({
-      by: ["status", "ownerMemberId", "conversationId"],
+      by: ["status", "ownerMemberId", "projectId"],
       where: {
         ...readable,
         status: { in: [...FINISHED_TASK_STATUSES] },
@@ -396,26 +394,28 @@ export class TaskOverviewReads {
       },
       _count: { _all: true },
     });
-    const [owners, conversations] = await Promise.all([
+    const [owners, projects] = await Promise.all([
       this.db.conversationMember.findMany({
         where: {
           id: { in: rows.flatMap(({ ownerMemberId }) => (ownerMemberId ? [ownerMemberId] : [])) },
         },
         select: TASK_MEMBER_SELECT,
       }),
-      this.db.conversation.findMany({
-        where: { id: { in: [...new Set(rows.map(({ conversationId }) => conversationId))] } },
-        select: { id: true, project: { select: { id: true, name: true, slug: true } } },
+      this.db.project.findMany({
+        where: {
+          id: { in: [...new Set(rows.flatMap(({ projectId }) => (projectId ? [projectId] : [])))] },
+        },
+        select: { id: true, name: true, slug: true },
       }),
     ]);
     const ownerById = new Map(owners.map((owner) => [owner.id, taskMember(workspaceId, owner)]));
-    const projectOf = new Map(conversations.map(({ id, project }) => [id, project]));
+    const projectOf = new Map(projects.map((project) => [project.id, project]));
     // One group per status, owner and Project: the same person owns through a membership per
     // conversation, and only whether that owner is the viewer matters to the board.
     const groups = new Map<string, FinishedTaskSummary["groups"][number]>();
     for (const row of rows) {
       const owner = row.ownerMemberId ? (ownerById.get(row.ownerMemberId) ?? null) : null;
-      const project = projectOf.get(row.conversationId) ?? null;
+      const project = row.projectId ? (projectOf.get(row.projectId) ?? null) : null;
       const viewerOwns = owner?.kind === "user" && owner.id === userId;
       const status = storedTaskStatus(row.status) as FinishedTaskStatus;
       const key = [status, owner?.id ?? NONE, project?.id ?? NONE].join(":");

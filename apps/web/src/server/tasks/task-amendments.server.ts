@@ -4,6 +4,7 @@ import {
   taskStatusMoveAllowed,
   taskStatusNeedsOwner,
   type TaskCommand,
+  type TaskHistoryChange,
   type TaskResult,
 } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
@@ -35,6 +36,7 @@ import { findTaskByNumber, assertExpectedRevision, commitTaskChange } from "./ta
 import { withNotices, type NoticeWriter } from "./task-notice-posting.server";
 import { signalTaskChange, announceTasks, announceNeighbours } from "./task-publication.server";
 import { requireManager, isTaskManager } from "./task-assignees.server";
+import { TASK_PROJECT_SELECT, resolveTaskProject } from "./task-projects.server";
 import { assertCanSetPriority } from "./task-priority.server";
 import { LABELS_PER_TASK_MAX, labelsChange, labelView, resolveTaskLabels } from "./labels.server";
 
@@ -119,17 +121,30 @@ export async function amendTask(
   const { conversationId, workspaceId } = conversation;
   const relational = command.blockedBy !== undefined || command.parent !== undefined;
   const labelEdit = command.labels !== undefined || command.removeLabels !== undefined;
-  if (command.title === undefined && command.description === undefined && !relational && !labelEdit)
+  const projectEdit = command.project !== undefined;
+  if (
+    command.title === undefined &&
+    command.description === undefined &&
+    !relational &&
+    !labelEdit &&
+    !projectEdit
+  )
     throw new AppError("INVALID_INPUT");
-  const manager = relational && (await isTaskManager(ports.db, workspaceId, member));
+  const authorityEdit = relational || projectEdit;
+  const manager = authorityEdit && (await isTaskManager(ports.db, workspaceId, member));
   const amend = async (tx: Transaction, notices?: NoticeWriter) => {
     const task = await findTaskByNumber(tx, conversationId, command.number!);
     if (!task) throw new AppError("NOT_FOUND");
     assertExpectedRevision(task, command.expectedRevision);
-    if (relational && !manager && task.ownerMemberId !== member.id && task.creator.id !== member.id)
+    if (
+      authorityEdit &&
+      !manager &&
+      task.ownerMemberId !== member.id &&
+      task.creator.id !== member.id
+    )
       throw new AppError("ACCESS_DENIED", {
         errorId: TASK_RELATION_DENIED,
-        hint: `only the owner or creator of task #${task.number}, or a Workspace owner or admin, may change what it waits for or its parent`,
+        hint: `only the owner or creator of task #${task.number}, or a Workspace owner or admin, may change what it waits for, its parent or its project`,
       });
     const plan = relational
       ? await planRelationAmend(tx, conversation, member, manager, task, command)
@@ -155,6 +170,26 @@ export async function amendTask(
         hint: `a task carries at most ${LABELS_PER_TASK_MAX} labels`,
       });
     const labelChange = labelsChange(addedLabels.map(labelView), removedLabels.map(labelView));
+    // The Project: one named (and pinned), or the conversation's again when cleared.
+    let nextProject = task.project ?? null;
+    let nextPinned = task.projectPinned;
+    if (projectEdit) {
+      if (command.project === null) {
+        const current = await tx.conversation.findUniqueOrThrow({
+          where: { id: conversationId },
+          select: { project: { select: TASK_PROJECT_SELECT } },
+        });
+        nextProject = current.project;
+        nextPinned = false;
+      } else {
+        nextProject = await resolveTaskProject(tx, workspaceId, command.project!);
+        nextPinned = true;
+      }
+    }
+    const projectChange: TaskHistoryChange | null =
+      projectEdit && (nextProject?.id ?? null) !== (task.project?.id ?? null)
+        ? { eventType: "project_changed", payload: { from: task.project ?? null, to: nextProject } }
+        : null;
     // An amended title is typed text. One that reads the same as the current title does for this
     // reader (its stored tokens read back as names or `@handle`, `task #N`, `#name`) is left as
     // stored, tokens included.
@@ -169,8 +204,15 @@ export async function amendTask(
       {
         ...(retitled && { title }),
         ...(command.description !== undefined && { description: command.description }),
+        ...(projectEdit && { projectId: nextProject?.id ?? null, projectPinned: nextPinned }),
       },
-      { relationChanges: [...(plan?.changes ?? []), ...(labelChange ? [labelChange] : [])] },
+      {
+        relationChanges: [
+          ...(plan?.changes ?? []),
+          ...(labelChange ? [labelChange] : []),
+          ...(projectChange ? [projectChange] : []),
+        ],
+      },
     );
     if (removedLabels.length)
       await tx.taskLabel.deleteMany({

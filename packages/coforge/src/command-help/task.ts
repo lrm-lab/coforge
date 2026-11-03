@@ -78,6 +78,7 @@ export const taskHelp: Readonly<Record<string, HelpEntry>> = {
       "--blocked-by  tasks that must be done or closed before this one can start; --parent  the parent task this one is a sub-task of. A <task> is a number in --target's conversation, or #channel/<n> in another channel of the Workspace",
       "--description  details for the task; only with a single --title",
       "--label  a Workspace label to attach (repeatable, at most five); the label must already exist",
+      "--project  file the Task under this Project by slug (otherwise it follows its channel's)",
       "--message-id  the channel message the task is made from (full id or its short form); requires task conversations, otherwise use `coforge task convert`; applies to every --title",
       "--alongside  with --message-id, create beside someone else's live task on that message",
       "--priority  urgent, high, medium, low or none (the default); every --title gets it",

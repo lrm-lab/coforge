@@ -50,10 +50,18 @@ export async function changeChannelProject(
     if (!project) throw new AppError("INVALID_INPUT");
   }
   if (channel.projectId === projectId) return { id: channel.id, project };
-  const updated = await db.conversation.update({
-    where: { id: channel.id },
-    data: { projectId },
-    select: { channelName: true, description: true, archivedAt: true, visibility: true },
+  const updated = await db.$transaction(async (tx) => {
+    const row = await tx.conversation.update({
+      where: { id: channel.id },
+      data: { projectId },
+      select: { channelName: true, description: true, archivedAt: true, visibility: true },
+    });
+    // The channel's Tasks follow it unless someone filed one elsewhere on purpose (task #460).
+    await tx.task.updateMany({
+      where: { conversationId: channel.id, projectPinned: false },
+      data: { projectId },
+    });
+    return row;
   });
   await announceChannelUpdated(realtime, {
     workspaceId,

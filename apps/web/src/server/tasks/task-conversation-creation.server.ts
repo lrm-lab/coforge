@@ -1,4 +1,9 @@
-import type { TaskCommand, TaskPrincipal, TaskPriority } from "@lrm/coforge-sdk/internal";
+import type {
+  TaskCommand,
+  TaskHistoryChange,
+  TaskPrincipal,
+  TaskPriority,
+} from "@lrm/coforge-sdk/internal";
 
 import { AppError } from "#src/lib/app-error";
 import {
@@ -8,6 +13,11 @@ import {
   resolveTaskLabels,
   type LabelRow,
 } from "./labels.server";
+import {
+  TASK_PROJECT_SELECT,
+  resolveTaskProject,
+  type TaskProjectRef,
+} from "./task-projects.server";
 import {
   lockConversation,
   lockWorkspaceTaskWrites,
@@ -122,6 +132,23 @@ export async function createConversationTasks(
         errorId: "task-label-limit",
         hint: `a task carries at most ${LABELS_PER_TASK_MAX} labels`,
       });
+    // The Project the new Tasks are filed under: the one named (and pinned) or the
+    // conversation's. A direct message has none, and cannot be given one.
+    const conversation = await tx.conversation.findUniqueOrThrow({
+      where: { id: scope.conversationId },
+      select: { directKey: true, project: { select: TASK_PROJECT_SELECT } },
+    });
+    const projectChosen = command.project !== undefined;
+    if (projectChosen && (!command.project || conversation.directKey))
+      throw new AppError("INVALID_INPUT", {
+        errorId: "task-project",
+        hint: conversation.directKey
+          ? "a direct message's Tasks are not filed under a Project"
+          : "--project names a Project by slug",
+      });
+    const project = projectChosen
+      ? await resolveTaskProject(tx, scope.workspaceId, command.project!)
+      : conversation.project;
     const written = convert ? [sourceTitle(source!)] : titles;
     if (written.some((title) => !title || title.length > 8_000))
       throw new AppError("INVALID_INPUT");
@@ -139,6 +166,8 @@ export async function createConversationTasks(
         requestId: requestIds[index]!,
         source,
         labels,
+        project,
+        projectPinned: projectChosen,
       });
       tasks.push(task);
       if (notice) notices.push(notice);
@@ -200,6 +229,9 @@ export async function insertConversationTask(
     source: SourceMessage | null;
     /** The Workspace labels the new Task carries; none for a conversion. */
     labels?: readonly LabelRow[];
+    /** The Project the new Task is filed under; the conversation's unless it was chosen. */
+    project?: TaskProjectRef | null;
+    projectPinned?: boolean;
   },
 ) {
   const { assignee, source } = input;
@@ -220,6 +252,8 @@ export async function insertConversationTask(
       creatorMemberId: member.id,
       requestId: input.requestId,
       sourceMessageId: source?.id,
+      projectId: input.project?.id,
+      projectPinned: input.projectPinned ?? false,
     },
     select: taskSelection,
   });
@@ -229,11 +263,18 @@ export async function insertConversationTask(
       data: labels.map((label) => ({ taskId: task.id, labelId: label.id })),
     });
   const labelsAdded = labelsChange(labels.map(labelView), []);
+  const projectAdded: TaskHistoryChange | null = input.project
+    ? { eventType: "project_changed", payload: { from: null, to: input.project } }
+    : null;
   await tx.taskHistoryEvent.createMany({
     data: historyRows(
       task.id,
       member,
-      [...creationChanges(task), ...(labelsAdded ? [labelsAdded] : [])],
+      [
+        ...creationChanges(task),
+        ...(labelsAdded ? [labelsAdded] : []),
+        ...(projectAdded ? [projectAdded] : []),
+      ],
       0,
     ),
   });

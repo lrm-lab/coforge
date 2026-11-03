@@ -4,7 +4,7 @@ import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.ser
 import { channelActorOf } from "#src/server/conversations/channel-actor.server";
 import { userUploadedAttachmentWhere } from "#src/server/attachments/message-attachments.server";
 import { assertCanAssignOther } from "./task-assignment-authority.server";
-import type { TaskCommand, TaskPrincipal } from "@lrm/coforge-sdk/internal";
+import type { TaskCommand, TaskHistoryChange, TaskPrincipal } from "@lrm/coforge-sdk/internal";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { AppError } from "#src/lib/app-error";
 import { conversationSignalScopes } from "#src/server/conversations/conversation-signal-scope.server";
@@ -37,6 +37,7 @@ import {
 import { receiptAssignee, assigneeMember } from "./task-assignees.server";
 import { indexedRequestId } from "./task-request-ids.server";
 import { LABELS_PER_TASK_MAX, labelsChange, labelView, resolveTaskLabels } from "./labels.server";
+import { TASK_PROJECT_SELECT, resolveTaskProject } from "./task-projects.server";
 
 export async function createTasks(
   ports: TaskBoardPorts,
@@ -126,6 +127,23 @@ export async function createTasks(
       });
       if (!attachment) throw new AppError("ACCESS_DENIED");
     }
+    // The Project the new Tasks are filed under: the one named (and pinned) or their
+    // conversation's. A direct message has none, and cannot be given one.
+    const conversation = await tx.conversation.findUniqueOrThrow({
+      where: { id: scope.conversationId },
+      select: { directKey: true, project: { select: TASK_PROJECT_SELECT } },
+    });
+    const projectChosen = command.project !== undefined;
+    if (projectChosen && (!command.project || conversation.directKey))
+      throw new AppError("INVALID_INPUT", {
+        errorId: "task-project",
+        hint: conversation.directKey
+          ? "a direct message's Tasks are not filed under a Project"
+          : "--project names a Project by slug",
+      });
+    const project = projectChosen
+      ? await resolveTaskProject(tx, scope.workspaceId, command.project!)
+      : conversation.project;
     // The labels the new Tasks carry, resolved before anything is written; an unknown name is
     // refused with the Workspace's own labels. A Task carries at most five.
     const labels = await resolveTaskLabels(tx, scope.workspaceId, command.labels ?? []);
@@ -269,6 +287,8 @@ export async function createTasks(
               id: messageId,
               workspaceId: scope.workspaceId,
               number: firstTaskNumber + index,
+              projectId: project?.id,
+              projectPinned: projectChosen,
               // The Task's title is its message's stored body, as a converted Task's is; `view`
               // reads its tokens back as text with the message's mention rows.
               title: stored.body,
@@ -310,12 +330,19 @@ export async function createTasks(
         ),
       });
     const labelsAdded = labelsChange(labels.map(labelView), []);
+    const projectAdded: TaskHistoryChange | null = project
+      ? { eventType: "project_changed", payload: { from: null, to: project } }
+      : null;
     await tx.taskHistoryEvent.createMany({
       data: tasks.flatMap((task) =>
         historyRows(
           task.id,
           member,
-          [...creationChanges(task), ...(labelsAdded ? [labelsAdded] : [])],
+          [
+            ...creationChanges(task),
+            ...(labelsAdded ? [labelsAdded] : []),
+            ...(projectAdded ? [projectAdded] : []),
+          ],
           0,
         ),
       ),

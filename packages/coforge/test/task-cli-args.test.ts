@@ -153,7 +153,7 @@ test("Task update, assign, convert, amend and receipt name what is wrong with th
   );
   expect(refusal(["task", "amend", "--target", "#general", "--number", "2"])).toEqual(
     invalidArg(
-      "At least one amendment is required: --title, --description, --clear-description, --blocked-by, --parent, or --label",
+      "At least one amendment is required: --title, --description, --clear-description, --blocked-by, --parent, --label, --project, or --clear-project",
     ),
   );
   expect(

@@ -54,6 +54,7 @@ const TASK_FLAGS: Record<TaskOperation, readonly string[]> = {
     "--blocked-by",
     "--parent",
     "--label",
+    "--project",
     "--anyway",
     "--priority",
     "--json",
@@ -96,9 +97,12 @@ const TASK_FLAGS: Record<TaskOperation, readonly string[]> = {
     "--title",
     "--description",
     "--clear-description",
+    "--clear-project",
     "--blocked-by",
     "--parent",
     "--label",
+    "--project",
+    "--clear-project",
     "--expected-revision",
     "--reviewer-isolation",
     "--json",
@@ -310,6 +314,11 @@ export function parseTaskArgs(
         "--label on create names a label to attach; to take one off use `task amend --label -name`",
       );
     if (labels.length) task.labels = labels;
+    const project = one("--project")?.trim();
+    if (project !== undefined) {
+      if (!project) throw invalidTaskArg("--project must name a Project by slug");
+      task.project = project;
+    }
   } else if (operation === "convert") {
     const messageId = one("--message-id")?.trim();
     if (!messageId) throw invalidTaskArg("--message-id is required");
@@ -375,6 +384,11 @@ export function parseTaskArgs(
     const title = one("--title");
     const blockedBy = one("--blocked-by");
     const parent = one("--parent");
+    const project = one("--project")?.trim();
+    const clearProject = values.has("--clear-project");
+    if (project !== undefined && clearProject)
+      throw invalidTaskArg("Use either --project or --clear-project, not both");
+    if (project === "") throw invalidTaskArg("--project must name a Project by slug");
     const rawLabels = values.get("--label") ?? [];
     const addedLabels = rawLabels
       .filter((label) => !label.trimStart().startsWith("-"))
@@ -391,15 +405,19 @@ export function parseTaskArgs(
       blockedBy === undefined &&
       parent === undefined &&
       addedLabels.length === 0 &&
-      removedLabels.length === 0
+      removedLabels.length === 0 &&
+      project === undefined &&
+      !clearProject
     )
       throw invalidTaskArg(
-        "At least one amendment is required: --title, --description, --clear-description, --blocked-by, --parent, or --label",
+        "At least one amendment is required: --title, --description, --clear-description, --blocked-by, --parent, --label, --project, or --clear-project",
       );
     if (blockedBy !== undefined) task.blockedBy = blockedByOption(blockedBy, true);
     if (parent !== undefined) task.parent = parentOption(parent, true);
     if (addedLabels.length) task.labels = addedLabels;
     if (removedLabels.length) task.removeLabels = removedLabels;
+    if (clearProject) task.project = null;
+    else if (project !== undefined) task.project = project;
     if (title !== undefined) task.title = title;
     if (clear) task.description = null;
     else if (description !== undefined) task.description = description;

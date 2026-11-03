@@ -149,6 +149,9 @@ export type TaskTreeNode =
 /** One Workspace task label as a Task carries it. `color` is a Badge semantic color key. */
 export type TaskLabel = { id: string; name: string; color: string };
 
+/** The Project a Task is filed under, as its view names it. */
+export type TaskProjectRef = { id: string; name: string; slug: string };
+
 export type TaskView = {
   /** The task's own id; for a task that started as a message it equals that message's id. */
   id: string;
@@ -173,6 +176,8 @@ export type TaskView = {
   /** The Workspace labels on this Task, by name. At most five; absent reads as none (an older
    * server does not send it). */
   labels?: TaskLabel[];
+  /** The Project the Task is filed under; null when it is in none. */
+  project?: TaskProjectRef | null;
   /** Absent reads as `none` (an older server does not send it). */
   priority?: TaskPriority;
   createdAt: string;
@@ -261,6 +266,11 @@ export type TaskHistoryChange =
       eventType: "labels_changed";
       /** The labels added and removed. */
       payload: { added: TaskLabel[]; removed: TaskLabel[] };
+    }
+  | {
+      eventType: "project_changed";
+      /** The Project before and after; null for none. */
+      payload: { from: TaskProjectRef | null; to: TaskProjectRef | null };
     };
 
 export type TaskHistoryEvent = {
@@ -308,6 +318,9 @@ export type TaskCommand = {
   labels?: string[];
   /** `amend`: labels to take off, by name. */
   removeLabels?: string[];
+  /** `create`/`amend`: the Project by slug. `amend` with null files the Task under its
+   * conversation's Project again. */
+  project?: string | null;
   /** `create`: the new Tasks' priority (default `none`). `update`: the new priority, with or
    * without a `status`. */
   priority?: TaskPriority;

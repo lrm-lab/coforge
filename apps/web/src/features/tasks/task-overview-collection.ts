@@ -60,6 +60,8 @@ export function createTaskOverview(
   // Announced changes a read may not have seen yet (`announced-tasks.ts`). The collection also
   // writes each applied change into the cached list, so a copy leaves once a newer one is listed.
   const announced = createAnnouncedTasks();
+  // The page's own Project field (with its icon) stays: a Task's view carries only the ref.
+  const pageTask = ({ project: _project, ...view }: TaskView) => view;
 
   const tasks = createCollection(
     queryCollectionOptions({
@@ -89,11 +91,11 @@ export function createTaskOverview(
     for (const view of result.tasks) {
       if (!tasks.has(view.id)) {
         if (view.id === row.id && !isFinishedStatus(view.status))
-          tasks.utils.writeInsert({ ...row, ...view });
+          tasks.utils.writeInsert({ ...row, ...pageTask(view) });
         continue;
       }
       try {
-        tasks.utils.writeUpdate(view);
+        tasks.utils.writeUpdate(pageTask(view));
       } catch (error) {
         // The Task left the page meanwhile: the next read shows the list as it is.
         if (!(error instanceof UpdateOperationItemNotFoundError)) throw error;
@@ -155,14 +157,14 @@ export function createTaskOverview(
       if (!row) needsRead ||= !isFinishedStatus(view.status);
       // Equal revisions too: a neighbour re-announced (blocked, parent progress changed) keeps its
       // revision, so that an Agent's `--expected-revision` stays valid.
-      else if (view.revision >= row.revision) updates.push(view);
+      else if (view.revision >= row.revision) updates.push(pageTask(view));
     }
     for (const view of newest.values()) if (!deleted.has(view.id)) announced.changed(view);
     for (const messageId of deleted) announced.deleted(messageId);
     const removed = [...deleted].filter((messageId) => tasks.has(messageId));
     if (updates.length > 0 || removed.length > 0)
       tasks.utils.writeBatch(() => {
-        for (const view of updates) tasks.utils.writeUpdate({ ...view });
+        for (const view of updates) tasks.utils.writeUpdate({ ...pageTask(view) });
         if (removed.length > 0) tasks.utils.writeDelete(removed);
       });
     return needsRead;
