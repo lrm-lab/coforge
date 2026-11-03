@@ -6,6 +6,7 @@ import { lockConversation } from "./conversation-lock.server";
 import type { ConversationRealtime } from "./conversation-realtime.server";
 import { messageSignalScope } from "./conversation-signal-scope.server";
 import { announceMessageBestEffort } from "./conversation-activity.server";
+import { ACTION_CARD_TTL_MS } from "./action-card-view.server";
 
 /** Posts an action card in `tx`: the Agent's Message carrying `body`, and its `ActionCard` row,
  * under the conversation lock. */
@@ -42,6 +43,7 @@ export async function createActionCardMessage(
       payload: card.payload as unknown as Prisma.InputJsonValue,
       draftHint: card.draftHint,
       preparedByAgentId: principal.agentId,
+      expiresAt: new Date(Date.now() + ACTION_CARD_TTL_MS),
     },
   });
   return message;

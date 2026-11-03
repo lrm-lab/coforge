@@ -6,7 +6,23 @@ import type { AgentActionPrepareResponse } from "@lrm/coforge-sdk/agent";
 /** What `prepare` answers, exactly the shape the Agent API promises. */
 export type ActionCardPrepareResult = AgentActionPrepareResponse;
 
-export type ActionCardState = "pending" | "executed" | "cancelled";
+export type ActionCardState = "pending" | "executed" | "cancelled" | "expired" | "answered_in_chat";
+
+/** How long a pending card waits before it expires, from the moment it is posted. */
+export const ACTION_CARD_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
+
+/**
+ * The state a reader sees: a pending row whose `expiresAt` has passed reads as expired even before
+ * the sweep writes it, so a slow tick never leaves an expired card answerable.
+ */
+export function effectiveActionCardState(
+  state: string,
+  expiresAt: Date | null | undefined,
+  now = new Date(),
+): ActionCardState {
+  if (state === "pending" && expiresAt && expiresAt.getTime() <= now.getTime()) return "expired";
+  return state as ActionCardState;
+}
 
 /** A resolved id plus display name for a card's chips; unresolved ids render as "unknown". */
 export type ActionCardRef = { id: string; displayName: string };
@@ -23,6 +39,10 @@ export type ActionCardViewBase = {
   /** Who committed it; `isViewer` lets the handled line name only someone else. */
   committedBy?: { displayName: string; isViewer: boolean };
   committedAt?: string;
+  /** When a pending card expires (7 days after it was posted). */
+  expiresAt?: string;
+  /** The asked person's first message that answered a choice in chat. */
+  answeredInChat?: { messageId: string };
   /** Whether the viewer may commit this card right now (implies `state === "pending"`). */
   canCommit: boolean;
   /** Whether the viewer may cancel this card right now (implies `state === "pending"`). */

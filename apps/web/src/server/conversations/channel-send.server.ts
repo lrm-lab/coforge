@@ -31,6 +31,7 @@ import {
 import { getMessageRequestIdempotency } from "./redis-message-request-idempotency.server";
 import { agentMessageSender } from "./sender-display.server";
 import { taskReferenceView } from "./task-reference-view.server";
+import { markChoiceCardsAnsweredInChat } from "./action-card-answered.server";
 import type { SentMessageHook } from "./sent-message-hook.server";
 import { unresolvedMentionHandles } from "./unresolved-mentions.server";
 
@@ -175,6 +176,15 @@ export async function sendChannel(
             },
           },
         });
+        if (member.userId)
+          await markChoiceCardsAnsweredInChat(tx, {
+            workspaceId,
+            conversationId: channelId,
+            userId: member.userId,
+            messageId: message.id,
+            sequence,
+            threadRootId: message.threadRootId ?? null,
+          });
         if (root)
           await recordThreadCreatedByReply(tx, {
             workspaceId,

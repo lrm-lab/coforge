@@ -8,6 +8,7 @@ import { installServerLifecycle } from "#src/server/runtime/server-lifecycle.ser
 import { assertStartupConfig } from "#src/server/startup-config.server";
 import { ensureWorkspaceMemoryLifecycle } from "#src/server/workspace-memory/lifecycle.server";
 import { startWeeklyReportScheduleTickFromEnv } from "#src/server/records/weekly-report-schedule-tick.server";
+import { startActionCardExpiryTickFromEnv } from "#src/server/conversations/action-card-expiry.server";
 import { startWorkspaceAssistantOnboarding } from "#src/server/agents/workspace-assistant-onboarding.server";
 import { startPlatformOperatorSeedingFromEnv } from "#src/server/app-marketplace/platform-operator-seeding.server";
 
@@ -22,6 +23,8 @@ ensureWorkspaceMemoryLifecycle();
 // Optional in-process clock for weekly-report auto-send. No-op unless
 // COFORGE_WEEKLY_REPORT_SCHEDULE_TICK_MS is set; external HTTP cron remains valid.
 startWeeklyReportScheduleTickFromEnv();
+// Cards expire after their TTL; the atomic sweep keeps every instance from announcing twice.
+startActionCardExpiryTickFromEnv();
 startWorkspaceAssistantOnboarding();
 // The first Marketplace operators, from the deployment's config; only when none exists yet.
 startPlatformOperatorSeedingFromEnv();

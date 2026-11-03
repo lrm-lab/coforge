@@ -12,12 +12,12 @@ import { canReadChannel, readableConversationWhere } from "./channel-read-access
 import { pageFillActionCardView } from "./action-card-page-fill.server";
 import { desktopTakeoverActionCardView } from "./action-card-desktop-takeover.server";
 import { choiceActionCardView } from "./action-card-choice.server";
-import type {
-  ActionCardPersonRef,
-  ActionCardRef,
-  ActionCardState,
-  ActionCardView,
-  ActionCardViewBase,
+import {
+  effectiveActionCardState,
+  type ActionCardPersonRef,
+  type ActionCardRef,
+  type ActionCardView,
+  type ActionCardViewBase,
 } from "./action-card-view.server";
 import { appRecoverOwnerView } from "./app-recover-owner-action-cards.server";
 import { appRegisterView } from "./app-register-action-cards.server";
@@ -67,6 +67,8 @@ export async function actionCardViews(
       payload: true,
       draftHint: true,
       state: true,
+      expiresAt: true,
+      answeredInChatMessageId: true,
       committedByUserId: true,
       committedAt: true,
       result: true,
@@ -173,7 +175,7 @@ export async function actionCardViews(
   const views = new Map<string, ActionCardView>();
   for (const card of cards) {
     const payload = card.payload as ResolvedActionCardPayload;
-    const state = card.state as ActionCardState;
+    const state = effectiveActionCardState(card.state, card.expiresAt);
     const pending = state === "pending";
     const base: ActionCardViewBase = {
       messageId: card.messageId,
@@ -187,6 +189,10 @@ export async function actionCardViews(
           }
         : undefined,
       committedAt: card.committedAt?.toISOString(),
+      expiresAt: card.expiresAt?.toISOString(),
+      answeredInChat: card.answeredInChatMessageId
+        ? { messageId: card.answeredInChatMessageId }
+        : undefined,
       canCommit: false,
       canCancel: pending && (card.preparedByAgent.ownerId === viewerUserId || isAdminViewer),
     };

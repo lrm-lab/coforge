@@ -1,3 +1,4 @@
+import { markChoiceCardsAnsweredInChat } from "#src/server/conversations/action-card-answered.server";
 import { deliveryTarget } from "./direct-conversation-agent-message.server";
 import type { SentMessageHook } from "#src/server/conversations/sent-message-hook.server";
 import { humanRef } from "./agent-peer-direct.repositories.server";
@@ -124,6 +125,14 @@ export async function sendMessage(
         threadRootId: true,
         deliveries: { select: { deliveryId: true } },
       },
+    });
+    await markChoiceCardsAnsweredInChat(tx, {
+      workspaceId: conversation.workspaceId,
+      conversationId,
+      userId: senderUserId,
+      messageId: created.id,
+      sequence,
+      threadRootId: created.threadRootId ?? null,
     });
     await Promise.all(
       attachments.map((attachment, position) =>

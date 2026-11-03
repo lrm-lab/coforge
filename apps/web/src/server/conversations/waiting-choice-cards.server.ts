@@ -37,6 +37,8 @@ export async function waitingChoiceCards(
       workspaceId,
       kind: "choice",
       state: "pending",
+      // A card past its expiry is no longer waiting, even before the sweep writes the state.
+      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
       payload: { path: ["to"], equals: userId },
       conversation: readableConversationWhere(workspaceId, { userId }),
     },

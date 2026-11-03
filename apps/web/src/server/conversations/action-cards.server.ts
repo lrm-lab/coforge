@@ -313,13 +313,13 @@ export class ActionCards {
       card.preparedByAgent.ownerId === principal.actorUserId || (role ? isAdminLike(role) : false);
     if (!canCancel) throw new AppError("ACCESS_DENIED");
     if (card.kind === APP_GRANT_AGENT_CARD_KIND) throw new AppError("INVALID_INPUT");
-    await this.markCancelled(card.conversationId, messageId);
+    await this.markCancelled(card.conversationId, messageId, principal.actorUserId);
   }
 
-  private async markCancelled(conversationId: string, messageId: string) {
+  private async markCancelled(conversationId: string, messageId: string, actorUserId: string) {
     const updated = await this.db.actionCard.updateMany({
       where: { messageId, state: "pending" },
-      data: { state: "cancelled" },
+      data: { state: "cancelled", committedByUserId: actorUserId, committedAt: new Date() },
     });
     if (updated.count === 0) throw new AppError("CONFLICT");
     await publishActionCardUpdate(this.db, this.realtime, conversationId, messageId);
