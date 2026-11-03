@@ -150,27 +150,22 @@ export function AccountSettings({
             onUpload={onAvatarUpload}
           />
           <div className="min-w-0 flex-1 pt-4">
-            <h2 className="break-words text-display-xs font-semibold text-primary">
-              {profile.name}
-            </h2>
+            {/* Edit sits with the name it changes, not at the far edge of a wide window; while
+                editing, Cancel and Save close the form below instead. */}
+            <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
+              <h2 className="min-w-0 break-words text-display-xs font-semibold text-primary">
+                {profile.name}
+              </h2>
+              {!editing && (
+                <Button type="button" className="shrink-0" onPress={startEditing}>
+                  {m.settings_profile_edit()}
+                </Button>
+              )}
+            </div>
             {profile.email ? (
               <p className="break-words text-md text-tertiary">{profile.email}</p>
             ) : null}
           </div>
-          {editing ? (
-            <div className="mt-4 flex shrink-0 items-center gap-3">
-              <Button type="button" color="secondary" isDisabled={saving} onPress={cancelEditing}>
-                {m.settings_profile_cancel()}
-              </Button>
-              <Button type="button" isDisabled={!canSave} onPress={save}>
-                {saving ? m.settings_profile_saving() : m.settings_profile_save()}
-              </Button>
-            </div>
-          ) : (
-            <Button type="button" className="mt-4 shrink-0" onPress={startEditing}>
-              {m.settings_profile_edit()}
-            </Button>
-          )}
         </header>
 
         {saveSuccess && !editing && (
@@ -215,6 +210,14 @@ export function AccountSettings({
                 hint={m.settings_description_remaining({ count: 280 - description.length })}
                 onChange={setDescription}
               />
+              <div className="flex justify-end gap-3">
+                <Button type="button" color="secondary" isDisabled={saving} onPress={cancelEditing}>
+                  {m.settings_profile_cancel()}
+                </Button>
+                <Button type="button" isDisabled={!canSave} onPress={save}>
+                  {saving ? m.settings_profile_saving() : m.settings_profile_save()}
+                </Button>
+              </div>
             </div>
           ) : (
             <dl className="flex min-w-0 flex-col gap-6">
