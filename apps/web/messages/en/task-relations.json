@@ -37,5 +37,10 @@
   "tasks_ref_hidden_hint": "You don't have access to this task",
   "tasks_ref_dm": "DM with @{peer}",
   "tasks_trail": "Where this task is",
-  "tasks_back": "Back"
+  "tasks_back": "Back",
+  "tasks_project": "Project",
+  "tasks_project_none": "No project",
+  "tasks_project_change": "Change project",
+  "tasks_project_search": "Find a project",
+  "tasks_project_follow": "The channel’s project"
 }

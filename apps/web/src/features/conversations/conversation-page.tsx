@@ -220,6 +220,7 @@ function DirectConversationPageBody({
       unreadKey={conversationId}
       page={page}
       taskView={taskView}
+      direct
       isMember
       readCursor={{
         key: `dm:${conversationId}`,
@@ -246,6 +247,8 @@ type ConversationPageBodyProps = {
   isMember: boolean;
   /** The conversation's name on its Task board. */
   name: string;
+  /** A direct conversation: its Tasks are filed under no Project. */
+  direct?: boolean;
   readCursor: { key: string; advance: (throughSequence: number) => Promise<unknown> };
   header: (tabs: HeaderTabs, openAgentProfile: (agentId: string) => void) => ReactNode;
   conversation: (
@@ -274,6 +277,7 @@ function ConversationPageBody({
   taskView,
   isMember,
   name,
+  direct,
   readCursor,
   header,
   conversation: renderConversation,
@@ -355,6 +359,7 @@ function ConversationPageBody({
         search={search}
         taskView={taskView}
         name={name}
+        direct={direct}
         members={conversation.mentionables}
         currentMemberId={conversation.senderMemberId}
         canMutate={isMember}

@@ -72,6 +72,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
     // only the main pane may advance the conversation-level read cursor.
     onReadLatest,
     conversationName,
+    direct,
     tasksPane,
     channels,
     taskPopup,
@@ -166,6 +167,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
       onDeleted={taskPopup?.onTaskDeleted}
       onOpenRelated={openRelatedTask}
       conversationName={conversationName}
+      direct={direct}
       members={conversation.mentionables}
       currentMemberId={conversation.senderMemberId || null}
       thread={

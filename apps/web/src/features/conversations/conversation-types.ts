@@ -154,6 +154,8 @@ export type ConversationProps = {
    * the Task popup and the thread/profile slot stay the conversation's, so a Task opened from
    * the board shows over it without leaving the tab. */
   tasksPane?: ReactNode;
+  /** A direct conversation: its Task popup offers no Project. */
+  direct?: boolean;
 };
 
 export type ThreadedConversationProps = Omit<ConversationProps, "conversation" | "agentStatus"> & {

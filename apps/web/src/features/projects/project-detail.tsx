@@ -24,6 +24,7 @@ import { CreateChannelDialog } from "#src/features/conversations/create-channel-
 import { createPublicChannel } from "#src/features/conversations/channels.functions";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { m } from "#src/paraglide/messages";
+import { ProjectTasksSection } from "./project-tasks";
 import type { getProject, getProjectRepository } from "./projects.functions";
 import { ProjectImage } from "./project-image";
 import { ProjectReadme } from "./project-readme";
@@ -93,6 +94,7 @@ export function ProjectDetail({
           </p>
         )}
         <div className="grid gap-6 lg:grid-cols-2">
+          <ProjectTasksSection projectId={project.id} />
           <section className="order-1 min-w-0 lg:order-2">
             <div className="mb-3 flex min-h-9 items-center justify-between gap-3">
               <h2 className="text-md font-semibold text-primary">{m.project_discussions()}</h2>

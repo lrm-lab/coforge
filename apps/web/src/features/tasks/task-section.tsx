@@ -14,6 +14,7 @@ import { TaskPickerDialog } from "./task-picker";
 import { TaskProperty } from "./task-property";
 import { openBlockers, relationRefusal, type VisibleTaskName } from "./task-relation-edits";
 import { TaskBlockedByValue, TaskBlockingValue, TaskParentValue } from "./task-relation-lines";
+import { TaskProjectMenu } from "./task-project-menu";
 import { StatusMenu } from "./task-status-menu";
 import { executeTask } from "./tasks.functions";
 import { useTaskAssignmentAccess } from "./use-task-assignment-access";
@@ -52,7 +53,10 @@ export function TaskSection({
   picker,
   onPickerChange,
   onOpenRelated,
+  projectField = true,
 }: {
+  /** Whether the Task can be filed under a Project: not one in a direct conversation. */
+  projectField?: boolean;
   /** One column under the title (a phone), or a column beside the pages. */
   layout?: "column" | "sidebar";
   task: TaskView;
@@ -139,6 +143,15 @@ export function TaskSection({
             }
           />
         </TaskProperty>
+        {projectField && (
+          <TaskProperty label={m.tasks_project()}>
+            <TaskProjectMenu
+              task={task}
+              disabled={pending}
+              onSelect={(project) => void run({ operation: "amend", number: task.number, project })}
+            />
+          </TaskProperty>
+        )}
         {relations.on && task.parent && (
           <TaskProperty label={m.tasks_parent()}>
             <TaskParentValue
