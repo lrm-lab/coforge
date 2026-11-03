@@ -23,13 +23,12 @@ import {
   UNFINISHED_TASK_STATUSES,
   type SelectedTask,
 } from "./task-view.server";
-import type { TaskBoardPorts, Member, ConversationRef } from "./task-board-ports.server";
+import type { TaskBoardPorts, Member } from "./task-board-ports.server";
 import { ensureTaskExecutionSession } from "./task-change.server";
 import { linkCreatedTasks } from "./task-gates.server";
 import { taskViewsOf } from "./task-relations.server";
 import { withNotices } from "./task-notice-posting.server";
 import {
-  signalTaskChange,
   announceTasks,
   publishDeliveries,
   publishAssignmentReceipt,
@@ -475,18 +474,4 @@ export async function createTasks(
       })),
     }),
   };
-}
-
-/**
- * Announces the Task a sent message became (`sentMessageBecomesTask`). As on Raft it posts no
- * notice: the message itself shows as the Task in the stream.
- */
-export async function announceSentMessageTask(
-  ports: TaskBoardPorts,
-  conversation: ConversationRef,
-  messageId: string,
-) {
-  const task = await ports.db.task.findUnique({ where: { messageId }, select: taskSelection });
-  if (!task || task.conversationId !== conversation.conversationId) throw new AppError("NOT_FOUND");
-  await signalTaskChange(ports, task);
 }

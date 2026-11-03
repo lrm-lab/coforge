@@ -4,7 +4,8 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import type { ConversationTaskSubset } from "#src/features/tasks/conversation-task-subset";
 import type { TaskCommand, TaskPrincipal, TaskResult } from "@lrm/coforge-sdk/internal";
-import { createTasks, announceSentMessageTask } from "./task-creation.server";
+import { createTasks } from "./task-creation.server";
+import { announceSentMessageTask } from "./task-sent-message.server";
 import { announceSpawnedTask } from "./sent-as-conversation-task.server";
 import { createConversationTasks } from "./task-conversation-creation.server";
 import {
