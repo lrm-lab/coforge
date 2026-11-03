@@ -125,3 +125,33 @@ test("an authorization failure naming RUNTIME_UNAVAILABLE explains the unavailab
     "The configured runtime is not available on this Computer, or is not shared with this Agent's owner.",
   );
 });
+
+test("each refined runtime refusal keeps its own reason and says what to fix", () => {
+  const cases = [
+    {
+      upstream: "RUNTIME_PRIVATE",
+      reason: "runtime_private",
+      text: "The configured runtime is marked private on this Computer, and is not shared with this Agent's owner.",
+    },
+    {
+      upstream: "RUNTIME_NOT_INSTALLED",
+      reason: "runtime_not_installed",
+      text: "Kiro is not installed on this Computer. Install Kiro, then start the Agent again.",
+    },
+    {
+      upstream: "RUNTIME_UNUSABLE",
+      reason: "runtime_unusable",
+      text: "Kiro is not usable on this Computer. Check its status in Computer settings, then start the Agent again.",
+    },
+  ] as const;
+  for (const { upstream, reason, text } of cases) {
+    const activity = launchFailureActivity(
+      new AgentAuthorizationError(
+        new AgentConfigRequestError("refused", 403, upstream, upstream.toLowerCase()),
+      ),
+      "Kiro",
+    );
+    expect(activity.runtimeError.errorReason).toBe(reason);
+    expect(activity.detail).toContain(text);
+  }
+});
