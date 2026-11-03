@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { LiveAgentAvatar } from "#src/features/agents/live-agent-avatar";
-import { choiceLetter } from "#src/features/conversations/choice-letter";
+import { choiceNumber } from "#src/features/conversations/choice-number";
 import { channelLabel } from "#src/features/conversations/channel-visibility";
 import type { HostedConversationTarget } from "#src/features/conversations/conversation-page-search";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
@@ -15,7 +15,7 @@ import { activityChatLink, waitingChoiceTarget } from "./activity-open-target";
 
 /**
  * A choice card waiting on the viewer, laid out as an Activity row: the asking Agent's face, the
- * question, then where it was asked, by whom, and the lettered options. Opening it opens the
+ * question, then where it was asked, by whom, and the numbered options. Opening it opens the
  * conversation at the card, to be answered there; a modified click opens it in Chat. The open
  * conversation's own row below marks it as open, so this one does not.
  */
@@ -37,7 +37,7 @@ export function WaitingChoiceRow({
     .filter(Boolean)
     .join(" · ");
   const options = card.options
-    .map((option, index) => `${choiceLetter(index)}. ${option.label}`)
+    .map((option, index) => `${choiceNumber(index)}. ${option.label}`)
     .join(" · ");
   return (
     <li className={ACTIVITY_ROW_ITEM_CLASS}>

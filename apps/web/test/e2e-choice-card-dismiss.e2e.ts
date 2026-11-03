@@ -74,7 +74,7 @@ test("the Agent's owner sees whom a choice card waits on and can withdraw it", a
       conversationId: channel.id,
       sequence: 1,
       senderMemberId: agentMember.id,
-      body: `${prompt} (A. Red; B. Blue)`,
+      body: `${prompt} (1. Red; 2. Blue)`,
     },
   });
   await db.conversation.update({ where: { id: channel.id }, data: { lastSequence: 1 } });

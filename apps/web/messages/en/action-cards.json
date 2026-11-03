@@ -21,6 +21,8 @@
   "action_card_choice_chosen": "Chose {option}",
   "action_card_choice_other": "Something else",
   "action_card_choice_chat_hint": "or answer in the chat below",
+  "action_card_choice_failed": "Didn't go through",
+  "action_card_choice_retry": "Retry",
   "action_card_commit_channel_create": "Create Channel",
   "action_card_commit_agent_create": "Create Agent",
   "action_card_commit_add_member": "Add Members",

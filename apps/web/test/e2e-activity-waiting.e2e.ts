@@ -72,7 +72,7 @@ test("a choice card asking the viewer waits in Activity until they answer it", a
         conversationId: channel.id,
         sequence,
         senderMemberId: agentMember.id,
-        body: `${prompt} (A. Red; B. Blue)`,
+        body: `${prompt} (1. Red; 2. Blue)`,
       },
     });
     await db.actionCard.create({
@@ -97,7 +97,8 @@ test("a choice card asking the viewer waits in Activity until they answer it", a
   const section = `document.querySelector('ol[aria-label="Waiting on you"]')`;
   const listed = (prompt: string) =>
     `(${section}?.textContent ?? "").includes(${JSON.stringify(prompt)})`;
-  const pick = `[data-message-id="${mineId}"] button[aria-label="A. Red"]`;
+  // The first option, Red.
+  const pick = `[data-message-id="${mineId}"] li:first-child > button[data-choice-row]`;
   try {
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1440", "900");

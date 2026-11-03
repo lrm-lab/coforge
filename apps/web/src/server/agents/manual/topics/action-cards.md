@@ -107,7 +107,7 @@ Read the card again: `[action card: executed; choice=password]` means they click
 choice delivery also names who answered, for example `@alice answered your choice "How should we
 sign in?" in #general: password · Password`.
 If they type in chat instead, interpret their reply and continue without waiting for the card. The
-card letters the options A, B, C… in their order, so a typed "B" means the second option.
+card numbers the options 1, 2, 3… in their order, so a typed "2" means the second option.
 
 By default the card also ends with a "Something else" row that is itself an input. Its answer arrives as
 `_other` with the person's own words fenced (each continuation line prefixed `│`) and marked

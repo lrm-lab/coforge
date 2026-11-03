@@ -7,13 +7,14 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
 
 /**
- * A choice card's last lettered row is the asked person's own answer (task #447), as Grok's is: the
- * row is itself an input ("Something else"), Enter sends the words, and the card closes on the
- * letter and the words. A blank Enter sends nothing. Anyone but the asked person sees the row,
- * inert, as they see the options.
+ * A choice card's last row is the asked person's own answer (task #447), as Grok's is: the row is
+ * itself an input ("Something else"), Enter sends the words, and the card closes to one line, the
+ * question and the words (task #449). A blank Enter sends nothing. Anyone but the asked person sees
+ * the options as a plain list, without that row. An option's number picks it from the keyboard,
+ * and focus goes on to the next card waiting on the viewer.
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The channel, its Agent, a
- * second member and three cards are seeded per run and removed after it. Screenshots (light, dark,
+ * second member and five cards are seeded per run and removed after it. Screenshots (light, dark,
  * Chinese, a phone, answered, someone else's card) are written under `.amp/e2e/choice-card-other/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
@@ -69,7 +70,7 @@ test("the asked person answers a choice card in its own last row", async () => {
         conversationId: channel.id,
         sequence,
         senderMemberId: agentMember.id,
-        body: `${prompt} (A. Red; B. Blue)`,
+        body: `${prompt} (1. Red; 2. Blue)`,
       },
     });
     await db.actionCard.create({
@@ -96,6 +97,7 @@ test("the asked person answers a choice card in its own last row", async () => {
   const shown = await ask(`Which colour? ${suffix}`, DEV_BROWSER_USER.id);
   const answered = await ask(`Which shade? ${suffix}`, DEV_BROWSER_USER.id);
   const others = await ask(`Which one, peer? ${suffix}`, peer.id);
+  const keyed = await ask(`Which key? ${suffix}`, DEV_BROWSER_USER.id);
   const closed = await ask(`Red or blue only? ${suffix}`, DEV_BROWSER_USER.id, false);
   await db.conversation.update({ where: { id: channel.id }, data: { lastSequence: sequence } });
 
@@ -115,22 +117,28 @@ test("the asked person answers a choice card in its own last row", async () => {
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1440", "900");
     await open();
-    // The row after A and B is C, an input named by its placeholder.
+    // The row after the options is an input named by its placeholder.
     expect(
       await evaluate<[string | null, string | null]>(
         `(() => { const el = document.querySelector('${input(shown)}'); return [el.getAttribute("aria-label"), el.getAttribute("placeholder")]; })()`,
       ),
-    ).toEqual(["C. Something else", "Something else"]);
-    // Someone else's card shows the row, but nothing to type in.
+    ).toEqual(["Something else", "Something else"]);
+    // Someone else's card lists the options, with nothing to type in or press: its one button is
+    // Dismiss, there for the Agent's owner.
     expect(await evaluate<boolean>(`document.querySelector('${input(others)}') === null`)).toBe(
       true,
     );
-    expect(await evaluate<boolean>(`${cardText(others)}.includes("Something else")`)).toBe(true);
+    expect(
+      await evaluate<string[]>(
+        `[...document.querySelectorAll('${card(others)} button')].map((b) => b.textContent)`,
+      ),
+    ).toEqual(["Dismiss"]);
+    expect(await evaluate<boolean>(`${cardText(others)}.includes("Something else")`)).toBe(false);
     await browser("screenshot", join(artifacts, "light.png"));
 
     // Without that row, the asked person is pointed at the chat: the hint puts the caret in the
     // composer, and the card still waits. Someone else's card never shows the hint.
-    const hint = `${card(closed)} > button`;
+    const hint = `${card(closed)} > div > button`;
     expect(await evaluate<boolean>(`document.querySelector('${input(closed)}') === null`)).toBe(
       true,
     );
@@ -138,7 +146,7 @@ test("the asked person answers a choice card in its own last row", async () => {
       "or answer in the chat below",
     );
     expect(
-      await evaluate<boolean>(`document.querySelector('${card(others)} > button') === null`),
+      await evaluate<boolean>(`document.querySelector('${card(others)} > div > button') === null`),
     ).toBe(true);
     // Four cards overflow the pane; the last one's hint starts under the composer.
     await browser("eval", `document.querySelector('${hint}').scrollIntoView({ block: "center" })`);
@@ -168,7 +176,7 @@ test("the asked person answers a choice card in its own last row", async () => {
       "pending",
     );
 
-    // The words, then Enter: the card closes on C and the words alone.
+    // The words, then Enter: the card closes to the question and the words.
     await browser("fill", input(answered), "  Teal, but darker  ");
     await browser("press", "Enter");
     await browser(
@@ -182,12 +190,52 @@ test("the asked person answers a choice card in its own last row", async () => {
     expect(stored.result).toMatchObject({ optionId: "_other", text: "Teal, but darker" });
     await browser("screenshot", join(artifacts, "answered.png"));
 
+    // From the keyboard: with a row focused, the card shows each option's number, and a number
+    // picks it. Focus goes on to the next card waiting on the viewer (the peer's is skipped).
+    await evaluate(`document.querySelector('${card(keyed)} [data-choice-row]').focus() ?? true`);
+    await browser("press", "Tab");
+    await browser("press", "Shift+Tab");
+    await browser("screenshot", join(artifacts, "keyboard.png"));
+    await browser("press", "2");
+    await browser("wait", "--fn", `document.querySelector('${input(keyed)}') === null`);
+    expect(
+      (await db.actionCard.findUniqueOrThrow({ where: { messageId: keyed } })).result,
+    ).toMatchObject({ optionId: "blue" });
+    expect(await evaluate<string>(cardText(keyed))).toContain("Blue");
+    expect(
+      await evaluate<boolean>(
+        `document.querySelector('${card(closed)}').contains(document.activeElement)`,
+      ),
+    ).toBe(true);
+    await browser("screenshot", join(artifacts, "keyboard-picked.png"));
+
+    // Someone else's answer is followed by their name; when they answered is the answer's tooltip
+    // (React Aria opens one on hover once the page has seen a pointer press).
+    await db.actionCard.update({
+      where: { messageId: others },
+      data: {
+        state: "executed",
+        committedByUserId: peer.id,
+        committedAt: new Date(),
+        result: { optionId: "red", label: "Red" },
+      },
+    });
+    await open();
+    await browser("wait", "--fn", `${cardText(others)}.includes("· Asked Peer")`);
+    expect(await evaluate<string>(cardText(others))).toBe(
+      `Which one, peer? ${suffix} Red· Asked Peer`,
+    );
+    await browser("click", "textarea[data-composer]");
+    await browser("hover", `${card(others)} button`);
+    await browser("wait", "--fn", `document.querySelector('[role="tooltip"]') !== null`);
+    await browser("screenshot", join(artifacts, "answered-by-peer.png"));
+
     await open("zh-CN");
     expect(
       await evaluate<string | null>(
         `document.querySelector('${input(shown)}').getAttribute("placeholder")`,
       ),
-    ).toBe("其他");
+    ).toBe("写别的答案…");
     await browser("screenshot", join(artifacts, "zh.png"));
 
     await browser("eval", `localStorage.setItem("coforge-theme", "dark")`);
