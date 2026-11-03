@@ -149,7 +149,8 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
             <span className="flex min-w-0 items-center gap-2">
               <span
                 className={cn(
-                  "min-w-0 truncate text-md font-semibold",
+                  // A list dragged narrow keeps a few letters of the title beside its (shortened) marks.
+                  "min-w-10 truncate text-md font-semibold",
                   unread ? "text-primary" : "text-secondary",
                 )}
               >
@@ -274,6 +275,12 @@ export function ActivityItemIcon({ item }: { item: ActivityInboxItem }) {
   );
 }
 
+/* In a list column dragged narrow (`activity-list` under 22rem) the marks keep their sign and
+ * number: "@" for "@you", "9" for "9 new", a Task without its owner. */
+const NARROW_SR_ONLY = "@max-[22rem]/activity-list:sr-only";
+const NARROW_HIDDEN = "@max-[22rem]/activity-list:hidden";
+const NARROW_ONLY = "hidden @max-[22rem]/activity-list:inline";
+
 /** The marks after a row's title: its Task, an unread mention, and how many messages are new. */
 function ActivityItemBadges({
   item,
@@ -295,18 +302,23 @@ function ActivityItemBadges({
       {task && (
         <Badge type="color" size="sm" color={TASK_STATUS_COLOR[task.status].badge}>
           #{task.number}
-          {task.ownerName ? ` @${task.ownerName}` : ""}
+          {task.ownerName ? <span className={NARROW_HIDDEN}>{` @${task.ownerName}`}</span> : null}
         </Badge>
       )}
       {task?.ownerDeleted && <DeletedAgentBadge />}
       {showMention && (
         <Badge type="color" size="sm" color="brand">
-          @{m.activity_inbox_mention_badge()}
+          @<span className={NARROW_SR_ONLY}>{m.activity_inbox_mention_badge()}</span>
         </Badge>
       )}
       {item.unreadCount > 0 && (
         <Badge type="color" size="sm" color="brand">
-          {m.activity_inbox_new({ count: item.unreadCount })}
+          <span className={NARROW_SR_ONLY}>
+            {m.activity_inbox_new({ count: item.unreadCount })}
+          </span>
+          <span aria-hidden="true" className={NARROW_ONLY}>
+            {item.unreadCount > 99 ? "99+" : item.unreadCount}
+          </span>
         </Badge>
       )}
     </span>

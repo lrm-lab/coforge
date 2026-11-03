@@ -38,12 +38,13 @@ export function ActivityInboxTabs({
       }}
       className="w-max shrink-0"
     >
-      {/* In a list column dragged narrow the tabs drop their icons, so the three still fit. */}
+      {/* In a list column dragged narrow the tabs drop their icons, sit closer and step down a
+          size, so the three still fit (English "Mentions" included). */}
       <TabList
         type="underline"
         size="md"
         aria-label={m.activity_inbox_filter_label()}
-        className="@max-[22rem]/tabbed-header:**:data-icon:hidden"
+        className="@max-[22rem]/tabbed-header:gap-2 @max-[22rem]/tabbed-header:**:data-icon:hidden @max-[22rem]/tabbed-header:*:text-sm"
       >
         {FILTER_TABS.map((tab) => (
           <Tab key={tab.id} id={tab.id} icon={tab.icon}>

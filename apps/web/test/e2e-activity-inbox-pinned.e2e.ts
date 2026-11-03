@@ -137,6 +137,37 @@ test("a pinned channel lists under Pinned, before All conversations, and stays t
       "--fn",
       `[...document.querySelectorAll(${pinnedItems})].some((item) => item.querySelector("a")?.getAttribute("aria-current") === "true" && item.textContent.includes("E2E pinned hello"))`,
     );
+    // Dragged to its narrowest, the list keeps each row's title (its marks shorten to "@" and
+    // the count) and never scrolls sideways (task #399).
+    await evaluate(`(document.querySelector('[role="separator"][aria-valuemin]').focus(), true)`);
+    await browser("press", "Home");
+    await browser(
+      "wait",
+      "--fn",
+      `(() => { const s = document.querySelector('[role="separator"][aria-valuemin]'); return s.getAttribute("aria-valuenow") === s.getAttribute("aria-valuemin"); })()`,
+    );
+    const narrowList = await evaluate<{
+      overflow: number;
+      titles: number[];
+      tabsPastEdge: number;
+    }>(`(() => {
+      const list = document.querySelector(${rowItems})?.closest("ol")?.parentElement;
+      const titles = [...document.querySelectorAll(${rowItems})]
+        .filter((item) => /E2E pinned|e2e-activity-pinned/.test(item.textContent))
+        .map((item) => Math.round(item.querySelector("a .truncate")?.getBoundingClientRect().width ?? 0));
+      const tabs = document.querySelector('[role="tablist"][aria-label="Filter Activity"]');
+      const edge = document.querySelector('[role="separator"][aria-valuemin]').getBoundingClientRect().left;
+      const tabsPastEdge = Math.round(Math.max(...[...tabs.querySelectorAll('[role="tab"]')].map((tab) => tab.getBoundingClientRect().right)) - edge);
+      return { overflow: list.scrollWidth - list.clientWidth, titles, tabsPastEdge };
+    })()`);
+    expect(narrowList.overflow).toBeLessThanOrEqual(0);
+    expect(narrowList.tabsPastEdge).toBeLessThanOrEqual(0);
+    expect(narrowList.titles.length).toBeGreaterThan(0);
+    for (const width of narrowList.titles) expect(width).toBeGreaterThanOrEqual(36);
+    await browser("screenshot", join(artifacts, "pinned-narrow-open.png"));
+    await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
+    await browser("screenshot", join(artifacts, "pinned-narrow-open-dark.png"));
+    await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
   } finally {
     await browser("close").catch(() => undefined);
     // Leave the dev user's sidebar without this test's pin.

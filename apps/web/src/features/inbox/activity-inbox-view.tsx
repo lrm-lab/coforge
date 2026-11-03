@@ -338,7 +338,10 @@ export function ActivityInboxView({
           </Button>
         </div>
       )}
-      <div ref={listScroll} className="min-h-0 flex-1 overflow-y-auto py-1">
+      <div
+        ref={listScroll}
+        className="@container/activity-list min-h-0 flex-1 overflow-x-hidden overflow-y-auto py-1"
+      >
         {query.isError && empty ? (
           <ActivityInboxLoadError onRetry={() => void query.refetch()} />
         ) : empty ? (
