@@ -7,6 +7,7 @@ import {
   discoverProcesses,
   DISCOVERY_TIMEOUT_MILLISECONDS,
   hiddenOwnProcess,
+  passesOverHidden,
   realUid,
 } from "./cleanup-discovery";
 import type { CommandResult, Runner } from "./cleanup-exec";
@@ -98,6 +99,18 @@ describe("Linux discovery from /proc", () => {
     await expect(discoverProcesses(roots, { platform: "linux", procRoot })).rejects.toThrow(
       "did not find this process",
     );
+  });
+
+  // Both ways the kernel hides one of our processes (a refused cwd, or a non-dumpable process's
+  // root-owned /proc entry, as GitHub's runner has) are decided alike: by its command line.
+  test("a hidden process of ours is passed over unless it is a shell, a dev runtime or unnamed", () => {
+    expect(passesOverHidden("(sd-pam)")).toBe(true);
+    expect(passesOverHidden("/usr/bin/sudo -E env")).toBe(true);
+    expect(passesOverHidden("/bin/bash -e step.sh")).toBe(false);
+    expect(passesOverHidden("-zsh")).toBe(false);
+    expect(passesOverHidden("bun dev.ts")).toBe(false);
+    expect(passesOverHidden("")).toBe(false);
+    expect(passesOverHidden(undefined)).toBe(false);
   });
 
   test("a root-owned /proc entry whose status shows our uid is a hidden process of ours", () => {

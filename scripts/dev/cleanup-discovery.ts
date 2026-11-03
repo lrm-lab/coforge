@@ -106,12 +106,29 @@ export function hiddenOwnProcess(owner: number, status: string, uid: number): bo
   return owner === 0 && uid !== 0 && realUid(status) === uid;
 }
 
+/**
+ * Whether the scan may pass over a process of ours whose directory the kernel hides (a refused
+ * cwd, https://man7.org/linux/man-pages/man2/ptrace.2.html, or a non-dumpable process): on
+ * GitHub's runner systemd's `(sd-pam)` and a non-dumpable helper are such. As on macOS, only a
+ * shell or dev runtime, which may be in a worktree, or one with no command line, fails the scan.
+ * The command line is not hidden.
+ */
+export function passesOverHidden(command: string | undefined): boolean {
+  return !!command && !WATCHED_PROGRAMS.has(programOf(command));
+}
+
 async function discoverLinux(roots: string[], procRoot: string, uid: number) {
   const self = Number(await readlink(join(procRoot, "self")).catch(() => Number.NaN));
   if (!Number.isInteger(self)) throw new Error("cannot tell which process this is under /proc");
   const pids = (await readdir(procRoot)).filter((name) => /^\d+$/.test(name)).map(Number);
   const found: ProcessInfo[] = [];
   let sawSelf = false;
+  /** Passes over a hidden process of ours (`passesOverHidden`), or one that exited; else fails. */
+  const hidden = async (pid: number, why: string, cause?: unknown) => {
+    const command = await readCommandLine(procRoot, pid);
+    if (passesOverHidden(command) || !(await exists(join(procRoot, String(pid))))) return;
+    throw new Error(`${why} (${command || "no command line"})`, { cause });
+  };
   for (const pid of pids) {
     const dir = join(procRoot, String(pid));
     try {
@@ -119,22 +136,13 @@ async function discoverLinux(roots: string[], procRoot: string, uid: number) {
       if (owner.uid !== uid) {
         const status = owner.uid === 0 ? await Bun.file(join(dir, "status")).text() : "";
         if (hiddenOwnProcess(owner.uid, status, uid))
-          throw new Error(`pid ${pid} is ours but /proc hides it (not dumpable)`);
+          await hidden(pid, "is ours but /proc hides it (not dumpable)");
         continue;
       }
-      // The kernel can refuse the cwd of a process of our uid (ptrace read access,
-      // https://man7.org/linux/man-pages/man2/ptrace.2.html), as it does for systemd's
-      // `(sd-pam)` on GitHub's runner. As on macOS, only a shell or dev runtime the scan cannot
-      // place fails it: that one may be in a worktree. Its command line is still readable.
       const target = await readlink(join(dir, "cwd")).catch(async (error: unknown) => {
         if (isGone(error)) throw error;
-        const command = (await readCommandLine(procRoot, pid)) ?? "";
-        if (command && !WATCHED_PROGRAMS.has(programOf(command))) return undefined;
-        // One that exited meanwhile has no command line: it is gone, not unreadable.
-        if (!(await exists(dir))) return undefined;
-        throw new Error(`${(error as Error).message} (${command || "no command line"})`, {
-          cause: error,
-        });
+        await hidden(pid, (error as Error).message, error);
+        return undefined;
       });
       if (target === undefined) continue;
       if (pid === self) sawSelf = true;
