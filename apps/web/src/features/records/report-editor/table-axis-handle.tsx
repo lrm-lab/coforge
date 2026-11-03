@@ -70,7 +70,7 @@ export function ColumnHandle({
         type="button"
         className={cn(
           "group/handle pointer-events-auto absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center opacity-0 transition-opacity",
-          "hover:opacity-100 focus-visible:opacity-100",
+          "hover:opacity-100 focus-visible:opacity-100 any-pointer-coarse:opacity-100",
           (menuOpen || dropTarget) && "opacity-100",
         )}
         aria-label={t(($) => $.table_controls.column_menu)}
@@ -148,7 +148,7 @@ export function RowHandle({
         type="button"
         className={cn(
           "group/handle pointer-events-auto absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center opacity-0 transition-opacity",
-          "hover:opacity-100 focus-visible:opacity-100",
+          "hover:opacity-100 focus-visible:opacity-100 any-pointer-coarse:opacity-100",
           (menuOpen || dropTarget) && "opacity-100",
         )}
         aria-label={t(($) => $.table_controls.row_menu)}

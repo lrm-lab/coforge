@@ -1,6 +1,6 @@
 import { createContext, useContext } from "react";
 
-import { Tooltip } from "#src/components/base/tooltip/tooltip";
+import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { clockLabel, formatMonthDayTime } from "#src/lib/dates";
 import { useTimeFormat } from "#src/lib/time-format-context";
 import { useTimeZone } from "#src/lib/time-zone-context";
@@ -69,12 +69,18 @@ export function SystemMessageRow({
             >
               {time}
             </time>
-            {/* The tooltip wraps the span itself: our `Tooltip` renders RAC's `TooltipTrigger`
-                around its child, and a wrapper put a `<button>` between this flex line and the
-                span, so `min-w-0` stopped governing it and the stream scrolled sideways on a
-                phone. As a direct child the span is the flex item, so `truncate` clips. */}
+            {/* The trigger is itself the flex item, so `min-w-0` governs it and `truncate` clips;
+                a wrapper between this line and the text let the stream scroll sideways on a
+                phone. A plain span gives React Aria nothing to hover, so the full text never
+                showed. Out of the tab order, as in `agent-model-label.tsx`: a stop per notice
+                would crowd the stream, and the text is read whole whatever the width cuts. */}
             <Tooltip title={text}>
-              <span className="min-w-0 truncate">{text}</span>
+              <TooltipTrigger
+                excludeFromTabOrder
+                className="min-w-0 cursor-default truncate rounded-sm text-left outline-focus-ring focus-visible:outline-2"
+              >
+                {text}
+              </TooltipTrigger>
             </Tooltip>
           </span>
         </CentredOnRule>

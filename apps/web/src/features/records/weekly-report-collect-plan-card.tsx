@@ -3,6 +3,11 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { Edit01 as Edit, Settings01 as Settings } from "@untitledui/icons";
 
+import {
+  Dialog as SlideoutDialog,
+  Modal as SlideoutModal,
+  ModalOverlay as SlideoutOverlay,
+} from "#src/components/application/slideout-menus/slideout-menu";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Checkbox } from "#src/components/base/checkbox/checkbox";
@@ -10,7 +15,6 @@ import { Input } from "#src/components/base/input/input";
 import { Select } from "#src/components/base/select/select";
 import type { AgentProfileTab } from "#src/features/agents/profile-panel/profile-panel-search";
 import { AgentProfilePanel } from "#src/features/agents/profile-panel/agent-profile-panel";
-import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import type { OpenAgentProfile } from "#src/features/agents/profile-panel/open-agent-profile";
 import { agentProfileQuery } from "#src/features/agents/profile-panel/agent-profile-queries";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
@@ -276,26 +280,26 @@ export function WeeklyReportCollectPlanCard(props: {
   return (
     <div className="@container rounded-xl border border-secondary bg-primary p-4">
       {profileAgentId ? (
-        <ModalOverlay
+        <SlideoutOverlay
           isOpen
+          isDismissable
           onOpenChange={(open) => {
             if (!open) setProfileAgentId(null);
           }}
         >
-          <Modal className="w-[calc(100vw-2rem)] max-w-2xl">
-            <Dialog
-              aria-label={m.records_collect_plan_setup()}
-              className="h-[40rem] overflow-hidden"
-            >
-              <AgentProfilePanel
-                agentId={profileAgentId}
-                requestedTab={profileTab}
-                onTabChange={setProfileTab}
-                onClose={() => setProfileAgentId(null)}
-              />
-            </Dialog>
-          </Modal>
-        </ModalOverlay>
+          <SlideoutModal className="max-w-136">
+            <SlideoutDialog aria-label={m.records_collect_plan_setup()} className="gap-0">
+              <div className="flex min-h-0 w-full flex-1 flex-col">
+                <AgentProfilePanel
+                  agentId={profileAgentId}
+                  requestedTab={profileTab}
+                  onTabChange={setProfileTab}
+                  onClose={() => setProfileAgentId(null)}
+                />
+              </div>
+            </SlideoutDialog>
+          </SlideoutModal>
+        </SlideoutOverlay>
       ) : null}
       <div className="grid grid-cols-1 items-start gap-x-3 gap-y-4 @sm:grid-cols-[4.5rem_minmax(0,1fr)]">
         <p className="pt-2 text-sm text-tertiary">{m.records_collect_plan_window()}</p>

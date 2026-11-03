@@ -136,7 +136,7 @@ export function ProjectFileTree({
                 {/* Our own trigger: the official DotsButton fixes its label to "Open menu". */}
                 <AriaButton
                   aria-label={m.project_file_actions({ name: entry.name })}
-                  className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-fg-quaternary opacity-0 outline-focus-ring group-focus-within/row:opacity-100 group-hover/row:opacity-100 hover:text-fg-quaternary_hover focus-visible:outline-2 aria-expanded:opacity-100"
+                  className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-fg-quaternary opacity-0 outline-focus-ring any-pointer-coarse:opacity-100 group-focus-within/row:opacity-100 group-hover/row:opacity-100 hover:text-fg-quaternary_hover focus-visible:outline-2 aria-expanded:opacity-100"
                 >
                   <DotsVertical aria-hidden="true" className="size-4" />
                 </AriaButton>
