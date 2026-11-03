@@ -1,8 +1,9 @@
-import type { Ref } from "react";
+import { useRef, type Ref } from "react";
 import { RefreshCcw01 as Refresh, Trash01 as Trash } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { TextArea } from "#src/components/base/textarea/textarea";
+import { Popconfirm } from "#src/components/ui/popconfirm";
 import { m } from "#src/paraglide/messages";
 import type { KeyPointPromptHistoryEntry, KeyPointPromptState } from "./records-content";
 
@@ -24,9 +25,11 @@ export function KeyPointPromptEditor({
   onChange: (text: string) => void;
   onFocus?: () => void;
   onBlur?: () => void;
-  /** Asks to delete this history entry; the caller confirms before deleting. */
-  onDeleteHistory?: (entry: KeyPointPromptHistoryEntry) => void;
+  /** Deletes this history entry once the user confirms it; throws when it is refused. */
+  onDeleteHistory?: (entry: KeyPointPromptHistoryEntry) => Promise<void>;
 }) {
+  // Where focus lands after a deleted entry's row (and its button) is gone.
+  const historyRef = useRef<HTMLElement>(null);
   return (
     <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 py-4 sm:px-8 sm:py-6">
       <section className="space-y-3">
@@ -50,7 +53,7 @@ export function KeyPointPromptEditor({
         />
       </section>
 
-      <section className="space-y-3">
+      <section ref={historyRef} tabIndex={-1} className="space-y-3 outline-hidden">
         <h2 className="text-sm font-semibold text-primary">
           {m.records_key_points_prompt_history()}
         </h2>
@@ -78,16 +81,26 @@ export function KeyPointPromptEditor({
                       {m.records_key_points_prompt_reuse()}
                     </Button>
                     {onDeleteHistory ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        color="tertiary-destructive"
-                        iconLeading={Trash}
-                        isDisabled={busy}
-                        onPress={() => onDeleteHistory(entry)}
+                      <Popconfirm
+                        title={m.records_key_points_prompt_history_delete_confirm_title()}
+                        description={m.records_key_points_prompt_history_delete_confirm_body()}
+                        confirmLabel={m.records_key_points_prompt_history_delete_action()}
+                        pendingLabel={m.records_delete_pending()}
+                        errorMessage={m.records_delete_error()}
+                        placement="bottom end"
+                        fallbackFocus={() => historyRef.current}
+                        onConfirm={() => onDeleteHistory(entry)}
                       >
-                        {m.records_key_points_prompt_history_delete()}
-                      </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          color="tertiary-destructive"
+                          iconLeading={Trash}
+                          isDisabled={busy}
+                        >
+                          {m.records_key_points_prompt_history_delete()}
+                        </Button>
+                      </Popconfirm>
                     ) : null}
                   </div>
                 </div>

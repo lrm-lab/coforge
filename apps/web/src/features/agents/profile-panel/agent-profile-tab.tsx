@@ -15,6 +15,7 @@ import { AgentMascotAvatar } from "#src/features/agents/agent-mascot-avatar";
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { Popconfirm } from "#src/components/ui/popconfirm";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { StatusDot } from "#src/components/ui/status-dot";
 import { humanLabel } from "#src/lib/human-label";
@@ -24,7 +25,10 @@ import { RuntimeProviderMark } from "#src/features/agents/runtime-provider-mark"
 import { AgentDesktopButton } from "#src/features/computers/agent-desktop-button";
 import { computerIcon } from "#src/features/computers/computer-identity";
 import { RuntimeUsage, UsageHealthDot } from "#src/features/computers/runtime-usage";
-import type { AgentRuntimeControls } from "#src/features/agents/agent-runtime-controls";
+import {
+  agentControlFailureMessage,
+  type AgentRuntimeControls,
+} from "#src/features/agents/agent-runtime-controls";
 import type { getAgentProfile } from "#src/features/agents/agents.functions";
 import { AgentSkills, type AgentSkillsLoadResult } from "#src/features/agents/agent-skills";
 import type { AgentVisibility } from "#src/features/agents/agent-visibility";
@@ -370,15 +374,25 @@ function AgentProfileTabBody({
             {/* Moving comes first, as in the reference Computer: it is the action that changes
                 where the Agent lives, and its progress belongs at the top while it runs. */}
             {migration}
-            <Button
-              color="secondary"
-              className="w-full justify-center"
-              iconLeading={controls.isOnline ? Stop : Play}
-              isDisabled={controls.startStopBusy}
-              onPress={controls.pressStartOrStop}
+            <Popconfirm
+              isDisabled={!controls.isOnline}
+              title={m.agent_control_stop_dialog_title()}
+              description={m.agent_control_stop_message({ name: controls.agentName })}
+              confirmLabel={m.agent_control_stop_confirm()}
+              pendingLabel={m.agent_control_stop_pending()}
+              errorMessage={agentControlFailureMessage}
+              onConfirm={controls.stop}
             >
-              {controls.isOnline ? m.agent_profile_action_stop() : m.agent_profile_action_start()}
-            </Button>
+              <Button
+                color="secondary"
+                className="w-full justify-center"
+                iconLeading={controls.isOnline ? Stop : Play}
+                isDisabled={controls.startStopBusy}
+                onPress={controls.isOnline ? undefined : controls.submitStart}
+              >
+                {controls.isOnline ? m.agent_profile_action_stop() : m.agent_profile_action_start()}
+              </Button>
+            </Popconfirm>
             <Button
               color="secondary"
               className="w-full justify-center"

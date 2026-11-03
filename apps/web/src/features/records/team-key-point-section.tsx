@@ -1,17 +1,9 @@
-import { useState } from "react";
-import {
-  AlertCircle,
-  Download01 as Download,
-  Stars01 as Stars,
-  XClose as X,
-} from "@untitledui/icons";
+import { useRef, useState } from "react";
+import { Download01 as Download, Stars01 as Stars } from "@untitledui/icons";
 import { Link } from "@tanstack/react-router";
-import { Heading, Text } from "react-aria-components";
 
-import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { Button } from "#src/components/base/buttons/button";
-import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
+import { Popconfirm } from "#src/components/ui/popconfirm";
 import { m } from "#src/paraglide/messages";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import type { KeyPointExtractionMeta } from "./records-content";
@@ -37,10 +29,10 @@ export function TeamKeyPointSection({
   extraction: KeyPointExtractionMeta | undefined;
   assistantAgentId?: string | null;
   busy?: boolean;
-  onStart: () => void;
+  /** Starts the extraction; throws when it could not be started. */
+  onStart: () => Promise<void>;
 }) {
   const workspaceSlug = useWorkspaceSlug();
-  const [confirmOpen, setConfirmOpen] = useState(false);
   // Stale persisted none-submitted failures stay invisible; waiting copy replaces them.
   const panelExtraction = isNoneSubmittedKeyPointFailure(extraction) ? undefined : extraction;
   const status = panelExtraction?.status;
@@ -51,17 +43,42 @@ export function TeamKeyPointSection({
       status === "failed" ||
       status === "pending_setup");
   const willOverwrite = status === "ready";
+  // Where focus lands when the button gives way to the running extraction.
+  const sectionRef = useRef<HTMLElement>(null);
+  // A first start has no popover to show a refusal in, so the section says it.
+  const [startError, setStartError] = useState<string | null>(null);
 
-  function onPressStart() {
-    if (willOverwrite) {
-      setConfirmOpen(true);
-      return;
-    }
-    onStart();
+  function startFirst() {
+    setStartError(null);
+    onStart().catch(() => setStartError(m.records_key_points_failed()));
   }
 
+  async function restart() {
+    setStartError(null);
+    await onStart();
+  }
+
+  const startButton = (
+    <Button
+      type="button"
+      size="sm"
+      color="primary"
+      className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
+      iconLeading={Stars}
+      isDisabled={busy}
+      // Overwriting asks first: the popconfirm around the button owns its press.
+      onPress={willOverwrite ? undefined : startFirst}
+    >
+      {status ? m.records_key_points_team_restart() : m.records_key_points_team_start()}
+    </Button>
+  );
+
   return (
-    <section className="mt-8 space-y-4 border-t border-secondary pt-6">
+    <section
+      ref={sectionRef}
+      tabIndex={-1}
+      className="mt-8 space-y-4 border-t border-secondary pt-6 outline-hidden"
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="space-y-1">
           <h2 className="text-sm font-semibold text-primary">
@@ -100,20 +117,29 @@ export function TeamKeyPointSection({
             {m.records_weekly_export_html()}
           </a>
           {canStart ? (
-            <Button
-              type="button"
-              size="sm"
-              color="primary"
-              className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
-              iconLeading={Stars}
-              isDisabled={busy}
-              onPress={onPressStart}
+            // One element for both states, so focus stays on the button; a first start has
+            // nothing to confirm.
+            <Popconfirm
+              isDisabled={!willOverwrite}
+              title={m.records_key_points_team_restart_confirm_title()}
+              description={m.records_key_points_team_restart_confirm_body()}
+              confirmLabel={m.records_key_points_team_restart()}
+              errorMessage={m.records_key_points_failed()}
+              placement="bottom end"
+              fallbackFocus={() => sectionRef.current}
+              onConfirm={restart}
             >
-              {status ? m.records_key_points_team_restart() : m.records_key_points_team_start()}
-            </Button>
+              {startButton}
+            </Popconfirm>
           ) : null}
         </div>
       </div>
+
+      {startError && (
+        <p role="alert" className="text-sm text-error-primary">
+          {startError}
+        </p>
+      )}
 
       {status ? (
         <KeyPointExtractionPanel
@@ -125,67 +151,6 @@ export function TeamKeyPointSection({
       ) : (
         <p className="text-sm text-tertiary">{m.records_key_points_team_waiting()}</p>
       )}
-
-      <ModalOverlay
-        isOpen={confirmOpen}
-        onOpenChange={(value) => {
-          if (busy) return;
-          setConfirmOpen(value);
-        }}
-      >
-        <Modal className="w-[calc(100vw-2rem)] max-w-md">
-          <Dialog className="p-6">
-            {({ close }) => (
-              <>
-                <ButtonUtility
-                  aria-label={m.controls_close()}
-                  icon={X}
-                  size="sm"
-                  color="tertiary"
-                  isDisabled={busy}
-                  className="absolute top-4 right-4"
-                  onClick={close}
-                />
-                <div className="flex items-start gap-3 pr-8">
-                  <FeaturedIcon color="warning" theme="light" size="sm" icon={AlertCircle} />
-                  <div className="min-w-0 space-y-2">
-                    <Heading slot="title" className="text-md font-semibold text-primary">
-                      {m.records_key_points_team_restart_confirm_title()}
-                    </Heading>
-                    <Text slot="description" className="text-sm text-secondary">
-                      {m.records_key_points_team_restart_confirm_body()}
-                    </Text>
-                  </div>
-                </div>
-                <div className="mt-6 flex justify-end gap-3">
-                  <Button
-                    type="button"
-                    color="secondary"
-                    size="sm"
-                    isDisabled={busy}
-                    onPress={close}
-                  >
-                    {m.records_template_cancel()}
-                  </Button>
-                  <Button
-                    type="button"
-                    color="primary"
-                    size="sm"
-                    className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
-                    isDisabled={busy}
-                    onPress={() => {
-                      setConfirmOpen(false);
-                      onStart();
-                    }}
-                  >
-                    {m.records_key_points_team_restart()}
-                  </Button>
-                </div>
-              </>
-            )}
-          </Dialog>
-        </Modal>
-      </ModalOverlay>
     </section>
   );
 }

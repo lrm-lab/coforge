@@ -17,7 +17,7 @@ import { AgentReminders } from "#src/features/agents/agent-reminders";
 import { useAgentRuntimeControls } from "#src/features/agents/agent-runtime-controls";
 import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
 import { executeAgentControl } from "#src/features/agents/agent-control.functions";
-import { AgentControlDialogs } from "#src/features/agents/agent-control-dialogs";
+import { AgentRestartDialog } from "#src/features/agents/agent-control-dialogs";
 import { AgentRuntimeCredentialDialog } from "#src/features/agents/agent-runtime-credential-dialog";
 import {
   AgentRuntimeConfigDialog,
@@ -485,7 +485,7 @@ export function AgentProfilePanel({
           onSave={onSaveRuntime}
         />
       )}
-      <AgentControlDialogs agentName={knownName} control={controls} />
+      <AgentRestartDialog agentName={knownName} control={controls} />
       {profile && (
         <AgentProfileConfirmationDialogs
           profile={profile}

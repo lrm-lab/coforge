@@ -9,7 +9,7 @@ import { Empty, EmptyHeader, EmptyTitle } from "#src/components/ui/empty";
 import { m } from "#src/paraglide/messages";
 import { CreateWeeklyTemplateDialog } from "./create-weekly-template-dialog";
 import { KeyPointPromptEditor } from "./key-point-prompt-editor";
-import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
+import { Popconfirm } from "#src/components/ui/popconfirm";
 import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
 import {
   emptyKeyPointPrompts,
@@ -80,6 +80,8 @@ export function WeeklyReportSettings({
   const [prompts, setPrompts] = useState<KeyPointPromptsMeta>(initialPrompts);
   const [draftText, setDraftText] = useState(initialPrompts[resolvedSlot].text);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  // Where focus lands after a deleted template's row (and its button) is gone.
+  const templatesRef = useRef<HTMLDivElement>(null);
   /** True while the textarea is focused / composing — ignore loader overwrites. */
   const editingRef = useRef(false);
   /** Last text we intentionally applied from server or a successful save. */
@@ -88,17 +90,6 @@ export function WeeklyReportSettings({
   const [editing, setEditing] = useState<WeeklyTemplateList[number] | null>(null);
   const [detail, setDetail] = useState<WeeklyTemplateList[number] | null>(null);
   const [busy, setBusy] = useState(false);
-  // Each delete confirm keeps its target after closing so the dialog's text stays intact through
-  // the modal's exit animation; the separate `open` flag drives visibility.
-  const [templateDeleteOpen, setTemplateDeleteOpen] = useState(false);
-  const [templatePendingDelete, setTemplatePendingDelete] = useState<
-    WeeklyTemplateList[number] | null
-  >(null);
-  const [historyDeleteOpen, setHistoryDeleteOpen] = useState(false);
-  const [historyPendingDelete, setHistoryPendingDelete] = useState<{
-    slot: KeyPointSlot;
-    entry: KeyPointPromptHistoryEntry;
-  } | null>(null);
 
   function readEditorText(): string {
     return textareaRef.current?.value ?? draftText;
@@ -167,17 +158,9 @@ export function WeeklyReportSettings({
     }
   }
 
-  function askDeleteTemplate(template: WeeklyTemplateList[number]) {
-    setTemplatePendingDelete(template);
-    setTemplateDeleteOpen(true);
-  }
-
-  async function confirmDeleteTemplate() {
-    const template = templatePendingDelete;
-    if (!template) return;
+  async function deleteTemplate(template: WeeklyTemplateList[number]) {
     await remove({ data: { templateId: template.id } });
     if (detail?.id === template.id) setDetail(null);
-    setTemplateDeleteOpen(false);
     await refresh.records();
   }
 
@@ -201,24 +184,13 @@ export function WeeklyReportSettings({
     }
   }
 
-  function askDeleteHistory(entry: KeyPointPromptHistoryEntry) {
-    setHistoryPendingDelete({ slot: keyPointSlot, entry });
-    setHistoryDeleteOpen(true);
-  }
-
-  async function confirmDeleteHistory() {
-    const target = historyPendingDelete;
-    if (!target) return;
+  async function deleteHistoryEntry(entry: KeyPointPromptHistoryEntry) {
     // Resolve the entry's position in the latest snapshot: a history that changed while the
-    // dialog was open must not make this delete a different entry.
-    const historyIndex = keyPointHistoryIndexOf(prompts[target.slot].history, target.entry);
-    if (historyIndex < 0) {
-      setHistoryDeleteOpen(false);
-      return;
-    }
-    const saved = await deleteHistory({ data: { slot: target.slot, historyIndex } });
+    // popover was open must not make this delete a different entry.
+    const historyIndex = keyPointHistoryIndexOf(prompts[keyPointSlot].history, entry);
+    if (historyIndex < 0) return;
+    const saved = await deleteHistory({ data: { slot: keyPointSlot, historyIndex } });
     setPrompts(saved);
-    setHistoryDeleteOpen(false);
     await refresh.records();
     setPrompts(saved);
   }
@@ -284,95 +256,109 @@ export function WeeklyReportSettings({
           id="templates"
           className="min-h-0 flex-1 overflow-auto bg-primary px-page py-4 sm:py-6"
         >
-          {templates.length === 0 ? (
-            <Empty className="py-10">
-              <EmptyHeader>
-                <EmptyTitle>{m.records_templates_empty()}</EmptyTitle>
-              </EmptyHeader>
-            </Empty>
-          ) : (
-            <div className="overflow-x-auto rounded-xl border border-secondary">
-              <table className="w-full min-w-[52rem] border-collapse text-left text-sm text-primary">
-                <thead>
-                  <tr className="bg-secondary_subtle text-tertiary">
-                    <th className="px-4 py-3 font-medium">{m.records_template_name()}</th>
-                    <th className="px-4 py-3 font-medium">{m.records_template_recipients()}</th>
-                    <th className="px-4 py-3 font-medium">{m.records_template_frequency()}</th>
-                    <th className="px-4 py-3 font-medium">{m.records_template_send_time()}</th>
-                    <th className="px-4 py-3 font-medium">{m.records_template_enabled()}</th>
-                    <th className="px-4 py-3 font-medium">{m.records_template_actions()}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {templates.map((template) => (
-                    <tr
-                      key={template.id}
-                      className="cursor-pointer border-t border-secondary hover:bg-primary_hover"
-                      onClick={() => setDetail(template)}
-                    >
-                      <td className="px-4 py-3">
-                        {/* The row stays clickable for pointers; this button is the same action
-                            for keyboard and assistive technology. */}
-                        <Button
-                          size="sm"
-                          color="link-gray"
-                          aria-label={`${m.records_template_open_detail()}: ${template.name}`}
-                          onPress={() => setDetail(template)}
-                          className="font-medium text-primary"
-                        >
-                          {template.name}
-                        </Button>
-                      </td>
-                      <td className="px-4 py-3 text-secondary">{recipientsCell(template)}</td>
-                      <td className="px-4 py-3 text-secondary">
-                        {m.records_template_frequency_weekly()}
-                      </td>
-                      <td className="px-4 py-3 text-secondary">
-                        {m.records_template_send_on({
-                          weekday: weekdayLabel(template.sendWeekday),
-                          time: template.sendTime,
-                        })}
-                      </td>
-                      <td className="px-4 py-3" onClick={(event) => event.stopPropagation()}>
-                        <Button
-                          size="sm"
-                          color="link-gray"
-                          isDisabled={busy}
-                          onPress={() => void toggleApplied(template)}
-                        >
-                          {template.active
-                            ? m.records_template_enabled_yes()
-                            : m.records_template_enabled_no()}
-                        </Button>
-                      </td>
-                      <td className="px-4 py-3" onClick={(event) => event.stopPropagation()}>
-                        <div className="flex items-center gap-3">
-                          <Button
-                            size="sm"
-                            color="link-color"
-                            iconLeading={Edit}
-                            isDisabled={busy}
-                            onPress={() => openEdit(template)}
-                          >
-                            {m.records_template_edit()}
-                          </Button>
-                          <Button
-                            size="sm"
-                            color="tertiary-destructive"
-                            iconLeading={Trash}
-                            isDisabled={busy}
-                            onPress={() => askDeleteTemplate(template)}
-                          >
-                            {m.records_template_delete()}
-                          </Button>
-                        </div>
-                      </td>
+          <div ref={templatesRef} tabIndex={-1} className="outline-hidden">
+            {templates.length === 0 ? (
+              <Empty className="py-10">
+                <EmptyHeader>
+                  <EmptyTitle>{m.records_templates_empty()}</EmptyTitle>
+                </EmptyHeader>
+              </Empty>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-secondary">
+                <table className="w-full min-w-[52rem] border-collapse text-left text-sm text-primary">
+                  <thead>
+                    <tr className="bg-secondary_subtle text-tertiary">
+                      <th className="px-4 py-3 font-medium">{m.records_template_name()}</th>
+                      <th className="px-4 py-3 font-medium">{m.records_template_recipients()}</th>
+                      <th className="px-4 py-3 font-medium">{m.records_template_frequency()}</th>
+                      <th className="px-4 py-3 font-medium">{m.records_template_send_time()}</th>
+                      <th className="px-4 py-3 font-medium">{m.records_template_enabled()}</th>
+                      <th className="px-4 py-3 font-medium">{m.records_template_actions()}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                  </thead>
+                  <tbody>
+                    {templates.map((template) => (
+                      <tr
+                        key={template.id}
+                        className="cursor-pointer border-t border-secondary hover:bg-primary_hover"
+                        onClick={() => setDetail(template)}
+                      >
+                        <td className="px-4 py-3">
+                          {/* The row stays clickable for pointers; this button is the same action
+                            for keyboard and assistive technology. */}
+                          <Button
+                            size="sm"
+                            color="link-gray"
+                            aria-label={`${m.records_template_open_detail()}: ${template.name}`}
+                            onPress={() => setDetail(template)}
+                            className="font-medium text-primary"
+                          >
+                            {template.name}
+                          </Button>
+                        </td>
+                        <td className="px-4 py-3 text-secondary">{recipientsCell(template)}</td>
+                        <td className="px-4 py-3 text-secondary">
+                          {m.records_template_frequency_weekly()}
+                        </td>
+                        <td className="px-4 py-3 text-secondary">
+                          {m.records_template_send_on({
+                            weekday: weekdayLabel(template.sendWeekday),
+                            time: template.sendTime,
+                          })}
+                        </td>
+                        <td className="px-4 py-3" onClick={(event) => event.stopPropagation()}>
+                          <Button
+                            size="sm"
+                            color="link-gray"
+                            isDisabled={busy}
+                            onPress={() => void toggleApplied(template)}
+                          >
+                            {template.active
+                              ? m.records_template_enabled_yes()
+                              : m.records_template_enabled_no()}
+                          </Button>
+                        </td>
+                        <td className="px-4 py-3" onClick={(event) => event.stopPropagation()}>
+                          <div className="flex items-center gap-3">
+                            <Button
+                              size="sm"
+                              color="link-color"
+                              iconLeading={Edit}
+                              isDisabled={busy}
+                              onPress={() => openEdit(template)}
+                            >
+                              {m.records_template_edit()}
+                            </Button>
+                            <Popconfirm
+                              title={m.records_template_delete_confirm_title({
+                                name: template.name,
+                              })}
+                              description={m.records_template_delete_confirm_body()}
+                              confirmLabel={m.records_template_delete_action()}
+                              pendingLabel={m.records_delete_pending()}
+                              errorMessage={m.records_delete_error()}
+                              placement="bottom end"
+                              fallbackFocus={() => templatesRef.current}
+                              onConfirm={() => deleteTemplate(template)}
+                            >
+                              <Button
+                                size="sm"
+                                color="tertiary-destructive"
+                                iconLeading={Trash}
+                                isDisabled={busy}
+                              >
+                                {m.records_template_delete()}
+                              </Button>
+                            </Popconfirm>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </TabPanel>
         <TabPanel id="key_points" className="flex min-h-0 flex-1 flex-col bg-primary">
           <Tabs
@@ -407,37 +393,12 @@ export function WeeklyReportSettings({
                   editingRef.current = false;
                   setDraftText(readEditorText());
                 }}
-                onDeleteHistory={askDeleteHistory}
+                onDeleteHistory={deleteHistoryEntry}
               />
             </TabPanel>
           </Tabs>
         </TabPanel>
       </Tabs>
-
-      {/* ModalOverlay must stay outside Tabs — CollectionBuilder's Hidden tree would remount it. */}
-      <ConfirmDialog
-        open={templateDeleteOpen}
-        onOpenChange={setTemplateDeleteOpen}
-        title={m.records_template_delete_confirm_title({
-          name: templatePendingDelete?.name ?? "",
-        })}
-        description={m.records_template_delete_confirm_body()}
-        confirmLabel={m.records_template_delete_action()}
-        pendingLabel={m.records_delete_pending()}
-        errorMessage={m.records_delete_error()}
-        onConfirm={confirmDeleteTemplate}
-      />
-
-      <ConfirmDialog
-        open={historyDeleteOpen}
-        onOpenChange={setHistoryDeleteOpen}
-        title={m.records_key_points_prompt_history_delete_confirm_title()}
-        description={m.records_key_points_prompt_history_delete_confirm_body()}
-        confirmLabel={m.records_key_points_prompt_history_delete_action()}
-        pendingLabel={m.records_delete_pending()}
-        errorMessage={m.records_delete_error()}
-        onConfirm={confirmDeleteHistory}
-      />
 
       <WeeklyTemplateDetailDialog
         template={detail}

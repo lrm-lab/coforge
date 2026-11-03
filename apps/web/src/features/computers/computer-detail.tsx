@@ -3,7 +3,7 @@ import { ChevronRight, RefreshCw01 as RotateCw, Terminal } from "@untitledui/ico
 
 import { Button } from "#src/components/base/buttons/button";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
-import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
+import { Popconfirm } from "#src/components/ui/popconfirm";
 import { humanLabel } from "#src/lib/human-label";
 import { m } from "#src/paraglide/messages";
 import { TerminalCommand } from "./terminal-command";
@@ -92,7 +92,6 @@ export function ComputerDetail({
     "idle",
   );
   const [createAgentOpen, setCreateAgentOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
   const [formatOpen, setFormatOpen] = useState(false);
   const [imageUpdateOpen, setImageUpdateOpen] = useState(false);
   const [upgradeConfirmOpen, setUpgradeConfirmOpen] = useState(false);
@@ -325,14 +324,17 @@ export function ComputerDetail({
                 </Button>
               )}
               {onDeleteComputer && (
-                <Button
-                  type="button"
-                  size="sm"
-                  color="secondary-destructive"
-                  onPress={() => setDeleteOpen(true)}
+                <Popconfirm
+                  title={m.computer_delete_dialog_title({ name: label })}
+                  description={m.computer_delete_description()}
+                  confirmLabel={m.computer_delete_action()}
+                  errorMessage={m.computer_delete_error()}
+                  onConfirm={onDeleteComputer}
                 >
-                  {m.computer_delete_action()}
-                </Button>
+                  <Button type="button" size="sm" color="secondary-destructive">
+                    {m.computer_delete_action()}
+                  </Button>
+                </Popconfirm>
               )}
               {onRemoveComputer && (
                 <ComputerRemoveAction name={label} onConfirm={onRemoveComputer} />
@@ -370,17 +372,6 @@ export function ComputerDetail({
           await runUpgrade(runtimeOffer, "runtime");
         }}
       />
-      {onDeleteComputer && (
-        <ConfirmDialog
-          open={deleteOpen}
-          onOpenChange={setDeleteOpen}
-          title={m.computer_delete_dialog_title({ name: label })}
-          description={m.computer_delete_description()}
-          confirmLabel={m.computer_delete_action()}
-          errorMessage={m.computer_delete_error()}
-          onConfirm={onDeleteComputer}
-        />
-      )}
       {onCreateAgent && onLoadRuntimeCatalog && (
         <AgentCreateDialog
           open={createAgentOpen}

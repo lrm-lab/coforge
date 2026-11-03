@@ -9,7 +9,7 @@ import { RuntimeProviderMark } from "#src/features/agents/runtime-provider-mark"
 import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
 import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
 import { useLiveAgentDisplay } from "#src/features/agents/workspace-agents-realtime";
-import { AgentControlDialogs } from "#src/features/agents/agent-control-dialogs";
+import { AgentRestartDialog, AgentStopDialog } from "#src/features/agents/agent-control-dialogs";
 import {
   useAgentRuntimeControls,
   type AgentControlExecute,
@@ -131,12 +131,7 @@ export function ComputerDetailAgentRoster({
             <span className="mr-auto text-sm text-tertiary">
               {m.computer_agents_selected({ count: String(selectedAgents.length) })}
             </span>
-            <Button
-              size="sm"
-              color="secondary"
-              isDisabled={locked}
-              onPress={control.pressStartOrStop}
-            >
+            <Button size="sm" color="secondary" isDisabled={locked} onPress={control.submitStart}>
               {m.agent_control_start()}
             </Button>
             <Button
@@ -214,7 +209,8 @@ export function ComputerDetailAgentRoster({
           <p className="py-2 text-sm text-tertiary">{m.computer_no_agents_on_computer()}</p>
         )}
       </DetailGroup>
-      <AgentControlDialogs agentName={selectionName} control={control} />
+      <AgentStopDialog agentName={selectionName} control={control} />
+      <AgentRestartDialog agentName={selectionName} control={control} />
     </>
   );
 }

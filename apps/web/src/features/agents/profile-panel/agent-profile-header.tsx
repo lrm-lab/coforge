@@ -8,11 +8,15 @@ import {
 } from "@untitledui/icons";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { Popconfirm } from "#src/components/ui/popconfirm";
 import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
 import type { AgentMascot } from "#src/features/agents/agent-mascot";
 import { AgentMascotAvatar } from "#src/features/agents/agent-mascot-avatar";
 import { DeletedAgentBadge } from "#src/features/agents/deleted-agent";
-import type { AgentRuntimeControls } from "#src/features/agents/agent-runtime-controls";
+import {
+  agentControlFailureMessage,
+  type AgentRuntimeControls,
+} from "#src/features/agents/agent-runtime-controls";
 import { m } from "#src/paraglide/messages";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 import { useOpenDirectConversation } from "#src/features/conversations/open-direct-conversation";
@@ -106,13 +110,26 @@ export function AgentProfileHeader({
       )}
       {!deleted && (
         <>
-          <ButtonUtility
-            icon={controls.isOnline ? Stop : Play}
-            size="sm"
-            isDisabled={controls.startStopBusy}
-            tooltip={controls.isOnline ? m.agent_control_stop_agent() : m.agent_control_start()}
-            onClick={controls.pressStartOrStop}
-          />
+          {/* One trigger for both states, so keyboard focus stays on it when Start becomes Stop;
+              Stop asks first, Start has nothing to confirm. */}
+          <Popconfirm
+            isDisabled={!controls.isOnline}
+            title={m.agent_control_stop_dialog_title()}
+            description={m.agent_control_stop_message({ name: controls.agentName })}
+            confirmLabel={m.agent_control_stop_confirm()}
+            pendingLabel={m.agent_control_stop_pending()}
+            errorMessage={agentControlFailureMessage}
+            placement="bottom end"
+            onConfirm={controls.stop}
+          >
+            <ButtonUtility
+              icon={controls.isOnline ? Stop : Play}
+              size="sm"
+              isDisabled={controls.startStopBusy}
+              tooltip={controls.isOnline ? m.agent_control_stop_agent() : m.agent_control_start()}
+              onClick={controls.isOnline ? undefined : controls.submitStart}
+            />
+          </Popconfirm>
           <ButtonUtility
             icon={RotateCcw}
             size="sm"

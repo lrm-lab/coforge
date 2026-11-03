@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState, type ReactNode, type Ref } from "react";
 import { Dialog as AriaDialog, Popover as AriaPopover } from "react-aria-components";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 
@@ -14,13 +14,16 @@ import { AgentMascotAvatar } from "./agent-mascot-avatar";
 /**
  * The popover a header control opens with a list of Agents (the thread's following Agents, the
  * chat list header's busy ones): its enter and exit motion, width, and a dialog labelled `label`.
- * `children` receives `close`, to close the popover when a row opens a profile.
+ * `children` receives `close`, to close the popover when a row opens a profile. `dialogRef` reaches
+ * the dialog, which a row that leaves the list can hand focus to.
  */
 export function AgentListPopover({
   label,
+  dialogRef,
   children,
 }: {
   label: string;
+  dialogRef?: Ref<HTMLElement>;
   children: (close: () => void) => ReactNode;
 }) {
   return (
@@ -33,7 +36,7 @@ export function AgentListPopover({
         "w-[min(20rem,calc(100vw-2.5rem))]",
       )}
     >
-      <AriaDialog aria-label={label} className="outline-hidden">
+      <AriaDialog ref={dialogRef} aria-label={label} className="outline-hidden">
         {({ close }) => children(close)}
       </AriaDialog>
     </AriaPopover>

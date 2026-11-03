@@ -447,7 +447,7 @@ export function TemplateReportDetail({
                   overviewReportId={report.id}
                   extraction={content.keyPointExtraction}
                   busy={teamKeyPointBusy}
-                  onStart={() => void onStartTeamKeyPoints()}
+                  onStart={onStartTeamKeyPoints}
                 />
               ) : null}
             </RecordsReadingColumn>

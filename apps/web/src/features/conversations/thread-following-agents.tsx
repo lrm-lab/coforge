@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { DialogTrigger as AriaDialogTrigger, Heading } from "react-aria-components";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -5,7 +6,7 @@ import { AlertCircle, XClose } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { useAppToast } from "#src/components/ui/toast";
+import { Popconfirm } from "#src/components/ui/popconfirm";
 import { AgentStackFace } from "#src/features/agents/agent-display-avatar";
 import {
   AgentListPopover,
@@ -43,11 +44,14 @@ function FollowingAgentRow({
   canUnfollow,
   onOpenProfile,
   onUnfollow,
+  listFocus,
 }: {
   agent: FollowingAgent;
   canUnfollow: boolean;
   onOpenProfile?: (agentId: string) => void;
-  onUnfollow: (agentId: string) => void;
+  onUnfollow: (agentId: string) => Promise<void>;
+  /** The list's dialog, where focus goes once this row is gone. */
+  listFocus: () => HTMLElement | null;
 }) {
   useWatchAgentDisplay(agent.id);
   const live = useLiveAgent(agent.id);
@@ -61,13 +65,25 @@ function FollowingAgentRow({
       onOpenProfile={onOpenProfile ? () => onOpenProfile(agent.id) : undefined}
       action={
         canUnfollow && (
-          <ButtonUtility
-            icon={XClose}
-            size="sm"
-            color="tertiary"
-            tooltip={m.conversation_thread_unfollow_agent({ name: agent.displayName })}
-            onClick={() => onUnfollow(agent.id)}
-          />
+          // The popconfirm opens from inside the list's popover, which stays open under it.
+          <Popconfirm
+            title={m.conversation_thread_unfollow_agent_confirm_title({ name: agent.displayName })}
+            description={m.conversation_thread_unfollow_agent_confirm_body({
+              name: agent.displayName,
+            })}
+            confirmLabel={m.conversation_thread_unfollow_agent_confirm()}
+            errorMessage={m.conversation_thread_following_agents_unfollow_error()}
+            placement="bottom end"
+            fallbackFocus={listFocus}
+            onConfirm={() => onUnfollow(agent.id)}
+          >
+            <ButtonUtility
+              icon={XClose}
+              size="sm"
+              color="tertiary"
+              tooltip={m.conversation_thread_unfollow_agent({ name: agent.displayName })}
+            />
+          </Popconfirm>
         )
       }
     />
@@ -88,26 +104,22 @@ export function ThreadFollowingAgents({
   threadRootId: string;
   onOpenAgentProfile?: (agentId: string) => void;
 }) {
-  const toast = useAppToast();
   const queryClient = useQueryClient();
   const unfollow = useServerFn(unfollowPublicChannelThreadAgent);
   const query = useThreadFollowingAgents(channelId, threadRootId);
   const queryKey = threadFollowingAgentsQueryKey(channelId, threadRootId);
+  const listDialogRef = useRef<HTMLElement>(null);
   const agents = query.data?.agents ?? [];
   const canUnfollow = query.data?.canUnfollow ?? false;
   const count = agents.length;
 
   async function unfollowAgent(agentId: string) {
-    try {
-      await unfollow({ data: { channelId, threadRootId, agentId } });
-      queryClient.setQueryData(queryKey, (current: typeof query.data) =>
-        current
-          ? { ...current, agents: current.agents.filter((agent) => agent.id !== agentId) }
-          : current,
-      );
-    } catch {
-      toast.error(m.conversation_thread_following_agents_unfollow_error());
-    }
+    await unfollow({ data: { channelId, threadRootId, agentId } });
+    queryClient.setQueryData(queryKey, (current: typeof query.data) =>
+      current
+        ? { ...current, agents: current.agents.filter((agent) => agent.id !== agentId) }
+        : current,
+    );
   }
 
   // Only a load with nothing to show is a failure: a failed background refetch keeps the list
@@ -146,7 +158,7 @@ export function ThreadFollowingAgents({
           </>
         )}
       </Button>
-      <AgentListPopover label={m.conversation_thread_following_agents()}>
+      <AgentListPopover label={m.conversation_thread_following_agents()} dialogRef={listDialogRef}>
         {(close) => (
           <>
             <div className="border-b border-secondary px-3 py-2">
@@ -173,7 +185,8 @@ export function ThreadFollowingAgents({
                           }
                         : undefined
                     }
-                    onUnfollow={(agentId) => void unfollowAgent(agentId)}
+                    onUnfollow={unfollowAgent}
+                    listFocus={() => listDialogRef.current}
                   />
                 ))}
               </AgentListRows>
