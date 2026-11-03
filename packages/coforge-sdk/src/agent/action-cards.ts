@@ -151,6 +151,8 @@ const choiceOptionIdSchema = z
 const choiceOptionSchema = z.object({
   id: choiceOptionIdSchema,
   label: z.string().trim().min(1).max(80),
+  /** The option the Agent recommends: at most one per question, and prepare moves it first. */
+  recommended: z.boolean().optional(),
 });
 
 /**
@@ -290,12 +292,14 @@ export type ResolvedDesktopTakeoverPayload = {
 export type ResolvedChoicePayload = {
   type: "choice";
   prompt: string;
-  options: { id: string; label: string }[];
+  options: { id: string; label: string; recommended?: true }[];
   /** The asked person's user id; every choice card names one. */
   to: string;
   /** Present when the card offers an answer of the person's own; absent when the Agent disabled
    * it and on cards made before the field existed. */
   other?: { label?: string };
+  /** A note for the prepare response, e.g. that a recommended option was moved to the front. */
+  warning?: string;
 };
 export type ResolvedActionCardPayload =
   | ResolvedChannelCreatePayload

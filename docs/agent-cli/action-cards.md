@@ -40,9 +40,10 @@ yet:
 - **`desktop:takeover`**: `prompt?`, `draftHint?`. Posts a card with an Open desktop control for
   this Agent's cloud screen when `page:fill` cannot finish the step (OAuth, captcha, unknown
   selectors). Do not ask for secrets in chat.
-- **`choice`**: `prompt`, `options` (2–8 of `{id,label}` with unique `id`s matching
-  `^[a-z][a-z0-9_]{0,31}$`), `to` (required: the handle or user id of the person who may
-  answer, and who must be a member of the conversation; there is no default owner),
+- **`choice`**: `prompt`, `options` (2–8 of `{id,label,recommended?}` with unique `id`s matching
+  `^[a-z][a-z0-9_]{0,31}$`; `recommended: true` marks the Agent's pick, at most one per question,
+  and prepare moves it first with a warning), `to` (required: the handle or user id of the person
+  who may answer, and who must be a member of the conversation; there is no default owner),
   `other?` (`{ enabled?, label? }`; on by default: a final row that is itself an input, submitted
   as `_other` with the person's text fenced in the delivery; `enabled: false` removes it),
   `draftHint?`. The person clicks an option or types in the other row. An executed

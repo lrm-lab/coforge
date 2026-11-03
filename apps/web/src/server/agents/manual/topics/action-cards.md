@@ -103,6 +103,10 @@ coforge action prepare --target "@alice" <<'COFORGEACTION'
 COFORGEACTION
 ```
 
+Mark the option you would choose with `"recommended": true` (at most one per question). It is
+shown first and labelled "Recommended", and the delivery to you adds `(recommended)`. Do not write
+"（推荐）" into the label: the label is the option's text, the recommendation is the flag.
+
 Read the card again: `[action card: executed; choice=password]` means they clicked that option. The
 choice delivery also names who answered, for example `@alice answered your choice "How should we
 sign in?" in #general: password · Password`.

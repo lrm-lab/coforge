@@ -107,6 +107,10 @@ export class ActionCards {
       action,
     );
     const legacyChoice = action.type === "choice" && !action.to?.trim();
+    const warnings = [
+      "warning" in payload ? payload.warning : undefined,
+      legacyChoice ? LEGACY_CHOICE_WARNING : undefined,
+    ].filter((line): line is string => !!line);
     const body = action.draftHint
       ? `${actionCardSummary(action)}\n${action.draftHint}`
       : actionCardSummary(action);
@@ -123,7 +127,7 @@ export class ActionCards {
     return {
       messageId: created.id,
       metadata: { kind: "action-card" },
-      ...(legacyChoice ? { warning: LEGACY_CHOICE_WARNING } : {}),
+      ...(warnings.length ? { warning: warnings.join(" ") } : {}),
     };
   }
 

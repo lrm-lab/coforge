@@ -62,11 +62,27 @@ export async function resolveChoicePayload(
       errorId: "action_card_choice_to",
       hint: "the person to ask is not in this conversation",
     });
+  const recommended = action.options.filter((option) => option.recommended === true);
+  if (recommended.length > 1)
+    throw new AppError("INVALID_INPUT", {
+      errorId: "action_card_choice_recommended",
+      hint: "a choice card marks at most one option recommended",
+    });
+  const options = action.options.map((option) => ({
+    id: option.id,
+    label: option.label,
+    ...(option.recommended === true ? { recommended: true as const } : {}),
+  }));
+  // A recommendation is shown first: moved with a note rather than refused.
+  const at = options.findIndex((option) => option.recommended === true);
+  const moved = at > 0 ? options.splice(at, 1)[0]! : undefined;
+  if (moved) options.unshift(moved);
   return {
     type: "choice",
     prompt: action.prompt,
-    options: action.options.map((option) => ({ id: option.id, label: option.label })),
+    options,
     to: user.id,
+    ...(moved ? { warning: `Recommended option "${moved.label}" moved to first position.` } : {}),
     // On unless the Agent turned it off; only cards made with this field (or after it existed) get it.
     ...(action.other?.enabled === false
       ? {}
@@ -144,7 +160,7 @@ export async function commitChoiceCard(
 function choiceAnswer(
   payload: ResolvedChoicePayload,
   input: { optionId: string; text?: string },
-): { optionId: string; label: string; text?: string } {
+): { optionId: string; label: string; text?: string; recommended?: true } {
   if (input.optionId === CHOICE_OTHER_OPTION_ID) {
     // A stored payload omits `other` when the Agent turned it off; a hand-made one may still say so.
     const other = payload.other as { label?: string; enabled?: boolean } | undefined;
@@ -159,7 +175,11 @@ function choiceAnswer(
   }
   const option = payload.options.find((entry) => entry.id === input.optionId);
   if (!option) throw new AppError("INVALID_INPUT");
-  return { optionId: option.id, label: option.label };
+  return {
+    optionId: option.id,
+    label: option.label,
+    ...(option.recommended ? { recommended: true as const } : {}),
+  };
 }
 
 /** The choice is a delivery: the Agent that asked is woken with who answered and what they chose,
@@ -174,7 +194,7 @@ async function wakeAskingAgent(
     agentId: string;
     actorUserId: string;
     prompt: string;
-    answer: { optionId: string; label: string; text?: string };
+    answer: { optionId: string; label: string; text?: string; recommended?: true };
   },
 ) {
   const [message, agent, actor] = await Promise.all([
@@ -222,7 +242,9 @@ async function wakeAskingAgent(
   const answered =
     input.answer.optionId === CHOICE_OTHER_OPTION_ID
       ? `${input.answer.label} (their own words)\n  │ ${fenceUserText(input.answer.text ?? "")}`
-      : `${input.answer.optionId} · ${input.answer.label}`;
+      : `${input.answer.optionId} · ${input.answer.label}${
+          input.answer.recommended ? " (recommended)" : ""
+        }`;
   await new AgentDeliveryPublisher(publisher ?? createCentrifugoServerApi()).publish(
     input.workspaceId,
     [
