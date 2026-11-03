@@ -28,6 +28,7 @@ export const REALTIME_EVENTS = {
   savedAdded: "saved.added.v1",
   savedRemoved: "saved.removed.v1",
   taskChanged: "task.changed.v1",
+  labelChanged: "label.changed.v1",
   workspaceDeleted: "workspace.deleted.v1",
   workspaceFeaturesChanged: "workspace.features.changed.v1",
   agentChanged: "agent.changed.v1",

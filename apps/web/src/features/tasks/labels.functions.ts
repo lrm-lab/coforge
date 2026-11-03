@@ -2,6 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
+import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
+import { announceLabelChanged } from "#src/server/tasks/label-signal.server";
 import { LABEL_COLORS, LABEL_NAME_MAX, Labels } from "#src/server/tasks/labels.server";
 
 const labelName = z.string().trim().min(1).max(LABEL_NAME_MAX);
@@ -21,7 +23,9 @@ export const createTaskLabel = createServerFn({ method: "POST" })
   .validator(z.object({ name: labelName, color: labelColor.optional() }).strict())
   .handler(async ({ context, data }) => {
     const { user, db, workspaceId } = context;
-    return new Labels(db).create(workspaceId, user.id, data);
+    const label = await new Labels(db).create(workspaceId, user.id, data);
+    await announceLabelChanged(createCentrifugoServerApi(), workspaceId, { label });
+    return label;
   });
 
 /** Renames or recolors a label; an owner or admin only. */
@@ -33,7 +37,9 @@ export const updateTaskLabel = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const { id, ...input } = data;
     const { user, db, workspaceId } = context;
-    return new Labels(db).update(workspaceId, user.id, id, input);
+    const label = await new Labels(db).update(workspaceId, user.id, id, input);
+    await announceLabelChanged(createCentrifugoServerApi(), workspaceId, { label });
+    return label;
   });
 
 /** Deletes a label from every task; an owner or admin only. */
@@ -43,4 +49,8 @@ export const deleteTaskLabel = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const { user, db, workspaceId } = context;
     await new Labels(db).delete(workspaceId, user.id, data.id);
+    await announceLabelChanged(createCentrifugoServerApi(), workspaceId, {
+      label: null,
+      deletedLabelId: data.id,
+    });
   });
