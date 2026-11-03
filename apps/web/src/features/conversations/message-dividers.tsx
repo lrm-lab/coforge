@@ -22,11 +22,9 @@ export function dayLabel(value: Date | string, locale?: string, timeZone?: strin
 /**
  * A divider row: 16px between its label and the content above and below (design spec). The row
  * below a divider always starts a sender run, whose own 12px top padding plus `pb-1` makes 16px.
- * Above, a continuation or notice row ends in 4px of padding, so the divider adds 12px; a row
- * with a sender heading ends in 12px, so the divider adds 4px.
+ * Every row above ends in 4px of padding, so the divider adds 12px.
  */
-const DIVIDER_ROW_CLASS =
-  "message-text flex items-center gap-3 px-4 pt-3 pb-1 md:px-6 [[data-header-row]+li>&]:pt-1";
+const DIVIDER_ROW_CLASS = "message-text flex items-center gap-3 px-4 pt-3 pb-1 md:px-6";
 
 /** The "new messages" divider (Slack-style): a brand rule naming where unread begins. */
 export function UnreadDivider() {

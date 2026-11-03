@@ -16,6 +16,7 @@ import {
 } from "./composer-outbox";
 import type { ChipMention } from "./message-markdown";
 import { MessageBody } from "./message-body";
+import { messagePaddingClass, ROW_CLASS, RUN_START_CLASS } from "./message-row";
 import { canEditUnsent, failureAnnounced, failureNeedsAnnouncing } from "./use-message-outbox";
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 
@@ -117,15 +118,10 @@ export function OutboxMessageRow({
   return (
     <li
       data-outbox-state={entry.state}
-      data-header-row={grouped ? undefined : ""}
       // Same geometry as `MessageRow` (see there).
-      className={cn(
-        "flex flex-col",
-        !grouped &&
-          "mt-2 first:mt-0 md:mt-4 [[data-header-row]+&]:mt-0 md:[[data-header-row]+&]:mt-2",
-      )}
+      className={cn(ROW_CLASS, !grouped && RUN_START_CLASS)}
     >
-      <div className={cn("mx-1 flex px-3 md:mx-3", "gap-3", grouped ? "pt-0 pb-1" : "py-3")}>
+      <div className={cn("mx-1 flex px-3 md:mx-3", "gap-3", messagePaddingClass(grouped))}>
         <div className="flex w-9 shrink-0 items-start justify-center">
           {!grouped && <IdentityAvatar size="sm" name={viewer.name} src={viewer.avatarUrl} />}
         </div>

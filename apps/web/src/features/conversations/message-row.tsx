@@ -47,6 +47,10 @@ export { groupsWithPrevious } from "./message-view";
  * changes which rows count as near the viewport, which lays out more of them — a feedback loop
  * that pins the main thread until the renderer is killed. */
 export const ROW_CLASS = "flex flex-col";
+/** The margin above a row that starts a sender run (see `MessageRow`'s spacing). */
+export const RUN_START_CLASS = "mt-2 first:mt-0 md:mt-4";
+/** A message's padding inside its hover background: 12px above a sender heading, 4px below all. */
+export const messagePaddingClass = (grouped: boolean) => (grouped ? "pb-1" : "pt-3 pb-1");
 
 /**
  * One history row: optional day divider, then the message with its hover actions.
@@ -215,26 +219,20 @@ export const MessageRow = memo(function MessageRow({
       <OwnMessageTicks readState={readState} inline />
     ) : undefined;
   return (
-    // Spacing (design spec, docs/design/page-skeleton-and-density.md): a message with a sender
-    // heading keeps 12px between its content and its hover background on all four sides; a
-    // same-sender continuation keeps 12px at the sides only and sits 4px under the row above. Two
-    // sender runs are 32px apart content to content from `md` up (16px of margin after a
-    // continuation's 4px, 8px after a heading row's 12px) and 24px on a phone (8px and 0), where
-    // 32px read as a blank band between short messages (task #118). The row is inset 4px (24px column: 12px) so the content
-    // stays on the stream's column with the composer and the dividers.
+    // Spacing (docs/design/page-skeleton-and-density.md): a message keeps 12px between its
+    // content and its hover background at the sides, and every row ends 4px under its content, so
+    // a same-sender continuation sits 4px under the row above whether that row has the sender
+    // heading or not, as in Raft. A row with the sender heading also keeps 12px above it. Two
+    // sender runs are 32px apart content to content from `md` up and 24px on a phone, where 32px
+    // read as a blank band between short messages (task #118). The row is inset 4px (24px column:
+    // 12px) so the content stays on the stream's column with the composer and the dividers.
     <li
       data-message-id={message.id}
-      data-header-row={grouped ? undefined : ""}
       className={cn(
         ROW_CLASS,
-        !grouped &&
-          !dayChanged &&
-          !unreadStartsHere &&
-          "mt-2 first:mt-0 md:mt-4 [[data-header-row]+&]:mt-0 md:[[data-header-row]+&]:mt-2",
-        // A continuation under a thread preview card starts 16px below the card (design spec):
-        // a heading row ends 12px under its card, a continuation row 4px.
-        grouped &&
-          "[[data-header-row]:has([data-thread-preview])+&]:mt-1 [li:not([data-header-row]):has([data-thread-preview])+&]:mt-3",
+        !grouped && !dayChanged && !unreadStartsHere && RUN_START_CLASS,
+        // A continuation under a thread preview card starts 16px below the card (design spec).
+        grouped && "[li:has([data-thread-preview])+&]:mt-3",
       )}
     >
       {unreadStartsHere && <UnreadDivider />}
@@ -247,7 +245,7 @@ export const MessageRow = memo(function MessageRow({
           "group/message relative mx-1 flex scroll-m-6 rounded-lg px-3 transition-[background-color,box-shadow] duration-500 hover:bg-message-hover focus-within:bg-message-hover target:bg-tertiary target:ring-2 target:ring-brand/50 target:ring-offset-4 target:ring-offset-primary md:mx-3",
           highlighted && "bg-tertiary ring-2 ring-brand/50 ring-offset-4 ring-offset-primary",
           "gap-3",
-          grouped ? "pt-0 pb-1" : "py-3",
+          messagePaddingClass(grouped),
         )}
       >
         <MessageSenderGutter

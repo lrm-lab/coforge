@@ -11,7 +11,8 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
  * edged and lifted, on the row's top edge, ending where the row's content begins. It never covers
  * the sender line — the time, an Agent's description filling it — nor a continuation's first line,
  * which no longer keeps a blank reserve for it, nor the "new messages" divider's label, under which
- * it comes down onto the sender line. A phone opens the action sheet instead.
+ * it comes down onto the sender line. A phone opens the action sheet instead. A sender run's first
+ * message is no farther from the next than the continuations are from each other.
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The channel, its Agent and
  * the messages are seeded per run and removed after it. Screenshots (light, dark, a narrow window,
@@ -126,6 +127,15 @@ test("a hovered message's action bar covers none of the message", async () => {
       await browser("set", "viewport", String(width), String(height));
       await browser("open", page);
       await browser("wait", "--fn", `${pageHydrated} && ${row(continuation!.id)} !== null`);
+
+      // A run reads as one: the first continuation sits as close under the heading row's text
+      // as the next continuation sits under it (Raft: 4px of row padding either way).
+      const gaps = await evaluate<number[]>(`(() => {
+        const text = (id) => document.querySelector("#message-" + id + " .message-markdown").getBoundingClientRect();
+        const ids = ${JSON.stringify(messages.slice(1).map((message) => message.id))};
+        return ids.slice(1).map((id, i) => Math.round(text(id).top - text(ids[i]).bottom));
+      })()`);
+      expect(new Set(gaps).size).toBe(1);
 
       // The heading row: the bar is over its top edge, clear of the time and the description.
       await hover(heading!.id);
