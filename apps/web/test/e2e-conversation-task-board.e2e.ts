@@ -189,12 +189,33 @@ test("a conversation's Tasks tab is the Tasks page board, claims by moving and p
         String(Math.round(fromX + ((toX - fromX) * step) / 10)),
         String(Math.round(fromY + ((toY - fromY) * step) / 10)),
       );
-    // While carried, a column the unowned card cannot go to is marked (dimmed, "not allowed"
-    // pointer); the one it can go to is not.
+    // While carried, a column the unowned card cannot go to is marked (its contents fade, the
+    // pointer reads "not allowed"); the one it can go to lights up (task #446).
     const blockedColumn = (column: string) =>
       `document.querySelector('section[aria-label=${JSON.stringify(column)}]').hasAttribute("data-drop-blocked")`;
     expect(await eval_(blockedColumn("In review"))).toBe(true);
     expect(await eval_(blockedColumn("In progress"))).toBe(false);
+    /** A column's look, waited for rather than read once (its fade and light transition in):
+     * its own opacity and its contents' are as given, and it is lit (a brand tint and rule on its
+     * overlay) or not. */
+    const looks = (column: string, contents: string, lit: boolean) =>
+      waitFor(
+        `(() => { const el = document.querySelector('section[aria-label=${JSON.stringify(column)}]'); const over = getComputedStyle(el, "::after"); const shown = over.content !== "none" && over.backgroundColor !== "rgba(0, 0, 0, 0)" && over.boxShadow !== "none"; return getComputedStyle(el).opacity === "1" && getComputedStyle(el.firstElementChild).opacity === ${JSON.stringify(contents)} && shown === ${lit}; })()`,
+      );
+    const bothLooks = async () => {
+      await looks("In review", "0.4", false);
+      await looks("In progress", "1", true);
+    };
+    await bothLooks();
+    await browser("screenshot", join(artifacts, "drag-light.png"));
+    // The same drag in the dark theme, where the old whole-column fade could not be seen.
+    await browser("eval", `document.documentElement.classList.add("dark-mode")`);
+    try {
+      await bothLooks();
+      await browser("screenshot", join(artifacts, "drag-dark.png"));
+    } finally {
+      await browser("eval", `document.documentElement.classList.remove("dark-mode")`);
+    }
     // The pointer, carrying the card, reads "not allowed" over that column: the card under it
     // takes no pointer events, so the column's cursor shows through.
     const cursorAt = ([x, y]: [number, number]) =>

@@ -25,6 +25,7 @@ import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { useDocumentDragCursor } from "#src/hooks/use-document-drag-cursor";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
+import { dropTargetClass, type DropState } from "./task-drop-target";
 import { getTaskMoveCommand } from "./task-move";
 import { TaskStatusIcon, statusLabel } from "./task-status-icon";
 import {
@@ -127,8 +128,9 @@ export function TaskWorkflow<T extends TaskView>({
   const hides = layout === "board" && groups.length > 1 && hidden !== undefined;
   const shownGroups = hides ? groups.filter((group) => !hidden.has(group.status)) : groups;
   const hiddenGroups = hides ? groups.filter((group) => hidden.has(group.status)) : [];
-  // While a card is carried, a column it can go to takes the drop; one it cannot says so before
-  // the drop (it dims, and the pointer over it reads "not allowed"). Its own column stays idle.
+  // While a card is carried, a column it can go to takes the drop and lights up; one it cannot
+  // says so before the drop (its contents fade, the pointer over it reads "not allowed",
+  // `dropTargetClass`). Its own column stays idle.
   const dropState = (status: TaskStatus): DropState => {
     if (!active || status === active.status) return "idle";
     const open =
@@ -304,10 +306,6 @@ function DragHandle({ task, disabled }: { task: TaskView; disabled: boolean }) {
   );
 }
 
-/** A group while a card is carried: it takes the drop, it cannot (the card may not move there), or
- * it has no part in the drag (no card is carried, or this is the card's own group). */
-type DropState = "open" | "blocked" | "idle";
-
 function TaskGroup({
   status,
   count,
@@ -361,16 +359,14 @@ function TaskGroup({
       className={
         board
           ? cn(
-              "flex min-w-0 flex-col rounded-xl bg-secondary transition-[box-shadow,opacity] md:max-w-80 md:min-w-52 md:flex-1",
-              dropState === "blocked" && "opacity-50",
+              "flex min-w-0 flex-col rounded-xl bg-secondary md:max-w-80 md:min-w-52 md:flex-1",
               hidable && HIDDEN_COLUMN_CLASS[status],
               !expanded && "md:self-start",
-              drop.isOver && "ring-2 ring-brand ring-inset",
+              dropTargetClass(dropState, drop.isOver),
             )
           : cn(
-              "min-w-0 overflow-hidden rounded-xl border border-secondary bg-primary transition-opacity",
-              dropState === "blocked" && "opacity-50",
-              drop.isOver && "ring-2 ring-brand",
+              "min-w-0 overflow-hidden rounded-xl border border-secondary bg-primary",
+              dropTargetClass(dropState, drop.isOver),
             )
       }
     >
@@ -478,11 +474,10 @@ function HiddenColumn({
       data-drop-blocked={dropState === "blocked" || undefined}
       className={({ isFocusVisible, isHovered }) =>
         cn(
-          "flex h-10 w-full cursor-pointer items-center gap-2 rounded-lg border border-secondary bg-primary px-3 text-sm text-secondary outline-focus-ring transition-[background-color,opacity]",
-          dropState === "blocked" && "opacity-50",
+          "flex h-10 w-full cursor-pointer items-center gap-2 rounded-lg border border-secondary bg-primary px-3 text-sm text-secondary outline-focus-ring transition-[background-color]",
           isHovered && "bg-primary_hover",
           isFocusVisible && "outline-2 outline-offset-2",
-          drop.isOver && "ring-2 ring-brand",
+          dropTargetClass(dropState, drop.isOver),
         )
       }
     >
