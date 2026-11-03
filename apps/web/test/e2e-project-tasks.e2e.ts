@@ -127,6 +127,10 @@ test("a Project page lists its Tasks as a tree, and a Task's popup moves it betw
     const option = (text: string) =>
       `[...document.querySelectorAll('[role^="menuitem"], [role="option"]')].find((el) => el.textContent.includes(${JSON.stringify(text)}))`;
     await browser("wait", "--fn", `${option(other.name)} != null`);
+    // Followed, the first row names the channel's Project and holds the check.
+    const followRow = option(`跟随频道（${home.name}）`);
+    expect(await evaluate<boolean>(`${followRow} != null`)).toBe(true);
+    expect(await evaluate<string | null>(`${followRow}.getAttribute("aria-checked")`)).toBe("true");
     await shoot("desktop-project-picker");
     await evaluate(`(${option(other.name)}.click(), true)`);
     await browser("wait", "--fn", `${dialog}.textContent.includes(${JSON.stringify(other.name)})`);

@@ -320,6 +320,7 @@ export function taskView(
       .map(({ label }) => labelView(label))
       .sort((a, b) => a.name.localeCompare(b.name)),
     project: task.project ?? null,
+    projectPinned: task.projectPinned,
     ...(task.discussionConversationId && {
       discussionConversationId: task.discussionConversationId,
       ...(counts && { replyCount: counts.replyCount }),
