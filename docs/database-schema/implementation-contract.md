@@ -35,3 +35,10 @@ apps/web/
   rollback/forward-compatibility impact, and affected repository tests have
   been reviewed. Destructive or long-running migrations require an explicit
   deployment plan before implementation.
+- The models and the migration history describe the same schema: `prisma migrate diff
+  --from-migrations prisma/migrations --to-schema prisma` (with a shadow database) is empty. A
+  migration that adds an index the model cannot see, such as one built `CONCURRENTLY` or a partial
+  one, declares it in the model in the same change (`@@index`/`@@unique` with `map:` and `where:`);
+  a column whose drop is deferred for expand-contract keeps a later migration that drops it,
+  written once the release that stopped reading it is live. Otherwise `migrate dev` generates SQL
+  that drops them (#473).

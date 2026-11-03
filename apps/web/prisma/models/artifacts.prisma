@@ -23,9 +23,12 @@ model Artifact {
   workspace       Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   versions        ArtifactVersion[]
 
-  // The live name is unique per home through a partial index (`deletedAt IS NULL`), so a soft
-  // delete releases it at once; Prisma cannot express a partial unique index in the model.
   @@index([workspaceId, homeKey])
+  /// The live name is unique per home (`deletedAt IS NULL`), so a soft delete releases it at once.
+  /// Built `CONCURRENTLY` by migration 20261103080100; declared here so `migrate diff` keeps it.
+  /// Its generated `workspaceId_homeKey_name` selector ignores `deletedAt`: look a live name up with
+  /// `findFirst` and `deletedAt: null`, never `findUnique` or `upsert` on it.
+  @@unique([workspaceId, homeKey, name], where: { deletedAt: null }, map: "artifacts_home_live_name_key")
   @@map("artifacts")
 }
 
