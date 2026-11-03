@@ -44,7 +44,8 @@ test("a send to many Agents goes to Centrifugo as one batch, and one failed push
     push("a3", "c1"),
   ]);
 
-  expect(batches).toHaveLength(4);
+  expect(batches).toHaveLength(2);
+  expect(batches[1]?.map(({ channel }) => channel)).toEqual(["daemon:w:c2"]);
   expect(batches[0]?.map(({ channel }) => channel)).toEqual([
     "daemon:w:c1",
     "daemon:w:c2",
