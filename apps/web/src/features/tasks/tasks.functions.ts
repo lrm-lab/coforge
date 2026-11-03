@@ -86,6 +86,15 @@ export const loadTaskOverview = createServerFn({ method: "GET" })
     return new TaskBoard(db).overview(workspaceId, user.id);
   });
 
+/** The unfinished Tasks of one Project the viewer may read, for the Project page. */
+export const loadProjectTasks = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .validator(z.object({ projectId: z.uuid() }).strict())
+  .handler(async ({ context, data }) => {
+    const { user, db, workspaceId } = context;
+    return new TaskBoard(db).projectTasks({ workspaceId, userId: user.id }, data.projectId);
+  });
+
 /** One Task as the Tasks page shows it, in any status; null when the viewer cannot see it. */
 export const loadOverviewTask = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])

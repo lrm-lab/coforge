@@ -83,6 +83,10 @@ export class TaskBoard {
     return this.overviewReads.overview(workspaceId, userId);
   }
 
+  projectTasks(scope: { workspaceId: string; userId: string }, projectId: string) {
+    return this.overviewReads.projectTasks(scope, projectId);
+  }
+
   overviewTask(
     scope: { workspaceId: string; userId: string },
     ref: { conversationId: string; number: number },

@@ -238,6 +238,47 @@ export class TaskOverviewReads {
   }
 
   /**
+   * The unfinished Tasks filed under one Project that the viewer may read, with the id of each
+   * Task's parent so a page can build the forest. A Task pinned elsewhere is not in the list, and
+   * a private channel's Tasks are only there for its own members; the Project's own counts come
+   * from the same filtered rows, never an unfiltered count.
+   */
+  async projectTasks(
+    scope: { workspaceId: string; userId: string },
+    projectId: string,
+  ): Promise<{
+    tasks: Array<TaskOverview["tasks"][number] & { parentTaskId: string | null }>;
+  }> {
+    const { workspaceId, userId } = scope;
+    await requireWorkspaceMember(this.db, workspaceId, userId);
+    const project = await this.db.project.findFirst({
+      where: { id: projectId, workspaceId },
+      select: { id: true },
+    });
+    if (!project) throw new AppError("NOT_FOUND");
+    const tasks = await this.db.task.findMany({
+      where: {
+        workspaceId,
+        projectId,
+        status: { in: UNFINISHED_TASK_STATUSES },
+        conversation: overviewConversationWhere(workspaceId, userId),
+      },
+      orderBy: [{ conversationId: "asc" }, { number: "asc" }],
+      select: {
+        ...overviewSelection(userId),
+        parentLinks: { select: { parentTaskId: true } },
+      },
+    });
+    const relations = await loadTaskRelations(this.db, "people", tasks);
+    return {
+      tasks: tasks.map((task) => ({
+        ...overviewRow(task, userId, { relations: relationsOf(relations, task.id) }),
+        parentTaskId: task.parentLinks[0]?.parentTaskId ?? null,
+      })),
+    };
+  }
+
+  /**
    * One Task as the Tasks page shows it, in any status, or null when the viewer cannot see it
    * there: the page opens a Task it has not loaded (a finished one past its pages) through this.
    */

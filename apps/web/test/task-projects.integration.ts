@@ -113,3 +113,49 @@ test("a direct message's tasks take no project, and only the owner, creator or a
     await db.$disconnect();
   }
 });
+
+test("the project page lists only readable, unfinished tasks filed under it, with their parents", async () => {
+  const { db, board, run, make, principals, channel, secret } = await setup();
+  try {
+    const workspaceId = principals.alice.workspaceId;
+    const aliceId = principals.alice.userId!;
+    const suffix = crypto.randomUUID().slice(0, 8);
+    const alpha = await db.project.create({
+      data: { workspaceId, name: "Alpha", slug: `alpha-${suffix}` },
+    });
+    const beta = await db.project.create({
+      data: { workspaceId, name: "Beta", slug: `beta-${suffix}` },
+    });
+    await db.conversation.update({
+      where: { id: channel.id },
+      data: { projectId: alpha.id },
+    });
+    const [parent] = await make("alice", 1);
+    const [child] = await make("alice", 1, { parent: { number: parent! } });
+    // A Task in the private channel starts in no Project, then is pinned to Beta: not Alpha's.
+    const [elsewhere] = await make("alice", 1, {}, secret.id);
+    await run("alice", { operation: "amend", number: elsewhere!, project: beta.slug }, secret.id);
+
+    const listed = await board.projectTasks({ workspaceId, userId: aliceId }, alpha.id);
+    expect(listed.tasks.map((task) => task.number).sort()).toEqual([parent, child].sort());
+    const parentRow = listed.tasks.find((task) => task.number === parent)!;
+    expect(listed.tasks.find((task) => task.number === child)!.parentTaskId).toBe(parentRow.id);
+
+    // A finished Task leaves the page.
+    await run("alice", { operation: "update", number: child!, status: "closed" });
+    expect(
+      (await board.projectTasks({ workspaceId, userId: aliceId }, alpha.id)).tasks.map(
+        (task) => task.number,
+      ),
+    ).toEqual([parent]);
+    // A Project of another Workspace is not found.
+    expect(
+      await board.projectTasks({ workspaceId, userId: aliceId }, crypto.randomUUID()).then(
+        () => "found",
+        () => "refused",
+      ),
+    ).toBe("refused");
+  } finally {
+    await db.$disconnect();
+  }
+});
