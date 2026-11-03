@@ -148,13 +148,15 @@ test("assignment receipts survive mute and disconnect without waking unrelated A
     expect(recovery.resumeMessages.map((message) => message.messageId)).toEqual(
       receipts.map((receipt) => receipt.messageId),
     );
+    // A system notice never holds a send: the send's freshness excludes senderless notices, so
+    // the receipt shows in the delivery read and the recovery context above, not here.
     expect(
       (
         await (
           await repo.agentTargetFreshness(workspace.id, assigned!.id, threads[0]!)
         ).readPending(0)
       ).map((message) => message.senderKind),
-    ).toEqual(["system"]);
+    ).toEqual([]);
     const receipt = receipts[0]!;
     const page = await repo.readMessagesPage(workspace.id, assigned!.id, threads[0]!, {
       around: receipt.messageId,

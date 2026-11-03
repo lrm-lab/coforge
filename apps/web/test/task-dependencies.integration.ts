@@ -19,16 +19,19 @@ test("a cycle of blockers or of parents is refused, naming the tasks", async () 
       (await refusal(run("alice", { operation: "amend", number: a!, blockedBy: [{ number: a! }] })))
         .code,
     ).toBe("INVALID_INPUT");
-    await run("alice", { operation: "amend", number: b!, parent: { number: a! } });
-    await run("alice", { operation: "amend", number: c!, parent: { number: b! } });
+    // The parent cycle uses siblings of their own: a task waiting for a later parent is refused
+    // by the tree rule before the parent move is judged.
+    const [p, q, r] = await make("alice", 3);
+    await run("alice", { operation: "amend", number: q!, parent: { number: p! } });
+    await run("alice", { operation: "amend", number: r!, parent: { number: q! } });
     const parents = await refusal(
-      run("alice", { operation: "amend", number: a!, parent: { number: c! } }),
+      run("alice", { operation: "amend", number: p!, parent: { number: r! } }),
     );
     expect(parents.code).toBe("INVALID_INPUT");
     expect(parents.hint).toContain("below");
     // Five levels are allowed, a sixth is not.
     const [d, e, f] = await make("alice", 3);
-    await run("alice", { operation: "amend", number: d!, parent: { number: c! } });
+    await run("alice", { operation: "amend", number: d!, parent: { number: r! } });
     await run("alice", { operation: "amend", number: e!, parent: { number: d! } });
     expect(
       (await refusal(run("alice", { operation: "amend", number: f!, parent: { number: e! } })))

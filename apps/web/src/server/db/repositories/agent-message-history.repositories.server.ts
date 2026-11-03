@@ -174,9 +174,12 @@ export async function readAgentMessagePage(
   const hasMore = rows.length > limit;
   const pageRows = rows.slice(0, limit).sort((a, b) => a.sequence - b.sequence);
   // An unread read lists what others wrote; the Agent's own messages sit under the same
-  // read-through the page moves, so they are consumed without being listed.
+  // read-through the page moves, so they are consumed without being listed. A senderless notice
+  // (a thread unfollow, say) is not someone writing to the Agent either.
   const messages = map(
-    page.unread ? pageRows.filter((row) => row.sender?.agentId !== agentId) : pageRows,
+    page.unread
+      ? pageRows.filter((row) => row.sender !== null && row.sender.agentId !== agentId)
+      : pageRows,
   );
   const hasOlder = page.after
     ? await anchorSideHasMessages(db, scope, anchor, "older")

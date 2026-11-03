@@ -79,11 +79,17 @@ async function setThreadFollowed(
         update: {},
       });
     } else {
-      await tx.threadFollow.deleteMany({ where: { memberId, rootMessageId } });
-      if (unfollowNotice) {
+      const { count } = await tx.threadFollow.deleteMany({ where: { memberId, rootMessageId } });
+      // Only a follow that ended leaves a notice; unfollowing again is not another decision.
+      if (unfollowNotice && count > 0) {
         const sequence = await allocateSequence(tx, conversationId);
         await tx.message.create({
-          data: { workspaceId, conversationId, sequence, body: unfollowNotice },
+          data: {
+            workspaceId,
+            conversationId,
+            sequence,
+            body: unfollowNotice,
+          },
         });
       }
     }
