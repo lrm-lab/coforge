@@ -12,11 +12,12 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
 
 /**
- * Another conversation's Task in a message (task #456, the web part of task #437): a channel's
- * Task reads as its badge under the channel's current name (`#name:#N`), a direct message's under
- * the other side from the reader's seat (`dm:@peer:#N`), each with its title as the tooltip and a
- * link that opens it there. A private channel's Task the reader cannot see stays the words the
- * sender wrote. A change to a referenced Task repaints its badge live, from any conversation.
+ * Another conversation's Task in a message (task #456, the web part of task #437) reads as its
+ * label: the status icon and the title, and nothing else. Its number and where it lives — the
+ * channel under its current name, a direct message as the other side from the reader's seat — are
+ * in its name and its peek, with the whole title; a press opens it there. A private channel's Task
+ * the reader cannot see is "a Task you can't view", without its number, status or channel. A
+ * change to a referenced Task repaints its label live, from any conversation.
  *
  * The write flag (`task-ref-tokens`) is off, so the message is seeded with its stored tokens. Opt-in
  * like the other browser E2Es: real local Web, `agent-browser`, and Centrifugo behind a same-origin
@@ -28,7 +29,7 @@ const centrifugoOrigin = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;
 if (!centrifugoOrigin) throw new Error("COFORGE_E2E_CENTRIFUGO_URL is required");
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/cross-task-reference");
 
-test("another conversation's Task reads as its live badge, or as the words for a reader who cannot see it", async () => {
+test("another conversation's Task reads as its live label, or as a Task the reader can't view", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `cross-task-${process.pid}`);
   const centrifugo = createCentrifugoServerApi();
@@ -125,10 +126,10 @@ test("another conversation's Task reads as its live badge, or as the words for a
       },
     });
 
-    const launchLabel = `#${renamed}:#${launchTask}`;
-    const directLabel = `dm:@${agent.name}:#${directTask}`;
-    const linkTo = (label: string) =>
-      `[...document.querySelectorAll(".message-markdown a")].find((el) => el.textContent === ${JSON.stringify(label)})`;
+    const launchTitle = `Ship the launch page ${tail}`;
+    const label = (title: string) =>
+      `[...document.querySelectorAll(".message-markdown [data-task-status]")].find((el) => el.textContent === ${JSON.stringify(title)})`;
+    const chip = (title: string) => `${label(title)}?.closest("[role=button]")`;
     const settled = () =>
       browser("wait", "--fn", `document.getAnimations().every((a) => a.playState !== "running")`);
     await mkdir(artifacts, { recursive: true });
@@ -137,56 +138,47 @@ test("another conversation's Task reads as its live badge, or as the words for a
     await browser(
       "wait",
       "--fn",
-      `${pageHydrated} && ${linkTo(launchLabel)} != null && ${linkTo(directLabel)} != null`,
+      `${pageHydrated} && ${chip(launchTitle)} != null && ${chip(`Draft the release notes ${tail}`)} != null`,
     );
 
-    // The channel's Task: current name, title and status in its name, a link to it there.
-    expect(await evaluate<string>(`${linkTo(launchLabel)}.getAttribute("aria-label")`)).toBe(
-      `${launchLabel}, Ship the launch page ${tail}, To do`,
-    );
-    expect(await evaluate<string>(`${linkTo(launchLabel)}.getAttribute("href")`)).toEndWith(
-      `/channel/${launch.id}?task=${launchTask}`,
+    // The channel's Task: its title on the label; status, number and current channel in its name.
+    expect(await evaluate<string>(`${chip(launchTitle)}.getAttribute("aria-label")`)).toBe(
+      `${launchTitle}, To do, #${launchTask} · #${renamed}`,
     );
     // The direct message's: the other side from the viewer's seat.
-    expect(await evaluate<string>(`${linkTo(directLabel)}.getAttribute("href")`)).toEndWith(
-      `/dm/${directId}?task=${directTask}`,
-    );
-    // The private channel's: the words the sender wrote, nothing to open, no title.
+    expect(
+      await evaluate<string>(
+        `${chip(`Draft the release notes ${tail}`)}.getAttribute("aria-label")`,
+      ),
+    ).toEndWith(`#${directTask} · DM with @${agent.name}`);
+    // The private channel's: said so, with nothing to open and nothing of the Task.
     const body = await evaluate<string>(
       `document.querySelector('[data-message-id="${seeded.id}"] .message-markdown').textContent`,
     );
-    expect(body).toContain(`#${secret.channelName}:#${secretTask} waits`);
+    expect(body).toContain("Task you can't view waits");
     expect(body).not.toContain(`Secret plan`);
-    expect(
-      await evaluate<number>(
-        `[...document.querySelectorAll(".message-markdown a")].filter((el) => el.textContent.includes("secret")).length`,
-      ),
-    ).toBe(0);
+    expect(body).not.toContain(secret.channelName!);
+    expect(body).not.toContain(`#${secretTask}`);
+    // A reference that names the open channel is its own Task's label, which opens in place.
+    expect(await evaluate<boolean>(`${chip(`Local follow-up ${tail}`)} != null`)).toBe(true);
 
-    // A reference that names the open channel is its own Task's badge, which opens in place.
-    expect(
-      await evaluate<boolean>(
-        `[...document.querySelectorAll(".message-markdown [data-task-status]")].some((el) => el.tagName === "SPAN" && el.textContent === "#${hereTask}")`,
-      ),
-    ).toBe(true);
-
-    // The title is the badge's tooltip.
+    // The peek: the whole title, and where the Task lives.
     await browser("click", "textarea[data-composer]");
-    await evaluate(`${linkTo(launchLabel)}.setAttribute("data-e2e-launch", "") ?? true`);
+    await evaluate(`${chip(launchTitle)}.setAttribute("data-e2e-launch", "") ?? true`);
     await browser("hover", "[data-e2e-launch]");
     await browser(
       "wait",
       "--fn",
-      `[...document.querySelectorAll('[role="tooltip"]')].some((el) => el.textContent.includes("Ship the launch page"))`,
+      `[...document.querySelectorAll("p")].some((el) => el.textContent === "#${launchTask} · #${renamed}")`,
     );
-    await browser("screenshot", join(artifacts, "badges.png"));
+    await browser("screenshot", join(artifacts, "labels.png"));
     await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
     await settled();
-    await browser("screenshot", join(artifacts, "badges-dark.png"));
+    await browser("screenshot", join(artifacts, "labels-dark.png"));
     await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
     await settled();
 
-    // A change to the Task, announced in its own channel, repaints the badge here.
+    // A change to the Task, announced in its own channel, repaints the label here.
     await live.execute(as, {
       idempotencyKey: crypto.randomUUID(),
       conversationId: launch.id,
@@ -196,10 +188,10 @@ test("another conversation's Task reads as its live badge, or as the words for a
     await browser(
       "wait",
       "--fn",
-      `${linkTo(launchLabel)}?.getAttribute("data-task-status") === "in_progress"`,
+      `${label(launchTitle)}?.getAttribute("data-task-status") === "in_progress"`,
     );
 
-    // The badge opens the Task in its channel.
+    // The label opens the Task in its channel.
     await browser("click", "[data-e2e-launch]");
     await browser(
       "wait",
@@ -210,7 +202,7 @@ test("another conversation's Task reads as its live badge, or as the words for a
     // Phone.
     await browser("set", "viewport", "390", "844");
     await browser("open", `${proxy.origin}/en/w/${workspace.slug}/channel/${here.id}`);
-    await browser("wait", "--fn", `${pageHydrated} && ${linkTo(launchLabel)} != null`);
+    await browser("wait", "--fn", `${pageHydrated} && ${chip(launchTitle)} != null`);
     await browser("screenshot", join(artifacts, "phone.png"));
   } finally {
     await browser("close").catch(() => undefined);
@@ -221,4 +213,4 @@ test("another conversation's Task reads as its live badge, or as the words for a
     await db.agent.deleteMany({ where: { id: agent.id } }).catch(() => undefined);
     await db.$disconnect();
   }
-});
+}, 180_000);

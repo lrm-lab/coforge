@@ -2,7 +2,7 @@ import type { TaskStatus, TaskView } from "@lrm/coforge-sdk/internal";
 
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { m } from "#src/paraglide/messages";
-import { StatusBadge } from "./task-history";
+import { TaskStatusIcon } from "./task-status-icon";
 import { TaskFieldTrigger as EditableTrigger } from "./task-field-trigger";
 import { taskStatusOptions } from "./task-move";
 import { statusLabel } from "./task-workflow";
@@ -20,14 +20,14 @@ export function StatusMenu({
   onSelect: (status: TaskStatus) => void;
 }) {
   const options = taskStatusOptions(task, currentMemberId);
-  if (options.length === 1) return <StatusBadge status={task.status} />;
+  if (options.length === 1) return <StatusText status={task.status} />;
   return (
     <Dropdown.Root>
       <EditableTrigger
         label={`${m.tasks_change_status()}: ${statusLabel(task.status)}`}
         disabled={disabled}
       >
-        <StatusBadge status={task.status} />
+        <StatusText status={task.status} />
       </EditableTrigger>
       <Dropdown.Popover placement="bottom start" className="w-52">
         <Dropdown.Menu
@@ -53,5 +53,15 @@ export function StatusMenu({
         </Dropdown.Menu>
       </Dropdown.Popover>
     </Dropdown.Root>
+  );
+}
+
+/** A status as its ring and its name: the ring carries the colour, the name reads as text. */
+function StatusText({ status }: { status: TaskStatus }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-sm text-primary">
+      <TaskStatusIcon status={status} />
+      {statusLabel(status)}
+    </span>
   );
 }

@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import type { Mentionable } from "#src/features/conversations/mention-text";
 import { isAppError } from "#src/lib/app-error";
+import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { CreateTaskDialog } from "./create-task-dialog";
 import { TASK_ASSIGNMENT_MANAGER_REQUIRED } from "./task-assignment";
@@ -43,6 +44,7 @@ function errorText(error: SectionError) {
  * Workspace has Tasks v2 on.
  */
 export function TaskSection({
+  layout = "column",
   task,
   onCommand,
   members,
@@ -51,6 +53,8 @@ export function TaskSection({
   onPickerChange,
   onOpenRelated,
 }: {
+  /** One column under the title (a phone), or a column beside the pages. */
+  layout?: "column" | "sidebar";
   task: TaskView;
   onCommand?: (command: DetailCommand) => Promise<void>;
   members?: readonly Mentionable[];
@@ -108,9 +112,8 @@ export function TaskSection({
     // compact grid: a short label and a one-line value per property, two to a row, with nothing
     // shown for a relation it does not have. A value with more behind it opens it in a popover.
     // The creator is History's first entry; History and the sub-tasks are tabs under the grid.
-    <section className="flex flex-col gap-2 px-4 pt-3 sm:px-6">
-      <h3 className="line-clamp-2 text-md font-semibold break-words text-primary">{task.title}</h3>
-      <dl className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
+    <section className={cn("flex flex-col gap-2", layout === "column" && "px-4 sm:px-6")}>
+      <dl data-layout={layout} className={cn("flex flex-col", layout === "sidebar" && "gap-3")}>
         <TaskProperty label={m.tasks_overview_status()}>
           <StatusMenu
             task={task}

@@ -1,14 +1,22 @@
 import type { TaskView } from "@lrm/coforge-sdk/internal";
-import { DotsHorizontal as MoreHorizontal, XClose } from "@untitledui/icons";
+import {
+  ArrowLeft,
+  ChevronRight,
+  DotsHorizontal as MoreHorizontal,
+  XClose,
+} from "@untitledui/icons";
+import { useRouter, useRouterState } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
-import { Heading } from "react-aria-components";
+import { Button as AriaButton, Heading } from "react-aria-components";
 
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import type { Mentionable } from "#src/features/conversations/mention-text";
+import { useMediaQuery } from "#src/hooks/use-media-query";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
+import { TaskStatusIcon } from "./task-status-icon";
 import { TaskDeleteDialog, taskDeleteMenuItem, useCanDeleteTask } from "./task-delete";
 import type { VisibleTaskName } from "./task-relation-edits";
 import { taskRelationMenuItems } from "./task-relation-lines";
@@ -20,6 +28,7 @@ import {
 } from "./task-detail-tabs";
 import { TaskSection, type RelationPicker } from "./task-section";
 import { ownsDiscussion, taskFollowMenuItem, useTaskFollow } from "./task-follow";
+import { isTaskStep } from "./task-popup-steps";
 import { statusLabel, TASK_STATUS_COLOR, type TaskControls } from "./task-workflow";
 import { useTaskRelationAccess, type DetailCommand } from "./use-task-relations";
 
@@ -167,8 +176,16 @@ export function TaskDetailDialog({
   const relations = useTaskRelationAccess(task, currentMemberId);
   // A Task followed for its own conversation; a message's thread keeps the thread's own follow.
   const follow = useTaskFollow(task, open && Boolean(thread) && ownsDiscussion(task));
+  // The properties are a column beside the tabs, as Linear's issue; a phone has no room beside.
+  const sidebar = !useMediaQuery("(max-width: 639px)", false);
+  // Opened from another Task's popup: Esc and the back arrow step back up to it (browser Back
+  // does by itself); only the first popup closes.
+  const router = useRouter();
+  const step = useRouterState({ select: (state) => isTaskStep(state.location) });
+  const stepBack = step ? () => router.history.back() : undefined;
   const section = (
     <TaskSection
+      layout={sidebar ? "sidebar" : "column"}
       task={task}
       onCommand={onCommand}
       members={members}
@@ -192,88 +209,117 @@ export function TaskDetailDialog({
           className={cn(
             // On a phone the thread scrolls, never the sheet (the shared Modal scrolls there).
             "flex h-full w-full flex-col overflow-hidden rounded-none max-sm:overflow-hidden max-sm:shadow-none max-sm:safe-area-padding",
-            // With a thread the popup is a workspace; without one it only wraps the task.
-            thread
-              ? "sm:h-[min(92vh,64rem)] sm:w-[min(60rem,calc(100vw-2rem))]"
-              : "sm:h-auto sm:w-[min(40rem,calc(100vw-2rem))]",
+            // The popup hugs what it shows, up to a cap; the discussion keeps a reading height of
+            // its own. With a thread or the side column it is a workspace; else it wraps the task.
+            "sm:h-auto sm:max-h-[min(92vh,64rem)]",
+            thread || sidebar
+              ? "sm:w-[min(60rem,calc(100vw-2rem))]"
+              : "sm:w-[min(44rem,calc(100vw-2rem))]",
           )}
         >
           <Dialog className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="flex shrink-0 items-center gap-3 border-b border-secondary py-3 pr-3 pl-4 sm:pl-6">
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-xs font-medium text-tertiary">{conversationName}</div>
-                <Heading
-                  slot="title"
-                  level={2}
-                  className="truncate text-md font-semibold text-primary"
-                >
-                  {m.tasks_details_title({ number: String(task.number) })}
-                </Heading>
+            <div
+              className="contents"
+              onKeyDownCapture={(event) => {
+                // Before the overlay's own Escape, which would close every step at once. A menu or
+                // picker open inside handles its Escape first and stops it there.
+                if (event.key !== "Escape" || !stepBack || event.defaultPrevented) return;
+                event.preventDefault();
+                event.stopPropagation();
+                stepBack();
+              }}
+            >
+              <div className="flex shrink-0 items-center gap-1 pt-2 pr-3 pl-2 sm:pl-4">
+                <TaskTrail
+                  task={task}
+                  conversationName={conversationName}
+                  onBack={stepBack}
+                  onOpenRelated={onOpenRelated}
+                />
+                {(relations.on || follow || canDelete) && (
+                  <Dropdown.Root>
+                    <ButtonUtility
+                      tooltip={m.tasks_more_actions({ number: String(task.number) })}
+                      icon={MoreHorizontal}
+                      size="sm"
+                      color="tertiary"
+                    />
+                    <Dropdown.Popover placement="bottom end">
+                      <Dropdown.Menu
+                        onAction={(key) => {
+                          if (key === "delete") setDeleting(true);
+                          else if (key === "parent" || key === "blocker" || key === "subtask")
+                            setPicker(key);
+                        }}
+                      >
+                        {relations.on && (
+                          <Dropdown.Section>
+                            {taskRelationMenuItems({
+                              canEdit: relations.canEdit,
+                              canAddBlocker: relations.canAddBlocker,
+                              hasParent: task.parent != null,
+                            })}
+                          </Dropdown.Section>
+                        )}
+                        {(follow || canDelete) && (
+                          <Dropdown.Section
+                            className={cn(relations.on && "border-t border-secondary pt-1")}
+                          >
+                            {follow && taskFollowMenuItem(follow)}
+                            {canDelete && taskDeleteMenuItem()}
+                          </Dropdown.Section>
+                        )}
+                      </Dropdown.Menu>
+                    </Dropdown.Popover>
+                  </Dropdown.Root>
+                )}
+                <ButtonUtility
+                  icon={XClose}
+                  size="sm"
+                  color="tertiary"
+                  aria-label={m.tasks_close()}
+                  onClick={() => onOpenChange(false)}
+                />
               </div>
-              {(relations.on || follow || canDelete) && (
-                <Dropdown.Root>
-                  <ButtonUtility
-                    tooltip={m.tasks_more_actions({ number: String(task.number) })}
-                    icon={MoreHorizontal}
-                    size="sm"
-                    color="tertiary"
-                  />
-                  <Dropdown.Popover placement="bottom end">
-                    <Dropdown.Menu
-                      onAction={(key) => {
-                        if (key === "delete") setDeleting(true);
-                        else if (key === "parent" || key === "blocker" || key === "subtask")
-                          setPicker(key);
-                      }}
+              <TaskDetailTabs
+                tabs={tabs}
+                selected={current}
+                onChange={setTab}
+                subtasks={task.subtasks}
+                task={
+                  <>
+                    <Heading
+                      slot="title"
+                      level={2}
+                      className="flex items-start gap-2 px-4 pt-2 text-lg font-semibold break-words text-primary sm:px-6"
                     >
-                      {relations.on && (
-                        <Dropdown.Section>
-                          {taskRelationMenuItems({
-                            canEdit: relations.canEdit,
-                            canAddBlocker: relations.canAddBlocker,
-                            hasParent: task.parent != null,
-                          })}
-                        </Dropdown.Section>
-                      )}
-                      {(follow || canDelete) && (
-                        <Dropdown.Section
-                          className={cn(relations.on && "border-t border-secondary pt-1")}
-                        >
-                          {follow && taskFollowMenuItem(follow)}
-                          {canDelete && taskDeleteMenuItem()}
-                        </Dropdown.Section>
-                      )}
-                    </Dropdown.Menu>
-                  </Dropdown.Popover>
-                </Dropdown.Root>
-              )}
-              <ButtonUtility
-                icon={XClose}
-                size="sm"
-                color="tertiary"
-                aria-label={m.tasks_close()}
-                onClick={() => onOpenChange(false)}
+                      <TaskStatusIcon status={task.status} className="mt-1 size-5" />
+                      <span className="line-clamp-3 min-w-0">{task.title}</span>
+                    </Heading>
+                    {task.description?.trim() && (
+                      // The description under the title, as Linear's issue; long ones are cut.
+                      <p className="line-clamp-6 px-4 text-sm whitespace-pre-wrap text-secondary sm:px-6">
+                        {task.description.trim()}
+                      </p>
+                    )}
+                    {!sidebar && section}
+                  </>
+                }
+                sidebar={sidebar ? section : undefined}
+                pages={{
+                  discussion: () => thread?.(),
+                  subtasks: () => (
+                    <TaskSubtasksPage
+                      task={task}
+                      canAdd={relations.canEdit}
+                      onAdd={() => setPicker("subtask")}
+                      onOpen={onOpenRelated}
+                    />
+                  ),
+                  history: () => <TaskHistoryPage task={task} members={members} />,
+                }}
               />
             </div>
-            <TaskDetailTabs
-              tabs={tabs}
-              selected={current}
-              onChange={setTab}
-              subtasks={task.subtasks}
-              task={section}
-              pages={{
-                discussion: () => thread?.(),
-                subtasks: () => (
-                  <TaskSubtasksPage
-                    task={task}
-                    canAdd={relations.canEdit}
-                    onAdd={() => setPicker("subtask")}
-                    onOpen={onOpenRelated}
-                  />
-                ),
-                history: () => <TaskHistoryPage task={task} members={members} />,
-              }}
-            />
           </Dialog>
         </Modal>
       </TaskPopupOverlay>
@@ -305,5 +351,64 @@ function TaskPopupOverlay(
       isDismissable
       className="max-sm:items-stretch max-sm:px-0 max-sm:[--modal-pb:0px] max-sm:[--modal-pt:0px]"
     />
+  );
+}
+
+/**
+ * Where the Task sits, above its title: a back arrow to the popup it was opened from, if any; the
+ * Task it is a step of, to go up to; then its conversation and number. A parent the reader cannot
+ * see is named as such and opens nothing.
+ */
+function TaskTrail({
+  task,
+  conversationName,
+  onBack,
+  onOpenRelated,
+}: {
+  task: TaskView;
+  conversationName?: string;
+  onBack?: () => void;
+  onOpenRelated?: (task: VisibleTaskName) => void;
+}) {
+  const parent = task.parent;
+  const openParent =
+    parent && !parent.hidden && onOpenRelated ? () => onOpenRelated(parent) : undefined;
+  const here = conversationName
+    ? `#${conversationName.replace(/^#/, "")} · #${task.number}`
+    : `#${task.number}`;
+  return (
+    <nav
+      aria-label={m.tasks_trail()}
+      className="flex min-w-0 flex-1 items-center gap-1 text-sm text-tertiary"
+    >
+      {onBack ? (
+        <ButtonUtility
+          icon={ArrowLeft}
+          size="sm"
+          color="tertiary"
+          tooltip={m.tasks_back()}
+          onClick={onBack}
+        />
+      ) : (
+        <span aria-hidden="true" className="w-1" />
+      )}
+      {parent && (
+        <>
+          {openParent && !parent.hidden ? (
+            <AriaButton
+              onPress={openParent}
+              className="flex min-w-0 items-center gap-1.5 rounded-md px-1 py-0.5 outline-none hover:bg-primary_hover hover:text-secondary focus-visible:ring-2 focus-visible:ring-focus-ring"
+            >
+              <TaskStatusIcon status={parent.status} className="size-3.5" />
+              <span className="max-w-[24em] truncate">{parent.title}</span>
+            </AriaButton>
+          ) : (
+            <span className="truncate px-1">{m.tasks_ref_hidden()}</span>
+          )}
+          <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 text-fg-quaternary" />
+        </>
+      )}
+      <span className="shrink-0 px-1 tabular-nums">{here}</span>
+    </nav>
   );
 }

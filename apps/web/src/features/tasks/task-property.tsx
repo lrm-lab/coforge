@@ -14,9 +14,20 @@ export function TaskProperty({
   className?: string;
 }) {
   return (
-    <div className={cn("flex min-h-8 min-w-0 items-center gap-3", className)}>
-      <dt className="w-20 shrink-0 text-sm text-tertiary">{label}</dt>
-      <dd className="flex min-w-0 flex-1 items-center">{children}</dd>
+    <div
+      className={cn(
+        "flex min-h-8 min-w-0 items-center gap-3",
+        // Beside the pages, the label sits above its value, as Jira's Details.
+        "[[data-layout=sidebar]_&]:flex-col [[data-layout=sidebar]_&]:items-start [[data-layout=sidebar]_&]:gap-1",
+        className,
+      )}
+    >
+      <dt className="w-20 shrink-0 text-sm text-tertiary [[data-layout=sidebar]_&]:w-auto [[data-layout=sidebar]_&]:text-xs">
+        {label}
+      </dt>
+      <dd className="flex min-w-0 flex-1 items-center [[data-layout=sidebar]_&]:w-full">
+        {children}
+      </dd>
     </div>
   );
 }

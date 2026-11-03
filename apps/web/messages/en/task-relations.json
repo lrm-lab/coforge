@@ -1,6 +1,6 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
-  "tasks_blocked_by_mark": "Blocked by {name}",
+  "tasks_blocked_by_mark": "Waiting on {name}",
   "tasks_parent": "Parent",
   "tasks_parent_mark": "Parent task {name}",
   "tasks_add_blocker": "Add",
@@ -32,5 +32,10 @@
   "tasks_history_blockers_added": "Added: {names}",
   "tasks_history_blockers_removed": "Removed: {names}",
   "tasks_tab_discussion": "Discussion",
-  "tasks_tabs_label": "Task details"
+  "tasks_tabs_label": "Task details",
+  "tasks_ref_hidden": "Task you can't view",
+  "tasks_ref_hidden_hint": "You don't have access to this task",
+  "tasks_ref_dm": "DM with @{peer}",
+  "tasks_trail": "Where this task is",
+  "tasks_back": "Back"
 }

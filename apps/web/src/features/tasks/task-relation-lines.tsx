@@ -8,7 +8,9 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { m } from "#src/paraglide/messages";
 
+import { taskMetaLabel } from "./task-chip";
 import { TaskLinkRow } from "./task-relations";
+import { TaskStatusIcon } from "./task-status-icon";
 import {
   canAddBlocker,
   canRemoveBlockers,
@@ -28,11 +30,12 @@ import { TaskPickerButton } from "./task-picker";
 
 /** A Task named inline: its name, then its title, cut to fit. */
 function InlineTask({ task }: { task: TaskLink }) {
-  if (task.hidden) return <span className="min-w-0 truncate">{m.tasks_hidden()}</span>;
+  if (task.hidden) return <span className="min-w-0 truncate">{m.tasks_ref_hidden()}</span>;
   return (
     <>
-      <span className="shrink-0 text-tertiary tabular-nums">{taskNameLabel(task)}</span>
+      <TaskStatusIcon status={task.status} className="size-3.5" />
       <span className="min-w-0 truncate text-primary">{task.title}</span>
+      <span className="shrink-0 text-xs text-tertiary tabular-nums">{taskMetaLabel(task)}</span>
     </>
   );
 }
@@ -147,7 +150,6 @@ export function TaskBlockedByValue({
       label={m.tasks_blocked_by()}
       value={
         <>
-          <Flag01 aria-hidden="true" className="size-4 shrink-0 text-fg-warning-secondary" />
           <FirstAndMore tasks={openBlockers(blockedBy)} />
         </>
       }

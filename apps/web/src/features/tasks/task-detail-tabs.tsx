@@ -40,6 +40,7 @@ export function TaskDetailTabs({
   onChange,
   subtasks,
   task,
+  sidebar,
   pages,
 }: {
   tabs: readonly TaskDetailTab[];
@@ -48,6 +49,8 @@ export function TaskDetailTabs({
   subtasks: TaskView["subtasks"];
   /** The Task's title and properties, above the tab strip. */
   task: ReactNode;
+  /** The properties, as a column beside the pages on a wide screen (Linear's issue). */
+  sidebar?: ReactNode;
   /** Each tab's page. The discussion fills its panel and scrolls itself; the others scroll here. */
   pages: Record<TaskDetailTab, () => ReactNode>;
 }) {
@@ -59,39 +62,48 @@ export function TaskDetailTabs({
     history: m.tasks_history(),
   };
   return (
-    <Tabs
-      selectedKey={selected}
-      onSelectionChange={(key) => onChange(key as TaskDetailTab)}
-      className="flex min-h-0 flex-1 flex-col"
-    >
-      <div className="shrink-0 border-b border-secondary">
-        {task}
-        <TabList
-          type="underline"
-          size="sm"
-          aria-label={m.tasks_tabs_label()}
-          className="-mb-px px-4 pt-2 sm:px-6"
-        >
-          {tabs.map((tab) => (
-            <Tab key={tab} id={tab} icon={TAB_ICON[tab]}>
-              {label[tab]}
-            </Tab>
-          ))}
-        </TabList>
-      </div>
-      {tabs.map((tab) => (
-        <TabPanel
-          key={tab}
-          id={tab}
-          className={cn(
-            "min-h-0 flex-1 outline-hidden",
-            tab === "discussion" ? "flex flex-col" : "overflow-y-auto",
-          )}
-        >
-          {pages[tab]()}
-        </TabPanel>
-      ))}
-    </Tabs>
+    <div className="flex min-h-0 flex-1">
+      <Tabs
+        selectedKey={selected}
+        onSelectionChange={(key) => onChange(key as TaskDetailTab)}
+        className="flex min-h-0 min-w-0 flex-1 flex-col"
+      >
+        <div className="flex shrink-0 flex-col gap-3 border-b border-secondary">
+          {task}
+          <TabList
+            type="underline"
+            size="sm"
+            aria-label={m.tasks_tabs_label()}
+            className="-mb-px px-4 sm:px-6"
+          >
+            {tabs.map((tab) => (
+              <Tab key={tab} id={tab} icon={TAB_ICON[tab]}>
+                {label[tab]}
+              </Tab>
+            ))}
+          </TabList>
+        </div>
+        {tabs.map((tab) => (
+          <TabPanel
+            key={tab}
+            id={tab}
+            className={cn(
+              "min-h-0 flex-1 outline-hidden",
+              tab === "discussion"
+                ? "flex h-[min(60vh,40rem)] flex-col max-sm:h-auto"
+                : "overflow-y-auto",
+            )}
+          >
+            {pages[tab]()}
+          </TabPanel>
+        ))}
+      </Tabs>
+      {sidebar && (
+        <aside className="w-64 shrink-0 overflow-y-auto border-l border-secondary px-4 py-3">
+          {sidebar}
+        </aside>
+      )}
+    </div>
   );
 }
 

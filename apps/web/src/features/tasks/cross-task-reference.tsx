@@ -1,10 +1,7 @@
-import type { TaskStatus } from "@lrm/coforge-sdk/internal";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import { Focusable } from "react-aria-components";
 
-import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import {
   useCurrentWorkspaceId,
   useLiveAgent,
@@ -13,10 +10,10 @@ import { useConversationId } from "#src/features/conversations/conversation-id";
 import { conversationRoute } from "#src/features/conversations/last-conversation";
 import { useLiveDirectRow } from "#src/features/conversations/sidebar-lists";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
-import { cn } from "#src/lib/utils";
+import { m } from "#src/paraglide/messages";
 import { directTaskQuery } from "./referenced-task";
-import { TASK_CHIP_CLASS, TASK_CHIP_CONTROL_CLASS, TaskReference } from "./task-reference";
-import { TaskNumberBadge, statusLabel } from "./task-status-icon";
+import { HiddenTaskChip, TaskChip } from "./task-chip";
+import { TaskReference } from "./task-reference";
 import { overviewTaskQuery } from "./use-finished-tasks";
 
 type CrossTaskReferenceProps = {
@@ -57,39 +54,24 @@ export function CrossTaskReference(props: CrossTaskReferenceProps) {
 function ChannelTaskReference({ conversationId, number, children }: CrossTaskReferenceProps) {
   const workspaceId = useCurrentWorkspaceId() ?? "";
   const { data: task } = useQuery(overviewTaskQuery(workspaceId, { conversationId, number }));
-  if (!task || task.source.channelName === null) return <>{children}</>;
-  return (
-    <TaskChip
-      kind="channel"
-      conversationId={conversationId}
-      number={number}
-      label={`#${task.source.channelName}:#${number}`}
-      title={task.title}
-      status={task.status}
-    />
-  );
+  const open = useOpenTask("channel", conversationId, number);
+  if (task === undefined) return <>{children}</>;
+  if (task === null || task.source.channelName === null) return <HiddenTaskChip />;
+  return <TaskChip task={task} place={`#${task.source.channelName}`} onPress={open} />;
 }
 
 function DirectTaskReference({ conversationId, number, children }: CrossTaskReferenceProps) {
   const workspaceId = useCurrentWorkspaceId() ?? "";
   const peer = useDirectPeerHandle(conversationId);
   // A direct message the viewer is not in has no Task of theirs to read.
-  const { data: task } = useQuery({
+  const { data: task, isPending } = useQuery({
     ...directTaskQuery(workspaceId, { conversationId, number }),
     enabled: peer !== undefined,
   });
-  // Unread, the words name the other side from the viewer's seat too, never the viewer themself.
-  if (!task || !peer) return <>{peer ? `dm:@${peer}:#${number}` : children}</>;
-  return (
-    <TaskChip
-      kind="dm"
-      conversationId={conversationId}
-      number={number}
-      label={`dm:@${peer}:#${number}`}
-      title={task.title}
-      status={task.status}
-    />
-  );
+  const open = useOpenTask("dm", conversationId, number);
+  if (peer !== undefined && isPending) return <>{children}</>;
+  if (!task || !peer) return <HiddenTaskChip />;
+  return <TaskChip task={task} place={m.tasks_ref_dm({ peer })} onPress={open} />;
 }
 
 /** Who a direct message is with, from the viewer's seat: the other side's handle, or undefined
@@ -101,40 +83,16 @@ function useDirectPeerHandle(conversationId: string): string | undefined {
   return peer.kind === "people" ? peer.username : agent?.name;
 }
 
-function TaskChip({
-  kind,
-  conversationId,
-  number,
-  label,
-  title,
-  status,
-}: {
-  kind: "channel" | "dm";
-  conversationId: string;
-  number: number;
-  label: string;
-  title: string;
-  status: TaskStatus;
-}) {
+/** Opens another conversation's Task there. */
+function useOpenTask(kind: "channel" | "dm", conversationId: string, number: number) {
   const workspaceSlug = useWorkspaceSlug();
-  const route = conversationRoute(
-    kind === "channel" ? { channelId: conversationId } : { dmId: conversationId },
-    workspaceSlug,
-  );
-  return (
-    <Tooltip title={title}>
-      <Focusable>
-        <Link
-          {...route}
-          search={{ task: number }}
-          // The ring is decorative, so the status is spelled out in the link's name, with the title.
-          aria-label={`${label}, ${title}, ${statusLabel(status)}`}
-          data-task-status={status}
-          className={cn(TASK_CHIP_CLASS, TASK_CHIP_CONTROL_CLASS)}
-        >
-          <TaskNumberBadge number={number} status={status} label={label} />
-        </Link>
-      </Focusable>
-    </Tooltip>
-  );
+  const navigate = useNavigate();
+  return () =>
+    void navigate({
+      ...conversationRoute(
+        kind === "channel" ? { channelId: conversationId } : { dmId: conversationId },
+        workspaceSlug,
+      ),
+      search: { task: number },
+    });
 }

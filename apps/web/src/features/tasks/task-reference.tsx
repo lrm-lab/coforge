@@ -3,7 +3,7 @@ import type { ComponentPropsWithoutRef } from "react";
 import { useConversationId } from "#src/features/conversations/conversation-id";
 import { chipControl } from "#src/lib/chip-control";
 import { cn } from "#src/lib/utils";
-import { TaskNumberBadge, statusLabel } from "./task-status-icon";
+import { TaskChip } from "./task-chip";
 import { useMissingTask, useNumberedTask } from "./use-conversation-tasks";
 
 /** A task badge in a message line, and the pointer, hover and focus ring of one that opens its
@@ -51,21 +51,16 @@ function ConversationTaskReference({
   const missing = useMissingTask(conversationId, number);
   const control = chipControl(onOpenTask && (() => onOpenTask(number)));
   if (missing) return <span {...props}>{children}</span>;
+  if (task) return <TaskChip task={task} onPress={onOpenTask && (() => onOpenTask(number))} />;
   return (
     <span
       {...props}
       {...control}
-      // The ring is decorative, so the status is spelled out in the chip's name.
-      aria-label={task ? `task #${number}, ${statusLabel(task.status)}` : `task #${number}`}
-      data-task-status={task?.status}
+      aria-label={`task #${number}`}
       // A badge that opens its Task is a control: the pointer, hover and focus ring of one.
       className={cn(TASK_CHIP_CLASS, control && TASK_CHIP_CONTROL_CLASS)}
     >
-      {task ? (
-        <TaskNumberBadge number={number} status={task.status} />
-      ) : (
-        <TaskNumberPlaceholder number={number} />
-      )}
+      <TaskNumberPlaceholder number={number} />
     </span>
   );
 }

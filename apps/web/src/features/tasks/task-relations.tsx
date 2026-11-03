@@ -2,7 +2,7 @@ import { taskNameLabel } from "@lrm/coforge-sdk/internal";
 import type { TaskLink, TaskName, TaskTreeNode } from "@lrm/coforge-sdk/internal";
 import type { ReactNode } from "react";
 import { Button as AriaButton } from "react-aria-components";
-import { ChevronDown, ChevronRight, CornerLeftUp, Flag01 } from "@untitledui/icons";
+import { ChevronDown, ChevronRight, CornerLeftUp } from "@untitledui/icons";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
@@ -10,6 +10,7 @@ import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 
 import { isFinishedStatus } from "./finished-tasks";
+import { taskMetaLabel } from "./task-chip";
 import { TaskOwnerAvatar } from "./task-owner";
 import { openBlockers, type TaskRelations, type VisibleTaskName } from "./task-relation-edits";
 import { TaskStatusIcon } from "./task-status-icon";
@@ -30,7 +31,7 @@ export function TaskBlockedMark({ blockedBy }: { blockedBy: readonly (TaskName |
   const open = openBlockers(blockedBy);
   const first = open[0];
   if (!first) return null;
-  const name = first.hidden ? m.tasks_hidden() : taskNameLabel(first);
+  const name = first.hidden ? m.tasks_ref_hidden() : taskMetaLabel(first);
   return (
     <Tooltip
       title={
@@ -39,10 +40,10 @@ export function TaskBlockedMark({ blockedBy }: { blockedBy: readonly (TaskName |
           {open.map((task, index) => (
             <span key={task.hidden ? `hidden-${index}` : taskNameLabel(task)} className="truncate">
               {task.hidden
-                ? m.tasks_hidden()
+                ? m.tasks_ref_hidden()
                 : "title" in task
-                  ? `${taskNameLabel(task)} ${task.title}`
-                  : taskNameLabel(task)}
+                  ? `${task.title} ${taskMetaLabel(task)}`
+                  : taskMetaLabel(task)}
             </span>
           ))}
         </span>
@@ -50,7 +51,6 @@ export function TaskBlockedMark({ blockedBy }: { blockedBy: readonly (TaskName |
     >
       {/* Never cut short: the source or title beside it gives way first. */}
       <TooltipTrigger className="inline-flex shrink-0 items-center gap-1 rounded-sm text-xs whitespace-nowrap text-tertiary tabular-nums focus-visible:ring-2 focus-visible:ring-focus-ring">
-        <Flag01 aria-hidden="true" className="size-3 shrink-0 text-fg-warning-secondary" />
         {open.length > 1
           ? m.tasks_blocked_by_count({ count: open.length })
           : m.tasks_blocked_by_mark({ name })}
@@ -101,10 +101,9 @@ export function TaskSubtaskMark({
  * see. A finished Task reads quieter. */
 function TaskLinkText({ task }: { task: TaskLink }) {
   if (task.hidden)
-    return <span className="min-w-0 truncate text-tertiary">{m.tasks_hidden()}</span>;
+    return <span className="min-w-0 truncate text-tertiary">{m.tasks_ref_hidden()}</span>;
   return (
     <>
-      <span className="shrink-0 text-xs text-tertiary tabular-nums">{taskNameLabel(task)}</span>
       <span
         className={cn(
           "min-w-0 truncate",
@@ -113,6 +112,7 @@ function TaskLinkText({ task }: { task: TaskLink }) {
       >
         {task.title}
       </span>
+      <span className="shrink-0 text-xs text-tertiary tabular-nums">{taskMetaLabel(task)}</span>
     </>
   );
 }
@@ -185,7 +185,7 @@ export function TreeRow({
       >
         <span aria-hidden="true" className="size-6 shrink-0" />
         <TaskStatusIcon status={node.status} />
-        <span className="min-w-0 truncate text-tertiary">{m.tasks_hidden()}</span>
+        <span className="min-w-0 truncate text-tertiary">{m.tasks_ref_hidden()}</span>
       </li>
     );
   const key = taskNameLabel(node);
