@@ -28,8 +28,8 @@ export function channelPreviewLine({
 
 /**
  * Whether a channel row shows its "@" mention badge: the server says the viewer is mentioned and
- * has not handled it. A muted channel has no unread count, so the badge cannot depend on it; the
- * next list read clears `mentioned` once the viewer has read the mention.
+ * has not handled it. A muted channel still counts unread (it only stops pushing), so the badge
+ * does not depend on that; the next list read clears `mentioned` once the viewer has read it.
  */
 export function channelMentionShown({ mentioned }: { mentioned: boolean }): boolean {
   return mentioned;

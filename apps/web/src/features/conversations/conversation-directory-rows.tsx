@@ -29,7 +29,7 @@ export type DirectoryChannel = {
   joined: boolean;
   /** Private: the row shows a lock where a public one shows `#`. */
   visibility: ChannelVisibility;
-  /** The member muted this channel; its unread badge degrades to a bare dot. */
+  /** The member muted this channel: no pushes, but its unread badge and count stay. */
   muted?: boolean;
   /** The member pinned this row; it moves to the Pinned section and its menu item reads "Unpin". */
   pinned: boolean;

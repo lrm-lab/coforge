@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { Link as AriaLink } from "react-aria-components";
 
-import { UnreadBadge, UnreadDot } from "#src/components/ui/unread-marker";
+import { UnreadBadge } from "#src/components/ui/unread-marker";
 import { cx } from "#src/utils/cx";
 import { m } from "#src/paraglide/messages";
 import { MentionBadge } from "./mention-badge";
@@ -157,7 +157,7 @@ export function ConversationRow({
                 <span className="flex-1" />
               )}
               {lastMessage.mentioned ? <MentionBadge /> : null}
-              {unreadCount ? muted ? <UnreadDot /> : <UnreadBadge count={unreadCount} /> : null}
+              {unreadCount ? <UnreadBadge count={unreadCount} /> : null}
             </span>
           ) : null}
         </span>
@@ -172,13 +172,7 @@ export function ConversationRow({
           {children}
         </span>
       )}
-      {!lastMessage && unreadCount ? (
-        muted ? (
-          <UnreadDot />
-        ) : (
-          <UnreadBadge count={unreadCount} />
-        )
-      ) : null}
+      {!lastMessage && unreadCount ? <UnreadBadge count={unreadCount} /> : null}
       {count ? (
         <span aria-hidden="true" className="shrink-0 text-xs text-quaternary tabular-nums">
           {count.value}

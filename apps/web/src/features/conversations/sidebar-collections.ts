@@ -153,10 +153,9 @@ export function createSidebar(
   const setMutedAtOnce = createOptimisticAction<{ target: PinRef; muted: boolean }>({
     onMutate: ({ target, muted }) =>
       edit(target, (row) => {
+        // A mute stops pushes, not counting: the row keeps the unread it has, and the re-read
+        // below brings the server's count and mention badge.
         row.muted = muted;
-        // A muted chat has no unread; the re-read below brings the server's count (and its
-        // mention badge, which a mute keeps).
-        if (muted) row.unreadCount = 0;
       }),
     mutationFn: async ({ target, muted }, { transaction }) => {
       await api.setMuted(target, muted);

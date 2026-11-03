@@ -23,7 +23,7 @@ export type DirectRow = {
   pinned: boolean;
   pinSortOrder: number | null;
   hidden: boolean;
-  /** The viewer muted this DM: its unread count degrades to a dot. Absent from a copy stored
+  /** The viewer muted this DM: no pushes, but its unread count stays. Absent from a copy stored
    * before DMs carried it, which reads as audible until the list is read again. */
   muted?: boolean;
   unreadCount: number;
