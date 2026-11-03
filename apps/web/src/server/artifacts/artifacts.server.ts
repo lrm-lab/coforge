@@ -7,6 +7,13 @@ import {
   canDeleteArtifact,
   type ArtifactActor,
 } from "./artifact-access.server";
+import {
+  ARTIFACT_SETTINGS,
+  mergeSettings,
+  type ArtifactConflict,
+  type ArtifactSettingName,
+  type ArtifactSettings,
+} from "./artifact-merge.server";
 
 /** Where an artifact lives; its home is its only access rule. */
 export type ArtifactHome =
@@ -194,10 +201,17 @@ export class Artifacts {
     files?: readonly ArtifactFileInput[];
     deletedPaths?: readonly string[];
   }): Promise<
-    | { status: "created"; versionId: string; number: number; merged: string[] }
+    | {
+        status: "created";
+        versionId: string;
+        number: number;
+        merged: string[];
+        mergedSettings: ArtifactSettingName[];
+      }
     | { status: "replayed"; versionId: string; number: number }
     | { status: "nothing" }
     | { status: "missing"; missing: string[] }
+    | ArtifactConflict
   > {
     const { homeKey } = await this.live(input.workspaceId, input.artifactId);
     if ((input.note?.length ?? 0) > ARTIFACT_NOTE_LIMIT) invalid("artifact-note");
@@ -260,22 +274,47 @@ export class Artifacts {
       if (input.baseVersion > current || input.baseVersion < 0)
         throw new AppError("CONFLICT", { errorId: "artifact-base-moved" });
 
-      const filesAt = async (number: number) => {
-        if (number <= 0) return new Map<string, FileRow>();
+      // A version's files, and the settings it recorded; before the first version, none of either.
+      const versionAt = async (number: number) => {
+        if (number <= 0) return { files: new Map<string, FileRow>(), settings: null };
         const version = await tx.artifactVersion.findUnique({
           where: { artifactId_number: { artifactId: locked.id, number } },
-          select: { id: true },
+          select: { id: true, title: true, description: true, entryPath: true },
         });
         if (!version) throw new AppError("CONFLICT", { errorId: "artifact-base-missing" });
         const rows = await tx.artifactFile.findMany({
           where: { versionId: version.id },
           select: { path: true, sha256: true, sizeBytes: true, kind: true },
         });
-        return new Map(rows.map((row) => [row.path, row]));
+        const { title, description, entryPath } = version;
+        return {
+          files: new Map(rows.map((row) => [row.path, row])),
+          settings: { title, description, entryPath } as ArtifactSettings,
+        };
       };
-      const currentFiles = await filesAt(current);
-      const baseFiles =
-        input.baseVersion === current ? currentFiles : await filesAt(input.baseVersion);
+      const currentFiles = (await versionAt(current)).files;
+      const currentSettings: ArtifactSettings = {
+        title: locked.title,
+        description: locked.description,
+        entryPath: locked.entryPath,
+      };
+      const base =
+        input.baseVersion === current
+          ? { files: currentFiles, settings: currentSettings }
+          : await versionAt(input.baseVersion);
+      const baseFiles = base.files;
+      const settings = mergeSettings(base.settings, currentSettings, {
+        ...(input.title !== undefined && { title: input.title }),
+        ...(input.description !== undefined && { description: input.description }),
+        ...(input.entryPath !== undefined && { entryPath: input.entryPath }),
+      });
+      if (settings.conflicts.length)
+        return {
+          status: "conflict",
+          currentVersion: current,
+          files: [],
+          settings: settings.conflicts,
+        } as const;
 
       // Deleting something the push's own base never held is a mistake, not a no-op.
       for (const path of deleted) if (!baseFiles.has(path)) invalid("artifact-file-path");
@@ -306,7 +345,7 @@ export class Artifacts {
         });
       }
       if (result.size > ARTIFACT_FILE_LIMIT) invalid("artifact-too-many-files");
-      const entryPath = input.entryPath ?? locked.entryPath;
+      const { entryPath, title, description } = settings.result;
       if (result.size && !result.has(entryPath)) invalid("artifact-entry-missing");
       if (
         locked.kind === "markdown" &&
@@ -315,10 +354,9 @@ export class Artifacts {
         invalid("artifact-file-too-large");
 
       const merged = [...othersChanged].sort();
-      const settingsChanged =
-        (input.entryPath !== undefined && input.entryPath !== locked.entryPath) ||
-        (input.title !== undefined && input.title !== locked.title) ||
-        (input.description !== undefined && input.description !== locked.description);
+      const settingsChanged = ARTIFACT_SETTINGS.some(
+        (name) => settings.result[name] !== currentSettings[name],
+      );
       if (added.length === 0 && deleted.length === 0 && !settingsChanged)
         // Nothing of the pusher's own: "Nothing to push", even when others moved the artifact.
         return { status: "nothing" } as const;
@@ -339,6 +377,8 @@ export class Artifacts {
           note: input.note ?? "",
           label: input.label ?? "",
           entryPath,
+          title,
+          description,
           changedPaths: {
             added: added.map((file) => file.path),
             deleted,
@@ -363,11 +403,17 @@ export class Artifacts {
         data: {
           currentVersion: version.number,
           entryPath,
-          ...(input.title !== undefined ? { title: input.title } : {}),
-          ...(input.description !== undefined ? { description: input.description } : {}),
+          title,
+          description,
         },
       });
-      return { status: "created", versionId: version.id, number: version.number, merged } as const;
+      return {
+        status: "created",
+        versionId: version.id,
+        number: version.number,
+        merged,
+        mergedSettings: settings.merged,
+      } as const;
     });
   }
 
@@ -421,6 +467,8 @@ export class Artifacts {
         note: true,
         label: true,
         entryPath: true,
+        title: true,
+        description: true,
         merged: true,
         createdAt: true,
       },

@@ -43,6 +43,10 @@ model ArtifactVersion {
   note             String         @default("")
   label            String         @default("")
   entryPath        String
+  /// The artifact's title and description as this version left them: a save over an older
+  /// version merges them item by item against its base's (`mergeSettings`).
+  title            String         @default("")
+  description      String         @default("")
   changedPaths     Json
   merged           Json?
   idempotencyKey   String
