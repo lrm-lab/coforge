@@ -50,7 +50,7 @@ export function seedUnreadCounts(entries: readonly UnreadChannel[]): UnreadCount
  * What the badge rule reads of one `conversation.activity.v1`: which conversation it is, how far
  * the conversation has moved, whether it is a channel or a direct message, and who wrote it. The
  * sender's kind is lifted out of the event because a system message never counts, exactly as
- * `HUMAN_UNREAD_MESSAGE_SQL` says.
+ * `HUMAN_UNREAD_BASE_SQL` says.
  */
 export type UnreadEventInput = {
   conversationId: string;
@@ -71,7 +71,7 @@ function isOwnMessage(event: UnreadEventInput, viewerId: string | undefined) {
 
 /**
  * Whether one message counts toward the viewer's unread badge at all, the same three exclusions
- * the server's unread rule makes (`HUMAN_UNREAD_MESSAGE_SQL`): the viewer's own message, and a
+ * the server's unread rule makes (`HUMAN_UNREAD_BASE_SQL`): the viewer's own message, and a
  * system message, which has no sender and is never unread. An Agent's message always counts, the
  * viewer's own Agent included.
  */

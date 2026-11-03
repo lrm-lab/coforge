@@ -14,16 +14,12 @@ import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
  * A top-level message `m` unread for the member row `cm`: someone else's message past the read
  * cursor, or at or past the mark-as-unread marker. Written as one lower bound (`LEAST` ignores a
  * NULL marker, leaving the read cursor) so a per-conversation count is an index range on
- * `messages(conversationId, sequence)` over the unread tail, not a scan of every message.
+ * `messages(conversationId, sequence)` over the unread tail, not a scan of every message. Every
+ * notification level counts the same: `muted` only stops pushing (Frank, 2026-11-03, as Raft).
  */
 export const HUMAN_UNREAD_BASE_SQL = Prisma.sql`m."sequence" > LEAST(cm."readThroughSequence", cm."unreadFromSequence" - 1)
   AND m."senderMemberId" IS NOT NULL
   AND m."senderMemberId" <> cm."id"`;
-
-/** The unread count: a muted member has none. The mention badge reads the base rule instead, so a
- * muted mention still shows. */
-export const HUMAN_UNREAD_MESSAGE_SQL = Prisma.sql`${HUMAN_UNREAD_BASE_SQL}
-  AND cm."notificationLevel" <> 'muted'`;
 
 /** Where a person stands in one of their conversations: how many of its top-level messages are
  * unread for them (the badge, by the same rule `PublicChannels.list` counts every row's with), and
@@ -65,7 +61,7 @@ export async function humanReadStates(
       FROM "messages" m
       WHERE m."conversationId" = cm."conversationId"
         AND m."threadRootId" IS NULL
-        AND ${HUMAN_UNREAD_MESSAGE_SQL}
+        AND ${HUMAN_UNREAD_BASE_SQL}
     ) unread
     WHERE cm."userId" = ${userId}::uuid
       AND cm."conversationId" = ANY(${[...conversationIds]}::uuid[])
@@ -145,7 +141,7 @@ export async function markHumanRead(
  * Where marking a conversation unread puts the marker for the member row `memberId`: the newest
  * top-level message someone else sent, so the badge it opens counts at least one. Null when there
  * is none, since the person's own messages and system notices never count (the same sender rule
- * as `HUMAN_UNREAD_MESSAGE_SQL`).
+ * as `HUMAN_UNREAD_BASE_SQL`).
  */
 export async function markUnreadAnchor(
   tx: Prisma.TransactionClient,

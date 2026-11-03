@@ -57,7 +57,7 @@ afterAll(async () => {
   await db.$disconnect();
 });
 
-test("none counts unread, muted does not", async () => {
+test("none and muted both count unread", async () => {
   const sender = await db.user.create({
     data: { username: `levels-sender-${suffix}`, displayName: "Sender" },
   });
@@ -82,7 +82,8 @@ test("none counts unread, muted does not", async () => {
     where: { conversationId_userId: { conversationId: channelId, userId } },
     data: { notificationLevel: "muted" },
   });
-  expect((await humanReadState(db, channelId, userId)).unreadCount).toBe(0);
+  // Muted stops pushing, not counting: the sidebar still shows the unread (as Raft does).
+  expect((await humanReadState(db, channelId, userId)).unreadCount).toBe(1);
   await db.user.delete({ where: { id: sender.id } }).catch(() => undefined);
 });
 
@@ -165,7 +166,7 @@ test("mentions do not argue for muting: 50 mentioned deliveries make no hint", a
   ).toBeNull();
 });
 
-test("the channel list counts no unread for a muted member but keeps its mention", async () => {
+test("the channel list counts unread for a muted member and keeps its mention", async () => {
   const member = await db.conversationMember.findUniqueOrThrow({
     where: { conversationId_userId: { conversationId: channelId, userId } },
   });
@@ -197,11 +198,11 @@ test("the channel list counts no unread for a muted member but keeps its mention
   });
   await db.conversationMember.update({
     where: { id: member.id },
-    data: { notificationLevel: "muted", channelMuted: true },
+    data: { notificationLevel: "muted", channelMuted: true, readThroughSequence: 1 },
   });
   const rows = await new PublicChannels(db, {} as never).list(workspaceId, userId);
   const row = rows.find((channel) => channel.id === channelId);
   expect(row?.muted).toBe(true);
-  expect(row?.unreadCount).toBe(0);
+  expect(row?.unreadCount).toBe(1);
   expect(row?.mentioned).toBe(true);
 });

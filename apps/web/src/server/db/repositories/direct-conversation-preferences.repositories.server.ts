@@ -4,7 +4,7 @@ import {
   setConversationPin,
 } from "#src/server/conversations/conversation-pins.server";
 import {
-  HUMAN_UNREAD_MESSAGE_SQL,
+  HUMAN_UNREAD_BASE_SQL,
   markUnreadAnchor,
 } from "#src/server/conversations/human-unread.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
@@ -333,7 +333,7 @@ export class PrismaDirectConversationPreferences {
         FROM "messages" m
         WHERE m."conversationId" = cm."conversationId"
           AND m."threadRootId" IS NULL
-          AND ${HUMAN_UNREAD_MESSAGE_SQL}
+          AND ${HUMAN_UNREAD_BASE_SQL}
       ) unread
       WHERE cm."userId" = ${userId}::uuid
         AND cm."leftAt" IS NULL

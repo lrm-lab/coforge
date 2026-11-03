@@ -1,6 +1,6 @@
 import { Prisma } from "#src/generated/prisma/client";
 import {
-  HUMAN_UNREAD_MESSAGE_SQL,
+  HUMAN_UNREAD_BASE_SQL,
   directThreadsSql,
   followedChannelThreadsSql,
   humanUnreadReplySql,
@@ -24,7 +24,7 @@ const unreadReplySql = humanUnreadReplySql(
  * and the nav dot probes for one, so the two share this definition. */
 export const conversationUnreadMessageSql = Prisma.sql`m."conversationId" = cm."conversationId"
     AND m."threadRootId" IS NULL
-    AND ${HUMAN_UNREAD_MESSAGE_SQL}`;
+    AND ${HUMAN_UNREAD_BASE_SQL}`;
 
 /** A reply unread for the viewer of a followed thread: `thread` names the row with its
  * `memberId`, `conversationId` and `rootMessageId`, beside its cursors (`tr`). The list probes for
@@ -57,7 +57,7 @@ export const conversationUnreadProbeLateral = unreadProbeLateral(conversationUnr
  * the viewer, and whether one of them is unread. It names the `cm` its `FROM` provides.
  */
 export const conversationMentionLateral = Prisma.sql`CROSS JOIN LATERAL (
-  SELECT COALESCE(BOOL_OR(${HUMAN_UNREAD_MESSAGE_SQL}), FALSE) AS "unread",
+  SELECT COALESCE(BOOL_OR(${HUMAN_UNREAD_BASE_SQL}), FALSE) AS "unread",
     (ARRAY_AGG(m."id" ORDER BY m."sequence"))[1] AS "firstId"
   FROM "message_mentions" mm
   JOIN "messages" m ON m."id" = mm."messageId" AND m."conversationId" = mm."conversationId"

@@ -84,7 +84,7 @@ export async function listChannels(
     }[]
   >`
       SELECT cm."conversationId" AS "conversationId",
-        CASE WHEN cm."notificationLevel" = 'muted' THEN 0 ELSE unread."count" END AS "unread",
+        unread."count" AS "unread",
         unread."arrivedSinceClosed" AS "arrivedSinceClosed",
         unread."mentioned" AS "mentioned"
       FROM "conversation_members" cm

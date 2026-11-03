@@ -44,7 +44,7 @@ import { announceActivityAttention, navHasUnread } from "./activity-attention.se
  * The All view lists the viewer's pinned conversations (the Chat sidebar's Pinned) apart, in pin
  * order and whatever their Done, and leaves their conversation items out of its list.
  *
- * Unread is the Chat sidebar's rule (`HUMAN_UNREAD_MESSAGE_SQL`), so the two surfaces agree. A
+ * Unread is the Chat sidebar's rule (`HUMAN_UNREAD_BASE_SQL`), so the two surfaces agree. A
  * conversation item covers top-level messages only; a thread item covers its replies and keeps its
  * read and Done boundaries in `thread_reads`. Every cursor write is the conversation module's
  * shared SQL (`human-unread.server.ts`).

@@ -13,7 +13,8 @@ export function onOffLevel(level: NotificationLevel): NotificationLevel {
   return level === "muted" ? "muted" : "all";
 }
 
-/** Whether a level suppresses unread/bold (and, for Agents, waking on ordinary messages). */
+/** Whether a level is muted: no pushes (and, for Agents, no waking on ordinary messages). A
+ * person's unread count and mention badge are the same at every level. */
 export function isMutedLevel(level: string | null | undefined): boolean {
   return level === "muted";
 }
