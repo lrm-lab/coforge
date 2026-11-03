@@ -54,6 +54,50 @@ test("commit channel:create executes PublicChannels.create + addMembers and mark
   }
 });
 
+test("a member the channel would refuse leaves no channel behind", async () => {
+  const ctx = await setupActionCards();
+  try {
+    const name = `atomic-${ctx.suffix}`;
+    const prepared = await ctx.actionCards.prepare(ctx.principal, {
+      target: `#${ctx.hub.channelName}`,
+      action: { type: "channel:create", name, initialHumans: [] },
+    });
+    const privateAgent = await ctx.db.agent.create({
+      data: {
+        workspaceId: ctx.workspace.id,
+        ownerId: ctx.alice.id,
+        name: `private-${ctx.suffix}`,
+        displayName: "Private",
+        visibility: "private",
+        runtimeConfig: {},
+      },
+    });
+    await expect(
+      ctx.actionCards.commitChannelCreate(
+        { workspaceId: ctx.workspace.id, actorUserId: ctx.alice.id },
+        {
+          messageId: prepared.messageId,
+          name,
+          memberUserIds: [],
+          memberAgentIds: [privateAgent.id],
+        },
+      ),
+    ).rejects.toMatchObject({ errorId: "agent-private" });
+    // Nothing was written: no channel of that name, and the card is still answerable.
+    expect(
+      await ctx.db.conversation.findFirst({
+        where: { workspaceId: ctx.workspace.id, channelName: name },
+      }),
+    ).toBeNull();
+    expect(
+      (await ctx.db.actionCard.findUniqueOrThrow({ where: { messageId: prepared.messageId } }))
+        .state,
+    ).toBe("pending");
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
 test("commit channel:add_member requires the actor to already be a channel member", async () => {
   const ctx = await setupActionCards();
   try {

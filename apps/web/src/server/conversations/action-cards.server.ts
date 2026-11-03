@@ -19,6 +19,7 @@ import { loadPendingActionCard } from "./pending-action-card.server";
 import { resolvePageFillPayload } from "./action-card-page-fill.server";
 import { resolveDesktopTakeoverPayload } from "./action-card-desktop-takeover.server";
 import { resolveChoicePayload } from "./action-card-choice.server";
+import { assertChannelMembersAddable } from "./channel-member-checks.server";
 import type { ConversationRealtime } from "./conversation-realtime.server";
 import {
   createActionCardMessage,
@@ -189,6 +190,16 @@ export class ActionCards {
     // not something the committing human retypes.
     const payload = card.payload as ResolvedActionCardPayload & { type: "channel:create" };
     // Its visibility too: the person approving it sees whether it is private.
+    // The picked members are written with the channel: a refused member must not leave a
+    // created channel behind a card that still says pending (a retry would make a second one).
+    const memberUserIds = [...new Set(input.memberUserIds)].filter(
+      (userId) => userId !== principal.actorUserId,
+    );
+    const memberAgentIds = [...new Set(input.memberAgentIds)];
+    await assertChannelMembersAddable(this.db, principal.workspaceId, {
+      userIds: memberUserIds,
+      agentIds: memberAgentIds,
+    });
     const created = await channels.create(
       principal.workspaceId,
       principal.actorUserId,
@@ -197,19 +208,12 @@ export class ActionCards {
         projectId: input.projectId,
         description: payload.description,
         visibility: payload.visibility,
+        members: [
+          ...memberUserIds.map((userId) => ({ userId })),
+          ...memberAgentIds.map((agentId) => ({ agentId })),
+        ],
       },
     );
-    if (input.memberUserIds.length || input.memberAgentIds.length) {
-      await channels.addMembers(
-        principal.workspaceId,
-        { userId: principal.actorUserId },
-        created.id,
-        {
-          userIds: input.memberUserIds,
-          agentIds: input.memberAgentIds,
-        },
-      );
-    }
     const result = { channelId: created.id };
     await this.markExecuted(input.messageId, card.conversationId, principal.actorUserId, result);
     return result;

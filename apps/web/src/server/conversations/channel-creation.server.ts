@@ -24,6 +24,8 @@ export function createChannel(
     description?: string;
     /** Public unless given (task #302). */
     visibility?: ChannelVisibility;
+    /** The people and Agents picked for the channel, written with it in one transaction. */
+    members?: readonly ChannelMember[];
   },
 ) {
   const args = {
@@ -33,8 +35,13 @@ export function createChannel(
       ...(input.projectId ? { projectId: input.projectId } : {}),
       ...(input.description !== undefined ? { description: input.description } : {}),
       ...(input.visibility ? { visibility: input.visibility } : {}),
-      // The creator becomes the channel's first admin.
-      members: { create: { ...input.creator, channelRole: "admin" } },
+      // The creator becomes the channel's first admin; picked members join in the same write.
+      members: {
+        create: [
+          { ...input.creator, channelRole: "admin" },
+          ...(input.members ?? []).map((member) => ({ ...member, channelRole: "member" })),
+        ],
+      },
     },
     select: { id: true, channelName: true, description: true, archivedAt: true, visibility: true },
   };

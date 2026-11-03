@@ -8,6 +8,7 @@ import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
+import { assertChannelMembersAddable } from "./channel-member-checks.server";
 import {
   authorizeChannelActor,
   channelEndSequence,
@@ -351,23 +352,7 @@ export async function addChannelMembers(
 
   const userIds = [...new Set(input.userIds)];
   const agentIds = [...new Set(input.agentIds)];
-  if (userIds.length) {
-    const validUsers = await db.workspaceMembership.count({
-      where: { workspaceId, userId: { in: userIds } },
-    });
-    if (validUsers !== userIds.length) throw new AppError("INVALID_INPUT");
-  }
-  if (agentIds.length) {
-    const targetAgents = await db.agent.findMany({
-      where: { workspaceId, id: { in: agentIds }, ...ACTIVE_AGENT_WHERE },
-      select: { id: true, visibility: true },
-    });
-    if (targetAgents.length !== agentIds.length) throw new AppError("INVALID_INPUT");
-    // A private Agent is never an active channel member — reject the whole add
-    // rather than silently drop it, with a stable code + explanation for the caller.
-    if (targetAgents.some((agent) => agent.visibility !== AGENT_VISIBILITY.PUBLIC))
-      throw new AppError("INVALID_INPUT", { errorId: "agent-private" });
-  }
+  await assertChannelMembersAddable(db, workspaceId, { userIds, agentIds });
 
   // Read who was already an active member before writing, so a caller (the Agent CLI) can
   // report "already in #channel" instead of a bare success for a no-op add.

@@ -25,6 +25,7 @@ import {
 } from "./channel-authority.server";
 import { setChannelArchived, updateChannelInfo } from "./channel-changes.server";
 import { createChannel } from "./channel-creation.server";
+import type { ChannelMember } from "#src/server/app-notifications/channel-events.server";
 import { addChannelMembers } from "./channel-roster.server";
 import {
   announceChannelCreated,
@@ -44,6 +45,8 @@ export type NewChannelOptions = {
   projectId?: string;
   description?: string;
   visibility?: ChannelVisibility;
+  /** Picked members, written with the channel rather than after it (the action-card commit). */
+  members?: readonly ChannelMember[];
 };
 
 export async function createUserChannel(
@@ -51,7 +54,7 @@ export async function createUserChannel(
   workspaceId: string,
   userId: string,
   name: string,
-  { projectId, description, visibility }: NewChannelOptions = {},
+  { projectId, description, visibility, members }: NewChannelOptions = {},
 ) {
   await requireWorkspaceMember(db, workspaceId, userId);
   if (!CHANNEL_NAME_PATTERN.test(name)) throw new AppError("INVALID_INPUT");
@@ -79,6 +82,7 @@ export async function createUserChannel(
       ...(projectId ? { projectId } : {}),
       ...(description !== undefined ? { description } : {}),
       ...(visibility ? { visibility } : {}),
+      ...(members?.length ? { members } : {}),
     });
   } catch (error) {
     if (isUniqueViolation(error)) throw new AppError("CONFLICT");
