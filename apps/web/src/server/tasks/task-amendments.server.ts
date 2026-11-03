@@ -35,6 +35,7 @@ import { findTaskByNumber, assertExpectedRevision, commitTaskChange } from "./ta
 import { withNotices, type NoticeWriter } from "./task-notice-posting.server";
 import { signalTaskChange, announceTasks, announceNeighbours } from "./task-publication.server";
 import { requireManager, isTaskManager } from "./task-assignees.server";
+import { LABELS_PER_TASK_MAX, labelsChange, labelView, resolveTaskLabels } from "./labels.server";
 
 export async function updateTaskStatus(
   ports: TaskBoardPorts,
@@ -107,7 +108,8 @@ export async function amendTask(
 ): Promise<TaskResult> {
   const { conversationId, workspaceId } = conversation;
   const relational = command.blockedBy !== undefined || command.parent !== undefined;
-  if (command.title === undefined && command.description === undefined && !relational)
+  const labelEdit = command.labels !== undefined || command.removeLabels !== undefined;
+  if (command.title === undefined && command.description === undefined && !relational && !labelEdit)
     throw new AppError("INVALID_INPUT");
   const manager = relational && (await isTaskManager(ports.db, workspaceId, member));
   const amend = async (tx: Transaction, notices?: NoticeWriter) => {
@@ -122,6 +124,27 @@ export async function amendTask(
     const plan = relational
       ? await planRelationAmend(tx, conversation, member, manager, task, command)
       : undefined;
+    // Labels are their own rows: the labels the command adds that the Task lacks and those it
+    // takes off that it carries. A name no label has is refused, never created here.
+    const [askedLabels, askedRemoved] = labelEdit
+      ? await Promise.all([
+          resolveTaskLabels(tx, workspaceId, command.labels ?? []),
+          resolveTaskLabels(tx, workspaceId, command.removeLabels ?? []),
+        ])
+      : [[], []];
+    const currentLabels = task.labels.map(({ label }) => labelView(label));
+    const currentIds = new Set(currentLabels.map((label) => label.id));
+    const addedLabels = askedLabels.filter((label) => !currentIds.has(label.id));
+    const removedLabels = askedRemoved.filter((label) => currentIds.has(label.id));
+    const nextLabels = new Set(currentIds);
+    for (const label of addedLabels) nextLabels.add(label.id);
+    for (const label of removedLabels) nextLabels.delete(label.id);
+    if (nextLabels.size > LABELS_PER_TASK_MAX)
+      throw new AppError("INVALID_INPUT", {
+        errorId: "task-label-limit",
+        hint: `a task carries at most ${LABELS_PER_TASK_MAX} labels`,
+      });
+    const labelChange = labelsChange(addedLabels.map(labelView), removedLabels.map(labelView));
     // An amended title is typed text. One that reads the same as the current title does for this
     // reader (its stored tokens read back as names or `@handle`, `task #N`, `#name`) is left as
     // stored, tokens included.
@@ -137,8 +160,16 @@ export async function amendTask(
         ...(retitled && { title }),
         ...(command.description !== undefined && { description: command.description }),
       },
-      { relationChanges: plan?.changes },
+      { relationChanges: [...(plan?.changes ?? []), ...(labelChange ? [labelChange] : [])] },
     );
+    if (removedLabels.length)
+      await tx.taskLabel.deleteMany({
+        where: { taskId: task.id, labelId: { in: removedLabels.map((label) => label.id) } },
+      });
+    if (addedLabels.length)
+      await tx.taskLabel.createMany({
+        data: addedLabels.map((label) => ({ taskId: task.id, labelId: label.id })),
+      });
     if (plan && notices) {
       await applyRelationPlan(tx, conversation, member, task, plan);
       await noticeNowBlocked(tx, notices, member, committed.task, plan);

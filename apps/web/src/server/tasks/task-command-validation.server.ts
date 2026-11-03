@@ -1,5 +1,6 @@
 import { isTaskRef, type TaskCommand } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
+import { LABEL_NAME_MAX, LABELS_PER_TASK_MAX } from "./labels.server";
 
 /**
  * The shape a Task command must have before `TaskBoard.execute` reads anything: its operation,
@@ -78,6 +79,22 @@ export function validateTaskCommand(command: TaskCommand) {
     if (command.number !== undefined) throw new AppError("INVALID_INPUT");
   }
   const relational = command.operation === "create" || command.operation === "amend";
+  const labelsAllowed = command.operation === "create" || command.operation === "amend";
+  for (const labels of [command.labels, command.removeLabels]) {
+    if (labels === undefined) continue;
+    if (
+      !labelsAllowed ||
+      !Array.isArray(labels) ||
+      labels.length > LABELS_PER_TASK_MAX ||
+      labels.some(
+        (name) => typeof name !== "string" || !name.trim() || name.trim().length > LABEL_NAME_MAX,
+      )
+    )
+      throw new AppError("INVALID_INPUT");
+  }
+  // Only an amendment takes a label off; a new Task starts with the labels it is given.
+  if (command.operation === "create" && command.removeLabels !== undefined)
+    throw new AppError("INVALID_INPUT");
   if (command.blockedBy !== undefined) {
     if (
       !relational ||

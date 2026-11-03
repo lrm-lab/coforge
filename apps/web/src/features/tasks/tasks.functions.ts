@@ -44,6 +44,8 @@ const taskCommand = z
     // Blockers and the parent (Tasks v2): the server's own validation decides what each may be.
     blockedBy: z.array(z.custom<TaskRef>(isTaskRef)).max(100).optional(),
     parent: z.custom<TaskRef>(isTaskRef).nullable().optional(),
+    labels: z.array(z.string().trim().min(1).max(32)).max(5).optional(),
+    removeLabels: z.array(z.string().trim().min(1).max(32)).max(5).optional(),
     assignee: z.string().nullable().optional(),
     description: z.string().max(50_000).nullable().optional(),
     createsResource: z.boolean().optional(),

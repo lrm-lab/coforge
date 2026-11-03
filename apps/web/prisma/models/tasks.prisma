@@ -27,6 +27,7 @@ model Task {
   workspace                    Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   owner                        ConversationMember? @relation("TaskOwner", fields: [ownerMemberId, conversationId, workspaceId], references: [id, conversationId, workspaceId], onDelete: Restrict)
   creator                      ConversationMember  @relation("TaskCreator", fields: [creatorMemberId, conversationId, workspaceId], references: [id, conversationId, workspaceId], onDelete: Restrict)
+  labels                       TaskLabel[]
   history                      TaskHistoryEvent[]
   executionSessions            TaskExecutionSession[]
   follows                      TaskFollow[]
@@ -203,4 +204,41 @@ model TaskParent {
   /// Serves the Workspace-wide read the graph checks and `show`'s subtree make.
   @@index([workspaceId])
   @@map("task_parents")
+}
+
+/// A Workspace-level task label: a display name and one Badge semantic color. The name is unique
+/// case-insensitively within the Workspace; any member may create one, only an owner or admin
+/// renames or deletes it.
+model Label {
+  id              String      @id @default(uuid(7)) @db.Uuid
+  workspaceId     String      @db.Uuid
+  /// The name as typed; `nameKey` is what uniqueness and lookups use.
+  name            String
+  /// `lower(trim(name))`: "Bug" and "bug" are one label.
+  nameKey         String
+  /// One of the Badge semantic color keys, never a hex value.
+  color           String      @default("gray")
+  createdByUserId String?     @db.Uuid
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  workspace       Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  tasks           TaskLabel[]
+
+  @@unique([workspaceId, nameKey])
+  @@index([workspaceId])
+  @@map("labels")
+}
+
+/// One label on one task. At most five per task, checked by the Task write; deleting the task or
+/// the label takes these rows with it.
+model TaskLabel {
+  taskId    String   @db.Uuid
+  labelId   String   @db.Uuid
+  createdAt DateTime @default(now())
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  label     Label    @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, labelId])
+  @@index([labelId])
+  @@map("task_labels")
 }

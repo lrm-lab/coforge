@@ -16,6 +16,7 @@ contract is `packages/coforge-sdk/src/internal/tasks.ts`.
   a `TaskCommand` must have, which `execute` checks before it reads anything:
   a malformed one is `INVALID_INPUT`. It reads no database and decides no
   authorization; who may act on which conversation stays in TaskBoard.
+- `labels.server.ts` owns Workspace task labels: the rows (a name unique case-insensitively per Workspace and one Badge color), resolution by name for a Task command (an unknown name is refused, never created), the five-per-task cap, and who creates (any member) or renames and deletes (owner or admin) one. `TaskView.labels` carries them; a Task write records `labels_changed`.
 - `task-view.server.ts` owns how a stored Task reads: its selection, its
   `TaskView`, and its stored status. `task-history.server.ts` owns which
   history events a Task write records and how they read back. TaskBoard and

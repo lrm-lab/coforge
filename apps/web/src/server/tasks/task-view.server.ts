@@ -27,6 +27,7 @@ import {
 import { browserSenderName } from "#src/server/conversations/sender-display.server";
 import { peopleReadableBody } from "#src/server/conversations/message-preview-line.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
+import { LABEL_SELECT, labelView } from "./labels.server";
 
 /**
  * How a stored Task reads: the rows a Task read selects, the `TaskView` the task board and an
@@ -69,6 +70,7 @@ export const taskSelection = {
   discussionConversationId: true,
   owner: { select: TASK_MEMBER_SELECT },
   creator: { select: TASK_MEMBER_SELECT },
+  labels: { select: { label: { select: LABEL_SELECT } } },
   executionSessions: {
     select: { id: true },
     orderBy: { createdAt: "desc" },
@@ -301,6 +303,9 @@ export function taskView(
     ...(resourceReceipt && { resourceReceipt }),
     owner: task.owner && taskMember(task.workspaceId, task.owner),
     creator: taskMember(task.workspaceId, task.creator),
+    labels: (task.labels ?? [])
+      .map(({ label }) => labelView(label))
+      .sort((a, b) => a.name.localeCompare(b.name)),
     ...(task.discussionConversationId && {
       discussionConversationId: task.discussionConversationId,
       ...(counts && { replyCount: counts.replyCount }),

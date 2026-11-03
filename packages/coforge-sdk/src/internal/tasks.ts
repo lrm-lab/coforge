@@ -138,6 +138,9 @@ export type TaskTreeNode =
     })
   | { hidden: true; status: TaskStatus; children: [] };
 
+/** One Workspace task label as a Task carries it. `color` is a Badge semantic color key. */
+export type TaskLabel = { id: string; name: string; color: string };
+
 export type TaskView = {
   /** The task's own id; for a task that started as a message it equals that message's id. */
   id: string;
@@ -159,6 +162,9 @@ export type TaskView = {
   subtasks: { total: number; finished: number } | null;
   owner: TaskMember | null;
   creator: TaskMember;
+  /** The Workspace labels on this Task, by name. At most five; absent reads as none (an older
+   * server does not send it). */
+  labels?: TaskLabel[];
   createdAt: string;
   updatedAt: string;
   /** The conversation's target (`#channel` or `@user`); an Agent's own cross-conversation list sets it. */
@@ -239,6 +245,11 @@ export type TaskHistoryChange =
       eventType: "parent_changed";
       /** The parent before and after; null for none. */
       payload: { from: TaskName | null; to: TaskName | null };
+    }
+  | {
+      eventType: "labels_changed";
+      /** The labels added and removed. */
+      payload: { added: TaskLabel[]; removed: TaskLabel[] };
     };
 
 export type TaskHistoryEvent = {
@@ -282,6 +293,10 @@ export type TaskCommand = {
   blockedBy?: TaskRef[];
   /** `create`: the parent of the new Tasks. `amend`: the new parent; null makes the Task top level. */
   parent?: TaskRef | null;
+  /** `create`: the labels the new Tasks carry. `amend`: labels to add, by name. */
+  labels?: string[];
+  /** `amend`: labels to take off, by name. */
+  removeLabels?: string[];
   /** `list`: only Tasks ready to start: todo, unowned and not blocked. */
   ready?: boolean;
   assignee?: string | null;

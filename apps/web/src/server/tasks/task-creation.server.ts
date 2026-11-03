@@ -36,6 +36,7 @@ import {
 } from "./task-publication.server";
 import { receiptAssignee, assigneeMember } from "./task-assignees.server";
 import { indexedRequestId } from "./task-request-ids.server";
+import { LABELS_PER_TASK_MAX, labelsChange, labelView, resolveTaskLabels } from "./labels.server";
 
 export async function createTasks(
   ports: TaskBoardPorts,
@@ -125,6 +126,14 @@ export async function createTasks(
       });
       if (!attachment) throw new AppError("ACCESS_DENIED");
     }
+    // The labels the new Tasks carry, resolved before anything is written; an unknown name is
+    // refused with the Workspace's own labels. A Task carries at most five.
+    const labels = await resolveTaskLabels(tx, scope.workspaceId, command.labels ?? []);
+    if (labels.length > LABELS_PER_TASK_MAX)
+      throw new AppError("INVALID_INPUT", {
+        errorId: "task-label-limit",
+        hint: `a task carries at most ${LABELS_PER_TASK_MAX} labels`,
+      });
     // One statement takes the conversation lock and allocates both counters: a batch's Task
     // numbers and its message sequences. `lastSequence` is the sole source; `MAX(sequence)`
     // only floors a lagging counter, as in `allocateSequences`.
@@ -293,8 +302,22 @@ export async function createTasks(
       } else tasks.push(message.task!);
       sequences.push(sequence);
     }
+    if (labels.length)
+      await tx.taskLabel.createMany({
+        data: tasks.flatMap((task) =>
+          labels.map((label) => ({ taskId: task.id, labelId: label.id })),
+        ),
+      });
+    const labelsAdded = labelsChange(labels.map(labelView), []);
     await tx.taskHistoryEvent.createMany({
-      data: tasks.flatMap((task) => historyRows(task.id, member, creationChanges(task), 0)),
+      data: tasks.flatMap((task) =>
+        historyRows(
+          task.id,
+          member,
+          [...creationChanges(task), ...(labelsAdded ? [labelsAdded] : [])],
+          0,
+        ),
+      ),
     });
     await linkCreatedTasks(tx, scope, member, tasks, command);
     const quoted = await notices.quote(tasks);

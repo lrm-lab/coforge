@@ -2,6 +2,13 @@ import type { TaskCommand, TaskPrincipal } from "@lrm/coforge-sdk/internal";
 
 import { AppError } from "#src/lib/app-error";
 import {
+  LABELS_PER_TASK_MAX,
+  labelsChange,
+  labelView,
+  resolveTaskLabels,
+  type LabelRow,
+} from "./labels.server";
+import {
   lockConversation,
   lockWorkspaceTaskWrites,
 } from "#src/server/conversations/conversation-lock.server";
@@ -109,6 +116,12 @@ export async function createConversationTasks(
     if (command.assignee && !assignee) throw new AppError("NOT_FOUND");
     if (assignee && assignee.id !== member.id)
       await assertCanAssignOther(tx, scope.workspaceId, member);
+    const labels = await resolveTaskLabels(tx, scope.workspaceId, command.labels ?? []);
+    if (labels.length > LABELS_PER_TASK_MAX)
+      throw new AppError("INVALID_INPUT", {
+        errorId: "task-label-limit",
+        hint: `a task carries at most ${LABELS_PER_TASK_MAX} labels`,
+      });
     const written = convert ? [sourceTitle(source!)] : titles;
     if (written.some((title) => !title || title.length > 8_000))
       throw new AppError("INVALID_INPUT");
@@ -124,6 +137,7 @@ export async function createConversationTasks(
         assignee,
         requestId: requestIds[index]!,
         source,
+        labels,
       });
       tasks.push(task);
       if (notice) notices.push(notice);
@@ -182,6 +196,8 @@ export async function insertConversationTask(
     assignee: Awaited<ReturnType<typeof assigneeMember>>;
     requestId: string;
     source: SourceMessage | null;
+    /** The Workspace labels the new Task carries; none for a conversion. */
+    labels?: readonly LabelRow[];
   },
 ) {
   const { assignee, source } = input;
@@ -204,8 +220,19 @@ export async function insertConversationTask(
     },
     select: taskSelection,
   });
+  const labels = input.labels ?? [];
+  if (labels.length)
+    await tx.taskLabel.createMany({
+      data: labels.map((label) => ({ taskId: task.id, labelId: label.id })),
+    });
+  const labelsAdded = labelsChange(labels.map(labelView), []);
   await tx.taskHistoryEvent.createMany({
-    data: historyRows(task.id, member, creationChanges(task), 0),
+    data: historyRows(
+      task.id,
+      member,
+      [...creationChanges(task), ...(labelsAdded ? [labelsAdded] : [])],
+      0,
+    ),
   });
   await followTask(tx, scope, task.id, member.id, "created");
   if (assignee && assignee.id !== member.id)

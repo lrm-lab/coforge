@@ -35,6 +35,7 @@ model Workspace {
   attachments            Attachment[]
   attachmentUploadSessions AttachmentUploadSession[]
   tasks                  Task[]
+  labels                 Label[]
   taskExecutionSessions  TaskExecutionSession[]
   actionCards            ActionCard[]
   weeklyReportCycles     WeeklyReportCycle[]
