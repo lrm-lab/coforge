@@ -7,11 +7,22 @@ import {
   requireWorkspaceMember,
   workspaceMemberRole,
 } from "#src/server/workspaces/workspace-membership.server";
+import {
+  LABELS_PER_GROUP_MAX,
+  LABEL_GROUP_SELECT,
+  findLabelGroup,
+  labelGroupNameKey,
+  resolveLabelGroup,
+  validateLabelGroupSelection,
+  validateLabelOrGroupName,
+  type LabelGroupRow,
+} from "./label-groups.server";
 
 /**
- * Workspace task labels: the label rows, their names and colors, and the task↔label rows a Task
- * write adds or removes. Any Workspace member uses and creates a label; renaming or deleting one is
- * a Workspace-settings action (`manageWorkspaceSettings`, owner or admin).
+ * Workspace task labels: the rows, their names and colors, and the task↔label rows a Task write
+ * adds or removes. Any Workspace member uses and creates a label; renaming, recoloring, merging,
+ * archiving and deleting one is a Workspace-settings action. A label's `group/name` form names its
+ * group; a group's `single` selection is enforced by the Task write, never by rewriting Tasks.
  */
 
 /** The Badge semantic color keys a label may use; never a hex value. */
@@ -35,34 +46,36 @@ export const LABEL_NAME_MAX = 32;
 export const LABELS_PER_TASK_MAX = 5;
 
 /** What uniqueness and lookups use: the trimmed name, lower-cased. */
-export const labelNameKey = (name: string) => name.trim().toLowerCase();
+export const labelNameKey = labelGroupNameKey;
 
-export type LabelRow = { id: string; name: string; color: string };
+export type LabelRow = {
+  id: string;
+  name: string;
+  color: string;
+  description: string | null;
+  groupId: string | null;
+  archivedAt: Date | null;
+  group: LabelGroupRow | null;
+};
 
-export const LABEL_SELECT = { id: true, name: true, color: true } satisfies Prisma.LabelSelect;
+export const LABEL_SELECT = {
+  id: true,
+  name: true,
+  color: true,
+  description: true,
+  groupId: true,
+  archivedAt: true,
+  group: { select: LABEL_GROUP_SELECT },
+} satisfies Prisma.LabelSelect;
 
-export const labelView = (row: LabelRow): TaskLabel => ({
+/** A Task's view of a label: what its card draws. */
+export const labelView = (row: { id: string; name: string; color: string }): TaskLabel => ({
   id: row.id,
   name: row.name,
   color: row.color,
 });
 
-export function validateLabelName(name: string): string {
-  const trimmed = name.trim();
-  // A leading `-` is how the CLI takes a label off (`--label -name`), so such a name could never be
-  // attached from the command line; refuse it where labels are made instead of at every use.
-  if (
-    !trimmed ||
-    trimmed.length > LABEL_NAME_MAX ||
-    /[\u0000-\u001f\u007f]/.test(trimmed) ||
-    trimmed.startsWith("-")
-  )
-    throw new AppError("INVALID_INPUT", {
-      errorId: "task-label-name",
-      hint: `a label name is 1 to ${LABEL_NAME_MAX} characters, with no control characters, and does not start with "-" (the CLI reads --label -name as taking it off)`,
-    });
-  return trimmed;
-}
+export const validateLabelName = validateLabelOrGroupName;
 
 export function validateLabelColor(color: string): LabelColor {
   if (!(LABEL_COLORS as readonly string[]).includes(color))
@@ -73,58 +86,145 @@ export function validateLabelColor(color: string): LabelColor {
   return color as LabelColor;
 }
 
+/** A label named as `group/label`, or just `label`. */
+function splitLabelName(name: string): { group: string | null; label: string } {
+  const slash = name.indexOf("/");
+  if (slash < 0) return { group: null, label: name };
+  return { group: name.slice(0, slash), label: name.slice(slash + 1) };
+}
+
+export type LabelCreateInput = {
+  /** The label's description; an Agent must give one, so a new label is worth suggesting. */
+  description?: string | null;
+  /** The group's selection when this command makes the group. */
+  selection?: string;
+};
+
 /**
- * The labels `names` name in this Workspace, by case-insensitive name. An unknown name is
- * `INVALID_INPUT` naming it and up to ten of the Workspace's labels, so an Agent learns what it
- * could have used; a label is never created implicitly.
+ * The labels `names` name in this Workspace. A name no label has is created when the command gives
+ * a description (the Agent rule); otherwise it is refused, naming the Workspace's own labels. An
+ * archived label cannot be attached, and a `group/label` that names a different group than the
+ * label's own is refused.
  */
 export async function resolveTaskLabels(
-  tx: Pick<Prisma.TransactionClient, "label">,
+  tx: Pick<Prisma.TransactionClient, "label" | "labelGroup">,
   workspaceId: string,
   names: readonly string[],
+  create?: LabelCreateInput,
 ): Promise<LabelRow[]> {
-  // The name as typed, by its key, so a refusal names it the way the command wrote it.
   const asked = [
-    ...new Map(names.map((name) => [labelNameKey(name), name.trim()])).entries(),
-  ].filter(([key]) => key);
-  const keys = asked.map(([key]) => key);
-  if (!keys.length) return [];
+    ...new Map(
+      names.map((name) => {
+        const parts = splitLabelName(name);
+        return [labelNameKey(parts.label), { ...parts, raw: name.trim() }];
+      }),
+    ).values(),
+  ].filter((entry) => entry.label.trim());
+  if (!asked.length) return [];
+  const keys = asked.map((entry) => labelNameKey(entry.label));
   const rows = await tx.label.findMany({
     where: { workspaceId, nameKey: { in: keys } },
     select: { ...LABEL_SELECT, nameKey: true },
   });
   const known = new Map(rows.map((row) => [row.nameKey, row]));
-  const missing = asked.filter(([key]) => !known.has(key));
-  if (missing.length) {
-    const existing = await tx.label.findMany({
-      where: { workspaceId },
-      orderBy: { name: "asc" },
-      take: 10,
-      select: { name: true },
+  const resolved: LabelRow[] = [];
+  for (const entry of asked) {
+    const key = labelNameKey(entry.label);
+    const existing = known.get(key);
+    if (existing) {
+      if (existing.archivedAt)
+        throw new AppError("INVALID_INPUT", {
+          errorId: "task-label-archived",
+          hint: `the label "${existing.name}" is archived; it cannot be attached again`,
+        });
+      if (entry.group !== null && existing.group?.nameKey !== labelNameKey(entry.group))
+        throw new AppError("INVALID_INPUT", {
+          errorId: "task-label-group",
+          hint: `"${existing.name}" belongs to ${existing.group ? `the group "${existing.group.name}"` : "no group"}, not "${entry.group}"`,
+        });
+      resolved.push(existing);
+      continue;
+    }
+    if (create?.description === undefined || create.description === null)
+      throw await unknownLabel(entry.raw, workspaceId, tx);
+    const labelName = validateLabelOrGroupName(entry.label);
+    const group =
+      entry.group === null
+        ? null
+        : await resolveLabelGroup(
+            tx,
+            workspaceId,
+            entry.group,
+            validateLabelGroupSelection(create.selection ?? "single"),
+          );
+    if (group) await assertGroupRoom(tx, workspaceId, group.id);
+    const created = await tx.label.create({
+      data: {
+        workspaceId,
+        name: labelName,
+        nameKey: key,
+        color: "gray",
+        description: create.description,
+        groupId: group?.id,
+      },
+      select: LABEL_SELECT,
     });
-    throw new AppError("INVALID_INPUT", {
-      errorId: "task-label-unknown",
-      hint: `no label named ${missing.map(([, name]) => `"${name}"`).join(", ")} in this Workspace${
-        existing.length ? `; existing: ${existing.map((row) => row.name).join(", ")}` : ""
-      }`,
-    });
+    resolved.push(created);
   }
-  return keys.map((key) => {
-    const { id, name, color } = known.get(key)!;
-    return { id, name, color };
+  return resolved;
+}
+
+async function unknownLabel(
+  raw: string,
+  workspaceId: string,
+  tx: Pick<Prisma.TransactionClient, "label">,
+): Promise<AppError> {
+  const existing = await tx.label.findMany({
+    where: { workspaceId },
+    orderBy: { name: "asc" },
+    take: 10,
+    select: { name: true },
+  });
+  return new AppError("INVALID_INPUT", {
+    errorId: "task-label-unknown",
+    hint: `no label named "${raw}" in this Workspace${
+      existing.length ? `; existing: ${existing.map((row) => row.name).join(", ")}` : ""
+    }. Create it with \`coforge label create --description ...\` or pass --label-description`,
   });
 }
 
+async function assertGroupRoom(
+  tx: Pick<Prisma.TransactionClient, "label">,
+  workspaceId: string,
+  groupId: string,
+): Promise<void> {
+  const count = await tx.label.count({ where: { workspaceId, groupId } });
+  if (count >= LABELS_PER_GROUP_MAX)
+    throw new AppError("INVALID_INPUT", {
+      errorId: "label-group-full",
+      hint: `a label group holds at most ${LABELS_PER_GROUP_MAX} labels`,
+    });
+}
+
 /**
- * The `labels` predicate for a list filter: a Task must carry every named label (AND). An unknown
- * name is refused by `resolveTaskLabels`, as in a Task write.
+ * The `labels` predicate for a list filter: every named label must be on the Task (AND), and
+ * `none` means no label at all. An unknown name is refused; a filter never creates one.
  */
 export async function labelFilterWhere(
-  db: Pick<Prisma.TransactionClient, "label">,
+  db: Pick<Prisma.TransactionClient, "label" | "labelGroup">,
   workspaceId: string,
   names: readonly string[] | undefined,
 ): Promise<Prisma.TaskWhereInput | undefined> {
   if (!names?.length) return undefined;
+  const none = names.some((name) => labelNameKey(name) === "none");
+  if (none) {
+    if (names.length > 1)
+      throw new AppError("INVALID_INPUT", {
+        errorId: "task-label-none",
+        hint: "--label none cannot be combined with a label name",
+      });
+    return { labels: { none: {} } };
+  }
   const labels = await resolveTaskLabels(db, workspaceId, names);
   return { AND: labels.map((label) => ({ labels: { some: { labelId: label.id } } })) };
 }
@@ -139,78 +239,150 @@ export function labelsChange(
     : null;
 }
 
-/** The Workspace's labels, and their create/rename/delete. */
+/** One label as the picker and `label list` show it. */
+export type LabelSummary = LabelRow & {
+  openCount: number;
+  taskCount: number;
+  lastUsedAt: string | null;
+};
+
+/** The Workspace's labels, their create/update/archive/merge/delete, and their counts. */
 export class Labels {
   constructor(private readonly db: PrismaClient) {}
 
-  async list(workspaceId: string, userId: string): Promise<TaskLabel[]> {
+  /** Every label, with how many open and all Tasks carry it and when it was last attached. */
+  async list(
+    workspaceId: string,
+    userId: string,
+    filter: { group?: string; archived?: boolean } = {},
+  ): Promise<LabelSummary[]> {
     await requireWorkspaceMember(this.db, workspaceId, userId);
+    const group = filter.group ? await findLabelGroup(this.db, workspaceId, filter.group) : null;
+    if (filter.group && !group) throw new AppError("NOT_FOUND");
     const rows = await this.db.label.findMany({
-      where: { workspaceId },
-      orderBy: { name: "asc" },
+      where: {
+        workspaceId,
+        ...(group && { groupId: group.id }),
+        ...(filter.archived ? {} : { archivedAt: null }),
+      },
+      orderBy: [{ name: "asc" }],
       select: LABEL_SELECT,
     });
-    return rows.map(labelView);
+    const counts = await this.db.$queryRaw<
+      { labelId: string; open: bigint; total: bigint; lastUsedAt: Date | null }[]
+    >`
+      SELECT tl."labelId" AS "labelId",
+        COUNT(*) FILTER (WHERE t."status" NOT IN ('done', 'closed'))::bigint AS "open",
+        COUNT(*)::bigint AS "total",
+        MAX(tl."createdAt") AS "lastUsedAt"
+      FROM "task_labels" tl
+      JOIN "tasks" t ON t."id" = tl."taskId"
+      WHERE t."workspaceId" = ${workspaceId}::uuid
+      GROUP BY tl."labelId"`;
+    const byLabel = new Map(counts.map((row) => [row.labelId, row]));
+    return rows.map((row) => {
+      const count = byLabel.get(row.id);
+      return {
+        ...row,
+        openCount: Number(count?.open ?? 0),
+        taskCount: Number(count?.total ?? 0),
+        lastUsedAt: count?.lastUsedAt?.toISOString() ?? null,
+      };
+    });
   }
 
-  /** Any member creates a label; a name that already exists (in any case) returns that label. */
+  /** Any member creates a label; a name that already exists returns that label. */
   async create(
     workspaceId: string,
     userId: string,
-    input: { name: string; color?: string },
-  ): Promise<TaskLabel> {
+    input: { name: string; color?: string; description?: string; group?: string },
+  ): Promise<LabelRow> {
     await requireWorkspaceMember(this.db, workspaceId, userId);
-    const name = validateLabelName(input.name);
+    const name = validateLabelOrGroupName(input.name);
     const color = validateLabelColor(input.color ?? "gray");
     const nameKey = labelNameKey(name);
     const existing = await this.db.label.findUnique({
       where: { workspaceId_nameKey: { workspaceId, nameKey } },
       select: LABEL_SELECT,
     });
-    if (existing) return labelView(existing);
+    if (existing) return existing;
+    const group = input.group ? await resolveLabelGroup(this.db, workspaceId, input.group) : null;
+    if (group) await assertGroupRoom(this.db, workspaceId, group.id);
     try {
-      const created = await this.db.label.create({
-        data: { workspaceId, name, nameKey, color, createdByUserId: userId },
+      return await this.db.label.create({
+        data: {
+          workspaceId,
+          name,
+          nameKey,
+          color,
+          description: input.description?.trim() || null,
+          groupId: group?.id,
+          createdByUserId: userId,
+        },
         select: LABEL_SELECT,
       });
-      return labelView(created);
     } catch (error) {
-      // Two members creating the same name at once: the unique key picks one, and both see it.
       if (!isUniqueViolation(error)) throw error;
-      const raced = await this.db.label.findUniqueOrThrow({
+      return this.db.label.findUniqueOrThrow({
         where: { workspaceId_nameKey: { workspaceId, nameKey } },
         select: LABEL_SELECT,
       });
-      return labelView(raced);
     }
   }
 
-  /** An owner or admin renames a label and/or changes its color; a taken name is CONFLICT. */
+  /** An owner or admin renames, recolors, describes, groups, archives or unarchives a label. */
   async update(
     workspaceId: string,
     userId: string,
     id: string,
-    input: { name?: string; color?: string },
-  ): Promise<TaskLabel> {
+    input: {
+      name?: string;
+      color?: string;
+      description?: string | null;
+      group?: string | null;
+      archived?: boolean;
+    },
+  ): Promise<LabelRow> {
     assertCanManageWorkspaceSettings(await workspaceMemberRole(this.db, workspaceId, userId));
     const label = await this.db.label.findFirst({
       where: { id, workspaceId },
-      select: { id: true, name: true, color: true },
+      select: LABEL_SELECT,
     });
     if (!label) throw new AppError("NOT_FOUND");
-    const name = input.name === undefined ? undefined : validateLabelName(input.name);
+    const name = input.name === undefined ? undefined : validateLabelOrGroupName(input.name);
     const color = input.color === undefined ? undefined : validateLabelColor(input.color);
-    if (name === undefined && color === undefined) return labelView(label);
+    let groupId: string | null | undefined;
+    if (input.group !== undefined) {
+      const group =
+        input.group === null ? null : await resolveLabelGroup(this.db, workspaceId, input.group);
+      if (group && group.id !== label.groupId)
+        await assertGroupRoom(this.db, workspaceId, group.id);
+      groupId = group?.id ?? null;
+    }
+    if (
+      name === undefined &&
+      color === undefined &&
+      input.description === undefined &&
+      groupId === undefined &&
+      input.archived === undefined
+    )
+      return label;
     try {
-      const updated = await this.db.label.update({
+      return await this.db.label.update({
         where: { id: label.id },
         data: {
           ...(name !== undefined && { name, nameKey: labelNameKey(name) }),
           ...(color !== undefined && { color }),
+          ...(input.description !== undefined && {
+            description: input.description?.trim() || null,
+          }),
+          ...(groupId !== undefined && { groupId }),
+          ...(input.archived !== undefined && {
+            archivedAt: input.archived ? (label.archivedAt ?? new Date()) : null,
+          }),
         },
         select: LABEL_SELECT,
       });
-      return labelView(updated);
     } catch (error) {
       if (isUniqueViolation(error))
         throw new AppError("CONFLICT", {
@@ -226,5 +398,96 @@ export class Labels {
     assertCanManageWorkspaceSettings(await workspaceMemberRole(this.db, workspaceId, userId));
     const deleted = await this.db.label.deleteMany({ where: { id, workspaceId } });
     if (!deleted.count) throw new AppError("NOT_FOUND");
+  }
+
+  /**
+   * An owner or admin merges `from` into `into`: the Tasks carrying `from` carry `into` instead,
+   * `from` disappears, and a Task that would then hold two labels of one single group keeps
+   * `into` and loses the other (recorded as a system `labels_changed`). Returns what moved and
+   * what was dropped, so the caller can report it.
+   */
+  async merge(
+    workspaceId: string,
+    userId: string,
+    fromId: string,
+    intoId: string,
+  ): Promise<{ moved: number; dropped: number }> {
+    assertCanManageWorkspaceSettings(await workspaceMemberRole(this.db, workspaceId, userId));
+    if (fromId === intoId) throw new AppError("INVALID_INPUT");
+    const labels = await this.db.label.findMany({
+      where: { workspaceId, id: { in: [fromId, intoId] } },
+      select: LABEL_SELECT,
+    });
+    const from = labels.find((label) => label.id === fromId);
+    const into = labels.find((label) => label.id === intoId);
+    if (!from || !into) throw new AppError("NOT_FOUND");
+    return this.db.$transaction(async (tx) => {
+      const carried = await tx.taskLabel.findMany({
+        where: { labelId: fromId },
+        select: { taskId: true },
+      });
+      let moved = 0;
+      let dropped = 0;
+      for (const { taskId } of carried) {
+        const already = await tx.taskLabel.findUnique({
+          where: { taskId_labelId: { taskId, labelId: intoId } },
+          select: { taskId: true },
+        });
+        if (already) {
+          await tx.taskLabel.delete({ where: { taskId_labelId: { taskId, labelId: fromId } } });
+          dropped += 1;
+          continue;
+        }
+        // A single group allows one label: the one already there goes, `into` takes its place.
+        const clash =
+          into.groupId && into.group?.selection === "single"
+            ? await tx.taskLabel.findFirst({
+                where: {
+                  taskId,
+                  labelId: { notIn: [intoId, fromId] },
+                  label: { groupId: into.groupId },
+                },
+                select: { label: { select: { id: true, name: true, color: true } } },
+              })
+            : null;
+        if (clash) {
+          await tx.taskLabel.delete({
+            where: { taskId_labelId: { taskId, labelId: clash.label.id } },
+          });
+          await this.recordMergeRemoval(tx, taskId, clash.label);
+          dropped += 1;
+        }
+        await tx.taskLabel.update({
+          where: { taskId_labelId: { taskId, labelId: fromId } },
+          data: { labelId: intoId },
+        });
+        moved += 1;
+      }
+      await tx.label.delete({ where: { id: fromId } });
+      return { moved, dropped };
+    });
+  }
+
+  /** A merge's dropped label, as a system history event on the Task it was taken off. */
+  private async recordMergeRemoval(
+    tx: Prisma.TransactionClient,
+    taskId: string,
+    label: TaskLabel,
+  ): Promise<void> {
+    const latest = await tx.taskHistoryEvent.findFirst({
+      where: { taskId },
+      orderBy: { seq: "desc" },
+      select: { seq: true },
+    });
+    await tx.taskHistoryEvent.create({
+      data: {
+        taskId,
+        seq: (latest?.seq ?? 0) + 1,
+        eventType: "labels_changed",
+        actorType: "system",
+        actorName: null,
+        payload: { added: [], removed: [label] },
+      },
+    });
   }
 }

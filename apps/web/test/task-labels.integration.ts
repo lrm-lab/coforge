@@ -120,7 +120,7 @@ test("any member creates a label; only an owner or admin renames or deletes one"
       name: "Clients",
       color: "orange",
     });
-    expect(renamed).toEqual({ id: fromBob.id, name: "Clients", color: "orange" });
+    expect(renamed).toMatchObject({ id: fromBob.id, name: "Clients", color: "orange" });
     await labels.create(workspaceId, aliceId, { name: "Copy" });
     expect(
       (await refusal(labels.update(workspaceId, aliceId, fromBob.id, { name: "copy" }))).code,
