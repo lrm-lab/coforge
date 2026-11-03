@@ -143,8 +143,6 @@ export async function procTree(
     cwd?: string;
     args?: string[];
     unreadable?: boolean;
-    /** Its `status` file (credentials); none when absent. */
-    status?: string;
   }[],
   selfPid: number = process.pid,
 ): Promise<string> {
@@ -153,9 +151,8 @@ export async function procTree(
   const root = await realpath(created);
   await mkdir(join(root, "sys"));
   await symlink(String(selfPid), join(root, "self"));
-  for (const { pid, cwd, args = [], unreadable, status } of processes) {
+  for (const { pid, cwd, args = [], unreadable } of processes) {
     await mkdir(join(root, String(pid)));
-    if (status !== undefined) await writeFile(join(root, String(pid), "status"), status);
     if (cwd !== undefined) await symlink(cwd, join(root, String(pid), "cwd"));
     if (unreadable) await writeFile(join(root, String(pid), "cwd"), "not a link");
     await writeFile(join(root, String(pid), "cmdline"), args.map((arg) => `${arg}\0`).join(""));

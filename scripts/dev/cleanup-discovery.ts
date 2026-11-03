@@ -106,27 +106,6 @@ export function hiddenOwnProcess(owner: number, status: string, uid: number): bo
   return owner === 0 && uid !== 0 && realUid(status) === uid;
 }
 
-/** The `Uid`, `Gid` and `CapPrm` lines of a `/proc/<pid>/status`, or undefined without all three. */
-function credentials(status: string): string | undefined {
-  const lines = ["Uid", "Gid", "CapPrm"].map((name) =>
-    new RegExp(`^${name}:\\s+(.+)$`, "m").exec(status)?.[1]?.trim(),
-  );
-  return lines.every((line) => line !== undefined) ? lines.join("|") : undefined;
-}
-
-/**
- * Whether an unreadable process of our uid is explained by its credentials differing from ours:
- * the kernel refuses `/proc/<pid>/cwd` (ptrace read access,
- * https://man7.org/linux/man-pages/man2/ptrace.2.html) when the target has another real,
- * effective or saved uid or gid, or capabilities we lack, as gnome-keyring-daemon or a CI runner's
- * agent does. One with our very credentials, or whose credentials cannot be read, is unexplained.
- */
-export function withheldProcess(status: string, ownStatus: string): boolean {
-  const theirs = credentials(status);
-  const ours = credentials(ownStatus);
-  return theirs !== undefined && ours !== undefined && theirs !== ours;
-}
-
 async function discoverLinux(roots: string[], procRoot: string, uid: number) {
   const self = Number(await readlink(join(procRoot, "self")).catch(() => Number.NaN));
   if (!Number.isInteger(self)) throw new Error("cannot tell which process this is under /proc");
@@ -143,21 +122,19 @@ async function discoverLinux(roots: string[], procRoot: string, uid: number) {
           throw new Error(`pid ${pid} is ours but /proc hides it (not dumpable)`);
         continue;
       }
+      // The kernel can refuse the cwd of a process of our uid (ptrace read access,
+      // https://man7.org/linux/man-pages/man2/ptrace.2.html), as it does for systemd's
+      // `(sd-pam)` on GitHub's runner. As on macOS, only a shell or dev runtime the scan cannot
+      // place fails it: that one may be in a worktree. Its command line is still readable.
       const target = await readlink(join(dir, "cwd")).catch(async (error: unknown) => {
         if (isGone(error)) throw error;
-        const [status, own] = await Promise.all(
-          [dir, join(procRoot, String(self))].map((at) =>
-            Bun.file(join(at, "status"))
-              .text()
-              .catch(() => ""),
-          ),
-        );
-        // A shell or dev runtime may still be ours in a worktree (`newgrp`, `sg`): its command
-        // line is not withheld, and the scan cannot vouch for it.
         const command = (await readCommandLine(procRoot, pid)) ?? "";
-        if (withheldProcess(status, own) && !WATCHED_PROGRAMS.has(programOf(command)))
-          return undefined;
-        throw error;
+        if (command && !WATCHED_PROGRAMS.has(programOf(command))) return undefined;
+        // One that exited meanwhile has no command line: it is gone, not unreadable.
+        if (!(await exists(dir))) return undefined;
+        throw new Error(`${(error as Error).message} (${command || "no command line"})`, {
+          cause: error,
+        });
       });
       if (target === undefined) continue;
       if (pid === self) sawSelf = true;
