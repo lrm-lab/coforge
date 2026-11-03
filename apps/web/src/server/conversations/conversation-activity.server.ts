@@ -122,7 +122,26 @@ export async function announceMessage(
     threadRootId: stored.threadRootId ?? undefined,
   });
   if (userIds.length === 0) return;
-  await realtime.conversationActivity({ userIds, event });
+  // A top-level message in a conversation someone muted still moves their row and its count, but
+  // tells their Activity dot to stay dark, as its read (`navHasUnreadSql`) does.
+  const muted = stored.threadRootId
+    ? new Set<string>()
+    : new Set(
+        (
+          await db.conversationMember.findMany({
+            where: {
+              conversationId: message.conversationId,
+              userId: { in: userIds },
+              notificationLevel: "muted",
+            },
+            select: { userId: true },
+          })
+        ).flatMap((member) => (member.userId ? [member.userId] : [])),
+      );
+  const loud = userIds.filter((userId) => !muted.has(userId));
+  if (loud.length) await realtime.conversationActivity({ userIds: loud, event });
+  if (muted.size)
+    await realtime.conversationActivity({ userIds: [...muted], event: { ...event, muted: true } });
 }
 
 function unannounced(reason: string, message: ConversationRealtimeMessage) {

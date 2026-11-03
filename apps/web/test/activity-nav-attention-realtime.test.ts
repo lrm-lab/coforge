@@ -56,6 +56,20 @@ test("a message lights the nav dot without reading the server", async () => {
   }
 });
 
+test("a message in a conversation the viewer muted leaves the nav dot dark (task #478)", () => {
+  const queryClient = new QueryClient();
+  queryClient.setQueryData(activityNavAttentionQuery().queryKey, {
+    hasUnread: false,
+    streamPositions: at(4),
+  });
+  const { onMessage } = activityNavAttentionRealtime(queryClient, USER);
+  onMessage({ muted: true }, { epoch: "e", offset: 5 });
+  expect(queryClient.getQueryData<Dot>(activityNavAttentionQuery().queryKey)).toEqual({
+    hasUnread: false,
+    streamPositions: at(4),
+  });
+});
+
 test("an activity change re-reads the dot, so another tab's read-all un-lights this one", async () => {
   const queryClient = new QueryClient();
   const dot = mountedDot(queryClient, async () => ({ hasUnread: false, streamPositions: {} }));

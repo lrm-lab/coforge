@@ -167,7 +167,9 @@ export function activityNavAttentionRealtime(
   let litBy: { position: StreamPosition | undefined } | undefined;
   return {
     // The read's stream positions stay: a message delivered here moved the dot without a read.
-    onMessage: (_event, position) => {
+    onMessage: (event, position) => {
+      // A muted conversation's message counts on its own row only.
+      if ((event as { muted?: true } | undefined)?.muted) return;
       litBy = { position };
       queryClient.setQueryData<ActivityNavAttention>(queryKey, (current) => ({
         streamPositions: {},

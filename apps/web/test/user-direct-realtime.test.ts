@@ -46,6 +46,9 @@ const storedMessage = {
   }),
 };
 
+/** Nobody muted the conversation: every recipient's activity lights their dot. */
+const noMutes = { findMany: async () => [] };
+
 const channelsOf = (published: { channel: string }[]) =>
   published.map((publication) => publication.channel).sort();
 const activityTo = (published: { channel: string; data: Record<string, unknown> }[]) =>
@@ -65,12 +68,16 @@ test("a direct conversation between people signals only its members, never the W
   );
   const { centrifugo, published } = recordingCentrifugo();
   const realtime = new CentrifugoConversationRealtime(centrifugo);
-  await announceMessage({ message: storedMessage } as unknown as PrismaClient, realtime, {
-    conversationId: "conversation-1",
-    messageId: "message-1",
-    sequence: 1,
-    ...scopes.message,
-  });
+  await announceMessage(
+    { message: storedMessage, conversationMember: noMutes } as unknown as PrismaClient,
+    realtime,
+    {
+      conversationId: "conversation-1",
+      messageId: "message-1",
+      sequence: 1,
+      ...scopes.message,
+    },
+  );
   await realtime.taskChanged({
     workspaceId: "workspace-1",
     conversationId: "conversation-1",
@@ -125,7 +132,7 @@ test("a member's conversation with themself signals only them", async () => {
   );
   const { centrifugo, published } = recordingCentrifugo();
   await announceMessage(
-    { message: storedMessage } as unknown as PrismaClient,
+    { message: storedMessage, conversationMember: noMutes } as unknown as PrismaClient,
     new CentrifugoConversationRealtime(centrifugo),
     { conversationId: "conversation-2", messageId: "message-2", sequence: 1, ...scopes.message },
   );
@@ -141,7 +148,7 @@ test("a member is still signalled, the other still named by the key, after the o
   expect(scopes.message).toMatchObject({ directUserIds: ["ada"], directPair: ["ada", "grace"] });
   const { centrifugo, published } = recordingCentrifugo();
   await announceMessage(
-    { message: storedMessage } as unknown as PrismaClient,
+    { message: storedMessage, conversationMember: noMutes } as unknown as PrismaClient,
     new CentrifugoConversationRealtime(centrifugo),
     { conversationId: "conversation-3", messageId: "message-3", sequence: 1, ...scopes.message },
   );
@@ -161,6 +168,7 @@ test("a person's message in a direct conversation also signals the sender's own 
       }),
     },
     message: storedMessage,
+    conversationMember: noMutes,
   } as unknown as PrismaClient;
   const idempotency = {
     execute: async () => ({ id: "message-4", sequence: 1 }),
@@ -189,7 +197,7 @@ test("a person's message in a direct conversation also signals the sender's own 
 test("a member's own conversation signals them once, even when a member row repeats their id", async () => {
   const { centrifugo, published } = recordingCentrifugo();
   await announceMessage(
-    { message: storedMessage } as unknown as PrismaClient,
+    { message: storedMessage, conversationMember: noMutes } as unknown as PrismaClient,
     new CentrifugoConversationRealtime(centrifugo),
     {
       conversationId: "conversation-5",
@@ -201,4 +209,29 @@ test("a member's own conversation signals them once, even when a member row repe
     },
   );
   expect(channelsOf(published)).toEqual(["chat:conversation-5", "chat:user:ada"]);
+});
+
+test("a member who muted the conversation is told so, so their Activity dot stays dark (task #478)", async () => {
+  const scopes = await conversationSignalScopes(
+    directConversation("user:ada|user:grace", [
+      { userId: "ada", agentId: null },
+      { userId: "grace", agentId: null },
+    ]),
+    "conversation-1",
+    "workspace-1",
+  );
+  const { centrifugo, published } = recordingCentrifugo();
+  const db = {
+    message: storedMessage,
+    conversationMember: { findMany: async () => [{ userId: "grace" }] },
+  } as unknown as PrismaClient;
+  await announceMessage(db, new CentrifugoConversationRealtime(centrifugo), {
+    conversationId: "conversation-1",
+    messageId: "message-1",
+    sequence: 1,
+    ...scopes.message,
+  });
+  const activity = published.filter((p) => p.data.type === "conversation.activity.v1");
+  expect(activity.find((p) => p.channel === "chat:user:grace")?.data.muted).toBe(true);
+  expect(activity.find((p) => p.channel === "chat:user:ada")?.data.muted).toBeUndefined();
 });

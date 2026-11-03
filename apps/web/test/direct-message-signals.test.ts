@@ -51,6 +51,7 @@ test("signals the sender's own channel with the sender named, so their other tab
     // What `announceMessage` reads back to build the row it pushes: the sender, the body, and
     // that this conversation is a direct message.
     database: {
+      conversationMember: { findMany: async () => [] },
       message: {
         async findUnique() {
           return {
