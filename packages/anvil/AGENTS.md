@@ -26,6 +26,7 @@
 | `src/catalog-process.ts`     | JSONL catalog execution and diagnostics with required host environment and process ports                                      |
 | `src/catalog-command.ts`     | Host catalog command execution port                                                                                           |
 | `src/stderr-hint.ts`         | The bounded, credential-redacted single-line stderr excerpt a catalog logs                                                    |
+| `src/stderr-excerpt.ts`      | Attaches a process's scrubbed stderr head to a failed open, after dispose has drained it                                     |
 | `src/transcript-tail.ts`     | The tail-reader capability and the lines of a transcript/rollout tail                                                         |
 | `src/local-session.ts`       | Shared limits and content-only projections for local Session handoff discovery                                                |
 | `src/per-turn/`              | Shared per-turn session and process execution                                                                                 |

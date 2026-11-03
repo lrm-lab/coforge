@@ -264,6 +264,13 @@ test.each([
   "Your credit balance is too low to access the API",
   "insufficient credits",
   "You have run out of credits",
+  // Command Code cli 1.88 submit errors. A wall-clock "Resets in …" is not a wait.
+  "Premium credits exhausted",
+  "Premium requests used up. Pick a standard model.",
+  "Spend limit reached",
+  "Usage limit reached",
+  "You've reached today's limit on grok-4",
+  "You've reached your weekly usage limit",
 ])("billing-exhausted wording is terminal and offline, without a named action: %s", (message) => {
   expect(classifyRuntimeErrorText(message)).toEqual({
     errorClass: RUNTIME_ERROR_CLASS.BILLING,
@@ -286,6 +293,40 @@ test("billing wording under another status still wins over the status block", ()
   const result = classifyRuntimeErrorText("HTTP 429: insufficient balance");
   expect(result.errorClass).toBe(RUNTIME_ERROR_CLASS.BILLING);
   expect(result.errorReason).toBe("billing_exhausted");
+});
+
+test("a Command Code usage limit that names an ISO reset waits until then", () => {
+  const resetsAt = "2100-01-01T00:00:00Z";
+  expect(
+    classifyRuntimeErrorText(`You've reached your weekly usage limit. Resets at ${resetsAt}`),
+  ).toEqual({
+    errorClass: RUNTIME_ERROR_CLASS.RATE_LIMIT,
+    errorReason: "quota_exhausted",
+    retryDecision: RUNTIME_ERROR_RETRY_DECISION.RETRY,
+    retryNotBefore: resetsAt,
+    requiredAction: "none",
+    takesAgentOffline: false,
+  });
+});
+
+test("Command Code's duration reset is not a recovery time, so the Agent goes offline", () => {
+  const result = classifyRuntimeErrorText(
+    "You've reached your weekly usage limit. Resets in 3h (3:45pm).",
+  );
+  expect(result.errorClass).toBe(RUNTIME_ERROR_CLASS.BILLING);
+  expect(result.errorReason).toBe("billing_exhausted");
+  expect(result.takesAgentOffline).toBe(true);
+  expect(result).not.toHaveProperty("retryNotBefore");
+});
+
+test("a call-stack failure is not an exhausted quota and stays wakeable", () => {
+  expect(classifyRuntimeErrorText("Maximum call stack size exceeded")).toEqual({
+    errorClass: RUNTIME_ERROR_CLASS.RUNTIME,
+    errorReason: "runtime_failure",
+    retryDecision: RUNTIME_ERROR_RETRY_DECISION.RETRY,
+    requiredAction: "none",
+    takesAgentOffline: false,
+  });
 });
 
 test("without a provider limit, a failure is classified from its text alone", () => {

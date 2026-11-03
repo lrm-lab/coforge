@@ -1,5 +1,6 @@
 import { getLogger } from "@logtape/logtape";
 import { JsonlProtocolError, JsonlRequestError } from "./jsonl-error";
+import { scrubRuntimeErrorText } from "./runtime-error-text";
 import {
   PROCESS_TREE_EXIT_GRACE_MS,
   type OwnedChildProcess,
@@ -39,6 +40,9 @@ export class JsonlProcess {
   #state: ProcessState = { type: "open" };
   #cleanupPromise: Promise<void> | undefined;
   readonly #stderrPromise: Promise<void>;
+  /** The first few stderr lines, for the failure log and for attaching to a session-open error. */
+  readonly #stderrHead: string[] = [];
+  static readonly STDERR_HEAD_LINES = 4;
 
   constructor(
     command: readonly string[],
@@ -67,6 +71,11 @@ export class JsonlProcess {
   onStderr(listener: (line: string) => void): () => void {
     this.#stderrListeners.add(listener);
     return () => this.#stderrListeners.delete(listener);
+  }
+
+  /** What stderr has said so far, secrets stripped and capped. Empty until a non-empty line arrives. */
+  stderrExcerpt(): string {
+    return this.#stderrHead.length === 0 ? "" : scrubRuntimeErrorText(this.#stderrHead.join("\n"));
   }
 
   onRecord(listener: (record: JsonRecord) => void): () => void {
@@ -264,8 +273,10 @@ export class JsonlProcess {
           }
           if (newline < 0) break;
           lines++;
-          for (const listener of this.#stderrListeners)
-            listener(oversized ? "[oversized stderr diagnostic]" : line.replace(/\r$/, ""));
+          const reported = oversized ? "[oversized stderr diagnostic]" : line.replace(/\r$/, "");
+          if (reported.trim() && this.#stderrHead.length < JsonlProcess.STDERR_HEAD_LINES)
+            this.#stderrHead.push(reported);
+          for (const listener of this.#stderrListeners) listener(reported);
           line = "";
           oversized = false;
           start = newline + 1;
@@ -273,15 +284,20 @@ export class JsonlProcess {
       }
       const tail = decoder.decode();
       if (tail && onDiagnostic) onDiagnostic((diagnostic + tail).slice(-16_384));
-      if (line)
-        for (const listener of this.#stderrListeners)
-          listener(oversized ? "[oversized stderr diagnostic]" : line);
+      if (line) {
+        const reported = oversized ? "[oversized stderr diagnostic]" : line;
+        if (reported.trim() && this.#stderrHead.length < JsonlProcess.STDERR_HEAD_LINES)
+          this.#stderrHead.push(reported);
+        for (const listener of this.#stderrListeners) listener(reported);
+      }
+      const excerpt = this.stderrExcerpt();
       if (bytes > 0)
         logger.warning("Code agent process wrote diagnostics to stderr", {
           event: "code_agent.process.stderr",
           pid: this.#child.pid,
           bytes,
           lines,
+          ...(excerpt ? { error_message: excerpt } : {}),
           outcome: "observed",
         });
     } catch {

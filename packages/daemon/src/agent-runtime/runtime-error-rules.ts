@@ -78,6 +78,12 @@ export const RUNTIME_BILLING_EXHAUSTED_PATTERNS = [
   /\b(?:usage|credit|account)\s+balance\b[^.]*\b(?:exhausted|depleted|insufficient|too low)\b/i,
   /\binsufficient\s+(?:balance|credits?|funds)\b/i,
   /\b(?:out of|run out of|no remaining)\s+credits?\b/i,
+  // Command Code's own submit errors (cli 1.88). A reset instant, when present, is quotaResetAt.
+  /\bpremium credits exhausted\b/i,
+  /\bpremium requests used up\b/i,
+  /\bspend limit reached\b/i,
+  /\busage limit reached\b/i,
+  /\byou(?:'|’)ve reached\b[^.]{0,80}\b(?:usage limit|today's limit)\b/i,
 ];
 
 /** A sticky model-config failure takes the Agent offline even without a named action — mirrored

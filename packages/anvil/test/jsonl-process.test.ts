@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { tmpdir } from "node:os";
 import { JsonlProcess } from "@lrm/coforge-anvil/execution";
 import { type OwnedProcessTree } from "@lrm/coforge-anvil";
+import { captureDaemonLogs } from "./fixtures/log-capture";
 import { fixturePerTurnHost } from "./fixtures/runtime-host";
 
 test("a response written just before the process exits is delivered, not failed as an exit", async () => {
@@ -257,4 +258,52 @@ test("a character that starts below the stderr bound is kept whole even when it 
 
 test("an unterminated last stderr line is reported as written", async () => {
   expect(await stderrLines(["done\npartial\r"])).toEqual(["done", "partial\r"]);
+});
+
+test("the stderr excerpt keeps four scrubbed lines and the process log records them", async () => {
+  const secret = "sk-abcdef123456";
+  const { result, records } = await captureDaemonLogs(async () => {
+    const encoder = new TextEncoder();
+    const closed = Promise.withResolvers<void>();
+    const chunks = [
+      "\n",
+      "Usage limit reached\n",
+      `token=${secret}\n`,
+      "line three\n",
+      "line four\n",
+      "line five should not be kept\n",
+    ];
+    const tree = {
+      child: {
+        pid: 1,
+        exited: Promise.resolve(1),
+        exitCode: 1,
+        stdin: { write: () => true, end: () => undefined, flush: async () => undefined },
+        stdout: { async *[Symbol.asyncIterator]() {} },
+        stderr: {
+          async *[Symbol.asyncIterator]() {
+            for (const chunk of chunks) yield encoder.encode(chunk);
+          },
+        },
+        kill: () => undefined,
+      },
+      terminate: async () => undefined,
+      waitForExit: async () => true,
+    } satisfies OwnedProcessTree;
+    const process = new JsonlProcess(["unused"], tmpdir(), {}, { spawn: () => tree });
+    process.onClose(() => closed.resolve());
+    try {
+      await closed.promise;
+      return process.stderrExcerpt();
+    } finally {
+      await process.dispose();
+    }
+  });
+  const excerpt = "Usage limit reached\ntoken=[REDACTED]\nline three\nline four";
+  expect(result).toBe(excerpt);
+  expect(result).not.toContain(secret);
+  expect(result).not.toContain("line five");
+  const logged = records.find((record) => record.properties.event === "code_agent.process.stderr");
+  expect(logged?.properties.error_message).toBe(excerpt);
+  expect(JSON.stringify(logged?.properties)).not.toContain(secret);
 });

@@ -9,6 +9,7 @@ import type {
 import { RequestError } from "@agentclientprotocol/sdk";
 import { asRecord, nonEmptyString } from "#src/json-record";
 import { scrubRuntimeErrorText } from "#src/runtime-error-text";
+import { attachStderrExcerpt } from "#src/stderr-excerpt";
 import type { AcpConnection } from "./connection";
 import type { AcpNativeTurn, AcpSessionProfile, AcpTurnReader } from "./profile";
 import { AcpSteering } from "./steering";
@@ -130,6 +131,11 @@ export class AcpSession implements AgentSession {
       this.#ready();
     } catch (error) {
       await this.dispose().catch(() => undefined);
+      // The request can reject before stderr has been read. Dispose already waits for that
+      // drain, and the head is still on the process, so the product's own sentence is attached
+      // here rather than at the rejection.
+      const process = this.#transport?.process;
+      if (typeof process?.stderrExcerpt === "function") attachStderrExcerpt(process, error);
       throw error;
     }
   }
