@@ -249,7 +249,7 @@ test("a real canonical welcome settles introduction and enables choices only unt
       workspaceId,
       senderMemberId: member.id,
       sequence: 1,
-      body: "你好，我是通用助手。",
+      body: "你好，我是你的助手。",
     },
   });
   const before = starts;

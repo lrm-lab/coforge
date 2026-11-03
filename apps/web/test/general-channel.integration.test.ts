@@ -80,6 +80,7 @@ test.skipIf(!connectionString)(
         slug: `gen-b-${suffix}`,
         name: "General B",
         userId: bob.id,
+        locale: "en",
       });
       created.push(fromEnrollment);
 

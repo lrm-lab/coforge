@@ -6,6 +6,7 @@ import {
 import { recordWorkspaceConfigUpdated } from "#src/server/app-notifications/workspace-events.server";
 import { WorkspaceAssistants } from "#src/server/agents/workspace-assistants.server";
 import { AppError } from "#src/lib/app-error";
+import type { Locale } from "#src/paraglide/runtime";
 import { attachDefaultMemoryAgentToGeneral } from "#src/server/workspace-memory/default-memory-agent.server";
 import {
   isReservedWorkspaceSlug,
@@ -27,7 +28,12 @@ export type MemberWorkspaceRecord = WorkspaceRecord & { role: string };
 
 export type WorkspaceCatalogStore = {
   listForUser(userId: string): Promise<MemberWorkspaceRecord[]>;
-  createForUser(input: { slug: string; name: string; userId: string }): Promise<WorkspaceRecord>;
+  createForUser(input: {
+    slug: string;
+    name: string;
+    userId: string;
+    locale?: Locale;
+  }): Promise<WorkspaceRecord>;
   rename(workspaceId: string, name: string): Promise<WorkspaceRecord>;
   /** Moves the Workspace to `slug` and keeps its current slug as a former one, which goes on
    * naming it. Throws a unique violation when another Workspace has or had `slug`. */
@@ -70,13 +76,13 @@ export class WorkspaceCatalog {
 
   async createForUser(
     userId: string,
-    input: { name: string; slug: string },
+    input: { name: string; slug: string; locale?: Locale },
   ): Promise<WorkspaceRecord> {
     const name = input.name.trim();
     if (!name) throw new AppError("INVALID_INPUT");
     const slug = acceptableSlug(input.slug);
     try {
-      return await this.store.createForUser({ slug, name, userId });
+      return await this.store.createForUser({ slug, name, userId, locale: input.locale });
     } catch (error) {
       if (isUniqueViolation(error)) throw new AppError("CONFLICT");
       throw new Error("workspace creation failed");
@@ -143,10 +149,10 @@ export class PrismaWorkspaceCatalogStore implements WorkspaceCatalogStore {
     return memberships.map(({ role, workspace }) => ({ ...workspaceRecord(workspace), role }));
   }
 
-  async createForUser(input: { slug: string; name: string; userId: string }) {
+  async createForUser(input: { slug: string; name: string; userId: string; locale?: Locale }) {
     const row = await createOwnedWorkspace(this.db, input, workspaceSelect);
     await attachDefaultMemoryAgentToGeneral(this.db, row.id, input.userId);
-    await new WorkspaceAssistants(this.db).ensure(row.id, input.userId);
+    await new WorkspaceAssistants(this.db).ensure(row.id, input.userId, { locale: input.locale });
     return workspaceRecord(row);
   }
 

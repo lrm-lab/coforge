@@ -4,6 +4,7 @@ import { workspaceAssistantOnboarding } from "#src/server/agents/workspace-assis
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
+import { extractLocaleFromRequest } from "#src/paraglide/runtime";
 import {
   changeWorkspaceSlugInputSchema,
   createWorkspaceInputSchema,
@@ -155,7 +156,13 @@ export const createWorkspace = createServerFn({ method: "POST" })
             { startIfOwed: true },
           ),
       },
-      { userId: user.id, name: data.name, slug: data.slug, now: new Date() },
+      {
+        userId: user.id,
+        name: data.name,
+        slug: data.slug,
+        now: new Date(),
+        locale: extractLocaleFromRequest(getRequest()),
+      },
     );
     writePreferredWorkspaceSlug(workspace.slug);
     return workspace;

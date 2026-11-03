@@ -158,7 +158,10 @@ export function workspaceJoinLinks(db: PrismaClient) {
     new PrismaWorkspaceJoinLinkStore(db),
     undefined,
     undefined,
-    (workspaceId, userId) =>
-      workspaceAssistantOnboarding(db).ensure(workspaceId, userId, { startIfOwed: true }),
+    (workspaceId, userId, options) =>
+      workspaceAssistantOnboarding(db).ensure(workspaceId, userId, {
+        startIfOwed: true,
+        ...options,
+      }),
   );
 }

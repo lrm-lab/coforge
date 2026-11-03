@@ -23,7 +23,7 @@ const dong = {
 
 test("a user with no membership gets a Workspace of their own", async () => {
   const store = memoryStore();
-  const first = await new WorkspaceEnrollment(store).ensureForUser(ada, "en-US");
+  const first = await new WorkspaceEnrollment(store).ensureForUser(ada, "en");
   expect(first.workspaceId).toBe("workspace-ada");
   expect(store.created).toEqual([{ slug: "ada", name: "Ada's Workspace" }]);
 });
@@ -36,21 +36,15 @@ test("a second user gets a different Workspace", async () => {
   expect(second.workspaceId).not.toBe(first.workspaceId);
 });
 
-test("Chinese Accept-Language names the Workspace in Chinese", async () => {
+test("the Chinese locale names the Workspace in Chinese", async () => {
   const store = memoryStore();
-  await new WorkspaceEnrollment(store).ensureForUser(dong, "zh-CN,zh;q=0.9,en;q=0.8");
+  await new WorkspaceEnrollment(store).ensureForUser(dong, "zh-CN");
   expect(store.created).toEqual([{ slug: "andong", name: "安栋的工作区" }]);
-});
-
-test("the highest-quality language tag wins", async () => {
-  const store = memoryStore();
-  await new WorkspaceEnrollment(store).ensureForUser(dong, "en;q=0.8,zh-CN;q=1");
-  expect(store.created[0]?.name).toBe("安栋的工作区");
 });
 
 test("an existing membership is left unchanged", async () => {
   const store = memoryStore();
-  await store.createForUser({ slug: "team", name: "Team", userId: ada.id });
+  await store.createForUser({ slug: "team", name: "Team", userId: ada.id, locale: "en" });
   const enrollment = new WorkspaceEnrollment(store);
   const result = await enrollment.ensureForUser(ada, "zh-CN");
   expect(result.workspaceId).toBe("workspace-team");

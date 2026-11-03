@@ -54,7 +54,7 @@ test("platform assistant native sessions isolate members and resume only their o
         instructions: buildCoforgeAgentInstructions({
           agentId: member,
           agentWorkspaceDirectory: directory,
-          identity: { systemKind: "workspace-assistant", displayName: "通用助手" },
+          identity: { systemKind: "workspace-assistant", displayName: "Frank的助手" },
         }),
         environment: { PI_CODING_AGENT_DIR: agentDir },
         runtime: {

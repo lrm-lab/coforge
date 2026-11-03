@@ -154,7 +154,7 @@ test("first sign-in makes the personal Workspace at the chosen URL, never at one
         user: { id: newcomer!.id, username: newcomer!.username },
         displayName: "Newcomer",
         workspaceSlug,
-        acceptLanguage: "en",
+        locale: "en",
       });
 
     for (const taken of [slug("old"), slug("new")]) {

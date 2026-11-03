@@ -10,9 +10,11 @@ const instructions = buildCoforgeAgentInstructions({ agentWorkspaceDirectory: di
 test("only a server-designated platform assistant receives the full platform playbook", () => {
   const assistant = buildCoforgeAgentInstructions({
     agentWorkspaceDirectory: directory,
-    identity: { systemKind: "workspace-assistant", displayName: "通用助手" },
+    identity: { systemKind: "workspace-assistant", displayName: "Frank的助手" },
   });
   expect(assistant).toContain("## CoForge platform assistant");
+  // It is named for its owner, so the playbook gives it no fixed name of its own.
+  expect(assistant).not.toContain("通用助手");
   expect(assistant).toContain("coforge manual get index");
   expect(assistant).toContain("coforge workspace info --full");
   expect(assistant).toContain("coforge action prepare");

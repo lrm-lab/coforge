@@ -1,4 +1,5 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
+import type { Locale } from "#src/paraglide/runtime";
 import { WORKSPACE_ASSISTANT_KIND } from "#src/features/agents/agent-system-kind";
 import { productionCloudComputers } from "#src/server/hosts/host-production.server";
 import {
@@ -30,10 +31,10 @@ export class WorkspaceAssistantOnboarding {
   async ensure(
     workspaceId: string,
     userId: string,
-    { startIfOwed = false }: { startIfOwed?: boolean } = {},
+    { startIfOwed = false, locale }: { startIfOwed?: boolean; locale?: Locale } = {},
   ) {
     const assistants = new WorkspaceAssistants(this.db);
-    const session = await assistants.ensure(workspaceId, userId);
+    const session = await assistants.ensure(workspaceId, userId, { locale });
     // The read path ends here: an existing session issues no writes at all. The start sequence
     // runs on provisioning (`session.created`) and on calls a write path marks `startIfOwed` —
     // Workspace creation, sign-in completion and link joins provision through several calls and

@@ -1,5 +1,6 @@
 import { workspaceAssistantOnboarding } from "#src/server/agents/workspace-assistant-onboarding.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
+import type { Locale } from "#src/paraglide/runtime";
 import {
   PrismaFirstSignInNames,
   withFirstSignInUser,
@@ -40,7 +41,8 @@ export type FirstSignInInput = {
   /** The page the person is on their way to; an active invite's join page makes the submit a
    * name-only one (see `FirstSignIn.complete`). */
   returnTo?: string;
-  acceptLanguage: string;
+  /** The UI locale of the request: the Workspace title and the assistant are worded in it. */
+  locale: Locale;
 };
 
 export type ConfirmedEnrollment = {
@@ -115,6 +117,7 @@ export type WeeklyReportAssistantBind = (input: {
   userId: string;
   workspaceId: string;
   computerId: string;
+  locale: Locale;
 }) => Promise<unknown>;
 
 /**
@@ -137,6 +140,7 @@ export class FirstSignIn {
     private readonly provisionWorkspace?: (input: {
       userId: string;
       workspaceId: string;
+      locale: Locale;
     }) => Promise<void>,
     private readonly isInviteActive?: InviteCheck,
   ) {}
@@ -212,7 +216,11 @@ export class FirstSignIn {
     const { workspaceId, displayName } = enrolled;
     // These retries repair external resources after the accepted name/Workspace has committed.
     if (enrolled.ownsWorkspace)
-      await this.provisionWorkspace?.({ userId: input.user.id, workspaceId });
+      await this.provisionWorkspace?.({
+        userId: input.user.id,
+        workspaceId,
+        locale: input.locale,
+      });
     const started = await this.startCloudComputer?.({
       userId: input.user.id,
       workspaceId,
@@ -225,6 +233,7 @@ export class FirstSignIn {
         userId: input.user.id,
         workspaceId,
         computerId,
+        locale: input.locale,
       });
     return { ok: true, workspaceId };
   }
@@ -277,7 +286,7 @@ class PrismaFirstSignInStore implements FirstSignInStore {
         new PrismaWorkspaceEnrollmentStore(tx),
       ).ensureForUser(
         { ...input.user, username, displayName: title },
-        input.acceptLanguage,
+        input.locale,
         input.workspaceSlug,
       );
       const displayName = await names.confirm(
@@ -303,13 +312,15 @@ function firstSignIn(db: PrismaClient): FirstSignIn {
         (input) => productionCloudComputers(db).ensureDefault(input),
         request,
       ),
-    async (request) => {
+    async ({ locale, ...request }) => {
       await workspaceAssistantOnboarding(db).ensure(request.workspaceId, request.userId, {
         startIfOwed: true,
+        locale,
       });
       return ensureWeeklyReportAssistant(db, request);
     },
-    ({ workspaceId, userId }) => provisionWorkspaceEnrollment(db, workspaceId, userId),
+    ({ workspaceId, userId, locale }) =>
+      provisionWorkspaceEnrollment(db, workspaceId, userId, { locale }),
     (token) => joinLinks.isActive(token),
   );
 }
@@ -329,7 +340,7 @@ export function completeFirstSignIn(input: {
   workspaceSlug?: string;
   avatarPresetId?: string;
   returnTo?: string;
-  acceptLanguage: string;
+  locale: Locale;
 }): Promise<FirstSignInResult> {
   return firstSignIn(input.db).complete(input);
 }

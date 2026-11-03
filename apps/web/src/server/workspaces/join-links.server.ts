@@ -1,4 +1,5 @@
 import { AppError } from "#src/lib/app-error";
+import type { Locale } from "#src/paraglide/runtime";
 import {
   announceMemberChanged,
   type ConversationRealtime,
@@ -102,7 +103,11 @@ export class WorkspaceJoinLinks {
     private readonly store: WorkspaceJoinLinkStore,
     private readonly now: () => Date = () => new Date(),
     private readonly realtime?: Pick<ConversationRealtime, "memberChanged">,
-    private readonly onboardMember?: (workspaceId: string, userId: string) => Promise<unknown>,
+    private readonly onboardMember?: (
+      workspaceId: string,
+      userId: string,
+      options: { locale?: Locale },
+    ) => Promise<unknown>,
   ) {}
 
   async current(input: { workspaceId: string; actorUserId: string }) {
@@ -153,7 +158,7 @@ export class WorkspaceJoinLinks {
 
   /** Joins the link's Workspace as a member; while the link works, someone already in it just gets
    * the Workspace back. */
-  async join(input: { token: string; userId: string }) {
+  async join(input: { token: string; userId: string; locale?: Locale }) {
     const { link, workspace } = await this.requireActive(input.token);
     const landing = { workspaceId: workspace.id, slug: workspace.slug };
     if (await this.store.findMemberRole(workspace.id, input.userId)) return landing;
@@ -169,7 +174,7 @@ export class WorkspaceJoinLinks {
         conversationIds: admission.joinedChannelIds,
       });
     }
-    await this.onboardMember?.(workspace.id, input.userId);
+    await this.onboardMember?.(workspace.id, input.userId, { locale: input.locale });
     return landing;
   }
 

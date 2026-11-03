@@ -1,7 +1,10 @@
-/// Shared assistant configuration; each member's private Agent isolates native sessions,
-/// credentials, working directories and read cursors.
+/// The Workspace's platform assistant: each member's private Agent isolates native sessions,
+/// credentials, working directories and read cursors. The Agent's own `displayName` names it, set
+/// once for its owner when it is made.
 model WorkspaceAssistant {
   workspaceId String @id @db.Uuid
+  /// No longer read; the Agent's `displayName` names each assistant. Still written through its
+  /// default. Kept until the release after this one is live (expand-contract), then dropped.
   displayName String @default("通用助手")
   createdAt DateTime @default(now())
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)

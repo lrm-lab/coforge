@@ -2,6 +2,7 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import { isDatabaseClient, type DatabaseScope } from "#src/server/db/transaction.server";
 import { WorkspaceAssistants } from "#src/server/agents/workspace-assistants.server";
 import { AppError } from "#src/lib/app-error";
+import type { Locale } from "#src/paraglide/runtime";
 import { attachDefaultMemoryAgentToGeneral } from "#src/server/workspace-memory/default-memory-agent.server";
 import { WorkspaceCatalog, PrismaWorkspaceCatalogStore } from "./catalog.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
@@ -21,7 +22,12 @@ export type EnrollmentUser = {
 
 export type WorkspaceEnrollmentStore = {
   findMembership(userId: string): Promise<string | null>;
-  createForUser(input: { slug: string; name: string; userId: string }): Promise<string>;
+  createForUser(input: {
+    slug: string;
+    name: string;
+    userId: string;
+    locale: Locale;
+  }): Promise<string>;
 };
 
 /** Ensures the authenticated User has a WorkspaceMembership as owner of their own Workspace when they have none. */
@@ -34,16 +40,16 @@ export class WorkspaceEnrollment {
    */
   async ensureForUser(
     user: EnrollmentUser,
-    acceptLanguage: string,
+    locale: Locale,
     slug?: string,
   ): Promise<{ workspaceId: string }> {
     const existing = await this.store.findMembership(user.id);
     if (existing) return { workspaceId: existing };
 
-    const name = workspaceDisplayName(user.displayName, acceptLanguage);
+    const name = workspaceDisplayName(user.displayName, locale);
     const workspaceId = slug
-      ? await this.create({ slug, name, userId: user.id })
-      : await this.createOwnedWorkspace(user.username, user.id, name);
+      ? await this.create({ slug, name, userId: user.id, locale })
+      : await this.createOwnedWorkspace(user.username, user.id, name, locale);
     return { workspaceId };
   }
 
@@ -60,17 +66,18 @@ export class WorkspaceEnrollment {
     username: string,
     userId: string,
     name: string,
+    locale: Locale,
   ): Promise<string> {
     const slug = nameToWorkspaceSlug(username);
     if (isValidWorkspaceSlug(slug) && !isReservedWorkspaceSlug(slug)) {
       try {
-        return await this.create({ slug, name, userId });
+        return await this.create({ slug, name, userId, locale });
       } catch (error) {
         if (!isUniqueViolation(error)) throw error;
       }
     }
     const suffix = userId.replaceAll("-", "").slice(0, 8);
-    return this.create({ slug: `${slug}-${suffix}`, name, userId });
+    return this.create({ slug: `${slug}-${suffix}`, name, userId, locale });
   }
 
   /**
@@ -80,7 +87,12 @@ export class WorkspaceEnrollment {
    * work around with another slug, which would leave the User two Workspaces: that Workspace is
    * the answer. A slug taken by anyone else's still throws the unique violation.
    */
-  private async create(input: { slug: string; name: string; userId: string }): Promise<string> {
+  private async create(input: {
+    slug: string;
+    name: string;
+    userId: string;
+    locale: Locale;
+  }): Promise<string> {
     try {
       return await this.store.createForUser(input);
     } catch (error) {
@@ -93,9 +105,9 @@ export class WorkspaceEnrollment {
   }
 }
 
-function workspaceDisplayName(displayName: string, acceptLanguage: string): string {
+function workspaceDisplayName(displayName: string, locale: Locale): string {
   const name = displayName.trim() || "User";
-  return prefersChinese(acceptLanguage) ? `${name}的工作区` : `${name}'s Workspace`;
+  return locale === "zh-CN" ? `${name}的工作区` : `${name}'s Workspace`;
 }
 
 export class PrismaWorkspaceEnrollmentStore implements WorkspaceEnrollmentStore {
@@ -110,12 +122,14 @@ export class PrismaWorkspaceEnrollmentStore implements WorkspaceEnrollmentStore 
     return row?.workspaceId ?? null;
   }
 
-  async createForUser(input: { slug: string; name: string; userId: string }) {
+  async createForUser(input: { slug: string; name: string; userId: string; locale: Locale }) {
     const row = await createOwnedWorkspace(this.db, input, { id: true });
     // A transaction owner provisions after committing, so external resource failures cannot
     // roll back an accepted name and Workspace. Ordinary enrollment owns its transaction here.
     if (isDatabaseClient(this.db))
-      await provisionWorkspaceEnrollment(this.db, row.id, input.userId);
+      await provisionWorkspaceEnrollment(this.db, row.id, input.userId, {
+        locale: input.locale,
+      });
     return row.id;
   }
 }
@@ -125,9 +139,10 @@ export async function provisionWorkspaceEnrollment(
   db: PrismaClient,
   workspaceId: string,
   userId: string,
+  options: { locale?: Locale } = {},
 ) {
   await attachDefaultMemoryAgentToGeneral(db, workspaceId, userId);
-  await new WorkspaceAssistants(db).ensure(workspaceId, userId);
+  await new WorkspaceAssistants(db).ensure(workspaceId, userId, options);
 }
 
 export async function requireExistingWorkspaceId(
@@ -146,36 +161,9 @@ export async function requireExistingWorkspaceId(
 export function workspaceIdForUser(
   db: PrismaClient,
   user: EnrollmentUser,
-  acceptLanguage: string,
+  locale: Locale,
 ): Promise<string> {
   return new WorkspaceEnrollment(new PrismaWorkspaceEnrollmentStore(db))
-    .ensureForUser(user, acceptLanguage)
+    .ensureForUser(user, locale)
     .then((result) => result.workspaceId);
-}
-
-function prefersChinese(acceptLanguage: string): boolean {
-  const tag = preferredLanguageTag(acceptLanguage);
-  return tag === "zh" || tag.startsWith("zh-");
-}
-
-function preferredLanguageTag(acceptLanguage: string): string {
-  let bestTag = "";
-  let bestQuality = -1;
-  for (const part of acceptLanguage.split(",")) {
-    const [rawTag, ...params] = part.trim().split(";");
-    if (!rawTag) continue;
-    let quality = 1;
-    for (const param of params) {
-      const [key, value] = param.trim().split("=");
-      if (key === "q" && value) {
-        const parsed = Number(value);
-        if (Number.isFinite(parsed)) quality = parsed;
-      }
-    }
-    if (quality > bestQuality) {
-      bestQuality = quality;
-      bestTag = rawTag.trim().toLowerCase();
-    }
-  }
-  return bestTag;
 }

@@ -351,6 +351,7 @@ test("Workspace humans enrolled in general see one general channel; outsiders ca
         slug: crypto.randomUUID(),
         name: "New workspace",
         userId: alice.id,
+        locale: "en",
       });
       const id = typeof created === "string" ? created : created.id;
       try {

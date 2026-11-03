@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 
+import { extractLocaleFromRequest } from "#src/paraglide/runtime";
 import { authMiddleware, workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { declareNoStore } from "#src/features/no-store-response.server";
 import { optionalBrowserUser } from "#src/server/auth/require-user.server";
@@ -78,5 +79,6 @@ export const joinWorkspaceByLink = createServerFn({ method: "POST" })
     workspaceJoinLinks(requireDatabaseClient()).join({
       token: data.token,
       userId: context.user.id,
+      locale: extractLocaleFromRequest(getRequest()),
     }),
   );

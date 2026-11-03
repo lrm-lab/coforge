@@ -95,7 +95,7 @@ test.skipIf(!connectionString)(
         db,
         user,
         displayName: "  Ada   Lovelace ",
-        acceptLanguage: "en-US",
+        locale: "en",
       });
 
       expect(result.ok).toBe(true);
@@ -134,7 +134,7 @@ test.skipIf(!connectionString)(
         user: own.user,
         displayName: "Ada",
         avatarPresetId: "person-7",
-        acceptLanguage: "en-US",
+        locale: "en",
       });
       // A second tab's submit keeps the first name, and the first face with it.
       await completeFirstSignIn({
@@ -142,7 +142,7 @@ test.skipIf(!connectionString)(
         user: own.user,
         displayName: "Ada",
         avatarPresetId: "person-8",
-        acceptLanguage: "en-US",
+        locale: "en",
       });
       expect(
         (await own.db.user.findUniqueOrThrow({ where: { id: own.user.id } })).avatarObjectKey,
@@ -155,7 +155,7 @@ test.skipIf(!connectionString)(
         displayName: "Grace",
         avatarPresetId: "person-3",
         returnTo,
-        acceptLanguage: "en-US",
+        locale: "en",
       });
       expect(result).toEqual({ ok: true, workspaceId: null });
       expect(
@@ -202,7 +202,7 @@ test.skipIf(!connectionString)(
         db,
         user,
         displayName: "System",
-        acceptLanguage: "en",
+        locale: "en",
       });
 
       expect(result).toEqual({ ok: false, problem: "refused" });
@@ -221,7 +221,7 @@ test.skipIf(!connectionString)(
     try {
       const results = await Promise.all(
         ["Ada Lovelace", "Ada Lovelace", "Ada King", "Countess Lovelace", "Ada Lovelace"].map(
-          (displayName) => completeFirstSignIn({ db, user, displayName, acceptLanguage: "en" }),
+          (displayName) => completeFirstSignIn({ db, user, displayName, locale: "en" }),
         ),
       );
 
@@ -272,7 +272,7 @@ test.skipIf(!connectionString)(
         db,
         user,
         displayName: "Ada Lovelace",
-        acceptLanguage: "en",
+        locale: "en",
       });
 
       expect(result).toEqual({ ok: true, workspaceId: existing });
@@ -303,7 +303,7 @@ test.skipIf(!connectionString)(
         user,
         displayName: " Ada   Lovelace ",
         returnTo,
-        acceptLanguage: "en",
+        locale: "en",
       });
 
       expect(result).toEqual({ ok: true, workspaceId: null });
@@ -317,7 +317,7 @@ test.skipIf(!connectionString)(
         user,
         displayName: "Ada King",
         returnTo,
-        acceptLanguage: "en",
+        locale: "en",
       });
       expect((await db.user.findUniqueOrThrow({ where: { id: user.id } })).displayName).toBe(
         "Ada Lovelace",
@@ -349,7 +349,7 @@ test.skipIf(!connectionString)(
           user,
           displayName: "Ada Lovelace",
           returnTo,
-          acceptLanguage: "en",
+          locale: "en",
         }),
       ).toEqual({ ok: false, problem: "invite_unavailable" });
       expect((await db.user.findUniqueOrThrow({ where: { id: user.id } })).welcomedAt).toBeNull();
@@ -361,7 +361,7 @@ test.skipIf(!connectionString)(
         displayName: "Ada Lovelace",
         workspaceSlug: `fsi-own-${user.username}`,
         returnTo,
-        acceptLanguage: "en",
+        locale: "en",
       });
       expect(result.ok).toBe(true);
       expect(await memberships()).toHaveLength(1);
@@ -382,7 +382,7 @@ test.skipIf(!connectionString)(
           user,
           displayName: "Ada Lovelace",
           returnTo: "/w/anywhere/join/whatever",
-          acceptLanguage: "en",
+          locale: "en",
         }),
       ).toMatchObject({ ok: true });
       expect(await memberships()).toHaveLength(1);
@@ -395,7 +395,7 @@ test.skipIf(!connectionString)(
             user: second.user,
             displayName: "Ada Lovelace",
             returnTo: "/join/not-a-token",
-            acceptLanguage: "en",
+            locale: "en",
           }),
         ).toEqual({ ok: false, problem: "invite_unavailable" });
         expect(await second.memberships()).toEqual([]);
@@ -418,7 +418,7 @@ test.skipIf(!connectionString)(
         user,
         displayName: `张三 ${suffix}`,
         workspaceSlug: `fsi-${suffix}`,
-        acceptLanguage: "en",
+        locale: "en",
       });
 
       expect(result.ok).toBe(true);
@@ -430,7 +430,7 @@ test.skipIf(!connectionString)(
         user,
         displayName: `李四 ${suffix}`,
         workspaceSlug: `fsi-${suffix}`,
-        acceptLanguage: "en",
+        locale: "en",
       });
       expect(await storedUsername()).toBe(`zhangsan-${suffix}`);
     } finally {
@@ -455,7 +455,7 @@ test.skipIf(!connectionString)(
         user,
         displayName: `Ada ${suffix} Lovelace`,
         returnTo: `/join/${token}`,
-        acceptLanguage: "en",
+        locale: "en",
       });
 
       expect(result).toEqual({ ok: true, workspaceId: null });
@@ -477,7 +477,7 @@ test.skipIf(!connectionString)(
         user,
         displayName: `张三 ${suffix}`,
         workspaceSlug: `fsi-${suffix}`,
-        acceptLanguage: "en",
+        locale: "en",
       });
 
       expect(await storedUsername()).toBe(`fsi-${suffix}`);
@@ -497,7 +497,7 @@ test.skipIf(!connectionString)(
         user,
         displayName: "李",
         workspaceSlug: `fsi-${suffix}`,
-        acceptLanguage: "en",
+        locale: "en",
       });
 
       expect(await storedUsername()).toBe(`user-${suffix}`);
@@ -518,7 +518,7 @@ test.skipIf(!connectionString)(
         db,
         user,
         displayName: `张三 ${suffix}`,
-        acceptLanguage: "en",
+        locale: "en",
       });
 
       expect(await storedUsername()).toBe(`zhangsan-${suffix}`);
@@ -542,7 +542,7 @@ test.skipIf(!connectionString)(
         user,
         displayName: `张三 ${suffix}`,
         workspaceSlug: `fsi-${suffix}`,
-        acceptLanguage: "en",
+        locale: "en",
       });
 
       expect(await storedUsername()).toBe(`user-${suffix}`);
@@ -582,7 +582,7 @@ test.skipIf(!connectionString)(
         user,
         displayName: `张三 ${suffix}`,
         workspaceSlug: `fsi-${suffix}`,
-        acceptLanguage: "en",
+        locale: "en",
       });
 
       expect(result.ok).toBe(true);

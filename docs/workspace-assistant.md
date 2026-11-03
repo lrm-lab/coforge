@@ -1,9 +1,9 @@
 # Workspace platform assistant
 
 Every Workspace has one platform assistant configuration. Each member sees a private
-“通用助手” in Direct messages. Behind that entry, the member has a dedicated Agent,
-conversation, native runtime sessions, API credentials, working directory and delegated
-message read cursors. Other members, including Workspace admins, cannot read that chat
+assistant in Direct messages, named for its owner (see Naming below). Behind that entry,
+the member has a dedicated Agent, conversation, native runtime sessions, API credentials,
+working directory and delegated message read cursors. Other members, including Workspace admins, cannot read that chat
 or migrate its files. Ordinary Agents retain their existing shared-session behavior.
 
 The assistant receives a maintained platform playbook in addition to normal Agent
@@ -12,6 +12,18 @@ with channels, messages, Tasks, reminders, Projects, Records, Agents, Computers 
 platform settings. Operations use the questioner's current permissions; it does not
 grant members admin privileges. External chat operations are posted as the member.
 Private assistant replies remain in that member's assistant DM.
+
+## Naming
+
+The assistant is named for its owner when it is made: `{name}的助手` in Chinese,
+`{name}'s Assistant` otherwise, using the member's display name (`Unnamed` when blank),
+cut to the Agent display-name limit. The language is the interface language the owner saved
+(`UserPreference.language`), else the UI locale of the request that provisions it (first
+sign-in, creating a Workspace, joining by link; the one the personal Workspace's title uses),
+else Chinese. The name is set once and does not follow a later rename or language switch. A
+migration renamed every existing assistant still called `通用助手` the same way (English for
+an owner who saved English) and left other names alone.
+`WorkspaceAssistant.displayName` is no longer read and is dropped in a later release.
 
 ## Provisioning and upgrades
 

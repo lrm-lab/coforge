@@ -61,12 +61,10 @@ test("first sign-in locks its User before a second tab can choose a different Wo
   try {
     await lock.query("BEGIN; LOCK TABLE workspaces IN SHARE MODE");
     calls.push(
-      completeFirstSignIn({ db: firstDb, user, displayName: "Ada Lovelace", acceptLanguage: "en" }),
+      completeFirstSignIn({ db: firstDb, user, displayName: "Ada Lovelace", locale: "en" }),
     );
     await waitingQuery(firstLabel);
-    calls.push(
-      completeFirstSignIn({ db: secondDb, user, displayName: "Ada King", acceptLanguage: "en" }),
-    );
+    calls.push(completeFirstSignIn({ db: secondDb, user, displayName: "Ada King", locale: "en" }));
     expect(await waitingQuery(secondLabel)).toMatch(/users[\s\S]*FOR UPDATE/i);
     const beforeCommit = await db.user.findUniqueOrThrow({ where: { id: user.id } });
     expect(beforeCommit.welcomedAt).toBeNull();

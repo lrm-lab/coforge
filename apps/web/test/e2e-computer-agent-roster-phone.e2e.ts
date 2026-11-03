@@ -22,7 +22,7 @@ let computerId = "";
 const agentIds: string[] = [];
 
 const AGENTS = [
-  { name: `assistant-${crypto.randomUUID()}`, displayName: "通用助手", runtime: "pi" },
+  { name: `assistant-${crypto.randomUUID()}`, displayName: "Frank的助手", runtime: "pi" },
   { name: `roster-coder-${process.pid}`, displayName: "coforge-ui", runtime: "claude-code" },
   { name: `roster-backend-${process.pid}`, displayName: "coforge-backend", runtime: "codex" },
 ];
@@ -82,7 +82,7 @@ test("on a phone every Agent row keeps its name and runtime, and nothing overflo
   await browser("set", "viewport", "390", "844");
   await browser("open", `${origin}/en/w/${slug}/computer/${computerId}`);
   await browser("wait", "#computer-agents-on-computer");
-  await browser("wait", "--fn", `document.body.innerText.includes("通用助手")`);
+  await browser("wait", "--fn", `document.body.innerText.includes("Frank的助手")`);
   await browser(
     "eval",
     `document.getElementById("computer-agents-on-computer").scrollIntoView({ block: "start" })`,
@@ -125,7 +125,7 @@ test("on a phone every Agent row keeps its name and runtime, and nothing overflo
     expect(row.text).toContain("@");
     expect(row.handleRight).toBeLessThanOrEqual(row.right);
   }
-  const assistant = layout.rows.find((row) => row.text.includes("通用助手"));
+  const assistant = layout.rows.find((row) => row.text.includes("Frank的助手"));
   expect(assistant?.text).toContain("Pi");
   // The buttons do not fit beside the heading at this width, so they wrap under it.
   expect(layout.buttonsTop).toBeGreaterThanOrEqual(layout.heading.bottom);
@@ -134,7 +134,7 @@ test("on a phone every Agent row keeps its name and runtime, and nothing overflo
 test("on a desktop the buttons stay beside the heading; dark mode reads the same", async () => {
   await browser("set", "viewport", "1440", "900");
   await browser("open", `${origin}/en/w/${slug}/computer/${computerId}`);
-  await browser("wait", "--fn", `document.body.innerText.includes("通用助手")`);
+  await browser("wait", "--fn", `document.body.innerText.includes("Frank的助手")`);
   await browser(
     "eval",
     `document.getElementById("computer-agents-on-computer").scrollIntoView({ block: "start" })`,

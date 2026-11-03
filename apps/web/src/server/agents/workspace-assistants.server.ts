@@ -8,6 +8,22 @@ import {
   startDefaultCloudComputer,
 } from "#src/server/workspaces/create-workspace.server";
 import { paginated } from "#src/server/db/pagination.server";
+import { AGENT_DISPLAY_NAME_MAX_LENGTH } from "#src/features/agents/agent.schemas";
+import { isUserLanguage } from "#src/server/db/repositories/user-preferences.repositories.server";
+import { humanLabel, type HumanNames } from "#src/lib/human-label";
+import type { Locale } from "#src/paraglide/runtime";
+
+/** `{name}的助手` / `{name}'s Assistant`, with the owner's name cut to fit an Agent's display name.
+ * Without a locale (no request to read one from) it is Chinese. */
+function personalAssistantName(owner: Pick<HumanNames, "displayName">, locale: Locale = "zh-CN") {
+  const suffix = locale === "zh-CN" ? "的助手" : "'s Assistant";
+  let name = "";
+  for (const character of humanLabel(owner)) {
+    if (name.length + character.length > AGENT_DISPLAY_NAME_MAX_LENGTH - suffix.length) break;
+    name += character;
+  }
+  return `${name}${suffix}`;
+}
 
 export const WORKSPACE_ASSISTANT_DESCRIPTION =
   "CoForge 平台通用助手：解答平台功能，协助消息、频道、任务、提醒、项目、周报及计算机操作。会话和记忆仅属于当前用户，操作遵循当前用户权限。";
@@ -25,8 +41,10 @@ const DEFAULT_RUNTIME = {
 export class WorkspaceAssistants {
   constructor(private readonly db: PrismaClient) {}
 
-  async ensure(workspaceId: string, userId: string) {
-    const { session, created } = await this.ensureSession(workspaceId, userId);
+  /** The assistant this call makes is named in the owner's saved interface language, else the
+   * request's `locale`, else Chinese. */
+  async ensure(workspaceId: string, userId: string, options: { locale?: Locale } = {}) {
+    const { session, created } = await this.ensureSession(workspaceId, userId, options);
     const conversation = await new DirectConversations(this.db).open(workspaceId, userId, {
       agentId: session.agentId,
     });
@@ -36,6 +54,7 @@ export class WorkspaceAssistants {
   private async ensureSession(
     workspaceId: string,
     userId: string,
+    { locale }: { locale?: Locale },
   ): Promise<{ session: { agentId: string }; created: boolean }> {
     // The steady state is a read: the shared row and the member's session already exist, and a
     // sidebar load must not write. Only a first open, or a session still waiting for its
@@ -105,7 +124,12 @@ export class WorkspaceAssistants {
             });
           return existing;
         }
-        const assistant = await tx.workspaceAssistant.upsert({
+        const owner = await tx.user.findUniqueOrThrow({
+          where: { id: userId },
+          select: { displayName: true, preferences: { select: { language: true } } },
+        });
+        const saved = owner.preferences?.language;
+        await tx.workspaceAssistant.upsert({
           where: { workspaceId },
           create: { workspaceId },
           update: { workspaceId },
@@ -120,7 +144,7 @@ export class WorkspaceAssistants {
                 workspaceId,
                 ownerId: userId,
                 name: `assistant-${crypto.randomUUID()}`,
-                displayName: assistant.displayName,
+                displayName: personalAssistantName(owner, isUserLanguage(saved) ? saved : locale),
                 description: WORKSPACE_ASSISTANT_DESCRIPTION,
                 systemKind: WORKSPACE_ASSISTANT_KIND,
                 introductionDueAt: new Date(),

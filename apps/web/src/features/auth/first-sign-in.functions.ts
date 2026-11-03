@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 
+import { extractLocaleFromRequest } from "#src/paraglide/runtime";
 import { authMiddleware } from "#src/features/auth/function-auth";
 import { joinTokenFromReturnTo } from "#src/features/auth/return-to";
 import { declareNoStore } from "#src/features/no-store-response.server";
@@ -54,7 +55,7 @@ export const submitDisplayName = createServerFn({ method: "POST" })
       workspaceSlug: data.workspaceSlug,
       avatarPresetId: data.avatarPresetId,
       returnTo: data.returnTo,
-      acceptLanguage: getRequest().headers.get("accept-language") ?? "",
+      locale: extractLocaleFromRequest(getRequest()),
     });
   });
 

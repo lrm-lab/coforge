@@ -1,4 +1,5 @@
 import { HostDirectoryError } from "#src/server/hosts/host-directory.server";
+import type { Locale } from "#src/paraglide/runtime";
 import type { WorkspaceRecord } from "#src/server/workspaces/catalog.server";
 
 /** The default cloud computer id in a start result. Anything else, including an
@@ -37,7 +38,7 @@ export async function createWorkspaceAndStartCloudComputer(
   deps: {
     createWorkspace: (
       userId: string,
-      input: { name: string; slug: string },
+      input: { name: string; slug: string; locale?: Locale },
     ) => Promise<WorkspaceRecord>;
     startCloudComputer: (input: {
       userId: string;
@@ -55,11 +56,12 @@ export async function createWorkspaceAndStartCloudComputer(
       computerId: string;
     }) => Promise<unknown>;
   },
-  input: { userId: string; name: string; slug: string; now: Date },
+  input: { userId: string; name: string; slug: string; now: Date; locale?: Locale },
 ): Promise<WorkspaceRecord> {
   const workspace = await deps.createWorkspace(input.userId, {
     name: input.name,
     slug: input.slug,
+    locale: input.locale,
   });
   const started = await startDefaultCloudComputer(deps.startCloudComputer, {
     userId: input.userId,
