@@ -109,6 +109,7 @@ export async function handleComputerFileUpload(
     if (result.status === "unsupported") return refused(503, "unsupported");
     if (result.status === "timeout") return refused(504, "timeout");
     if (result.status === "unavailable") return refused(404, "unavailable");
+    if (result.status !== "failed") return refused(500, "failed");
     return Response.json(
       { reason: "failed" satisfies ComputerFileUploadRefusal, message: result.message },
       { status: 422, headers: { "cache-control": "no-store" } },
