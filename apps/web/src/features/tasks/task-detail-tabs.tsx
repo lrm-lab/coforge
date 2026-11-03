@@ -63,41 +63,46 @@ export function TaskDetailTabs({
   };
   return (
     <div className="flex min-h-0 flex-1">
-      <Tabs
-        selectedKey={selected}
-        onSelectionChange={(key) => onChange(key as TaskDetailTab)}
-        className="flex min-h-0 min-w-0 flex-1 flex-col"
-      >
-        <div className="flex shrink-0 flex-col gap-3 border-b border-secondary">
-          {task}
-          <TabList
-            type="underline"
-            size="sm"
-            aria-label={m.tasks_tabs_label()}
-            className="-mb-px px-4 sm:px-6"
-          >
-            {tabs.map((tab) => (
-              <Tab key={tab} id={tab} icon={TAB_ICON[tab]}>
-                {label[tab]}
-              </Tab>
-            ))}
-          </TabList>
-        </div>
-        {tabs.map((tab) => (
-          <TabPanel
-            key={tab}
-            id={tab}
-            className={cn(
-              "min-h-0 flex-1 outline-hidden",
-              tab === "discussion"
-                ? "flex h-[min(60vh,40rem)] flex-col max-sm:h-auto"
-                : "overflow-y-auto",
-            )}
-          >
-            {pages[tab]()}
-          </TabPanel>
-        ))}
-      </Tabs>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {/* The Task sits above the tabs, not inside them: React Aria renders what is inside its
+            Tabs once more to read the tabs, without the contexts a menu needs, so the relation
+            pickers the Task holds threw there when opened (task #476). */}
+        <div className="flex shrink-0 flex-col gap-3">{task}</div>
+        <Tabs
+          selectedKey={selected}
+          onSelectionChange={(key) => onChange(key as TaskDetailTab)}
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          <div className="shrink-0 border-b border-secondary pt-3">
+            <TabList
+              type="underline"
+              size="sm"
+              aria-label={m.tasks_tabs_label()}
+              className="-mb-px px-4 sm:px-6"
+            >
+              {tabs.map((tab) => (
+                <Tab key={tab} id={tab} icon={TAB_ICON[tab]}>
+                  {label[tab]}
+                </Tab>
+              ))}
+            </TabList>
+          </div>
+          {tabs.map((tab) => (
+            <TabPanel
+              key={tab}
+              id={tab}
+              className={cn(
+                "min-h-0 flex-1 outline-hidden",
+                tab === "discussion"
+                  ? "flex h-[min(60vh,40rem)] flex-col max-sm:h-auto"
+                  : "overflow-y-auto",
+              )}
+            >
+              {pages[tab]()}
+            </TabPanel>
+          ))}
+        </Tabs>
+      </div>
       {sidebar && (
         <aside className="w-64 shrink-0 overflow-y-auto border-l border-secondary px-4 py-3">
           {sidebar}
