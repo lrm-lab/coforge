@@ -30,6 +30,7 @@ model User {
   avatarContentType           String?
   createdAt                   DateTime                        @default(now())
   preferences                 UserPreference?
+  notificationSettings        UserNotificationSettings?
   identities                  UserIdentity[]
   gitHubConnection            GitHubConnection?
   gitHubAuthorization         GitHubAuthorization?
@@ -109,6 +110,15 @@ model WebPushSubscription {
   p256dh         String
   auth           String
   expirationTime DateTime?
+  /// desktop | mobile, as the browser reported it when subscribing; null (older subscriptions) is a
+  /// computer, whose notifications are never delayed.
+  deviceKind        String?
+  /// What Settings names the device by, such as "Chrome · macOS".
+  deviceLabel       String?
+  /// The last delivery the push service accepted, and the last it refused (with why).
+  lastSuccessAt     DateTime?
+  lastFailureAt     DateTime?
+  lastFailureReason String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)

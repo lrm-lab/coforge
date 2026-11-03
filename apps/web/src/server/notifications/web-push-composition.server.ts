@@ -4,6 +4,7 @@ import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.ser
 import { toPublicServerError } from "#src/server/errors/public-error.server";
 import { createCentrifugoNotificationPublisher } from "./in-page-notification-publisher.server";
 import { PrismaWebPushSubscriptionStore } from "./prisma-web-push-subscriptions.server";
+import { computerActivity, deferredMobilePushes } from "./notification-redis.server";
 import {
   WebPushNotifications,
   type NotificationPublisher,
@@ -67,7 +68,10 @@ export async function createWebPushNotifications(
       },
     };
   }
-  return new WebPushNotifications(new PrismaWebPushSubscriptionStore(db), transport, publisher);
+  return new WebPushNotifications(new PrismaWebPushSubscriptionStore(db), transport, publisher, {
+    activity: computerActivity(),
+    deferred: deferredMobilePushes(),
+  });
 }
 
 export function bestEffortMessageNotifier(

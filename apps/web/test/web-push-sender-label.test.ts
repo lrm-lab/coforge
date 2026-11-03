@@ -32,6 +32,8 @@ async function notificationFor(input: {
       }),
     },
     conversationMember: { findFirst: async () => ({ id: "member-1" }) },
+    // No notification settings and no preferences: the defaults (full preview, sound on).
+    user: { findMany: async () => [] },
   } as unknown as PrismaClient;
   return new PrismaWebPushSubscriptionStore(db).notificationForRecipient("message-1", "user-1");
 }

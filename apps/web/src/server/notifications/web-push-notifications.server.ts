@@ -1,16 +1,30 @@
 import { m } from "#src/paraglide/messages";
 import { systemNoticeText } from "#src/features/conversations/system-notice-text";
 import { workspacePath } from "#src/features/workspaces/workspace-url";
+import type { ComputerActivityReader } from "./computer-activity.server";
+import type { DeferredPushQueue } from "./deferred-mobile-pushes.server";
+import { releaseDeferred, type DeferredOutcome } from "./deferred-mobile-release.server";
+import {
+  DEFAULT_NOTIFICATION_SETTINGS,
+  mobileDeferredUntil,
+  previewNotification,
+  suppression,
+  type NotificationSettings,
+} from "./notification-rules.server";
 
 export type StoredWebPushSubscription = {
   id: string;
   endpoint: string;
   p256dh: string;
   auth: string;
+  /** desktop | mobile as the browser reported it; absent or null is a computer, never delayed. */
+  deviceKind?: string | null;
 };
 
 export type WebPushSubscriptionInput = Omit<StoredWebPushSubscription, "id"> & {
   expirationTime: Date | null;
+  deviceKind?: "desktop" | "mobile" | null;
+  deviceLabel?: string | null;
 };
 
 export type WebPushPayload = {
@@ -19,6 +33,8 @@ export type WebPushPayload = {
   url: string;
   tag: string;
   forceDisplay?: boolean;
+  /** Shown without a sound: the person turned sound off (task #467). */
+  silent?: boolean;
 };
 
 /** One recipient of a message: their id, and every browser subscription they currently hold (which
@@ -27,12 +43,17 @@ export type MessageRecipient = {
   userId: string;
   /** The recipient's stored interface language, if they chose one. */
   language?: string | null;
+  /** Their account notification settings, and the zone quiet hours read; absent: the defaults. */
+  settings?: NotificationSettings;
+  timeZone?: string;
   subscriptions: StoredWebPushSubscription[];
 };
 
 export type MessageWebPushNotification = {
   title: string;
   body: string;
+  /** Who sent it, for the "sender only" preview; null for a server notice. */
+  sender?: string | null;
   /** The structured notice, when the message has one; each recipient's language renders it. */
   system?: { kind: string; params: unknown };
   url: string;
@@ -53,7 +74,24 @@ export type RecipientNotification = {
    * browser can compare it against the page it is already looking at before showing an OS
    * notification. */
   conversationPath: string;
+  /** Shown without a sound: the person turned sound off (task #467). */
+  silent?: boolean;
 };
+
+/** A waiting phone notification's message as its one recipient sees it now, and whether they have
+ * read it since; null when they are no longer a recipient or the message is gone. */
+export type DeferredNotification = Omit<
+  MessageWebPushNotification,
+  "workspaceId" | "recipients"
+> & {
+  /** The conversation it is in: a person leaving the computer gets one per conversation. */
+  conversationId: string;
+  recipient: MessageRecipient;
+  read: boolean;
+};
+
+/** How one delivery to one subscription went, for its device's status. */
+export type DeliveryOutcome = { id: string; ok: boolean; at: Date; reason?: string };
 
 export interface WebPushSubscriptionStore {
   notificationForMessage(messageId: string): Promise<MessageWebPushNotification | null>;
@@ -61,10 +99,14 @@ export interface WebPushSubscriptionStore {
     messageId: string,
     userId: string,
   ): Promise<RecipientNotification | null>;
+  deferredNotification(messageId: string, userId: string): Promise<DeferredNotification | null>;
+  /** A person's settings and the zone quiet hours read, for a check that needs no message. */
+  settingsFor(userId: string): Promise<{ settings: NotificationSettings; timeZone: string }>;
   subscriptionsForUser(userId: string): Promise<StoredWebPushSubscription[]>;
   saveSubscription(userId: string, subscription: WebPushSubscriptionInput): Promise<void>;
   removeSubscription(userId: string, endpoint: string): Promise<void>;
   removeSubscriptionById(id: string): Promise<void>;
+  recordDeliveries(outcomes: DeliveryOutcome[]): Promise<void>;
 }
 
 export interface WebPushTransport {
@@ -124,12 +166,28 @@ export function classifyTestDelivery(result: DeliveryResult): "sent" | "failed" 
   return "failed";
 }
 
+/** What a delivery needs beyond the store and transport (task #467): whether each person is at a
+ * computer, where a phone's notification waits, and the clock. Without them every device is sent
+ * at once. */
+export type DeliveryOptions = {
+  activity?: ComputerActivityReader;
+  deferred?: DeferredPushQueue;
+  now?: () => Date;
+};
+
+const isPhone = (subscription: StoredWebPushSubscription) => subscription.deviceKind === "mobile";
+
 export class WebPushNotifications {
+  private readonly now: () => Date;
+
   constructor(
     private readonly subscriptions: WebPushSubscriptionStore,
     private readonly transport: WebPushTransport,
     private readonly publisher?: NotificationPublisher,
-  ) {}
+    private readonly options: DeliveryOptions = {},
+  ) {
+    this.now = options.now ?? (() => new Date());
+  }
 
   subscribe(userId: string, subscription: WebPushSubscriptionInput) {
     return this.subscriptions.saveSubscription(userId, subscription);
@@ -149,29 +207,39 @@ export class WebPushNotifications {
   async notifyMessage(messageId: string): Promise<DeliveryResult> {
     const notification = await this.subscriptions.notificationForMessage(messageId);
     if (!notification) return { sent: 0, failed: 0, removed: 0, unreachable: 0 };
-    const userIds = notification.recipients.map((recipient) => recipient.userId);
-    const byLanguage = new Map<string, StoredWebPushSubscription[]>();
-    for (const recipient of notification.recipients) {
-      const language = recipient.language === "zh-CN" ? "zh-CN" : "en";
-      byLanguage.set(language, [...(byLanguage.get(language) ?? []), ...recipient.subscriptions]);
-    }
-    const deliveries = [...byLanguage].map(([language, subscriptions]) =>
-      this.deliver(subscriptions, {
-        title: notification.title,
-        body: notification.system
-          ? systemNoticeText(
-              { body: notification.body, system: notification.system },
-              language as Locale,
-            )
-          : notification.body,
-        url: notification.url,
-        tag: messageNotificationTag(messageId),
-      }),
+    const now = this.now();
+    // A pause or quiet hours leave a person out of both paths; the unread counts are separate.
+    const recipients = notification.recipients.filter(
+      (recipient) =>
+        !suppression(
+          recipient.settings ?? DEFAULT_NOTIFICATION_SETTINGS,
+          recipient.timeZone ?? "UTC",
+          now,
+        ),
     );
+    const userIds = recipients.map((recipient) => recipient.userId);
+    const activity = await this.computerActivity(recipients);
+    const outcomes: DeliveryOutcome[] = [];
+    const deliveries = recipients.map(async (recipient) => {
+      const settings = recipient.settings ?? DEFAULT_NOTIFICATION_SETTINGS;
+      const waitUntil = recipient.subscriptions.some(isPhone)
+        ? mobileDeferredUntil(settings.mobileDelay, activity.get(recipient.userId) ?? null, now)
+        : null;
+      const waits =
+        waitUntil !== null && (await this.wait(messageId, recipient.userId, now, waitUntil));
+      return this.deliver(
+        waits
+          ? recipient.subscriptions.filter((subscription) => !isPhone(subscription))
+          : recipient.subscriptions,
+        this.payloadFor(messageId, notification, recipient),
+        outcomes,
+      );
+    });
     const [results] = await Promise.all([
       Promise.all(deliveries),
       this.publishAvailable(messageId, notification.workspaceId, userIds),
     ]);
+    await this.recordOutcomes(outcomes);
     const totals = results.reduce(
       (total, result) => ({
         sent: total.sent + result.sent,
@@ -183,6 +251,90 @@ export class WebPushNotifications {
     );
     const errorId = results.find((result) => result.errorId)?.errorId;
     return errorId ? { ...totals, errorId } : totals;
+  }
+
+  /** A person whose phone notifications were waiting, looked at again (`releaseDeferred`). */
+  async releaseDeferred(userId: string): Promise<{ outcome: DeferredOutcome; sent: number }> {
+    const queue = this.options.deferred;
+    if (!queue) return { outcome: "gone", sent: 0 };
+    return releaseDeferred(
+      {
+        store: this.subscriptions,
+        queue,
+        activity: this.options.activity,
+        now: this.now(),
+        send: async (releases) => {
+          const outcomes: DeliveryOutcome[] = [];
+          const results = await Promise.all(
+            releases.map(({ messageId, waiting }) =>
+              this.deliver(
+                waiting.recipient.subscriptions.filter(isPhone),
+                this.payloadFor(messageId, waiting, waiting.recipient),
+                outcomes,
+              ),
+            ),
+          );
+          await this.recordOutcomes(outcomes);
+          return results.reduce((total, result) => total + result.sent, 0);
+        },
+      },
+      userId,
+    );
+  }
+
+  /** Puts a person's phone notification in the queue; false when there is none or it failed, and
+   * then the phone rings now, as when the computer's activity cannot be read. */
+  private async wait(messageId: string, userId: string, now: Date, until: Date) {
+    if (!this.options.deferred) return false;
+    try {
+      await this.options.deferred.defer({ messageId, userId, firstQueuedAt: now }, until);
+      return true;
+    } catch {
+      console.warn(JSON.stringify({ event: "web_push.defer_failed", messageId }));
+      return false;
+    }
+  }
+
+  private async computerActivity(recipients: readonly MessageRecipient[]) {
+    if (
+      !this.options.activity ||
+      !recipients.some((recipient) => recipient.subscriptions.some(isPhone))
+    )
+      return new Map();
+    try {
+      return await this.options.activity.read(recipients.map((recipient) => recipient.userId));
+    } catch {
+      // Without the computer's activity, a phone rings at once rather than not at all.
+      return new Map();
+    }
+  }
+
+  /** One recipient's payload: the notice in their language, shaped by their preview and sound. */
+  private payloadFor(
+    messageId: string,
+    notification: Pick<MessageWebPushNotification, "title" | "body" | "sender" | "system" | "url">,
+    recipient: MessageRecipient,
+  ): WebPushPayload {
+    const locale: Locale = recipient.language === "zh-CN" ? "zh-CN" : "en";
+    const settings = recipient.settings ?? DEFAULT_NOTIFICATION_SETTINGS;
+    const body = notification.system
+      ? systemNoticeText({ body: notification.body, system: notification.system }, locale)
+      : notification.body;
+    const shown = previewNotification(
+      {
+        title: notification.title,
+        body,
+        sender: notification.system ? null : (notification.sender ?? null),
+      },
+      settings.previewMode,
+      locale,
+    );
+    return {
+      ...shown,
+      url: notification.url,
+      tag: messageNotificationTag(messageId),
+      ...(!settings.sound && { silent: true }),
+    };
   }
 
   private async publishAvailable(
@@ -217,9 +369,77 @@ export class WebPushNotifications {
     });
   }
 
+  /** Each surviving subscription's success or failure (a removed one has no status left). */
+  private outcomesOf(
+    subscriptions: readonly StoredWebPushSubscription[],
+    results: readonly ("sent" | "failed" | "removed" | "unreachable")[],
+  ): DeliveryOutcome[] {
+    const at = this.now();
+    return subscriptions.flatMap((subscription, index): DeliveryOutcome[] => {
+      const result = results[index];
+      if (result === "removed") return [];
+      return [
+        {
+          id: subscription.id,
+          ok: result === "sent",
+          at,
+          ...(result !== "sent" && { reason: result }),
+        },
+      ];
+    });
+  }
+
+  /** The devices' last outcomes, for their status in Settings, in one store call. Best-effort: a
+   * failed write never fails the delivery it describes. */
+  private async recordOutcomes(outcomes: DeliveryOutcome[]) {
+    if (outcomes.length === 0) return;
+    try {
+      await this.subscriptions.recordDeliveries(outcomes);
+    } catch {
+      console.warn(JSON.stringify({ event: "web_push.status_unrecorded", count: outcomes.length }));
+    }
+  }
+
+  /**
+   * The Settings test (task #467): one notification to every device the person holds, never held
+   * back by a pause, quiet hours or a phone's wait (as on Raft), with each device's outcome so
+   * Settings can show which ones work. Clicking it opens Settings in `workspaceSlug`.
+   */
+  async sendTestToDevices(
+    userId: string,
+    locale: Locale,
+    workspaceSlug: string,
+  ): Promise<Array<{ id: string; outcome: "sent" | "failed" | "removed" | "unreachable" }>> {
+    const devices = await this.subscriptions.subscriptionsForUser(userId);
+    const payload: WebPushPayload = {
+      title: m.preferences_browser_notifications_test_title({}, { locale }),
+      body: m.preferences_browser_notifications_test_body({}, { locale }),
+      url: workspacePath(workspaceSlug, "/settings"),
+      tag: `test:${crypto.randomUUID()}`,
+      forceDisplay: true,
+    };
+    return Promise.all(
+      devices.map(async (device) => {
+        const result = await this.deliver([device], payload);
+        const outcome =
+          result.sent > 0
+            ? ("sent" as const)
+            : result.removed > 0
+              ? ("removed" as const)
+              : result.unreachable > 0
+                ? ("unreachable" as const)
+                : ("failed" as const);
+        return { id: device.id, outcome };
+      }),
+    );
+  }
+
+  /** Sends `payload` to each subscription. With `collected`, the outcomes are added to it for one
+   * write by the caller instead of being written here. */
   private async deliver(
     subscriptions: StoredWebPushSubscription[],
     payload: WebPushPayload,
+    collected?: DeliveryOutcome[],
   ): Promise<DeliveryResult> {
     const errorId = deliveryErrorId();
     const results = await Promise.all(
@@ -261,6 +481,9 @@ export class WebPushNotifications {
         }
       }),
     );
+    const outcomes = this.outcomesOf(subscriptions, results);
+    if (collected) collected.push(...outcomes);
+    else await this.recordOutcomes(outcomes);
     return {
       sent: results.filter((result) => result === "sent").length,
       failed: results.filter((result) => result === "failed").length,

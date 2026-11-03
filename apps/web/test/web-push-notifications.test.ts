@@ -1,5 +1,6 @@
 import { describe, expect, spyOn, test } from "bun:test";
 
+import { DEFAULT_NOTIFICATION_SETTINGS } from "#src/server/notifications/notification-rules.server";
 import {
   WebPushDeliveryError,
   WebPushNotifications,
@@ -32,6 +33,8 @@ function store(input?: {
   const value: WebPushSubscriptionStore = {
     notificationForMessage: async () => input?.message ?? null,
     notificationForRecipient: async () => null,
+    deferredNotification: async () => null,
+    settingsFor: async () => ({ settings: DEFAULT_NOTIFICATION_SETTINGS, timeZone: "UTC" }),
     subscriptionsForUser: async () => input?.subscriptions ?? [],
     saveSubscription: async (userId, subscription) => {
       saved.push({ userId, endpoint: subscription.endpoint });
@@ -42,6 +45,7 @@ function store(input?: {
     removeSubscriptionById: async (id) => {
       removed.push(id);
     },
+    recordDeliveries: async () => {},
   };
   return { value, removed, saved };
 }

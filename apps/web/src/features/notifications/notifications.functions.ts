@@ -64,6 +64,8 @@ export const subscribeBrowserPush = createServerFn({ method: "POST" })
       p256dh: data.keys.p256dh,
       auth: data.keys.auth,
       expirationTime: data.expirationTime ? new Date(data.expirationTime) : null,
+      deviceKind: data.deviceKind ?? null,
+      deviceLabel: data.deviceLabel ?? null,
     });
   });
 

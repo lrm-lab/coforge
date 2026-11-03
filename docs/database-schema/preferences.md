@@ -8,6 +8,17 @@ nullable and NULL means the code default. `conversationOpenMode` is a retired co
 column: its historical closed-set values remain constrained, but the application neither reads
 nor writes them.
 
+## `user_notification_settings`
+
+A person's notification settings for their whole account (task #467, Raft's account settings):
+`pausedUntil`, quiet hours (`quietHoursEnabled`, `quietStartMinute`, `quietEndMinute`, minutes after
+local midnight, possibly across it, read in `user_preferences.timeZone`), `previewMode`
+(`full | sender | hidden`), `sound` and `mobileDelay`
+(`immediate | inactive | idle_1m | idle_2m | idle_5m | idle_10m`). No row means the defaults.
+`version` rises on every save, and a save names the version it was made from.
+`web_push_subscriptions` records each browser's `deviceKind` (`desktop | mobile`; null is a
+computer), `deviceLabel` and last delivery outcome for the device list.
+
 ## `workspace_member_preferences`
 
 One row per Workspace membership for a member's own settings inside that Workspace, keyed by

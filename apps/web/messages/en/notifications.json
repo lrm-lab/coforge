@@ -1,0 +1,6 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "notification_preview_sender": "{sender} sent a message",
+  "notification_preview_hidden_title": "CoForge",
+  "notification_preview_hidden_body": "New message"
+}

@@ -5,6 +5,7 @@ import { RedisClient } from "bun";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
 import { RedisMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
 import { PrismaWebPushSubscriptionStore } from "#src/server/notifications/prisma-web-push-subscriptions.server";
+import { DEFAULT_NOTIFICATION_SETTINGS } from "#src/server/notifications/notification-rules.server";
 import { quietCentrifugo } from "./helpers/fake-centrifugo";
 
 test("a channel member without a browser push subscription is still a notificationForMessage recipient", async () => {
@@ -51,8 +52,15 @@ test("a channel member without a browser push subscription is still a notificati
     const pushSubscriptions = new PrismaWebPushSubscriptionStore(db);
     const notification = await pushSubscriptions.notificationForMessage(message.id);
     expect(notification?.workspaceId).toBe(workspace.id);
+    // Each recipient carries the notification settings their push is decided by (task #467).
     expect(notification?.recipients).toEqual([
-      { userId: carol.id, language: null, subscriptions: [] },
+      {
+        userId: carol.id,
+        language: null,
+        settings: DEFAULT_NOTIFICATION_SETTINGS,
+        timeZone: "UTC",
+        subscriptions: [],
+      },
     ]);
     expect(await pushSubscriptions.notificationForRecipient(message.id, carol.id)).toEqual({
       title: notification!.title,

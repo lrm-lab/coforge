@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DEVICE_KINDS } from "./notification-settings.schemas";
 
 const base64Url = (bytes: number) =>
   z
@@ -29,6 +30,10 @@ export const browserPushSubscriptionInput = z.object({
   endpoint: z.string().max(4_096).refine(isSafePushEndpoint),
   expirationTime: z.number().int().positive().nullable(),
   keys: z.object({ p256dh: base64Url(65), auth: base64Url(16) }),
+  // Whether this browser is a phone or a computer, and what Settings calls it (task #467); a
+  // subscription without them is a computer, whose notifications never wait.
+  deviceKind: z.enum(DEVICE_KINDS).optional(),
+  deviceLabel: z.string().trim().min(1).max(80).optional(),
 });
 
 export const browserPushUnsubscribeInput = z.object({

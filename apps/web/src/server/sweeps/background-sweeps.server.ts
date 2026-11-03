@@ -3,6 +3,7 @@ import { appNotificationPresence } from "#src/server/app-notifications/app-notif
 import { setPresenceObserver } from "#src/server/app-notifications/presence-observer";
 import { ensurePresenceSweep } from "#src/server/app-notifications/presence-sweep.server";
 import { ensureAgentMuteHintSweep } from "#src/server/conversations/agent-mute-hint-sweep.server";
+import { ensureDeferredMobilePushSweep } from "#src/server/notifications/deferred-mobile-push-sweep.server";
 
 /**
  * The periodic sweeps the Centrifugo RPC composition starts, and the one place that connects the
@@ -15,4 +16,5 @@ export function registerBackgroundSweeps(): void {
   ensureAgentActivitySweep();
   ensurePresenceSweep();
   ensureAgentMuteHintSweep();
+  ensureDeferredMobilePushSweep();
 }

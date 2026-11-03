@@ -15,11 +15,47 @@ import {
 } from "#src/server/db/repositories/attachment-comment-recipients.repositories.server";
 import { messageNotificationTag } from "./web-push-notifications.server";
 import type {
+  DeferredNotification,
+  DeliveryOutcome,
+  MessageRecipient,
   MessageWebPushNotification,
   RecipientNotification,
+  StoredWebPushSubscription,
   WebPushSubscriptionInput,
   WebPushSubscriptionStore,
 } from "./web-push-notifications.server";
+import { previewNotification, suppression } from "./notification-rules.server";
+import {
+  NotificationSettingsStore,
+  type PersonNotificationSettings,
+} from "./notification-settings.server";
+
+const SUBSCRIPTION_SELECT = {
+  id: true,
+  endpoint: true,
+  p256dh: true,
+  auth: true,
+  deviceKind: true,
+} as const;
+
+/** One recipient row, with the settings their notifications are decided by. */
+function recipientOf(
+  row: {
+    userId: string | null;
+    user: {
+      preferences: { language: string | null } | null;
+      webPushSubscriptions: StoredWebPushSubscription[];
+    } | null;
+  },
+  settings: PersonNotificationSettings | undefined,
+): MessageRecipient {
+  return {
+    userId: row.userId!,
+    language: row.user?.preferences?.language ?? null,
+    ...(settings && { settings: settings.settings, timeZone: settings.timeZone }),
+    subscriptions: row.user?.webPushSubscriptions ?? [],
+  };
+}
 import { workspacePath } from "#src/features/workspaces/workspace-url";
 import { humanLabel } from "#src/lib/human-label";
 import { SYSTEM_SENDER_LABEL } from "#src/features/profiles/person-name";
@@ -47,7 +83,10 @@ type MessageContext = {
     workspaceId: string;
     senderMemberId: string | null;
     threadRootId: string | null;
+    sequence: number;
   };
+  /** Who sent it, for the "sender only" preview; null for a server notice. */
+  sender: string | null;
   channelName: string | null;
   /** The users the message's stored mention rows name; a mention pierces channel mute. */
   mentionedUserIds: string[];
@@ -166,7 +205,9 @@ export class PrismaWebPushSubscriptionStore implements WebPushSubscriptionStore 
         workspaceId: message.workspaceId,
         senderMemberId: message.senderMemberId,
         threadRootId: message.threadRootId,
+        sequence: message.sequence,
       },
+      sender: message.sender ? sender : null,
       channelName,
       mentionedUserIds,
       ...(message.systemMessage
@@ -223,33 +264,37 @@ export class PrismaWebPushSubscriptionStore implements WebPushSubscriptionStore 
   async notificationForMessage(messageId: string): Promise<MessageWebPushNotification | null> {
     const context = await this.loadMessageContext(messageId);
     if (!context) return null;
-    let rows = await this.db.conversationMember.findMany({
-      where: this.recipientWhere(context),
+    const rows = await this.recipientRows(context);
+    const settings = await new NotificationSettingsStore(this.db).readMany(
+      rows.map((row) => row.userId!),
+    );
+    return {
+      title: context.title,
+      body: context.body,
+      sender: context.sender,
+      ...(context.system ? { system: context.system } : {}),
+      url: context.url,
+      workspaceId: context.message.workspaceId,
+      recipients: rows.map((row) => recipientOf(row, settings.get(row.userId!))),
+    };
+  }
+
+  /** The members `recipientWhere` names, with their language and subscriptions, narrowed to who may
+   * read the file for a comment conversation; `userId` narrows it to that one member. */
+  private async recipientRows(context: MessageContext, userId?: string) {
+    const rows = await this.db.conversationMember.findMany({
+      where: this.recipientWhere(context, userId),
       select: {
         userId: true,
         user: {
           select: {
             preferences: { select: { language: true } },
-            webPushSubscriptions: {
-              select: { id: true, endpoint: true, p256dh: true, auth: true },
-            },
+            webPushSubscriptions: { select: SUBSCRIPTION_SELECT },
           },
         },
       },
     });
-    if (context.commentSource) rows = await this.commentSourceRecipients(context, rows);
-    return {
-      title: context.title,
-      body: context.body,
-      ...(context.system ? { system: context.system } : {}),
-      url: context.url,
-      workspaceId: context.message.workspaceId,
-      recipients: rows.map((row) => ({
-        userId: row.userId!,
-        language: row.user?.preferences?.language ?? null,
-        subscriptions: row.user?.webPushSubscriptions ?? [],
-      })),
-    };
+    return context.commentSource ? this.commentSourceRecipients(context, rows) : rows;
   }
 
   async notificationForRecipient(
@@ -271,19 +316,112 @@ export class PrismaWebPushSubscriptionStore implements WebPushSubscriptionStore 
       );
       if (!access?.canRead || access.conversationId !== context.message.conversationId) return null;
     }
+    // The in-page notification follows the same settings as a push (task #467).
+    const { settings, timeZone, language } = await new NotificationSettingsStore(this.db).read(
+      userId,
+    );
+    if (suppression(settings, timeZone, new Date())) return null;
+    const locale = language === "zh-CN" ? "zh-CN" : "en";
     return {
-      title: context.title,
-      body: context.body,
+      ...previewNotification(
+        {
+          title: context.title,
+          body: context.body,
+          sender: context.system ? null : context.sender,
+        },
+        settings.previewMode,
+        locale,
+      ),
       url: context.url,
       tag: messageNotificationTag(messageId),
       conversationPath: context.conversationPath,
+      ...(!settings.sound && { silent: true }),
     };
+  }
+
+  async deferredNotification(
+    messageId: string,
+    userId: string,
+  ): Promise<DeferredNotification | null> {
+    const context = await this.loadMessageContext(messageId);
+    if (!context) return null;
+    const [row] = await this.recipientRows(context, userId);
+    if (!row) return null;
+    const [{ readThroughSequence }, thread] = await Promise.all([
+      this.db.conversationMember.findFirstOrThrow({
+        where: { conversationId: context.message.conversationId, userId, ...ACTIVE_MEMBER_WHERE },
+        select: { readThroughSequence: true },
+      }),
+      context.message.threadRootId
+        ? this.db.threadRead.findFirst({
+            where: { rootMessageId: context.message.threadRootId, member: { userId } },
+            select: { readThroughSequence: true },
+          })
+        : null,
+    ]);
+    const readThrough = context.message.threadRootId
+      ? (thread?.readThroughSequence ?? 0)
+      : readThroughSequence;
+    const settings = await new NotificationSettingsStore(this.db).read(userId);
+    return {
+      conversationId: context.message.conversationId,
+      title: context.title,
+      body: context.body,
+      sender: context.sender,
+      ...(context.system ? { system: context.system } : {}),
+      url: context.url,
+      recipient: recipientOf(row, settings),
+      read: readThrough >= context.message.sequence,
+    };
+  }
+
+  settingsFor(userId: string) {
+    return new NotificationSettingsStore(this.db).read(userId);
+  }
+
+  /** One `UPDATE` per kind of outcome (success, or each failure reason) for a whole fan-out, not
+   * one per subscription; each kind is stamped with its first outcome's time (milliseconds apart). */
+  async recordDeliveries(outcomes: DeliveryOutcome[]) {
+    const groups = new Map<string, { ids: string[]; outcome: DeliveryOutcome }>();
+    for (const outcome of outcomes) {
+      const kind = outcome.ok ? "ok" : `failed:${outcome.reason ?? "failed"}`;
+      const group = groups.get(kind) ?? { ids: [], outcome };
+      group.ids.push(outcome.id);
+      groups.set(kind, group);
+    }
+    await Promise.all(
+      [...groups.values()].map(({ ids, outcome }) =>
+        this.db.webPushSubscription.updateMany({
+          where: { id: { in: ids } },
+          data: outcome.ok
+            ? { lastSuccessAt: outcome.at }
+            : { lastFailureAt: outcome.at, lastFailureReason: outcome.reason ?? "failed" },
+        }),
+      ),
+    );
+  }
+
+  /** The person's browsers as Settings lists them, newest first. */
+  async devicesForUser(userId: string) {
+    return this.db.webPushSubscription.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        endpoint: true,
+        deviceKind: true,
+        deviceLabel: true,
+        lastSuccessAt: true,
+        lastFailureAt: true,
+        lastFailureReason: true,
+      },
+    });
   }
 
   async subscriptionsForUser(userId: string) {
     return this.db.webPushSubscription.findMany({
       where: { userId },
-      select: { id: true, endpoint: true, p256dh: true, auth: true },
+      select: SUBSCRIPTION_SELECT,
     });
   }
 

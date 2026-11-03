@@ -1,0 +1,6 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "notification_preview_sender": "{sender} 发了一条消息",
+  "notification_preview_hidden_title": "CoForge",
+  "notification_preview_hidden_body": "有一条新消息"
+}

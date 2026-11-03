@@ -1,0 +1,24 @@
+/// A person's notification settings for their whole account (every Workspace), as on Raft
+/// (`DEFAULT_NOTIFICATION_ACCOUNT_SETTINGS`): no row means the defaults. Quiet hours read the time
+/// zone from `UserPreference.timeZone`. `version` rises by one on every change; a save names the
+/// version it was made from (task #467).
+model UserNotificationSettings {
+  userId            String    @id @db.Uuid
+  /// Notifications are paused until this instant.
+  pausedUntil       DateTime?
+  quietHoursEnabled Boolean   @default(false)
+  /// Minutes after local midnight; the window may cross midnight (22:00 to 08:00 by default).
+  quietStartMinute  Int       @default(1320)
+  quietEndMinute    Int       @default(480)
+  /// full | sender | hidden: what a notification shows of the message.
+  previewMode       String    @default("full")
+  sound             Boolean   @default(true)
+  /// immediate | inactive | idle_1m | idle_2m | idle_5m | idle_10m: when a phone's notification
+  /// waits for the computer to stop being used.
+  mobileDelay       String    @default("inactive")
+  version           Int       @default(0)
+  updatedAt         DateTime  @updatedAt
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_notification_settings")
+}
