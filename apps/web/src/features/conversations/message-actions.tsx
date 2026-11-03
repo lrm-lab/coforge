@@ -62,10 +62,18 @@ export function MessageActionToolbar({
 }: MessageActions & { grouped: boolean }) {
   return (
     <div
+      data-message-toolbar
       className={cn(
-        "pointer-events-none absolute right-3 flex items-center gap-0.5 opacity-0 transition-opacity",
-        // 12px from the top of a heading row (design spec); a continuation has no top padding.
-        grouped ? "top-0.5" : "top-3",
+        // A bar of its own over the message, as Slack's and Raft's: solid, edged and lifted, so
+        // nothing under it shows through.
+        "pointer-events-none absolute right-3 z-10 flex h-8 items-center gap-0.5 rounded-lg border border-secondary bg-primary px-0.5 opacity-0 shadow-xs transition-opacity",
+        // It sits on the row's top edge and ends where the row's content begins — 12px down a
+        // heading row, at the top of a continuation — so it never covers the sender line (its time,
+        // the Agent's description) or the first line of text (task #459).
+        grouped ? "-top-8" : "-top-5",
+        // Under the "new messages" divider that edge holds the divider's label, so the bar comes
+        // down onto the sender line, which keeps its end free for it (`MessageSenderLine`).
+        "[li:has(>[role=separator])_&]:top-0",
         "lg:[@media(hover:hover)_and_(pointer:fine)]:group-focus-within/message:pointer-events-auto lg:[@media(hover:hover)_and_(pointer:fine)]:group-focus-within/message:opacity-100",
         "lg:[@media(hover:hover)_and_(pointer:fine)]:group-hover/message:pointer-events-auto lg:[@media(hover:hover)_and_(pointer:fine)]:group-hover/message:opacity-100",
       )}

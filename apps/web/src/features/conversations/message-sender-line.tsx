@@ -1,6 +1,7 @@
 import { Button } from "#src/components/base/buttons/button";
 import { AgentDescriptionLabel, AgentModelLabel } from "#src/features/agents/agent-model-label";
 import { DeletedAgentBadge } from "#src/features/agents/deleted-agent";
+import { cn } from "#src/lib/utils";
 
 import type { MessageView } from "./message-view";
 
@@ -32,7 +33,14 @@ export function MessageSenderLine({
   time: string;
 }) {
   return (
-    <p className="flex min-h-5 items-baseline gap-2 pr-8">
+    <p
+      className={cn(
+        "flex min-h-5 items-baseline gap-2 pr-8",
+        // Under the "new messages" divider the hover bar sits at this line's end
+        // (`MessageActionToolbar`); the line leaves it room where the bar shows.
+        "lg:[@media(hover:hover)_and_(pointer:fine)]:[li:has(>[role=separator])_&]:pr-32",
+      )}
+    >
       <span className="flex min-w-0 items-baseline gap-2">
         {onOpenSender ? (
           <Button

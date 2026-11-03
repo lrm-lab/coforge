@@ -33,11 +33,6 @@ import { ReviewLanding } from "./attachment-review-address";
 import type { MessageView } from "./message-view";
 import type { ReadState } from "./conversation-pane-layout";
 
-/** A grouped row has no sender header, so the hover action strip would sit on its first line: the
- * strip's width (thread, reaction, forward, save, copy) is reserved there, only where the strip can
- * appear (a touch screen opens the action sheet instead). */
-const HOVER_BAR_RESERVE_CLASS = "lg:[@media(hover:hover)_and_(pointer:fine)]:pr-24";
-
 // The conversation pane reads the day with the rows it groups.
 export { dayLabel };
 export { groupsWithPrevious } from "./message-view";
@@ -302,12 +297,7 @@ export const MessageRow = memo(function MessageRow({
               data-scroll-anchor
               onMouseUp={quoteSelection.read}
               onKeyUp={quoteSelection.read}
-              className={cn(
-                "relative min-w-0 text-md text-primary [overflow-wrap:anywhere]",
-                // See `HOVER_BAR_RESERVE_CLASS`: a touch screen opens the action sheet instead,
-                // and the reserve was 80px of blank on every continuation line on a phone.
-                grouped && HOVER_BAR_RESERVE_CLASS,
-              )}
+              className="relative min-w-0 text-md text-primary [overflow-wrap:anywhere]"
             >
               <CollapsibleMessageBody
                 body={displayBody}
@@ -340,14 +330,11 @@ export const MessageRow = memo(function MessageRow({
               a reply's thread is in the address already. */}
           <ReviewLanding value={message.threadRootId ? undefined : message.id}>
             {message.forwarded && (
-              // The attachments are the card's; the footer below draws none for a forward. A
-              // continuation with no note has no text line to reserve the hover bar's width.
-              <div className={cn(grouped && !showsBody && HOVER_BAR_RESERVE_CLASS)}>
-                <ForwardedMessageCard
-                  forwarded={message.forwarded}
-                  attachments={message.attachments}
-                />
-              </div>
+              // The attachments are the card's; the footer below draws none for a forward.
+              <ForwardedMessageCard
+                forwarded={message.forwarded}
+                attachments={message.attachments}
+              />
             )}
             <MessageRowFooter
               message={message.forwarded ? { ...message, attachments: [] } : message}
