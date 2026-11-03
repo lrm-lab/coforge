@@ -136,6 +136,64 @@ test("an unknown field is still rejected by the strict schema before the board i
   expect(called).toBe(false);
 });
 
+test("a held operation's --anyway reaches the freshness gate instead of being read as malformed", async () => {
+  let advancedTo: number | undefined;
+  let executed = 0;
+  const result = await handleAgentTaskPost(
+    request({
+      idempotencyKey: "request-1",
+      operation: "create",
+      target: "#general",
+      title: "ship it",
+      continueAnyway: true,
+    }),
+    principal,
+    {
+      execute: async () => {
+        executed++;
+        return { tasks: [] };
+      },
+    },
+    async () => ({
+      freshness: {
+        readRecent: async () => ({ unseen: [], maxSequence: 7 }),
+        advanceReadThrough: async (sequence: number) => {
+          advancedTo = sequence;
+          return sequence;
+        },
+      },
+      scope: {} as never,
+    }),
+  );
+
+  expect(result.status).toBe(200);
+  expect(executed).toBe(1);
+  expect(advancedTo).toBe(7);
+});
+
+test("a non-boolean --anyway is still refused as a malformed body", async () => {
+  let called = false;
+  const result = await handleAgentTaskPost(
+    request({
+      idempotencyKey: "request-1",
+      operation: "create",
+      target: "#general",
+      title: "ship it",
+      continueAnyway: "yes",
+    }),
+    principal,
+    {
+      execute: async () => {
+        called = true;
+        return { tasks: [] };
+      },
+    },
+  );
+
+  expect(result.status).toBe(400);
+  expect(called).toBe(false);
+});
+
 test("an Agent API principal becomes the Agent alone, never its owner's userId beside it", () => {
   // The HTTP auth principal carries the agent AND its owner (`userId`). The real board's scope()
   // throws ACCESS_DENIED unless EXACTLY ONE of the two is set, so a pass-through principal makes

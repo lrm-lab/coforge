@@ -121,6 +121,7 @@ const taskRequestSchema = z
       .array(z.number().int().positive().max(MAX_MESSAGE_SEQUENCE))
       .max(SEEN_EXACT_SEQS_LIMIT)
       .optional(),
+    continueAnyway: z.boolean().optional(),
     alongside: z.boolean().optional(),
     attachmentId: z.uuid().optional(),
     status: z.enum(taskStatuses).optional(),

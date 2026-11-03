@@ -160,7 +160,8 @@ import {
 } from "#src/attention-args";
 
 export type { ChannelInvocation, InboxInvocation, ThreadInvocation };
-import { formatHeldTaskRequest, formatTaskResult } from "#src/task-format";
+import { formatTaskResult } from "#src/task-format";
+import { heldTaskCliError } from "#src/task-held-result";
 
 export { createAgentApiClient } from "@lrm/coforge-sdk/agent";
 
@@ -941,8 +942,7 @@ export async function run(args: readonly string[], transport: MessageTransport):
     }
     try {
       const result = await transport.task(command);
-      if (result.state === "held")
-        return formatHeldTaskRequest(command, result, command.freshnessContextMode === "withheld");
+      if (result.state === "held") throw heldTaskCliError(command, result, outputJson);
       return outputJson ? result : formatTaskResult(command, result);
     } catch (error) {
       // Deleting is irreversible and a refusal is an authority fact, not a race: name who may.
