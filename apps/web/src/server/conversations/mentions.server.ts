@@ -1,5 +1,10 @@
 import type { Prisma } from "#src/generated/prisma/client";
-import { readableBody } from "@lrm/coforge-sdk/internal";
+import {
+  canonicalTaskReference,
+  readableBody,
+  type ReadableBodyNames,
+  type TaskReference,
+} from "@lrm/coforge-sdk/internal";
 import { humanLabel } from "#src/lib/human-label";
 
 /** The mention-row projection every body reader needs to resolve embedded tokens. */
@@ -68,11 +73,33 @@ export function browserMessageMention(row: BrowserMessageMentionRow) {
  * The token form is a storage/browser-render concern and never crosses onto the Agent channel; an
  * unresolved mention token (no matching mention row) stays as written.
  */
-export function agentReadableBody(body: string, mentions: readonly MessageMentionRef[]): string {
+export function agentReadableBody(
+  body: string,
+  mentions: readonly MessageMentionRef[],
+  task?: ReadableBodyNames["task"],
+): string {
   return readableBody(body, {
     mention: (type, id) =>
       mentions.find((row) => row.kind === type && row.actorId.toLowerCase() === id)?.handle,
+    ...(task ? { task } : {}),
   });
+}
+
+/**
+ * A task reference as the reading Agent sees it. A direct message's task names the sender's peer;
+ * when the reader is that peer, the other side is the sender, so the reference is rewritten to name
+ * the sender — the same token, read from the other seat. Every other reference reads canonically.
+ */
+export function agentTaskReferenceView(
+  reference: TaskReference,
+  readerHandle: string,
+  senderHandle: string,
+): string {
+  if (reference.kind !== "dm") return canonicalTaskReference(reference);
+  const peer = reference.peerHandle.replace(/~(?:agent|human)$/i, "");
+  return peer.toLowerCase() === readerHandle.toLowerCase()
+    ? `dm:@${senderHandle}:#${reference.number}`
+    : canonicalTaskReference(reference);
 }
 
 /** One of the viewer's own past @-mentions, as read back for affinity scoring. */

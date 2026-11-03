@@ -445,8 +445,8 @@ test("A board row shows what a task waits for and its parent; show prints blocke
   });
   const row = formatTaskBoard("#c", { tasks: [blocked] } as TaskResult, "all");
   expect(row).toContain("blocked by #3 a task in another channel");
-  expect(row).not.toContain("#ops/4");
-  expect(row).toContain("↳ #ops/7");
+  expect(row).not.toContain("#ops:#4");
+  expect(row).toContain("↳ #ops:#7");
   const shown = formatTaskShow(blocked, {
     blocking: [
       { hidden: false, number: 9, channel: "web", title: "Later", status: "todo" },
@@ -479,17 +479,17 @@ test("A board row shows what a task waits for and its parent; show prints blocke
       },
     ],
   });
-  expect(shown).toContain("Parent task: #ops/7");
-  expect(shown).toContain("  #web/9 [todo] Later");
+  expect(shown).toContain("Parent task: #ops:#7");
+  expect(shown).toContain("  #web:#9 [todo] Later");
   expect(shown).toContain("  a task in another channel ([in_progress])");
   expect(shown).toContain("  - a task in another channel ([done])");
   expect(shown).toContain("Blocked by:");
   expect(shown).toContain("Blocking:");
   expect(shown).toContain("Sub-tasks: 1/2 finished");
   expect(shown).toContain(
-    "  - #6 [todo] Child → @ada (blocked by #ops/3 a task in another channel)",
+    "  - #6 [todo] Child → @ada (blocked by #ops:#3 a task in another channel)",
   );
-  expect(shown).toContain("    - #ops/8 [done] Grandchild");
+  expect(shown).toContain("    - #ops:#8 [done] Grandchild");
 });
 
 test("A claim refused for a blocker says what it waits for and what happens next", () => {
@@ -509,7 +509,7 @@ test("A claim refused for a blocker says what it waits for and what happens next
     ],
   } as TaskResult;
   const text = formatClaimResults("#c", result);
-  expect(text).toContain("#5: blocked — waiting for #ops/3 #4 a task in another channel");
+  expect(text).toContain("#5: blocked — waiting for #ops:#3 #4 a task in another channel");
   expect(text).toContain("notified");
   expect(claimRefusal("#c", result)?.message).toContain("blocked");
 });

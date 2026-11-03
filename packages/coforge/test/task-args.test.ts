@@ -51,9 +51,9 @@ test("create and amend take --blocked-by and --parent; list takes --ready", () =
       "--title",
       "A",
       "--blocked-by",
-      "3,#coforge/388",
+      "3,#coforge:#388",
       "--parent",
-      "ops/7",
+      "#ops:#7",
     ]),
   ).toMatchObject({
     task: {
@@ -61,7 +61,7 @@ test("create and amend take --blocked-by and --parent; list takes --ready", () =
       parent: { number: 7, channel: "ops" },
     },
   });
-  for (const raw of ["#Bad Name/3", "coforge/", "/3", "a/b/3", "coforge/x"])
+  for (const raw of ["#Bad Name:#3", "#coforge/3", "coforge/", "/3", "a/b/3", "coforge/x"])
     expect(() =>
       parseTaskArgs(["create", ...target, "--title", "A", "--blocked-by", raw]),
     ).toThrow();

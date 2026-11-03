@@ -56,8 +56,8 @@ const mention = (person: SystemPerson) => `@${person.handle}`;
 
 const reference = (task: SystemTask, locale?: Locale) => {
   if (task.hidden) return m.system_notice_task_hidden({}, { locale });
-  // A Task in another channel is named `channel/number`.
-  const number = task.channel ? `${task.channel}/${task.number}` : task.number;
+  // A Task in another channel is named `channel:#number` (the template adds the leading `#`).
+  const number = task.channel ? `${task.channel}:#${task.number}` : task.number;
   return task.title
     ? m.system_notice_task_reference({ number, title: task.title }, { locale })
     : m.system_notice_task_number({ number }, { locale });

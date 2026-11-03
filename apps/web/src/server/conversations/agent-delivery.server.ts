@@ -39,7 +39,15 @@ export function encodeAgentDelivery(
   },
 ): Uint8Array {
   const { mentions, body, forwarded, ...rest } = delivery;
-  const readable = agentReadableBody(body, mentions);
+  const readable = agentReadableBody(body, mentions, (reference) =>
+    // A DM task reference whose conversation is this delivery's: the sender wrote the other side,
+    // so the Agent reading it is that peer and sees the sender.
+    reference.kind === "dm" &&
+    reference.conversationId === delivery.conversationId &&
+    delivery.latestSenderHandle
+      ? `dm:@${delivery.latestSenderHandle}:#${reference.number}`
+      : undefined,
+  );
   return encodeAgentMessageDelivery({
     ...rest,
     protocolMajor: WORKSPACE_PROTOCOL_MAJOR,

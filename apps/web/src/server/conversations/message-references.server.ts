@@ -10,6 +10,7 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import type { Prisma } from "#src/generated/prisma/client";
 import { readMessageReferences } from "#src/lib/message-references";
+import { isFeatureEnabled } from "#src/server/feature-flags/feature-flags.server";
 import {
   channelThreadRootsWhere,
   messageIdMatchesAnchor,
@@ -94,7 +95,10 @@ export async function channelMentionTargets(
  * text could not.
  */
 export async function storeMessageBody(
-  tx: Pick<Prisma.TransactionClient, "task" | "conversation" | "message">,
+  tx: Pick<
+    Prisma.TransactionClient,
+    "task" | "conversation" | "message" | "conversationMember" | "user" | "agent"
+  >,
   scope: { workspaceId: string; conversationId: string; reader: ChannelActor },
   body: string,
   mentionScope: {
@@ -103,13 +107,20 @@ export async function storeMessageBody(
       | ((handles: readonly string[]) => Promise<readonly MentionTarget[]>);
     bindings?: readonly MentionSelectorInput[];
   },
+  options: { crossTaskReferences?: boolean } = {},
 ): Promise<{ body: string; mentions: ResolvedMention[] }> {
   const references = readMessageReferences(body);
   const { handles } = references.candidates;
   const threads = references.candidates.threads.slice(0, MAX_THREAD_REFERENCES);
   // A thread reference's channel is looked up with the channels, in the same query.
+  const channelTasks = references.candidates.channelTasks;
+  const dmTasks = references.candidates.dmTasks;
   const channelNames = [
-    ...new Set([...references.candidates.channelNames, ...threads.map((thread) => thread.name)]),
+    ...new Set([
+      ...references.candidates.channelNames,
+      ...threads.map((thread) => thread.name),
+      ...channelTasks.map((task) => task.name),
+    ]),
   ];
   // A `#N` above the largest task number names no task, and is never sent to the query, which
   // would reject it.
@@ -169,10 +180,118 @@ export async function storeMessageBody(
       if (matches.length === 1) threadRoots.set(`${name}:${anchor}`, matches[0]!.id);
     }
   }
+  // Another conversation's task is a v2 write: v1 only reads the tokens, so nothing is written
+  // until the flag is switched on after a release that can render them.
+  const crossTaskReferences =
+    (channelTasks.length > 0 || dmTasks.length > 0) &&
+    (options.crossTaskReferences ??
+      (await isFeatureEnabled("task-ref-tokens", { workspaceId: scope.workspaceId })));
+  const channelTaskByRef = new Map<string, { conversationId: string; channelName: string }>();
+  if (crossTaskReferences && channelTasks.length) {
+    const numbers = [...new Set(channelTasks.map((task) => task.number))].filter(
+      (number) => number <= PG_INTEGER_MAX,
+    );
+    const rows = await tx.task.findMany({
+      where: {
+        number: { in: numbers },
+        conversation: {
+          ...visibleChannelWhere(scope.workspaceId, scope.reader),
+          channelName: { in: channelTasks.map((task) => task.name) },
+        },
+      },
+      select: {
+        number: true,
+        conversationId: true,
+        conversation: { select: { channelName: true } },
+      },
+    });
+    for (const row of rows)
+      channelTaskByRef.set(`${row.conversation.channelName}:${row.number}`, {
+        conversationId: row.conversationId,
+        channelName: row.conversation.channelName!,
+      });
+  }
+  const dmTaskByRef = new Map<string, { conversationId: string; peerHandle: string }>();
+  if (crossTaskReferences && dmTasks.length) {
+    // Raft's rule: a bare handle that both a person and an Agent answer is ambiguous and stays
+    // text; a `~human`/`~agent` suffix picks the kind.
+    const nameOf = (peer: string) => peer.replace(/~(?:agent|human)$/i, "");
+    const kindOf = (peer: string) =>
+      /~agent$/i.test(peer) ? "agent" : /~human$/i.test(peer) ? "user" : null;
+    const names = [...new Set(dmTasks.map((task) => nameOf(task.peer)))];
+    const [users, agents] = await Promise.all([
+      tx.user.findMany({
+        where: { username: { in: names } },
+        select: { id: true, username: true },
+      }),
+      tx.agent.findMany({
+        where: { workspaceId: scope.workspaceId, name: { in: names } },
+        select: { id: true, name: true },
+      }),
+    ]);
+    const userByName = new Map(users.map((user) => [user.username, user.id]));
+    const agentByName = new Map(agents.map((agent) => [agent.name, agent.id]));
+    const senderWhere =
+      "userId" in scope.reader
+        ? { userId: scope.reader.userId }
+        : { agentId: scope.reader.agentId };
+    const direct = await tx.conversation.findMany({
+      where: {
+        workspaceId: scope.workspaceId,
+        kind: "direct",
+        members: { some: senderWhere },
+      },
+      select: { id: true, members: { select: { userId: true, agentId: true } } },
+    });
+    const numbers = [...new Set(dmTasks.map((task) => task.number))].filter(
+      (number) => number <= PG_INTEGER_MAX,
+    );
+    const tasks = numbers.length
+      ? await tx.task.findMany({
+          where: {
+            number: { in: numbers },
+            conversationId: { in: direct.map((conversation) => conversation.id) },
+          },
+          select: { number: true, conversationId: true },
+        })
+      : [];
+    for (const task of dmTasks) {
+      const name = nameOf(task.peer);
+      const kind = kindOf(task.peer);
+      const peerIds = [
+        ...(kind !== "agent" && userByName.has(name) ? [userByName.get(name)!] : []),
+        ...(kind !== "user" && agentByName.has(name) ? [agentByName.get(name)!] : []),
+      ];
+      // One conversation of the sender's with exactly this peer; two ids (a person and an Agent
+      // sharing the name) is ambiguous, and picks neither.
+      if (peerIds.length !== 1) continue;
+      const peerId = peerIds[0]!;
+      const matches = direct.filter((conversation) => {
+        const others = conversation.members.filter(
+          (member) =>
+            !("userId" in scope.reader
+              ? member.userId === scope.reader.userId
+              : member.agentId === scope.reader.agentId),
+        );
+        return (
+          others.length === 1 && (others[0]!.userId === peerId || others[0]!.agentId === peerId)
+        );
+      });
+      if (matches.length !== 1) continue;
+      if (!tasks.some((row) => row.conversationId === matches[0]!.id && row.number === task.number))
+        continue;
+      dmTaskByRef.set(`${task.peer}:${task.number}`, {
+        conversationId: matches[0]!.id,
+        peerHandle: task.peer,
+      });
+    }
+  }
   return {
     body: references.resolve({
       mention: mentions.target,
       task: (number) => knownTasks.has(number),
+      channelTask: (name, number) => channelTaskByRef.get(`${name}:${number}`),
+      dmTask: (peer, number) => dmTaskByRef.get(`${peer}:${number}`),
       channel: (name) => channelsByName.get(name),
       thread: (name, anchor) => {
         const channel = channelsByName.get(name);

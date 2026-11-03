@@ -25,6 +25,8 @@ export const FEATURE_FLAGS = {
     "Applications phase 2: notifying the apps installed in a Workspace of what happens in it",
   "task-conversations":
     "Task conversations: a task has its own conversation, as an experiment a Workspace owner or admin switches on",
+  "task-ref-tokens":
+    "Store `#channel:#N` and `dm:@peer:#N` in message bodies (written by the server, read by every client)",
 } as const;
 
 export type FeatureFlag = keyof typeof FEATURE_FLAGS;

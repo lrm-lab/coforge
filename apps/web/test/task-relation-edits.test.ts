@@ -47,7 +47,7 @@ const node = (number: number, children: TaskTreeNode[] = []): TaskTreeNode => ({
 test("a Task is named by a bare number in its own conversation and by channel elsewhere", () => {
   expect(taskRefOf(visible(link(7)))).toEqual({ number: 7 });
   expect(taskRefOf(visible(link(7, "design")))).toEqual({ number: 7, channel: "design" });
-  expect(taskNameLabel(visible(link(7, "design")))).toBe("#design/7");
+  expect(taskNameLabel(visible(link(7, "design")))).toBe("#design:#7");
 });
 
 test("adding or removing a blocker amends to the whole new set, in both naming forms", () => {
@@ -92,7 +92,7 @@ test("the blocker picker leaves out the Task and its blockers, and refuses what 
     { blocking: [link(8), link(9, "design"), hidden], subtree: [node(11, [node(12)])] },
   );
   expect([...rules.excluded].sort()).toEqual(["#3", "#5"]);
-  expect([...rules.loops].sort()).toEqual(["#11", "#12", "#8", "#design/9"]);
+  expect([...rules.loops].sort()).toEqual(["#11", "#12", "#8", "#design:#9"]);
 });
 
 test("the parent picker leaves out the Task and its parent, and refuses its own sub-tasks", () => {
@@ -100,7 +100,7 @@ test("the parent picker leaves out the Task and its parent, and refuses its own 
     { number: 5, parent: link(2, "design") },
     { subtree: [node(11, [node(12)])] },
   );
-  expect([...rules.excluded].sort()).toEqual(["#5", "#design/2"]);
+  expect([...rules.excluded].sort()).toEqual(["#5", "#design:#2"]);
   expect([...rules.loops].sort()).toEqual(["#11", "#12"]);
   expect(parentPickerRules({ number: 5, parent: hidden }, { subtree: [] }).excluded).toEqual(
     new Set(["#5"]),
@@ -128,12 +128,12 @@ test("candidates are the unfinished Tasks, the conversation's first and the othe
     ],
     { memberId: "me", manager: false },
   );
-  expect(found.map(taskNameLabel)).toEqual(["#1", "#2", "#design/4"]);
+  expect(found.map(taskNameLabel)).toEqual(["#1", "#2", "#design:#4"]);
   const rules = blockerPickerRules(
     { number: 1, blockedBy: [link(2)] },
     { blocking: [], subtree: [] },
   );
-  expect(pickable(found, rules).map(taskNameLabel)).toEqual(["#design/4"]);
+  expect(pickable(found, rules).map(taskNameLabel)).toEqual(["#design:#4"]);
 });
 
 test("a candidate may be a parent only where the viewer may add a sub-task", () => {
@@ -160,16 +160,16 @@ test("a candidate may be a parent only where the viewer may add a sub-task", () 
   ];
   const rules = parentPickerRules({ number: 9, parent: null }, { subtree: [] });
   const found = candidateLinks("here", own, workspace, { memberId: "me-here", manager: false });
-  expect(parentCandidates(pickable(found, rules)).map(taskNameLabel)).toEqual(["#1", "#design/4"]);
+  expect(parentCandidates(pickable(found, rules)).map(taskNameLabel)).toEqual(["#1", "#design:#4"]);
   // A Workspace owner or admin may add sub-tasks under any of them.
   const manager = candidateLinks("here", own, workspace, { memberId: "me-here", manager: true });
   expect(parentCandidates(pickable(manager, rules)).map(taskNameLabel)).toEqual([
     "#1",
     "#2",
     "#3",
-    "#design/4",
-    "#ops/5",
-    "#ops/6",
+    "#design:#4",
+    "#ops:#5",
+    "#ops:#6",
   ]);
   // Without a member in the conversation there is no Task to add a sub-task under.
   const anonymous = candidateLinks("here", own, [], { memberId: null, manager: false });

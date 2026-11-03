@@ -161,35 +161,41 @@ function expectedRevisionOption(raw: string | undefined): number | undefined {
 }
 
 /**
- * A task by number: `7` in the target's own conversation, or `#channel/7` (the `#` optional) in a
- * channel of the Workspace.
+ * A task by number: `7` in the target's own conversation, or `#channel:#7` (Raft's form) in a
+ * channel of the Workspace. The old `#channel/7` is not accepted: published Computers parse their
+ * own arguments, so only the new release needs this form.
  */
 function taskRefOption(raw: string, message: string): TaskRef {
-  const part = raw.trim().replace(/^#/, "");
-  const slash = part.lastIndexOf("/");
-  if (slash === -1) return { number: positiveInt(part, message) };
-  const channel = part.slice(0, slash).replace(/^#/, "");
-  if (!CHANNEL_NAME_PATTERN.test(channel)) throw invalidTaskArg(message);
-  return { number: positiveInt(part.slice(slash + 1), message), channel };
+  const part = raw.trim();
+  const match = /^#([a-z0-9][a-z0-9_-]{0,31}):#?([1-9]\d*)$/.exec(part);
+  if (match) {
+    const channel = match[1]!;
+    if (!CHANNEL_NAME_PATTERN.test(channel)) throw invalidTaskArg(message);
+    return { number: Number(match[2]!), channel };
+  }
+  if (part.startsWith("#") && part.includes(":")) throw invalidTaskArg(message);
+  return { number: positiveInt(part, message) };
 }
 
-/** `--blocked-by 3,#coforge/388`: the tasks a task waits for. An amendment may pass `''` to clear them. */
+/** `--blocked-by 3,#coforge:#388`: the tasks a task waits for. An amendment may pass `''` to clear them. */
 function blockedByOption(raw: string, clearable: boolean): TaskRef[] {
   if (raw.trim() === "") {
     if (clearable) return [];
-    throw invalidTaskArg("--blocked-by must list tasks, like 3,5 or 3,#channel/7");
+    throw invalidTaskArg("--blocked-by must list tasks, like 3,5 or 3,#channel:#7");
   }
   return raw
     .split(",")
-    .map((part) => taskRefOption(part, `--blocked-by must be tasks like 3,#channel/7; got ${raw}`));
+    .map((part) =>
+      taskRefOption(part, `--blocked-by must be tasks like 3,#channel:#7; got ${raw}`),
+    );
 }
 
-/** `--parent 7` or `--parent '#coforge/7'`. An amendment may pass `''` to make the task top level. */
+/** `--parent 7` or `--parent '#coforge:#7'`. An amendment may pass `''` to make the task top level. */
 function parentOption(raw: string, clearable: boolean): TaskRef | null {
   if (raw.trim() === "" && clearable) return null;
   return taskRefOption(
     raw,
-    `--parent must be a task like 7 or #channel/7${clearable ? " (or '' for none)" : ""}; got ${raw}`,
+    `--parent must be a task like 7 or #channel:#7${clearable ? " (or '' for none)" : ""}; got ${raw}`,
   );
 }
 

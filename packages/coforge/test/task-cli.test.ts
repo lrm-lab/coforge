@@ -415,11 +415,11 @@ test("Task amend may change only a relation, through the daemon's own validation
     },
   };
   await run(
-    ["task", "amend", "--target", "#general", "--number", "7", "--blocked-by", "#qa-other/2"],
+    ["task", "amend", "--target", "#general", "--number", "7", "--blocked-by", "#qa-other:#2"],
     transport,
   );
   await run(
-    ["task", "amend", "--target", "#general", "--number", "7", "--parent", "#general/5"],
+    ["task", "amend", "--target", "#general", "--number", "7", "--parent", "#general:#5"],
     transport,
   );
   expect(calls[0]).toMatchObject({

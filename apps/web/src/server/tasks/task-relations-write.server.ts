@@ -42,7 +42,7 @@ const invalid = (hint: string) =>
   new AppError("INVALID_INPUT", { errorId: TASK_RELATION_INVALID, hint });
 
 const refLabel = (ref: TaskRef) =>
-  ref.channel ? `#${ref.channel}/${ref.number}` : `#${ref.number}`;
+  ref.channel ? `#${ref.channel}:#${ref.number}` : `#${ref.number}`;
 const refKey = (ref: TaskRef) => `${ref.channel ?? ""}/${ref.number}`;
 
 /** `refs` without repeats. */

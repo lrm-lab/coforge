@@ -100,10 +100,10 @@ export function isTaskRef(value: unknown): value is TaskRef {
  */
 export type TaskName = { hidden: false; number: number; channel: string | null } | { hidden: true };
 
-/** How text writes a Task's name: `#3`, `#channel/3`, or, for one the reader may not name, that. */
+/** How text writes a Task's name: `#3`, `#channel:#3`, or, for one the reader may not name, that. */
 export function taskNameLabel(name: TaskName): string {
   if (name.hidden) return "a task in another channel";
-  return name.channel === null ? `#${name.number}` : `#${name.channel}/${name.number}`;
+  return name.channel === null ? `#${name.number}` : `#${name.channel}:#${name.number}`;
 }
 
 /** A Task as another Task's card names it: a blocker, a dependent or a parent. */

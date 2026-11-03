@@ -34,6 +34,8 @@ test("a bare #N lists the number as a task candidate and as a channel name", () 
     taskNumbers: [68],
     channelNames: ["68"],
     threads: [],
+    channelTasks: [],
+    dmTasks: [],
   });
 });
 
@@ -65,6 +67,8 @@ test("a channel named by the whole #name run wins over a task that is only its n
     taskNumbers: [132],
     channelNames: ["132-plan"],
     threads: [],
+    channelTasks: [],
+    dmTasks: [],
   });
 });
 
@@ -82,6 +86,8 @@ test("an escape later in a bare #N's run keeps the task; only the channel readin
     taskNumbers: [132],
     channelNames: [],
     threads: [],
+    channelTasks: [],
+    dmTasks: [],
   });
   // With no such task the run stays byte-for-byte.
   expect(

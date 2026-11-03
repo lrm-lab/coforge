@@ -120,7 +120,7 @@ const STATUS_WORDING: Record<TaskStatus, { emoji: string; label: string }> = {
 
 const reference = (task: QuotedTask) => {
   if (task.hidden) return "a task in another channel";
-  const name = task.channel ? `#${task.channel}/${task.number}` : `#${task.number}`;
+  const name = task.channel ? `#${task.channel}:#${task.number}` : `#${task.number}`;
   return task.title ? `${name} "${task.title}"` : name;
 };
 const references = (tasks: readonly QuotedTask[]) => tasks.map(reference).join(", ");

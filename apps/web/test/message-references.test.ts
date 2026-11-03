@@ -2,7 +2,6 @@ import { expect, test } from "bun:test";
 import {
   channelReferenceToken,
   replaceMentionTokens,
-  replaceTaskReferenceTokens,
   resolveMentionTargets,
   taskReferenceToken,
   threadReferenceToken,
@@ -58,6 +57,8 @@ test("long unchanged Unicode prose keeps exact reference offsets and every surro
     taskNumbers: [68],
     channelNames: ["product"],
     threads: [],
+    channelTasks: [],
+    dmTasks: [],
   });
   expect(read.resolve({ mention: () => ADA, channel, task: (number) => number === 68 })).toBe(
     `${prefix}<@human:${ADA.id}>\n续行 ${channelReferenceToken(PRODUCT.id, PRODUCT.name)} ${taskReferenceToken(68)} 尾文`,
@@ -179,6 +180,8 @@ test("HTML-looking lines are prose, the way the renderer shows them", () => {
     taskNumbers: [],
     channelNames: ["product"],
     threads: [],
+    channelTasks: [],
+    dmTasks: [],
   });
   const resolution = resolveMentionTargets(messageReferenceCandidates(body).handles, [ADA]);
   expect(resolveMessageReferences(body, { mention: resolution.target, channel })).toBe(
@@ -203,6 +206,8 @@ test("long HTML-looking Unicode prose maps references past unchanged code, autol
     taskNumbers: [68],
     channelNames: ["product"],
     threads: [],
+    channelTasks: [],
+    dmTasks: [],
   });
   expect(
     read.resolve({
@@ -224,6 +229,8 @@ test("HTML-looking quote lines keep reference order and every surrounding byte",
     taskNumbers: [68],
     channelNames: ["product"],
     threads: [],
+    channelTasks: [],
+    dmTasks: [],
   });
   expect(
     read.resolve({
@@ -404,6 +411,8 @@ test("messageReferenceCandidates lists what a sender could mean, outside code, U
     taskNumbers: [68, 70],
     channelNames: ["product"],
     threads: [{ name: "product", anchor: "deadbeef" }],
+    channelTasks: [],
+    dmTasks: [],
   });
 });
 
@@ -423,6 +432,8 @@ test("a body with no @ or # is returned as written", () => {
     taskNumbers: [],
     channelNames: [],
     threads: [],
+    channelTasks: [],
+    dmTasks: [],
   });
   expect(resolveMessageReferences(body, { channel })).toBe(body);
 });
@@ -597,9 +608,4 @@ test("task references inside code spans stay byte-for-byte", () => {
   expect(resolveMessageReferences(source, { task: () => true })).toBe(
     `see \`task #68\` and\n\`\`\`\ntask #68\n\`\`\`\nand ${taskReferenceToken(68)}`,
   );
-});
-
-test("replaceTaskReferenceTokens round-trips a stored task token", () => {
-  const body = resolveMessageReferences("refer to task #7", { task: () => true });
-  expect(replaceTaskReferenceTokens(body, (number) => `task #${number}`)).toBe("refer to task #7");
 });
