@@ -41,14 +41,17 @@ message_references(
   messageId, workspaceId,
   kind,          -- task | channel | thread | mention
   targetId,      -- Task.id / Conversation.id / Message.id / User.id|Agent.id
-  start, end     -- offsets of the reference in the body's text
+  snippet,       -- the text the sender wrote, exactly: `#coforge:#448`
+  ordinal,       -- which occurrence of that snippet in the body this row means (0, 1, …)
   createdAt
 )
 ```
 
 - The body stores **human-readable text**: `#coforge:#448`, `dm:@alice:#7`, `task #3`, `@ada`,
   `#design`, `#design:1a2b3c4d`. No `<@…>` tokens are written from v2 on.
-- Readers render with the rows and offsets; a body with no rows renders as plain text.
+- Readers do **not** store or trust character offsets. They parse the body with the shared
+  recognizer, take each reference in reading order, and match it to its row by the text fragment
+  and the occurrence number. A body with no rows renders as plain text.
 - `targetId` is indexed: “messages referencing this task” is one query, and realtime can subscribe
   to a task's references instead of re-reading a conversation window.
 - No titles, statuses or names are stored: display is resolved at read time, per reader, from the
@@ -74,7 +77,8 @@ The same rule applies to Agent-facing text (`readableBody`) and to the web.
 - On send (and on edit), parse the body once with the shared grammar, resolve every reference the
   sender may resolve, and write the rows in the same transaction as the message.
 - A reference the sender may not resolve stays plain text: no row, nothing to leak.
-- An edit replaces the message's rows and offsets; a delete cascades.
+- An edit replaces the message's rows (a new parse, new fragments and ordinals); a delete
+  cascades. Nothing can point at a stale byte position.
 - At most one reference per span; overlapping matches follow the recognizer's precedence (message
   and thread references before a task, a prefixed task before a bare `#N`, prose only — code,
   links and HTML are never references).
