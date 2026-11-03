@@ -37,6 +37,7 @@ import { subscribeRuntimeReconnect } from "./runtime-reconnect";
 import { subscribeProviderScans } from "./provider-scan-handlers";
 import { subscribeWorkspaceQueries } from "./workspace-query-handlers";
 import { subscribeLocalSessionQueries } from "./local-session-query-handlers";
+import { subscribeComputerFileQueries } from "./computer-file-query-handlers";
 import { LocalSessionCatalog } from "#src/local-session/local-session-catalog";
 import {
   RuntimePublicationSubscriptions,
@@ -233,6 +234,12 @@ export class RuntimeStartup {
       for (const unsubscribe of subscribeLocalSessionQueries(transport, {
         connection,
         catalog: this.#localSessions,
+        currentTransport: () => ports.transport(),
+        isStopping: () => ports.isStopping(),
+      }))
+        this.#subscribe(unsubscribe);
+      for (const unsubscribe of subscribeComputerFileQueries(transport, {
+        connection,
         currentTransport: () => ports.transport(),
         isStopping: () => ports.isStopping(),
       }))

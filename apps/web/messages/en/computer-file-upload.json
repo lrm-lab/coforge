@@ -1,0 +1,16 @@
+{
+  "computer_file_upload_title": "Upload to computer",
+  "computer_file_upload_description": "Files land in uploads/ on this computer. Direct upload requires object storage.",
+  "computer_file_upload_choose": "Choose file",
+  "computer_file_upload_uploading": "Uploading…",
+  "computer_file_upload_placing": "Placing on computer…",
+  "computer_file_upload_ready": "Saved as {path}",
+  "computer_file_upload_failed": "The file could not be uploaded. Try again.",
+  "computer_file_upload_offline": "This computer is offline. Try again when it's back.",
+  "computer_file_upload_unsupported": "This computer's software does not support file upload yet. Upgrade and try again.",
+  "computer_file_upload_timeout": "The computer didn't finish placing the file. Try again.",
+  "computer_file_upload_storage_unavailable": "Direct upload is not available in this environment.",
+  "computer_file_upload_too_large": "File is too large (limit {limit}).",
+  "computer_file_upload_invalid_name": "That file name is not allowed.",
+  "computer_file_upload_unavailable": "This computer is not available for uploads."
+}

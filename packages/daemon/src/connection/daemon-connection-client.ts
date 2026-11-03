@@ -37,6 +37,8 @@ import type {
   LocalSessionSearchResult,
   LocalSessionExcerptRequest,
   LocalSessionExcerptResult,
+  ComputerFilePullRequest,
+  ComputerFilePullResult,
   ComputerUpgradeResult,
   AgentMentionDeliveryTransition,
   AgentMentionDeliveryTerminalError,
@@ -153,6 +155,8 @@ export interface DaemonConnectionClient extends AgentApiConnectionClient {
     callback: (request: LocalSessionExcerptRequest) => Promise<void>,
   ): () => void;
   sendLocalSessionExcerptResult?(result: LocalSessionExcerptResult): Promise<void>;
+  onComputerFilePull?(callback: (request: ComputerFilePullRequest) => Promise<void>): () => void;
+  sendComputerFilePullResult?(result: ComputerFilePullResult): Promise<void>;
   onUsageScan?(callback: (request: DaemonRuntimeUsageScanRequest) => Promise<void>): () => void;
   sendUsageScanResult?(response: DaemonRuntimeUsageScanResponse): Promise<void>;
   onProviderModelRefresh?(

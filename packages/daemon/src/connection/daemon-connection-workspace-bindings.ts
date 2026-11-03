@@ -18,6 +18,8 @@ export abstract class DaemonConnectionWorkspaceBindings implements Pick<
   | "sendLocalSessionSearchResult"
   | "onLocalSessionExcerpt"
   | "sendLocalSessionExcerptResult"
+  | "onComputerFilePull"
+  | "sendComputerFilePullResult"
   | "onPiChatRequest"
   | "sendPiChatFrame"
 > {
@@ -64,6 +66,12 @@ export abstract class DaemonConnectionWorkspaceBindings implements Pick<
   }
   get sendLocalSessionExcerptResult() {
     return this.daemonQueries.localSessionExcerpt.sendResult;
+  }
+  get onComputerFilePull() {
+    return this.daemonQueries.computerFilePull.onRequest;
+  }
+  get sendComputerFilePullResult() {
+    return this.daemonQueries.computerFilePull.sendResult;
   }
   get onPiChatRequest() {
     return this.daemonQueries.piChat.onRequest;
