@@ -24,7 +24,9 @@ test("a task carries its labels, case-insensitively, and an amend adds and remov
       { id: design.id, name: "Design", color: "blue" },
     ]);
 
-    await run("alice", { operation: "amend", number: number!, labels: ["BUG"] });
+    // The reply (and the `task.changed.v1` built from it) carries the labels the Task now has.
+    const amended = await run("alice", { operation: "amend", number: number!, labels: ["BUG"] });
+    expect((amended.tasks[0]!.labels ?? []).map((label) => label.name)).toEqual(["Bug", "Design"]);
     expect(((await show(number!)).tasks[0]!.labels ?? []).map((label) => label.name)).toEqual([
       "Bug",
       "Design",

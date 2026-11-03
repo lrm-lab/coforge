@@ -224,6 +224,16 @@ export async function amendTask(
     const title = command.title?.trim();
     const retitled =
       title !== undefined && title !== readTaskText(task.title, ports.reader, taskMentions(task));
+    // The label rows first: the commit reads the Task back for its reply and its
+    // `task.changed.v1`, which must carry the labels it now has.
+    if (removedLabels.length)
+      await tx.taskLabel.deleteMany({
+        where: { taskId: task.id, labelId: { in: removedLabels.map((label) => label.id) } },
+      });
+    if (addedLabels.length)
+      await tx.taskLabel.createMany({
+        data: addedLabels.map((label) => ({ taskId: task.id, labelId: label.id })),
+      });
     const committed = await commitTaskChange(
       tx,
       member,
@@ -242,14 +252,6 @@ export async function amendTask(
         ],
       },
     );
-    if (removedLabels.length)
-      await tx.taskLabel.deleteMany({
-        where: { taskId: task.id, labelId: { in: removedLabels.map((label) => label.id) } },
-      });
-    if (addedLabels.length)
-      await tx.taskLabel.createMany({
-        data: addedLabels.map((label) => ({ taskId: task.id, labelId: label.id })),
-      });
     if (plan && notices) {
       await applyRelationPlan(tx, conversation, member, task, plan);
       await noticeNowBlocked(tx, notices, member, committed.task, plan);
