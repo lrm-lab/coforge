@@ -1,5 +1,5 @@
+import { ChannelTitle } from "#src/features/conversations/channel-name";
 import { actionCardPreviewText } from "#src/features/conversations/action-card-preview";
-import { channelLabel } from "#src/features/conversations/channel-visibility";
 import { useMemo } from "react";
 import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -307,9 +307,16 @@ function SearchResultRow({
   const { conversation, message } = hit;
   const { previewed, preview } = useSearchPreview();
   const workspaceSlug = useWorkspaceSlug();
-  const place = conversation.channelName
-    ? channelLabel({ name: conversation.channelName, visibility: conversation.visibility })
-    : `@${directName(conversation.direct) ?? message.senderName}`;
+  const place = conversation.channelName ? (
+    // A private channel with its lock, as everywhere a channel is named (task #375).
+    <ChannelTitle
+      name={conversation.channelName}
+      visibility={conversation.visibility}
+      lockClassName="size-3.5"
+    />
+  ) : (
+    `@${directName(conversation.direct) ?? message.senderName}`
+  );
   // An action card's excerpt is written in the viewer's language; it matched on its English body.
   const text =
     actionCardPreviewText(message.card) ||

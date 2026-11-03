@@ -1,4 +1,4 @@
-import { channelLabel } from "#src/features/conversations/channel-visibility";
+import { channelGlyph, ChannelTitle } from "#src/features/conversations/channel-name";
 import { memo } from "react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { BellOff01, Check, Hash01, Mail01 } from "@untitledui/icons";
@@ -84,12 +84,13 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
         : place.peer.displayName;
   const rowPlace = activityRowPlace(item);
   const placeLabel =
-    rowPlace?.kind === "attachment"
-      ? m.activity_inbox_attachment_comment({ fileName: rowPlace.fileName })
-      : rowPlace &&
-        (place.kind === "channel"
-          ? channelLabel({ name: title, visibility: place.visibility })
-          : `@${title}`);
+    rowPlace?.kind === "attachment" ? (
+      m.activity_inbox_attachment_comment({ fileName: rowPlace.fileName })
+    ) : rowPlace && place.kind === "channel" ? (
+      <ChannelTitle name={title} visibility={place.visibility} lockClassName="size-3.5" />
+    ) : (
+      rowPlace && `@${title}`
+    );
   const sender =
     item.latest.senderKind === "system" ? m.activity_inbox_system_sender() : item.latest.senderName;
 
@@ -152,7 +153,16 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
                   unread ? "text-primary" : "text-secondary",
                 )}
               >
-                {task ? task.title : thread ? <Preview message={thread.root} /> : title}
+                {task ? (
+                  task.title
+                ) : thread ? (
+                  <Preview message={thread.root} />
+                ) : place.kind === "channel" ? (
+                  // A private channel goes by a lock before its name, as in Chat (task #375).
+                  <ChannelTitle name={title} visibility={place.visibility} hash={false} />
+                ) : (
+                  title
+                )}
               </span>
               <ActivityItemBadges item={item} filter={filter} />
               {/* Gives way to the Done check wherever the check shows (hover, focus, the open
@@ -167,7 +177,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
               />
             </span>
             <span className="truncate text-sm text-tertiary">
-              {placeLabel && `${placeLabel} · `}
+              {placeLabel && <>{placeLabel} · </>}
               <span className="font-semibold text-secondary">{sender}: </span>
               <Preview message={item.latest} />
             </span>
@@ -256,9 +266,10 @@ export function ActivityItemIcon({ item }: { item: ActivityInboxItem }) {
         <GroupAvatar members={place.members} className="avatar-group-sm" />
       </span>
     );
+  const Glyph = place.kind === "channel" ? channelGlyph(place) : Hash01;
   return (
     <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-tertiary">
-      <Hash01 aria-hidden="true" className="size-4.5 text-fg-quaternary" />
+      <Glyph aria-hidden="true" className="size-4.5 text-fg-quaternary" />
     </span>
   );
 }

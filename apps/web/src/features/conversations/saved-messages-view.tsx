@@ -1,5 +1,5 @@
+import { ChannelTitle } from "./channel-name";
 import { actionCardPreviewText } from "./action-card-preview";
-import { channelLabel } from "./channel-visibility";
 import { Link, useRouter } from "@tanstack/react-router";
 import { Bookmark, BookmarkCheck, Copy01, Link01, MessageTextSquare01 } from "@untitledui/icons";
 import { Link as AriaLink } from "react-aria-components";
@@ -93,9 +93,16 @@ function SavedMessageCard({
   const jump = savedJumpTarget(workspaceSlug, conversation, message);
   // The localized URL (`publicHref`), the one the card links to and the address bar shows.
   const href = router.buildLocation(jump).publicHref;
-  const place = conversation.channelName
-    ? channelLabel({ name: conversation.channelName, visibility: conversation.visibility })
-    : `@${message.senderName}`;
+  const place = conversation.channelName ? (
+    // A private channel with its lock, as everywhere a channel is named (task #375).
+    <ChannelTitle
+      name={conversation.channelName}
+      visibility={conversation.visibility}
+      lockClassName="size-3.5"
+    />
+  ) : (
+    `@${message.senderName}`
+  );
   const attachmentName = message.attachments[0]?.fileName;
 
   function remove() {

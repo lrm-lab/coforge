@@ -1,4 +1,5 @@
-import { channelLabel, type ChannelVisibility } from "./channel-visibility";
+import { withChannelTitle } from "./channel-name";
+import type { ChannelVisibility } from "./channel-visibility";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Bell01, Check, Plus } from "@untitledui/icons";
@@ -133,10 +134,8 @@ export function PendingMentionStrip({
           const busy = adding.has(mention.resolutionId);
           // A person reads by their name, as the sender picked them; an Agent by its handle.
           const target = `@${mention.targetType === "user" ? mention.targetLabel : mention.targetHandle}`;
-          const channel = channelLabel({
-            name: mention.channelName,
-            visibility: mention.visibility,
-          });
+          // A private channel with its lock, as everywhere a channel is named (task #375).
+          const channel = { name: mention.channelName, visibility: mention.visibility };
           return (
             <li
               key={mention.resolutionId}
@@ -152,11 +151,15 @@ export function PendingMentionStrip({
                 name={mention.targetLabel}
               />
               <p role="status" className="min-w-0 flex-1 text-sm text-secondary">
-                {mention.outcome === "added"
-                  ? m.conversation_pending_mention_added({ target, channel })
-                  : mention.outcome === "notified"
-                    ? m.conversation_pending_mention_queued({ target, channel })
-                    : m.conversation_pending_mention_not_notified({ target, channel })}
+                {withChannelTitle(
+                  (name) =>
+                    mention.outcome === "added"
+                      ? m.conversation_pending_mention_added({ target, channel: name })
+                      : mention.outcome === "notified"
+                        ? m.conversation_pending_mention_queued({ target, channel: name })
+                        : m.conversation_pending_mention_not_notified({ target, channel: name }),
+                  channel,
+                )}
               </p>
               <div className="ml-auto flex shrink-0 items-center gap-1">
                 {settled ? (

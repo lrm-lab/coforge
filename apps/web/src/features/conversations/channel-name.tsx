@@ -1,3 +1,4 @@
+import { Fragment, type ReactNode } from "react";
 import { Hash01, Lock01 } from "@untitledui/icons";
 import { isPrivateChannel, type ChannelVisibility } from "./channel-visibility";
 import { m } from "#src/paraglide/messages";
@@ -45,4 +46,24 @@ export function ChannelTitle({
       <span className="truncate">{name}</span>
     </span>
   );
+}
+
+/** Stands in for the channel while a sentence is written, then marks where its title goes. */
+const CHANNEL_SLOT = "\u2063";
+
+/**
+ * A sentence that names a channel, with the channel as `ChannelTitle` shows it (a private one with
+ * its lock) wherever the sentence puts it: `sentence` writes the words around it.
+ */
+export function withChannelTitle(
+  sentence: (channel: string) => string,
+  channel: { name: string; visibility: ChannelVisibility },
+): ReactNode {
+  const parts = sentence(CHANNEL_SLOT).split(CHANNEL_SLOT);
+  return parts.map((part, index) => (
+    <Fragment key={index}>
+      {part}
+      {index < parts.length - 1 && <ChannelTitle {...channel} lockClassName="size-3.5" />}
+    </Fragment>
+  ));
 }

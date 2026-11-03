@@ -3,7 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { LiveAgentAvatar } from "#src/features/agents/live-agent-avatar";
 import { choiceNumber } from "#src/features/conversations/choice-number";
-import { channelLabel } from "#src/features/conversations/channel-visibility";
+import { ChannelTitle } from "#src/features/conversations/channel-name";
 import type { HostedConversationTarget } from "#src/features/conversations/conversation-page-search";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import type { WaitingChoiceCard } from "#src/server/conversations/waiting-choice-cards.server";
@@ -30,12 +30,16 @@ export function WaitingChoiceRow({
   const target = waitingChoiceTarget(card);
   // Where it was asked: its channel, or a Task's, as "#channel · Task #N"; a DM goes unnamed.
   const channel = card.task?.channel ?? card.channel;
-  const place = [
-    channel && channelLabel(channel),
-    card.task && m.activity_inbox_waiting_task({ number: card.task.number }),
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  // A private channel with its lock, as everywhere a channel is named (task #375).
+  const taskLabel = card.task && m.activity_inbox_waiting_task({ number: card.task.number });
+  const place =
+    channel || taskLabel ? (
+      <>
+        {channel && <ChannelTitle {...channel} lockClassName="size-3.5" />}
+        {channel && taskLabel && " · "}
+        {taskLabel}
+      </>
+    ) : null;
   const options = card.options
     .map((option, index) => `${choiceNumber(index)}. ${option.label}`)
     .join(" · ");
@@ -67,7 +71,7 @@ export function WaitingChoiceRow({
             />
           </span>
           <span className="truncate text-sm text-tertiary">
-            {place && `${place} · `}
+            {place && <>{place} · </>}
             <span className="font-semibold text-secondary">{card.preparedBy.name}: </span>
             {options}
           </span>

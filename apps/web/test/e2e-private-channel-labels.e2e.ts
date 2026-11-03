@@ -11,7 +11,8 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
 /**
  * A private channel named outside its own page (task #375): search, Saved, Activity, the Tasks
  * page, an Agent's reminders and the strip under a message whose mention did not reach someone.
- * Each names the private `vault` without `#` and the public `plaza` with it.
+ * Each names the private `vault` without `#` and the public `plaza` with it, and puts the lock
+ * before the private name (the Activity row, the reminder and the mention strip lacked it).
  *
  * Opt-in like the other browser E2Es: real local Web (`COFORGE_DEV_SKIP_AUTH=1`, a seeded
  * database), `agent-browser` and local PostgreSQL. Everything it writes lives in a Workspace of its
@@ -49,12 +50,23 @@ test("a private channel goes without `#` wherever another page names it", async 
   const text = `document.body.textContent`;
   /** The page names the private channel bare and never as `#vault`. */
   const namesVaultBare = `${text}.includes("${vaultName}") && !${text}.includes("#${vaultName}")`;
-  const shoot = async (path: string, ready: string, shot: string) => {
+  /** Outside the sidebar, the private name follows its lock. */
+  const vaultLocked = `[...document.querySelectorAll('[role="img"][aria-label="Private"]')].some((lock) => !lock.closest("[data-sidebar]") && lock.nextElementSibling?.textContent === "${vaultName}")`;
+  const both = async (shot: string) => {
+    await browser("screenshot", join(artifacts, shot));
+    await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
+    await browser("screenshot", join(artifacts, shot.replace(".png", "-dark.png")));
+    await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
+  };
+  /** \`locked\`: the page names the channel with its lock; the Tasks board names it in a card's
+   * text line, bare. */
+  const shoot = async (path: string, ready: string, shot: string, locked = true) => {
     await browser("open", `${origin}${workspacePath}${path}`);
     await waitFor(`${pageHydrated} && ${ready}`);
     await browser("wait", "300");
-    await browser("screenshot", join(artifacts, shot));
+    await both(shot);
     expect(await evaluate(namesVaultBare)).toBe(true);
+    if (locked) expect(await evaluate(vaultLocked)).toBe(true);
   };
   try {
     for (const peer of [ada!, grace!])
@@ -181,7 +193,7 @@ test("a private channel goes without `#` wherever another page names it", async 
     );
     await shoot(`/saved`, `${text}.includes("#${plazaName}")`, "2-saved.png");
     await shoot(`/activity`, `${text}.includes("#${plazaName}")`, "3-activity.png");
-    await shoot(`/tasks`, `${text}.includes("#${plazaName}")`, "4-tasks.png");
+    await shoot(`/tasks`, `${text}.includes("#${plazaName}")`, "4-tasks.png", false);
     await shoot(
       `/agent/${agent.id}?agentTab=reminders`,
       `${text}.includes("Check the vault")`,
@@ -196,8 +208,9 @@ test("a private channel goes without `#` wherever another page names it", async 
     await browser("press", "Enter");
     await waitFor(`${text}.includes("was not notified")`);
     await browser("wait", "300");
-    await browser("screenshot", join(artifacts, "6-mention-strip.png"));
+    await both("6-mention-strip.png");
     expect(await evaluate(namesVaultBare)).toBe(true);
+    expect(await evaluate(vaultLocked)).toBe(true);
   } catch (failure) {
     await browser("screenshot", join(artifacts, "failure.png")).catch(() => undefined);
     throw failure;

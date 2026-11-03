@@ -1,4 +1,4 @@
-import { channelLabel } from "#src/features/conversations/channel-visibility";
+import { ChannelTitle } from "#src/features/conversations/channel-name";
 import { useEffect, useState } from "react";
 import { AlarmClock, Clock, Link01 as LinkIcon, Repeat01 as Repeat } from "@untitledui/icons";
 import { Link } from "@tanstack/react-router";
@@ -190,12 +190,27 @@ function formatRecurrence(value: string) {
 function Source({ reminder }: { reminder: AgentReminderListItem }) {
   const thread = reminder.anchor?.threadRootId;
   const shortThread = thread?.slice(0, 13);
+  const anchor = reminder.anchor;
+  // A private channel with its lock, as everywhere a channel is named (task #375).
   const target =
-    reminder.anchor?.kind === "channel"
-      ? channelLabel({ name: reminder.anchor.channelName, visibility: reminder.anchor.visibility })
-      : reminder.target;
+    anchor?.kind === "channel" ? (
+      <ChannelTitle
+        name={anchor.channelName}
+        visibility={anchor.visibility}
+        lockClassName="size-3.5"
+      />
+    ) : (
+      reminder.target
+    );
+  const named = anchor?.kind === "channel" ? anchor.channelName : reminder.target;
   const label =
-    shortThread && !target.includes(shortThread) ? `${target} · ${shortThread}` : target;
+    shortThread && !named.includes(shortThread) ? (
+      <>
+        {target} · {shortThread}
+      </>
+    ) : (
+      target
+    );
   const content = (
     <>
       <LinkIcon className="size-3.5 shrink-0" aria-hidden="true" />
