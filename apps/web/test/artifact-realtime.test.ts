@@ -7,7 +7,7 @@ const event = {
   artifactId: "a1",
   number: 3,
   publisher: { agentId: "agent-1" },
-};
+} as const;
 
 test("a page reads a version announcement, and nothing else as one", () => {
   expect(decodeArtifactVersionPublishedEvent(event)).toEqual(event);
