@@ -50,7 +50,7 @@ const badgeColor = (color: string) => (BADGE_COLORS.has(color) ? color : "gray")
 export function TaskLabelChip({ label, className }: { label: TaskLabel; className?: string }) {
   return (
     <BadgeWithDot type="modern" size="sm" color={badgeColor(label.color)} className={className}>
-      <span className="max-w-32 truncate">{label.name}</span>
+      <span className="min-w-0 max-w-32 truncate">{label.name}</span>
     </BadgeWithDot>
   );
 }
@@ -64,13 +64,15 @@ export function TaskCardLabels({ labels }: { labels: readonly TaskLabel[] | unde
   const shown = labels.slice(0, CARD_LABELS);
   const rest = labels.slice(CARD_LABELS);
   return (
-    <span className="flex min-w-0 flex-wrap items-center gap-1">
+    // One line: where two and +N do not fit, the names are cut before the row wraps; +N stays
+    // whole (task #455).
+    <span className="flex min-w-0 items-center gap-1">
       {shown.map((label) => (
-        <TaskLabelChip key={label.id} label={label} />
+        <TaskLabelChip key={label.id} label={label} className="min-w-0 shrink" />
       ))}
       {rest.length > 0 && (
         <Tooltip title={rest.map((label) => label.name).join(", ")}>
-          <TooltipTrigger className="h-auto w-auto rounded-md outline-focus-ring focus-visible:outline-2">
+          <TooltipTrigger className="h-auto w-auto shrink-0 rounded-md outline-focus-ring focus-visible:outline-2">
             <span className="inline-flex h-5.5 items-center rounded-md border border-secondary px-1.5 text-xs font-medium text-secondary">
               +{rest.length}
             </span>
