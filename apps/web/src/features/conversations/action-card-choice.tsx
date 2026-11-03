@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { AlertCircle, Clock, Pencil01 } from "@untitledui/icons";
 import { FocusScope, useFocusManager } from "react-aria";
 import { Button as AriaButton } from "react-aria-components";
 import { CHOICE_OTHER_OPTION_ID, CHOICE_OTHER_TEXT_MAX_LENGTH } from "@lrm/coforge-sdk/agent";
 
 import { Button } from "#src/components/base/buttons/button";
+import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { Spinner } from "#src/components/ui/spinner";
 import type { ActionCardView } from "#src/server/conversations/action-cards.server";
 import { cn } from "#src/lib/utils";
@@ -99,12 +100,31 @@ export function ChoiceActionCard({
     void pick(words ? { ...lastPick, text: words } : lastPick);
   }
 
+  /** With the card itself focused, as it is when the card before it was just answered: a number
+   * picks its option, and an arrow key goes to the first or last row (task #457). */
+  function onCardKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.target !== cardRef.current || !pending || !view.canCommit) return;
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    const rows = [...(cardRef.current?.querySelectorAll<HTMLElement>(ROW) ?? [])];
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      (event.key === "ArrowDown" ? rows[0] : rows.at(-1))?.focus();
+      return;
+    }
+    const option = view.options[Number(event.key) - 1];
+    if (option) {
+      event.preventDefault();
+      void pick({ optionId: option.id });
+    }
+  }
+
   return (
     <div
       ref={cardRef}
       role="group"
       aria-label={view.prompt}
       tabIndex={-1}
+      onKeyDown={onCardKeyDown}
       data-choice-waiting={pending && view.canCommit ? "" : undefined}
       className={cn(
         "outline-focus-ring focus-visible:outline-2",
@@ -194,7 +214,7 @@ function PendingChoice({
   return (
     // The card's keys work from any row in it.
     <div className="flex flex-col" onKeyDown={onKeyDown}>
-      <p className="px-2.5 pb-2 text-sm font-semibold wrap-anywhere text-primary">{view.prompt}</p>
+      <ChoicePrompt prompt={view.prompt} />
       {canAnswer ? (
         <ul className="flex flex-col gap-1.5">
           {view.options.map((option, index) => {
@@ -219,15 +239,8 @@ function PendingChoice({
                   {sending && <Spinner className="size-4 shrink-0 text-fg-brand-primary" />}
                   <span className="min-w-0 flex-1 wrap-anywhere">{option.label}</span>
                   {index < 9 && (
-                    // The number shows on the row under the pointer, and on every row while the
-                    // card has keyboard focus.
-                    <kbd
-                      aria-hidden="true"
-                      className={cn(
-                        KEY_HINT,
-                        "invisible min-w-5 px-1 tabular-nums group-hover/row:visible group-has-[[data-choice-row]:focus-visible]/card:visible",
-                      )}
-                    >
+                    // The number that picks the row, always shown (task #457).
+                    <kbd aria-hidden="true" className={cn(KEY_HINT, "min-w-5 px-1 tabular-nums")}>
                       {index + 1}
                     </kbd>
                   )}
@@ -312,6 +325,55 @@ function PendingChoice({
             </Button>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The question, cut to two lines (task #457), as the handled card's is: the whole of it shows on
+ * hover, and a press on a cut question opens it out. The card's group is named by the whole
+ * question, so a screen reader always hears all of it.
+ */
+function ChoicePrompt({ prompt }: { prompt: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const [cut, setCut] = useState(false);
+  // The question's element, as state: it moves into a button once cut, and the measuring follows.
+  const [questionEl, setQuestionEl] = useState<HTMLSpanElement | null>(null);
+  // Whether the two lines cut the question, measured again as the card's width changes.
+  useLayoutEffect(() => {
+    const question = questionEl;
+    if (!question || expanded) return;
+    const measure = () => setCut(question.scrollHeight > question.clientHeight + 1);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(question);
+    return () => observer.disconnect();
+  }, [questionEl, expanded]);
+  const question = (
+    <span
+      ref={setQuestionEl}
+      data-choice-question=""
+      className={cn("block", !expanded && "line-clamp-2")}
+    >
+      {prompt}
+    </span>
+  );
+  return (
+    <div className="px-2.5 pb-2 text-sm font-semibold wrap-anywhere text-primary">
+      {cut && !expanded ? (
+        <Tooltip title={prompt}>
+          <AriaButton
+            // Named by the question itself; `aria-expanded` says there is more of it.
+            aria-expanded={false}
+            onPress={() => setExpanded(true)}
+            className="block w-full cursor-pointer rounded-sm text-left outline-focus-ring focus-visible:outline-2"
+          >
+            {question}
+          </AriaButton>
+        </Tooltip>
+      ) : (
+        question
       )}
     </div>
   );

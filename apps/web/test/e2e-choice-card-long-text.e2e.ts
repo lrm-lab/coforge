@@ -212,7 +212,27 @@ test("a choice card keeps very long text on screen, wrapped, on a desktop and a 
     ] as const) {
       await browser("set", "viewport", width, height);
       await open();
-      // Keyboard focus in the card, so the numbers show.
+      // Before anything has focus (task #457): every option's number shows, and the waiting card's
+      // question is cut to two lines, a press on it showing the rest.
+      expect(
+        await evaluate<boolean>(`(() => {
+          const rows = [...document.querySelectorAll('${card(forMe)} button[data-choice-row]')];
+          return rows.length > 0 && rows.every((row) => {
+            const kbd = row.querySelector("kbd");
+            return kbd !== null && getComputedStyle(kbd).visibility === "visible";
+          });
+        })()`),
+      ).toBe(true);
+      const pendingQuestion = `document.querySelector('${card(forMe)} [data-choice-question]')`;
+      const questionLines = `Math.round(${pendingQuestion}.getBoundingClientRect().height / parseFloat(getComputedStyle(${pendingQuestion}).lineHeight))`;
+      expect(await evaluate<number>(questionLines)).toBe(2);
+      await evaluate(
+        `document.querySelector('${card(forMe)} [data-choice-question]').scrollIntoView({ block: "center" }) ?? true`,
+      );
+      await browser("screenshot", join(artifacts, `${name}-waiting-cut.png`));
+      await browser("click", `${card(forMe)} button[aria-expanded="false"]`);
+      expect(await evaluate<number>(questionLines)).toBeGreaterThan(2);
+      // Keyboard focus in the card.
       await evaluate(`document.querySelector('${card(forMe)} [data-choice-row]').focus() ?? true`);
       await browser("press", "Tab");
       await browser("press", "Shift+Tab");

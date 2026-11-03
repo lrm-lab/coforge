@@ -209,6 +209,23 @@ test("the asked person answers a choice card in its own last row", async () => {
     ).toBe(true);
     await browser("screenshot", join(artifacts, "keyboard-picked.png"));
 
+    // With the card itself focused (a click on its background), a number picks too (task #457).
+    await evaluate(`document.querySelector('${card(closed)}').focus() ?? true`);
+    expect(
+      await evaluate<boolean>(
+        `document.activeElement === document.querySelector('${card(closed)}')`,
+      ),
+    ).toBe(true);
+    await browser("press", "1");
+    await browser(
+      "wait",
+      "--fn",
+      `document.querySelector('${card(closed)} [data-choice-row]') === null`,
+    );
+    expect(
+      (await db.actionCard.findUniqueOrThrow({ where: { messageId: closed } })).result,
+    ).toMatchObject({ optionId: "red" });
+
     // Someone else's answer is followed by their name; when they answered is the answer's tooltip
     // (React Aria opens one on hover once the page has seen a pointer press).
     await db.actionCard.update({
