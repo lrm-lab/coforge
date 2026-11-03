@@ -6,6 +6,12 @@ model Task {
   messageId                    String?             @unique @db.Uuid
   conversationId               String              @db.Uuid
   workspaceId                  String              @db.Uuid
+  /// The Project this Task is filed under. It follows its conversation's Project unless
+  /// `projectPinned` says someone chose this one explicitly.
+  projectId                    String?             @db.Uuid
+  /// Whether `projectId` was chosen for this Task (or an ancestor's) rather than inherited from
+  /// the conversation; a pinned Task keeps its Project when the conversation changes.
+  projectPinned                Boolean             @default(false)
   number                       Int
   title                        String
   description                  String?
@@ -25,6 +31,7 @@ model Task {
   message                      Message?            @relation(fields: [messageId, conversationId], references: [id, conversationId], onDelete: Cascade)
   conversation                 Conversation        @relation(fields: [conversationId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
   workspace                    Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project                      Project?            @relation(fields: [projectId], references: [id], onDelete: SetNull)
   owner                        ConversationMember? @relation("TaskOwner", fields: [ownerMemberId, conversationId, workspaceId], references: [id, conversationId, workspaceId], onDelete: Restrict)
   creator                      ConversationMember  @relation("TaskCreator", fields: [creatorMemberId, conversationId, workspaceId], references: [id, conversationId, workspaceId], onDelete: Restrict)
   labels                       TaskLabel[]
@@ -59,6 +66,7 @@ model Task {
   @@index([conversationId, status, updatedAt(sort: Desc), id(sort: Desc)])
   /// Serves an Agent's own Tasks (`task list --mine`) from its member rows, whatever else the
   /// Workspace holds.
+  @@index([projectId, status])
   @@index([ownerMemberId, status])
   /// Serves "has this member created a Task", e.g. the setup checklist's task step.
   @@index([creatorMemberId])
