@@ -43,7 +43,7 @@ export function LocalSessionHandoffDialog({
       }}
     >
       <Modal className="w-[min(40rem,calc(100vw-2rem))]">
-        <Dialog className="flex flex-col gap-5 p-6 text-left">
+        <Dialog className="flex max-h-[calc(100dvh-4rem)] flex-col gap-5 overflow-y-auto p-6 text-left">
           <HandoffContent busy={busy} onBusyChange={setBusy} onClose={() => onOpenChange(false)} />
         </Dialog>
       </Modal>

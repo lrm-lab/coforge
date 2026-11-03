@@ -56,7 +56,7 @@ export function shortenPath(path: string): string {
   return `…/${segments.slice(-2).join("/")}`;
 }
 
-/** What a session's row and the form's selected card show: its trimmed title (empty when it has
+/** What a session's row in the list shows: its trimmed title (empty when it has
  * none) and where it ran, the shortened directory and the model. */
 export function sessionSummary(session: LocalSessionEntry): { title: string; place: string } {
   return {

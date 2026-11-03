@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { truncateCodePointsWithEllipsis, type LocalSessionEntry } from "@lrm/coforge-sdk/internal";
 
 import { Button } from "#src/components/base/buttons/button";
@@ -10,8 +10,9 @@ import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
 import { m } from "#src/paraglide/messages";
 import { briefingFirstMessage, buildBriefing } from "./handoff-briefing";
+import { HandoffBriefingView } from "./handoff-briefing-view";
 import { HandoffProgress, HandoffRefusal } from "./handoff-states";
-import { isRecentlyActive, sessionSummary } from "./local-session-list";
+import { isRecentlyActive } from "./local-session-list";
 import type { SessionExcerptState } from "./local-session-state";
 import { useHandoffCreate } from "./use-handoff-create";
 import { useLocalSessionExcerpt } from "./use-local-session-handoff";
@@ -62,7 +63,7 @@ export function HandoffForm({
   const briefing = useMemo(
     () =>
       blocked
-        ? ""
+        ? undefined
         : buildBriefing({
             firstMessage: briefingFirstMessage(ready?.initialRequest, session.title),
             turns: ready?.recentTurns ?? [],
@@ -82,7 +83,10 @@ export function HandoffForm({
   // Once the Agent exists its name stays, so a resend can never be read as a second Agent. The
   // name field checks itself: the form does not submit while it is empty or taken.
   const locked = pending || createdName !== undefined;
-  const canSubmit = createdName !== undefined || !blocked;
+  // What is sent: the person's own text once they have edited it, else the briefing as built.
+  const [editedText, setEditedText] = useState<string>();
+  const text = editedText ?? briefing?.text ?? "";
+  const canSubmit = createdName !== undefined || (!blocked && text.trim() !== "");
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -101,7 +105,7 @@ export function HandoffForm({
         computerId,
         visibility: AGENT_VISIBILITY.PUBLIC,
       },
-      briefing,
+      text,
     );
   }
 
@@ -112,7 +116,17 @@ export function HandoffForm({
       <AgentUsernameField isReadOnly={locked} />
       <ExcerptNotice state={excerpt.state} onRetry={excerpt.retry} />
       {excerpt.state.kind === "loading" && <HandoffProgress label={m.handoff_loading()} />}
-      {!blocked && <BriefingPreview text={briefing} />}
+      {briefing && (
+        <HandoffBriefingView
+          briefing={briefing}
+          editedText={editedText}
+          onEditedTextChange={setEditedText}
+          isReadOnly={locked}
+          tool={tool}
+          model={modelLabel}
+          cwd={session.cwd}
+        />
+      )}
       {error && <Alert color="error" description={error} />}
       {briefingFailed && (
         <Alert color="error" description={m.handoff_briefing_failed({ name: createdName ?? "" })} />
@@ -153,15 +167,12 @@ function SelectedSession({
   onChooseAnother: () => void;
   disabled: boolean;
 }) {
-  // The session's directory and model, once: the briefing below repeats them in full.
-  const { title, place } = sessionSummary(session);
+  // Only its title: where it ran and on which model are the briefing's first lines below.
+  const title = session.title.trim();
   return (
-    <div className="flex items-start gap-3 rounded-xl border border-secondary p-3">
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium text-primary">
-          {title || m.handoff_untitled()}
-        </div>
-        <div className="truncate text-xs text-tertiary">{place}</div>
+    <div className="flex items-center gap-3 rounded-xl border border-secondary p-3">
+      <div className="min-w-0 flex-1 truncate text-sm font-medium text-primary">
+        {title || m.handoff_untitled()}
       </div>
       <Button
         type="button"
@@ -189,23 +200,4 @@ function ExcerptNotice({ state, onRetry }: { state: SessionExcerptState; onRetry
     default:
       return null;
   }
-}
-
-function BriefingPreview({ text }: { text: string }) {
-  const labelId = useId();
-  return (
-    <div className="flex flex-col gap-1.5">
-      <p id={labelId} className="text-sm font-medium text-secondary">
-        {m.handoff_briefing_preview()}
-      </p>
-      <div
-        role="region"
-        aria-labelledby={labelId}
-        tabIndex={0}
-        className="max-h-48 overflow-y-auto rounded-lg border border-secondary bg-secondary p-3 text-sm whitespace-pre-wrap text-secondary outline-focus-ring focus-visible:outline-2"
-      >
-        {text}
-      </div>
-    </div>
-  );
 }
