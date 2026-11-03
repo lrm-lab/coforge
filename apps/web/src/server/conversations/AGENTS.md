@@ -78,7 +78,7 @@ These rules apply to `src/server/conversations/`.
   `mapBrowserMessage` are the one browser-facing message shape, DMs included (pages, updates, threads, saved messages,
   search, the Activity inbox); never strip its `senderMemberId`, the pane's only own-message test. A window read returns top-level
   messages only, each thread a summary (`thread-summaries.server.ts`).
-- `message-seen-by.server.ts` owns the authenticated read of who has seen a viewer's own top-level message; it returns active user and Agent ids whose main read cursor reached that sequence.
+- `message-seen-by.server.ts` owns the authenticated read of who has seen a viewer's own top-level message; it returns active user and Agent ids whose main read cursor reached that sequence. Its "read at" time is the first `message_reads` row past the sequence, and `message-read-retention.server.ts` prunes those rows after seven days: a pruned message still reads as seen, without a time.
 - `message-search.server.ts` owns human message search: a Workspace member
   searches every channel (joined or not, archived too, never one hidden from the
   Workspace) and only their own direct conversations, the same rule as `ConversationHistory.authorize`. Its SQL lives in

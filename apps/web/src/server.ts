@@ -9,6 +9,7 @@ import { assertStartupConfig } from "#src/server/startup-config.server";
 import { ensureWorkspaceMemoryLifecycle } from "#src/server/workspace-memory/lifecycle.server";
 import { startWeeklyReportScheduleTickFromEnv } from "#src/server/records/weekly-report-schedule-tick.server";
 import { startActionCardExpiryTickFromEnv } from "#src/server/conversations/action-card-expiry.server";
+import { startMessageReadRetentionTickFromEnv } from "#src/server/conversations/message-read-retention.server";
 import { startWorkspaceAssistantOnboarding } from "#src/server/agents/workspace-assistant-onboarding.server";
 import { startPlatformOperatorSeedingFromEnv } from "#src/server/app-marketplace/platform-operator-seeding.server";
 
@@ -25,6 +26,8 @@ ensureWorkspaceMemoryLifecycle();
 startWeeklyReportScheduleTickFromEnv();
 // Cards expire after their TTL; the atomic sweep keeps every instance from announcing twice.
 startActionCardExpiryTickFromEnv();
+// Read records older than a week are pruned daily; deleting one only drops a "read at" time.
+startMessageReadRetentionTickFromEnv();
 startWorkspaceAssistantOnboarding();
 // The first Marketplace operators, from the deployment's config; only when none exists yet.
 startPlatformOperatorSeedingFromEnv();
