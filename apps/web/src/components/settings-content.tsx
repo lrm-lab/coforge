@@ -31,6 +31,7 @@ import { cn } from "#src/lib/utils";
 import { SettingsCardFooter, SettingsField } from "#src/components/settings-layout";
 import { saveErrorFrom, type SaveError } from "#src/components/save-error";
 import { m } from "#src/paraglide/messages";
+import { NotificationSettingsPanel } from "#src/features/notifications/notification-settings-panel";
 import { AccountSettings, type AccountProfile } from "./settings-account";
 import { PreferencesSettings } from "./settings-preferences";
 import { WorkspaceProfileSettings } from "./settings-workspace-profile";
@@ -312,11 +313,8 @@ function NotificationSettings({
   showAddToHomeScreenGuide,
   onBrowserNotificationsChange,
   onEnableBrowserNotifications,
-  onTestBrowserNotification,
 }: SettingsContentProps) {
   const [saving, guardSave] = useSubmitGuard();
-  const [testing, guardTest] = useSubmitGuard();
-  const [testSent, setTestSent] = useState(false);
   const unavailableReason = !browserNotificationsConfigured
     ? m.notifications_push_unconfigured()
     : browserNotificationPermission === "unsupported"
@@ -345,10 +343,9 @@ function NotificationSettings({
               aria-label={m.preferences_browser_notifications()}
               isSelected={browserNotificationsEnabled}
               isDisabled={toggleDisabled}
-              onChange={(isSelected) => {
-                setTestSent(false);
-                void guardSave(() => onBrowserNotificationsChange(isSelected));
-              }}
+              onChange={(isSelected) =>
+                void guardSave(() => onBrowserNotificationsChange(isSelected))
+              }
             />
           </div>
           {showActions && (
@@ -363,25 +360,6 @@ function NotificationSettings({
                 >
                   {m.preferences_browser_notifications_allow_browser()}
                 </Button>
-              )}
-              <Button
-                type="button"
-                color="secondary"
-                size="sm"
-                isDisabled={browserNotificationPermission !== "granted" || testing}
-                onPress={() => {
-                  setTestSent(false);
-                  void guardTest(async () => setTestSent(await onTestBrowserNotification()));
-                }}
-              >
-                {testing
-                  ? m.preferences_browser_notifications_testing()
-                  : m.preferences_browser_notifications_test()}
-              </Button>
-              {testSent && (
-                <span role="status" className="text-xs text-tertiary">
-                  {m.preferences_browser_notifications_test_sent()}
-                </span>
               )}
             </div>
           )}
@@ -405,6 +383,10 @@ function NotificationSettings({
           </div>
         </div>
       )}
+      {/* The account's rules for every device, and the devices themselves (task #469). */}
+      <div className="mt-8 flex flex-col gap-8">
+        <NotificationSettingsPanel />
+      </div>
     </div>
   );
 }

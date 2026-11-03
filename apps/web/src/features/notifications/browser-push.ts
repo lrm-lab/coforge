@@ -4,7 +4,45 @@ export type SerializedBrowserPushSubscription = {
   endpoint: string;
   expirationTime: number | null;
   keys: { p256dh: string; auth: string };
+  /** What Settings lists the device as, and whether its notifications wait while the person is at
+   * a computer (a phone's do; task #467). */
+  deviceKind?: "desktop" | "mobile";
+  deviceLabel?: string;
 };
+
+/** Whether this browser is a phone's or tablet's: one a person carries, whose notifications may
+ * wait while they are at a computer. */
+export function browserDeviceKind(userAgent: string, maxTouchPoints: number): "desktop" | "mobile" {
+  const ipadAsMac = userAgent.includes("Macintosh") && maxTouchPoints > 1;
+  return ipadAsMac || /Android|iPhone|iPad|iPod|Mobile/.test(userAgent) ? "mobile" : "desktop";
+}
+
+/** A short name for this browser, "Chrome · macOS", for the Settings device list (a name in no language, as it is stored). */
+export function browserDeviceLabel(userAgent: string): string {
+  const browser = /Edg\//.test(userAgent)
+    ? "Edge"
+    : /Firefox\//.test(userAgent)
+      ? "Firefox"
+      : /Chrome\//.test(userAgent)
+        ? "Chrome"
+        : /Safari\//.test(userAgent)
+          ? "Safari"
+          : "Browser";
+  const system = /iPhone|iPod/.test(userAgent)
+    ? "iPhone"
+    : /iPad/.test(userAgent)
+      ? "iPad"
+      : /Android/.test(userAgent)
+        ? "Android"
+        : /Mac OS X|Macintosh/.test(userAgent)
+          ? "macOS"
+          : /Windows/.test(userAgent)
+            ? "Windows"
+            : /Linux/.test(userAgent)
+              ? "Linux"
+              : "";
+  return system ? `${browser} · ${system}` : browser;
+}
 
 let lifecycleDisabled = false;
 const registrationTimeoutMs = 15_000;
@@ -42,7 +80,12 @@ export async function ensureBrowserPushSubscription(
 ): Promise<SerializedBrowserPushSubscription> {
   if (browserNotificationPermission() !== "granted")
     throw new Error("Browser notification permission is not granted");
-  return withRegistrationTimeout(registerBrowserPush(publicKey));
+  const subscription = await withRegistrationTimeout(registerBrowserPush(publicKey));
+  return {
+    ...subscription,
+    deviceKind: browserDeviceKind(navigator.userAgent, navigator.maxTouchPoints),
+    deviceLabel: browserDeviceLabel(navigator.userAgent),
+  };
 }
 
 /** Ensures this browser holds a subscription and saves it on the server, unless signing out. */
@@ -72,6 +115,8 @@ export async function showPageNotification(notification: {
   body: string;
   tag: string;
   url: string;
+  /** Shown without a sound: the person turned sound off (task #467). */
+  silent?: boolean;
 }) {
   const registration = await ensureServiceWorkerRegistration();
   await registration.showNotification(notification.title, {
@@ -79,6 +124,7 @@ export async function showPageNotification(notification: {
     tag: notification.tag,
     icon: "/logo.svg",
     data: { url: notification.url },
+    silent: notification.silent === true,
   });
 }
 
@@ -151,4 +197,17 @@ function sameKey(existing: ArrayBuffer | null, expected: Uint8Array) {
   if (!existing) return false;
   const bytes = new Uint8Array(existing);
   return bytes.length === expected.length && bytes.every((byte, index) => byte === expected[index]);
+}
+
+/** This browser's push endpoint, when it has a subscription: how Settings marks "this device".
+ * Never registers a service worker or asks for permission. */
+export async function currentBrowserPushEndpoint(): Promise<string | undefined> {
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return undefined;
+  try {
+    const registration = await navigator.serviceWorker.getRegistration("/");
+    const subscription = await registration?.pushManager?.getSubscription();
+    return subscription?.endpoint ?? undefined;
+  } catch {
+    return undefined;
+  }
 }

@@ -21,6 +21,8 @@ async function showPushNotification(event) {
     icon: "/logo.svg",
     tag: payload.tag,
     data: { url: payload.url },
+    // Sound off in the person's notification settings (task #467).
+    silent: payload.silent === true,
   });
 }
 
