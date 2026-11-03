@@ -71,7 +71,9 @@ export function actionCardBodySuffix(card: {
         ? (card.result as { optionId: string }).optionId
         : "";
     if (optionId === CHOICE_OTHER_OPTION_ID || /^[a-z][a-z0-9_]{0,31}$/.test(optionId)) {
-      return `[action card: executed; choice=${optionId}]`;
+      // The answer is the option the Agent recommended, as its delivery says too.
+      const recommended = (card.result as { recommended?: unknown }).recommended === true;
+      return `[action card: executed; choice=${optionId}${recommended ? " (recommended)" : ""}]`;
     }
   }
   return `[action card: ${card.state}]`;

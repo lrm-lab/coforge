@@ -209,3 +209,35 @@ test("actionPrepare maps a network failure to PREPARE_FAILED", async () => {
   expect(error).toBeInstanceOf(CliError);
   expect((error as CliError).code).toBe("PREPARE_FAILED");
 });
+
+// QA (task #457 item 6): the server's note on a prepared card (a recommended option moved first)
+// reaches the Agent instead of being dropped.
+test("run() prints the server's warning after the posted card", async () => {
+  const body = JSON.stringify({
+    type: "choice",
+    prompt: "Which color?",
+    to: "@ada",
+    options: [
+      { id: "red", label: "Red" },
+      { id: "green", label: "Green", recommended: true },
+    ],
+  });
+  const stream = new ReadableStream<Uint8Array<ArrayBuffer>>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(body) as Uint8Array<ArrayBuffer>);
+      controller.close();
+    },
+  });
+  spyOn(Bun.stdin, "stream").mockReturnValue(stream);
+  const transport: MessageTransport = {
+    ...noopTransport,
+    actionPrepare: async () => ({
+      messageId: "11111111-1111-1111-1111-111111111111",
+      metadata: { kind: "action-card" },
+      warning: 'Recommended option "Green" moved to first position.',
+    }),
+  };
+  const output = await run(["action", "prepare", "--target", "#general"], transport);
+  expect(output).toContain("Action card posted to #general");
+  expect(output).toEndWith('\nWarning: Recommended option "Green" moved to first position.');
+});

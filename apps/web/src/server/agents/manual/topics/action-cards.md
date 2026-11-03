@@ -104,7 +104,9 @@ COFORGEACTION
 ```
 
 Mark the option you would choose with `"recommended": true` (at most one per question). It is
-shown first and labelled "Recommended", and the delivery to you adds `(recommended)`. Do not write
+shown first (prepare prints a `Warning:` line saying so) and labelled "Recommended", and when it is
+chosen the delivery to you and a read of the card add `(recommended)`, for example
+`[action card: executed; choice=green (recommended)]`. Do not write
 "（推荐）" into the label: the label is the option's text, the recommendation is the flag.
 
 Read the card again: `[action card: executed; choice=password]` means they clicked that option. The

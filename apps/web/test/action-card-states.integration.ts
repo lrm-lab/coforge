@@ -7,6 +7,8 @@ import { markChoiceCardsAnsweredInChat } from "#src/server/conversations/action-
 import { sendChannel } from "#src/server/conversations/channel-send.server";
 import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { ACTION_CARD_TTL_MS } from "#src/server/conversations/action-card-view.server";
+import { actionCardBodySuffix } from "#src/server/conversations/agent-message-view.server";
+import { commitChoiceCard } from "#src/server/conversations/action-card-choice.server";
 
 const choice = (to: string, prompt = "Which color?") => ({
   type: "choice" as const,
@@ -318,6 +320,52 @@ test("answering a card in chat refreshes it on screen", async () => {
     ).toBe("answered_in_chat");
     // The card's own page hears the change; without it the card stays open until a reload.
     expect(events.some((event) => event.messageId === prepared.messageId)).toBe(true);
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+// QA (task #457 item 6): a recommended third option is moved first on the card, so the card's
+// text (what an Agent reads back, and what a reply of "1" means) numbers it first too; prepare
+// says it moved it; and a read of the answered card names the choice as the recommended one.
+test("a recommended option leads the card's text, and its answer reads as recommended", async () => {
+  const ctx = await setupActionCards();
+  try {
+    const prepared = await ctx.actionCards.prepare(ctx.principal, {
+      target: `#${ctx.hub.channelName}`,
+      action: {
+        ...choice(ctx.alice.username, "Which color?"),
+        options: [
+          { id: "red", label: "Red" },
+          { id: "blue", label: "Blue" },
+          { id: "green", label: "Green", recommended: true },
+        ],
+      },
+    });
+    expect(prepared.warning).toContain('"Green"');
+    const card = await ctx.db.message.findUniqueOrThrow({
+      where: { id: prepared.messageId },
+      select: { body: true },
+    });
+    expect(card.body).toBe("Which color? (1. Green; 2. Red; 3. Blue)");
+    // Answered by a click, as the card stores it, and read back the way an Agent reads it.
+    await commitChoiceCard(
+      ctx.db,
+      undefined,
+      { workspaceId: ctx.workspace.id, actorUserId: ctx.alice.id },
+      { messageId: prepared.messageId, optionId: "green" },
+      { publisher: { publishBatch: async () => [] } as never },
+    );
+    const stored = await ctx.db.actionCard.findUniqueOrThrow({
+      where: { messageId: prepared.messageId },
+      select: { state: true, kind: true, result: true },
+    });
+    expect(actionCardBodySuffix(stored)).toBe(
+      "[action card: executed; choice=green (recommended)]",
+    );
+    expect(
+      actionCardBodySuffix({ state: "executed", kind: "choice", result: { optionId: "red" } }),
+    ).toBe("[action card: executed; choice=red]");
   } finally {
     await ctx.cleanup();
   }

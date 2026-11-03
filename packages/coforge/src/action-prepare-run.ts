@@ -8,7 +8,12 @@ import {
 import { refuseForeignStdinFile } from "#src/send-stdin";
 
 /** What the server answers a posted card with. */
-export type ActionPrepareResult = { messageId?: string; metadata?: { kind: string } };
+export type ActionPrepareResult = {
+  messageId?: string;
+  metadata?: { kind: string };
+  /** The server's note on the card (a recommended option moved first, say). */
+  warning?: string;
+};
 
 /** `coforge action prepare`: reads the action JSON from stdin, posts the card, says where. */
 export async function runActionPrepare(
@@ -31,5 +36,7 @@ export async function runActionPrepare(
       retryable: false,
     });
   const shortId = result.messageId.slice(0, 13);
-  return `Action card posted to ${invocation.target} as message ${result.messageId} (short ${shortId}). The human can click the action verb to commit.`;
+  const posted = `Action card posted to ${invocation.target} as message ${result.messageId} (short ${shortId}). The human can click the action verb to commit.`;
+  // The server's note on the card it posted (a recommended option moved first, say).
+  return result.warning ? `${posted}\nWarning: ${result.warning}` : posted;
 }

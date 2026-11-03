@@ -112,9 +112,14 @@ export class ActionCards {
       "warning" in payload ? payload.warning : undefined,
       legacyChoice ? LEGACY_CHOICE_WARNING : undefined,
     ].filter((line): line is string => !!line);
-    const body = action.draftHint
-      ? `${actionCardSummary(action)}\n${action.draftHint}`
-      : actionCardSummary(action);
+    // A choice's text numbers its options as the card shows them (a recommended one moved
+    // first), so an Agent reading it back, and a reply of "1", mean the card's first option.
+    const summary = actionCardSummary(
+      action.type === "choice" && "options" in payload
+        ? { ...action, options: payload.options }
+        : action,
+    );
+    const body = action.draftHint ? `${summary}\n${action.draftHint}` : summary;
 
     const created = await this.db.$transaction((tx) =>
       createActionCardMessage(tx, principal, target, {

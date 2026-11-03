@@ -39,6 +39,8 @@ Moved out of [`AGENTS.md`](AGENTS.md) to keep it under 200 lines; the rules are 
   upgraded (never the message body, which people see in previews). Remove that fallback when no
   supported Computer is older than the release that added `to`. A card made before `to` was
   required names nobody and can no longer be answered.
-  Agent-facing reads append `[action card: executed; choice=<id>]` when that result is present.
+  Agent-facing reads append `[action card: executed; choice=<id>]` when that result is present, with
+  ` (recommended)` after the id when it is the recommended option. A choice card's body numbers its
+  options in the card's order, a recommended one first.
 - Agent-facing message reads append ` [action card: <state>]` (or the choice form above) to a
   card message's body so an Agent never claims a resource exists before a human commits it.
