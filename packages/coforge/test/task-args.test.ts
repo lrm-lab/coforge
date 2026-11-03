@@ -149,7 +149,7 @@ test("--priority sets a new task's priority and an update's, with or without --s
     ]),
   ).toMatchObject({ task: { status: "in_review", priority: "high" } });
   expect(() => parseTaskArgs(["update", ...target, "--number", "7"])).toThrow(
-    "--status or --priority",
+    "--status, --priority or --label",
   );
   expect(() => parseTaskArgs(["update", ...target, "--number", "7", "--priority", "asap"])).toThrow(
     "--priority must be one of: urgent, high, medium, low, none; got asap",

@@ -108,9 +108,10 @@ export const taskHelp: Readonly<Record<string, HelpEntry>> = {
   },
   "task update": {
     syntax:
-      "coforge task update --target <channel> [--peer-kind human|agent] --number <n> (--status <status> | --priority <level> | both) [--reviewer-isolation] [--json]",
+      "coforge task update --target <channel> [--peer-kind human|agent] --number <n> (--status <status> | --priority <level> | --label <name> | --label -<name> | any of them) [--label-description <text>] [--reviewer-isolation] [--json]",
     flags: [
       "--priority  urgent, high, medium, low or none. People set any task's; an Agent only a task it created, or in a channel it coordinates",
+      "--label  adds a label by name; --label -name takes one off (repeatable). --label-description lets an unknown label be created",
     ],
     example: "coforge task update --target '#general' --number 42 --status in_review",
   },

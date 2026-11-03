@@ -87,6 +87,8 @@ const TASK_FLAGS: Record<TaskOperation, readonly string[]> = {
     "--number",
     "--status",
     "--priority",
+    "--label",
+    "--label-description",
     "--expected-revision",
     "--reviewer-isolation",
     "--json",
@@ -350,9 +352,39 @@ export function parseTaskArgs(
           : `task update accepts exactly one --number; received ${numbers.length}. Run task update once per task.`,
       );
     task.number = taskNumber(numbers[0]);
+    const rawLabels = values.get("--label") ?? [];
+    const addedLabels: string[] = [];
+    const removedLabels: string[] = [];
+    for (const raw of rawLabels) {
+      const name = raw.trim();
+      if (!name) throw invalidTaskArg("--label must name a label");
+      if (name.startsWith("-")) removedLabels.push(name.slice(1));
+      else addedLabels.push(name);
+    }
+    if (addedLabels.length) task.labels = addedLabels;
+    if (removedLabels.length) task.removeLabels = removedLabels;
+    const labelDescription = one("--label-description")?.trim();
+    if (labelDescription !== undefined) {
+      if (!labelDescription) throw invalidTaskArg("--label-description must not be empty");
+      task.labelDescription = labelDescription;
+    }
     const status = one("--status");
-    if (status === undefined && !values.has("--priority"))
-      throw invalidTaskArg("task update needs --status or --priority (or both)");
+    if (
+      status === undefined &&
+      !values.has("--priority") &&
+      addedLabels.length === 0 &&
+      removedLabels.length === 0
+    )
+      throw invalidTaskArg("task update needs --status, --priority or --label");
+    if (
+      (addedLabels.length || removedLabels.length) &&
+      (status !== undefined || values.has("--priority"))
+    )
+      throw invalidTaskArg(
+        "task update takes --label on its own; run the status or priority change separately",
+      );
+    // A label edit is an amendment; the server's update path moves status and priority only.
+    if (addedLabels.length || removedLabels.length) task.operation = "amend";
     if (status !== undefined) {
       if (!(TASK_STATUSES as readonly string[]).includes(status))
         throw invalidTaskArg(`--status must be one of: ${TASK_STATUSES.join(", ")}; got ${status}`);

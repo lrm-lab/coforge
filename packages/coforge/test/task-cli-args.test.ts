@@ -131,7 +131,7 @@ test("Task update, assign, convert, amend and receipt name what is wrong with th
     invalidArg("--status must be one of: todo, in_progress, in_review, done, closed; got open"),
   );
   expect(refusal([...update, "--number", "1"])).toEqual(
-    invalidArg("task update needs --status or --priority (or both)"),
+    invalidArg("task update needs --status, --priority or --label"),
   );
   expect(
     refusal([...update, "--number", "1", "--status", "done", "--expected-revision", "-1"]),
@@ -269,3 +269,19 @@ function refusal(args: string[]) {
 }
 
 const invalidArg = (message: string) => ({ code: "INVALID_ARG", message });
+
+test("task update takes labels, and task list takes the none filter", () => {
+  expect(
+    parseArgs(["task", "update", "--target", "#general", "--number", "5", "--label", "Bug"]),
+  ).toMatchObject({
+    command: "task",
+    task: { operation: "amend", number: 5, labels: ["Bug"] },
+  });
+  expect(
+    parseArgs(["task", "update", "--target", "#general", "--number", "5", "--label", "-Bug"]),
+  ).toMatchObject({ command: "task", task: { removeLabels: ["Bug"] } });
+  expect(parseArgs(["task", "list", "--target", "#general", "--label", "none"])).toMatchObject({
+    command: "task",
+    task: { operation: "list", labels: ["none"] },
+  });
+});

@@ -182,15 +182,54 @@ async function unknownLabel(
   const existing = await tx.label.findMany({
     where: { workspaceId },
     orderBy: { name: "asc" },
-    take: 10,
+    take: 50,
     select: { name: true },
   });
+  const near = nearestLabelNames(
+    raw,
+    existing.map((row) => row.name),
+  );
+  const suggestion = near.length
+    ? `; did you mean ${near.join(", ")}?`
+    : existing.length
+      ? `; existing: ${existing
+          .slice(0, 10)
+          .map((row) => row.name)
+          .join(", ")}`
+      : "";
   return new AppError("INVALID_INPUT", {
     errorId: "task-label-unknown",
-    hint: `no label named "${raw}" in this Workspace${
-      existing.length ? `; existing: ${existing.map((row) => row.name).join(", ")}` : ""
-    }. Create it with \`coforge label create --description ...\` or pass --label-description`,
+    hint: `no label named "${raw}" in this Workspace${suggestion}. Create it with \`coforge label create --description ...\` or pass --label-description`,
   });
+}
+
+/** Up to three existing names within a small edit distance of the one asked for. */
+function nearestLabelNames(asked: string, names: readonly string[]): string[] {
+  const key = labelNameKey(asked);
+  return names
+    .map((name) => ({ name, distance: editDistance(key, labelNameKey(name)) }))
+    .filter(({ distance }) => distance > 0 && distance <= Math.max(2, Math.floor(key.length / 3)))
+    .sort((a, b) => a.distance - b.distance)
+    .slice(0, 3)
+    .map(({ name }) => name);
+}
+
+function editDistance(a: string, b: string): number {
+  const previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i++) {
+    let diagonal = previous[0]!;
+    previous[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const above = previous[j]!;
+      previous[j] = Math.min(
+        previous[j]! + 1,
+        previous[j - 1]! + 1,
+        diagonal + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+      diagonal = above;
+    }
+  }
+  return previous[b.length]!;
 }
 
 async function assertGroupRoom(
