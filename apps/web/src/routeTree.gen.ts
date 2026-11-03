@@ -117,6 +117,7 @@ import { Route as WWorkspaceSlugRecordsSettingsRouteImport } from './routes/w.$w
 import { Route as WWorkspaceSlugRecordsStatsRouteImport } from './routes/w.$workspaceSlug/records.stats'
 import { Route as ApiAgentV1ActionsPrepareRouteImport } from './routes/api/agent/v1/actions/prepare'
 import { Route as ApiAgentV1AppsIndexRouteImport } from './routes/api/agent/v1/apps/index'
+import { Route as ApiAgentV1AppsMarketplaceRouteImport } from './routes/api/agent/v1/apps/marketplace'
 import { Route as ApiAgentV1AttachmentUploadSessionsIndexRouteImport } from './routes/api/agent/v1/attachment-upload-sessions/index'
 import { Route as ApiAgentV1AttachmentUploadSessionsUploadIdRouteImport } from './routes/api/agent/v1/attachment-upload-sessions/$uploadId'
 import { Route as ApiAgentV1AttachmentsIndexRouteImport } from './routes/api/agent/v1/attachments/index'
@@ -758,6 +759,12 @@ const ApiAgentV1AppsIndexRoute = ApiAgentV1AppsIndexRouteImport.update({
   path: '/api/agent/v1/apps/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAgentV1AppsMarketplaceRoute =
+  ApiAgentV1AppsMarketplaceRouteImport.update({
+    id: '/api/agent/v1/apps/marketplace',
+    path: '/api/agent/v1/apps/marketplace',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiAgentV1AttachmentUploadSessionsIndexRoute =
   ApiAgentV1AttachmentUploadSessionsIndexRouteImport.update({
     id: '/api/agent/v1/attachment-upload-sessions/',
@@ -1200,6 +1207,7 @@ export interface FileRoutesByFullPath {
   '/w/$workspaceSlug/projects/': typeof WWorkspaceSlugProjectsIndexRoute
   '/w/$workspaceSlug/records/': typeof WWorkspaceSlugRecordsIndexRoute
   '/api/agent/v1/actions/prepare': typeof ApiAgentV1ActionsPrepareRoute
+  '/api/agent/v1/apps/marketplace': typeof ApiAgentV1AppsMarketplaceRoute
   '/api/agent/v1/attachment-upload-sessions/$uploadId': typeof ApiAgentV1AttachmentUploadSessionsUploadIdRouteWithChildren
   '/api/agent/v1/attachments/$attachmentId': typeof ApiAgentV1AttachmentsAttachmentIdRouteWithChildren
   '/api/agent/v1/attachments/capabilities': typeof ApiAgentV1AttachmentsCapabilitiesRoute
@@ -1363,6 +1371,7 @@ export interface FileRoutesByTo {
   '/w/$workspaceSlug/projects': typeof WWorkspaceSlugProjectsIndexRoute
   '/w/$workspaceSlug/records': typeof WWorkspaceSlugRecordsIndexRoute
   '/api/agent/v1/actions/prepare': typeof ApiAgentV1ActionsPrepareRoute
+  '/api/agent/v1/apps/marketplace': typeof ApiAgentV1AppsMarketplaceRoute
   '/api/agent/v1/attachment-upload-sessions/$uploadId': typeof ApiAgentV1AttachmentUploadSessionsUploadIdRouteWithChildren
   '/api/agent/v1/attachments/$attachmentId': typeof ApiAgentV1AttachmentsAttachmentIdRouteWithChildren
   '/api/agent/v1/attachments/capabilities': typeof ApiAgentV1AttachmentsCapabilitiesRoute
@@ -1531,6 +1540,7 @@ export interface FileRoutesById {
   '/w/$workspaceSlug/projects/': typeof WWorkspaceSlugProjectsIndexRoute
   '/w/$workspaceSlug/records/': typeof WWorkspaceSlugRecordsIndexRoute
   '/api/agent/v1/actions/prepare': typeof ApiAgentV1ActionsPrepareRoute
+  '/api/agent/v1/apps/marketplace': typeof ApiAgentV1AppsMarketplaceRoute
   '/api/agent/v1/attachment-upload-sessions/$uploadId': typeof ApiAgentV1AttachmentUploadSessionsUploadIdRouteWithChildren
   '/api/agent/v1/attachments/$attachmentId': typeof ApiAgentV1AttachmentsAttachmentIdRouteWithChildren
   '/api/agent/v1/attachments/capabilities': typeof ApiAgentV1AttachmentsCapabilitiesRoute
@@ -1698,6 +1708,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/projects/'
     | '/w/$workspaceSlug/records/'
     | '/api/agent/v1/actions/prepare'
+    | '/api/agent/v1/apps/marketplace'
     | '/api/agent/v1/attachment-upload-sessions/$uploadId'
     | '/api/agent/v1/attachments/$attachmentId'
     | '/api/agent/v1/attachments/capabilities'
@@ -1861,6 +1872,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/projects'
     | '/w/$workspaceSlug/records'
     | '/api/agent/v1/actions/prepare'
+    | '/api/agent/v1/apps/marketplace'
     | '/api/agent/v1/attachment-upload-sessions/$uploadId'
     | '/api/agent/v1/attachments/$attachmentId'
     | '/api/agent/v1/attachments/capabilities'
@@ -2028,6 +2040,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/projects/'
     | '/w/$workspaceSlug/records/'
     | '/api/agent/v1/actions/prepare'
+    | '/api/agent/v1/apps/marketplace'
     | '/api/agent/v1/attachment-upload-sessions/$uploadId'
     | '/api/agent/v1/attachments/$attachmentId'
     | '/api/agent/v1/attachments/capabilities'
@@ -2170,6 +2183,7 @@ export interface RootRouteChildren {
   ApiProjectsProjectIdIconRoute: typeof ApiProjectsProjectIdIconRoute
   ApiWorkspacesWorkspaceIdIconRoute: typeof ApiWorkspacesWorkspaceIdIconRoute
   ApiAgentV1ActionsPrepareRoute: typeof ApiAgentV1ActionsPrepareRoute
+  ApiAgentV1AppsMarketplaceRoute: typeof ApiAgentV1AppsMarketplaceRoute
   ApiAgentV1AttachmentUploadSessionsUploadIdRoute: typeof ApiAgentV1AttachmentUploadSessionsUploadIdRouteWithChildren
   ApiAgentV1AttachmentsAttachmentIdRoute: typeof ApiAgentV1AttachmentsAttachmentIdRouteWithChildren
   ApiAgentV1AttachmentsCapabilitiesRoute: typeof ApiAgentV1AttachmentsCapabilitiesRoute
@@ -2973,6 +2987,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentV1AppsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/agent/v1/apps/marketplace': {
+      id: '/api/agent/v1/apps/marketplace'
+      path: '/api/agent/v1/apps/marketplace'
+      fullPath: '/api/agent/v1/apps/marketplace'
+      preLoaderRoute: typeof ApiAgentV1AppsMarketplaceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/agent/v1/attachment-upload-sessions/': {
       id: '/api/agent/v1/attachment-upload-sessions/'
       path: '/api/agent/v1/attachment-upload-sessions'
@@ -3679,6 +3700,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiProjectsProjectIdIconRoute: ApiProjectsProjectIdIconRoute,
   ApiWorkspacesWorkspaceIdIconRoute: ApiWorkspacesWorkspaceIdIconRoute,
   ApiAgentV1ActionsPrepareRoute: ApiAgentV1ActionsPrepareRoute,
+  ApiAgentV1AppsMarketplaceRoute: ApiAgentV1AppsMarketplaceRoute,
   ApiAgentV1AttachmentUploadSessionsUploadIdRoute:
     ApiAgentV1AttachmentUploadSessionsUploadIdRouteWithChildren,
   ApiAgentV1AttachmentsAttachmentIdRoute:

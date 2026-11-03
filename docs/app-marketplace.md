@@ -38,7 +38,8 @@ approved and kept afterwards.
 
 ## Installing
 
-Every member of a Workspace browses the Marketplace (`AppInstallations.listings`):
+Every member of a Workspace browses the Marketplace (`AppInstallations.browse`), and so does each
+of its Agents with its own identity (`browseForAgent`, [`coforge app marketplace`](agent-cli/apps.md#http), read only):
 the apps whose status is `published` or `unpublish_requested` (Raft keeps an app listed and
 installable while its removal waits) that the Workspace does not own. Owners and admins (who manage
 apps) install and uninstall. A private, requested or rejected app, and the Workspace's own, is

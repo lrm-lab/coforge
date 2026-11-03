@@ -184,3 +184,10 @@ card is never posted for a request already decided, and each token is a fresh fi
 The `PATCH` body is `{ expectedRevision, set, unset, idempotencyKey }` and nothing else. Each
 change raises `revision` by one; returning every key to its default keeps the App's row at the
 next revision, because the daemon ignores a revision lower than the one it holds.
+
+`GET /api/agent/v1/apps/marketplace?query=&limit=` (`coforge app marketplace`, Raft's `integration
+marketplace`): the Agent browses, with its own identity, what any member of its Workspace sees in
+the [Marketplace](../app-marketplace.md); it installs nothing. `query` (at most 200 characters, as
+plain text) matches name, key, description or developer; `limit` is 1–50, default 20. It answers
+`{ surface: "public_marketplace", metadataTrust: "untrusted_app_supplied", query, limit, truncated,
+apps }` (types: `@lrm/coforge-sdk/agent` `app-marketplace.ts`); app text is the author's, untrusted.

@@ -66,6 +66,14 @@ export interface AppInstallationStore {
   ): Promise<{ role: WorkspaceMemberRole; workspaceSlug: string } | undefined>;
   /** The listed apps that `workspaceId` does not own. */
   listListings(workspaceId: string): Promise<MarketplaceListing[]>;
+  /** At most `take` of them, in the same order, whose name, key, description or developer holds
+   * `query` (case-insensitively, as text: `%`, `_` and `\` match themselves); all for `null`. */
+  searchListings(
+    workspaceId: string,
+    search: { query: string | null; take: number },
+  ): Promise<MarketplaceListing[]>;
+  /** Whether `agentId` is a live Agent of `workspaceId` (`ACTIVE_AGENT_WHERE`). */
+  hasAgent(workspaceId: string, agentId: string): Promise<boolean>;
   /** One of them; `undefined` for a private, requested, rejected or own app, or no such key. */
   findListing(
     workspaceId: string,
@@ -146,6 +154,20 @@ export class AppInstallations {
         approvesOnInstall: await this.permissionsOn(workspace),
       };
     });
+  }
+
+  /** The Marketplace as an Agent browses it with its own identity (`coforge app marketplace`):
+   * what any member of its Workspace sees, at most `limit` apps matching `query`, and whether more
+   * matched. It installs nothing; an install stays a person's. An Agent no longer in the
+   * Workspace is NOT_FOUND. */
+  async browseForAgent(
+    agent: { workspaceId: string; agentId: string },
+    { query, limit }: { query: string | null; limit: number },
+  ): Promise<{ listings: MarketplaceListing[]; truncated: boolean }> {
+    if (!(await this.reads.hasAgent(agent.workspaceId, agent.agentId)))
+      throw new AppError("NOT_FOUND");
+    const found = await this.reads.searchListings(agent.workspaceId, { query, take: limit + 1 });
+    return { listings: found.slice(0, limit), truncated: found.length > limit };
   }
 
   /** Installs the listed app `key` in the actor's Workspace. `revision` is the declaration

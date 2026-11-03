@@ -12,6 +12,7 @@ import { revokeAppAuthorizations } from "#src/server/db/repositories/oauth-autho
 import { WORKSPACE_CAPABILITY_ROLES } from "#src/features/workspaces/workspace-roles";
 import { archiveAppBots } from "#src/server/db/repositories/app-bot.repositories.server";
 import { findAppMember } from "#src/server/db/repositories/app.repositories.server";
+import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 
 /**
  * The one owner of what removing an installation revokes. Takes an app away from the Workspaces
@@ -100,7 +101,45 @@ export class PrismaAppInstallationStore implements AppInstallationStore {
       },
       orderBy: [{ name: "asc" }, { key: "asc" }],
     });
-    return rows.map((row) => listing(row, row.installations.length > 0));
+    return rows.map((row) => listing(row));
+  }
+
+  async searchListings(
+    workspaceId: string,
+    { query, take }: { query: string | null; take: number },
+  ) {
+    // LIKE reads `%`, `_` and `\` as patterns; escaped, the query is matched as typed.
+    const text = query && {
+      contains: query.replace(/[\\%_]/g, "\\$&"),
+      mode: "insensitive" as const,
+    };
+    const rows = await this.db.app.findMany({
+      where: {
+        ...listedElsewhere(workspaceId),
+        ...(text && {
+          OR: [
+            { name: text },
+            { key: text },
+            { description: text },
+            { ownerWorkspace: { name: text } },
+          ],
+        }),
+      },
+      select: {
+        ...LISTING,
+        installations: { where: { workspaceId }, select: { id: true } },
+      },
+      orderBy: [{ name: "asc" }, { key: "asc" }],
+      take,
+    });
+    return rows.map((row) => listing(row));
+  }
+
+  async hasAgent(workspaceId: string, agentId: string) {
+    return (
+      (await this.db.agent.count({ where: { id: agentId, workspaceId, ...ACTIVE_AGENT_WHERE } })) >
+      0
+    );
   }
 
   async findListing(workspaceId: string, key: string, { lock = false } = {}) {
@@ -112,7 +151,7 @@ export class PrismaAppInstallationStore implements AppInstallationStore {
       where: { key, ...listedElsewhere(workspaceId) },
       select: { ...LISTING, installations: { where: { workspaceId }, select: { id: true } } },
     });
-    return row ? listing(row, row.installations.length > 0) : undefined;
+    return row ? listing(row) : undefined;
   }
 
   async findLiveShare(tokenHash: string, now: Date) {
@@ -219,6 +258,11 @@ function info(row: ListingRow): SharedAppInfo {
   };
 }
 
-function listing(row: ListingRow, installed: boolean): MarketplaceListing {
+/** A listing from a row that also read the asking Workspace's installation (`installations`),
+ * which only says `installed`: its row id never leaves the repository. */
+function listing(
+  { installations, ...row }: ListingRow & { installations: unknown[] },
+  installed = installations.length > 0,
+): MarketplaceListing {
   return { ...info(row), installed };
 }

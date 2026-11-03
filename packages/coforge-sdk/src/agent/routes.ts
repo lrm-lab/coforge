@@ -69,10 +69,12 @@ const APP_CONFIG_ROUTES = {
   update: { method: "PATCH", path: appConfigPath },
 } as const;
 
-/** `coforge app list|token`: the Workspace's apps, and a short-lived token for one. Same routes
+/** `coforge app list|token|marketplace`: the Workspace's apps, a short-lived token for one, and the
+ * Marketplace browsed read-only. Same routes
  * under `proxy`, `local` and `cloud`. */
 const APP_ROUTES = {
   list: { method: "GET", path: "/api/agent/v1/apps" },
+  marketplace: { method: "GET", path: "/api/agent/v1/apps/marketplace" },
   token: {
     method: "POST",
     path: (appKey: string) => `/api/agent/v1/apps/${encodeURIComponent(appKey)}/token`,
