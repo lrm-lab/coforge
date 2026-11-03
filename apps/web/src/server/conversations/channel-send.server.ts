@@ -286,13 +286,7 @@ export async function sendChannel(
         async (delivery) =>
           [
             delivery.agentId,
-            await taskReferenceView(
-              ctx.db,
-              workspaceId,
-              delivery.agentId,
-              channelId,
-              message.body,
-            ),
+            await taskReferenceView(ctx.db, workspaceId, delivery.agentId, channelId, message.body),
           ] as const,
       ),
     ),
