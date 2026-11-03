@@ -4,6 +4,7 @@ import { parseLoadSubsetOptions, queryCollectionOptions } from "@tanstack/query-
 import { createStore } from "@tanstack/react-store";
 import {
   TASK_REFERENCE_TOKEN_PATTERN,
+  readTaskReferenceToken,
   type TaskStatus,
   type TaskView,
 } from "@lrm/coforge-sdk/internal";
@@ -67,9 +68,12 @@ const referencesByMessage = new WeakMap<object, readonly number[]>();
 function referencedNumbers(message: { body: string }) {
   let numbers = referencesByMessage.get(message);
   if (!numbers) {
-    numbers = [...message.body.matchAll(TASK_REFERENCE_TOKEN_PATTERN)].map((match) =>
-      Number(match[1]),
-    );
+    // Only this conversation's tasks: a cross-conversation token carries a conversation id, not
+    // a number this read can ask for.
+    numbers = [...message.body.matchAll(TASK_REFERENCE_TOKEN_PATTERN)].flatMap((match) => {
+      const reference = readTaskReferenceToken(match as unknown as RegExpExecArray);
+      return reference?.kind === "local" ? [reference.number] : [];
+    });
     referencesByMessage.set(message, numbers);
   }
   return numbers;

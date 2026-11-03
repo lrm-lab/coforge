@@ -29,4 +29,16 @@ test("cross-conversation task references resolve only when the sender may read t
       dmTask: () => undefined,
     }),
   ).toBe(`see <@task:c:${conversation}:design:7> and dm:@ada:#9, but not #design:#7x`);
+  // Unresolvable whole references stay as written, inner numbers included.
+  expect(
+    readMessageReferences("#design:#7 and dm:@ada:#9").resolve({
+      channelTask: () => undefined,
+      dmTask: () => undefined,
+      task: () => true,
+    }),
+  ).toBe("#design:#7 and dm:@ada:#9");
+  // A space ends the reference: `#7` after it is this conversation's task.
+  expect(readMessageReferences("#design: #7").resolve({ task: () => true })).toBe(
+    "#design: <@task:7>",
+  );
 });

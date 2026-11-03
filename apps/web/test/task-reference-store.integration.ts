@@ -85,6 +85,19 @@ test("cross-conversation task references are stored only where the sender may re
       storeMessageBody(tx, scope, body, { targets: [] }, { crossTaskReferences: false }),
     );
     expect(off.body).toBe(body);
+    // With the switch off no cross-conversation token is written, and the whole reference is
+    // left as typed — its `#N` is not re-read as this conversation's task.
+    expect(off.body).not.toContain("<@task:");
+    const local = await db.$transaction((tx) =>
+      storeMessageBody(
+        tx,
+        scope,
+        "see #7 and task #7",
+        { targets: [] },
+        { crossTaskReferences: false },
+      ),
+    );
+    expect(local.body).toBe("see <@task:7> and <@task:7>");
   } finally {
     await db.workspace.delete({ where: { id: workspace.id } });
     await db.user.deleteMany({ where: { id: { in: [alice.id, bob.id] } } });
