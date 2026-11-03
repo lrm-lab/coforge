@@ -7,17 +7,8 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import {
-  AtSign,
-  CheckDone01,
-  Inbox01,
-  Mail01,
-  MessageQuestionCircle,
-  Pin01,
-} from "@untitledui/icons";
+import { CheckDone01, MessageQuestionCircle, Pin01 } from "@untitledui/icons";
 
-import { Tab, TabList, Tabs } from "#src/components/application/tabs/tabs";
-import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { PageHeader } from "#src/components/layout/page-header";
@@ -50,6 +41,7 @@ import { ACTIVITY_LIST_BESIDE_FROM, ActivityConversationPane } from "./activity-
 import { openedItemKey } from "./activity-open-target";
 import { useActivityItemActions } from "./use-activity-item-actions";
 import { ActivityInboxRow } from "./activity-inbox-row";
+import { ActivityInboxTabs } from "./activity-inbox-tabs";
 import { WaitingChoiceRow } from "./waiting-choice-row";
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
@@ -402,74 +394,6 @@ export function ActivityInboxView({
 
 /** The waiting cards shown before the rest fold behind "N more". */
 const WAITING_SHOWN = 3;
-
-const FILTER_TABS: ReadonlyArray<{
-  id: ActivityInboxFilter;
-  icon: typeof Inbox01;
-  label: () => string;
-}> = [
-  { id: "all", icon: Inbox01, label: () => m.activity_inbox_filter_all() },
-  { id: "unread", icon: Mail01, label: () => m.activity_inbox_filter_unread() },
-  { id: "mentions", icon: AtSign, label: () => m.activity_inbox_filter_mentions() },
-];
-
-/**
- * All / Unread / Mentions as the Chat header's icon + label underline tabs. Unread and Mentions
- * carry how many rows have something unread and an unread mention; the numbers are the same
- * whichever tab is showing, and a zero shows nothing.
- */
-function ActivityInboxTabs({
-  filter,
-  onFilterChange,
-  counts,
-}: {
-  filter: ActivityInboxFilter;
-  onFilterChange: (filter: ActivityInboxFilter) => void;
-  counts: Partial<Record<ActivityInboxFilter, number>>;
-}) {
-  return (
-    <Tabs
-      selectedKey={filter}
-      onSelectionChange={(key) => {
-        const next = FILTER_TABS.find((tab) => tab.id === key);
-        if (next) onFilterChange(next.id);
-      }}
-      className="w-max shrink-0"
-    >
-      {/* In a list column dragged narrow the tabs drop their icons, so the three still fit. */}
-      <TabList
-        type="underline"
-        size="md"
-        aria-label={m.activity_inbox_filter_label()}
-        className="@max-[22rem]/tabbed-header:**:data-icon:hidden"
-      >
-        {FILTER_TABS.map((tab) => (
-          <Tab key={tab.id} id={tab.id} icon={tab.icon}>
-            {/* The official `badge` prop hides below `md`; the count must show on phones too. */}
-            {({ isSelected, isHovered }) => {
-              const count = counts[tab.id] ?? 0;
-              return (
-                <>
-                  {tab.label()}
-                  {count > 0 && (
-                    <Badge
-                      type="pill-color"
-                      size="sm"
-                      color={isSelected || isHovered ? "brand" : "gray"}
-                      className="transition-inherit-all"
-                    >
-                      {count > 99 ? "99+" : count}
-                    </Badge>
-                  )}
-                </>
-              );
-            }}
-          </Tab>
-        ))}
-      </TabList>
-    </Tabs>
-  );
-}
 
 /** A list section's label (Pinned, All conversations): a tertiary subheading on the rows' inset,
  * with the section's mark when it has one. */
