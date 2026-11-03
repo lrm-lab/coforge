@@ -181,8 +181,8 @@ These rules apply to `src/features/conversations/`. Forwarding a message (the Fo
   `useSidebarActions`, so the sidebar follows) and collapse; both panels share `settings-panel-parts.tsx`.
 - Leaving a channel uses the never-joined read-only state and `joined: false`, without a separate "left" state. A conversation that answers `NOT_FOUND` (such as a channel just hidden from the Workspace or deleted) leaves for Chat
   through `ConversationLoadError`; do not show it as a load failure.
-- A human commits an action card through `CreateChannelDialog`, `AgentCreateDialog`, or
-  `ChannelAddMembersDialog` with their preselect/commit props; the sidebar "+" is the create
+- An action card's primary button commits the draft as shown; only `agent:create` opens `AgentCreateDialog`,
+  and Edit… opens `CreateChannelDialog` or `ChannelAddMembersDialog`. The sidebar "+" is the create
   dialog's `memberPicker` mode (public Agents only). Do not build card-specific creation forms.
   `ChannelAddMembersDialog` answers one question — who joins this channel now: the card's
   proposal arrives picked and individually removable, with the same search over the Workspace's

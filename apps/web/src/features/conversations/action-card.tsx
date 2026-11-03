@@ -1,10 +1,7 @@
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { Button } from "#src/components/base/buttons/button";
-import { Badge } from "#src/components/base/badges/badges";
 import { m } from "#src/paraglide/messages";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { APP_GRANT_REQUEST_CHANGED } from "#src/features/apps/agent-app-access";
@@ -23,20 +20,10 @@ import {
 } from "./action-cards.functions";
 import { CreateChannelDialog } from "./create-channel-dialog";
 import { ChannelAddMembersDialog } from "./channel-add-members-dialog";
-import { ActionCardAppBody } from "./action-card-app-body";
 import { ChoiceActionCard } from "./action-card-choice";
-import {
-  ActionCardDesktopTakeoverBody,
-  ActionCardHandoffDoneSuffix,
-  ActionCardOpenDesktopButton,
-  ActionCardPageFillBody,
-} from "./action-card-handoff";
-import {
-  actionCardCommitLabel,
-  actionCardDeniedReason,
-  actionCardIcon,
-  actionCardTitle,
-} from "./action-card-labels";
+import { HandledActionCard } from "./action-card-handled";
+import { PendingActionCard, type ActionCardFailure } from "./action-card-pending";
+import { channelMembersQueryKey } from "./conversation-query-keys";
 import { AgentCreateDialog } from "#src/features/agents/agent-create-dialog";
 import { createAgent } from "#src/features/agents/agents.functions";
 import {
@@ -45,37 +32,24 @@ import {
 } from "#src/features/computers/computers.functions";
 import { getCloudDesktopOrigin } from "#src/features/computers/cloud-desktop-origin.functions";
 import { cloudDesktopUrl, openCloudDesktopWindow } from "#src/features/computers/cloud-desktop-url";
-import { formatAgentProfileParam } from "#src/features/agents/profile-panel/profile-panel-search";
-import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { WAITING_CHOICE_CARDS_KEY } from "#src/features/inbox/activity-inbox-queries";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { projectsQuery } from "#src/features/projects/project-tree-queries";
-import type { ActionCardRef, ActionCardView } from "#src/server/conversations/action-cards.server";
-
-function chipList(items: ActionCardRef[]) {
-  if (!items.length) return null;
-  return (
-    <div className="flex flex-wrap gap-1">
-      {items.map((item) => (
-        <Badge key={item.id} size="sm" color="gray">
-          @{item.displayName}
-        </Badge>
-      ))}
-    </div>
-  );
-}
+import type { ActionCardView } from "#src/server/conversations/action-cards.server";
 
 /** Renders an Agent-prepared action card below its message body.
  * Owns its own commit/cancel dialogs and a self-refresh after acting; the conversation view also
  * refreshes every currently pending card on realtime signals and window focus (see
  * `conversation-queries.ts`). */
+/** Codes for a draft the server refuses as it is, which no Retry of it can change. */
+const REFUSALS = ["INVALID_INPUT", "NOT_FOUND", "ACCESS_DENIED", "AGENT_NOT_VISIBLE"] as const;
+
 export function ActionCard({ card }: { card: ActionCardView }) {
-  const workspaceSlug = useWorkspaceSlug();
   const [view, setView] = useState(card);
   useEffect(() => setView(card), [card]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
-  const [error, setError] = useState("");
+  const [failure, setFailure] = useState<ActionCardFailure | null>(null);
   const cancel = useServerFn(cancelActionCard);
   const refresh = useServerFn(loadActionCardStates);
   const commitChannelCreate = useServerFn(commitChannelCreateActionCard);
@@ -89,21 +63,19 @@ export function ActionCard({ card }: { card: ActionCardView }) {
   const commitChoice = useServerFn(commitChoiceActionCard);
   const queryClient = useQueryClient();
   const [fillValues, setFillValues] = useState<Record<string, string>>({});
-  const isPageFill = view.kind === "page:fill";
-  const isDesktopTakeover = view.kind === "desktop:takeover";
   // Known only to someone in the channel, who alone may commit (task #302).
   const addMemberChannelId = view.kind === "channel:add_member" ? view.channel.id : null;
-  const [approving, setApproving] = useState(false);
-  const isAppGrant = view.kind === "app:grant_agent";
-  const isAppRegister = view.kind === "app:register";
-  // A channel card's dialog offers the Workspace's Projects, with the card's suggestion picked. The
-  // dialog opens once they have been read, so the suggestion is there when its form mounts.
+  // A commit in flight (the card's own button shows it), or the Computers an Agent's dialog lists
+  // still loading.
+  const [committing, setCommitting] = useState(false);
+  const [openingDialog, setOpeningDialog] = useState(false);
+  // A channel card commits its drafted Project only while that Project still exists, and its
+  // dialog offers them all with the suggestion picked. Either waits until they have been read.
   const workspaceId = useCurrentWorkspaceId();
   const projects = useQuery({
     ...projectsQuery(workspaceId ?? ""),
-    enabled: view.kind === "channel:create" && Boolean(workspaceId),
+    enabled: view.state === "pending" && view.kind === "channel:create" && Boolean(workspaceId),
   });
-  const isRecoverOwner = view.kind === "app:recover_owner";
   const create = useServerFn(createAgent);
   const loadComputers = useServerFn(listComputers);
   const loadRuntimeCatalog = useServerFn(getComputerRuntimeCatalog);
@@ -117,7 +89,7 @@ export function ActionCard({ card }: { card: ActionCardView }) {
   const desktopOrigin = useQuery({
     queryKey: ["cloud-desktop-origin"],
     queryFn: () => loadDesktopOrigin(),
-    enabled: Boolean(desktopComputerId && desktopAgentId),
+    enabled: view.state === "pending" && Boolean(desktopComputerId && desktopAgentId),
     staleTime: 60_000,
   });
   const desktopUrl =
@@ -136,308 +108,222 @@ export function ActionCard({ card }: { card: ActionCardView }) {
     if (next) setView(next);
   }
 
+  /** Runs a commit and shows the card as the server now has it. A failure says why, and the primary
+   * button offers to send it again, unless `explain` knows that sending it again would not help. */
+  async function commit(
+    send: () => Promise<unknown>,
+    explain?: (
+      cause: unknown,
+    ) => (Partial<Pick<ActionCardFailure, "retry" | "fix">> & { message: string }) | undefined,
+  ) {
+    setCommitting(true);
+    setFailure(null);
+    try {
+      await send();
+    } catch (cause) {
+      const known = explain?.(cause);
+      // A conflict may be someone else's commit of this card: read it again, and a done card shows
+      // as done instead of offering to send it again.
+      if (isAppErrorCode(cause, "CONFLICT")) await refetch().catch(() => {});
+      // The server refused the draft itself: sent again unchanged, it is refused the same way.
+      const refused = isAppErrorCode(cause, ...REFUSALS);
+      setFailure({
+        message: known?.message ?? (refused ? m.action_card_refused() : m.action_card_error()),
+        retry: known?.retry ?? !refused,
+        fix: known?.fix,
+        from: "commit",
+      });
+      setCommitting(false);
+      return;
+    }
+    // Committed: a read that fails here leaves the card to the conversation's own refresh, and
+    // offers no Retry of a commit that went through.
+    await refetch().catch(() => {});
+    setCommitting(false);
+  }
+
   async function doCancel() {
     setCancelling(true);
-    setError("");
+    setFailure(null);
     try {
       // An app approval card is cancelled by denying the Agent's request.
-      await (isAppGrant ? denyAppGrant : cancel)({ data: { messageId: view.messageId } });
+      await (view.kind === "app:grant_agent" ? denyAppGrant : cancel)({
+        data: { messageId: view.messageId },
+      });
       await refetch();
     } catch {
-      setError(m.action_card_error());
+      setFailure({ message: m.action_card_error(), retry: false, from: "cancel" });
     } finally {
       setCancelling(false);
     }
   }
 
-  async function approve() {
-    setApproving(true);
-    setError("");
-    try {
-      await approveAppGrant({
-        data: {
-          messageId: view.messageId,
-          scopes: view.kind === "app:grant_agent" ? view.scopes : [],
-        },
-      });
-      await refetch();
-    } catch (cause) {
-      if (isAppErrorCode(cause, "CONFLICT") && cause.errorId === APP_GRANT_REQUEST_CHANGED) {
-        // The request asks for other scopes than the card showed: show the card again.
-        await refetch().catch(() => {});
-        setError(m.app_card_request_changed());
-      } else setError(m.action_card_error());
-    } finally {
-      setApproving(false);
-    }
-  }
-
-  async function fillPage() {
-    if (view.kind !== "page:fill") return;
-    setApproving(true);
-    setError("");
-    try {
-      await commitFill({ data: { messageId: view.messageId, values: fillValues } });
-      setFillValues({});
-      await refetch();
-    } catch (cause) {
-      if (
-        isAppErrorCode(cause, "TEMPORARILY_UNAVAILABLE") &&
-        cause.errorId === "page-fill-browser"
-      ) {
-        setError(m.action_card_page_fill_browser());
-      } else if (
-        isAppErrorCode(cause, "TEMPORARILY_UNAVAILABLE") &&
-        cause.errorId === "page-fill-desktop"
-      ) {
-        setError(m.action_card_page_fill_desktop());
-      } else if (isAppErrorCode(cause, "INVALID_INPUT") && cause.errorId === "page-fill-field") {
-        setError(m.action_card_page_fill_field());
-      } else setError(m.action_card_error());
-    } finally {
-      setApproving(false);
-    }
-  }
-
-  async function finishDesktop() {
-    if (view.kind !== "desktop:takeover") return;
-    setApproving(true);
-    setError("");
-    try {
-      await commitDesktop({ data: { messageId: view.messageId } });
-      await refetch();
-    } catch {
-      setError(m.action_card_error());
-    } finally {
-      setApproving(false);
-    }
-  }
-
   async function pickChoice(optionId: string, text?: string) {
-    setError("");
+    setFailure(null);
     try {
       await commitChoice({ data: { messageId: view.messageId, optionId, text } });
       // Answered, it no longer waits on the viewer in Activity.
       void queryClient.invalidateQueries({ queryKey: WAITING_CHOICE_CARDS_KEY });
       await refetch();
     } catch {
-      setError(m.action_card_error());
+      setFailure({ message: m.action_card_error(), retry: true, from: "commit" });
     }
   }
 
-  async function register() {
-    setApproving(true);
-    setError("");
+  /** An Agent's runtime form is the dialog's, and it lists the Computers, which are read first.
+   * Nothing is created yet, so the button waits without saying so. */
+  async function openAgentDialog() {
+    setOpeningDialog(true);
+    setFailure(null);
     try {
-      await (isRecoverOwner ? recoverOwner : registerApp)({ data: { messageId: view.messageId } });
-      await refetch();
+      if (!computers) setComputers(await loadComputers());
+      setDialogOpen(true);
     } catch {
-      setError(m.action_card_error());
+      setFailure({ message: m.action_card_error(), retry: true, from: "commit" });
     } finally {
-      setApproving(false);
+      setOpeningDialog(false);
     }
   }
 
-  async function openDialog() {
-    setError("");
-    if (isAppGrant) return approve();
-    if (isAppRegister || isRecoverOwner) return register();
-    if (view.kind === "agent:create" && !computers) {
-      try {
-        setComputers(await loadComputers());
-      } catch {
-        setError(m.action_card_error());
-        return;
+  /** The primary button: commit the draft as the card shows it. Only a kind whose draft lacks
+   * something (an Agent's runtime form) opens its dialog instead. */
+  async function commitDraft() {
+    switch (view.kind) {
+      case "channel:create": {
+        const suggested = view.suggestedProjectId;
+        return commit(
+          async () => {
+            await commitChannelCreate({
+              data: {
+                messageId: view.messageId,
+                name: view.name,
+                // Dropped only once the Projects show it is gone; unread, the server decides.
+                projectId:
+                  projects.data && !projects.data.some((project) => project.id === suggested)
+                    ? undefined
+                    : suggested,
+                memberUserIds: view.initialHumans.map((human) => human.id),
+                memberAgentIds: view.initialAgents.map((agent) => agent.id),
+              },
+            });
+          },
+          (cause) =>
+            // A channel of that name exists by now: sending it again fails the same way, so the
+            // button renames it.
+            isAppErrorCode(cause, "CONFLICT")
+              ? {
+                  message: m.action_card_channel_taken({ name: view.name }),
+                  retry: false,
+                  fix: "edit",
+                }
+              : undefined,
+        );
       }
+      case "channel:add_member": {
+        const channelId = addMemberChannelId;
+        if (!channelId) return;
+        return commit(
+          async () => {
+            await commitAddMember({
+              data: {
+                messageId: view.messageId,
+                channelId,
+                userIds: view.humans.map((human) => human.id),
+                agentIds: view.agents.map((agent) => agent.id),
+              },
+            });
+            await queryClient.invalidateQueries({ queryKey: channelMembersQueryKey(channelId) });
+          },
+          (cause) =>
+            isAppErrorCode(cause, "ACCESS_DENIED")
+              ? { message: m.channel_members_access_denied(), retry: false }
+              : undefined,
+        );
+      }
+      case "agent:create":
+        return openAgentDialog();
+      case "app:grant_agent": {
+        const scopes = view.scopes;
+        return commit(
+          () => approveAppGrant({ data: { messageId: view.messageId, scopes } }),
+          (cause) =>
+            isAppErrorCode(cause, "CONFLICT") && cause.errorId === APP_GRANT_REQUEST_CHANGED
+              ? // The request asks for other scopes than the card showed: show the card again.
+                { message: m.app_card_request_changed(), retry: false }
+              : undefined,
+        );
+      }
+      case "app:register":
+      case "app:recover_owner":
+        return commit(() =>
+          (view.kind === "app:recover_owner" ? recoverOwner : registerApp)({
+            data: { messageId: view.messageId },
+          }),
+        );
+      case "desktop:takeover":
+        return commit(() => commitDesktop({ data: { messageId: view.messageId } }));
+      case "page:fill":
+        return commit(
+          async () => {
+            await commitFill({ data: { messageId: view.messageId, values: fillValues } });
+            setFillValues({});
+          },
+          (cause) => {
+            if (isAppErrorCode(cause, "TEMPORARILY_UNAVAILABLE")) {
+              if (cause.errorId === "page-fill-browser")
+                return { message: m.action_card_page_fill_browser(), retry: false };
+              if (cause.errorId === "page-fill-desktop")
+                return { message: m.action_card_page_fill_desktop() };
+            }
+            return isAppErrorCode(cause, "INVALID_INPUT") && cause.errorId === "page-fill-field"
+              ? { message: m.action_card_page_fill_field(), retry: false }
+              : undefined;
+          },
+        );
+      default:
+        return;
     }
-    setDialogOpen(true);
   }
 
   if (view.kind === "choice")
     return (
       <ChoiceActionCard
         view={view}
-        error={error}
+        error={failure?.message ?? ""}
         cancelling={cancelling}
         onPick={pickChoice}
         onCancel={() => void doCancel()}
       />
     );
-  const Icon = actionCardIcon(view.kind);
-  const title = actionCardTitle(view);
-  const commitLabel = actionCardCommitLabel(view, approving);
-  const deniedReason = actionCardDeniedReason(view);
   return (
-    <div className="mt-1 flex max-w-md flex-col gap-3 rounded-xl border border-secondary bg-primary p-4 shadow-xs">
-      <div className="flex items-center gap-2">
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-secondary text-tertiary ring-1 ring-secondary ring-inset">
-          <Icon aria-hidden="true" className="size-4" />
-        </span>
-        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-primary">{title}</span>
-        {view.state === "pending" && (
-          <Badge size="sm" color="gray">
-            {m.action_card_state_pending()}
-          </Badge>
-        )}
-      </div>
-
-      <div className="flex flex-col gap-1.5 text-sm text-secondary">
-        {view.kind === "channel:create" && (
-          <>
-            <p>
-              #{view.name} · {view.visibility === "public" ? m.channel_public() : view.visibility}
-            </p>
-            {view.description && <p className="text-tertiary">{view.description}</p>}
-            {chipList([...view.initialHumans, ...view.initialAgents])}
-          </>
-        )}
-        {view.kind === "agent:create" && (
-          <>
-            <p>{view.name}</p>
-            {view.description && <p className="text-tertiary">{view.description}</p>}
-            {(view.requiredComputer ?? view.suggestedComputer) && (
-              <p className="text-tertiary">
-                {view.requiredComputer
-                  ? m.action_card_required_computer({
-                      name: view.requiredComputer.displayName,
-                    })
-                  : m.action_card_suggested_computer({
-                      name: view.suggestedComputer!.displayName,
-                    })}
-              </p>
-            )}
-          </>
-        )}
-        {view.kind === "channel:add_member" && (
-          <>
-            <p>#{view.channel.displayName}</p>
-            {chipList([...view.humans, ...view.agents])}
-          </>
-        )}
-        {(view.kind === "app:grant_agent" ||
-          view.kind === "app:recover_owner" ||
-          view.kind === "app:register") && <ActionCardAppBody view={view} />}
-        {view.kind === "page:fill" && (
-          <ActionCardPageFillBody
-            view={view}
-            fillValues={fillValues}
-            setFillValues={setFillValues}
-          />
-        )}
-        {view.kind === "desktop:takeover" && <ActionCardDesktopTakeoverBody view={view} />}
-        {view.draftHint && <p className="text-xs text-tertiary italic">{view.draftHint}</p>}
-      </div>
-
-      {error && (
-        <p role="alert" className="text-sm text-error-primary">
-          {error}
-        </p>
+    <>
+      {view.state === "pending" ? (
+        <PendingActionCard
+          view={view}
+          fillValues={fillValues}
+          setFillValues={setFillValues}
+          failure={failure}
+          committing={committing}
+          cancelling={cancelling}
+          commitDisabled={
+            openingDialog ||
+            (view.kind === "channel:create" &&
+              Boolean(view.suggestedProjectId && workspaceId) &&
+              projects.isPending) ||
+            (view.kind === "page:fill" &&
+              view.fields.some(
+                (field) => field.input === "password" && !(fillValues[field.id] ?? "").length,
+              ))
+          }
+          onCommit={() => void commitDraft()}
+          onEdit={() => setDialogOpen(true)}
+          onOpenDesktop={desktopUrl ? openDesktop : undefined}
+          onCancel={() => void doCancel()}
+        />
+      ) : (
+        // The dialogs below stay mounted past the commit they made, so they close on their own.
+        <HandledActionCard view={view} />
       )}
-
-      {view.state === "pending" && (
-        <div className="flex flex-wrap items-center gap-2">
-          {view.canCommit ? (
-            <Button
-              size="sm"
-              isDisabled={
-                approving ||
-                (view.kind === "page:fill" &&
-                  view.fields.some(
-                    (field) => field.input === "password" && !(fillValues[field.id] ?? "").length,
-                  ))
-              }
-              onPress={() => {
-                if (isPageFill) void fillPage();
-                else if (isDesktopTakeover) void finishDesktop();
-                else void openDialog();
-              }}
-            >
-              {commitLabel}
-            </Button>
-          ) : (
-            <p className="text-xs text-tertiary">{deniedReason}</p>
-          )}
-          <ActionCardOpenDesktopButton
-            enabled={Boolean((isPageFill || isDesktopTakeover) && view.canCommit && desktopUrl)}
-            onOpen={openDesktop}
-          />
-          {view.canCancel && (
-            <Button
-              size="sm"
-              color="tertiary"
-              isDisabled={cancelling}
-              onPress={() => void doCancel()}
-            >
-              {isAppGrant
-                ? cancelling
-                  ? m.app_card_denying()
-                  : m.agent_apps_deny()
-                : cancelling
-                  ? m.action_card_cancelling()
-                  : m.action_card_dismiss()}
-            </Button>
-          )}
-        </div>
-      )}
-      {view.state === "executed" && (
-        <p className="text-xs text-tertiary">
-          {m.action_card_done({
-            name: view.committedBy?.displayName ?? m.action_card_unknown(),
-            time: view.committedAt ? new Date(view.committedAt).toLocaleString() : "",
-          })}
-          <ActionCardHandoffDoneSuffix view={view} />
-          {view.kind === "channel:create" && view.result && (
-            <>
-              {" · "}
-              <Link
-                to="/w/$workspaceSlug/channel/$channelId"
-                params={{ workspaceSlug, channelId: view.result.channelId }}
-                className="text-brand-secondary hover:underline"
-              >
-                #{view.name}
-              </Link>
-            </>
-          )}
-          {view.kind === "app:recover_owner" && view.result && (
-            <>
-              {" · "}
-              {m.app_recover_card_done({ agent: view.result.ownerAgent })}
-            </>
-          )}
-          {view.kind === "app:register" && view.result && (
-            <>
-              {" · "}
-              {view.result.clientKey}
-              <br />
-              {view.result.noOwnerAgent
-                ? m.app_register_card_no_owner_agent()
-                : m.app_register_card_secret_sent()}
-            </>
-          )}
-          {view.kind === "agent:create" && view.result && (
-            <>
-              {" · "}
-              <Link
-                to="/w/$workspaceSlug/members"
-                params={{ workspaceSlug }}
-                search={{
-                  profile: formatAgentProfileParam(view.result.agentId),
-                  agentTab: "profile",
-                }}
-                className="text-brand-secondary hover:underline"
-              >
-                {view.name}
-              </Link>
-            </>
-          )}
-        </p>
-      )}
-      {view.state === "cancelled" && (
-        <p className="text-xs text-tertiary">
-          {isAppGrant ? m.app_card_denied() : m.action_card_cancelled()}
-        </p>
-      )}
-
       {dialogOpen && view.kind === "channel:create" && !projects.isPending && (
         <CreateChannelDialog
           open
@@ -493,6 +379,6 @@ export function ActionCard({ card }: { card: ActionCardView }) {
           onCreated={() => void refetch()}
         />
       )}
-    </div>
+    </>
   );
 }

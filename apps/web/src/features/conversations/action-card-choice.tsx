@@ -288,7 +288,7 @@ function PendingChoice({
             isDisabled={Boolean(picking)}
             onPress={onRetry}
           >
-            {m.action_card_choice_retry()}
+            {m.action_card_retry()}
           </Button>
         </div>
       )}

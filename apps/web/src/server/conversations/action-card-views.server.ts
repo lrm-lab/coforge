@@ -1,6 +1,8 @@
 import { APP_GRANT_AGENT_CARD_KIND, type ResolvedActionCardPayload } from "@lrm/coforge-sdk/agent";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { humanLabel } from "#src/lib/human-label";
+import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
+import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { canManageAgentAppAccess } from "#src/server/app-agent-access/access-rules.server";
 import { roleCan } from "#src/features/workspaces/workspace-roles";
 import { isAdminLike } from "#src/server/workspaces/member-role.server";
@@ -11,6 +13,7 @@ import { pageFillActionCardView } from "./action-card-page-fill.server";
 import { desktopTakeoverActionCardView } from "./action-card-desktop-takeover.server";
 import { choiceActionCardView } from "./action-card-choice.server";
 import type {
+  ActionCardPersonRef,
   ActionCardRef,
   ActionCardState,
   ActionCardView,
@@ -101,13 +104,13 @@ export async function actionCardViews(
       userIds.size
         ? db.user.findMany({
             where: { id: { in: [...userIds] } },
-            select: { id: true, username: true, displayName: true },
+            select: { id: true, username: true, displayName: true, avatarObjectKey: true },
           })
         : Promise.resolve([]),
       agentIds.size
         ? db.agent.findMany({
             where: { id: { in: [...agentIds] } },
-            select: { id: true, name: true, displayName: true },
+            select: { id: true, name: true, displayName: true, avatarMascot: true },
           })
         : Promise.resolve([]),
       channelIds.size
@@ -134,6 +137,10 @@ export async function actionCardViews(
 
   const userName = new Map(users.map((u) => [u.id, humanLabel(u)]));
   const agentName = new Map(agents.map((a) => [a.id, a.displayName?.trim() || a.name]));
+  const userAvatar = new Map(
+    users.map((u) => [u.id, workspaceUserAvatarUrl(workspaceId, u.id, u.avatarObjectKey)]),
+  );
+  const agentAvatar = new Map(agents.map((a) => [a.id, agentAvatarUrl(a.id, a.avatarMascot)]));
   const viewerInChannel = new Set(
     viewerChannelMemberships.flatMap((m) => (m.leftAt === null ? [m.conversationId] : [])),
   );
@@ -154,6 +161,14 @@ export async function actionCardViews(
     id,
     displayName: names.get(id) ?? "unknown",
   });
+  const human = (id: string): ActionCardPersonRef => ({
+    ...ref(id, userName),
+    avatarUrl: userAvatar.get(id) ?? null,
+  });
+  const agent = (id: string): ActionCardPersonRef => ({
+    ...ref(id, agentName),
+    avatarUrl: agentAvatar.get(id) ?? null,
+  });
 
   const views = new Map<string, ActionCardView>();
   for (const card of cards) {
@@ -166,7 +181,10 @@ export async function actionCardViews(
       draftHint: card.draftHint ?? undefined,
       preview: previewCardOf(card),
       committedBy: card.committedByUserId
-        ? { displayName: userName.get(card.committedByUserId) ?? "unknown" }
+        ? {
+            displayName: userName.get(card.committedByUserId) ?? "unknown",
+            isViewer: card.committedByUserId === viewerUserId,
+          }
         : undefined,
       committedAt: card.committedAt?.toISOString(),
       canCommit: false,
@@ -179,8 +197,8 @@ export async function actionCardViews(
         name: payload.name,
         visibility: payload.visibility,
         description: payload.description,
-        initialHumans: (payload.initialHumanIds ?? []).map((id) => ref(id, userName)),
-        initialAgents: (payload.initialAgentIds ?? []).map((id) => ref(id, agentName)),
+        initialHumans: (payload.initialHumanIds ?? []).map(human),
+        initialAgents: (payload.initialAgentIds ?? []).map(agent),
         suggestedProjectId: payload.suggestedProjectId,
         canCommit: pending,
         result: readableResult<{ channelId: string }>(card.result),
@@ -252,8 +270,8 @@ export async function actionCardViews(
           id: channelName.has(payload.channelId) ? payload.channelId : null,
           displayName: channelName.get(payload.channelId) ?? "unknown",
         },
-        humans: (payload.humanIds ?? []).map((id) => ref(id, userName)),
-        agents: (payload.agentIds ?? []).map((id) => ref(id, agentName)),
+        humans: (payload.humanIds ?? []).map(human),
+        agents: (payload.agentIds ?? []).map(agent),
         // Only an active member of a channel they read adds to it: not someone who left it.
         canCommit:
           pending && channelName.has(payload.channelId) && viewerInChannel.has(payload.channelId),

@@ -2,13 +2,9 @@ import { useLayoutEffect, useState, type CSSProperties } from "react";
 import { Button as AriaButton } from "react-aria-components";
 import { CHOICE_OTHER_OPTION_ID } from "@lrm/coforge-sdk/agent";
 
-import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import type { ActionCardView } from "#src/server/conversations/action-cards.server";
-import { formatMonthDayTime } from "#src/lib/dates";
-import { useTimeFormat } from "#src/lib/time-format-context";
-import { useTimeZone } from "#src/lib/time-zone-context";
 import { m } from "#src/paraglide/messages";
-import { getLocale } from "#src/paraglide/runtime";
+import { AnsweredAtTooltip } from "./action-card-answered-at";
 
 type ChoiceView = Extract<ActionCardView, { kind: "choice" }>;
 
@@ -91,32 +87,12 @@ export function HandledChoice({ view, answer }: { view: ChoiceView; answer?: str
       {answer === undefined ? (
         closed && <span className="text-quaternary">{closed}</span>
       ) : view.committedAt ? (
-        <Tooltip
-          title={
-            <>
-              {answeredBy && <>{answeredBy} · </>}
-              <AnsweredAt value={view.committedAt} />
-            </>
-          }
-        >
-          <TooltipTrigger
-            // A button never lays out inline, and the trigger's own `w-max` would hold a long
-            // answer on one line past the column: at the column's width it wraps instead.
-            className="h-auto w-auto cursor-default rounded-sm text-left outline-focus-ring focus-visible:outline-2"
-          >
-            {outcome}
-          </TooltipTrigger>
-        </Tooltip>
+        <AnsweredAtTooltip at={view.committedAt} by={answeredBy}>
+          {outcome}
+        </AnsweredAtTooltip>
       ) : (
         outcome
       )}
     </p>
   );
-}
-
-/** When a card was answered, written only while its tooltip is open. */
-function AnsweredAt({ value }: { value: string }) {
-  const timeFormat = useTimeFormat();
-  const timeZone = useTimeZone();
-  return formatMonthDayTime(value, timeZone, getLocale(), timeFormat);
 }

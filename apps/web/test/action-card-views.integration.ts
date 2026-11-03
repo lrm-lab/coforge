@@ -64,7 +64,10 @@ test("viewsFor resolves names, reports per-viewer canCommit/canCancel, and expos
     const executedView = afterCommit.get(createCard.messageId)!;
     expect(executedView.state).toBe("executed");
     expect(executedView.canCommit).toBe(false);
-    expect(executedView.committedBy).toEqual({ displayName: ctx.alice.username });
+    expect(executedView.committedBy).toEqual({
+      displayName: ctx.alice.username,
+      isViewer: false,
+    });
 
     // A reference that no longer resolves (simulating a deleted user, without violating the
     // fixture's own FK constraints) resolves to "unknown" instead of throwing.

@@ -1,6 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
 
-import { Button } from "#src/components/base/buttons/button";
 import { m } from "#src/paraglide/messages";
 import type { ActionCardView } from "#src/server/conversations/action-cards.server";
 
@@ -16,9 +15,13 @@ export function ActionCardPageFillBody({
 }) {
   return (
     <>
-      {view.prompt && <p>{view.prompt}</p>}
+      {view.prompt && <p className="font-semibold text-primary">{view.prompt}</p>}
+      {/* Who cannot fill it in still sees what the page asks for. */}
+      {!view.canCommit && (
+        <p className="text-tertiary">{view.fields.map((field) => field.label).join(" · ")}</p>
+      )}
       <p className="text-tertiary">{m.action_card_page_fill_note()}</p>
-      {view.state === "pending" && view.canCommit && (
+      {view.canCommit && (
         <div className="flex flex-col gap-2 pt-1">
           {view.fields.map((field) => (
             <label key={field.id} className="flex flex-col gap-1">
@@ -48,45 +51,8 @@ export function ActionCardDesktopTakeoverBody({
 }) {
   return (
     <>
-      {view.prompt && <p>{view.prompt}</p>}
+      {view.prompt && <p className="font-semibold text-primary">{view.prompt}</p>}
       <p className="text-tertiary">{m.action_card_desktop_takeover_note()}</p>
     </>
   );
-}
-
-/** Open the cloud desktop for page:fill / desktop:takeover while the card is pending. */
-export function ActionCardOpenDesktopButton({
-  enabled,
-  onOpen,
-}: {
-  enabled: boolean;
-  onOpen: () => void;
-}) {
-  if (!enabled) return null;
-  return (
-    <Button size="sm" color="secondary" onPress={onOpen}>
-      {m.action_card_open_desktop()}
-    </Button>
-  );
-}
-
-/** Result suffix once a handoff card has been committed. */
-export function ActionCardHandoffDoneSuffix({ view }: { view: ActionCardView }) {
-  if (view.kind === "page:fill" && view.result) {
-    return (
-      <>
-        {" · "}
-        {m.action_card_page_fill_done()}
-      </>
-    );
-  }
-  if (view.kind === "desktop:takeover" && view.result) {
-    return (
-      <>
-        {" · "}
-        {m.action_card_desktop_takeover_done()}
-      </>
-    );
-  }
-  return null;
 }

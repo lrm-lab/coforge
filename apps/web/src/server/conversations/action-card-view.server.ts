@@ -10,6 +10,8 @@ export type ActionCardState = "pending" | "executed" | "cancelled";
 
 /** A resolved id plus display name for a card's chips; unresolved ids render as "unknown". */
 export type ActionCardRef = { id: string; displayName: string };
+/** A human or Agent the card names, with the picture the card shows for them. */
+export type ActionCardPersonRef = ActionCardRef & { avatarUrl: string | null };
 
 export type ActionCardViewBase = {
   messageId: string;
@@ -18,7 +20,8 @@ export type ActionCardViewBase = {
   /** What the card's one line is written from in the viewer's language, for the text that stands
    * for it (a screen reader's, a thread's reply preview). Absent for a choice card. */
   preview?: PreviewCard;
-  committedBy?: { displayName: string };
+  /** Who committed it; `isViewer` lets the handled line name only someone else. */
+  committedBy?: { displayName: string; isViewer: boolean };
   committedAt?: string;
   /** Whether the viewer may commit this card right now (implies `state === "pending"`). */
   canCommit: boolean;
@@ -46,8 +49,8 @@ export type ActionCardView =
       name: string;
       visibility: "public" | "private";
       description?: string;
-      initialHumans: ActionCardRef[];
-      initialAgents: ActionCardRef[];
+      initialHumans: ActionCardPersonRef[];
+      initialAgents: ActionCardPersonRef[];
       /** The Project the Agent suggested, for the confirm dialog to preselect. It may no longer
        * exist by the time the card is read. */
       suggestedProjectId?: string;
@@ -65,8 +68,8 @@ export type ActionCardView =
       kind: "channel:add_member";
       /** `id` is null to a viewer who cannot read the channel (task #302). */
       channel: { id: string | null; displayName: string };
-      humans: ActionCardRef[];
-      agents: ActionCardRef[];
+      humans: ActionCardPersonRef[];
+      agents: ActionCardPersonRef[];
       result?: { channelId: string; userIds: string[]; agentIds: string[] };
     })
   /** The Agent that posted it asks to use `app`; committing approves, cancelling denies. */

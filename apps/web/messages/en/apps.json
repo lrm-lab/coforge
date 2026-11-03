@@ -194,8 +194,8 @@
   "app_card_request": "Wants to use {app}",
   "app_card_scopes": "Scopes: {scopes}",
   "app_card_denied_reason": "Only Workspace owners and admins, or the Agent's creator, can approve this.",
-  "app_card_approving": "Approving…",
-  "app_card_denying": "Denying…",
+  "app_card_approving": "Approving",
+  "app_card_denying": "Denying",
   "app_card_request_changed": "The request changed; review it again.",
   "app_card_denied": "Denied",
   "apps_section_setup": "Installation setup",
@@ -276,8 +276,8 @@
   "apps_section_agent_access_description": "Which Agents may use this app. Saved on its own, not with the form's Save.",
   "apps_agent_access_none_selected": "No Agent is selected, so no Agent will be granted this app automatically. Each one needs a person's approval.",
   "app_register_card_title": "Register App",
-  "app_register_card_commit": "Register App",
-  "app_register_card_committing": "Registering…",
+  "app_register_card_commit": "Register",
+  "app_register_card_committing": "Registering",
   "app_register_card_client_key": "Client key: {key}",
   "app_register_card_client_key_auto": "Client key: Auto-generated on commit",
   "app_register_card_redirect": "Redirect URL: {urls}",
@@ -292,9 +292,8 @@
   "app_register_card_no_owner_agent": "No owner Agent was set (the requesting Agent is gone), so no secret was sent. A Workspace owner or admin can generate one in Settings → Applications.",
   "app_recover_card_title": "Recover App Owner",
   "app_recover_card_commit": "Make Owner Agent",
-  "app_recover_card_committing": "Setting the owner Agent…",
+  "app_recover_card_committing": "Setting the owner Agent",
   "app_recover_card_request": "Make {agent} the owner Agent of {app}",
   "app_recover_card_note": "The app has no live owner Agent. The owner Agent can rotate the client secret, update the app and request its publication.",
-  "app_recover_card_denied_reason": "Only Workspace owners and admins can set an app's owner Agent.",
-  "app_recover_card_done": "{agent} is now the owner Agent."
+  "app_recover_card_denied_reason": "Only Workspace owners and admins can set an app's owner Agent."
 }
