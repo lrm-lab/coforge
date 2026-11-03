@@ -356,6 +356,7 @@ export const MessageRow = memo(function MessageRow({
                 onToggleReaction && ((emoji, active) => onToggleReaction(message.id, emoji, active))
               }
               showsTask={showsTask}
+              onOpenTask={onOpenTask}
               onOpenThread={onOpenThread}
               cornerTicks={textTicks ? undefined : readState}
             />

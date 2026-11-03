@@ -75,10 +75,16 @@ export function useMissingTask(conversationId: string, number: number) {
   return useSelector(store, (held) => held.missing.has(number));
 }
 
-/** The Task a message became, read as `useNumberedTask` reads one. */
+/**
+ * The Task a message became, read as `useNumberedTask` reads one: the Task that is the message, or
+ * (task conversations) the first Task made from it.
+ */
 export function useMessageTask(conversationId: string, messageId: string) {
   const { store } = useConversationTasksCollection(conversationId);
-  return useSelector(store, (held) => held.byId.get(messageId));
+  return useSelector(
+    store,
+    (held) => held.byId.get(messageId) ?? held.bySource.get(messageId)?.[0],
+  );
 }
 
 /**

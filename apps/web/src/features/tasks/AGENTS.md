@@ -120,8 +120,9 @@ workspaceId]` Query its loader fills (`task-overview-collection.ts`,
   status's Untitled UI colour badge with the same ring leading.
 - A message row's part reads its one Task through `useNumberedTask` /
   `useMessageTask`, selectors over the collection's TanStack Store (`byId`,
-  `byNumber`, where an unchanged Task keeps its object), never from a list
-  passed down. They never read anything themselves, so a row adds no request.
+  `byNumber`, `bySource`, where an unchanged Task keeps its object), never from a list
+  passed down. Under task conversations a message's Task is the one made from it
+  (`sourceMessageId`), which a message window reads by that message's sequence. They never read anything themselves, so a row adds no request.
   A body's task reference whose number the collection does not hold yet opens
   the Task on a press, as Raft's does; it is the plain words only once a read
   by number has answered without it or its Task was deleted (`missing`).

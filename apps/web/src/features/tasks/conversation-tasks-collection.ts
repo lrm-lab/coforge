@@ -107,16 +107,26 @@ export function messageWindowTasks(
 export type TaskChanges = { tasks: readonly TaskView[]; deleted: readonly string[] };
 
 /**
- * The Tasks the collection holds, by message id and by number, for readers of one Task, and the
- * numbers known to name no Task: a read by number answered without them, or their Task's
- * deletion was announced (`apply`). A body's reference to one of those is plain words
- * (`TaskReference`). A row the collection drops because no read holds it any more is not one.
+ * The Tasks the collection holds, by id and by number, for readers of one Task; by the top-level
+ * message each was made from (`sourceMessageId`, task conversations' "Send as Task"), in number
+ * order, so that message shows its Task as one that became a Task does; and the numbers known to
+ * name no Task: a read by number answered without them, or their Task's deletion was announced
+ * (`apply`). A body's reference to one of those is plain words (`TaskReference`). A row the
+ * collection drops because no read holds it any more is not one.
  */
 type HeldConversationTasks = {
   byId: ReadonlyMap<string, ConversationTask>;
   byNumber: ReadonlyMap<number, ConversationTask>;
+  bySource: ReadonlyMap<string, readonly ConversationTask[]>;
   missing: ReadonlySet<number>;
 };
+
+/** The stream message a Task was made from; none for a thread reply, which no stream row shows. */
+function streamSource(task: ConversationTask) {
+  return task.sourceMessage && !task.sourceMessage.threadRootId
+    ? task.sourceMessage.messageId
+    : undefined;
+}
 
 /** A new store state from the collection's changes: unchanged Tasks keep their very objects. */
 function heldAfter(
@@ -125,20 +135,38 @@ function heldAfter(
 ): HeldConversationTasks {
   const byId = new Map(held.byId);
   const byNumber = new Map(held.byNumber);
+  let bySource: Map<string, readonly ConversationTask[]> | undefined;
+  const sources = () => (bySource ??= new Map(held.bySource));
   let missing = held.missing;
   for (const { type, value } of changes) {
     const known = byId.get(value.id);
     if (known && byNumber.get(known.number) === known) byNumber.delete(known.number);
+    const knownSource = known && streamSource(known);
+    if (knownSource) {
+      const rest = sources()
+        .get(knownSource)
+        ?.filter((row) => row.id !== value.id);
+      if (rest?.length) sources().set(knownSource, rest);
+      else sources().delete(knownSource);
+    }
     // A delete here is also a row no read holds any more, so it says nothing about the Task.
     if (type === "delete") byId.delete(value.id);
     else {
       byId.set(value.id, value);
       byNumber.set(value.number, value);
+      const source = streamSource(value);
+      if (source)
+        sources().set(
+          source,
+          [...(sources().get(source) ?? []), value].sort(
+            (left, right) => left.number - right.number,
+          ),
+        );
       if (missing.has(value.number))
         missing = new Set([...missing].filter((number) => number !== value.number));
     }
   }
-  return { byId, byNumber, missing };
+  return { byId, byNumber, bySource: bySource ?? held.bySource, missing };
 }
 
 /**
@@ -161,6 +189,7 @@ export function createConversationTasks(
   const store = createStore<HeldConversationTasks>({
     byId: new Map(),
     byNumber: new Map(),
+    bySource: new Map(),
     missing: new Set<number>(),
   });
 

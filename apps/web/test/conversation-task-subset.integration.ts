@@ -149,3 +149,56 @@ test("a conversation's Tasks are read as `list` allows: a channel's by any Works
     board.conversationTasks(as(outsider.id), channel.id, { numbers: [1] }),
   ).rejects.toMatchObject({ code: "ACCESS_DENIED" });
 });
+
+// Task #452: under task conversations a Task has no message of its own; "Send as Task" makes it
+// from the message just sent (`sourceMessageId`). A message window reads it by that message's
+// sequence, so the message shows its Task; a Task made from a thread reply has no stream row.
+test("a message window reads the Tasks made from its top-level messages, by their sequence", async () => {
+  const { alice, channel, board, as, run } = await fixture();
+  const created = (await run({ operation: "create", titles: ["Sourced", "From a reply", "Own"] }))
+    .tasks;
+  const [sourced, fromReply] = created;
+  const messages = await db.message.findMany({
+    where: { id: { in: created.map((task) => task.messageId!) } },
+    select: { id: true, sequence: true, senderMemberId: true },
+    orderBy: { sequence: "asc" },
+  });
+  const reply = await db.message.create({
+    data: {
+      conversationId: channel.id,
+      workspaceId: channel.workspaceId,
+      senderMemberId: messages[0]!.senderMemberId,
+      body: "a reply",
+      sequence: messages.at(-1)!.sequence + 1_000,
+      threadRootId: messages[0]!.id,
+    },
+  });
+  // As `sentMessageSpawnsTask` leaves them: no message of their own, a source message instead.
+  await db.task.update({
+    where: { id: sourced!.id },
+    data: { messageId: null, sourceMessageId: sourced!.messageId },
+  });
+  await db.task.update({
+    where: { id: fromReply!.id },
+    data: { messageId: null, sourceMessageId: reply.id },
+  });
+
+  const window = await board.conversationTasks(as(alice.id), channel.id, {
+    sequenceFrom: messages[0]!.sequence,
+  });
+  expect(window.tasks.map((task) => [task.title, task.sequence])).toEqual([
+    ["Sourced", messages[0]!.sequence],
+    ["Own", messages[2]!.sequence],
+  ]);
+  // A window past the source message does not read its Task.
+  const later = await board.conversationTasks(as(alice.id), channel.id, {
+    sequenceFrom: messages[1]!.sequence,
+  });
+  expect(later.tasks.map((task) => task.title)).toEqual(["Own"]);
+  // A window pinned in history is bounded on both sides by the source's sequence too.
+  const pinned = await board.conversationTasks(as(alice.id), channel.id, {
+    sequenceFrom: messages[0]!.sequence,
+    sequenceTo: messages[1]!.sequence,
+  });
+  expect(pinned.tasks.map((task) => task.title)).toEqual(["Sourced"]);
+});

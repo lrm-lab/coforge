@@ -84,8 +84,11 @@ export const taskSelection = {
   sourceMessage: {
     select: {
       id: true,
+      conversationId: true,
       body: true,
       threadRootId: true,
+      // A conversation page's message window reads the Task by it (`conversationTasks`).
+      sequence: true,
       mentions: BROWSER_MESSAGE_MENTIONS_SELECT,
       sender: {
         select: {

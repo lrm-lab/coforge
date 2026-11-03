@@ -12,6 +12,7 @@ export function MessageRowFooter({
   viewerId,
   onToggleReaction,
   showsTask,
+  onOpenTask,
   onOpenThread,
   cornerTicks,
 }: {
@@ -19,6 +20,8 @@ export function MessageRowFooter({
   viewerId?: string;
   onToggleReaction?: (emoji: string, active: boolean) => void;
   showsTask: boolean;
+  /** Opens a Task's popup by number; the message's Task badge then opens its Task. */
+  onOpenTask?: (number: number) => void;
   onOpenThread?: (rootId: string) => void;
   /** An own message's ticks (`ownMessageReadState`) when it has no text for them to follow;
    * absent for everyone else's and for one whose text carries them. */
@@ -38,7 +41,7 @@ export function MessageRowFooter({
           Saved page itself does not repeat it — that list has its own row, where every entry is
           saved by definition. */}
       {saveSaved && <SavedMessageMarker />}
-      {showsTask && <MessageTask messageId={message.id} />}
+      {showsTask && <MessageTask messageId={message.id} onOpenTask={onOpenTask} />}
       {onOpenThread && <RootThread rootId={message.id} onOpen={onOpenThread} />}
       {/* The row's column keeps room for them, so the last line never runs underneath. */}
       {cornerTicks && <OwnMessageTicks readState={cornerTicks} inline={false} />}

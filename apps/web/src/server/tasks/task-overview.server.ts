@@ -49,6 +49,17 @@ export type FinishedTaskScope = { workspaceId: string; userId: string; conversat
 /** How far back the board reads finished Tasks, by their last update. */
 export type FinishedTaskWindow = "week" | "month" | "all";
 const FINISHED_PAGE_SIZE = 50;
+
+/** The sequence of the top-level message in `conversationId` a Task was made from, if any. */
+const streamSourceSequence = (
+  task: {
+    sourceMessage: { conversationId: string; threadRootId: string | null; sequence: number } | null;
+  },
+  conversationId: string,
+) =>
+  task.sourceMessage?.conversationId === conversationId && !task.sourceMessage.threadRootId
+    ? task.sourceMessage.sequence
+    : undefined;
 export type FinishedTaskPage = { tasks: TaskOverview["tasks"]; nextCursor: string | null };
 /**
  * Finished Tasks counted by status, owner and Project. `currentMemberId` is the owner's membership
@@ -280,13 +291,24 @@ export class TaskOverviewReads {
     )
       throw new AppError("INVALID_INPUT");
     const readable = await this.access.listableConversation(viewer, conversationId);
+    const sequence = { gte: sequenceFrom, lte: sequenceTo };
     const tasks = await this.db.task.findMany({
       where: {
         workspaceId: viewer.workspaceId,
         conversationId: readable,
         status: statuses && { in: statuses },
         number: numbers && { in: numbers },
-        message: window ? { sequence: { gte: sequenceFrom, lte: sequenceTo } } : undefined,
+        // A Task under task conversations has no message of its own: it shows on the top-level
+        // message of this conversation it was made from ("Send as Task").
+        OR: window
+          ? [
+              { message: { sequence } },
+              {
+                messageId: null,
+                sourceMessage: { conversationId: readable, threadRootId: null, sequence },
+              },
+            ]
+          : undefined,
       },
       orderBy: { number: "asc" },
       select: taskSelection,
@@ -299,7 +321,7 @@ export class TaskOverviewReads {
         tasks,
         (task, extras) => ({
           ...taskView(task, "people", extras),
-          sequence: task.message?.sequence ?? 0,
+          sequence: task.message?.sequence ?? streamSourceSequence(task, readable) ?? 0,
         }),
       ),
     };

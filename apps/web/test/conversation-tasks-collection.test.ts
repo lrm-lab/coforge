@@ -355,3 +355,69 @@ test("a read the server refuses leaves its live query in error, which the Tasks 
   expect(board.status).toBe("error");
   expect(failing.store.state.byId.size).toBe(0);
 });
+
+// Task #452: under task conversations "Send as Task" makes a Task of its own beside the message,
+// the message its source. As on Raft, the message still shows its Task, so the store holds each
+// Task by the top-level message it came from too.
+test("a Task made from a message is held by that message as well as by its own id", async () => {
+  const sourced = task(6, {
+    id: "task-6",
+    messageId: null,
+    sourceMessageId: "message-60",
+    sourceMessage: { messageId: "message-60", senderName: "Frank", preview: "status" },
+    sequence: 60,
+  });
+  const inThread = task(7, {
+    id: "task-7",
+    messageId: null,
+    sourceMessageId: "reply-70",
+    sourceMessage: {
+      messageId: "reply-70",
+      threadRootId: "message-60",
+      senderName: "Frank",
+      preview: "a reply",
+    },
+    sequence: 70,
+  });
+  const { tasks } = fixture([...serverTasks, sourced, inThread]);
+  const window = createLiveQueryCollection((q) =>
+    q.from({ task: tasks.collection }).where(({ task }) => gte(task.sequence, 60)),
+  );
+  await window.preload();
+  const { bySource } = tasks.store.state;
+  expect(bySource.get("message-60")?.map((row) => row.number)).toEqual([6]);
+  // A thread reply is not in the stream: the Task it came from is not shown on a stream row.
+  expect(bySource.has("reply-70")).toBe(false);
+  // The message that is a Task itself is found by its id, as before.
+  expect(bySource.has("message-1")).toBe(false);
+
+  tasks.apply([{ tasks: [], deleted: ["task-6"] }]);
+  expect(tasks.store.state.bySource.has("message-60")).toBe(false);
+});
+
+test("the Tasks made from one message are held in number order, and a change keeps a Task's place", async () => {
+  const fromMessage = (number: number, id: string) =>
+    task(number, {
+      id,
+      messageId: null,
+      sourceMessageId: "message-80",
+      sourceMessage: { messageId: "message-80", senderName: "Frank", preview: "plan" },
+      sequence: 80,
+    });
+  const { tasks } = fixture([...serverTasks, fromMessage(9, "task-9"), fromMessage(8, "task-8")]);
+  const window = createLiveQueryCollection((q) =>
+    q.from({ task: tasks.collection }).where(({ task }) => gte(task.sequence, 80)),
+  );
+  await window.preload();
+  const numbers = () => tasks.store.state.bySource.get("message-80")?.map((row) => row.number);
+  expect(numbers()).toEqual([8, 9]);
+
+  // A newer copy (a status move) replaces the Task where it was; the other keeps its object.
+  const other = tasks.store.state.bySource.get("message-80")![1];
+  tasks.apply([
+    { tasks: [{ ...fromMessage(8, "task-8"), status: "in_progress", revision: 2 }], deleted: [] },
+  ]);
+  expect(numbers()).toEqual([8, 9]);
+  expect(tasks.store.state.bySource.get("message-80")![0]!.status).toBe("in_progress");
+  expect(tasks.store.state.bySource.get("message-80")![1]).toBe(other);
+});
