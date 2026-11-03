@@ -43,6 +43,9 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
   runs. Such an unattended restart resumes
   with a prompt naming where the turn stopped, and at most `UNATTENDED_RECOVERY_LIMIT` run in a row
   before a turn completes; past that the owner sees an error and only a message or a restart helps.
+- `task-idle-nudge.ts` asks the cloud once when a turn leaves an Agent idle, and writes the
+  answer as idle input: one ask per Agent at a time, 15 seconds, a 404 disables it until the
+  daemon restarts, and a fresh session is asked once per session (task #476).
 - `agent-launch-coordinator.ts` owns launch identity and launch-state initialization; `runtime.ts` supplies lifecycle ports and start admission.
 - `agent-launch-process.ts` owns the provider process boundary and its Session, Activity, and exit cleanup callbacks for one resolved launch.
 - `agent-launch-config.ts` owns the transport fallback for obtaining an Agent launch credential/config.
