@@ -42,3 +42,27 @@ test("cross-conversation task references resolve only when the sender may read t
     "#design: <@task:7>",
   );
 });
+
+test("cross references in inline and fenced code are never references", () => {
+  const conversation = "01a19d18-791a-70dc-9961-37f663f63aa1";
+  const body = [
+    "inline `#design:#7` and `dm:@ada:#9` and `#12`",
+    "```",
+    "#design:#7",
+    "dm:@ada:#9",
+    "#12",
+    "```",
+    "then #design:#7",
+  ].join("\n");
+  const references = readMessageReferences(body);
+  expect(references.candidates.channelTasks).toEqual([{ name: "design", number: 7 }]);
+  expect(references.candidates.dmTasks).toEqual([]);
+  expect(references.candidates.taskNumbers).toEqual([]);
+  expect(
+    references.resolve({
+      channelTask: () => ({ conversationId: conversation, channelName: "design" }),
+      dmTask: () => ({ conversationId: conversation, peerHandle: "ada" }),
+      task: () => true,
+    }),
+  ).toBe(body.replace("then #design:#7", `then <@task:c:${conversation}:design:7>`));
+});
