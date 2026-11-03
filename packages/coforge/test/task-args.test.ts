@@ -77,6 +77,25 @@ test("create and amend take --blocked-by and --parent; list takes --ready", () =
   expect(() => parseTaskArgs(["list", ...target, "--ready", "--status", "todo"])).toThrow();
 });
 
+test("create, claim and assign take --anyway to confirm a held review", () => {
+  const target = ["--target", "#general"];
+  expect(parseTaskArgs(["create", ...target, "--title", "A", "--anyway"])).toMatchObject({
+    task: { continueAnyway: true },
+  });
+  expect(parseTaskArgs(["claim", ...target, "--number", "7", "--anyway"])).toMatchObject({
+    task: { continueAnyway: true },
+  });
+  expect(
+    parseTaskArgs(["assign", ...target, "--number", "7", "--assignee", "@ada", "--anyway"]),
+  ).toMatchObject({ task: { continueAnyway: true } });
+  expect(parseTaskArgs(["create", ...target, "--title", "A"])).not.toHaveProperty(
+    "task.continueAnyway",
+  );
+  expect(() =>
+    parseTaskArgs(["update", ...target, "--number", "7", "--status", "done", "--anyway"]),
+  ).toThrow();
+});
+
 test("task numbers are plain digits: exponent, hex and decimal forms are refused", () => {
   const target = ["--target", "#general"];
   for (const raw of ["1e1", "0x10", "1.0", "+3", "-1"]) {

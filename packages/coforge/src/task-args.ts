@@ -51,12 +51,29 @@ const TASK_FLAGS: Record<TaskOperation, readonly string[]> = {
     "--alongside",
     "--blocked-by",
     "--parent",
+    "--anyway",
     "--json",
   ],
   convert: ["--target", "--peer-kind", "--message-id", "--json"],
-  claim: ["--target", "--peer-kind", "--number", "--message-id", "--reviewer-isolation", "--json"],
+  claim: [
+    "--target",
+    "--peer-kind",
+    "--number",
+    "--message-id",
+    "--reviewer-isolation",
+    "--anyway",
+    "--json",
+  ],
   unclaim: ["--target", "--peer-kind", "--number", "--expected-revision", "--json"],
-  assign: ["--target", "--peer-kind", "--number", "--assignee", "--expected-revision", "--json"],
+  assign: [
+    "--target",
+    "--peer-kind",
+    "--number",
+    "--assignee",
+    "--expected-revision",
+    "--anyway",
+    "--json",
+  ],
   unassign: ["--target", "--peer-kind", "--number", "--expected-revision", "--json"],
   update: [
     "--target",
@@ -112,6 +129,7 @@ const TASK_SWITCHES = new Set([
   "--ready",
   "--creates-resource",
   "--alongside",
+  "--anyway",
   "--json",
 ]);
 
@@ -249,6 +267,7 @@ export function parseTaskArgs(
     if (titles.some((title) => !title.trim())) throw invalidTaskArg("--title must be nonblank");
     if (titles.length === 1) task.title = titles[0];
     else task.titles = titles;
+    if (values.has("--anyway")) task.continueAnyway = true;
     const assignee = one("--assignee");
     if (assignee !== undefined)
       task.assignee = handleOption(assignee, "--assignee must be an @handle");
@@ -282,6 +301,7 @@ export function parseTaskArgs(
     else if (numbers.length) task.numbers = numbers;
     if (messageIds.length === 1) task.messageId = messageIds[0];
     else if (messageIds.length) task.messageIds = messageIds;
+    if (values.has("--anyway")) task.continueAnyway = true;
   } else if (operation === "update") {
     const numbers = values.get("--number") ?? [];
     if (numbers.length !== 1)
@@ -309,6 +329,7 @@ export function parseTaskArgs(
       assignee.startsWith("@") ? assignee : `@${assignee}`,
       "--assignee must be an @handle",
     );
+    if (values.has("--anyway")) task.continueAnyway = true;
   }
   if (operation === "amend") {
     const description = one("--description");

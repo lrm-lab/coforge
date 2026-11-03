@@ -89,7 +89,6 @@ import { formatReadWindow } from "#src/message-read-format";
 import {
   formatAttachmentDownloadSuccess,
   formatAttachmentUploadSuccess,
-  formatMessageLine,
   formatSendSuccess,
   formatSendCommitted,
   type PendingMentionAction,
@@ -161,7 +160,7 @@ import {
 } from "#src/attention-args";
 
 export type { ChannelInvocation, InboxInvocation, ThreadInvocation };
-import { formatTaskResult } from "#src/task-format";
+import { formatHeldTaskRequest, formatTaskResult } from "#src/task-format";
 
 export { createAgentApiClient } from "@lrm/coforge-sdk/agent";
 
@@ -943,7 +942,7 @@ export async function run(args: readonly string[], transport: MessageTransport):
     try {
       const result = await transport.task(command);
       if (result.state === "held")
-        return formatHeldTaskRequest(result, command.freshnessContextMode === "withheld");
+        return formatHeldTaskRequest(command, result, command.freshnessContextMode === "withheld");
       return outputJson ? result : formatTaskResult(command, result);
     } catch (error) {
       // Deleting is irreversible and a refusal is an authority fact, not a race: name who may.
@@ -1722,11 +1721,3 @@ function parseWeeklyReportArgs(args: readonly string[]): WeeklyReportInvocation 
 }
 
 /** A write the server held until the Agent has seen the conversation's newer messages. */
-function formatHeldTaskRequest(result: TaskResult, reviewerIsolation: boolean): string {
-  if (reviewerIsolation || result.freshnessContextMode === "withheld") {
-    const count = result.newMessageCount ?? result.withheldMessageCount ?? 0;
-    return `Reviewer-isolation freshness hold: ${count} newer ${count === 1 ? "message" : "messages"} withheld.`;
-  }
-  const messages = result.heldMessages?.map(formatMessageLine).join("\n");
-  return `Task request held.${messages ? ` Review newer messages:\n${messages}` : ""}`;
-}

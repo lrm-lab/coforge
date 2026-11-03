@@ -119,6 +119,13 @@ export async function executeAgentTaskWithFreshness(
   };
 
   if (heldOperation) {
+    if (command.continueAnyway === true) {
+      // The caller confirmed the held review: advance over everything the target holds and
+      // execute — the task write's own "send anyway".
+      const recent = await freshness.readRecent?.(HELD_CONTEXT_LIMIT, excluded);
+      if (recent?.maxSequence !== undefined) await freshness.advanceReadThrough?.(recent.maxSequence);
+      return execute();
+    }
     const unconsumed = await pending();
     if (unconsumed.length > 0) return held(unconsumed, await pendingCount());
     if (seen > 0 || excluded?.length) {

@@ -142,6 +142,8 @@ export function validateTaskRequest(value: TaskRequest): void {
     throw new Error("invalid Task mode");
   if (value.createsResource !== undefined && typeof value.createsResource !== "boolean")
     throw new Error("invalid Task request");
+  if (value.continueAnyway !== undefined && typeof value.continueAnyway !== "boolean")
+    throw new Error("invalid Task request");
   if (
     value.alongside !== undefined &&
     (typeof value.alongside !== "boolean" || !["create", "convert"].includes(value.operation))

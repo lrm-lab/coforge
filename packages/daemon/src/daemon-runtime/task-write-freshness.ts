@@ -27,7 +27,9 @@ export async function taskWriteWithFreshness(
 ): Promise<TaskResult | undefined> {
   const heldOperation = FRESHNESS_HELD_OPERATIONS.includes(command.operation);
   if (!heldOperation && !FRESHNESS_ATTACH_OPERATIONS.includes(command.operation)) return undefined;
-  if (heldOperation) {
+  // The caller confirmed the held review (`--anyway`): skip the local hold and let the write
+  // through — the server's gate honors the same confirmation.
+  if (heldOperation && command.continueAnyway !== true) {
     const held = await heldTaskResult(ports, agentId, command, target, agentApiKey);
     if (held) return held;
   }

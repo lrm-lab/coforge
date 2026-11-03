@@ -56,6 +56,34 @@ describe("Agent task write freshness", () => {
     expect(executed).toBe(0);
   });
 
+  test("continueAnyway executes a held operation and advances over the held context", async () => {
+    let executed = 0;
+    let advancedTo: number | undefined;
+    const withAdvanced = freshness([4, 5], [4, 5]);
+    withAdvanced.advanceReadThrough = async (sequence: number) => {
+      advancedTo = sequence;
+      return sequence;
+    };
+    for (const operation of ["create", "claim", "assign"] as const) {
+      const result = await executeAgentTaskWithFreshness(
+        {
+          board: {
+            execute: async () => {
+              executed++;
+              return { tasks: [] };
+            },
+          },
+          freshness: async () => ({ freshness: withAdvanced, scope: {} as never }),
+        },
+        principal,
+        { operation, idempotencyKey: operation, target: "#tasks", continueAnyway: true },
+      );
+      expect(result.state).toBeUndefined();
+    }
+    expect(executed).toBe(3);
+    expect(advancedTo).toBe(5);
+  });
+
   test("a held operation reports only the count under reviewer isolation", async () => {
     const result = await executeAgentTaskWithFreshness(
       {

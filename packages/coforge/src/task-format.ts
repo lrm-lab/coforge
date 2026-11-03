@@ -146,6 +146,26 @@ export function formatTasksCreated(target: string, result: TaskResult): string {
   ].join("\n");
 }
 
+/** A write the server held until the Agent has seen the conversation's newer messages. */
+export function formatHeldTaskRequest(
+  command: TaskCommand,
+  result: TaskResult,
+  reviewerIsolation: boolean,
+): string {
+  if (reviewerIsolation || result.freshnessContextMode === "withheld") {
+    const count = result.newMessageCount ?? result.withheldMessageCount ?? 0;
+    return `Reviewer-isolation freshness hold: ${count} newer ${count === 1 ? "message" : "messages"} withheld.`;
+  }
+  const messages = result.heldMessages?.map(formatMessageLine).join("\n");
+  const anyway =
+    command.operation === "create" ||
+    command.operation === "claim" ||
+    command.operation === "assign"
+      ? " To proceed without reviewing them, rerun this command with --anyway."
+      : "";
+  return `Task request held.${messages ? ` Review newer messages:\n${messages}` : ""}${anyway}`;
+}
+
 /** The Task `coforge task convert` made from a message, and its thread. */
 export function formatTaskConverted(target: string, task: TaskView): string {
   return [

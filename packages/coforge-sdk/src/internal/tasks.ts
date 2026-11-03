@@ -298,6 +298,9 @@ export type TaskCommand = {
   seenUpToSeq?: number;
   /** Exact messages shown above `seenUpToSeq`, for sparse context reads. */
   seenExactSeqs?: number[];
+  /** `create`/`claim`/`assign`: the caller confirmed the held review — the write executes even
+   * with unread target context, advancing the boundary over it. */
+  continueAnyway?: boolean;
 };
 
 /** The conversation kinds an Agent's own Task list reads: channels and direct messages. */
