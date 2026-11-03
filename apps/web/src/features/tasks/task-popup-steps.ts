@@ -13,8 +13,10 @@ import type { RouterHistory } from "@tanstack/react-router";
  */
 const steps = new Set<string>();
 
-/** How long an opening may take to push its entry before it is no longer taken as a step. */
-const OPEN_WINDOW_MS = 2_000;
+/** How long an opening may take to push its entry before it is no longer taken as a step: long
+ * enough for a slow network, where a page waits on its data before the entry is pushed (task #478).
+ * Going back or forward first gives the opening up. */
+const OPEN_WINDOW_MS = 10_000;
 
 /** A history location as the router or its history reports it: only the entry's key is read. */
 type Entry = { state: { __TSR_key?: string; key?: string } };
@@ -37,7 +39,8 @@ function watch(history: RouterHistory) {
       steps.add(key);
     } else if (key && action.type === "REPLACE" && shown && steps.has(shown)) {
       steps.add(key);
-    }
+    } else if (action.type === "BACK" || action.type === "FORWARD" || action.type === "GO")
+      pendingUntil = 0;
     shown = key;
   });
 }

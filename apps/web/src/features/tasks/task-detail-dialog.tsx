@@ -14,6 +14,7 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import type { Mentionable } from "#src/features/conversations/mention-text";
 import { useMediaQuery } from "#src/hooks/use-media-query";
+import { useLatestCallback } from "#src/hooks/use-latest-callback";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { TaskStatusIcon } from "./task-status-icon";
@@ -183,6 +184,30 @@ export function TaskDetailDialog({
   const router = useRouter();
   const step = useRouterState({ select: (state) => isTaskStep(state.location) });
   const stepBack = step ? () => router.history.back() : undefined;
+  const stepScope = useRef<HTMLDivElement>(null);
+  // Esc on a step goes back up to the popup it was opened from, before the overlay's own Escape,
+  // which would close every step at once. Heard on the document, ahead of every other handler:
+  // focus may be in the dialog, on the dialog itself (where it lands as a step opens, task #472),
+  // or on the page once the row that opened the step is gone (task #478). A menu or picker, in a
+  // popover outside the dialog, keeps its own Escape.
+  // The first popup, with focus left on the page, closes on Esc as it does with focus inside.
+  const close = useLatestCallback(() => onOpenChange(false));
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      const target = event.target;
+      const onPage = target === document.body || target === document.documentElement;
+      const inside = target instanceof Node && Boolean(stepScope.current?.contains(target));
+      if (step ? !onPage && !inside : !onPage) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (step) router.history.back();
+      else close();
+    };
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
+  }, [open, step, router, close]);
   const section = (
     <TaskSection
       layout={sidebar ? "sidebar" : "column"}
@@ -217,20 +242,7 @@ export function TaskDetailDialog({
               : "sm:w-[min(44rem,calc(100vw-2rem))]",
           )}
         >
-          <div
-            className="contents"
-            onKeyDownCapture={(event) => {
-              // Before the overlay's own Escape, which would close every step at once. It wraps the
-              // dialog itself, which holds focus right after a step opens (task #472). A menu or
-              // picker, in a popover outside the dialog, handles its own Escape.
-              if (event.key !== "Escape" || !stepBack || event.defaultPrevented) return;
-              if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target))
-                return;
-              event.preventDefault();
-              event.stopPropagation();
-              stepBack();
-            }}
-          >
+          <div ref={stepScope} className="contents">
             <Dialog className="flex min-h-0 flex-1 flex-col overflow-hidden">
               <div className="flex shrink-0 items-center gap-1 pt-2 pr-3 pl-2 sm:pl-4">
                 <TaskTrail
