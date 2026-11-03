@@ -6,7 +6,14 @@ import {
   XClose,
 } from "@untitledui/icons";
 import { useRouter, useRouterState } from "@tanstack/react-router";
-import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ComponentProps,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from "react";
 import { Button as AriaButton, Heading } from "react-aria-components";
 
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
@@ -184,29 +191,36 @@ export function TaskDetailDialog({
   const router = useRouter();
   const step = useRouterState({ select: (state) => isTaskStep(state.location) });
   const stepBack = step ? () => router.history.back() : undefined;
-  const stepScope = useRef<HTMLDivElement>(null);
-  // Esc on a step goes back up to the popup it was opened from, before the overlay's own Escape,
-  // which would close every step at once. Heard on the document, ahead of every other handler:
-  // focus may be in the dialog, on the dialog itself (where it lands as a step opens, task #472),
-  // or on the page once the row that opened the step is gone (task #478). A menu or picker, in a
-  // popover outside the dialog, keeps its own Escape.
-  // The first popup, with focus left on the page, closes on Esc as it does with focus inside.
+  // Esc on a step goes back up to the popup it was opened from; the overlay's own Escape, which
+  // would close every step at once, is off while it is a step. Esc is the popup's only after
+  // everything inside has had it: an input method composing, the composer's mention or task
+  // completion, a menu, a picker, an image or a confirmation over the popup each take their own
+  // Escape first (they mark it handled), and only an Escape nothing took steps back (task #478).
   const close = useLatestCallback(() => onOpenChange(false));
+  const stepOnEscape = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Escape") return;
+    // Taken inside (the composer's completion closing): the overlay, which does not look at
+    // that, must not close the popup on the same press.
+    if (event.defaultPrevented) return event.stopPropagation();
+    if (!step || event.nativeEvent.isComposing || event.keyCode === 229) return;
+    // Only from the popup itself, not from an overlay over it that the React tree passes through.
+    if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target)) return;
+    event.preventDefault();
+    router.history.back();
+  };
+  // With focus left on the page (the row that opened a step is gone), the popup still hears Esc:
+  // a step goes back, the first popup closes, as each does with focus inside.
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented) return;
-      const target = event.target;
-      const onPage = target === document.body || target === document.documentElement;
-      const inside = target instanceof Node && Boolean(stepScope.current?.contains(target));
-      if (step ? !onPage && !inside : !onPage) return;
+      if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return;
+      if (event.target !== document.body && event.target !== document.documentElement) return;
       event.preventDefault();
-      event.stopPropagation();
       if (step) router.history.back();
       else close();
     };
-    document.addEventListener("keydown", onKeyDown, true);
-    return () => document.removeEventListener("keydown", onKeyDown, true);
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
   }, [open, step, router, close]);
   const section = (
     <TaskSection
@@ -229,7 +243,7 @@ export function TaskDetailDialog({
   const current = tabs.includes(tab) ? tab : tabs[0];
   return (
     <>
-      <TaskPopupOverlay isOpen={open} onOpenChange={onOpenChange}>
+      <TaskPopupOverlay isOpen={open} onOpenChange={onOpenChange} keyboardDismiss={!step}>
         <Modal
           className={cn(
             // On a phone the thread scrolls, never the sheet (the shared Modal scrolls there).
@@ -242,7 +256,7 @@ export function TaskDetailDialog({
               : "sm:w-[min(44rem,calc(100vw-2rem))]",
           )}
         >
-          <div ref={stepScope} className="contents">
+          <div className="contents" onKeyDown={stepOnEscape}>
             <Dialog className="flex min-h-0 flex-1 flex-col overflow-hidden">
               <div className="flex shrink-0 items-center gap-1 pt-2 pr-3 pl-2 sm:pl-4">
                 <TaskTrail
@@ -357,12 +371,17 @@ export function TaskDetailDialog({
  * overlay follows: with the keyboard up, the header stays at the top and the composer sits right
  * above the keyboard.
  */
-function TaskPopupOverlay(
-  props: Pick<ComponentProps<typeof ModalOverlay>, "isOpen" | "onOpenChange" | "children">,
-) {
+function TaskPopupOverlay({
+  keyboardDismiss,
+  ...props
+}: Pick<ComponentProps<typeof ModalOverlay>, "isOpen" | "onOpenChange" | "children"> & {
+  /** Off for a step, whose Escape steps back instead of closing every step. */
+  keyboardDismiss: boolean;
+}) {
   return (
     <ModalOverlay
       {...props}
+      isKeyboardDismissDisabled={!keyboardDismiss}
       isDismissable
       className="max-sm:items-stretch max-sm:px-0 max-sm:[--modal-pb:0px] max-sm:[--modal-pt:0px]"
     />

@@ -48,6 +48,15 @@ test("Esc steps back to the popup a sub-task or a parent was opened from", async
       members: { create: [{ userId: DEV_BROWSER_USER.id }] },
     },
   });
+  // Another channel for the composer's `#` completion to offer.
+  const other = await db.conversation.create({
+    data: {
+      workspaceId,
+      channelName: `e2e-esc-ref-${tail}`,
+      description: "",
+      members: { create: [{ userId: DEV_BROWSER_USER.id }] },
+    },
+  });
   const before = (await experiments.read(workspaceId)).taskConversations;
   try {
     await experiments.write(workspaceId, "taskConversations", true);
@@ -143,10 +152,95 @@ test("Esc steps back to the popup a sub-task or a parent was opened from", async
         await browser("wait", "--fn", `${dialog} === null`);
       }
     }
+
+    // What sits inside or over the popup has Esc first, on the first popup and on a step alike:
+    // an input method still composing in the discussion's composer keeps it (only the IME
+    // cancels), the composer's `#` completion closes alone, and a menu or a confirmation over the
+    // popup closes alone. Only the next Esc is the popup's.
+    await browser("set", "viewport", "1280", "860");
+    const composer = `${dialog}.querySelector("textarea[data-composer]")`;
+    const layers = `document.querySelectorAll('[role="dialog"], [role="alertdialog"], [role="menu"]').length`;
+    const stays = async (title: string, count: number) => {
+      await settled();
+      await Bun.sleep(400);
+      await settled();
+      expect(await evaluate<boolean>(showing(title))).toBe(true);
+      expect(await evaluate<number>(layers)).toBe(count);
+    };
+    for (const [state, title] of [
+      ["first", parentTitle],
+      ["step", childTitle],
+    ] as const) {
+      await browser("open", pages.channel(parent));
+      await browser("wait", "--fn", `${pageHydrated} && ${showing(parentTitle)}`);
+      if (state === "step") {
+        await pressText("子任务", '[role="tab"]');
+        await browser(
+          "wait",
+          "--fn",
+          `${dialog}.textContent.includes(${JSON.stringify(childTitle)})`,
+        );
+        await pressText(childTitle, 'button, [role="button"], [role="row"]');
+        await browser("wait", "--fn", showing(childTitle));
+      }
+      await browser("wait", "--fn", `${composer} !== null`);
+
+      // An IME composing: Chrome sends Escape as keyCode 229 with `isComposing`.
+      expect(
+        await evaluate<boolean>(
+          `(() => { const t = ${composer}; t.focus(); t.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", keyCode: 229, isComposing: true, bubbles: true, cancelable: true })); return true; })()`,
+        ),
+      ).toBe(true);
+      await stays(title, 1);
+
+      // The `#` completion: Esc closes it, the popup stays, focus stays in the composer.
+      await browser("fill", '[role="dialog"] textarea[data-composer]', `#e2e-esc-ref-${tail}`);
+      // A key as typing would end with, so React has seen where the caret is (`fill` sends none,
+      // and React would otherwise report the caret as moved on the next key and reopen the list).
+      await browser("press", "End");
+      await browser("wait", "--fn", `${composer}.hasAttribute("aria-controls")`);
+      await shoot(`guard-${state}-1-completion`);
+      await browser("press", "Escape");
+      await browser("wait", "--fn", `!${composer}.hasAttribute("aria-controls")`);
+      await stays(title, 1);
+      expect(await evaluate<boolean>(`document.activeElement === ${composer}`)).toBe(true);
+      await browser("fill", '[role="dialog"] textarea[data-composer]', "");
+
+      // The ··· menu over the popup: Esc closes the menu alone.
+      await press(`${dialog}.querySelector('button[aria-label*="的更多操作"]')`);
+      await browser("wait", "--fn", `document.querySelector('[role="menu"]') !== null`);
+      await browser("press", "Escape");
+      await browser("wait", "--fn", `document.querySelector('[role="menu"]') === null`);
+      await stays(title, 1);
+
+      // A confirmation over the popup (delete): Esc closes the confirmation alone.
+      await press(`${dialog}.querySelector('button[aria-label*="的更多操作"]')`);
+      await browser("wait", "--fn", `document.querySelector('[role="menu"]') !== null`);
+      await press(
+        `[...document.querySelectorAll('[role="menuitem"]')].find((el) => el.textContent.includes("删除任务"))`,
+      );
+      await browser("wait", "--fn", `${layers} === 2`);
+      await shoot(`guard-${state}-2-confirm`);
+      await browser("press", "Escape");
+      await browser("wait", "--fn", `${layers} === 1`);
+      await stays(title, 1);
+
+      // Nothing over it: Esc is the popup's again. (Focus came back to the ··· button, whose
+      // tooltip would take the next Esc first, as React Aria's tooltips do; read the title.)
+      await press(`${dialog}.querySelector("h2")`);
+      await esc();
+      if (state === "step") {
+        await browser("wait", "--fn", showing(parentTitle));
+        await esc();
+      }
+      await browser("wait", "--fn", `${dialog} === null`);
+    }
   } finally {
     await browser("close").catch(() => undefined);
     await experiments.write(workspaceId, "taskConversations", before).catch(() => undefined);
-    await db.conversation.deleteMany({ where: { id: channel.id } }).catch(() => undefined);
+    await db.conversation
+      .deleteMany({ where: { id: { in: [channel.id, other.id] } } })
+      .catch(() => undefined);
     await db.$disconnect();
   }
 }, 300_000);
