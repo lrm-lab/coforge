@@ -27,6 +27,14 @@ export interface ArtifactBlobStore {
     workspaceId: string,
     sha256s: readonly string[],
   ): Promise<string[]>;
+  /** Of `sha256s`, the ones `actor` may name in a save of `artifactId`: bytes it uploaded, or
+   * ones the artifact already uses. Any other is answered as missing, so the client uploads it. */
+  allowed(
+    workspaceId: string,
+    artifactId: string,
+    actor: { userId?: string; agentId?: string },
+    sha256s: readonly string[],
+  ): Promise<Set<string>>;
   /** A stored blob's bytes, or null when the Workspace stores none under `sha256`. */
   read(workspaceId: string, sha256: string): Promise<Uint8Array | null>;
   /** Stores bytes the server made itself (a merged file), once, by their sha256. */

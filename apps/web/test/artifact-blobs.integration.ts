@@ -111,7 +111,7 @@ test("a blob no version names goes a day after its upload; one any version names
     author: { userId },
   });
   const save = async (content: string, baseVersion: number) => {
-    const blob = await blobs.upload({ workspaceId, bytes: text(content) });
+    const blob = await blobs.upload({ workspaceId, bytes: text(content), actor: { userId } });
     await artifacts.push({
       workspaceId,
       artifactId: artifact.id,
@@ -188,7 +188,11 @@ test("a save naming a blob that was removed meanwhile is told to upload it again
     entryPath: "document.md",
     author: { userId },
   });
-  const blob = await blobs.upload({ workspaceId, bytes: text(`late ${handle}`) });
+  const blob = await blobs.upload({
+    workspaceId,
+    bytes: text(`late ${handle}`),
+    actor: { userId },
+  });
   await age(workspaceId, blob.sha256, ARTIFACT_BLOB_GRACE_MS + 60_000);
   await blobs.removeUnreferenced();
   expect(

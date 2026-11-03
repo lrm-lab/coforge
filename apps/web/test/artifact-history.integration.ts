@@ -76,7 +76,8 @@ afterAll(async () => {
 });
 
 const upload = async (text: string) =>
-  (await blobs.upload({ workspaceId, bytes: new TextEncoder().encode(text) })).sha256;
+  (await blobs.upload({ workspaceId, bytes: new TextEncoder().encode(text), actor: { userId } }))
+    .sha256;
 
 let made = 0;
 async function document(home: "workspace" | "channel" = "workspace") {

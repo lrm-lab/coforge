@@ -9,6 +9,9 @@ model Artifact {
   name            String
   title           String            @default("")
   description     String            @default("")
+  /// A document's first two lines with text, plain, for its card and list; kept from its
+  /// current version (`artifactPreview`). Empty for any other artifact.
+  preview         String            @default("")
   /// html | markdown | text | csv | image | pdf | video | other
   kind            String
   entryPath       String
@@ -104,7 +107,24 @@ model ArtifactBlob {
   referenced  Boolean   @default(false)
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
+  grants      ArtifactBlobGrant[]
+
   @@id([workspaceId, sha256])
   @@index([lastUsedAt], map: "artifact_blobs_unused_idx", where: raw("\"referenced\" = false"))
   @@map("artifact_blobs")
+}
+
+/// Who may name a stored blob in a save: whoever uploaded those bytes (`user:<id>` or
+/// `agent:<id>`). A save may name only bytes its publisher uploaded or its artifact already uses,
+/// so a hash learned from a home the publisher cannot read does not copy its bytes into one it
+/// can write. Goes with the blob.
+model ArtifactBlobGrant {
+  workspaceId String       @db.Uuid
+  sha256      String
+  actorKey    String
+  createdAt   DateTime     @default(now())
+  blob        ArtifactBlob @relation(fields: [workspaceId, sha256], references: [workspaceId, sha256], onDelete: Cascade, map: "artifact_blob_grants_blob_fkey")
+
+  @@id([workspaceId, sha256, actorKey])
+  @@map("artifact_blob_grants")
 }

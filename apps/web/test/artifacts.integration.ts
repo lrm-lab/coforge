@@ -30,6 +30,7 @@ const store: ArtifactBlobStore = {
   use: async (_tx, _workspaceId, sha256s) => sha256s.filter((sha256) => !blobs.has(sha256)),
   // No bytes are stored here: a line merge of documents is `artifact-merge.integration.ts`'s.
   read: async () => null,
+  allowed: async (_workspaceId, _artifactId, _actor, sha256s) => new Set(sha256s),
   upload: async () => {
     throw new Error("no bytes are stored in this test");
   },

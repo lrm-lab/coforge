@@ -78,7 +78,8 @@ async function save(
 }
 
 const upload = async (text: string) =>
-  (await blobs.upload({ workspaceId, bytes: new TextEncoder().encode(text) })).sha256;
+  (await blobs.upload({ workspaceId, bytes: new TextEncoder().encode(text), actor: { userId } }))
+    .sha256;
 
 const current = (artifactId: string, version?: number) =>
   artifacts.read({ workspaceId, artifactId, reader: { userId }, ...(version && { version }) });

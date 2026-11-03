@@ -6,6 +6,7 @@ import type {
   StoredFile,
 } from "#src/server/files/file-storage.server";
 import { errorType } from "#src/server/errors/error-type.server";
+import type { ArtifactActor } from "./artifact-access.server";
 import {
   ARTIFACT_BINARY_LIMIT,
   ARTIFACT_TEXT_LIMIT,
@@ -66,8 +67,55 @@ export class StoredArtifactBlobs implements ArtifactBlobStore {
     return sha256s.filter((sha256) => !stored.has(sha256));
   }
 
-  /** Stores `bytes` under their sha256, once. `sha256`, when the client names one, must be theirs. */
-  async upload(input: { workspaceId: string; bytes: Uint8Array<ArrayBuffer>; sha256?: string }) {
+  /** Stores `bytes` under their sha256, once, and grants them to `actor`, who has shown it holds
+   * them, for its saves. `sha256`, when the client names one, must be theirs. */
+  async upload(input: {
+    workspaceId: string;
+    bytes: Uint8Array<ArrayBuffer>;
+    sha256?: string;
+    actor?: ArtifactActor;
+  }) {
+    const blob = await this.#store(input);
+    if (!input.actor) return blob;
+    const grant = () =>
+      this.db.artifactBlobGrant.createMany({
+        data: [
+          { workspaceId: input.workspaceId, sha256: blob.sha256, actorKey: actorKey(input.actor!) },
+        ],
+        skipDuplicates: true,
+      });
+    // The sweep may take a blob unused for a day between the store and the grant: store again.
+    await grant().catch(async () => {
+      await this.#store(input);
+      await grant();
+    });
+    return blob;
+  }
+
+  /** Of `sha256s`, the ones `actor` may name in a save of `artifactId`: granted to it, or used by
+   * one of that artifact's versions already. */
+  async allowed(
+    workspaceId: string,
+    artifactId: string,
+    actor: ArtifactActor,
+    sha256s: readonly string[],
+  ): Promise<Set<string>> {
+    if (sha256s.length === 0) return new Set();
+    const [granted, used] = await Promise.all([
+      this.db.artifactBlobGrant.findMany({
+        where: { workspaceId, actorKey: actorKey(actor), sha256: { in: [...sha256s] } },
+        select: { sha256: true },
+      }),
+      this.db.artifactFile.findMany({
+        where: { artifactId, sha256: { in: [...sha256s] } },
+        select: { sha256: true },
+        distinct: ["sha256"],
+      }),
+    ]);
+    return new Set([...granted, ...used].map((row) => row.sha256));
+  }
+
+  async #store(input: { workspaceId: string; bytes: Uint8Array<ArrayBuffer>; sha256?: string }) {
     const { workspaceId, bytes } = input;
     // Text has the larger limit, so nothing larger is read as either.
     if (bytes.length > ARTIFACT_TEXT_LIMIT) invalid("artifact-file-too-large");
@@ -182,3 +230,7 @@ function isText(bytes: Uint8Array): boolean {
 function invalid(errorId: string): never {
   throw new AppError("INVALID_INPUT", { errorId });
 }
+
+/** How a grant names its actor. */
+const actorKey = (actor: ArtifactActor) =>
+  actor.agentId ? `agent:${actor.agentId}` : `user:${actor.userId}`;

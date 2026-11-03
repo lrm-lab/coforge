@@ -29,6 +29,7 @@ const store: ArtifactBlobStore = {
   use: async () => [],
   // These artifacts are not documents, so no save reads or merges their bytes.
   read: async () => null,
+  allowed: async (_workspaceId, _artifactId, _actor, sha256s) => new Set(sha256s),
   upload: async () => {
     throw new Error("no bytes are stored in this test");
   },

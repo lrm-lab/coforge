@@ -69,7 +69,8 @@ function actorColumns(actor: ArtifactActor) {
  */
 export class Artifacts {
   private readonly enabled: (workspaceId: string) => Promise<boolean>;
-  private readonly reads: ArtifactReads;
+  /** Reading artifacts: a version, the history, a list and cards (`ArtifactReads`). */
+  readonly reads: ArtifactReads;
   private readonly signals?: ArtifactSignals;
 
   constructor(
@@ -198,12 +199,13 @@ export class Artifacts {
     if (added.some((file) => deleted.includes(file.path))) invalid("artifact-file-path");
 
     // The bytes are checked before the lock: a missing blob is a 200 the client uploads and retries.
-    const blobs = await this.blobs.inspectMany(input.workspaceId, [
-      ...new Set(added.map((file) => file.sha256)),
+    const named = [...new Set(added.map((file) => file.sha256))];
+    const [blobs, allowed] = await Promise.all([
+      this.blobs.inspectMany(input.workspaceId, named),
+      this.blobs.allowed(input.workspaceId, input.artifactId, input.publisher, named),
     ]);
-    const missing = [...new Set(added.map((file) => file.sha256))].filter(
-      (sha256) => !blobs.has(sha256),
-    );
+    // Bytes the publisher never uploaded, and this artifact does not use, are as good as missing.
+    const missing = named.filter((sha256) => !blobs.has(sha256) || !allowed.has(sha256));
     if (missing.length) return { status: "missing", missing };
     for (const file of added) {
       const blob = blobs.get(file.sha256)!;
