@@ -9,17 +9,23 @@ export type ArtifactHome =
 
 export type ArtifactActor = { userId?: string; agentId?: string };
 
-/** One file a push adds or replaces: bytes already uploaded under `sha256`. */
+/** One file a push adds or replaces: bytes already uploaded under `sha256`. Its size and kind
+ * come from the blob, never from the client. */
 export type ArtifactFileInput = {
   path: string;
   sha256: string;
-  sizeBytes: number;
-  kind: string;
 };
+
+/** What a stored blob is: its size and the kind the server derived from the bytes. */
+export type ArtifactBlobInfo = { sizeBytes: number; kind: string };
 
 /** Content-addressed storage of artifact bytes, shared by every version. */
 export interface ArtifactBlobStore {
-  has(workspaceId: string, sha256: string): Promise<boolean>;
+  /** One lookup for every sha256 a push names; a blob that is not stored is absent. */
+  inspectMany(
+    workspaceId: string,
+    sha256s: readonly string[],
+  ): Promise<Map<string, ArtifactBlobInfo>>;
 }
 
 const NAME = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
@@ -27,6 +33,8 @@ const KINDS = new Set(["html", "markdown", "text", "csv", "image", "pdf", "video
 export const ARTIFACT_TEXT_LIMIT = 16 * 1024 * 1024;
 export const ARTIFACT_BINARY_LIMIT = 15 * 1024 * 1024;
 export const ARTIFACT_FILE_LIMIT = 200;
+export const ARTIFACT_NOTE_LIMIT = 500;
+export const ARTIFACT_LABEL_LIMIT = 60;
 
 export function artifactHomeKey(home: ArtifactHome): string {
   return home.kind === "conversation" ? `conversation:${home.conversationId}` : home.kind;
@@ -43,9 +51,43 @@ function actorColumns(actor: ArtifactActor) {
 }
 
 /**
+ * A file path as segments: no empty segment (`a//b`, a trailing `/`), no `.`/`..`, no backslash,
+ * no control character, nothing absolute. `a..b.txt` is a normal name and passes.
+ */
+export function artifactPathValid(path: string): boolean {
+  if (!path || path.startsWith("/") || path.endsWith("/")) return false;
+  return path
+    .split("/")
+    .every(
+      (segment) =>
+        segment.length > 0 &&
+        segment !== "." &&
+        segment !== ".." &&
+        !/[\\:\u0000-\u001f\u007f]/.test(segment),
+    );
+}
+
+/** The server's own reading of a file's kind, from its extension; the client cannot choose it. */
+export function artifactKindOfPath(path: string): string {
+  const extension = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
+  if (["html", "htm"].includes(extension)) return "html";
+  if (["md", "markdown"].includes(extension)) return "markdown";
+  if (["txt", "log"].includes(extension)) return "text";
+  if (extension === "csv") return "csv";
+  if (["png", "jpg", "jpeg", "gif", "webp", "avif", "svg"].includes(extension)) return "image";
+  if (extension === "pdf") return "pdf";
+  if (["mp4", "webm", "mov"].includes(extension)) return "video";
+  return "other";
+}
+
+type FileRow = { path: string; sha256: string; sizeBytes: number; kind: string };
+
+/**
  * Versioned artifacts: create, push a new immutable version, and read one. A push sends only
- * changed files; unlisted files carry over from its base version. Content lives in
- * content-addressed blobs, and this module only records which bytes a version uses.
+ * changed files; unlisted files carry over from its base version — and when the artifact moved on,
+ * a push over an older base is merged with the others' changes unless it touched the same file.
+ * Content lives in content-addressed blobs, and this module only records which bytes a version
+ * uses.
  */
 export class Artifacts {
   constructor(
@@ -66,29 +108,25 @@ export class Artifacts {
     if (!NAME.test(input.name)) invalid("artifact-name");
     if (!KINDS.has(input.kind)) invalid("artifact-kind");
     if (input.description && input.description.length > 1000) invalid("artifact-description");
-    const duplicate = await this.db.artifact.findUnique({
-      where: {
-        workspaceId_homeKey_name: {
+    try {
+      return await this.db.artifact.create({
+        data: {
           workspaceId: input.workspaceId,
           homeKey: artifactHomeKey(input.home),
           name: input.name,
+          title: input.title ?? "",
+          description: input.description ?? "",
+          kind: input.kind,
+          entryPath: input.entryPath,
+          ...actorColumns(input.author),
         },
-      },
-      select: { id: true },
-    });
-    if (duplicate) throw new AppError("CONFLICT", { errorId: "artifact-name-taken" });
-    return this.db.artifact.create({
-      data: {
-        workspaceId: input.workspaceId,
-        homeKey: artifactHomeKey(input.home),
-        name: input.name,
-        title: input.title ?? "",
-        description: input.description ?? "",
-        kind: input.kind,
-        entryPath: input.entryPath,
-        ...actorColumns(input.author),
-      },
-    });
+      });
+    } catch (error) {
+      // The live-name unique index is the authority: a soft-deleted row releases the name.
+      if (isUniqueViolation(error))
+        throw new AppError("CONFLICT", { errorId: "artifact-name-taken" });
+      throw error;
+    }
   }
 
   async push(input: {
@@ -100,66 +138,137 @@ export class Artifacts {
     note?: string;
     label?: string;
     entryPath?: string;
+    title?: string;
+    description?: string;
     files?: readonly ArtifactFileInput[];
     deletedPaths?: readonly string[];
   }): Promise<
-    | { status: "created"; versionId: string; number: number }
+    | { status: "created"; versionId: string; number: number; merged: string[] }
     | { status: "replayed"; versionId: string; number: number }
+    | { status: "nothing" }
     | { status: "missing"; missing: string[] }
   > {
-    const artifact = await this.db.artifact.findFirst({
-      where: { id: input.artifactId, workspaceId: input.workspaceId, deletedAt: null },
-      select: { id: true, currentVersion: true, entryPath: true, kind: true },
-    });
-    if (!artifact) throw new AppError("NOT_FOUND");
-
-    const replay = await this.db.artifactVersion.findUnique({
-      where: {
-        artifactId_idempotencyKey: {
-          artifactId: artifact.id,
-          idempotencyKey: input.idempotencyKey,
-        },
-      },
-      select: { id: true, number: true },
-    });
-    if (replay) return { status: "replayed", versionId: replay.id, number: replay.number };
-
-    if (input.baseVersion !== artifact.currentVersion)
-      throw new AppError("CONFLICT", { errorId: "artifact-base-moved" });
-
+    if ((input.note?.length ?? 0) > ARTIFACT_NOTE_LIMIT) invalid("artifact-note");
+    if ((input.label?.length ?? 0) > ARTIFACT_LABEL_LIMIT) invalid("artifact-label");
     const added = [...(input.files ?? [])];
-    const deleted = new Set(input.deletedPaths ?? []);
-    if (added.length + deleted.size > ARTIFACT_FILE_LIMIT) invalid("artifact-too-many-files");
+    const deleted = [...new Set(input.deletedPaths ?? [])];
+    for (const file of added) if (!artifactPathValid(file.path)) invalid("artifact-file-path");
+    for (const path of deleted) if (!artifactPathValid(path)) invalid("artifact-file-path");
+    if (new Set(added.map((file) => file.path)).size !== added.length)
+      invalid("artifact-file-path");
+    if (added.some((file) => deleted.includes(file.path))) invalid("artifact-file-path");
+
+    // The bytes are checked before the lock: a missing blob is a 200 the client uploads and retries.
+    const blobs = await this.blobs.inspectMany(input.workspaceId, [
+      ...new Set(added.map((file) => file.sha256)),
+    ]);
+    const missing = [...new Set(added.map((file) => file.sha256))].filter(
+      (sha256) => !blobs.has(sha256),
+    );
+    if (missing.length) return { status: "missing", missing };
     for (const file of added) {
-      if (!file.path || file.path.startsWith("/") || file.path.includes(".."))
-        invalid("artifact-file-path");
-      const limit = file.kind === "text" ? ARTIFACT_TEXT_LIMIT : ARTIFACT_BINARY_LIMIT;
-      if (file.sizeBytes > limit) invalid("artifact-file-too-large");
+      const blob = blobs.get(file.sha256)!;
+      const limit = blob.kind === "text" ? ARTIFACT_TEXT_LIMIT : ARTIFACT_BINARY_LIMIT;
+      if (blob.sizeBytes > limit) invalid("artifact-file-too-large");
     }
-    const missing: string[] = [];
-    for (const file of added)
-      if (!(await this.blobs.has(input.workspaceId, file.sha256))) missing.push(file.sha256);
-    if (missing.length) return { status: "missing", missing: [...new Set(missing)] };
 
-    const inherited =
-      input.baseVersion > 0
-        ? await this.db.artifactFile.findMany({
-            where: { versionId: await this.versionId(artifact.id, input.baseVersion) },
-            select: { path: true, sha256: true, sizeBytes: true, kind: true },
-          })
-        : [];
-    const files = new Map(inherited.map((file) => [file.path, file]));
-    for (const path of deleted) files.delete(path);
-    for (const file of added) files.set(file.path, file);
-    if (!files.size) invalid("artifact-no-files");
-    const entryPath = input.entryPath ?? artifact.entryPath;
-    if (!files.has(entryPath)) invalid("artifact-entry-missing");
+    return this.db.$transaction(async (tx) => {
+      // Serialize every push for this artifact: the base check, the replay check and the version
+      // number are decided under one row lock, so a concurrent push cannot slip between them.
+      const [locked] = await tx.$queryRaw<
+        {
+          id: string;
+          currentVersion: number;
+          entryPath: string;
+          title: string;
+          description: string;
+          kind: string;
+        }[]
+      >`SELECT "id", "currentVersion", "entryPath", "title", "description", "kind"
+         FROM "artifacts"
+         WHERE "id" = ${input.artifactId}::uuid AND "workspaceId" = ${input.workspaceId}::uuid
+           AND "deletedAt" IS NULL
+         FOR UPDATE`;
+      if (!locked) throw new AppError("NOT_FOUND");
+      const current = locked.currentVersion;
 
-    const created = await this.db.$transaction(async (tx) => {
+      const replay = await tx.artifactVersion.findUnique({
+        where: {
+          artifactId_idempotencyKey: {
+            artifactId: locked.id,
+            idempotencyKey: input.idempotencyKey,
+          },
+        },
+        select: { id: true, number: true },
+      });
+      if (replay)
+        return { status: "replayed", versionId: replay.id, number: replay.number } as const;
+
+      if (input.baseVersion > current || input.baseVersion < 0)
+        throw new AppError("CONFLICT", { errorId: "artifact-base-moved" });
+
+      const filesAt = async (number: number) => {
+        if (number <= 0) return new Map<string, FileRow>();
+        const version = await tx.artifactVersion.findUnique({
+          where: { artifactId_number: { artifactId: locked.id, number } },
+          select: { id: true },
+        });
+        if (!version) throw new AppError("CONFLICT", { errorId: "artifact-base-missing" });
+        const rows = await tx.artifactFile.findMany({
+          where: { versionId: version.id },
+          select: { path: true, sha256: true, sizeBytes: true, kind: true },
+        });
+        return new Map(rows.map((row) => [row.path, row]));
+      };
+      const currentFiles = await filesAt(current);
+      const baseFiles =
+        input.baseVersion === current ? currentFiles : await filesAt(input.baseVersion);
+
+      // Deleting something the push's own base never held is a mistake, not a no-op.
+      for (const path of deleted) if (!baseFiles.has(path)) invalid("artifact-file-path");
+
+      // What others changed between the push's base and the current version.
+      const othersChanged = new Set<string>();
+      if (input.baseVersion < current) {
+        for (const path of new Set([...baseFiles.keys(), ...currentFiles.keys()])) {
+          const before = baseFiles.get(path);
+          const now = currentFiles.get(path);
+          if (before?.sha256 !== now?.sha256) othersChanged.add(path);
+        }
+        // The same file touched on both sides cannot be merged without a human.
+        for (const path of [...added.map((file) => file.path), ...deleted])
+          if (othersChanged.has(path))
+            throw new AppError("CONFLICT", { errorId: "artifact-base-moved" });
+      }
+
+      const result = new Map(currentFiles);
+      for (const path of deleted) result.delete(path);
+      for (const file of added) {
+        const blob = blobs.get(file.sha256)!;
+        result.set(file.path, {
+          path: file.path,
+          sha256: file.sha256,
+          sizeBytes: blob.sizeBytes,
+          kind: blob.kind,
+        });
+      }
+      if (result.size > ARTIFACT_FILE_LIMIT) invalid("artifact-too-many-files");
+      const entryPath = input.entryPath ?? locked.entryPath;
+      if (result.size && !result.has(entryPath)) invalid("artifact-entry-missing");
+
+      const merged = [...othersChanged].sort();
+      const settingsChanged =
+        (input.entryPath !== undefined && input.entryPath !== locked.entryPath) ||
+        (input.title !== undefined && input.title !== locked.title) ||
+        (input.description !== undefined && input.description !== locked.description);
+      if (added.length === 0 && deleted.length === 0 && !settingsChanged)
+        // Nothing of the pusher's own: "Nothing to push", even when others moved the artifact.
+        return { status: "nothing" } as const;
+
       const version = await tx.artifactVersion.create({
         data: {
-          artifactId: artifact.id,
-          number: artifact.currentVersion + 1,
+          artifactId: locked.id,
+          number: current + 1,
           ...(input.publisher.agentId
             ? { publisherAgentId: input.publisher.agentId, publisherUserId: null }
             : { publisherUserId: input.publisher.userId ?? null, publisherAgentId: null }),
@@ -168,16 +277,17 @@ export class Artifacts {
           entryPath,
           changedPaths: {
             added: added.map((file) => file.path),
-            deleted: [...deleted],
+            deleted,
           } satisfies Prisma.InputJsonObject,
+          ...(merged.length ? { merged: merged as Prisma.InputJsonValue } : {}),
           idempotencyKey: input.idempotencyKey,
         },
         select: { id: true, number: true },
       });
       await tx.artifactFile.createMany({
-        data: [...files.values()].map((file) => ({
+        data: [...result.values()].map((file) => ({
           versionId: version.id,
-          artifactId: artifact.id,
+          artifactId: locked.id,
           path: file.path,
           sha256: file.sha256,
           sizeBytes: file.sizeBytes,
@@ -185,12 +295,16 @@ export class Artifacts {
         })),
       });
       await tx.artifact.update({
-        where: { id: artifact.id },
-        data: { currentVersion: version.number, entryPath },
+        where: { id: locked.id },
+        data: {
+          currentVersion: version.number,
+          entryPath,
+          ...(input.title !== undefined ? { title: input.title } : {}),
+          ...(input.description !== undefined ? { description: input.description } : {}),
+        },
       });
-      return version;
+      return { status: "created", versionId: version.id, number: version.number, merged } as const;
     });
-    return { status: "created", versionId: created.id, number: created.number };
   }
 
   async read(input: { workspaceId: string; artifactId: string; version?: number }) {
@@ -212,7 +326,15 @@ export class Artifacts {
     if (number <= 0) return { artifact, version: null, files: [] };
     const version = await this.db.artifactVersion.findUnique({
       where: { artifactId_number: { artifactId: artifact.id, number } },
-      select: { id: true, number: true, note: true, label: true, entryPath: true, createdAt: true },
+      select: {
+        id: true,
+        number: true,
+        note: true,
+        label: true,
+        entryPath: true,
+        merged: true,
+        createdAt: true,
+      },
     });
     if (!version) throw new AppError("NOT_FOUND");
     const files = await this.db.artifactFile.findMany({
@@ -222,13 +344,13 @@ export class Artifacts {
     });
     return { artifact, version, files };
   }
+}
 
-  private async versionId(artifactId: string, number: number) {
-    const version = await this.db.artifactVersion.findUnique({
-      where: { artifactId_number: { artifactId, number } },
-      select: { id: true },
-    });
-    if (!version) throw new AppError("CONFLICT", { errorId: "artifact-base-missing" });
-    return version.id;
-  }
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "P2002"
+  );
 }

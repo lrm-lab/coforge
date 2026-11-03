@@ -23,7 +23,8 @@ model Artifact {
   workspace       Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   versions        ArtifactVersion[]
 
-  @@unique([workspaceId, homeKey, name])
+  // The live name is unique per home through a partial index (`deletedAt IS NULL`), so a soft
+  // delete releases it at once; Prisma cannot express a partial unique index in the model.
   @@index([workspaceId, homeKey])
   @@map("artifacts")
 }
