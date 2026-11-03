@@ -129,8 +129,19 @@ export function useReferenceCompletion({
     textarea?.setSelectionRange(caret, caret);
   }, [value]);
 
+  // The text a dismissed list was shown for: Escape closes it until the text changes. The key's
+  // own keyup reports the caret again (React's onSelect), which would otherwise reopen it on the
+  // spot and take a second Escape (task #478).
+  const dismissedRef = useRef<string | undefined>(undefined);
+
   function track(text: string, caret: number | null) {
-    setQuery(caret === null ? undefined : activeReferenceQuery(text, caret));
+    if (dismissedRef.current !== undefined && dismissedRef.current !== text)
+      dismissedRef.current = undefined;
+    setQuery(
+      caret === null || dismissedRef.current !== undefined
+        ? undefined
+        : activeReferenceQuery(text, caret),
+    );
     setHighlighted(0);
   }
 
@@ -163,6 +174,7 @@ export function useReferenceCompletion({
       // Closing the list is all it does: a dialog or pane around the field must not close too.
       event.preventDefault();
       event.stopPropagation();
+      dismissedRef.current = value;
       setQuery(undefined);
       return true;
     }

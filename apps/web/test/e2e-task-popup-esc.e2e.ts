@@ -40,12 +40,17 @@ test("Esc steps back to the popup a sub-task or a parent was opened from", async
   });
   const as = { workspaceId, userId: DEV_BROWSER_USER.id };
   const tail = `${process.pid}-${Date.now()}`.slice(-6);
+  // A second member, for the composer's `@` completion to offer.
+  const peer = await db.user.create({
+    data: { username: `esc-peer-${tail}`, displayName: `Esc Peer ${tail}` },
+  });
+  await db.workspaceMembership.create({ data: { workspaceId, userId: peer.id, role: "member" } });
   const channel = await db.conversation.create({
     data: {
       workspaceId,
       channelName: `e2e-esc-${tail}`,
       description: "",
-      members: { create: [{ userId: DEV_BROWSER_USER.id }] },
+      members: { create: [{ userId: DEV_BROWSER_USER.id }, { userId: peer.id }] },
     },
   });
   // Another channel for the composer's `#` completion to offer.
@@ -193,18 +198,22 @@ test("Esc steps back to the popup a sub-task or a parent was opened from", async
       ).toBe(true);
       await stays(title, 1);
 
-      // The `#` completion: Esc closes it, the popup stays, focus stays in the composer.
-      await browser("fill", '[role="dialog"] textarea[data-composer]', `#e2e-esc-ref-${tail}`);
-      // A key as typing would end with, so React has seen where the caret is (`fill` sends none,
-      // and React would otherwise report the caret as moved on the next key and reopen the list).
-      await browser("press", "End");
-      await browser("wait", "--fn", `${composer}.hasAttribute("aria-controls")`);
-      await shoot(`guard-${state}-1-completion`);
-      await browser("press", "Escape");
-      await browser("wait", "--fn", `!${composer}.hasAttribute("aria-controls")`);
-      await stays(title, 1);
-      expect(await evaluate<boolean>(`document.activeElement === ${composer}`)).toBe(true);
-      await browser("fill", '[role="dialog"] textarea[data-composer]', "");
+      // The `#` and `@` completions: one Esc closes the list and only the list; it stays closed
+      // (the key's own keyup must not reopen it), the popup stays and so does focus.
+      for (const [trigger, typed] of [
+        ["channel", `#e2e-esc-ref-${tail}`],
+        ["mention", "@Esc"],
+      ] as const) {
+        await browser("fill", '[role="dialog"] textarea[data-composer]', typed);
+        await browser("wait", "--fn", `${composer}.hasAttribute("aria-controls")`);
+        await shoot(`guard-${state}-1-${trigger}`);
+        await browser("press", "Escape");
+        await browser("wait", "--fn", `!${composer}.hasAttribute("aria-controls")`);
+        await stays(title, 1);
+        expect(await evaluate<boolean>(`${composer}.hasAttribute("aria-controls")`)).toBe(false);
+        expect(await evaluate<boolean>(`document.activeElement === ${composer}`)).toBe(true);
+        await browser("fill", '[role="dialog"] textarea[data-composer]', "");
+      }
 
       // The ··· menu over the popup: Esc closes the menu alone.
       await press(`${dialog}.querySelector('button[aria-label*="的更多操作"]')`);
@@ -241,6 +250,7 @@ test("Esc steps back to the popup a sub-task or a parent was opened from", async
     await db.conversation
       .deleteMany({ where: { id: { in: [channel.id, other.id] } } })
       .catch(() => undefined);
+    await db.user.delete({ where: { id: peer.id } }).catch(() => undefined);
     await db.$disconnect();
   }
 }, 300_000);
