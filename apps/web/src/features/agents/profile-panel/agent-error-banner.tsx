@@ -1,7 +1,6 @@
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 
 import { Button } from "#src/components/base/buttons/button";
-import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import type { AgentDiagnosticFacts } from "#src/features/agents/agent-diagnostics";
 import { ACTIVITY_MARKER_CLASS, ActivityMarker } from "#src/features/agents/activity-marker";
 import { agentDisplay } from "#src/features/agents/agent-activity-presentation";
@@ -10,10 +9,9 @@ import { CopyDiagnosticsButton } from "./copy-diagnostics-button";
 
 /**
  * The Agent's current error, under the panel header on every tab, for as long as the cloud
- * display says `error`: the provider's own wording after `Error:` (two lines; the whole of it on
- * hover), and, for whoever gets the Activity tab, a copy of its diagnostic block and a way to it,
- * except on the tab itself, whose own band copies it. It leaves on its own once the display moves
- * on.
+ * display says `error`: the provider's own wording after `Error:`, in full, and, for whoever gets
+ * the Activity tab, a copy of its diagnostic block and a way to it, except on the tab itself,
+ * whose own band copies it. It leaves on its own once the display moves on.
  */
 export function AgentErrorBanner({
   agent,
@@ -39,11 +37,7 @@ export function AgentErrorBanner({
       {/* The Activity log's own error marker, at the log's inset and gap, so on that tab the
           marker and the text sit in the log's columns, right above its error rows. */}
       <ActivityMarker tone="error" className={ACTIVITY_MARKER_CLASS} />
-      <Tooltip title={label}>
-        <TooltipTrigger className="min-w-0 flex-1 cursor-default rounded-xs text-left outline-focus-ring focus-visible:outline-2">
-          <span className="line-clamp-2 text-sm break-words text-primary">{label}</span>
-        </TooltipTrigger>
-      </Tooltip>
+      <span className="min-w-0 flex-1 text-sm break-words text-primary">{label}</span>
       {!onActivityTab && onViewLogs && (
         <div className="-my-1 flex shrink-0 items-center gap-1">
           <CopyDiagnosticsButton agent={agent} display={display} />

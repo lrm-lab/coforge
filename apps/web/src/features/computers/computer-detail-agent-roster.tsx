@@ -15,7 +15,6 @@ import {
   type AgentControlExecute,
 } from "#src/features/agents/agent-runtime-controls";
 import { StatusDot } from "#src/components/ui/status-dot";
-import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { agentDisplay } from "#src/features/agents/agent-activity-presentation";
 import { cn } from "#src/lib/utils";
 import { DetailGroup } from "./computer-detail-rows";
@@ -278,7 +277,7 @@ function AgentRosterEntry({
   // The official Button carries the row: `h-auto`/`py-3` keep the table's rhythm, `rounded-none
   // px-0` keep its cells on the column heads, and `font-normal` leaves the cells at their own weight
   // instead of the Button's semibold.
-  const row = (
+  return (
     <Button
       noTextPadding
       color="tertiary"
@@ -294,13 +293,6 @@ function AgentRosterEntry({
       {identity}
     </Button>
   );
-  return status.kind === "error" ? (
-    <Tooltip title={status.label} placement="bottom end">
-      {row}
-    </Tooltip>
-  ) : (
-    row
-  );
 }
 
 /** The table's columns: name, runtime, status. The name and runtime are as wide as their widest
@@ -315,10 +307,10 @@ const ROSTER_ROW = "@2xl:col-span-3 @2xl:grid @2xl:grid-cols-subgrid @2xl:gap-x-
  * `gap-3`. The heads move by the same amount to stay over their cells. */
 const ROSTER_SELECT_INSET = "pl-7";
 
-/** One Agent's cells: avatar, name and @handle; its runtime and model; its status, an error's up
- * to two lines (the row's tooltip has the whole of it). Below `@2xl` the runtime stacks under the name and the status is a
- * dot at the row's end, its words for screen readers only, except an error's, which stacks under
- * the runtime so it can still be read. */
+/** One Agent's cells: avatar, name and @handle; its runtime and model; its status, an error in
+ * full. Below `@2xl` the runtime stacks under the name and the status is a dot at the row's end,
+ * its words for screen readers only, except an error's, which stacks under the runtime so it can
+ * still be read. */
 function AgentRosterIdentity({
   agent,
   display,
@@ -357,7 +349,7 @@ function AgentRosterIdentity({
           {status.kind === "error" && (
             <span
               aria-hidden="true"
-              className="line-clamp-2 text-xs break-words whitespace-normal text-error-primary @2xl:hidden"
+              className="text-xs break-words whitespace-normal text-error-primary @2xl:hidden"
             >
               {status.label}
             </span>
@@ -373,7 +365,7 @@ function AgentRosterIdentity({
         <span
           className={cn(
             "@max-2xl:sr-only",
-            status.kind === "error" ? "line-clamp-2 break-words whitespace-normal" : "truncate",
+            status.kind === "error" ? "break-words whitespace-normal" : "truncate",
           )}
         >
           {status.label}
