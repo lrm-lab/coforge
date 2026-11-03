@@ -34,6 +34,7 @@ import type { MentionDeliveryTracker } from "./mention-delivery-tracker";
 import type { PhaseBookkeeping } from "./phase-bookkeeping";
 import type { RuntimeErrorDeliveryHold } from "./runtime-error-delivery-hold";
 import type { SystemCleaner } from "#src/system-cleaner/system-cleaner";
+import type { TaskIdleNudge } from "./task-idle-nudge";
 
 type Publish = (id: string, source: PublishedActivityLaunch, activity: ActivityDraft) => void;
 
@@ -49,6 +50,8 @@ export type RuntimeEventObservationPorts = Readonly<{
   mentionDeliveries: MentionDeliveryTracker;
   agentSessions: AgentSessions;
   systemCleaner: SystemCleaner;
+  /** The task idle reminder, asked when an interrupted turn leaves the Agent idle. */
+  idleNudge?: Pick<TaskIdleNudge, "maybeAsk">;
   collectSkillAgents: ReadonlySet<string>;
   fastModeWarned: Set<string>;
   isWorking(agentId: string): boolean;
@@ -393,6 +396,7 @@ export function observeRuntimeEvent(
           : ports.interruptedActivity(agentId),
       );
     ports.systemCleaner.onAgentWorkingToIdle(agentId);
+    ports.idleNudge?.maybeAsk(agentId);
   }
   if (collectorFailReason && ports.collectSkillAgents.has(agentId))
     void ports.failCollectorRunningSlots(agentId, collectorFailReason).catch(() => {});

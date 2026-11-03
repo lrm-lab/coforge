@@ -26,6 +26,7 @@ import { launchAgentProcess } from "./agent-launch-process";
 import { getLogger } from "@logtape/logtape";
 import type { AgentSessionReport } from "@lrm/coforge-sdk/internal";
 import { SystemCleaner } from "#src/system-cleaner/system-cleaner";
+import { TaskIdleNudge } from "./task-idle-nudge";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
 
@@ -109,7 +110,45 @@ export type AgentLaunchCoordinatorPorts = {
 };
 
 export class AgentLaunchCoordinator {
-  constructor(readonly ports: AgentLaunchCoordinatorPorts) {}
+  /** Launches that created their native session, not resumed one: the idle reminder asks with
+   * `freshSession` once per such launch, because that session has no memory of the Tasks. */
+  readonly #freshLaunches = new Set<string>();
+  /** The task idle reminder's daemon side, built from this coordinator's own collaborators. */
+  readonly idleNudge: TaskIdleNudge;
+
+  constructor(readonly ports: AgentLaunchCoordinatorPorts) {
+    this.idleNudge = new TaskIdleNudge({
+      ask: async (agentId, request) => {
+        const agentApiKey = this.ports.agentApiKeys.get(agentId);
+        if (!agentApiKey) throw new Error("Agent API key is missing");
+        const transport = this.ports.transport();
+        if (!transport.agentTaskIdleNudge) throw new Error("idle nudge is unavailable");
+        return transport.agentTaskIdleNudge(request, agentApiKey);
+      },
+      idle: (agentId) => {
+        const session = this.ports.agentProcessManager.session(agentId);
+        return (
+          session !== undefined &&
+          session.hasLiveTurn === false &&
+          !this.ports.deliveryQueue.hasQueued(agentId) &&
+          !this.ports.deliveryQueue.shouldHold(agentId)
+        );
+      },
+      backgroundTasks: (agentId) =>
+        this.ports.currentActivityLaunches.get(agentId)?.backgroundTasks?.count ?? 0,
+      sessionId: (agentId) => this.ports.currentActivityLaunches.get(agentId)?.launchId,
+      freshSession: (agentId) => {
+        const launchId = this.ports.currentActivityLaunches.get(agentId)?.launchId;
+        return launchId !== undefined && this.#freshLaunches.has(launchId);
+      },
+      deliver: async (agentId, text) => {
+        const session = this.ports.agentProcessManager.session(agentId);
+        if (!session?.notify) return false;
+        await session.notify(text);
+        return true;
+      },
+    });
+  }
 
   async launchAgent(
     agentId: string,
@@ -130,6 +169,7 @@ export class AgentLaunchCoordinator {
         serverLaunch,
       });
     this.ports.sessions.rememberSession(agentId, reference);
+    if (request.sessionId === undefined) this.#freshLaunches.add(launchId);
     const launch: ActivityLaunch = {
       launchId,
       clientSeq: reused ? this.ports.agentProcessManager.lastClientSeq(agentId) : 0,
@@ -169,7 +209,7 @@ export class AgentLaunchCoordinator {
         ),
       );
     return launchAgentProcess(
-      this.ports,
+      { ...this.ports, idleNudge: this.idleNudge },
       agentId,
       config,
       request,

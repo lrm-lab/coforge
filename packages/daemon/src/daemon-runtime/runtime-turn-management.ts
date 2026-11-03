@@ -8,6 +8,7 @@ import type { ActivityLaunch } from "./activity-launch";
 import type { ActivityDraft, AgentActivityPublisher } from "./agent-activity-publisher";
 import type { AgentDeliveryQueue } from "./agent-delivery-queue";
 import type { AgentInboxCoordinator } from "./agent-inbox-coordinator";
+import type { TaskIdleNudge } from "./task-idle-nudge";
 import type { AgentLaunchCustody } from "./agent-launch-custody";
 import type { AgentMessageAttentionIndex } from "./agent-message-attention-index";
 import type { AgentProcessManager } from "#src/agent-runtime/agent-process-manager";
@@ -30,6 +31,8 @@ export type RuntimeTurnPorts = {
   phaseBookkeeping: PhaseBookkeeping;
   runtimeRelease: RuntimeRelease<ActivityLaunch>;
   systemCleaner: SystemCleaner;
+  /** The task idle reminder, asked when a turn leaves the Agent idle. */
+  idleNudge?: Pick<TaskIdleNudge, "maybeAsk">;
   drafts: Drafts;
   activity(
     agentId: string,
@@ -83,7 +86,10 @@ export function showQuietTurn(
 ): void {
   const waiting = launch.backgroundTasks?.quietDetail();
   publish(agentId, launch, ports.drafts.quietTurn(agentId, waiting));
-  if (!waiting) ports.systemCleaner.onAgentWorkingToIdle(agentId);
+  if (!waiting) {
+    ports.systemCleaner.onAgentWorkingToIdle(agentId);
+    ports.idleNudge?.maybeAsk(agentId);
+  }
 }
 
 /** Restore observation and delivery gating only; this is no proof of a turn outcome. */

@@ -20,6 +20,8 @@ import {
   type RuntimeEventObservationPorts,
 } from "./runtime-event-observation";
 import {
+  canonicalAgentMessageTarget,
+  observeLaunchEvent,
   handleAgentStart,
   handleAgentStop,
   handleAgentTurnInterrupt,
@@ -656,6 +658,9 @@ export class DaemonRuntime {
       mentionDeliveries: this.#mentionDeliveries,
       agentSessions: this.#agentSessions,
       systemCleaner: this.systemCleaner,
+      get idleNudge() {
+        return runtime.#launchCoordinator.idleNudge;
+      },
       collectSkillAgents: this.#collectSkillAgents,
       fastModeWarned: this.#fastModeWarned,
       isWorking: (agentId) => this.#isWorking(agentId),
@@ -1127,10 +1132,11 @@ export class DaemonRuntime {
     controlled: boolean,
     event: AgentRuntimeEvent,
   ): void {
-    // A late trajectory flush must not mutate the replacement launch's Agent state.
-    if (this.#currentActivityLaunches.get(agentId) !== launch) return;
-    observeRuntimeEvent(
-      this.#observationPorts,
+    observeLaunchEvent(
+      {
+        currentLaunch: (id) => this.#currentActivityLaunches.get(id),
+        observation: this.#observationPorts,
+      },
       agentId,
       launch,
       config,
@@ -1309,6 +1315,7 @@ export class DaemonRuntime {
       phaseBookkeeping: this.#phaseBookkeeping,
       runtimeRelease: this.#runtimeRelease,
       systemCleaner: this.systemCleaner,
+      idleNudge: this.#launchCoordinator.idleNudge,
       drafts: this.#drafts,
       activity: (
         agentId: string,
@@ -1435,19 +1442,14 @@ export class DaemonRuntime {
     target: string,
     agentApiKey: string,
   ): Promise<string> {
-    return canonicalThreadTarget(target, (parent, anchor) =>
-      this.#transport.agentMessage!(
-        {
-          idempotencyKey: crypto.randomUUID(),
-          agentId,
-          workspaceId: this.#connection.workspaceId,
-          operation: "read",
-          target: parent,
-          around: anchor,
-          limit: 1,
-        },
-        agentApiKey,
-      ),
+    return canonicalAgentMessageTarget(
+      {
+        workspaceId: this.#connection.workspaceId,
+        readMessage: this.#transport.agentMessage!,
+      },
+      agentId,
+      target,
+      agentApiKey,
     );
   }
 

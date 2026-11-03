@@ -12,6 +12,13 @@ import type {
   AgentTurnInterruptResult as InterruptOutcome,
 } from "#src/agent-runtime/agent-process-manager";
 import type { ActivityDraft } from "./agent-activity-publisher";
+import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
+import {
+  observeRuntimeEvent,
+  type RuntimeEventObservationPorts,
+} from "./runtime-event-observation";
+import { canonicalThreadTarget } from "./thread-target";
+import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import type { ActivityLaunch } from "./activity-launch";
 import { AGENT_ACTIVITY_DETAIL_KIND } from "@lrm/coforge-sdk/internal";
 import { interruptAgentTurn } from "./turn-interrupt";
@@ -186,4 +193,47 @@ export async function handleAgentWorkspaceReset(
   )
     throw new Error("Agent control scope unavailable");
   await ports.resetWorkspace(request);
+}
+
+/** The launch-event gate: a late trajectory flush must not touch the replacement launch. */
+export function observeLaunchEvent(
+  ports: {
+    currentLaunch(agentId: string): ActivityLaunch | undefined;
+    observation: RuntimeEventObservationPorts;
+  },
+  agentId: string,
+  launch: ActivityLaunch,
+  config: AgentRuntimeConfig,
+  runtime: AgentRuntime,
+  controlled: boolean,
+  event: AgentRuntimeEvent,
+): void {
+  if (ports.currentLaunch(agentId) !== launch) return;
+  observeRuntimeEvent(ports.observation, agentId, launch, config, runtime, controlled, event);
+}
+
+/** Resolves a thread target to its parent plus anchor by reading that parent once. */
+export function canonicalAgentMessageTarget(
+  ports: {
+    workspaceId: string;
+    readMessage: NonNullable<DaemonConnectionClient["agentMessage"]>;
+  },
+  agentId: string,
+  target: string,
+  agentApiKey: string,
+): Promise<string> {
+  return canonicalThreadTarget(target, (parent, anchor) =>
+    ports.readMessage(
+      {
+        idempotencyKey: crypto.randomUUID(),
+        agentId,
+        workspaceId: ports.workspaceId,
+        operation: "read",
+        target: parent,
+        around: anchor,
+        limit: 1,
+      },
+      agentApiKey,
+    ),
+  );
 }

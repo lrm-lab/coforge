@@ -36,11 +36,12 @@ import type { ActivityLaunch } from "./activity-launch";
 import type { LaunchRequest } from "./runtime-launch-types";
 import type { SessionReference } from "./launch-identity";
 import type { AgentLaunchCoordinatorPorts } from "./agent-launch-coordinator";
+import type { TaskIdleNudge } from "./task-idle-nudge";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
 
 export async function launchAgentProcess(
-  ports: AgentLaunchCoordinatorPorts,
+  ports: AgentLaunchCoordinatorPorts & { idleNudge?: Pick<TaskIdleNudge, "maybeAsk"> },
   agentId: string,
   config: AgentRuntimeConfig,
   request: LaunchRequest,
@@ -295,7 +296,10 @@ export async function launchAgentProcess(
       unsubscribe();
       if (launch.stopping) return;
       // A process that ended without a crash has stopped working too.
-      if (!launch.crashDetail) ports.systemCleaner.onAgentWorkingToIdle(agentId);
+      if (!launch.crashDetail) {
+        ports.systemCleaner.onAgentWorkingToIdle(agentId);
+        ports.idleNudge?.maybeAsk(agentId);
+      }
       // A reused launch is tracked by AgentControl exactly like a managed one is —
       // its exit must flip the on-disk record back to "stopped" (via `wake()`'s mirror image,
       // `stopped()`) so a later wake or server Start sees a truthful record.
