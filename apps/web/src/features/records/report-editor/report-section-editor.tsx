@@ -1,4 +1,6 @@
-import { ContentEditor, type ContentEditorProps } from "./content-editor";
+import type { Ref } from "react";
+
+import { ContentEditor, type ContentEditorProps, type ContentEditorRef } from "./content-editor";
 import type { UploadResult } from "./types";
 
 export type ReportSectionEditorProps = {
@@ -9,6 +11,8 @@ export type ReportSectionEditorProps = {
   className?: string;
   editable?: boolean;
   onUploadFile?: (file: File) => Promise<UploadResult | null>;
+  /** Lets the owner replace the text after the user has typed, which `defaultValue` cannot. */
+  editorRef?: Ref<ContentEditorRef>;
 };
 
 /**
@@ -23,6 +27,7 @@ export function ReportSectionEditor({
   className,
   editable = true,
   onUploadFile,
+  editorRef,
 }: ReportSectionEditorProps) {
   const props: ContentEditorProps = {
     defaultValue,
@@ -35,5 +40,5 @@ export function ReportSectionEditor({
     showBubbleMenu: editable,
     debounceMs: 150,
   };
-  return <ContentEditor {...props} />;
+  return <ContentEditor ref={editorRef} {...props} />;
 }

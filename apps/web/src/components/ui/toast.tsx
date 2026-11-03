@@ -48,22 +48,43 @@ export function AppToastProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** How long a toast carrying an Undo stays: longer than the 4 s default so the action can be reached
+ * (Material 3 suggests 4–10 s for a snackbar with an action). */
+export const UNDO_TOAST_MS = 6000;
+
+/** One success toast per title; `key` keeps two different items' toasts of the same title apart
+ * (closing chat A then chat B must not replace A's Undo). */
+function successId(title: string, key?: string) {
+  return key === undefined ? `success:${title}` : `success:${title}:${key}`;
+}
+
+const appToast = {
+  success(
+    title: string,
+    options?: {
+      durationMs?: number;
+      action?: { label: string; onClick: () => void };
+      key?: string;
+    },
+  ) {
+    toast.success(title, {
+      id: successId(title, options?.key),
+      duration: options?.durationMs,
+      action: options?.action,
+    });
+  },
+  /** Takes a success toast away early, for an Undo that no longer applies. */
+  dismiss(title: string, key?: string) {
+    toast.dismiss(successId(title, key));
+  },
+  // A toast only confirms that an action failed; an error reference belongs under an inline
+  // failure, never in a toast.
+  error(title: string) {
+    toast.error(title, { id: `error:${title}` });
+  },
+};
+
+/** One object for the whole app, so an effect can depend on it without re-running. */
 export function useAppToast() {
-  return {
-    success(
-      title: string,
-      options?: { durationMs?: number; action?: { label: string; onClick: () => void } },
-    ) {
-      toast.success(title, {
-        id: `success:${title}`,
-        duration: options?.durationMs,
-        action: options?.action,
-      });
-    },
-    // A toast only confirms that an action failed; an error reference belongs under an inline
-    // failure, never in a toast.
-    error(title: string) {
-      toast.error(title, { id: `error:${title}` });
-    },
-  };
+  return appToast;
 }

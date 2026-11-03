@@ -74,6 +74,7 @@
   "tab_reorder_dropped": "{tab} 已放在第 {position} 个，共 {count} 个。",
   "tab_reorder_cancelled": "已取消，{tab} 回到第 {position} 个，共 {count} 个。",
   "controls_cancel": "取消",
+  "action_undo": "撤销",
   "controls_copied": "已复制",
   "controls_back": "返回",
   "controls_next": "下一步",

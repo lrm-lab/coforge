@@ -7,7 +7,9 @@ import { PageHeader } from "#src/components/layout/page-header";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
+import { UNDO_TOAST_MS, useAppToast } from "#src/components/ui/toast";
 import { m } from "#src/paraglide/messages";
+import type { ContentEditorRef } from "#src/features/records/report-editor/content-editor";
 import { ReportSectionEditor } from "#src/features/records/report-editor/report-section-editor";
 import { readReportDraft, trackReportSave, writeReportDraft } from "./report-draft-cache";
 import { deleteRecordNote, saveRecordNote } from "./records.functions";
@@ -26,6 +28,7 @@ export function NoteDetail({ note }: { note: NoteSubject["note"] }) {
   const workspaceSlug = useWorkspaceSlug();
   const save = useServerFn(saveRecordNote);
   const remove = useServerFn(deleteRecordNote);
+  const toast = useAppToast();
   const [title, setTitle] = useState(note.title);
   const [body, setBody] = useState(() => readReportDraft(note.id)?.markdown ?? note.body);
   const titleRef = useRef(title);
@@ -38,28 +41,46 @@ export function NoteDetail({ note }: { note: NoteSubject["note"] }) {
   const [editingTitle, setEditingTitle] = useState(false);
   const deleteDialog = useRecordDeleteDialog();
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const editorRef = useRef<ContentEditorRef>(null);
+  /** The Undo toast for the last Clear, while it still applies. */
+  const clearedToastRef = useRef<string>(undefined);
 
-  async function persist(next: { title?: string; body?: string }, noteId = noteIdRef.current) {
+  /** Saves the note; resolves to whether the server took it. A failure is not thrown: autosaves
+   * ignore it, a Clear and its Undo report it. */
+  async function persist(
+    next: { title?: string; body?: string },
+    noteId = noteIdRef.current,
+  ): Promise<boolean> {
     setSaving(true);
     try {
       writeReportDraft(noteId, { markdown: next.body ?? bodyRef.current });
-      await trackReportSave(
-        noteId,
-        save({
-          data: {
-            noteId,
-            title: next.title,
-            body: next.body,
-          },
-        }),
+      const request = save({
+        data: {
+          noteId,
+          title: next.title,
+          body: next.body,
+        },
+      });
+      const saved = request.then(
+        () => true,
+        () => false,
       );
+      await trackReportSave(noteId, request);
       void refresh.records();
+      return await saved;
     } finally {
       setSaving(false);
     }
   }
 
+  function dismissClearedToast() {
+    if (clearedToastRef.current) toast.dismiss(clearedToastRef.current);
+    clearedToastRef.current = undefined;
+  }
+
   function schedulePersist(nextBody: string) {
+    // Typing after a Clear ends its Undo: restoring would overwrite the new text.
+    dismissClearedToast();
     setBody(nextBody);
     bodyRef.current = nextBody;
     writeReportDraft(noteIdRef.current, { markdown: nextBody });
@@ -83,11 +104,46 @@ export function NoteDetail({ note }: { note: NoteSubject["note"] }) {
     await persist({ title: next });
   }
 
+  /** Replaces the whole body at once and saves it. The editor is told directly: once the user has
+   * typed, it ignores a new `defaultValue`. Resolves to whether the save went through. */
+  async function replaceBody(next: string): Promise<boolean> {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = undefined;
+    editorRef.current?.setMarkdown(next);
+    setBody(next);
+    bodyRef.current = next;
+    writeReportDraft(noteIdRef.current, { markdown: next });
+    return persist({ body: next });
+  }
+
+  /** Clears the note at once and, once the save went through, offers Undo, which puts the cleared
+   * text back unless something was typed since. */
   async function clearBody() {
-    setBody("");
-    bodyRef.current = "";
-    writeReportDraft(noteIdRef.current, { markdown: "" });
-    await persist({ body: "" });
+    const previous = editorRef.current?.getMarkdown() ?? bodyRef.current;
+    const title = m.records_note_cleared();
+    // Registered before the save is awaited, so typing while it runs withdraws the Undo.
+    if (previous) clearedToastRef.current = title;
+    const saved = await replaceBody("");
+    if (!previous) return;
+    if (!saved) {
+      if (clearedToastRef.current === title) clearedToastRef.current = undefined;
+      return;
+    }
+    if (clearedToastRef.current !== title) return;
+    toast.success(title, {
+      durationMs: UNDO_TOAST_MS,
+      action: {
+        label: m.action_undo(),
+        onClick: () => {
+          // Text typed since is newer than what was cleared: restoring would overwrite it.
+          if ((editorRef.current?.getMarkdown() ?? bodyRef.current) !== "") return;
+          clearedToastRef.current = undefined;
+          void replaceBody(previous).then((restored) => {
+            if (!restored) toast.error(m.records_note_restore_failed());
+          });
+        },
+      },
+    });
   }
 
   async function removeNote() {
@@ -100,6 +156,13 @@ export function NoteDetail({ note }: { note: NoteSubject["note"] }) {
       search: { tab: "notes" },
     });
   }
+
+  // Leaving the note ends its Undo: another view of the note may have been edited since.
+  useEffect(() => {
+    return () => {
+      if (clearedToastRef.current) toast.dismiss(clearedToastRef.current);
+    };
+  }, [note.id, toast]);
 
   useEffect(() => {
     return () => {
@@ -188,6 +251,7 @@ export function NoteDetail({ note }: { note: NoteSubject["note"] }) {
             )}
             <ReportSectionEditor
               key={note.id}
+              editorRef={editorRef}
               defaultValue={body}
               placeholder={m.records_note_body_placeholder()}
               className="min-h-[55vh] pb-[45vh]"

@@ -16,7 +16,7 @@ import {
   EmptyTitle,
 } from "#src/components/ui/empty";
 import { RelativeTime } from "#src/components/ui/relative-time";
-import { useAppToast } from "#src/components/ui/toast";
+import { UNDO_TOAST_MS, useAppToast } from "#src/components/ui/toast";
 import { copyText } from "#src/lib/clipboard";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { m } from "#src/paraglide/messages";
@@ -29,8 +29,8 @@ import { messagePlainText } from "./selection-copy";
  * The Saved view (#127). A card jumps back to the message's position in its conversation — a
  * thread reply lands on its root's row and the thread stays closed (position-only `?message=`,
  * not the notification deep link's `#message-<id>` hash; see `saved-messages-model`). The trailing
- * bookmark unsaves in one click, without a confirm: it is instantly reversible and the card
- * disappearing is the confirmation (docs/design/toast-vs-inline.md §13).
+ * bookmark unsaves in one click, without a confirm: the card goes at once and the toast offers Undo,
+ * which saves the same message again (docs/design/toast-vs-inline.md §13).
  */
 export function SavedMessagesView() {
   const saved = useSavedMessages();
@@ -62,7 +62,12 @@ export function SavedMessagesView() {
       ) : (
         <ol className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-4">
           {entries.map((entry) => (
-            <SavedMessageCard key={entry.message.id} entry={entry} onUnsave={saved.unsave} />
+            <SavedMessageCard
+              key={entry.message.id}
+              entry={entry}
+              onSave={saved.save}
+              onUnsave={saved.unsave}
+            />
           ))}
         </ol>
       )}
@@ -72,9 +77,12 @@ export function SavedMessagesView() {
 
 function SavedMessageCard({
   entry,
+  onSave,
   onUnsave,
 }: {
   entry: SavedEntry;
+  /** Puts the card back at once; rejects (after taking it away again) when the server refuses. */
+  onSave: (entry: SavedEntry) => Promise<void>;
   /** Takes the card away at once; rejects (after putting it back) when the server refuses. */
   onUnsave: (messageId: string) => Promise<void>;
 }) {
@@ -91,7 +99,19 @@ function SavedMessageCard({
   const attachmentName = message.attachments[0]?.fileName;
 
   function remove() {
-    void onUnsave(message.id).catch(() => toast.error(m.conversation_save_failed()));
+    void onUnsave(message.id)
+      .then(() =>
+        toast.success(m.conversation_unsaved(), {
+          key: message.id,
+          durationMs: UNDO_TOAST_MS,
+          action: {
+            label: m.action_undo(),
+            onClick: () =>
+              void onSave(entry).catch(() => toast.error(m.conversation_save_failed())),
+          },
+        }),
+      )
+      .catch(() => toast.error(m.conversation_save_failed()));
   }
 
   function copy(text: string, success: string) {

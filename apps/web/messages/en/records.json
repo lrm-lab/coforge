@@ -69,6 +69,8 @@
   "records_templates_empty": "No weekly templates yet. Create one to get started.",
   "records_report_actions": "Report actions",
   "records_report_clear": "Clear",
+  "records_note_cleared": "Note cleared",
+  "records_note_restore_failed": "Couldn't restore the note. Try again.",
   "records_report_reset": "Reset",
   "records_report_delete": "Delete",
   "records_report_delete_confirm_title": "Delete weekly report \"{name}\"?",

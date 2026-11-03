@@ -69,6 +69,8 @@
   "records_templates_empty": "还没有周报模板。点击「创建模板」开始配置。",
   "records_report_actions": "周报操作",
   "records_report_clear": "清空",
+  "records_note_cleared": "笔记已清空",
+  "records_note_restore_failed": "恢复笔记失败，请重试。",
   "records_report_reset": "重置",
   "records_report_delete": "删除",
   "records_report_delete_confirm_title": "删除周报「{name}」？",

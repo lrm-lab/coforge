@@ -11,7 +11,7 @@ import {
 import { SubmenuTrigger } from "react-aria-components";
 
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
-import { useAppToast } from "#src/components/ui/toast";
+import { UNDO_TOAST_MS, useAppToast } from "#src/components/ui/toast";
 import { m } from "#src/paraglide/messages";
 import type { PinRef } from "./pinned-conversations";
 import { useSidebarActions } from "./sidebar-lists";
@@ -51,8 +51,8 @@ export type ConversationRowMenuTarget =
  * menu (`MenuTrigger trigger="contextMenu"`, #122/#126/#128). The framework opens it on right
  * click, long-press on touch and the platform's keyboard/screen-reader shortcuts, and places it
  * at that point; a left click stays an ordinary navigation. Close Chat acts at once, without a
- * confirm: it only hides the chat from the viewer's own list, and a new message from someone else
- * brings it back.
+ * confirm: it only hides the chat from the viewer's own list, a new message from someone else
+ * brings it back, and its toast offers Undo.
  */
 export function ConversationRowMenu({
   target,
@@ -96,11 +96,28 @@ export function ConversationRowMenu({
       moveTo(id === "home" ? null : id);
       return;
     }
+    /** Closes the chat, then offers the way back: Undo reopens it where it stood in the list. */
+    const closeChat = async () => {
+      await actions.close(row);
+      toast.success(m.conversation_closed(), {
+        // Closing chat A then chat B keeps both Undos.
+        key: row.kind === "channel" ? `channel:${row.channelId}` : `direct:${row.conversationId}`,
+        durationMs: UNDO_TOAST_MS,
+        action: {
+          label: m.action_undo(),
+          onClick: () =>
+            void actions.reopen(row).catch((cause: unknown) => {
+              console.error("closed chat could not be reopened", cause);
+              toast.error(m.conversation_menu_action_error());
+            }),
+        },
+      });
+    };
     const run = {
       "mark-unread": () => actions.markUnread(row),
       pin: () => actions.setPinned(row, !target.pinned),
       mute: () => actions.setMuted(row, !target.muted),
-      "close-chat": () => actions.close(row),
+      "close-chat": closeChat,
     }[String(key)];
     run?.().catch((cause: unknown) => {
       console.error("conversation row menu action failed", cause);
