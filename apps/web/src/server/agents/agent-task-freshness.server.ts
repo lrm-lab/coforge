@@ -123,7 +123,8 @@ export async function executeAgentTaskWithFreshness(
       // The caller confirmed the held review: advance over everything the target holds and
       // execute — the task write's own "send anyway".
       const recent = await freshness.readRecent?.(HELD_CONTEXT_LIMIT, excluded);
-      if (recent?.maxSequence !== undefined) await freshness.advanceReadThrough?.(recent.maxSequence);
+      if (recent?.maxSequence !== undefined)
+        await freshness.advanceReadThrough?.(recent.maxSequence);
       return execute();
     }
     const unconsumed = await pending();
