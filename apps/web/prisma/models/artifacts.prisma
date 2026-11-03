@@ -51,6 +51,9 @@ model ArtifactVersion {
   /// What this version took from others' saves since its base: `{ files: paths, settings: names }`;
   /// null when it took nothing.
   merged           Json?
+  /// The version this one went back to (`Artifacts.revert`): its content saved again as a new
+  /// version. Null for an ordinary save.
+  revertedFrom     Int?
   idempotencyKey   String
   createdAt        DateTime       @default(now())
   artifact         Artifact       @relation(fields: [artifactId], references: [id], onDelete: Cascade)

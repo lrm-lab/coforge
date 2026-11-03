@@ -62,6 +62,20 @@ export async function artifactHomeAccess(
   return { read, write: member && conversation.archivedAt === null };
 }
 
+/** The actor's access to a home, required: `NOT_FOUND` where it cannot read, as if nothing were
+ * there, and `ACCESS_DENIED` where it reads but may not write. */
+export async function requireArtifactHome(
+  db: Db,
+  workspaceId: string,
+  actor: ArtifactActor,
+  homeKey: string,
+  need: "read" | "write",
+) {
+  const access = await artifactHomeAccess(db, workspaceId, actor, homeKey);
+  if (!access.read) throw new AppError("NOT_FOUND");
+  if (need === "write" && !access.write) throw new AppError("ACCESS_DENIED");
+}
+
 /** Whether the actor belongs to the Workspace: a member person, or one of its live Agents. */
 async function inWorkspace(db: Db, workspaceId: string, actor: ArtifactActor) {
   if (actor.userId)

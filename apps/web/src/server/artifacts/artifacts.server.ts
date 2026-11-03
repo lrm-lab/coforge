@@ -11,7 +11,7 @@ import {
   type ArtifactFileRow as FileRow,
 } from "./artifact-files.server";
 import {
-  artifactHomeAccess,
+  requireArtifactHome,
   artifactsDisabled,
   artifactsEnabled,
   canDeleteArtifact,
@@ -25,6 +25,9 @@ import {
   type ArtifactSettingName,
   type ArtifactSettings,
 } from "./artifact-merge.server";
+import { ArtifactReads } from "./artifact-reads.server";
+import { revertArtifact, type ArtifactRevert } from "./artifact-revert.server";
+import { announceVersion, type ArtifactSignals } from "./artifact-signals.server";
 
 /** Where an artifact lives; its home is its only access rule. */
 export type ArtifactHome =
@@ -66,14 +69,22 @@ function actorColumns(actor: ArtifactActor) {
  */
 export class Artifacts {
   private readonly enabled: (workspaceId: string) => Promise<boolean>;
+  private readonly reads: ArtifactReads;
+  private readonly signals?: ArtifactSignals;
 
   constructor(
     private readonly db: PrismaClient,
     private readonly blobs: ArtifactBlobStore,
-    /** Whether the Workspace has the `artifacts` experiment on; every operation asks first. */
-    options: { enabled?: (workspaceId: string) => Promise<boolean> } = {},
+    options: {
+      /** Whether the Workspace has the `artifacts` experiment on; every operation asks first. */
+      enabled?: (workspaceId: string) => Promise<boolean>;
+      /** Where a new version is announced, after it commits; none without it. */
+      signals?: ArtifactSignals;
+    } = {},
   ) {
     this.enabled = options.enabled ?? ((workspaceId) => artifactsEnabled(db, workspaceId));
+    this.reads = new ArtifactReads(db, this.enabled);
+    this.signals = options.signals;
   }
 
   /** The actor's access to a home: `NOT_FOUND` where it cannot read, as if nothing were there,
@@ -84,9 +95,7 @@ export class Artifacts {
     homeKey: string,
     need: "read" | "write",
   ) {
-    const access = await artifactHomeAccess(this.db, workspaceId, actor, homeKey);
-    if (!access.read) throw new AppError("NOT_FOUND");
-    if (need === "write" && !access.write) throw new AppError("ACCESS_DENIED");
+    await requireArtifactHome(this.db, workspaceId, actor, homeKey, need);
   }
 
   /** A live artifact's home and author, after the experiment check: what every access needs. */
@@ -158,6 +167,10 @@ export class Artifacts {
     description?: string;
     files?: readonly ArtifactFileInput[];
     deletedPaths?: readonly string[];
+    /** Refuse, rather than merge, when the artifact moved past `baseVersion` (going back). */
+    exactBase?: boolean;
+    /** The version this save goes back to (`revert`). */
+    revertedFrom?: number;
   }): Promise<
     | {
         status: "created";
@@ -202,7 +215,7 @@ export class Artifacts {
       if (document && blob.sizeBytes > ARTIFACT_DOCUMENT_LIMIT) invalid("artifact-file-too-large");
     }
 
-    return this.db.$transaction(async (tx) => {
+    const saved = await this.db.$transaction(async (tx) => {
       // Serialize every push for this artifact: the base check, the replay check and the version
       // number are decided under one row lock, so a concurrent push cannot slip between them.
       const [locked] = await tx.$queryRaw<
@@ -234,7 +247,11 @@ export class Artifacts {
       if (replay)
         return { status: "replayed", versionId: replay.id, number: replay.number } as const;
 
-      if (input.baseVersion > current || input.baseVersion < 0)
+      if (
+        input.baseVersion > current ||
+        input.baseVersion < 0 ||
+        (input.exactBase && input.baseVersion !== current)
+      )
         throw new AppError("CONFLICT", { errorId: "artifact-base-moved" });
 
       // A version's files, and the settings it recorded; before the first version, none of either.
@@ -338,7 +355,12 @@ export class Artifacts {
       const settingsChanged = ARTIFACT_SETTINGS.some(
         (name) => settings.result[name] !== currentSettings[name],
       );
-      if (added.length === 0 && deleted.length === 0 && !settingsChanged)
+      // A file sent again as it already is changes nothing.
+      const filesChanged =
+        deleted.length > 0 ||
+        added.some((file) => currentFiles.get(file.path)?.sha256 !== result.get(file.path)!.sha256);
+      // A label names the content as it is now, so it alone is a version worth saving.
+      if (!filesChanged && !settingsChanged && !input.label)
         // Nothing of the pusher's own: "Nothing to push", even when others moved the artifact.
         return { status: "nothing" } as const;
       // In this transaction, so the sweep of unused blobs leaves them; one it removed since the
@@ -369,6 +391,7 @@ export class Artifacts {
             merged: { files: merged, settings: settings.merged } satisfies Prisma.InputJsonObject,
           }),
           idempotencyKey: input.idempotencyKey,
+          revertedFrom: input.revertedFrom ?? null,
         },
         select: { id: true, number: true },
       });
@@ -400,6 +423,15 @@ export class Artifacts {
       } as const;
       // A line merge reads three documents of up to 2 MiB and stores one under this lock.
     }, PUSH_TRANSACTION);
+    if (saved.status === "created")
+      await announceVersion(this.signals, {
+        workspaceId: input.workspaceId,
+        homeKey,
+        artifactId: input.artifactId,
+        number: saved.number,
+        publisher: input.publisher,
+      });
+    return saved;
   }
 
   /** Soft-deletes the artifact (its name is free again at once); its author's, or a Workspace
@@ -420,51 +452,19 @@ export class Artifacts {
     });
   }
 
-  async read(input: {
-    workspaceId: string;
-    artifactId: string;
-    reader: ArtifactActor;
-    version?: number;
-  }) {
-    if (!(await this.enabled(input.workspaceId))) throw artifactsDisabled();
-    const artifact = await this.db.artifact.findFirst({
-      where: { id: input.artifactId, workspaceId: input.workspaceId, deletedAt: null },
-      select: {
-        id: true,
-        name: true,
-        title: true,
-        description: true,
-        kind: true,
-        entryPath: true,
-        homeKey: true,
-        currentVersion: true,
-      },
-    });
-    if (!artifact) throw new AppError("NOT_FOUND");
-    await this.requireHome(input.workspaceId, input.reader, artifact.homeKey, "read");
-    const number = input.version ?? artifact.currentVersion;
-    if (number <= 0) return { artifact, version: null, files: [] };
-    const version = await this.db.artifactVersion.findUnique({
-      where: { artifactId_number: { artifactId: artifact.id, number } },
-      select: {
-        id: true,
-        number: true,
-        note: true,
-        label: true,
-        entryPath: true,
-        title: true,
-        description: true,
-        merged: true,
-        createdAt: true,
-      },
-    });
-    if (!version) throw new AppError("NOT_FOUND");
-    const files = await this.db.artifactFile.findMany({
-      where: { versionId: version.id },
-      select: { path: true, sha256: true, sizeBytes: true, kind: true },
-      orderBy: { path: "asc" },
-    });
-    return { artifact, version, files };
+  /** The artifact and one version (its current one by default) with that version's files. */
+  read(input: Parameters<ArtifactReads["read"]>[0]) {
+    return this.reads.read(input);
+  }
+
+  /** The artifact's versions, newest first, a page at a time. */
+  history(input: Parameters<ArtifactReads["history"]>[0]) {
+    return this.reads.history(input);
+  }
+
+  /** Goes back to version `to` (`revertArtifact`): its content saved as a new version. */
+  revert(input: ArtifactRevert) {
+    return revertArtifact(this.reads, (save) => this.push(save), input);
   }
 }
 

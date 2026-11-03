@@ -18,6 +18,7 @@ export const REALTIME_EVENTS = {
   dmClosed: "dm.closed.v1",
   dmMarked: "dm.marked.v1",
   activityChanged: "activity.changed.v1",
+  artifactVersionPublished: "artifact.version.published.v1",
   conversationActivity: "conversation.activity.v1",
   conversationRead: "conversation.read.v1",
   messageAvailable: "message.available.v1",
