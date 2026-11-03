@@ -26,9 +26,9 @@ test("a phone or tablet subscribes as mobile, a computer as desktop", () => {
 });
 
 test("a device is named by its browser and system", () => {
-  expect(browserDeviceLabel(MAC_CHROME)).toBe("Chrome · macOS");
-  expect(browserDeviceLabel(IPHONE_SAFARI)).toBe("Safari · iPhone");
-  expect(browserDeviceLabel(ANDROID_CHROME)).toBe("Chrome · Android");
-  expect(browserDeviceLabel(WINDOWS_EDGE)).toBe("Edge · Windows");
+  expect(browserDeviceLabel(MAC_CHROME)).toBe("macOS · Chrome");
+  expect(browserDeviceLabel(IPHONE_SAFARI)).toBe("iPhone · Safari");
+  expect(browserDeviceLabel(ANDROID_CHROME)).toBe("Android · Chrome");
+  expect(browserDeviceLabel(WINDOWS_EDGE)).toBe("Windows · Edge");
   expect(browserDeviceLabel("curl/8")).toBe("Browser");
 });

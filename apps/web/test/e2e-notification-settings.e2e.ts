@@ -44,7 +44,7 @@ test("notification settings save at once and list the devices", async () => {
             "BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QTpQtUbVlUls0VJXg7A8u-Ts1XbjhazAkj7I99e8QcYP7DkM",
           auth: "tBHItJI5svbpez7KI4CCXg",
           deviceKind: index === 0 ? "desktop" : "mobile",
-          deviceLabel: index === 0 ? "Chrome · macOS" : "Safari · iPhone",
+          deviceLabel: index === 0 ? "macOS · Chrome" : "iPhone · Safari",
           ...(index === 0
             ? { lastSuccessAt: now }
             : { lastFailureAt: now, lastFailureReason: "unreachable" }),
@@ -67,8 +67,17 @@ test("notification settings save at once and list the devices", async () => {
 
     await browser("set", "viewport", "1280", "900");
     await browser("open", page);
-    await browser("wait", "--fn", `${pageHydrated} && ${text}.includes("Safari · iPhone")`);
-    expect(await evaluate<boolean>(`${text}.includes("Chrome · macOS")`)).toBe(true);
+    await browser("wait", "--fn", `${pageHydrated} && ${text}.includes("iPhone · Safari")`);
+    expect(await evaluate<boolean>(`${text}.includes("macOS · Chrome")`)).toBe(true);
+    // The failed device says why; with message notifications off the page says these do nothing;
+    // the quiet hours' time zone opens "Language and region".
+    expect(await evaluate<boolean>(`${text}.includes("连不上它的推送服务")`)).toBe(true);
+    expect(await evaluate<boolean>(`${text}.includes("消息通知已关闭")`)).toBe(true);
+    expect(
+      await evaluate<boolean>(
+        `[...document.querySelectorAll("a")].some((a) => a.href.includes("section=language-region"))`,
+      ),
+    ).toBe(true);
     // Sound off and quiet hours on, each saved at once.
     await evaluate(
       `([...document.querySelectorAll('[role="switch"], input[role="switch"]')].find((el) => (el.getAttribute("aria-label") ?? el.closest("label")?.textContent ?? "").includes("声音")) ?? document.querySelector('input[aria-label="声音"]')).click() ?? true`,
@@ -97,7 +106,7 @@ test("notification settings save at once and list the devices", async () => {
 
     await browser("set", "viewport", "390", "844");
     await browser("open", page);
-    await browser("wait", "--fn", `${pageHydrated} && ${text}.includes("Safari · iPhone")`);
+    await browser("wait", "--fn", `${pageHydrated} && ${text}.includes("iPhone · Safari")`);
     expect(
       await evaluate<boolean>(
         `document.documentElement.scrollWidth <= document.documentElement.clientWidth`,

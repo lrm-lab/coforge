@@ -385,7 +385,7 @@ function NotificationSettings({
       )}
       {/* The account's rules for every device, and the devices themselves (task #469). */}
       <div className="mt-8 flex flex-col gap-8">
-        <NotificationSettingsPanel />
+        <NotificationSettingsPanel enabled={browserNotificationsEnabled} />
       </div>
     </div>
   );

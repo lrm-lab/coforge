@@ -12,7 +12,7 @@
   "notif_paused_until": "Notifications are paused on every device until {until}.",
   "notif_pause_resume": "Resume",
   "notif_quiet_title": "Quiet hours",
-  "notif_quiet_description": "Every day in this window, no device pops up a notification; unread counts still update. Time zone: {timeZone}.",
+  "notif_quiet_description": "Every day in this window, no device pops up a notification; unread counts still update.",
   "notif_quiet_from": "From",
   "notif_quiet_to": "To",
   "notif_section_content": "Content",
@@ -49,5 +49,11 @@
   "notif_test_unreachable": "Push service unreachable",
   "notif_save_failed": "Notification settings could not be saved. Try again.",
   "notif_save_conflict": "These settings were just changed on another device. The latest values are shown; try again.",
-  "notif_load_failed": "Notification settings could not be loaded."
+  "notif_load_failed": "Notification settings could not be loaded.",
+  "notif_device_last_failure_reason": "Last failed {time}: {reason}",
+  "notif_failure_removed": "the subscription is no longer valid; turn notifications on again on that device",
+  "notif_failure_unreachable": "its push service could not be reached",
+  "notif_failure_failed": "its push service refused it",
+  "notif_off_note": "Message notifications are off, so these settings do nothing until you turn them on.",
+  "notif_time_zone_label": "Time zone: "
 }

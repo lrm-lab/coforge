@@ -17,7 +17,7 @@ export function browserDeviceKind(userAgent: string, maxTouchPoints: number): "d
   return ipadAsMac || /Android|iPhone|iPad|iPod|Mobile/.test(userAgent) ? "mobile" : "desktop";
 }
 
-/** A short name for this browser, "Chrome · macOS", for the Settings device list (a name in no language, as it is stored). */
+/** A short name for this browser, "macOS · Chrome", for the Settings device list (a name in no language, as it is stored). */
 export function browserDeviceLabel(userAgent: string): string {
   const browser = /Edg\//.test(userAgent)
     ? "Edge"
@@ -41,7 +41,7 @@ export function browserDeviceLabel(userAgent: string): string {
             : /Linux/.test(userAgent)
               ? "Linux"
               : "";
-  return system ? `${browser} · ${system}` : browser;
+  return system ? `${system} · ${browser}` : browser;
 }
 
 let lifecycleDisabled = false;

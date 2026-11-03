@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { Globe01, MessageTextSquare01, Monitor01, PauseCircle, Phone01 } from "@untitledui/icons";
 
@@ -10,6 +11,7 @@ import { SelectItem } from "#src/components/base/select/select-item";
 import { Toggle } from "#src/components/base/toggle/toggle";
 import { SettingsCard, SettingsField, SettingsGroup } from "#src/components/settings-layout";
 import { useAppToast } from "#src/components/ui/toast";
+import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { isAppError } from "#src/lib/app-error";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
@@ -84,6 +86,13 @@ const OUTCOME_LABELS: Record<TestOutcome, () => string> = {
   unreachable: m.notif_test_unreachable,
 };
 
+/** Why a device's last notification failed, as the person can act on it. */
+function failureReason(reason: string | null): string {
+  if (reason === "removed") return m.notif_failure_removed();
+  if (reason === "unreachable") return m.notif_failure_unreachable();
+  return m.notif_failure_failed();
+}
+
 const when = (iso: string) =>
   new Intl.DateTimeFormat(getLocale(), { dateStyle: "medium", timeStyle: "short" }).format(
     new Date(iso),
@@ -96,7 +105,13 @@ const when = (iso: string) =>
  * change saves at once from the version it was made from; another device's save in between is
  * shown and the change is asked for again.
  */
-export function NotificationSettingsPanel() {
+export function NotificationSettingsPanel({
+  enabled,
+}: {
+  /** Whether message notifications are on at all; off, these settings do nothing. */
+  enabled: boolean;
+}) {
+  const workspaceSlug = useWorkspaceSlug();
   const queryClient = useQueryClient();
   const toast = useAppToast();
   const load = useServerFn(getNotificationSettings);
@@ -144,6 +159,14 @@ export function NotificationSettingsPanel() {
 
   return (
     <>
+      {!enabled && (
+        <p
+          role="note"
+          className="rounded-lg border border-secondary bg-secondary px-4 py-3 text-sm text-secondary"
+        >
+          {m.notif_off_note()}
+        </p>
+      )}
       <SettingsGroup icon={PauseCircle} label={m.notif_section_pause()}>
         <SettingsCard>
           <SettingsField label={m.notif_pause_title()} description={m.notif_pause_description()}>
@@ -182,7 +205,7 @@ export function NotificationSettingsPanel() {
           <SettingsField
             inline
             label={m.notif_quiet_title()}
-            description={m.notif_quiet_description({ timeZone })}
+            description={m.notif_quiet_description()}
           >
             <Toggle
               size="md"
@@ -192,6 +215,18 @@ export function NotificationSettingsPanel() {
               onChange={(enabled) => void save({ quietHours: { ...quiet, enabled } })}
             />
           </SettingsField>
+          {/* The zone quiet hours read is the one "Language and region" sets; it opens there. */}
+          <p className="-mt-3 text-sm text-tertiary">
+            {m.notif_time_zone_label()}
+            <Link
+              to="/w/$workspaceSlug/settings"
+              params={{ workspaceSlug }}
+              search={{ section: "language-region" }}
+              className="rounded-sm font-medium text-brand-secondary outline-focus-ring hover:underline focus-visible:outline-2"
+            >
+              {timeZone}
+            </Link>
+          </p>
           {quiet.enabled && (
             <div className="flex flex-wrap items-end gap-3">
               {(["startMinute", "endMinute"] as const).map((end) => (
@@ -300,7 +335,7 @@ export function NotificationSettingsPanel() {
                     <Icon aria-hidden="true" className="size-5 shrink-0 text-fg-quaternary" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-primary">
-                        {device.deviceLabel ??
+                        {(device.deviceLabel !== "Browser" && device.deviceLabel) ||
                           (device.deviceKind === "mobile"
                             ? m.notif_device_mobile()
                             : device.deviceKind === "desktop"
@@ -315,7 +350,10 @@ export function NotificationSettingsPanel() {
                       <p className="truncate text-xs text-tertiary">
                         {device.lastFailureAt &&
                         (!device.lastSuccessAt || device.lastFailureAt > device.lastSuccessAt)
-                          ? m.notif_device_last_failure({ time: when(device.lastFailureAt) })
+                          ? m.notif_device_last_failure_reason({
+                              time: when(device.lastFailureAt),
+                              reason: failureReason(device.lastFailureReason),
+                            })
                           : device.lastSuccessAt
                             ? m.notif_device_last_success({ time: when(device.lastSuccessAt) })
                             : m.notif_device_never()}
