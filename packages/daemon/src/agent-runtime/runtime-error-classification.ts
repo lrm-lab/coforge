@@ -86,8 +86,9 @@ export type RuntimeErrorClassification = Readonly<{
 function billingClassification(
   httpStatus: number | null,
   message: string,
+  now: number,
 ): RuntimeErrorClassification {
-  const retryNotBefore = quotaResetAt(message);
+  const retryNotBefore = quotaResetAt(message, now);
   const waiting = retryNotBefore !== undefined;
   return {
     errorClass: waiting ? RUNTIME_ERROR_CLASS.RATE_LIMIT : RUNTIME_ERROR_CLASS.BILLING,
@@ -157,6 +158,7 @@ function classifyRuntimeErrorAction(
 export function classifyRuntimeErrorText(
   message: string,
   providerHttpStatus?: number,
+  now = Date.now(),
 ): RuntimeErrorClassification {
   const httpStatus = isHttpErrorStatus(providerHttpStatus)
     ? providerHttpStatus
@@ -167,7 +169,7 @@ export function classifyRuntimeErrorText(
     httpStatus === 402 ||
     RUNTIME_BILLING_EXHAUSTED_PATTERNS.some((pattern) => pattern.test(message))
   )
-    return billingClassification(httpStatus, message);
+    return billingClassification(httpStatus, message, now);
   for (const rule of CLASSIFICATION_RULES) {
     if (rule.matches(message, httpStatus)) {
       const requiredAction = classifyRuntimeErrorAction(rule.errorClass, message);
@@ -192,4 +194,16 @@ export function classifyRuntimeErrorText(
     requiredAction: "none",
     takesAgentOffline: false,
   };
+}
+
+/** Milliseconds until `message`'s recovery time, when the failure should wait instead of taking
+ * the Agent offline. A past time, or a failure with no recovery time, is not a wait: callers
+ * use their ordinary backoff or the offline path. */
+export function recoveryWaitMs(message: string, now = Date.now()): number | undefined {
+  const classification = classifyRuntimeErrorText(message, undefined, now);
+  if (classification.takesAgentOffline || classification.retryNotBefore === undefined)
+    return undefined;
+  const at = Date.parse(classification.retryNotBefore);
+  if (!Number.isFinite(at) || at <= now) return undefined;
+  return at - now;
 }

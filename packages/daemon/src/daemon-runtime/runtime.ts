@@ -122,6 +122,7 @@ import { sendAgentStatus, type AgentStatusReportPorts } from "./agent-status-rep
 import { agentIdForContext, contextFor } from "./agent-context";
 import { cleanupUnconfirmed, launchFailureDraft } from "./agent-failure-presentation";
 import { RuntimeRelease, wakeRequest, type WakeRestart } from "./runtime-release";
+import { beginWakeLaunch } from "./wake-launch";
 import { AgentFeatureSync } from "./agent-feature-sync";
 import { WakeRecycle } from "./wake-recycle";
 import { AgentMessageOperations } from "./agent-message-operations";
@@ -200,7 +201,8 @@ export class DaemonRuntime {
   /** Busy-gated delivery holding for providers with no safe busy path. */
   readonly #deliveryQueue = new AgentDeliveryQueue();
   /** Launch failures of message-triggered wakes, per Agent: while one owes a cooldown, a delivery
-   * does not launch the Agent again. No attempt cap; the cooldown stops growing at its ceiling. */
+   * does not launch the Agent again. No attempt cap. The short cooldown stops growing at its
+   * ceiling; a quota failure that names a recovery time waits until then. */
   readonly #wakeLaunchFailures = new LaunchFailureBackoff();
   readonly #exitedDelivery = new AgentExitedDelivery({
     hasRuntimeErrorHold: (agentId) => this.#deliveryQueue.explicitHold(agentId) !== undefined,
@@ -1272,15 +1274,13 @@ export class DaemonRuntime {
     });
   }
 
-  /** Relaunches an exited Agent for a message; a failure starts or extends the wake cooldown. A
-   * successful launch presents whatever `AgentDeliveryQueue` holds for it as one notice. */
   #wakeAgent(agentId: string, restart: WakeRestart): Promise<AgentRuntime> {
-    const launch = this.#startAgent(agentId, restart.config, undefined, wakeRequest(restart));
-    this.#wakeLaunches.add(agentId);
-    void launch
-      .catch(() => this.#wakeLaunchFailures.recordFailure(agentId))
-      .finally(() => this.#wakeLaunches.delete(agentId));
-    return launch;
+    return beginWakeLaunch(
+      agentId,
+      this.#startAgent(agentId, restart.config, undefined, wakeRequest(restart)),
+      this.#wakeLaunches,
+      this.#wakeLaunchFailures,
+    );
   }
 
   /** Drops an Agent's local state for channels it can no longer read: waiting deliveries (each

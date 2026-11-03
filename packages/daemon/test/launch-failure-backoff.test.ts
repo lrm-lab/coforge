@@ -49,6 +49,27 @@ test("agents fail independently and a reset only clears its own streak", () => {
   expect(backoff.attempts("a")).toBe(1);
 });
 
+test("an explicit cooldown replaces the exponential one and still counts the attempt", () => {
+  const backoff = new LaunchFailureBackoff();
+  const threeHours = 3 * 60 * 60 * 1000;
+  expect(backoff.recordFailure("a", 10_000, threeHours)).toEqual({
+    attempts: 1,
+    cooldownMs: threeHours,
+    untilMs: 10_000 + threeHours,
+  });
+  expect(backoff.isBlocked("a", 10_000 + threeHours - 1)).toBe(true);
+  expect(backoff.isBlocked("a", 10_000 + threeHours)).toBe(false);
+  expect(backoff.recordFailure("a", 20_000, threeHours).cooldownMs).toBe(threeHours);
+  expect(backoff.attempts("a")).toBe(2);
+  expect(backoff.recordFailure("a", 30_000).cooldownMs).toBe(4_000);
+});
+
+test("a non-positive explicit cooldown keeps the exponential backoff", () => {
+  const backoff = new LaunchFailureBackoff();
+  expect(backoff.recordFailure("a", 10_000, 0).cooldownMs).toBe(1_000);
+  expect(backoff.recordFailure("b", 10_000, Number.NaN).cooldownMs).toBe(1_000);
+});
+
 test("clear forgets every agent", () => {
   const backoff = new LaunchFailureBackoff();
   backoff.recordFailure("a");

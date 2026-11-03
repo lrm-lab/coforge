@@ -14,6 +14,9 @@ import type { AgentRuntimeRecord, AgentRuntimeState } from "./agent-runtime-stat
 import type { AgentSessions } from "./agent-session";
 import { replayAgentControlResults } from "./agent-control-replay";
 import { LaunchFailureBackoff } from "./launch-failure-backoff";
+import { systemLaunchRetryScheduler, type LaunchRetryScheduler } from "./launch-retry-scheduler";
+
+export type { LaunchRetryScheduler };
 
 const logger = getLogger(["coforge", "daemon", "agent-control"]);
 
@@ -68,18 +71,6 @@ type Runtime = {
   /** A Start that was pending for this Agent (see `startPending`) no longer is: it launched, its
    * attempts ran out, or a Stop or newer operation ended it. */
   startSettled?(agentId: string): void;
-};
-
-/** Injectable timer seam for the automatic launch retry: production uses plain `setTimeout`, and
- * tests drive the delays deterministically instead of sleeping through them. */
-export type LaunchRetryScheduler = {
-  schedule(callback: () => void, delayMs: number): unknown;
-  cancel(handle: unknown): void;
-};
-
-const systemLaunchRetryScheduler: LaunchRetryScheduler = {
-  schedule: (callback, delayMs) => setTimeout(callback, delayMs),
-  cancel: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
 };
 
 /** Owns separate stop, workspace reset, and start primitives. */

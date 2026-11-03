@@ -64,8 +64,12 @@ export class AgentStopCoordinator {
     this.ports.messageAttention.clearAgent(agentId);
     this.ports.deliveryQueue.clearAgent(agentId);
     this.ports.runtimeErrorHold.forget(agentId);
+    // A quota launch is waiting out a recovery time. Reporting inactive here is what makes the
+    // card look offline; the retry stays armed on the control record. Read the wait before
+    // `forget`, which clears it so a later explicit Stop still reports inactive.
+    const waitingForQuota = this.ports.offlineResidency.hasLaunchWait(agentId);
     this.ports.offlineResidency.forget(agentId);
-    this.ports.sendAgentStatus(agentId, "inactive");
+    if (!waitingForQuota) this.ports.sendAgentStatus(agentId, "inactive");
     this.ports.activityPublisher.forgetBusy(agentId);
     if (!retainLaunch) this.ports.currentActivityLaunches.delete(agentId);
   }

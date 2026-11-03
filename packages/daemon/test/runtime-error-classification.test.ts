@@ -264,13 +264,15 @@ test.each([
   "Your credit balance is too low to access the API",
   "insufficient credits",
   "You have run out of credits",
-  // Command Code cli 1.88 submit errors. A wall-clock "Resets in …" is not a wait.
+  // Command Code cli 1.88 submit errors. With no duration and no date these stay offline.
   "Premium credits exhausted",
   "Premium requests used up. Pick a standard model.",
   "Spend limit reached",
   "Usage limit reached",
   "You've reached today's limit on grok-4",
   "You've reached your weekly usage limit",
+  "You've hit your usage limit",
+  "Usage limit reached. You've reached your usage limit. Increase your limits to continue using codex.",
 ])("billing-exhausted wording is terminal and offline, without a named action: %s", (message) => {
   expect(classifyRuntimeErrorText(message)).toEqual({
     errorClass: RUNTIME_ERROR_CLASS.BILLING,
@@ -309,14 +311,61 @@ test("a Command Code usage limit that names an ISO reset waits until then", () =
   });
 });
 
-test("Command Code's duration reset is not a recovery time, so the Agent goes offline", () => {
-  const result = classifyRuntimeErrorText(
-    "You've reached your weekly usage limit. Resets in 3h (3:45pm).",
-  );
-  expect(result.errorClass).toBe(RUNTIME_ERROR_CLASS.BILLING);
-  expect(result.errorReason).toBe("billing_exhausted");
-  expect(result.takesAgentOffline).toBe(true);
-  expect(result).not.toHaveProperty("retryNotBefore");
+test.each([
+  ["3h (3:45pm)", 3 * 60 * 60 * 1000],
+  ["45m", 45 * 60 * 1000],
+  ["2d 4h", 2 * 24 * 60 * 60 * 1000 + 4 * 60 * 60 * 1000],
+  ["3h 5m", 3 * 60 * 60 * 1000 + 5 * 60 * 1000],
+])(
+  "a Command Code duration reset waits that long and ignores the clock: Resets in %s",
+  (duration, waitMs) => {
+    const started = Date.now();
+    const result = classifyRuntimeErrorText(
+      `You've reached your weekly usage limit. Resets in ${duration}.`,
+    );
+    const retryNotBefore = Date.parse(result.retryNotBefore ?? "");
+    expect(result).toMatchObject({
+      errorClass: RUNTIME_ERROR_CLASS.RATE_LIMIT,
+      errorReason: "quota_exhausted",
+      retryDecision: RUNTIME_ERROR_RETRY_DECISION.RETRY,
+      requiredAction: "none",
+      takesAgentOffline: false,
+    });
+    expect(retryNotBefore).toBeGreaterThanOrEqual(started + waitMs);
+    expect(retryNotBefore).toBeLessThanOrEqual(Date.now() + waitMs);
+  },
+);
+
+test("Codex usage limit with a local try-again time waits until then", () => {
+  const message = "You've hit your usage limit. Try again at Nov 3, 2100 5:19 PM.";
+  expect(classifyRuntimeErrorText(message)).toMatchObject({
+    errorClass: RUNTIME_ERROR_CLASS.RATE_LIMIT,
+    errorReason: "quota_exhausted",
+    retryDecision: RUNTIME_ERROR_RETRY_DECISION.RETRY,
+    retryNotBefore: new Date(2100, 10, 3, 17, 19, 0, 0).toISOString(),
+    requiredAction: "none",
+    takesAgentOffline: false,
+  });
+});
+
+test("Codex try-again-in hours on a usage limit waits that long", () => {
+  const started = Date.now();
+  const result = classifyRuntimeErrorText("You've hit your usage limit. try again in 5 hours.");
+  const retryNotBefore = Date.parse(result.retryNotBefore ?? "");
+  expect(result.takesAgentOffline).toBe(false);
+  expect(result.errorReason).toBe("quota_exhausted");
+  expect(retryNotBefore).toBeGreaterThanOrEqual(started + 5 * 60 * 60 * 1000);
+  expect(retryNotBefore).toBeLessThanOrEqual(Date.now() + 5 * 60 * 60 * 1000);
+});
+
+test("a session limit is not an exhausted usage quota", () => {
+  expect(classifyRuntimeErrorText("You've hit your session limit")).toEqual({
+    errorClass: RUNTIME_ERROR_CLASS.RUNTIME,
+    errorReason: "runtime_failure",
+    retryDecision: RUNTIME_ERROR_RETRY_DECISION.RETRY,
+    requiredAction: "none",
+    takesAgentOffline: false,
+  });
 });
 
 test("a call-stack failure is not an exhausted quota and stays wakeable", () => {

@@ -77,7 +77,13 @@ Rules for Agent lifecycle, control, Session state, and Activity in
   `runtime_error` Activity whose `runtimeError` is class `LauncherError` with
   a `LAUNCH_FAILURE_REASON` as `errorReason`, and whose `detail` says what
   happened and the next step (a runnable `coforge-computer` command or the
-  Agent setting to change).
+  Agent setting to change). Exception: a thrown launch whose text names a
+  future quota recovery time (`recoveryWaitMs`) does not report `inactive`.
+  A managed Start retries the same attempt at that time. A message-triggered
+  wake does not arm that timer; its cooldown lasts until the same time, so
+  another delivery does not launch during the wait. The Activity is the quota
+  failure (including when it resets), not `LauncherError`. No recovery time
+  keeps the short backoff.
 - Decide the reason only from `hasErrorCode` against a typed launch error:
   an Error subclass whose `readonly code` is its reason, thrown where the
   cause is known (`AgentAuthorizationError` here, the spawner's
@@ -87,10 +93,13 @@ Rules for Agent lifecycle, control, Session state, and Activity in
 - Log every failed launch as `agent_runtime:launch_failed` with
   `launchFailureLogFields` (reason, redacted message, SDK trace); the
   Activity sends people to that log line.
-- The reason changes no retry, with one exception: a reason listed in
-  `NON_RETRYABLE_LAUNCH_FAILURE_REASONS` (today only `runtime_login_required`)
-  skips the retries, because no attempt can succeed until a person signs the
-  runtime in. Every other reason keeps the same launch attempts and backoff.
+- The reason changes no retry, with two exceptions. A reason listed in
+  `NON_RETRYABLE_LAUNCH_FAILURE_REASONS` skips the retries, because no attempt
+  can succeed until a person changes something on the Computer. A quota failure
+  that names a future recovery time waits until then on the same attempt,
+  instead of the short backoff, and does not use up the seven attempts. A wake
+  records that wait as its cooldown. Every other reason keeps the same launch
+  attempts and backoff.
 - `launch-attempt-failure.ts` owns what a failed attempt owes — the retry
   after its cooldown, or the terminal `launch_failed` record — including the
   non-retryable decision above; `AgentControl` only asks it and stops when it

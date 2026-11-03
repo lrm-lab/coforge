@@ -84,6 +84,8 @@ export const RUNTIME_BILLING_EXHAUSTED_PATTERNS = [
   /\bspend limit reached\b/i,
   /\busage limit reached\b/i,
   /\byou(?:'|’)ve reached\b[^.]{0,80}\b(?:usage limit|today's limit)\b/i,
+  // Codex 0.165 prints this, not "you've reached". "You've hit your session limit" stays out.
+  /\byou(?:'|’)ve hit your usage limit\b/i,
 ];
 
 /** A sticky model-config failure takes the Agent offline even without a named action — mirrored
@@ -114,15 +116,97 @@ type ClassificationRule = Readonly<{
 
 const { RETRY, TERMINAL } = RUNTIME_ERROR_RETRY_DECISION;
 
-/** A provider that names when an exhausted quota resets, as an ISO-8601 UTC instant. Only an
- * explicit, unambiguous instant counts: "resets 3:45pm" is a wall-clock guess this daemon cannot
- * wait on, and a monthly quota usually names nothing. */
+/** A provider that names when an exhausted quota resets. An ISO instant wins. A duration
+ * (`Resets in 3h`, `2d 4h`, `45m`, or `try again in 5 hours`) is `now` plus that length: the
+ * parenthetical clock is ignored because it has no timezone. Codex's `Try again at Nov 3, 2026
+ * 5:19 PM` is the local time its own strftime prints, so it is read in this machine's zone. A
+ * bare `3:45pm` is not a recovery time. */
 const QUOTA_RESET_TIME =
   /\bresets?\s+(?:at\s+)?(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z)\b/i;
+const QUOTA_RESET_DURATION = /\bresets\s+in\s+((?:\d+\s*[dhms]\b\s*)+)/i;
+const QUOTA_TRY_AGAIN_IN =
+  /\btry again in\s+(\d+(?:\.\d+)?)\s*(days?|hours?|minutes?|seconds?|d|h|ms|m|s)\b/i;
+const QUOTA_TRY_AGAIN_AT =
+  /\btry again at\s+([A-Za-z]{3})\s+(\d{1,2}),\s+(\d{4})\s+(\d{1,2}):(\d{2})\s*([AP]M)\b/i;
+const QUOTA_MONTHS: Readonly<Record<string, number>> = {
+  jan: 0,
+  feb: 1,
+  mar: 2,
+  apr: 3,
+  may: 4,
+  jun: 5,
+  jul: 6,
+  aug: 7,
+  sep: 8,
+  oct: 9,
+  nov: 10,
+  dec: 11,
+};
+const QUOTA_UNIT_MS: Readonly<Record<string, number>> = {
+  d: 86_400_000,
+  h: 3_600_000,
+  m: 60_000,
+  s: 1_000,
+};
 
-export function quotaResetAt(message: string): string | undefined {
-  const value = QUOTA_RESET_TIME.exec(message)?.[1];
-  return value !== undefined && Number.isFinite(Date.parse(value)) ? value : undefined;
+export function quotaResetAt(message: string, now = Date.now()): string | undefined {
+  const absolute = QUOTA_RESET_TIME.exec(message)?.[1];
+  if (absolute !== undefined && Number.isFinite(Date.parse(absolute))) return absolute;
+  const duration = compactDurationMs(QUOTA_RESET_DURATION.exec(message)?.[1]);
+  if (duration !== undefined) return new Date(now + duration).toISOString();
+  const again = QUOTA_TRY_AGAIN_IN.exec(message);
+  const amount = again?.[1];
+  const unit = again?.[2];
+  const againMs =
+    amount !== undefined && unit !== undefined ? Number(amount) * wordUnitMs(unit) : Number.NaN;
+  if (Number.isFinite(againMs) && againMs > 0) return new Date(now + againMs).toISOString();
+  return tryAgainAt(message);
+}
+
+function compactDurationMs(body: string | undefined): number | undefined {
+  if (!body) return undefined;
+  let total = 0;
+  for (const match of body.matchAll(/(\d+)\s*([dhms])\b/gi)) {
+    const count = match[1];
+    const unitMs = QUOTA_UNIT_MS[match[2]?.toLowerCase() ?? ""];
+    if (count === undefined || unitMs === undefined) continue;
+    total += Number(count) * unitMs;
+  }
+  return total > 0 ? total : undefined;
+}
+
+function wordUnitMs(unit: string): number {
+  const name = unit.toLowerCase();
+  if (name === "ms") return 1;
+  if (name.startsWith("d")) return QUOTA_UNIT_MS.d!;
+  if (name.startsWith("h")) return QUOTA_UNIT_MS.h!;
+  if (name.startsWith("s")) return QUOTA_UNIT_MS.s!;
+  return QUOTA_UNIT_MS.m!;
+}
+
+/** Codex 0.165 formats this with `%b %-d, %Y %-I:%M %p` in the machine's local zone. */
+function tryAgainAt(message: string): string | undefined {
+  const match = QUOTA_TRY_AGAIN_AT.exec(message);
+  const monthName = match?.[1];
+  const dayText = match?.[2];
+  const yearText = match?.[3];
+  const hourText = match?.[4];
+  const minuteText = match?.[5];
+  const meridiem = match?.[6];
+  if (!monthName || !dayText || !yearText || !hourText || !minuteText || !meridiem)
+    return undefined;
+  const month = QUOTA_MONTHS[monthName.toLowerCase()];
+  if (month === undefined) return undefined;
+  let hour = Number(hourText);
+  const minute = Number(minuteText);
+  if (meridiem.toUpperCase() === "PM" && hour < 12) hour += 12;
+  if (meridiem.toUpperCase() === "AM" && hour === 12) hour = 0;
+  const year = Number(yearText);
+  const day = Number(dayText);
+  const parsed = new Date(year, month, day, hour, minute, 0, 0);
+  if (parsed.getFullYear() !== year || parsed.getMonth() !== month || parsed.getDate() !== day)
+    return undefined;
+  return parsed.toISOString();
 }
 
 /** Ordered rules: the first one whose pattern matches wins. The sequence mirrors the reference

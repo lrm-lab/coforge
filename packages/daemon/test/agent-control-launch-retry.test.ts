@@ -123,6 +123,39 @@ test("a failed launch is counted, retried after the cooldown, and reports starte
   expect(h.timers.delays()).toEqual([1_000]);
 });
 
+test("a usage limit that names a duration waits that long and does not spend launch attempts", async () => {
+  const h = harness(async () => {
+    throw new Error("You've reached your weekly usage limit. Resets in 3h (3:45pm).");
+  });
+
+  await h.control.start(startIntent);
+  expect(h.launches).toEqual([1]);
+  expect(h.results).toEqual([]);
+  expect(h.record()?.phase).toBe("starting");
+  const delay = h.timers.delays()[0] ?? 0;
+  expect(delay).toBeGreaterThanOrEqual(3 * 60 * 60 * 1000 - 1_000);
+  expect(delay).toBeLessThanOrEqual(3 * 60 * 60 * 1000 + 1_000);
+
+  await h.timers.fireLatest();
+  expect(h.launches).toEqual([1, 2]);
+  expect(h.results).toEqual([]);
+  expect(h.record()?.phase).toBe("starting");
+  expect(h.timers.delays()).toHaveLength(2);
+  expect(h.timers.delays()[1] ?? 0).toBeGreaterThanOrEqual(3 * 60 * 60 * 1000 - 1_000);
+});
+
+test("a usage limit with no recovery time keeps the short launch backoff", async () => {
+  const h = harness(async () => {
+    throw new Error("You've hit your usage limit.");
+  });
+
+  await h.control.start(startIntent);
+  expect(h.launches).toEqual([1]);
+  expect(h.results).toEqual([]);
+  expect(h.record()?.phase).toBe("starting");
+  expect(h.timers.delays()).toEqual([1_000]);
+});
+
 test("consecutive failures back off 1s, 2s, 4s... 30s and then report launch_failed", async () => {
   const h = harness(async () => {
     throw new Error("never spawns");

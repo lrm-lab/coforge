@@ -54,13 +54,25 @@ export class LaunchFailureBackoff {
     private readonly capMs: number = LAUNCH_FAILURE_BACKOFF_CAP_MS,
   ) {}
 
-  /** Records one failed attempt for `agentId` and returns the cooldown the next attempt owes. */
-  recordFailure(agentId: string, now: number = Date.now()): LaunchFailureBackoffState {
+  /**
+   * Records one failed attempt for `agentId` and returns the cooldown the next attempt owes.
+   * `cooldownMs`, when positive, replaces the exponential cooldown: a quota failure that names
+   * a recovery time waits until then. The attempt still counts. Omitting it keeps the short
+   * backoff, which stops growing at the cap.
+   */
+  recordFailure(
+    agentId: string,
+    now: number = Date.now(),
+    cooldownMs?: number,
+  ): LaunchFailureBackoffState {
     const attempts = this.attempts(agentId) + 1;
-    const cooldownMs = launchFailureCooldownMs(attempts, this.baseMs, this.capMs);
-    const untilMs = now + cooldownMs;
+    const cooldown =
+      cooldownMs !== undefined && Number.isFinite(cooldownMs) && cooldownMs > 0
+        ? cooldownMs
+        : launchFailureCooldownMs(attempts, this.baseMs, this.capMs);
+    const untilMs = now + cooldown;
     this.#failures.set(agentId, { attempts, untilMs });
-    return { attempts, cooldownMs, untilMs };
+    return { attempts, cooldownMs: cooldown, untilMs };
   }
 
   /** Clears the streak after a successful launch (or an explicit Stop). Returns how many

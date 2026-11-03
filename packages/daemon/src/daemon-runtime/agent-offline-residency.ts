@@ -10,6 +10,7 @@ import {
 } from "#src/agent-runtime/runtime-error-activity";
 import {
   classifyRuntimeErrorText,
+  recoveryWaitMs,
   RUNTIME_ERROR_CLASS,
   type RuntimeErrorClassification,
 } from "#src/agent-runtime/runtime-error-classification";
@@ -57,6 +58,9 @@ export type AgentOfflineResidencyPorts = Readonly<{
 export class AgentOfflineResidency {
   readonly #ports: AgentOfflineResidencyPorts;
   readonly #records = new Map<string, { launch: OfflineResidencyLaunch; draft: ActivityDraft }>();
+  /** A thrown launch named a future recovery time. Cleanup must not report the Agent inactive.
+   * `forget` drops it, so a later explicit Stop still reports inactive. */
+  readonly #launchWaits = new Map<string, number>();
 
   constructor(ports: AgentOfflineResidencyPorts) {
     this.#ports = ports;
@@ -86,6 +90,13 @@ export class AgentOfflineResidency {
    * clears the record; an abandoned launch keeps it. */
   forget(agentId: string): void {
     this.#records.delete(agentId);
+    this.#launchWaits.delete(agentId);
+  }
+
+  /** Whether a thrown launch is waiting on a recovery time that is still ahead. */
+  hasLaunchWait(agentId: string, now = Date.now()): boolean {
+    const untilMs = this.#launchWaits.get(agentId);
+    return untilMs !== undefined && untilMs > now;
   }
 
   /** The visible Activity an offline-taking runtime failure reports: action-required wording
@@ -166,9 +177,11 @@ export class AgentOfflineResidency {
   /**
    * A launch that failed before its error events could flow — the provider threw while the
    * session was being created — never reaches `#observeRuntimeEvent`. When the thrown error's
-   * own text classifies as an offline failure this is the same `takeOffline` record: the Agent
-   * stays offline and a later custody delivery restates this Activity. Returns the built
-   * Activity, or undefined for an ordinary launch failure (which keeps the launcher wording).
+   * own text names a future recovery time, this records that wait and returns the quota
+   * Activity; the caller must not report the Agent inactive. When it classifies as an offline
+   * failure this is the same `takeOffline` record: the Agent stays offline and a later custody
+   * delivery restates this Activity. Returns undefined for an ordinary launch failure (which
+   * keeps the launcher wording).
    */
   thrownLaunchActivity(
     agentId: string,
@@ -180,6 +193,11 @@ export class AgentOfflineResidency {
     const message = error instanceof Error ? error.message : String(error);
     const event: RuntimeErrorEvent = { type: "error", message };
     const classification = classifyRuntimeErrorText(message);
+    const waitMs = recoveryWaitMs(message);
+    if (waitMs !== undefined) {
+      this.#launchWaits.set(agentId, Date.now() + waitMs);
+      return buildRuntimeErrorActivity(event, classification);
+    }
     if (!classification.takesAgentOffline) return undefined;
     const built = this.buildActivity(config, providerLabel, event, classification);
     launch.offlineError = built;

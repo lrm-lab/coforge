@@ -362,12 +362,9 @@ export async function launchAgentProcess(
         ...launchFailureLogFields(error),
         outcome: "failed",
       });
-      ports.sendAgentStatus(agentId, "inactive");
-      // A thrown launch failure whose text classifies as an offline error (auth, plan access)
-      // gets that failure's prompt and offline record, not the generic launcher wording — as
-      // the reference Computer does for `runtime.start.request_failed`. The launch-failure
-      // reason in the log above stays the typed one; classification only chooses what the
-      // person sees and what a later `no_process` rejection restates.
+      // A thrown open whose text names a recovery time records a wait (`hasLaunchWait`) and
+      // must not report inactive. An offline classification keeps that failure's Activity
+      // instead of the generic launcher wording. The log above stays the typed launch reason.
       const offlineLaunchError =
         launch.offlineError ??
         ports.offlineResidency.thrownLaunchActivity(
@@ -377,6 +374,8 @@ export async function launchAgentProcess(
           config,
           error,
         );
+      if (!ports.offlineResidency.hasLaunchWait(agentId))
+        ports.sendAgentStatus(agentId, "inactive");
       ports.activityPublisher.publish(
         agentId,
         launch,

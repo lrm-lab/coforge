@@ -12,6 +12,7 @@ import {
 } from "./launch-failure";
 import type { AgentRuntimeRecord, AgentRuntimeStateStore } from "./agent-runtime-state";
 import { LAUNCH_FAILURE_MAX_ATTEMPTS, type LaunchFailureBackoff } from "./launch-failure-backoff";
+import { recoveryWaitMs } from "./runtime-error-classification";
 
 const logger = getLogger(["coforge", "daemon", "agent-control"]);
 
@@ -37,11 +38,31 @@ export type LaunchAttemptFailurePorts = {
  * A reason no retry can fix (`NON_RETRYABLE_LAUNCH_FAILURE_REASONS`, a login the runtime no longer
  * has) goes straight to the terminal record, so the server's Start operation is answered instead
  * of staying pending for the whole retry window.
+ *
+ * A quota failure that names a future recovery time is not one of those attempts. The same
+ * attempt is armed again at that time, and the short-backoff budget stays unused, so a reset
+ * hours away is not abandoned after the seven quick retries.
  */
 export async function settleLaunchFailure(
   ports: LaunchAttemptFailurePorts,
 ): Promise<AgentControlResult | undefined> {
   const { intent, record, error } = ports;
+  const waitMs = recoveryWaitMs(thrownText(error));
+  if (waitMs !== undefined) {
+    logger.warning("Agent launch is waiting for a reported quota reset", {
+      event: "agent_control:launch_quota_wait",
+      agent_id: intent.agentId,
+      attempt: ports.attempt,
+      cooldown_ms: waitMs,
+      retry_at_ms: Date.now() + waitMs,
+      outcome: "retry",
+      error_code: diagnosticErrorCode(error),
+      ...launchFailureLogFields(error),
+    });
+    await ports.store.write(intent.agentId, record);
+    ports.scheduleRetry(ports.attempt, waitMs);
+    return undefined;
+  }
   const failure = ports.failures.recordFailure(intent.agentId);
   if (!isNonRetryableLaunchFailure(error) && ports.attempt < LAUNCH_FAILURE_MAX_ATTEMPTS) {
     logger.warning("Agent launch failed; retrying after backoff", {
@@ -86,4 +107,9 @@ export async function settleLaunchFailure(
   });
   await ports.store.write(intent.agentId, record);
   return record.lastResult;
+}
+
+function thrownText(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return typeof error === "string" ? error : "";
 }
