@@ -49,10 +49,17 @@ export const labelView = (row: LabelRow): TaskLabel => ({
 
 export function validateLabelName(name: string): string {
   const trimmed = name.trim();
-  if (!trimmed || trimmed.length > LABEL_NAME_MAX || /[\u0000-\u001f\u007f]/.test(trimmed))
+  // A leading `-` is how the CLI takes a label off (`--label -name`), so such a name could never be
+  // attached from the command line; refuse it where labels are made instead of at every use.
+  if (
+    !trimmed ||
+    trimmed.length > LABEL_NAME_MAX ||
+    /[\u0000-\u001f\u007f]/.test(trimmed) ||
+    trimmed.startsWith("-")
+  )
     throw new AppError("INVALID_INPUT", {
       errorId: "task-label-name",
-      hint: `a label name is 1 to ${LABEL_NAME_MAX} characters, with no control characters`,
+      hint: `a label name is 1 to ${LABEL_NAME_MAX} characters, with no control characters, and does not start with "-" (the CLI reads --label -name as taking it off)`,
     });
   return trimmed;
 }

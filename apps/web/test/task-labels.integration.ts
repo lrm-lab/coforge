@@ -129,6 +129,13 @@ test("any member creates a label; only an owner or admin renames or deletes one"
       (await refusal(labels.create(workspaceId, aliceId, { name: "Bad", color: "chartreuse" })))
         .code,
     ).toBe("INVALID_INPUT");
+    // A leading `-` is the CLI's "take it off", so such a name could never be attached there.
+    expect((await refusal(labels.create(workspaceId, aliceId, { name: "-Design" }))).code).toBe(
+      "INVALID_INPUT",
+    );
+    expect(
+      (await refusal(labels.update(workspaceId, aliceId, fromBob.id, { name: "-Clients" }))).code,
+    ).toBe("INVALID_INPUT");
 
     const [number] = await make("alice", 1, { labels: ["Clients"] });
     const taskId = (await show(number!)).tasks[0]!.id;
