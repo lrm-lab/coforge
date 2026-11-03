@@ -24,10 +24,12 @@ export function chosenAnswer(view: ChoiceView): string | undefined {
   return view.options.find((option) => option.id === view.result?.optionId)?.label;
 }
 
-/** What stands in for the answer on a card closed without one, in gray. A card that expires or is
- * answered in the chat instead is written here too once the server records those states. */
+/** What stands in for the answer on a card closed without one, in gray: withdrawn, run out, or
+ * answered in the chat instead (task #453). */
 function closedWithoutAnswer(view: ChoiceView): string | undefined {
   if (view.state === "cancelled") return m.action_card_cancelled();
+  if (view.state === "expired") return m.action_card_expired();
+  if (view.state === "answered_in_chat") return m.action_card_answered_in_chat();
   return undefined;
 }
 
@@ -85,7 +87,18 @@ export function HandledChoice({ view, answer }: { view: ChoiceView; answer?: str
         <span className="mr-1">{question}</span>
       )}{" "}
       {answer === undefined ? (
-        closed && <span className="text-quaternary">{closed}</span>
+        closed &&
+        (view.committedAt ? (
+          // Who closed it and when, as an answer's tooltip says (task #472).
+          <AnsweredAtTooltip
+            at={view.committedAt}
+            by={view.committedBy?.isViewer ? undefined : view.committedBy?.displayName}
+          >
+            <span className="text-quaternary">{closed}</span>
+          </AnsweredAtTooltip>
+        ) : (
+          <span className="text-quaternary">{closed}</span>
+        ))
       ) : view.committedAt ? (
         <AnsweredAtTooltip at={view.committedAt} by={answeredBy}>
           {outcome}

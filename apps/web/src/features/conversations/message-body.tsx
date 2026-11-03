@@ -22,7 +22,10 @@ import type {
   OpenAgentProfile,
   OpenPersonProfile,
 } from "#src/features/agents/profile-panel/open-agent-profile";
-import { CrossTaskReference } from "#src/features/tasks/cross-task-reference";
+import {
+  CrossTaskReference,
+  DirectTaskReferenceByPeer,
+} from "#src/features/tasks/cross-task-reference";
 import { TaskReference } from "#src/features/tasks/task-reference";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import "./message-markdown.css";
@@ -86,7 +89,9 @@ export function MessageBody({
   const handles = useMemo(() => mentionHandlesByToken(mentions), [mentions]);
   // A body with no token and no plain `@handle` to resolve skips the chip pass entirely.
   const hasReference =
-    source.includes("<@") || (plainMentions !== undefined && plainMentions.size > 0);
+    source.includes("<@") ||
+    source.includes(":#") ||
+    (plainMentions !== undefined && plainMentions.size > 0);
   const hasTrailing = trailing !== undefined && trailing !== null;
   // Typed against react-markdown's own plugin list so the plugin-with-options tuple form
   // type-checks without a cast.
@@ -267,6 +272,14 @@ function chipSpan(
         >
           {children}
         </CrossTaskReference>
+      );
+    }
+    const taskPeer = data["data-task-reference-peer"];
+    if (typeof taskNumber === "number" && taskKind === "dm" && typeof taskPeer === "string") {
+      return (
+        <DirectTaskReferenceByPeer peer={taskPeer} number={taskNumber} onOpenTask={onOpenTask}>
+          {children}
+        </DirectTaskReferenceByPeer>
       );
     }
     if (typeof taskNumber === "number") {

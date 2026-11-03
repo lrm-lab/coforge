@@ -159,7 +159,9 @@ test("a Task popup opened from another steps back to it", async () => {
 
       await intoSubtask();
       await shoot(`${label}-subtask`);
-      // Esc steps back up to the parent's popup, which Esc then closes.
+      // Esc steps back up to the parent's popup, which Esc then closes; with focus on the dialog
+      // itself too, where it lands when a step opens (task #472).
+      await evaluate(`${dialog}.focus() ?? true`);
       await browser("press", "Escape");
       await browser("wait", "--fn", atParent);
       await browser("press", "Escape");

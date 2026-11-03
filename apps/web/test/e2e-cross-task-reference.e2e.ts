@@ -126,6 +126,27 @@ test("another conversation's Task reads as its live label, or as a Task the read
       },
     });
 
+    // The same references as a person types them, which the body keeps while the server stores no
+    // tokens for them (task #472): read from the words, `dm:@peer` never a mention of its own.
+    const viewerMember = await db.conversationMember.findFirstOrThrow({
+      where: { conversationId: here.id, userId: DEV_BROWSER_USER.id },
+    });
+    const typed = await db.message.create({
+      data: {
+        conversationId: here.id,
+        workspaceId,
+        senderMemberId: viewerMember.id,
+        sequence: seeded.sequence + 1,
+        body:
+          `Typed: #${renamed}:#${launchTask} then dm:@${agent.name}:#${directTask}, ` +
+          `and #${secret.channelName}:#${secretTask} stays.`,
+      },
+    });
+    await db.conversation.update({
+      where: { id: here.id },
+      data: { lastSequence: typed.sequence },
+    });
+
     const launchTitle = `Ship the launch page ${tail}`;
     const label = (title: string) =>
       `[...document.querySelectorAll(".message-markdown [data-task-status]")].find((el) => el.textContent === ${JSON.stringify(title)})`;
@@ -162,7 +183,40 @@ test("another conversation's Task reads as its live label, or as a Task the read
     // A reference that names the open channel is its own Task's label, which opens in place.
     expect(await evaluate<boolean>(`${chip(`Local follow-up ${tail}`)} != null`)).toBe(true);
 
-    // The peek: the whole title, and where the Task lives.
+    // The typed references: the channel's and the direct message's Tasks are labels, the private
+    // channel's stays as written, and the Agent named in `dm:@…` is no mention.
+    const typedBody = `document.querySelector('[data-message-id="${typed.id}"] .message-markdown')`;
+    await browser(
+      "wait",
+      "--fn",
+      `${typedBody}?.querySelectorAll("[data-task-status]").length === 2`,
+    );
+    expect(
+      await evaluate<string[]>(
+        `[...${typedBody}.querySelectorAll("[data-task-status]")].map((el) => el.textContent)`,
+      ),
+    ).toEqual([launchTitle, `Draft the release notes ${tail}`]);
+    expect(await evaluate<string>(`${typedBody}.textContent`)).toContain(
+      `#${secret.channelName}:#${secretTask} stays.`,
+    );
+    expect(
+      await evaluate<number>(`${typedBody}.querySelectorAll("[data-mention-agent-id]").length`),
+    ).toBe(0);
+
+    // The peek from the keyboard (task #472): focus on the label opens it, the whole title and
+    // where the Task lives.
+    const peekShown = `[...document.querySelectorAll("p")].some((el) => el.textContent === "#${launchTask} · #${renamed}")`;
+    await evaluate(`${chip(launchTitle)}.focus() ?? true`);
+    await browser("press", "Shift+Tab");
+    await browser("press", "Tab");
+    await browser(
+      "wait",
+      "--fn",
+      `document.activeElement === ${chip(launchTitle)} && ${peekShown}`,
+    );
+    await evaluate(`document.activeElement.blur() ?? true`);
+    await browser("wait", "--fn", `!(${peekShown})`);
+    // And on hover, once the page has seen a press.
     await browser("click", "textarea[data-composer]");
     await evaluate(`${chip(launchTitle)}.setAttribute("data-e2e-launch", "") ?? true`);
     await browser("hover", "[data-e2e-launch]");

@@ -165,3 +165,40 @@ test("another conversation's task token inside a link or code is its words", () 
   expect(link!.children).toEqual([text("#design:#7")]);
   expect(code!.children).toEqual([text(`<@task:d:${TASK_CONVERSATION}:ada:9>`)]);
 });
+
+test("a typed #channel:#N names a listed channel's Task, an unlisted one stays as written", () => {
+  const tree = channelChipify(
+    [paragraph([text("see #Launch:#7 and #secret:#2 now")])],
+    new Map([[CHANNEL_ID, "launch"]]),
+  );
+  const [before, reference, after] = tree.children[0]!.children;
+  expect(before).toEqual(text("see "));
+  expect(reference).toMatchObject({
+    tagName: "span",
+    properties: {
+      "data-task-reference-number": 7,
+      "data-task-reference-conversation-id": CHANNEL_ID,
+      "data-task-reference-kind": "channel",
+    },
+  });
+  expect(after).toEqual(text(" and #secret:#2 now"));
+});
+
+test("a typed dm:@peer:#N is one reference: its @peer is no mention of its own", () => {
+  const tree = { type: "root", children: [paragraph([text("ask dm:@ada:#3 first")])] } as never;
+  const ada = { actorId: "ada-id", handle: "ada", label: "Ada", agentId: "ada-id" };
+  rehypeReferenceChips({ mentions: new Map(), plainMentions: new Map([["ada", ada]]) })(tree);
+  const [before, reference, after] = (
+    tree as { children: Array<{ children: Array<Record<string, unknown>> }> }
+  ).children[0]!.children;
+  expect(before).toEqual(text("ask "));
+  expect(reference).toMatchObject({
+    properties: {
+      "data-task-reference-number": 3,
+      "data-task-reference-kind": "dm",
+      "data-task-reference-peer": "ada",
+    },
+    children: [text("dm:@ada:#3")],
+  });
+  expect(after).toEqual(text(" first"));
+});

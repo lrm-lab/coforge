@@ -103,16 +103,31 @@ export function HandledActionCard({ view }: { view: ActionCardView }) {
   const workspaceSlug = useWorkspaceSlug();
   const outcome = outcomeOf(view);
   const verb = actionCardHandledVerb(view);
-  if (view.state === "cancelled")
+  if (view.state === "cancelled" || view.state === "expired" || view.state === "answered_in_chat") {
+    const closed =
+      view.state === "expired"
+        ? m.action_card_expired()
+        : view.state === "answered_in_chat"
+          ? m.action_card_answered_in_chat()
+          : view.kind === "app:grant_agent"
+            ? m.app_card_denied()
+            : m.action_card_cancelled();
+    const closedBy = view.committedBy?.isViewer ? undefined : view.committedBy?.displayName;
     return (
       <p className="text-sm wrap-anywhere text-tertiary">
         <span className="mr-1">{verb}</span>{" "}
         {outcome && <span className="mr-1.5">{outcome.text}</span>}{" "}
-        <span className="text-quaternary">
-          {view.kind === "app:grant_agent" ? m.app_card_denied() : m.action_card_cancelled()}
-        </span>
+        {view.committedAt ? (
+          // Who closed it and when, as a done card's result says (task #472).
+          <AnsweredAtTooltip at={view.committedAt} by={closedBy}>
+            <span className="text-quaternary">{closed}</span>
+          </AnsweredAtTooltip>
+        ) : (
+          <span className="text-quaternary">{closed}</span>
+        )}
       </p>
     );
+  }
   const by =
     view.committedBy && !view.committedBy.isViewer ? view.committedBy.displayName : undefined;
   const at = view.committedAt;

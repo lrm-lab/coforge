@@ -247,6 +247,31 @@ test("the asked person answers a choice card in its own last row", async () => {
     await browser("wait", "--fn", `document.querySelector('[role="tooltip"]') !== null`);
     await browser("screenshot", join(artifacts, "answered-by-peer.png"));
 
+    // Answered in the chat instead, the card says so; withdrawn by someone else, its tooltip says
+    // who (task #472).
+    await db.actionCard.update({
+      where: { messageId: shown },
+      data: { state: "answered_in_chat" },
+    });
+    await db.actionCard.update({
+      where: { messageId: others },
+      data: { state: "cancelled", result: undefined },
+    });
+    await browser("open", page("en"));
+    await browser("wait", "--fn", pageHydrated);
+    await browser("wait", "--fn", `${cardText(shown)}.includes("Answered in the chat")`);
+    await browser("wait", "--fn", `${cardText(others)}.includes("Cancelled")`);
+    await browser("click", "textarea[data-composer]");
+    await browser("hover", `${card(others)} button`);
+    await browser(
+      "wait",
+      "--fn",
+      `document.querySelector('[role="tooltip"]')?.textContent.includes("Asked Peer") === true`,
+    );
+    await browser("screenshot", join(artifacts, "closed-by-peer.png"));
+    // The rest of the run reads the first card waiting again.
+    await db.actionCard.update({ where: { messageId: shown }, data: { state: "pending" } });
+
     await open("zh-CN");
     expect(
       await evaluate<string | null>(

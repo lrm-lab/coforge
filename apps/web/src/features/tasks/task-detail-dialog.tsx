@@ -217,18 +217,21 @@ export function TaskDetailDialog({
               : "sm:w-[min(44rem,calc(100vw-2rem))]",
           )}
         >
-          <Dialog className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div
-              className="contents"
-              onKeyDownCapture={(event) => {
-                // Before the overlay's own Escape, which would close every step at once. A menu or
-                // picker open inside handles its Escape first and stops it there.
-                if (event.key !== "Escape" || !stepBack || event.defaultPrevented) return;
-                event.preventDefault();
-                event.stopPropagation();
-                stepBack();
-              }}
-            >
+          <div
+            className="contents"
+            onKeyDownCapture={(event) => {
+              // Before the overlay's own Escape, which would close every step at once. It wraps the
+              // dialog itself, which holds focus right after a step opens (task #472). A menu or
+              // picker, in a popover outside the dialog, handles its own Escape.
+              if (event.key !== "Escape" || !stepBack || event.defaultPrevented) return;
+              if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target))
+                return;
+              event.preventDefault();
+              event.stopPropagation();
+              stepBack();
+            }}
+          >
+            <Dialog className="flex min-h-0 flex-1 flex-col overflow-hidden">
               <div className="flex shrink-0 items-center gap-1 pt-2 pr-3 pl-2 sm:pl-4">
                 <TaskTrail
                   task={task}
@@ -319,8 +322,8 @@ export function TaskDetailDialog({
                   history: () => <TaskHistoryPage task={task} members={members} />,
                 }}
               />
-            </div>
-          </Dialog>
+            </Dialog>
+          </div>
         </Modal>
       </TaskPopupOverlay>
       <TaskDeleteDialog

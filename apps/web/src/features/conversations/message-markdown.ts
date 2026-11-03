@@ -20,6 +20,8 @@
  */
 import {
   CHANNEL_REFERENCE_TOKEN_PATTERN,
+  CHANNEL_TASK_REFERENCE_PATTERN,
+  DM_TASK_REFERENCE_PATTERN,
   MENTION_PATTERN,
   MENTION_TOKEN_PATTERN,
   TASK_REFERENCE_TOKEN_PATTERN,
@@ -33,6 +35,7 @@ import type { Element, Root, Text } from "hast";
 import type { Mentionable, MentionRef } from "./mention-text";
 import {
   channelChip,
+  directTaskReferenceByPeer,
   mentionChip,
   taskReference,
   threadChip,
@@ -174,7 +177,9 @@ export function rehypeReferenceChips(options: ReferenceChipOptions) {
             visit(child, child.tagName === "a" ? "link" : place);
         } else if (
           child.type === "text" &&
-          (child.value.includes("<@") || (plain && child.value.includes("@")))
+          (child.value.includes("<@") ||
+            child.value.includes(":#") ||
+            (plain && child.value.includes("@")))
         ) {
           const replaced = parts(child.value, place);
           if (replaced) {
@@ -230,6 +235,10 @@ export function patternAlternation(patterns: readonly RegExp[]): {
 /** The kinds a pass matches, each with its chip builder, the plain `@handle` only when asked for. */
 function referenceKinds(options: ReferenceChipOptions): ReferenceKind[] {
   const { mentions, viewerId, plainMentions, channelNames } = options;
+  // A written `#channel:#N` names its channel by name; the Workspace's channels are the authority.
+  const channelIdByName = new Map(
+    [...(channelNames ?? [])].map(([id, name]) => [name.toLowerCase(), id] as const),
+  );
   const kinds: ReferenceKind[] = [
     {
       pattern: MENTION_TOKEN_PATTERN,
@@ -254,6 +263,29 @@ function referenceKinds(options: ReferenceChipOptions): ReferenceKind[] {
         return place === "prose"
           ? taskReference(reference)
           : { type: "text", value: canonicalTaskReference(reference) };
+      },
+    },
+    // Another conversation's Task as it was written (task #472): the body keeps `dm:@peer:#N` and
+    // `#channel:#N` as typed while the server does not store their tokens, so they are read here.
+    // A `dm:` reference is matched whole, so its `@peer` never becomes a mention of its own.
+    {
+      pattern: DM_TASK_REFERENCE_PATTERN,
+      build: ([peer, number], place) =>
+        place === "prose" ? directTaskReferenceByPeer(peer!, Number(number)) : undefined,
+    },
+    {
+      pattern: CHANNEL_TASK_REFERENCE_PATTERN,
+      build: ([name, number], place) => {
+        const id = channelIdByName.get(name!.toLowerCase());
+        // A channel the reader's Workspace list does not hold (a private one they are not in)
+        // stays as written.
+        if (id === undefined || place !== "prose") return undefined;
+        return taskReference({
+          kind: "channel",
+          conversationId: id,
+          channelName: name!.toLowerCase(),
+          number: Number(number),
+        });
       },
     },
     {

@@ -84,6 +84,21 @@ export function taskReference(reference: TaskReference): Element {
   };
 }
 
+/** A direct message's Task written `dm:@peer:#N`, with no stored token to carry the
+ * conversation: the renderer finds the viewer's direct message with that peer (task #472). */
+export function directTaskReferenceByPeer(peer: string, number: number): Element {
+  return {
+    type: "element",
+    tagName: "span",
+    properties: {
+      "data-task-reference-number": number,
+      "data-task-reference-kind": "dm",
+      "data-task-reference-peer": peer,
+    },
+    children: [{ type: "text", value: `dm:@${peer}:#${number}` }],
+  };
+}
+
 /** A channel chip under the channel's current name. */
 export function channelChip(id: string, name: string): Element {
   return {

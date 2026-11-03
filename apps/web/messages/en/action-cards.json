@@ -32,6 +32,8 @@
   "action_card_cancelling": "Dismissing",
   "action_card_dismiss": "Dismiss",
   "action_card_cancelled": "Cancelled",
+  "action_card_answered_in_chat": "Answered in the chat",
+  "action_card_expired": "Expired",
   "action_card_required_computer": "Must run on {name}",
   "action_card_suggested_computer": "Suggested computer: {name}",
   "action_card_initial_members": "Initial members",
