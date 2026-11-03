@@ -346,18 +346,23 @@ export async function commentAudience(
       actor.kind === kind && !labels.has(keyOf(kind, actor.id)) ? [actor.id] : [],
     );
   const [userIds, agentIds] = [unlabelled("user"), unlabelled("agent")];
-  if (userIds.length)
-    for (const user of await db.user.findMany({
-      where: { id: { in: userIds } },
-      select: { id: true, displayName: true },
-    }))
-      labels.set(keyOf("user", user.id), humanLabel(user));
-  if (agentIds.length)
-    for (const agent of await db.agent.findMany({
-      where: { id: { in: agentIds } },
-      select: { id: true, name: true, displayName: true },
-    }))
-      labels.set(keyOf("agent", agent.id), agent.displayName?.trim() || agent.name);
+  const [users, agents] = await Promise.all([
+    userIds.length
+      ? db.user.findMany({
+          where: { id: { in: userIds } },
+          select: { id: true, displayName: true },
+        })
+      : [],
+    agentIds.length
+      ? db.agent.findMany({
+          where: { id: { in: agentIds } },
+          select: { id: true, name: true, displayName: true },
+        })
+      : [],
+  ]);
+  for (const user of users) labels.set(keyOf("user", user.id), humanLabel(user));
+  for (const agent of agents)
+    labels.set(keyOf("agent", agent.id), agent.displayName?.trim() || agent.name);
   return {
     viewerId: viewer.userId,
     members,
