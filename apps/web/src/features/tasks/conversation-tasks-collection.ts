@@ -63,16 +63,18 @@ function conversationTaskSubset(options: LoadSubsetOptions | undefined) {
   return subset;
 }
 
-/** The task numbers one body names, read once per message object. */
+/** The task numbers one body names of its own conversation's Tasks, read once per message
+ * object: `<@task:68>`, or a `#name:#68` that names this very conversation. */
 const referencesByMessage = new WeakMap<object, readonly number[]>();
-function referencedNumbers(message: { body: string }) {
+function referencedNumbers(message: { body: string }, conversationId: string) {
   let numbers = referencesByMessage.get(message);
   if (!numbers) {
-    // Only this conversation's tasks: a cross-conversation token carries a conversation id, not
-    // a number this read can ask for.
     numbers = [...message.body.matchAll(TASK_REFERENCE_TOKEN_PATTERN)].flatMap((match) => {
-      const reference = readTaskReferenceToken(match as unknown as RegExpExecArray);
-      return reference?.kind === "local" ? [reference.number] : [];
+      const reference = readTaskReferenceToken(match);
+      if (!reference) return [];
+      return reference.kind === "local" || reference.conversationId === conversationId
+        ? [reference.number]
+        : [];
     });
     referencesByMessage.set(message, numbers);
   }
@@ -88,6 +90,7 @@ function referencedNumbers(message: { body: string }) {
 export function messageWindowTasks(
   messages: readonly { sequence: number; body: string }[],
   hasNewer: boolean,
+  conversationId: string,
 ) {
   if (messages.length === 0) return undefined;
   let sequenceFrom = Infinity;
@@ -96,7 +99,7 @@ export function messageWindowTasks(
   for (const message of messages) {
     sequenceFrom = Math.min(sequenceFrom, message.sequence);
     sequenceTo = Math.max(sequenceTo, message.sequence);
-    for (const number of referencedNumbers(message)) numbers.add(number);
+    for (const number of referencedNumbers(message, conversationId)) numbers.add(number);
   }
   return {
     sequenceFrom,

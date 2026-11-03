@@ -126,8 +126,16 @@ export function statusLabel(status: TaskStatus) {
 }
 
 /** A task as `#N` on its status's colour badge, the status ring leading: how a message body shows a
- * task reference. */
-export function TaskNumberBadge({ number, status }: { number: number; status: TaskStatus }) {
+ * task reference. Another conversation's names its conversation too (`label`: `#design:#7`). */
+export function TaskNumberBadge({
+  number,
+  status,
+  label,
+}: {
+  number: number;
+  status: TaskStatus;
+  label?: string;
+}) {
   return (
     <BadgeWithIcon
       type="color"
@@ -136,7 +144,7 @@ export function TaskNumberBadge({ number, status }: { number: number; status: Ta
       iconLeading={STATUS_BADGE_ICON[status]}
       className="inline-flex"
     >
-      #{number}
+      {label ?? `#${number}`}
     </BadgeWithIcon>
   );
 }

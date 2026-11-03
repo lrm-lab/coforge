@@ -24,6 +24,8 @@ import {
   MENTION_TOKEN_PATTERN,
   TASK_REFERENCE_TOKEN_PATTERN,
   THREAD_REFERENCE_TOKEN_PATTERN,
+  canonicalTaskReference,
+  readTaskReferenceToken,
   threadReferenceText,
 } from "@lrm/coforge-sdk/internal";
 import type { Element, Root, Text } from "hast";
@@ -245,11 +247,13 @@ function referenceKinds(options: ReferenceChipOptions): ReferenceKind[] {
     },
     {
       pattern: TASK_REFERENCE_TOKEN_PATTERN,
-      build: ([digits], place) => {
-        const number = Number(digits);
+      build: (groups, place) => {
+        // The alternation hands over the groups alone; the reader counts the whole match at 0.
+        const reference = readTaskReferenceToken(["", ...groups]);
+        if (!reference) return undefined;
         return place === "prose"
-          ? taskReference(number)
-          : { type: "text", value: `task #${number}` };
+          ? taskReference(reference)
+          : { type: "text", value: canonicalTaskReference(reference) };
       },
     },
     {

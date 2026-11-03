@@ -2,7 +2,11 @@
  * The chips a message body's references become (`rehypeReferenceChips`, `message-markdown.ts`):
  * fixed `span`s whose only text is a resolved label, injected after sanitizing.
  */
-import { threadReferenceText } from "@lrm/coforge-sdk/internal";
+import {
+  canonicalTaskReference,
+  threadReferenceText,
+  type TaskReference,
+} from "@lrm/coforge-sdk/internal";
 import type { Element } from "hast";
 
 /**
@@ -62,13 +66,21 @@ export function mentionChip(mention: ChipMention, viewerId: string | undefined):
   };
 }
 
-/** A task reference, written as the words it stands for until the renderer resolves it. */
-export function taskReference(number: number): Element {
+/** A task reference, written as the words it stands for until the renderer resolves it (for
+ * another conversation's, the names the sender saw, all a reader who cannot see it reads); another
+ * conversation's also carries that conversation. */
+export function taskReference(reference: TaskReference): Element {
   return {
     type: "element",
     tagName: "span",
-    properties: { "data-task-reference-number": number },
-    children: [{ type: "text", value: `task #${number}` }],
+    properties: {
+      "data-task-reference-number": reference.number,
+      ...(reference.kind !== "local" && {
+        "data-task-reference-conversation-id": reference.conversationId,
+        "data-task-reference-kind": reference.kind,
+      }),
+    },
+    children: [{ type: "text", value: canonicalTaskReference(reference) }],
   };
 }
 

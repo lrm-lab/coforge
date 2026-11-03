@@ -101,3 +101,67 @@ test("an alternation reads each match as its own pattern's groups, a `u` pattern
     { index: 2, groups: ["plan", "2"] },
   ]);
 });
+
+const TASK_CONVERSATION = "44444444-4444-4444-8444-444444444444";
+
+function taskPass(children: unknown[]) {
+  const tree = { type: "root", children } as never;
+  rehypeReferenceChips({ mentions: new Map() })(tree);
+  return tree as { children: Array<{ children: Array<Record<string, unknown>> }> };
+}
+
+test("another conversation's task token carries its conversation and reads as the sender wrote it", () => {
+  const tree = taskPass([
+    paragraph([
+      text(
+        `see <@task:c:${TASK_CONVERSATION}:design:7> and <@task:d:${TASK_CONVERSATION}:ada~agent:9>`,
+      ),
+    ]),
+  ]);
+  expect(tree.children[0]!.children).toEqual([
+    text("see "),
+    {
+      type: "element",
+      tagName: "span",
+      properties: {
+        "data-task-reference-number": 7,
+        "data-task-reference-conversation-id": TASK_CONVERSATION,
+        "data-task-reference-kind": "channel",
+      },
+      children: [text("#design:#7")],
+    },
+    text(" and "),
+    {
+      type: "element",
+      tagName: "span",
+      properties: {
+        "data-task-reference-number": 9,
+        "data-task-reference-conversation-id": TASK_CONVERSATION,
+        "data-task-reference-kind": "dm",
+      },
+      children: [text("dm:@ada~agent:#9")],
+    },
+  ]);
+});
+
+test("another conversation's task token inside a link or code is its words", () => {
+  const tree = taskPass([
+    paragraph([
+      {
+        type: "element",
+        tagName: "a",
+        properties: { href: "/x" },
+        children: [text(`<@task:c:${TASK_CONVERSATION}:design:7>`)],
+      },
+      {
+        type: "element",
+        tagName: "code",
+        properties: {},
+        children: [text(`<@task:d:${TASK_CONVERSATION}:ada:9>`)],
+      },
+    ]),
+  ]);
+  const [link, code] = tree.children[0]!.children as Array<{ children: unknown[] }>;
+  expect(link!.children).toEqual([text("#design:#7")]);
+  expect(code!.children).toEqual([text(`<@task:d:${TASK_CONVERSATION}:ada:9>`)]);
+});

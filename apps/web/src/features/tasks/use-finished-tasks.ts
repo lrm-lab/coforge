@@ -41,14 +41,16 @@ export const overviewTaskQuery = (
   task: { conversationId: string; number: number } | undefined,
 ) =>
   queryOptions({
-    queryKey: [
-      ...finishedTasksScopeKey({ workspaceId }),
-      "task",
-      task?.conversationId,
-      task?.number,
-    ],
+    queryKey: [...conversationTaskReadsKey(workspaceId, task?.conversationId), task?.number],
+    // A change while realtime was away is read on its return (see `FINISHED_TASKS_STALE_MS`).
+    refetchOnReconnect: "always",
     queryFn: task ? () => loadOverviewTask({ data: task }) : skipToken,
   });
+
+/** Every single-Task read of one conversation (`overviewTaskQuery`, `directTaskQuery`): what a
+ * change to its Tasks reads again. */
+export const conversationTaskReadsKey = (workspaceId: string, conversationId: string | undefined) =>
+  [...finishedTasksScopeKey({ workspaceId }), "task", conversationId] as const;
 
 /**
  * How long a finished-work read stays fresh.

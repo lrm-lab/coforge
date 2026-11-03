@@ -76,8 +76,11 @@ export function dmTaskReferenceToken(
   return `<@task:d:${conversationId.toLowerCase()}:${peerHandle}:${number}>`;
 }
 
-/** The reference a token carries, or undefined when the token is malformed. */
-export function readTaskReferenceToken(match: RegExpExecArray): TaskReference | undefined {
+/** The reference a token carries, or undefined when the token is malformed. `match` is the
+ * pattern's match, or any array with its groups at the same indices (the whole match at 0). */
+export function readTaskReferenceToken(
+  match: ArrayLike<string | undefined>,
+): TaskReference | undefined {
   if (match[1] !== undefined) return { kind: "local", number: Number(match[1]) };
   if (match[2] !== undefined)
     return {
@@ -106,8 +109,7 @@ export function replaceTaskReferenceTokens(
   resolve: (reference: TaskReference) => string | undefined,
 ): string {
   return body.replace(TASK_REFERENCE_TOKEN_PATTERN, (token, ...groups) => {
-    const match = [token, ...groups] as unknown as RegExpExecArray;
-    const reference = readTaskReferenceToken(match);
+    const reference = readTaskReferenceToken([token, ...groups]);
     return reference ? (resolve(reference) ?? token) : token;
   });
 }

@@ -26,7 +26,10 @@ export function ConversationTaskDemand({
   readWindow: boolean;
   openTaskNumber: number | undefined;
 }) {
-  const window = useMemo(() => messageWindowTasks(messages, hasNewer), [messages, hasNewer]);
+  const window = useMemo(
+    () => messageWindowTasks(messages, hasNewer, conversationId),
+    [messages, hasNewer, conversationId],
+  );
   // Only what the reads depend on reaches them, so a message that changes none of it (most
   // realtime messages) rebuilds no query.
   return (

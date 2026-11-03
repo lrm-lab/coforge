@@ -6,6 +6,12 @@ import { cn } from "#src/lib/utils";
 import { TaskNumberBadge, statusLabel } from "./task-status-icon";
 import { useMissingTask, useNumberedTask } from "./use-conversation-tasks";
 
+/** A task badge in a message line, and the pointer, hover and focus ring of one that opens its
+ * Task (this conversation's, or another's: `CrossTaskReference`). */
+export const TASK_CHIP_CLASS = "inline-block rounded-md align-middle";
+export const TASK_CHIP_CONTROL_CLASS =
+  "cursor-pointer hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring";
+
 type TaskReferenceProps = ComponentPropsWithoutRef<"span"> & {
   number: number;
   /** Opens the Task's detail popup; absent, a known Task's badge is not a control. */
@@ -53,11 +59,7 @@ function ConversationTaskReference({
       aria-label={task ? `task #${number}, ${statusLabel(task.status)}` : `task #${number}`}
       data-task-status={task?.status}
       // A badge that opens its Task is a control: the pointer, hover and focus ring of one.
-      className={cn(
-        "inline-block rounded-md align-middle",
-        control &&
-          "cursor-pointer hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring",
-      )}
+      className={cn(TASK_CHIP_CLASS, control && TASK_CHIP_CONTROL_CLASS)}
     >
       {task ? (
         <TaskNumberBadge number={number} status={task.status} />

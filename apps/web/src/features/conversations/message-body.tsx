@@ -22,6 +22,7 @@ import type {
   OpenAgentProfile,
   OpenPersonProfile,
 } from "#src/features/agents/profile-panel/open-agent-profile";
+import { CrossTaskReference } from "#src/features/tasks/cross-task-reference";
 import { TaskReference } from "#src/features/tasks/task-reference";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import "./message-markdown.css";
@@ -204,7 +205,8 @@ function ChannelChipLink({
  * `data-mention-user-id` (a person) and its resolved `data-mention-label`. With the matching
  * handler it becomes a keyboard- and pointer-accessible control that opens that profile and peeks
  * at the card on hover or focus; without one it stays an inert span. A task reference carries
- * `data-task-reference-number` and renders as `TaskReference`. A channel-reference chip carries
+ * `data-task-reference-number` and renders as `TaskReference`, or as `CrossTaskReference` when it
+ * also carries another conversation's id (`data-task-reference-conversation-id`). A channel-reference chip carries
  * `data-channel-id` and becomes a router link to that channel: it navigates, so it is a real link
  * (open in a new tab, copy the address) rather than a button. A thread-reference chip carries
  * `data-thread-channel-id` and `data-thread-root-id` and becomes a router link to that channel
@@ -247,7 +249,26 @@ function chipSpan(
         </ChannelChipLink>
       );
     }
-    const taskNumber = (props as Record<string, unknown>)["data-task-reference-number"];
+    const data = props as Record<string, unknown>;
+    const taskNumber = data["data-task-reference-number"];
+    const taskConversationId = data["data-task-reference-conversation-id"];
+    const taskKind = data["data-task-reference-kind"];
+    if (
+      typeof taskNumber === "number" &&
+      typeof taskConversationId === "string" &&
+      (taskKind === "channel" || taskKind === "dm")
+    ) {
+      return (
+        <CrossTaskReference
+          conversationId={taskConversationId}
+          number={taskNumber}
+          kind={taskKind}
+          onOpenTask={onOpenTask}
+        >
+          {children}
+        </CrossTaskReference>
+      );
+    }
     if (typeof taskNumber === "number") {
       return (
         <TaskReference {...props} number={taskNumber} onOpenTask={onOpenTask}>

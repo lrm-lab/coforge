@@ -36,6 +36,7 @@ import { useSearchShortcut } from "#src/features/search/search-shortcut";
 import { useSidebarShortcut } from "#src/features/settings/sidebar-shortcut";
 import { markShownWorkspace, shownWorkspace } from "#src/features/workspaces/shown-workspace";
 import { LeaveDeletedWorkspace } from "#src/features/workspaces/leave-deleted-workspace";
+import { ReferencedTasksRealtime } from "#src/features/tasks/referenced-task";
 import { getStartPage } from "#src/features/workspaces/last-location.functions";
 import { rememberQueryCache } from "#src/features/cache-persistence/browser-query-cache";
 import { nameStepRedirect } from "#src/features/auth/name-step-redirect";
@@ -161,6 +162,7 @@ function AppLayout() {
                 <PanelTabOrderProvider workspaceId={currentWorkspace.id} orders={tabOrders}>
                   {/* Every open page leaves a Workspace its owner deleted. */}
                   <LeaveDeletedWorkspace workspaceId={currentWorkspace.id} />
+                  <ReferencedTasksRealtime workspaceId={currentWorkspace.id} userId={user.id} />
                   {/* The server prunes dead web-push subscriptions (404/410), and nothing else ever
             re-registers them — without this the phone stays silent until a manual toggle. */}
                   <BrowserPushLifecycle
