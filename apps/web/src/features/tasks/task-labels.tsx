@@ -211,6 +211,11 @@ export function TaskLabelsField({
                 onSubmit={() => {
                   if (wanted && !exists && !full) void createAndAdd(wanted);
                 }}
+                onKeyDown={(event) => {
+                  // Esc with nothing typed closes the picker (with text, it clears the text first).
+                  // The search box hands Esc to the list, which keeps it, so the picker stayed open.
+                  if (event.key === "Escape" && !search) setOpen(false);
+                }}
                 autoFocus
               >
                 <AriaInput

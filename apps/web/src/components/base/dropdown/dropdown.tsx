@@ -137,6 +137,10 @@ interface DropdownMenuProps<T extends object> extends AriaMenuProps<T> {}
 const DropdownMenu = <T extends object>(props: DropdownMenuProps<T>) => {
     return (
         <AriaMenu
+            // Esc closes a menu, as in Slack and Linear. React Aria's default has a menu with
+            // picks (labels, a picker's choices) clear them all on Esc and keep the key, so the
+            // menu stayed open and the picks were lost.
+            escapeKeyBehavior="none"
             {...props}
             className={(state) =>
                 cx("h-min overflow-y-auto py-1 outline-hidden select-none", typeof props.className === "function" ? props.className(state) : props.className)

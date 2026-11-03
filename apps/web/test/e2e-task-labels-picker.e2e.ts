@@ -100,6 +100,12 @@ test("labels go on and off a Task, are made from a name, show on cards and filte
     );
     expect(await evaluate<number>(`${menu}.querySelectorAll("header").length`)).toBe(0);
     await shoot("desktop-1-picker");
+    // Esc closes the picker and keeps the Task's labels (React Aria's menus clear their picks on
+    // Esc instead, and stay open).
+    await browser("press", "Escape");
+    await browser("wait", "--fn", `${menu} === null`);
+    expect(await onTask()).toEqual([name("Bug")]);
+    await openPicker();
     await evaluate(`(${item(name("Design"))}.click(), true)`);
     await browser("wait", "--fn", `${props}.includes(${JSON.stringify(name("Design"))})`);
     expect(await onTask()).toEqual([name("Bug"), name("Design")].sort());
@@ -121,6 +127,17 @@ test("labels go on and off a Task, are made from a name, show on cards and filte
       select: { color: true },
     });
     expect(motion.color).not.toBe("gray");
+    await browser("press", "Escape");
+    await browser("wait", "--fn", `${menu} === null`);
+    // History names each label and priority change, instead of leaving an empty row.
+    await run({ operation: "update", number, priority: "high" });
+    const history = `[...${dialog}.querySelectorAll('[role="tab"]')].find((el) => el.textContent.includes("History"))`;
+    await evaluate(`(${history}.click(), true)`);
+    const inPopup = (text: string) => `${dialog}.textContent.includes(${JSON.stringify(text)})`;
+    await browser("wait", "--fn", `${inPopup("Changed labels")} && ${inPopup("Changed priority")}`);
+    expect(await evaluate<boolean>(inPopup(`Added: ${name("Motion")}`))).toBe(true);
+    expect(await evaluate<boolean>(inPopup("Priority: None → High"))).toBe(true);
+    await shoot("desktop-2b-history");
     await browser("press", "Escape");
 
     // The board: the card shows its labels; a label pick keeps the Tasks that carry it, and
