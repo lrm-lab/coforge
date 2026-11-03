@@ -1,6 +1,8 @@
 import type { TaskCommand, TaskResult } from "@lrm/coforge-sdk/internal";
 import { mergeSeenExactSeqs } from "@lrm/coforge-sdk/internal";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
+import { AgentPreflightError } from "./agent-preflight-error";
+import { recordTaskHoldOffered, taskHoldOffered } from "./agent-task-hold-offers";
 import { heldTaskResult, type HeldTaskResultDeps } from "./held-task-result";
 
 /** Task writes that must wait for the Agent to review unread target context first. */
@@ -27,11 +29,23 @@ export async function taskWriteWithFreshness(
 ): Promise<TaskResult | undefined> {
   const heldOperation = FRESHNESS_HELD_OPERATIONS.includes(command.operation);
   if (!heldOperation && !FRESHNESS_ATTACH_OPERATIONS.includes(command.operation)) return undefined;
-  // The caller confirmed the held review (`--anyway`): skip the local hold and let the write
-  // through — the server's gate honors the same confirmation.
-  if (heldOperation && command.continueAnyway !== true) {
-    const held = await heldTaskResult(ports, agentId, command, target, agentApiKey);
-    if (held) return held;
+  if (heldOperation) {
+    // `--anyway` is only an exit from a hold that was actually offered for this target: without a
+    // prior hold it is refused, so the review cannot be skipped preemptively.
+    if (command.continueAnyway === true && !taskHoldOffered(agentId, target))
+      throw new AgentPreflightError(
+        "No freshness hold was suggested for this target, so there is nothing to confirm: " +
+          "review the messages with `coforge message read` first.",
+        "INVALID_INPUT",
+        { retryable: false },
+      );
+    if (command.continueAnyway !== true) {
+      const held = await heldTaskResult(ports, agentId, command, target, agentApiKey);
+      if (held) {
+        recordTaskHoldOffered(agentId, target);
+        return held;
+      }
+    }
   }
   const { messageAttention } = ports;
   const seenUpToSeq = Math.max(
@@ -52,6 +66,7 @@ export async function taskWriteWithFreshness(
     agentApiKey,
   );
   const shown = result.state === "held" ? (result.heldMessages ?? []) : (result.recentUnread ?? []);
+  if (result.state === "held") recordTaskHoldOffered(agentId, target);
   if (shown.length > 0)
     messageAttention.recordModelSeen(
       agentId,
