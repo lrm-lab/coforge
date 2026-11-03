@@ -1,15 +1,17 @@
 import {
   diagnosticErrorName,
   type InboxResponse,
+  type InboxSeal,
   type LocalInboxRequest,
 } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
 import type { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
 import type { AgentAppInbox, MintAppItem } from "#src/agent-app-inbox/agent-app-inbox";
+import type { AgentAppInboxSeals } from "#src/agent-app-inbox/app-inbox-seals";
 import type { AgentProcessManager, AgentRuntime } from "#src/agent-runtime/agent-process-manager";
 import type { AgentMessageAttentionIndex } from "./agent-message-attention-index";
 import { forgetLocalAgent, type AgentLocalFootprint } from "./agent-forget";
-import { agentInbox, appInbox } from "./agent-inbox-factories";
+import { agentInbox, appInbox, appInboxSeals } from "./agent-inbox-factories";
 import type { AgentInboxStateMachine } from "./agent-inbox-state-machine";
 import type { AgentDeliveryQueue } from "./agent-delivery-queue";
 import type { ActivityLaunch } from "./activity-launch";
@@ -42,6 +44,7 @@ export type AgentInboxCoordinatorPorts = {
 export class AgentInboxCoordinator {
   readonly #agentInboxes = new Map<string, AgentInboxStateMachine>();
   readonly #appInboxes = new Map<string, Promise<AgentAppInbox>>();
+  readonly #appSeals = new Map<string, Promise<AgentAppInboxSeals>>();
   readonly #notifiedAppItems = new Map<string, Map<string, Promise<boolean>>>();
 
   constructor(private readonly ports: AgentInboxCoordinatorPorts) {}
@@ -52,6 +55,15 @@ export class AgentInboxCoordinator {
 
   appInbox(agentId: string): Promise<AgentAppInbox> {
     return appInbox(this.#appInboxes, this.ports.stateDirectory, this.ports.workspaceId, agentId);
+  }
+
+  appSeals(agentId: string): Promise<AgentAppInboxSeals> {
+    return appInboxSeals(
+      this.#appSeals,
+      this.ports.stateDirectory,
+      this.ports.workspaceId,
+      agentId,
+    );
   }
 
   async appItemsPending(agentId: string): Promise<number> {
@@ -86,7 +98,64 @@ export class AgentInboxCoordinator {
         })),
         ...(await inbox.read()).map((app) => ({ kind: "app" as const, app })),
       ],
+      seals: await this.#seals(agentId),
     };
+  }
+
+  /** The revisions of the App Inbox items one source identity has now: what a seal calls live. */
+  async appItemRevisions(
+    agentId: string,
+    appId: string,
+    notificationClass: string,
+    sourceId: string,
+  ): Promise<string[]> {
+    return (await this.appInbox(agentId))
+      .list()
+      .filter(
+        (item) =>
+          item.appId === appId &&
+          item.notificationClass === notificationClass &&
+          item.sourceRef.id === sourceId,
+      )
+      .map((item) => item.sourceRef.revision);
+  }
+
+  /** Every sealed source identity with the state `inbox check` reports: its registered revision
+   * against the source's live one, or DETACHED when it names no revision or nothing is live. */
+  async #seals(agentId: string): Promise<InboxSeal[]> {
+    const seals = await (await this.appSeals(agentId)).list();
+    const items = (await this.appInbox(agentId)).list();
+    return seals.map((seal) => {
+      const live = items
+        .filter(
+          (item) =>
+            item.appId === seal.appId &&
+            item.notificationClass === seal.notificationClass &&
+            item.sourceRef.id === seal.sourceId,
+        )
+        .map((item) => item.sourceRef.revision);
+      const liveRevision = live.length ? String(Math.max(...live.map(Number))) : undefined;
+      const state: InboxSeal["state"] =
+        seal.sourceRevision === undefined || liveRevision === undefined
+          ? "DETACHED"
+          : seal.sourceRevision === liveRevision
+            ? "SEALED"
+            : "STALE";
+      return {
+        appId: seal.appId,
+        notificationClass: seal.notificationClass,
+        sourceRef: {
+          kind: seal.sourceKind,
+          id: seal.sourceId,
+          ...(seal.sourceRevision === undefined ? {} : { revision: seal.sourceRevision }),
+        },
+        owner: seal.owner,
+        until: seal.until,
+        sealedAt: seal.sealedAt,
+        state,
+        ...(liveRevision === undefined ? {} : { liveRevision }),
+      };
+    });
   }
 
   async drainAppInboxNotices(agentId: string): Promise<void> {
@@ -194,12 +263,13 @@ export class AgentInboxCoordinator {
 
   forgetAgent(
     agentId: string,
-    footprint: Omit<AgentLocalFootprint, "agentInboxes" | "appInboxes">,
+    footprint: Omit<AgentLocalFootprint, "agentInboxes" | "appInboxes" | "appSeals">,
   ): void {
     forgetLocalAgent(agentId, {
       ...footprint,
       agentInboxes: this.#agentInboxes,
       appInboxes: this.#appInboxes,
+      appSeals: this.#appSeals,
     });
   }
 }

@@ -130,4 +130,9 @@ message LocalReminderRequest {
   optional string status = 12;
   optional bool all = 13;
   optional uint32 revision = 14;
+  // seal/unseal: every live revision of the reminder, instead of one named revision.
+  optional bool all_pending = 15;
+  // seal only: who sealed it, and the condition under which it may be released.
+  optional string owner = 16;
+  optional string until = 17;
 }

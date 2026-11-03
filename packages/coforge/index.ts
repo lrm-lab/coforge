@@ -13,7 +13,6 @@ import {
   parseMentionSelector,
   RFC_UUID_PATTERN,
   type AgentMessageRecord,
-  type AgentReminderOperationResponse,
   type ChannelCommand,
   type MentionSelectorInput as MentionSelector,
   type TaskCommand,
@@ -205,17 +204,15 @@ import {
   formatReminderCommandResponse,
   parseReminderArgs,
   resolveReminderRequestId,
+  sendReminderCommand,
 } from "#src/reminder-commands";
-import type {
-  LocalReminderReceiptResponse,
-  ReminderInvocation,
-  ReminderTransportRequest,
-} from "#src/reminder-commands";
+import type { ReminderInvocation, ReminderResponse } from "#src/reminder-commands";
 export type {
-  LocalReminderReceiptResponse,
   ReminderInvocation,
+  ReminderResponse,
   ReminderTransportRequest,
 } from "#src/reminder-commands";
+import type { ReminderTransportRequest } from "#src/reminder-commands";
 export { resolveReminderId } from "#src/reminder-commands";
 export type WeeklyReportInvocation =
   | {
@@ -317,9 +314,7 @@ export type MessageTransport = {
   inboxCheck?(): Promise<unknown>;
   inboxList?: InboxTransport["inboxList"];
   setChannelMuted?(target: string, muted: boolean): Promise<unknown>;
-  reminder?(
-    request: ReminderTransportRequest,
-  ): Promise<AgentReminderOperationResponse | LocalReminderReceiptResponse>;
+  reminder?(request: ReminderTransportRequest): Promise<ReminderResponse>;
   setThreadFollowed?(target: string, followed: boolean): Promise<unknown>;
   threadList?(): Promise<AgentThreadListResponse>;
   channel?(command: Omit<ChannelCommand, "idempotencyKey">): Promise<unknown>;
@@ -919,7 +914,10 @@ export async function run(args: readonly string[], transport: MessageTransport):
     if (!transport.reminder) throw new Error("Reminder transport is unavailable");
     const { command: _command, ...request } = invocation;
     const resolved = await resolveReminderRequestId(transport, request);
-    return formatReminderCommandResponse(resolved.operation, await transport.reminder(resolved));
+    return formatReminderCommandResponse(
+      resolved.operation,
+      await sendReminderCommand(transport, resolved),
+    );
   }
   if (invocation.command === "task") {
     if (!transport.task) throw new Error("Task transport is unavailable");

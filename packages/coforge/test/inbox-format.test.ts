@@ -27,6 +27,7 @@ const result = (over: Partial<InboxCheckResult> = {}): InboxCheckResult => ({
   },
   pendingRows: [],
   appItems: [],
+  seals: [],
   ...over,
 });
 
@@ -156,4 +157,53 @@ test("reports App items and a daemon failure beside the list", () => {
   );
   expect(output).toContain("App items pending: 1.\n- Reminder: Due now");
   expect(output).toContain("Daemon pending buffer unavailable (boom)");
+});
+
+test("the Seal registry names what was sealed against what is live now", () => {
+  const output = formatInboxCheck(
+    result({
+      seals: [
+        {
+          appId: "system.reminder",
+          notificationClass: "due",
+          sourceRef: {
+            kind: "reminder",
+            id: "123e4567-e89b-42d3-a456-426614174000",
+            revision: "3",
+          },
+          owner: "@ada",
+          until: "the deploy lands",
+          sealedAt: "2026-11-03T10:00:00.000Z",
+          state: "STALE",
+          liveRevision: "4",
+        },
+        {
+          appId: "system.reminder",
+          notificationClass: "due",
+          sourceRef: { kind: "reminder", id: "123e4567-e89b-42d3-a456-426614174000" },
+          owner: "@ada",
+          until: "the deploy lands",
+          sealedAt: "2026-11-03T10:00:00.000Z",
+          state: "DETACHED",
+          liveRevision: "4",
+        },
+      ],
+    }),
+    Date.parse("2026-11-03T10:00:00.000Z"),
+  );
+  expect(output).toContain("Seal registry:");
+  expect(output).toContain("STALE");
+  expect(output).toContain("registered_revision=3 live_revision=4");
+  expect(output).toContain("DETACHED(id-only)");
+  expect(output).toContain('until="the deploy lands"');
+});
+
+test("an App item from another app says its reminder seals were not checked", () => {
+  const output = formatInboxCheck(
+    result({
+      appItems: [{ appId: "system.cleaner", itemId: "cleaner:memory_size:agent-a" }],
+    }),
+    Date.parse("2026-11-03T10:00:00.000Z"),
+  );
+  expect(output).toContain("Reminder seals: not checked");
 });

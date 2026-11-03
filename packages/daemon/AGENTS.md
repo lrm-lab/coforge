@@ -115,7 +115,7 @@ Directories with their own `AGENTS.md` add rules for that directory only.
 | `src/code-agent/version-probe.ts`    | Bounded version subprocess reads with the host environment for Anvil gates                                                                                 |
 | `src/local-session/`                 | Bounded, read-only discovery and briefing extraction for local Claude Code and Codex sessions                                                              |
 | `src/agent-migration/`               | Agent migration on this Computer: select, pack and upload a workspace; download, verify, commit                                                            |
-| `src/agent-app-inbox/`               | Typed Agent App items (incl. the transient client-secret notice), apart from chat Message attention                                                        |
+| `src/agent-app-inbox/`               | Typed Agent App items (incl. the transient client-secret notice) and the Agent's sealed source identities, apart from chat Message attention                 |
 | `src/agent-reminder/`                | Cloud reminder schedule mirror, version-fenced timers, and fire receipts                                                                                   |
 | `src/system-cleaner/`                | Per-Agent MEMORY.md and disk measurements, and the hints they present at Working→Idle                                                                      |
 | `src/agent-app-config/`              | Agent App config sync: snapshot requests per connection, routing each config to its App runtime                                                            |

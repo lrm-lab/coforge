@@ -148,10 +148,27 @@ message InboxEntry {
   }
 }
 
+// One App Inbox source identity sealed by the Agent, as `inbox check` reports it. `state` is
+// SEALED (its registered revision is live), STALE (the live revision moved past it), or DETACHED
+// (sealed without a revision, or nothing live for it).
+message InboxSeal {
+  string app_id = 1;
+  string notification_class = 2;
+  string source_kind = 3;
+  string source_id = 4;
+  optional string source_revision = 5;
+  string owner = 6;
+  string until = 7;
+  string sealed_at = 8;
+  string state = 9;
+  optional string live_revision = 10;
+}
+
 message InboxResponse {
   string request_id = 1;
   bool accepted = 2;
   repeated InboxEntry entries = 3;
+  repeated InboxSeal seals = 4;
 }
 
 message UsageScanRequest {

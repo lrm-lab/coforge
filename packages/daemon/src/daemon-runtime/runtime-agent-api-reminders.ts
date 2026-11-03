@@ -18,6 +18,7 @@ import {
   reminderAppInboxSummary,
 } from "#src/agent-reminder/reminder-app-inbox-text";
 import { getLogger } from "@logtape/logtape";
+import { sealReminder, sealedReminderConflict } from "./runtime-agent-api-reminder-seals";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
 
@@ -79,6 +80,17 @@ export async function reminder(
 ) {
   const agentId = ports.agentIdForContext(context);
   if (!isAgentApiKey(agentApiKey)) throw new Error("Agent API key is missing");
+  if (request.operation === "seal" || request.operation === "unseal")
+    return sealReminder(ports, agentId, request);
+  if (
+    request.reminderId &&
+    (request.operation === "cancel" ||
+      request.operation === "snooze" ||
+      request.operation === "update")
+  ) {
+    const sealed = await sealedReminderConflict(ports, agentId, request.reminderId);
+    if (sealed) return sealed;
+  }
   if (request.operation === "ack" || request.operation === "dismiss") {
     const accepted = await ports.reminders.acknowledge(
       agentId,

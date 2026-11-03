@@ -1,4 +1,5 @@
 import type { AgentAppInbox } from "#src/agent-app-inbox/agent-app-inbox";
+import type { AgentAppInboxSeals } from "#src/agent-app-inbox/app-inbox-seals";
 import type { AgentInboxStateMachine } from "#src/daemon-runtime/agent-inbox-state-machine";
 import type { AgentMessageAttentionIndex } from "#src/daemon-runtime/agent-message-attention-index";
 import type { AgentFeatureSync } from "#src/daemon-runtime/agent-feature-sync";
@@ -15,6 +16,7 @@ export interface AgentLocalFootprint {
   messageAttention: AgentMessageAttentionIndex;
   consumedSeqs: AgentConsumedSeqStore;
   appInboxes: Map<string, Promise<AgentAppInbox>>;
+  appSeals: Map<string, Promise<AgentAppInboxSeals>>;
   featureSync: Pick<AgentFeatureSync, "forget">;
 }
 
@@ -30,5 +32,7 @@ export function forgetLocalAgent(agentId: string, footprint: AgentLocalFootprint
   // An open still in flight may reject after the delete; keep that rejection handled.
   footprint.appInboxes.get(agentId)?.catch(() => {});
   footprint.appInboxes.delete(agentId);
+  footprint.appSeals.get(agentId)?.catch(() => {});
+  footprint.appSeals.delete(agentId);
   footprint.featureSync.forget(agentId);
 }

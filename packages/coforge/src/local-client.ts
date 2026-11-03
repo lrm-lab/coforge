@@ -15,11 +15,7 @@ import {
   type WeeklyReportCommand,
   type WeeklyReportResponse,
 } from "@lrm/coforge-sdk/internal";
-import type {
-  ActionPrepareResult,
-  LocalReminderReceiptResponse,
-  ReminderTransportRequest,
-} from "../index";
+import type { ActionPrepareResult, ReminderResponse, ReminderTransportRequest } from "../index";
 import {
   agentApiRoutes,
   decodeAgentApiRefusal,
@@ -759,9 +755,7 @@ export function connectLocal(
     return { outcome: "failed", definite: false };
   }
 
-  async function callReminder(
-    fields: ReminderTransportRequest,
-  ): Promise<AgentReminderOperationResponse | LocalReminderReceiptResponse> {
+  async function callReminder(fields: ReminderTransportRequest): Promise<ReminderResponse> {
     if (!context || !/^sfp_[A-Za-z0-9_-]{43}$/.test(context))
       throw new Error("coforge agent context is invalid");
     if (!proxyUrl) throw new Error("coforge agent proxy is not configured");
@@ -782,9 +776,7 @@ export function connectLocal(
       throw new Error("agent reminder request failed (network or timeout)");
     }
     if (!response.ok) throw new Error(`agent reminder request failed (${response.status})`);
-    const result = (await response.json()) as
-      | AgentReminderOperationResponse
-      | LocalReminderReceiptResponse;
+    const result = (await response.json()) as ReminderResponse;
     if (fields.operation === "ack" || fields.operation === "dismiss") return result;
     return decodeAgentReminderOperationResponse(
       encodeAgentReminderOperationResponse(result as AgentReminderOperationResponse),

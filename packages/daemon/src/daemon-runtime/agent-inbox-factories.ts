@@ -1,4 +1,5 @@
 import { AgentAppInbox } from "#src/agent-app-inbox/agent-app-inbox";
+import { AgentAppInboxSeals } from "#src/agent-app-inbox/app-inbox-seals";
 import { AgentInboxStateMachine } from "#src/daemon-runtime/agent-inbox-state-machine";
 import { WORKSPACE_PROTOCOL_MAJOR } from "@lrm/coforge-sdk/internal";
 import type { AgentStateDb } from "#src/persistence/agent-state-db";
@@ -28,6 +29,20 @@ export function appInbox(
   if (existing) return existing;
   const opened = AgentAppInbox.open(stateDirectory, workspaceId, agentId);
   inboxes.set(agentId, opened);
+  return opened;
+}
+
+/** The Agent's sealed App Inbox source identities, opened once per Agent like its App Inbox. */
+export function appInboxSeals(
+  seals: Map<string, Promise<AgentAppInboxSeals>>,
+  stateDirectory: string,
+  workspaceId: string,
+  agentId: string,
+): Promise<AgentAppInboxSeals> {
+  const existing = seals.get(agentId);
+  if (existing) return existing;
+  const opened = AgentAppInboxSeals.open(stateDirectory, workspaceId, agentId);
+  seals.set(agentId, opened);
   return opened;
 }
 

@@ -1,4 +1,9 @@
 import { getLogger } from "@logtape/logtape";
+import { defaultClock, type ReminderClock } from "./reminder-clock";
+export { defaultClock, type ReminderClock } from "./reminder-clock";
+
+/** Consumed receipts stay this long past their retry deadline as a re-fire fence, then go. */
+const RECEIPT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 import type {
   ReminderFireRequest,
   ReminderFireResponse,
@@ -56,28 +61,6 @@ export interface ReminderReceiptStore {
   read(agentId: string): Promise<ReminderReceipt[]>;
   write(agentId: string, receipts: readonly ReminderReceipt[]): Promise<void>;
 }
-
-export interface ReminderClock {
-  now(): number;
-  schedule(callback: () => void, delayMs: number): unknown;
-  cancel(timer: unknown): void;
-}
-
-/** Consumed receipts stay this long past their retry deadline as a re-fire fence, then go. */
-const RECEIPT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
-
-/** Wall-clock time and unref'd timers, so a pending timer never keeps the daemon alive. */
-export const defaultClock: ReminderClock = {
-  now: Date.now,
-  schedule(callback, delayMs) {
-    const timer = setTimeout(callback, delayMs);
-    timer.unref();
-    return timer;
-  },
-  cancel(timer) {
-    clearTimeout(timer as ReturnType<typeof setTimeout>);
-  },
-};
 
 /** Authenticated authoritative reminder mirror and durable fire state machine. */
 export class ReminderScheduler {

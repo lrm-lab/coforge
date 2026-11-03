@@ -323,6 +323,7 @@ export type {
   LocalInboxRequest,
   InboxResponse,
   InboxEntry,
+  InboxSeal,
   AppInboxItem,
 } from "./local-daemon";
 export {
@@ -383,6 +384,7 @@ export * from "./computer-file-upload";
 export * from "./agent-control";
 export * from "./agent-migration";
 export * from "./reminder";
+export * from "./reminder-grammar";
 export * from "./app-config";
 export * from "./tasks";
 export * from "./task-codec";

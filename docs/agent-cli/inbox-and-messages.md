@@ -9,7 +9,12 @@ included). A muted channel is listed only for an unread mention, but its followe
 threads are still listed. `More: ... --before <n>` continues the list; the value
 is an opaque cursor, not a message seq. The command also shows the daemon's
 not-yet-delivered messages and typed `app` items; it never performs a cloud
-Message read, clears Message attention, or acknowledges an App item.
+Message read, clears Message attention, or acknowledges an App item. A
+`Seal registry:` section lists the App Inbox source identities the Agent sealed
+with `coforge reminder seal`: `SEALED` when the registered revision is live,
+`STALE` when the live revision moved past it, and `DETACHED` when it was sealed
+without a revision or nothing live matches it. An App item from another App
+says its reminder seals were not checked.
 The generic Inbox CLI does not expose acknowledgement. Each App owns any
 completion command and concurrency token required by its domain.
 

@@ -4,6 +4,7 @@ import {
   InboxResponseSchema,
   InboxEntrySchema,
   AppInboxItemSchema,
+  InboxSealSchema,
   MessageAttentionSummarySchema,
 } from "#src/internal/gen/coforge/rpc/v1/local_rpc_pb";
 import { fromWireRequestId, toWireRequestId } from "./idempotency-key-wire";
@@ -35,7 +36,25 @@ export type AppInboxItem = {
 export type InboxEntry =
   | { kind: "message_target"; messageTarget: MessageAttentionSummary }
   | { kind: "app"; app: AppInboxItem };
-export type InboxResponse = { idempotencyKey: string; accepted: boolean; entries: InboxEntry[] };
+/** One sealed App Inbox source identity, as `inbox check` reports it. `state` is `SEALED` when the
+ * registered revision is live, `STALE` when the live revision moved past it, and `DETACHED` when
+ * it was sealed without a revision or nothing live matches it. */
+export type InboxSeal = {
+  appId: string;
+  notificationClass: string;
+  sourceRef: { kind: string; id: string; revision?: string };
+  owner: string;
+  until: string;
+  sealedAt: string;
+  state: "SEALED" | "STALE" | "DETACHED";
+  liveRevision?: string;
+};
+export type InboxResponse = {
+  idempotencyKey: string;
+  accepted: boolean;
+  entries: InboxEntry[];
+  seals: InboxSeal[];
+};
 export function encodeLocalInboxRequest(value: LocalInboxRequest): Uint8Array {
   return toBinary(LocalInboxRequestSchema, create(LocalInboxRequestSchema, toWireRequestId(value)));
 }
@@ -49,6 +68,22 @@ export function encodeInboxResponse(value: InboxResponse): Uint8Array {
     InboxResponseSchema,
     create(InboxResponseSchema, {
       ...toWireRequestId(value),
+      seals: value.seals.map((seal) =>
+        create(InboxSealSchema, {
+          appId: seal.appId,
+          notificationClass: seal.notificationClass,
+          sourceKind: seal.sourceRef.kind,
+          sourceId: seal.sourceRef.id,
+          ...(seal.sourceRef.revision === undefined
+            ? {}
+            : { sourceRevision: seal.sourceRef.revision }),
+          owner: seal.owner,
+          until: seal.until,
+          sealedAt: seal.sealedAt,
+          state: seal.state,
+          ...(seal.liveRevision === undefined ? {} : { liveRevision: seal.liveRevision }),
+        }),
+      ),
       entries: value.entries.map((entry) =>
         create(
           InboxEntrySchema,
@@ -85,6 +120,24 @@ export function decodeInboxResponse(bytes: Uint8Array): InboxResponse {
   return fromWireRequestId({
     requestId: value.requestId,
     accepted: value.accepted,
+    seals: value.seals.map((seal): InboxSeal => {
+      if (seal.state !== "SEALED" && seal.state !== "STALE" && seal.state !== "DETACHED")
+        throw new Error("invalid App Inbox seal");
+      return {
+        appId: seal.appId,
+        notificationClass: seal.notificationClass,
+        sourceRef: {
+          kind: seal.sourceKind,
+          id: seal.sourceId,
+          ...(seal.sourceRevision === undefined ? {} : { revision: seal.sourceRevision }),
+        },
+        owner: seal.owner,
+        until: seal.until,
+        sealedAt: seal.sealedAt,
+        state: seal.state,
+        ...(seal.liveRevision === undefined ? {} : { liveRevision: seal.liveRevision }),
+      };
+    }),
     entries: value.entries.map((entry): InboxEntry => {
       if (entry.value.case === "messageTarget") {
         return {

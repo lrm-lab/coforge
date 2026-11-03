@@ -124,7 +124,7 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
     example: "coforge thread unfollow --target '#general:12345678'",
   },
   reminder: {
-    syntax: "coforge reminder schedule|list|cancel|update|snooze ...",
+    syntax: "coforge reminder schedule|list|cancel|update|snooze|seal|unseal ...",
     example: "coforge reminder list",
   },
   "reminder schedule": {
@@ -143,6 +143,15 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
   },
   "reminder snooze": {
     syntax: "coforge reminder snooze --id <id> --until <iso> [--json]",
+  },
+  "reminder seal": {
+    syntax:
+      "coforge reminder seal --id <id> [--revision <n>|--all-pending] --owner <who> --until <condition> [--json]",
+    example:
+      "coforge reminder seal --id 123e4567 --all-pending --owner @ada --until 'the deploy lands'",
+  },
+  "reminder unseal": {
+    syntax: "coforge reminder unseal --id <id> [--revision <n>|--all-pending] [--json]",
   },
   attachment: {
     syntax: "coforge attachment view|comments|upload ...",

@@ -1,4 +1,5 @@
 import type { AgentInboxListResponse, AgentInboxRequest } from "@lrm/coforge-sdk/agent";
+import type { InboxSeal } from "@lrm/coforge-sdk/internal";
 import {
   formatInboxCheck,
   type InboxAppItem,
@@ -12,6 +13,7 @@ type DaemonInbox = {
     messageTarget?: Partial<InboxPendingRow>;
     app?: InboxAppItem;
   }>;
+  seals?: InboxSeal[];
 };
 
 /** The transport calls `inbox check` makes: the server's list and the daemon's own state. */
@@ -68,6 +70,7 @@ export async function runInboxCheck(
     appItems: (inbox?.entries ?? []).flatMap((entry) =>
       entry.kind === "app" && entry.app ? [entry.app] : [],
     ),
+    seals: inbox?.seals ?? [],
     ...("error" in daemon ? { daemonError: daemon.error } : {}),
   };
   if (!json) return formatInboxCheck(result, Date.now());

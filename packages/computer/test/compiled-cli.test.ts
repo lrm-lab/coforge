@@ -198,7 +198,7 @@ test("single-file installation provides management and Agent CLI without a Daemo
     expect(await invoke(["inbox", "check", "--json"])).toEqual({
       code: 0,
       stdout:
-        '{"view":"unread","list":{"ok":true,"view":"unread","items":[],"totals":{"conversations":0,"dms":0,"mentions":0},"hasMore":false,"nextBefore":null},"pendingRows":[],"appItems":[]}\n',
+        '{"view":"unread","list":{"ok":true,"view":"unread","items":[],"totals":{"conversations":0,"dms":0,"mentions":0},"hasMore":false,"nextBefore":null},"pendingRows":[],"appItems":[],"seals":[]}\n',
       stderr: "",
     });
     const sent = await invoke(["message", "send", "--target", "@user"], "release-only hello");

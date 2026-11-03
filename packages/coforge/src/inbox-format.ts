@@ -5,6 +5,7 @@ import type {
   AgentInboxListResponse,
   AgentInboxView,
 } from "@lrm/coforge-sdk/agent";
+import type { InboxSeal } from "@lrm/coforge-sdk/internal";
 
 /** A conversation with messages the daemon holds but has not delivered to the Agent yet. */
 export type InboxPendingRow = {
@@ -32,6 +33,8 @@ export type InboxCheckResult = {
   list: AgentInboxListResponse;
   pendingRows: InboxPendingRow[];
   appItems: InboxAppItem[];
+  /** The App Inbox source identities the Agent sealed, as the daemon reports them. */
+  seals?: InboxSeal[];
   /** Why the daemon's own part could not be read; its rows and App items are then missing. */
   daemonError?: string;
 };
@@ -105,6 +108,25 @@ function header(result: InboxCheckResult, extraPending: number): string {
   return `Inbox: ${plural(totals.conversations, "unread conversation")} (${plural(totals.dms, "DM")}, ${totals.mentions} with mentions).`;
 }
 
+function sealState(seal: InboxSeal): string {
+  if (seal.state !== "DETACHED") return seal.state;
+  return seal.sourceRef.revision === undefined ? "DETACHED(id-only)" : "DETACHED(no-live-item)";
+}
+
+/** The `Seal registry:` lines: what the Agent sealed, against what is live now. */
+function sealRegistry(seals: readonly InboxSeal[]): string[] {
+  return seals.map((seal) => {
+    const source = `${seal.sourceRef.kind}:${seal.sourceRef.id.slice(0, 8)}`;
+    return [
+      `- [${foldUntrustedLine(seal.appId)}] ${source} ${sealState(seal)}`,
+      `owner=${foldUntrustedLine(seal.owner)}`,
+      `until=${JSON.stringify(foldUntrustedLine(seal.until))}`,
+      `registered_revision=${seal.sourceRef.revision ?? "-"}`,
+      `live_revision=${seal.liveRevision ?? "-"}`,
+    ].join(" ");
+  });
+}
+
 /** `inbox check`: the unread conversations, then how to see more, the next step and App items. */
 export function formatInboxCheck(result: InboxCheckResult, nowMs: number): string {
   const { list, view, before } = result;
@@ -163,6 +185,10 @@ export function formatInboxCheck(result: InboxCheckResult, nowMs: number): strin
         }),
       ].join("\n"),
     );
+  const seals = result.seals ?? [];
+  if (seals.length > 0) sections.push(["Seal registry:", ...sealRegistry(seals)].join("\n"));
+  if (result.appItems.some((app) => app.appId && app.appId !== "system.reminder"))
+    sections.push("Reminder seals: not checked");
   if (result.daemonError)
     sections.push(
       `Daemon pending buffer unavailable (${result.daemonError}); not-yet-delivered counts and App items are not shown.`,

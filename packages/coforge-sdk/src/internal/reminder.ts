@@ -1,4 +1,5 @@
 import { RPC_METHODS } from "./rpc-methods";
+import { RECURRENCE } from "./reminder-grammar";
 import { isScopeId } from "./scope-id";
 import { boundedPayload } from "./codec";
 import { MESSAGE_ANCHOR_SOURCE, RFC_UUID_PATTERN } from "./uuid";
@@ -22,7 +23,11 @@ export const REMINDER_SYNC_MESSAGE_TYPE = "coforge.rpc.v1.ReminderSync" as const
 export const REMINDER_CAPABILITY = "reminder:v1" as const;
 /** The protocol number every versioned reminder message carries (`protocol_major`). */
 export const REMINDER_PROTOCOL_MAJOR = 1 as const;
+export { DEFAULT_REMINDER_TIMEZONE, parseReminderRecurrence } from "./reminder-grammar";
+export type { ReminderRecurrence } from "./reminder-grammar";
 
+const OPERATIONS = ["schedule", "list", "update", "snooze", "cancel", "log"] as const;
+const REMINDER_STATUSES = ["scheduled", "fired", "canceled"] as const;
 const MAX_BYTES = 65_536;
 /** The messageId short forms reminder schedules accept: the same rule the CLI prints. */
 const PREFIX = new RegExp(`^${MESSAGE_ANCHOR_SOURCE}$`, "i");
@@ -35,47 +40,6 @@ const TARGET = new RegExp(
 const CANONICAL_TARGET = new RegExp(
   `^(?:#[a-z0-9][a-z0-9_-]{0,31}|@${USERNAME}(?::${UUID_BODY})?)$`,
 );
-const RECURRENCE =
-  /^(?:every:[1-9]\d*[mhd]|daily@(?:[01]\d|2[0-3]):[0-5]\d|weekly:(?:mon|tue|wed|thu|fri|sat|sun)(?:,(?:mon|tue|wed|thu|fri|sat|sun))*@(?:[01]\d|2[0-3]):[0-5]\d)$/;
-const OPERATIONS = ["schedule", "list", "update", "snooze", "cancel", "log"] as const;
-const REMINDER_STATUSES = ["scheduled", "fired", "canceled"] as const;
-
-/** One parsed recurrence spelling of the canonical `RECURRENCE` grammar. */
-export type ReminderRecurrence =
-  | { kind: "every"; count: number; unit: "m" | "h" | "d" }
-  | { kind: "daily"; hour: number; minute: number }
-  | { kind: "weekly"; weekdays: string[]; hour: number; minute: number };
-
-/** Parse a recurrence string against the canonical grammar, or `undefined` when it does not
- * match. The three patterns are the same alternatives `RECURRENCE` validates — nonzero interval
- * counts, real clock hours, known weekday tokens — so a parse failure and a validation failure
- * agree on exactly the same strings. Consumers of a validated reminder repeat — the cloud's
- * `nextOccurrence` — parse through here so the grammar lives in one file next to the `RECURRENCE`
- * regex that validates it, and a grammar change cannot leave a downstream parser behind. */
-export function parseReminderRecurrence(value: string): ReminderRecurrence | undefined {
-  const interval = /^every:([1-9]\d*)([mhd])$/.exec(value);
-  if (interval)
-    return {
-      kind: "every",
-      count: Number(interval[1]),
-      unit: interval[2] as "m" | "h" | "d",
-    };
-  const daily = /^daily@([01]\d|2[0-3]):([0-5]\d)$/.exec(value);
-  if (daily) return { kind: "daily", hour: Number(daily[1]), minute: Number(daily[2]) };
-  const weekly =
-    /^weekly:((?:mon|tue|wed|thu|fri|sat|sun)(?:,(?:mon|tue|wed|thu|fri|sat|sun))*)@([01]\d|2[0-3]):([0-5]\d)$/.exec(
-      value,
-    );
-  if (weekly)
-    return {
-      kind: "weekly",
-      weekdays: weekly[1]!.split(","),
-      hour: Number(weekly[2]),
-      minute: Number(weekly[3]),
-    };
-  return undefined;
-}
-
 export type ReminderOperation = (typeof OPERATIONS)[number];
 export type ReminderStatus = (typeof REMINDER_STATUSES)[number];
 /** The identity every reminder message carries: the Agent, on its Computer, in its Workspace. */
@@ -163,8 +127,27 @@ export type ReminderSnapshotRequest = ReminderScope;
 export type LocalReminderRequest = ReminderOperationFields & {
   idempotencyKey: string;
   context: string;
-  operation: ReminderOperation | "ack" | "dismiss";
+  operation: ReminderOperation | "ack" | "dismiss" | "seal" | "unseal";
   revision?: number;
+  /** `seal`/`unseal`: every live revision of the reminder, instead of one named revision. */
+  allPending?: boolean;
+  /** `seal` only: who sealed it, and the condition under which it may be released. */
+  owner?: string;
+  until?: string;
+};
+
+/**
+ * What a local reminder command answers without the cloud: a seal or unseal (how many source
+ * identities it wrote or removed), or a refusal of a lifecycle change because the reminder is
+ * sealed (`reason: "sealed"` names who sealed it and until when).
+ */
+export type LocalReminderLocalResponse = {
+  accepted: boolean;
+  reminderId?: string;
+  sealed?: number;
+  reason?: string;
+  owner?: string;
+  until?: string;
 };
 
 export const isReminderId = (value: string): boolean => RFC_UUID_PATTERN.test(value);
@@ -520,14 +503,49 @@ export function decodeReminderSnapshotRequest(bytes: Uint8Array): ReminderSnapsh
   );
 }
 
+/** A seal's owner and release condition: one bounded line each, never empty. */
+function sealText(value: string | undefined, field: string): string | undefined {
+  if (value === undefined) return undefined;
+  if (!value.trim() || value.length > 200 || /[\u0000-\u001f\u007f]/.test(value))
+    throw new Error(`invalid reminder seal ${field}`);
+  return value;
+}
+
 function local(value: LocalReminderRequest): LocalReminderRequest {
   if (
     !isScopeId(value.idempotencyKey) ||
     !value.context ||
-    ![...OPERATIONS, "ack", "dismiss"].includes(value.operation)
+    ![...OPERATIONS, "ack", "dismiss", "seal", "unseal"].includes(value.operation)
   )
     throw new Error("invalid local reminder request");
   fields(value);
+  sealText(value.owner, "owner");
+  sealText(value.until, "condition");
+  if (value.operation === "seal" || value.operation === "unseal") {
+    const businessFields = [
+      "title",
+      "messageId",
+      "target",
+      "fireAt",
+      "delaySeconds",
+      "repeat",
+      "timezone",
+      "status",
+      "all",
+    ] as const;
+    positive(value.revision, "reminder revision");
+    if (
+      !value.reminderId ||
+      businessFields.some((name) => value[name] !== undefined) ||
+      (value.revision !== undefined && value.allPending === true)
+    )
+      throw new Error("invalid local reminder seal request");
+    if (value.operation === "seal" && (!value.owner || !value.until))
+      throw new Error("invalid local reminder seal request");
+    if (value.operation === "unseal" && (value.owner !== undefined || value.until !== undefined))
+      throw new Error("invalid local reminder unseal request");
+    return value;
+  }
   if (["ack", "dismiss"].includes(value.operation)) {
     const businessFields = [
       "title",
@@ -569,11 +587,3 @@ export function decodeLocalReminderRequest(bytes: Uint8Array): LocalReminderRequ
   const wire = optional(fromBinary(LocalReminderRequestSchema, bounded(bytes)));
   return local(fromWireRequestId(wire as { requestId: string }) as LocalReminderRequest);
 }
-
-/**
- * The timezone a repeating reminder takes when the caller names none. A product default rather than
- * an implementation detail: the CLI applies it locally while validating a request, and the server
- * applies it when the reminder is written, so both edges have to agree — otherwise the same command
- * would be accepted as one clock and stored as another.
- */
-export const DEFAULT_REMINDER_TIMEZONE = "Asia/Shanghai";

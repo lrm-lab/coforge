@@ -31,6 +31,7 @@ test("round trips the version-compatible unified Inbox protocol", () => {
         },
       },
     ],
+    seals: [],
   };
   expect(decodeInboxResponse(encodeInboxResponse(response))).toEqual(response);
 });
@@ -54,6 +55,7 @@ test("round trips a transient System Cleaner item", () => {
         },
       },
     ],
+    seals: [],
   };
   expect(decodeInboxResponse(encodeInboxResponse(response))).toEqual(response);
 });
@@ -74,6 +76,7 @@ test("round trips when the newest pending message was created, and leaves it uns
     idempotencyKey: "r",
     accepted: true,
     entries: [entry(1_700_000_000_123), entry()],
+    seals: [],
   };
   const decoded = decodeInboxResponse(encodeInboxResponse(response));
   expect(decoded).toEqual(response);
@@ -83,4 +86,38 @@ test("round trips when the newest pending message was created, and leaves it uns
   expect(() => encodeInboxResponse({ ...response, entries: [entry(-1)] })).toThrow(
     "invalid message attention time",
   );
+});
+
+test("round trips a sealed source identity with and without a revision", () => {
+  const response = {
+    idempotencyKey: "r",
+    accepted: true,
+    entries: [],
+    seals: [
+      {
+        appId: "system.reminder",
+        notificationClass: "due",
+        sourceRef: {
+          kind: "reminder",
+          id: "123e4567-e89b-42d3-a456-426614174000",
+          revision: "3",
+        },
+        owner: "@ada",
+        until: "the deploy lands",
+        sealedAt: "2026-11-03T10:00:00.000Z",
+        state: "SEALED" as const,
+        liveRevision: "3",
+      },
+      {
+        appId: "system.reminder",
+        notificationClass: "due",
+        sourceRef: { kind: "reminder", id: "123e4567-e89b-42d3-a456-426614174000" },
+        owner: "@ada",
+        until: "the deploy lands",
+        sealedAt: "2026-11-03T10:00:00.000Z",
+        state: "DETACHED" as const,
+      },
+    ],
+  };
+  expect(decodeInboxResponse(encodeInboxResponse(response))).toEqual(response);
 });

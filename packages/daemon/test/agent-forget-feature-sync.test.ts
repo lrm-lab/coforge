@@ -13,6 +13,7 @@ test("forgetting an Agent leaves nothing of its feature state: no launched value
     messageAttention: { clearAgent() {} },
     consumedSeqs: { remove() {} },
     appInboxes: new Map(),
+    appSeals: new Map(),
     featureSync: sync,
   } as never);
   expect(sync.noticePrefix("a")).toBe("");

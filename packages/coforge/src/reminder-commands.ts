@@ -1,5 +1,6 @@
 import type {
   AgentReminderOperationResponse,
+  LocalReminderLocalResponse,
   LocalReminderRequest,
   ReminderSummaryRecord,
 } from "@lrm/coforge-sdk/internal";
@@ -17,20 +18,51 @@ export type ReminderInvocation = Omit<LocalReminderRequest, "context" | "idempot
   command: "reminder";
 };
 export type ReminderTransportRequest = Omit<LocalReminderRequest, "context" | "idempotencyKey">;
+export type { LocalReminderLocalResponse };
 export type LocalReminderReceiptResponse = {
   accepted: boolean;
   reminderId: string;
   revision: number;
 };
+/** What one reminder command answers: the cloud's operation result, a local receipt, or a local
+ * seal/unseal (or its refusal). */
+export type ReminderResponse =
+  | AgentReminderOperationResponse
+  | LocalReminderReceiptResponse
+  | LocalReminderLocalResponse;
+
 /** The reminder transport these commands need: the CLI's `MessageTransport.reminder`. */
 type ReminderTransport = {
-  reminder?(
-    request: ReminderTransportRequest,
-  ): Promise<AgentReminderOperationResponse | LocalReminderReceiptResponse>;
+  reminder?(request: ReminderTransportRequest): Promise<ReminderResponse>;
 };
 
+/**
+ * Issues one reminder command. A seal or unseal is answered by the daemon's local seal store, so
+ * its failure is `UPDATE_FAILED` rather than the generic transport wording the cloud commands use.
+ */
+export async function sendReminderCommand(
+  transport: ReminderTransport,
+  request: ReminderTransportRequest,
+): Promise<ReminderResponse> {
+  if (!transport.reminder) throw new Error("Reminder transport is unavailable");
+  try {
+    return await transport.reminder(request);
+  } catch (error) {
+    if (
+      (request.operation === "seal" || request.operation === "unseal") &&
+      !(error instanceof CliError)
+    )
+      throw new CliError({
+        code: "UPDATE_FAILED",
+        message: "The local reminder seal store could not be updated.",
+        retryable: true,
+      });
+    throw error;
+  }
+}
+
 const REMINDER_USAGE =
-  "Usage: coforge reminder schedule --title <title> (--target <target>|--channel <target>) (--message-id <full UUID|8hex>|--msg-id <full UUID|8hex>) (--delay-seconds <n|duration> | --fire-at <timestamp> | --repeat <rule>) [--repeat <rule>] [--tz <timezone>] | coforge reminder list [--all | --status <comma-list of scheduled,fired,canceled; default scheduled,fired>] | coforge reminder update --id <full UUID|8hex+> (--fire-at <timestamp> | --in <duration> | --repeat <rule|none>|--cadence <rule|none> | --title <title>) [--tz <timezone>] | coforge reminder snooze --id <full UUID|8hex+> (--delay-seconds <n|duration> | --by <duration> | --fire-at <timestamp>) | coforge reminder cancel|log --id <full UUID|8hex+> | coforge reminder ack|dismiss --id <full UUID|8hex+> --revision <n>";
+  "Usage: coforge reminder schedule --title <title> (--target <target>|--channel <target>) (--message-id <full UUID|8hex>|--msg-id <full UUID|8hex>) (--delay-seconds <n|duration> | --fire-at <timestamp> | --repeat <rule>) [--repeat <rule>] [--tz <timezone>] | coforge reminder list [--all | --status <comma-list of scheduled,fired,canceled; default scheduled,fired>] | coforge reminder update --id <full UUID|8hex+> (--fire-at <timestamp> | --in <duration> | --repeat <rule|none>|--cadence <rule|none> | --title <title>) [--tz <timezone>] | coforge reminder snooze --id <full UUID|8hex+> (--delay-seconds <n|duration> | --by <duration> | --fire-at <timestamp>) | coforge reminder cancel|log --id <full UUID|8hex+> | coforge reminder ack|dismiss --id <full UUID|8hex+> --revision <n> | coforge reminder seal --id <full UUID|8hex+> [--revision <n>|--all-pending] --owner <who> --until <condition> | coforge reminder unseal --id <full UUID|8hex+> [--revision <n>|--all-pending]";
 
 /** A resolvable `--id` is a full UUID or a case-insensitive hex prefix of at least 8 characters. */
 const REMINDER_ID_PREFIX = /^[0-9a-f]{8,}$/i;
@@ -39,7 +71,18 @@ export function parseReminderArgs(args: readonly string[]): ReminderInvocation {
   const operation = args[0];
   if (
     !operation ||
-    !["schedule", "list", "update", "snooze", "cancel", "log", "ack", "dismiss"].includes(operation)
+    ![
+      "schedule",
+      "list",
+      "update",
+      "snooze",
+      "cancel",
+      "log",
+      "ack",
+      "dismiss",
+      "seal",
+      "unseal",
+    ].includes(operation)
   )
     throw new Error(REMINDER_USAGE);
   const names: Record<string, keyof ReminderTransportRequest> = {
@@ -56,6 +99,8 @@ export function parseReminderArgs(args: readonly string[]): ReminderInvocation {
     "--tz": "timezone",
     "--status": "status",
     "--revision": "revision",
+    "--owner": "owner",
+    "--until": "until",
   };
   const request: Record<string, unknown> = { command: "reminder", operation };
   const seen = new Set<string>();
@@ -75,6 +120,10 @@ export function parseReminderArgs(args: readonly string[]): ReminderInvocation {
     seen.add(flag);
     if (flag === "--all") {
       request.all = true;
+      continue;
+    }
+    if (flag === "--all-pending") {
+      request.allPending = true;
       continue;
     }
     if (flag === "--by" || flag === "--in") {
@@ -143,6 +192,8 @@ function validateReminderShape(value: ReminderInvocation): void {
     log: ["reminderId"],
     ack: ["reminderId", "revision"],
     dismiss: ["reminderId", "revision"],
+    seal: ["reminderId", "revision", "allPending", "owner", "until"],
+    unseal: ["reminderId", "revision", "allPending"],
   };
   const fields = Object.keys(value).filter(
     (key) => key !== "command" && key !== "operation",
@@ -189,6 +240,12 @@ function validateReminderShape(value: ReminderInvocation): void {
   }
   if (["ack", "dismiss"].includes(value.operation) && (!id || !value.revision))
     throw new Error(REMINDER_USAGE);
+  if (value.operation === "seal" || value.operation === "unseal") {
+    if (!id || (value.revision !== undefined && value.allPending === true))
+      throw new Error(`Pass at most one of --revision and --all-pending.\n${REMINDER_USAGE}`);
+    if (value.operation === "seal" && (!value.owner || !value.until))
+      throw new Error(`Sealing a reminder needs --owner and --until.\n${REMINDER_USAGE}`);
+  }
 }
 
 /** The `list` scope an `--id` prefix lookup runs under, per command. */
@@ -207,6 +264,8 @@ const REMINDER_ID_RESOLUTION_SCOPE: Record<string, ReminderIdResolutionScope> = 
   log: { all: true },
   ack: { all: true },
   dismiss: { all: true },
+  seal: { all: true },
+  unseal: { all: true },
 };
 
 /**
@@ -220,10 +279,25 @@ export async function resolveReminderRequestId(
   const scope = REMINDER_ID_RESOLUTION_SCOPE[request.operation];
   if (!scope || !request.reminderId) return request;
   if (isReminderId(request.reminderId)) return request;
-  return {
-    ...request,
-    reminderId: await resolveReminderId(transport, request.reminderId, scope),
-  };
+  const prefix = request.reminderId;
+  let resolved: string;
+  try {
+    resolved = await resolveReminderId(transport, prefix, scope);
+  } catch (error) {
+    // A seal names one reminder: an ambiguous prefix is a bad argument, not a second lookup.
+    if (
+      (request.operation === "seal" || request.operation === "unseal") &&
+      error instanceof CliError &&
+      error.code === "AMBIGUOUS"
+    )
+      throw new CliError({
+        code: "INVALID_ARG",
+        message: `Reminder prefix ${prefix} is ambiguous`,
+        retryable: false,
+      });
+    throw error;
+  }
+  return { ...request, reminderId: resolved };
 }
 
 /**
@@ -267,9 +341,41 @@ export async function resolveReminderId(
 
 export function formatReminderCommandResponse(
   operation: string,
-  result: AgentReminderOperationResponse | LocalReminderReceiptResponse,
+  result:
+    | AgentReminderOperationResponse
+    | LocalReminderReceiptResponse
+    | LocalReminderLocalResponse,
 ): string {
-  if (!result.accepted) return "Reminder request was not accepted.";
+  const local = result as LocalReminderLocalResponse;
+  if (local.reason === "sealed")
+    throw new CliError({
+      code: "UPDATE_FAILED",
+      message: `sealed by ${local.owner} until ${local.until}; run coforge reminder unseal explicitly first`,
+      retryable: false,
+    });
+  if (!result.accepted) {
+    if (local.reason === "no-matching-seal")
+      throw new CliError({
+        code: "NOT_FOUND",
+        message: "No matching local reminder seal exists",
+        retryable: false,
+      });
+    if (local.reason === "no-live-revision")
+      throw new CliError({
+        code: "NOT_FOUND",
+        message: "No live reminder revision matches --all-pending",
+        retryable: false,
+      });
+    return "Reminder request was not accepted.";
+  }
+  if (operation === "seal" || operation === "unseal") {
+    const id = (local.reminderId ?? "").slice(0, 8);
+    const count = local.sealed ?? 0;
+    const noun = `${count} reminder source ${count === 1 ? "identity" : "identities"}`;
+    return operation === "seal"
+      ? `Sealed ${noun} for ${id} by ${local.owner} until ${local.until}.`
+      : `Unsealed ${noun} for ${id}.`;
+  }
   if (operation === "ack" || operation === "dismiss") {
     const receipt = result as LocalReminderReceiptResponse;
     return `Accepted reminder ${operation} request: id=${receipt.reminderId} revision=${receipt.revision}.`;
