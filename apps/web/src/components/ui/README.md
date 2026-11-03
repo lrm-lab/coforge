@@ -33,6 +33,12 @@ why the official library has no equivalent.
 The one sanctioned copy-and-adapt exception, the app sidebar, is described in
 [`layout/sidebar/README.md`](../layout/sidebar/README.md).
 
+One approved edit to an official file: `base/tooltip/tooltip.tsx` opens its first tooltip after
+500ms instead of Untitled's 300ms (Frank, 2026-11-03), so a pointer passing over a row of icon
+buttons does not pop one up. It is the component's default, so `ButtonUtility`'s tooltips follow;
+once one is open, a neighbour still opens at once (React Aria's warm-up). Keep it when updating the
+file from upstream.
+
 ## Lint config
 
 ## Lint config

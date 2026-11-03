@@ -25,7 +25,7 @@ interface TooltipProps extends AriaTooltipTriggerComponentProps, Omit<AriaToolti
     /**
      * Delay in milliseconds before the tooltip is shown.
      *
-     * @default 300
+     * @default 500
      */
     delay?: number;
 }
@@ -35,7 +35,7 @@ export const Tooltip = ({
     description,
     children,
     arrow = false,
-    delay = 300,
+    delay = 500,
     closeDelay = 0,
     trigger,
     isDisabled,
