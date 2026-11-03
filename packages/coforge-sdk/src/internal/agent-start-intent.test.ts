@@ -165,6 +165,46 @@ test("rejects decoding a resume prompt that also carries message recovery", () =
   }
 });
 
+test("a task conversation target round-trips through start recovery", () => {
+  const message = {
+    messageId: "message-1",
+    deliveryId: "delivery-1",
+    conversationId: "conversation-1",
+    sequence: 4,
+    target: "#coforge:#100",
+    latestSenderKind: "human" as const,
+    latestSenderHandle: "frank",
+    latestSenderDescription: "",
+    body: "status?",
+  };
+  const decoded = decodeAgentStartIntent(
+    encodeAgentStartIntent({
+      ...base,
+      resumeMessages: [message],
+      unreadSummary: { "#coforge:#100": 1, "dm:@ada~human:#3": 1 },
+    }),
+  );
+  expect(decoded.resumeMessages?.[0]?.target).toBe("#coforge:#100");
+  expect(decoded.unreadSummary).toEqual({ "#coforge:#100": 1, "dm:@ada~human:#3": 1 });
+  expect(
+    decodeAgentStartIntent(
+      encodeAgentStartIntent({
+        ...base,
+        resumeMessages: [{ ...message, target: "#general:12345678" }],
+      }),
+    ).resumeMessages?.[0]?.target,
+  ).toBe("#general:12345678");
+  for (const target of ["#general:reply-id", "attachment:12345678-1234-4234-8234-123456789abc"])
+    expect(() =>
+      decodeAgentStartIntent(
+        encodeAgentStartIntent({
+          ...base,
+          resumeMessages: [{ ...message, target }],
+        }),
+      ),
+    ).toThrow("invalid agent recovery context");
+});
+
 test("summary recovery carries conversation ids without loading message bodies", () => {
   const intent = {
     ...base,

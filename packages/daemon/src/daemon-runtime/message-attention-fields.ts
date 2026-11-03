@@ -1,10 +1,22 @@
 import {
   isAttachmentMessageTarget,
   isChannelMessageTarget,
+  isTaskConversationTarget,
   threadParentTarget,
   type AgentMessageDelivery,
 } from "@lrm/coforge-sdk/internal";
 import type { MessageAttention } from "./agent-message-attention-index";
+
+/** A target attention will hold. `@…` covers a direct message and `@peer:#N`. A task on a channel
+ * or written `dm:@peer:#N` matches neither the `@` prefix nor a channel thread anchor. */
+export function isDeliveryTarget(target: string): boolean {
+  return (
+    target.startsWith("@") ||
+    isChannelMessageTarget(target) ||
+    isAttachmentMessageTarget(target) ||
+    isTaskConversationTarget(target)
+  );
+}
 
 /** The fields every delivery must carry before it can touch attention or be acknowledged. */
 export function hasDeliveryScope(
@@ -16,9 +28,7 @@ export function hasDeliveryScope(
     message.messageId &&
     message.body &&
     message.target &&
-    (message.target.startsWith("@") ||
-      isChannelMessageTarget(message.target) ||
-      isAttachmentMessageTarget(message.target)) &&
+    isDeliveryTarget(message.target) &&
     message.target.length >= 2 &&
     message.sequence >= 1,
   );
@@ -31,15 +41,17 @@ export function attentionFlags(
   previous: MessageAttention | undefined,
 ): string[] {
   return [
-    isChannelMessageTarget(target)
-      ? "channel"
-      : isAttachmentMessageTarget(target)
-        ? threadParentTarget(target) === undefined
-          ? "attachment"
-          : "thread"
-        : target.includes(":")
-          ? "thread"
-          : "dm",
+    isTaskConversationTarget(target)
+      ? "task"
+      : isChannelMessageTarget(target)
+        ? "channel"
+        : isAttachmentMessageTarget(target)
+          ? threadParentTarget(target) === undefined
+            ? "attachment"
+            : "thread"
+          : target.includes(":")
+            ? "thread"
+            : "dm",
     // Reached the Agent from outside the channel: it can read the message, not reply there.
     ...(nonMemberMention || previous?.flags.includes("non_member_mention")
       ? ["non_member_mention"]

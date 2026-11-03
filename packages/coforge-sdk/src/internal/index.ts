@@ -68,6 +68,23 @@ export const isChannelMessageTarget = (target: string): boolean =>
   new RegExp(
     `^#[a-z0-9][a-z0-9_-]{0,31}(?::(?:${MESSAGE_ANCHOR_SOURCE}|${UUID_LIKE_SOURCE}))?$`,
   ).test(target);
+/**
+ * A task conversation, named by its board and task number (`:#N`), not by a message anchor.
+ * `#channel:#N` fails `isChannelMessageTarget` (the suffix is not an anchor). `dm:@peer:#N` does
+ * not start with `@`. The server publishes a direct board as `@peer:#N`, or `@peer~human:#N` /
+ * `@peer~agent:#N` when the name is shared. A thread (`#general:12345678`, `@ada:abcd1234`) is not
+ * one of these.
+ */
+const TASK_CONVERSATION_HANDLE = "[a-z0-9][a-z0-9_-]{0,127}(?:~(?:human|agent))?";
+const TASK_CONVERSATION_TARGET = new RegExp(
+  `^(?:#[a-z0-9][a-z0-9_-]{0,31}|dm:@${TASK_CONVERSATION_HANDLE}|@${TASK_CONVERSATION_HANDLE}):#[1-9]\\d*$`,
+);
+export const isTaskConversationTarget = (target: string): boolean =>
+  TASK_CONVERSATION_TARGET.test(target);
+/** A start may replay this target. Task conversations are included. Attachment targets are not:
+ * this boundary has never accepted them. */
+export const isRecoverableAgentTarget = (target: string): boolean =>
+  target.startsWith("@") || isChannelMessageTarget(target) || isTaskConversationTarget(target);
 /** An attachment's comment target: `attachment:<uuid>`, optionally with a comment thread root. */
 export const isAttachmentMessageTarget = (target: string): boolean =>
   new RegExp(

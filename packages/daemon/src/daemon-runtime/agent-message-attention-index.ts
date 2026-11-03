@@ -10,8 +10,6 @@ import { getLogger } from "@logtape/logtape";
 import {
   AGENT_MESSAGE_ACK_METHOD,
   HELD_CONTEXT_LIMIT,
-  isAttachmentMessageTarget,
-  isChannelMessageTarget,
   isValidMessageSender,
   mergeSeenExactSeqs,
   threadRootTarget,
@@ -19,7 +17,12 @@ import {
 import type { AgentHistoryConsumptionScope } from "@lrm/coforge-sdk/agent";
 import type { AgentProcessManager } from "#src/agent-runtime/agent-process-manager";
 import { agentStartupCatchupInput } from "#src/agent-runtime/agent-startup";
-import { attentionFlags, hasDeliveryScope, latestCreatedAtField } from "./message-attention-fields";
+import {
+  attentionFlags,
+  hasDeliveryScope,
+  isDeliveryTarget,
+  latestCreatedAtField,
+} from "./message-attention-fields";
 import { isTrackedMention } from "./mention-delivery-tracker";
 import {
   acceptNotice,
@@ -464,9 +467,7 @@ export class AgentMessageAttentionIndex {
         !message.deliveryId ||
         !message.conversationId ||
         !message.body ||
-        (!message.target.startsWith("@") &&
-          !isChannelMessageTarget(message.target) &&
-          !isAttachmentMessageTarget(message.target)) ||
+        !isDeliveryTarget(message.target) ||
         message.sequence < 1 ||
         !isValidMessageSender(message.latestSenderKind, message.latestSenderHandle)
       )
@@ -495,12 +496,7 @@ export class AgentMessageAttentionIndex {
       });
     }
     const summaryOnly = Object.entries(unreadSummary).filter(
-      ([target, count]) =>
-        !suppliedTargets.has(target) &&
-        (target.startsWith("@") ||
-          isChannelMessageTarget(target) ||
-          isAttachmentMessageTarget(target)) &&
-        count > 0,
+      ([target, count]) => !suppliedTargets.has(target) && isDeliveryTarget(target) && count > 0,
     );
     if (!recoveredTargets.size && !summaryOnly.length) return;
     // Recovery is a wakeup, not a second copy of the bodies: the same messages will come back

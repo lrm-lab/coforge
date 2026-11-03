@@ -13,6 +13,7 @@ import {
   encodeAgentMessageResponse,
   validateAgentMessageRequest,
   isChannelMessageTarget,
+  isTaskConversationTarget,
   SEEN_EXACT_SEQS_LIMIT,
 } from "./index";
 
@@ -153,6 +154,43 @@ test("accepts full and short channel thread targets without treating them as mut
   expect(isChannelMessageTarget("#general:12345678")).toBe(true);
   expect(isChannelMessageTarget("#general:12345678-1234-4234-8234-123456789abc")).toBe(true);
   expect(isChannelMessageTarget("#general:reply-id")).toBe(false);
+});
+
+test("a task conversation is not a channel thread", () => {
+  for (const target of [
+    "#coforge:#100",
+    "#c:#1",
+    "dm:@ada:#3",
+    "dm:@ada~human:#3",
+    "dm:@ada~agent:#12",
+    "@ada:#3",
+    "@ada~human:#3",
+    "@ada~agent:#12",
+    `@${"a".repeat(64)}:#7`,
+    "@a_b-c:#2",
+  ]) {
+    expect(isTaskConversationTarget(target)).toBe(true);
+    expect(isChannelMessageTarget(target)).toBe(false);
+  }
+  for (const target of [
+    "#general",
+    "#general:12345678",
+    "#general:12345678-1234-4234-8234-123456789abc",
+    "#general:reply-id",
+    "#general:#0",
+    "#general:#01",
+    "#coforge:#100:deadbeef",
+    "@ada",
+    "@ada:12345678",
+    "@ada:abcd1234",
+    "@Ada:#1",
+    "@a~bot:#2",
+    "dm:@ada",
+    "dm:@:#1",
+    "#:#1",
+    "attachment:12345678-1234-4234-8234-123456789abc",
+  ])
+    expect(isTaskConversationTarget(target)).toBe(false);
 });
 
 test("round-trips an Agent direct message delivery", () => {

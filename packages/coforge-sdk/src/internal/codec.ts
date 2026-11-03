@@ -15,7 +15,7 @@ import {
 import {
   RUNTIME_PROVIDER,
   AGENT_SESSION_INVALIDATE_REASONS,
-  isChannelMessageTarget,
+  isRecoverableAgentTarget,
   requireRuntimeProvider,
   type ComputerRegisterRequest,
   type ComputerRegisterResponse,
@@ -478,17 +478,14 @@ export function decodeAgentStartIntent(bytes: Uint8Array): AgentStartIntent {
         !message.deliveryId ||
         !message.conversationId ||
         !message.body ||
-        (!message.target.startsWith("@") && !isChannelMessageTarget(message.target)) ||
+        !isRecoverableAgentTarget(message.target) ||
         message.sequence < 1n ||
         message.sequence > BigInt(Number.MAX_SAFE_INTEGER) ||
         !isValidMessageSender(message.latestSenderKind, message.latestSenderHandle),
     ) ||
     messageIds.size !== recoveryMessages.length ||
     deliveryIds.size !== recoveryMessages.length ||
-    v.unreadSummary.some(
-      (entry) =>
-        (!entry.target.startsWith("@") && !isChannelMessageTarget(entry.target)) || entry.count < 1,
-    ) ||
+    v.unreadSummary.some((entry) => !isRecoverableAgentTarget(entry.target) || entry.count < 1) ||
     summaryTargets.size !== v.unreadSummary.length
   )
     throw new Error("invalid agent recovery context");

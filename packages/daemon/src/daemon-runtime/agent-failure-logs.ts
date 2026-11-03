@@ -1,4 +1,5 @@
 import { getLogger } from "@logtape/logtape";
+import { scrubRuntimeErrorText } from "@lrm/coforge-anvil";
 import type {
   AgentActivityProbe,
   AgentMessageDelivery,
@@ -8,6 +9,15 @@ import type {
 } from "@lrm/coforge-sdk/internal";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import { controlCodeField } from "./control-error-code";
+
+/** `diagnosticErrorCode` keeps the error's name, never its message, so a secret cannot ride out
+ * as `error_code`. The message is what makes `message_delivery_failed` diagnosable. It goes
+ * through the same scrubber as Activity (`scrubRuntimeErrorText`: credentials stripped, 512 code
+ * points) and the stack stays off the record. */
+function loggedErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return scrubRuntimeErrorText(message);
+}
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
 
@@ -63,6 +73,7 @@ export function logAgentOperationFailure(
     computer_id: computerId,
     agent_id: request.agentId,
     error_code: diagnosticErrorCode(error),
+    error_message: loggedErrorMessage(error),
     ...controlCodeField(error),
     outcome: "failed",
   });

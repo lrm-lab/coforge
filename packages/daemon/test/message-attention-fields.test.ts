@@ -30,4 +30,8 @@ test("a target keeps its non-member flag once any pending message set it", () =>
   ]);
   expect(attentionFlags("@ada", undefined, undefined)).toEqual(["dm"]);
   expect(attentionFlags("#general:abc", true, undefined)).toEqual(["thread", "non_member_mention"]);
+  expect(attentionFlags("#coforge:#100", undefined, undefined)).toEqual(["task"]);
+  expect(attentionFlags("@ada:#7", undefined, undefined)).toEqual(["task"]);
+  expect(attentionFlags("dm:@ada~human:#3", undefined, undefined)).toEqual(["task"]);
+  expect(attentionFlags("@ada:12345678", undefined, undefined)).toEqual(["thread"]);
 });
