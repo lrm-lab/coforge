@@ -6,6 +6,10 @@ import { useConversationAgentProfile } from "#src/features/agents/profile-panel/
 import { useLiveAgent } from "#src/features/agents/workspace-agents-realtime";
 import { ACTIVITY_INBOX_QUERY_PREFIX } from "#src/features/inbox/activity-inbox-queries";
 import { ConversationTaskBoard } from "#src/features/tasks/conversation-task-board";
+import { ArtifactPane } from "#src/features/artifacts/artifact-pane";
+import { useArtifactsOn } from "#src/features/artifacts/artifact-queries";
+import { ConversationFilesWithDocuments } from "#src/features/artifacts/artifact-files";
+import { cn } from "#src/lib/utils";
 import { markPublicChannelRead } from "./channels.functions";
 import { ChannelConversation, ChannelConversationHeader } from "./channel-conversation";
 import { ConversationFilesPanel } from "./conversation-files";
@@ -268,7 +272,31 @@ type ConversationPageBodyProps = {
  * and the chat with its thread, Task popup and Agent profile. Each kind supplies its data, header,
  * conversation and read cursor.
  */
-function ConversationPageBody({
+function ConversationPageBody(props: ConversationPageProps & ConversationPageBodyProps) {
+  const { doc, docVersion, docFull, docHistory } = props.search;
+  const documents = useArtifactsOn() === true;
+  const main = <ConversationPageMain {...props} documents={documents} />;
+  if (!documents || !doc) return main;
+  // An open document sits beside the conversation, or alone in full screen (task #385).
+  return (
+    <div className="@container/page flex min-h-0 min-w-0 flex-1">
+      {!docFull && (
+        <div
+          className={cn(
+            "flex min-h-0 min-w-0 flex-1 flex-col",
+            // With the history open, the chat shows only where it still has room (ArtifactPane).
+            docHistory && "hidden @6xl/page:flex",
+          )}
+        >
+          {main}
+        </div>
+      )}
+      <ArtifactPane search={{ doc, docVersion, docFull, docHistory }} />
+    </div>
+  );
+}
+
+function ConversationPageMain({
   search: pageSearch,
   jumpMessage,
   onJumpMessageConsumed,
@@ -281,8 +309,18 @@ function ConversationPageBody({
   readCursor,
   header,
   conversation: renderConversation,
-}: ConversationPageProps & ConversationPageBodyProps) {
-  const { view: requestedView, profile, agentTab, ...search } = pageSearch;
+  documents,
+}: ConversationPageProps & ConversationPageBodyProps & { documents: boolean }) {
+  const {
+    view: requestedView,
+    profile,
+    agentTab,
+    doc: _doc,
+    docVersion: _docVersion,
+    docFull: _docFull,
+    docHistory: _docHistory,
+    ...search
+  } = pageSearch;
   const view = useShownConversationTab(requestedView);
   const agentProfile = useConversationAgentProfile({ profile, agentTab });
   const { conversation } = page;
@@ -340,10 +378,18 @@ function ConversationPageBody({
           { active: "files", onShowChat: showChat, onShowTasks: showTasks },
           onOpenAgentProfile,
         )}
-        <ConversationFilesPanel
-          conversationId={conversation.conversationId}
-          onOpenMessage={openMessage}
-        />
+        {documents ? (
+          <ConversationFilesWithDocuments
+            conversationId={conversation.conversationId}
+            canCreate={isMember}
+            onOpenMessage={openMessage}
+          />
+        ) : (
+          <ConversationFilesPanel
+            conversationId={conversation.conversationId}
+            onOpenMessage={openMessage}
+          />
+        )}
       </div>
     );
   // The Tasks tab sits in the conversation's main pane, so a Task opened from it shows the

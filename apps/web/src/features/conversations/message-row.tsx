@@ -13,6 +13,7 @@ import { m } from "#src/paraglide/messages";
 import { ActionCard } from "./action-card";
 import { MessageSenderLine } from "./message-sender-line";
 import { attachmentMessageDisplayBody } from "./attachment-file-name";
+import { MessageArtifactCards } from "#src/features/artifacts/artifact-card";
 import { CollapsibleMessageBody } from "./collapsible-message-body";
 import type { ChipMention } from "./message-reference-chips";
 import { messagePlainText } from "./selection-copy";
@@ -329,6 +330,7 @@ export const MessageRow = memo(function MessageRow({
                 collapsible={collapsible}
                 onToggleExpanded={() => onToggleExpanded(message.id)}
               />
+              <MessageArtifactCards body={message.body} />
               {message.weeklyReportSuggestion ? (
                 <WeeklyReportMessageCard
                   messageId={message.id}

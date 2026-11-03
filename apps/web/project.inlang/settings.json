@@ -22,6 +22,7 @@
       "./messages/{locale}/task-relations.json",
       "./messages/{locale}/task-labels.json",
       "./messages/{locale}/task-history-more.json",
+      "./messages/{locale}/artifacts.json",
       "./messages/{locale}/channel-notifications.json",
       "./messages/{locale}/message-forward.json",
       "./messages/{locale}/drafts.json",

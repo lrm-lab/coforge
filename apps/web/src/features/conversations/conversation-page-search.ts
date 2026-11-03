@@ -9,11 +9,12 @@ import type { ConversationPageTarget } from "./conversation-page-loader";
 import { CONVERSATION_TABS } from "./conversation-tabs";
 import { attachmentReviewSearchShape } from "./attachment-review-address";
 import { openTaskParamSchema } from "./conversation-thread-search";
+import { artifactSearchShape } from "#src/features/artifacts/artifact-search";
 
 /**
  * A conversation page's address state wherever the page is shown: the tab, the Task board's view,
  * and what it has open (a thread, a Task popup, a file's review with its comments, an Agent's or a
- * person's profile).
+ * person's profile, a document).
  * Every host's `validateSearch` spreads it; Chat's routes add `message`, the one-shot jump, and a
  * page hosting a conversation beside its own content adds `hostedConversationSearchShape`.
  */
@@ -25,6 +26,7 @@ export const conversationPageSearchShape = {
   ...attachmentReviewSearchShape,
   profile: profileParamSchema,
   agentTab: agentProfileTabParamSchema,
+  ...artifactSearchShape,
 };
 
 export type ConversationPageSearch = z.output<z.ZodObject<typeof conversationPageSearchShape>>;
@@ -43,6 +45,10 @@ export function pickConversationPageSearch({
   comment,
   profile,
   agentTab,
+  doc,
+  docVersion,
+  docFull,
+  docHistory,
 }: ConversationPageSearch): ConversationPageSearch {
   // `satisfies` names every field of the shape: one added there must be picked here too.
   return {
@@ -58,6 +64,10 @@ export function pickConversationPageSearch({
     comment,
     profile,
     agentTab,
+    doc,
+    docVersion,
+    docFull,
+    docHistory,
   } satisfies Record<keyof ConversationPageSearch, unknown>;
 }
 
