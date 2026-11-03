@@ -22,7 +22,13 @@ Part of [Agents UI](AGENTS.md). Rules for `src/features/agents/`.
   which has no mascot; another member's Agent animates there once its display is watched. A mascot carries the Agent's mascot
   key (`LiveAgent.mascot`, the profile's `mascot`), never a URL to reverse. The Rive canvas mounts
   only while it is near the viewport, motion is allowed and the shared file loads
-  (`mascot-rive.tsx`, the only `@rive-app/*` importer); anything else stays the still picture. A
+  (`mascot-rive.tsx`, the only `@rive-app/*` importer); anything else stays the still picture. At
+  most three on screen move at once (Frank's limit, task #433; `mascot-motion-budget.ts`). Which
+  three: first the one under the pointer, then one whose Agent's activity or hover just changed (it
+  moves 1.5 s to act it out), then Agents working or thinking before the rest, then the last on
+  the page first (a hover card or popover, then the open conversation, then the sidebar). One
+  covered by another face or a dialog holds still and takes no place. A held mascot keeps the frame it stopped on, so it shows its Agent's
+  next activity only once it moves again. The picker's choices are outside the limit. A
   moving mascot's eyes follow the cursor (below). Names: `mascot-contract.ts` and
   `mascot-rive-contract.ts`, shared with the generator (`assets/mascots/README.md`).
 - Every Agent mascot is a sticker (Frank's references, 2026-10-23): `AvatarSticker` (`features/avatars/avatar-sticker.tsx`) is the one markup

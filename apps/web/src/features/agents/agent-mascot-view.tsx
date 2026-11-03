@@ -61,6 +61,7 @@ export function AgentMascotView({
   activity,
   still = false,
   hovered: hoveredFromParent,
+  uncapped = false,
   className,
 }: {
   mascot: AgentMascot;
@@ -72,6 +73,9 @@ export function AgentMascotView({
   /** Whether the pointer is over a larger target this picture belongs to (a list row), which
    * decides the mascot's `hovered` in place of the picture's own pointer. */
   hovered?: boolean;
+  /** Moves whatever the limit on mascots moving at once (`mascot-motion-budget.ts`): the
+   * mascot picker's choices, which are there to be seen moving. */
+  uncapped?: boolean;
   className?: string;
 }) {
   const reducedMotion = usePrefersReducedMotion();
@@ -95,6 +99,7 @@ export function AgentMascotView({
           mascot={mascot}
           activity={activity}
           hovered={hovered}
+          uncapped={uncapped}
           onFailed={markFailed}
         />
       ) : (

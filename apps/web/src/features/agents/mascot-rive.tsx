@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { EventType, RiveFile, RuntimeLoader } from "@rive-app/canvas-lite";
+import { useEffect, useRef, useState } from "react";
+import { EventType, RiveFile, RuntimeLoader, type Rive } from "@rive-app/canvas-lite";
 import riveWasmUrl from "@rive-app/canvas-lite/rive.wasm?url";
 import {
   useRive,
@@ -11,6 +11,7 @@ import {
 
 import type { AgentMascot } from "./agent-mascot";
 import { followPointer } from "./mascot-look-tracker";
+import { mascotsInMotion } from "./mascot-motion-budget";
 import {
   MASCOT_RIVE,
   mascotArtboard,
@@ -58,12 +59,15 @@ export function MascotCanvas({
   mascot,
   activity,
   hovered,
+  uncapped = false,
   onReady,
   onFailed,
 }: {
   mascot: AgentMascot;
   activity: MascotActivity;
   hovered: boolean;
+  /** Outside the limit on mascots moving at once (`mascot-motion-budget.ts`). */
+  uncapped?: boolean;
   /** The canvas is bound and has drawn: the still picture beneath it may go. */
   onReady: () => void;
   onFailed: () => void;
@@ -81,7 +85,12 @@ export function MascotCanvas({
   }, [onFailed]);
   // Keyed on the mascot: the Rive instance is made once per canvas and ignores a changed artboard.
   return (
-    file && <BoundMascot key={mascot} {...{ file, mascot, activity, hovered, onReady, onFailed }} />
+    file && (
+      <BoundMascot
+        key={mascot}
+        {...{ file, mascot, activity, hovered, uncapped, onReady, onFailed }}
+      />
+    )
   );
 }
 
@@ -90,6 +99,7 @@ function BoundMascot({
   mascot,
   activity,
   hovered,
+  uncapped = false,
   onReady,
   onFailed,
 }: {
@@ -138,5 +148,138 @@ function BoundMascot({
     });
     return () => cancelAnimationFrame(frame);
   }, [instance, bound, onReady]);
+  // Within the page's motion budget, or holding the frame it stopped on.
+  const budgeted = useRef<BudgetedMascot | null>(null);
+  useEffect(() => {
+    if (!rive || !canvas) return;
+    const mascot: BudgetedMascot = {
+      rive,
+      canvas,
+      hovered: false,
+      activity,
+      changedAt: 0,
+      uncapped,
+      held: false,
+    };
+    budgeted.current = mascot;
+    return joinMotionBudget(mascot);
+  }, [rive, canvas, uncapped]);
+  useEffect(() => {
+    const mascot = budgeted.current;
+    if (!mascot || mascot.hovered === hovered) return;
+    mascot.hovered = hovered;
+    // Leaving, it plays the reaction back out before it may hold still again.
+    mascot.changedAt = performance.now();
+    judgeMotionSoon();
+  }, [hovered, rive, canvas]);
+  useEffect(() => {
+    const mascot = budgeted.current;
+    if (!mascot || mascot.activity === activity) return;
+    mascot.activity = activity;
+    // A held mascot would go on showing the activity it stopped on: it moves while it settles.
+    mascot.changedAt = performance.now();
+    judgeMotionSoon();
+  }, [activity, rive, canvas]);
   return <RiveComponent className="size-full" />;
+}
+
+/** A mounted canvas the motion budget plays or pauses; `held` is the budget's own pause. */
+type BudgetedMascot = {
+  rive: Rive;
+  canvas: HTMLCanvasElement;
+  hovered: boolean;
+  activity: MascotActivity;
+  /** When `activity` or `hovered` last changed (`performance.now()`), 0 for never. */
+  changedAt: number;
+  uncapped: boolean;
+  held: boolean;
+};
+
+const budget = new Set<BudgetedMascot>();
+const ids = new WeakMap<BudgetedMascot, string>();
+let nextId = 0;
+let judging: number | undefined;
+let soon: number | undefined;
+let entering: IntersectionObserver | undefined;
+// Often enough that a face sliding out from behind another starts moving within a beat, rarely
+// enough that the layout read it takes stays small next to one frame of drawing.
+const JUDGE_EVERY_MS = 500;
+// Long enough for a state machine to play a change of activity or hover through to its loop.
+const SETTLE_MS = 1_500;
+
+function joinMotionBudget(mascot: BudgetedMascot) {
+  ids.set(mascot, String(nextId++));
+  budget.add(mascot);
+  // Judged in the next animation frame: the layout it reads is then the one that frame lays out
+  // anyway, not an extra one forced between frames while the page scrolls.
+  judging ??= window.setInterval(judgeMotionSoon, JUDGE_EVERY_MS);
+  // A canvas scrolling into view is judged at once, before it moves past the limit for long.
+  entering ??= new IntersectionObserver(judgeMotionSoon);
+  entering.observe(mascot.canvas);
+  judgeMotionSoon();
+  return () => {
+    budget.delete(mascot);
+    entering?.unobserve(mascot.canvas);
+    // The same instance may join again (a changed `uncapped`): it starts from playing.
+    if (mascot.held) mascot.rive.play();
+    if (budget.size === 0) {
+      window.clearInterval(judging);
+      judging = undefined;
+      entering?.disconnect();
+      entering = undefined;
+    } else judgeMotionSoon();
+  };
+}
+
+function judgeMotionSoon() {
+  soon ??= requestAnimationFrame(() => {
+    soon = undefined;
+    judgeMotion();
+  });
+}
+
+/** Measures every mounted mascot and plays or pauses each as `mascotsInMotion` says. Only a pause
+ * this budget made is undone here: `play()` restarts drawing, which the runtime stops for a
+ * canvas off screen. */
+function judgeMotion() {
+  const now = performance.now();
+  const mascots = [...budget].sort((a, b) =>
+    a.canvas.compareDocumentPosition(b.canvas) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1,
+  );
+  const byId = new Map(mascots.map((mascot) => [ids.get(mascot)!, mascot]));
+  const { play, pause } = mascotsInMotion(
+    mascots.map((mascot) => {
+      const box = mascot.canvas.getBoundingClientRect();
+      const onScreen =
+        box.width > 0 &&
+        box.bottom > 0 &&
+        box.right > 0 &&
+        box.top < window.innerHeight &&
+        box.left < window.innerWidth;
+      const over = onScreen
+        ? document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)
+        : null;
+      return {
+        id: ids.get(mascot)!,
+        onScreen,
+        covered: over !== null && over !== mascot.canvas && !mascot.canvas.contains(over),
+        hovered: mascot.hovered,
+        settling: mascot.changedAt > 0 && now - mascot.changedAt < SETTLE_MS,
+        atWork: mascot.activity === "working" || mascot.activity === "thinking",
+        uncapped: mascot.uncapped,
+      };
+    }),
+  );
+  for (const id of play) {
+    const mascot = byId.get(id)!;
+    if (!mascot.held) continue;
+    mascot.held = false;
+    mascot.rive.play();
+  }
+  for (const id of pause) {
+    const mascot = byId.get(id)!;
+    if (mascot.held) continue;
+    mascot.held = true;
+    mascot.rive.pause();
+  }
 }

@@ -111,7 +111,7 @@ export function AgentAvatarDialog({
                     // The mascots move while choosing: idle, eyes following the cursor, and the
                     // hover reaction under the pointer (a still picture with reduced motion).
                     figure={(hovered) => (
-                      <AgentMascotView mascot={key} activity="idle" hovered={hovered} />
+                      <AgentMascotView mascot={key} activity="idle" hovered={hovered} uncapped />
                     )}
                   />
                 ))}
