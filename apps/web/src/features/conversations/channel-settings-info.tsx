@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { Check, Share04 as Share } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
+import { DIALOG_BUTTON_SIZE } from "#src/components/ui/dialog-actions";
 import { Input } from "#src/components/base/input/input";
 import { TextArea } from "#src/components/base/textarea/textarea";
 import { EntityPickerField, projectOptions } from "#src/features/pickers/entity-picker";
@@ -158,12 +159,17 @@ export function InfoForm({
         </p>
       )}
       <div className="flex justify-end gap-2">
-        <Button size="sm" color="secondary" isDisabled={!form.dirty || locked} onPress={form.reset}>
+        <Button
+          size={DIALOG_BUTTON_SIZE}
+          color="secondary"
+          isDisabled={!form.dirty || locked}
+          onPress={form.reset}
+        >
           {m.channel_settings_cancel()}
         </Button>
         <Button
           type="submit"
-          size="sm"
+          size={DIALOG_BUTTON_SIZE}
           iconLeading={form.saved ? Check : undefined}
           isDisabled={!form.dirty || locked}
           isLoading={form.saving}

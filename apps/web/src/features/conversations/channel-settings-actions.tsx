@@ -12,6 +12,7 @@ import {
 } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
+import { DIALOG_BUTTON_SIZE } from "#src/components/ui/dialog-actions";
 import { m } from "#src/paraglide/messages";
 import type { ChannelConversationView } from "./channel-conversation";
 import type { ConfirmedAction } from "./channel-action-confirm-dialog";
@@ -58,6 +59,7 @@ export function ActionsSection({
             channel settings. */}
         {conversation.canChangeVisibility && (
           <Button
+            size={DIALOG_BUTTON_SIZE}
             color="secondary"
             iconLeading={priv ? LockUnlocked01 : Lock01}
             className="w-full"
@@ -69,6 +71,7 @@ export function ActionsSection({
         {conversation.archived
           ? capabilities.unarchive && (
               <Button
+                size={DIALOG_BUTTON_SIZE}
                 color="secondary"
                 iconLeading={Unarchive}
                 className="w-full"
@@ -82,6 +85,7 @@ export function ActionsSection({
             )
           : capabilities.archive && (
               <Button
+                size={DIALOG_BUTTON_SIZE}
                 color="secondary"
                 iconLeading={Archive}
                 className="w-full"
@@ -94,6 +98,7 @@ export function ActionsSection({
             Settings → Members → System channels). */}
         {conversation.canHideGeneral && (
           <Button
+            size={DIALOG_BUTTON_SIZE}
             color="secondary"
             iconLeading={EyeOff}
             className="w-full"
@@ -104,6 +109,7 @@ export function ActionsSection({
         )}
         {capabilities.leave && !conversation.archived && (
           <Button
+            size={DIALOG_BUTTON_SIZE}
             color="secondary"
             iconLeading={LogOut}
             className="w-full"
@@ -114,6 +120,7 @@ export function ActionsSection({
         )}
         {conversation.canStopAgents && (
           <Button
+            size={DIALOG_BUTTON_SIZE}
             color="secondary"
             iconLeading={StopCircle}
             className="w-full"
@@ -124,6 +131,7 @@ export function ActionsSection({
         )}
         {conversation.canDelete && !conversation.archived && (
           <Button
+            size={DIALOG_BUTTON_SIZE}
             color="secondary-destructive"
             iconLeading={Trash01}
             className="w-full"

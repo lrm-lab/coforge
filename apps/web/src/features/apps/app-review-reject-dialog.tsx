@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Heading } from "react-aria-components";
 
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
-import { Button } from "#src/components/base/buttons/button";
+import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 import { TextArea } from "#src/components/base/textarea/textarea";
 import { Alert } from "#src/components/ui/alert";
 import {
@@ -64,19 +64,12 @@ export function RejectReviewDialog({
               isDisabled={pending}
             />
             {error && <Alert color="error" title={m.apps_review_reject_error()} />}
-            <div className="flex justify-end gap-3">
-              <Button
-                type="button"
-                size="sm"
-                color="secondary"
-                isDisabled={pending}
-                onPress={unsaved.requestClose}
-              >
+            <DialogActions>
+              <DialogCancel type="button" isDisabled={pending} onPress={unsaved.requestClose}>
                 {m.apps_review_cancel()}
-              </Button>
-              <Button
+              </DialogCancel>
+              <DialogAction
                 type="button"
-                size="sm"
                 color="primary-destructive"
                 isLoading={pending}
                 showTextWhileLoading
@@ -92,8 +85,8 @@ export function RejectReviewDialog({
                 }
               >
                 {pending ? m.apps_review_rejecting() : m.apps_review_reject_confirm()}
-              </Button>
-            </div>
+              </DialogAction>
+            </DialogActions>
           </Dialog>
         </Modal>
       </ModalOverlay>

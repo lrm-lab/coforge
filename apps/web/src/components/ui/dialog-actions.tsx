@@ -3,8 +3,9 @@ import type { ReactNode } from "react";
 import { Button, type Props as ButtonProps } from "#src/components/base/buttons/button";
 import { cx } from "#src/utils/cx";
 
-/** Every button a dialog shows, in its button row or beside a field: the height of the app's
- * inputs (40px). Raft sizes its dialog buttons to its own inputs the same way. */
+/** Every button a dialog or popconfirm shows, in its button row or beside a field, and the form
+ * and action buttons of a conversation's settings panel: the height of the app's inputs (40px).
+ * Raft gives the same places one size, its inputs' height (32px there, measured 2026-11-03). */
 export const DIALOG_BUTTON_SIZE = "md";
 
 /**

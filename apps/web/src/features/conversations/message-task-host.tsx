@@ -4,8 +4,8 @@ import { useServerFn } from "@tanstack/react-start";
 import { Heading } from "react-aria-components";
 import { XClose } from "@untitledui/icons";
 
-import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { DialogAction, DialogActions } from "#src/components/ui/dialog-actions";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { useAppToast } from "#src/components/ui/toast";
 import { useLatestCallback } from "#src/hooks/use-latest-callback";
@@ -131,13 +131,11 @@ function TakenDialog({
           <Heading slot="title" className="pr-8 text-lg font-semibold text-primary">
             {m.message_make_task_taken({ number, holder: taken.holder })}
           </Heading>
-          <div className="mt-5 flex justify-end gap-3">
-            <Button color="secondary" size="sm" onPress={onOpen} isDisabled={making}>
+          <DialogActions className="mt-5">
+            <DialogAction color="secondary" onPress={onOpen} isDisabled={making}>
               {m.message_make_task_open({ number })}
-            </Button>
-            <Button
-              color="primary"
-              size="sm"
+            </DialogAction>
+            <DialogAction
               isLoading={making}
               showTextWhileLoading
               onPress={() => {
@@ -146,8 +144,8 @@ function TakenDialog({
               }}
             >
               {m.message_make_task_alongside()}
-            </Button>
-          </div>
+            </DialogAction>
+          </DialogActions>
         </Dialog>
       </Modal>
     </ModalOverlay>

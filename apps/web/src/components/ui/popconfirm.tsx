@@ -1,8 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Heading, Popover, Text, type PopoverProps } from "react-aria-components";
 
-import { Button } from "#src/components/base/buttons/button";
-import { DialogActions } from "#src/components/ui/dialog-actions";
+import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 import { Dialog, DialogTrigger } from "#src/components/ui/modal";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { m } from "#src/paraglide/messages";
@@ -103,12 +102,11 @@ export function Popconfirm({
                 </p>
               )}
               <DialogActions>
-                <Button color="tertiary" size="sm" isDisabled={pending} onPress={close}>
+                <DialogCancel isDisabled={pending} onPress={close}>
                   {m.controls_cancel()}
-                </Button>
-                <Button
+                </DialogCancel>
+                <DialogAction
                   color="primary-destructive"
-                  size="sm"
                   isLoading={pending}
                   showTextWhileLoading
                   onPress={() => {
@@ -128,7 +126,7 @@ export function Popconfirm({
                   }}
                 >
                   {pending && pendingLabel ? pendingLabel : confirmLabel}
-                </Button>
+                </DialogAction>
               </DialogActions>
             </div>
           )}

@@ -3,7 +3,7 @@ import { LinkExternal01, XClose } from "@untitledui/icons";
 import { Heading, Link as AriaLink } from "react-aria-components";
 
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
-import { Button } from "#src/components/base/buttons/button";
+import { DialogAction, DialogActions } from "#src/components/ui/dialog-actions";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { m } from "#src/paraglide/messages";
 import { APP_SCOPE_DESCRIPTIONS } from "./app-form";
@@ -101,9 +101,9 @@ export function AppDialogShell({
               <div className="grid min-h-0 flex-1 content-start gap-5 overflow-x-hidden overflow-y-auto px-6 py-5 [&>*]:min-w-0">
                 {children}
               </div>
-              <div className="flex shrink-0 justify-end gap-3 border-t border-secondary px-6 py-4">
+              <DialogActions className="shrink-0 border-t border-secondary px-6 py-4">
                 {footer}
-              </div>
+              </DialogActions>
             </>
           )}
         </Dialog>
@@ -115,8 +115,8 @@ export function AppDialogShell({
 /** The footer's Close button. */
 export function DialogCloseButton({ label, onClose }: { label: string; onClose: () => void }) {
   return (
-    <Button type="button" size="sm" color="secondary" onPress={onClose}>
+    <DialogAction type="button" color="secondary" onPress={onClose}>
       {label}
-    </Button>
+    </DialogAction>
   );
 }

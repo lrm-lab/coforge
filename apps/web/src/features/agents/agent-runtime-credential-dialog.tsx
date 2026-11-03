@@ -1,6 +1,12 @@
 import { useState, type FormEvent } from "react";
 
 import { Button } from "#src/components/base/buttons/button";
+import {
+  DIALOG_BUTTON_SIZE,
+  DialogAction,
+  DialogActions,
+  DialogCancel,
+} from "#src/components/ui/dialog-actions";
 import { Input } from "#src/components/base/input/input";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
@@ -116,10 +122,9 @@ export function AgentRuntimeCredentialDialog({
                   <p className="text-sm text-secondary">
                     {m.agent_runtime_delete_key_confirm({ provider: providerId })}
                   </p>
-                  <div className="flex justify-end gap-3">
-                    <Button
+                  <DialogActions>
+                    <DialogCancel
                       type="button"
-                      color="secondary"
                       autoFocus
                       isDisabled={saving}
                       onPress={() => {
@@ -128,8 +133,8 @@ export function AgentRuntimeCredentialDialog({
                       }}
                     >
                       {m.controls_cancel()}
-                    </Button>
-                    <Button
+                    </DialogCancel>
+                    <DialogAction
                       type="button"
                       color="primary-destructive"
                       isDisabled={saving}
@@ -138,8 +143,8 @@ export function AgentRuntimeCredentialDialog({
                       onPress={() => void onDelete()}
                     >
                       {saving ? m.agent_runtime_deleting() : m.agent_runtime_delete_key()}
-                    </Button>
-                  </div>
+                    </DialogAction>
+                  </DialogActions>
                 </div>
               ) : (
                 <div className="flex justify-between gap-3 border-t border-secondary px-6 py-4">
@@ -147,6 +152,7 @@ export function AgentRuntimeCredentialDialog({
                     {credentialHint && onDelete && (
                       <Button
                         type="button"
+                        size={DIALOG_BUTTON_SIZE}
                         color="secondary-destructive"
                         autoFocus={returnFocusToDeleteEntry}
                         isDisabled={saving}
@@ -156,19 +162,18 @@ export function AgentRuntimeCredentialDialog({
                       </Button>
                     )}
                   </div>
-                  <div className="flex gap-3">
-                    <Button
+                  <DialogActions>
+                    <DialogCancel
                       type="button"
-                      color="secondary"
                       isDisabled={saving}
                       onPress={() => onOpenChange(false)}
                     >
                       {m.controls_cancel()}
-                    </Button>
-                    <Button type="submit" isDisabled={saving}>
+                    </DialogCancel>
+                    <DialogAction type="submit" isDisabled={saving}>
                       {saving ? m.agent_runtime_saving() : m.agent_runtime_save()}
-                    </Button>
-                  </div>
+                    </DialogAction>
+                  </DialogActions>
                 </div>
               )}
             </form>

@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import { Badge } from "#src/components/base/badges/badges";
-import { Button } from "#src/components/base/buttons/button";
+import { DialogAction, DialogCancel } from "#src/components/ui/dialog-actions";
 import { Alert } from "#src/components/ui/alert";
 import { m } from "#src/paraglide/messages";
 import { AppDialogShell, DialogCloseButton } from "./app-dialog-parts";
@@ -70,19 +70,23 @@ export function MarketplaceAppDetail({
       footer={
         app && (
           <>
-            <DialogCloseButton label={m.apps_marketplace_close()} onClose={close} />
+            {canManage && !app.installed ? (
+              <DialogCancel type="button" onPress={close}>
+                {m.apps_marketplace_close()}
+              </DialogCancel>
+            ) : (
+              <DialogCloseButton label={m.apps_marketplace_close()} onClose={close} />
+            )}
             {canManage && !app.installed && (
-              <Button
+              <DialogAction
                 type="button"
-                size="sm"
-                color="primary"
                 isLoading={installing}
                 showTextWhileLoading
                 isDisabled={installing}
                 onPress={() => void install(app)}
               >
                 {installing ? m.apps_marketplace_installing() : m.apps_marketplace_install()}
-              </Button>
+              </DialogAction>
             )}
           </>
         )

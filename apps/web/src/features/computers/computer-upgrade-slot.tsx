@@ -10,6 +10,7 @@ import { Heading, ProgressBar, Text } from "react-aria-components";
 
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
+import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
@@ -265,27 +266,20 @@ function UpgradeConfirmFrame({
                 </Heading>
                 {children}
               </div>
-              <div className="flex justify-end gap-2 px-6 py-4">
-                <Button
-                  type="button"
-                  size="sm"
-                  color="secondary"
-                  isDisabled={confirming}
-                  onPress={() => close()}
-                >
+              <DialogActions className="px-6 py-4">
+                <DialogCancel type="button" isDisabled={confirming} onPress={() => close()}>
                   {m.controls_cancel()}
-                </Button>
-                <Button
+                </DialogCancel>
+                <DialogAction
                   type="button"
-                  size="sm"
                   isDisabled={confirming}
                   isLoading={confirming}
                   showTextWhileLoading
                   onPress={() => void guard(onConfirm)}
                 >
                   {confirmLabel}
-                </Button>
-              </div>
+                </DialogAction>
+              </DialogActions>
             </>
           )}
         </Dialog>

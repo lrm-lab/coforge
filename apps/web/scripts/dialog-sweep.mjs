@@ -8,7 +8,8 @@
 // whose database holds the dev seed (`bun run seed:dev`) and signs in the dev user.
 //
 // Per dialog the output directory gets `<id>.png` (the dialog's surface) and `<id>-page.png` (the
-// 1440x900 light viewport), plus one `report.json` mapping each id to `ok` or `failed: <reason>`.
+// 1440x900 light viewport), plus one `report.json` mapping each id to `ok` or `failed: <reason>`
+// and one `buttons.json` with the height of every labelled button in each dialog.
 // A dialog the seed cannot reach is reported as failed with the reason; it never stops the run.
 // Nothing is ever confirmed: each dialog is opened, captured and closed with Escape.
 //
@@ -294,7 +295,23 @@ async function captureDialog(page, dialog) {
     height,
   });
   await page.screenshot(path.join(OUT_DIR, `${dialog.id}-page.png`));
+  buttonSizes[dialog.id] = await page.evalJs(MEASURE_BUTTONS);
 }
+
+// Every labelled button of the dialog on top: its name and rendered height, so `buttons.json` shows
+// which dialogs mix sizes or leave the shared 40px row (task #224's acceptance measured 36 vs 40).
+const buttonSizes = {};
+const MEASURE_BUTTONS = `(() => {
+  ${PAGE_HELPERS}
+  const modal = sweepModals().at(-1);
+  if (!modal) return [];
+  return [...modal.querySelectorAll("button, a[href]")]
+    .filter((el) => sweepVisible(el) && (el.innerText || "").trim())
+    .map((el) => ({
+      name: (el.innerText || "").replace(/\\s+/g, " ").trim().slice(0, 40),
+      height: Math.round(el.getBoundingClientRect().height),
+    }));
+})()`;
 
 async function closeDialogs(page) {
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -391,6 +408,14 @@ async function main() {
   }
 
   await writeFile(path.join(OUT_DIR, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
+  await writeFile(path.join(OUT_DIR, "buttons.json"), `${JSON.stringify(buttonSizes, null, 2)}\n`);
+  for (const [id, buttons] of Object.entries(buttonSizes)) {
+    const off = buttons.filter((button) => button.height !== 40);
+    if (off.length)
+      console.log(
+        `${id.padEnd(32)} not 40px: ${off.map((b) => `${b.name} ${b.height}`).join(", ")}`,
+      );
+  }
   const failed = Object.values(report).filter((status) => status !== "ok").length;
   console.log(`\n${selected.length - failed} ok, ${failed} failed. Output: ${OUT_DIR}`);
 }
