@@ -11,6 +11,7 @@ import type {
   AgentActionPrepareResponse,
   AgentAppRequest,
   AgentTaskConversationRequest,
+  AgentArtifactRequest,
   AgentTaskIdleNudgeRequest,
   AgentTaskIdleNudgeResponse,
   AgentSendReconciliationResponse,
@@ -272,6 +273,7 @@ export interface DaemonConnectionClient extends AgentApiConnectionClient {
   agentAttachmentUploadSessionCancel?(uploadId: string, agentApiKey: string): Promise<Response>;
   agentAttachmentUploadSessionGet?(uploadId: string, agentApiKey: string): Promise<Response>;
   agentApp?(request: AgentAppRequest, agentApiKey: string): Promise<Response>;
+  agentArtifact?(request: AgentArtifactRequest, agentApiKey: string): Promise<Response>;
   agentTaskConversation?(
     request: AgentTaskConversationRequest,
     agentApiKey: string,

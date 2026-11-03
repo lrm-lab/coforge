@@ -69,6 +69,7 @@ import { Route as WWorkspaceSlugSearchRouteImport } from './routes/w.$workspaceS
 import { Route as WWorkspaceSlugSettingsRouteImport } from './routes/w.$workspaceSlug/settings'
 import { Route as WWorkspaceSlugTasksRouteImport } from './routes/w.$workspaceSlug/tasks'
 import { Route as WWorkspaceSlugConnectGithubRouteImport } from './routes/w.$workspaceSlug_.connect-github'
+import { Route as ApiAgentV1ArtifactsRouteImport } from './routes/api/agent/v1/artifacts'
 import { Route as ApiAgentV1ChannelsRouteImport } from './routes/api/agent/v1/channels'
 import { Route as ApiAgentV1EventsRouteImport } from './routes/api/agent/v1/events'
 import { Route as ApiAgentV1GithubCommitTrailersRouteImport } from './routes/api/agent/v1/github-commit-trailers'
@@ -488,6 +489,11 @@ const WWorkspaceSlugConnectGithubRoute =
     path: '/w/$workspaceSlug/connect-github',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiAgentV1ArtifactsRoute = ApiAgentV1ArtifactsRouteImport.update({
+  id: '/api/agent/v1/artifacts',
+  path: '/api/agent/v1/artifacts',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAgentV1ChannelsRoute = ApiAgentV1ChannelsRouteImport.update({
   id: '/api/agent/v1/channels',
   path: '/api/agent/v1/channels',
@@ -1160,6 +1166,7 @@ export interface FileRoutesByFullPath {
   '/w/$workspaceSlug/settings': typeof WWorkspaceSlugSettingsRoute
   '/w/$workspaceSlug/tasks': typeof WWorkspaceSlugTasksRoute
   '/w/$workspaceSlug/connect-github': typeof WWorkspaceSlugConnectGithubRoute
+  '/api/agent/v1/artifacts': typeof ApiAgentV1ArtifactsRoute
   '/api/agent/v1/channels': typeof ApiAgentV1ChannelsRoute
   '/api/agent/v1/events': typeof ApiAgentV1EventsRoute
   '/api/agent/v1/github-commit-trailers': typeof ApiAgentV1GithubCommitTrailersRoute
@@ -1325,6 +1332,7 @@ export interface FileRoutesByTo {
   '/w/$workspaceSlug/settings': typeof WWorkspaceSlugSettingsRoute
   '/w/$workspaceSlug/tasks': typeof WWorkspaceSlugTasksRoute
   '/w/$workspaceSlug/connect-github': typeof WWorkspaceSlugConnectGithubRoute
+  '/api/agent/v1/artifacts': typeof ApiAgentV1ArtifactsRoute
   '/api/agent/v1/channels': typeof ApiAgentV1ChannelsRoute
   '/api/agent/v1/events': typeof ApiAgentV1EventsRoute
   '/api/agent/v1/github-commit-trailers': typeof ApiAgentV1GithubCommitTrailersRoute
@@ -1493,6 +1501,7 @@ export interface FileRoutesById {
   '/w/$workspaceSlug/settings': typeof WWorkspaceSlugSettingsRoute
   '/w/$workspaceSlug/tasks': typeof WWorkspaceSlugTasksRoute
   '/w/$workspaceSlug_/connect-github': typeof WWorkspaceSlugConnectGithubRoute
+  '/api/agent/v1/artifacts': typeof ApiAgentV1ArtifactsRoute
   '/api/agent/v1/channels': typeof ApiAgentV1ChannelsRoute
   '/api/agent/v1/events': typeof ApiAgentV1EventsRoute
   '/api/agent/v1/github-commit-trailers': typeof ApiAgentV1GithubCommitTrailersRoute
@@ -1661,6 +1670,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/settings'
     | '/w/$workspaceSlug/tasks'
     | '/w/$workspaceSlug/connect-github'
+    | '/api/agent/v1/artifacts'
     | '/api/agent/v1/channels'
     | '/api/agent/v1/events'
     | '/api/agent/v1/github-commit-trailers'
@@ -1826,6 +1836,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/settings'
     | '/w/$workspaceSlug/tasks'
     | '/w/$workspaceSlug/connect-github'
+    | '/api/agent/v1/artifacts'
     | '/api/agent/v1/channels'
     | '/api/agent/v1/events'
     | '/api/agent/v1/github-commit-trailers'
@@ -1993,6 +2004,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/settings'
     | '/w/$workspaceSlug/tasks'
     | '/w/$workspaceSlug_/connect-github'
+    | '/api/agent/v1/artifacts'
     | '/api/agent/v1/channels'
     | '/api/agent/v1/events'
     | '/api/agent/v1/github-commit-trailers'
@@ -2148,6 +2160,7 @@ export interface RootRouteChildren {
   AppsShareTokenRoute: typeof AppsShareTokenRoute
   OidcDotwellKnownOpenidConfigurationRoute: typeof OidcDotwellKnownOpenidConfigurationRoute
   WWorkspaceSlugConnectGithubRoute: typeof WWorkspaceSlugConnectGithubRoute
+  ApiAgentV1ArtifactsRoute: typeof ApiAgentV1ArtifactsRoute
   ApiAgentV1ChannelsRoute: typeof ApiAgentV1ChannelsRoute
   ApiAgentV1EventsRoute: typeof ApiAgentV1EventsRoute
   ApiAgentV1GithubCommitTrailersRoute: typeof ApiAgentV1GithubCommitTrailersRoute
@@ -2649,6 +2662,13 @@ declare module '@tanstack/react-router' {
       path: '/w/$workspaceSlug/connect-github'
       fullPath: '/w/$workspaceSlug/connect-github'
       preLoaderRoute: typeof WWorkspaceSlugConnectGithubRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agent/v1/artifacts': {
+      id: '/api/agent/v1/artifacts'
+      path: '/api/agent/v1/artifacts'
+      fullPath: '/api/agent/v1/artifacts'
+      preLoaderRoute: typeof ApiAgentV1ArtifactsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/agent/v1/channels': {
@@ -3656,6 +3676,7 @@ const rootRouteChildren: RootRouteChildren = {
   OidcDotwellKnownOpenidConfigurationRoute:
     OidcDotwellKnownOpenidConfigurationRoute,
   WWorkspaceSlugConnectGithubRoute: WWorkspaceSlugConnectGithubRoute,
+  ApiAgentV1ArtifactsRoute: ApiAgentV1ArtifactsRoute,
   ApiAgentV1ChannelsRoute: ApiAgentV1ChannelsRoute,
   ApiAgentV1EventsRoute: ApiAgentV1EventsRoute,
   ApiAgentV1GithubCommitTrailersRoute: ApiAgentV1GithubCommitTrailersRoute,

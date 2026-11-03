@@ -10,6 +10,7 @@ export * from "./user-info";
 export * from "./profile";
 export * from "./app-config";
 export * from "./apps";
+export * from "./artifacts";
 export * from "./app-marketplace";
 export * from "./memory-citations";
 export * from "./openviking-memory";

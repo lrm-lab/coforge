@@ -1,6 +1,10 @@
 import { agentApiRoutes } from "@lrm/coforge-sdk/agent";
 import { taskConversationHttpRequest } from "@lrm/coforge-sdk/agent";
-import type { AgentAppRequest, AgentTaskConversationRequest } from "@lrm/coforge-sdk/agent";
+import type {
+  AgentAppRequest,
+  AgentArtifactRequest,
+  AgentTaskConversationRequest,
+} from "@lrm/coforge-sdk/agent";
 import { agentAppCloudRequest } from "./agent-app-cloud-request";
 import { agentHeaders } from "./agent-http-wire";
 
@@ -152,6 +156,21 @@ export function agentTaskConversation(
     ports,
     `Agent task ${request.route}`,
     taskConversationHttpRequest(agentApiRoutes.cloud.taskConversations, request),
+    agentApiKey,
+  );
+}
+
+/** `coforge artifact create|read|push|history|revert`: forwarded as it is (task #385). */
+export function agentArtifact(
+  ports: ForwardPorts,
+  request: AgentArtifactRequest,
+  agentApiKey: string,
+): Promise<Response> {
+  const route = agentApiRoutes.cloud.artifacts;
+  return forwardAgentRequest(
+    ports,
+    `Agent artifact ${request.operation}`,
+    { method: route.method, path: route.path, body: JSON.stringify(request) },
     agentApiKey,
   );
 }

@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
+import { artifactInputs } from "./artifact-inputs";
 import { productionArtifacts } from "#src/server/artifacts/artifact-composition.server";
 
 /**
@@ -10,14 +11,8 @@ import { productionArtifacts } from "#src/server/artifacts/artifact-composition.
  * experiment and the document's home (a conversation, or the Workspace).
  */
 
-const id = z.uuid();
-const version = z.number().int().positive();
-/** A document's text: at most 2 MiB once encoded, which the service checks in bytes, and no
- * NUL, which would store it as binary. */
-const text = z
-  .string()
-  .max(2 * 1024 * 1024)
-  .refine((value) => !value.includes("\u0000"));
+const { id, version, text, title, description, note, label, historyLimit, baseVersion } =
+  artifactInputs;
 
 const scopeOf = (context: { workspaceId: string; user: { id: string } }) => ({
   workspaceId: context.workspaceId,
@@ -56,7 +51,7 @@ export const loadArtifactHistory = createServerFn({ method: "GET" })
       .object({
         artifactId: id,
         before: version.optional(),
-        limit: z.number().int().min(1).max(50).optional(),
+        limit: historyLimit.optional(),
       })
       .strict(),
   )
@@ -75,7 +70,7 @@ export const createArtifactDocument = createServerFn({ method: "POST" })
     z
       .object({
         conversationId: id.optional(),
-        title: z.string().trim().min(1).max(200),
+        title,
         text: text.optional(),
       })
       .strict(),
@@ -94,13 +89,13 @@ export const saveArtifactDocument = createServerFn({ method: "POST" })
     z
       .object({
         artifactId: id,
-        baseVersion: z.number().int().nonnegative(),
+        baseVersion,
         idempotencyKey: id,
         text: text.optional(),
-        title: z.string().trim().min(1).max(200).optional(),
-        description: z.string().max(1000).optional(),
-        note: z.string().max(500).optional(),
-        label: z.string().max(60).optional(),
+        title: title.optional(),
+        description: description.optional(),
+        note: note.optional(),
+        label: label.optional(),
       })
       .strict(),
   )

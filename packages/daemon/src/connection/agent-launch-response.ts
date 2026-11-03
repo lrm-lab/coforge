@@ -1,6 +1,8 @@
 import { agentEnvironmentShapeViolation } from "@lrm/coforge-sdk/internal";
 import { isAgentApiKey } from "#src/credentials/agent-api-key";
 import type { AgentRuntimeProviderConfig } from "@lrm/coforge-anvil";
+import type { AgentLaunchConfig } from "./daemon-connection-client";
+import { parseAgentLaunchIdentity } from "./agent-launch-identity";
 
 /** Readers of the fields an Agent launch response carries: each refuses what is not exactly the
  * field's shape. */
@@ -48,4 +50,28 @@ export function parseAgentRuntimeProviderConfig(
       ...(typeof config.apiKey === "string" ? { apiKey: config.apiKey } : {}),
     };
   throw new Error("invalid Agent runtime provider config response");
+}
+
+/** The whole Agent launch response: the Agent's key, and its provider, environment, assigned
+ * skill packs and identity where the server sent them. */
+export function parseAgentLaunchConfig(response: unknown): AgentLaunchConfig {
+  const value = response as {
+    apiKey?: unknown;
+    providerConfig?: unknown;
+    envVars?: unknown;
+    assignedSkillPacks?: unknown;
+    identity?: unknown;
+  };
+  const providerConfig = parseAgentRuntimeProviderConfig(value.providerConfig);
+  const assignedSkillPacks = Array.isArray(value.assignedSkillPacks)
+    ? value.assignedSkillPacks.filter((entry): entry is string => typeof entry === "string")
+    : [];
+  const identity = parseAgentLaunchIdentity(value.identity);
+  return {
+    agentApiKey: parseAgentApiKey(value.apiKey),
+    ...(providerConfig ? { providerConfig } : {}),
+    envVars: parseAgentEnvironment(value.envVars),
+    ...(assignedSkillPacks.length > 0 ? { assignedSkillPacks } : {}),
+    ...(identity ? { identity } : {}),
+  };
 }

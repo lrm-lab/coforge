@@ -15,5 +15,6 @@ itself is described in [`packages/coforge/README.md`](../../packages/coforge/REA
 | [Registering an app](app-registration.md)   | `app prepare register`, `app status`, `app list --owned`, `app rotate-secret`: owner Agents                             |
 | [Managing an app](app-management.md)        | `app update/logo/transfer-owner/delete/share-link/request-publish`, `app prepare recover-owner`: owner and admin Agents |
 | [Calling app actions](app-invoke.md)        | `app invoke <app-key> <action>`: input, validation, Bearer call, errors                                                 |
+| [Documents](artifacts.md)                   | `artifact create/read/push/history/revert`: documents of a channel, a DM or the Workspace, merges and conflicts |
 | [Action cards](action-cards.md)             | `action prepare`, supported card kinds, the app approval card, how a human commits a card                               |
 | [Output formats](output.md)                 | The plain-text formats the CLI prints                                                                                   |

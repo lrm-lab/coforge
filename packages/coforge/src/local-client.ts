@@ -1,3 +1,6 @@
+import { appConfigRequests } from "#src/app-config-request";
+import type { AgentArtifactRequest } from "@lrm/coforge-sdk/agent";
+import { artifactRequest } from "#src/artifact-commands";
 import {
   AGENT_SEND_LOCAL_DEADLINE_MS,
   decodeAgentMessageResponse,
@@ -25,10 +28,6 @@ import {
   decodeAgentManualSearchResponse,
   decodeAgentVersionResponse,
   decodeAgentProfileErrorResponse,
-  decodeAgentAppConfigErrorResponse,
-  decodeAgentAppConfigResponse,
-  type AgentAppConfigPatch,
-  type AgentAppConfigResponse,
   decodeAgentProfileShowResponse,
   decodeAgentProfileUpdateResponse,
   decodeAgentUserInfoErrorResponse,
@@ -226,6 +225,8 @@ export function connectLocal(
   };
   return {
     reminder: (request: ReminderTransportRequest) => callReminder(request),
+    artifact: (request: AgentArtifactRequest) =>
+      artifactRequest(proxyEndpoint, context, proxyUrl, request),
     inboxCheck: () => inboxCheckRequest(proxyEndpoint, context, proxyUrl),
     inboxList: (request: AgentInboxRequest) =>
       inboxListRequest(proxyEndpoint, context, proxyUrl, request),
@@ -361,38 +362,7 @@ export function connectLocal(
         decodeAgentProfileErrorResponse,
         "profile-update",
       ),
-    appConfigGet: (appId: string): Promise<AgentAppConfigResponse> =>
-      envelopeRequest(
-        proxyEndpoint,
-        context,
-        proxyUrl,
-        {
-          method: agentApiRoutes.local.appConfig.get.method,
-          path: agentApiRoutes.local.appConfig.get.path(appId),
-        },
-        decodeAgentAppConfigResponse,
-        decodeAgentAppConfigErrorResponse,
-        "app-config",
-      ),
-    // One key per invocation. A repeat cannot apply twice either way: the cloud refuses any
-    // change not made against the current revision.
-    appConfigUpdate: (
-      appId: string,
-      change: AgentAppConfigPatch,
-    ): Promise<AgentAppConfigResponse> =>
-      envelopeRequest(
-        proxyEndpoint,
-        context,
-        proxyUrl,
-        {
-          method: agentApiRoutes.local.appConfig.update.method,
-          path: agentApiRoutes.local.appConfig.update.path(appId),
-          body: { ...change, idempotencyKey: crypto.randomUUID() },
-        },
-        decodeAgentAppConfigResponse,
-        decodeAgentAppConfigErrorResponse,
-        "app-config",
-      ),
+    ...appConfigRequests(proxyEndpoint, context, proxyUrl),
     threadList: (): Promise<AgentThreadListResponse> =>
       envelopeRequest(
         proxyEndpoint,

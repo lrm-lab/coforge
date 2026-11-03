@@ -20,11 +20,7 @@ import {
   UUID_LIKE_SOURCE,
   isRecord,
 } from "@lrm/coforge-sdk/internal";
-import {
-  agentApiRoutes,
-  decodeAgentAppRegistrationRequest,
-  decodeAgentAppTokenBody,
-} from "@lrm/coforge-sdk/agent";
+import { agentApiRoutes, decodeAgentArtifactRequest } from "@lrm/coforge-sdk/agent";
 import { isAgentApiKey } from "#src/credentials/agent-api-key";
 import {
   parseActionPrepareRequest,
@@ -34,7 +30,6 @@ import {
   parseMentionExecuteFields,
   parseProfileUpdateFields,
   decodePathParam,
-  parseAppConfigUpdate,
   parseAttachmentCommentsRequest,
   parseInboxListQuery,
   parseInboxRequest,
@@ -49,6 +44,7 @@ import { getLogger } from "@logtape/logtape";
 import { admitOpenVikingControl, admitOpenVikingRead } from "./openviking-read-proxy";
 import { parseMessageRequest } from "./agent-proxy-message-request";
 import { TASK_CONVERSATION_PROXY_ROUTES } from "./agent-proxy-task-routes";
+import { APP_PROXY_ROUTES } from "./agent-proxy-app-routes";
 
 export type AgentProxy = {
   url: string;
@@ -92,11 +88,6 @@ const MENTION_DELIVERY_SUFFIX = "/mention-deliveries";
 const LOCAL_MENTION_DELIVERY_ROUTE_PREFIX = LOCAL_PROXY_ROUTES.mentionDeliveries
   .path("")
   .slice(0, -MENTION_DELIVERY_SUFFIX.length);
-// An App's config is `<prefix><appId>/config`.
-const APP_CONFIG_SUFFIX = "/config";
-const LOCAL_APP_CONFIG_ROUTE_PREFIX = LOCAL_PROXY_ROUTES.appConfig.get
-  .path("")
-  .slice(0, -APP_CONFIG_SUFFIX.length);
 /** Covers `WEEKLY_REPORT_MARKDOWN_MAX_CHARS` plus JSON framing. A byte budget, so it is not the
  * same number as that character cap — see `internal/weekly-report-limits.ts`. */
 const WEEKLY_REPORT_COLLECT_MAX_BODY_BYTES = 512 * 1024;
@@ -178,59 +169,15 @@ const ROUTE_TABLE: readonly ProxyRoute[] = [
     parse: ({ fields }) => parseProfileUpdateFields(fields),
     domainFailure: domain.profileDomainFailure,
   }),
+  ...APP_PROXY_ROUTES,
   defineRoute({
-    family: "agent-api/app-config-get",
-    method: LOCAL_PROXY_ROUTES.appConfig.get.method,
-    match: pathParam(LOCAL_APP_CONFIG_ROUTE_PREFIX, APP_CONFIG_SUFFIX),
-    body: "none",
-    handler: "appConfigGet",
-    parse: ({ param }) => {
-      const appId = decodePathParam(param);
-      return appId instanceof Response ? appId : { appId };
-    },
-    domainFailure: domain.appConfigDomainFailure,
-  }),
-  defineRoute({
-    family: "agent-api/app-config-update",
-    method: LOCAL_PROXY_ROUTES.appConfig.update.method,
-    match: pathParam(LOCAL_APP_CONFIG_ROUTE_PREFIX, APP_CONFIG_SUFFIX),
+    family: "agent-api/artifact",
+    method: LOCAL_PROXY_ROUTES.artifacts.method,
+    match: exactPath(LOCAL_PROXY_ROUTES.artifacts.path),
     body: "json-object",
-    handler: "appConfigUpdate",
-    parse: ({ param, fields }) => parseAppConfigUpdate(param, fields),
-    domainFailure: domain.appConfigDomainFailure,
-  }),
-  defineRoute({
-    family: "agent-api/app-list",
-    method: LOCAL_PROXY_ROUTES.apps.list.method,
-    match: exactPath(LOCAL_PROXY_ROUTES.apps.list.path),
-    body: "none",
-    handler: "agentApp",
-    parse: () => ({ operation: "list" as const }),
-    respond: forwardResponse,
-  }),
-  defineRoute({
-    family: "agent-api/app-token",
-    method: LOCAL_PROXY_ROUTES.apps.token.method,
-    // The same `/api/agent/v1/apps/` prefix as an App's config.
-    match: pathParam(LOCAL_APP_CONFIG_ROUTE_PREFIX, "/token"),
-    body: "json-object",
-    handler: "agentApp",
-    parse: ({ param, fields }) => {
-      const appKey = decodePathParam(param);
-      const body = decodeAgentAppTokenBody(fields);
-      if (appKey instanceof Response) return appKey;
-      return body ? { operation: "token" as const, appKey, ...body } : badRequest();
-    },
-    respond: forwardResponse,
-  }),
-  defineRoute({
-    family: "agent-api/app-registration",
-    method: LOCAL_PROXY_ROUTES.appRegistrations.method,
-    match: exactPath(LOCAL_PROXY_ROUTES.appRegistrations.path),
-    body: "json-object",
-    maxBodyBytes: LOCAL_PROXY_ROUTES.appRegistrations.maxBodyBytes,
-    handler: "agentApp",
-    parse: ({ fields }) => decodeAgentAppRegistrationRequest(fields) ?? badRequest(),
+    maxBodyBytes: LOCAL_PROXY_ROUTES.artifacts.maxBodyBytes,
+    handler: "agentArtifact",
+    parse: ({ fields }) => decodeAgentArtifactRequest(fields) ?? badRequest(),
     respond: forwardResponse,
   }),
   defineRoute({

@@ -1,4 +1,5 @@
 import { APP_REGISTRATION_REQUEST_MAX_BYTES } from "./app-management";
+import { ARTIFACT_REQUEST_MAX_BYTES } from "./artifacts";
 
 /** Mention delivery (`coforge mention delivery`): what became of each @mention in a message the
  * Agent sent, by the message's full id or eight-hex prefix. */
@@ -48,6 +49,14 @@ const TASK_CONVERSATION_ROUTES = {
 const TASK_IDLE_NUDGE_ROUTE = { method: "POST", path: "/api/agent/v1/tasks/idle-nudge" } as const;
 
 const THREAD_LIST_ROUTE = { method: "GET", path: "/api/agent/v1/threads" } as const;
+
+/** `coforge artifact create|read|push|history|revert`: one document operation per request (task
+ * #385). Same route under `proxy`, `local` and `cloud`. */
+const ARTIFACTS_ROUTE = {
+  method: "POST",
+  path: "/api/agent/v1/artifacts",
+  maxBodyBytes: ARTIFACT_REQUEST_MAX_BYTES,
+} as const;
 
 /** `coforge mention pending|execute`. Same routes under `proxy`, `local` and `cloud`. */
 const MENTION_ACTIONS_ROUTES = {
@@ -188,6 +197,7 @@ export const agentApiRoutes = {
     threadList: THREAD_LIST_ROUTE,
     inboxList: INBOX_LIST_ROUTE,
     labels: LABELS_ROUTE,
+    artifacts: ARTIFACTS_ROUTE,
     appConfig: APP_CONFIG_ROUTES,
     apps: APP_ROUTES,
     appRegistrations: APP_REGISTRATION_LOCAL_ROUTE,
@@ -232,6 +242,7 @@ export const agentApiRoutes = {
     threadList: THREAD_LIST_ROUTE,
     inboxList: INBOX_LIST_ROUTE,
     labels: LABELS_ROUTE,
+    artifacts: ARTIFACTS_ROUTE,
     appConfig: APP_CONFIG_ROUTES,
     apps: APP_ROUTES,
     appRegistrations: APP_REGISTRATION_LOCAL_ROUTE,
@@ -351,6 +362,7 @@ export const agentApiRoutes = {
     threadList: THREAD_LIST_ROUTE,
     inboxList: INBOX_LIST_ROUTE,
     labels: LABELS_ROUTE,
+    artifacts: ARTIFACTS_ROUTE,
     appConfig: APP_CONFIG_ROUTES,
     apps: APP_ROUTES,
     appRegistrations: APP_REGISTRATION_CLOUD_ROUTES,

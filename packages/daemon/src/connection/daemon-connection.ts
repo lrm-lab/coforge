@@ -49,6 +49,7 @@ import type {
   AgentAppConfigGetRequest,
   AgentAppRequest,
   AgentTaskConversationRequest,
+  AgentArtifactRequest,
   AgentAppConfigUpdateRequest,
   AgentMentionExecuteRequest,
   AgentMentionPendingRequest,
@@ -164,17 +165,12 @@ import {
   thrownMessage,
 } from "@lrm/coforge-sdk/internal";
 
-import { parseAgentLaunchIdentity } from "./agent-launch-identity";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import {
   decodeAppRegistrationNotice,
   type AppRegistrationNotice,
 } from "@lrm/coforge-sdk/internal/app-registration-notice";
-import {
-  parseAgentApiKey,
-  parseAgentEnvironment,
-  parseAgentRuntimeProviderConfig,
-} from "./agent-launch-response";
+import { parseAgentApiKey, parseAgentLaunchConfig } from "./agent-launch-response";
 import { controlPayloadShape } from "./control-payload";
 import { connectionLiveness, INBOUND_STALLED_MS } from "./connection-liveness";
 import { DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS } from "./shutdown-notice-timeout";
@@ -193,6 +189,7 @@ import {
 import { requestAgentConfig } from "./agent-config-request";
 import {
   agentApp,
+  agentArtifact,
   agentAttachment,
   agentAttachmentUpload,
   agentAttachmentUploadSessionCancel,
@@ -1450,6 +1447,10 @@ export class DaemonConnection
     return agentAttachmentUploadSessionGet(this.#forwardPorts(), uploadId, agentApiKey);
   }
 
+  agentArtifact(request: AgentArtifactRequest, agentApiKey: string): Promise<Response> {
+    return agentArtifact(this.#forwardPorts(), request, agentApiKey);
+  }
+
   agentApp(request: AgentAppRequest, agentApiKey: string): Promise<Response> {
     return agentApp(this.#forwardPorts(), request, agentApiKey);
   }
@@ -1490,27 +1491,9 @@ export class DaemonConnection
     requestId?: string;
     launchId?: string;
   }): Promise<AgentLaunchConfig> {
-    const value = (await (
-      await this.#agentApiKeyRequest("Agent launch config", "POST", input)
-    ).json()) as {
-      apiKey?: unknown;
-      providerConfig?: unknown;
-      envVars?: unknown;
-      assignedSkillPacks?: unknown;
-      identity?: unknown;
-    };
-    const providerConfig = parseAgentRuntimeProviderConfig(value.providerConfig);
-    const assignedSkillPacks = Array.isArray(value.assignedSkillPacks)
-      ? value.assignedSkillPacks.filter((entry): entry is string => typeof entry === "string")
-      : [];
-    const identity = parseAgentLaunchIdentity(value.identity);
-    return {
-      agentApiKey: parseAgentApiKey(value.apiKey),
-      ...(providerConfig ? { providerConfig } : {}),
-      envVars: parseAgentEnvironment(value.envVars),
-      ...(assignedSkillPacks.length > 0 ? { assignedSkillPacks } : {}),
-      ...(identity ? { identity } : {}),
-    };
+    return parseAgentLaunchConfig(
+      await (await this.#agentApiKeyRequest("Agent launch config", "POST", input)).json(),
+    );
   }
 
   async revokeAgentApiKey(agentApiKey: string): Promise<void> {

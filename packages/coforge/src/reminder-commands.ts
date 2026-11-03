@@ -382,3 +382,18 @@ export function formatReminderCommandResponse(
   }
   return formatAgentReminderResponse(operation, result as AgentReminderOperationResponse);
 }
+
+/** `coforge reminder ...`: resolves a short reminder id, sends the command, and says what came of
+ * it. */
+export async function runReminder(
+  invocation: ReminderInvocation,
+  transport: ReminderTransport,
+): Promise<string> {
+  if (!transport.reminder) throw new Error("Reminder transport is unavailable");
+  const { command: _command, ...request } = invocation;
+  const resolved = await resolveReminderRequestId(transport, request);
+  return formatReminderCommandResponse(
+    resolved.operation,
+    await sendReminderCommand(transport, resolved),
+  );
+}

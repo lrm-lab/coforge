@@ -65,6 +65,12 @@ import { parseUserInfoArgs, runUserInfo, type UserInfoInvocation } from "#src/us
 export type { UserInfoInvocation };
 import { parseAppConfigArgs, runAppConfig, type AppConfigInvocation } from "#src/app-config";
 import {
+  parseArtifactArgs,
+  runArtifact,
+  type ArtifactInvocation,
+  type ArtifactTransport,
+} from "#src/artifact-commands";
+import {
   formatMentionActionResults,
   formatMentionDeliveries,
   incompleteMentionActions,
@@ -196,12 +202,7 @@ export type AttachmentUploadInvocation = {
   json?: boolean;
 };
 export type { ChannelManagementInvocation } from "./src/channel-args";
-import {
-  formatReminderCommandResponse,
-  parseReminderArgs,
-  resolveReminderRequestId,
-  sendReminderCommand,
-} from "#src/reminder-commands";
+import { parseReminderArgs, runReminder } from "#src/reminder-commands";
 import type { ReminderInvocation, ReminderResponse } from "#src/reminder-commands";
 export type {
   ReminderInvocation,
@@ -312,6 +313,7 @@ export type MessageTransport = {
   inboxList?: InboxTransport["inboxList"];
   setChannelMuted?(target: string, muted: boolean): Promise<unknown>;
   reminder?(request: ReminderTransportRequest): Promise<ReminderResponse>;
+  artifact?: ArtifactTransport["artifact"];
   setThreadFollowed?(target: string, followed: boolean): Promise<unknown>;
   threadList?(): Promise<AgentThreadListResponse>;
   channel?(command: Omit<ChannelCommand, "idempotencyKey">): Promise<unknown>;
@@ -385,6 +387,7 @@ export function parseArgs(
   | ProfileShowInvocation
   | ProfileUpdateInvocation
   | AppConfigInvocation
+  | ArtifactInvocation
   | MentionInvocation {
   if (args[0] === "whoami") return parseWhoamiArgs(args.slice(1));
   if (args[0] === "version") return parseVersionArgs(args.slice(1));
@@ -397,6 +400,7 @@ export function parseArgs(
   if (args[0] === "app" && args[1] === "config") return parseAppConfigArgs(args.slice(2));
   if (args[0] === "mention") return parseMentionArgs(args.slice(1));
   if (args[0] === "reminder") return parseReminderArgs(args.slice(1));
+  if (args[0] === "artifact") return parseArtifactArgs(args.slice(1));
   if (args[0] === "task") return parseTaskArgs(args.slice(1));
   if (args[0] === "weekly-report-collect") return parseWeeklyReportCollectArgs(args.slice(1));
   if (args[0] === "weekly-report-key-points") return parseWeeklyReportKeyPointsArgs(args.slice(1));
@@ -867,6 +871,7 @@ export async function run(args: readonly string[], transport: MessageTransport):
     return invocation.json ? result : formatProfile(result);
   }
   if (invocation.command === "app-config") return runAppConfig(invocation, transport);
+  if (invocation.command === "artifact") return runArtifact(invocation, transport);
   if (invocation.command === "mention-pending")
     return runMentionPending(transport.mentionPending?.bind(transport), invocation);
   if (invocation.command === "mention-delivery") {
@@ -907,15 +912,7 @@ export async function run(args: readonly string[], transport: MessageTransport):
     const client = createAgentApiClient(createMessageTransportAgentApiTransport(transport));
     return formatWorkspaceInfo(await client.workspace.info(), invocation);
   }
-  if (invocation.command === "reminder") {
-    if (!transport.reminder) throw new Error("Reminder transport is unavailable");
-    const { command: _command, ...request } = invocation;
-    const resolved = await resolveReminderRequestId(transport, request);
-    return formatReminderCommandResponse(
-      resolved.operation,
-      await sendReminderCommand(transport, resolved),
-    );
-  }
+  if (invocation.command === "reminder") return runReminder(invocation, transport);
   if (invocation.command === "task") {
     if (!transport.task) throw new Error("Task transport is unavailable");
     const outputJson = invocation.json === true;

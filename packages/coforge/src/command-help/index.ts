@@ -1,5 +1,6 @@
 import { CliError } from "../cli-error";
 import type { HelpEntry } from "./entry";
+import { artifactHelp } from "./artifact";
 import { taskHelp } from "./task";
 
 /**
@@ -8,6 +9,7 @@ import { taskHelp } from "./task";
  */
 const COMMANDS: Readonly<Record<string, HelpEntry>> = {
   ...taskHelp,
+  ...artifactHelp,
   message: {
     syntax: "coforge message check|read|search|send|resolve|react ...",
     example: "coforge message check --target '#general'",

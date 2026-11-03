@@ -6,6 +6,7 @@ import type {
   AgentAppConfigUpdateRequest,
   AgentAppRequest,
   AgentTaskConversationRequest,
+  AgentArtifactRequest,
   AgentManualGetRequest,
   AgentManualGetResponse,
   AgentManualSearchRequest,
@@ -57,6 +58,7 @@ export type AgentRequestForwarderPorts = Readonly<{
     | "appConfigGet"
     | "appConfigUpdate"
     | "agentApp"
+    | "agentArtifact"
     | "agentTaskConversation"
     | "agentMemoryDisposition"
     | "agentOpenviking"
@@ -252,6 +254,15 @@ export class AgentRequestForwarder {
   ): Promise<Response> {
     this.#ports.authorizedAgent(context, agentApiKey);
     return this.#transportCall("agentTaskConversation", NOT_CONNECTED)(request, agentApiKey);
+  }
+
+  async agentArtifact(
+    context: string,
+    request: AgentArtifactRequest,
+    agentApiKey: string,
+  ): Promise<Response> {
+    this.#ports.authorizedAgent(context, agentApiKey);
+    return this.#transportCall("agentArtifact", NOT_CONNECTED)(request, agentApiKey);
   }
 
   async agentMemoryDisposition(

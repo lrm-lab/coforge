@@ -32,6 +32,7 @@ import type {
   AgentAppConfigResponse,
   AgentAppConfigUpdateRequest,
   AgentAppRequest,
+  AgentArtifactRequest,
   AgentTaskConversationRequest,
   AgentMentionExecuteRequest,
   AgentMentionExecuteResponse,
@@ -151,6 +152,13 @@ export type AgentProxyRuntime = {
   ): Promise<AgentAppConfigResponse>;
   /** `coforge app list|token`: forwarded as it is, the cloud's response answered as it came. */
   agentApp?(context: string, request: AgentAppRequest, agentApiKey: string): Promise<Response>;
+  /** `coforge artifact create|read|push|history|revert`: forwarded as it is, the cloud's response
+   * answered as it came (task #385). */
+  agentArtifact?(
+    context: string,
+    request: AgentArtifactRequest,
+    agentApiKey: string,
+  ): Promise<Response>;
   /** `coforge task view|read|reply|follow|unfollow|list --following`: forwarded as it is, the
    * cloud's response answered as it came. */
   agentTaskConversation?(
