@@ -168,7 +168,6 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
       conversationName={conversationName}
       members={conversation.mentionables}
       currentMemberId={conversation.senderMemberId || null}
-      onOpenSource={taskPopup ? undefined : conversationTaskPopup.showMessage}
       thread={
         ownDiscussion
           ? () => (

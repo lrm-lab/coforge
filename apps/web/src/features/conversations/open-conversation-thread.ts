@@ -10,7 +10,6 @@ import {
   conversationSearchWithThread,
 } from "./conversation-thread-search";
 import { keepsLandingForReview } from "./attachment-review-address";
-import { messageHash } from "./conversation-page-search";
 
 /**
  * The subset of either conversation route's search this hook reads/writes. A
@@ -144,27 +143,7 @@ export function useOpenConversationTask() {
       }),
     [router],
   );
-  /** Leaves the popup for a message in the chat, landing on its row: Chat's one-shot `message`
-   * (`useConversationPositionJump`), or `msg` where a page hosts the conversation (`open`). A reply
-   * opens its thread at the reply, as an Activity card does. */
-  const showMessage = useCallback(
-    ({ messageId, threadRootId }: { messageId: string; threadRootId?: string }) => {
-      const landing = threadRootId ?? messageId;
-      void router.navigate({
-        to: ".",
-        resetScroll: false,
-        hash: threadRootId ? messageHash(messageId) : undefined,
-        search: (previous: ConversationTaskSearch & { threadRootId?: string; open?: string }) => ({
-          ...conversationSearchWithoutTask(previous),
-          view: "chat" as const,
-          threadRootId,
-          ...(previous.open ? { msg: landing } : { message: landing }),
-        }),
-      });
-    },
-    [router],
-  );
-  return { openTaskNumber, openTask, closeTask, showMessage };
+  return { openTaskNumber, openTask, closeTask };
 }
 
 /**

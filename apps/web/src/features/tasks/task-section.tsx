@@ -1,6 +1,6 @@
 import { MAX_TASK_BLOCKERS, MAX_TASK_TREE_DEPTH, type TaskView } from "@lrm/coforge-sdk/internal";
 import { useServerFn } from "@tanstack/react-start";
-import { useState, type ComponentProps } from "react";
+import { useState } from "react";
 
 import type { Mentionable } from "#src/features/conversations/mention-text";
 import { isAppError } from "#src/lib/app-error";
@@ -13,7 +13,6 @@ import { TaskPickerDialog } from "./task-picker";
 import { TaskProperty } from "./task-property";
 import { openBlockers, relationRefusal, type VisibleTaskName } from "./task-relation-edits";
 import { TaskBlockedByValue, TaskBlockingValue, TaskParentValue } from "./task-relation-lines";
-import { TaskSourceLink } from "./task-source";
 import { StatusMenu } from "./task-status-menu";
 import { executeTask } from "./tasks.functions";
 import { useTaskAssignmentAccess } from "./use-task-assignment-access";
@@ -48,7 +47,6 @@ export function TaskSection({
   onCommand,
   members,
   currentMemberId,
-  source,
   picker,
   onPickerChange,
   onOpenRelated,
@@ -57,8 +55,6 @@ export function TaskSection({
   onCommand?: (command: DetailCommand) => Promise<void>;
   members?: readonly Mentionable[];
   currentMemberId: string | null;
-  /** The message the Task was made from, as a link back to it. */
-  source?: ComponentProps<typeof TaskSourceLink>;
   /** The picker the header menu (or the sub-tasks' "+") opened, if any. The popup owns it, since
    * its header menu opens one too. */
   picker: RelationPicker | null;
@@ -166,11 +162,6 @@ export function TaskSection({
         {relations.on && relations.detail.blocking.length > 0 && (
           <TaskProperty label={m.tasks_blocking()}>
             <TaskBlockingValue blocking={relations.detail.blocking} onOpen={onOpenRelated} />
-          </TaskProperty>
-        )}
-        {source && (
-          <TaskProperty label={m.tasks_source()} className="sm:col-span-2">
-            <TaskSourceLink {...source} />
           </TaskProperty>
         )}
       </dl>

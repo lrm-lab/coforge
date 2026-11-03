@@ -137,9 +137,6 @@ type TaskDetailDialogProps = {
   members?: readonly Mentionable[];
   currentMemberId: string | null;
   thread?: () => ReactNode;
-  /** Leaves the popup for a message in the conversation's chat; where absent, a Task made from
-   * someone's message does not link it. */
-  onOpenSource?: (message: { messageId: string; threadRootId?: string }) => void;
   /** Opens a Task this one is related to, in its own channel where that is where it lives. Where
    * absent, related Tasks are named but not opened. */
   onOpenRelated?: (task: VisibleTaskName) => void;
@@ -160,7 +157,6 @@ export function TaskDetailDialog({
   members,
   currentMemberId,
   thread,
-  onOpenSource,
   onOpenRelated,
 }: TaskDetailDialogProps) {
   const [deleting, setDeleting] = useState(false);
@@ -180,15 +176,6 @@ export function TaskDetailDialog({
       picker={picker}
       onPickerChange={setPicker}
       onOpenRelated={onOpenRelated}
-      source={
-        task.sourceMessage && onOpenSource && conversationName
-          ? {
-              source: task.sourceMessage,
-              channel: conversationName,
-              onOpen: () => onOpenSource(task.sourceMessage!),
-            }
-          : undefined
-      }
     />
   );
   // The discussion is there only with a thread; the sub-tasks only once there are some.
