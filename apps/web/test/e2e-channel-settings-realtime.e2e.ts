@@ -136,10 +136,12 @@ test("another open tab follows a channel's rename, description and archive live"
     // Archive in the editor tab: the watcher's composer turns into the archived notice and the
     // row leaves its sidebar.
     await editor.clickText("button", "Archive Channel");
+    // The confirm names the action too; take it from the confirm dialog, not the panel behind.
+    const confirmButton = '[role="dialog"]:not([aria-label="Channel Details and Settings"]) button';
     await editor.waitFor(
-      `[...document.querySelectorAll("button")].some((button) => button.textContent.trim() === "Archive")`,
+      `[...document.querySelectorAll(${JSON.stringify(confirmButton)})].some((button) => button.textContent.trim() === "Archive Channel")`,
     );
-    await editor.clickText("button", "Archive");
+    await editor.clickText(confirmButton, "Archive Channel");
     await watcher.waitFor(`document.body.textContent.includes("This channel is archived.")`);
     await watcher.waitFor(`!${sidebarHas(renamed)}`);
     await watcher.run("screenshot", join(artifacts, "archived.png"));

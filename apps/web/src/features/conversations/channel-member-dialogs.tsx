@@ -115,7 +115,7 @@ export function RemoveMemberDialog({
                   showTextWhileLoading
                   onPress={() => void confirm()}
                 >
-                  {busy ? m.channel_members_removing() : m.channel_members_remove_action()}
+                  {busy ? m.channel_members_removing() : m.channel_members_remove_title()}
                 </DialogAction>
               </DialogActions>
             </>

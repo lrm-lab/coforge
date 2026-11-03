@@ -34,6 +34,7 @@
   "pi_chat_name": "会话名称",
   "pi_chat_save": "保存",
   "pi_chat_cancel": "取消",
+  "pi_chat_delete_action": "删除会话",
   "pi_chat_delete_confirm": "删除此会话及已保存的历史记录？",
   "pi_chat_older": "加载更早消息",
   "pi_chat_message": "消息",

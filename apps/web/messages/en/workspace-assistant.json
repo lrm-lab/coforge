@@ -34,6 +34,7 @@
   "pi_chat_name": "Conversation name",
   "pi_chat_save": "Save",
   "pi_chat_cancel": "Cancel",
+  "pi_chat_delete_action": "Delete Conversation",
   "pi_chat_delete_confirm": "Delete this conversation and its saved history?",
   "pi_chat_older": "Load Earlier Messages",
   "pi_chat_message": "Message",

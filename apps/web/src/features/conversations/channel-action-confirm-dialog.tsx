@@ -79,14 +79,15 @@ const CONFIRM_COPY: Record<
     denied: m.channel_settings_delete_denied,
     permanent: true,
   },
-  // As Slack asks: the title and the button say it all.
   "make-private": {
     title: (name) => m.channel_settings_make_private_title({ name }),
+    body: (name) => m.channel_settings_make_private_confirm({ name }),
     confirm: m.channel_settings_make_private_action,
     ...VISIBILITY_COPY,
   },
   "make-public": {
     title: (name) => m.channel_settings_make_public_title({ name }),
+    body: (name) => m.channel_settings_make_public_confirm({ name }),
     confirm: m.channel_settings_make_public_action,
     ...VISIBILITY_COPY,
   },

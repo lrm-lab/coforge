@@ -22,7 +22,7 @@ export function ComputerRemoveAction({
         onOpenChange={setOpen}
         title={m.computer_remove_dialog_title({ name })}
         description={m.computer_remove_description()}
-        confirmLabel={m.computer_remove_action()}
+        confirmLabel={m.computer_remove_confirm_action()}
         errorMessage={m.computer_remove_error()}
         onConfirm={onConfirm}
       />

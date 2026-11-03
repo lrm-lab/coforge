@@ -124,7 +124,7 @@ export function PiChatSessionActions({
         onOpenChange={setDeleting}
         title={running ? m.pi_chat_stop_delete() : m.pi_chat_delete()}
         description={running ? m.pi_chat_stop_delete_confirm() : m.pi_chat_delete_confirm()}
-        confirmLabel={running ? m.pi_chat_stop_delete() : m.pi_chat_delete()}
+        confirmLabel={running ? m.pi_chat_stop_delete() : m.pi_chat_delete_action()}
         errorMessage={m.pi_chat_connection_error()}
         onConfirm={async () => {
           if (running && !controls)

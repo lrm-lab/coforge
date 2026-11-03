@@ -222,7 +222,7 @@ test("the settings panel shows a channel's members as a page, adds and removes o
         })
       ).leftAt,
     ).toBeNull();
-    await clickText('[role="dialog"] button', "Remove");
+    await clickText('[role="dialog"] button', "Remove Member");
     await waitFor(`!${panelHas(outside.displayName)}`);
     expect(
       (

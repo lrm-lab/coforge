@@ -68,6 +68,7 @@ test("the channel settings panel edits info, preferences, archive and membership
     `[...document.querySelectorAll(${JSON.stringify(selector)})].find((element) => element.textContent.trim() === ${JSON.stringify(text)})`;
   const clickText = (selector: string, text: string) =>
     browser("eval", `${byText(selector, text)}.click()`);
+  const confirmButton = '[role="dialog"]:not([aria-label="Channel Details and Settings"]) button';
   async function openPanel() {
     // A click that lands before the page hydrates opens nothing; try again until the panel opens.
     for (let attempt = 0; ; attempt += 1) {
@@ -198,8 +199,9 @@ test("the channel settings panel edits info, preferences, archive and membership
 
     // Archive: confirm, the panel closes and an archived notice replaces the composer.
     await clickText("button", "Archive Channel");
-    await waitFor(`${byText("button", "Archive")} !== undefined`);
-    await clickText("button", "Archive");
+    // The confirm names the action too; take it from the confirm dialog, not the panel behind.
+    await waitFor(`${byText(confirmButton, "Archive Channel")} !== undefined`);
+    await clickText(confirmButton, "Archive Channel");
     await waitFor(`document.body.textContent.includes("This channel is archived.")`);
     expect(await evaluate<boolean>(`document.querySelector("main textarea") === null`)).toBe(true);
     expect(
@@ -229,8 +231,8 @@ test("the channel settings panel edits info, preferences, archive and membership
     // Leave: confirm, the channel turns read-only with a Join button; rejoining restores it.
     await openPanel();
     await clickText("button", "Leave Channel");
-    await waitFor(`${byText("button", "Leave")} !== undefined`);
-    await clickText("button", "Leave");
+    await waitFor(`${byText(confirmButton, "Leave Channel")} !== undefined`);
+    await clickText(confirmButton, "Leave Channel");
     await waitFor(`${byText("button", "Join Channel")} !== undefined`);
     expect((await viewerRow()).leftAt).not.toBeNull();
     await clickText("button", "Join Channel");
