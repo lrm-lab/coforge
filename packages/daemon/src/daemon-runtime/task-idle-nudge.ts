@@ -31,9 +31,14 @@ export type TaskIdleNudgePorts = {
   /** Writes the reminder as idle input, the way a wake message is written. */
   deliver(agentId: string, text: string): Promise<boolean>;
   timeoutMs?: number;
+  /** Epoch milliseconds; injectable so the 404 retry window is testable. */
+  now?: () => number;
 };
 
 export const IDLE_NUDGE_TIMEOUT_MS = 15_000;
+/** A 404 pauses asking for this long, not until a restart: the web and the Computer ship
+ * separately, so the route can appear while this daemon keeps running. */
+export const IDLE_NUDGE_UNSUPPORTED_RETRY_MS = 60 * 60_000;
 
 /**
  * The daemon's side of the task idle reminder: when a turn ends and the Agent is genuinely idle,
@@ -46,14 +51,15 @@ export class TaskIdleNudge {
   readonly #inFlight = new Set<string>();
   /** The session each Agent's fresh-session ask was made for. */
   readonly #askedSessions = new Map<string, string>();
-  /** Set by the first 404: this server has no idle nudge until the daemon restarts. */
-  #unsupported = false;
+  /** When a 404 last said this server has no idle nudge; asking resumes after the retry window. */
+  #unsupportedUntil = 0;
 
   constructor(private readonly ports: TaskIdleNudgePorts) {}
 
   /** Called where a turn ends or a process exits; never throws, never blocks that path. */
   maybeAsk(agentId: string): void {
-    if (this.#unsupported || this.#inFlight.has(agentId) || !this.ports.idle(agentId)) return;
+    if (this.#inFlight.has(agentId) || !this.ports.idle(agentId)) return;
+    if (this.#now() < this.#unsupportedUntil) return;
     const sessionId = this.ports.sessionId(agentId);
     const fresh =
       this.ports.freshSession(agentId) &&
@@ -66,6 +72,10 @@ export class TaskIdleNudge {
       ...(fresh ? { freshSession: true } : {}),
       ...(backgroundTasks > 0 ? { backgroundTasks } : {}),
     }).finally(() => this.#inFlight.delete(agentId));
+  }
+
+  #now(): number {
+    return this.ports.now?.() ?? Date.now();
   }
 
   async #ask(agentId: string, request: IdleNudgeRequest): Promise<void> {
@@ -94,10 +104,11 @@ export class TaskIdleNudge {
       if (timer !== undefined) clearTimeout(timer);
     }
     if (answer === undefined) {
-      this.#unsupported = true;
-      logger.info("This server has no task idle nudge; not asking again", {
+      this.#unsupportedUntil = this.#now() + IDLE_NUDGE_UNSUPPORTED_RETRY_MS;
+      logger.info("This server has no task idle nudge; asking again in an hour", {
         event: "task_idle_nudge:unsupported",
         agent_id: agentId,
+        retry_after_ms: IDLE_NUDGE_UNSUPPORTED_RETRY_MS,
       });
       return;
     }

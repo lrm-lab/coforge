@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import {
+  IDLE_NUDGE_UNSUPPORTED_RETRY_MS,
   TaskIdleNudge,
   type TaskIdleNudgePorts,
   type IdleNudgeRequest,
@@ -22,6 +23,7 @@ function harness(
   let backgroundTasks = 0;
   let sessionId: string | undefined = "session-1";
   let freshSession = false;
+  let now = Date.parse("2026-11-03T12:00:00Z");
   const ports: TaskIdleNudgePorts = {
     ask: async (agentId, request) => {
       asks.push({ agentId, request });
@@ -36,6 +38,7 @@ function harness(
       return true;
     },
     timeoutMs: 20,
+    now: () => now,
     ...overrides,
   };
   return {
@@ -49,6 +52,7 @@ function harness(
       freshSession = fresh;
     },
     setFreshSession: (value: boolean) => (freshSession = value),
+    advance: (ms: number) => (now += ms),
   };
 }
 
@@ -90,13 +94,23 @@ test("another idle event while the ask is in flight does not ask again", async (
   expect(h.asks).toHaveLength(2);
 });
 
-test("a server without the route is not asked again", async () => {
+test("a 404 pauses asking for an hour, then tries again", async () => {
   const h = harness({ respond: async () => undefined });
   h.nudge.maybeAsk("agent-a");
   await settle();
   h.nudge.maybeAsk("agent-b");
   await settle();
   expect(h.asks).toHaveLength(1);
+
+  h.advance(IDLE_NUDGE_UNSUPPORTED_RETRY_MS - 1);
+  h.nudge.maybeAsk("agent-a");
+  await settle();
+  expect(h.asks).toHaveLength(1);
+
+  h.advance(1);
+  h.nudge.maybeAsk("agent-a");
+  await settle();
+  expect(h.asks).toHaveLength(2);
 });
 
 test("a reminder is dropped when the Agent picked up work while the ask was in flight", async () => {
