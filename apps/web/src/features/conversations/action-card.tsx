@@ -213,10 +213,10 @@ export function ActionCard({ card }: { card: ActionCardView }) {
     }
   }
 
-  async function pickChoice(optionId: string) {
+  async function pickChoice(optionId: string, text?: string) {
     setError("");
     try {
-      await commitChoice({ data: { messageId: view.messageId, optionId } });
+      await commitChoice({ data: { messageId: view.messageId, optionId, text } });
       // Answered, it no longer waits on the viewer in Activity.
       void queryClient.invalidateQueries({ queryKey: WAITING_CHOICE_CARDS_KEY });
       await refetch();
