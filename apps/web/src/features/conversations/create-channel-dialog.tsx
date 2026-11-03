@@ -3,6 +3,11 @@ import { CHANNEL_NAME_PATTERN } from "@lrm/coforge-sdk/internal";
 import { XClose } from "@untitledui/icons";
 import { Heading, Text } from "react-aria-components";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
+import {
+  UnsavedChangesDialog,
+  useReportDirty,
+  useUnsavedChangesGuard,
+} from "#src/components/ui/unsaved-changes-dialog";
 import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { Button } from "#src/components/base/buttons/button";
@@ -99,6 +104,13 @@ export function CreateChannelDialog({
   // A create in flight keeps the dialog from closing; the form below holds all other state and
   // mounts afresh on each opening, so a reopened dialog never shows the previous session.
   const busy = useRef(false);
+  // Whether the form holds edits (it reports them while mounted); closing then asks first.
+  const [dirty, setDirty] = useState(false);
+  const guard = useUnsavedChangesGuard({
+    overlayOpen: open,
+    dirty,
+    close: () => onOpenChange(false),
+  });
   const form = {
     onCreate,
     onOpenChannel,
@@ -112,32 +124,38 @@ export function CreateChannelDialog({
     candidates,
     directory,
     busy,
+    onDirtyChange: setDirty,
   };
   return (
-    <ModalOverlay
-      isOpen={open}
-      onOpenChange={(value) => {
-        if (!busy.current) onOpenChange(value);
-      }}
-      // On a phone the group chat dialog is Raft's sheet: edge to edge and down to the bottom.
-      className={memberPicker ? "max-md:px-0 max-md:[--modal-pb:0px]" : undefined}
-    >
-      {memberPicker ? (
-        // On a phone the sheet takes the screen's height, so the member list has room to fill
-        // (task #331); side by side the panes share a fixed height.
-        <Modal className="w-[calc(100vw-2rem)] max-w-4xl overflow-hidden max-md:h-full max-md:w-full max-md:rounded-b-none max-md:pb-safe-bottom">
-          <Dialog className="flex h-full flex-col p-0 md:h-[min(36rem,calc(100dvh-4rem))] md:flex-row">
-            {({ close }) => <CreateChannelForm {...form} memberPicker close={close} />}
-          </Dialog>
-        </Modal>
-      ) : (
-        <Modal className="w-[calc(100vw-2rem)] max-w-md">
-          <Dialog className="p-6">
-            {({ close }) => <CreateChannelForm {...form} memberPicker={false} close={close} />}
-          </Dialog>
-        </Modal>
-      )}
-    </ModalOverlay>
+    <>
+      <ModalOverlay
+        isOpen={open}
+        onOpenChange={(value) => {
+          if (busy.current) return;
+          if (value) onOpenChange(true);
+          else guard.requestClose();
+        }}
+        // On a phone the group chat dialog is Raft's sheet: edge to edge and down to the bottom.
+        className={memberPicker ? "max-md:px-0 max-md:[--modal-pb:0px]" : undefined}
+      >
+        {memberPicker ? (
+          // On a phone the sheet takes the screen's height, so the member list has room to fill
+          // (task #331); side by side the panes share a fixed height.
+          <Modal className="w-[calc(100vw-2rem)] max-w-4xl overflow-hidden max-md:h-full max-md:w-full max-md:rounded-b-none max-md:pb-safe-bottom">
+            <Dialog className="flex h-full flex-col p-0 md:h-[min(36rem,calc(100dvh-4rem))] md:flex-row">
+              {({ close }) => <CreateChannelForm {...form} memberPicker close={close} />}
+            </Dialog>
+          </Modal>
+        ) : (
+          <Modal className="w-[calc(100vw-2rem)] max-w-md">
+            <Dialog className="p-6">
+              {({ close }) => <CreateChannelForm {...form} memberPicker={false} close={close} />}
+            </Dialog>
+          </Modal>
+        )}
+      </ModalOverlay>
+      <UnsavedChangesDialog {...guard.promptProps} />
+    </>
   );
 }
 
@@ -157,6 +175,7 @@ type CreateChannelFormProps = Pick<
   candidates: GroupChatCandidate[];
   directory: { isPending: boolean; isError: boolean; refetch: () => unknown };
   busy: { current: boolean };
+  onDirtyChange: (dirty: boolean) => void;
   close: () => void;
 };
 
@@ -176,16 +195,17 @@ function CreateChannelForm({
   candidates,
   directory,
   busy,
+  onDirtyChange,
   close,
 }: CreateChannelFormProps) {
   const [name, setName] = useState(defaultName);
-  const [projectId, setProjectId] = useState(() =>
+  const [initialProjectId] = useState(() =>
     projects.some((project) => project.id === defaultProjectId) ? defaultProjectId! : "",
   );
+  const [projectId, setProjectId] = useState(initialProjectId);
   const [makePrivate, setMakePrivate] = useState(false);
-  const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string>>(() =>
-    initialKeys(initialMembers),
-  );
+  const [startingKeys] = useState(() => initialKeys(initialMembers));
+  const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string>>(startingKeys);
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -200,6 +220,14 @@ function CreateChannelForm({
   const nameValid = CHANNEL_NAME_PATTERN.test(name.trim());
   const canCreate = canCreateGroupChat(selectedKeys.size, minMembers);
   const locked = saving || created !== null;
+  const dirty =
+    created === null &&
+    (name !== defaultName ||
+      projectId !== initialProjectId ||
+      makePrivate ||
+      selectedKeys.size !== startingKeys.size ||
+      [...selectedKeys].some((key) => !startingKeys.has(key)));
+  useReportDirty(dirty, onDirtyChange);
   function toggle(key: string, on: boolean) {
     setSelectedKeys((previous) => toggleGroupChatKey(previous, key, on));
   }

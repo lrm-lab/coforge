@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { Text } from "react-aria-components";
 import {
   Archive,
   EyeOff,
@@ -12,10 +11,7 @@ import {
   Trash01,
 } from "@untitledui/icons";
 
-import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
-import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { Button } from "#src/components/base/buttons/button";
-import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 import { m } from "#src/paraglide/messages";
 import type { ChannelConversationView } from "./channel-conversation";
 import type { ConfirmedAction } from "./channel-action-confirm-dialog";
@@ -23,8 +19,7 @@ import { isPrivateChannel } from "./channel-visibility";
 import { setPublicChannelArchived } from "./channel-lifecycle.functions";
 import { PanelSection } from "./settings-panel-parts";
 
-/* The channel settings slideout's Actions section and its unsaved-changes prompt
- * (`channel-settings-panel`). */
+/* The channel settings slideout's Actions section (`channel-settings-panel`). */
 
 export function ActionsSection({
   conversation,
@@ -144,55 +139,5 @@ export function ActionsSection({
         </p>
       )}
     </PanelSection>
-  );
-}
-
-export function UnsavedChangesDialog({
-  open,
-  saving,
-  onKeepEditing,
-  onDiscard,
-  onSaveAndClose,
-}: {
-  open: boolean;
-  saving: boolean;
-  onKeepEditing: () => void;
-  onDiscard: () => void;
-  onSaveAndClose: () => Promise<void>;
-}) {
-  return (
-    <ModalOverlay
-      isOpen={open}
-      isDismissable={!saving}
-      onOpenChange={(next) => {
-        if (!next && !saving) onKeepEditing();
-      }}
-    >
-      <Modal className="w-[calc(100vw-2rem)] max-w-lg">
-        <Dialog className="text-left">
-          <DialogHeader title={m.channel_settings_unsaved_title()} />
-          <Text slot="description" className="mx-6 mt-4 block text-sm text-secondary">
-            {m.channel_settings_unsaved_message()}
-          </Text>
-          <DialogActions className="mt-6 px-6 pb-6">
-            <DialogCancel isDisabled={saving} onPress={onKeepEditing}>
-              {m.channel_settings_keep_editing()}
-            </DialogCancel>
-            {/* Beside Save, Discard stays outlined: one filled button per row. */}
-            <DialogAction color="secondary-destructive" isDisabled={saving} onPress={onDiscard}>
-              {m.channel_settings_discard()}
-            </DialogAction>
-            <DialogAction
-              isDisabled={saving}
-              isLoading={saving}
-              showTextWhileLoading
-              onPress={() => void onSaveAndClose()}
-            >
-              {saving ? m.channel_settings_saving() : m.channel_settings_save_and_close()}
-            </DialogAction>
-          </DialogActions>
-        </Dialog>
-      </Modal>
-    </ModalOverlay>
   );
 }

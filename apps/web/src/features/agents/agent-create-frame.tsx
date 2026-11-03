@@ -1,19 +1,33 @@
-import type { FormEvent, ReactNode } from "react";
+import { createContext, useContext, useState, type FormEvent, type ReactNode } from "react";
 import { Heading, Text } from "react-aria-components";
 import { XClose as X } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
+import {
+  UnsavedChangesDialog,
+  useReportDirty,
+  useUnsavedChangesGuard,
+} from "#src/components/ui/unsaved-changes-dialog";
 import { m } from "#src/paraglide/messages";
 import { useScrollEdges } from "#src/hooks/use-scroll-edges";
 import { cx } from "#src/utils/cx";
 import { AGENT_ILLUSTRATIONS } from "./agent-illustrations";
 
+/** What the frame's parts share: the form reports whether it holds edits, and the intro's close
+ * button and the footer's Cancel close through `requestClose`, which asks first when it does. */
+const AgentCreateGuardContext = createContext<{
+  setDirty: (dirty: boolean) => void;
+  requestClose: () => void;
+} | null>(null);
+
 /** The new-Agent dialog's frame: a 400px card whose forms swap inside it, so choosing the other
  * kind of Agent never closes and reopens the dialog. It hangs from near the top of the screen, not
  * centred, so a form that grows or shrinks moves only its bottom edge. A form is an
- * `AgentCreateForm`: its intro and footer stay put and only its fields scroll. */
+ * `AgentCreateForm`: its intro and footer stay put and only its fields scroll. Closing with edits
+ * in the form (Escape, a click outside, the close button, Cancel) asks first; a create that
+ * succeeds closes through `onOpenChange` directly. */
 export function AgentCreateModal({
   open,
   onOpenChange,
@@ -26,18 +40,33 @@ export function AgentCreateModal({
   dismissable?: boolean;
   children: ReactNode;
 }) {
+  const [dirty, setDirty] = useState(false);
+  const guard = useUnsavedChangesGuard({
+    overlayOpen: open,
+    dirty,
+    close: () => onOpenChange(false),
+  });
   return (
-    <ModalOverlay
-      isOpen={open}
-      className="sm:items-start sm:[--modal-pt:12vh]"
-      onOpenChange={(next) => {
-        if (dismissable) onOpenChange(next);
-      }}
-    >
-      <Modal className="flex w-[calc(100vw-2rem)] max-w-100 flex-col rounded-xl max-sm:overflow-hidden">
-        <Dialog className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</Dialog>
-      </Modal>
-    </ModalOverlay>
+    <>
+      <ModalOverlay
+        isOpen={open}
+        className="sm:items-start sm:[--modal-pt:12vh]"
+        onOpenChange={(next) => {
+          if (!dismissable) return;
+          if (next) onOpenChange(true);
+          else guard.requestClose();
+        }}
+      >
+        <Modal className="flex w-[calc(100vw-2rem)] max-w-100 flex-col rounded-xl max-sm:overflow-hidden">
+          <Dialog className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <AgentCreateGuardContext value={{ setDirty, requestClose: guard.requestClose }}>
+              {children}
+            </AgentCreateGuardContext>
+          </Dialog>
+        </Modal>
+      </ModalOverlay>
+      <UnsavedChangesDialog {...guard.promptProps} />
+    </>
   );
 }
 
@@ -46,17 +75,30 @@ export function AgentCreateForm({
   onSubmit,
   intro,
   footer,
+  changed = false,
   children,
 }: {
   onSubmit?: (event: FormEvent<HTMLFormElement>) => void;
+  /** Whether a choice the form holds in state, not in a text field, differs from its default. */
+  changed?: boolean;
   /** Absent where the dialog's head sits outside the form (the new-Agent dialog's kind cards). */
   intro?: ReactNode;
   footer: ReactNode;
   children: ReactNode;
 }) {
   const { ref, start: above, end: below } = useScrollEdges("y");
+  // The fields are uncontrolled or prefilled with a suggestion, so typing in any of them is the
+  // edit; once typed in, the form stays changed.
+  const [typed, setTyped] = useState(false);
+  const setDirty = useContext(AgentCreateGuardContext)?.setDirty;
+  const dirty = typed || changed;
+  useReportDirty(dirty, setDirty);
   return (
-    <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
+    <form
+      onSubmit={onSubmit}
+      onInput={() => setTyped(true)}
+      className="flex min-h-0 flex-1 flex-col"
+    >
       {intro && <div className="shrink-0">{intro}</div>}
       {/* A divider on each side that hides more fields, so a cut-off form reads as one that scrolls. */}
       <div
@@ -90,6 +132,7 @@ export function AgentCreateIntro({
   children?: ReactNode;
 }) {
   const Illustration = AGENT_ILLUSTRATIONS[illustration];
+  const requestClose = useContext(AgentCreateGuardContext)?.requestClose ?? onClose;
   return (
     <div className="relative px-6 pt-6 text-center">
       {onClose && (
@@ -99,7 +142,7 @@ export function AgentCreateIntro({
           icon={X}
           size="sm"
           color="tertiary"
-          onClick={onClose}
+          onClick={requestClose}
           className="absolute top-3 right-3"
         />
       )}
@@ -131,6 +174,9 @@ export function AgentCreateFooter({
   submitting: boolean;
   submitDisabled?: boolean;
 }) {
+  // While a create runs, Cancel stops it at once, as before; otherwise it asks about edits first.
+  const guarded = useContext(AgentCreateGuardContext)?.requestClose;
+  const requestClose = submitting || !guarded ? onCancel : guarded;
   // Two equal halves, as in the design.
   return (
     <div className="grid grid-cols-2 gap-3 px-6 pt-4 pb-6">
@@ -139,7 +185,7 @@ export function AgentCreateFooter({
         color="secondary"
         size="md"
         isDisabled={cancelDisabled}
-        onPress={onCancel}
+        onPress={requestClose}
       >
         {m.controls_cancel()}
       </Button>

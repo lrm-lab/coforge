@@ -5,6 +5,10 @@ import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { Button } from "#src/components/base/buttons/button";
 import { TextArea } from "#src/components/base/textarea/textarea";
 import { Alert } from "#src/components/ui/alert";
+import {
+  UnsavedChangesDialog,
+  useUnsavedChangesGuard,
+} from "#src/components/ui/unsaved-changes-dialog";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { m } from "#src/paraglide/messages";
 import { REVIEW_REASON_MAX_LENGTH } from "./app-publish-status";
@@ -26,54 +30,74 @@ export function RejectReviewDialog({
   const [reason, setReason] = useState("");
   const [error, setError] = useState(false);
   const [pending, guard] = useSubmitGuard();
+  // A typed reason is the edit; discarding it also empties the field, as the dialog stays mounted.
+  const unsaved = useUnsavedChangesGuard({
+    overlayOpen: open,
+    dirty: reason.trim() !== "",
+    close: () => onOpenChange(false),
+    onDiscard: () => {
+      setReason("");
+      setError(false);
+    },
+  });
   return (
-    <ModalOverlay isOpen={open} isDismissable={!pending} onOpenChange={onOpenChange}>
-      <Modal className="w-[calc(100vw-2rem)] max-w-md">
-        <Dialog className="grid gap-4 p-6 text-left">
-          <Heading slot="title" className="text-lg font-semibold text-primary">
-            {m.apps_review_reject_title({ name: appName })}
-          </Heading>
-          <TextArea
-            label={m.apps_review_reject_reason()}
-            value={reason}
-            onChange={setReason}
-            rows={4}
-            maxLength={REVIEW_REASON_MAX_LENGTH}
-            isDisabled={pending}
-          />
-          {error && <Alert color="error" title={m.apps_review_reject_error()} />}
-          <div className="flex justify-end gap-3">
-            <Button
-              type="button"
-              size="sm"
-              color="secondary"
+    <>
+      <ModalOverlay
+        isOpen={open}
+        isDismissable={!pending}
+        onOpenChange={(next) => {
+          if (next) onOpenChange(true);
+          else if (!pending) unsaved.requestClose();
+        }}
+      >
+        <Modal className="w-[calc(100vw-2rem)] max-w-md">
+          <Dialog className="grid gap-4 p-6 text-left">
+            <Heading slot="title" className="text-lg font-semibold text-primary">
+              {m.apps_review_reject_title({ name: appName })}
+            </Heading>
+            <TextArea
+              label={m.apps_review_reject_reason()}
+              value={reason}
+              onChange={setReason}
+              rows={4}
+              maxLength={REVIEW_REASON_MAX_LENGTH}
               isDisabled={pending}
-              onPress={() => onOpenChange(false)}
-            >
-              {m.apps_review_cancel()}
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              color="primary-destructive"
-              isLoading={pending}
-              showTextWhileLoading
-              onPress={() =>
-                void guard(async () => {
-                  setError(false);
-                  try {
-                    await onReject(reason);
-                  } catch {
-                    setError(true);
-                  }
-                })
-              }
-            >
-              {pending ? m.apps_review_rejecting() : m.apps_review_reject_confirm()}
-            </Button>
-          </div>
-        </Dialog>
-      </Modal>
-    </ModalOverlay>
+            />
+            {error && <Alert color="error" title={m.apps_review_reject_error()} />}
+            <div className="flex justify-end gap-3">
+              <Button
+                type="button"
+                size="sm"
+                color="secondary"
+                isDisabled={pending}
+                onPress={unsaved.requestClose}
+              >
+                {m.apps_review_cancel()}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                color="primary-destructive"
+                isLoading={pending}
+                showTextWhileLoading
+                onPress={() =>
+                  void guard(async () => {
+                    setError(false);
+                    try {
+                      await onReject(reason);
+                    } catch {
+                      setError(true);
+                    }
+                  })
+                }
+              >
+                {pending ? m.apps_review_rejecting() : m.apps_review_reject_confirm()}
+              </Button>
+            </div>
+          </Dialog>
+        </Modal>
+      </ModalOverlay>
+      <UnsavedChangesDialog {...unsaved.promptProps} />
+    </>
   );
 }

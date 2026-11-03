@@ -10,6 +10,10 @@ import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { useAppToast } from "#src/components/ui/toast";
+import {
+  UnsavedChangesDialog,
+  useUnsavedChangesGuard,
+} from "#src/components/ui/unsaved-changes-dialog";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
@@ -90,6 +94,14 @@ export function MessageForwardDialog({
   });
 
   const picked = [...selected.values()];
+  // Picked destinations or a typed note are the user's edits; every way out asks before dropping
+  // them.
+  const guard = useUnsavedChangesGuard({
+    // Mounted only while open.
+    overlayOpen: true,
+    dirty: picked.length > 0 || note.trim() !== "",
+    close: onClose,
+  });
   // A public channel the viewer has not joined is joined on send; the button says so, so nothing
   // joins silently.
   const unjoined = picked.filter(
@@ -234,89 +246,94 @@ export function MessageForwardDialog({
   );
 
   return (
-    <ModalOverlay
-      isOpen
-      isDismissable={!sending}
-      onOpenChange={(open) => {
-        if (!open && !sending) onClose();
-      }}
-      className="max-lg:[--modal-pb:0px] max-lg:[--modal-pt:0px] max-lg:px-0"
-    >
-      <Modal className="max-lg:h-(--visual-viewport-height) max-lg:w-full max-lg:rounded-none max-lg:safe-area-padding lg:w-[calc(100vw-4rem)] lg:max-w-4xl">
-        <Dialog className="flex h-full max-h-[inherit] flex-col overflow-hidden text-left lg:h-[min(40rem,calc(var(--visual-viewport-height)-4rem))]">
-          {desktop || step === "destinations" ? (
-            <DialogHeader
-              title={m.message_forward_action()}
-              onClose={sending ? undefined : onClose}
-              className="px-4 pt-4 pb-3 lg:px-6 lg:pt-6"
-            />
-          ) : (
-            <div className="flex items-center gap-2 px-4 pt-4 pb-3">
-              <ButtonUtility
-                size="sm"
-                color="tertiary"
-                icon={ArrowLeft}
-                aria-label={m.message_forward_back()}
-                onClick={() => setStep("destinations")}
+    <>
+      <ModalOverlay
+        isOpen
+        isDismissable={!sending}
+        onOpenChange={(open) => {
+          if (!open && !sending) guard.requestClose();
+        }}
+        className="max-lg:[--modal-pb:0px] max-lg:[--modal-pt:0px] max-lg:px-0"
+      >
+        <Modal className="max-lg:h-(--visual-viewport-height) max-lg:w-full max-lg:rounded-none max-lg:safe-area-padding lg:w-[calc(100vw-4rem)] lg:max-w-4xl">
+          <Dialog className="flex h-full max-h-[inherit] flex-col overflow-hidden text-left lg:h-[min(40rem,calc(var(--visual-viewport-height)-4rem))]">
+            {desktop || step === "destinations" ? (
+              <DialogHeader
+                title={m.message_forward_action()}
+                onClose={sending ? undefined : guard.requestClose}
+                className="px-4 pt-4 pb-3 lg:px-6 lg:pt-6"
               />
-              <Heading slot="title" className="text-lg font-semibold text-primary">
-                {m.message_forward_action()}
-              </Heading>
-            </div>
-          )}
-          {/* Each pane may be narrower than its rows' text (`min-w-0`): a long name or `@handle`
-              truncates instead of widening the pane past the dialog. */}
-          <div className="flex min-h-0 flex-1 border-t border-secondary lg:grid lg:grid-cols-[2fr_3fr]">
-            <div
-              className={
-                step === "note"
-                  ? "flex min-h-0 min-w-0 flex-col max-lg:hidden lg:border-r lg:border-secondary"
-                  : "flex min-h-0 min-w-0 flex-1 flex-col lg:border-r lg:border-secondary"
-              }
-            >
-              <ForwardTargetPane
-                query={query}
-                onQueryChange={setQuery}
-                targets={targets.data ?? null}
-                failed={failed}
-                error={targets.isError}
-                selected={selected}
-                onToggle={toggle}
-              />
-            </div>
-            <div
-              className={
-                step === "destinations"
-                  ? "flex min-h-0 min-w-0 flex-col max-lg:hidden"
-                  : "flex min-h-0 min-w-0 flex-1 flex-col"
-              }
-            >
-              <ForwardNotePane
-                forwarded={forwardedPreview(source, plainBody)}
-                attachments={source.message.attachments}
-                picked={picked}
-                onRemove={(target) => toggle(target, false)}
-                note={note}
-                onNoteChange={setNote}
-                placeholder={placeholder}
-                sendLabel={
-                  unjoined.length > 0 ? m.message_forward_join_and_send() : m.message_forward_send()
+            ) : (
+              <div className="flex items-center gap-2 px-4 pt-4 pb-3">
+                <ButtonUtility
+                  size="sm"
+                  color="tertiary"
+                  icon={ArrowLeft}
+                  aria-label={m.message_forward_back()}
+                  onClick={() => setStep("destinations")}
+                />
+                <Heading slot="title" className="text-lg font-semibold text-primary">
+                  {m.message_forward_action()}
+                </Heading>
+              </div>
+            )}
+            {/* Each pane may be narrower than its rows' text (`min-w-0`): a long name or `@handle`
+                truncates instead of widening the pane past the dialog. */}
+            <div className="flex min-h-0 flex-1 border-t border-secondary lg:grid lg:grid-cols-[2fr_3fr]">
+              <div
+                className={
+                  step === "note"
+                    ? "flex min-h-0 min-w-0 flex-col max-lg:hidden lg:border-r lg:border-secondary"
+                    : "flex min-h-0 min-w-0 flex-1 flex-col lg:border-r lg:border-secondary"
                 }
-                sending={sending}
-                onSend={() => void send()}
-                notice={noticeView}
-              />
+              >
+                <ForwardTargetPane
+                  query={query}
+                  onQueryChange={setQuery}
+                  targets={targets.data ?? null}
+                  failed={failed}
+                  error={targets.isError}
+                  selected={selected}
+                  onToggle={toggle}
+                />
+              </div>
+              <div
+                className={
+                  step === "destinations"
+                    ? "flex min-h-0 min-w-0 flex-col max-lg:hidden"
+                    : "flex min-h-0 min-w-0 flex-1 flex-col"
+                }
+              >
+                <ForwardNotePane
+                  forwarded={forwardedPreview(source, plainBody)}
+                  attachments={source.message.attachments}
+                  picked={picked}
+                  onRemove={(target) => toggle(target, false)}
+                  note={note}
+                  onNoteChange={setNote}
+                  placeholder={placeholder}
+                  sendLabel={
+                    unjoined.length > 0
+                      ? m.message_forward_join_and_send()
+                      : m.message_forward_send()
+                  }
+                  sending={sending}
+                  onSend={() => void send()}
+                  notice={noticeView}
+                />
+              </div>
             </div>
-          </div>
-          {!desktop && step === "destinations" && (
-            <div className="flex shrink-0 justify-end border-t border-secondary px-4 py-3 pb-[max(0.75rem,var(--spacing-safe-bottom))]">
-              <Button size="md" isDisabled={picked.length === 0} onPress={() => setStep("note")}>
-                {m.message_forward_next()}
-              </Button>
-            </div>
-          )}
-        </Dialog>
-      </Modal>
-    </ModalOverlay>
+            {!desktop && step === "destinations" && (
+              <div className="flex shrink-0 justify-end border-t border-secondary px-4 py-3 pb-[max(0.75rem,var(--spacing-safe-bottom))]">
+                <Button size="md" isDisabled={picked.length === 0} onPress={() => setStep("note")}>
+                  {m.message_forward_next()}
+                </Button>
+              </div>
+            )}
+          </Dialog>
+        </Modal>
+      </ModalOverlay>
+      <UnsavedChangesDialog {...guard.promptProps} />
+    </>
   );
 }

@@ -7,6 +7,11 @@ import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Alert } from "#src/components/ui/alert";
+import {
+  UnsavedChangesDialog,
+  useReportDirty,
+  useUnsavedChangesGuard,
+} from "#src/components/ui/unsaved-changes-dialog";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
@@ -36,7 +41,7 @@ import { NotificationsSection, useNotificationEvents } from "./app-editor-notifi
 import { PermissionFields } from "./app-editor-permissions";
 import { SetupSection, type SetupErrors } from "./app-editor-setup";
 import { refusedSetupFields, setupDraftOf, setupInputOf, type SetupDraft } from "./app-setup-draft";
-import type { AppPermissionGroup } from "./app-permissions";
+import { samePermissionGroups, type AppPermissionGroup } from "./app-permissions";
 import { APP_WHEN_TO_USE_MAX_LENGTH, refusedAppFields } from "./app-registration";
 import { AppSecretPanel, type IssuedSecret } from "./app-secret-panel";
 import type { AppDeclarations, AppSummary } from "./apps.functions";
@@ -48,33 +53,41 @@ import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/di
  * flag is on: `declares`), and, when editing, Agent access, Distribution and the Danger zone. One
  * Save sends the form, the declarations included, which a registration writes with the app;
  * approving a permissions update, regenerating the secret and deleting act at once. A click outside
- * never closes it; Escape and the close button do, except while a save runs.
+ * never closes it; Escape and the close button do, except while a save runs, and with unsaved
+ * edits they ask first.
  */
 export function AppEditor({ open, onClose, ...form }: AppEditorProps) {
   const [saving, guard] = useSubmitGuard();
+  // The form reports its unsaved edits; every way out reaches the overlay's `onOpenChange`.
+  const [dirty, setDirty] = useState(false);
+  const unsaved = useUnsavedChangesGuard({ overlayOpen: open, dirty, close: onClose });
   return (
-    <ModalOverlay
-      isOpen={open}
-      isKeyboardDismissDisabled={saving}
-      onOpenChange={(next) => {
-        if (!next && !saving) onClose();
-      }}
-    >
-      <Modal className="w-[calc(100vw-2rem)] max-w-4xl">
-        <Dialog className="flex max-h-[inherit] flex-col overflow-hidden text-left">
-          {({ close }) => (
-            // Each opening starts from the app as it is now, or from an empty form.
-            <AppEditorForm
-              key={form.app?.key ?? "new"}
-              {...form}
-              saving={saving}
-              guard={guard}
-              onClose={close}
-            />
-          )}
-        </Dialog>
-      </Modal>
-    </ModalOverlay>
+    <>
+      <ModalOverlay
+        isOpen={open}
+        isKeyboardDismissDisabled={saving}
+        onOpenChange={(next) => {
+          if (!next && !saving) unsaved.requestClose();
+        }}
+      >
+        <Modal className="w-[calc(100vw-2rem)] max-w-4xl">
+          <Dialog className="flex max-h-[inherit] flex-col overflow-hidden text-left">
+            {({ close }) => (
+              // Each opening starts from the app as it is now, or from an empty form.
+              <AppEditorForm
+                key={form.app?.key ?? "new"}
+                {...form}
+                saving={saving}
+                guard={guard}
+                onClose={close}
+                onDirtyChange={setDirty}
+              />
+            )}
+          </Dialog>
+        </Modal>
+      </ModalOverlay>
+      <UnsavedChangesDialog {...unsaved.promptProps} />
+    </>
   );
 }
 
@@ -115,6 +128,7 @@ function AppEditorForm({
   saving,
   guard,
   onClose,
+  onDirtyChange,
   onSubmit,
   onRegenerate,
   onDelete,
@@ -128,6 +142,7 @@ function AppEditorForm({
 }: Omit<AppEditorProps, "open"> & {
   saving: boolean;
   guard: ReturnType<typeof useSubmitGuard>[1];
+  onDirtyChange: (dirty: boolean) => void;
 }) {
   const editing = app !== undefined;
   const [draft, setDraft] = useState<AppDraft>(() => (app ? draftOf(app) : EMPTY_APP_DRAFT));
@@ -176,6 +191,24 @@ function AppEditorForm({
   const [active, setActive] = useActiveSection(scroller, sections);
   const reducedMotion = useReducedMotion() ?? false;
   const tooLong = whenToUseLength(draft) > APP_WHEN_TO_USE_MAX_LENGTH;
+  // The form is dirty when what it sends differs from what it opened with or was last saved as (a
+  // save that keeps the editor open moves the baseline). A saved app's permissions and events are
+  // compared with its stored declaration instead, as the permissions section's own "unsaved" note
+  // does: a newer declaration read meanwhile replaces them without being an edit.
+  const snapshot = () =>
+    JSON.stringify({
+      draft,
+      setup: setupDraft,
+      ...(permissions
+        ? {}
+        : { groups: [...groups].sort(), events: [...notificationEvents.submitted].sort() }),
+    });
+  const [baseline, setBaseline] = useState(snapshot);
+  const dirty =
+    snapshot() !== baseline ||
+    (permissions !== undefined &&
+      (!samePermissionGroups(groups, permissions.declared) || notificationEvents.unsaved));
+  useReportDirty(dirty, onDirtyChange);
 
   function change<Field extends keyof AppDraft>(field: Field, value: AppDraft[Field]) {
     setDraft((current) => ({ ...current, [field]: value }));
@@ -211,6 +244,7 @@ function AppEditorForm({
         setup: declares.setup ? setupInputOf(setupDraft) : undefined,
         stayOpen,
       });
+      setBaseline(snapshot());
       return true;
     } catch (cause) {
       const problem = appFormProblem(cause, editing ? m.apps_error_update : m.apps_error_register);

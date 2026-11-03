@@ -189,7 +189,10 @@ test("the add view creates an Agent named by the search, and it joins the channe
     await waitFor(`${agentForm}?.querySelector('[role="alert"]')?.textContent.trim().length > 0`);
     expect(await evaluate<boolean>(`${panel} !== null`)).toBe(true);
     await browser("screenshot", join(artifacts, "refused.png"));
+    // The name typed is an edit, so Cancel asks first.
     await clickText(`[role="dialog"] button`, "Cancel");
+    await waitFor(`${byText(`[role="dialog"] button`, "Discard Changes")} !== undefined`);
+    await clickText(`[role="dialog"] button`, "Discard Changes");
     await waitFor(`${agentForm} === undefined`);
     expect(await db.agent.count({ where: { workspaceId, name: agentName } })).toBe(1);
 

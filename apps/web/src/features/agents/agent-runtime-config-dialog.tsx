@@ -8,6 +8,11 @@ import { Input } from "#src/components/base/input/input";
 import { Select } from "#src/components/base/select/select";
 import { StatusDot } from "#src/components/ui/status-dot";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
+import {
+  UnsavedChangesDialog,
+  useReportDirty,
+  useUnsavedChangesGuard,
+} from "#src/components/ui/unsaved-changes-dialog";
 import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { m } from "#src/paraglide/messages";
@@ -59,6 +64,7 @@ export function AgentRuntimeConfigForm({
   saving,
   error,
   onClose,
+  onDirtyChange,
   onSave,
 }: {
   computerId: string;
@@ -72,6 +78,8 @@ export function AgentRuntimeConfigForm({
   saving: boolean;
   error: string;
   onClose: () => void;
+  /** Tells the dialog whether the form holds unsaved edits, so closing can ask first. */
+  onDirtyChange?: (dirty: boolean) => void;
   onSave: (form: FormData, changed: { runtime: boolean; environment: boolean }) => void;
 }) {
   const [selectedComputerId, setSelectedComputerId] = useState(
@@ -93,6 +101,7 @@ export function AgentRuntimeConfigForm({
   const envKeyErrors = envRows.map((row) => agentEnvironmentNameError(row.key));
   const computerDirty = Boolean(computers) && selectedComputerId !== (computerId || "");
   const dirty = runtimeDirty || envDirty || computerDirty;
+  useReportDirty(dirty, onDirtyChange);
   const envPending = environment !== undefined && !environment.loaded;
   const showComputerPicker = Boolean(computers && computers.length > 0);
 
@@ -274,7 +283,7 @@ export function AgentRuntimeConfigForm({
  * `AgentRuntimeCredentialDialog` and the full page's edit dialog, rather than editing the
  * RUNTIME CONFIG section in place: the Runtime/Model/Reasoning badges never change; only the
  * pencil opens this. Closing (Esc, overlay click, Cancel, the header's X) is blocked while
- * `saving`, same as the credential dialog.
+ * `saving`, same as the credential dialog, and asks first while the form holds unsaved edits.
  */
 export function AgentRuntimeConfigDialog({
   open,
@@ -303,33 +312,41 @@ export function AgentRuntimeConfigDialog({
   error: string;
   onSave: (form: FormData, changed: { runtime: boolean; environment: boolean }) => void;
 }) {
+  // The form reports its edits; every way out (Esc, overlay click, Cancel, the X) reaches the
+  // overlay's `onOpenChange`, where closing with edits asks first.
+  const [dirty, setDirty] = useState(false);
+  const guard = useUnsavedChangesGuard({ overlayOpen: open, dirty, close: onClose });
   return (
-    <ModalOverlay
-      isOpen={open}
-      onOpenChange={(next: boolean) => {
-        if (saving) return;
-        if (!next) onClose();
-      }}
-    >
-      <Modal className="w-[calc(100vw-2rem)] max-w-lg">
-        <Dialog>
-          {({ close }) => (
-            <AgentRuntimeConfigForm
-              computerId={computerId}
-              computers={computers}
-              computerLocked={computerLocked}
-              credentialConfigured={credentialConfigured}
-              initial={initial}
-              onLoad={onLoad}
-              environment={environment}
-              saving={saving}
-              error={error}
-              onClose={close}
-              onSave={onSave}
-            />
-          )}
-        </Dialog>
-      </Modal>
-    </ModalOverlay>
+    <>
+      <ModalOverlay
+        isOpen={open}
+        onOpenChange={(next: boolean) => {
+          if (saving) return;
+          if (!next) guard.requestClose();
+        }}
+      >
+        <Modal className="w-[calc(100vw-2rem)] max-w-lg">
+          <Dialog>
+            {({ close }) => (
+              <AgentRuntimeConfigForm
+                computerId={computerId}
+                computers={computers}
+                computerLocked={computerLocked}
+                credentialConfigured={credentialConfigured}
+                initial={initial}
+                onLoad={onLoad}
+                environment={environment}
+                saving={saving}
+                error={error}
+                onClose={close}
+                onDirtyChange={setDirty}
+                onSave={onSave}
+              />
+            )}
+          </Dialog>
+        </Modal>
+      </ModalOverlay>
+      <UnsavedChangesDialog {...guard.promptProps} />
+    </>
   );
 }

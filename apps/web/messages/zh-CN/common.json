@@ -108,5 +108,11 @@
   "connection_offline_since": "内容停在 {time}。",
   "connection_offline_body": "重新连接后会显示新消息。",
   "connection_retry_now": "立即重试",
-  "connection_device_offline_title": "你已离线"
+  "connection_device_offline_title": "你已离线",
+  "unsaved_changes_title": "未保存的修改",
+  "unsaved_changes_message": "有未保存的修改，要放弃吗？",
+  "unsaved_changes_keep_editing": "继续编辑",
+  "unsaved_changes_discard": "放弃更改",
+  "unsaved_changes_save_and_close": "保存并关闭",
+  "unsaved_changes_saving": "保存中…"
 }

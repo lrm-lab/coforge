@@ -127,11 +127,7 @@
   "channel_resume_agents_archived": "此群聊已归档，无法在这里恢复其中的 Agent。",
   "channel_resume_agents_offline": "{total} 个 Agent 中有 {count} 个没有恢复：它们所在的电脑离线。它们会保持停止，电脑重新上线后可以再次恢复。",
   "channel_settings_delete_denied": "只有工作区所有者或管理员可以删除群聊。",
-  "channel_settings_unsaved_title": "未保存的修改",
   "channel_settings_unsaved_message": "群聊名称或描述有未保存的修改，关闭前要保存吗？",
-  "channel_settings_save_and_close": "保存并关闭",
-  "channel_settings_discard": "放弃更改",
-  "channel_settings_keep_editing": "继续编辑",
   "channel_archived_notice": "该群聊已归档。",
   "channel_archived_unarchive": "取消归档",
   "channel_unread_accessible": [

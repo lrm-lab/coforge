@@ -108,5 +108,11 @@
   "connection_offline_since": "Up to date as of {time}.",
   "connection_offline_body": "New messages show up once it reconnects.",
   "connection_retry_now": "Retry Now",
-  "connection_device_offline_title": "You're offline"
+  "connection_device_offline_title": "You're offline",
+  "unsaved_changes_title": "Unsaved Changes",
+  "unsaved_changes_message": "You have unsaved changes. Discard them?",
+  "unsaved_changes_keep_editing": "Keep Editing",
+  "unsaved_changes_discard": "Discard Changes",
+  "unsaved_changes_save_and_close": "Save and Close",
+  "unsaved_changes_saving": "Saving…"
 }

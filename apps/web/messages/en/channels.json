@@ -127,11 +127,7 @@
   "channel_resume_agents_archived": "This channel is archived, so its Agents cannot be resumed from here.",
   "channel_resume_agents_offline": "{count} of {total} Agents were not resumed because their Computer is offline. They stay stopped; resume them again once it is back.",
   "channel_settings_delete_denied": "Only a Workspace owner or admin can delete a channel.",
-  "channel_settings_unsaved_title": "Unsaved Changes",
   "channel_settings_unsaved_message": "The channel name or description has unsaved edits. Save them before closing?",
-  "channel_settings_save_and_close": "Save and Close",
-  "channel_settings_discard": "Discard Changes",
-  "channel_settings_keep_editing": "Keep Editing",
   "channel_archived_notice": "This channel is archived.",
   "channel_archived_unarchive": "Unarchive",
   "channel_unread_accessible": [

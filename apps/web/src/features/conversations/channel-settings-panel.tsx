@@ -13,6 +13,7 @@ import { useAppToast } from "#src/components/ui/toast";
 import { AgentProfilePanel } from "#src/features/agents/profile-panel/agent-profile-panel";
 import { PersonProfilePanel } from "#src/features/agents/person-profile-panel";
 import type { AgentProfileTab as AgentProfileTabId } from "#src/features/agents/profile-panel/profile-panel-search";
+import { UnsavedChangesDialog } from "#src/components/ui/unsaved-changes-dialog";
 import { m } from "#src/paraglide/messages";
 import type { ChannelConversationView } from "./channel-conversation";
 import {
@@ -34,7 +35,7 @@ import {
   setPublicConversationPinned,
 } from "./channels.functions";
 import { ChannelActionConfirmDialog, type ConfirmedAction } from "./channel-action-confirm-dialog";
-import { ActionsSection, UnsavedChangesDialog } from "./channel-settings-actions";
+import { ActionsSection } from "./channel-settings-actions";
 import { StopChannelAgentsDialog } from "./stop-channel-agents-dialog";
 import { InfoForm, ProjectField, useInfoForm } from "./channel-settings-info";
 
@@ -246,6 +247,7 @@ export function ChannelSettingsPanel({
       <UnsavedChangesDialog
         open={unsavedPromptOpen}
         saving={info.saving}
+        description={m.channel_settings_unsaved_message()}
         onKeepEditing={() => {
           afterClose.current = undefined;
           setUnsavedPromptOpen(false);
@@ -255,7 +257,7 @@ export function ChannelSettingsPanel({
           setUnsavedPromptOpen(false);
           close();
         }}
-        onSaveAndClose={async () => {
+        onSave={async () => {
           const saved = await info.save();
           setUnsavedPromptOpen(false);
           if (saved) close();

@@ -89,7 +89,8 @@ export function LocalAgentForm({
   const [submitting, guard] = useSubmitGuard();
   const workspaceSlug = useWorkspaceSlug();
   const [error, setError] = useState("");
-  const [computerId, setComputerId] = useState(defaults?.computerId ?? computers[0]?.id ?? "");
+  const [initialComputerId] = useState(defaults?.computerId ?? computers[0]?.id ?? "");
+  const [computerId, setComputerId] = useState(initialComputerId);
   const [isPrivate, setIsPrivate] = useState(false);
   // Signing a runtime in from the not-signed-in notice: the flow's dialog, and the runtimes this
   // dialog has seen signed in since, whose stored report the Computer list may not have yet.
@@ -168,6 +169,7 @@ export function LocalAgentForm({
     <>
       <AgentCreateForm
         onSubmit={submit}
+        changed={computerId !== initialComputerId || isPrivate}
         intro={
           !headless && (
             <AgentCreateIntro
