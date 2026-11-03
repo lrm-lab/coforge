@@ -22,6 +22,11 @@ const USERS_ROUTE = {
   path: (name: string) => `/api/agent/v1/users/${encodeURIComponent(name)}`,
 } as const;
 
+/** `coforge label list`: the Workspace's labels. Same routes under `proxy`, `local` and `cloud`. */
+const LABELS_ROUTE = {
+  method: "GET",
+  path: "/api/agent/v1/labels",
+} as const;
 /** `coforge thread list` and the unread list of `coforge inbox check`. Same routes under `proxy`, `local` and `cloud`. */
 const INBOX_LIST_ROUTE = {
   method: "GET",
@@ -175,6 +180,7 @@ export const agentApiRoutes = {
     taskConversations: TASK_CONVERSATION_ROUTES,
     threadList: THREAD_LIST_ROUTE,
     inboxList: INBOX_LIST_ROUTE,
+    labels: LABELS_ROUTE,
     appConfig: APP_CONFIG_ROUTES,
     apps: APP_ROUTES,
     appRegistrations: APP_REGISTRATION_LOCAL_ROUTE,
@@ -217,6 +223,7 @@ export const agentApiRoutes = {
     taskConversations: TASK_CONVERSATION_ROUTES,
     threadList: THREAD_LIST_ROUTE,
     inboxList: INBOX_LIST_ROUTE,
+    labels: LABELS_ROUTE,
     appConfig: APP_CONFIG_ROUTES,
     apps: APP_ROUTES,
     appRegistrations: APP_REGISTRATION_LOCAL_ROUTE,
@@ -334,6 +341,7 @@ export const agentApiRoutes = {
     taskConversations: TASK_CONVERSATION_ROUTES,
     threadList: THREAD_LIST_ROUTE,
     inboxList: INBOX_LIST_ROUTE,
+    labels: LABELS_ROUTE,
     appConfig: APP_CONFIG_ROUTES,
     apps: APP_ROUTES,
     appRegistrations: APP_REGISTRATION_CLOUD_ROUTES,

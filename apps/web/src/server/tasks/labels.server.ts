@@ -257,6 +257,21 @@ export class Labels {
     filter: { group?: string; archived?: boolean } = {},
   ): Promise<LabelSummary[]> {
     await requireWorkspaceMember(this.db, workspaceId, userId);
+    return this.summaries(workspaceId, filter);
+  }
+
+  /** The same read for an Agent: the Agent API has already authenticated it to the Workspace. */
+  async listForWorkspace(
+    workspaceId: string,
+    filter: { group?: string; archived?: boolean } = {},
+  ): Promise<LabelSummary[]> {
+    return this.summaries(workspaceId, filter);
+  }
+
+  private async summaries(
+    workspaceId: string,
+    filter: { group?: string; archived?: boolean },
+  ): Promise<LabelSummary[]> {
     const group = filter.group ? await findLabelGroup(this.db, workspaceId, filter.group) : null;
     if (filter.group && !group) throw new AppError("NOT_FOUND");
     const rows = await this.db.label.findMany({
