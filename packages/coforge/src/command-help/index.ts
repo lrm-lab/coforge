@@ -256,9 +256,10 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
   },
   "task amend": {
     syntax:
-      "coforge task amend --target <channel> [--peer-kind human|agent] --number <n> [--title <title>] [--description <text>|--clear-description] [--blocked-by <task>,...|''] [--parent <task>|''] [--reviewer-isolation] [--json]",
+      "coforge task amend --target <channel> [--peer-kind human|agent] --number <n> [--title <title>] [--description <text>|--clear-description] [--blocked-by <task>,...|''] [--parent <task>|''] [--label <name>]... [--project <slug>|--clear-project] [--reviewer-isolation] [--json]",
     flags: [
       "--blocked-by  replaces the whole set ('' clears it); --parent  the new parent ('' makes it top level)",
+      "--project  file the Task under this Project by slug, kept when its channel changes Project; --clear-project  let it follow its channel's Project again",
     ],
   },
   "task history": {

@@ -492,6 +492,14 @@ test("A board row shows what a task waits for and its parent; show prints blocke
   expect(shown).toContain("    - #ops:#8 [done] Grandchild");
 });
 
+test("show names the Project a task is filed under, or says it has none", () => {
+  const filed = task(5, { project: { id: "p1", name: "Task deps", slug: "task-deps" } });
+  expect(formatTaskShow(filed)).toContain("\nProject: Task deps (task-deps)\n");
+  expect(formatTaskShow(task(6, { project: null }))).toContain("\nProject: (none)\n");
+  // An older server sends no project: nothing is claimed about it.
+  expect(formatTaskShow(task(7))).not.toContain("Project:");
+});
+
 test("A claim refused for a blocker says what it waits for and what happens next", () => {
   const result = {
     tasks: [],

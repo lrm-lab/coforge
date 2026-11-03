@@ -19,6 +19,7 @@ import {
 } from "#src/server/tasks/task-principal.server";
 import { z } from "zod";
 import { AppError } from "#src/lib/app-error";
+import { PROJECT_SLUG_MAX_LENGTH } from "#src/features/projects/projects.schemas";
 import {
   agentAuthMiddleware,
   agentErrorResponse,
@@ -129,7 +130,7 @@ export const taskRequestSchema = z
     labels: z.array(z.string().min(1).max(64)).max(5).optional(),
     removeLabels: z.array(z.string().min(1).max(64)).max(5).optional(),
     labelDescription: z.string().min(1).max(500).optional(),
-    project: z.string().min(1).max(64).nullable().optional(),
+    project: z.string().trim().min(1).max(PROJECT_SLUG_MAX_LENGTH).nullable().optional(),
     expectedRevision: z.number().int().nonnegative().optional(),
   })
   .strict();

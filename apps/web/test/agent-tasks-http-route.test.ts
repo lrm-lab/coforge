@@ -313,3 +313,25 @@ test("a refusal's hint reaches the Agent only when it is one written for Agents"
   const internal = await refuse(new AppError("CONFLICT", { hint: "internal detail" }));
   expect(JSON.stringify(internal)).not.toContain("internal detail");
 });
+
+test("an amend may name any Project slug a Project can have, and null to follow the channel again", async () => {
+  const received: unknown[] = [];
+  const board = {
+    execute: async (_principal: unknown, command: unknown) => {
+      received.push(command);
+      return { tasks: [] };
+    },
+  };
+  const amend = (project: string | null) =>
+    handleAgentTaskPost(
+      request({ idempotencyKey: "r", operation: "amend", target: "#general", number: 1, project }),
+      principal,
+      board,
+    );
+
+  // Project slugs may be 100 characters long (`PROJECT_SLUG_MAX_LENGTH`).
+  expect((await amend("p".repeat(100))).status).toBe(200);
+  expect((await amend(null)).status).toBe(200);
+  expect((await amend("p".repeat(101))).status).toBe(400);
+  expect(received).toMatchObject([{ project: "p".repeat(100) }, { project: null }]);
+});

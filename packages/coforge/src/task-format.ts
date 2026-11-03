@@ -38,6 +38,14 @@ function messageField(task: TaskView): string {
   return task.sourceMessage ? `source=${shortId(task.sourceMessage.messageId)}` : "msg=-";
 }
 
+/** `Project: <name> (<slug>)`, or `(none)`; nothing when an older server sends no project. */
+export function projectLine(project: TaskView["project"]): string[] {
+  if (project === undefined) return [];
+  return [
+    `Project: ${project ? `${foldUntrustedLine(project.name)} (${project.slug})` : "(none)"}`,
+  ];
+}
+
 /** At most this many label names on one list line; the rest fold into `+N`. */
 const LABELS_SHOWN = 3;
 
@@ -229,6 +237,7 @@ export function formatTaskShow(
     `Title: ${fenceMessageBody(task.title)}`,
     `Description: ${task.description ? fenceMessageBody(task.description) : "(none set)"}`,
     `Labels: ${(task.labels ?? []).map((label) => label.name).join(", ") || "(none)"}`,
+    ...projectLine(task.project),
     `Priority: ${task.priority ?? "none"}`,
     ...showRelationLines(task, relations),
   ].join("\n");

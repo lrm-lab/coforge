@@ -95,6 +95,13 @@ test("a direct message's tasks take no project, and only the owner, creator or a
     );
     expect(inDm.code).toBe("INVALID_INPUT");
     expect(inDm.hint).toContain("direct message");
+    // Nor can a direct message's Task be moved into one afterwards.
+    const [dmNumber] = await make("alice", 1, {}, dm.id);
+    const movedIn = await refusal(
+      run("alice", { operation: "amend", number: dmNumber!, project: project.slug }, dm.id),
+    );
+    expect(movedIn.code).toBe("INVALID_INPUT");
+    expect(movedIn.hint).toContain("direct message");
 
     const [number] = await make("alice", 1);
     // Bob is a member but neither the owner nor the creator: the Project is theirs to read only.

@@ -8,6 +8,7 @@ import type {
 import { fenceMessageBody } from "./message-body-format";
 import { formatUtcTimestamp } from "./message-format";
 import { shortId } from "./short-id";
+import { projectLine } from "./task-format";
 
 const oneLine = foldUntrustedLine;
 
@@ -50,6 +51,7 @@ export function formatTaskView(view: AgentTaskViewResponse): string {
     "",
     `Current title: ${fenceMessageBody(view.task.title)}`,
     `Assignee: ${view.task.owner ? `@${view.task.owner.handle}` : "unassigned"}`,
+    ...projectLine(view.task.project),
     ...(view.task.creator
       ? [
           `Created by: @${view.task.creator.handle}${

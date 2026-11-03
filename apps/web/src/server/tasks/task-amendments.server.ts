@@ -196,14 +196,20 @@ export async function amendTask(
     let nextProject = task.project ?? null;
     let nextPinned = task.projectPinned;
     if (projectEdit) {
+      const current = await tx.conversation.findUniqueOrThrow({
+        where: { id: conversationId },
+        select: { directKey: true, project: { select: TASK_PROJECT_SELECT } },
+      });
       if (command.project === null) {
-        const current = await tx.conversation.findUniqueOrThrow({
-          where: { id: conversationId },
-          select: { project: { select: TASK_PROJECT_SELECT } },
-        });
         nextProject = current.project;
         nextPinned = false;
       } else {
+        // As at creation: a direct message's Tasks are filed under no Project.
+        if (current.directKey)
+          throw new AppError("INVALID_INPUT", {
+            errorId: "task-project",
+            hint: "a direct message's Tasks are not filed under a Project",
+          });
         nextProject = await resolveTaskProject(tx, workspaceId, command.project!);
         nextPinned = true;
       }

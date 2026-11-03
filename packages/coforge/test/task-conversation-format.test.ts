@@ -35,6 +35,22 @@ const view = (overrides: Partial<AgentTaskViewResponse> = {}): AgentTaskViewResp
   ...overrides,
 });
 
+test("view names the task's Project under its assignee, when the server sends one", () => {
+  const filed = view({
+    task: {
+      id: "t1",
+      number: 7,
+      title: "Fix the flaky test",
+      status: "in_progress",
+      project: { id: "p1", name: "Task deps", slug: "task-deps" },
+    },
+  });
+  expect(formatTaskView(filed)).toContain("Assignee: unassigned\nProject: Task deps (task-deps)\n");
+  const none = view({ task: { id: "t1", number: 7, title: "x", status: "todo", project: null } });
+  expect(formatTaskView(none)).toContain("Project: (none)");
+  expect(formatTaskView(view())).not.toContain("Project:");
+});
+
 test("a task with its conversation lists the messages oldest first and what to run next", () => {
   expect(formatTaskView(view())).toBe(
     [

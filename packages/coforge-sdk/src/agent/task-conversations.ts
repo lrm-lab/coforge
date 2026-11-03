@@ -5,7 +5,7 @@
  * description of it serves both.
  */
 
-import { isRecord, type TaskPriority, type TaskStatus } from "../internal";
+import { isRecord, type TaskPriority, type TaskProjectRef, type TaskStatus } from "../internal";
 import type { agentApiRoutes } from "./routes";
 
 export type AgentTaskConversationRoutes = typeof agentApiRoutes.cloud.taskConversations;
@@ -55,6 +55,8 @@ export type AgentTaskViewResponse = {
     owner?: { handle: string } | null;
     creator?: { handle: string };
     createdAt?: string;
+    /** The Project it is filed under, null for none; absent from an older server. */
+    project?: TaskProjectRef | null;
     sourceMessage?: {
       messageId: string;
       threadRootId?: string;
