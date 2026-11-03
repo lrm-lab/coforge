@@ -49,6 +49,17 @@ export type LastMessageLines = {
  * message's selected row is a card (`card`). A face that reacts to the pointer over the whole row
  * reads it with `useRowHovered`.
  */
+/** Beside a muted row's name: its activity is muted (no push; the unread still counts). */
+function MutedIcon() {
+  return (
+    <BellOff01
+      role="img"
+      aria-label={m.conversation_muted_dynamics()}
+      className="size-3.5 shrink-0 text-quaternary"
+    />
+  );
+}
+
 /** A muted row's unread count is a quiet gray number, not the near-black badge. */
 function UnreadCount({ count, muted }: { count: number; muted?: boolean }) {
   if (!muted) return <UnreadBadge count={count} />;
@@ -138,27 +149,25 @@ export function ConversationRow({
       {lastMessage ? (
         <span className="flex min-w-0 flex-1 flex-col justify-center">
           <span className="flex min-w-0 items-center gap-2">
-            <span
-              className={cx(
-                "min-w-0 flex-1 truncate text-sm font-medium",
-                current
-                  ? "text-brand-secondary"
-                  : muted
-                    ? "text-tertiary"
-                    : pinned
-                      ? "text-sidebar-fg"
-                      : "text-secondary",
-                muted && "font-normal",
-              )}
-            >
-              {children}
+            {/* The muted icon follows the name, as Raft's; the time keeps the end of the line. */}
+            <span className="flex min-w-0 flex-1 items-center gap-1">
+              <span
+                className={cx(
+                  "min-w-0 truncate text-sm font-medium",
+                  current
+                    ? "text-brand-secondary"
+                    : muted
+                      ? "text-tertiary"
+                      : pinned
+                        ? "text-sidebar-fg"
+                        : "text-secondary",
+                  muted && "font-normal",
+                )}
+              >
+                {children}
+              </span>
+              {muted ? <MutedIcon /> : null}
             </span>
-            {muted ? (
-              <BellOff01
-                aria-label={m.conversation_muted_dynamics()}
-                className="size-3.5 shrink-0 text-quaternary"
-              />
-            ) : null}
             {lastMessage.time ? (
               <span className="shrink-0 text-xs text-quaternary tabular-nums">
                 {lastMessage.time}
@@ -180,14 +189,18 @@ export function ConversationRow({
           ) : null}
         </span>
       ) : (
-        <span
-          className={cx(
-            // The section titles' size, weight and colour, so Saved reads as one of them.
-            "min-w-0 flex-1 truncate text-sm font-medium",
-            current ? "text-brand-secondary" : muted ? "text-tertiary" : "text-primary",
-          )}
-        >
-          {children}
+        <span className="flex min-w-0 flex-1 items-center gap-1">
+          <span
+            className={cx(
+              // The section titles' size, weight and colour, so Saved reads as one of them.
+              "min-w-0 truncate text-sm font-medium",
+              current ? "text-brand-secondary" : muted ? "text-tertiary" : "text-primary",
+              muted && "font-normal",
+            )}
+          >
+            {children}
+          </span>
+          {muted ? <MutedIcon /> : null}
         </span>
       )}
       {!lastMessage && unreadCount ? <UnreadCount count={unreadCount} muted={muted} /> : null}
