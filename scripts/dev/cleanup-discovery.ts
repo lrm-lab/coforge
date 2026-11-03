@@ -157,7 +157,12 @@ async function discoverLinux(roots: string[], procRoot: string, uid: number) {
         const command = (await readCommandLine(procRoot, pid)) ?? "";
         if (withheldProcess(status, own) && !WATCHED_PROGRAMS.has(programOf(command)))
           return undefined;
-        throw error;
+        throw new Error(
+          `${(error as Error).message} (${command || "no command line"}; credentials ${
+            credentials(status) ?? "unreadable"
+          }, ours ${credentials(own) ?? "unreadable"})`,
+          { cause: error },
+        );
       });
       if (target === undefined) continue;
       if (pid === self) sawSelf = true;
