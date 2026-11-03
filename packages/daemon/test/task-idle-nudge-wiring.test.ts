@@ -1,7 +1,9 @@
 import { expect, test } from "bun:test";
+import type { AgentSession } from "@lrm/coforge-anvil";
 import { AgentLaunchCoordinator } from "#src/daemon-runtime/agent-launch-coordinator";
 import { showQuietTurn, type RuntimeTurnPorts } from "#src/daemon-runtime/runtime-turn-management";
 import type { AgentTaskIdleNudgeResponse } from "@lrm/coforge-sdk/agent";
+import { activityHarness } from "./fixtures/activity-runtime";
 
 type Session = { hasLiveTurn: boolean; notify?: (text: string) => Promise<void> };
 
@@ -74,4 +76,49 @@ test("a quiet turn asks the reminder only when nothing is still running", () => 
   asked.length = 0;
   showQuietTurn(ports(true), "agent-a", launch(true) as never, () => {});
   expect(asked).toEqual([]);
+});
+
+test("DaemonRuntime asks after a completed turn and writes the idle reminder", async () => {
+  const sent: string[] = [];
+  const nudges: string[] = [];
+  const harness = await activityHarness(
+    {
+      computerId: "computer-idle-nudge-e2e",
+      workspaceId: "workspace-idle-nudge-e2e",
+      workspaceRoot: `/tmp/coforge-idle-nudge-${crypto.randomUUID()}`,
+    },
+    undefined,
+    {
+      async agentTaskIdleNudge() {
+        nudges.push("asked");
+        return {
+          send: true,
+          items: [],
+          backlog: [],
+          text: "follow up after turn",
+        } satisfies AgentTaskIdleNudgeResponse;
+      },
+    },
+  );
+  try {
+    const session = harness.session as AgentSession & { hasLiveTurn: boolean };
+    Object.defineProperty(session, "hasLiveTurn", { value: false, writable: true });
+    session.sendMessage = async (text) => {
+      session.hasLiveTurn = true;
+      sent.push(text);
+    };
+    session.notify = async (text) => {
+      session.hasLiveTurn = true;
+      sent.push(text);
+    };
+    await session.sendMessage("run one turn");
+    harness.emitEvent({ type: "text-delta", text: "turn output" });
+    session.hasLiveTurn = false;
+    harness.emitEvent({ type: "completed", status: "completed" });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(nudges).toEqual(["asked"]);
+    expect(sent).toEqual(["run one turn", "follow up after turn"]);
+  } finally {
+    await harness.runtime.stop();
+  }
 });
