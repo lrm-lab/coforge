@@ -196,6 +196,62 @@ test("the asked person's first message answers the card, in its own thread too",
   }
 });
 
+// Task #472: a message answers one card, the nearest one before it that waits in the same place;
+// an earlier card still waiting stays pending.
+test("a message answers only the nearest pending card before it", async () => {
+  const ctx = await setupActionCards();
+  try {
+    const ask = (prompt: string) =>
+      ctx.actionCards.prepare(ctx.principal, {
+        target: `#${ctx.hub.channelName}`,
+        action: choice(ctx.alice.username, prompt),
+      });
+    const earlier = await ask("First question?");
+    const later = await ask("Second question?");
+    const laterCard = await ctx.db.message.findUniqueOrThrow({
+      where: { id: later.messageId },
+      select: { sequence: true },
+    });
+    const answer = await messageBy(ctx, ctx.alice.id, laterCard.sequence + 1);
+    const answerAt = (message: typeof answer) =>
+      ctx.db.$transaction((tx) =>
+        markChoiceCardsAnsweredInChat(tx, {
+          workspaceId: ctx.workspace.id,
+          conversationId: ctx.hub.id,
+          userId: ctx.alice.id,
+          messageId: message.id,
+          sequence: message.sequence,
+          threadRootId: message.threadRootId,
+        }),
+      );
+    expect(await answerAt(answer)).toEqual([later.messageId]);
+    const state = async (messageId: string) =>
+      (await ctx.db.actionCard.findUniqueOrThrow({ where: { messageId } })).state;
+    expect(await state(earlier.messageId)).toBe("pending");
+    expect(await state(later.messageId)).toBe("answered_in_chat");
+    // The next message answers the one still waiting.
+    const next = await messageBy(ctx, ctx.alice.id, laterCard.sequence + 2);
+    expect(await answerAt(next)).toEqual([earlier.messageId]);
+
+    // In a thread too: a card asked inside a top-level card's thread is nearer than that card.
+    const root = await ask("Root question?");
+    const inThread = await ctx.actionCards.prepare(ctx.principal, {
+      target: `#${ctx.hub.channelName}:${root.messageId}`,
+      action: choice(ctx.alice.username, "Thread question?"),
+    });
+    const inThreadCard = await ctx.db.message.findUniqueOrThrow({
+      where: { id: inThread.messageId },
+      select: { sequence: true, threadRootId: true },
+    });
+    expect(inThreadCard.threadRootId).toBe(root.messageId);
+    const reply = await messageBy(ctx, ctx.alice.id, inThreadCard.sequence + 1, root.messageId);
+    expect(await answerAt(reply)).toEqual([inThread.messageId]);
+    expect(await state(root.messageId)).toBe("pending");
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
 test("cancelling records who did it, and the view names them", async () => {
   const ctx = await setupActionCards();
   try {
