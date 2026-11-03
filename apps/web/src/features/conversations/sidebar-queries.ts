@@ -1,7 +1,12 @@
 import { queryOptions } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 
-import { setPublicChannelMuted, setPublicConversationPinned } from "./channels.functions";
+import {
+  setPublicChannelMuted,
+  setPublicChannelNotificationLevel,
+  setPublicConversationPinned,
+} from "./channels.functions";
+import type { ChannelNotificationLevel } from "./notification-levels";
 import {
   setPublicConversationHidden,
   setPublicConversationUnread,
@@ -51,6 +56,7 @@ export type SidebarApi = {
   loadDirectBadges: () => Promise<DirectBadges>;
   pin: (target: PinRef, pinned: boolean) => Promise<unknown>;
   setMuted: (target: PinRef, muted: boolean) => Promise<unknown>;
+  setNotificationLevel: (channelId: string, level: ChannelNotificationLevel) => Promise<unknown>;
   markUnread: (target: PinRef) => Promise<unknown>;
   setHidden: (target: PinRef, hidden: boolean) => Promise<unknown>;
   arrange: (arrangement: Arrangement) => Promise<unknown>;
@@ -69,6 +75,8 @@ export const serverSidebarApi: SidebarApi = {
     target.kind === "channel"
       ? setPublicChannelMuted({ data: { channelId: target.channelId, muted } })
       : setDirectConversationMuted({ data: { conversationId: target.conversationId, muted } }),
+  setNotificationLevel: (channelId, notificationLevel) =>
+    setPublicChannelNotificationLevel({ data: { channelId, notificationLevel } }),
   markUnread: (target) =>
     target.kind === "channel"
       ? setPublicConversationUnread({ data: { channelId: target.channelId, unread: true } })

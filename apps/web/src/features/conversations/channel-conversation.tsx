@@ -32,6 +32,7 @@ import type { ChannelSuggestion } from "./reference-completion";
 import { m } from "#src/paraglide/messages";
 import type { AgentProfileTab } from "#src/features/agents/profile-panel/profile-panel-search";
 import type { ConversationProps } from "./conversation-types";
+import type { ChannelNotificationLevel } from "./notification-levels";
 import type { OpenAgentProfile } from "#src/features/agents/profile-panel/open-agent-profile";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 
@@ -49,6 +50,8 @@ export type ChannelConversationView = Omit<DirectConversationView, "agent" | "me
   };
   coordinatorAgent?: { id: string; name: string; displayName: string };
   muted: boolean;
+  /** The viewer's notification level here (task #401); absent from a page kept from before. */
+  notificationLevel?: ChannelNotificationLevel;
   pinned: boolean;
   /** What this viewer may change from the settings panel. */
   channelCapabilities: ChannelCapabilities;

@@ -18,6 +18,11 @@ import { useSidebarActions } from "./sidebar-lists";
 import type { ChatSection } from "./chat-section.schemas";
 import { ChatSectionDialog } from "./chat-section-dialog";
 import {
+  CHANNEL_NOTIFICATION_LEVELS,
+  notificationLevelLabel,
+  type ChannelNotificationLevel,
+} from "./notification-levels";
+import {
   conversationRowMenuEnabled,
   conversationRowMenuItems,
   type ConversationRowMenuItem,
@@ -43,7 +48,14 @@ function itemLabel(item: ConversationRowMenuItem): string {
 /** What the menu acts on: a channel row (membership decides) or a direct-message row (always the
  * viewer's own conversation). */
 export type ConversationRowMenuTarget =
-  | { kind: "channel"; id: string; joined: boolean; pinned: boolean; muted: boolean }
+  | {
+      kind: "channel";
+      id: string;
+      joined: boolean;
+      pinned: boolean;
+      muted: boolean;
+      notificationLevel: ChannelNotificationLevel;
+    }
   | { kind: "direct"; conversationId: string; pinned: boolean; muted: boolean };
 
 /**
@@ -91,6 +103,15 @@ export function ConversationRowMenu({
    * (§13). */
   function handleAction(key: unknown) {
     if (key === "section-new") return setCreating(true);
+    if (String(key).startsWith("notify:") && target.kind === "channel") {
+      const level = String(key).slice("notify:".length) as ChannelNotificationLevel;
+      if (level === target.notificationLevel) return;
+      actions.setNotificationLevel(target.id, level).catch((cause: unknown) => {
+        console.error("conversation row menu action failed", cause);
+        toast.error(m.conversation_menu_action_error());
+      });
+      return;
+    }
     if (String(key).startsWith("section:")) {
       const id = String(key).slice("section:".length);
       moveTo(id === "home" ? null : id);
@@ -172,12 +193,16 @@ export function ConversationRowMenu({
             {items.map((item) => (
               <Fragment key={item.id}>
                 {item.id === "close-chat" && <Dropdown.Separator />}
-                <Dropdown.Item
-                  id={item.id}
-                  icon={itemIcon(item)}
-                  label={itemLabel(item)}
-                  selectionIndicator="none"
-                />
+                {item.id === "notify" && target.kind === "channel" ? (
+                  <NotifySubmenu level={target.notificationLevel} onAction={handleAction} />
+                ) : (
+                  <Dropdown.Item
+                    id={item.id}
+                    icon={itemIcon(item)}
+                    label={itemLabel(item)}
+                    selectionIndicator="none"
+                  />
+                )}
               </Fragment>
             ))}
           </Dropdown.Menu>
@@ -191,5 +216,40 @@ export function ConversationRowMenu({
         />
       )}
     </>
+  );
+}
+
+/** A channel's four notification levels, the current one ticked (Slack's channel menu). */
+function NotifySubmenu({
+  level,
+  onAction,
+}: {
+  level: ChannelNotificationLevel;
+  onAction: (key: unknown) => void;
+}) {
+  return (
+    <SubmenuTrigger>
+      <Dropdown.Item
+        id="notify"
+        icon={level === "muted" ? BellOff01 : Bell01}
+        label={m.channel_notify()}
+        selectionIndicator="none"
+      />
+      <Dropdown.SubmenuPopover>
+        <Dropdown.Menu
+          aria-label={m.channel_notify()}
+          selectionMode="single"
+          selectedKeys={[`notify:${level}`]}
+          onAction={onAction}
+        >
+          {CHANNEL_NOTIFICATION_LEVELS.map((each) => (
+            <Fragment key={each}>
+              {each === "muted" && <Dropdown.Separator />}
+              <Dropdown.Item id={`notify:${each}`} label={notificationLevelLabel(each)} />
+            </Fragment>
+          ))}
+        </Dropdown.Menu>
+      </Dropdown.SubmenuPopover>
+    </SubmenuTrigger>
   );
 }

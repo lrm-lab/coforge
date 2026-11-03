@@ -1,0 +1,13 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "channel_notify": "通知",
+  "channel_notify_description": "这个群聊什么时候提醒你，只影响你。",
+  "channel_notify_all": "所有新消息",
+  "channel_notify_relevant": "仅与我相关",
+  "channel_notify_none": "不通知",
+  "channel_notify_muted": "静音",
+  "channel_notify_all_description": "每条新消息都提醒",
+  "channel_notify_relevant_description": "只在 @我 或我关注的讨论串有新回复时提醒",
+  "channel_notify_none_description": "不提醒，未读照常计数",
+  "channel_notify_muted_description": "不提醒，也不算未读；@我 仍会标出"
+}

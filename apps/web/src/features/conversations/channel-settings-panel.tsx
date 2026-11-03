@@ -7,6 +7,7 @@ import {
   ModalOverlay as SlideoutOverlay,
   SlideoutMenu,
 } from "#src/components/application/slideout-menus/slideout-menu";
+import { Select } from "#src/components/base/select/select";
 import { Toggle } from "#src/components/base/toggle/toggle";
 import { EntityPickerField, memberOption } from "#src/features/pickers/entity-picker";
 import { useAppToast } from "#src/components/ui/toast";
@@ -27,6 +28,13 @@ import {
   MembersPageHeading,
   SettingsPanelHeader,
 } from "./channel-settings-header";
+import {
+  CHANNEL_NOTIFICATION_LEVELS,
+  notificationLevelDescription,
+  notificationLevelLabel,
+  notificationLevelOf,
+  type ChannelNotificationLevel,
+} from "./notification-levels";
 import { PanelSection, PreferenceRow } from "./settings-panel-parts";
 import { useSidebarActions, useSidebarLists } from "./sidebar-lists";
 import {
@@ -356,7 +364,7 @@ function PreferencesSection({
   // The sidebar owns the mute (its row menu writes it too): its row is the truth, and its
   // optimistic action the write. The page's copy answers for a channel the sidebar does not list.
   const listed = useSidebarLists().channels.find((channel) => channel.id === channelId);
-  const muted = listed?.muted ?? conversation.muted;
+  const level = notificationLevelOf(listed ?? conversation);
 
   async function change(which: "pin" | "mute" | "collapse", write: () => Promise<unknown>) {
     setPending(which);
@@ -388,19 +396,25 @@ function PreferencesSection({
             }
           />
         </PreferenceRow>
-        <PreferenceRow
-          title={m.channel_settings_mute()}
-          description={m.channel_settings_mute_description()}
-        >
-          <Toggle
-            size="md"
-            aria-label={m.channel_settings_mute()}
-            isSelected={muted}
+        {/* Four levels, as the row menu offers them (task #401): a switch could not say which level
+            turning Mute off goes back to. */}
+        <PreferenceRow title={m.channel_notify()} description={notificationLevelDescription(level)}>
+          <Select
+            aria-label={m.channel_notify()}
+            size="sm"
+            className="w-52"
+            selectedKey={level}
             isDisabled={pending !== null}
-            onChange={(next) =>
-              void change("mute", () => actions.setMuted({ kind: "channel", channelId }, next))
-            }
-          />
+            onSelectionChange={(key) => {
+              const next = key as ChannelNotificationLevel | null;
+              if (next === null || next === level) return;
+              void change("mute", () => actions.setNotificationLevel(channelId, next));
+            }}
+          >
+            {CHANNEL_NOTIFICATION_LEVELS.map((each) => (
+              <Select.Item key={each} id={each} label={notificationLevelLabel(each)} />
+            ))}
+          </Select>
         </PreferenceRow>
         <PreferenceRow
           title={m.channel_settings_collapse_long_messages()}

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "channel_notify": "Notifications",
+  "channel_notify_description": "When this chat notifies you. Only affects you.",
+  "channel_notify_all": "All new messages",
+  "channel_notify_relevant": "Only what involves me",
+  "channel_notify_none": "Nothing",
+  "channel_notify_muted": "Mute",
+  "channel_notify_all_description": "Notify me about every new message",
+  "channel_notify_relevant_description": "Only when I'm @mentioned or a thread I follow gets a reply",
+  "channel_notify_none_description": "No notifications; unread still counts",
+  "channel_notify_muted_description": "No notifications or unread count; @mentions still show"
+}

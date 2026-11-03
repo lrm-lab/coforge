@@ -127,6 +127,7 @@ const fixtures = [
         project: undefined,
         coordinatorAgent: undefined,
         muted: false,
+        notificationLevel: "all",
         collapseLongMessages: true,
         pinned: false,
         channelCapabilities: {
@@ -196,6 +197,7 @@ const fixtures = [
         archived: false,
         visibility: "public",
         muted: false,
+        notificationLevel: "all",
         unreadCount: 0,
         hidden: false,
         pinned: false,

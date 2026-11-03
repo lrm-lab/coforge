@@ -37,6 +37,7 @@ export function channelSignalApplier(
         archived,
         visibility,
         muted: false,
+        notificationLevel: "all",
         unreadCount: 0,
         mentioned: false,
         lastMessage: null,

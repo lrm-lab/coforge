@@ -23,6 +23,7 @@ import type { ChatListValue } from "./chat-lists-reader";
 import { chatSectionOrderQuery, chatSectionsQuery, type ChatSectionsApi } from "./chat-sections";
 import { isBuiltInSection } from "./directory-section-order";
 import type { ChatSection } from "./chat-section.schemas";
+import type { ChannelNotificationLevel } from "./notification-levels";
 import {
   fetchChannels,
   fetchDirects,
@@ -43,6 +44,7 @@ type SidebarFields = {
   unreadCount: number;
   hidden: boolean;
   muted?: boolean;
+  notificationLevel?: ChannelNotificationLevel;
 };
 
 /**
@@ -156,11 +158,30 @@ export function createSidebar(
         // A mute stops pushes, not counting: the row keeps the unread it has, and the re-read
         // below brings the server's count and mention badge.
         row.muted = muted;
+        if (target.kind === "channel") row.notificationLevel = muted ? "muted" : "all";
       }),
     mutationFn: async ({ target, muted }, { transaction }) => {
       await api.setMuted(target, muted);
       confirm(transaction);
       reread(target);
+    },
+  });
+
+  /** A channel's notification level (task #401): only `muted` changes the row (no unread count),
+   * so the re-read below brings the server's count and mention badge. */
+  const setLevelAtOnce = createOptimisticAction<{
+    channelId: string;
+    level: ChannelNotificationLevel;
+  }>({
+    onMutate: ({ channelId, level }) =>
+      edit({ kind: "channel", channelId }, (row) => {
+        row.notificationLevel = level;
+        row.muted = level === "muted";
+      }),
+    mutationFn: async ({ channelId, level }, { transaction }) => {
+      await api.setNotificationLevel(channelId, level);
+      confirm(transaction);
+      reread({ kind: "channel", channelId });
     },
   });
 
@@ -399,6 +420,12 @@ export function createSidebar(
       saved(pin({ target, pinned }), () => api.pin(target, pinned), listOf(target)),
     setMuted: (target: PinRef, muted: boolean) =>
       saved(setMutedAtOnce({ target, muted }), () => api.setMuted(target, muted), listOf(target)),
+    setNotificationLevel: (channelId: string, level: ChannelNotificationLevel) =>
+      saved(
+        setLevelAtOnce({ channelId, level }),
+        () => api.setNotificationLevel(channelId, level),
+        listOf({ kind: "channel", channelId }),
+      ),
     markUnread: (target: PinRef) =>
       saved(markUnreadAtOnce(target), () => api.markUnread(target), listOf(target)),
     close: (target: PinRef) => setHidden(target, true),

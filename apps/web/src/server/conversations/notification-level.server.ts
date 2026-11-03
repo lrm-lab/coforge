@@ -8,6 +8,11 @@ export function isNotificationLevel(value: unknown): value is NotificationLevel 
   return NOTIFICATION_LEVELS.includes(value as NotificationLevel);
 }
 
+/** A stored level as a read returns it; anything else (no membership) reads as `all`. */
+export function readNotificationLevel(value: string | null | undefined): NotificationLevel {
+  return isNotificationLevel(value) ? value : "all";
+}
+
 /** Agents and DMs have one switch: `muted` or `all`. */
 export function onOffLevel(level: NotificationLevel): NotificationLevel {
   return level === "muted" ? "muted" : "all";

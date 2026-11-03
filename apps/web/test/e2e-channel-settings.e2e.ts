@@ -9,8 +9,8 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 /**
  * The channel settings panel in a real browser. The header's gear opens a slideout naming the
  * channel with its Public badge and member summary. A channel admin saves a new description and
- * name from Info. Closing with unsaved edits asks first. Pin and Mute change only the viewer's
- * membership. Archiving (after a confirmation) replaces the composer with an archived notice
+ * name from Info. Closing with unsaved edits asks first. Pin and the notification level change
+ * only the viewer's membership. Archiving (after a confirmation) replaces the composer with an archived notice
  * whose Unarchive opens the panel to bring it back. Leaving (after a confirmation) turns the channel read-only
  * until the viewer rejoins.
  *
@@ -104,7 +104,13 @@ test("the channel settings panel edits info, preferences, archive and membership
     });
     await db.conversationMember.upsert({
       where: { conversationId_userId: { conversationId: channelId, userId: DEV_BROWSER_USER.id } },
-      update: { leftAt: null, channelRole: "admin", channelMuted: false, hiddenAt: new Date() },
+      update: {
+        leftAt: null,
+        channelRole: "admin",
+        notificationLevel: "all",
+        channelMuted: false,
+        hiddenAt: new Date(),
+      },
       create: {
         conversationId: channelId,
         workspaceId,
@@ -191,8 +197,15 @@ test("the channel settings panel edits info, preferences, archive and membership
     await openPanel();
     await browser("click", '[aria-label="Pin channel"]');
     await waitFor(`document.querySelector('[aria-label="Pin channel"]').checked === true`);
-    await browser("click", '[aria-label="Mute activity"]');
-    await waitFor(`document.querySelector('[aria-label="Mute activity"]').checked === true`);
+    // Notifications: the four levels (task #401); Mute is the one the row shows.
+    const notify = `document.querySelector('[role="dialog"] button[aria-label^="Notifications"], [role="dialog"] [aria-label="Notifications"] button')`;
+    await browser("eval", `${notify}.click()`);
+    await waitFor(`${byText('[role="option"]', "Mute")} !== undefined`);
+    await clickText('[role="option"]', "Mute");
+    await waitFor(`${notify}.textContent.includes("Mute")`);
+    // The select shows the level at once; the save lands just after.
+    for (let i = 0; i < 50 && !(await viewerRow()).channelMuted; i++)
+      await new Promise((resolve) => setTimeout(resolve, 100));
     const preferred = await viewerRow();
     expect(preferred.pins.length).toBe(1);
     expect(preferred.channelMuted).toBe(true);

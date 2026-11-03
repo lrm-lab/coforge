@@ -26,6 +26,13 @@ test("items follow the mockup's order, with mute after pin and close-chat last",
   ]);
 });
 
+test("a channel offers its notification levels where a DM offers Mute", () => {
+  const ids = (kind: "channel" | "direct") =>
+    conversationRowMenuItems({ kind, pinned: false, muted: false }).map((item) => item.id);
+  expect(ids("channel")).toEqual(["mark-unread", "pin", "notify", "close-chat"]);
+  expect(ids("direct")).toEqual(["mark-unread", "pin", "mute", "close-chat"]);
+});
+
 test("the pin item carries the row's pinned state so the label can read Pin or Unpin", () => {
   const unpinned = conversationRowMenuItems({ pinned: false, muted: false });
   const pinned = conversationRowMenuItems({ pinned: true, muted: false });

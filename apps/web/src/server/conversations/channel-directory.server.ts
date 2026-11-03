@@ -1,5 +1,8 @@
 import { compareChannelNames } from "#src/features/conversations/channel-signals";
-import { isMutedLevel } from "#src/server/conversations/notification-level.server";
+import {
+  isMutedLevel,
+  readNotificationLevel,
+} from "#src/server/conversations/notification-level.server";
 import { channelVisibilityOf } from "#src/features/conversations/channel-visibility";
 import { AppError } from "#src/lib/app-error";
 import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
@@ -154,6 +157,7 @@ export async function listChannels(
         archived: channel.archivedAt !== null,
         visibility: channelVisibilityOf(channel),
         muted: isMutedLevel(member?.notificationLevel),
+        notificationLevel: readNotificationLevel(member?.notificationLevel),
         unreadCount: member ? (unreadByConversation.get(channel.id) ?? 0) : 0,
         mentioned: member ? mentionedConversations.has(channel.id) : false,
         lastMessage: preview?.lastMessage ?? null,

@@ -18,6 +18,7 @@ const channel = (id: string, fields: Partial<Channel> = {}): Channel => ({
   archived: false,
   visibility: "public",
   muted: false,
+  notificationLevel: "all",
   unreadCount: 0,
   mentioned: false,
   lastMessage: null,
@@ -115,6 +116,8 @@ export async function sidebarWith(
     loadDirectBadges: async () => ({ viewerId: "viewer", unread: {}, streamPositions: {} }),
     pin: async (target, pinned) => void saves.push(`pin ${JSON.stringify(target)} ${pinned}`),
     setMuted: async (target, muted) => void saves.push(`mute ${JSON.stringify(target)} ${muted}`),
+    setNotificationLevel: async (channelId, level) =>
+      void saves.push(`notify ${channelId} ${level}`),
     markUnread: async (target) => void saves.push(`unread ${JSON.stringify(target)}`),
     setHidden: async (target, hidden) =>
       void saves.push(`${hidden ? "close" : "reopen"} ${JSON.stringify(target)}`),
@@ -142,6 +145,7 @@ export function serverlessApi(server: {
     loadDirectBadges: async () => ({ viewerId: "viewer", unread: {}, streamPositions: {} }),
     pin: async () => {},
     setMuted: async () => {},
+    setNotificationLevel: async () => {},
     markUnread: async () => {},
     setHidden: async () => {},
     arrange: async () => {},

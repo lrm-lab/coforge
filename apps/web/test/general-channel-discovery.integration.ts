@@ -100,6 +100,7 @@ test("Workspace humans enrolled in general see one general channel; outsiders ca
         archived: false,
         visibility: "public",
         muted: false,
+        notificationLevel: "all",
         unreadCount: 0,
         mentioned: false,
         lastMessage: null,

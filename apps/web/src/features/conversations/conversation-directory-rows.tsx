@@ -19,6 +19,7 @@ import { DirectAgentAvatar } from "./direct-agent-avatar";
 import { GroupAvatar, type GroupAvatarMember } from "./group-avatar";
 import { lastMessageTime } from "./last-message-time";
 import { previewText } from "./preview-line";
+import { notificationLevelOf, type ChannelNotificationLevel } from "./notification-levels";
 import type { ListedDirect } from "./sidebar-rows";
 import { useLiveChannelRow, useLiveDirectRow } from "./sidebar-lists";
 import { useUnreadCount } from "./unread-store";
@@ -31,6 +32,9 @@ export type DirectoryChannel = {
   visibility: ChannelVisibility;
   /** The member muted this channel: no pushes, but its unread badge and count stay. */
   muted?: boolean;
+  /** The member's notification level here (task #401); absent from a copy stored before rows
+   * carried it, which reads from `muted`. */
+  notificationLevel?: ChannelNotificationLevel;
   /** The member pinned this row; it moves to the Pinned section and its menu item reads "Unpin". */
   pinned: boolean;
   /** Where the row sits in the Pinned section, among the member's pinned channels and DMs. */
@@ -95,7 +99,12 @@ export const ChannelDirectoryRow = memo(function ChannelDirectoryRow({
   const Glyph = channelGlyph(channel);
   return (
     <ConversationRowMenu
-      target={{ kind: "channel", ...channel, muted: channel.muted === true }}
+      target={{
+        kind: "channel",
+        ...channel,
+        muted: channel.muted === true,
+        notificationLevel: notificationLevelOf(channel),
+      }}
       {...menu}
     >
       <ConversationRow
