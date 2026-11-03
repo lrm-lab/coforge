@@ -54,6 +54,21 @@ export const AGENT_FACING_ERROR_IDS: ReadonlySet<string> = new Set([
   TASK_RELATIONS_OFF,
   TASK_PRIORITY_INVALID,
   TASK_PRIORITY_DENIED,
+  // Label refusals: an Agent needs the Workspace's own names, the archived fact and the group
+  // rule, not a shapeless INVALID_INPUT (task #455).
+  "task-label-unknown",
+  "task-label-archived",
+  "task-label-group",
+  "task-label-group-single",
+  "task-label-limit",
+  "task-label-none",
+  "task-label-name",
+  "task-label-reserved",
+  "task-label-color",
+  "task-label-name-taken",
+  "label-group-full",
+  "label-group-selection",
+  "label-group-name-taken",
 ]);
 
 const names = (open: readonly TaskName[]) => open.map(taskNameLabel).join(", ");

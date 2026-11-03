@@ -84,7 +84,7 @@ const taskRefSchema = z
   })
   .strict();
 
-const taskRequestSchema = z
+export const taskRequestSchema = z
   .object({
     operation: z.enum(taskOperations),
     idempotencyKey: z.string().min(1),
@@ -126,6 +126,10 @@ const taskRequestSchema = z
     attachmentId: z.uuid().optional(),
     status: z.enum(taskStatuses).optional(),
     priority: z.enum(TASK_PRIORITIES).optional(),
+    labels: z.array(z.string().min(1).max(64)).max(5).optional(),
+    removeLabels: z.array(z.string().min(1).max(64)).max(5).optional(),
+    labelDescription: z.string().min(1).max(500).optional(),
+    project: z.string().min(1).max(64).nullable().optional(),
     expectedRevision: z.number().int().nonnegative().optional(),
   })
   .strict();
