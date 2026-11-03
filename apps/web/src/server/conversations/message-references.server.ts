@@ -238,7 +238,8 @@ export async function storeMessageBody(
     const direct = await tx.conversation.findMany({
       where: {
         workspaceId: scope.workspaceId,
-        kind: "direct",
+        channelName: null,
+        directKey: { not: null },
         members: { some: senderWhere },
       },
       select: { id: true, members: { select: { userId: true, agentId: true } } },
