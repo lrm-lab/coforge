@@ -216,9 +216,30 @@ model TaskParent {
   @@map("task_parents")
 }
 
+/// One level of label groups: a name and whether a Task may carry one label of it (`single`) or
+/// several (`multiple`). A Task never carries two labels of a single group; a group change does not
+/// rewrite existing rows, the next label write to a Task enforces it.
+model LabelGroup {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  workspaceId String   @db.Uuid
+  name        String
+  /// `lower(trim(name))`: the name a group is looked up and made unique by.
+  nameKey     String
+  /// single | multiple
+  selection   String   @default("single")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  labels      Label[]
+
+  @@unique([workspaceId, nameKey])
+  @@index([workspaceId])
+  @@map("label_groups")
+}
+
 /// A Workspace-level task label: a display name and one Badge semantic color. The name is unique
 /// case-insensitively within the Workspace; any member may create one, only an owner or admin
-/// renames or deletes it.
+/// renames, recolors, merges, archives or deletes it.
 model Label {
   id              String      @id @default(uuid(7)) @db.Uuid
   workspaceId     String      @db.Uuid
@@ -228,14 +249,22 @@ model Label {
   nameKey         String
   /// One of the Badge semantic color keys, never a hex value.
   color           String      @default("gray")
+  /// What the label is for; an Agent must write one when it creates a label, a person may skip it.
+  description     String?
+  /// The group it belongs to; null when it has none.
+  groupId         String?     @db.Uuid
+  /// Set while archived: it stays on the Tasks that carry it, but cannot be attached again.
+  archivedAt      DateTime?
   createdByUserId String?     @db.Uuid
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
   workspace       Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group           LabelGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
   tasks           TaskLabel[]
 
   @@unique([workspaceId, nameKey])
   @@index([workspaceId])
+  @@index([groupId])
   @@map("labels")
 }
 
