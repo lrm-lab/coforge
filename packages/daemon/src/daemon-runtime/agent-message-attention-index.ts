@@ -21,6 +21,12 @@ import type { AgentProcessManager } from "#src/agent-runtime/agent-process-manag
 import { agentStartupCatchupInput } from "#src/agent-runtime/agent-startup";
 import { attentionFlags, hasDeliveryScope, latestCreatedAtField } from "./message-attention-fields";
 import { isTrackedMention } from "./mention-delivery-tracker";
+import {
+  acceptNotice,
+  AgentWakeupUnavailableError,
+  noticeGeneration,
+  type NoticeGeneration,
+} from "./agent-wakeup-unavailable-error";
 import { inboxNoticeText } from "./inbox-notice-text";
 import { MemoryChannelUpdates, type MemoryChannelUpdateSchedule } from "./memory-channel-updates";
 import type {
@@ -109,16 +115,7 @@ function countDistinctMessages(deliveries: readonly AgentMessageDelivery[]): num
 
 /** Daemon-owned volatile attention and model-visible sequence index. */
 export class AgentMessageAttentionIndex {
-  readonly #generations = new Map<
-    string,
-    {
-      seenDeliveryIds: Set<string>;
-      seenMessageIds: Set<string>;
-      notified: Set<string>;
-      notificationAttempts: Map<string, Promise<void>>;
-      cancellation: AbortController;
-    }
-  >();
+  readonly #generations = new Map<string, NoticeGeneration>();
   readonly #attention = new Map<string, Map<string, MessageAttention>>();
   /** One privately owned cursor aggregate per Agent, hydrated on first use. Each target keeps
    * its frontier, exact sequences, conversation and review together; aliases and review order
@@ -619,7 +616,7 @@ export class AgentMessageAttentionIndex {
     const generation = this.#generation(message.agentId);
     const session = this.#runtimes.session(message.agentId);
     if (!session?.notify)
-      return Promise.reject(new Error("Agent session cannot receive a wakeup notice"));
+      throw new AgentWakeupUnavailableError("Agent session cannot receive a wakeup notice");
     if (!message.target) return Promise.reject(new Error("delivery target is missing"));
     // Mark busy synchronously, in the same tick as this decision to write to the
     // session — before the next queued input for this Agent can be drained and see a stale
@@ -645,7 +642,7 @@ export class AgentMessageAttentionIndex {
     const notification = Promise.resolve()
       .then(() => {
         if (this.#generations.get(message.agentId) !== generation)
-          throw new Error("Agent notice was cancelled");
+          throw new AgentWakeupUnavailableError("Agent notice was cancelled");
         return this.#acceptNotice(generation.cancellation.signal, () =>
           conversation || trackedIds.length
             ? session.notify!(notice, {
@@ -720,27 +717,13 @@ export class AgentMessageAttentionIndex {
 
   /** Each notice removes its own listener at settlement, even in a long-lived generation. */
   async #acceptNotice(signal: AbortSignal, send: () => Promise<void>): Promise<void> {
-    signal.throwIfAborted();
-    const cancelled = Promise.withResolvers<never>();
-    const abort = () => cancelled.reject(signal.reason);
-    signal.addEventListener("abort", abort, { once: true });
-    try {
-      await Promise.race([send(), cancelled.promise]);
-    } finally {
-      signal.removeEventListener("abort", abort);
-    }
+    return acceptNotice(signal, send);
   }
 
   #generation(agentId: string) {
     const existing = this.#generations.get(agentId);
     if (existing) return existing;
-    const generation = {
-      cancellation: new AbortController(),
-      seenDeliveryIds: new Set<string>(),
-      seenMessageIds: new Set<string>(),
-      notified: new Set<string>(),
-      notificationAttempts: new Map<string, Promise<void>>(),
-    };
+    const generation = noticeGeneration();
     this.#generations.set(agentId, generation);
     return generation;
   }

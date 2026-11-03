@@ -44,6 +44,8 @@ export async function harness(
   options: {
     reportSession?: boolean;
     refuseNotice?: boolean;
+    /** The error the session's `notify` rejects with, before writing anything. */
+    notifyError?: Error;
     /** Holds every notice write open until it settles. */
     noticeGate?: Promise<void>;
     /** Holds every launch after the first open until it settles. */
@@ -86,6 +88,7 @@ export async function harness(
             for (const listener of listeners) listener({ type: "completed", status: "completed" });
           },
           async notify(notice: string, noticeOptions?: { deliveryIds?: readonly string[] }) {
+            if (options.notifyError) throw options.notifyError;
             if (options.refuseNotice) throw new Error("the session refused the notice");
             notices.push(notice);
             noticeDeliveryIds.push(noticeOptions?.deliveryIds);

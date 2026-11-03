@@ -11,6 +11,7 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import type { DeliveryHoldReason } from "./agent-delivery-queue";
 import { diagnosticErrorName } from "@lrm/coforge-sdk/internal";
+import { AgentWakeupUnavailableError } from "./agent-wakeup-unavailable-error";
 
 const logger = getLogger(["coforge", "daemon", "mention-delivery"]);
 
@@ -155,8 +156,19 @@ export class MentionDeliveryTracker {
     try {
       outcome = await this.ports.announce(message);
     } catch (error) {
-      if (this.#tracked.get(message.deliveryId) === receiving)
-        await this.refuse(message, MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED);
+      if (this.#tracked.get(message.deliveryId) === receiving) {
+        // A wakeup that lost its session (cancelled mid-notice, session gone) is transient:
+        // report IDENTITY_UNKNOWN, which the server answers by waking the Agent and re-issuing
+        // the mention for the relaunched session — not by settling it lost.
+        const transient = error instanceof AgentWakeupUnavailableError;
+        await this.refuse(
+          message,
+          transient
+            ? MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN
+            : MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED,
+          error instanceof Error ? error.message : undefined,
+        );
+      }
       throw error;
     }
     if (this.#tracked.get(message.deliveryId) !== receiving) return;
@@ -233,13 +245,18 @@ export class MentionDeliveryTracker {
   }
 
   /** Reports that the daemon will not tell a mention, and forgets it. */
-  async refuse(message: TrackedMentionDelivery, code: MentionDeliveryTerminalCode): Promise<void> {
+  async refuse(
+    message: TrackedMentionDelivery,
+    code: MentionDeliveryTerminalCode,
+    detail?: string,
+  ): Promise<void> {
     this.#forget(message.deliveryId);
     logger.info("Tracked mention delivery refused", {
       event: "agent.mention_delivery.terminal_error",
       agent_id: message.agentId,
       delivery_id: message.deliveryId,
       code,
+      ...(detail ? { detail } : {}),
     });
     await this.#send("terminal_error", message, () =>
       this.ports.terminalError({ ...this.#scope(message), code }),
