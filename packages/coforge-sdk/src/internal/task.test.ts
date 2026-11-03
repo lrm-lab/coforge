@@ -57,6 +57,17 @@ test("validateTaskRequest rejects an unknown operation, thread targets, and miss
   ).toThrow("invalid Task revision");
 });
 
+test("validateTaskRequest accepts a relational amend and still rejects an empty one", () => {
+  const amend = { ...base, operation: "amend" as const, number: 14 };
+  expect(() =>
+    validateTaskRequest({ ...amend, blockedBy: [{ number: 2, channel: "qa-other" }] }),
+  ).not.toThrow();
+  expect(() => validateTaskRequest({ ...amend, blockedBy: [] })).not.toThrow();
+  expect(() => validateTaskRequest({ ...amend, parent: null })).not.toThrow();
+  expect(() => validateTaskRequest({ ...amend, parent: { number: 3 } })).not.toThrow();
+  expect(() => validateTaskRequest(amend)).toThrow("missing Task operation argument");
+});
+
 test("validateTaskRequest requires the idempotency key, scope ids, and the protocol major", () => {
   const { idempotencyKey: _dropped, ...withoutKey } = base;
   expect(() =>

@@ -197,7 +197,12 @@ export function validateTaskRequest(value: TaskRequest): void {
       value.number !== undefined &&
       value.numbers === undefined &&
       !messages &&
-      (value.title !== undefined || value.description !== undefined)) ||
+      (value.title !== undefined ||
+        value.description !== undefined ||
+        // A relational amendment (`--blocked-by`, `--parent`) carries neither title nor
+        // description; the server's amendTask treats it as an amendment of its own.
+        value.blockedBy !== undefined ||
+        value.parent !== undefined)) ||
     (value.operation === "receipt" &&
       value.number !== undefined &&
       value.numbers === undefined &&
