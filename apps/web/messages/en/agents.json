@@ -67,7 +67,6 @@
   "agent_status_offline": "Offline",
   "agent_form_joins_channel": "Joins #{channel} automatically after it is created.",
   "agent_form_description_placeholder": "What should this Agent help with?",
-  "agent_form_display_name": "Display name",
   "agent_form_username": "Username",
   "agent_form_username_suggest": "Suggest Another",
   "agent_form_username_required": "Enter a username such as release-fix, or roll the dice for one.",

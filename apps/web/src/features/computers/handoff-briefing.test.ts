@@ -1,32 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
-import { AGENT_NAME_MAX_LENGTH } from "@lrm/coforge-sdk/internal";
 import { DIRECT_MESSAGE_MAX_LENGTH } from "#src/features/conversations/conversation.schemas";
-import {
-  briefingFirstMessage,
-  buildBriefing,
-  defaultAgentName,
-  freeAgentName,
-} from "./handoff-briefing";
+import { briefingFirstMessage, buildBriefing } from "./handoff-briefing";
 
 const roles = { user: "User", assistant: "Assistant" };
 const render = ({ firstMessage, recent }: { firstMessage: string; recent: string }) =>
   `Opening:\n${firstMessage}\n\nRecent:\n${recent}\n\nCarry on.`;
-
-describe("defaultAgentName", () => {
-  test("is the last folder in username form", () => {
-    expect(defaultAgentName("/Users/frank/Code/My App/", "Codex")).toBe("my-app");
-    expect(defaultAgentName("C:\\work\\Web_Site", "Codex")).toBe("web-site");
-  });
-  test("falls back to the tool when the folder has no username characters", () => {
-    expect(defaultAgentName("/Users/frank/代码", "Claude Code")).toBe("claude-code");
-    expect(defaultAgentName("/", "Codex")).toBe("codex");
-  });
-  test("ignores trailing separators", () => {
-    expect(defaultAgentName("/a/b//", "Codex")).toBe("b");
-    expect(defaultAgentName("", "Codex")).toBe("codex");
-  });
-});
 
 describe("truncation", () => {
   const turn = (text: string) => ({ role: "user" as const, text, timestampMs: 1 });
@@ -119,16 +98,5 @@ describe("buildBriefing", () => {
       render: ({ firstMessage, recent }) => `${"t".repeat(6000)}\n${firstMessage}\n${recent}`,
     });
     expect(text.length).toBeLessThanOrEqual(DIRECT_MESSAGE_MAX_LENGTH);
-  });
-});
-
-describe("freeAgentName", () => {
-  test("keeps a name nobody has", () => {
-    expect(freeAgentName("coforge", new Set(["other"]))).toBe("coforge");
-  });
-  test("steps past taken names, compared without case", () => {
-    expect(freeAgentName("Coforge", new Set(["coforge", "coforge-2"]))).toBe("Coforge-3");
-    const long = "a".repeat(AGENT_NAME_MAX_LENGTH);
-    expect(freeAgentName(long, new Set([long]))).toBe(`${"a".repeat(AGENT_NAME_MAX_LENGTH - 2)}-2`);
   });
 });

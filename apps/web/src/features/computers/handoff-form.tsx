@@ -1,22 +1,15 @@
 import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
-import { AtSign } from "@untitledui/icons";
 import { truncateCodePointsWithEllipsis, type LocalSessionEntry } from "@lrm/coforge-sdk/internal";
 
 import { Button } from "#src/components/base/buttons/button";
-import { Input } from "#src/components/base/input/input";
 import { Alert } from "#src/components/ui/alert";
 import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
-import { finishedAgentUsername, typedAgentUsername } from "#src/features/agents/agent-username";
+import { finishedAgentUsername } from "#src/features/agents/agent-username";
+import { AgentUsernameField } from "#src/features/agents/agent-username-field";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
-import { useWorkspaceDirectory } from "#src/features/conversations/workspace-directory-query";
 import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
 import { m } from "#src/paraglide/messages";
-import {
-  briefingFirstMessage,
-  buildBriefing,
-  defaultAgentName,
-  freeAgentName,
-} from "./handoff-briefing";
+import { briefingFirstMessage, buildBriefing } from "./handoff-briefing";
 import { HandoffProgress, HandoffRefusal } from "./handoff-states";
 import { isRecentlyActive, sessionSummary } from "./local-session-list";
 import type { SessionExcerptState } from "./local-session-state";
@@ -44,14 +37,6 @@ export function HandoffForm({
   onBusyChange: (busy: boolean) => void;
 }) {
   const tool = runtimeProviderLabel(session.provider);
-  // What the person typed; until they do, the Agent's name is the default.
-  const [typed, setTyped] = useState<string>();
-  const directory = useWorkspaceDirectory();
-  // Agent names are unique in a Workspace; the ones the viewer can see are checked before submit.
-  const taken = useMemo(
-    () => new Set((directory.data?.agents ?? []).map((agent) => agent.handle.toLowerCase())),
-    [directory.data],
-  );
   const [active] = useState(() => isRecentlyActive(session.updatedAtMs, Date.now()));
   const excerpt = useLocalSessionExcerpt(computerId, session);
   const { submit, pending, error, createdName, briefingFailed, openConversation } =
@@ -94,21 +79,19 @@ export function HandoffForm({
     [blocked, ready, session.title, session.cwd, tool, modelLabel],
   );
 
+  // Once the Agent exists its name stays, so a resend can never be read as a second Agent. The
+  // name field checks itself: the form does not submit while it is empty or taken.
   const locked = pending || createdName !== undefined;
-  // Until the person types a name, the default steps past names already taken; once the Agent
-  // exists its name stays, so a resend can never be read as a second Agent.
-  const shownName =
-    createdName ?? typed ?? freeAgentName(defaultAgentName(session.cwd, tool), taken);
-  const username = finishedAgentUsername(shownName);
-  const nameTaken = createdName === undefined && taken.has(username.toLowerCase());
-  const canSubmit = createdName !== undefined || (username !== "" && !nameTaken && !blocked);
+  const canSubmit = createdName !== undefined || !blocked;
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canSubmit) return;
+    const name =
+      createdName ?? finishedAgentUsername(String(new FormData(event.currentTarget).get("name")));
     void submit(
       {
-        name: username,
+        name,
         description: m.handoff_agent_description({
           tool,
           cwd: truncateCodePointsWithEllipsis(session.cwd.trim(), DESCRIPTION_CWD_MAX - 1),
@@ -126,27 +109,13 @@ export function HandoffForm({
     <form onSubmit={onSubmit} className="flex flex-col gap-4">
       <SelectedSession session={session} onChooseAnother={onChooseAnother} disabled={locked} />
       {active && <Alert color="warning" description={m.handoff_active_warning({ tool })} />}
-      <Input
-        label={m.handoff_agent_name()}
-        size="sm"
-        icon={AtSign}
-        isRequired
-        hideRequiredIndicator
-        isReadOnly={locked}
-        value={shownName}
-        isInvalid={nameTaken}
-        hint={nameTaken ? m.agent_form_name_taken() : undefined}
-        onChange={(text) => setTyped(typedAgentUsername(text))}
-        onBlur={() =>
-          setTyped((current) => (current === undefined ? current : finishedAgentUsername(current)))
-        }
-      />
+      <AgentUsernameField isReadOnly={locked} />
       <ExcerptNotice state={excerpt.state} onRetry={excerpt.retry} />
       {excerpt.state.kind === "loading" && <HandoffProgress label={m.handoff_loading()} />}
       {!blocked && <BriefingPreview text={briefing} />}
       {error && <Alert color="error" description={error} />}
       {briefingFailed && (
-        <Alert color="error" description={m.handoff_briefing_failed({ name: shownName })} />
+        <Alert color="error" description={m.handoff_briefing_failed({ name: createdName ?? "" })} />
       )}
       <DialogActions>
         {openConversation ? (

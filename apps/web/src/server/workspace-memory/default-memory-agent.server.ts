@@ -4,9 +4,8 @@ import {
 } from "#src/server/app-notifications/app-notifications.server";
 import { recordChannelMembersAdded } from "#src/server/app-notifications/channel-events.server";
 import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
-import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
+import { RUNTIME_PROVIDER, deletedAgentName } from "@lrm/coforge-sdk/internal";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
-import { AGENT_NAME_MAX_LENGTH } from "#src/features/agents/agent.schemas";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 import { isOpenVikingPrototypeEnabled } from "./prototype-gate";
@@ -209,13 +208,8 @@ async function releaseDeletedHandle(tx: Prisma.TransactionClient, workspaceId: s
   if (!deleted) return;
   await tx.agent.update({
     where: { id: deleted.id },
-    data: { name: releasedDeletedAgentName(WORKSPACE_MEMORY_AGENT_HANDLE, deleted.id) },
+    data: { name: deletedAgentName(WORKSPACE_MEMORY_AGENT_HANDLE, deleted.id) },
   });
-}
-
-function releasedDeletedAgentName(name: string, agentId: string): string {
-  const suffix = `-deleted-${agentId.replaceAll("-", "").slice(0, 12)}`;
-  return `${name.slice(0, AGENT_NAME_MAX_LENGTH - suffix.length).replace(/-+$/, "")}${suffix}`;
 }
 
 async function addUnmutedMember(

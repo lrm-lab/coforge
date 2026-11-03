@@ -1,3 +1,4 @@
+import { deletedAgentName } from "@lrm/coforge-sdk/internal";
 import {
   appNotificationsPossible,
   attemptAppNotification,
@@ -15,7 +16,6 @@ import {
   type AgentRuntimeConfig,
 } from "#src/server/agents/agent-runtime-config.server";
 import { AGENT_VISIBILITY, type AgentVisibility } from "#src/features/agents/agent-visibility";
-import { AGENT_NAME_MAX_LENGTH } from "#src/features/agents/agent.schemas";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 
 export type { AgentRuntimeConfig } from "#src/server/agents/agent-runtime-config.server";
@@ -277,18 +277,6 @@ export async function moveAgentToComputer(
     data: { computerId: input.toComputerId },
   });
   return count === 1;
-}
-
-/**
- * The name a deleted Agent gives up its username for. It stays a valid username — at most
- * `AGENT_NAME_MAX_LENGTH`, lowercase segments joined by single hyphens — because the deleted
- * Agent's messages still reach readers with it as their sender handle, and a handle outside that
- * grammar fails the sender check on every history read. The 12 hex digits of the id keep renamed
- * rows of the same name apart.
- */
-function deletedAgentName(name: string, agentId: string): string {
-  const suffix = `-deleted-${agentId.replaceAll("-", "").slice(0, 12)}`;
-  return `${name.slice(0, AGENT_NAME_MAX_LENGTH - suffix.length).replace(/-+$/, "")}${suffix}`;
 }
 
 export class RepositoryAgentAuthorization {

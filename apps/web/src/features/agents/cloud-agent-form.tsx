@@ -1,14 +1,12 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQueryClient } from "@tanstack/react-query";
-import { Input } from "#src/components/base/input/input";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { m } from "#src/paraglide/messages";
 import { useOpenDirectConversation } from "#src/features/conversations/open-direct-conversation";
 import { useCloseConversationList } from "#src/features/conversations/conversation-navigation";
 import { useRefreshSidebar } from "#src/features/conversations/sidebar-lists";
 import { useCurrentWorkspaceId, useRefreshAgentDirectory } from "./workspace-agents-realtime";
-import { AGENT_DISPLAY_NAME_MAX_LENGTH } from "./agent.schemas";
 import { agentCreateErrorMessage } from "./agent-form";
 import { createCloudAgent } from "./cloud-agents.functions";
 import { AgentCreateFooter, AgentCreateForm } from "./agent-create-frame";
@@ -70,7 +68,6 @@ export function CloudAgentForm({
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const name = finishedAgentUsername(String(form.get("name") ?? ""));
-    const displayName = String(form.get("displayName") ?? "").trim() || undefined;
     if (!name) {
       setError(m.agent_form_username_required());
       return;
@@ -80,7 +77,7 @@ export function CloudAgentForm({
       // One request id for the form's life: after a timeout, a lost response or a failed DM
       // navigation the server returns the Agent this request already made, even under a name
       // edited since; after a refusal (a taken name) nothing was made, and the new name is used.
-      const request = { name, displayName, requestId };
+      const request = { name, requestId };
       const active = new AbortController();
       controller.current = active;
       try {
@@ -161,13 +158,6 @@ export function CloudAgentForm({
     >
       <div className="flex flex-col gap-3 px-6 pt-5 pb-2">
         <AgentUsernameField autoFocus={autoFocus} isReadOnly={submitting} />
-        <Input
-          label={m.agent_form_display_name()}
-          name="displayName"
-          size="sm"
-          maxLength={AGENT_DISPLAY_NAME_MAX_LENGTH}
-          isReadOnly={submitting}
-        />
         {submitting && (
           <p role="status" className="text-sm text-tertiary">
             {m.cloud_agent_create_preparing()}

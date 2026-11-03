@@ -18,7 +18,6 @@
   "handoff_active_badge": "Recently used",
   "handoff_choose_another": "Choose another session",
   "handoff_active_warning": "This session was used in {tool} in the last few minutes. Make sure it has stopped there first, or both sides may change the project directory at once.",
-  "handoff_agent_name": "Agent name",
   "handoff_model_default": "Default model",
   "handoff_excerpt_failed": "Could not read this session's recent context, so the briefing below carries only the opening request. You can continue or choose another session.",
   "handoff_excerpt_busy": "The computer is still reading this session. Try again shortly.",

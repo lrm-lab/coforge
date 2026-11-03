@@ -18,7 +18,6 @@
   "handoff_active_badge": "刚用过",
   "handoff_choose_another": "换一个会话",
   "handoff_active_warning": "这个会话刚刚还在 {tool} 里用过。请先确认那边已经停下，否则两边可能同时改这个项目目录。",
-  "handoff_agent_name": "智能体名称",
   "handoff_model_default": "默认模型",
   "handoff_excerpt_failed": "读取这个会话的近期上下文失败，下面的简报只包含最初的请求。你可以继续，也可以换一个会话。",
   "handoff_excerpt_busy": "电脑还在读取这个会话，稍后重试。",

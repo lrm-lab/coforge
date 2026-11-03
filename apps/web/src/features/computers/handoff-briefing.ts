@@ -1,41 +1,12 @@
-import {
-  AGENT_NAME_MAX_LENGTH,
-  truncateCodePointsWithEllipsis,
-  type LocalSessionTurn,
-} from "@lrm/coforge-sdk/internal";
+import { truncateCodePointsWithEllipsis, type LocalSessionTurn } from "@lrm/coforge-sdk/internal";
 
-import { finishedAgentUsername } from "#src/features/agents/agent-username";
 import { DIRECT_MESSAGE_MAX_LENGTH } from "#src/features/conversations/conversation.schemas";
-import { pathSegments } from "./local-session-list";
 
 const FIRST_MESSAGE_MAX = 2_000;
 const TURN_MAX = 800;
 const RECENT_MAX = 3_500;
 /** Shrink steps tried when the briefing with the full excerpt is still too long. */
 const SHRINK_STEPS = [1, 0.5, 0.25, 0];
-
-/** The Agent name a handoff starts with: the session's last folder in username form, else the tool's. */
-export function defaultAgentName(cwd: string, toolLabel: string): string {
-  return (
-    finishedAgentUsername(pathSegments(cwd).at(-1) ?? "") ||
-    finishedAgentUsername(toolLabel) ||
-    "agent"
-  );
-}
-
-/**
- * `name`, or the first of `name-2`, `name-3`… not in `taken` (lowercase handles), so a second
- * handoff from the same folder does not default to a name that is already an Agent's.
- */
-export function freeAgentName(name: string, taken: ReadonlySet<string>): string {
-  if (!taken.has(name.toLowerCase())) return name;
-  for (let suffix = 2; ; suffix += 1) {
-    // Cut the base, not the suffix, so the candidate stays a valid username.
-    const tail = `-${suffix}`;
-    const candidate = `${name.slice(0, AGENT_NAME_MAX_LENGTH - tail.length).replace(/-+$/, "")}${tail}`;
-    if (!taken.has(candidate.toLowerCase())) return candidate;
-  }
-}
 
 /** `text` trimmed and cut to at most `max` code points, the ellipsis included. */
 function clip(text: string, max: number): string {
