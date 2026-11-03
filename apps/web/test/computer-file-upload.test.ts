@@ -132,6 +132,52 @@ test("complete verifies the object then waits for the Computer pull", async () =
   expect(published?.downloadUrl).toBe("https://files.example/get");
 });
 
+test("ingest stores the file then waits for the Computer pull", async () => {
+  const pullResults = new MemoryPullResults();
+  let putKey: string | undefined;
+  let published: ComputerFilePullRequest | undefined;
+  const uploads = new ComputerFileUploads(
+    {
+      owned: async () => true,
+      online: async () => true,
+      supported: async () => true,
+      storage: {
+        ...storage({}),
+        put: async (objectKey) => {
+          putKey = objectKey;
+        },
+      },
+      sessions: new MemorySessions(),
+      pullResults,
+      publishPull: async (request) => {
+        published = request;
+        pullResults.result = {
+          ...request,
+          status: "ok",
+          path: "/workspace/uploads/notes.txt",
+          errorMessage: "",
+        };
+      },
+    },
+    {
+      now: () => 1_000,
+      wait: async () => {},
+      timeoutMs: 1_000,
+      sessionExpiresInSeconds: 900,
+      pullExpiresInSeconds: 600,
+    },
+  );
+  const file = new File(["hello"], "notes.txt", { type: "text/plain" });
+  expect(await uploads.ingest(viewer, computerId, file)).toEqual({
+    status: "ready",
+    path: "/workspace/uploads/notes.txt",
+    fileName: "notes.txt",
+    sizeBytes: 5,
+  });
+  expect(putKey).toContain("/computer-files/");
+  expect(published?.downloadUrl).toBe("https://files.example/get");
+});
+
 test("complete reports offline without publishing a pull", async () => {
   const sessions = new MemorySessions();
   let published = false;

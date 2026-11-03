@@ -68,8 +68,11 @@ function pollDelayMs(attempt: number) {
 }
 
 /**
- * Owner uploads that land in a Computer's `uploads/` directory: browser PUTs to storage with a
- * short-lived presigned URL, then complete verifies the object and asks the Computer to pull it.
+ * Owner uploads that land in a Computer's `uploads/` directory.
+ *
+ * The browser path uses {@link ComputerFileUploads.ingest}: the web server writes the object
+ * (attachments-style), then asks the Computer to pull a short-lived GET URL. Browser→OSS PUT is
+ * not used yet — OSS CORS for direct upload is still an ops follow-up.
  */
 export class ComputerFileUploads {
   constructor(
@@ -98,6 +101,45 @@ export class ComputerFileUploads {
       pullExpiresInSeconds: 900,
     },
   ) {}
+
+  /**
+   * Browser upload: store the bytes on the server's file backend, then pull onto the Computer.
+   * Needs `presignGet` so the Daemon can fetch outbound; local-only storage cannot place files.
+   */
+  async ingest(
+    viewer: ComputerFileViewer,
+    computerId: string,
+    file: Blob & { name: string; type: string; size: number },
+  ): Promise<ComputerFileUploadCompleteResponse | { status: "too_large" | "invalid_name" }> {
+    if (!(await this.dependencies.owned(viewer, computerId))) return { status: "unavailable" };
+    if (!this.dependencies.storage.presignGet) return { status: "storage_unavailable" };
+    if (!Number.isSafeInteger(file.size) || file.size <= 0 || file.size > COMPUTER_FILE_MAX_BYTES)
+      return { status: "too_large" };
+    let fileName: string;
+    try {
+      fileName = sanitizeComputerFileName(file.name);
+    } catch {
+      return { status: "invalid_name" };
+    }
+    const contentType = file.type || "application/octet-stream";
+    const uploadId = crypto.randomUUID();
+    const objectKey = `workspaces/${viewer.workspaceId}/computer-files/${computerId}/${uploadId}/original`;
+    try {
+      await this.dependencies.storage.put(objectKey, file, contentType);
+    } catch (error) {
+      return {
+        status: "failed",
+        message: error instanceof Error ? error.message.slice(0, 200) : "storage put failed",
+      };
+    }
+    return this.pullPlacedObject(viewer, computerId, {
+      uploadId,
+      objectKey,
+      fileName,
+      contentType,
+      sizeBytes: file.size,
+    });
+  }
 
   async create(
     viewer: ComputerFileViewer,
@@ -184,6 +226,29 @@ export class ComputerFileUploads {
         message: `object size ${head.sizeBytes} does not match declared ${session.sizeBytes}`,
       };
 
+    return this.pullPlacedObject(viewer, computerId, {
+      uploadId: session.uploadId,
+      objectKey: session.objectKey,
+      fileName: session.fileName,
+      contentType: session.contentType,
+      sizeBytes: session.sizeBytes,
+    });
+  }
+
+  private async pullPlacedObject(
+    viewer: ComputerFileViewer,
+    computerId: string,
+    placed: {
+      uploadId: string;
+      objectKey: string;
+      fileName: string;
+      contentType: string;
+      sizeBytes: number;
+    },
+  ): Promise<ComputerFileUploadCompleteResponse> {
+    const storage = this.dependencies.storage;
+    if (!storage.presignGet) return { status: "storage_unavailable" };
+
     const availability = { workspaceId: viewer.workspaceId, computerId };
     const [online, supported] = await Promise.all([
       this.dependencies.online(availability),
@@ -192,7 +257,7 @@ export class ComputerFileUploads {
     if (!online) return { status: "offline" };
     if (!supported) return { status: "unsupported" };
 
-    const downloadUrl = await storage.presignGet(session.objectKey, {
+    const downloadUrl = await storage.presignGet(placed.objectKey, {
       expiresInSeconds: this.timing.pullExpiresInSeconds,
     });
     const request: ComputerFilePullRequest = {
@@ -201,9 +266,21 @@ export class ComputerFileUploads {
       workspaceId: viewer.workspaceId,
       computerId,
       downloadUrl,
-      fileName: session.fileName,
-      sizeBytes: session.sizeBytes,
-      contentType: session.contentType,
+      fileName: placed.fileName,
+      sizeBytes: placed.sizeBytes,
+      contentType: placed.contentType,
+    };
+    const session: ComputerFileUploadSessionRecord = {
+      uploadId: placed.uploadId,
+      workspaceId: viewer.workspaceId,
+      computerId,
+      userId: viewer.userId,
+      objectKey: placed.objectKey,
+      fileName: placed.fileName,
+      contentType: placed.contentType,
+      sizeBytes: placed.sizeBytes,
+      state: "pending",
+      expiresAt: new Date(this.timing.now() + 60_000).toISOString(),
     };
 
     try {
@@ -226,8 +303,8 @@ export class ComputerFileUploads {
             return {
               status: "ready",
               path: result.path,
-              fileName: session.fileName,
-              sizeBytes: session.sizeBytes,
+              fileName: placed.fileName,
+              sizeBytes: placed.sizeBytes,
             };
           }
           await this.dependencies.sessions.put({ ...session, state: "failed" }, 60).catch(() => {});
