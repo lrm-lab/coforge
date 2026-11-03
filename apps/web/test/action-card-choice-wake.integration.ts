@@ -208,10 +208,14 @@ test("the person's own answer commits the card, and the Agent hears it fenced", 
     { messageId: message.id, optionId: "_other", text: "  Blue with\nstripes  " },
     { publisher: publisher as never },
   );
-  expect(result).toEqual({ optionId: "_other", label: "Other", text: "Blue with\nstripes" });
+  expect(result).toEqual({
+    optionId: "_other",
+    label: "Something else",
+    text: "Blue with\nstripes",
+  });
   const card = await db.actionCard.findUniqueOrThrow({ where: { messageId: message.id } });
   expect(card.result).toEqual(result);
-  const answer = `@choice-${suffix} answered your choice "Which color?" in #choice-${suffix}: Other (their own words)\n  │ Blue with\n  │ stripes`;
+  const answer = `@choice-${suffix} answered your choice "Which color?" in #choice-${suffix}: Something else (their own words)\n  │ Blue with\n  │ stripes`;
   const decoded = new TextDecoder().decode(
     Uint8Array.from(Object.values((published[0] as { data: Record<string, number> }).data)),
   );

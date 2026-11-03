@@ -3,7 +3,7 @@ import {
   renderForwardedMessage,
   type ForwardedMessage,
 } from "@lrm/coforge-sdk/internal";
-import { CHOICE_OTHER_OPTION_ID } from "@lrm/coforge-sdk/agent";
+import { CHOICE_OTHER_DEFAULT_LABEL, CHOICE_OTHER_OPTION_ID } from "@lrm/coforge-sdk/agent";
 import {
   agentReadableBody,
   deliveryMentionsAgent,
@@ -90,7 +90,7 @@ export function choiceResultBody(
   const prompt = payload?.prompt ? `"${payload.prompt}" ` : "";
   const chosen =
     result?.optionId === CHOICE_OTHER_OPTION_ID
-      ? `${result.label ?? "Other"} (their own words)\n  │ ${fenceUserText(result.text ?? "")}`
+      ? `${result.label ?? CHOICE_OTHER_DEFAULT_LABEL} (their own words)\n  │ ${fenceUserText(result.text ?? "")}`
       : result?.label
         ? `${result.optionId ?? ""} · ${result.label}`.trim()
         : "an option";

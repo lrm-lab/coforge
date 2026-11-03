@@ -1,4 +1,5 @@
 import {
+  CHOICE_OTHER_DEFAULT_LABEL,
   CHOICE_OTHER_OPTION_ID,
   CHOICE_OTHER_TEXT_MAX_LENGTH,
   type ChoiceAction,
@@ -150,7 +151,11 @@ function choiceAnswer(
     if (!other || other.enabled === false) throw new AppError("INVALID_INPUT");
     const text = input.text?.trim();
     if (!text || text.length > CHOICE_OTHER_TEXT_MAX_LENGTH) throw new AppError("INVALID_INPUT");
-    return { optionId: CHOICE_OTHER_OPTION_ID, label: other.label ?? "Other", text };
+    return {
+      optionId: CHOICE_OTHER_OPTION_ID,
+      label: other.label ?? CHOICE_OTHER_DEFAULT_LABEL,
+      text,
+    };
   }
   const option = payload.options.find((entry) => entry.id === input.optionId);
   if (!option) throw new AppError("INVALID_INPUT");

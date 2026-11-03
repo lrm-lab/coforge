@@ -160,8 +160,8 @@ const choiceOptionSchema = z.object({
 const choiceOtherSchema = z.object({
   /** Default on; `enabled: false` removes the row and refuses an `_other` answer. */
   enabled: z.boolean().optional(),
-  /** The row and result label; the client's localized default ("Other" / "其他") applies when
-   * absent. */
+  /** The row and result label; absent, the row is `CHOICE_OTHER_DEFAULT_LABEL` ("Something
+   * else", "其他" in Chinese). */
   label: z.string().trim().min(1).max(80).optional(),
 });
 
@@ -185,6 +185,10 @@ export type ChoiceAction = z.infer<typeof choiceActionSchema>;
 /** The id an "other" answer records; the option-id grammar forbids a leading underscore, so no
  * Agent option can collide with it. */
 export const CHOICE_OTHER_OPTION_ID = "_other";
+
+/** What the "other" row is called when the Agent gives it no label: the result records it, and
+ * the Agent reads it, in these words; the card shows the viewer's language ("其他" in Chinese). */
+export const CHOICE_OTHER_DEFAULT_LABEL = "Something else";
 
 /** The most the person's own answer may hold, as the prompt's bound. */
 export const CHOICE_OTHER_TEXT_MAX_LENGTH = 200;
