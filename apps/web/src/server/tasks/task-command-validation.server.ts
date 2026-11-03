@@ -79,7 +79,8 @@ export function validateTaskCommand(command: TaskCommand) {
     if (command.number !== undefined) throw new AppError("INVALID_INPUT");
   }
   const relational = command.operation === "create" || command.operation === "amend";
-  const labelsAllowed = command.operation === "create" || command.operation === "amend";
+  const labelsAllowed =
+    command.operation === "create" || command.operation === "amend" || command.operation === "list";
   for (const labels of [command.labels, command.removeLabels]) {
     if (labels === undefined) continue;
     if (
@@ -92,8 +93,9 @@ export function validateTaskCommand(command: TaskCommand) {
     )
       throw new AppError("INVALID_INPUT");
   }
-  // Only an amendment takes a label off; a new Task starts with the labels it is given.
-  if (command.operation === "create" && command.removeLabels !== undefined)
+  // Only an amendment takes a label off; a new Task starts with the labels it is given, and a list
+  // filters by them.
+  if (command.operation !== "amend" && command.removeLabels !== undefined)
     throw new AppError("INVALID_INPUT");
   if (command.blockedBy !== undefined) {
     if (

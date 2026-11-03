@@ -49,6 +49,18 @@ test("a task carries its labels, case-insensitively, and an amend adds and remov
       removed: [],
     });
 
+    // `list --label` filters: every named label must be on the Task.
+    await labels.create(workspaceId, principals.alice.userId!, { name: "Both" });
+    await run("alice", { operation: "amend", number: number!, labels: ["Both"] });
+    const onlyDesign = (await make("alice", 1, { labels: ["Design"] }))[0]!;
+    const listed = async (...names: string[]) =>
+      (await run("alice", { operation: "list", labels: names })).tasks.map((task) => task.number);
+    expect(await listed("Design")).toEqual([onlyDesign]);
+    expect(await listed("Bug", "Both")).toEqual([number]);
+    expect(await listed("Design", "Bug")).toEqual([]);
+    const unknownFilter = await refusal(run("alice", { operation: "list", labels: ["Nope"] }));
+    expect(unknownFilter.code).toBe("INVALID_INPUT");
+
     // A label no Workspace label names is refused and never created; the hint names the ones it has.
     const unknown = await refusal(
       run("alice", { operation: "amend", number: number!, labels: ["Nope"] }),
@@ -56,7 +68,7 @@ test("a task carries its labels, case-insensitively, and an amend adds and remov
     expect(unknown.code).toBe("INVALID_INPUT");
     expect(unknown.hint).toContain("Nope");
     expect(unknown.hint).toContain("Design");
-    expect(await db.label.count({ where: { workspaceId } })).toBe(2);
+    expect(await db.label.count({ where: { workspaceId } })).toBe(3);
   } finally {
     await db.$disconnect();
   }

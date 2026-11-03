@@ -38,7 +38,7 @@ type TaskOperation = (typeof TASK_OPERATIONS)[number];
 
 /** The flags each `task` subcommand takes. */
 const TASK_FLAGS: Record<TaskOperation, readonly string[]> = {
-  list: ["--target", "--mine", "--status", "--ready", "--json"],
+  list: ["--target", "--mine", "--status", "--ready", "--label", "--json"],
   show: ["--target", "--peer-kind", "--number", "--json"],
   create: [
     "--target",
@@ -51,6 +51,7 @@ const TASK_FLAGS: Record<TaskOperation, readonly string[]> = {
     "--alongside",
     "--blocked-by",
     "--parent",
+    "--label",
     "--anyway",
     "--json",
   ],
@@ -93,6 +94,7 @@ const TASK_FLAGS: Record<TaskOperation, readonly string[]> = {
     "--clear-description",
     "--blocked-by",
     "--parent",
+    "--label",
     "--expected-revision",
     "--reviewer-isolation",
     "--json",
@@ -117,9 +119,11 @@ const TASK_FLAGS: Record<TaskOperation, readonly string[]> = {
 /** Flags a subcommand accepts more than once. `update` counts its `--number`s only to refuse
  * more than one by name. */
 const TASK_REPEATABLE_FLAGS: Partial<Record<TaskOperation, readonly string[]>> = {
-  create: ["--title"],
+  create: ["--title", "--label"],
+  list: ["--label"],
   claim: ["--number", "--message-id"],
   update: ["--number"],
+  amend: ["--label"],
 };
 
 const TASK_SWITCHES = new Set([
@@ -267,6 +271,9 @@ export function parseTaskArgs(
   if (operation === "list") {
     task.status = one("--status") as TaskStatus | "all" | undefined;
     if (values.has("--ready")) task.ready = true;
+    const labels = (values.get("--label") ?? []).map((label) => label.trim());
+    if (labels.some((label) => !label)) throw invalidTaskArg("--label must name a label");
+    if (labels.length) task.labels = labels;
   } else if (operation === "create") {
     const titles = values.get("--title") ?? [];
     if (!titles.length) throw invalidTaskArg("--title is required (at least one)");
@@ -293,6 +300,12 @@ export function parseTaskArgs(
     if (blockedBy !== undefined) task.blockedBy = blockedByOption(blockedBy, false);
     const parent = one("--parent");
     if (parent !== undefined) task.parent = parentOption(parent, false);
+    const labels = (values.get("--label") ?? []).map((label) => label.trim());
+    if (labels.some((label) => !label || label.startsWith("-")))
+      throw invalidTaskArg(
+        "--label on create names a label to attach; to take one off use `task amend --label -name`",
+      );
+    if (labels.length) task.labels = labels;
   } else if (operation === "convert") {
     const messageId = one("--message-id")?.trim();
     if (!messageId) throw invalidTaskArg("--message-id is required");
@@ -345,18 +358,31 @@ export function parseTaskArgs(
     const title = one("--title");
     const blockedBy = one("--blocked-by");
     const parent = one("--parent");
+    const rawLabels = values.get("--label") ?? [];
+    const addedLabels = rawLabels
+      .filter((label) => !label.trimStart().startsWith("-"))
+      .map((label) => label.trim());
+    const removedLabels = rawLabels
+      .filter((label) => label.trimStart().startsWith("-"))
+      .map((label) => label.trim().slice(1).trim());
+    if ([...addedLabels, ...removedLabels].some((label) => !label))
+      throw invalidTaskArg("--label must name a label; --label -name takes one off");
     if (
       title === undefined &&
       description === undefined &&
       !clear &&
       blockedBy === undefined &&
-      parent === undefined
+      parent === undefined &&
+      addedLabels.length === 0 &&
+      removedLabels.length === 0
     )
       throw invalidTaskArg(
-        "At least one amendment is required: --title, --description, --clear-description, --blocked-by, or --parent",
+        "At least one amendment is required: --title, --description, --clear-description, --blocked-by, --parent, or --label",
       );
     if (blockedBy !== undefined) task.blockedBy = blockedByOption(blockedBy, true);
     if (parent !== undefined) task.parent = parentOption(parent, true);
+    if (addedLabels.length) task.labels = addedLabels;
+    if (removedLabels.length) task.removeLabels = removedLabels;
     if (title !== undefined) task.title = title;
     if (clear) task.description = null;
     else if (description !== undefined) task.description = description;

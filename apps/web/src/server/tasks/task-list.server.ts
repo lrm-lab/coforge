@@ -13,6 +13,7 @@ import type {
 } from "@lrm/coforge-sdk/internal";
 import type { TaskBoardPorts } from "./task-board-ports.server";
 import { NOT_BLOCKED_WHERE, showRelations } from "./task-relations.server";
+import { labelFilterWhere } from "./labels.server";
 import {
   CONVERSATION_KIND_WHERE,
   TASK_SCOPE_WHERE,
@@ -74,6 +75,7 @@ export async function listOwnTasks(
     await requireWorkspaceMember(ports.db, principal.workspaceId, principal.userId);
   const actor = principal.agentId ? { agentId: principal.agentId } : { userId: principal.userId! };
   const scope = ownTaskScope(actor);
+  const labels = await labelFilterWhere(ports.db, principal.workspaceId, command.labels);
   const tasks = await ports.db.task.findMany({
     where: {
       workspaceId: principal.workspaceId,
@@ -81,6 +83,7 @@ export async function listOwnTasks(
       status:
         command.status === "all" ? undefined : (command.status ?? { in: UNFINISHED_TASK_STATUSES }),
       conversation: scope.conversations,
+      ...(labels ?? {}),
     },
     orderBy: [{ conversationId: "asc" }, { number: "asc" }],
     select: {
@@ -141,6 +144,7 @@ export async function listConversationTasks(
   conversationId: string,
   command: TaskCommand,
 ): Promise<TaskResult> {
+  const labels = await labelFilterWhere(ports.db, workspaceId, command.labels);
   const tasks = await ports.db.task.findMany({
     where: {
       conversationId: conversationId,
@@ -149,6 +153,7 @@ export async function listConversationTasks(
         : {
             status: command.status === "all" ? undefined : command.status,
           }),
+      ...(labels ?? {}),
     },
     orderBy: { number: "asc" },
     select: taskSelection,

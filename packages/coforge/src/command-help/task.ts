@@ -9,8 +9,9 @@ export const taskHelp: Readonly<Record<string, HelpEntry>> = {
   },
   "task list": {
     syntax:
-      "coforge task list (--target <channel> | --mine | --following) [--status all|todo|in_progress|in_review|done|closed] [--ready] [--json]",
+      "coforge task list (--target <channel> | --mine | --following) [--status all|todo|in_progress|in_review|done|closed] [--ready] [--label <name>]... [--json]",
     flags: [
+      "--label  only tasks carrying every named label (repeatable)",
       "--ready  todo tasks nobody holds and no open blocker waits on (with --target)",
       "--following  the task conversations you follow, with their unread counts (no other flag combines with it)",
     ],
@@ -69,11 +70,12 @@ export const taskHelp: Readonly<Record<string, HelpEntry>> = {
   },
   "task create": {
     syntax:
-      "coforge task create --target <channel> [--peer-kind human|agent] --title <title>... [--assignee @handle] [--creates-resource] [--description <text>] [--message-id <id>] [--alongside] [--blocked-by <task>,...] [--parent <task>] [--anyway] [--json]",
+      "coforge task create --target <channel> [--peer-kind human|agent] --title <title>... [--assignee @handle] [--creates-resource] [--description <text>] [--message-id <id>] [--alongside] [--blocked-by <task>,...] [--parent <task>] [--label <name>]... [--anyway] [--json]",
     flags: [
       "--anyway  create even when the target has messages you have not reviewed (the hold lists them)",
       "--blocked-by  tasks that must be done or closed before this one can start; --parent  the parent task this one is a sub-task of. A <task> is a number in --target's conversation, or #channel/<n> in another channel of the Workspace",
       "--description  details for the task; only with a single --title",
+      "--label  a Workspace label to attach (repeatable, at most five); the label must already exist",
       "--message-id  the channel message the task is made from (full id or its short form); requires task conversations, otherwise use `coforge task convert`; applies to every --title",
       "--alongside  with --message-id, create beside someone else's live task on that message",
     ],

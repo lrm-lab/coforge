@@ -108,6 +108,20 @@ export async function resolveTaskLabels(
   });
 }
 
+/**
+ * The `labels` predicate for a list filter: a Task must carry every named label (AND). An unknown
+ * name is refused by `resolveTaskLabels`, as in a Task write.
+ */
+export async function labelFilterWhere(
+  db: Pick<Prisma.TransactionClient, "label">,
+  workspaceId: string,
+  names: readonly string[] | undefined,
+): Promise<Prisma.TaskWhereInput | undefined> {
+  if (!names?.length) return undefined;
+  const labels = await resolveTaskLabels(db, workspaceId, names);
+  return { AND: labels.map((label) => ({ labels: { some: { labelId: label.id } } })) };
+}
+
 /** The history change a label edit records; null when nothing changed. */
 export function labelsChange(
   added: readonly TaskLabel[],

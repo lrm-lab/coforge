@@ -109,3 +109,19 @@ test("task numbers are plain digits: exponent, hex and decimal forms are refused
     task: { number: 12 },
   });
 });
+
+test("labels: create attaches, amend adds and takes off, list filters", () => {
+  const target = ["--target", "#general"];
+  expect(
+    parseTaskArgs(["create", ...target, "--title", "A", "--label", "Design", "--label", "Bug"]),
+  ).toMatchObject({ task: { labels: ["Design", "Bug"] } });
+  expect(
+    parseTaskArgs(["amend", ...target, "--number", "7", "--label", "Design", "--label", "-Bug"]),
+  ).toMatchObject({ task: { labels: ["Design"], removeLabels: ["Bug"] } });
+  expect(parseTaskArgs(["list", ...target, "--label", "Design", "--label", "Bug"])).toMatchObject({
+    task: { labels: ["Design", "Bug"] },
+  });
+  // Create has nothing to take off, and an empty name is a mistake either way.
+  expect(() => parseTaskArgs(["create", ...target, "--title", "A", "--label", "-Bug"])).toThrow();
+  expect(() => parseTaskArgs(["amend", ...target, "--number", "7", "--label", "-"])).toThrow();
+});

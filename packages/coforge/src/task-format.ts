@@ -38,6 +38,17 @@ function messageField(task: TaskView): string {
   return task.sourceMessage ? `source=${shortId(task.sourceMessage.messageId)}` : "msg=-";
 }
 
+/** At most this many label names on one list line; the rest fold into `+N`. */
+const LABELS_SHOWN = 3;
+
+/** A list line's labels, or nothing when the Task carries none. */
+function labelsField(task: TaskView): string {
+  const labels = task.labels ?? [];
+  if (!labels.length) return "";
+  const shown = labels.slice(0, LABELS_SHOWN).map((label) => label.name);
+  return ` · ${shown.join(", ")}${labels.length > LABELS_SHOWN ? ` +${labels.length - LABELS_SHOWN}` : ""}`;
+}
+
 function times(task: TaskView): string {
   return ` created=${formatUtcTimestamp(task.createdAt)} updated=${formatUtcTimestamp(task.updatedAt)}`;
 }
@@ -48,7 +59,7 @@ function boardRow(task: TaskView): string {
   const creatorMark = departure(task.creator);
   const creator = ` (by @${task.creator.handle}${creatorMark ? ` [${creatorMark}]` : ""})`;
   const details = task.description ? `\n  details: ${fenceMessageBody(task.description)}` : "";
-  return `#${task.number} [${task.status}] ${fenceMessageBody(task.title)}${owner}${creator} ${messageField(task)} rev=${task.revision}${resourceReceipt(task)}${relationMarks(task)}${times(task)}${details}`;
+  return `#${task.number} [${task.status}] ${fenceMessageBody(task.title)}${owner}${creator} ${messageField(task)} rev=${task.revision}${resourceReceipt(task)}${relationMarks(task)}${labelsField(task)}${times(task)}${details}`;
 }
 
 /** One conversation's Tasks, in board order, as `coforge task list --target` prints them. */
@@ -66,7 +77,7 @@ function ownRow(task: TaskView): string {
   const mark = departure(task.creator);
   const creator = ` by=@${task.creator.handle}${mark ? ` creator=${mark}` : ""}`;
   const title = foldUntrustedLine(task.title);
-  return `- ${task.channelRef ?? "<unknown conversation>"} task #${task.number} [${task.status}]${creator} ${messageField(task)}${resourceReceipt(task)}${relationMarks(task)}${times(task)} ${title}`;
+  return `- ${task.channelRef ?? "<unknown conversation>"} task #${task.number} [${task.status}]${creator} ${messageField(task)}${resourceReceipt(task)}${relationMarks(task)}${labelsField(task)}${times(task)} ${title}`;
 }
 
 /**
@@ -204,6 +215,7 @@ export function formatTaskShow(
     `## Task #${task.number} [${task.status}]`,
     `Title: ${fenceMessageBody(task.title)}`,
     `Description: ${task.description ? fenceMessageBody(task.description) : "(none set)"}`,
+    `Labels: ${(task.labels ?? []).map((label) => label.name).join(", ") || "(none)"}`,
     ...showRelationLines(task, relations),
   ].join("\n");
 }

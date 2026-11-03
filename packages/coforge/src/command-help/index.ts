@@ -2,7 +2,6 @@ import { CliError } from "../cli-error";
 import type { HelpEntry } from "./entry";
 import { taskHelp } from "./task";
 
-
 /**
  * Every command `parseArgs` accepts, keyed by the words that name it. The longest matching key
  * wins, so `message read --help` finds its own entry and `message --help` the family's.
