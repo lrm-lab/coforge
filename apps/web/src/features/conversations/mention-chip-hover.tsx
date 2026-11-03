@@ -6,7 +6,7 @@ import type {
   OpenPersonProfile,
 } from "#src/features/agents/profile-panel/open-agent-profile";
 import { cn } from "#src/lib/utils";
-import { MENTION_CHIP_OPENABLE_CLASS } from "./message-markdown";
+import { MENTION_CHIP_OPENABLE_CLASS } from "./message-reference-chips";
 import { PersonHoverCard } from "./person-hover-card";
 
 /** The chip's own classes plus the pointer and hover affordance of a control. The trigger is an

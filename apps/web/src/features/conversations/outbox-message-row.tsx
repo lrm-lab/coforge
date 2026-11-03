@@ -14,7 +14,7 @@ import {
   type OutboxEntry,
   type UnsentReason,
 } from "./composer-outbox";
-import type { ChipMention } from "./message-markdown";
+import type { ChipMention } from "./message-reference-chips";
 import { MessageBody } from "./message-body";
 import { messagePaddingClass, ROW_CLASS, RUN_START_CLASS } from "./message-row";
 import { canEditUnsent, failureAnnounced, failureNeedsAnnouncing } from "./use-message-outbox";

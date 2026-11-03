@@ -10,7 +10,7 @@ import type { ThreadFollow } from "./thread-pane-header";
 import type { SendOptions } from "./composer-outbox";
 import type { Mentionable } from "./mention-text";
 import type { ThreadSummary } from "./thread-summary-model";
-import type { ChipMention } from "./message-markdown";
+import type { ChipMention } from "./message-reference-chips";
 import type { OwnMessageIndexEntry } from "./own-messages-menu";
 import type { ChannelSuggestion } from "./reference-completion";
 import type { ReadPositions } from "./conversation-pane-layout";

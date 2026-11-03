@@ -14,12 +14,9 @@ import { MESSAGE_REMARK_PLUGINS, messageSource } from "#src/lib/message-syntax";
 import { MessageFormula } from "./message-formula";
 import { AgentMentionChip, PersonMentionChip } from "./mention-chip-hover";
 import { followInternalLinkClick, internalAppHref } from "./internal-app-href";
-import {
-  mentionHandlesByToken,
-  rehypeReferenceChips,
-  rehypeTrailingSlot,
-  type ChipMention,
-} from "./message-markdown";
+import { mentionHandlesByToken, rehypeReferenceChips } from "./message-markdown";
+import type { ChipMention } from "./message-reference-chips";
+import { rehypeTrailingSlot } from "./message-trailing-slot";
 import type { MentionRef } from "./mention-text";
 import type {
   OpenAgentProfile,

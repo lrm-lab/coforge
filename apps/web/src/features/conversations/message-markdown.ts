@@ -29,43 +29,13 @@ import {
 import type { Element, Root, Text } from "hast";
 
 import type { Mentionable, MentionRef } from "./mention-text";
-
-/**
- * Complete class literals so Tailwind's source scan emits every utility. The chip treatment
- * matches the one the plain-text renderer used: a soft brand fill, and the stronger solid fill
- * for a mention of the viewing user (the way Slack marks "@you"). `message-markdown-mention` is
- * the stable hook the stylesheet and the component use to recognise a chip.
- */
-const CHIP_BASE = "message-markdown-mention rounded-sm px-0.5 font-medium";
-export const MENTION_CHIP_CLASS = `${CHIP_BASE} bg-brand-primary text-brand-secondary`;
-export const MENTION_CHIP_SELF_CLASS = `${CHIP_BASE} bg-brand-solid text-white`;
-/** Added by the renderer to a mention chip that opens a profile (a host passed the handler), so the
- * stylesheet gives it the pointer and hover affordance of a control; an inert chip lacks it. */
-export const MENTION_CHIP_OPENABLE_CLASS = "message-markdown-mention-openable";
-
-/**
- * Channel-reference chip classes. A `<@channel:uuid:name>` token renders with the same soft fill as
- * the other reference chips; the renderer turns the chip into a link to that channel (see
- * `message-body.tsx`).
- */
-export const CHANNEL_CHIP_CLASS =
-  "message-markdown-channel-reference rounded-sm px-0.5 font-medium bg-brand-primary text-brand-secondary";
-/** The chip's `className` list, split once; nothing mutates it. */
-const CHANNEL_CHIP_CLASSES = CHANNEL_CHIP_CLASS.split(" ");
-
-/**
- * Thread-reference chip classes. A `<@thread:uuid:uuid:name>` token renders with the same soft fill;
- * the renderer turns the chip into a link that opens the thread in its channel (see
- * `message-body.tsx`).
- */
-export const THREAD_CHIP_CLASS =
-  "message-markdown-thread-reference rounded-sm px-0.5 font-medium bg-brand-primary text-brand-secondary";
-const THREAD_CHIP_CLASSES = THREAD_CHIP_CLASS.split(" ");
-
-/** A resolved mention as a chip needs the mentioned actor's id (who the viewer is compared with,
- * a handle being a name that may change hands), its handle and current display label, plus the
- * Agent id to open its profile panel when applicable. */
-export type ChipMention = { actorId: string; handle: string; label: string; agentId?: string };
+import {
+  channelChip,
+  mentionChip,
+  taskReference,
+  threadChip,
+  type ChipMention,
+} from "./message-reference-chips";
 
 /**
  * The resolved mention for every token in a body, keyed the way `MENTION_TOKEN_PATTERN`
@@ -322,98 +292,4 @@ function referenceKinds(options: ReferenceChipOptions): ReferenceKind[] {
       },
     });
   return kinds;
-}
-
-/** A mention chip: the self treatment for the viewer, and the id of the Agent or person whose
- * profile the renderer opens from it, and the label it shows. */
-function mentionChip(mention: ChipMention, viewerId: string | undefined): Element {
-  // An Agent is never the viewer, whatever ids are compared.
-  const self = Boolean(viewerId) && !mention.agentId && mention.actorId === viewerId;
-  const className = (self ? MENTION_CHIP_SELF_CLASS : MENTION_CHIP_CLASS).split(" ");
-  return {
-    type: "element",
-    tagName: "span",
-    properties: {
-      className,
-      "data-mention-label": mention.label,
-      ...(mention.agentId
-        ? { "data-mention-agent-id": mention.agentId }
-        : { "data-mention-user-id": mention.actorId }),
-    },
-    children: [{ type: "text", value: `@${mention.label}` }],
-  };
-}
-
-/** A task reference, written as the words it stands for until the renderer resolves it. */
-function taskReference(number: number): Element {
-  return {
-    type: "element",
-    tagName: "span",
-    properties: { "data-task-reference-number": number },
-    children: [{ type: "text", value: `task #${number}` }],
-  };
-}
-
-/** A channel chip under the channel's current name. */
-function channelChip(id: string, name: string): Element {
-  return {
-    type: "element",
-    tagName: "span",
-    properties: { className: CHANNEL_CHIP_CLASSES, "data-channel-id": id },
-    children: [{ type: "text", value: `#${name}` }],
-  };
-}
-
-/** A thread chip, `#name:xxxxxxxx-xxxx` under the channel's current name. */
-function threadChip(channelId: string, rootId: string, name: string): Element {
-  return {
-    type: "element",
-    tagName: "span",
-    properties: {
-      className: THREAD_CHIP_CLASSES,
-      "data-thread-channel-id": channelId,
-      "data-thread-root-id": rootId,
-    },
-    children: [{ type: "text", value: threadReferenceText(name, rootId) }],
-  };
-}
-
-// A list item's text may sit in a paragraph of its own (a loose list); a quote holds blocks.
-const SLOT_CONTAINERS = new Set(["ul", "ol", "li", "blockquote"]);
-const SLOT_TEXT_BLOCKS = new Set(["p", "h1", "h2", "h3", "h4", "h5", "h6"]);
-
-function lastElement(parent: Root | Element): Element | undefined {
-  for (let index = parent.children.length - 1; index >= 0; index -= 1) {
-    const child = parent.children[index];
-    if (child.type === "element") return child;
-  }
-  return undefined;
-}
-
-/**
- * Marks where `trailing` goes: the end of the body's last paragraph, heading or list item, found
- * through lists and quotes, so it reads on that line's end; after a final code block or table,
- * which have no line to join, it starts the next line. The slot is a `span[data-trailing-slot]`,
- * which `MessageBody` renders as what it was given.
- */
-export function rehypeTrailingSlot() {
-  return (tree: Root) => {
-    let parent: Root | Element = tree;
-    for (;;) {
-      const last = lastElement(parent);
-      if (!last) break;
-      if (SLOT_TEXT_BLOCKS.has(last.tagName)) {
-        parent = last;
-        break;
-      }
-      if (!SLOT_CONTAINERS.has(last.tagName)) break;
-      parent = last;
-    }
-    parent.children.push({
-      type: "element",
-      tagName: "span",
-      properties: { dataTrailingSlot: "" },
-      children: [],
-    });
-  };
 }

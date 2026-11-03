@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { rehypeTrailingSlot } from "#src/features/conversations/message-markdown";
+import { rehypeTrailingSlot } from "#src/features/conversations/message-trailing-slot";
 
 /** Runs the trailing-slot pass and returns where its slot landed, as a tag path from the root. */
 function slotPath(children: unknown[]) {

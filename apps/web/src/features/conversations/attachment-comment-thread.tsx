@@ -26,7 +26,7 @@ import {
   type MentionPin,
 } from "./mention-pins";
 import { MessageBody } from "./message-body";
-import type { ChipMention } from "./message-markdown";
+import type { ChipMention } from "./message-reference-chips";
 
 /**
  * An attachment's comments (`attachmentCommentsQueryKey`), paged backwards from the newest and read

@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 import type { ConversationProps, DirectConversationView } from "./conversation-types";
-import type { ChipMention } from "./message-markdown";
+import type { ChipMention } from "./message-reference-chips";
 import type { ChannelSuggestion } from "./reference-completion";
 import type { StreamRead } from "./stream-state";
 import type { ThreadFollow } from "./thread-pane-header";

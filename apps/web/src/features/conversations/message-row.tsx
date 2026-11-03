@@ -14,7 +14,7 @@ import { ActionCard } from "./action-card";
 import { MessageSenderLine } from "./message-sender-line";
 import { attachmentMessageDisplayBody } from "./attachment-file-name";
 import { CollapsibleMessageBody } from "./collapsible-message-body";
-import type { ChipMention } from "./message-markdown";
+import type { ChipMention } from "./message-reference-chips";
 import { messagePlainText } from "./selection-copy";
 import { QuoteSelectionBar, useQuoteSelection } from "./message-quote-selection";
 import { useTimeFormat } from "#src/lib/time-format-context";
