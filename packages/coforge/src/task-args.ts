@@ -54,6 +54,7 @@ const TASK_FLAGS: Record<TaskOperation, readonly string[]> = {
     "--blocked-by",
     "--parent",
     "--label",
+    "--label-description",
     "--project",
     "--anyway",
     "--priority",
@@ -101,6 +102,7 @@ const TASK_FLAGS: Record<TaskOperation, readonly string[]> = {
     "--blocked-by",
     "--parent",
     "--label",
+    "--label-description",
     "--project",
     "--clear-project",
     "--expected-revision",
@@ -314,6 +316,11 @@ export function parseTaskArgs(
         "--label on create names a label to attach; to take one off use `task amend --label -name`",
       );
     if (labels.length) task.labels = labels;
+    const labelDescription = one("--label-description")?.trim();
+    if (labelDescription !== undefined) {
+      if (!labelDescription) throw invalidTaskArg("--label-description must not be empty");
+      task.labelDescription = labelDescription;
+    }
     const project = one("--project")?.trim();
     if (project !== undefined) {
       if (!project) throw invalidTaskArg("--project must name a Project by slug");
@@ -416,6 +423,11 @@ export function parseTaskArgs(
     if (parent !== undefined) task.parent = parentOption(parent, true);
     if (addedLabels.length) task.labels = addedLabels;
     if (removedLabels.length) task.removeLabels = removedLabels;
+    const labelDescription = one("--label-description")?.trim();
+    if (labelDescription !== undefined) {
+      if (!labelDescription) throw invalidTaskArg("--label-description must not be empty");
+      task.labelDescription = labelDescription;
+    }
     if (clearProject) task.project = null;
     else if (project !== undefined) task.project = project;
     if (title !== undefined) task.title = title;

@@ -104,6 +104,14 @@ export function validateTaskCommand(command: TaskCommand) {
     )
       throw new AppError("INVALID_INPUT");
   }
+  if (
+    command.labelDescription !== undefined &&
+    (command.labels === undefined ||
+      typeof command.labelDescription !== "string" ||
+      !command.labelDescription.trim() ||
+      command.labelDescription.length > 500)
+  )
+    throw new AppError("INVALID_INPUT");
   // Only an amendment takes a label off; a new Task starts with the labels it is given, and a list
   // filters by them.
   if (command.operation !== "amend" && command.removeLabels !== undefined)

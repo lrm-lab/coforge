@@ -126,7 +126,25 @@ export async function createConversationTasks(
     if (command.assignee && !assignee) throw new AppError("NOT_FOUND");
     if (assignee && assignee.id !== member.id)
       await assertCanAssignOther(tx, scope.workspaceId, member);
-    const labels = await resolveTaskLabels(tx, scope.workspaceId, command.labels ?? []);
+    const labels = await resolveTaskLabels(
+      tx,
+      scope.workspaceId,
+      command.labels ?? [],
+      command.labelDescription !== undefined
+        ? { description: command.labelDescription }
+        : undefined,
+    );
+    const singleGroup = new Map<string, string>();
+    for (const label of labels) {
+      if (label.group?.selection !== "single") continue;
+      const other = singleGroup.get(label.group.id);
+      if (other)
+        throw new AppError("INVALID_INPUT", {
+          errorId: "task-label-group-single",
+          hint: `"${other}" and "${label.name}" are both in the single group "${label.group.name}"; a task carries one of them`,
+        });
+      singleGroup.set(label.group.id, label.name);
+    }
     if (labels.length > LABELS_PER_TASK_MAX)
       throw new AppError("INVALID_INPUT", {
         errorId: "task-label-limit",

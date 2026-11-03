@@ -145,7 +145,25 @@ export async function createTasks(
       : conversation.project;
     // The labels the new Tasks carry, resolved before anything is written; an unknown name is
     // refused with the Workspace's own labels. A Task carries at most five.
-    const labels = await resolveTaskLabels(tx, scope.workspaceId, command.labels ?? []);
+    const labels = await resolveTaskLabels(
+      tx,
+      scope.workspaceId,
+      command.labels ?? [],
+      command.labelDescription !== undefined
+        ? { description: command.labelDescription }
+        : undefined,
+    );
+    const singleGroup = new Map<string, string>();
+    for (const label of labels) {
+      if (label.group?.selection !== "single") continue;
+      const other = singleGroup.get(label.group.id);
+      if (other)
+        throw new AppError("INVALID_INPUT", {
+          errorId: "task-label-group-single",
+          hint: `"${other}" and "${label.name}" are both in the single group "${label.group.name}"; a task carries one of them`,
+        });
+      singleGroup.set(label.group.id, label.name);
+    }
     if (labels.length > LABELS_PER_TASK_MAX)
       throw new AppError("INVALID_INPUT", {
         errorId: "task-label-limit",

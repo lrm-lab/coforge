@@ -153,14 +153,36 @@ export async function amendTask(
     // takes off that it carries. A name no label has is refused, never created here.
     const [askedLabels, askedRemoved] = labelEdit
       ? await Promise.all([
-          resolveTaskLabels(tx, workspaceId, command.labels ?? []),
+          resolveTaskLabels(
+            tx,
+            workspaceId,
+            command.labels ?? [],
+            command.labelDescription !== undefined
+              ? { description: command.labelDescription }
+              : undefined,
+          ),
           resolveTaskLabels(tx, workspaceId, command.removeLabels ?? []),
         ])
       : [[], []];
-    const currentLabels = task.labels.map(({ label }) => labelView(label));
+    const currentLabelRows = task.labels.map(({ label }) => label);
+    const currentLabels = currentLabelRows.map(labelView);
     const currentIds = new Set(currentLabels.map((label) => label.id));
     const addedLabels = askedLabels.filter((label) => !currentIds.has(label.id));
-    const removedLabels = askedRemoved.filter((label) => currentIds.has(label.id));
+    const askedRemovedLabels = askedRemoved.filter((label) => currentIds.has(label.id));
+    // A single group allows one label: adding one takes the group's other label off this Task.
+    const replacedLabels = addedLabels.flatMap((label) =>
+      label.group?.selection === "single"
+        ? currentLabelRows.filter(
+            (current) => current.id !== label.id && current.groupId === label.groupId,
+          )
+        : [],
+    );
+    const removedLabels = [
+      ...askedRemovedLabels,
+      ...replacedLabels.filter(
+        (label) => !askedRemovedLabels.some((removed) => removed.id === label.id),
+      ),
+    ];
     const nextLabels = new Set(currentIds);
     for (const label of addedLabels) nextLabels.add(label.id);
     for (const label of removedLabels) nextLabels.delete(label.id);

@@ -318,6 +318,9 @@ export type TaskCommand = {
   labels?: string[];
   /** `amend`: labels to take off, by name. */
   removeLabels?: string[];
+  /** `create`/`amend`: the description a label this command creates gets; without one an unknown
+   * label is refused (an Agent must say what a new label is for). */
+  labelDescription?: string;
   /** `create`/`amend`: the Project by slug. `amend` with null files the Task under its
    * conversation's Project again. */
   project?: string | null;

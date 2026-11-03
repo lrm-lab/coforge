@@ -65,12 +65,17 @@ test("a merge moves Tasks to the target and drops a second label of its single g
     const aliceId = principals.alice.userId!;
     const groups = new LabelGroups(db);
     const labels = new Labels(db);
-    await groups.create(workspaceId, aliceId, { name: "Kind", selection: "single" });
+    const kind = await groups.create(workspaceId, aliceId, {
+      name: "Kind",
+      selection: "multiple",
+    });
     const alpha = await labels.create(workspaceId, aliceId, { name: "Alpha", group: "Kind" });
     const beta = await labels.create(workspaceId, aliceId, { name: "Beta", group: "Kind" });
     const gamma = await labels.create(workspaceId, aliceId, { name: "Gamma", group: "Kind" });
     const [one] = await make("alice", 1, { labels: ["Alpha"] });
     const [two] = await make("alice", 1, { labels: ["Alpha", "Gamma"] });
+    // The group becomes single without rewriting these Tasks; the merge below enforces it.
+    await groups.update(workspaceId, aliceId, kind.id, { selection: "single" });
 
     // A member may not merge; an owner may.
     expect(
@@ -115,6 +120,39 @@ test("switching a group to single reports the Tasks that now carry several of it
     expect(switched.group.selection).toBe("single");
     expect(switched.nonConforming).toBe(1);
     expect(await db.taskLabel.count({ where: { task: { workspaceId } } })).toBe(2);
+  } finally {
+    await db.$disconnect();
+  }
+});
+
+test("a single group replaces its label, refuses two at creation, and none filters", async () => {
+  const { db, run, make, show, principals, refusal } = await setup();
+  try {
+    const workspaceId = principals.alice.workspaceId;
+    const aliceId = principals.alice.userId!;
+    const groups = new LabelGroups(db);
+    const labels = new Labels(db);
+    await groups.create(workspaceId, aliceId, { name: "Kind" });
+    await labels.create(workspaceId, aliceId, { name: "Alpha", group: "Kind" });
+    await labels.create(workspaceId, aliceId, { name: "Beta", group: "Kind" });
+
+    const [number] = await make("alice", 1, { labels: ["Alpha"] });
+    await run("alice", { operation: "amend", number: number!, labels: ["Beta"] });
+    expect((await show(number!)).tasks[0]!.labels!.map((label) => label.name)).toEqual(["Beta"]);
+    const history = await run("alice", { operation: "history", number: number! });
+    const changed = history.history!.filter((event) => event.eventType === "labels_changed");
+    expect(changed.at(-1)!.payload).toMatchObject({ removed: [{ name: "Alpha" }] });
+
+    // Two labels of one single group in one create are refused, naming both.
+    const both = await refusal(make("alice", 1, { labels: ["Alpha", "Beta"] }));
+    expect(both.code).toBe("INVALID_INPUT");
+    expect(both.hint).toContain("Alpha");
+    expect(both.hint).toContain("Beta");
+
+    // `none` filters the Tasks that carry no label at all.
+    const [unlabeled] = await make("alice", 1);
+    const listed = await run("alice", { operation: "list", labels: ["none"] });
+    expect(listed.tasks.map((task) => task.number)).toEqual([unlabeled]);
   } finally {
     await db.$disconnect();
   }
