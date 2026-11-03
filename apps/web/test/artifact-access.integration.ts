@@ -27,6 +27,11 @@ const store: ArtifactBlobStore = {
   inspectMany: async (_workspaceId, sha256s) =>
     new Map(sha256s.flatMap((sha) => (blobs.has(sha) ? [[sha, blobs.get(sha)!]] : []))),
   use: async () => [],
+  // These artifacts are not documents, so no save reads or merges their bytes.
+  read: async () => null,
+  upload: async () => {
+    throw new Error("no bytes are stored in this test");
+  },
 };
 let switchedOn = true;
 const artifacts = new Artifacts(db, store, { enabled: async () => switchedOn });

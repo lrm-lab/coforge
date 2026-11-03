@@ -48,6 +48,8 @@ model ArtifactVersion {
   title            String         @default("")
   description      String         @default("")
   changedPaths     Json
+  /// What this version took from others' saves since its base: `{ files: paths, settings: names }`;
+  /// null when it took nothing.
   merged           Json?
   idempotencyKey   String
   createdAt        DateTime       @default(now())

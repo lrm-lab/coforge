@@ -11,7 +11,7 @@ import {
   ARTIFACT_TEXT_LIMIT,
   type ArtifactBlobInfo,
   type ArtifactBlobStore,
-} from "./artifacts.server";
+} from "./artifact-files.server";
 
 /** How long an uploaded blob waits for a version to name it before the sweep removes it. */
 export const ARTIFACT_BLOB_GRACE_MS = 24 * 60 * 60 * 1000;
@@ -109,6 +109,11 @@ export class StoredArtifactBlobs implements ArtifactBlobStore {
       select: { objectKey: true },
     });
     return row ? (await this.bucket()).open(row.objectKey) : null;
+  }
+
+  async read(workspaceId: string, sha256: string): Promise<Uint8Array | null> {
+    const opened = await this.open(workspaceId, sha256);
+    return opened ? new Uint8Array(await new Response(opened.body).arrayBuffer()) : null;
   }
 
   /**

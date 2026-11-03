@@ -1,6 +1,16 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import {
+  ARTIFACT_BINARY_LIMIT,
+  ARTIFACT_DOCUMENT_LIMIT,
+  ARTIFACT_FILE_LIMIT,
+  ARTIFACT_TEXT_LIMIT,
+  artifactPathValid,
+  type ArtifactBlobStore,
+  type ArtifactFileInput,
+  type ArtifactFileRow as FileRow,
+} from "./artifact-files.server";
+import {
   artifactHomeAccess,
   artifactsDisabled,
   artifactsEnabled,
@@ -10,6 +20,7 @@ import {
 import {
   ARTIFACT_SETTINGS,
   mergeSettings,
+  mergeDocumentFile,
   type ArtifactConflict,
   type ArtifactSettingName,
   type ArtifactSettings,
@@ -22,42 +33,14 @@ export type ArtifactHome =
   | { kind: "public" };
 
 export type { ArtifactActor };
-
-/** One file a push adds or replaces: bytes already uploaded under `sha256`. Its size and kind
- * come from the blob, never from the client. */
-export type ArtifactFileInput = {
-  path: string;
-  sha256: string;
-};
-
-/** What a stored blob is: its size and the kind the server derived from the bytes. */
-export type ArtifactBlobInfo = { sizeBytes: number; kind: string };
-
-/** Content-addressed storage of artifact bytes, shared by every version. */
-export interface ArtifactBlobStore {
-  /** One lookup for every sha256 a push names; a blob that is not stored is absent. */
-  inspectMany(
-    workspaceId: string,
-    sha256s: readonly string[],
-  ): Promise<Map<string, ArtifactBlobInfo>>;
-  /** Marks the blobs a save names as used, in the save's transaction; returns those no longer
-   * stored. */
-  use(
-    tx: Prisma.TransactionClient,
-    workspaceId: string,
-    sha256s: readonly string[],
-  ): Promise<string[]>;
-}
+export * from "./artifact-files.server";
 
 const NAME = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const KINDS = new Set(["html", "markdown", "text", "csv", "image", "pdf", "video", "other"]);
-export const ARTIFACT_TEXT_LIMIT = 16 * 1024 * 1024;
-export const ARTIFACT_BINARY_LIMIT = 15 * 1024 * 1024;
-export const ARTIFACT_FILE_LIMIT = 200;
+/** Longer than Prisma's 5 s default: a save may line-merge a 2 MiB document under its lock. */
+const PUSH_TRANSACTION = { timeout: 15_000 };
 export const ARTIFACT_NOTE_LIMIT = 500;
 export const ARTIFACT_LABEL_LIMIT = 60;
-/** A document's (a `markdown` artifact's) own file: what a person edits in one page. */
-export const ARTIFACT_DOCUMENT_LIMIT = 2 * 1024 * 1024;
 
 export function artifactHomeKey(home: ArtifactHome): string {
   return home.kind === "conversation" ? `conversation:${home.conversationId}` : home.kind;
@@ -74,41 +57,10 @@ function actorColumns(actor: ArtifactActor) {
 }
 
 /**
- * A file path as segments: no empty segment (`a//b`, a trailing `/`), no `.`/`..`, no backslash,
- * no control character, nothing absolute. `a..b.txt` is a normal name and passes.
- */
-export function artifactPathValid(path: string): boolean {
-  if (!path || path.startsWith("/") || path.endsWith("/")) return false;
-  return path
-    .split("/")
-    .every(
-      (segment) =>
-        segment.length > 0 &&
-        segment !== "." &&
-        segment !== ".." &&
-        !/[\\:\u0000-\u001f\u007f]/.test(segment),
-    );
-}
-
-/** The server's own reading of a file's kind, from its extension; the client cannot choose it. */
-export function artifactKindOfPath(path: string): string {
-  const extension = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
-  if (["html", "htm"].includes(extension)) return "html";
-  if (["md", "markdown"].includes(extension)) return "markdown";
-  if (["txt", "log"].includes(extension)) return "text";
-  if (extension === "csv") return "csv";
-  if (["png", "jpg", "jpeg", "gif", "webp", "avif", "svg"].includes(extension)) return "image";
-  if (extension === "pdf") return "pdf";
-  if (["mp4", "webm", "mov"].includes(extension)) return "video";
-  return "other";
-}
-
-type FileRow = { path: string; sha256: string; sizeBytes: number; kind: string };
-
-/**
  * Versioned artifacts: create, push a new immutable version, and read one. A push sends only
  * changed files; unlisted files carry over from its base version — and when the artifact moved on,
- * a push over an older base is merged with the others' changes unless it touched the same file.
+ * a push over an older base is merged with the others' changes: by file, a document's text by
+ * line, and settings by item (`artifact-merge.server.ts`); what does not merge is a conflict.
  * Content lives in content-addressed blobs, and this module only records which bytes a version
  * uses.
  */
@@ -142,7 +94,13 @@ export class Artifacts {
     if (!(await this.enabled(workspaceId))) throw artifactsDisabled();
     const artifact = await this.db.artifact.findFirst({
       where: { id: artifactId, workspaceId, deletedAt: null },
-      select: { homeKey: true, authorUserId: true, authorAgentId: true },
+      select: {
+        homeKey: true,
+        authorUserId: true,
+        authorAgentId: true,
+        kind: true,
+        entryPath: true,
+      },
     });
     if (!artifact) throw new AppError("NOT_FOUND");
     return artifact;
@@ -213,7 +171,8 @@ export class Artifacts {
     | { status: "missing"; missing: string[] }
     | ArtifactConflict
   > {
-    const { homeKey } = await this.live(input.workspaceId, input.artifactId);
+    const live = await this.live(input.workspaceId, input.artifactId);
+    const { homeKey } = live;
     if ((input.note?.length ?? 0) > ARTIFACT_NOTE_LIMIT) invalid("artifact-note");
     if ((input.label?.length ?? 0) > ARTIFACT_LABEL_LIMIT) invalid("artifact-label");
     await this.requireHome(input.workspaceId, input.publisher, homeKey, "write");
@@ -237,6 +196,10 @@ export class Artifacts {
       const blob = blobs.get(file.sha256)!;
       const limit = blob.kind === "text" ? ARTIFACT_TEXT_LIMIT : ARTIFACT_BINARY_LIMIT;
       if (blob.sizeBytes > limit) invalid("artifact-file-too-large");
+      // A document's own file is refused before anything merges it.
+      const document =
+        live.kind === "markdown" && file.path === (input.entryPath ?? live.entryPath);
+      if (document && blob.sizeBytes > ARTIFACT_DOCUMENT_LIMIT) invalid("artifact-file-too-large");
     }
 
     return this.db.$transaction(async (tx) => {
@@ -308,41 +271,59 @@ export class Artifacts {
         ...(input.description !== undefined && { description: input.description }),
         ...(input.entryPath !== undefined && { entryPath: input.entryPath }),
       });
-      if (settings.conflicts.length)
-        return {
-          status: "conflict",
-          currentVersion: current,
-          files: [],
-          settings: settings.conflicts,
-        } as const;
 
       // Deleting something the push's own base never held is a mistake, not a no-op.
       for (const path of deleted) if (!baseFiles.has(path)) invalid("artifact-file-path");
 
       // What others changed between the push's base and the current version.
       const othersChanged = new Set<string>();
+      const lineMerged = new Map<string, FileRow>();
+      const fileConflicts: ArtifactConflict["files"] = [];
       if (input.baseVersion < current) {
         for (const path of new Set([...baseFiles.keys(), ...currentFiles.keys()])) {
           const before = baseFiles.get(path);
           const now = currentFiles.get(path);
           if (before?.sha256 !== now?.sha256) othersChanged.add(path);
         }
-        // The same file touched on both sides cannot be merged without a human.
-        for (const path of [...added.map((file) => file.path), ...deleted])
+        // A file both sides changed merges line by line when it is a document's text; any other
+        // file, or a file one side deleted, cannot be merged without a human.
+        for (const path of deleted)
           if (othersChanged.has(path))
             throw new AppError("CONFLICT", { errorId: "artifact-base-moved" });
+        for (const file of added) {
+          if (!othersChanged.has(file.path)) continue;
+          const document = locked.kind === "markdown" && file.path === settings.result.entryPath;
+          const merge = await mergeDocumentFile(this.blobs, input.workspaceId, document, {
+            base: baseFiles.get(file.path),
+            theirs: currentFiles.get(file.path),
+            mine: { ...file, ...blobs.get(file.sha256)! },
+          });
+          if (!merge) throw new AppError("CONFLICT", { errorId: "artifact-base-moved" });
+          if ("chunks" in merge) fileConflicts.push({ path: file.path, chunks: merge.chunks });
+          else lineMerged.set(file.path, merge);
+        }
       }
+      if (settings.conflicts.length || fileConflicts.length)
+        return {
+          status: "conflict",
+          currentVersion: current,
+          files: fileConflicts,
+          settings: settings.conflicts,
+        } as const;
 
       const result = new Map(currentFiles);
       for (const path of deleted) result.delete(path);
       for (const file of added) {
         const blob = blobs.get(file.sha256)!;
-        result.set(file.path, {
-          path: file.path,
-          sha256: file.sha256,
-          sizeBytes: blob.sizeBytes,
-          kind: blob.kind,
-        });
+        result.set(
+          file.path,
+          lineMerged.get(file.path) ?? {
+            path: file.path,
+            sha256: file.sha256,
+            sizeBytes: blob.sizeBytes,
+            kind: blob.kind,
+          },
+        );
       }
       if (result.size > ARTIFACT_FILE_LIMIT) invalid("artifact-too-many-files");
       const { entryPath, title, description } = settings.result;
@@ -363,7 +344,7 @@ export class Artifacts {
       // In this transaction, so the sweep of unused blobs leaves them; one it removed since the
       // inspection above is uploaded again.
       const gone = await this.blobs.use(tx, input.workspaceId, [
-        ...new Set(added.map((file) => file.sha256)),
+        ...new Set(added.map((file) => result.get(file.path)!.sha256)),
       ]);
       if (gone.length) return { status: "missing", missing: gone } as const;
 
@@ -383,7 +364,10 @@ export class Artifacts {
             added: added.map((file) => file.path),
             deleted,
           } satisfies Prisma.InputJsonObject,
-          ...(merged.length ? { merged: merged as Prisma.InputJsonValue } : {}),
+          // What came from others: files (by path) and settings (by name), for the history.
+          ...((merged.length || settings.merged.length) && {
+            merged: { files: merged, settings: settings.merged } satisfies Prisma.InputJsonObject,
+          }),
           idempotencyKey: input.idempotencyKey,
         },
         select: { id: true, number: true },
@@ -414,7 +398,8 @@ export class Artifacts {
         merged,
         mergedSettings: settings.merged,
       } as const;
-    });
+      // A line merge reads three documents of up to 2 MiB and stores one under this lock.
+    }, PUSH_TRANSACTION);
   }
 
   /** Soft-deletes the artifact (its name is free again at once); its author's, or a Workspace

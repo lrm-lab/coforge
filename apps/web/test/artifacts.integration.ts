@@ -28,6 +28,11 @@ const store: ArtifactBlobStore = {
     );
   },
   use: async (_tx, _workspaceId, sha256s) => sha256s.filter((sha256) => !blobs.has(sha256)),
+  // No bytes are stored here: a line merge of documents is `artifact-merge.integration.ts`'s.
+  read: async () => null,
+  upload: async () => {
+    throw new Error("no bytes are stored in this test");
+  },
 };
 const artifacts = new Artifacts(db, store, { enabled: async () => true });
 
@@ -120,7 +125,9 @@ test("a push over an older base merges others' files, and conflicts on the same 
   blob("sha-2");
   blob("sha-3");
   blob("sha-4");
-  const artifact = await create("merge");
+  // A file set, not a document: the same file on both sides is merged only by a human here
+  // (a document merges line by line, `artifact-merge.integration.ts`).
+  const artifact = await create("merge", "index.md", "other");
   await artifacts.push({
     workspaceId,
     artifactId: artifact.id,
