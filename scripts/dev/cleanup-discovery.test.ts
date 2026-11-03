@@ -73,6 +73,37 @@ describe("Linux discovery from /proc", () => {
     );
   });
 
+  // A process of our uid that holds what we do not (another group, or capabilities, as
+  // gnome-keyring-daemon or a CI runner's agent does) is one the kernel will not let us inspect
+  // (ptrace read access, EACCES on its cwd); it is not one of our dev processes, so it is skipped.
+  // One with exactly our credentials that still cannot be read is a failure, as before.
+  test("skips an unreadable process the kernel withholds for its credentials, not one like ours", async () => {
+    const credentials = (gid: number, capabilities: string) =>
+      `Name:\tx\nUid:\t1000\t1000\t1000\t1000\nGid:\t${gid}\t${gid}\t${gid}\t${gid}\nCapPrm:\t${capabilities}\n`;
+    const ours = credentials(1000, "0000000000000000");
+    const tree = (status: string) =>
+      procTree([
+        { pid: process.pid, cwd: "/elsewhere", status: ours },
+        { pid: 2001, unreadable: true, args: ["agent"], status },
+        { pid: 2002, cwd: "/repo/x", args: ["zsh"], status: ours },
+      ]);
+    const scan = async (status: string) =>
+      (await discoverProcesses(roots, { platform: "linux", procRoot: await tree(status) })).map(
+        (found) => found.pid,
+      );
+    expect(await scan(credentials(1000, "0000000000004000"))).toEqual([2002]);
+    expect(await scan(credentials(1001, "0000000000000000"))).toEqual([2002]);
+    await expect(scan(ours)).rejects.toThrow("cannot read pid 2001");
+    // A shell or dev runtime under another group (`newgrp`, `sg`) may be ours in a worktree.
+    const shell = await procTree([
+      { pid: process.pid, cwd: "/elsewhere", status: ours },
+      { pid: 2001, unreadable: true, args: ["/bin/zsh", "-l"], status: credentials(1001, "0") },
+    ]);
+    await expect(discoverProcesses(roots, { platform: "linux", procRoot: shell })).rejects.toThrow(
+      "cannot read pid 2001",
+    );
+  });
+
   test("fails when /proc/self does not name a process in the tree", async () => {
     const procRoot = await procTree([{ pid: 2001, cwd: "/repo/x", args: ["zsh"] }], 9999);
     await expect(discoverProcesses(roots, { platform: "linux", procRoot })).rejects.toThrow(
