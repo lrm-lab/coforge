@@ -19,7 +19,14 @@ import {
   observeRuntimeEvent,
   type RuntimeEventObservationPorts,
 } from "./runtime-event-observation";
-import { interruptAgentTurn } from "./turn-interrupt";
+import {
+  handleAgentStart,
+  handleAgentStop,
+  handleAgentTurnInterrupt,
+  handleAgentWorkspaceReset,
+  scanUsage,
+  type AgentControlIntentPorts,
+} from "./runtime-agent-flows";
 import type { AgentProxy, LaunchRequest, SessionMode } from "./runtime-launch-types";
 import {
   AgentProcessManager,
@@ -27,7 +34,7 @@ import {
   type AgentRuntime,
 } from "#src/agent-runtime/agent-process-manager";
 import { activityDraft } from "./activity-draft";
-import { recoveryOf, runtimeConfigOf, type AgentRecoveryContext } from "./runtime-launch-intent";
+import type { AgentRecoveryContext } from "./runtime-launch-intent";
 import { LaunchFailureBackoff } from "#src/agent-runtime/launch-failure-backoff";
 import { createAgentDesktopHolds } from "#src/agent-runtime/agent-desktop";
 export type DaemonConfig = {
@@ -49,7 +56,6 @@ import {
   type RunnerHoldReason,
   AGENT_MESSAGE_REJECT_METHOD,
   MENTION_DELIVERY_TERMINAL_CODES,
-  AGENT_ACTIVITY_DETAIL_KIND,
   type AgentActivity,
   type AgentMessageResponse,
   type AgentStartIntent,
@@ -65,7 +71,6 @@ import {
   type LocalAgentMessageRequest,
   type LocalInboxRequest,
   type RuntimeProvider,
-  RUNTIME_PROVIDER_USES_EXTERNAL_CLI,
   type UsageScanResponse,
   type LocalReminderRequest,
   type ReminderJob,
@@ -75,7 +80,6 @@ import {
   type AgentWorkspaceDeleteResult,
 } from "@lrm/coforge-sdk/internal";
 import type { AgentMigrationRunner } from "#src/agent-migration/migration-runner";
-import { usageScanFailure, usageScanReading, usageScanResult } from "./usage-scan-response";
 import { AgentControl } from "#src/agent-runtime/agent-control";
 import { AgentSessions } from "#src/agent-runtime/agent-session";
 import { AgentWorkspaceQueries } from "./agent-workspace-queries";
@@ -173,7 +177,7 @@ import { acceptAppRegistrationNotice } from "#src/agent-app-inbox/app-registrati
 import type { AgentVersionResponse } from "@lrm/coforge-sdk/agent";
 
 /** Per-provider reading deadline supplied by a runtime usage scan. */
-export const USAGE_SCAN_READ_TIMEOUT_MS = 10_000;
+export { USAGE_SCAN_READ_TIMEOUT_MS } from "./runtime-agent-flows";
 
 const NOT_RUNNING = "daemon runtime is not running";
 
@@ -903,27 +907,15 @@ export class DaemonRuntime {
   }
 
   async scanUsage(provider: RuntimeProvider): Promise<UsageScanResponse> {
-    this.#assertRunning();
-    const now = () => new Date();
-    // Cursor, OpenCode, Pi, and CoForge have no reader yet. Say that the reader is not
-    // connected. Do not claim the official product has no quota endpoint.
-    if (!RUNTIME_PROVIDER_USES_EXTERNAL_CLI[provider])
-      return usageScanResult("unsupported", undefined, "Usage reader is not connected yet");
-    const codeAgentProvider = this.#createProvider(provider);
-    if (!codeAgentProvider.readUsage)
-      return usageScanResult("unsupported", undefined, "Usage reader is not connected yet");
-    try {
-      // An observed snapshot (`#rememberUsage` stamps when it was observed) is the fallback for a
-      // provider with no reading of its own.
-      const snapshot =
-        (await codeAgentProvider.readUsage({
-          workingDirectory: this.#connection.workspaceRoot,
-          timeoutMs: USAGE_SCAN_READ_TIMEOUT_MS,
-        })) ?? this.#currentObservedUsage(provider);
-      return usageScanReading(snapshot, now);
-    } catch (error) {
-      return usageScanFailure(error, () => this.#currentObservedUsage(provider), now);
-    }
+    return scanUsage(
+      {
+        assertRunning: () => this.#assertRunning(),
+        workspaceRoot: this.#connection.workspaceRoot,
+        createProvider: (provider) => this.#createProvider(provider),
+        observedUsage: (provider) => this.#currentObservedUsage(provider),
+      },
+      provider,
+    );
   }
 
   start(connection: DaemonConfig): Promise<void> {
@@ -1161,78 +1153,47 @@ export class DaemonRuntime {
   }) => assertOwnIntent(intent, this.#connection.workspaceId, this.#connection.computerId);
 
   async handleAgentStart(intent: AgentStartIntent): Promise<AgentRuntime> {
-    this.#assertOwnIntent({
-      ...intent,
-      computerId: intent.computerId || this.#connection.computerId,
-    });
-    if (intent.controlEpoch) {
-      await this.#agentControl.start(intent);
-      await this.#agentSessions.replay(intent.agentId);
-      const runtime = this.#agentProcessManager.runtime(intent.agentId);
-      if (!runtime) throw new Error("Agent managed launch did not complete");
-      return runtime;
-    }
-    if (this.#agentControl.managed(intent.agentId))
-      throw new Error("Agent requires a fenced Start");
-    const stopping = this.#stopState.pendingStop(intent.agentId);
-    if (stopping) await stopping;
-    return this.#startAgent(intent.agentId, runtimeConfigOf(intent), recoveryOf(intent), {
-      sessionId: intent.sessionId,
-      requestId: intent.requestId,
-      previousLaunchId: intent.previousLaunchId,
-      sessionMode: intent.sessionMode,
-      resumePrompt: intent.resumePrompt,
-      introductionPrompt: intent.introductionPrompt,
-    });
+    return handleAgentStart(this.#controlIntentPorts(), intent);
+  }
+
+  #controlIntentPorts(): AgentControlIntentPorts {
+    return {
+      assertOwnIntent: (intent) => this.#assertOwnIntent(intent),
+      connection: this.#connection,
+      started: this.#startup.started,
+      stopping: this.#stopping,
+      controlStart: (intent) => this.#agentControl.start(intent),
+      controlStop: (intent) => this.#agentControl.stop(intent),
+      replaySession: (agentId) => this.#agentSessions.replay(agentId),
+      runtime: (agentId) => this.#agentProcessManager.runtime(agentId),
+      managed: (agentId) => this.#agentControl.managed(agentId),
+      pendingStop: (agentId) => this.#stopState.pendingStop(agentId),
+      startAgent: (agentId, config, recovery, request) =>
+        this.#startAgent(agentId, config, recovery, request),
+      stopAgent: (agentId) => this.stopAgent(agentId),
+      resetWorkspace: (request) => this.#agentControl.resetWorkspace(request),
+    };
   }
 
   async handleAgentWorkspaceReset(request: AgentWorkspaceResetRequest): Promise<void> {
-    if (
-      !this.#startup.started ||
-      this.#stopping ||
-      request.workspaceId !== this.#connection.workspaceId ||
-      request.computerId !== this.#connection.computerId
-    )
-      throw new Error("Agent control scope unavailable");
-    await this.#agentControl.resetWorkspace(request);
+    return handleAgentWorkspaceReset(this.#controlIntentPorts(), request);
   }
 
   async handleAgentStop(intent: AgentStopIntent): Promise<void> {
-    this.#assertOwnIntent(intent);
-    if (intent.provider !== undefined && intent.controlEpoch !== undefined) {
-      await this.#agentControl.stop({
-        protocolMajor: intent.protocolMajor,
-        requestId: intent.requestId,
-        workspaceId: intent.workspaceId,
-        computerId: intent.computerId,
-        agentId: intent.agentId,
-        provider: intent.provider,
-        epoch: intent.controlEpoch,
-      });
-      return;
-    }
-    if (this.#agentControl.managed(intent.agentId)) throw new Error("Agent requires a fenced Stop");
-    await this.stopAgent(intent.agentId);
+    return handleAgentStop(this.#controlIntentPorts(), intent);
   }
+
   async handleAgentTurnInterrupt(intent: AgentTurnInterruptIntent): Promise<void> {
-    this.#assertOwnIntent(intent);
-    await interruptAgentTurn(
+    return handleAgentTurnInterrupt(
       {
+        assertOwnIntent: (intent) => this.#assertOwnIntent(intent),
         launch: (agentId) => this.#currentActivityLaunches.get(agentId),
         interrupt: (agentId, options) => this.#agentProcessManager.interruptTurn(agentId, options),
-        publish: (agentId, launch, outcome) =>
-          this.#activityPublisher.publish(
-            agentId,
-            launch,
-            outcome === "restarted"
-              ? this.#activity(
-                  agentId,
-                  AGENT_ACTIVITY_DETAIL_KIND.SYSTEM_MESSAGE,
-                  "info",
-                  "Stopping this turn: restarting the runtime",
-                )
-              : this.#drafts.interrupted(agentId),
-          ),
+        publish: (agentId, launch, draft) =>
+          this.#activityPublisher.publish(agentId, launch, draft),
+        activity: (agentId, detailKind, level, detail) =>
+          this.#activity(agentId, detailKind as AgentActivity["detailKind"], level, detail),
+        interruptedDraft: (agentId) => this.#drafts.interrupted(agentId),
         report: this.#transport.sendAgentTurnInterruptResult?.bind(this.#transport),
       },
       intent,
