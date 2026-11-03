@@ -4,7 +4,7 @@ import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.se
 import { getMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
 import { handleTaskReplyPost } from "#src/server/tasks/task-conversation-routes.server";
 import { taskConversationsGate } from "#src/server/tasks/task-conversations-gate.server";
-import { TaskConversations } from "#src/server/tasks/task-conversations.server";
+import { agentTaskConversations } from "#src/server/tasks/task-conversations.server";
 import { agentTaskPrincipal } from "#src/server/tasks/task-principal.server";
 
 export const Route = createFileRoute("/api/agent/v1/tasks_/reply")({
@@ -15,10 +15,7 @@ export const Route = createFileRoute("/api/agent/v1/tasks_/reply")({
         handleTaskReplyPost(
           request,
           agentTaskPrincipal(principal),
-          new TaskConversations(
-            { db, reader: "agent", dependencies: { publisher: createCentrifugoServerApi() } },
-            getMessageRequestIdempotency(),
-          ),
+          agentTaskConversations(db, createCentrifugoServerApi(), getMessageRequestIdempotency()),
           taskConversationsGate(db, principal),
         ),
     },

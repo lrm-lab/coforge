@@ -8,6 +8,8 @@ import { AppError } from "#src/lib/app-error";
 import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
 import type { MessageRequestIdempotency } from "#src/server/conversations/message-request-idempotency.server";
 import { publishActionCardUpdate } from "#src/server/conversations/action-card-message.server";
+import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
+import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { lockConversation } from "#src/server/conversations/conversation-lock.server";
 import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
 import type { Prisma } from "#src/generated/prisma/client";
@@ -471,4 +473,27 @@ export async function postTaskNotice(
       },
     });
   return message;
+}
+
+/**
+ * The task conversations an Agent's writes go through: a reply's delivery reaches the followers'
+ * Agents, and `message.available.v1` the people with the task's popup open, as a person's reply
+ * does (`task-conversation.functions.ts`); an unfollow's notice reaches them too.
+ */
+export function agentTaskConversations(
+  db: TaskBoardPorts["db"],
+  centrifugo: CentrifugoServerApi,
+  idempotency?: MessageRequestIdempotency,
+) {
+  return new TaskConversations(
+    {
+      db,
+      reader: "agent",
+      dependencies: {
+        publisher: centrifugo,
+        realtime: new CentrifugoConversationRealtime(centrifugo),
+      },
+    },
+    idempotency,
+  );
 }

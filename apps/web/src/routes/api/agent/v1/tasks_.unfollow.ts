@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
 import { handleTaskUnfollowPost } from "#src/server/tasks/task-conversation-routes.server";
 import { taskConversationsGate } from "#src/server/tasks/task-conversations-gate.server";
-import { TaskConversations } from "#src/server/tasks/task-conversations.server";
+import { agentTaskConversations } from "#src/server/tasks/task-conversations.server";
 import { agentTaskPrincipal } from "#src/server/tasks/task-principal.server";
 
 export const Route = createFileRoute("/api/agent/v1/tasks_/unfollow")({
@@ -13,7 +14,7 @@ export const Route = createFileRoute("/api/agent/v1/tasks_/unfollow")({
         handleTaskUnfollowPost(
           request,
           agentTaskPrincipal(principal),
-          new TaskConversations({ db, reader: "agent", dependencies: {} }),
+          agentTaskConversations(db, createCentrifugoServerApi()),
           taskConversationsGate(db, principal),
         ),
     },

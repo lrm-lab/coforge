@@ -4,7 +4,10 @@ import { decodeAgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { handleTaskViewGet } from "#src/server/tasks/task-conversation-routes.server";
-import { TaskConversations } from "#src/server/tasks/task-conversations.server";
+import {
+  agentTaskConversations,
+  TaskConversations,
+} from "#src/server/tasks/task-conversations.server";
 import { agentTaskPrincipal } from "#src/server/tasks/task-principal.server";
 
 const connectionString = Bun.env.TASK_TEST_DATABASE_URL ?? Bun.env.DATABASE_URL;
@@ -343,4 +346,29 @@ test("the route answers an Agent authenticated with its owner beside it", async 
   );
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({ taskRef: `#${channelName}:#1` });
+});
+
+// Task #472: an Agent's reply reaches a person's open task popup at once. The popup follows the
+// task conversation's own channel (`message.available.v1`), as it does a person's reply.
+test("an Agent's task reply is announced on the task conversation's channel", async () => {
+  const published: Array<{ channel: string; data: unknown }> = [];
+  const centrifugo = {
+    publishJson: async (channel: string, data: unknown) => {
+      published.push({ channel, data });
+    },
+    broadcast: async () => {},
+    publish: async () => {},
+    publishBatch: async () => [],
+  };
+  const sent = await agentTaskConversations(db, centrifugo as never).reply(as("worker"), ref, {
+    body: "done, see the branch",
+  });
+  const task = await db.task.findUniqueOrThrow({
+    where: { id: taskId },
+    select: { discussionConversationId: true },
+  });
+  expect(published).toContainEqual({
+    channel: `chat:${task.discussionConversationId}`,
+    data: expect.objectContaining({ type: "message.available.v1", messageId: sent.messageId }),
+  });
 });
