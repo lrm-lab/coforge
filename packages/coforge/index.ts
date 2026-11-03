@@ -71,11 +71,7 @@ import {
   mentionDeliveryFailure,
   MENTION_DELIVERY_MESSAGE_ID_HINT,
 } from "#src/mention-format";
-import {
-  ACTION_HEREDOC_DELIMITER,
-  parseActionCardInput,
-  toActionCardAction,
-} from "#src/action-prepare-input";
+import { runActionPrepare } from "#src/action-prepare-run";
 import { formatReadWindow } from "#src/message-read-format";
 import {
   formatAttachmentDownloadSuccess,
@@ -263,7 +259,8 @@ export type WeeklyReportMemoryInvocation = {
   memory: Pick<WeeklyReportMemoryCommand, "idempotencyKey" | "reportId">;
 };
 export type ActionPrepareInvocation = { command: "action-prepare"; target: string };
-export type ActionPrepareResult = { messageId?: string; metadata?: { kind: string } };
+import type { ActionPrepareResult } from "#src/action-prepare-run";
+export type { ActionPrepareResult };
 export type ManualInvocation =
   | { command: "manual-get"; topic: string; intent: string; reason: string }
   | { command: "manual-search"; query: string; intent: string; reason: string };
@@ -1008,25 +1005,7 @@ export async function run(args: readonly string[], transport: MessageTransport):
     const result = await transport.weeklyReportMemory(memory);
     return `Memory ${result.status} (report ${result.reportId}).`;
   }
-  if (invocation.command === "action-prepare") {
-    if (!transport.actionPrepare) throw new Error("Action transport is unavailable");
-    refuseForeignStdinFile([
-      `coforge action prepare --target "${invocation.target}" <<'${ACTION_HEREDOC_DELIMITER}'`,
-      '{"type":"channel:create","name":"demo","visibility":"public"}',
-      ACTION_HEREDOC_DELIMITER,
-    ]);
-    const raw = await new Response(Bun.stdin.stream()).text();
-    const action = toActionCardAction(parseActionCardInput(raw));
-    const result = await transport.actionPrepare(invocation.target, action);
-    if (!result.messageId)
-      throw new CliError({
-        code: "INVALID_JSON_RESPONSE",
-        message: "Prepare action response did not include a message id",
-        retryable: false,
-      });
-    const shortId = result.messageId.slice(0, 13);
-    return `Action card posted to ${invocation.target} as message ${result.messageId} (short ${shortId}). The human can click the action verb to commit.`;
-  }
+  if (invocation.command === "action-prepare") return runActionPrepare(transport, invocation);
   if (isAttentionInvocation(invocation)) return runAttention(transport, invocation);
   if (invocation.command === "task-conversation") return runTaskConversation(transport, invocation);
   if (invocation.command === "channel-manage") {
