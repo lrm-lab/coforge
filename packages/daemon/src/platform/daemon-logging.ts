@@ -15,8 +15,11 @@ export async function configureDaemonLogging(stateDirectory: string): Promise<vo
         getRotatingFileSink(logPath, {
           maxSize: 10 * 1024 * 1024,
           maxFiles: 5,
-          bufferSize: 8192,
-          flushInterval: 1000,
+          // Flush every record. The sync sink has no timer: with a buffer it writes only when the
+          // buffer fills or when a *later* record arrives a whole flushInterval after the last
+          // flush, so a daemon's startup lines and a quiet Workspace's request lines sat in memory
+          // until the process exited (a cloud Computer looked like it wrote no logs at all).
+          bufferSize: 0,
           formatter: getJsonLinesFormatter({ properties: "flatten" }),
         }),
         {

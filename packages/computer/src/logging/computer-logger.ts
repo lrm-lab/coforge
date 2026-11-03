@@ -25,8 +25,9 @@ export async function configureComputerLogger(input: {
     getRotatingFileSink(join(directory, LOG_FILE), {
       maxSize: 10 * 1024 * 1024,
       maxFiles: 5,
-      bufferSize: 8192,
-      flushInterval: 1000,
+      // Flush every record; the sync sink has no timer and would otherwise hold a quiet
+      // process's lines in memory until it exits (see the Daemon's logger).
+      bufferSize: 0,
       formatter: getJsonLinesFormatter({ properties: "nest:properties" }),
     }),
   );

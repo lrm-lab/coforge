@@ -55,6 +55,29 @@ test.each(["daemon", "coordinator"])(
   DAEMON_START_AND_STOP_TIMEOUT_MS,
 );
 
+test.each(["daemon", "coordinator"])(
+  "%s writes its startup record while it is still running",
+  async (role) => {
+    const directory = await mkdtemp(join(tempRoot, "coforge-daemon-logs-"));
+    const socketPath = join(directory, "daemon.sock");
+    const child = spawnDaemon(socketPath, directory, role);
+    try {
+      await waitFor(() => pathExists(socketPath));
+      // No stop and no later activity: a buffered sink would only flush on exit, so a quiet
+      // daemon looked like it wrote no logs at all (a cloud Computer's log stood still).
+      await waitFor(async () => {
+        const text = await readFile(daemonLogPath(directory), "utf8").catch(() => "");
+        return text.includes(role === "coordinator" ? "coordinator:started" : "daemon:started");
+      });
+    } finally {
+      if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+      await child.exited;
+      await rm(directory, { recursive: true, force: true });
+    }
+  },
+  DAEMON_STARTUP_DEADLINE_MS,
+);
+
 test.skipIf(process.platform === "win32")(
   "Daemon refuses a symlinked log root",
   async () => {
