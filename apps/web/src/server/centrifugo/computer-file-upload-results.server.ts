@@ -60,9 +60,7 @@ function authorized(
   );
 }
 
-export function computerFilePullResultMethods(
-  enabled = true,
-): Record<string, CentrifugoRpcMethod> {
+export function computerFilePullResultMethods(enabled = true): Record<string, CentrifugoRpcMethod> {
   const unavailable: CentrifugoRpcMethod = () => ({
     code: 503,
     message: "protocol method dependencies are unavailable",

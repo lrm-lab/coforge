@@ -6,10 +6,7 @@ import {
   type ComputerFilePullResults,
   type PendingComputerFilePull,
 } from "#src/server/computers/computer-file-upload.server";
-import type {
-  ComputerFilePullRequest,
-  ComputerFilePullResult,
-} from "@lrm/coforge-sdk/internal";
+import type { ComputerFilePullRequest, ComputerFilePullResult } from "@lrm/coforge-sdk/internal";
 import type { FileStorage } from "#src/server/files/file-storage.server";
 
 const viewer = { userId: "user-1", workspaceId: "ws-1" };

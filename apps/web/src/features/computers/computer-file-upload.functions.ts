@@ -24,15 +24,11 @@ export const createComputerFileUpload = createServerFn({ method: "POST" })
   .handler(async ({ data, context: { db, user, workspaceId } }) => {
     setResponseHeader("cache-control", "no-store");
     const uploads = await computerFileUploads(db);
-    return uploads.create(
-      { userId: user.id, workspaceId },
-      data.computerId,
-      {
-        fileName: data.fileName,
-        contentType: data.contentType,
-        sizeBytes: data.sizeBytes,
-      },
-    );
+    return uploads.create({ userId: user.id, workspaceId }, data.computerId, {
+      fileName: data.fileName,
+      contentType: data.contentType,
+      sizeBytes: data.sizeBytes,
+    });
   });
 
 /** Verifies the uploaded object and asks the Computer to pull it into uploads/. */

@@ -267,9 +267,7 @@ export function ComputerDetail({
           />
           {/* Two one-line tools in one box: the workspace scan and terminal troubleshooting. */}
           <div className="divide-y divide-secondary rounded-xl border border-secondary [&>*]:px-4">
-            {computer.ownedByCurrentUser && (
-              <ComputerFileUploadPanel computerId={computer.id} />
-            )}
+            {computer.ownedByCurrentUser && <ComputerFileUploadPanel computerId={computer.id} />}
             <div className="py-2">
               <ComputerDetailWorkspaceInventory
                 snapshot={onScanAgentWorkspaces ? agentWorkspaceScan : null}

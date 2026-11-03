@@ -230,9 +230,7 @@ export class ComputerFileUploads {
               sizeBytes: session.sizeBytes,
             };
           }
-          await this.dependencies.sessions
-            .put({ ...session, state: "failed" }, 60)
-            .catch(() => {});
+          await this.dependencies.sessions.put({ ...session, state: "failed" }, 60).catch(() => {});
           return {
             status: "failed",
             message: result.errorMessage || result.status,

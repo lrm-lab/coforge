@@ -11,12 +11,7 @@ import {
   createComputerFileUpload,
 } from "./computer-file-upload.functions";
 
-type UploadStatus =
-  | "idle"
-  | "uploading"
-  | "placing"
-  | "ready"
-  | "error";
+type UploadStatus = "idle" | "uploading" | "placing" | "ready" | "error";
 
 function statusMessage(
   status: Exclude<UploadStatus, "idle" | "uploading" | "placing" | "ready"> | string,
@@ -42,10 +37,7 @@ function statusMessage(
   }
 }
 
-async function putToStorage(
-  upload: { url: string; headers: Record<string, string> },
-  file: File,
-) {
+async function putToStorage(upload: { url: string; headers: Record<string, string> }, file: File) {
   const response = await fetch(upload.url, {
     method: "PUT",
     headers: upload.headers,
@@ -74,9 +66,7 @@ export function ComputerFileUploadPanel({ computerId }: { computerId: string }) 
     setMessage(null);
     if (file.size <= 0 || file.size > COMPUTER_FILE_MAX_BYTES) {
       setStatus("error");
-      setMessage(
-        statusMessage("too_large"),
-      );
+      setMessage(statusMessage("too_large"));
       return;
     }
     setStatus("uploading");

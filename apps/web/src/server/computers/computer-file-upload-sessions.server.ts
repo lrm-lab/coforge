@@ -16,7 +16,12 @@ export class RedisComputerFileUploadSessions implements ComputerFileUploadSessio
   }
 
   async put(session: ComputerFileUploadSessionRecord, ttlSeconds: number) {
-    await this.redis.set(this.key(session.uploadId), JSON.stringify(session), "EX", String(ttlSeconds));
+    await this.redis.set(
+      this.key(session.uploadId),
+      JSON.stringify(session),
+      "EX",
+      String(ttlSeconds),
+    );
   }
 
   async get(uploadId: string) {
