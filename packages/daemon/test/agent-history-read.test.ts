@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { settleHistoryRead } from "#src/daemon-runtime/agent-history-read";
 import type { AgentMessageAttentionIndex } from "#src/daemon-runtime/agent-message-attention-index";
+import { NoticeActionClocks } from "#src/daemon-runtime/notice-action-clocks";
 
 function attentionStub() {
   const calls: string[] = [];
@@ -11,6 +12,7 @@ function attentionStub() {
       calls.push(record.review ? `record review ${record.review.sequence}` : "record"),
     clearThrough: (_agent: string, _target: string, through: number) =>
       calls.push(`clear ${through}`),
+    noticeActionClocks: new NoticeActionClocks(),
   } as unknown as AgentMessageAttentionIndex;
   return { attention, calls };
 }
