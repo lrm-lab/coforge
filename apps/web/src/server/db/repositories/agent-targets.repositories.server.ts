@@ -320,11 +320,7 @@ async function resolveAgentTargetUsing(
   });
   const { conversation, isChannel } = resolved;
   const parentTarget = target.split(":")[0]!;
-  // A `#channel:<task-discussion id>` resolves its task_thread conversation itself — the `<id>`
-  // names the conversation, not a thread root inside it.
-  const threadRootId = (conversation as { isTaskDiscussionTarget?: boolean }).isTaskDiscussionTarget
-    ? null
-    : await targetRoot(ports, conversation.id, target);
+  const threadRootId = await targetRoot(ports, conversation.id, target);
   return {
     conversationId: conversation.id,
     threadRootId,

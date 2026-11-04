@@ -1,9 +1,4 @@
-import { AppError } from "#src/lib/app-error";
 import { appEventConversation } from "#src/server/app-agent-events/app-event-target.server";
-import {
-  taskDiscussionAccess,
-  taskDiscussionBoardSelect,
-} from "#src/server/conversations/task-discussion-access.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import {
   dmParentTarget,
@@ -23,27 +18,7 @@ export async function resolveAgentConversationTarget(input: {
   const isChannel = parentTarget.startsWith("#");
   let directPeerKind: "user" | "agent" | undefined;
   const conversation = isChannel
-    ? await (async () => {
-        // `#channel:<id>` names the channel, then a thread anchor — or the Task's own
-        // conversation (`task_thread`) its discussion lives in, which the board's access
-        // decides, not a message anchor (task #522).
-        const taskThread = await input.db.conversation.findFirst({
-          where: {
-            id: input.target.split(":")[1] ?? "",
-            kind: "task_thread",
-            workspaceId: input.workspaceId,
-          },
-          select: {
-            id: true,
-            ...taskDiscussionBoardSelect({ agentId: input.agentId }),
-          },
-        });
-        if (taskThread) {
-          if (taskDiscussionAccess(taskThread) !== "read") throw new AppError("NOT_FOUND");
-          return { ...taskThread, isTaskDiscussionTarget: true as const };
-        }
-        return input.getChannel(parentTarget);
-      })()
+    ? await input.getChannel(parentTarget)
     : await (async () => {
         const appConversation = await appEventConversation(
           input.db,

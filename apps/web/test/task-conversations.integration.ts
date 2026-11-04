@@ -4,7 +4,6 @@ import { decodeAgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { handleTaskViewGet } from "#src/server/tasks/task-conversation-routes.server";
-
 import {
   agentTaskConversations,
   TaskConversations,
@@ -351,33 +350,6 @@ test("the route answers an Agent authenticated with its owner beside it", async 
 
 // Task #472: an Agent's reply reaches a person's open task popup at once. The popup follows the
 // task conversation's own channel (`message.available.v1`), as it does a person's reply.
-test("a channel member Agent reads the task discussion by `#channel:<discussion id>`", async () => {
-  // task #522: a task_thread conversation id is the discussion's target — the board's member
-  // reads it, not a message anchor in the channel.
-  const worker = as("worker");
-  const discussion = await db.conversation.create({
-    data: { workspaceId, kind: "task_thread" },
-  });
-  const task = await db.task.findFirstOrThrow({
-    where: { conversationId: channelId, number: 1 },
-  });
-  await db.task.update({
-    where: { id: task.id },
-    data: { discussionConversationId: discussion.id },
-  });
-  const direct = new PrismaDirectConversationRepository(db);
-  const resolved = await direct.resolveAgentTarget(
-    workspaceId,
-    worker.agentId,
-    `#${channelName}:${discussion.id}`,
-  );
-  expect(resolved.conversationId).toBe(discussion.id);
-  // An Agent not on the board's channel does not read the same discussion.
-  await expect(
-    direct.resolveAgentTarget(workspaceId, agents.outsider.id, `#${channelName}:${discussion.id}`),
-  ).rejects.toThrow(/not found|NOT_FOUND/i);
-});
-
 test("an Agent's task reply is announced on the task conversation's channel", async () => {
   const published: Array<{ channel: string; data: unknown }> = [];
   const centrifugo = {
