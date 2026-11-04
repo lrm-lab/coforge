@@ -1,7 +1,9 @@
 import type { AgentProxy } from "./runtime-launch-types";
 
 /** Drops the Agent's issued local context and proxy token, only when the maps still hold exactly
- * the pair being revoked — a relaunched Agent's newer pair is never touched. */
+ * the pair being revoked — a relaunched Agent's newer pair is never touched. With no pair the
+ * tables' current one is revoked; a caller that passes any part of its own pair (even a launch
+ * that issued only a context) revokes exactly that, never values another process still uses. */
 export function revokeLocalLaunch(
   contexts: Map<string, string>,
   proxyTokens: Map<string, string>,
@@ -10,11 +12,30 @@ export function revokeLocalLaunch(
   context?: string,
   proxyToken?: string,
 ): void {
-  context ??= contexts.get(agentId);
-  proxyToken ??= proxyTokens.get(agentId);
+  if (context === undefined && proxyToken === undefined) {
+    context = contexts.get(agentId);
+    proxyToken = proxyTokens.get(agentId);
+  }
   if (context && contexts.get(agentId) === context) contexts.delete(agentId);
   if (proxyToken && proxyTokens.get(agentId) === proxyToken) proxyTokens.delete(agentId);
   if (proxyToken) proxy?.revoke(proxyToken);
+}
+
+/**
+ * Puts back the proxy token a still-running process holds after a launch that overwrote it
+ * failed — but only while the table still holds the failed launch's token, so a concurrent
+ * launch's newer token is never clobbered. With no prior token the entry is removed, which is
+ * the same outcome the revoke leaves when it runs alone.
+ */
+export function restoreSupersededProxyToken(
+  proxyTokens: Map<string, string>,
+  agentId: string,
+  supersededToken: string | undefined,
+  restoredToken: string | undefined,
+): void {
+  if (supersededToken === undefined || proxyTokens.get(agentId) !== supersededToken) return;
+  if (restoredToken === undefined) proxyTokens.delete(agentId);
+  else proxyTokens.set(agentId, restoredToken);
 }
 
 type LaunchDisposables = {

@@ -28,6 +28,7 @@ import {
 import { ignoredAgentEnvironmentActivity } from "./agent-environment-activity";
 import { requestAgentLaunchConfig } from "./agent-launch-config";
 import { restoreSupersededAgentApiKey } from "./agent-api-key-revoke";
+import { restoreSupersededProxyToken } from "./agent-launch-revocation";
 import { wakeReusedAgent } from "./agent-wake-control";
 import { logAgentApiKeyRevokeFailed } from "./agent-failure-logs";
 import { getLogger } from "@logtape/logtape";
@@ -63,9 +64,13 @@ export async function launchAgentProcess(
   launch.timing = timing;
   timing.phase("admitted");
   let agentApiKey: string | undefined;
-  // The key this launch displaces from the table: a still-running process holds it, and a
-  // failed launch puts it back so that process does not lose its credential mid-flight.
+  // The key and proxy token this launch displaces from the tables: a still-running process
+  // holds them, and a failed launch puts them back so that process loses neither its
+  // credential nor its local proxy binding mid-flight.
   let priorAgentApiKey: string | undefined;
+  let priorProxyToken: string | undefined;
+  let proxyToken: string | undefined;
+  let localContext: string | undefined;
   try {
     const launchConfig = await requestAgentLaunchConfig(
       ports.transport(),
@@ -89,9 +94,10 @@ export async function launchAgentProcess(
     if (skipped) ports.activityPublisher.publish(agentId, launch, skipped);
     priorAgentApiKey = ports.agentApiKeys.get(agentId);
     ports.agentApiKeys.set(agentId, agentApiKey);
-    const proxyToken = ports.agentProxy?.issue(agentId, agentApiKey);
+    priorProxyToken = ports.agentProxyTokens.get(agentId);
+    proxyToken = ports.agentProxy?.issue(agentId, agentApiKey);
     if (proxyToken) ports.agentProxyTokens.set(agentId, proxyToken);
-    const localContext = proxyToken ?? ports.contextFor(agentId);
+    localContext = proxyToken ?? ports.contextFor(agentId);
     const desktopEnvironment = await ports.desktops.hold(agentId);
     const workspaceDirectory = agentWorkspaceDirectory(
       ports.connection.workspaceRoot,
@@ -353,7 +359,10 @@ export async function launchAgentProcess(
   } catch (error) {
     ports.desktops.end(agentId);
     launch.startup?.dispose();
-    ports.revokeLocalLaunch(agentId);
+    restoreSupersededProxyToken(ports.agentProxyTokens, agentId, proxyToken, priorProxyToken);
+    // Only what this launch issued is revoked: a launch that failed before the issue touches
+    // no table entry, and the running process's own pair is never read as this launch's.
+    if (localContext !== undefined) ports.revokeLocalLaunch(agentId, localContext, proxyToken);
     if (agentApiKey) {
       restoreSupersededAgentApiKey(ports.agentApiKeys, agentId, agentApiKey, priorAgentApiKey);
       try {
