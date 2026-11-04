@@ -13,11 +13,8 @@ import {
   resolveTaskLabels,
   type LabelRow,
 } from "./labels.server";
-import {
-  TASK_PROJECT_SELECT,
-  resolveTaskProject,
-  type TaskProjectRef,
-} from "./task-projects.server";
+import { resolveNewTaskProject, type TaskProjectRef } from "./task-projects.server";
+import { resolveTaskParent } from "./task-relations-write.server";
 import {
   lockConversation,
   lockWorkspaceTaskWrites,
@@ -150,23 +147,10 @@ export async function createConversationTasks(
         errorId: "task-label-limit",
         hint: `a task carries at most ${LABELS_PER_TASK_MAX} labels`,
       });
-    // The Project the new Tasks are filed under: the one named (and pinned) or the
-    // conversation's. A direct message has none, and cannot be given one.
-    const conversation = await tx.conversation.findUniqueOrThrow({
-      where: { id: scope.conversationId },
-      select: { directKey: true, project: { select: TASK_PROJECT_SELECT } },
-    });
-    const projectChosen = command.project !== undefined;
-    if (projectChosen && (!command.project || conversation.directKey))
-      throw new AppError("INVALID_INPUT", {
-        errorId: "task-project",
-        hint: conversation.directKey
-          ? "a direct message's Tasks are not filed under a Project"
-          : "--project names a Project by slug",
-      });
-    const project = projectChosen
-      ? await resolveTaskProject(tx, scope.workspaceId, command.project!)
-      : conversation.project;
+    // The Project the new Tasks are filed under (task #484): the one named, a sub-task's
+    // parent's, else this member's last-used one here.
+    const parent = await resolveTaskParent(tx, scope, member, command.parent, []);
+    const project = await resolveNewTaskProject(tx, scope, member, command, parent);
     const written = convert ? [sourceTitle(source!)] : titles;
     if (written.some((title) => !title || title.length > 8_000))
       throw new AppError("INVALID_INPUT");

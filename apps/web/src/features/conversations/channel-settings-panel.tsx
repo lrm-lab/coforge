@@ -45,7 +45,7 @@ import {
 import { ChannelActionConfirmDialog, type ConfirmedAction } from "./channel-action-confirm-dialog";
 import { ActionsSection } from "./channel-settings-actions";
 import { StopChannelAgentsDialog } from "./stop-channel-agents-dialog";
-import { InfoForm, ProjectField, useInfoForm } from "./channel-settings-info";
+import { InfoForm, useInfoForm } from "./channel-settings-info";
 
 /**
  * The channel header's details-and-settings slideout: identity, the Members strip, the Info form
@@ -206,22 +206,15 @@ export function ChannelSettingsPanel({
                       onOpenMembers={() => setMembersView("members")}
                       onAddMembers={() => setMembersView("add")}
                     />
-                    {(capabilities.update || conversation.project) && (
+                    {capabilities.update && (
                       <PanelSection
                         title={m.channel_settings_info()}
                         description={m.channel_settings_info_description()}
                       >
-                        {capabilities.update && (
-                          <InfoForm
-                            form={info}
-                            channelName={conversation.name}
-                            archived={conversation.archived}
-                          />
-                        )}
-                        <ProjectField
-                          conversation={conversation}
-                          canEdit={capabilities.update && !conversation.archived}
-                          onChanged={onChanged}
+                        <InfoForm
+                          form={info}
+                          channelName={conversation.name}
+                          archived={conversation.archived}
                         />
                       </PanelSection>
                     )}

@@ -4,6 +4,7 @@ import type { ConversationRealtime } from "#src/server/conversations/conversatio
 import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import type { MessageNotifier } from "#src/server/notifications/web-push-composition.server";
 import type { TaskReader } from "./task-view.server";
+import { TASK_PROJECT_SELECT, type TaskProjectRef } from "./task-projects.server";
 
 export type TaskBoardDependencies = {
   /** Who reads this board's command results: people (the default) or an Agent, through the Agent
@@ -36,6 +37,9 @@ export type Member = {
     /** The Agent's own server role; never inherited from its owner. */
     role?: string | null;
   } | null;
+  /** The Project this member last filed a Task under in this conversation (task #484); a
+   * person's web Task form defaults to it. */
+  lastTaskProject?: TaskProjectRef | null;
 };
 /** The member a Task is assigned to: named in a notice by handle alone. */
 export type Assignee = Omit<Member, "user" | "agent"> & {
@@ -48,6 +52,7 @@ export const MEMBER_SELECT = {
   agentId: true,
   user: { select: { username: true, displayName: true } },
   agent: { select: { name: true, displayName: true, role: true } },
+  lastTaskProject: { select: TASK_PROJECT_SELECT },
 } satisfies Prisma.ConversationMemberSelect;
 /** One conversation of one Workspace: where a Task lives and where its notices go. */
 export type ConversationRef = { conversationId: string; workspaceId: string };

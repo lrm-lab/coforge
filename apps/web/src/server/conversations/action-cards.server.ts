@@ -177,7 +177,6 @@ export class ActionCards {
     input: {
       messageId: string;
       name: string;
-      projectId?: string;
       memberUserIds: string[];
       memberAgentIds: string[];
     },
@@ -210,7 +209,6 @@ export class ActionCards {
       principal.actorUserId,
       input.name,
       {
-        projectId: input.projectId,
         description: payload.description,
         visibility: payload.visibility,
         members: [
@@ -359,7 +357,7 @@ export class ActionCards {
     if (action.type === "channel:create") {
       if (action.name === "general" || (await this.handles.channelExists(workspaceId, action.name)))
         throw new ActionCardError(409, "CHANNEL_EXISTS", `channel #${action.name} already exists`);
-      const [initialHumanIds, initialAgentIds, suggestedProjectId] = await Promise.all([
+      const [initialHumanIds, initialAgentIds] = await Promise.all([
         this.handles.resolveHumans(workspaceId, action.initialHumans, "action.initialHumans"),
         this.handles.resolveAgents(
           workspaceId,
@@ -367,9 +365,6 @@ export class ActionCards {
           action.initialAgents,
           "action.initialAgents",
         ),
-        action.project
-          ? this.handles.resolveProject(workspaceId, action.project, "action.project")
-          : Promise.resolve(undefined),
       ]);
       return {
         type: "channel:create",
@@ -378,7 +373,6 @@ export class ActionCards {
         description: action.description,
         ...(initialHumanIds ? { initialHumanIds } : {}),
         ...(initialAgentIds ? { initialAgentIds } : {}),
-        ...(suggestedProjectId ? { suggestedProjectId } : {}),
       };
     }
     if (action.type === "agent:create") {

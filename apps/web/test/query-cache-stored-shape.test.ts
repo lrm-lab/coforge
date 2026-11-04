@@ -124,7 +124,6 @@ const fixtures = [
         description: "",
         archived: false,
         visibility: "public",
-        project: undefined,
         coordinatorAgent: undefined,
         muted: false,
         notificationLevel: "all",

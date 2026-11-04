@@ -35,7 +35,6 @@ const messageIdInput = z.object({ messageId: z.uuid() });
 
 const commitChannelCreateInput = messageIdInput.extend({
   name: z.string().trim().regex(CHANNEL_NAME_PATTERN),
-  projectId: z.uuid().optional(),
   memberUserIds: z.array(z.uuid()).default([]),
   memberAgentIds: z.array(z.uuid()).default([]),
 });
@@ -55,7 +54,6 @@ export const commitChannelCreateActionCard = createServerFn({ method: "POST" })
       {
         messageId: data.messageId,
         name: data.name,
-        projectId: data.projectId,
         memberUserIds: data.memberUserIds,
         memberAgentIds: data.memberAgentIds,
       },

@@ -7,7 +7,7 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { ChannelTitle, channelGlyph } from "./channel-name";
 import { ChannelSettingsPanel } from "./channel-settings-panel";
 import { channelLabel, isPrivateChannel, type ChannelVisibility } from "./channel-visibility";
-import { ChannelHeaderMemberCluster, ChannelProjectChip } from "./channel-header-people";
+import { ChannelHeaderMemberCluster } from "./channel-header-people";
 import type { ChannelMembersView } from "./channel-members-page";
 import type { ChannelCapabilities } from "#src/server/conversations/channel-authority.server";
 import { TabbedHeader } from "#src/components/layout/tabbed-header";
@@ -41,13 +41,6 @@ export type ChannelConversationView = Omit<DirectConversationView, "agent" | "me
   description: string;
   archived: boolean;
   visibility: ChannelVisibility;
-  project?: {
-    id: string;
-    name: string;
-    slug: string;
-    githubFullName: string | null;
-    githubHtmlUrl: string | null;
-  };
   coordinatorAgent?: { id: string; name: string; displayName: string };
   muted: boolean;
   /** The viewer's notification level here (task #401); absent from a page kept from before. */
@@ -106,10 +99,7 @@ export function ChannelConversationHeader({
               <h1 className="min-w-0 shrink truncate text-md font-semibold">
                 <ChannelTitle name={conversation.name} visibility={conversation.visibility} />
               </h1>
-              {conversation.project && (
-                <ChannelProjectChip workspaceSlug={workspaceSlug} project={conversation.project} />
-              )}
-              {conversation.description && !conversation.project && (
+              {conversation.description && (
                 <p className="hidden min-w-0 truncate text-sm text-tertiary sm:block">
                   {conversation.description}
                 </p>

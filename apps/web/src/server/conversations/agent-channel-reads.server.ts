@@ -38,16 +38,6 @@ export type AgentChannelInfo = {
   channelAdminBasis?: ChannelAdminBasis;
   /** Every capability name; only the ones this Agent may currently invoke are `true`. */
   channelCapabilities: ChannelCapabilities;
-  /**
-   * A Project discussion group owned by this Workspace; fields match workspace info --projects.
-   */
-  project?: {
-    id: string;
-    name: string;
-    slug: string;
-    githubFullName?: string;
-    githubHtmlUrl?: string;
-  };
 };
 
 export type AgentChannelRoster = {
@@ -78,20 +68,16 @@ export type AgentChannelRoster = {
 export async function agentChannelInfo(
   db: PrismaClient,
   workspaceId: string,
-  channel: Pick<
-    Conversation,
-    "id" | "channelName" | "description" | "archivedAt" | "projectId" | "visibility"
-  >,
+  channel: Pick<Conversation, "id" | "channelName" | "description" | "archivedAt" | "visibility">,
   actor: ChannelActor,
 ): Promise<AgentChannelInfo> {
-  const [member, memberCounts, authority, project] = await Promise.all([
+  const [member, memberCounts, authority] = await Promise.all([
     db.conversationMember.findFirst({
       where: { conversationId: channel.id, ...actor, ...ACTIVE_MEMBER_WHERE },
       select: { notificationLevel: true },
     }),
     countActiveMembers(db, channel.id),
     resolveChannelAuthority(db, workspaceId, actor, channel),
-    channelProject(db, workspaceId, channel.projectId),
   ]);
   return {
     id: channel.id,
@@ -105,30 +91,6 @@ export async function agentChannelInfo(
     channelRole: authority.channelRole,
     channelAdminBasis: authority.adminBasis,
     channelCapabilities: authority.capabilities,
-    ...(project ? { project } : {}),
-  };
-}
-
-/**
- * Resolve the bound Project only in this Workspace, even if a corrupt projectId crosses Workspaces.
- */
-async function channelProject(
-  db: PrismaClient,
-  workspaceId: string,
-  projectId: string | null,
-): Promise<AgentChannelInfo["project"]> {
-  if (!projectId) return undefined;
-  const project = await db.project.findFirst({
-    where: { id: projectId, workspaceId },
-    select: { id: true, name: true, slug: true, githubFullName: true, githubHtmlUrl: true },
-  });
-  if (!project) return undefined;
-  return {
-    id: project.id,
-    name: project.name,
-    slug: project.slug,
-    ...(project.githubFullName ? { githubFullName: project.githubFullName } : {}),
-    ...(project.githubHtmlUrl ? { githubHtmlUrl: project.githubHtmlUrl } : {}),
   };
 }
 

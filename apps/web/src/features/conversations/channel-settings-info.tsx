@@ -1,30 +1,21 @@
 import { useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Check, Share04 as Share } from "@untitledui/icons";
+import { Check } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { DIALOG_BUTTON_SIZE } from "#src/components/ui/dialog-actions";
 import { Input } from "#src/components/base/input/input";
 import { TextArea } from "#src/components/base/textarea/textarea";
-import { EntityPickerField, projectOptions } from "#src/features/pickers/entity-picker";
-import { useAppToast } from "#src/components/ui/toast";
-import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
-import { projectsQuery } from "#src/features/projects/project-tree-queries";
 import { isAppError } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import type { ChannelConversationView } from "./channel-conversation";
-import { setPublicChannelProject, updatePublicChannelInfo } from "./channels.functions";
+import { updatePublicChannelInfo } from "./channels.functions";
 
 /** How long "Saved" stays beside the Info form's Save button. */
 const SAVED_NOTICE_MS = 1500;
 
-/** The Project picker's "No Project" option. */
-const NO_PROJECT = "none";
-
 /*
- * The channel settings panel's Info section: the name-and-description form channel admins edit,
- * and the Project the channel belongs to.
+ * The channel settings panel's Info section: the name-and-description form channel admins edit.
  */
 
 export type InfoForm = ReturnType<typeof useInfoForm>;
@@ -186,92 +177,5 @@ export function InfoForm({
         {form.saved ? m.channel_settings_saved() : ""}
       </span>
     </form>
-  );
-}
-
-/**
- * The Project the channel belongs to. A channel admin picks it here, changes it or sets it to none,
- * and it saves on the pick, as the coordinator does; anyone else reads it, with its repository
- * linked. The Workspace's Projects are read when the panel shows the field to an admin.
- */
-export function ProjectField({
-  conversation,
-  canEdit,
-  onChanged,
-}: {
-  conversation: ChannelConversationView;
-  canEdit: boolean;
-  onChanged: () => Promise<void>;
-}) {
-  const project = conversation.project;
-  const workspaceId = useCurrentWorkspaceId();
-  const projects = useQuery({
-    ...projectsQuery(workspaceId ?? ""),
-    enabled: canEdit && Boolean(workspaceId),
-  }).data;
-  const toast = useAppToast();
-  const setProject = useServerFn(setPublicChannelProject);
-  const [saving, setSaving] = useState(false);
-
-  async function change(value: string) {
-    if (value === (project?.id ?? NO_PROJECT)) return;
-    setSaving(true);
-    try {
-      await setProject({
-        data: {
-          channelId: conversation.conversationId,
-          projectId: value === NO_PROJECT ? null : value,
-        },
-      });
-      await onChanged();
-    } catch {
-      toast.error(m.channel_settings_project_error());
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const repository = project?.githubHtmlUrl && project.githubFullName && (
-    <a
-      href={project.githubHtmlUrl}
-      target="_blank"
-      rel="noreferrer"
-      aria-label={m.channel_settings_view_repository({ repository: project.githubFullName })}
-      className="inline-flex min-w-0 items-center gap-1 text-sm text-brand-secondary hover:underline"
-    >
-      <span className="truncate">{project.githubFullName}</span>
-      <Share aria-hidden="true" className="size-3.5 shrink-0" />
-    </a>
-  );
-
-  if (!canEdit) {
-    if (!project) return null;
-    return (
-      <div className="mt-4 first:mt-0">
-        <p className="text-sm text-tertiary">{m.channel_settings_project()}</p>
-        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-          <span className="truncate font-medium text-primary">{project.name}</span>
-          {repository}
-        </div>
-      </div>
-    );
-  }
-  // Under the name form a rule sets it apart: it saves on pick, not with the form's Save.
-  return (
-    <div className="mt-5 flex flex-col gap-1.5 border-t border-secondary pt-5 first:mt-0 first:border-t-0 first:pt-0">
-      <EntityPickerField
-        fieldLabel={m.channel_settings_project()}
-        label={m.channel_settings_project()}
-        selectedKey={project?.id ?? NO_PROJECT}
-        isDisabled={saving || !projects}
-        options={[
-          { id: NO_PROJECT, label: m.channel_no_project() },
-          // The current Project stays listed while the Workspace's are still being read.
-          ...projectOptions(projects ?? (project ? [project] : [])),
-        ]}
-        onSelect={(key) => void change(key)}
-      />
-      {repository && <div>{repository}</div>}
-    </div>
   );
 }

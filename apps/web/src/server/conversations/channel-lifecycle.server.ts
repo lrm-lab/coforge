@@ -39,10 +39,9 @@ import { channelAudience } from "./conversation-signal-scope.server";
 /** A channel's life as a whole: creating it, its name, description and member roles, archiving
  * it, hiding `#general` from the Workspace, and deleting a channel for good. */
 
-/** What a new channel may start with besides its name: its project, description and visibility
+/** What a new channel may start with besides its name: its description and visibility
  * (public unless given). */
 export type NewChannelOptions = {
-  projectId?: string;
   description?: string;
   visibility?: ChannelVisibility;
   /** Picked members, written with the channel rather than after it (the action-card commit). */
@@ -54,19 +53,12 @@ export async function createUserChannel(
   workspaceId: string,
   userId: string,
   name: string,
-  { projectId, description, visibility, members }: NewChannelOptions = {},
+  { description, visibility, members }: NewChannelOptions = {},
 ) {
   await requireWorkspaceMember(db, workspaceId, userId);
   if (!CHANNEL_NAME_PATTERN.test(name)) throw new AppError("INVALID_INPUT");
   // #general is the Workspace's own channel, created with the Workspace.
   if (name === "general") throw new AppError("CONFLICT");
-  if (projectId) {
-    const project = await db.project.findFirst({
-      where: { id: projectId, workspaceId },
-      select: { id: true },
-    });
-    if (!project) throw new AppError("INVALID_INPUT");
-  }
   let created: {
     id: string;
     channelName: string | null;
@@ -79,7 +71,6 @@ export async function createUserChannel(
       workspaceId,
       name,
       creator: { userId },
-      ...(projectId ? { projectId } : {}),
       ...(description !== undefined ? { description } : {}),
       ...(visibility ? { visibility } : {}),
       ...(members?.length ? { members } : {}),
@@ -123,14 +114,12 @@ export async function createChannelWithMembers(
   userId: string,
   input: {
     name: string;
-    projectId?: string;
     visibility?: ChannelVisibility;
     userIds: string[];
     agentIds: string[];
   },
 ): Promise<{ id: string; membersAddFailed: boolean }> {
   const { id } = await createUserChannel(ports, workspaceId, userId, input.name, {
-    projectId: input.projectId,
     visibility: input.visibility,
   });
   if (input.userIds.length === 0 && input.agentIds.length === 0)

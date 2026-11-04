@@ -205,7 +205,6 @@ export async function actionCardViews(
         description: payload.description,
         initialHumans: (payload.initialHumanIds ?? []).map(human),
         initialAgents: (payload.initialAgentIds ?? []).map(agent),
-        suggestedProjectId: payload.suggestedProjectId,
         canCommit: pending,
         result: readableResult<{ channelId: string }>(card.result),
       });

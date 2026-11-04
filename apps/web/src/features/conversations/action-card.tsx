@@ -33,8 +33,6 @@ import {
 import { getCloudDesktopOrigin } from "#src/features/computers/cloud-desktop-origin.functions";
 import { cloudDesktopUrl, openCloudDesktopWindow } from "#src/features/computers/cloud-desktop-url";
 import { WAITING_CHOICE_CARDS_KEY } from "#src/features/inbox/activity-inbox-queries";
-import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
-import { projectsQuery } from "#src/features/projects/project-tree-queries";
 import type { ActionCardView } from "#src/server/conversations/action-cards.server";
 
 /** Renders an Agent-prepared action card below its message body.
@@ -69,13 +67,6 @@ export function ActionCard({ card }: { card: ActionCardView }) {
   // still loading.
   const [committing, setCommitting] = useState(false);
   const [openingDialog, setOpeningDialog] = useState(false);
-  // A channel card commits its drafted Project only while that Project still exists, and its
-  // dialog offers them all with the suggestion picked. Either waits until they have been read.
-  const workspaceId = useCurrentWorkspaceId();
-  const projects = useQuery({
-    ...projectsQuery(workspaceId ?? ""),
-    enabled: view.state === "pending" && view.kind === "channel:create" && Boolean(workspaceId),
-  });
   const create = useServerFn(createAgent);
   const loadComputers = useServerFn(listComputers);
   const loadRuntimeCatalog = useServerFn(getComputerRuntimeCatalog);
@@ -190,18 +181,12 @@ export function ActionCard({ card }: { card: ActionCardView }) {
   async function commitDraft() {
     switch (view.kind) {
       case "channel:create": {
-        const suggested = view.suggestedProjectId;
         return commit(
           async () => {
             await commitChannelCreate({
               data: {
                 messageId: view.messageId,
                 name: view.name,
-                // Dropped only once the Projects show it is gone; unread, the server decides.
-                projectId:
-                  projects.data && !projects.data.some((project) => project.id === suggested)
-                    ? undefined
-                    : suggested,
                 memberUserIds: view.initialHumans.map((human) => human.id),
                 memberAgentIds: view.initialAgents.map((agent) => agent.id),
               },
@@ -307,9 +292,6 @@ export function ActionCard({ card }: { card: ActionCardView }) {
           cancelling={cancelling}
           commitDisabled={
             openingDialog ||
-            (view.kind === "channel:create" &&
-              Boolean(view.suggestedProjectId && workspaceId) &&
-              projects.isPending) ||
             (view.kind === "page:fill" &&
               view.fields.some(
                 (field) => field.input === "password" && !(fillValues[field.id] ?? "").length,
@@ -324,20 +306,17 @@ export function ActionCard({ card }: { card: ActionCardView }) {
         // The dialogs below stay mounted past the commit they made, so they close on their own.
         <HandledActionCard view={view} />
       )}
-      {dialogOpen && view.kind === "channel:create" && !projects.isPending && (
+      {dialogOpen && view.kind === "channel:create" && (
         <CreateChannelDialog
           open
           onOpenChange={setDialogOpen}
           defaultName={view.name}
-          projects={projects.data}
-          defaultProjectId={view.suggestedProjectId}
           initialMembers={{ humans: view.initialHumans, agents: view.initialAgents }}
-          onCreate={async (name, projectId, memberUserIds, memberAgentIds) => {
+          onCreate={async (name, memberUserIds, memberAgentIds) => {
             await commitChannelCreate({
               data: {
                 messageId: view.messageId,
                 name,
-                projectId,
                 memberUserIds: memberUserIds ?? [],
                 memberAgentIds: memberAgentIds ?? [],
               },

@@ -1,7 +1,7 @@
 import { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useParams, useRouter, useRouterState } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
+import { useSuspenseQuery } from "@tanstack/react-query";
 import { BadgeWithIcon } from "#src/components/base/badges/badges";
 import { PageHeader } from "#src/components/layout/page-header";
 import { Spinner } from "#src/components/ui/spinner";
@@ -25,7 +25,6 @@ import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { CreateChannelDialog } from "./create-channel-dialog";
 import { NewConversationMenu } from "./new-conversation-menu";
 import { channelNamesQuery } from "./conversation-queries";
-import { projectsQuery } from "#src/features/projects/project-tree-queries";
 import { rememberConversation } from "./last-conversation";
 import { unknownAgentOf, unreadIdsToKeep, type SeededList } from "./conversation-unread";
 import { useChannelUnread } from "./use-channel-unread";
@@ -66,8 +65,6 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const [browsing, setBrowsing] = useState(false);
   const [creating, setCreating] = useState(false);
-  // The projects a new channel can join: read when the dialog opens, not on every navigation.
-  const projects = useQuery({ ...projectsQuery(workspaceId ?? ""), enabled: creating }).data;
   const create = useServerFn(createPublicChannel);
   const channel = useParams({
     from: "/w/$workspaceSlug/_chat/channel/$channelId",
@@ -248,15 +245,13 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
             <CreateChannelDialog
               open={creating}
               onOpenChange={setCreating}
-              projects={projects}
               memberPicker
               minMembers={2}
               offersPrivate
-              onCreate={async (name, projectId, memberUserIds, memberAgentIds, visibility) => {
+              onCreate={async (name, memberUserIds, memberAgentIds, visibility) => {
                 const created = await create({
                   data: {
                     name,
-                    projectId,
                     visibility,
                     userIds: memberUserIds ?? [],
                     agentIds: memberAgentIds ?? [],

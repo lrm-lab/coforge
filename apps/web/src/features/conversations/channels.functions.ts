@@ -37,7 +37,6 @@ export const createPublicChannel = createServerFn({ method: "POST" })
   .validator(
     z.object({
       name: z.string().trim().regex(CHANNEL_NAME_PATTERN),
-      projectId: z.uuid().optional(),
       visibility: channelVisibilitySchema.optional(),
       userIds: z.array(z.uuid()).max(100).default([]),
       agentIds: z.array(z.uuid()).max(100).default([]),
@@ -231,14 +230,6 @@ export const setPublicChannelCoordinator = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { channels, workspaceId, userId } = channelScope(context);
     return channels.setCoordinator(workspaceId, userId, data.channelId, data.coordinatorAgentId);
-  });
-
-export const setPublicChannelProject = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
-  .validator(channelInput.extend({ projectId: z.uuid().nullable() }))
-  .handler(async ({ data, context }) => {
-    const { channels, workspaceId, userId } = channelScope(context);
-    return channels.setProject(workspaceId, { userId }, data.channelId, data.projectId);
   });
 
 export const sendPublicChannelMessage = createServerFn({ method: "POST" })

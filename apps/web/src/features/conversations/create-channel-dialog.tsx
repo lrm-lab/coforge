@@ -14,7 +14,6 @@ import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Checkbox } from "#src/components/base/checkbox/checkbox";
 import { Input } from "#src/components/base/input/input";
-import { EntityPickerField, projectOptions } from "#src/features/pickers/entity-picker";
 import { Toggle } from "#src/components/base/toggle/toggle";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { isAppErrorCode } from "#src/lib/app-error";
@@ -51,17 +50,12 @@ type CreateChannelDialogProps = {
    * Chat list re-read; a rejection means nothing was created. */
   onCreate: (
     name: string,
-    projectId?: string,
     memberUserIds?: string[],
     memberAgentIds?: string[],
     visibility?: ChannelVisibility,
   ) => Promise<CreatedChannel | void>;
   /** Opens a channel the dialog created (the picker's result state and success). */
   onOpenChannel?: (channelId: string) => void | Promise<void>;
-  projects?: { id: string; name: string; slug: string; iconUrl?: string | null }[];
-  /** Preselects a Project, e.g. the one an Agent's card suggests; ignored when it is not in
-   * `projects`. */
-  defaultProjectId?: string;
   /** Prefills, but does not force, the channel name — e.g. the project slug when
    * creating a project's first discussion group. */
   defaultName?: string;
@@ -72,7 +66,7 @@ type CreateChannelDialogProps = {
     agents: { id: string; displayName: string }[];
   };
   /** The two-pane group chat dialog: the Workspace's people and public Agents to pick from, beside
-   * the name and project. Off, the dialog is the single column the other callers keep. */
+   * the name. Off, the dialog is the single column the other callers keep. */
   memberPicker?: boolean;
   /** With `memberPicker`, the fewest people (besides the creator) the channel may start with. */
   minMembers?: number;
@@ -80,16 +74,11 @@ type CreateChannelDialogProps = {
   offersPrivate?: boolean;
 };
 
-/** The "No Project" row's key: a Project id is never empty. */
-const NO_PROJECT = "none";
-
 export function CreateChannelDialog({
   open,
   onOpenChange,
   onCreate,
   onOpenChannel,
-  projects = [],
-  defaultProjectId,
   defaultName = "",
   initialMembers,
   memberPicker = false,
@@ -115,8 +104,6 @@ export function CreateChannelDialog({
     onCreate,
     onOpenChannel,
     onOpenChange,
-    projects,
-    defaultProjectId,
     defaultName,
     initialMembers,
     minMembers,
@@ -164,8 +151,6 @@ type CreateChannelFormProps = Pick<
   | "onCreate"
   | "onOpenChannel"
   | "onOpenChange"
-  | "projects"
-  | "defaultProjectId"
   | "defaultName"
   | "initialMembers"
   | "minMembers"
@@ -185,8 +170,6 @@ function CreateChannelForm({
   onCreate,
   onOpenChannel,
   onOpenChange,
-  projects = [],
-  defaultProjectId,
   defaultName = "",
   initialMembers,
   minMembers = 0,
@@ -199,10 +182,6 @@ function CreateChannelForm({
   close,
 }: CreateChannelFormProps) {
   const [name, setName] = useState(defaultName);
-  const [initialProjectId] = useState(() =>
-    projects.some((project) => project.id === defaultProjectId) ? defaultProjectId! : "",
-  );
-  const [projectId, setProjectId] = useState(initialProjectId);
   const [makePrivate, setMakePrivate] = useState(false);
   const [startingKeys] = useState(() => initialKeys(initialMembers));
   const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string>>(startingKeys);
@@ -223,7 +202,6 @@ function CreateChannelForm({
   const dirty =
     created === null &&
     (name !== defaultName ||
-      projectId !== initialProjectId ||
       makePrivate ||
       selectedKeys.size !== startingKeys.size ||
       [...selectedKeys].some((key) => !startingKeys.has(key)));
@@ -243,7 +221,6 @@ function CreateChannelForm({
       const outcome: CreateChannelOutcome = createChannelOutcome(
         await onCreate(
           channelName,
-          projectId || undefined,
           userIds,
           agentIds,
           makePrivate ? CHANNEL_VISIBILITY.PRIVATE : undefined,
@@ -275,18 +252,6 @@ function CreateChannelForm({
       pattern="[a-z0-9][a-z0-9_\-]{0,31}"
       placeholder={m.channel_name_placeholder()}
       isDisabled={locked}
-    />
-  );
-  // The group chat dialog always offers the field (a Workspace with no Project shows it disabled,
-  // reading "No Project"); the single-column dialog keeps it only when there is a Project to pick.
-  const projectField = (memberPicker || projects.length > 0) && (
-    <EntityPickerField
-      label={m.channel_project()}
-      placeholder={m.channel_no_project()}
-      selectedKey={projectId || NO_PROJECT}
-      isDisabled={locked || projects.length === 0}
-      options={[{ id: NO_PROJECT, label: m.channel_no_project() }, ...projectOptions(projects)]}
-      onSelect={(key) => setProjectId(key === NO_PROJECT ? "" : key)}
     />
   );
   // Slack's switch, without a description: the name says what it does.
@@ -350,7 +315,6 @@ function CreateChannelForm({
         )}
         <form onSubmit={(event) => void submit(event)} className="mt-5 flex flex-col gap-2">
           {nameField}
-          {projectField}
           {privateField}
           {initialMembers &&
             (initialMembers.humans.length > 0 || initialMembers.agents.length > 0) && (
@@ -446,7 +410,6 @@ function CreateChannelForm({
             className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4"
           >
             {nameField}
-            {projectField}
             {privateField}
             {errorText}
             {minMembersHint}
@@ -487,7 +450,6 @@ function CreateChannelForm({
             className="mt-5 flex flex-1 flex-col gap-4"
           >
             {nameField}
-            {projectField}
             {privateField}
             <ul className="flex flex-col gap-1">
               {selectedGroupChatCandidates(candidates, selectedKeys).map((entry) => (

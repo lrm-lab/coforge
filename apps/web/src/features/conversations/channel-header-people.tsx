@@ -1,6 +1,3 @@
-import { Link } from "@tanstack/react-router";
-import { Folder } from "@untitledui/icons";
-
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { AvatarAddButton } from "#src/components/base/avatar/base-components/avatar-add-button";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
@@ -29,28 +26,6 @@ export type ChannelHeaderFace = {
   serverRole?: string | null;
   channelRole?: string;
 };
-
-/** The project named on a channel, as a folder chip beside the title. Absent when the channel
- * has no project. */
-export function ChannelProjectChip({
-  workspaceSlug,
-  project,
-}: {
-  workspaceSlug: string;
-  project: { name: string; slug: string };
-}) {
-  return (
-    <Link
-      to="/w/$workspaceSlug/projects/$projectSlug"
-      params={{ workspaceSlug, projectSlug: project.slug }}
-      aria-label={`${m.channel_settings_project()}: ${project.name}`}
-      className="inline-flex h-7 min-w-8 max-w-40 shrink-[999] items-center gap-1.5 rounded-lg border border-secondary bg-primary px-2 text-sm font-medium text-secondary outline-focus-ring hover:bg-primary_hover focus-visible:outline-2"
-    >
-      <Folder aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
-      <span className="truncate">{project.name}</span>
-    </Link>
-  );
-}
 
 /** The overlapping member faces and the dashed invite button. Presentational, so the header and
  * a test can both supply the roster. */

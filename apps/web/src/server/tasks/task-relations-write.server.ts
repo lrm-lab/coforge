@@ -24,6 +24,7 @@ import type { Member, Transaction } from "./task-board-ports.server";
 import { historyRows } from "./task-history.server";
 import { byName, descend } from "./task-relations.server";
 import { NAMED_CONVERSATION_SELECT, taskName } from "./task-view.server";
+import { TASK_PROJECT_SELECT } from "./task-projects.server";
 
 /**
  * Writes a Task's blockers and parent (`task_dependencies`, `task_parents`) and decides whether a
@@ -62,12 +63,27 @@ const TARGET_SELECT = {
   number: true,
   status: true,
   conversationId: true,
+  project: { select: TASK_PROJECT_SELECT },
   conversation: { select: NAMED_CONVERSATION_SELECT },
   owner: PERSON_SELECT,
   creator: PERSON_SELECT,
 } satisfies Prisma.TaskSelect;
 
 type Target = Prisma.TaskGetPayload<{ select: typeof TARGET_SELECT }> & { ref: TaskRef };
+
+/** The Task `ref` names, or null; the same "does not exist" refusals as a relation write — used
+ * by create to read the would-be parent's Project (task #484). */
+export async function resolveTaskParent(
+  tx: Transaction,
+  scope: Scope,
+  member: Member,
+  ref: TaskRef | null | undefined,
+  except: readonly TaskKey[] = [],
+): Promise<Target | null> {
+  if (ref == null) return null;
+  const [parent] = await resolve(tx, scope, member, [ref], except);
+  return parent ?? null;
+}
 
 /** Whether `person`, a seat in some conversation, is `member`: the same person or Agent. A Task in
  * another conversation has an owner and creator with other seat ids than the actor's there. */

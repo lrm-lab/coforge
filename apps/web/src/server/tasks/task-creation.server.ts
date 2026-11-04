@@ -36,7 +36,8 @@ import {
 import { receiptAssignee, assigneeMember } from "./task-assignees.server";
 import { indexedRequestId } from "./task-request-ids.server";
 import { LABELS_PER_TASK_MAX, labelsChange, labelView, resolveTaskLabels } from "./labels.server";
-import { TASK_PROJECT_SELECT, resolveTaskProject } from "./task-projects.server";
+import { resolveNewTaskProject } from "./task-projects.server";
+import { resolveTaskParent } from "./task-relations-write.server";
 
 export async function createTasks(
   ports: TaskBoardPorts,
@@ -126,23 +127,10 @@ export async function createTasks(
       });
       if (!attachment) throw new AppError("ACCESS_DENIED");
     }
-    // The Project the new Tasks are filed under: the one named (and pinned) or their
-    // conversation's. A direct message has none, and cannot be given one.
-    const conversation = await tx.conversation.findUniqueOrThrow({
-      where: { id: scope.conversationId },
-      select: { directKey: true, project: { select: TASK_PROJECT_SELECT } },
-    });
-    const projectChosen = command.project !== undefined;
-    if (projectChosen && (!command.project || conversation.directKey))
-      throw new AppError("INVALID_INPUT", {
-        errorId: "task-project",
-        hint: conversation.directKey
-          ? "a direct message's Tasks are not filed under a Project"
-          : "--project names a Project by slug",
-      });
-    const project = projectChosen
-      ? await resolveTaskProject(tx, scope.workspaceId, command.project!)
-      : conversation.project;
+    // The Project the new Tasks are filed under (task #484): the one named, a sub-task's
+    // parent's, else this member's last-used one here.
+    const parent = await resolveTaskParent(tx, scope, member, command.parent, []);
+    const project = await resolveNewTaskProject(tx, scope, member, command, parent);
     // The labels the new Tasks carry, resolved before anything is written; an unknown name is
     // refused with the Workspace's own labels. A Task carries at most five.
     const labels = await resolveTaskLabels(

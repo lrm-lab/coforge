@@ -133,7 +133,6 @@ export async function openChannel(
     description: channel.description,
     archived: channel.archivedAt !== null,
     visibility: channelVisibilityOf(channel),
-    project: channel.project ?? undefined,
     coordinatorAgent: activeCoordinator,
     senderMemberId: member?.id ?? "",
     viewerId: member ? userId : undefined,

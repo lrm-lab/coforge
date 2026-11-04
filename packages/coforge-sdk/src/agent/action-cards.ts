@@ -60,11 +60,6 @@ export const channelCreateActionSchema = z.object({
    * (`@scout` or bare `scout`) or a UUID; resolved at prepare time.
    */
   initialAgents: z.array(idOrHandleSchema).max(64).optional(),
-  /**
-   * A Project to suggest for the channel: its name or slug (or a UUID); resolved at prepare time.
-   * It only preselects the create dialog; the person who commits picks the Project that counts.
-   */
-  project: idOrHandleSchema.optional(),
   draftHint: draftHintSchema,
 });
 export type ChannelCreateAction = z.infer<typeof channelCreateActionSchema>;
@@ -243,7 +238,6 @@ export type ResolvedChannelCreatePayload = {
   description?: string;
   initialHumanIds?: string[];
   initialAgentIds?: string[];
-  suggestedProjectId?: string;
 };
 export type ResolvedAgentCreatePayload = {
   type: "agent:create";

@@ -233,4 +233,16 @@ export const PINNED_SHAPES: Record<number, Record<string, string>> = {
     "chat sections": "b49b26a074dbffb9",
     "chat section order": "fc37a20be1db425d",
   },
+  19: {
+    "channel window": "65b24cb706859448",
+    "direct window with an Agent": "2fee8267523e1b97",
+    "direct window with a person": "0906fd265d7973a6",
+    "sidebar channels": "341c07e634e727d5",
+    "sidebar directs": "5205999212e744be",
+    "channel names": "292a0fa92b3cbad1",
+    "saved messages": "29e083a65a909ec0",
+    "chat sections": "b49b26a074dbffb9",
+    "chat section order": "fc37a20be1db425d",
+    "agent workspace scan": "be4265c651dc4bff",
+  },
 };

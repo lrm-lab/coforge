@@ -8,10 +8,6 @@ Moved out of [`AGENTS.md`](AGENTS.md) to keep it under 200 lines; the rules are 
   row in one conversation-locked transaction (`createActionCardMessage`). The server alone posts
   `app:grant_agent` (`AppGrantCards`) once per waiting app access request, under its row lock;
   whoever decides the request settles the card in that transaction (`settleAppGrantCard`).
-- A `channel:create` action's optional `project` (a name, slug or UUID; `ActionCardHandles.resolveProject`)
-  is stored on the card as `suggestedProjectId` and shown on its view for the confirm dialog to
-  preselect. It is a suggestion only: the commit takes the confirming human's own `projectId`, never
-  the card's.
 - `ActionCards.viewsFor(workspaceId, viewerUserId, messageIds)` (`action-card-views.server.ts`) is
   one batched lookup per message page. Never look up action cards per message.
 - Every commit path runs the real operation first, under the committing human's identity and that
