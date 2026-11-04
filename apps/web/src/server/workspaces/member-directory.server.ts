@@ -11,6 +11,7 @@ import {
   type ConversationRealtime,
 } from "#src/server/conversations/conversation-realtime.server";
 import { announceConversationsRevoked } from "#src/server/conversations/channel-membership-signals.server";
+import type { MembershipNoticeRef } from "#src/server/conversations/channel-membership-notice.server";
 
 import {
   createCentrifugoServerApi,
@@ -48,8 +49,10 @@ export type WorkspaceMemberDirectoryStore = {
   removeMember(
     workspaceId: string,
     userId: string,
+    options?: { operator?: { userId: string } },
   ): Promise<{
     leftChannelIds: string[];
+    membershipNotices: { conversationId: string; messageId: string; sequence: number }[];
     /** The channels and their task conversations: what the person no longer reads. */
     revokedConversationIds: string[];
     computerIds: string[];
@@ -77,8 +80,17 @@ const centrifugoMemberDaemons: WorkspaceMemberDaemons = {
 export class WorkspaceMemberDirectory {
   constructor(
     private readonly store: WorkspaceMemberDirectoryStore,
-    private readonly realtime?: Pick<ConversationRealtime, "memberChanged" | "revokeConversations">,
+    private readonly realtime?: Pick<
+      ConversationRealtime,
+      "memberChanged" | "revokeConversations"
+    > &
+      Partial<Pick<ConversationRealtime, "messageAvailable">>,
     private readonly daemons: WorkspaceMemberDaemons = centrifugoMemberDaemons,
+    /** Announces a posted membership record to open pages; production wires
+     * `announceMessageBestEffort` — the records never count unread or wake anyone. */
+    private readonly announce: (
+      notice: MembershipNoticeRef & { workspaceId: string; conversationId: string },
+    ) => Promise<void> = async () => {},
   ) {}
 
   async listMembers(input: { workspaceId: string; actorUserId: string }) {
@@ -106,7 +118,9 @@ export class WorkspaceMemberDirectory {
     const target = await this.store.findMembership(input.workspaceId, input.targetUserId);
     if (!target) throw new AppError("NOT_FOUND");
     assertCanRemoveMember(actor.role, target.role);
-    await this.removeFromWorkspace(input.workspaceId, input.targetUserId);
+    await this.removeFromWorkspace(input.workspaceId, input.targetUserId, {
+      operator: { userId: input.actorUserId },
+    });
   }
 
   async leave(input: { workspaceId: string; userId: string }) {
@@ -118,13 +132,16 @@ export class WorkspaceMemberDirectory {
   /** Removes the person, then tells the channels they were in that their member lists changed,
    * ends their subscriptions to those channels (they read none of them now) and tells their
    * Computers' daemons to reconnect. All best effort: the removal has committed. */
-  private async removeFromWorkspace(workspaceId: string, userId: string) {
-    const { leftChannelIds, revokedConversationIds, computerIds } = await this.store.removeMember(
-      workspaceId,
-      userId,
-    );
+  private async removeFromWorkspace(
+    workspaceId: string,
+    userId: string,
+    options: { operator?: { userId: string } } = {},
+  ) {
+    const { leftChannelIds, membershipNotices, revokedConversationIds, computerIds } =
+      await this.store.removeMember(workspaceId, userId, options);
     await Promise.all([
       announceMemberChanged(this.realtime, { workspaceId, conversationIds: leftChannelIds }),
+      ...membershipNotices.map((notice) => this.announce({ workspaceId, ...notice })),
       announceConversationsRevoked(this.realtime, {
         workspaceId,
         userIds: [userId],

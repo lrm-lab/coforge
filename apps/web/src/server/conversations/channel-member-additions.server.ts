@@ -1,4 +1,6 @@
+import type { PrismaClient } from "#src/generated/prisma/client";
 import { isAppErrorCode } from "#src/lib/app-error";
+import { partitionAddableChannelMembers } from "./channel-member-checks.server";
 import type { PublicChannels } from "./public-channels.server";
 import type { ChannelActor } from "./channel-actor.server";
 
@@ -12,13 +14,15 @@ export type MemberAdditionFailure = {
 /**
  * Adds the picked people and Agents through `PublicChannels.addMembers`, reporting each one that
  * cannot join instead of failing the rest (the channel settings' add view). The whole batch goes
- * in one call first; only when that call refuses a target (INVALID_INPUT) does each target go on
- * its own, and only INVALID_INPUT counts as that target's refusal. Any other error, such as a
- * refusal of the channel itself (archived, the actor not an active member, no such channel),
- * rejects the request. `addMembers` stays all-or-nothing for its other callers (the Agent CLI,
- * channel creation, action cards). Returns the fresh roster with the failures.
+ * in one call first; only when that call refuses a target (INVALID_INPUT) are the unaddable
+ * targets partitioned out and the addable set added in one call, so one action posts at most one
+ * membership record. Any other error, such as a refusal of the channel itself (archived, the
+ * actor not an active member, no such channel), rejects the request. `addMembers` stays
+ * all-or-nothing for its other callers (the Agent CLI, channel creation, action cards). Returns
+ * the fresh roster with the failures.
  */
 export async function addMembersReportingRefusals(
+  db: PrismaClient,
   channels: PublicChannels,
   workspaceId: string,
   actor: ChannelActor,
@@ -27,39 +31,21 @@ export async function addMembersReportingRefusals(
 ) {
   const userIds = [...new Set(input.userIds)];
   const agentIds = [...new Set(input.agentIds)];
-  const failed: MemberAdditionFailure[] = [];
   try {
     const members = await channels.addMembers(workspaceId, actor, channelId, { userIds, agentIds });
-    return { members, failed };
+    return { members, failed: [] };
   } catch (error) {
     if (!isAppErrorCode(error, "INVALID_INPUT")) throw error;
   }
 
-  const targets = [
-    ...userIds.map((id) => ({ kind: "user" as const, id })),
-    ...agentIds.map((id) => ({ kind: "agent" as const, id })),
-  ];
-  // `addMembers` returns the fresh roster (beside who already belonged); keep the last one.
-  let members: Awaited<ReturnType<PublicChannels["members"]>> | undefined;
-  for (const target of targets) {
-    try {
-      members = await channels.addMembers(workspaceId, actor, channelId, {
-        userIds: target.kind === "user" ? [target.id] : [],
-        agentIds: target.kind === "agent" ? [target.id] : [],
-      });
-    } catch (error) {
-      if (!isAppErrorCode(error, "INVALID_INPUT")) throw error;
-      failed.push({ ...target, reason: refusalReason(target.kind, error.errorId) });
-    }
-  }
-  // The last successful call already read the roster; read it here only if every pick failed.
-  return { members: members ?? (await channels.members(workspaceId, actor, channelId)), failed };
-}
-
-function refusalReason(
-  kind: MemberAdditionFailure["kind"],
-  errorId: string | undefined,
-): MemberAdditionFailure["reason"] {
-  if (kind === "user") return "not_in_workspace";
-  return errorId === "agent-private" ? "agent_private" : "agent_inactive";
+  const { addable, refused } = await partitionAddableChannelMembers(db, workspaceId, {
+    userIds,
+    agentIds,
+  });
+  const members =
+    addable.userIds.length + addable.agentIds.length
+      ? await channels.addMembers(workspaceId, actor, channelId, addable)
+      : // Nothing to add: the roster still comes back for the view.
+        await channels.members(workspaceId, actor, channelId);
+  return { members, failed: refused };
 }

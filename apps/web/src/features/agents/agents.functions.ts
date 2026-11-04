@@ -16,13 +16,7 @@ import {
   updateAgentRoleInputSchema,
 } from "./agent.schemas";
 import { normalizeAgentVisibility } from "./agent-visibility";
-import {
-  publishAgentDirectoryChanged,
-  publishAgentVisibilityChanged,
-} from "#src/server/agents/agent-visibility-realtime.server";
-import { ChangeAgentVisibility } from "#src/server/agents/change-agent-visibility.server";
-import { AgentInboxPurgePublisher } from "#src/server/agents/agent-inbox-purge.server";
-import { PrismaChangeAgentVisibilityStore } from "#src/server/db/repositories/agent-visibility-change.repositories.server";
+import { publishAgentDirectoryChanged } from "#src/server/agents/agent-visibility-realtime.server";
 import { setAgentRole } from "#src/server/agents/agent-role.server";
 import { AppError, isAppErrorCode } from "#src/lib/app-error";
 import { listVisibleAgentModels } from "#src/server/agents/agent-models.server";
@@ -31,9 +25,7 @@ import { AgentMascots } from "#src/server/agents/agent-mascot.server";
 import { isAdminLike, type WorkspaceMemberRole } from "#src/server/workspaces/member-role.server";
 import { requireDatabaseClient } from "#src/server/db/client.server";
 import { PrismaAgentRepository } from "#src/server/db/repositories/agent.repositories.server";
-import { AgentDeletion } from "#src/server/agents/agent-deletion.server";
 import { listArchivedAgents } from "#src/server/agents/archived-agents.server";
-import { PrismaAgentDeletionStore } from "#src/server/db/repositories/agent-deletion.repositories.server";
 import { userAgentRuntimeControl } from "#src/server/agents/user-agent-control.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import {
@@ -50,6 +42,7 @@ import {
   type AgentVisibilityViewer,
 } from "#src/server/agents/agent-visibility.server";
 import { workspaceMemberRole } from "#src/server/workspaces/workspace-membership.server";
+import { agentDeletion, changeAgentVisibilityUseCase } from "./agents-lifecycle.functions";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { ComputerRuntimeVisibility } from "#src/server/computers/computer-runtime-visibility.server";
 import { PrismaComputerRuntimeRepository } from "#src/server/db/repositories/computer-runtime.repositories.server";
@@ -91,25 +84,6 @@ async function agentEnvironment(db: Database) {
     userAgentRuntimeControl(db, agents),
     getAgentRuntimeLock(),
     await readAgentRuntimeCredentialEncryptionKey(process.env),
-  );
-}
-
-function agentDeletion(db: Database) {
-  const agents = new PrismaAgentRepository(db);
-  return new AgentDeletion(
-    agents,
-    new PrismaAgentDeletionStore(db),
-    userAgentRuntimeControl(db, agents),
-    getAgentRuntimeLock(),
-  );
-}
-
-function changeAgentVisibilityUseCase(db: Database) {
-  return new ChangeAgentVisibility(
-    new PrismaAgentRepository(db),
-    new PrismaChangeAgentVisibilityStore(db),
-    publishAgentVisibilityChanged,
-    new AgentInboxPurgePublisher(db),
   );
 }
 

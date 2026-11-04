@@ -21,6 +21,7 @@ import { softLeaveMember } from "./channel-changes.server";
 import { joinChannelAsAgent } from "./agent-channel-join.server";
 import { announceMemberChanged, type ConversationRealtime } from "./conversation-realtime.server";
 import { announceJoinedOrLeft } from "./channel-membership-signals.server";
+import { announceMessageBestEffort } from "./conversation-activity.server";
 import { assertCallerNotPrivate, createAgentChannel } from "./agent-channel-create.server";
 
 import {
@@ -133,9 +134,16 @@ export class AgentChannelManagement {
       return { target: `#${channel.channelName}`, joined: true, alreadyJoined: Boolean(before) };
     }
     await assertCallerNotPrivate(this.db, workspaceId, agentId, "join");
-    const joined = await joinChannelAsAgent(this.db, workspaceId, channel.id, agentId);
+    const { joined, notice } = await joinChannelAsAgent(this.db, workspaceId, channel.id, agentId);
     if (joined)
       await announceMemberChanged(this.realtime, { workspaceId, conversationIds: [channel.id] });
+    if (notice)
+      await announceMessageBestEffort(this.db, this.realtime, {
+        workspaceId,
+        conversationId: channel.id,
+        messageId: notice.messageId,
+        sequence: notice.sequence,
+      });
     return { target: `#${channel.channelName}`, joined: true, alreadyJoined: !joined };
   }
 
@@ -365,13 +373,23 @@ export class AgentChannelManagement {
       });
       if (!agentRow) throw memberNotFound(handle);
       if (agentRow.id !== callingAgentId) await assertMayRemoveOthers();
-      wasMember = await this.markLeft(workspaceId, channel.id, { agentId: agentRow.id });
+      wasMember = await this.markLeft(
+        workspaceId,
+        channel.id,
+        { agentId: agentRow.id },
+        agentRow.id === callingAgentId ? undefined : { agentId: callingAgentId },
+      );
       if (wasMember) removedAgentId = agentRow.id;
     } else {
       await assertMayRemoveOthers();
       const user = await this.db.user.findUnique({ where: { username: handle } });
       if (!user) throw memberNotFound(handle);
-      wasMember = await this.markLeft(workspaceId, channel.id, { userId: user.id });
+      wasMember = await this.markLeft(
+        workspaceId,
+        channel.id,
+        { userId: user.id },
+        { agentId: callingAgentId },
+      );
       if (wasMember) removedUserIds = [user.id];
     }
     if (wasMember)
@@ -394,12 +412,27 @@ export class AgentChannelManagement {
   }
 
   /** Ends one member's active membership of a channel; whether they were an active member. */
-  private markLeft(
+  private async markLeft(
     workspaceId: string,
     conversationId: string,
     member: { agentId: string } | { userId: string },
+    operator?: { agentId: string } | { userId: string },
   ): Promise<boolean> {
-    return softLeaveMember(this.db, workspaceId, conversationId, member);
+    const { wasMember, notice } = await softLeaveMember(
+      this.db,
+      workspaceId,
+      conversationId,
+      member,
+      { ...(operator ? { operator } : {}) },
+    );
+    if (notice)
+      await announceMessageBestEffort(this.db, this.realtime, {
+        workspaceId,
+        conversationId,
+        messageId: notice.messageId,
+        sequence: notice.sequence,
+      });
+    return wasMember;
   }
 
   /** A `#channel` target and the channel it names that `reader` may read (400 if malformed, 404

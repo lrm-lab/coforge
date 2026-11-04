@@ -104,6 +104,7 @@ test.skipIf(!connectionString)(
     const { db, channels, workspace, creator, ada, outsider, scout, ghost, team } = await setup();
     try {
       const result = await addMembersReportingRefusals(
+        db,
         channels,
         workspace.id,
         { userId: creator.id },
@@ -125,6 +126,7 @@ test.skipIf(!connectionString)(
       // Each kind of refusal carries its own reason; an already-active member is a quiet success.
       const stranger = crypto.randomUUID();
       const second = await addMembersReportingRefusals(
+        db,
         channels,
         workspace.id,
         { userId: creator.id },
@@ -139,6 +141,7 @@ test.skipIf(!connectionString)(
 
       await db.agent.update({ where: { id: scout.id }, data: { deletedAt: new Date() } });
       const third = await addMembersReportingRefusals(
+        db,
         channels,
         workspace.id,
         { userId: creator.id },
@@ -163,6 +166,7 @@ test.skipIf(!connectionString)(
     try {
       const stranger = crypto.randomUUID();
       const result = await addMembersReportingRefusals(
+        db,
         channels,
         workspace.id,
         { userId: creator.id },
@@ -192,6 +196,7 @@ test.skipIf(!connectionString)("a batch every pick can join is added in one writ
     await setup();
   try {
     const result = await addMembersReportingRefusals(
+      db,
       channels,
       workspace.id,
       { userId: creator.id },
@@ -224,7 +229,7 @@ test.skipIf(!connectionString)(
 
       expect(
         await appErrorCode(
-          addMembersReportingRefusals(channels, workspace.id, { userId: creator.id }, team.id, {
+          addMembersReportingRefusals(db, channels, workspace.id, { userId: creator.id }, team.id, {
             userIds: [ada.id],
             agentIds: [ghost.id],
           }),
@@ -246,10 +251,17 @@ test.skipIf(!connectionString)(
     try {
       expect(
         await appErrorCode(
-          addMembersReportingRefusals(channels, workspace.id, { userId: outsider.id }, team.id, {
-            userIds: [ada.id],
-            agentIds: [ghost.id],
-          }),
+          addMembersReportingRefusals(
+            db,
+            channels,
+            workspace.id,
+            { userId: outsider.id },
+            team.id,
+            {
+              userIds: [ada.id],
+              agentIds: [ghost.id],
+            },
+          ),
         ),
       ).toBe("ACCESS_DENIED");
       expect(await activeMemberIds(db, team.id)).toEqual(before);

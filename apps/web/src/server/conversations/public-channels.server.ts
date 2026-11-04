@@ -41,11 +41,11 @@ import { markPublicChannelRead } from "./channel-read.server";
 import {
   addChannelMembers,
   channelMembers,
-  executeMentionActions,
   joinChannel,
   leaveChannel,
   removeChannelMember,
 } from "./channel-roster.server";
+import { executeMentionActions } from "./channel-mention-actions.server";
 import {
   markThreadReadForUser,
   setAgentThreadFollowed,

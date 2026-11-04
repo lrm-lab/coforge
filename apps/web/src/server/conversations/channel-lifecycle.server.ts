@@ -125,10 +125,17 @@ export async function createChannelWithMembers(
   if (input.userIds.length === 0 && input.agentIds.length === 0)
     return { id, membersAddFailed: false };
   try {
-    await addChannelMembers(ports, workspaceId, { userId }, id, {
-      userIds: input.userIds,
-      agentIds: input.agentIds,
-    });
+    await addChannelMembers(
+      ports,
+      workspaceId,
+      { userId },
+      id,
+      {
+        userIds: input.userIds,
+        agentIds: input.agentIds,
+      },
+      { recordNotice: false },
+    );
     return { id, membersAddFailed: false };
   } catch (error) {
     console.warn(

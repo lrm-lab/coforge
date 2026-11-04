@@ -1,4 +1,5 @@
 import { recordChannelMembersRemoved } from "#src/server/app-notifications/channel-events.server";
+import { recordMembershipNotice } from "#src/server/conversations/channel-membership-notice.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { WORKSPACE_ASSISTANT_KIND } from "#src/features/agents/agent-system-kind";
@@ -36,7 +37,15 @@ export class PrismaChangeAgentVisibilityStore implements ChangeAgentVisibilitySt
     agentId: string;
     workspaceId: string;
     visibility: string;
-  }): Promise<{ changed: boolean; leftChannelIds: string[]; joinedChannelIds: string[] }> {
+    /** The person changing the visibility; a private change records them removing the Agent
+     * from its channels. */
+    operatorUserId?: string;
+  }): Promise<{
+    changed: boolean;
+    leftChannelIds: string[];
+    joinedChannelIds: string[];
+    membershipNotices?: { conversationId: string; messageId: string; sequence: number }[];
+  }> {
     return this.db.$transaction(async (tx) => {
       const assistant = await tx.agent.findFirst({
         where: {
@@ -85,10 +94,22 @@ export class PrismaChangeAgentVisibilityStore implements ChangeAgentVisibilitySt
         left.map((row) => row.conversationId),
         { agentId: input.agentId },
       );
+      const membershipNotices = [];
+      for (const row of left) {
+        const notice = await recordMembershipNotice(tx, {
+          workspaceId: input.workspaceId,
+          conversationId: row.conversationId,
+          kind: "channel.member_removed",
+          actors: [{ agentId: input.agentId }],
+          ...(input.operatorUserId ? { operator: { userId: input.operatorUserId } } : {}),
+        });
+        if (notice) membershipNotices.push({ ...notice, conversationId: row.conversationId });
+      }
       return {
         changed: true,
         leftChannelIds: left.map((row) => row.conversationId),
         joinedChannelIds: [],
+        membershipNotices,
       };
     });
   }

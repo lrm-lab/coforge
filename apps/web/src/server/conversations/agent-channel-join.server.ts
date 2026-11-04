@@ -1,22 +1,24 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { appNotificationsPossible } from "#src/server/app-notifications/app-notifications.server";
 import { recordChannelMembersAdded } from "#src/server/app-notifications/channel-events.server";
+import {
+  recordMembershipNotice,
+  type MembershipNoticeRef,
+} from "#src/server/conversations/channel-membership-notice.server";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
 
 /**
  * An Agent joins a channel by itself (the Agent CLI's `channel join`): a first membership, or a
  * re-join through a soft-left row, which clears `leftAt` and keeps the row's settings. Returns
- * whether it joined, `false` when it already was in. While no app notification can be recorded it
- * is the two statements it always was; otherwise they share a transaction with
- * `channel.member_added`.
+ * whether it joined and the system record it posted, for the caller to signal after the commit.
+ * The membership record writes either way; the app notification lands only while one is possible.
  */
 export async function joinChannelAsAgent(
   db: PrismaClient,
   workspaceId: string,
   channelId: string,
   agentId: string,
-): Promise<boolean> {
-  if (!appNotificationsPossible()) return joinMembership(db, workspaceId, channelId, agentId);
+): Promise<{ joined: boolean; notice: MembershipNoticeRef | null }> {
   return db.$transaction((tx) => joinChannelAsAgentIn(tx, workspaceId, channelId, agentId));
 }
 
@@ -48,9 +50,17 @@ export async function joinChannelAsAgentIn(
   workspaceId: string,
   channelId: string,
   agentId: string,
-): Promise<boolean> {
+): Promise<{ joined: boolean; notice: MembershipNoticeRef | null }> {
   const joined = await joinMembership(tx, workspaceId, channelId, agentId);
   if (joined && appNotificationsPossible())
     await recordChannelMembersAdded(tx, workspaceId, channelId, [{ agentId }]);
-  return joined;
+  const notice = joined
+    ? await recordMembershipNotice(tx, {
+        workspaceId,
+        conversationId: channelId,
+        kind: "channel.member_joined",
+        actors: [{ agentId }],
+      })
+    : null;
+  return { joined, notice };
 }

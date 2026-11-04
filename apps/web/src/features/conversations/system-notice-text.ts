@@ -52,6 +52,10 @@ const STATUS_LABEL: Record<TaskStatus, (locale?: Locale) => string> = {
 /** Someone acting in a notice is named as people see them; someone it is about (an assignee, a
  * coordinator) as the mention they would be written as. */
 const shown = (person: SystemPerson) => person.displayName || person.handle;
+/** A member record's name as the stored body writes it: a person's display name, an Agent's
+ * @handle (Raft's @Dax style). */
+const memberName = (member: SystemPerson & { kind?: string }) =>
+  member.kind === "agent" ? `@${member.handle}` : shown(member);
 const mention = (person: SystemPerson) => `@${person.handle}`;
 
 const reference = (task: SystemTask, locale?: Locale) => {
@@ -225,6 +229,23 @@ function noticeText(notice: SystemNotice, locale?: Locale): string {
           { locale },
         );
       return "";
+    }
+    case "channel.member_joined":
+    case "channel.member_left": {
+      const members = notice.params.members.map(memberName).join(", ");
+      return notice.kind === "channel.member_joined"
+        ? m.system_notice_channel_member_joined({ members }, { locale })
+        : m.system_notice_channel_member_left({ members }, { locale });
+    }
+    case "channel.member_added":
+    case "channel.member_removed": {
+      const members = notice.params.members.map(memberName).join(", ");
+      const actor = notice.params.actor
+        ? memberName(notice.params.actor)
+        : m.system_notice_actor_unknown({}, { locale });
+      return notice.kind === "channel.member_added"
+        ? m.system_notice_channel_member_added({ actor, members }, { locale })
+        : m.system_notice_channel_member_removed({ actor, members }, { locale });
     }
     case "member.welcome_requested":
       return m.system_notice_member_welcome_requested({

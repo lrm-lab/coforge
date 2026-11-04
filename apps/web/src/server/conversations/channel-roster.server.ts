@@ -1,11 +1,10 @@
-import { AppError, isAppError } from "#src/lib/app-error";
+import { AppError } from "#src/lib/app-error";
 import { compareHumanLabels, humanLabel } from "#src/lib/human-label";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import { CHANNEL_VISIBILITY } from "#src/features/conversations/channel-visibility";
 import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import { recordChannelMembersAdded } from "#src/server/app-notifications/channel-events.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
-import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
 import { assertChannelMembersAddable } from "./channel-member-checks.server";
@@ -24,18 +23,10 @@ import {
   resolveChannelAuthority,
 } from "./channel-authority.server";
 import { softLeaveMember, upsertChannelMembers } from "./channel-changes.server";
+import { recordMembershipNotice } from "./channel-membership-notice.server";
+import { announceMessageBestEffort } from "./conversation-activity.server";
 import { announceJoinedOrLeft } from "./channel-membership-signals.server";
 import { channelPeopleChanged } from "./channel-people-invalidation.server";
-
-import {
-  announceNotifiedPeople,
-  claimMentionActions,
-  notifyMentionTargets,
-  releaseMentionActions,
-  type MentionActionResult,
-} from "./pending-mention-actions.server";
-import { publishNonMemberDeliveries } from "./non-member-deliveries.server";
-import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
 
 /** Who is in a channel: joining and leaving it, adding and removing members, the roster with the
  * actor's capabilities, and the sender's follow-up on a mention of someone outside it. */
@@ -53,7 +44,7 @@ export async function joinChannel(
   // an admin Agent has a row with `leftAt` set, which re-joining must clear rather than skip.
   // (Re-)joining starts already-read at the channel's current top-level end: the badge
   // counts what arrives *after* you joined, never the backlog that existed before.
-  const alreadyIn = await db.$transaction(async (tx) => {
+  const { alreadyIn, notice } = await db.$transaction(async (tx) => {
     const active = await tx.conversationMember.count({
       where: { conversationId: channelId, userId, ...ACTIVE_MEMBER_WHERE },
     });
@@ -67,9 +58,25 @@ export async function joinChannel(
       data: { readThroughSequence: await channelEndSequence(tx, channelId) },
     });
     if (active === 0) await recordChannelMembersAdded(tx, workspaceId, channelId, [{ userId }]);
-    return active > 0;
+    const notice =
+      active === 0
+        ? await recordMembershipNotice(tx, {
+            workspaceId,
+            conversationId: channelId,
+            kind: "channel.member_joined",
+            actors: [{ userId }],
+          })
+        : null;
+    return { alreadyIn: active > 0, notice };
   });
   if (alreadyIn) return;
+  if (notice)
+    await announceMessageBestEffort(db, realtime, {
+      workspaceId,
+      conversationId: channelId,
+      messageId: notice.messageId,
+      sequence: notice.sequence,
+    });
   channelPeopleChanged([channelId]);
   await announceJoinedOrLeft(realtime, {
     workspaceId,
@@ -94,8 +101,15 @@ export async function leaveChannel(
 ) {
   const channel = await memberChannel(db, workspaceId, userId, channelId);
   if (channel.channelName === "general") throw new AppError("CONFLICT");
-  const wasMember = await softLeaveMember(db, workspaceId, channel.id, { userId });
+  const { wasMember, notice } = await softLeaveMember(db, workspaceId, channel.id, { userId });
   if (!wasMember) throw new AppError("ACCESS_DENIED");
+  if (notice)
+    await announceMessageBestEffort(db, realtime, {
+      workspaceId,
+      conversationId: channel.id,
+      messageId: notice.messageId,
+      sequence: notice.sequence,
+    });
   await announceJoinedOrLeft(realtime, {
     workspaceId,
     conversationId: channel.id,
@@ -134,7 +148,16 @@ export async function removeChannelMember(
     channel,
   );
   if (!authority.capabilities.remove_member) throw new AppError("ACCESS_DENIED");
-  const wasMember = await softLeaveMember(db, workspaceId, channel.id, target);
+  const { wasMember, notice } = await softLeaveMember(db, workspaceId, channel.id, target, {
+    operator: { userId: actorUserId },
+  });
+  if (wasMember && notice)
+    await announceMessageBestEffort(db, realtime, {
+      workspaceId,
+      conversationId: channel.id,
+      messageId: notice.messageId,
+      sequence: notice.sequence,
+    });
   if (wasMember)
     await announceJoinedOrLeft(realtime, {
       workspaceId,
@@ -333,6 +356,9 @@ export async function addChannelMembers(
   actor: ChannelActor,
   channelId: string,
   input: { userIds: string[]; agentIds: string[] },
+  /** `recordNotice: false` skips the system record — channel creation's initial members are the
+   * channel's founders, not a "was pulled in" event (Raft records none either). */
+  options: { recordNotice?: boolean } = {},
 ) {
   const { db, realtime } = ports;
   await authorizeChannelActor(db, workspaceId, actor);
@@ -374,7 +400,7 @@ export async function addChannelMembers(
   // what arrives after the add, never the backlog that existed before (mirrors `join`). An
   // already-active member keeps the read position they had — re-adding is a no-op.
   const readThroughSequence = await channelEndSequence(db, channelId);
-  await upsertChannelMembers(
+  const notice = await upsertChannelMembers(
     db,
     { workspaceId, channelId, readThroughSequence },
     {
@@ -382,8 +408,16 @@ export async function addChannelMembers(
       agentIds,
       alreadyMemberUserIds,
       alreadyMemberAgentIds,
+      actor: options.recordNotice === false ? undefined : actor,
     },
   );
+  if (notice)
+    await announceMessageBestEffort(db, realtime, {
+      workspaceId,
+      conversationId: channelId,
+      messageId: notice.messageId,
+      sequence: notice.sequence,
+    });
   const alreadyActiveUserIds = new Set(alreadyMemberUserIds);
   const added =
     userIds.length - alreadyMemberUserIds.length + agentIds.length - alreadyMemberAgentIds.length;
@@ -397,76 +431,4 @@ export async function addChannelMembers(
 
   const result = await channelMembers(ports, workspaceId, actor, channelId);
   return { ...result, alreadyMemberUserIds, alreadyMemberAgentIds };
-}
-
-/**
- * The sender acts on mentions of their messages that did not reach their target: `notify` has
- * each target read that one message (see `notifyMentionTargets`); `add` makes each target a
- * member of the channel it was mentioned in, under the sender's own authority to add members.
- * Results come back in request order, one per distinct resolution id.
- */
-export async function executeMentionActions(
-  ports: PublicChannelPorts,
-  workspaceId: string,
-  userId: string,
-  action: "notify" | "add",
-  resolutionIds: readonly string[],
-): Promise<MentionActionResult[]> {
-  const { db, realtime, publisher } = ports;
-  await requireWorkspaceMember(db, workspaceId, userId);
-  if (action === "notify") {
-    const { results, deliveries, notifiedUserIds } = await notifyMentionTargets(
-      db,
-      workspaceId,
-      { userId },
-      resolutionIds,
-    );
-    await publishNonMemberDeliveries(
-      db,
-      publisher ?? createCentrifugoServerApi(),
-      workspaceId,
-      deliveries,
-    );
-    await announceNotifiedPeople(realtime, workspaceId, notifiedUserIds);
-    return results;
-  }
-  const { refused, claimed } = await claimMentionActions(
-    db,
-    workspaceId,
-    { userId },
-    resolutionIds,
-  );
-  const results = new Map(refused.map((result) => [result.resolutionId, result]));
-  const byChannel = new Map<string, typeof claimed>();
-  for (const claim of claimed)
-    byChannel.set(claim.conversationId, [...(byChannel.get(claim.conversationId) ?? []), claim]);
-  for (const [channelId, claims] of byChannel) {
-    try {
-      await addChannelMembers(ports, workspaceId, { userId }, channelId, {
-        userIds: claims.flatMap((claim) => (claim.targetType === "user" ? [claim.targetId] : [])),
-        agentIds: claims.flatMap((claim) => (claim.targetType === "agent" ? [claim.targetId] : [])),
-      });
-      for (const claim of claims)
-        results.set(claim.resolutionId, {
-          resolutionId: claim.resolutionId,
-          status: "delivered",
-          targetType: claim.targetType,
-          targetId: claim.targetId,
-          targetHandle: claim.targetHandle,
-        });
-    } catch (error) {
-      await releaseMentionActions(db, claims);
-      if (!isAppError(error)) throw error;
-      for (const claim of claims)
-        results.set(claim.resolutionId, {
-          resolutionId: claim.resolutionId,
-          status: "no_permission",
-          reason: "could_not_apply",
-          targetType: claim.targetType,
-          targetId: claim.targetId,
-          targetHandle: claim.targetHandle,
-        });
-    }
-  }
-  return [...new Set(resolutionIds)].map((id) => results.get(id)!);
 }

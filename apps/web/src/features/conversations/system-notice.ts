@@ -68,6 +68,19 @@ export type SystemNotice =
     }
   | { kind: "agent_dm.chain_limit" | "agent_dm.rate_limit"; params: Record<string, never> }
   | { kind: "member.welcome_requested"; params: { newcomer: SystemPerson; agent: SystemPerson } }
+  | {
+      /** A member of a channel came or went: who (joined/left carry no actor; added/removed
+       * name the operator), both people and Agents. */
+      kind:
+        | "channel.member_joined"
+        | "channel.member_added"
+        | "channel.member_left"
+        | "channel.member_removed";
+      params: {
+        members: (SystemPerson & { kind?: "user" | "agent" })[];
+        actor?: SystemPerson & { kind?: "user" | "agent" };
+      };
+    }
   | { kind: "legacy_text"; params: { body: string } };
 
 /** The body and structured content one notice carries. */
@@ -144,6 +157,16 @@ export function isSystemNotice(value: { kind: string; params: unknown }): value 
       );
     case "member.welcome_requested":
       return person(params.newcomer) && person(params.agent);
+    case "channel.member_joined":
+    case "channel.member_added":
+    case "channel.member_left":
+    case "channel.member_removed":
+      return (
+        Array.isArray(params.members) &&
+        params.members.length > 0 &&
+        params.members.every(person) &&
+        (params.actor === null || params.actor === undefined || person(params.actor))
+      );
     case "agent_dm.chain_limit":
     case "agent_dm.rate_limit":
       return true;

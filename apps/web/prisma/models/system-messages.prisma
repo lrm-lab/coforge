@@ -8,6 +8,7 @@ model SystemMessage {
   /// task.created | task.converted | task.from_message | task.assigned | task.claimed |
   /// task.moved | task.unassigned | task.assigned_you | task.unblocked | task.blocked | task.released |
   /// task.subtasks_finished | channel.coordinator_changed | member.welcome_requested |
+  /// channel.member_joined | channel.member_added | channel.member_left | channel.member_removed |
   /// agent_dm.chain_limit | agent_dm.rate_limit | legacy.released | legacy.deleted |
   /// legacy.reminder | legacy_text
   kind           String

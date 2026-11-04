@@ -8,6 +8,10 @@ import {
 } from "#src/server/app-notifications/channel-events.server";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
 import { channelActorMemberWhere, type ChannelActor } from "./channel-actor.server";
+import {
+  recordMembershipNotice,
+  type MembershipNoticeRef,
+} from "./channel-membership-notice.server";
 import { channelPeopleChanged } from "./channel-people-invalidation.server";
 
 /**
@@ -27,21 +31,28 @@ export async function softLeaveMember(
   workspaceId: string,
   conversationId: string,
   actor: ChannelActor,
-): Promise<boolean> {
+  options: { operator?: ChannelActor } = {},
+): Promise<{ wasMember: boolean; notice: MembershipNoticeRef | null }> {
   const where = { conversationId, ...channelActorMemberWhere(actor), ...ACTIVE_MEMBER_WHERE };
-  const left = appNotificationsPossible()
-    ? await db.$transaction(async (tx) => {
-        const result = await tx.conversationMember.updateMany({
-          where,
-          data: { leftAt: new Date() },
-        });
-        if (result.count > 0)
-          await recordChannelMembersRemoved(tx, workspaceId, [conversationId], actor);
-        return result.count > 0;
-      })
-    : (await db.conversationMember.updateMany({ where, data: { leftAt: new Date() } })).count > 0;
-  if (left && "userId" in actor) channelPeopleChanged([conversationId]);
-  return left;
+  const { wasMember, notice } = await db.$transaction(async (tx) => {
+    const result = await tx.conversationMember.updateMany({
+      where,
+      data: { leftAt: new Date() },
+    });
+    if (result.count === 0) return { wasMember: false, notice: null };
+    if (appNotificationsPossible())
+      await recordChannelMembersRemoved(tx, workspaceId, [conversationId], actor);
+    const notice = await recordMembershipNotice(tx, {
+      workspaceId,
+      conversationId,
+      kind: options.operator ? "channel.member_removed" : "channel.member_left",
+      actors: [actor],
+      operator: options.operator,
+    });
+    return { wasMember: true, notice };
+  });
+  if (wasMember && "userId" in actor) channelPeopleChanged([conversationId]);
+  return { wasMember, notice };
 }
 
 const infoSelect = {
@@ -104,8 +115,10 @@ export async function upsertChannelMembers(
     agentIds: readonly string[];
     alreadyMemberUserIds: readonly string[];
     alreadyMemberAgentIds: readonly string[];
+    /** The channel actor adding the members; absent, no membership record is posted. */
+    actor?: ChannelActor;
   },
-): Promise<void> {
+): Promise<MembershipNoticeRef | null> {
   const { workspaceId, channelId, readThroughSequence } = channel;
   const alreadyUsers = new Set(input.alreadyMemberUserIds);
   const alreadyAgents = new Set(input.alreadyMemberAgentIds);
@@ -129,18 +142,27 @@ export async function upsertChannelMembers(
       ),
     ]);
   const joiningUserIds = input.userIds.filter((userId) => !alreadyUsers.has(userId));
+  const joining = [
+    ...joiningUserIds.map((userId) => ({ userId })),
+    ...input.agentIds
+      .filter((agentId) => !alreadyAgents.has(agentId))
+      .map((agentId) => ({ agentId })),
+  ];
   try {
-    if (!appNotificationsPossible()) await write(db);
-    else
-      await db.$transaction(async (tx) => {
-        await write(tx);
-        await recordChannelMembersAdded(tx, workspaceId, channelId, [
-          ...joiningUserIds.map((userId) => ({ userId })),
-          ...input.agentIds
-            .filter((agentId) => !alreadyAgents.has(agentId))
-            .map((agentId) => ({ agentId })),
-        ]);
-      });
+    return await db.$transaction(async (tx) => {
+      await write(tx);
+      if (appNotificationsPossible())
+        await recordChannelMembersAdded(tx, workspaceId, channelId, joining);
+      if (input.actor)
+        return await recordMembershipNotice(tx, {
+          workspaceId,
+          conversationId: channelId,
+          kind: "channel.member_added",
+          actors: joining,
+          operator: input.actor,
+        });
+      return null;
+    });
   } finally {
     // Without a transaction, some upserts may land before another fails.
     if (joiningUserIds.length) channelPeopleChanged([channelId]);

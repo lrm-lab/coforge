@@ -16,12 +16,20 @@ import {
  * Action cards are never touched — history stays exactly as it was.
  */
 export interface ChangeAgentVisibilityStore {
-  apply(input: { agentId: string; workspaceId: string; visibility: AgentVisibility }): Promise<{
+  apply(input: {
+    agentId: string;
+    workspaceId: string;
+    visibility: AgentVisibility;
+    /** The person changing the visibility; a private change records them removing the Agent. */
+    operatorUserId?: string;
+  }): Promise<{
     changed: boolean;
     /** The channels a public→private change soft-left; empty otherwise. */
     leftChannelIds: string[];
     /** The channels a private→public change re-joined (`#general`); empty otherwise. */
     joinedChannelIds: string[];
+    /** The membership records a private change posted, for post-commit announcing. */
+    membershipNotices?: { conversationId: string; messageId: string; sequence: number }[];
   }>;
   /** What a public→private change would do, for the confirmation dialog. Read-only. */
   preview(input: { agentId: string; workspaceId: string }): Promise<AgentVisibilityChangePreview>;
@@ -54,6 +62,14 @@ export class ChangeAgentVisibility {
     private readonly onVisibilityChanged: (workspaceId: string, agentId: string) => Promise<void>,
     private readonly inboxPurge: Pick<AgentInboxPurgePublisher, "purge">,
     private readonly realtime?: Pick<ConversationRealtime, "memberChanged">,
+    /** Announces a posted membership record to open pages; production wires
+     * `announceMessageBestEffort` — the records never count unread or wake anyone. */
+    private readonly announce: (notice: {
+      workspaceId: string;
+      conversationId: string;
+      messageId: string;
+      sequence: number;
+    }) => Promise<void> = async () => {},
   ) {}
 
   async execute(
@@ -61,12 +77,20 @@ export class ChangeAgentVisibility {
     input: { agentId: string; visibility: AgentVisibility },
   ): Promise<{ visibility: AgentVisibility; changed: boolean }> {
     const agent = await this.authorize(principal, input.agentId);
-    const { changed, leftChannelIds, joinedChannelIds } = await this.store.apply({
-      agentId: agent.id,
-      workspaceId: agent.workspaceId,
-      visibility: input.visibility,
-    });
+    const { changed, leftChannelIds, joinedChannelIds, membershipNotices } = await this.store.apply(
+      {
+        agentId: agent.id,
+        workspaceId: agent.workspaceId,
+        visibility: input.visibility,
+        operatorUserId: principal.userId,
+      },
+    );
     if (changed) await this.onVisibilityChanged(agent.workspaceId, agent.id).catch(() => {});
+    await Promise.all(
+      (membershipNotices ?? []).map((notice) =>
+        this.announce({ workspaceId: agent.workspaceId, ...notice }),
+      ),
+    );
     await announceMemberChanged(this.realtime, {
       workspaceId: agent.workspaceId,
       conversationIds: [...leftChannelIds, ...joinedChannelIds],

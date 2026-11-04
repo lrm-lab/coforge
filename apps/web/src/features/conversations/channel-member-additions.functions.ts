@@ -18,6 +18,7 @@ export const addPublicChannelMembersReportingRefusals = createServerFn({ method:
   )
   .handler(async ({ data, context }) =>
     addMembersReportingRefusals(
+      context.db,
       new PublicChannels(context.db),
       context.workspaceId,
       { userId: context.user.id },

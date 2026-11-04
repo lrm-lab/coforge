@@ -16,12 +16,15 @@ import {
   type ConversationRealtime,
 } from "#src/server/conversations/conversation-realtime.server";
 import { errorType } from "#src/server/errors/error-type.server";
+import type { MembershipNoticeRef } from "#src/server/conversations/channel-membership-notice.server";
 
 /** What one delete changed. */
 export type AgentDeletionEffects = {
   membershipsLeft: number;
   /** The channels the Agent was an active member of, whose member lists now changed. */
   leftChannelIds: string[];
+  /** The channel membership records posted for those exits, for post-commit signaling. */
+  membershipNotices?: { conversationId: string; messageId: string; sequence: number }[];
   remindersCanceled: number;
   apiKeysRevoked?: number;
 };
@@ -74,7 +77,13 @@ export class AgentDeletion {
     private readonly runtimeControl: AgentRuntimeControl,
     private readonly runtimeLock: AgentRuntimeLock,
     private readonly now: () => Date = () => new Date(),
-    private readonly realtime?: Pick<ConversationRealtime, "memberChanged">,
+    private readonly realtime?: Pick<ConversationRealtime, "memberChanged"> &
+      Partial<Pick<ConversationRealtime, "messageAvailable">>,
+    /** Announces a posted membership record to open pages; production wires
+     * `announceMessageBestEffort` — the records never count unread or wake anyone. */
+    private readonly announce: (
+      notice: MembershipNoticeRef & { workspaceId: string; conversationId: string },
+    ) => Promise<void> = async () => {},
   ) {}
 
   async delete(
@@ -98,11 +107,17 @@ export class AgentDeletion {
       return outcome;
     });
     // Outside the runtime lock: a slow browser signal must never hold up the Agent's runtime.
-    if (result.outcome === "deleted")
+    if (result.outcome === "deleted") {
       await announceMemberChanged(this.realtime, {
         workspaceId: principal.workspaceId,
         conversationIds: result.leftChannelIds,
       });
+      await Promise.all(
+        (result.membershipNotices ?? []).map((notice) =>
+          this.announce({ workspaceId: principal.workspaceId, ...notice }),
+        ),
+      );
+    }
     return result;
   }
 

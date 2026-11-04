@@ -21,15 +21,26 @@ function publicChannelsFixture(target: {
     agent: {
       findFirst: async () => ({ id: "actor-agent" }),
       findMany: async () => [target],
+      findUnique: async () => ({ name: target.name, displayName: target.displayName }),
     },
-    conversation: { findFirst: async () => ({ id: "channel-1" }) },
+    conversation: {
+      findFirst: async () => ({ id: "channel-1" }),
+      findUnique: async () => ({
+        archivedAt: null,
+        channelName: "ch",
+        hiddenFromWorkspaceAt: null,
+      }),
+    },
     conversationMember: {
       findFirst: async () => ({ id: "actor-membership" }),
       findMany: async () => [],
       upsert: async () => ({}),
     },
-    message: { findFirst: async () => null },
-    user: { findMany: async () => [] },
+    message: { findFirst: async () => null, create: async () => ({ id: "notice-1" }) },
+    systemMessage: { create: async () => ({}) },
+    user: { findMany: async () => [], findUnique: async () => null },
+    $queryRaw: async () => [{ first: 1 }],
+    $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(db),
   } as unknown as PrismaClient;
   return { channels: new PublicChannels(db) };
 }
@@ -94,17 +105,29 @@ function agentChannelManagementFixture(callerVisibility: string | undefined) {
         channelName: "general",
         archivedAt: null,
       }),
+      findUnique: async () => ({
+        archivedAt: null,
+        channelName: "general",
+        hiddenFromWorkspaceAt: null,
+      }),
     },
     agent: {
       findFirst: async () =>
         callerVisibility === undefined
           ? null
           : { id: "caller-agent", visibility: callerVisibility },
+      findUnique: async () => ({ id: "caller-agent", name: "caller", displayName: "Caller" }),
     },
     conversationMember: {
       findFirst: async () => null,
+      findMany: async () => [],
       upsert: async () => ({}),
     },
+    message: { create: async () => ({ id: "notice-1" }) },
+    systemMessage: { create: async () => ({}) },
+    user: { findUnique: async () => null, findMany: async () => [] },
+    $queryRaw: async () => [{ first: 1 }],
+    $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(db),
   } as unknown as PrismaClient;
   return new AgentChannelManagement(db);
 }

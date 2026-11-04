@@ -107,7 +107,12 @@ describe("ChangeAgentVisibility", () => {
     );
     expect(result).toEqual({ visibility: "private", changed: true });
     expect(applied).toEqual([
-      { agentId: "agent-1", workspaceId: "workspace-1", visibility: "private" },
+      {
+        agentId: "agent-1",
+        workspaceId: "workspace-1",
+        visibility: "private",
+        operatorUserId: "user-1",
+      },
     ]);
     expect(notified).toEqual([{ workspaceId: "workspace-1", agentId: "agent-1" }]);
   });

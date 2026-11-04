@@ -3,6 +3,7 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { ACTIVE_CHANNEL_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
 import { clearOnboardingAgent } from "#src/server/workspaces/workspace-onboarding.server";
+import { recordMembershipNotice } from "#src/server/conversations/channel-membership-notice.server";
 import type {
   AgentDeletionOutcome,
   AgentDeletionStore,
@@ -70,6 +71,17 @@ export class PrismaAgentDeletionStore implements AgentDeletionStore {
         activeChannels.map((row) => row.conversationId),
         { agentId: input.agentId },
       );
+      const membershipNotices = [];
+      for (const row of activeChannels) {
+        const notice = await recordMembershipNotice(tx, {
+          workspaceId: input.workspaceId,
+          conversationId: row.conversationId,
+          kind: "channel.member_removed",
+          actors: [{ agentId: input.agentId }],
+          ...(input.deletedByUserId ? { operator: { userId: input.deletedByUserId } } : {}),
+        });
+        if (notice) membershipNotices.push({ ...notice, conversationId: row.conversationId });
+      }
       const remindersCanceled = await tx.reminder.updateMany({
         where: {
           workspaceId: input.workspaceId,
@@ -85,6 +97,7 @@ export class PrismaAgentDeletionStore implements AgentDeletionStore {
       return {
         outcome: "deleted" as const,
         membershipsLeft: membershipsLeft.count,
+        membershipNotices,
         leftChannelIds: activeChannels.map((row) => row.conversationId),
         remindersCanceled: remindersCanceled.count,
         apiKeysRevoked: apiKeysRevoked.count,

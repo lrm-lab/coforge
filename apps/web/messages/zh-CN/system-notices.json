@@ -33,5 +33,10 @@
   "system_notice_coordinator_removed": "{actor} 取消了 {previous} 在 #{channel} 的协调员身份",
   "system_notice_agent_dm_chain_limit": "[CoForge 已暂停] 这些 Agent 连续互发的消息太多了，连续 10 分钟没有新消息后可以继续。",
   "system_notice_agent_dm_rate_limit": "[CoForge 已暂停] 这里有个 Agent 过去一小时给其他 Agent 发的私信太多了，等这一小时的总数降到上限以下就能再发。",
-  "system_notice_member_welcome_requested": "已请 {agent} 欢迎 {newcomer}"
+  "system_notice_member_welcome_requested": "已请 {agent} 欢迎 {newcomer}",
+  "system_notice_channel_member_joined": "{members} 加入了频道。",
+  "system_notice_channel_member_left": "{members} 离开了频道。",
+  "system_notice_channel_member_added": "{actor} 将 {members} 拉进了频道。",
+  "system_notice_channel_member_removed": "{actor} 将 {members} 移出了频道。",
+  "system_notice_actor_unknown": "有人"
 }

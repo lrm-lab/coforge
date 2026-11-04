@@ -1,4 +1,8 @@
 import { withTaskDiscussions } from "#src/server/conversations/task-discussion-revoke.server";
+import { announceMessageBestEffort } from "#src/server/conversations/conversation-activity.server";
+import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
+import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
+import { recordMembershipNotice } from "#src/server/conversations/channel-membership-notice.server";
 import { channelPeopleChanged } from "#src/server/conversations/channel-people-invalidation.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
@@ -95,12 +99,19 @@ export class PrismaWorkspaceMemberDirectoryStore implements WorkspaceMemberDirec
     };
   }
 
-  async removeMember(workspaceId: string, userId: string) {
+  async removeMember(
+    workspaceId: string,
+    userId: string,
+    options: { operator?: { userId: string } } = {},
+  ) {
     const removed = await this.db.$transaction(async (tx) => {
       await tx.workspaceMembership.delete({
         where: { workspaceId_userId: { workspaceId, userId } },
       });
       const activeChannels = await tx.conversationMember.findMany({
+        // The notices below lock each channel in this order, so two concurrent removals locking
+        // the same channels take the same locks in the same order.
+        orderBy: { conversationId: "asc" },
         where: { workspaceId, userId, ...ACTIVE_CHANNEL_MEMBER_WHERE },
         select: { conversationId: true },
       });
@@ -112,9 +123,21 @@ export class PrismaWorkspaceMemberDirectoryStore implements WorkspaceMemberDirec
       });
       const { computerIds } = await unlinkDepartingMemberComputers(tx, { workspaceId, userId });
       const leftChannelIds = activeChannels.map((row) => row.conversationId);
+      const membershipNotices = [];
+      for (const row of activeChannels) {
+        const notice = await recordMembershipNotice(tx, {
+          workspaceId,
+          conversationId: row.conversationId,
+          kind: options.operator ? "channel.member_removed" : "channel.member_left",
+          actors: [{ userId }],
+          ...(options.operator ? { operator: options.operator } : {}),
+        });
+        if (notice) membershipNotices.push({ ...notice, conversationId: row.conversationId });
+      }
       await recordMemberRemoved(tx, workspaceId, { userId, leftChannelIds });
       return {
         leftChannelIds,
+        membershipNotices,
         revokedConversationIds: await withTaskDiscussions(tx, leftChannelIds),
         computerIds,
       };
@@ -125,5 +148,24 @@ export class PrismaWorkspaceMemberDirectoryStore implements WorkspaceMemberDirec
 }
 
 export function workspaceMemberDirectory(db: PrismaClient) {
-  return new WorkspaceMemberDirectory(new PrismaWorkspaceMemberDirectoryStore(db));
+  return new WorkspaceMemberDirectory(
+    new PrismaWorkspaceMemberDirectoryStore(db),
+    undefined,
+    undefined,
+    (notice) => announceMessageBestEffort(db, productionRealtime(), notice),
+  );
+}
+
+let realtime: CentrifugoConversationRealtime | undefined;
+/** The open-page publication a membership record announces through; none when Centrifugo is not
+ * configured — a page reconciles a missed record on its next subscribe. */
+function productionRealtime() {
+  if (!realtime) {
+    try {
+      realtime = new CentrifugoConversationRealtime(createCentrifugoServerApi());
+    } catch {
+      return undefined;
+    }
+  }
+  return realtime;
 }
