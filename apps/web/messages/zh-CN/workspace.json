@@ -213,5 +213,14 @@
   "workspace_join_signed_out": "登录已过期，请重新登录后加入。",
   "workspace_join_invalid_title": "邀请链接不可用",
   "workspace_join_invalid_description": "这个邀请链接无效或已过期，请向邀请你的人要一个新链接。",
-  "workspace_join_back": "返回 CoForge"
+  "workspace_join_back": "返回 CoForge",
+  "project_overview": "概览",
+  "project_code": "代码",
+  "project_sections": "项目",
+  "project_no_description": "还没有说明。",
+  "project_progress": "进度",
+  "project_people": "在做的人",
+  "project_in_progress": "进行中",
+  "project_up_next": "接下来",
+  "project_recently_done": "最近完成"
 }

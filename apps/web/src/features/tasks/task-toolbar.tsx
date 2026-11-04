@@ -67,6 +67,7 @@ export function TaskToolbar({
   completedWindow,
   onWindowChange,
   conversation = false,
+  project = false,
   action,
 }: {
   tasks: readonly FilterableTask[];
@@ -82,6 +83,8 @@ export function TaskToolbar({
   onWindowChange: (completedWindow: FinishedWindow) => void;
   /** One conversation's board: every Task shares its source and Project, so neither is offered. */
   conversation?: boolean;
+  /** One Project's board: every Task shares its Project, so none is offered. */
+  project?: boolean;
   /** The board's own button (a conversation's "Create task"), before Display. */
   action?: ReactNode;
 }) {
@@ -146,6 +149,7 @@ export function TaskToolbar({
       remove: () => onFilterChange({ ...filter, owners: [] }),
     },
     !conversation &&
+      !project &&
       filter.projects.length > 0 && {
         id: "projects",
         label: m.tasks_filter_project_is({
@@ -183,7 +187,7 @@ export function TaskToolbar({
                 picked={filter.owners}
                 onChange={(picked) => onFilterChange({ ...filter, owners: picked })}
               />
-              {!conversation && (
+              {!conversation && !project && (
                 <FilterSubmenu
                   name={m.tasks_overview_project()}
                   options={projects}
@@ -251,7 +255,9 @@ export function TaskToolbar({
           onLayoutChange={onLayoutChange}
           completedWindow={completedWindow}
           onWindowChange={onWindowChange}
-          fields={conversation ? CONVERSATION_FIELDS : TASK_DISPLAY_FIELDS}
+          fields={
+            conversation ? CONVERSATION_FIELDS : project ? PROJECT_FIELDS : TASK_DISPLAY_FIELDS
+          }
         />
       </div>
     </div>
@@ -334,6 +340,9 @@ function FilterSubmenu({
 
 /** A conversation's board has no source or Project to show. */
 const CONVERSATION_FIELDS: readonly TaskDisplayField[] = ["number", "owner"];
+
+/** A Project's board has no Project to show. */
+const PROJECT_FIELDS: readonly TaskDisplayField[] = ["number", "source", "owner"];
 
 const FIELD_LABEL: Record<TaskDisplayField, () => string> = {
   number: () => m.tasks_field_number(),

@@ -215,5 +215,14 @@
   "workspace_join_signed_out": "Your session has expired. Sign in again to join.",
   "workspace_join_invalid_title": "This invite link can’t be used",
   "workspace_join_invalid_description": "This invite link is invalid or has expired. Ask the person who invited you for a new link.",
-  "workspace_join_back": "Back to CoForge"
+  "workspace_join_back": "Back to CoForge",
+  "project_overview": "Overview",
+  "project_code": "Code",
+  "project_sections": "Project",
+  "project_no_description": "No description yet.",
+  "project_progress": "Progress",
+  "project_people": "People",
+  "project_in_progress": "In progress",
+  "project_up_next": "Up next",
+  "project_recently_done": "Recently done"
 }

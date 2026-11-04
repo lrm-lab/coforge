@@ -9,9 +9,11 @@ import { TaskBoard } from "#src/server/tasks/task-board.server";
 import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
 
 /**
- * A Project's Tasks (task #460): the Project page lists its unfinished Tasks with a sub-task under
- * its main Task, and a Task's popup files it under another Project and back under its channel's.
- * Desktop and phone, light and dark.
+ * A Project's Tasks (tasks #460, #504): the Project page's Overview lists its Tasks in progress, up
+ * next (a sub-task under its main Task) and recently done; its Tasks tab is the Project's board,
+ * with no Project to pick or show, on a phone the same groups; a Task opens its popup over the
+ * page. A Task's popup files it under another Project and back. Desktop and phone, light and
+ * dark.
  *
  * Opt-in like the other browser E2Es: real local Web started as it is and
  * `agent-browser`. Two Projects, a channel
@@ -33,7 +35,12 @@ test("a Project page lists its Tasks as a tree, and a Task's popup moves it betw
   });
   const tail = `${process.pid}-${Date.now()}`.slice(-6);
   const home = await db.project.create({
-    data: { workspaceId, name: `Launch ${tail}`, slug: `launch-${tail}` },
+    data: {
+      workspaceId,
+      name: `Launch ${tail}`,
+      slug: `launch-${tail}`,
+      description: "The new marketing site: copy, domain and launch checklist.",
+    },
   });
   const other = await db.project.create({
     data: { workspaceId, name: `Docs ${tail}`, slug: `docs-${tail}` },
@@ -43,7 +50,6 @@ test("a Project page lists its Tasks as a tree, and a Task's popup moves it betw
       workspaceId,
       channelName: `e2e-project-${tail}`,
       description: "",
-      projectId: home.id,
       members: { create: [{ userId: DEV_BROWSER_USER.id }] },
     },
   });
@@ -59,9 +65,11 @@ test("a Project page lists its Tasks as a tree, and a Task's popup moves it betw
     const mainTitle = `Ship the site ${tail}`;
     const subTitle = `Write the copy ${tail}`;
     const loneTitle = `Pick a domain ${tail}`;
-    const main = (await run({ operation: "create", title: mainTitle })).tasks[0]!.number;
+    // A Task carries its own Project (task #484): named at creation, or its parent's.
+    const project = home.slug;
+    const main = (await run({ operation: "create", title: mainTitle, project })).tasks[0]!.number;
     await run({ operation: "create", title: subTitle, parent: { number: main } });
-    const lone = (await run({ operation: "create", title: loneTitle })).tasks[0]!.number;
+    const lone = (await run({ operation: "create", title: loneTitle, project })).tasks[0]!.number;
     const projectOf = async (number: number) =>
       (
         await db.task.findFirstOrThrow({
@@ -103,7 +111,66 @@ test("a Project page lists its Tasks as a tree, and a Task's popup moves it betw
       await shoot(`${label}-project-page`);
     }
 
-    // The popup files the lone Task under the other Project, then under its channel's again.
+    // A finished Task shows under "Recently done"; one in progress under "In progress".
+    const doneTitle = `Draft the brief ${tail}`;
+    const done = (await run({ operation: "create", title: doneTitle, project })).tasks[0]!.number;
+    // A claim gives each an owner and puts it in progress; one then moves on to Done.
+    await run({ operation: "claim", number: done });
+    await run({ operation: "update", number: done, status: "done" });
+    await run({ operation: "claim", number: main });
+    const heading = (text: string) =>
+      `[...document.querySelectorAll("h2")].some((h) => h.textContent.startsWith(${JSON.stringify(text)}))`;
+    await browser("set", "viewport", "1280", "860");
+    await browser("open", projectPage);
+    await browser(
+      "wait",
+      "--fn",
+      `${pageHydrated} && document.body.textContent.includes(${JSON.stringify(doneTitle)})`,
+    );
+    for (const text of ["进行中", "接下来", "最近完成"]) {
+      expect(await evaluate<boolean>(heading(text))).toBe(true);
+    }
+    // No repository linked: no Code tab.
+    const tabs = `[...document.querySelectorAll('[role="tab"]')].map((t) => t.textContent)`;
+    expect(await evaluate<string[]>(tabs)).toEqual(["概览", "任务"]);
+    await shoot("desktop-overview");
+
+    // The Tasks tab is the Project's board: no Project filter, no Project pill on the cards.
+    await browser("open", `${projectPage}?tab=tasks`);
+    await browser(
+      "wait",
+      "--fn",
+      `${pageHydrated} && document.querySelector("[data-task-board]")?.textContent.includes(${JSON.stringify(loneTitle)})`,
+    );
+    expect(
+      await evaluate<boolean>(
+        `document.querySelector("[data-task-board]").textContent.includes(${JSON.stringify(home.name)})`,
+      ),
+    ).toBe(false);
+    await shoot("desktop-tasks-tab");
+    // A card's title opens its popup over the Project page.
+    await evaluate(
+      `([...document.querySelectorAll("[data-task-board] a")].find((a) => a.textContent.includes(${JSON.stringify(loneTitle)})).click(), true)`,
+    );
+    await browser("wait", "--fn", `document.querySelector('[role="dialog"]') !== null`);
+    expect(await evaluate<string>("location.pathname")).toEndWith(`/projects/${home.slug}`);
+    await shoot("desktop-tasks-popup");
+
+    // On a phone the Tasks tab is the groups, not a board.
+    await browser("set", "viewport", "390", "844");
+    await browser("open", `${projectPage}?tab=tasks`);
+    await browser(
+      "wait",
+      "--fn",
+      `${pageHydrated} && document.body.textContent.includes(${JSON.stringify(doneTitle)})`,
+    );
+    expect(await evaluate<boolean>(`document.querySelector("[data-task-board]") === null`)).toBe(
+      true,
+    );
+    expect(await evaluate<boolean>(heading("进行中"))).toBe(true);
+    await shoot("phone-tasks-tab");
+
+    // The popup files the lone Task under the other Project, then back under its own.
     await browser("set", "viewport", "1280", "860");
     await browser("open", `${origin}/zh-CN/w/${workspace.slug}/channel/${channel.id}?task=${lone}`);
     const dialog = `document.querySelector('[role="dialog"]')`;
@@ -120,18 +187,17 @@ test("a Project page lists its Tasks as a tree, and a Task's popup moves it betw
     const option = (text: string) =>
       `[...document.querySelectorAll('[role^="menuitem"], [role="option"]')].find((el) => el.textContent.includes(${JSON.stringify(text)}))`;
     await browser("wait", "--fn", `${option(other.name)} != null`);
-    // Followed, the first row names the channel's Project and holds the check.
-    const followRow = option(`跟随频道（${home.name}）`);
-    expect(await evaluate<boolean>(`${followRow} != null`)).toBe(true);
-    expect(await evaluate<string | null>(`${followRow}.getAttribute("aria-checked")`)).toBe("true");
+    // The Task's own Project holds the check.
+    expect(await evaluate<string | null>(`${option(home.name)}.getAttribute("aria-checked")`)).toBe(
+      "true",
+    );
     await shoot("desktop-project-picker");
     await evaluate(`(${option(other.name)}.click(), true)`);
     await browser("wait", "--fn", `${dialog}.textContent.includes(${JSON.stringify(other.name)})`);
     expect(await projectOf(lone)).toBe(other.slug);
-    await shoot("desktop-project-set");
     await evaluate(`(${trigger}.click(), true)`);
-    await browser("wait", "--fn", `${option("跟随频道的项目")} != null`);
-    await evaluate(`(${option("跟随频道的项目")}.click(), true)`);
+    await browser("wait", "--fn", `${option(home.name)} != null`);
+    await evaluate(`(${option(home.name)}.click(), true)`);
     await browser("wait", "--fn", `${dialog}.textContent.includes(${JSON.stringify(home.name)})`);
     expect(await projectOf(lone)).toBe(home.slug);
   } finally {

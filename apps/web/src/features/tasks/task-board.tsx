@@ -66,6 +66,7 @@ export function TaskBoard<T extends BoardTask>({
   renderTitle,
   onCommand,
   conversation,
+  project = false,
 }: {
   /** The unfinished Tasks, and any the board itself moved to Done or Closed. */
   tasks: readonly T[];
@@ -80,6 +81,8 @@ export function TaskBoard<T extends BoardTask>({
   /** Absent where the viewer may not change Tasks: no drag, no menu. */
   onCommand?: (task: T, command: OverviewTaskCommand) => Promise<void>;
   conversation?: ConversationBoard;
+  /** One Project's board, on its page under the page's own header: no Project is offered. */
+  project?: boolean;
 }) {
   const { statuses, filter, layout, completedWindow, changeWindow: onWindowChange } = view;
   const [hiddenColumns, setColumnHidden] = useTaskHiddenColumns();
@@ -121,8 +124,9 @@ export function TaskBoard<T extends BoardTask>({
   // What a Task waits on and its tree show on its card only with Tasks v2 on; read once here, not
   // per card.
   const relationsOn = useTaskConversationsOn() === true;
-  // The Tasks page is the page's main content; a conversation's tab sits inside its page.
-  const Root = conversation ? "section" : "main";
+  // The Tasks page is the page's main content; a conversation's or Project's tab sits inside its
+  // page.
+  const Root = conversation || project ? "section" : "main";
   return (
     <Root
       aria-label={m.tasks_board()}
@@ -133,7 +137,7 @@ export function TaskBoard<T extends BoardTask>({
         !conversation && "h-full max-h-full",
       )}
     >
-      {conversation ? conversation.header : <PageHeader heading={m.tasks_tab()} />}
+      {conversation ? conversation.header : !project && <PageHeader heading={m.tasks_tab()} />}
       <TaskToolbar
         tasks={choices}
         filter={filter}
@@ -145,6 +149,7 @@ export function TaskBoard<T extends BoardTask>({
         completedWindow={completedWindow}
         onWindowChange={onWindowChange}
         conversation={Boolean(conversation)}
+        project={project}
         action={
           onCreateTask && (
             <Button type="button" size="sm" color="secondary" onPress={() => setCreateOpen(true)}>
@@ -203,6 +208,7 @@ export function TaskBoard<T extends BoardTask>({
               renderTitle={renderTitle}
               onCommand={onCommand ? (command) => onCommand(task, command) : undefined}
               conversation={conversation}
+              project={project}
             />
           )}
         />
@@ -279,6 +285,7 @@ function BoardTaskCard<T extends BoardTask>({
   renderTitle,
   onCommand,
   conversation,
+  project,
 }: {
   task: T;
   controls: TaskControls;
@@ -288,6 +295,7 @@ function BoardTaskCard<T extends BoardTask>({
   renderTitle?: (task: T, title: ReactNode) => ReactNode;
   onCommand?: (command: OverviewTaskCommand) => Promise<void>;
   conversation?: ConversationBoard;
+  project: boolean;
 }) {
   // The menu, with its tooltip, is built once someone reaches for this card (a mouse over it), or
   // tabs to or presses the plain button standing in for it; building every card's up front was
@@ -313,7 +321,7 @@ function BoardTaskCard<T extends BoardTask>({
       }
       source={conversation ? undefined : task.source?.label}
       // Null for a Task outside any Project: no pill.
-      project={conversation ? undefined : task.project}
+      project={conversation || project ? undefined : task.project}
       controls={controls}
       menu={
         onCommand &&

@@ -13,11 +13,10 @@ import { decodeTaskChangedEvent } from "#src/features/tasks/task-realtime";
 import { TaskOwnerAvatar } from "#src/features/tasks/task-owner";
 import { TaskStatusIcon } from "#src/features/tasks/task-status-icon";
 import { loadProjectTasks } from "#src/features/tasks/tasks.functions";
-import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
+import { overviewTaskParam } from "#src/features/tasks/task-overview-search";
 import { cn } from "#src/lib/utils";
-import { m } from "#src/paraglide/messages";
 
-type ProjectTask = Awaited<ReturnType<typeof loadProjectTasks>>["tasks"][number];
+export type ProjectTask = Awaited<ReturnType<typeof loadProjectTasks>>["tasks"][number];
 export type ProjectTaskNode = { task: ProjectTask; children: ProjectTaskNode[] };
 
 /**
@@ -36,14 +35,14 @@ export function projectTaskForest(tasks: readonly ProjectTask[]): ProjectTaskNod
   return roots;
 }
 
-/**
- * The Project page's Tasks (task #460): its unfinished Tasks, a sub-task under its main Task, each
- * opening in the Tasks page's popup. A private channel's Tasks show only to its members, as the
- * read decides.
- */
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
-export function ProjectTasksSection({ projectId }: { projectId: string }) {
+/**
+ * The Project's unfinished Tasks (task #460), live: a Task's Project change arrives as
+ * `task.changed.v1` (task #484), and the prefix invalidates every Project's read whichever Project
+ * it moved from or to. A private channel's Tasks show only to its members, as the read decides.
+ */
+export function useProjectTasks(projectId: string) {
   const load = useServerFn(loadProjectTasks);
   const queryClient = useQueryClient();
   const workspaceId = useCurrentWorkspaceId();
@@ -52,12 +51,12 @@ export function ProjectTasksSection({ projectId }: { projectId: string }) {
     queryKey: ["project-tasks", projectId],
     queryFn: () => load({ data: { projectId } }),
   });
-  // A Task's Project change arrives as `task.changed.v1` (task #484): the prefix invalidates the
-  // page's one query whichever Project it moved from or to.
   const onTaskChanged = useCallback(
     (publication: { data: unknown }) => {
-      if (decodeTaskChangedEvent(publication.data))
+      if (decodeTaskChangedEvent(publication.data)) {
         void queryClient.invalidateQueries({ queryKey: ["project-tasks"] });
+        void queryClient.invalidateQueries({ queryKey: ["project-recent-done"] });
+      }
     },
     [queryClient],
   );
@@ -69,40 +68,10 @@ export function ProjectTasksSection({ projectId }: { projectId: string }) {
     channel: userConversationChannel(userId),
     onPublication: onTaskChanged,
   });
-  const tasks = query.data?.tasks ?? [];
-  const forest = projectTaskForest(tasks);
-  return (
-    <section className="min-w-0 lg:col-span-2">
-      <div className="mb-3 flex min-h-9 items-center gap-2">
-        <h2 className="text-md font-semibold text-primary">{m.project_tasks()}</h2>
-        {tasks.length > 0 && (
-          <span className="text-sm text-tertiary tabular-nums">{tasks.length}</span>
-        )}
-      </div>
-      <div className="overflow-hidden rounded-xl border border-secondary">
-        {query.isError ? (
-          <p className="px-4 py-10 text-center text-sm text-error-primary">
-            {m.project_tasks_failed()}
-          </p>
-        ) : query.isPending ? (
-          <p className="px-4 py-10 text-center text-sm text-tertiary">
-            {m.project_tasks_loading()}
-          </p>
-        ) : forest.length === 0 ? (
-          <p className="px-4 py-10 text-center text-sm text-tertiary">{m.project_tasks_empty()}</p>
-        ) : (
-          <ul className="divide-y divide-secondary">
-            {forest.map((node) => (
-              <ProjectTaskTree key={node.task.id} node={node} depth={0} />
-            ))}
-          </ul>
-        )}
-      </div>
-    </section>
-  );
+  return query;
 }
 
-function ProjectTaskTree({ node, depth }: { node: ProjectTaskNode; depth: number }) {
+export function ProjectTaskTree({ node, depth }: { node: ProjectTaskNode; depth: number }) {
   return (
     <li>
       <ProjectTaskRow task={node.task} depth={depth} />
@@ -117,13 +86,16 @@ function ProjectTaskTree({ node, depth }: { node: ProjectTaskNode; depth: number
   );
 }
 
-function ProjectTaskRow({ task, depth }: { task: ProjectTask; depth: number }) {
-  const workspaceSlug = useWorkspaceSlug();
+/** A Task's row; it opens the Task's popup over the Project page. */
+export function ProjectTaskRow({ task, depth }: { task: ProjectTask; depth: number }) {
   return (
     <Link
-      to="/w/$workspaceSlug/tasks"
-      params={{ workspaceSlug }}
-      search={{ task: `${task.conversationId}:${task.number}` }}
+      to="."
+      search={(previous: Record<string, unknown>) => ({
+        ...previous,
+        task: overviewTaskParam(task),
+      })}
+      resetScroll={false}
       className={cn(
         "flex min-w-0 items-center gap-3 py-3 pr-4 outline-focus-ring hover:bg-primary_hover focus-visible:outline-2 focus-visible:-outline-offset-2",
         depth > 0 && "border-t border-secondary",

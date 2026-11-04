@@ -19,7 +19,10 @@ import { Skeleton } from "#src/components/ui/skeleton";
 import { FileTypeIcon } from "#src/features/files/file-type-icon";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { m } from "#src/paraglide/messages";
-import { ProjectTasksSection } from "./project-tasks";
+import { Tab, TabList, TabPanel, Tabs } from "#src/components/application/tabs/tabs";
+import { useBreakpoint } from "#src/hooks/use-breakpoint";
+import { WorkspaceTaskBoard } from "#src/features/tasks/workspace-task-board";
+import { ProjectOverview, ProjectTaskGroups } from "./project-overview";
 import type { getProject, getProjectRepository } from "./projects.functions";
 import { ProjectImage } from "./project-image";
 import { ProjectReadme } from "./project-readme";
@@ -28,15 +31,30 @@ import { RepositorySection } from "./repository-section";
 import { RepositoryStatusMessage } from "./repository-status";
 
 type Repository = Awaited<ReturnType<typeof getProjectRepository>>;
+type ProjectSearch = Parameters<typeof WorkspaceTaskBoard>[0]["search"] & { tab?: ProjectTab };
 
+export type ProjectTab = "overview" | "tasks" | "code";
+
+/**
+ * A Project's page (task #504): Overview (what it is for, progress, people, its Tasks in three
+ * groups), Tasks (its board; on a phone the groups) and, with a linked repository, Code.
+ */
 export function ProjectDetail({
   project,
   repository,
+  search,
+  onTabChange,
 }: {
   project: NonNullable<Awaited<ReturnType<typeof getProject>>>;
   repository: Promise<Repository>;
+  search: ProjectSearch;
+  onTabChange: (tab: ProjectTab) => void;
 }) {
   const workspaceSlug = useWorkspaceSlug();
+  const wide = useBreakpoint("md");
+  const hasCode = Boolean(project.githubFullName);
+  const tab: ProjectTab =
+    search.tab === "code" && !hasCode ? "overview" : (search.tab ?? "overview");
   return (
     <main className="flex h-full min-w-0 flex-col bg-primary">
       <PageHeader
@@ -79,33 +97,65 @@ export function ProjectDetail({
           )
         }
       />
-      <div className="min-h-0 flex-1 overflow-y-auto px-page py-4 sm:py-6">
-        {project.description && (
-          <p className="mb-6 whitespace-pre-wrap break-words text-sm text-tertiary">
-            {project.description}
-          </p>
-        )}
-        <div className="grid gap-6 lg:grid-cols-2">
-          <ProjectTasksSection projectId={project.id} />
-
-          <Suspense
-            fallback={
-              <>
-                <RepositorySection title={m.project_commits()}>
-                  <RepositoryLoading />
-                </RepositorySection>
-                <RepositorySection title={m.project_files()} files>
-                  <RepositoryLoading />
-                </RepositorySection>
-              </>
-            }
+      <Tabs
+        selectedKey={tab}
+        onSelectionChange={(key) => {
+          if (key === "overview" || key === "tasks" || key === "code") onTabChange(key);
+        }}
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        <div className="shrink-0 border-b border-secondary pt-2">
+          <TabList
+            type="underline"
+            size="sm"
+            aria-label={m.project_sections()}
+            className="-mb-px gap-6 px-page before:hidden"
           >
-            <Await promise={repository}>
-              {(data) => <RepositoryContents data={data} projectSlug={project.slug} />}
-            </Await>
-          </Suspense>
+            <Tab id="overview">{m.project_overview()}</Tab>
+            <Tab id="tasks">{m.project_tasks()}</Tab>
+            {hasCode && <Tab id="code">{m.project_code()}</Tab>}
+          </TabList>
         </div>
-      </div>
+        <TabPanel id="overview" className="min-h-0 flex-1 overflow-y-auto outline-hidden">
+          <ProjectOverview project={project} />
+        </TabPanel>
+        <TabPanel
+          id="tasks"
+          className="flex min-h-0 flex-1 flex-col outline-hidden max-md:overflow-y-auto"
+        >
+          {wide ? (
+            <WorkspaceTaskBoard search={search} project={project.id} />
+          ) : (
+            <ProjectTaskGroups projectId={project.id} />
+          )}
+        </TabPanel>
+        {hasCode && (
+          <TabPanel id="code" className="min-h-0 flex-1 overflow-y-auto outline-hidden">
+            <div className="grid gap-6 px-page py-4 sm:py-6 lg:grid-cols-2">
+              <Suspense
+                fallback={
+                  <>
+                    <RepositorySection title={m.project_commits()}>
+                      <RepositoryLoading />
+                    </RepositorySection>
+                    <RepositorySection title={m.project_files()} files>
+                      <RepositoryLoading />
+                    </RepositorySection>
+                  </>
+                }
+              >
+                <Await promise={repository}>
+                  {(data) => <RepositoryContents data={data} projectSlug={project.slug} />}
+                </Await>
+              </Suspense>
+            </div>
+          </TabPanel>
+        )}
+      </Tabs>
+      {/* Away from the board, a Task row still opens its popup over the page. */}
+      {!(wide && tab === "tasks") && (
+        <WorkspaceTaskBoard search={search} project={project.id} board={false} />
+      )}
     </main>
   );
 }
