@@ -5,15 +5,15 @@
  * itself, so a page opened directly in a tab could send its reader anywhere; framed, `top` is the
  * wrapper, out of its reach.
  *
- * The page's headers let its own inline scripts and styles run; nothing else loads, and nothing
- * leaves:
+ * The page's headers let its own inline scripts and styles run, load nothing else, and stop it
+ * sending anything over HTTP, WebSocket or WebRTC:
  * - `sandbox allow-scripts`, as a CSP directive (and on the wrapper's iframe), makes it an opaque
  *   origin: no cookies, no storage, no same-origin access to anything. Without `allow-same-origin`,
  *   `allow-forms`, `allow-popups`, `allow-modals` or `allow-top-navigation`, it can neither submit
  *   a form, open a window, nor move the page that frames it.
  * - `default-src 'none'`, with only inline script and style and `data:` / `blob:` images, fonts
- *   and media, so it can neither load nor send anything: `connect-src`, `form-action`,
- *   `frame-src` and the rest are closed. Libraries and images are inlined by whoever writes it.
+ *   and media: `connect-src`, `form-action`, `frame-src` and the rest are closed, so no request
+ *   leaves. Libraries and images are inlined by whoever writes it.
  * - `frame-ancestors`: the wrapper's origin and the app the link was made for.
  * - Its first script removes WebRTC, which CSP does not close in Chrome (`withWebRtcOff`).
  *
@@ -21,6 +21,14 @@
  * wrapper's does: its `frame-src` admits only the sandbox origin, which a navigation of its frame
  * is checked against, so the page cannot send its frame (and what it puts in the URL) elsewhere.
  * The wrapper then shows a notice in the frame's place (`sandboxWrapper`).
+ *
+ * Known gap, accepted for now: a resource hint (`<link rel="preconnect">` or `dns-prefetch`,
+ * written in the page or added by its script) still makes Chrome resolve any host and open a TCP
+ * connection to it. No CSP directive or header closes that, and blocking it from script is easily
+ * worked around. No HTTP request goes out, but the host learns the reader's address and when the
+ * page was opened, and the page can spell data into the host names it resolves (its own link
+ * included, which opens only that page for five minutes). Pinned by
+ * `artifact-sandbox-browser.e2e.ts`; closed when a better isolation is at hand.
  */
 export function sandboxPageHeaders(input: { sandboxOrigin: string; appOrigin: string }): Headers {
   return new Headers({

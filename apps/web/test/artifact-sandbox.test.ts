@@ -58,21 +58,56 @@ describe("the sandbox origin's configuration", () => {
       expect(() => readArtifactSandboxConfig({ COFORGE_ARTIFACT_SANDBOX_ORIGIN: value })).toThrow(
         ArtifactSandboxConfigError,
       );
-    expect(() =>
-      readArtifactSandboxConfig({
-        COFORGE_ARTIFACT_SANDBOX_ORIGIN: APP,
-        COFORGE_OIDC_ISSUER: `${APP}/oidc`,
-      }),
-    ).toThrow("must not be the application's own origin");
   });
 
-  test("a request is the sandbox's by its host alone", () => {
+  test("refuses the application's host, a subdomain of it, or its parent, by any setting naming it", () => {
+    const refused = [
+      [APP, { COFORGE_OIDC_ISSUER: `${APP}/oidc` }, "must not be the application's own host"],
+      // Another port is still the same host: the gate matches by name.
+      ["https://app.example:8443", { COFORGE_OIDC_ISSUER: `${APP}/oidc` }, "own host"],
+      // Named by the GitHub callback alone.
+      [APP, { COFORGE_GITHUB_CALLBACK_URL: `${APP}/auth/github/callback` }, "own host"],
+      // A subdomain or a parent: a parent domain's cookies would reach the sandbox. (Siblings,
+      // `app.x` beside `pages.x`, pass this check though they are one site too: pick a domain of
+      // its own, as production's coforgeusercontent.com is.)
+      ["https://pages.app.example", { COFORGE_OIDC_ISSUER: `${APP}/oidc` }, "subdomain"],
+      ["https://example", { COFORGE_OIDC_ISSUER: `${APP}/oidc` }, "subdomain"],
+    ] as const;
+    for (const [origin, env, message] of refused)
+      expect(() =>
+        readArtifactSandboxConfig({ COFORGE_ARTIFACT_SANDBOX_ORIGIN: origin, ...env }, () => {}),
+      ).toThrow(message);
+    // A sibling of a different name is not a subdomain either way.
+    expect(
+      readArtifactSandboxConfig(
+        {
+          COFORGE_ARTIFACT_SANDBOX_ORIGIN: "https://myapp.example",
+          COFORGE_OIDC_ISSUER: `${APP}/oidc`,
+        },
+        () => {},
+      ),
+    ).toEqual({ origin: "https://myapp.example" });
+  });
+
+  test("with nothing naming the application, boots with a warning", () => {
+    const warnings: string[] = [];
+    expect(
+      readArtifactSandboxConfig({ COFORGE_ARTIFACT_SANDBOX_ORIGIN: SANDBOX }, (w) =>
+        warnings.push(w),
+      ),
+    ).toEqual({ origin: SANDBOX });
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("artifact_sandbox_origin_unchecked");
+  });
+
+  test("a request is the sandbox's by its host name alone", () => {
     expect(isSandboxRequest(new Request("http://sandbox.example/a/x.y"), SANDBOX)).toBe(true);
     expect(isSandboxRequest(new Request(`${APP}/a/x.y`), SANDBOX)).toBe(false);
     expect(isSandboxRequest(new Request("http://sandbox.example/"), null)).toBe(false);
-    // A fully qualified spelling is the same host.
+    // A fully qualified spelling, a spelled-out port, or capitals: the same host.
     expect(isSandboxRequest(new Request("http://sandbox.example./a/x.y"), SANDBOX)).toBe(true);
-    expect(isSandboxRequest(new Request("http://sandbox.example:8443/"), SANDBOX)).toBe(false);
+    expect(isSandboxRequest(new Request("http://sandbox.example:443/"), SANDBOX)).toBe(true);
+    expect(isSandboxRequest(new Request("http://SANDBOX.example/"), SANDBOX)).toBe(true);
   });
 });
 

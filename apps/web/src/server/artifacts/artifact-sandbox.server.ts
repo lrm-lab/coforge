@@ -50,7 +50,7 @@ export class ArtifactSandbox {
         hint: "this deployment has no sandbox origin for web pages (COFORGE_ARTIFACT_SANDBOX_ORIGIN)",
       });
     // A sandbox on the application's own host would be no sandbox: refuse rather than serve.
-    if (new URL(origin).host === new URL(input.embedderOrigin).host)
+    if (new URL(origin).hostname === new URL(input.embedderOrigin).hostname)
       throw new AppError("TEMPORARILY_UNAVAILABLE", { errorId: "artifact-sandbox-off" });
     const page = await this.page({
       workspaceId: input.workspaceId,

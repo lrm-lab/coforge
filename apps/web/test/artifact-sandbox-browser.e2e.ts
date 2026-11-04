@@ -4,14 +4,17 @@ import { NAVIGATED_NOTICE } from "#src/server/artifacts/artifact-sandbox-respons
 import { chromePath, launchHeadlessChrome, until } from "./helpers/headless-chrome";
 
 /**
- * A web-page artifact in a real browser (task #490): its own inline scripts run, and nothing it
- * tries reaches anywhere — no fetch, XHR, beacon, WebSocket, WebRTC, image, script, stylesheet, form,
+ * A web-page artifact in a real browser (task #490): its own inline scripts run, and no request it
+ * tries goes out — no fetch, XHR, beacon, WebSocket, WebRTC, image, script, stylesheet, form,
  * popup, nor moving the top page — framed in the app or opened in a tab of its own. It reads no
  * cookie and no storage, and an origin other than the one the link was made for cannot frame it.
  * Everything it tries is aimed at an "outside" server that counts what reaches it.
  *
  * Nor can it navigate its own frame away, which no header of its own forbids: the wrapper's
  * `frame-src` stops the navigation, and the wrapper puts a notice in the frame's place.
+ *
+ * The one way out left open, resource hints (a DNS lookup and a TCP connection, no request), is
+ * pinned by the last test, so a browser change either way shows.
  *
  * Needs only Chrome (`COFORGE_E2E_CHROME`, else the macOS Google Chrome install): the sandbox is
  * the real `ArtifactSandbox` over a fake read of one page, the app and the outside are tiny local
@@ -34,6 +37,20 @@ const outside = Bun.serve({
   },
 });
 const OUT = `http://127.0.0.1:${outside.port}`;
+// A bare TCP listener: what a resource hint opens is a connection, not an HTTP request.
+let tcpConnections = 0;
+const tcp = Bun.listen({
+  hostname: "127.0.0.1",
+  port: 0,
+  socket: {
+    open: (socket) => {
+      tcpConnections += 1;
+      socket.end();
+    },
+    data: () => {},
+  },
+});
+const TCP = `http://127.0.0.1:${tcp.port}`;
 // A STUN server the page might reach over WebRTC, which CSP's fetch directives do not govern.
 const stun = await Bun.udpSocket({
   hostname: "127.0.0.1",
@@ -71,9 +88,15 @@ const NAVIGATOR = `<!doctype html><p>moving</p><script>setTimeout(() => { locati
   `${OUT}/self`,
 )}; }, 100);</script>`;
 
+/** Resource hints, written and added by script: the one way out that stays open (below). */
+const HINTS = `<!doctype html><link rel="preconnect" href="${TCP}"><link rel="dns-prefetch" href="${TCP}"><script>
+for (const rel of ["preconnect", "dns-prefetch"]) { const l = document.createElement("link"); l.rel = rel; l.href = ${JSON.stringify(TCP)}; document.head.append(l); }
+</script><p>hints</p>`;
+
 const PAGES: Record<string, Uint8Array> = {
   probe: new TextEncoder().encode(PROBE),
   navigator: new TextEncoder().encode(NAVIGATOR),
+  hints: new TextEncoder().encode(HINTS),
 };
 
 /** Runs first in each tab's top document: collects what frames post to it. */
@@ -85,9 +108,9 @@ let sandbox: ArtifactSandbox;
 let browser: Awaited<ReturnType<typeof launchHeadlessChrome>>;
 
 beforeAll(async () => {
-  // The sandbox and the app answer on `localhost` at ports of their own, the outside on
-  // `127.0.0.1`: three origins.
-  sandboxServer = Bun.serve({ port: 0, hostname: "localhost", fetch: (r) => sandbox.serve(r) });
+  // The app on `localhost`, the sandbox and the outside on `127.0.0.1` at ports of their own:
+  // three origins, and the app and the sandbox on different hosts, as `link` requires.
+  sandboxServer = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: (r) => sandbox.serve(r) });
   sandbox = new ArtifactSandbox({
     reads: {
       read: async (input: { artifactId: string }) =>
@@ -98,7 +121,7 @@ beforeAll(async () => {
         }) as never,
     },
     readBlob: async (_workspaceId, sha256) => PAGES[sha256] ?? null,
-    origin: `http://localhost:${sandboxServer.port}`,
+    origin: `http://127.0.0.1:${sandboxServer.port}`,
     secret: async () => "x".repeat(40),
     now: () => new Date(),
   });
@@ -113,6 +136,8 @@ beforeAll(async () => {
 afterAll(async () => {
   await browser?.close();
   for (const server of [outside, sandboxServer, app]) server?.stop(true);
+  tcp.stop(true);
+  stun.close();
 });
 
 const appOrigin = () => `http://localhost:${app.port}`;
@@ -188,6 +213,23 @@ test("a page cannot navigate its own frame away either: the wrapper shows a noti
   expect(await framed.evaluate<string>("location.href")).toStartWith(appOrigin());
   await framed.close();
 }, 20000);
+
+/**
+ * The known gap, pinned so a change shows: a resource hint (`<link rel="preconnect">`, written in
+ * the page or added by its script) makes Chrome resolve the host and open a TCP connection, which
+ * no CSP directive or header stops. No HTTP request goes out, but the host learns the reader's
+ * address and when the page was opened, and a page can spell data into a host name it resolves.
+ * Accepted for now (task #490); when this test starts failing, the browser closed the gap.
+ */
+test("known gap: a resource hint still opens a connection", async () => {
+  hits.length = 0;
+  tcpConnections = 0;
+  const tab = await browser.open(inApp(await linkFor("hints")));
+  await until(async () => tcpConnections > 0);
+  // Only a connection: nothing reached the HTTP outside.
+  expect(hits).toEqual([]);
+  await tab.close();
+});
 
 /** A page framing `src` the way the app's pane does: our wrapper is its own origin's page. */
 function framing(src: string): Response {
