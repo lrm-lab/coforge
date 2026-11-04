@@ -100,5 +100,10 @@
   "doc_share_workspace": "Everyone in the Workspace",
   "doc_share_workspace_detail": "Any member of the Workspace, in the conversation or not.",
   "doc_share_read_only": "Only the person who made it, or a Workspace admin, can change this.",
-  "doc_share_done": "Done"
+  "doc_share_done": "Done",
+  "doc_retry": "Try again",
+  "doc_refresh_failed": "Couldn't check for changes. What you see may be out of date.",
+  "doc_load_failed_title": "Couldn't load this",
+  "doc_load_failed_retry": "Something went wrong while loading. Try again in a moment.",
+  "doc_back_to_workspace": "Back to the Workspace"
 }

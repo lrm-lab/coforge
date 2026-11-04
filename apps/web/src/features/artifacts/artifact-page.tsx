@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, useRouter } from "@tanstack/react-router";
 
-import { ClockRewind } from "@untitledui/icons";
+import { AlertCircle, ClockRewind, RefreshCw01 } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Skeleton } from "#src/components/ui/skeleton";
@@ -25,7 +25,12 @@ import { ArtifactBanner } from "./artifact-pane-header";
 import { loadArtifactSandboxLink } from "./artifact-sandbox.functions";
 import { useArtifactLeaveGuard } from "./artifact-leave-guard";
 import { useArtifactAccess } from "./artifact-access";
-import { ArtifactPageHeader, useHomeName, type ArtifactHome } from "./artifact-page-header";
+import {
+  ARTIFACT_TITLE_ID,
+  ArtifactPageHeader,
+  useHomeName,
+  type ArtifactHome,
+} from "./artifact-page-header";
 import { ACCESS_ICON, ArtifactShareDialog } from "./artifact-share-dialog";
 import { ArtifactPaneConfirms, type ArtifactConfirming } from "./artifact-pane-confirms";
 import { actorName, isWebPage } from "./artifact-parts";
@@ -124,7 +129,19 @@ function ArtifactPageFor({
     },
   });
 
-  if (editor.document.isError) return <ArtifactUnavailable />;
+  // Gone or not the viewer's (the server says so), or never read: the page is not there. A read
+  // that failed once the artifact showed keeps it, and its unsaved edits, with a way to try again.
+  const failure = editor.document.error;
+  if (isGone(failure) || (failure && !current))
+    return (
+      <>
+        <ArtifactUnavailable
+          gone={isGone(failure)}
+          onRetry={() => void editor.document.refetch()}
+        />
+        {leavePrompt}
+      </>
+    );
   const kind = current?.artifact.kind;
   const webPage = kind !== undefined && isWebPage(kind);
   const title = editor.title || current?.artifact.title || m.doc_untitled();
@@ -148,7 +165,8 @@ function ArtifactPageFor({
   };
   return (
     <main
-      aria-label={m.doc_pane_label()}
+      aria-labelledby={current ? ARTIFACT_TITLE_ID : undefined}
+      aria-label={current ? undefined : m.doc_pane_label()}
       className="@container/doc flex h-full min-h-0 min-w-0 flex-1 flex-col bg-primary"
     >
       <ArtifactPageHeader
@@ -170,12 +188,50 @@ function ArtifactPageFor({
         }
         onDelete={() => setConfirming("delete")}
       />
+      {failure && (
+        <ArtifactBanner
+          tone="warning"
+          icon={AlertCircle}
+          actions={
+            <Button
+              size="xs"
+              color="secondary"
+              iconLeading={RefreshCw01}
+              isLoading={editor.document.isFetching}
+              onClick={() => void editor.document.refetch()}
+            >
+              {m.doc_retry()}
+            </Button>
+          }
+        >
+          {m.doc_refresh_failed()}
+        </ArtifactBanner>
+      )}
       <div className="relative flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
           {!current ? (
             <LoadingBody />
           ) : webPage ? (
             <>
+              {viewingOld && (
+                // An older web page reads only: no going back to it, as a person does not write
+                // web pages (task #490); the way back to the latest is the one action.
+                <ArtifactBanner
+                  tone="info"
+                  icon={ClockRewind}
+                  actions={
+                    <Button
+                      size="xs"
+                      color="primary"
+                      onClick={() => navigate({ version: undefined })}
+                    >
+                      {m.doc_back_to_latest()}
+                    </Button>
+                  }
+                >
+                  {m.doc_old_banner({ number: String(old), latest: String(latest) })}
+                </ArtifactBanner>
+              )}
               {!viewingOld &&
                 editor.published && (
                   // An Agent saved a new version: the page shows it already; this says who.
@@ -200,6 +256,7 @@ function ArtifactPageFor({
                 version={viewingOld ? old! : latest}
                 title={title}
                 source={viewingOld ? oldRead.data?.text : current.text}
+                sourceFailed={viewingOld && oldRead.isError}
               />
             </>
           ) : viewingOld ? (
@@ -300,6 +357,11 @@ async function openInTab(artifactId: string, version: number) {
   }
 }
 
+/** The server's answer for an artifact that is not there for the viewer: deleted, never there,
+ * or not theirs to read. */
+const isGone = (error: unknown) =>
+  isAppError(error) && (error.code === "NOT_FOUND" || error.code === "ACCESS_DENIED");
+
 /** Who made the artifact, from its read: an Agent, a person, or nobody left. */
 function authorOf(artifact: { authorUserId: string | null; authorAgentId: string | null }) {
   if (artifact.authorAgentId) return { agentId: artifact.authorAgentId };
@@ -317,25 +379,38 @@ function LoadingBody() {
   );
 }
 
-/** Deleted, never there, or not the viewer's to see: the server does not say which. */
-function ArtifactUnavailable() {
+/**
+ * The page with no artifact to show. Deleted, never there, or not the viewer's to see: the server
+ * does not say which, so neither does the page (`gone`). A read that failed otherwise, before
+ * anything showed, says so and tries again.
+ */
+function ArtifactUnavailable({ gone, onRetry }: { gone: boolean; onRetry: () => void }) {
   const workspaceSlug = useWorkspaceSlug();
   const router = useRouter();
   return (
     <main className="flex h-full min-w-0 flex-1 flex-col items-center justify-center gap-3 bg-primary px-6 text-center">
-      <h1 className="text-md font-semibold text-primary">{m.doc_unavailable_title()}</h1>
-      <p className="max-w-sm text-sm text-tertiary">{m.doc_load_failed()}</p>
-      <button
-        type="button"
-        className="text-sm font-semibold text-brand-secondary hover:text-brand-secondary_hover"
-        onClick={() =>
-          window.history.length > 1
-            ? router.history.back()
-            : void router.navigate({ to: "/w/$workspaceSlug", params: { workspaceSlug } })
-        }
-      >
-        {m.doc_back()}
-      </button>
+      <h1 className="text-md font-semibold text-primary">
+        {gone ? m.doc_unavailable_title() : m.doc_load_failed_title()}
+      </h1>
+      <p className="max-w-sm text-sm text-tertiary">
+        {gone ? m.doc_load_failed() : m.doc_load_failed_retry()}
+      </p>
+      <div className="flex items-center gap-4">
+        {!gone && (
+          <Button size="sm" color="secondary" iconLeading={RefreshCw01} onClick={onRetry}>
+            {m.doc_retry()}
+          </Button>
+        )}
+        <Button
+          size="sm"
+          color="link-gray"
+          onClick={() =>
+            void router.navigate({ to: "/w/$workspaceSlug", params: { workspaceSlug } })
+          }
+        >
+          {m.doc_back_to_workspace()}
+        </Button>
+      </div>
     </main>
   );
 }

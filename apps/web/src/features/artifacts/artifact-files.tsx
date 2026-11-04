@@ -1,4 +1,5 @@
-import { Button as AriaButton, ToggleButton } from "react-aria-components";
+import { ToggleButton } from "react-aria-components";
+import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Plus } from "@untitledui/icons";
@@ -8,11 +9,12 @@ import {
   ConversationFilesPanel,
   conversationFilesQuery,
 } from "#src/features/conversations/conversation-files";
+import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { ArtifactEditedLine, ArtifactIcon, kindLabel, useArtifactTime } from "./artifact-parts";
 import { artifactListQuery, useArtifactActor, type ArtifactCard } from "./artifact-queries";
-import { draftArtifactSearch, useArtifactNavigation, useOpenArtifactPage } from "./artifact-search";
+import { artifactPageRoute, draftArtifactSearch, useArtifactNavigation } from "./artifact-search";
 
 type Filter = "all" | "files" | "artifacts";
 
@@ -143,14 +145,14 @@ function ArtifactList({
 }
 
 function ArtifactRow({ card }: { card: ArtifactCard }) {
-  const openPage = useOpenArtifactPage();
+  const workspaceSlug = useWorkspaceSlug();
   const actorOf = useArtifactActor();
   const time = useArtifactTime();
   return (
     <li>
-      <AriaButton
-        onPress={() => openPage(card.id)}
-        className="flex w-full min-w-0 items-center gap-3 rounded-xl border border-secondary bg-primary p-3 text-left outline-focus-ring hover:border-primary hover:bg-primary_hover data-focus-visible:outline-2"
+      <Link
+        {...artifactPageRoute(workspaceSlug, card.id)}
+        className="flex w-full min-w-0 items-center gap-3 rounded-xl border border-secondary bg-primary p-3 text-left outline-focus-ring hover:border-primary hover:bg-primary_hover focus-visible:outline-2"
       >
         <ArtifactIcon kind={card.kind} />
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -166,7 +168,7 @@ function ArtifactRow({ card }: { card: ArtifactCard }) {
             time={time(card.updatedAt)}
           />
         </span>
-      </AriaButton>
+      </Link>
     </li>
   );
 }

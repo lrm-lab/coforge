@@ -1,16 +1,18 @@
 import { useMemo } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 
-import { Button as AriaButton } from "react-aria-components";
+import { Link } from "@tanstack/react-router";
+
+import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { m } from "#src/paraglide/messages";
 import { artifactIdsInBody, bodyWithArtifactTitles } from "./artifact-link";
 import { ArtifactEditedLine, ArtifactIcon, kindLabel, useArtifactTime } from "./artifact-parts";
 import { artifactCardQuery, useArtifactActor, useArtifactsOn } from "./artifact-queries";
-import { useOpenArtifactPage } from "./artifact-search";
+import { artifactPageRoute } from "./artifact-search";
 
 /**
  * The cards of the artifacts a message links to (task #385, #514): each its kind, title, first
- * two lines, version and who changed it last; the card opens it. Nothing
+ * two lines, version and who changed it last; the card is a link to its page. Nothing
  * shows while documents are off, for a link the reader may not open, or before the card is read.
  */
 export function MessageArtifactCards({ body }: { body: string }) {
@@ -48,25 +50,27 @@ function ArtifactCardView({ artifactId }: { artifactId: string }) {
   const { data: card } = useQuery(artifactCardQuery(artifactId));
   const actorOf = useArtifactActor();
   const time = useArtifactTime();
-  const openPage = useOpenArtifactPage();
+  const workspaceSlug = useWorkspaceSlug();
   if (!card) return null;
   const title = card.title || m.doc_untitled();
   const kind = kindLabel(card.kind);
   return (
     <article
       aria-label={m.doc_card_label({ kind, title })}
-      className="relative flex w-full max-w-[34rem] items-start gap-3 rounded-xl border border-secondary bg-primary p-3 shadow-xs transition has-[button:hover]:border-primary has-[button:hover]:shadow-sm has-[button[data-focus-visible]]:outline-2 has-[button[data-focus-visible]]:outline-focus-ring"
+      className="relative flex w-full max-w-[34rem] items-start gap-3 rounded-xl border border-secondary bg-primary p-3 shadow-xs transition has-[a:hover]:border-primary has-[a:hover]:shadow-sm has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-focus-ring"
     >
       <ArtifactIcon kind={card.kind} />
       <div className="min-w-0 flex-1">
         <p className="flex min-w-0 items-baseline gap-2">
           {/* The title is the card's one way in; its hit area covers the whole card. */}
-          <AriaButton
-            onPress={() => openPage(card.id)}
+          <Link
+            {...artifactPageRoute(workspaceSlug, card.id)}
+            // The message row opens its actions on a click; this click is the card's alone.
+            onClick={(event) => event.stopPropagation()}
             className="min-w-0 truncate text-left text-sm font-semibold text-primary outline-none before:absolute before:inset-0 before:rounded-xl"
           >
             {title}
-          </AriaButton>
+          </Link>
           <span className="shrink-0 text-xs text-quaternary">{kind}</span>
         </p>
         {card.preview && (

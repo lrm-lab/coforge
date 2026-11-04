@@ -24,8 +24,8 @@ export function artifactIdsInBody(body: string, limit = 3): string[] {
 
 /** One app link, bare, as a Markdown link's target or in `<…>`, with what stands around it. */
 const LINK_IN_TEXT = new RegExp(String.raw`(\[[^\]]*\]\(|<)?(${APP_LINK.source})(\))?`, "g");
-/** Code, whose text is shown as written. */
-const CODE = /(```[\s\S]*?(?:```|$)|`[^`\n]*`)/;
+/** Inline code, whose text is shown as written. */
+const INLINE_CODE = /(`[^`\n]*`)/;
 /** What ends a sentence after a bare link rather than the link itself, as GFM autolinks read it. */
 const TRAILING = /[.,;:!?]+$/;
 
@@ -42,10 +42,10 @@ export function bodyWithArtifactTitles(body: string, titles: ReadonlyMap<string,
     const id = [...link.matchAll(DOC_PARAM)][0]?.[1]?.toLowerCase();
     return id === undefined ? undefined : titles.get(id);
   };
-  const shown = withoutCardLines(body, (line) => {
+  const isCardLine = (line: string) => {
     const sole = line.trim();
     return sole.match(APP_LINK)?.[0] === sole && titleOf(sole) !== undefined;
-  });
+  };
   const titled = (text: string) =>
     text.replace(LINK_IN_TEXT, (whole, named: string | undefined, found: string, close) => {
       if (named) return whole;
@@ -55,21 +55,34 @@ export function bodyWithArtifactTitles(body: string, titles: ReadonlyMap<string,
       const label = title.replace(/[[\]\\*_`]/g, (char) => `\\${char}`);
       return `[${label}](${link})${found.slice(link.length)}${close ?? ""}`;
     });
-  // Split on code: the odd pieces are code.
-  return shown
-    .split(CODE)
-    .map((piece, at) => (at % 2 ? piece : titled(piece)))
-    .join("");
+  const lines = body.split("\n");
+  const code = codeLines(lines);
+  let dropped = false;
+  const shown = lines.flatMap((line, at) => {
+    if (code[at]) return [line];
+    if (isCardLine(line)) return ((dropped = true), []);
+    // Split on inline code: the odd pieces are code.
+    return [
+      line
+        .split(INLINE_CODE)
+        .map((piece, index) => (index % 2 ? piece : titled(piece)))
+        .join(""),
+    ];
+  });
+  const text = shown.join("\n");
+  return dropped ? text.trimEnd() : text;
 }
 
-/** `body` without the lines `isCardLine` names, outside fenced code; nothing left over at its end. */
-function withoutCardLines(body: string, isCardLine: (line: string) => boolean): string {
-  let fenced = false;
-  let dropped = false;
-  const kept = body.split("\n").filter((line) => {
-    if (line.trimStart().startsWith("```")) fenced = !fenced;
-    else if (!fenced && isCardLine(line)) return !(dropped = true);
-    return true;
+/** Which lines are code: inside a ``` or ~~~ fence (closed by the same mark, at least as long),
+ * the fence's own lines, or indented four spaces or a tab. */
+function codeLines(lines: readonly string[]): boolean[] {
+  let fence: string | null = null;
+  return lines.map((line) => {
+    const mark = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1];
+    if (mark && (fence === null || (mark[0] === fence[0] && mark.length >= fence.length))) {
+      fence = fence === null ? mark : null;
+      return true;
+    }
+    return fence !== null || /^(?: {4}|\t)/.test(line);
   });
-  return dropped ? kept.join("\n").trimEnd() : body;
 }

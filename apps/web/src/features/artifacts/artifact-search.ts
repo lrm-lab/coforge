@@ -1,12 +1,13 @@
-import { useRouter } from "@tanstack/react-router";
+import { redirect, useRouter } from "@tanstack/react-router";
 import { z } from "zod";
 
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 
 /**
- * The open document's address on a conversation page (task #385): `doc` names it, `docVersion`
- * an older version shown read-only, `docFull` the full-screen view, `docHistory` its version
- * history beside it, `docDraft` a new document not saved yet. Each falls back to absent when malformed.
+ * A document's fields on a conversation page's address (task #385): `docDraft` a new document not
+ * saved yet, beside the chat, and `docFull` that draft in full screen. `doc`, `docVersion` and
+ * `docHistory` are a link from before an artifact had its own page (task #514), which goes there
+ * (`redirectDocLink`). Each falls back to absent when malformed.
  */
 export const artifactSearchShape = {
   doc: z.uuid().optional().catch(undefined),
@@ -29,14 +30,6 @@ export function useArtifactNavigation() {
       search: (previous: ArtifactSearch) => ({ ...previous, ...patch }),
     });
 }
-
-/** The address that opens a document at its latest version, closing whatever else was open. */
-export const openArtifactSearch = (artifactId: string): ArtifactSearch => ({
-  doc: artifactId,
-  docVersion: undefined,
-  docHistory: undefined,
-  docDraft: undefined,
-});
 
 /** The address of a new document, unsaved until its first save. */
 export const draftArtifactSearch: ArtifactSearch = {
@@ -84,4 +77,20 @@ export function useOpenArtifactPage() {
   const workspaceSlug = useWorkspaceSlug();
   return (artifactId: string, options: { replace?: boolean } = {}) =>
     void router.navigate({ ...artifactPageRoute(workspaceSlug, artifactId), ...options });
+}
+
+/**
+ * A conversation page's `?doc=` link from before an artifact had its own page (task #385): it
+ * goes to that page before the conversation loads (a route's `beforeLoad`), whether or not the
+ * reader may read the conversation; the artifact's page decides what they see.
+ */
+export function redirectDocLink(workspaceSlug: string, search: ArtifactSearch) {
+  if (search.doc === undefined) return;
+  throw redirect({
+    ...artifactPageRoute(workspaceSlug, search.doc, {
+      version: search.docVersion,
+      history: search.docHistory,
+    }),
+    replace: true,
+  });
 }

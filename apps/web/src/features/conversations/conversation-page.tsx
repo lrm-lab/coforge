@@ -1,6 +1,5 @@
 import { useEffect, useEffectEvent, useRef, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Navigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 
 import { useConversationAgentProfile } from "#src/features/agents/profile-panel/open-agent-profile";
@@ -8,9 +7,7 @@ import { useLiveAgent } from "#src/features/agents/workspace-agents-realtime";
 import { ACTIVITY_INBOX_QUERY_PREFIX } from "#src/features/inbox/activity-inbox-queries";
 import { ConversationTaskBoard } from "#src/features/tasks/conversation-task-board";
 import { ArtifactDraftPane } from "#src/features/artifacts/artifact-draft-pane";
-import { artifactPageRoute } from "#src/features/artifacts/artifact-search";
 import { useArtifactsOn } from "#src/features/artifacts/artifact-queries";
-import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { ConversationFilesWithDocuments } from "#src/features/artifacts/artifact-files";
 import { cn } from "#src/lib/utils";
 import { markPublicChannelRead } from "./channels.functions";
@@ -276,17 +273,8 @@ type ConversationPageBodyProps = {
  * conversation and read cursor.
  */
 function ConversationPageBody(props: ConversationPageProps & ConversationPageBodyProps) {
-  const { doc, docVersion, docFull, docHistory, docDraft } = props.search;
+  const { docFull, docDraft } = props.search;
   const documents = useArtifactsOn() === true;
-  const workspaceSlug = useWorkspaceSlug();
-  // A document's link from before its own page (task #385) opens that page (task #514).
-  if (documents && doc !== undefined)
-    return (
-      <Navigate
-        {...artifactPageRoute(workspaceSlug, doc, { version: docVersion, history: docHistory })}
-        replace
-      />
-    );
   const open = documents && docDraft === true;
   // The chat keeps one place in the tree whether a new document is open or not, so opening one
   // or going full screen only hides the chat: its scroll, open thread and draft stay.

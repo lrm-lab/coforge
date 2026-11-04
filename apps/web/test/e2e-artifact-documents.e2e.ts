@@ -86,7 +86,7 @@ test("a document opens from its card, saves versions, resolves a conflict and go
     await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
   };
   // The artifact's own page, or a new document's pane beside the chat.
-  const pane = `document.querySelector('[aria-label="Document"]')`;
+  const pane = `(document.querySelector("main[aria-labelledby]") ?? document.querySelector('section[aria-label="Document"]'))`;
   const inPane = (text: string) => `(${pane}?.textContent ?? "").includes(${JSON.stringify(text)})`;
   const button = (text: string, within = "document") =>
     `[...${within}.querySelectorAll("button")].find((b) => b.textContent.trim() === ${JSON.stringify(text)})`;

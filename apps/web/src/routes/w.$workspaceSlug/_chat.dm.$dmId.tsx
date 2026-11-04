@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
+import { redirectDocLink } from "#src/features/artifacts/artifact-search";
 import { ConversationLoadError } from "#src/features/conversations/conversation-load-error";
 import { ConversationPending } from "#src/features/conversations/conversation-pending";
 import { conversationPageSearchShape } from "#src/features/conversations/conversation-page-search";
@@ -14,6 +15,8 @@ export const Route = createFileRoute("/w/$workspaceSlug/_chat/dm/$dmId")({
     ...conversationPageSearchShape,
     message: z.uuid().optional().catch(undefined),
   }),
+  // A document link from before its own page goes there first (task #514).
+  beforeLoad: ({ params, search }) => redirectDocLink(params.workspaceSlug, search),
   loaderDeps: ({ search }) => conversationPageLoaderDeps(search),
   remountDeps: ({ params }) => params.dmId,
   loader: async ({ context, params, deps, parentMatchPromise, cause }) => {

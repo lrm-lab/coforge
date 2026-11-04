@@ -26,12 +26,15 @@ export function ArtifactWebPage({
   version,
   title,
   source,
+  sourceFailed = false,
 }: {
   artifactId: string;
   version: number;
   title: string;
   /** The page's HTML at `version`, once read. */
   source: string | undefined;
+  /** An older version's source could not be read. */
+  sourceFailed?: boolean;
 }) {
   const [view, setView] = useState<"preview" | "source">("preview");
   return (
@@ -57,6 +60,8 @@ export function ArtifactWebPage({
       <div className="flex min-h-0 flex-1 flex-col p-4 md:px-6">
         {view === "preview" ? (
           <Preview artifactId={artifactId} version={version} title={title} />
+        ) : sourceFailed ? (
+          <p className="text-sm text-tertiary">{m.doc_version_load_failed()}</p>
         ) : source === undefined ? (
           <Skeleton className="h-full w-full rounded-xl" />
         ) : (

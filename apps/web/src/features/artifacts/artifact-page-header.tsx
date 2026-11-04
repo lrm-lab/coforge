@@ -23,6 +23,9 @@ import { StatusLine } from "./artifact-pane-header";
 import { ArtifactIcon } from "./artifact-parts";
 import type { ArtifactEditorStatus } from "./use-artifact-editor";
 
+/** The page's title, which names its `main`. */
+export const ARTIFACT_TITLE_ID = "artifact-page-title";
+
 /** Where an artifact lives, as its page's way back names it. */
 export type ArtifactHome = { kind: "channel" | "dm" | "workspace"; conversationId: string | null };
 
@@ -71,7 +74,12 @@ export function ArtifactPageHeader({
       ) : (
         <>
           <ArtifactIcon kind={kind} size="sm" />
-          <h1 className="min-w-0 truncate text-sm font-semibold text-primary">{title}</h1>
+          <h1
+            id={ARTIFACT_TITLE_ID}
+            className="min-w-0 truncate text-sm font-semibold text-primary"
+          >
+            {title}
+          </h1>
           <span className="max-sm:hidden">
             <StatusLine status={status} version={version} />
           </span>

@@ -21,6 +21,16 @@ test("a line that is only a document link reads as nothing beside its card", () 
   expect(bodyWithArtifactTitles(fenced, titles)).toBe(fenced);
 });
 
+test("a document link in ~~~ fenced or indented code stays as written", () => {
+  const tildes = `Run this:\n~~~\n${LINK}\n~~~`;
+  expect(bodyWithArtifactTitles(tildes, titles)).toBe(tildes);
+  // A ``` line inside a ~~~ fence does not close it.
+  const mixed = `~~~\n\`\`\`\n${LINK}\n~~~`;
+  expect(bodyWithArtifactTitles(mixed, titles)).toBe(mixed);
+  const indented = `Run this:\n\n    ${LINK}\n\t${LINK}`;
+  expect(bodyWithArtifactTitles(indented, titles)).toBe(indented);
+});
+
 test("a document link among other words reads as the document's title, still a link", () => {
   expect(bodyWithArtifactTitles(`Draft is here: ${LINK} — have a look`, titles)).toBe(
     `Draft is here: [Launch plan](${LINK}) — have a look`,
