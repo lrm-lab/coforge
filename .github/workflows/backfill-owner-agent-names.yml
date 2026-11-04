@@ -80,7 +80,7 @@ jobs:
           chmod 600 "$ssh_dir/key" "$ssh_dir/known_hosts"
           echo "SSH_DIR=$ssh_dir" >> "$GITHUB_ENV"
 
-      - name: Resolve the Web container
+      - name: Resolve the Web container and show where the bundle is
         env:
           DEPLOY_SSH_HOST: ${{ vars.DEPLOY_SSH_HOST }}
           DEPLOY_SSH_USER: ${{ vars.DEPLOY_SSH_USER }}
@@ -91,14 +91,22 @@ jobs:
               -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=8 \
               "$DEPLOY_SSH_USER@$DEPLOY_SSH_HOST" "$@"
           }
-          container="$(remote "docker ps -q \
-            --filter label=com.docker.compose.project=$PROJECT \
-            --filter label=com.docker.compose.service=web")"
+          # Only the running web container, newest first, one id. A stale container left beside the
+          # new one would otherwise give a multi-line value and a broken `docker exec`.
+          ids="$(remote "docker ps -q --filter label=com.docker.compose.project=$PROJECT \
+            --filter label=com.docker.compose.service=web --filter status=running")"
+          echo "candidate container ids:"
+          printf '%s\n' "$ids"
+          container="$(printf '%s\n' "$ids" | head -n 1)"
           if [ -z "$container" ]; then
             echo "No running Web container for $PROJECT" >&2
             exit 1
           fi
           echo "WEB_CONTAINER=$container" >> "$GITHUB_ENV"
+          # Diagnostics (task #495): which image, where the exec lands, and whether the bundle is
+          # there. `-w /app` pins the directory the bundle was copied to, independent of WORKDIR.
+          remote "docker inspect --format '{{.Image}} {{.Config.WorkingDir}} {{.Config.User}}' $container"
+          remote "docker exec -w /app '$container' sh -c 'echo pwd=\$(pwd); ls -la /app | head -40; echo ---; ls -la /app/.ops || echo \"no /app/.ops\"'"
 
       - name: Back up agents.displayName before an apply
         if: inputs.mode == 'apply'
@@ -109,7 +117,7 @@ jobs:
           ssh -i "$SSH_DIR/key" -o UserKnownHostsFile="$SSH_DIR/known_hosts" \
             -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=8 \
             "$DEPLOY_SSH_USER@$DEPLOY_SSH_HOST" \
-            "docker exec -i '$WEB_CONTAINER' bun .ops/backfill-owner-agent-names.js --backup" \
+            "docker exec -i -w /app '$WEB_CONTAINER' bun /app/.ops/backfill-owner-agent-names.js --backup" \
             > agents-displayName-backup.jsonl
           wc -l agents-displayName-backup.jsonl
 
@@ -130,4 +138,4 @@ jobs:
           ssh -i "$SSH_DIR/key" -o UserKnownHostsFile="$SSH_DIR/known_hosts" \
             -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=8 \
             "$DEPLOY_SSH_USER@$DEPLOY_SSH_HOST" \
-            "docker exec -i '$WEB_CONTAINER' bun .ops/backfill-owner-agent-names.js $FLAG"
+            "docker exec -i -w /app '$WEB_CONTAINER' bun /app/.ops/backfill-owner-agent-names.js $FLAG"
