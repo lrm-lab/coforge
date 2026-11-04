@@ -32,7 +32,7 @@ older than the field ignores it; a server older than it sends none. A failure re
 omits the list rather than failing the launch.
 
 When an installation limits its Agents to a selection ([Agent access scope](../database-schema/apps.md#agent-access-scope)),
-the list and `app list` name the app only to a selected Agent or one holding an active grant.
+the list and `app list` name every installed app to every Agent.
 
 ## `app list`
 

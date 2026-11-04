@@ -1,7 +1,6 @@
 import { APP_GRANT_AGENT_CARD_KIND } from "@lrm/coforge-sdk/agent";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { grantCovers, type AgentAppGrantSource } from "#src/features/apps/agent-app-access";
-import { toAgentAccessMode } from "#src/features/apps/agent-access-scope";
 import { APP_IDENTITY_SCOPES } from "#src/features/apps/app-registration";
 import { findWorkspaceMemberRole } from "./workspace-member-role.repositories.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
@@ -23,12 +22,6 @@ const INSTALLED_APP = {
   logoObjectKey: true,
 } as const;
 
-/** What an installation's Agent access scope reads; the app is installed once per Workspace. */
-export const SCOPE_SELECT = {
-  agentAccess: true,
-  agents: { where: { agent: ACTIVE_AGENT_WHERE }, select: { agentId: true } },
-} as const;
-
 /** An app row's logo, as the one fact about it that leaves the server: its URL. */
 const LOGO = { key: true, ownerWorkspaceId: true, logoObjectKey: true } as const;
 const logoUrlOf = (app: Prisma.AppGetPayload<{ select: typeof LOGO }>) =>
@@ -40,12 +33,10 @@ const installed = ({
   installations,
   ...app
 }: Prisma.AppGetPayload<{
-  select: typeof INSTALLED_APP & { installations: { select: typeof SCOPE_SELECT } };
+  select: typeof INSTALLED_APP & { installations: { select: { id: true } } };
 }>) => ({
   ...app,
   logoUrl: logoUrlOf({ key: app.key, ownerWorkspaceId, logoObjectKey }),
-  agentAccess: toAgentAccessMode(installations[0]?.agentAccess ?? ""),
-  selectedAgentIds: installations[0]?.agents.map((row) => row.agentId) ?? [],
 });
 
 const PENDING = "pending";
@@ -134,7 +125,7 @@ export class PrismaAppAgentAccessStore implements AppAgentAccessStore {
       where: { installations: { some: { workspaceId } } },
       select: {
         ...INSTALLED_APP,
-        installations: { where: { workspaceId }, select: SCOPE_SELECT },
+        installations: { where: { workspaceId }, select: { id: true } },
       },
       orderBy: [{ name: "asc" }, { key: "asc" }],
     });
@@ -146,7 +137,7 @@ export class PrismaAppAgentAccessStore implements AppAgentAccessStore {
       where: { key: appKey, installations: { some: { workspaceId } } },
       select: {
         ...INSTALLED_APP,
-        installations: { where: { workspaceId }, select: SCOPE_SELECT },
+        installations: { where: { workspaceId }, select: { id: true } },
       },
     });
     return row ? installed(row) : undefined;
@@ -265,17 +256,30 @@ export class PrismaAppAgentAccessStore implements AppAgentAccessStore {
 
   async createAutomaticGrant(grant: GrantInput) {
     try {
-      await this.db.appAgentGrant.create({
-        data: {
-          appId: grant.appId,
-          agentId: grant.agentId,
-          workspaceId: grant.workspaceId,
-          scopes: grant.scopes,
-          source: grant.source,
-          grantedByUserId: grant.grantedByUserId,
-        },
+      return await this.db.$transaction(async (tx) => {
+        await tx.appAgentGrant.create({
+          data: {
+            appId: grant.appId,
+            agentId: grant.agentId,
+            workspaceId: grant.workspaceId,
+            scopes: grant.scopes,
+            source: grant.source,
+            grantedByUserId: grant.grantedByUserId,
+          },
+        });
+        // An automatic grant settles a request still waiting for a person, like `giveGrant`'s.
+        const pending = await tx.appAgentAccessRequest.findFirst({
+          where: { appId: grant.appId, agentId: grant.agentId, status: PENDING },
+          select: { id: true, scopes: true },
+        });
+        if (pending && grantCovers(grant.scopes, pending.scopes))
+          await approvePendingRequest(tx, {
+            requestId: pending.id,
+            agentId: grant.agentId,
+            userId: null,
+          });
+        return true;
       });
-      return true;
     } catch (error) {
       if (isUniqueViolation(error)) return false;
       throw error;

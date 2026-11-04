@@ -140,25 +140,6 @@ test.skipIf(!db)("a scope the app does not allow is INVALID_INPUT", async () => 
 });
 
 test.skipIf(!db)(
-  "an Agent outside the installation's selection still waits for a person",
-  async () => {
-    const f = await fixture(db!);
-    try {
-      await allowEmail(f);
-      await db!.appInstallation.updateMany({
-        where: { appId: f.app.id },
-        data: { agentAccess: "selected" },
-      });
-      const waiting = await token(f, f.app.key, { scopes: ["email"] });
-      expect(waiting.body).toMatchObject({ status: "approval_required", scopes: WITH_EMAIL });
-      expect(await grantedScopes(f)).toBeUndefined();
-    } finally {
-      await f.cleanup();
-    }
-  },
-);
-
-test.skipIf(!db)(
   "a card approves only the scopes it showed; a widened request is a CONFLICT",
   async () => {
     const f = await fixture(db!);

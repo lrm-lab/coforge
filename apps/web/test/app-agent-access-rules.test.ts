@@ -16,7 +16,6 @@ const FIXED = ["openid", "profile", "identity"];
 
 const facts = (overrides: Partial<Parameters<typeof decideAgentAccess>[0]> = {}) => ({
   installed: true,
-  inScope: true,
   allowedScopes: ALL_SCOPES,
   requestedScopes: [],
   grant: undefined,
@@ -25,21 +24,6 @@ const facts = (overrides: Partial<Parameters<typeof decideAgentAccess>[0]> = {})
 });
 
 describe("decideAgentAccess", () => {
-  test("an Agent outside a Selected Agents scope with no grant needs an approval, not an automatic grant", () => {
-    expect(decideAgentAccess(facts({ inScope: false }))).toEqual({
-      kind: "needs_approval",
-      scopes: FIXED,
-    });
-    expect(
-      decideAgentAccess(
-        facts({ inScope: false, pendingRequest: { id: "r1", scopes: ALL_SCOPES } }),
-      ),
-    ).toEqual({ kind: "needs_approval", scopes: ALL_SCOPES, pendingRequestId: "r1" });
-    expect(
-      decideAgentAccess(facts({ inScope: false, grant: { scopes: FIXED, revoked: false } })),
-    ).toEqual({ kind: "granted", scopes: FIXED });
-  });
-
   test("an app not installed in the Agent's Workspace is not usable, whatever its grant", () => {
     expect(decideAgentAccess(facts({ installed: false }))).toEqual({ kind: "not_installed" });
     expect(
@@ -84,12 +68,13 @@ describe("decideAgentAccess", () => {
     ).toEqual({ kind: "needs_approval", scopes: ALL_SCOPES, pendingRequestId: "request-1" });
   });
 
-  test("a pending request is widened by the scopes a later use asks for", () => {
+  test("a use wider than the pending request marks the request widened", () => {
+    const revoked = { scopes: FIXED, revoked: true };
     expect(
       decideAgentAccess(
         facts({
-          inScope: false,
           requestedScopes: ["email"],
+          grant: revoked,
           pendingRequest: { id: "r1", scopes: FIXED },
         }),
       ),
@@ -98,6 +83,20 @@ describe("decideAgentAccess", () => {
       scopes: ALL_SCOPES,
       pendingRequestId: "r1",
       widened: true,
+    });
+  });
+
+  test("a pending request does not hold back the automatic grant of an installed app", () => {
+    expect(
+      decideAgentAccess(
+        facts({
+          requestedScopes: ["email"],
+          pendingRequest: { id: "r1", scopes: FIXED },
+        }),
+      ),
+    ).toEqual({
+      kind: "grant_automatically",
+      scopes: ALL_SCOPES,
     });
   });
 

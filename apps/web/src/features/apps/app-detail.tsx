@@ -1,6 +1,5 @@
 import { Badge } from "#src/components/base/badges/badges";
 import { m } from "#src/paraglide/messages";
-import { AgentAccessScope } from "./agent-access-field";
 import { InstallationCard } from "./app-editor-installation";
 import { AppBotInstallation } from "./app-bot-grant";
 import { AppWebhookDelivery } from "./app-webhook-delivery";
@@ -102,7 +101,6 @@ export function AppDetail({
             <p className="text-sm text-tertiary">{m.apps_detail_login_summary()}</p>
             <LoginScopeList allowedScopes={app.allowedScopes} />
           </section>
-          <AgentAccessScope appKey={app.key} canManage={canManage} />
           <AppBotInstallation
             declares={declares}
             app={app}

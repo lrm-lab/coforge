@@ -15,7 +15,6 @@ import {
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { AgentAccessScope } from "./agent-access-field";
 import { DangerZoneRows } from "./app-editor-danger";
 import { DistributionSection } from "./app-editor-distribution";
 import {
@@ -171,7 +170,6 @@ function AppEditorForm({
     notifications: `${idPrefix}notifications`,
     bot: `${idPrefix}bot`,
     setup: `${idPrefix}setup`,
-    agentAccess: `${idPrefix}agent-access`,
     distribution: `${idPrefix}distribution`,
     danger: `${idPrefix}danger`,
   };
@@ -184,7 +182,6 @@ function AppEditorForm({
       ? [{ id: ids.notifications, title: m.apps_notifications_section() }]
       : []),
     ...(declares.bot ? [{ id: ids.bot, title: m.apps_bot_section() }] : []),
-    ...(editing ? [{ id: ids.agentAccess, title: m.apps_agent_access_title() }] : []),
     ...(editing ? [{ id: ids.distribution, title: m.apps_section_distribution() }] : []),
     ...(editing ? [{ id: ids.danger, title: m.apps_section_danger() }] : []),
   ];
@@ -435,16 +432,6 @@ function AppEditorForm({
               isDisabled={saving}
               onChanged={onRefreshSetup}
             />
-          )}
-          {app && (
-            <EditorSection
-              id={ids.agentAccess}
-              title={m.apps_agent_access_title()}
-              status={m.apps_status_applies_at_once()}
-              description={m.apps_section_agent_access_description()}
-            >
-              <AgentAccessScope appKey={app.key} canManage showTitle={false} />
-            </EditorSection>
           )}
           {app && (
             <DistributionSection

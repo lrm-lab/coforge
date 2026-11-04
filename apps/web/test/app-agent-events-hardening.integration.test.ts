@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
 
-import { createInstallationAgentScope } from "#src/server/app-agent-access/app-agent-access-composition.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { EVENT, db, fixture, useAgentEventsFlag } from "./app-agent-events-fixture";
 
@@ -17,12 +16,15 @@ test.skipIf(!db)(
     try {
       const token = await f.tokenFor(f.scout.id);
       expect((await f.event(token, EVENT)).status).toBe(202);
-      const scope = createInstallationAgentScope(db!);
-      await scope.set({ workspaceId: f.workspace.id, userId: f.owner.id }, f.key, {
-        mode: "selected",
-        agentIds: [f.other.id],
+      // A person revokes the Agent's grant on its Apps page: the token it holds stops, and a new
+      // request waits for a person.
+      const grant = await db!.appAgentInboundGrant.findUniqueOrThrow({
+        where: { appId_agentId: { appId: f.app.id, agentId: f.scout.id } },
       });
-      // The token it holds stops, and its grant is revoked, so a new request waits for a person.
+      await f.inbound.revoke(
+        { workspaceId: f.workspace.id, userId: f.owner.id },
+        { agentId: f.scout.id, grantId: grant.id },
+      );
       expect((await f.event(token, EVENT)).status).toBe(401);
       expect(
         await db!.appAgentInboundGrant.findUniqueOrThrow({
@@ -31,33 +33,14 @@ test.skipIf(!db)(
       ).toMatchObject({ revokedAt: expect.any(Date) });
       const again = await f.ask(f.scout.id);
       expect(again.body.status).toBe("pending");
-      // The Agent still selected keeps working.
+      // Another Agent unaffected by the revoke keeps working.
       expect((await f.event(await f.tokenFor(f.other.id), EVENT)).status).toBe(202);
-      // A person's approval works for an Agent outside the selection.
+      // A person's approval restores the revoked Agent's access.
       await f.inbound.approve(
         { workspaceId: f.workspace.id, userId: f.owner.id },
         { agentId: f.scout.id, requestId: again.body.request_id },
       );
       expect((await f.event(await f.tokenFor(f.scout.id), EVENT)).status).toBe(202);
-    } finally {
-      await f.cleanup();
-    }
-  },
-);
-
-test.skipIf(!db)(
-  "an automatic grant stops working for an Agent the installation no longer includes, even without the hook",
-  async () => {
-    const f = await fixture(db!);
-    try {
-      const token = await f.tokenFor(f.scout.id);
-      await db!.appInstallation.update({
-        where: { appId_workspaceId: { appId: f.app.id, workspaceId: f.workspace.id } },
-        data: { agentAccess: "selected" },
-      });
-      expect((await f.event(token, EVENT)).status).toBe(401);
-      // The grant is still active in the table, but it does not cover the request any more.
-      expect((await f.ask(f.scout.id)).body.status).toBe("pending");
     } finally {
       await f.cleanup();
     }

@@ -1,12 +1,10 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
-import { toAgentAccessMode } from "#src/features/apps/agent-access-scope";
 import { APP_AGENT_INBOUND_SCOPES } from "#src/features/apps/app-registration";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import type {
   AppAgentInboundStore,
   InboundTarget,
 } from "#src/server/app-agent-events/app-agent-inbound.server";
-import { agentInScope } from "#src/server/app-agent-access/access-rules.server";
 import {
   INBOUND_REQUEST_TTL_MS,
   effectiveInboundAccess,
@@ -74,28 +72,6 @@ export async function revokeAppAgentInbound(
   });
 }
 
-/** An installation's Agent selection narrowed: revokes the grants of the Agents it no longer
- * includes and denies their pending requests, so the app needs a person's approval again. */
-export async function revokeExcludedAgentInbound(
-  tx: Tx,
-  input: { appId: string; workspaceId: string; keepAgentIds: string[]; userId: string },
-) {
-  const excluded = {
-    appId: input.appId,
-    workspaceId: input.workspaceId,
-    agentId: { notIn: input.keepAgentIds },
-  };
-  const at = new Date();
-  await tx.appAgentInboundGrant.updateMany({
-    where: { ...excluded, revokedAt: null },
-    data: { revokedAt: at, revokedByUserId: input.userId },
-  });
-  await tx.appAgentInboundRequest.updateMany({
-    where: { ...excluded, status: PENDING },
-    data: { status: "denied", decidedAt: at, decidedByUserId: input.userId },
-  });
-}
-
 /** Agent inbound rows; when an app may send, and who may decide, stay in
  * `server/app-agent-events/`. */
 export class PrismaAppAgentInboundStore implements AppAgentInboundStore {
@@ -131,7 +107,7 @@ export class PrismaAppAgentInboundStore implements AppAgentInboundStore {
       }),
       this.db.appInstallation.findUnique({
         where: { appId_workspaceId: { appId, workspaceId: workspace.id } },
-        select: { agentAccess: true, agents: { select: { agentId: true } } },
+        select: { id: true },
       }),
       this.db.appAgentInboundGrant.findUnique({
         where: { appId_agentId: { appId, agentId: agent.id } },
@@ -147,10 +123,6 @@ export class PrismaAppAgentInboundStore implements AppAgentInboundStore {
       app,
       workspace,
       agent,
-      installation: {
-        agentAccess: toAgentAccessMode(installation.agentAccess),
-        selectedAgentIds: installation.agents.map((row) => row.agentId),
-      },
       creatorRole: app.createdByUserId
         ? await findWorkspaceMemberRole(this.db, workspace.id, app.createdByUserId)
         : undefined,
@@ -426,7 +398,7 @@ export class PrismaAppAgentInboundStore implements AppAgentInboundStore {
             allowedScopes: true,
             installations: {
               where: { workspaceId: input.workspaceId },
-              select: { agentAccess: true, agents: { select: { agentId: true } } },
+              select: { id: true },
             },
           },
         },
@@ -438,13 +410,6 @@ export class PrismaAppAgentInboundStore implements AppAgentInboundStore {
     const access = effectiveInboundAccess({
       declared: app.allowedScopes,
       grant: { scopes: row.scopes, revoked: row.revokedAt !== null, source: row.source },
-      inScope: agentInScope(
-        {
-          agentAccess: toAgentAccessMode(installation.agentAccess),
-          selectedAgentIds: installation.agents.map((agent) => agent.agentId),
-        },
-        input.agentId,
-      ),
     });
     return { app, workspaceSlug: row.agent.workspace.slug, ...access };
   }

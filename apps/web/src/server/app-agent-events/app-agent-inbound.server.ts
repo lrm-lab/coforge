@@ -1,10 +1,6 @@
 import { AppError } from "#src/lib/app-error";
 import type { WorkspaceMemberRole } from "#src/features/workspaces/workspace-roles";
-import {
-  agentInScope,
-  canManageAgentAppAccess,
-} from "#src/server/app-agent-access/access-rules.server";
-import type { AgentScope } from "#src/server/app-agent-access/access-rules.server";
+import { canManageAgentAppAccess } from "#src/server/app-agent-access/access-rules.server";
 import { inboundRequestExpired } from "./inbound-rules.server";
 import { canSeeAgent } from "#src/server/agents/agent-visibility.server";
 import { autoApprovalApplies, decideInboundAccess, inboundScopesOf } from "./inbound-rules.server";
@@ -29,7 +25,6 @@ export type InboundFacts = {
   };
   workspace: { id: string; slug: string };
   agent: { id: string; name: string; displayName: string; ownerId: string };
-  installation: AgentScope;
   /** The app creator's role in the Agent's Workspace; `undefined` for a non-member or no creator. */
   creatorRole: WorkspaceMemberRole | undefined;
   grant: { scopes: string[]; revoked: boolean; source: string } | undefined;
@@ -183,10 +178,8 @@ export class AppAgentInbound {
       }))
     )
       return undefined;
-    const inScope = agentInScope(facts.installation, facts.agent.id);
     const automatic = autoApprovalApplies({
       local: facts.app.ownerWorkspaceId === facts.workspace.id,
-      inScope,
       creator: facts.app.createdByUserId
         ? { userId: facts.app.createdByUserId, role: facts.creatorRole }
         : undefined,
@@ -196,7 +189,6 @@ export class AppAgentInbound {
       declared: facts.app.allowedScopes,
       requested: scopes,
       grant: facts.grant,
-      inScope,
       automatic,
       pendingRequest: facts.pendingRequest,
     });

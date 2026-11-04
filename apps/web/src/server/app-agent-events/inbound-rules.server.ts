@@ -40,11 +40,9 @@ export type InboundGrantFacts = { scopes: readonly string[]; revoked: boolean; s
 export function effectiveInboundAccess(facts: {
   declared: readonly string[];
   grant: InboundGrantFacts | undefined;
-  inScope: boolean;
 }): { working: boolean; scopes: string[] } {
   const { grant } = facts;
-  if (!grant || grant.revoked || !(facts.inScope || grant.source === "approval"))
-    return { working: false, scopes: [] };
+  if (!grant || grant.revoked) return { working: false, scopes: [] };
   return {
     working: true,
     scopes: inboundScopesOf(grant.scopes).filter((scope) => facts.declared.includes(scope)),
@@ -58,9 +56,6 @@ export type InboundAccessFacts = {
   requested: readonly string[];
   /** The app's grant for the Agent, active or revoked; `undefined` when it never had one. */
   grant: InboundGrantFacts | undefined;
-  /** Whether the installation includes the Agent (`agentInScope`). A grant works for an Agent
-   * outside it only when a person approved that grant. */
-  inScope: boolean;
   /** Whether the automatic rule holds (`autoApprovalApplies`). */
   automatic: boolean;
   /** The app's request for the Agent that waits for a person. */
@@ -108,19 +103,15 @@ export function decideInboundAccess(facts: InboundAccessFacts): InboundAccessDec
  * Whether an app's request to send to an Agent is approved without a person. An app registered in
  * the Agent's own Workspace needs its creator to be a current member who may manage the Agent's app
  * access: a Workspace owner or admin, or the Agent's human creator. An app installed from another
- * Workspace follows the installation's authority alone. Either way the installation must include
- * the Agent (`agentInScope`).
+ * Workspace follows the installation's authority alone. Every Agent may use every installed app.
  */
 export function autoApprovalApplies(facts: {
   /** The app was registered in the Agent's Workspace. */
   local: boolean;
-  /** The installation lets the Agent use the app. */
-  inScope: boolean;
   /** The app's creator, with their role in the Agent's Workspace (`undefined`: not a member). */
   creator: { userId: string; role: WorkspaceMemberRole | undefined } | undefined;
   agent: { ownerId: string };
 }): boolean {
-  if (!facts.inScope) return false;
   if (!facts.local) return true;
   return facts.creator !== undefined && canManageAgentAppAccess(facts.creator, facts.agent);
 }

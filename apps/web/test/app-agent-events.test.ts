@@ -83,7 +83,6 @@ test("a request is judged by the grant, the automatic rule and a person's earlie
   const base = {
     declared: ["agent:event:write"],
     requested: ["agent:event:write"],
-    inScope: true,
   };
   const none = { grant: undefined, pendingRequest: undefined };
   expect(decideInboundAccess({ ...base, ...none, automatic: true })).toEqual({
@@ -104,22 +103,20 @@ test("a request is judged by the grant, the automatic rule and a person's earlie
       grant: { scopes: ["agent:event:write"], revoked: false, source: "automatic" },
     }),
   ).toMatchObject({ kind: "approved", created: false });
-  // A grant does not cover an Agent the installation no longer includes, unless a person approved it.
+  // Every installed app includes every Agent: the grant's source does not change the answer.
   const grant = { scopes: ["agent:event:write"], revoked: false };
   expect(
     decideInboundAccess({
       ...base,
       ...none,
-      inScope: false,
       automatic: false,
       grant: { ...grant, source: "automatic" },
     }),
-  ).toMatchObject({ kind: "pending" });
+  ).toMatchObject({ kind: "approved", created: false });
   expect(
     decideInboundAccess({
       ...base,
       ...none,
-      inScope: false,
       automatic: false,
       grant: { ...grant, source: "approval" },
     }),
@@ -142,7 +139,7 @@ test("a request is judged by the grant, the automatic rule and a person's earlie
 
 test("the automatic rule needs the installation to include the Agent, and a local app's creator to manage it", () => {
   const agent = { ownerId: "creator" };
-  const local = { local: true, inScope: true, agent };
+  const local = { local: true, agent };
   expect(autoApprovalApplies({ ...local, creator: { userId: "u", role: "owner" } })).toBe(true);
   expect(autoApprovalApplies({ ...local, creator: { userId: "u", role: "admin" } })).toBe(true);
   expect(autoApprovalApplies({ ...local, creator: { userId: "creator", role: "member" } })).toBe(
@@ -154,15 +151,7 @@ test("the automatic rule needs the installation to include the Agent, and a loca
     false,
   );
   expect(autoApprovalApplies({ ...local, creator: undefined })).toBe(false);
-  expect(
-    autoApprovalApplies({ ...local, inScope: false, creator: { userId: "u", role: "owner" } }),
-  ).toBe(false);
-  expect(autoApprovalApplies({ local: false, inScope: true, creator: undefined, agent })).toBe(
-    true,
-  );
-  expect(autoApprovalApplies({ local: false, inScope: false, creator: undefined, agent })).toBe(
-    false,
-  );
+  expect(autoApprovalApplies({ local: false, creator: undefined, agent })).toBe(true);
 });
 
 test("an event Message names its source and leaves nothing in the app's text able to mention or reference", () => {

@@ -188,7 +188,7 @@ export const Route = createFileRoute("/api/agent-api-keys")({
           computerId: principal.computerId,
           // The lookup above already requires `computerId: principal.computerId`.
           computer: agent.computer,
-          apps: await agentLaunchApps(db, agent.workspaceId, agent.id),
+          apps: await agentLaunchApps(db, agent.workspaceId),
           features: {
             taskConversations: await taskConversationsEnabled(db, {
               workspaceId: agent.workspaceId,

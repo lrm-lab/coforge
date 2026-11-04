@@ -62,9 +62,8 @@ model AppAgentAccessRequest {
   @@map("app_agent_access_requests")
 }
 
-/// An Agent selected for an installation whose `agentAccess` is `selected`
-/// (`server/app-agent-access/`): it is granted the app automatically on first use, and the app is
-/// listed to it. The rows stay, unused, while the installation is `all`.
+/// Kept for rolling compatibility until a later release drops it: nothing reads or writes the
+/// Selected Agents rows since the mode was removed (task #436).
 model AppInstallationAgent {
   installationId String          @db.Uuid
   agentId        String          @db.Uuid

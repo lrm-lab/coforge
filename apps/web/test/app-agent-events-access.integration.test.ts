@@ -146,29 +146,8 @@ test.skipIf(!db)(
         },
       });
       await db!.app.update({ where: { id: f.app.id }, data: { ownerWorkspaceId: stranger.id } });
-      // Selected Agents: the installation names no Agent yet.
-      await db!.appInstallation.update({
-        where: { appId_workspaceId: { appId: f.app.id, workspaceId: f.workspace.id } },
-        data: { agentAccess: "selected" },
-      });
+      // Every Agent may use it, whichever Workspace the app came from.
       await db!.appAgentInboundGrant.deleteMany({ where: { appId: f.app.id } });
-      expect((await f.ask(f.scout.id)).body.status).toBe("pending");
-      await db!.appInstallationAgent.create({
-        data: {
-          installationId: (
-            await db!.appInstallation.findFirstOrThrow({
-              where: { appId: f.app.id, workspaceId: f.workspace.id },
-            })
-          ).id,
-          agentId: f.other.id,
-        },
-      });
-      expect((await f.ask(f.other.id)).body.status).toBe("approved");
-      await db!.appInstallation.update({
-        where: { appId_workspaceId: { appId: f.app.id, workspaceId: f.workspace.id } },
-        data: { agentAccess: "all" },
-      });
-      await db!.appAgentInboundRequest.deleteMany({ where: { appId: f.app.id } });
       expect((await f.ask(f.scout.id)).body.status).toBe("approved");
       await db!.workspace.delete({ where: { id: stranger.id } }).catch(() => {});
     } finally {
