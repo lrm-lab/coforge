@@ -1,12 +1,12 @@
 import { COMPUTER_REGISTER_METHOD, WORKSPACE_GET_METHOD } from "@lrm/coforge-sdk/internal";
 
-import { principalFromAuthorizationHeader } from "#src/server/auth/computer-access-token.server";
+import { authenticateComputerAttach } from "#src/server/computers/computer-attach.server";
 import {
   CentrifugoRpcAuthenticationError,
   CentrifugoRpcHandler,
-  createComputerRegistrationMethod,
   createWorkspaceGetMethod,
 } from "#src/server/centrifugo/rpc-handler.server";
+import { createComputerRegistrationMethod } from "#src/server/centrifugo/computer-registration-method.server";
 import { getDatabaseClient } from "#src/server/db/client.server";
 import {
   PrismaComputerRegistrationRepository,
@@ -16,7 +16,9 @@ import { WorkspaceQueryUseCase } from "#src/server/workspaces/query.server";
 import { ComputerRegistrar } from "./registration.server";
 
 type Dependencies = {
-  authenticate(request: Request): Promise<{ userId: string } | null>;
+  authenticate(
+    request: Request,
+  ): Promise<{ userId: string; workspaceId?: string; attachSessionId?: string } | null>;
   workspaceQuery: WorkspaceQueryUseCase;
   registration: Pick<ComputerRegistrar, "register">;
 };
@@ -33,7 +35,14 @@ export function createComputerHttpHandler(dependencies?: Dependencies) {
     authenticateEnvelope: async (_envelope, request) => {
       const principal = await resolved.authenticate(request);
       if (!principal) throw new CentrifugoRpcAuthenticationError();
-      return { ...principal, workspaceId: "", computerId: "" };
+      // A one-shot attach token keeps the workspace its approval bound (so `computer:register`
+      // lands there regardless of the body's slug); a daemon key's workspace comes from the key.
+      return {
+        ...principal,
+        workspaceId: principal.workspaceId ?? "",
+        computerId: "",
+        attachSessionId: principal.attachSessionId,
+      };
     },
   });
 }
@@ -43,7 +52,9 @@ function productionDependencies(): Dependencies | undefined {
   if (!db) return undefined;
   const workspaceAccess = new PrismaWorkspaceAccess(db);
   return {
-    authenticate: principalFromAuthorizationHeader,
+    // A `Bearer at_…` attach token resolves to its approved user and workspace first; the
+    // ordinary login JWT follows, refused where that login was retired (task #417).
+    authenticate: (request) => authenticateComputerAttach(request, db),
     workspaceQuery: new WorkspaceQueryUseCase(workspaceAccess),
     registration: new ComputerRegistrar({
       workspaceAccess,

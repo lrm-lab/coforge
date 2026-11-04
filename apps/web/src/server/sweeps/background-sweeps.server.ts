@@ -1,6 +1,7 @@
 import { ensureAgentActivitySweep } from "#src/server/agents/agent-activity-sweep.server";
 import { ensureArtifactBlobSweep } from "#src/server/artifacts/artifact-blob-sweep.server";
 import { ensureDeletedTaskSweep } from "#src/server/tasks/deleted-task-sweep.server";
+import { ensureComputerAttachSweep } from "#src/server/computers/computer-attach-sweep.server";
 import { appNotificationPresence } from "#src/server/app-notifications/app-notification-presence.server";
 import { setPresenceObserver } from "#src/server/app-notifications/presence-observer";
 import { ensurePresenceSweep } from "#src/server/app-notifications/presence-sweep.server";
@@ -21,4 +22,5 @@ export function registerBackgroundSweeps(): void {
   ensureDeferredMobilePushSweep();
   ensureArtifactBlobSweep();
   ensureDeletedTaskSweep();
+  ensureComputerAttachSweep();
 }

@@ -6,6 +6,11 @@ import type {
   WorkspaceAccess,
 } from "#src/server/computers/registration.server";
 import { prepareDaemonApiKey } from "#src/server/auth/daemon-api-key.server";
+import { consumeAttachToken } from "#src/server/computers/computer-attach.server";
+import { ComputerRegistrationError } from "#src/server/computers/registration.server";
+const audit = (detail: Record<string, unknown>) =>
+  console.info(JSON.stringify({ event: "computer_credential", ...detail }));
+
 import { bindUnboundMemoryAgentComputer } from "#src/server/workspace-memory/default-memory-agent.server";
 import type { WorkspaceAccess as QueryWorkspaceAccess } from "#src/server/workspaces/query.server";
 
@@ -33,6 +38,17 @@ export class PrismaWorkspaceAccess implements WorkspaceAccess, QueryWorkspaceAcc
   async getAccessibleBySlug(slug: string, principal: AuthenticatedPrincipal) {
     return this.findAccessibleBySlug(slug, principal);
   }
+  /** By id, as the one-shot attach's token names its bound workspace (task #417). */
+  async findAccessibleById(id: string, principal: AuthenticatedPrincipal) {
+    const row = await this.db.workspace.findFirst({
+      where: { id, members: { some: { userId: principal.userId } } },
+      select: workspaceShape,
+    });
+    return row ? mapWorkspace(row) : undefined;
+  }
+  async getAccessibleById(id: string, principal: AuthenticatedPrincipal) {
+    return this.findAccessibleById(id, principal);
+  }
   async listAccessible(principal: AuthenticatedPrincipal) {
     const rows = await this.db.workspace.findMany({
       where: { members: { some: { userId: principal.userId } } },
@@ -54,7 +70,16 @@ export class PrismaComputerRegistrationRepository implements ComputerRegistratio
     workspace: Workspace;
     request: ComputerRegisterRequest;
   }) {
-    return this.db.$transaction(async (tx) => {
+    // The audits name the session consumed and the key issued; both wait for the commit, so a
+    // registration that rolls back never leaves a row claiming it happened (task #417).
+    const registered = await this.db.$transaction(async (tx) => {
+      // A one-shot attach token is consumed here, inside the registration's own transaction:
+      // the token and the `sk_computer` it buys change hands atomically — a racing second
+      // register finds it gone and a refused register leaves it usable (task #417).
+      if (principal.attachSessionId) {
+        const consumed = await consumeAttachToken(tx, principal.attachSessionId);
+        if (!consumed) throw new ComputerRegistrationError(401, "attach token spent");
+      }
       await tx.computer.updateMany({
         where: {
           ownerId: principal.userId,
@@ -88,6 +113,7 @@ export class PrismaComputerRegistrationRepository implements ComputerRegistratio
         principal,
         workspaceId: workspace.id,
         computerId: computer.id,
+        kind: "computer",
       });
       await tx.workspaceComputer.upsert({
         where: {
@@ -108,5 +134,18 @@ export class PrismaComputerRegistrationRepository implements ComputerRegistratio
         daemonApiKey: daemonApiKey.apiKey,
       };
     });
+    if (principal.attachSessionId)
+      audit({
+        action: "attach_consumed",
+        session_id: principal.attachSessionId,
+        workspace_id: workspace.id,
+      });
+    audit({
+      action: "key_issued",
+      computer_id: registered.computerId,
+      workspace_id: registered.workspaceId,
+      via: principal.attachSessionId ? "attach_token" : "login",
+    });
+    return registered;
   }
 }

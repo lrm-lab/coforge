@@ -1,4 +1,5 @@
 import { importJWK, jwtVerify, SignJWT, type JWK } from "jose";
+import { sha256Hex } from "./opaque-token.server";
 
 /**
  * The credential a Computer holds between `coforge-computer login` and `coforge-computer setup`.
@@ -43,12 +44,14 @@ export async function signComputerAccessToken(
 ): Promise<{ token: string; expiresInSeconds: number }> {
   const { jwk, kid, issuer, audience } = signingMaterial(environment);
   const key = await importJWK(jwk, "EdDSA");
-  const token = await new SignJWT({})
+  const token = await new SignJWT({ kind: "device" })
     .setProtectedHeader({ alg: "EdDSA", kid, typ: "JWT" })
     .setSubject(userId)
     .setIssuer(issuer)
     .setAudience(audience)
     .setIssuedAt()
+    // A jti makes two same-second tokens distinct, so retiring one never kills the other.
+    .setJti(crypto.randomUUID())
     .setExpirationTime(`${COMPUTER_ACCESS_TOKEN_TTL_SECONDS}s`)
     .sign(key);
   return { token, expiresInSeconds: COMPUTER_ACCESS_TOKEN_TTL_SECONDS };
@@ -61,10 +64,10 @@ export async function signComputerAccessToken(
  * HTTP endpoint that has to do its own checking - and it must never trust a `sub` it has not
  * verified. The public half is derived from the private JWK the same way /api/jwks does it.
  */
-async function verifyComputerAccessToken(
+export async function verifyComputerAccessToken(
   token: string,
   environment: Record<string, string | undefined> = process.env,
-): Promise<{ userId: string } | null> {
+): Promise<{ userId: string; kind?: string; jti?: string } | null> {
   let material: ReturnType<typeof signingMaterial>;
   try {
     material = signingMaterial(environment);
@@ -78,18 +81,37 @@ async function verifyComputerAccessToken(
       issuer: material.issuer,
       audience: material.audience,
     });
-    return typeof payload.sub === "string" && payload.sub ? { userId: payload.sub } : null;
+    return typeof payload.sub === "string" && payload.sub
+      ? {
+          userId: payload.sub,
+          kind: typeof payload.kind === "string" ? payload.kind : undefined,
+          jti: typeof payload.jti === "string" ? payload.jti : undefined,
+        }
+      : null;
   } catch {
     return null;
   }
 }
 
-/** Reads a `Bearer` token from a request and resolves the user it was issued to. */
+/**
+ * Reads a `Bearer` token from a request and resolves the user it was issued to. Where a database
+ * is supplied a login `retire-session` has retired answers null here too, so `/api/workspaces/…`
+ * and every other JWT-authed route refuse it at once — Centrifugo's own token check stays
+ * stateless and may accept a retired login for the hour left on it, which task #417 accepts.
+ */
 export async function principalFromAuthorizationHeader(
   request: Request,
   environment: Record<string, string | undefined> = process.env,
-): Promise<{ userId: string } | null> {
+  db?: {
+    computerRetiredLogin: { findUnique(args: { where: { tokenHash: string } }): Promise<unknown> };
+  },
+): Promise<{ userId: string; kind?: string; jti?: string } | null> {
   const header = request.headers.get("authorization");
   if (!header?.startsWith("Bearer ")) return null;
-  return verifyComputerAccessToken(header.slice("Bearer ".length).trim(), environment);
+  const bearer = header.slice("Bearer ".length).trim();
+  const principal = await verifyComputerAccessToken(bearer, environment);
+  if (!principal) return null;
+  if (db && (await db.computerRetiredLogin.findUnique({ where: { tokenHash: sha256Hex(bearer) } })))
+    return null;
+  return principal;
 }

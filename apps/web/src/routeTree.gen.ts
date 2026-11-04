@@ -44,6 +44,7 @@ import { Route as ApiAttachmentsAttachmentIdRouteImport } from './routes/api/att
 import { Route as ApiComputerAttachRouteImport } from './routes/api/computer/attach'
 import { Route as ApiComputerConfirmKeyRouteImport } from './routes/api/computer/confirm-key'
 import { Route as ApiComputerDetachRouteImport } from './routes/api/computer/detach'
+import { Route as ApiComputerRetireSessionRouteImport } from './routes/api/computer/retire-session'
 import { Route as ApiComputerSelfRouteImport } from './routes/api/computer/self'
 import { Route as ApiComputerSwapKeyRouteImport } from './routes/api/computer/swap-key'
 import { Route as ApiComputerWorkspaceRouteImport } from './routes/api/computer/workspace'
@@ -61,6 +62,7 @@ import { Route as ApiMeAvatarRouteImport } from './routes/api/me/avatar'
 import { Route as ApiWorkspacesSlugRouteImport } from './routes/api/workspaces.$slug'
 import { Route as AppsShareTokenRouteImport } from './routes/apps.share.$token'
 import { Route as AuthGithubCallbackRouteImport } from './routes/auth/github.callback'
+import { Route as ComputersAttachSessionIdRouteImport } from './routes/computers.attach.$sessionId'
 import { Route as OidcDotwellKnownOpenidConfigurationRouteImport } from './routes/oidc.[.]well-known.openid-configuration'
 import { Route as WWorkspaceSlugChatRouteImport } from './routes/w.$workspaceSlug/_chat'
 import { Route as WWorkspaceSlugComputersRouteImport } from './routes/w.$workspaceSlug/_computers'
@@ -98,6 +100,8 @@ import { Route as ApiAppInstallationsInstallationIdChannelsRouteImport } from '.
 import { Route as ApiAppInstallationsInstallationIdComputersRouteImport } from './routes/api.app-installations.$installationId.computers'
 import { Route as ApiAppInstallationsInstallationIdSetupRouteImport } from './routes/api.app-installations.$installationId.setup'
 import { Route as ApiAppInstallationsInstallationIdWorkspaceRouteImport } from './routes/api.app-installations.$installationId.workspace'
+import { Route as ApiComputerAttachPollRouteImport } from './routes/api/computer/attach/poll'
+import { Route as ApiComputerAttachStartRouteImport } from './routes/api/computer/attach/start'
 import { Route as ApiComputersComputerIdCreatorAvatarRouteImport } from './routes/api/computers/$computerId/creator-avatar'
 import { Route as ApiComputersComputerIdFileUploadsRouteImport } from './routes/api/computers/$computerId/file-uploads'
 import { Route as ApiE2eWorkspacesSlugRouteImport } from './routes/api/e2e/workspaces.$slug'
@@ -361,6 +365,12 @@ const ApiComputerDetachRoute = ApiComputerDetachRouteImport.update({
   path: '/api/computer/detach',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiComputerRetireSessionRoute =
+  ApiComputerRetireSessionRouteImport.update({
+    id: '/api/computer/retire-session',
+    path: '/api/computer/retire-session',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiComputerSelfRoute = ApiComputerSelfRouteImport.update({
   id: '/api/computer/self',
   path: '/api/computer/self',
@@ -453,6 +463,12 @@ const AuthGithubCallbackRoute = AuthGithubCallbackRouteImport.update({
   path: '/callback',
   getParentRoute: () => AuthGithubRoute,
 } as any)
+const ComputersAttachSessionIdRoute =
+  ComputersAttachSessionIdRouteImport.update({
+    id: '/computers/attach/$sessionId',
+    path: '/computers/attach/$sessionId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const OidcDotwellKnownOpenidConfigurationRoute =
   OidcDotwellKnownOpenidConfigurationRouteImport.update({
     id: '/oidc/.well-known/openid-configuration',
@@ -650,6 +666,16 @@ const ApiAppInstallationsInstallationIdWorkspaceRoute =
     path: '/api/app-installations/$installationId/workspace',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiComputerAttachPollRoute = ApiComputerAttachPollRouteImport.update({
+  id: '/poll',
+  path: '/poll',
+  getParentRoute: () => ApiComputerAttachRoute,
+} as any)
+const ApiComputerAttachStartRoute = ApiComputerAttachStartRouteImport.update({
+  id: '/start',
+  path: '/start',
+  getParentRoute: () => ApiComputerAttachRoute,
+} as any)
 const ApiComputersComputerIdCreatorAvatarRoute =
   ApiComputersComputerIdCreatorAvatarRouteImport.update({
     id: '/api/computers/$computerId/creator-avatar',
@@ -1164,9 +1190,10 @@ export interface FileRoutesByFullPath {
   '/api/app-agent-requests/$requestId': typeof ApiAppAgentRequestsRequestIdRoute
   '/api/app-installations/lookup': typeof ApiAppInstallationsLookupRoute
   '/api/attachments/$attachmentId': typeof ApiAttachmentsAttachmentIdRoute
-  '/api/computer/attach': typeof ApiComputerAttachRoute
+  '/api/computer/attach': typeof ApiComputerAttachRouteWithChildren
   '/api/computer/confirm-key': typeof ApiComputerConfirmKeyRoute
   '/api/computer/detach': typeof ApiComputerDetachRoute
+  '/api/computer/retire-session': typeof ApiComputerRetireSessionRoute
   '/api/computer/self': typeof ApiComputerSelfRoute
   '/api/computer/swap-key': typeof ApiComputerSwapKeyRoute
   '/api/computer/workspace': typeof ApiComputerWorkspaceRoute
@@ -1184,6 +1211,7 @@ export interface FileRoutesByFullPath {
   '/api/workspaces/$slug': typeof ApiWorkspacesSlugRoute
   '/apps/share/$token': typeof AppsShareTokenRoute
   '/auth/github/callback': typeof AuthGithubCallbackRoute
+  '/computers/attach/$sessionId': typeof ComputersAttachSessionIdRoute
   '/oidc/.well-known/openid-configuration': typeof OidcDotwellKnownOpenidConfigurationRoute
   '/w/$workspaceSlug/activity': typeof WWorkspaceSlugActivityRoute
   '/w/$workspaceSlug/app-review': typeof WWorkspaceSlugAppReviewRoute
@@ -1219,6 +1247,8 @@ export interface FileRoutesByFullPath {
   '/api/app-installations/$installationId/computers': typeof ApiAppInstallationsInstallationIdComputersRoute
   '/api/app-installations/$installationId/setup': typeof ApiAppInstallationsInstallationIdSetupRoute
   '/api/app-installations/$installationId/workspace': typeof ApiAppInstallationsInstallationIdWorkspaceRoute
+  '/api/computer/attach/poll': typeof ApiComputerAttachPollRoute
+  '/api/computer/attach/start': typeof ApiComputerAttachStartRoute
   '/api/computers/$computerId/creator-avatar': typeof ApiComputersComputerIdCreatorAvatarRoute
   '/api/computers/$computerId/file-uploads': typeof ApiComputersComputerIdFileUploadsRoute
   '/api/e2e/workspaces/$slug': typeof ApiE2eWorkspacesSlugRoute
@@ -1335,9 +1365,10 @@ export interface FileRoutesByTo {
   '/api/app-agent-requests/$requestId': typeof ApiAppAgentRequestsRequestIdRoute
   '/api/app-installations/lookup': typeof ApiAppInstallationsLookupRoute
   '/api/attachments/$attachmentId': typeof ApiAttachmentsAttachmentIdRoute
-  '/api/computer/attach': typeof ApiComputerAttachRoute
+  '/api/computer/attach': typeof ApiComputerAttachRouteWithChildren
   '/api/computer/confirm-key': typeof ApiComputerConfirmKeyRoute
   '/api/computer/detach': typeof ApiComputerDetachRoute
+  '/api/computer/retire-session': typeof ApiComputerRetireSessionRoute
   '/api/computer/self': typeof ApiComputerSelfRoute
   '/api/computer/swap-key': typeof ApiComputerSwapKeyRoute
   '/api/computer/workspace': typeof ApiComputerWorkspaceRoute
@@ -1355,6 +1386,7 @@ export interface FileRoutesByTo {
   '/api/workspaces/$slug': typeof ApiWorkspacesSlugRoute
   '/apps/share/$token': typeof AppsShareTokenRoute
   '/auth/github/callback': typeof AuthGithubCallbackRoute
+  '/computers/attach/$sessionId': typeof ComputersAttachSessionIdRoute
   '/oidc/.well-known/openid-configuration': typeof OidcDotwellKnownOpenidConfigurationRoute
   '/w/$workspaceSlug/activity': typeof WWorkspaceSlugActivityRoute
   '/w/$workspaceSlug/app-review': typeof WWorkspaceSlugAppReviewRoute
@@ -1389,6 +1421,8 @@ export interface FileRoutesByTo {
   '/api/app-installations/$installationId/computers': typeof ApiAppInstallationsInstallationIdComputersRoute
   '/api/app-installations/$installationId/setup': typeof ApiAppInstallationsInstallationIdSetupRoute
   '/api/app-installations/$installationId/workspace': typeof ApiAppInstallationsInstallationIdWorkspaceRoute
+  '/api/computer/attach/poll': typeof ApiComputerAttachPollRoute
+  '/api/computer/attach/start': typeof ApiComputerAttachStartRoute
   '/api/computers/$computerId/creator-avatar': typeof ApiComputersComputerIdCreatorAvatarRoute
   '/api/computers/$computerId/file-uploads': typeof ApiComputersComputerIdFileUploadsRoute
   '/api/e2e/workspaces/$slug': typeof ApiE2eWorkspacesSlugRoute
@@ -1505,9 +1539,10 @@ export interface FileRoutesById {
   '/api/app-agent-requests/$requestId': typeof ApiAppAgentRequestsRequestIdRoute
   '/api/app-installations/lookup': typeof ApiAppInstallationsLookupRoute
   '/api/attachments/$attachmentId': typeof ApiAttachmentsAttachmentIdRoute
-  '/api/computer/attach': typeof ApiComputerAttachRoute
+  '/api/computer/attach': typeof ApiComputerAttachRouteWithChildren
   '/api/computer/confirm-key': typeof ApiComputerConfirmKeyRoute
   '/api/computer/detach': typeof ApiComputerDetachRoute
+  '/api/computer/retire-session': typeof ApiComputerRetireSessionRoute
   '/api/computer/self': typeof ApiComputerSelfRoute
   '/api/computer/swap-key': typeof ApiComputerSwapKeyRoute
   '/api/computer/workspace': typeof ApiComputerWorkspaceRoute
@@ -1525,6 +1560,7 @@ export interface FileRoutesById {
   '/api/workspaces/$slug': typeof ApiWorkspacesSlugRoute
   '/apps/share/$token': typeof AppsShareTokenRoute
   '/auth/github/callback': typeof AuthGithubCallbackRoute
+  '/computers/attach/$sessionId': typeof ComputersAttachSessionIdRoute
   '/oidc/.well-known/openid-configuration': typeof OidcDotwellKnownOpenidConfigurationRoute
   '/w/$workspaceSlug/_chat': typeof WWorkspaceSlugChatRouteWithChildren
   '/w/$workspaceSlug/_computers': typeof WWorkspaceSlugComputersRouteWithChildren
@@ -1562,6 +1598,8 @@ export interface FileRoutesById {
   '/api/app-installations/$installationId/computers': typeof ApiAppInstallationsInstallationIdComputersRoute
   '/api/app-installations/$installationId/setup': typeof ApiAppInstallationsInstallationIdSetupRoute
   '/api/app-installations/$installationId/workspace': typeof ApiAppInstallationsInstallationIdWorkspaceRoute
+  '/api/computer/attach/poll': typeof ApiComputerAttachPollRoute
+  '/api/computer/attach/start': typeof ApiComputerAttachStartRoute
   '/api/computers/$computerId/creator-avatar': typeof ApiComputersComputerIdCreatorAvatarRoute
   '/api/computers/$computerId/file-uploads': typeof ApiComputersComputerIdFileUploadsRoute
   '/api/e2e/workspaces/$slug': typeof ApiE2eWorkspacesSlugRoute
@@ -1683,6 +1721,7 @@ export interface FileRouteTypes {
     | '/api/computer/attach'
     | '/api/computer/confirm-key'
     | '/api/computer/detach'
+    | '/api/computer/retire-session'
     | '/api/computer/self'
     | '/api/computer/swap-key'
     | '/api/computer/workspace'
@@ -1700,6 +1739,7 @@ export interface FileRouteTypes {
     | '/api/workspaces/$slug'
     | '/apps/share/$token'
     | '/auth/github/callback'
+    | '/computers/attach/$sessionId'
     | '/oidc/.well-known/openid-configuration'
     | '/w/$workspaceSlug/activity'
     | '/w/$workspaceSlug/app-review'
@@ -1735,6 +1775,8 @@ export interface FileRouteTypes {
     | '/api/app-installations/$installationId/computers'
     | '/api/app-installations/$installationId/setup'
     | '/api/app-installations/$installationId/workspace'
+    | '/api/computer/attach/poll'
+    | '/api/computer/attach/start'
     | '/api/computers/$computerId/creator-avatar'
     | '/api/computers/$computerId/file-uploads'
     | '/api/e2e/workspaces/$slug'
@@ -1854,6 +1896,7 @@ export interface FileRouteTypes {
     | '/api/computer/attach'
     | '/api/computer/confirm-key'
     | '/api/computer/detach'
+    | '/api/computer/retire-session'
     | '/api/computer/self'
     | '/api/computer/swap-key'
     | '/api/computer/workspace'
@@ -1871,6 +1914,7 @@ export interface FileRouteTypes {
     | '/api/workspaces/$slug'
     | '/apps/share/$token'
     | '/auth/github/callback'
+    | '/computers/attach/$sessionId'
     | '/oidc/.well-known/openid-configuration'
     | '/w/$workspaceSlug/activity'
     | '/w/$workspaceSlug/app-review'
@@ -1905,6 +1949,8 @@ export interface FileRouteTypes {
     | '/api/app-installations/$installationId/computers'
     | '/api/app-installations/$installationId/setup'
     | '/api/app-installations/$installationId/workspace'
+    | '/api/computer/attach/poll'
+    | '/api/computer/attach/start'
     | '/api/computers/$computerId/creator-avatar'
     | '/api/computers/$computerId/file-uploads'
     | '/api/e2e/workspaces/$slug'
@@ -2023,6 +2069,7 @@ export interface FileRouteTypes {
     | '/api/computer/attach'
     | '/api/computer/confirm-key'
     | '/api/computer/detach'
+    | '/api/computer/retire-session'
     | '/api/computer/self'
     | '/api/computer/swap-key'
     | '/api/computer/workspace'
@@ -2040,6 +2087,7 @@ export interface FileRouteTypes {
     | '/api/workspaces/$slug'
     | '/apps/share/$token'
     | '/auth/github/callback'
+    | '/computers/attach/$sessionId'
     | '/oidc/.well-known/openid-configuration'
     | '/w/$workspaceSlug/_chat'
     | '/w/$workspaceSlug/_computers'
@@ -2077,6 +2125,8 @@ export interface FileRouteTypes {
     | '/api/app-installations/$installationId/computers'
     | '/api/app-installations/$installationId/setup'
     | '/api/app-installations/$installationId/workspace'
+    | '/api/computer/attach/poll'
+    | '/api/computer/attach/start'
     | '/api/computers/$computerId/creator-avatar'
     | '/api/computers/$computerId/file-uploads'
     | '/api/e2e/workspaces/$slug'
@@ -2192,9 +2242,10 @@ export interface RootRouteChildren {
   WorkspacesNewRoute: typeof WorkspacesNewRoute
   DotwellKnownOauthAuthorizationServerOidcRoute: typeof DotwellKnownOauthAuthorizationServerOidcRoute
   ApiAppInstallationsLookupRoute: typeof ApiAppInstallationsLookupRoute
-  ApiComputerAttachRoute: typeof ApiComputerAttachRoute
+  ApiComputerAttachRoute: typeof ApiComputerAttachRouteWithChildren
   ApiComputerConfirmKeyRoute: typeof ApiComputerConfirmKeyRoute
   ApiComputerDetachRoute: typeof ApiComputerDetachRoute
+  ApiComputerRetireSessionRoute: typeof ApiComputerRetireSessionRoute
   ApiComputerSelfRoute: typeof ApiComputerSelfRoute
   ApiComputerSwapKeyRoute: typeof ApiComputerSwapKeyRoute
   ApiComputerWorkspaceRoute: typeof ApiComputerWorkspaceRoute
@@ -2210,6 +2261,7 @@ export interface RootRouteChildren {
   ApiInternalWeeklyReportScheduleRoute: typeof ApiInternalWeeklyReportScheduleRoute
   ApiWorkspacesSlugRoute: typeof ApiWorkspacesSlugRoute
   AppsShareTokenRoute: typeof AppsShareTokenRoute
+  ComputersAttachSessionIdRoute: typeof ComputersAttachSessionIdRoute
   OidcDotwellKnownOpenidConfigurationRoute: typeof OidcDotwellKnownOpenidConfigurationRoute
   ApiAgentV1ArtifactsRoute: typeof ApiAgentV1ArtifactsRoute
   ApiAgentV1ChannelsRoute: typeof ApiAgentV1ChannelsRoute
@@ -2540,6 +2592,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiComputerDetachRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/computer/retire-session': {
+      id: '/api/computer/retire-session'
+      path: '/api/computer/retire-session'
+      fullPath: '/api/computer/retire-session'
+      preLoaderRoute: typeof ApiComputerRetireSessionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/computer/self': {
       id: '/api/computer/self'
       path: '/api/computer/self'
@@ -2658,6 +2717,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/auth/github/callback'
       preLoaderRoute: typeof AuthGithubCallbackRouteImport
       parentRoute: typeof AuthGithubRoute
+    }
+    '/computers/attach/$sessionId': {
+      id: '/computers/attach/$sessionId'
+      path: '/computers/attach/$sessionId'
+      fullPath: '/computers/attach/$sessionId'
+      preLoaderRoute: typeof ComputersAttachSessionIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/oidc/.well-known/openid-configuration': {
       id: '/oidc/.well-known/openid-configuration'
@@ -2917,6 +2983,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/app-installations/$installationId/workspace'
       preLoaderRoute: typeof ApiAppInstallationsInstallationIdWorkspaceRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/api/computer/attach/poll': {
+      id: '/api/computer/attach/poll'
+      path: '/poll'
+      fullPath: '/api/computer/attach/poll'
+      preLoaderRoute: typeof ApiComputerAttachPollRouteImport
+      parentRoute: typeof ApiComputerAttachRoute
+    }
+    '/api/computer/attach/start': {
+      id: '/api/computer/attach/start'
+      path: '/start'
+      fullPath: '/api/computer/attach/start'
+      preLoaderRoute: typeof ApiComputerAttachStartRouteImport
+      parentRoute: typeof ApiComputerAttachRoute
     }
     '/api/computers/$computerId/creator-avatar': {
       id: '/api/computers/$computerId/creator-avatar'
@@ -3648,6 +3728,19 @@ const WWorkspaceSlugRouteWithChildren = WWorkspaceSlugRoute._addFileChildren(
   WWorkspaceSlugRouteChildren,
 )
 
+interface ApiComputerAttachRouteChildren {
+  ApiComputerAttachPollRoute: typeof ApiComputerAttachPollRoute
+  ApiComputerAttachStartRoute: typeof ApiComputerAttachStartRoute
+}
+
+const ApiComputerAttachRouteChildren: ApiComputerAttachRouteChildren = {
+  ApiComputerAttachPollRoute: ApiComputerAttachPollRoute,
+  ApiComputerAttachStartRoute: ApiComputerAttachStartRoute,
+}
+
+const ApiComputerAttachRouteWithChildren =
+  ApiComputerAttachRoute._addFileChildren(ApiComputerAttachRouteChildren)
+
 interface ApiAgentV1AttachmentUploadSessionsUploadIdRouteChildren {
   ApiAgentV1AttachmentUploadSessionsUploadIdCompleteRoute: typeof ApiAgentV1AttachmentUploadSessionsUploadIdCompleteRoute
 }
@@ -3740,9 +3833,10 @@ const rootRouteChildren: RootRouteChildren = {
   DotwellKnownOauthAuthorizationServerOidcRoute:
     DotwellKnownOauthAuthorizationServerOidcRoute,
   ApiAppInstallationsLookupRoute: ApiAppInstallationsLookupRoute,
-  ApiComputerAttachRoute: ApiComputerAttachRoute,
+  ApiComputerAttachRoute: ApiComputerAttachRouteWithChildren,
   ApiComputerConfirmKeyRoute: ApiComputerConfirmKeyRoute,
   ApiComputerDetachRoute: ApiComputerDetachRoute,
+  ApiComputerRetireSessionRoute: ApiComputerRetireSessionRoute,
   ApiComputerSelfRoute: ApiComputerSelfRoute,
   ApiComputerSwapKeyRoute: ApiComputerSwapKeyRoute,
   ApiComputerWorkspaceRoute: ApiComputerWorkspaceRoute,
@@ -3759,6 +3853,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiInternalWeeklyReportScheduleRoute: ApiInternalWeeklyReportScheduleRoute,
   ApiWorkspacesSlugRoute: ApiWorkspacesSlugRoute,
   AppsShareTokenRoute: AppsShareTokenRoute,
+  ComputersAttachSessionIdRoute: ComputersAttachSessionIdRoute,
   OidcDotwellKnownOpenidConfigurationRoute:
     OidcDotwellKnownOpenidConfigurationRoute,
   ApiAgentV1ArtifactsRoute: ApiAgentV1ArtifactsRoute,

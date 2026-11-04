@@ -67,6 +67,8 @@ export type ComputerRegisterResponse = {
   computerId: string;
   workspaceId: string;
   daemonApiKey: string;
+  /** The attached Workspace's slug, for a one-shot attach that never named one (task #417). */
+  workspaceSlug?: string;
 };
 export type DaemonRuntimeReadyRequest = {
   protocolMajor: number;

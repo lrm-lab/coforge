@@ -18,14 +18,25 @@ export const Route = createFileRoute("/api/workspaces/$slug")({
   server: {
     handlers: {
       GET: async ({ request, params }) => {
-        const principal = await principalFromAuthorizationHeader(request);
+        const db = getDatabaseClient();
+        // A login `retire-session` retired is refused here too (task #417); a db-less build keeps
+        // the signature-only check rather than let a missing database open the door.
+        const principal = await principalFromAuthorizationHeader(
+          request,
+          process.env,
+          db ?? undefined,
+        );
         if (!principal)
           return Response.json(
             { error: "unauthorized" },
             { status: 401, headers: { "cache-control": "no-store" } },
           );
-        const db = getDatabaseClient();
         if (!db) return Response.json({ error: "unavailable" }, { status: 503 });
+        if (!principal)
+          return Response.json(
+            { error: "unauthorized" },
+            { status: 401, headers: { "cache-control": "no-store" } },
+          );
         const workspace = await new PrismaWorkspaceAccess(db).getAccessibleBySlug(
           params.slug,
           principal,

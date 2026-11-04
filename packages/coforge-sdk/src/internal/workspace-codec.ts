@@ -115,6 +115,7 @@ export function decodeComputerRegisterResponse(bytes: Uint8Array): ComputerRegis
     computerId: value.computerId,
     workspaceId: value.workspaceId,
     daemonApiKey: value.daemonApiKey,
+    workspaceSlug: value.workspaceSlug || undefined,
   };
 }
 

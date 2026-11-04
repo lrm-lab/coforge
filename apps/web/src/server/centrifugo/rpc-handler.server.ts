@@ -1,12 +1,6 @@
 /** The deliberately small boundary between Centrifugo's HTTP proxy and Web. */
-import {
-  decodeComputerRegisterRequest,
-  encodeComputerRegisterResponse,
-  utf8Encoder,
-  utf8Decoder,
-} from "@lrm/coforge-sdk/internal";
+import { utf8Encoder, utf8Decoder } from "@lrm/coforge-sdk/internal";
 import { isRecord } from "@lrm/coforge-sdk/internal";
-import { ComputerRegistrationError } from "#src/server/computers/registration.server";
 import { handleRequestError } from "#src/server/errors/request-error-handler.server";
 import { requireDaemonPrincipal } from "./daemon-rpc-principal.server";
 import { validModelCatalogs } from "./rpc-handler-catalog-validation.server";
@@ -648,7 +642,15 @@ function usageStatus(
 
 /** The signed-in user an RPC acts for, when its principal names one. */
 function userPrincipal({ principal }: CentrifugoRpcMetadata) {
-  return principal.userId ? { userId: principal.userId } : undefined;
+  return principal.userId
+    ? {
+        userId: principal.userId,
+        // An attach token's bound workspace and the session it is consumed against pass through
+        // (task #417); a daemon principal's empty-string workspaceId means none.
+        workspaceId: principal.workspaceId || undefined,
+        attachSessionId: principal.attachSessionId,
+      }
+    : undefined;
 }
 
 /** A Workspace read: a `WorkspaceQueryError` answers with its own code; anything else throws. */
@@ -693,25 +695,6 @@ import type {
   CentrifugoRpcAuthenticate,
   CentrifugoProxyAuthorizer,
 } from "./rpc-types.server";
-
-export function createComputerRegistrationMethod(useCase: {
-  register: (
-    request: import("@lrm/coforge-sdk/internal").ComputerRegisterRequest,
-    principal: { userId: string } | undefined,
-  ) => Promise<import("@lrm/coforge-sdk/internal").ComputerRegisterResponse>;
-}): CentrifugoRpcMethod {
-  return async (payload, metadata) => {
-    try {
-      const request = decodeComputerRegisterRequest(payload);
-      const result = await useCase.register(request, userPrincipal(metadata));
-      return encodeComputerRegisterResponse(result);
-    } catch (error) {
-      if (error instanceof ComputerRegistrationError)
-        return { code: error.code, message: error.message };
-      throw error;
-    }
-  };
-}
 
 const errors = {
   malformed: { code: 400, message: "invalid RPC request" },

@@ -33,4 +33,6 @@ message ComputerRegisterResponse {
   reserved 5;
   reserved "connection_id";
   string daemon_api_key = 6;
+  // The attached Workspace's slug, for a one-shot attach that never named one (task #417).
+  string workspace_slug = 7;
 }

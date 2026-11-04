@@ -138,3 +138,51 @@ model WorkspaceComputer {
   @@unique([workspaceId, computerId])
   @@map("workspace_computers")
 }
+
+/// A one-shot Computer attach (task #417): the machine reported itself, a person approved on the
+/// approval page, the deviceCode polled for a single-use attachToken, and that exchanged for an
+/// sk_computer. Codes and the token reach the Computer once; only hashes are kept.
+model ComputerAttachSession {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  /// The Computer's bearer secret for `/api/computer/attach/poll` — hash only, never in a link.
+  deviceCodeHash String  @unique @map("device_code_hash")
+  /// The short code a person compares on the approval page — a display code, not a credential;
+  /// the session's id in the URL is what identifies it.
+  userCode      String   @map("user_code")
+  machineName   String   @map("machine_name")
+  hostname      String
+  os            String
+  /// pending | approved | refused | consumed | expired
+  status        String   @default("pending")
+  /// The one-shot attach_token the poll hands an approved session — hash only, single-use.
+  attachTokenHash  String?  @unique @map("attach_token_hash")
+  /// The token's own ten minutes from the approval — the session's expiry does not cut it short.
+  attachTokenExpiresAt DateTime? @map("attach_token_expires_at")
+  tokenConsumedAt  DateTime? @map("token_consumed_at")
+  approvedUserId     String?   @map("approved_user_id") @db.Uuid
+  approvedWorkspaceId String? @map("approved_workspace_id") @db.Uuid
+  expiresAt     DateTime @map("expires_at")
+  /// Rate limits the poll: faster than the interval answers `slow_down`.
+  lastPolledAt  DateTime? @map("last_polled_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([expiresAt])
+  @@index([status])
+  @@map("computer_attach_sessions")
+}
+
+/// A retired Computer-held user login (task #417 retire-session): the JWT's hash, checked at
+/// verify so the retired login stops answering at once. Repeat calls idempotent by the key.
+model ComputerRetiredLogin {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  /// sha256 of the retired access token — the token itself is never stored.
+  tokenHash   String   @unique @map("token_hash")
+  /// The owner it authenticated; checked against the Computer key's owner.
+  userId      String   @map("user_id") @db.Uuid
+  /// The Computer the login sat on; a retired login does not move to another.
+  computerId  String   @map("computer_id") @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  retiredAt   DateTime @default(now()) @map("retired_at")
+
+  @@map("computer_retired_logins")
+}
