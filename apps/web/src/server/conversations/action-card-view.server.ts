@@ -136,6 +136,27 @@ export type ActionCardView =
       other?: { label?: string };
       result?: { optionId: string; label: string; text?: string };
     })
+  /** An Agent's several questions on one card, one submit answering all, for the person it
+   * names. */
+  | (ActionCardViewBase & {
+      kind: "questions";
+      prompt?: string;
+      questions: {
+        id: string;
+        prompt: string;
+        select: "one" | "many";
+        options: { id: string; label: string; description?: string; recommended?: true }[];
+        other?: { label?: string };
+      }[];
+      asked?: { displayName: string; isViewer: boolean };
+      result?: {
+        answers: {
+          questionId: string;
+          prompt: string;
+          selection: { optionId: string; label: string; recommended?: true; text?: string }[];
+        }[];
+      };
+    })
   | (ActionCardViewBase & {
       kind: "app:recover_owner";
       app: { key: string; name: string };

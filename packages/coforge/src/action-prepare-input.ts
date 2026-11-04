@@ -66,15 +66,19 @@ export function parseActionCardInput(raw: string): unknown {
  * to `INVALID_ACTION` with a joined issue list.
  */
 export function toActionCardAction(json: unknown): ActionCardAction {
-  // A choice always names who it asks. The CLI enforces it here; the SDK schema keeps the field
-  // optional only so the server still reads cards from older Computers, which strip it.
-  const choice =
+  // A choice or questions card always names who it asks. The CLI enforces it here; the SDK
+  // schema keeps the field optional only so the server still reads cards from older Computers,
+  // which strip it.
+  const card =
     json && typeof json === "object" ? (json as { type?: unknown; to?: unknown }) : undefined;
-  if (choice?.type === "choice" && (typeof choice.to !== "string" || choice.to.trim() === ""))
+  if (
+    (card?.type === "choice" || card?.type === "questions") &&
+    (typeof card.to !== "string" || card.to.trim() === "")
+  )
     throw new CliError({
       code: "INVALID_ACTION",
       message:
-        'Action failed validation: to: a choice card must name who it asks (set "to" to their handle or user id)',
+        'Action failed validation: to: a choice or questions card must name who it asks (set "to" to their handle or user id)',
       retryable: false,
     });
   const parsed = actionCardActionSchema.safeParse(json);

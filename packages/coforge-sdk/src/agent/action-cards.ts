@@ -179,6 +179,42 @@ export const choiceActionSchema = z.object({
 });
 export type ChoiceAction = z.infer<typeof choiceActionSchema>;
 
+const questionsOptionSchema = z.object({
+  id: choiceOptionIdSchema,
+  label: z.string().trim().min(1).max(80),
+  /** Shown under the option as its explanation. */
+  description: z.string().trim().min(1).max(200).optional(),
+  /** The option the Agent recommends: at most one per question, and prepare moves it first. */
+  recommended: z.boolean().optional(),
+});
+
+/** One question on a `questions` card: its id names it inside the card, `select` defaults to a
+ * single pick, and `other` offers the same own-answer row a choice card does. */
+const questionsQuestionSchema = z.object({
+  id: choiceOptionIdSchema,
+  prompt: z.string().trim().min(1).max(200),
+  select: z.enum(["one", "many"]).default("one"),
+  options: z.array(questionsOptionSchema).min(2).max(6),
+  other: choiceOtherSchema.optional(),
+});
+
+/**
+ * Ask several questions on one card (Claude Code's AskUserQuestion): at most four, each
+ * single- or multi-select, and one submit answers them all. The result records per-question
+ * `answers`. A single `choice` card stays its own type — a one-question card here behaves the
+ * same, but old cards render unchanged.
+ */
+export const questionsActionSchema = z.object({
+  type: z.literal("questions"),
+  /** An optional card-level title; each question's `prompt` is the question text. */
+  prompt: z.string().trim().min(1).max(200).optional(),
+  questions: z.array(questionsQuestionSchema).min(1).max(4),
+  /** The person the card asks; same semantics and fallback as `choice`. */
+  to: idOrHandleSchema.optional(),
+  draftHint: draftHintSchema,
+});
+export type QuestionsAction = z.infer<typeof questionsActionSchema>;
+
 /** The id an "other" answer records; the option-id grammar forbids a leading underscore, so no
  * Agent option can collide with it. */
 export const CHOICE_OTHER_OPTION_ID = "_other";
@@ -199,6 +235,7 @@ export const actionCardActionSchema = z.discriminatedUnion("type", [
   pageFillActionSchema,
   desktopTakeoverActionSchema,
   choiceActionSchema,
+  questionsActionSchema,
 ]);
 export type ActionCardAction = z.infer<typeof actionCardActionSchema>;
 /** The server-posted approval card for an Agent's use of an app; never an Agent's action. */
@@ -226,6 +263,18 @@ export function validateActionCardAction(action: ActionCardAction): string | nul
   if (action.type === "choice") {
     const ids = action.options.map((option) => option.id);
     if (new Set(ids).size !== ids.length) return "choice option ids must be unique";
+  }
+  if (action.type === "questions") {
+    const questionIds = action.questions.map((question) => question.id);
+    if (new Set(questionIds).size !== questionIds.length)
+      return "questions question ids must be unique";
+    for (const question of action.questions) {
+      const optionIds = question.options.map((option) => option.id);
+      if (new Set(optionIds).size !== optionIds.length)
+        return "questions option ids must be unique per question";
+      if (question.options.filter((option) => option.recommended === true).length > 1)
+        return "questions marks at most one option recommended per question";
+    }
   }
   return null;
 }
@@ -295,6 +344,21 @@ export type ResolvedChoicePayload = {
   /** A note for the prepare response, e.g. that a recommended option was moved to the front. */
   warning?: string;
 };
+export type ResolvedQuestionsPayload = {
+  type: "questions";
+  prompt?: string;
+  questions: {
+    id: string;
+    prompt: string;
+    select: "one" | "many";
+    options: { id: string; label: string; description?: string; recommended?: true }[];
+    other?: { label?: string };
+  }[];
+  /** The asked person's user id; every questions card names one. */
+  to: string;
+  /** A note for the prepare response, e.g. that a recommended option was moved to the front. */
+  warning?: string;
+};
 export type ResolvedActionCardPayload =
   | ResolvedChannelCreatePayload
   | ResolvedAgentCreatePayload
@@ -304,7 +368,8 @@ export type ResolvedActionCardPayload =
   | ResolvedAppRecoverOwnerPayload
   | ResolvedPageFillPayload
   | ResolvedDesktopTakeoverPayload
-  | ResolvedChoicePayload;
+  | ResolvedChoicePayload
+  | ResolvedQuestionsPayload;
 
 /** `POST /api/agent/v1/actions/prepare` request body. */
 export type AgentActionPrepareRequest = {

@@ -12,6 +12,7 @@ import { canReadChannel, readableConversationWhere } from "./channel-read-access
 import { pageFillActionCardView } from "./action-card-page-fill.server";
 import { desktopTakeoverActionCardView } from "./action-card-desktop-takeover.server";
 import { choiceActionCardView } from "./action-card-choice.server";
+import { questionsActionCardView } from "./action-card-questions.server";
 import {
   effectiveActionCardState,
   type ActionCardPersonRef,
@@ -257,6 +258,11 @@ export async function actionCardViews(
       views.set(
         card.messageId,
         choiceActionCardView(base, card, payload, viewerUserId, pending, userName),
+      );
+    } else if (payload.type === "questions") {
+      views.set(
+        card.messageId,
+        questionsActionCardView(base, card, payload, viewerUserId, pending, userName),
       );
     } else if (payload.type === "app:recover_owner") {
       views.set(card.messageId, {

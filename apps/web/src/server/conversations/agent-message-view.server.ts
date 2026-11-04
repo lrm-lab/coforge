@@ -76,6 +76,32 @@ export function actionCardBodySuffix(card: {
       return `[action card: executed; choice=${optionId}${recommended ? " (recommended)" : ""}]`;
     }
   }
+  if (card.state === "executed" && card.kind === "questions") {
+    const answers =
+      card.result && typeof card.result === "object" && "answers" in card.result
+        ? (card.result as { answers?: unknown }).answers
+        : undefined;
+    if (Array.isArray(answers)) {
+      const parts = answers.flatMap((entry) => {
+        if (!entry || typeof entry !== "object") return [];
+        const { questionId, selection } = entry as {
+          questionId?: unknown;
+          selection?: unknown;
+        };
+        if (typeof questionId !== "string" || !Array.isArray(selection)) return [];
+        const picked = selection
+          .map((option) =>
+            option && typeof option === "object" && "optionId" in option
+              ? String((option as { optionId: unknown }).optionId)
+              : "",
+          )
+          .filter(Boolean)
+          .join(",");
+        return picked ? [`${questionId}=${picked}`] : [];
+      });
+      if (parts.length) return `[action card: executed; ${parts.join("; ")}]`;
+    }
+  }
   return `[action card: ${card.state}]`;
 }
 

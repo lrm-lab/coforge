@@ -7,6 +7,7 @@ import { readableConversationWhere } from "./channel-read-access.server";
 export type WaitingChoiceCard = {
   messageId: string;
   conversationId: string;
+  kind: "choice" | "questions";
   /** The channel the card is in; null in a direct conversation or a Task's. */
   channel: { name: string; visibility: ChannelVisibility } | null;
   /** The thread the card was posted in, when it is a reply. */
@@ -19,6 +20,8 @@ export type WaitingChoiceCard = {
   } | null;
   prompt: string;
   options: { id: string; label: string }[];
+  /** A questions card's question list, present on `kind: "questions"` rows. */
+  questions?: { prompt: string; options: { id: string; label: string }[] }[];
   preparedBy: { agentId: string; name: string; avatarUrl: string };
   createdAt: string;
 };
@@ -35,7 +38,7 @@ export async function waitingChoiceCards(
   const cards = await db.actionCard.findMany({
     where: {
       workspaceId,
-      kind: "choice",
+      kind: { in: ["choice", "questions"] },
       state: "pending",
       // A card past its expiry is no longer waiting, even before the sweep writes the state.
       OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
@@ -46,6 +49,7 @@ export async function waitingChoiceCards(
     select: {
       messageId: true,
       conversationId: true,
+      kind: true,
       payload: true,
       createdAt: true,
       message: { select: { threadRootId: true } },
@@ -66,12 +70,17 @@ export async function waitingChoiceCards(
     },
   });
   return cards.map((card) => {
-    const payload = card.payload as { prompt?: string; options?: { id: string; label: string }[] };
+    const payload = card.payload as {
+      prompt?: string;
+      options?: { id: string; label: string }[];
+      questions?: { prompt: string; options: { id: string; label: string }[] }[];
+    };
     const { channelName, visibility, taskDiscussionOf } = card.conversation;
     const agent = card.preparedByAgent;
     return {
       messageId: card.messageId,
       conversationId: card.conversationId,
+      kind: card.kind as "choice" | "questions",
       channel: channelOf({ channelName, visibility }),
       threadRootId: card.message.threadRootId,
       task: taskDiscussionOf && {
@@ -79,8 +88,9 @@ export async function waitingChoiceCards(
         number: taskDiscussionOf.number,
         channel: channelOf(taskDiscussionOf.conversation),
       },
-      prompt: payload.prompt ?? "",
+      prompt: payload.prompt ?? payload.questions?.[0]?.prompt ?? "",
       options: payload.options ?? [],
+      ...(payload.questions ? { questions: payload.questions } : {}),
       preparedBy: {
         agentId: agent.id,
         name: agent.displayName,

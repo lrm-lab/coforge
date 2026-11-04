@@ -13,6 +13,7 @@ import { ActionCards } from "#src/server/conversations/action-cards.server";
 import { commitPageFillCard } from "#src/server/conversations/action-card-page-fill.server";
 import { commitDesktopTakeoverCard } from "#src/server/conversations/action-card-desktop-takeover.server";
 import { commitChoiceCard } from "#src/server/conversations/action-card-choice.server";
+import { commitQuestionsCard } from "#src/server/conversations/action-card-questions.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { createAppAgentAccess } from "#src/server/app-agent-access/app-agent-access-composition.server";
@@ -186,6 +187,49 @@ export const commitChoiceActionCard = createServerFn({ method: "POST" })
         messageId: data.messageId,
         optionId: data.optionId,
         ...(data.text !== undefined && { text: data.text }),
+      },
+    );
+  });
+
+/** `questions`: the person submitted one answer for every question on the card. */
+export const commitQuestionsActionCard = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(
+    messageIdInput.extend({
+      answers: z
+        .array(
+          z.object({
+            questionId: z
+              .string()
+              .trim()
+              .regex(/^[a-z][a-z0-9_]{0,31}$/),
+            selection: z
+              .array(
+                z.union([
+                  z.literal(CHOICE_OTHER_OPTION_ID),
+                  z
+                    .string()
+                    .trim()
+                    .regex(/^[a-z][a-z0-9_]{0,31}$/),
+                ]),
+              )
+              .min(1),
+            text: z.string().max(CHOICE_OTHER_TEXT_MAX_LENGTH).optional(),
+          }),
+        )
+        .min(1)
+        .max(4),
+    }),
+  )
+  .handler(async ({ data, context: { db, workspaceId, user } }) => {
+    const centrifugo = createCentrifugoServerApi();
+    return commitQuestionsCard(
+      db,
+      new CentrifugoConversationRealtime(centrifugo),
+      { workspaceId, actorUserId: user.id },
+      {
+        messageId: data.messageId,
+        answers: data.answers,
       },
     );
   });

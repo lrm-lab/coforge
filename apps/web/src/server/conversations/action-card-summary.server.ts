@@ -29,6 +29,19 @@ export function actionCardSummary(action: ActionCardAction): string {
       .join("; ");
     return `${action.prompt} (${labels})`;
   }
+  if (action.type === "questions") {
+    // Numbered as the card numbers them, per question, so a reply of "1. 2" reads as the
+    // first question's second option.
+    const questions = action.questions
+      .map(
+        (question, index) =>
+          `${index + 1}. ${question.prompt} (${question.options
+            .map((option, optionIndex) => `${choiceNumber(optionIndex)}. ${option.label}`)
+            .join("; ")})`,
+      )
+      .join("; ");
+    return action.prompt ? `${action.prompt}: ${questions}` : questions;
+  }
   if (action.type === "channel:create") return `Action card: create channel #${action.name}`;
   if (action.type === "agent:create") return `Action card: create agent ${action.name}`;
   const { channelHandle, memberHandles } = addMemberHandles(action);

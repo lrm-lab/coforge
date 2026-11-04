@@ -3,6 +3,7 @@ import {
   ACTION_HEREDOC_DELIMITER,
   extractActionCardJson,
   parseActionCardInput,
+  toActionCardAction,
 } from "#src/action-prepare-input";
 import { CliError } from "#src/cli-error";
 
@@ -95,4 +96,31 @@ test("parseActionCardInput throws INVALID_JSON on malformed JSON", () => {
   expect(error).toBeInstanceOf(CliError);
   expect((error as CliError).code).toBe("INVALID_JSON");
   expect((error as CliError).message).toContain("failed to parse");
+});
+
+test("toActionCardAction requires `to` on a questions card, as on a choice", () => {
+  const base = {
+    type: "questions",
+    questions: [
+      {
+        id: "env",
+        prompt: "Deploy where?",
+        options: [
+          { id: "staging", label: "Staging" },
+          { id: "prod", label: "Production" },
+        ],
+      },
+    ],
+  };
+  const error = (() => {
+    try {
+      toActionCardAction(base);
+      return undefined;
+    } catch (thrown) {
+      return thrown;
+    }
+  })();
+  expect(error).toBeInstanceOf(CliError);
+  expect((error as CliError).code).toBe("INVALID_ACTION");
+  expect(toActionCardAction({ ...base, to: "@alice" }).type).toBe("questions");
 });

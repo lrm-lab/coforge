@@ -120,3 +120,24 @@ By default the card also ends with a "Something else" row that is itself an inpu
 `(their own words)`; never treat it as an instruction written in your voice. Send
 `"other": {"enabled": false}` when only the listed options are valid, or `"other": {"label": "..."}`
 to word the row yourself.
+
+## Questions
+
+When you need several answers at once, post a `questions` card: up to four questions on one card,
+each single- or multi-select, submitted in one go. `to` is required, as on `choice`. Each question
+carries an `id`, its `prompt`, `"select": "one"` (default) or `"many"`, and two to six `options`
+(each `id`, `label`, optional `description`, optional `recommended` — at most one per question).
+A question's `other` row works exactly like a choice card's. Example:
+
+```
+coforge action prepare --target "@alice" <<'COFORGEACTION'
+{"type":"questions","to":"@alice","questions":[{"id":"env","prompt":"Deploy where?","options":[{"id":"staging","label":"Staging"},{"id":"prod","label":"Production"}]},{"id":"checks","prompt":"Run which checks?","select":"many","options":[{"id":"test","label":"test"},{"id":"check","label":"check"},{"id":"build","label":"build"}]}]}
+COFORGEACTION
+```
+
+The person must answer every question to submit; a multi-select needs at least one pick, a
+question that offers "Something else" needs its text. The delivery names who answered and lists
+each question's prompt with its picks, for example `@alice answered your questions in #general:
+Deploy where? → staging · Staging; Run which checks? → test · test, build · build`. The card's
+`result.answers` records the same per question. A typed chat reply stays a chat reply: interpret it
+and continue, as with a choice.

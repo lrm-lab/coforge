@@ -351,3 +351,102 @@ test("an Agent cannot prepare the server's app approval card", () => {
   });
   expect(parsed.success).toBe(false);
 });
+
+describe("questionsActionSchema", () => {
+  const multi = {
+    type: "questions",
+    prompt: "A few things to settle",
+    to: "@alice",
+    questions: [
+      {
+        id: "deploy_env",
+        prompt: "Deploy where?",
+        options: [
+          { id: "staging", label: "Staging", recommended: true },
+          { id: "prod", label: "Production" },
+        ],
+      },
+      {
+        id: "checks",
+        prompt: "Run which checks?",
+        select: "many",
+        options: [
+          { id: "test", label: "test" },
+          { id: "check", label: "check" },
+          { id: "build", label: "build" },
+        ],
+        other: { enabled: true },
+      },
+    ],
+  };
+
+  test("accepts one to four questions, single or multi select, option descriptions", () => {
+    const parsed = actionCardActionSchema.parse(multi);
+    expect(parsed.type).toBe("questions");
+    if (parsed.type !== "questions") throw new Error("expected questions");
+    expect(parsed.questions).toHaveLength(2);
+    expect(parsed.questions[0]!.select).toBe("one");
+    expect(parsed.questions[1]!.select).toBe("many");
+    expect(validateActionCardAction(parsed)).toBeNull();
+  });
+
+  test("refuses zero or five questions, and options outside two to six", () => {
+    for (const questions of [[], Array(5).fill(multi.questions[0])]) {
+      expect(actionCardActionSchema.safeParse({ ...multi, questions }).success).toBe(false);
+    }
+    expect(
+      actionCardActionSchema.safeParse({
+        ...multi,
+        questions: [{ ...multi.questions[0], options: [{ id: "a", label: "A" }] }],
+      }).success,
+    ).toBe(false);
+    expect(
+      actionCardActionSchema.safeParse({
+        ...multi,
+        questions: [{ ...multi.questions[0], options: Array(7).fill({ id: "a", label: "A" }) }],
+      }).success,
+    ).toBe(false);
+  });
+
+  test("requires unique question ids, and unique option ids within a question", () => {
+    const dupQ = actionCardActionSchema.parse({
+      ...multi,
+      questions: [{ ...multi.questions[0] }, { ...multi.questions[0] }],
+    });
+    expect(validateActionCardAction(dupQ)).toBe("questions question ids must be unique");
+
+    const dupO = actionCardActionSchema.parse({
+      ...multi,
+      questions: [
+        {
+          id: "only",
+          prompt: "Pick",
+          options: [
+            { id: "a", label: "A" },
+            { id: "a", label: "Again" },
+          ],
+        },
+      ],
+    });
+    expect(validateActionCardAction(dupO)).toBe("questions option ids must be unique per question");
+  });
+
+  test("refuses a question with two recommended options", () => {
+    const parsed = actionCardActionSchema.parse({
+      ...multi,
+      questions: [
+        {
+          id: "only",
+          prompt: "Pick",
+          options: [
+            { id: "a", label: "A", recommended: true },
+            { id: "b", label: "B", recommended: true },
+          ],
+        },
+      ],
+    });
+    expect(validateActionCardAction(parsed)).toBe(
+      "questions marks at most one option recommended per question",
+    );
+  });
+});

@@ -19,6 +19,7 @@ import { loadPendingActionCard } from "./pending-action-card.server";
 import { resolvePageFillPayload } from "./action-card-page-fill.server";
 import { resolveDesktopTakeoverPayload } from "./action-card-desktop-takeover.server";
 import { resolveChoicePayload } from "./action-card-choice.server";
+import { resolveQuestionsPayload } from "./action-card-questions.server";
 import { assertChannelMembersAddable } from "./channel-member-checks.server";
 import type { ConversationRealtime } from "./conversation-realtime.server";
 import {
@@ -107,7 +108,8 @@ export class ActionCards {
       target.conversationId,
       action,
     );
-    const legacyChoice = action.type === "choice" && !action.to?.trim();
+    const legacyChoice =
+      (action.type === "choice" || action.type === "questions") && !action.to?.trim();
     const warnings = [
       "warning" in payload ? payload.warning : undefined,
       legacyChoice ? LEGACY_CHOICE_WARNING : undefined,
@@ -338,7 +340,7 @@ export class ActionCards {
       return resolvePageFillPayload(this.db, workspaceId, agentId, action);
     if (action.type === "desktop:takeover")
       return resolveDesktopTakeoverPayload(this.db, workspaceId, agentId, action);
-    if (action.type === "choice") {
+    if (action.type === "choice" || action.type === "questions") {
       // A request without `to` comes from a Computer whose CLI predates it (see
       // LEGACY_CHOICE_WARNING): ask the Agent's owner, as before.
       const ownerUserId = action.to?.trim()
@@ -349,7 +351,9 @@ export class ActionCards {
               select: { ownerId: true },
             })
           )?.ownerId;
-      return resolveChoicePayload(this.db, conversationId, action, ownerUserId);
+      if (action.type === "choice")
+        return resolveChoicePayload(this.db, conversationId, action, ownerUserId);
+      return resolveQuestionsPayload(this.db, conversationId, action, ownerUserId);
     }
     if (action.type === "app:register") return resolveAppRegisterPayload(this.db, action);
     if (action.type === "app:recover_owner")

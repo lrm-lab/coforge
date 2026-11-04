@@ -27,7 +27,7 @@ export async function markChoiceCardsAnsweredInChat(
     where: {
       workspaceId: input.workspaceId,
       conversationId: input.conversationId,
-      kind: "choice",
+      kind: { in: ["choice", "questions"] },
       state: "pending",
       payload: { path: ["to"], equals: input.userId },
       message: { sequence: { lt: input.sequence } },
