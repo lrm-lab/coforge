@@ -12,6 +12,8 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import type { PiChatFrame } from "@lrm/coforge-sdk/internal/pi-chat-wire";
 import { COFORGE_DAEMON_VERSION } from "#src/version";
+import { createComputerSelfClient } from "#src/connection/computer-self-client";
+import { migrateComputerKey } from "#src/daemon-runtime/computer-key-migration";
 import type { DaemonCredentialStore } from "#src/credentials/credential-store";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import { DaemonConnectionStoppedError } from "#src/connection/daemon-connection-stopped-error";
@@ -53,7 +55,7 @@ export type RuntimeStartupPorts = {
   /** The Workspace's current transport, read at send time; it is replaced on a failed start. */
   transport: () => DaemonConnectionClient;
   replaceTransport: () => Promise<unknown>;
-  credentials: Pick<DaemonCredentialStore, "load">;
+  credentials: Pick<DaemonCredentialStore, "load" | "save" | "isConfirmed" | "markConfirmed">;
   runtimeInstanceId: string;
   startedAtMs: number;
   computerVersion?: string;
@@ -169,8 +171,20 @@ export class RuntimeStartup {
   async #open(connection: DaemonConfig, signal: AbortSignal): Promise<void> {
     const { ports } = this;
     mkdirSync(connection.workspaceRoot, { recursive: true });
-    const token = await ports.credentials.load(connection.workspaceId, connection.computerId);
-    if (!token) throw new Error("Workspace credential is missing");
+    const stored = await ports.credentials.load(connection.workspaceId, connection.computerId);
+    if (!stored) throw new Error("Workspace credential is missing");
+    // The stored dk_ migrates to the Computer's own sk_computer (task #417): saved before it is
+    // confirmed, so a failure leaves the old key live and the connection still opens with it.
+    const token = await migrateComputerKey({
+      credentials: ports.credentials,
+      client: connection.serverHttpUrl
+        ? createComputerSelfClient(connection.serverHttpUrl)
+        : undefined,
+      workspaceId: connection.workspaceId,
+      computerId: connection.computerId,
+      apiKey: stored,
+      signal,
+    });
     const publications = new RuntimePublicationSubscriptions({
       ...ports.publications,
       transport: ports.transport(),

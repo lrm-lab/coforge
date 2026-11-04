@@ -40,13 +40,17 @@ These rules apply to `src/server/computers/`.
   routes. Keep the check there, never in one caller.
 - A `daemonApiKey` migrates to `sk_computer` (`kind: "computer"`) through
   `POST /api/computer/swap-key` (issues the new key without revoking the old),
-  `GET /api/computer/self` (the daemon verifies the new key), then
+  save the new key to the daemon's credential file, then
   `POST /api/computer/confirm-key` (revokes the old key and any prior unconfirmed
   `sk_computer`s). A repeated `swap-key` revokes the unconfirmed `sk_computer`s
-  first — the server keeps hashes and cannot replay a lost plaintext key. Once
-  the old `daemonApiKey` is confirmed away, downgrading the daemon past the
-  `sk_computer` cutover is unsupported: the old key is revoked and the daemon
-  must re-attach. The computer-self endpoints (`self`, `detach`, `swap-key`,
+  first — the server keeps hashes and cannot replay a lost plaintext key.
+  `GET /api/computer/self` verifies a key answers for the same Computer; the
+  startup migration does not call it. The
+  stored key is opaque to the daemon: an older binary reads the same
+  (workspaceId, computerId) credential file and uses an `sk_computer` everywhere
+  a `dk_` went, so downgrading past the cutover needs no re-attach
+  (`packages/daemon/test/computer-key-migration.test.ts` locks this). The
+  computer-self endpoints (`self`, `detach`, `swap-key`,
   `confirm-key`) authenticate through `authenticateLinkedDaemon` and accept
   only `kind: "computer"`; the daemon's other routes accept either key during
   the transition.
