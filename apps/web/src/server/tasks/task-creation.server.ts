@@ -267,8 +267,12 @@ export async function createTasks(
             ? agentId === coordinator.coordinatorAgentId
             : !scope.channel || !isMutedLevel(notificationLevel)),
       );
-      // The Task's id is its message's, as for every Task that started as a message.
+      // The Task's id is its own — `task.messageId` names the message the Task started from.
+      // The message and the Task get separate uuid(7)s: a reclaimed message's prior Task kept
+      // `task.id === message.id`, and a fresh task.id keeps that old Task's references and
+      // realtime keys off the new one (task #507).
       const messageId = Bun.randomUUIDv7();
+      const taskId = Bun.randomUUIDv7();
       const message = await tx.message.create({
         data: {
           id: messageId,
@@ -298,7 +302,7 @@ export async function createTasks(
           },
           task: {
             create: {
-              id: messageId,
+              id: taskId,
               workspaceId: scope.workspaceId,
               number: firstTaskNumber + index,
               projectId: project?.id,

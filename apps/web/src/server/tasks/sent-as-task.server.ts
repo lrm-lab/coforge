@@ -30,7 +30,10 @@ export async function createMessageTask(
   if (allocated[0]?.number === undefined) throw new AppError("NOT_FOUND");
   const task = await tx.task.create({
     data: {
-      id: message.id,
+      // The Task's id is its own — `messageId` names the message the Task started from. A
+      // reclaimed message's prior Task kept `task.id === message.id`, and a fresh task.id keeps
+      // that old Task's references and realtime keys off the new one (task #507).
+      id: Bun.randomUUIDv7(),
       messageId: message.id,
       conversationId: message.conversationId,
       workspaceId: message.workspaceId,
