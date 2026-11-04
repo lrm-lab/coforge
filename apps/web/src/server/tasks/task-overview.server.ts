@@ -109,7 +109,7 @@ const NONE = "none";
 /** The label pick as a Task filter: every picked label, or none at all for `none`. */
 export function labelPickWhere(labels: readonly string[]): Prisma.TaskWhereInput[] {
   if (labels.length === 0) return [];
-  if (labels.includes(NONE)) return [{ labels: { none: {} } }];
+  if (labels.includes(NONE)) return [{ labels: { none: { label: { archivedAt: null } } } }];
   return labels.map((labelId) => ({ labels: { some: { labelId } } }));
 }
 

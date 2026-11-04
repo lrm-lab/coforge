@@ -74,7 +74,8 @@ export const taskSelection = {
   discussionConversationId: true,
   owner: { select: TASK_MEMBER_SELECT },
   creator: { select: TASK_MEMBER_SELECT },
-  labels: { select: { label: { select: LABEL_SELECT } } },
+  // An archived label stays on its rows (restoring it brings it back) but is no longer the Task's.
+  labels: { where: { label: { archivedAt: null } }, select: { label: { select: LABEL_SELECT } } },
   project: { select: TASK_PROJECT_SELECT },
   projectPinned: true,
   executionSessions: {

@@ -8,17 +8,24 @@ import {
   announceLabelGroupChanged,
 } from "#src/server/tasks/label-signal.server";
 import { LABEL_COLORS, LABEL_NAME_MAX, Labels } from "#src/server/tasks/labels.server";
+import { canManageWorkspaceSettings } from "#src/features/workspaces/workspace-roles";
+import { workspaceMemberRole } from "#src/server/workspaces/workspace-membership.server";
 import { LABEL_GROUP_SELECTIONS, LabelGroups } from "#src/server/tasks/label-groups.server";
 
 const labelName = z.string().trim().min(1).max(LABEL_NAME_MAX);
 const labelColor = z.enum(LABEL_COLORS);
 
-/** The Workspace's labels, for the task card and its label picker. Any member may read them. */
+/**
+ * The Workspace's labels, for the task card and its label picker, and whether the viewer may
+ * recolor them (an owner or admin, as `Labels.update` decides). Any member may read the labels.
+ */
 export const loadWorkspaceLabels = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .handler(async ({ context }) => {
     const { user, db, workspaceId } = context;
-    return new Labels(db).list(workspaceId, user.id);
+    const labels = await new Labels(db).list(workspaceId, user.id);
+    const role = await workspaceMemberRole(db, workspaceId, user.id);
+    return { labels, canManage: canManageWorkspaceSettings(role) };
   });
 
 /** Creates a label; a name that already exists (in any case) returns that label. Any member. */
@@ -32,11 +39,18 @@ export const createTaskLabel = createServerFn({ method: "POST" })
     return label;
   });
 
-/** Renames or recolors a label; an owner or admin only. */
+/** Renames, recolors or archives a label (archiving takes it off every Task); an owner or admin only. */
 export const updateTaskLabel = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(
-    z.object({ id: z.uuid(), name: labelName.optional(), color: labelColor.optional() }).strict(),
+    z
+      .object({
+        id: z.uuid(),
+        name: labelName.optional(),
+        color: labelColor.optional(),
+        archived: z.boolean().optional(),
+      })
+      .strict(),
   )
   .handler(async ({ context, data }) => {
     const { id, ...input } = data;

@@ -262,8 +262,19 @@ export async function labelFilterWhere(
         errorId: "task-label-none",
         hint: "--label none cannot be combined with a label name",
       });
-    return { labels: { none: {} } };
+    return { labels: { none: { label: { archivedAt: null } } } };
   }
+  // An archived label is on no Task any more, so naming it matches nothing (it is not an error:
+  // a saved filter or a script that names it keeps working).
+  const archived = await db.label.findFirst({
+    where: {
+      workspaceId,
+      archivedAt: { not: null },
+      nameKey: { in: names.map((name) => labelNameKey(splitLabelName(name).label)) },
+    },
+    select: { id: true },
+  });
+  if (archived) return { id: { in: [] } };
   const labels = await resolveTaskLabels(db, workspaceId, names);
   return { AND: labels.map((label) => ({ labels: { some: { labelId: label.id } } })) };
 }

@@ -147,3 +147,57 @@ test("any member creates a label; only an owner or admin renames or deletes one"
     await db.$disconnect();
   }
 });
+
+test("archiving a label takes it off every task, frees its slot, and is for an owner or admin", async () => {
+  const { db, run, make, show, principals, refusal } = await setup();
+  try {
+    const workspaceId = principals.alice.workspaceId;
+    const aliceId = principals.alice.userId!;
+    const labels = new Labels(db);
+    const names = ["One", "Two", "Three", "Four", "Five", "Six"];
+    const created = [];
+    for (const name of names) created.push(await labels.create(workspaceId, aliceId, { name }));
+
+    const [number] = await make("alice", 1, { labels: names.slice(0, 5) });
+    const taskId = (await show(number!)).tasks[0]!.id;
+    const labelNames = async () =>
+      ((await show(number!)).tasks[0]!.labels ?? []).map((label) => label.name);
+
+    expect(
+      (
+        await refusal(
+          labels.update(workspaceId, principals.bob.userId!, created[0]!.id, { archived: true }),
+        )
+      ).code,
+    ).toBe("ACCESS_DENIED");
+    expect(await labelNames()).toContain("One");
+
+    await labels.update(workspaceId, aliceId, created[0]!.id, { archived: true });
+    expect(await labelNames()).toEqual(["Five", "Four", "Three", "Two"]);
+    // The row stays, so restoring the label brings it back.
+    expect(await db.taskLabel.count({ where: { taskId } })).toBe(5);
+
+    // The archived label no longer counts towards the five, so a fifth active one fits.
+    await run("alice", { operation: "amend", number: number!, labels: ["Six"] });
+    expect(await labelNames()).toEqual(["Five", "Four", "Six", "Three", "Two"]);
+    // `list --label` on an archived label matches no Task, and `--label none` counts a Task whose
+    // only label was archived as having none.
+    const listed = async (...names: string[]) =>
+      (await run("alice", { operation: "list", labels: names })).tasks.map((task) => task.number);
+    expect(await listed("One")).toEqual([]);
+    await labels.create(workspaceId, aliceId, { name: "Solo" });
+    const [solo] = await make("alice", 1, { labels: ["Solo"] });
+    expect(await listed("none")).not.toContain(solo);
+    await labels.update(
+      workspaceId,
+      aliceId,
+      (await db.label.findFirstOrThrow({ where: { workspaceId, name: "Solo" } })).id,
+      { archived: true },
+    );
+    expect(await listed("none")).toContain(solo);
+    // An archived label cannot be attached again.
+    expect((await refusal(make("alice", 1, { labels: ["One"] }))).code).toBe("INVALID_INPUT");
+  } finally {
+    await db.$disconnect();
+  }
+});
