@@ -69,12 +69,32 @@ export function seedTasks(deps: {
           ownerMemberId: opts.ownerMemberId ?? null,
         },
       });
-    // task #507: one new-shape Task whose `id` is a fresh uuid(7), not its message's.
+    // task #507: one new-shape Task whose `id` is a fresh uuid(7), not its message's. Its
+    // source message is written here — `ensureMessage` only queues, and the queue already
+    // flushed into rows before this ran.
+    const newShapeMessageId = stableId("task:new-shape:message");
+    const { _max } = await db.message.aggregate({
+      where: { conversationId: pendingTasks[0]!.conversationId },
+      _max: { sequence: true },
+    });
+    await db.message.upsert({
+      where: { id: newShapeMessageId },
+      create: {
+        id: newShapeMessageId,
+        conversationId: pendingTasks[0]!.conversationId,
+        workspaceId,
+        senderMemberId: pendingTasks[0]!.senderMemberId,
+        body: "A task reclaimed after its predecessor was cleaned up",
+        sequence: (_max.sequence ?? 0) + 1,
+        createdAt: deps.daysAgo(1, 16),
+      },
+      update: {},
+    });
     await db.task.upsert({
-      where: { messageId: stableId("task:new-shape:message") },
+      where: { messageId: newShapeMessageId },
       create: {
         id: stableId("task:new-shape"),
-        messageId: stableId("task:new-shape:message"),
+        messageId: newShapeMessageId,
         conversationId: pendingTasks[0]!.conversationId,
         workspaceId,
         number: 999,
