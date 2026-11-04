@@ -7,7 +7,8 @@ import { m } from "#src/paraglide/messages";
 
 /**
  * The key a row is picked with, at the row's start, always in sight (Frank, 11-04, as Grok's
- * question card shows it): gray, filled brand once the row is picked.
+ * question card shows it): gray, filled with the text's own colour once the row is picked; no
+ * purple on the card but its main button (Frank, 11-04).
  */
 export function KeyBadge({ picked, children }: { picked?: boolean; children: React.ReactNode }) {
   return (
@@ -15,7 +16,7 @@ export function KeyBadge({ picked, children }: { picked?: boolean; children: Rea
       aria-hidden="true"
       className={cn(
         "grid size-6 shrink-0 place-items-center rounded-md font-body text-xs font-medium tabular-nums transition-colors",
-        picked ? "bg-brand-solid text-white" : "bg-secondary text-tertiary",
+        picked ? "bg-fg-primary text-(--color-bg-primary)" : "bg-secondary text-tertiary",
       )}
     >
       {children}
@@ -172,8 +173,6 @@ export function QuestionRows({
 
 function Recommended() {
   return (
-    <span className="shrink-0 text-xs text-brand-secondary">
-      {m.action_card_questions_recommended()}
-    </span>
+    <span className="shrink-0 text-xs text-tertiary">{m.action_card_questions_recommended()}</span>
   );
 }

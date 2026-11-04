@@ -196,19 +196,20 @@ export function QuestionsStepper({
                     // A dot to see, a wider target to press.
                     className="group/dot grid size-5 cursor-pointer place-items-center rounded-full outline-focus-ring data-focus-visible:outline-2"
                   >
-                    {/* One look per state on every card (Raft, task #515): the current question
-                        a longer dash, answered brand, not yet answered gray, skipped (on an
-                        answered card) a ring. */}
+                    {/* One look per state on every card (Raft, task #515), in grays (Frank:
+                        no purple but the main button): the current question a longer dash,
+                        answered dark, not yet answered light, skipped (on an answered card) a
+                        ring. */}
                     <span
                       className={cn(
                         "h-1.5 rounded-full transition-[width,background-color]",
                         index === step ? "w-3.5" : "w-1.5",
                         answered(drafts[entry.id])
-                          ? "bg-fg-brand-primary"
+                          ? "bg-fg-secondary"
                           : readOnly && anyAnswered
                             ? "border border-fg-quaternary"
                             : index === step
-                              ? "bg-fg-tertiary"
+                              ? "bg-fg-quaternary"
                               : "bg-quaternary group-hover/dot:bg-fg-quaternary",
                       )}
                     />
