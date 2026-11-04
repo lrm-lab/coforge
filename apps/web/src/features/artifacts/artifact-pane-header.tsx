@@ -144,7 +144,7 @@ export function ArtifactBanner({
         "mx-4 mt-3 flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border px-3 py-2.5 text-sm",
         tone === "warning"
           ? "border-utility-yellow-300 bg-warning-primary text-warning-primary"
-          : "border-brand bg-brand-primary text-secondary",
+          : "border-secondary bg-brand-primary_alt text-secondary",
       )}
     >
       <Icon aria-hidden="true" className="size-4 shrink-0" />
