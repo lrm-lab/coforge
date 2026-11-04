@@ -343,11 +343,7 @@ function childrenOf(prefix: string): string[] {
   const names = new Set<string>();
   for (const key of Object.keys(COMMANDS)) {
     const rest =
-      prefix === ""
-        ? key
-        : key.startsWith(`${prefix} `)
-          ? key.slice(prefix.length + 1)
-          : "";
+      prefix === "" ? key : key.startsWith(`${prefix} `) ? key.slice(prefix.length + 1) : "";
     if (rest) names.add(rest.split(" ")[0]!);
   }
   return [...names];
@@ -363,10 +359,17 @@ function renderHelp(name: string, entry: HelpEntry): string {
   return lines.join("\n");
 }
 
+/** The command words in `argv`: everything before the first flag, so a flag's value never
+ * reads as a command name. */
+function commandWords(argv: readonly string[]): string[] {
+  const firstFlag = argv.findIndex((arg) => arg.startsWith("-"));
+  return firstFlag === -1 ? [...argv] : argv.slice(0, firstFlag);
+}
+
 /** The help for the longest command named in `argv`, or undefined when it names none. An empty
  * `argv` lists the top-level commands (`coforge --help`). */
 export function commandHelp(argv: readonly string[]): string | undefined {
-  const words = argv.filter((arg) => !arg.startsWith("-"));
+  const words = commandWords(argv);
   if (words.length === 0)
     return [
       "coforge <command>",
@@ -382,6 +385,70 @@ export function commandHelp(argv: readonly string[]): string | undefined {
   return undefined;
 }
 
+/** Common spellings Agents reach for that are not commands, mapped to the real command. */
+const COMMAND_ALIASES: Record<string, string> = {
+  project: "workspace info --projects",
+  projects: "workspace info --projects",
+};
+
+/** A small Levenshtein distance for did-you-mean suggestions over short command words. */
+function editDistance(a: string, b: string): number {
+  const row = Array.from({ length: a.length + 1 }, (_, i) => i);
+  for (let j = 1; j <= b.length; j++) {
+    let diagonal = row[0]!;
+    row[0] = j;
+    for (let i = 1; i <= a.length; i++) {
+      const next = row[i]!;
+      row[i] = Math.min(row[i]! + 1, row[i - 1]! + 1, diagonal + (a[i - 1] === b[j - 1] ? 0 : 1));
+      diagonal = next;
+    }
+  }
+  return row[a.length]!;
+}
+
+/** The error for a command line `parseArgs` does not know: the deepest matching level's
+ * commands, an alias hit, or a near-miss suggestion, like Raft's unknown-command error. */
+export function unknownCommandError(args: readonly string[]): CliError {
+  const words = commandWords(args);
+  const level =
+    words[0] !== undefined && (COMMANDS[words[0]] !== undefined || childrenOf(words[0]).length > 0)
+      ? words[0]
+      : "";
+  const available = childrenOf(level);
+  const candidates = level === "" ? [...available, ...Object.keys(COMMAND_ALIASES)] : available;
+  const bad = (words[level === "" ? 0 : 1] ?? words[0] ?? "").toLowerCase();
+  let suggestion: string | undefined;
+  if (level === "" && words[0] !== undefined && COMMAND_ALIASES[words[0]])
+    suggestion = `coforge ${COMMAND_ALIASES[words[0]]}`;
+  else {
+    const near = candidates.filter(
+      (candidate) =>
+        editDistance(bad, candidate) <= 2 ||
+        candidate.startsWith(bad) ||
+        (bad.length > 2 && bad.startsWith(candidate)),
+    );
+    const resolved = new Set(
+      near.map((word) =>
+        level === "" && COMMAND_ALIASES[word]
+          ? `coforge ${COMMAND_ALIASES[word]}`
+          : `coforge ${level ? `${level} ` : ""}${word}`,
+      ),
+    );
+    if (resolved.size === 1) suggestion = [...resolved][0];
+  }
+  const where = level === "" ? "the available commands" : `the ${level} commands`;
+  const nextAction =
+    level !== "" && available.length === 0
+      ? `Run \`coforge ${level} --help\` for the accepted form.`
+      : `Run \`coforge ${level ? `${level} ` : ""}--help\` for ${where}: ${available.join(" ")}` +
+        (suggestion ? ` Did you mean \`${suggestion}\`?` : "");
+  return new CliError({
+    code: "INVALID_ARG",
+    message: `"${args.join(" ")}" is not a command this CLI knows.`,
+    retryable: false,
+    suggestedNextAction: nextAction,
+  });
+}
 
 /** An argument the command cannot accept: what was wrong, and the help that lists the accepted
  * form — never a bare `Usage:` line. */

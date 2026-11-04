@@ -9,6 +9,7 @@ import {
   type TaskStatus,
 } from "@lrm/coforge-sdk/internal";
 import { CliError } from "#src/cli-error";
+import { unknownCommandError } from "./command-help";
 import { reviewerIsolationFromEnvironment } from "#src/reviewer-isolation";
 import {
   parseTaskConversationArgs,
@@ -234,7 +235,7 @@ export function parseTaskArgs(
   if (conversation) return conversation;
   const operation = args[0] as TaskOperation | undefined;
   if (!operation || !(TASK_OPERATIONS as readonly string[]).includes(operation))
-    throw new Error("Usage:");
+    throw unknownCommandError(["task", ...args]);
   const allowed = TASK_FLAGS[operation];
   const repeatable = TASK_REPEATABLE_FLAGS[operation] ?? [];
   const values = new Map<string, string[]>();

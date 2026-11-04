@@ -1,5 +1,5 @@
 import { CLI_USAGE } from "./src/usage";
-import { commandHelp, invalidArgument } from "./src/command-help";
+import { commandHelp, invalidArgument, unknownCommandError } from "./src/command-help";
 import { runMessageResolve } from "./src/message-resolve";
 import { formatReaction } from "./src/message-format";
 import { parseChannelManagementArgs, type ChannelManagementInvocation } from "./src/channel-args";
@@ -76,7 +76,6 @@ import {
   formatMentionDeliveries,
   incompleteMentionActions,
   mentionDeliveryFailure,
-  MENTION_DELIVERY_MESSAGE_ID_HINT,
 } from "#src/mention-format";
 import { runActionPrepare } from "#src/action-prepare-run";
 import { formatReadWindow } from "#src/message-read-format";
@@ -125,11 +124,8 @@ import {
   withOutputMode,
 } from "#src/cli-error";
 import { inferAttachmentMimeType, validateAttachmentUploadArgs } from "#src/attachment-upload";
-import {
-  parseMentionPendingArgs,
-  runMentionPending,
-  type MentionPendingInvocation,
-} from "#src/mention-pending";
+import { runMentionPending, type MentionPendingInvocation } from "#src/mention-pending";
+import { parseMentionArgs } from "#src/mention-args";
 import { runInboxCheck, type InboxTransport } from "#src/inbox-check";
 import { runAttention } from "#src/attention-format";
 import { parseTaskArgs, type TaskInvocation } from "#src/task-args";
@@ -570,10 +566,7 @@ export function parseArgs(
         };
     }
   }
-  throw invalidArgument(
-    args.slice(0, 2).join(" "),
-    `"${args.join(" ")}" is not a command this CLI knows. Run \`coforge manual get manual\` for the command list.`,
-  );
+  throw unknownCommandError(args);
 }
 
 /**
@@ -730,66 +723,6 @@ function parseProfileShowArgs(args: readonly string[]): ProfileShowInvocation {
     ...(trimmed ? { target: stripHandlePrefix(trimmed) } : {}),
     ...(json ? { json: true } : {}),
   };
-}
-
-const MENTION_USAGE =
-  "Usage: coforge mention pending [--limit <n>] [--json] | coforge mention notify <resolution-id>... [--json] | coforge mention add <resolution-id>... [--json] | coforge mention delivery --message <message-id> [--json]";
-
-function parseMentionArgs(args: readonly string[]): MentionInvocation {
-  const [sub, ...rest] = args;
-  if (sub === "delivery") return parseMentionDeliveryArgs(rest);
-  if (sub === "pending") return parseMentionPendingArgs(rest);
-  const json = rest.includes("--json");
-  const positionals = rest.filter((arg) => arg !== "--json");
-  if (positionals.some((arg) => arg.startsWith("--"))) throw new Error(MENTION_USAGE);
-  if (sub === "notify" || sub === "add") {
-    const resolutionIds = [...new Set(positionals.map((id) => id.trim()).filter(Boolean))];
-    if (!resolutionIds.length)
-      throw new CliError({
-        code: "INVALID_ARG",
-        message: "At least one resolution id is required.",
-        retryable: false,
-        outputMode: json ? "json" : "text",
-      });
-    return {
-      command: "mention-action",
-      action: sub,
-      resolutionIds,
-      ...(json ? { json: true } : {}),
-    };
-  }
-  throw new Error(MENTION_USAGE);
-}
-
-/** `coforge mention delivery --message <id> [--json]`: the message by its full id or the
- * eight-hex prefix `message read` shows, as `message resolve` and `message react` take it. */
-function parseMentionDeliveryArgs(args: readonly string[]): MentionInvocation {
-  const json = args.includes("--json");
-  const outputMode = json ? "json" : "text";
-  let messageId: string | undefined;
-  for (let index = 0; index < args.length; index++) {
-    if (args[index] === "--json") continue;
-    if (args[index] === "--message" && args[index + 1] !== undefined)
-      messageId = args[++index]!.trim();
-    else throw new Error(MENTION_USAGE);
-  }
-  if (!messageId)
-    throw new CliError({
-      code: "INVALID_ARG",
-      message: "--message <id> is required.",
-      retryable: false,
-      suggestedNextAction: MENTION_DELIVERY_MESSAGE_ID_HINT,
-      outputMode,
-    });
-  if (!MESSAGE_ANCHOR_PATTERN.test(messageId))
-    throw new CliError({
-      code: "INVALID_ARG",
-      message: `--message takes a message id (a full UUID or its first eight hex characters), not ${messageId}.`,
-      retryable: false,
-      suggestedNextAction: MENTION_DELIVERY_MESSAGE_ID_HINT,
-      outputMode,
-    });
-  return { command: "mention-delivery", messageId, ...(json ? { json: true } : {}) };
 }
 
 function parseActionPrepareArgs(args: readonly string[]): ActionPrepareInvocation {
@@ -1212,7 +1145,7 @@ function isMessageCommand(value: string | undefined): value is MessageCommand {
 function parseWeeklyReportCollectArgs(args: readonly string[]): WeeklyReportCollectInvocation {
   const operation = args[0];
   if (operation !== "submit-pack" && operation !== "submit-empty" && operation !== "submit-failure")
-    throw new Error("Usage:");
+    throw unknownCommandError(["weekly-report-collect", ...args]);
   const values = new Map<string, string>();
   for (let index = 1; index < args.length; index++) {
     const name = args[index];
@@ -1259,7 +1192,7 @@ function parseWeeklyReportCollectArgs(args: readonly string[]): WeeklyReportColl
 }
 
 function parseWeeklyReportKeyPointsArgs(args: readonly string[]): WeeklyReportKeyPointsInvocation {
-  if (args[0] !== "submit") throw new Error("Usage:");
+  if (args[0] !== "submit") throw unknownCommandError(["weekly-report-key-points", ...args]);
   const values = new Map<string, string>();
   for (let index = 1; index < args.length; index++) {
     const name = args[index];
@@ -1288,7 +1221,7 @@ function parseWeeklyReportKeyPointsArgs(args: readonly string[]): WeeklyReportKe
 }
 
 function parseWeeklyReportMemoryArgs(args: readonly string[]): WeeklyReportMemoryInvocation {
-  if (args[0] !== "submit") throw new Error("Usage:");
+  if (args[0] !== "submit") throw unknownCommandError(["weekly-report-memory", ...args]);
   const values = new Map<string, string>();
   for (let index = 1; index < args.length; index++) {
     const name = args[index];
@@ -1331,7 +1264,7 @@ function parseWeeklyReportArgs(args: readonly string[]): WeeklyReportInvocation 
     return { command: "weekly-report", inputPath: args[2] };
   }
   if (operation !== "context" && operation !== "list" && operation !== "read")
-    throw new Error("Usage:");
+    throw unknownCommandError(["weekly-report", ...args]);
   const values = new Map<string, string>();
   for (let index = 1; index < args.length; index++) {
     const name = args[index];

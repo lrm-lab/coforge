@@ -11,6 +11,7 @@ import {
   isReminderId,
 } from "@lrm/coforge-sdk/internal";
 import { CliError } from "#src/cli-error";
+import { unknownCommandError } from "./command-help";
 import { parseDurationSeconds } from "#src/reminder-duration";
 import { formatReminderResponse as formatAgentReminderResponse } from "#src/reminder-format";
 
@@ -84,7 +85,7 @@ export function parseReminderArgs(args: readonly string[]): ReminderInvocation {
       "unseal",
     ].includes(operation)
   )
-    throw new Error(REMINDER_USAGE);
+    throw unknownCommandError(["reminder", ...args]);
   const names: Record<string, keyof ReminderTransportRequest> = {
     "--id": "reminderId",
     "--title": "title",

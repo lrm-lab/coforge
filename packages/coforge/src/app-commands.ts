@@ -25,6 +25,7 @@ import {
   type AppManagementInvocation,
 } from "./app-management-args";
 import { shortId } from "./short-id";
+import { unknownCommandError } from "./command-help";
 import {
   isAppRegistrationInvocation,
   parseAppRegistrationArgs,
@@ -98,7 +99,7 @@ export function parseAppArgs(
   if (subcommand === "prepare" || subcommand === "status" || subcommand === "rotate-secret")
     return parseAppRegistrationArgs(subcommand, rest, invalid);
   if (subcommand === "invoke") return parseInvokeArgs(rest, invalid, parseTimeout);
-  if (subcommand !== "token") invalid(`Unknown app command ${subcommand ?? ""}`.trim());
+  if (subcommand !== "token") throw unknownCommandError(["app", ...args]);
   const values: Record<string, string> = {};
   const scopes: string[] = [];
   for (let index = 0; index < options.length; index += 2) {

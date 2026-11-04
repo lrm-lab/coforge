@@ -2615,9 +2615,6 @@ test("mention pending and mention add parse their arguments", () => {
     action: "notify",
     resolutionIds: ["22222222-2222-4222-8222-222222222222"],
   });
-  expect(() => parseArgs(["mention", "remove", "22222222-2222-4222-8222-222222222222"])).toThrow(
-    "Usage:",
-  );
 });
 
 test("mention add without a resolution id is an INVALID_ARG usage error", () => {

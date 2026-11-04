@@ -17,7 +17,8 @@ export const appHelp: Readonly<Record<string, HelpEntry>> = {
     syntax: "coforge app marketplace [<query>] [--limit <1-50>] [--json]",
   },
   "app update": {
-    syntax: "coforge app update --client <key> [--name <n>] [--description <t>] [--when-to-use <t>] [--category <c>] [--homepage-url <u> | --clear-homepage-url] [--redirect-url <u>]... [--agent-manifest-url <u> | --clear-agent-manifest-url] [--scope <scope>]... [--json]",
+    syntax:
+      "coforge app update --client <key> [--name <n>] [--description <t>] [--when-to-use <t>] [--category <c>] [--homepage-url <u> | --clear-homepage-url] [--redirect-url <u>]... [--agent-manifest-url <u> | --clear-agent-manifest-url] [--scope <scope>]... [--json]",
   },
   "app logo": {
     syntax: "coforge app logo --client <key> --file <path> [--json]",

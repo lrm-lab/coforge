@@ -3,6 +3,7 @@ import { parseArgs, run } from "../index";
 import type { MessageTransport } from "../index";
 import { CLI_USAGE } from "../src/usage";
 import { commandHelp } from "../src/command-help";
+import { parseAppArgs } from "../src/app-commands";
 
 const transport = {} as unknown as MessageTransport;
 
@@ -122,3 +123,64 @@ test("coforge --help lists the top-level commands, and a group --help lists its 
   expect(app).toContain("  marketplace");
 });
 
+test("an unknown command names the deepest level's commands and suggests near misses", async () => {
+  const nested = (await run(["message", "bogus"], transport).catch((e: unknown) => e)) as {
+    code?: string;
+    message?: string;
+    suggestedNextAction?: string;
+  };
+  expect(nested.code).toBe("INVALID_ARG");
+  expect(nested.message).toContain("not a command this CLI knows");
+  expect(nested.suggestedNextAction).toContain("coforge message --help");
+  expect(nested.suggestedNextAction).toContain("check");
+
+  const typo = (await run(["projet", "list"], transport).catch((e: unknown) => e)) as {
+    code?: string;
+    message?: string;
+    suggestedNextAction?: string;
+  };
+  expect(typo.suggestedNextAction).toContain("Did you mean `coforge workspace info --projects`?");
+
+  const alias = (await run(["project", "list"], transport).catch((e: unknown) => e)) as {
+    code?: string;
+    message?: string;
+    suggestedNextAction?: string;
+  };
+  expect(alias.suggestedNextAction).toContain("Did you mean `coforge workspace info --projects`?");
+
+  const close = (await run(["message", "chek"], transport).catch((e: unknown) => e)) as {
+    code?: string;
+    message?: string;
+    suggestedNextAction?: string;
+  };
+  expect(close.suggestedNextAction).toContain("Did you mean `coforge message check`?");
+});
+
+test("an unknown subcommand in a self-parsing group names that group's commands", async () => {
+  type Shape = { code?: string; message?: string; suggestedNextAction?: string };
+
+  for (const [args, group] of [
+    [["task", "bogus"], "task"],
+    [["reminder", "bogus"], "reminder"],
+    [["mention", "bogus"], "mention"],
+    [["weekly-report", "bogus"], "weekly-report"],
+  ] as const) {
+    const error = (await run([...args], transport).catch((e: unknown) => e)) as Shape;
+    expect(error.code).toBe("INVALID_ARG");
+    expect(error.suggestedNextAction).toContain(`coforge ${group} --help`);
+  }
+
+  const appError = (() => {
+    try {
+      parseAppArgs(["bogus"]);
+    } catch (error) {
+      return error as Shape;
+    }
+    throw new Error("expected parseAppArgs to reject");
+  })();
+  expect(appError.suggestedNextAction).toContain("coforge app --help");
+  expect(appError.suggestedNextAction).toContain("update");
+
+  const taskTypo = (await run(["task", "veiw"], transport).catch((e: unknown) => e)) as Shape;
+  expect(taskTypo.suggestedNextAction).toContain("Did you mean `coforge task view`?");
+});
