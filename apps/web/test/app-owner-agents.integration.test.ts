@@ -396,14 +396,16 @@ test.skipIf(!db)("Settings names the owner Agent only while it is live and publi
   try {
     const owners = createAppOwnerAgents(db!);
     await f.register.commit(f.actor("admin"), (await f.prepare(f.scout.id)).messageId);
-    expect(await owners.ownerNames(f.workspace.id)).toEqual(new Map([[f.key, "scout"]]));
+    expect(await owners.owners(f.workspace.id)).toEqual(
+      new Map([[f.key, { id: f.scout.id, name: "scout", avatarMascot: null }]]),
+    );
     await db!.agent.update({ where: { id: f.scout.id }, data: { visibility: "private" } });
-    expect((await owners.ownerNames(f.workspace.id)).size).toBe(0);
+    expect((await owners.owners(f.workspace.id)).size).toBe(0);
     await db!.agent.update({
       where: { id: f.scout.id },
       data: { visibility: "public", deletedAt: new Date() },
     });
-    expect((await owners.ownerNames(f.workspace.id)).size).toBe(0);
+    expect((await owners.owners(f.workspace.id)).size).toBe(0);
   } finally {
     await f.cleanup();
   }

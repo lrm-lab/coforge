@@ -1,4 +1,6 @@
 import { Badge } from "#src/components/base/badges/badges";
+import { ActorName } from "#src/features/avatars/actor-name";
+import { messageSlots } from "#src/lib/message-slots";
 import { m } from "#src/paraglide/messages";
 import { InstallationCard } from "./app-editor-installation";
 import { AppBotInstallation } from "./app-bot-grant";
@@ -76,7 +78,9 @@ export function AppDetail({
           </p>
           {app.ownerAgent && (
             <p className="text-sm text-tertiary">
-              {m.apps_detail_owner_agent({ agent: app.ownerAgent.name })}
+              {messageSlots(m.apps_detail_owner_agent, {
+                agent: <ActorName actor={{ kind: "agent", ...app.ownerAgent }} />,
+              })}
             </p>
           )}
           {homepage && (

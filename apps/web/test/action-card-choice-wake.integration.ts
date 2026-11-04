@@ -306,12 +306,15 @@ test("a choice card names who is asked, and only they may choose", async () => {
   ).toBeUndefined();
   const base = { messageId, state: "pending" as const, canCommit: false, canCancel: false };
   const card = { result: null };
-  const names = new Map([[userId, "Choice Person"]]);
+  const names = (id: string) =>
+    id === userId ? { id, displayName: "Choice Person", avatarUrl: null } : undefined;
   const view = choiceActionCardView(base, card, payload, userId, true, names);
   expect(view.canCommit).toBe(true);
   // The card names whom it asks, so everyone else sees whose choice it waits on.
   expect(view.kind === "choice" && view.asked).toEqual({
+    id: userId,
     displayName: "Choice Person",
+    avatarUrl: null,
     isViewer: true,
   });
   expect(view.kind === "choice" && view.other).toEqual({});

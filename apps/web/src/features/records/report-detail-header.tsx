@@ -11,6 +11,8 @@ import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
+import { ActorName } from "#src/features/avatars/actor-name";
+import { messageSlots } from "#src/lib/message-slots";
 import { m } from "#src/paraglide/messages";
 import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
 import { formatWeeklyReportCompletedAt, type ReportBodyRestoreView } from "./records-content";
@@ -82,8 +84,18 @@ export function ReportDetailHeader({
                 })}
               </span>
               <span className="truncate">
-                {m.records_report_shared_by({
-                  name: report.sharedBy?.displayName ?? report.author.displayName,
+                {messageSlots(m.records_report_shared_by, {
+                  // The sharer's face before the name (task #521).
+                  name: (
+                    <ActorName
+                      actor={{
+                        kind: "user",
+                        id: (report.sharedBy ?? report.author).userId,
+                        name: (report.sharedBy ?? report.author).displayName,
+                        avatarUrl: (report.sharedBy ?? report.author).avatarUrl,
+                      }}
+                    />
+                  ),
                 })}
               </span>
             </p>

@@ -25,6 +25,7 @@ import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
 import { isValidTemplateName, hourlySendTimes } from "./records-content";
 import { FOUNDATION_MODELS_WEEKLY_TEMPLATE_NAME } from "./foundation-models-weekly";
 import { parseTemplateSections, type TemplateOutlineSection } from "./template-outline-sections";
+import { ActorName } from "#src/features/avatars/actor-name";
 import { memberLabel, weekdayLabel, type TemplateMemberOption } from "./weekly-template-members";
 import type { WeeklyTemplateList } from "./weekly-report-settings";
 import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
@@ -381,7 +382,19 @@ export function CreateWeeklyTemplateDialog({
                                 buttonLabel={m.records_template_remove_recipient({ name })}
                                 onButtonClick={() => toggleRecipient(id)}
                               >
-                                {member ? humanLabel(member) : id}
+                                {member ? (
+                                  // The recipient's face before the name (task #521).
+                                  <ActorName
+                                    actor={{
+                                      kind: "user",
+                                      id,
+                                      name: humanLabel(member),
+                                      avatarUrl: member.avatarUrl,
+                                    }}
+                                  />
+                                ) : (
+                                  id
+                                )}
                               </BadgeWithButton>
                             );
                           })

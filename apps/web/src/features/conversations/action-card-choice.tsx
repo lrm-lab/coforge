@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
-import { AlertCircle, Clock, Pencil01 } from "@untitledui/icons";
+import { AlertCircle, Pencil01 } from "@untitledui/icons";
 import { FocusScope, useFocusManager } from "react-aria";
 import { Button as AriaButton } from "react-aria-components";
 import { CHOICE_OTHER_OPTION_ID, CHOICE_OTHER_TEXT_MAX_LENGTH } from "@lrm/coforge-sdk/agent";
@@ -13,6 +13,7 @@ import { m } from "#src/paraglide/messages";
 import { focusDraftEnd } from "./composer-field";
 import { shouldSendOnEnter } from "./composer-behavior";
 import { HandledChoice, chosenAnswer } from "./action-card-choice-handled";
+import { WaitingOn } from "./action-card-waiting-on";
 
 type ChoiceView = Extract<ActionCardView, { kind: "choice" }>;
 type Pick = { optionId: string; text?: string };
@@ -181,7 +182,7 @@ function PendingChoice({
   const canAnswer = view.canCommit;
   // Whom it waits on, for anyone but the asked person; withdrawing is for the Agent's owner or an
   // admin, never the asked person, who answers or types instead.
-  const waitingOn = canAnswer ? undefined : view.asked?.displayName;
+  const waitingOn = canAnswer ? undefined : view.asked;
   const withdrawable = view.canCancel && !canAnswer;
 
   const focus = useFocusManager();
@@ -306,12 +307,7 @@ function PendingChoice({
       )}
       {(waitingOn || withdrawable) && (
         <div className="flex items-center gap-3 px-2.5 pt-2 pb-1">
-          {waitingOn && (
-            <p className="flex min-w-0 flex-1 items-center gap-1.5 text-xs text-tertiary">
-              <Clock aria-hidden="true" className="size-3.5 shrink-0" />
-              {m.action_card_choice_waiting({ name: waitingOn })}
-            </p>
-          )}
+          {waitingOn && <WaitingOn asked={waitingOn} />}
           {withdrawable && (
             <Button
               size="sm"

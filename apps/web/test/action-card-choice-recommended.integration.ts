@@ -79,7 +79,7 @@ test("a recommended option is moved first with a warning, and the view carries t
     payload,
     userId,
     true,
-    new Map([[userId, "Rec"]]),
+    (id) => (id === userId ? { id, displayName: "Rec", avatarUrl: null } : undefined),
   );
   expect(view.kind).toBe("choice");
   if (view.kind !== "choice") throw new Error("expected a choice view");

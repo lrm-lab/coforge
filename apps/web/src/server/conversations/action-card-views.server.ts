@@ -173,6 +173,9 @@ export async function actionCardViews(
     avatarUrl: agentAvatar.get(id) ?? null,
   });
 
+  const userPerson = (id: string): ActionCardPersonRef | undefined =>
+    userName.has(id) ? human(id) : undefined;
+
   const views = new Map<string, ActionCardView>();
   for (const card of cards) {
     const payload = card.payload as ResolvedActionCardPayload;
@@ -184,10 +187,7 @@ export async function actionCardViews(
       draftHint: card.draftHint ?? undefined,
       preview: previewCardOf(card),
       committedBy: card.committedByUserId
-        ? {
-            displayName: userName.get(card.committedByUserId) ?? "unknown",
-            isViewer: card.committedByUserId === viewerUserId,
-          }
+        ? { ...human(card.committedByUserId), isViewer: card.committedByUserId === viewerUserId }
         : undefined,
       committedAt: card.committedAt?.toISOString(),
       expiresAt: card.expiresAt?.toISOString(),
@@ -257,12 +257,12 @@ export async function actionCardViews(
     } else if (payload.type === "choice") {
       views.set(
         card.messageId,
-        choiceActionCardView(base, card, payload, viewerUserId, pending, userName),
+        choiceActionCardView(base, card, payload, viewerUserId, pending, userPerson),
       );
     } else if (payload.type === "questions") {
       views.set(
         card.messageId,
-        questionsActionCardView(base, card, payload, viewerUserId, pending, userName),
+        questionsActionCardView(base, card, payload, viewerUserId, pending, userPerson),
       );
     } else if (payload.type === "app:recover_owner") {
       views.set(card.messageId, {

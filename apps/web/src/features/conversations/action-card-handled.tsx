@@ -1,4 +1,7 @@
+import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
+
+import { ActorName } from "#src/features/avatars/actor-name";
 
 import { formatAgentProfileParam } from "#src/features/agents/profile-panel/profile-panel-search";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
@@ -9,11 +12,12 @@ import {
   unhandledKind,
   type ToolActionCardView,
 } from "./action-card-labels";
-import { namesOf } from "./action-card-object";
+import { NamesWithFaces } from "./action-card-object";
+import { cardActor } from "./action-card-actor";
 
 /** What a handled card made: its words and, where the thing has an id, where it opens. */
 type Outcome = {
-  text: string;
+  text: ReactNode;
   target?: { kind: "channel"; channelId: string } | { kind: "agent"; agentId: string };
 };
 
@@ -35,11 +39,20 @@ function outcomeOf(view: ToolActionCardView): Outcome | undefined {
       // What was added is what the person kept of the proposal, and the channel opens only for
       // someone who can read it (its id is null to anyone else).
       const kept = new Set([...(view.result?.userIds ?? []), ...(view.result?.agentIds ?? [])]);
-      const proposed = [...view.humans, ...view.agents];
+      const proposed = [
+        ...view.humans.map((person) => ({ ...person, kind: "user" as const })),
+        ...view.agents.map((person) => ({ ...person, kind: "agent" as const })),
+      ];
       const people = view.result ? proposed.filter((person) => kept.has(person.id)) : proposed;
       const channel = `#${view.channel.displayName}`;
       return {
-        text: people.length ? `${namesOf(people)} → ${channel}` : channel,
+        text: people.length ? (
+          <>
+            <NamesWithFaces people={people} /> → {channel}
+          </>
+        ) : (
+          channel
+        ),
         target:
           view.result && view.channel.id
             ? { kind: "channel", channelId: view.channel.id }
@@ -73,7 +86,7 @@ const LINK_CLASS =
 function outcomeLink(
   workspaceSlug: string,
   target: NonNullable<Outcome["target"]>,
-  text: string,
+  text: ReactNode,
 ): FocusableLink {
   return target.kind === "channel" ? (
     <Link
@@ -115,7 +128,7 @@ export function HandledActionCard({ view }: { view: ToolActionCardView }) {
           : view.kind === "app:grant_agent"
             ? m.app_card_denied()
             : m.action_card_cancelled();
-    const closedBy = view.committedBy?.isViewer ? undefined : view.committedBy?.displayName;
+    const closedBy = view.committedBy?.isViewer ? undefined : view.committedBy;
     return (
       <p className="text-sm wrap-anywhere text-tertiary">
         <span className="mr-1">{verb}</span>{" "}
@@ -131,8 +144,7 @@ export function HandledActionCard({ view }: { view: ToolActionCardView }) {
       </p>
     );
   }
-  const by =
-    view.committedBy && !view.committedBy.isViewer ? view.committedBy.displayName : undefined;
+  const by = view.committedBy && !view.committedBy.isViewer ? view.committedBy : undefined;
   const at = view.committedAt;
   const link = outcome?.target && outcomeLink(workspaceSlug, outcome.target, outcome.text);
   const result = outcome && !link && (
@@ -152,7 +164,11 @@ export function HandledActionCard({ view }: { view: ToolActionCardView }) {
         ) : (
           (link ?? result)
         )}
-        {by && <span className="ml-1.5 text-quaternary">· {by}</span>}
+        {by && (
+          <span className="ml-1.5 inline-block max-w-48 truncate align-bottom text-quaternary">
+            · <ActorName actor={cardActor(by)} />
+          </span>
+        )}
       </p>
       {view.kind === "app:register" && view.result && (
         <p className="pt-1 text-xs text-tertiary">

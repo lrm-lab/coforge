@@ -1,11 +1,14 @@
 import type { ComponentProps, ReactNode } from "react";
 import { Focusable } from "react-aria-components";
 
+import { ActorName } from "#src/features/avatars/actor-name";
+import type { ActionCardActor } from "#src/server/conversations/action-card-view.server";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { formatMonthDayTime } from "#src/lib/dates";
 import { useTimeFormat } from "#src/lib/time-format-context";
 import { useTimeZone } from "#src/lib/time-zone-context";
 import { getLocale } from "#src/paraglide/runtime";
+import { cardActor } from "./action-card-actor";
 
 /** When a card was handled, written only while its tooltip is open: the content mounts with the
  * tooltip, so a list of closed cards formats no times. */
@@ -27,7 +30,7 @@ export function AnsweredAtTooltip({
   at,
   by,
   ...result
-}: { at: string; by?: string } & (
+}: { at: string; by?: ActionCardActor } & (
   | { link: FocusableLink; children?: never }
   | { link?: never; children: ReactNode }
 )) {
@@ -35,7 +38,11 @@ export function AnsweredAtTooltip({
     <Tooltip
       title={
         <>
-          {by && <>{by} · </>}
+          {by && (
+            <>
+              <ActorName actor={cardActor(by)} /> ·{" "}
+            </>
+          )}
           <AnsweredAt value={at} />
         </>
       }

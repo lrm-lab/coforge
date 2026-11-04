@@ -1,7 +1,8 @@
 import { Link } from "@tanstack/react-router";
-import { ArrowUpRight, CheckCircle, Users01 as Users } from "@untitledui/icons";
+import { ArrowUpRight, CheckCircle } from "@untitledui/icons";
 
 import { PageHeader } from "#src/components/layout/page-header";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { m } from "#src/paraglide/messages";
 import type { loadWeeklyReportDashboard } from "./records.functions";
@@ -48,7 +49,15 @@ export function WeeklyReportDashboard({ dashboard }: { dashboard: Dashboard }) {
                     className="rounded-xl border border-secondary bg-primary"
                   >
                     <div className="flex items-center gap-2 border-b border-secondary px-4 py-3">
-                      <Users aria-hidden="true" className="size-4 text-tertiary" />
+                      {/* The person's face, not a generic people icon (task #521). */}
+                      <ActorAvatar
+                        presence={false}
+                        size="xs"
+                        name={member.displayName}
+                        alt=""
+                        src={member.avatarUrl}
+                        className="size-5 shrink-0"
+                      />
                       <h3 className="font-semibold text-primary">{member.displayName}</h3>
                     </div>
                     <div className="grid gap-3 p-4 md:grid-cols-3">

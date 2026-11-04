@@ -122,7 +122,16 @@ async function loadAgentProfileDetail(context: WorkspaceUserContext, agentId: st
     // Who archived it, labelled the way the rest of the product names a person; absent when
     // that was not recorded.
     deletedBy: result.deletedBy
-      ? { id: result.deletedBy.id, label: humanLabel(result.deletedBy) }
+      ? {
+          id: result.deletedBy.id,
+          label: humanLabel(result.deletedBy),
+          // The face drawn beside the name (task #521).
+          avatarUrl: workspaceUserAvatarUrl(
+            workspaceId,
+            result.deletedBy.id,
+            result.deletedBy.avatarObjectKey ?? null,
+          ),
+        }
       : null,
   };
 }

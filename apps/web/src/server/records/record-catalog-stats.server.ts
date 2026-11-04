@@ -101,7 +101,11 @@ export function recordStats(db: Db) {
     await requireMembership(db, input.workspaceId, input.userId);
     const members = await db.workspaceMembership.findMany({
       where: { workspaceId: input.workspaceId },
-      include: { user: { select: { id: true, username: true, displayName: true } } },
+      include: {
+        user: {
+          select: { id: true, username: true, displayName: true, avatarObjectKey: true },
+        },
+      },
       orderBy: { createdAt: "asc" },
     });
     const cycles = await db.weeklyReportCycle.findMany({
@@ -148,6 +152,12 @@ export function recordStats(db: Db) {
       members: members.map((member) => ({
         userId: member.user.id,
         displayName: humanLabel(member.user),
+        // The face beside the name (task #521).
+        avatarUrl: workspaceUserAvatarUrl(
+          input.workspaceId,
+          member.user.id,
+          member.user.avatarObjectKey,
+        ),
       })),
     };
   }

@@ -246,7 +246,18 @@ function ChannelCandidateRow({
     <PickerListRow
       label={entry.displayName}
       description={entry.description}
-      leading={<Face face={{ kind: "identity", name: entry.displayName, src: entry.avatarUrl }} />}
+      // The id gives an Agent its mascot and a person their status dot, as `memberOption` does
+      // (task #521).
+      leading={
+        <Face
+          face={{
+            kind: "identity",
+            name: entry.displayName,
+            src: entry.avatarUrl,
+            ...(entry.kind === "agent" ? { agentId: entry.id } : { userId: entry.id }),
+          }}
+        />
+      }
       // A person is named by their display name alone; an Agent adds the handle it is mentioned by.
       addon={entry.search.kind === "agent" ? `@${entry.search.name}` : undefined}
       isSelected={isSelected}

@@ -106,7 +106,13 @@ export class PrismaAppOwnerAgentStore implements AppOwnerAgentStore {
       select: {
         ...APP,
         ownerAgent: {
-          select: { name: true, displayName: true, visibility: true, deletedAt: true },
+          select: {
+            name: true,
+            displayName: true,
+            visibility: true,
+            avatarMascot: true,
+            deletedAt: true,
+          },
         },
       },
     });
@@ -116,6 +122,7 @@ export class PrismaAppOwnerAgentStore implements AppOwnerAgentStore {
         name: ownerAgent.name,
         displayName: ownerAgent.displayName,
         visibility: ownerAgent.visibility,
+        avatarMascot: ownerAgent.avatarMascot,
         archived: ownerAgent.deletedAt !== null,
       },
     }));

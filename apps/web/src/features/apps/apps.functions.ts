@@ -18,9 +18,11 @@ import { createAppWebhooks } from "#src/server/app-notifications/app-webhooks-co
 import { createAppPublishing } from "#src/server/app-marketplace/app-publishing-composition.server";
 import { isFeatureEnabled } from "#src/server/feature-flags/feature-flags.server";
 import { createAppOwnerAgents } from "#src/server/apps/app-owner-agents-composition.server";
+import type { OwnerAgentSummary } from "#src/server/apps/app-owner-agents.server";
 import { createAppRegistry } from "#src/server/apps/app-registry-composition.server";
 import { appLogoUrl } from "#src/server/apps/app-logo.server";
 import type { AppView } from "#src/server/apps/app-registry.server";
+import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import { actorOf } from "./app-actor";
 import { APP_CATEGORIES } from "./app-category";
 import type { AppPublishStatus } from "./app-publish-status";
@@ -80,7 +82,7 @@ export type AppSummary = Omit<
   bot?: AppBotSummary;
   /** The Agent that registered the app and manages it with the Workspace's owners and admins;
    * present only for an app this Workspace owns, and only for a live public Agent. */
-  ownerAgent?: { name: string };
+  ownerAgent?: { id: string; name: string; avatarUrl: string };
   /** Where the app is in Marketplace review; present only for an app this Workspace owns: an
    * installing Workspace never sees the developer's review state. */
   publishStatus?: AppPublishStatus;
@@ -117,6 +119,13 @@ const setupSummary = ({
   url,
   description,
   installation: { installationId, status, link, completedAt: completedAt?.toISOString() ?? null },
+});
+
+/** The owner Agent as the app detail names it: its id and face (task #521). */
+const ownerAgentView = ({ id, name, avatarMascot }: OwnerAgentSummary) => ({
+  id,
+  name,
+  avatarUrl: agentAvatarUrl(id, avatarMascot),
 });
 
 const botSummary = ({ installationId, granted, statusText }: AppBotView): AppBotSummary => ({
@@ -199,8 +208,8 @@ export const loadWorkspaceApps = createServerFn({ method: "GET" })
     ]);
     // Only an app with an owner Agent needs its name looked up.
     const ownerAgents = apps.some((app) => app.ownerAgentId)
-      ? await createAppOwnerAgents(context.db).ownerNames(actor.workspaceId)
-      : new Map<string, string>();
+      ? await createAppOwnerAgents(context.db).owners(actor.workspaceId)
+      : new Map<string, OwnerAgentSummary>();
     const bot = await isFeatureEnabled("app-bot", {
       workspaceId: actor.workspaceId,
       workspaceSlug,
@@ -214,7 +223,7 @@ export const loadWorkspaceApps = createServerFn({ method: "GET" })
       apps: apps.map((app) => ({
         ...summary(app, actor.workspaceId, permissions?.apps.get(app.key), setups?.get(app.key)),
         ...(app.ownerWorkspaceId === actor.workspaceId &&
-          ownerAgents.has(app.key) && { ownerAgent: { name: ownerAgents.get(app.key)! } }),
+          ownerAgents.has(app.key) && { ownerAgent: ownerAgentView(ownerAgents.get(app.key)!) }),
         ...(bots?.get(app.key)?.declared && { bot: botSummary(bots.get(app.key)!) }),
         ...(webhookStatuses &&
           app.ownerWorkspaceId === actor.workspaceId && {

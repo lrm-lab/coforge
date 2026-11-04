@@ -9,12 +9,16 @@ export type OwnerAgentCaller = { workspaceId: string; agentId: string };
 
 export type OwnerAgentApp = ManagedAppRow;
 
+/** An owner Agent as an app's detail names it. */
+export type OwnerAgentSummary = { id: string; name: string; avatarMascot: string | null };
+
 /** An app with the Agent that owns it, as its row holds both. */
 export type OwnedAppRow = OwnerAgentApp & {
   ownerAgent: {
     name: string;
     displayName: string | null;
     visibility: string;
+    avatarMascot: string | null;
     archived: boolean;
   } | null;
 };
@@ -192,12 +196,22 @@ export class AppOwnerAgents {
 
   /** The owner Agent each of the Workspace's apps shows in Settings: only a live public Agent is
    * named, so a private or archived one never is. */
-  async ownerNames(workspaceId: string): Promise<Map<string, string>> {
-    const names = new Map<string, string>();
-    for (const { key, ownerAgent } of await this.store.withOwners(workspaceId))
-      if (ownerAgent && !ownerAgent.archived && ownerAgent.visibility === AGENT_VISIBILITY.PUBLIC)
-        names.set(key, ownerAgent.displayName?.trim() || ownerAgent.name);
-    return names;
+  async owners(workspaceId: string): Promise<Map<string, OwnerAgentSummary>> {
+    const owners = new Map<string, OwnerAgentSummary>();
+    for (const { key, ownerAgentId, ownerAgent } of await this.store.withOwners(workspaceId))
+      if (
+        ownerAgentId &&
+        ownerAgent &&
+        !ownerAgent.archived &&
+        ownerAgent.visibility === AGENT_VISIBILITY.PUBLIC
+      )
+        owners.set(key, {
+          id: ownerAgentId,
+          name: ownerAgent.displayName?.trim() || ownerAgent.name,
+          // Its face is drawn beside the name (task #521).
+          avatarMascot: ownerAgent.avatarMascot,
+        });
+    return owners;
   }
 
   /** The calling Agent, if it is in the Workspace its key names and not archived. */

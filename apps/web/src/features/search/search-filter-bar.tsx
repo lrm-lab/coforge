@@ -3,6 +3,8 @@ import { useMemo, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown } from "@untitledui/icons";
 
+import { ActorName } from "#src/features/avatars/actor-name";
+import { messageSlots } from "#src/lib/message-slots";
 import { EntityPicker } from "#src/features/pickers/entity-picker";
 import { Button } from "#src/components/base/buttons/button";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
@@ -65,7 +67,23 @@ export function SearchFilterBar({
     <div role="group" aria-label={m.search_filters()} className="flex flex-wrap items-center gap-2">
       <EntityPicker
         trigger={
-          <Chip>{sender ? m.search_from_named({ name: sender.label }) : m.search_from()}</Chip>
+          <Chip>
+            {sender
+              ? messageSlots(m.search_from_named, {
+                  // The face before the name in the chip (task #521).
+                  name: (
+                    <ActorName
+                      actor={{
+                        kind: sender.kind,
+                        id: sender.id,
+                        name: sender.label,
+                        avatarUrl: sender.avatarUrl,
+                      }}
+                    />
+                  ),
+                })
+              : m.search_from()}
+          </Chip>
         }
         label={m.search_find_sender()}
         searchPlaceholder={m.search_find_sender()}
@@ -75,7 +93,14 @@ export function SearchFilterBar({
           ...senders.map((candidate) => ({
             id: candidate.key,
             label: candidate.label,
-            face: { kind: "identity" as const, name: candidate.name, src: candidate.avatarUrl },
+            face: {
+              kind: "identity" as const,
+              name: candidate.name,
+              src: candidate.avatarUrl,
+              ...(candidate.kind === "agent"
+                ? { agentId: candidate.id }
+                : { userId: candidate.id }),
+            },
             addon: candidate.addon,
             keywords: candidate.textValue,
           })),

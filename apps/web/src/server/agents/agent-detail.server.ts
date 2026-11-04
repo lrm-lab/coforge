@@ -63,7 +63,12 @@ type DetailAgent = {
   /** Set once the Agent is deleted; its profile stays readable. */
   deletedAt?: Date | null;
   /** Who deleted it, when that was recorded. */
-  deletedBy?: { id: string; username: string; displayName?: string | null } | null;
+  deletedBy?: {
+    id: string;
+    username: string;
+    displayName?: string | null;
+    avatarObjectKey?: string | null;
+  } | null;
 };
 
 export type AgentDetailSource = {

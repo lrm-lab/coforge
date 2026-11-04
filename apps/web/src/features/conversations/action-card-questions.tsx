@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { AlertCircle, Clock, SlashCircle01 } from "@untitledui/icons";
+import { AlertCircle, SlashCircle01 } from "@untitledui/icons";
 import { CHOICE_OTHER_OPTION_ID } from "@lrm/coforge-sdk/agent";
 
 import { Button } from "#src/components/base/buttons/button";
+import { ActorName } from "#src/features/avatars/actor-name";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import {
@@ -14,6 +15,8 @@ import {
 } from "./action-card-question-rows";
 import { dropDrafts, keepDrafts, keptDrafts } from "./action-card-questions-drafts";
 import { QuestionsStepper } from "./action-card-questions-stepper";
+import { WaitingOn } from "./action-card-waiting-on";
+import { cardActor } from "./action-card-actor";
 
 /** One question's answer, as `commitQuestionsActionCard` takes it. */
 export type QuestionsAnswer = { questionId: string; selection: string[]; text?: string };
@@ -65,7 +68,7 @@ export function QuestionsActionCard({
     else dropDrafts(view.messageId);
   }, [view.messageId, pending, drafts]);
   const canAnswer = pending && view.canCommit;
-  const waitingOn = pending && !canAnswer ? view.asked?.displayName : undefined;
+  const waitingOn = pending && !canAnswer ? view.asked : undefined;
   const withdrawable = pending && view.canCancel && !canAnswer;
   // Answered, the same pages as while answering, each pick marked (Frank, 11-04).
   const answeredView = view.state === "executed" ? recordedDrafts(view) : undefined;
@@ -96,12 +99,7 @@ export function QuestionsActionCard({
     <div className="flex flex-col gap-2 px-2.5 pb-1">
       {errorLine}
       <div className="flex items-center gap-3">
-        {waitingOn && (
-          <p className="flex min-w-0 flex-1 items-center gap-1.5 text-xs text-tertiary">
-            <Clock aria-hidden="true" className="size-3.5 shrink-0" />
-            {m.action_card_choice_waiting({ name: waitingOn })}
-          </p>
-        )}
+        {waitingOn && <WaitingOn asked={waitingOn} />}
         {withdrawable && (
           <Button
             size="sm"
@@ -223,8 +221,12 @@ function ClosedReason({ view }: { view: QuestionsView }) {
         {reason}
       </p>
     );
-  const by = view.asked?.isViewer ? undefined : view.committedBy?.displayName;
-  return by ? <p className="truncate px-2.5 pb-1 text-xs text-quaternary">{by}</p> : null;
+  const by = view.asked?.isViewer ? undefined : view.committedBy;
+  return by ? (
+    <p className="truncate px-2.5 pb-1 text-xs text-quaternary">
+      <ActorName actor={cardActor(by)} />
+    </p>
+  ) : null;
 }
 
 const NO_DRAFTS: Record<string, Draft> = {};

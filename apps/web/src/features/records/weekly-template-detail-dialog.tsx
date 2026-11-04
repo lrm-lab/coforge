@@ -4,6 +4,7 @@ import { Heading } from "react-aria-components";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { Badge } from "#src/components/base/badges/badges";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { ActorName } from "#src/features/avatars/actor-name";
 import { m } from "#src/paraglide/messages";
 import type { TemplateOutlineSection } from "./template-outline-sections";
 import { memberLabel, type TemplateMemberOption } from "./weekly-template-members";
@@ -31,11 +32,22 @@ export function WeeklyTemplateDetailDialog({
   onClose: () => void;
 }) {
   if (!template) return null;
-  const recipientNames = template.allMembers
-    ? [m.records_template_all_members()]
+  const recipients = template.allMembers
+    ? [{ key: "all", name: m.records_template_all_members(), actor: undefined }]
     : template.recipients.map((row) => {
         const member = members.find((item) => item.userId === row.userId);
-        return memberLabel(member ?? row);
+        const name = memberLabel(member ?? row);
+        // A recipient's face before the name (task #521).
+        return {
+          key: row.userId,
+          name,
+          actor: {
+            kind: "user" as const,
+            id: row.userId,
+            name,
+            avatarUrl: member?.avatarUrl,
+          },
+        };
       });
 
   return (
@@ -79,9 +91,9 @@ export function WeeklyTemplateDetailDialog({
                     {m.records_template_recipients()}
                   </span>
                   <div className="flex min-w-0 flex-wrap gap-1.5">
-                    {recipientNames.map((name) => (
-                      <Badge key={name} size="sm" color="gray" type="modern">
-                        {name}
+                    {recipients.map(({ key, name, actor }) => (
+                      <Badge key={key} size="sm" color="gray" type="modern">
+                        {actor ? <ActorName actor={actor} /> : name}
                       </Badge>
                     ))}
                   </div>

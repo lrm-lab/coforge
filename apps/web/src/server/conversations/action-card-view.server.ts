@@ -28,6 +28,9 @@ export function effectiveActionCardState(
 export type ActionCardRef = { id: string; displayName: string };
 /** A human or Agent the card names, with the picture the card shows for them. */
 export type ActionCardPersonRef = ActionCardRef & { avatarUrl: string | null };
+/** A person who asked or answered a card, with their face (task #521); `isViewer` lets a line name
+ * only someone else. */
+export type ActionCardActor = ActionCardPersonRef & { isViewer: boolean };
 
 export type ActionCardViewBase = {
   messageId: string;
@@ -37,7 +40,7 @@ export type ActionCardViewBase = {
    * for it (a screen reader's, a thread's reply preview). Absent for a choice card. */
   preview?: PreviewCard;
   /** Who committed it; `isViewer` lets the handled line name only someone else. */
-  committedBy?: { displayName: string; isViewer: boolean };
+  committedBy?: ActionCardActor;
   committedAt?: string;
   /** When a pending card expires (7 days after it was posted). */
   expiresAt?: string;
@@ -130,7 +133,7 @@ export type ActionCardView =
       options: { id: string; label: string }[];
       /** The asked person as the card names them, and whether that is the viewer; absent on a card
        * made before every choice named one, which nobody can answer. */
-      asked?: { displayName: string; isViewer: boolean };
+      asked?: ActionCardActor;
       /** Present when the card offers the person's own answer as its last row; absent when the
        * Agent turned it off and on cards made before it existed. */
       other?: { label?: string };
@@ -148,7 +151,7 @@ export type ActionCardView =
         options: { id: string; label: string; description?: string; recommended?: true }[];
         other?: { label?: string };
       }[];
-      asked?: { displayName: string; isViewer: boolean };
+      asked?: ActionCardActor;
       result?: {
         answers: {
           questionId: string;

@@ -1,5 +1,7 @@
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 
+import { cardActor } from "./action-card-actor";
+import { ActorName } from "#src/features/avatars/actor-name";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
@@ -13,15 +15,38 @@ import { ActionCardDesktopTakeoverBody, ActionCardPageFillBody } from "./action-
 
 const listFormats = new Map<string, Intl.ListFormat>();
 
-/** The people a card names, as the names read in a sentence. */
-export function namesOf(people: ActionCardRef[]) {
+function listFormat() {
   const locale = getLocale();
   let format = listFormats.get(locale);
   if (!format) {
     format = new Intl.ListFormat(locale, { type: "conjunction" });
     listFormats.set(locale, format);
   }
-  return format.format(people.map((person) => person.displayName));
+  return format;
+}
+
+/** The people a card names, as the names read in a sentence. */
+export function namesOf(people: ActionCardRef[]) {
+  return listFormat().format(people.map((person) => person.displayName));
+}
+
+/** The same sentence with each name drawn with its face (task #521): the language's own joiners
+ * stay as `Intl.ListFormat` writes them, and each name's slot takes the person in order. */
+export function NamesWithFaces({
+  people,
+}: {
+  people: (ActionCardPersonRef & { kind: "user" | "agent" })[];
+}) {
+  let next = 0;
+  return listFormat()
+    .formatToParts(people.map((person) => person.displayName))
+    .map((part, index) =>
+      part.type === "element" ? (
+        <ActorName key={index} actor={cardActor(people[next]!, people[next++]!.kind)} />
+      ) : (
+        part.value
+      ),
+    );
 }
 
 /** A few faces and, as text, everyone they are. More than the faces shown still read in the names. */

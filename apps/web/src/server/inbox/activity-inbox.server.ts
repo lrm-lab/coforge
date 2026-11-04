@@ -16,7 +16,10 @@ import {
   mapBrowserMessage,
 } from "#src/server/conversations/conversation-history.server";
 import { attachForwardedAccess } from "#src/server/conversations/message-forward-view.server";
-import { browserSenderName } from "#src/server/conversations/sender-display.server";
+import {
+  browserSenderAvatarUrl,
+  browserSenderName,
+} from "#src/server/conversations/sender-display.server";
 import {
   markActivityAllRead,
   markActivityDone,
@@ -252,8 +255,12 @@ export class ActivityInbox {
           status: true,
           owner: {
             select: {
-              user: { select: { username: true, displayName: true } },
-              agent: { select: { name: true, displayName: true, deletedAt: true } },
+              userId: true,
+              agentId: true,
+              user: { select: { username: true, displayName: true, avatarObjectKey: true } },
+              agent: {
+                select: { name: true, displayName: true, deletedAt: true, avatarMascot: true },
+              },
             },
           },
         },
@@ -290,6 +297,14 @@ export class ActivityInbox {
           number: task.number,
           status: storedTaskStatus(task.status),
           ownerName: task.owner ? browserSenderName(task.owner) : null,
+          // The owner's face, drawn beside the name (task #521).
+          ownerFace: task.owner
+            ? {
+                kind: task.owner.userId ? ("user" as const) : ("agent" as const),
+                id: task.owner.userId ?? task.owner.agentId ?? undefined,
+                avatarUrl: browserSenderAvatarUrl(task.owner, workspaceId),
+              }
+            : null,
           // A deleted Agent keeps its Tasks; the card says so instead of reading as a live owner.
           ownerDeleted: Boolean(task.owner?.agent?.deletedAt),
         },

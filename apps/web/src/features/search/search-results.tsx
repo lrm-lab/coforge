@@ -24,6 +24,8 @@ import { computerLabel } from "#src/features/computers/computer-identity";
 import { messagePlainText } from "#src/features/conversations/selection-copy";
 import { searchTerms } from "#src/lib/search-terms";
 import { m } from "#src/paraglide/messages";
+import { ActorName, type NamedActor } from "#src/features/avatars/actor-name";
+import type { WorkspaceDirectory } from "#src/features/workspaces/workspaces.functions";
 import type { MessageSearchHit } from "#src/server/conversations/message-search.server";
 import { matchSearchEntities, type SearchEntity } from "./search-entities";
 import { SearchEntityList } from "./search-entity-list";
@@ -99,6 +101,7 @@ export function SearchResults({
         />
       )}
       <MessageResults
+        workspaceId={workspaceId}
         search={search}
         hits={hits}
         terms={terms}
@@ -157,6 +160,7 @@ function useSearchEntities(
 
 /** The Messages section: loading, failure, its rows and Load more. */
 function MessageResults({
+  workspaceId,
   search,
   hits,
   terms,
@@ -164,6 +168,7 @@ function MessageResults({
   onClear,
   onOpen,
 }: {
+  workspaceId: string;
   search: ReturnType<typeof useMessageSearch>;
   hits: MessageSearchHit[];
   terms: string[];
@@ -226,6 +231,7 @@ function MessageResults({
             <SearchResultRow
               key={hit.message.id}
               hit={hit}
+              workspaceId={workspaceId}
               terms={terms}
               onOpen={() => onOpen(conversationKey(hit.conversation))}
             />
@@ -289,24 +295,50 @@ function conversationKey(
   }
 }
 
-/** The name of who a direct conversation is with: its Agent, or the member on the other side. */
-function directName(direct: MessageSearchHit["conversation"]["direct"]) {
+/** Who a direct conversation is with: its Agent, or the member on the other side. */
+function directActor(
+  direct: MessageSearchHit["conversation"]["direct"],
+  directory: WorkspaceDirectory | undefined,
+): NamedActor | undefined {
   if (!direct) return undefined;
-  return direct.kind === "agent" ? direct.agent.displayName : direct.peer.displayName;
+  if (direct.kind === "agent")
+    return {
+      kind: "agent",
+      id: direct.agent.id,
+      name: direct.agent.displayName,
+      avatarUrl: directory?.agents.find((agent) => agent.id === direct.agent.id)?.avatarUrl,
+    };
+  return {
+    kind: "user",
+    id: direct.peer.id,
+    name: direct.peer.displayName,
+    avatarUrl: directory?.people.find((person) => person.id === direct.peer.id)?.avatarUrl,
+  };
+}
+
+function senderActor(message: MessageSearchHit["message"]): NamedActor {
+  return {
+    kind: message.senderKind === "agent" ? "agent" : "user",
+    name: message.senderName,
+    avatarUrl: message.senderAvatarUrl,
+  };
 }
 
 function SearchResultRow({
   hit,
+  workspaceId,
   terms,
   onOpen,
 }: {
   hit: MessageSearchHit;
+  workspaceId: string;
   terms: string[];
   onOpen: () => void;
 }) {
   const { conversation, message } = hit;
   const { previewed, preview } = useSearchPreview();
   const workspaceSlug = useWorkspaceSlug();
+  const directory = useQuery(searchDirectoryQuery(workspaceId)).data;
   const place = conversation.channelName ? (
     // A private channel with its lock, as everywhere a channel is named (task #375).
     <ChannelTitle
@@ -315,7 +347,9 @@ function SearchResultRow({
       lockClassName="size-3.5"
     />
   ) : (
-    `@${directName(conversation.direct) ?? message.senderName}`
+    // The other side's face before their name (task #521); the picture comes from the directory
+    // the search filters already load, as the hit carries only ids and names.
+    <ActorName actor={directActor(conversation.direct, directory) ?? senderActor(message)} />
   );
   // An action card's excerpt is written in the viewer's language; it matched on its English body.
   const text =

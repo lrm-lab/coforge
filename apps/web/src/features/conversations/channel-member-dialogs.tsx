@@ -5,11 +5,27 @@ import { Text } from "react-aria-components";
 
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
+import { ActorName } from "#src/features/avatars/actor-name";
+import { messageSlots } from "#src/lib/message-slots";
 import { m } from "#src/paraglide/messages";
 import { removePublicChannelMember } from "./channels.functions";
 import type { RosterMember } from "./channel-members-query";
 import { channelMembersQueryKey } from "./conversation-query-keys";
 import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
+
+/** The member a dialog's sentence names, with their face (task #521). Titles stay plain text. */
+function MemberName({ member }: { member: RosterMember }) {
+  return (
+    <ActorName
+      actor={{
+        kind: member.kind,
+        id: member.id,
+        name: member.displayName,
+        avatarUrl: member.avatarUrl,
+      }}
+    />
+  );
+}
 
 /** A Workspace owner or admin stays a channel admin everywhere; their row explains that instead
  * of demoting them. */
@@ -28,7 +44,9 @@ export function ServerAdminRoleDialog({
             <>
               <DialogHeader title={m.channel_members_server_admin_title()} onClose={close} />
               <Text slot="description" className="mx-6 mt-4 block text-sm text-secondary">
-                {m.channel_members_server_admin_message({ name: member.displayName })}
+                {messageSlots(m.channel_members_server_admin_message, {
+                  name: <MemberName member={member} />,
+                })}
               </Text>
               <DialogActions className="mt-6 px-6 pb-6">
                 <DialogAction color="secondary" onPress={close}>
@@ -94,8 +112,8 @@ export function RemoveMemberDialog({
                 onClose={busy ? undefined : close}
               />
               <Text slot="description" className="mx-6 mt-4 block text-sm text-secondary">
-                {m.channel_members_remove_message({
-                  name: member.displayName,
+                {messageSlots(m.channel_members_remove_message, {
+                  name: <MemberName member={member} />,
                   channel: channelName,
                 })}
               </Text>

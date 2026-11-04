@@ -5,7 +5,11 @@ import {
   type QuestionsAction,
   type ResolvedQuestionsPayload,
 } from "@lrm/coforge-sdk/agent";
-import type { ActionCardView, ActionCardViewBase } from "./action-card-view.server";
+import type {
+  ActionCardPersonRef,
+  ActionCardView,
+  ActionCardViewBase,
+} from "./action-card-view.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { questionsResultBody } from "./agent-message-view.server";
@@ -105,17 +109,16 @@ export function questionsActionCardView(
   payload: ResolvedQuestionsPayload,
   viewerUserId: string,
   pending: boolean,
-  userName: ReadonlyMap<string, string>,
+  userPerson: (userId: string) => ActionCardPersonRef | undefined,
 ): ActionCardView {
-  const askedName = payload.to ? userName.get(payload.to) : undefined;
+  const person = payload.to ? userPerson(payload.to) : undefined;
+  const asked = person ? { ...person, isViewer: person.id === viewerUserId } : undefined;
   return {
     ...base,
     kind: "questions",
     ...(payload.prompt ? { prompt: payload.prompt } : {}),
     questions: payload.questions,
-    ...(askedName && payload.to
-      ? { asked: { displayName: askedName, isViewer: payload.to === viewerUserId } }
-      : {}),
+    ...(asked ? { asked } : {}),
     canCommit: pending && payload.to === viewerUserId,
     result: card.result as { answers: QuestionsAnswer[] } | undefined,
   };

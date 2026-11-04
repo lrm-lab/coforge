@@ -17,12 +17,18 @@ export function messageSlots<Slot extends string>(
     Object.keys(nodes).map((slot) => [slot, `${MARK}${slot}${MARK}`]),
   ) as Record<Slot, string>;
   const parts = message(slots).split(MARK);
-  // Split on the marker, the slots' names fall on the odd indexes.
-  return parts.map((part, index) =>
-    index % 2 === 1 && part in nodes ? (
-      <Fragment key={index}>{nodes[part as Slot]}</Fragment>
-    ) : (
-      part
-    ),
+  // One inline run: in a flex parent (a button's label) loose pieces of text would each be an
+  // item, and the spaces at their ends would go. Split on the marker, the slots' names fall on
+  // the odd indexes.
+  return (
+    <span>
+      {parts.map((part, index) =>
+        index % 2 === 1 && part in nodes ? (
+          <Fragment key={index}>{nodes[part as Slot]}</Fragment>
+        ) : (
+          part
+        ),
+      )}
+    </span>
   );
 }

@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 
 import { m } from "#src/paraglide/messages";
+import { ActorName } from "#src/features/avatars/actor-name";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 
 /** Child member report hanging under a template weekly-report node. */
@@ -13,6 +14,7 @@ export type TemplateChild = {
     userId: string;
     username: string;
     displayName: string;
+    avatarUrl?: string | null;
   };
 };
 
@@ -46,6 +48,7 @@ function submitTimeLabel(submittedAt: string | null): string {
 export function TemplateChildrenTable({ children }: { children: readonly TemplateChild[] }) {
   const workspaceSlug = useWorkspaceSlug();
   const rows = templateChildRows(children);
+  const authors = new Map(children.map((child) => [child.id, child.author]));
 
   return (
     <div className="overflow-x-auto rounded-lg border border-secondary">
@@ -71,32 +74,46 @@ export function TemplateChildrenTable({ children }: { children: readonly Templat
               <td className="px-3 py-2" />
             </tr>
           ) : (
-            rows.map((row) => (
-              <tr key={row.id} className="border-b border-secondary last:border-b-0">
-                <td className="border-r border-secondary px-3 py-2">
-                  {row.submitted ? (
-                    <Link
-                      to="/w/$workspaceSlug/records/$recordId"
-                      params={{ workspaceSlug, recordId: row.id }}
-                      search={(previous) => ({
-                        tab: previous.tab === "notes" ? "notes" : "weekly",
-                      })}
-                      className="text-brand-secondary hover:underline"
-                    >
-                      {row.name}
-                    </Link>
-                  ) : (
-                    <span className="text-tertiary">{row.name}</span>
-                  )}
-                </td>
-                <td className="border-r border-secondary px-3 py-2">
-                  {row.submitted
-                    ? m.records_template_enabled_yes()
-                    : m.records_template_enabled_no()}
-                </td>
-                <td className="px-3 py-2">{submitTimeLabel(row.submittedAt)}</td>
-              </tr>
-            ))
+            rows.map((row) => {
+              const author = authors.get(row.id);
+              // The author's face before the name (task #521).
+              const name = (
+                <ActorName
+                  actor={{
+                    kind: "user",
+                    id: author?.userId,
+                    name: row.name,
+                    avatarUrl: author?.avatarUrl,
+                  }}
+                />
+              );
+              return (
+                <tr key={row.id} className="border-b border-secondary last:border-b-0">
+                  <td className="border-r border-secondary px-3 py-2">
+                    {row.submitted ? (
+                      <Link
+                        to="/w/$workspaceSlug/records/$recordId"
+                        params={{ workspaceSlug, recordId: row.id }}
+                        search={(previous) => ({
+                          tab: previous.tab === "notes" ? "notes" : "weekly",
+                        })}
+                        className="text-brand-secondary hover:underline"
+                      >
+                        {name}
+                      </Link>
+                    ) : (
+                      <span className="text-tertiary">{name}</span>
+                    )}
+                  </td>
+                  <td className="border-r border-secondary px-3 py-2">
+                    {row.submitted
+                      ? m.records_template_enabled_yes()
+                      : m.records_template_enabled_no()}
+                  </td>
+                  <td className="px-3 py-2">{submitTimeLabel(row.submittedAt)}</td>
+                </tr>
+              );
+            })
           )}
         </tbody>
       </table>

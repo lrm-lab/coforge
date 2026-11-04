@@ -1,6 +1,7 @@
 import { Badge } from "#src/components/base/badges/badges";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
+import { ActorName } from "#src/features/avatars/actor-name";
 import { humanLabel } from "#src/lib/human-label";
 import { m } from "#src/paraglide/messages";
 import type { getAgentProfile } from "#src/features/agents/agents.functions";
@@ -54,7 +55,14 @@ export function AppBotProfile({
             <RelativeTime value={profile.createdAt} timeZone={timeZone} />
           </FactRow>
           <FactRow label={m.agent_bot_granted_by()}>
-            <span className="truncate">{creator}</span>
+            <ActorName
+              actor={{
+                kind: "user",
+                id: profile.owner.id,
+                name: creator,
+                avatarUrl: profile.owner.avatarUrl,
+              }}
+            />
           </FactRow>
         </div>
       </section>

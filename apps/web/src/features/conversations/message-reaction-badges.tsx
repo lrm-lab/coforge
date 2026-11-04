@@ -2,7 +2,32 @@ import { Button } from "#src/components/base/buttons/button";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { RollingNumber } from "#src/components/ui/rolling-number";
 import { cn } from "#src/lib/utils";
-import type { ReactionSummary } from "./message-reactions";
+import { ActorName } from "#src/features/avatars/actor-name";
+import { useMemberDirectory } from "./member-directory";
+import type { ReactionSummary, Reactor } from "./message-reactions";
+
+/** Who reacted, each with their face (task #521). The face comes from the conversation's members
+ * by id; a reactor who has since left is still named, with an initial in place of a picture. An
+ * Agent's label is its `@handle`, which is how the server writes one. */
+function ReactorNames({ reactors }: { reactors: Reactor[] }) {
+  const directory = useMemberDirectory();
+  return reactors.map((reactor, index) => {
+    const member = directory?.find((candidate) => candidate.id === reactor.id);
+    return (
+      <span key={reactor.id}>
+        {index > 0 && ", "}
+        <ActorName
+          actor={{
+            kind: member?.kind ?? (reactor.label.startsWith("@") ? "agent" : "user"),
+            id: reactor.id,
+            name: reactor.label,
+            avatarUrl: member?.avatarUrl,
+          }}
+        />
+      </span>
+    );
+  });
+}
 
 /**
  * A message's reactions, one badge per emoji with its count; hovering names who reacted, and
@@ -24,7 +49,7 @@ export function MessageReactionBadges({
       {reactions.map(({ emoji, count, reactors }) => {
         const mine = viewerId !== undefined && reactors.some((reactor) => reactor.id === viewerId);
         return (
-          <Tooltip key={emoji} title={reactors.map((reactor) => reactor.label).join(", ")}>
+          <Tooltip key={emoji} title={<ReactorNames reactors={reactors} />}>
             <TooltipTrigger>
               <Button
                 color="tertiary"

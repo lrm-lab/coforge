@@ -64,7 +64,8 @@ test("viewsFor resolves names, reports per-viewer canCommit/canCancel, and expos
     const executedView = afterCommit.get(createCard.messageId)!;
     expect(executedView.state).toBe("executed");
     expect(executedView.canCommit).toBe(false);
-    expect(executedView.committedBy).toEqual({
+    expect(executedView.committedBy).toMatchObject({
+      id: ctx.alice.id,
       displayName: ctx.alice.username,
       isViewer: false,
     });

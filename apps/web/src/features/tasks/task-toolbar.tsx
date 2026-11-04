@@ -15,6 +15,8 @@ import {
 import { Button } from "#src/components/base/buttons/button";
 import { Toggle } from "#src/components/base/toggle/toggle";
 import { cn } from "#src/lib/utils";
+import { ActorName } from "#src/features/avatars/actor-name";
+import { messageSlots } from "#src/lib/message-slots";
 import { TagCloseX } from "#src/components/base/tags/base-components/tag-close-x";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Select } from "#src/components/base/select/select";
@@ -92,7 +94,13 @@ export function TaskToolbar({
         face:
           option.kind === "none"
             ? undefined
-            : { kind: "identity", name: option.name, src: option.avatarUrl },
+            : {
+                kind: "identity",
+                name: option.name,
+                src: option.avatarUrl,
+                // The ids give an Agent its mascot and a person their status dot (task #521).
+                ...(option.kind === "agent" ? { agentId: option.id } : { userId: option.id }),
+              },
         ...(option.handle !== undefined && agentHandle(option.handle)),
         count: option.count,
       })),
@@ -124,12 +132,17 @@ export function TaskToolbar({
         options.find((option) => option.id === id)?.label ??
         (id === NO_OWNER || id === NO_PROJECT || id === NO_LABEL ? none : m.tasks_filter_other()),
     );
-  const chips = [
+  const candidates: (Chip | false | undefined)[] = [
     filter.owners.length > 0 && {
       id: "owners",
       label: m.tasks_filter_owner_is({
         names: namesLabel(labelsOf(owners, filter.owners, m.tasks_unassigned())),
       }),
+      content: ownersChip(
+        owners,
+        filter.owners,
+        labelsOf(owners, filter.owners, m.tasks_unassigned()),
+      ),
       remove: () => onFilterChange({ ...filter, owners: [] }),
     },
     !conversation &&
@@ -152,7 +165,8 @@ export function TaskToolbar({
       label: m.tasks_filter_status_is({ name: namesLabel(statuses.map(statusLabel)) }),
       remove: () => onStatusesChange([]),
     },
-  ].filter((chip) => chip !== false && chip !== undefined);
+  ];
+  const chips = candidates.filter((chip) => chip !== false && chip !== undefined);
 
   return (
     <div className="flex min-h-11 shrink-0 items-center justify-between gap-3 border-b border-secondary px-4 py-1.5 md:px-6">
@@ -221,7 +235,7 @@ export function TaskToolbar({
                   textValue={chip.label}
                   className="inline-flex h-7 max-w-[20rem] cursor-default items-center gap-1 rounded-md border border-secondary pr-1.5 pl-2.5 text-xs text-secondary outline-focus-ring focus-visible:outline-2"
                 >
-                  <span className="truncate">{chip.label}</span>
+                  <span className="truncate">{chip.content ?? chip.label}</span>
                   {/* React Aria names it "<this label> <the chip>". */}
                   <TagCloseX size="md" aria-label={m.tasks_filter_remove()} />
                 </Tag>
@@ -255,6 +269,41 @@ function namesLabel(names: readonly string[]) {
   return names.length <= 2
     ? names.join(", ")
     : m.tasks_filter_names_more({ names: names.slice(0, 2).join(", "), count: names.length - 2 });
+}
+
+type Chip = { id: string; label: string; content?: ReactNode; remove: () => void };
+
+/** The owner chip with a face before each name shown (task #521); the others stay text. */
+function ownersChip(
+  options: readonly PickerOption[],
+  picked: readonly string[],
+  labels: readonly string[],
+) {
+  const names = picked.slice(0, 2).map((id, index) => {
+    const face = options.find((option) => option.id === id)?.face;
+    if (face?.kind !== "identity") return labels[index];
+    return (
+      <ActorName
+        key={id}
+        actor={{
+          kind: face.agentId ? "agent" : "user",
+          id: face.agentId ?? face.userId,
+          name: face.name,
+          avatarUrl: face.src,
+        }}
+      />
+    );
+  });
+  const joined = names.flatMap((name, index) => (index ? [", ", name] : [name]));
+  return messageSlots(m.tasks_filter_owner_is, {
+    names:
+      picked.length <= 2
+        ? joined
+        : messageSlots(m.tasks_filter_names_more, {
+            names: joined,
+            count: String(picked.length - 2),
+          }),
+  });
 }
 
 function FilterSubmenu({

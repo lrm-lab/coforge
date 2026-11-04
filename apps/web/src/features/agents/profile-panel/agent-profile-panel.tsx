@@ -369,7 +369,7 @@ export function AgentProfilePanel({
                   agentId={profile.id}
                   agentName={profile.displayName || profile.name}
                   deletedAt={profile.deletedAt}
-                  deletedBy={profile.deletedBy?.label ?? null}
+                  deletedBy={profile.deletedBy}
                   computer={profile.computer}
                   canManageWorkspace={
                     Boolean(profile.computer?.ownedByViewer) || profile.canManageAgentRole

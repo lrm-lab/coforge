@@ -7,6 +7,8 @@ import {
   deleteArchivedAgentWorkspace,
   scanArchivedAgentWorkspace,
 } from "#src/features/agents/agent-workspace-files.functions";
+import { ActorName } from "#src/features/avatars/actor-name";
+import { messageSlots } from "#src/lib/message-slots";
 import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { useTimeFormat } from "#src/lib/time-format-context";
 import { formatDateForDisplay } from "#src/lib/dates";
@@ -35,7 +37,7 @@ export function AgentArchiveSection({
   agentName: string;
   deletedAt: Date | string;
   /** Who archived it, when that was recorded. */
-  deletedBy: string | null;
+  deletedBy: { id: string; label: string; avatarUrl?: string | null } | null;
   computer?: ArchiveComputer;
   /** The viewer owns that Computer or is a Workspace owner/admin. */
   canManageWorkspace: boolean;
@@ -55,7 +57,19 @@ export function AgentArchiveSection({
           <dt className={SUBFIELD_LABEL_CLASS}>{m.agent_archive_archived_at()}</dt>
           <dd className="mt-1 text-sm font-medium text-primary">
             {deletedBy
-              ? m.agent_archive_archived_at_by({ date: archivedAt, name: deletedBy })
+              ? messageSlots(m.agent_archive_archived_at_by, {
+                  date: archivedAt,
+                  name: (
+                    <ActorName
+                      actor={{
+                        kind: "user",
+                        id: deletedBy.id,
+                        name: deletedBy.label,
+                        avatarUrl: deletedBy.avatarUrl,
+                      }}
+                    />
+                  ),
+                })
               : archivedAt}
           </dd>
         </div>

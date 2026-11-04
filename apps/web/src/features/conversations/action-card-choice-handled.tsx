@@ -4,9 +4,11 @@ import { Button as AriaButton } from "react-aria-components";
 import { CHOICE_OTHER_OPTION_ID } from "@lrm/coforge-sdk/agent";
 
 import type { ActionCardView } from "#src/server/conversations/action-cards.server";
+import { ActorName } from "#src/features/avatars/actor-name";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { AnsweredAtTooltip } from "./action-card-answered-at";
+import { cardActor } from "./action-card-actor";
 
 type ChoiceView = Extract<ActionCardView, { kind: "choice" }>;
 
@@ -35,7 +37,7 @@ function closedWithoutAnswer(view: ChoiceView): string | undefined {
  */
 export function HandledChoice({ view, answer }: { view: ChoiceView; answer?: string }) {
   const closed = closedWithoutAnswer(view);
-  const answeredBy = view.asked?.isViewer ? undefined : view.committedBy?.displayName;
+  const answeredBy = view.asked?.isViewer ? undefined : view.committedBy;
   const [expanded, setExpanded] = useState(false);
   const [cut, setCut] = useState(false);
   // The question's element, as state: it moves into a button once cut, and the measuring follows.
@@ -69,7 +71,7 @@ export function HandledChoice({ view, answer }: { view: ChoiceView; answer?: str
         <span className="font-medium text-primary">{answer}</span>
         {answeredBy && (
           <span className="ml-1.5 inline-block max-w-48 truncate align-bottom text-quaternary">
-            · {answeredBy}
+            · <ActorName actor={cardActor(answeredBy)} />
           </span>
         )}
       </span>
@@ -103,7 +105,7 @@ export function HandledChoice({ view, answer }: { view: ChoiceView; answer?: str
           // Who closed it and when, as an answer's tooltip says (task #472).
           <AnsweredAtTooltip
             at={view.committedAt}
-            by={view.committedBy?.isViewer ? undefined : view.committedBy?.displayName}
+            by={view.committedBy?.isViewer ? undefined : view.committedBy}
           >
             {closedLine}
           </AnsweredAtTooltip>

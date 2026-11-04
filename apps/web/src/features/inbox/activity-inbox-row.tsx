@@ -1,5 +1,6 @@
 import { channelGlyph, ChannelTitle } from "#src/features/conversations/channel-name";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
+import { ActorName } from "#src/features/avatars/actor-name";
 import { memo } from "react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { BellOff01, Check, Hash01, Mail01 } from "@untitledui/icons";
@@ -90,8 +91,22 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
     ) : (
       rowPlace && `@${title}`
     );
+  // A person or an Agent is named with their face; the server's own notices have none (task #521).
+  const { latest } = item;
   const sender =
-    item.latest.senderKind === "system" ? m.activity_inbox_system_sender() : item.latest.senderName;
+    latest.senderKind === "system" ? (
+      m.activity_inbox_system_sender()
+    ) : (
+      <ActorName
+        actor={{
+          kind: latest.senderKind,
+          id: latest.senderKind === "agent" ? latest.senderAgentId : latest.senderUserId,
+          name: latest.senderName,
+          avatarUrl: latest.senderAvatarUrl,
+          deleted: latest.senderDeleted,
+        }}
+      />
+    );
 
   function handleAction(key: unknown) {
     if (key === "read") actions.read(item);
@@ -304,7 +319,20 @@ function ActivityItemBadges({
       {task && (
         <Badge type="color" size="sm" color={TASK_STATUS_COLOR[task.status].badge}>
           #{task.number}
-          {task.ownerName ? <span className={NARROW_HIDDEN}>{` @${task.ownerName}`}</span> : null}
+          {task.ownerName ? (
+            // The owner's face stands in for the "@" the name used to start with (task #521).
+            <span className={cn(NARROW_HIDDEN, "ml-1")}>
+              <ActorName
+                actor={{
+                  kind: task.ownerFace?.kind ?? "user",
+                  id: task.ownerFace?.id,
+                  name: task.ownerName,
+                  avatarUrl: task.ownerFace?.avatarUrl,
+                  deleted: task.ownerDeleted,
+                }}
+              />
+            </span>
+          ) : null}
         </Badge>
       )}
       {task?.ownerDeleted && <DeletedAgentBadge />}

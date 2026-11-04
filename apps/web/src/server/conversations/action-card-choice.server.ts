@@ -5,7 +5,11 @@ import {
   type ChoiceAction,
   type ResolvedChoicePayload,
 } from "@lrm/coforge-sdk/agent";
-import type { ActionCardView, ActionCardViewBase } from "./action-card-view.server";
+import type {
+  ActionCardPersonRef,
+  ActionCardView,
+  ActionCardViewBase,
+} from "./action-card-view.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { fenceUserText } from "./agent-message-view.server";
@@ -96,17 +100,16 @@ export function choiceActionCardView(
   payload: ResolvedChoicePayload,
   viewerUserId: string,
   pending: boolean,
-  userName: ReadonlyMap<string, string>,
+  userPerson: (userId: string) => ActionCardPersonRef | undefined,
 ): ActionCardView {
-  const askedName = payload.to ? userName.get(payload.to) : undefined;
+  const person = payload.to ? userPerson(payload.to) : undefined;
+  const asked = person ? { ...person, isViewer: person.id === viewerUserId } : undefined;
   return {
     ...base,
     kind: "choice",
     prompt: payload.prompt,
     options: payload.options,
-    ...(askedName && payload.to
-      ? { asked: { displayName: askedName, isViewer: payload.to === viewerUserId } }
-      : {}),
+    ...(asked ? { asked } : {}),
     ...(payload.other ? { other: payload.other } : {}),
     canCommit: pending && payload.to === viewerUserId,
     result: card.result as { optionId: string; label: string; text?: string } | undefined,
