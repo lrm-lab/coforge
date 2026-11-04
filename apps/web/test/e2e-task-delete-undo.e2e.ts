@@ -49,6 +49,7 @@ test("a Task deleted from its popup comes back with Undo", async () => {
       (await db.task.findFirstOrThrow({ where: { conversationId: channel.id, number } })).deletedAt;
 
     await mkdir(artifacts, { recursive: true });
+    const settled = `document.getAnimations().every((a) => a.playState !== "running")`;
     const toast = `[...document.querySelectorAll("[data-sonner-toast]")].find((el) => el.textContent.includes("Deleted Task #${number}"))`;
     const shoot = async (name: string) => {
       await browser("screenshot", join(artifacts, `${name}.png`));
@@ -108,6 +109,8 @@ test("a Task deleted from its popup comes back with Undo", async () => {
     await evaluate(
       `([...${toast}.querySelectorAll("button")].find((el) => el.textContent.trim() === "Undo").setAttribute("data-e2e-undo", ""), true)`,
     );
+    // The toast slides in; a click aimed while it moves lands on the board under it.
+    await browser("wait", "--fn", settled);
     await browser("click", "[data-e2e-undo]");
     for (let tries = 0; tries < 50 && (await deletedAt()) !== null; tries++)
       await browser("wait", "100");
@@ -128,6 +131,8 @@ test("a Task deleted from its popup comes back with Undo", async () => {
     await evaluate(
       `([...${toast}.querySelectorAll("button")].find((el) => el.textContent.trim() === "Undo").setAttribute("data-e2e-undo", ""), true)`,
     );
+    // The toast slides in; a click aimed while it moves lands on the board under it.
+    await browser("wait", "--fn", settled);
     await browser("click", "[data-e2e-undo]");
     await browser("wait", "--fn", row);
     expect(await deletedAt()).toBeNull();
