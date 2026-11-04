@@ -23,6 +23,7 @@ import type {
   AgentMentionPendingRequest,
   AgentInboxListResponse,
   AgentInboxRequest,
+  AgentLabelListResponse,
   AgentThreadListResponse,
   AgentMentionPendingResponse,
   AgentMentionDeliveryRequest,
@@ -68,6 +69,7 @@ export interface AgentApiConnectionClient {
     agentApiKey: string,
   ): Promise<AgentAppConfigResponse>;
   threadList?(agentApiKey: string): Promise<AgentThreadListResponse>;
+  labelList?(agentApiKey: string): Promise<AgentLabelListResponse>;
   inboxList?(request: AgentInboxRequest, agentApiKey: string): Promise<AgentInboxListResponse>;
   mentionPending?(
     request: AgentMentionPendingRequest,

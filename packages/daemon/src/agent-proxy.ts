@@ -1,10 +1,4 @@
-import {
-  badRequest,
-  contentLengthRejected,
-  MAX_BODY_BYTES,
-  payloadTooLarge,
-  readJsonBody,
-} from "./agent-proxy-body";
+import { badRequest, MAX_BODY_BYTES, readJsonBody } from "./agent-proxy-body";
 import { guardDelivery } from "./agent-proxy-delivery";
 import { randomBytes } from "node:crypto";
 import { exactPath, pathParam } from "./agent-proxy-paths";
@@ -15,7 +9,6 @@ import {
   type LocalReminderRequest,
   type TaskCommand,
   type WeeklyReportCommand,
-  ATTACHMENT_MAX_BYTES,
   MESSAGE_ANCHOR_SOURCE,
   UUID_LIKE_SOURCE,
   isRecord,
@@ -30,7 +23,6 @@ import {
   parseMentionExecuteFields,
   parseProfileUpdateFields,
   decodePathParam,
-  parseAttachmentCommentsRequest,
   parseInboxListQuery,
   parseInboxRequest,
   parseMentionPendingLimit,
@@ -45,6 +37,7 @@ import { admitOpenVikingControl, admitOpenVikingRead } from "./openviking-read-p
 import { parseMessageRequest } from "./agent-proxy-message-request";
 import { TASK_CONVERSATION_PROXY_ROUTES } from "./agent-proxy-task-routes";
 import { APP_PROXY_ROUTES } from "./agent-proxy-app-routes";
+import { ATTACHMENT_PROXY_ROUTES } from "./agent-proxy-attachment-routes";
 
 export type AgentProxy = {
   url: string;
@@ -66,24 +59,10 @@ import {
 
 const LOCAL_PROXY_TOKEN = /^sfp_[A-Za-z0-9_-]{43}$/;
 const MESSAGE_ID_ANCHOR = new RegExp(`^(?:${MESSAGE_ANCHOR_SOURCE}|${UUID_LIKE_SOURCE})$`, "i");
-const LOCAL_ATTACHMENT_ROUTE_PREFIX = agentApiRoutes.local.attachments.path("");
-const LOCAL_ATTACHMENT_UPLOAD_PATH = agentApiRoutes.local.attachments.upload.path;
-// The cloud rejects attachments above `ATTACHMENT_MAX_BYTES`; the local upload hop allows that
-// plus slack for multipart framing overhead (boundary markers, field headers), so a file the
-// cloud accepts is never refused here. The base number is the SDK's shared fact, not a copy.
-const ATTACHMENT_UPLOAD_MAX_BYTES = ATTACHMENT_MAX_BYTES + 64 * 1024;
-// The four presigned-direct-upload session routes are plain JSON, so they reuse the
-// JSON body path below rather than the multipart forwarding above. `create` is a fixed path;
-// `complete`/`cancel`/`get` share a `/:uploadId[/complete]` prefix.
-const LOCAL_UPLOAD_SESSION_CREATE_PATH = agentApiRoutes.local.attachmentUploadSessions.create.path;
-const LOCAL_UPLOAD_SESSION_ROUTE_PREFIX =
-  agentApiRoutes.local.attachmentUploadSessions.get.path("");
-const UPLOAD_SESSION_COMPLETE_SUFFIX = "/complete";
 const LOCAL_PROXY_ROUTES = agentApiRoutes.proxy;
 const LOCAL_USER_ROUTE_PREFIX = LOCAL_PROXY_ROUTES.users.path("");
 // Mention delivery is `<prefix><messageId>/mention-deliveries`; the prefix is what the route's
 // own path puts before an empty id.
-const ATTACHMENT_COMMENTS_SUFFIX = "/comments";
 const MENTION_DELIVERY_SUFFIX = "/mention-deliveries";
 const LOCAL_MENTION_DELIVERY_ROUTE_PREFIX = LOCAL_PROXY_ROUTES.mentionDeliveries
   .path("")
@@ -197,6 +176,14 @@ const ROUTE_TABLE: readonly ProxyRoute[] = [
     parse: () => ({}),
   }),
   defineRoute({
+    family: "agent-api/labels",
+    method: LOCAL_PROXY_ROUTES.labels.method,
+    match: exactPath(LOCAL_PROXY_ROUTES.labels.path),
+    body: "none",
+    handler: "labelList",
+    parse: () => ({}),
+  }),
+  defineRoute({
     family: "agent-api/mention-pending",
     method: LOCAL_PROXY_ROUTES.mentionActions.pending.method,
     match: exactPath(LOCAL_PROXY_ROUTES.mentionActions.pending.path),
@@ -227,73 +214,7 @@ const ROUTE_TABLE: readonly ProxyRoute[] = [
     },
     domainFailure: domain.mentionDeliveryDomainFailure,
   }),
-  defineRoute({
-    family: "agent-api/attachment-comments",
-    method: LOCAL_PROXY_ROUTES.attachmentComments.method,
-    // Ahead of the attachment's own route, whose prefix match takes any rest of the path as an id.
-    match: pathParam(LOCAL_ATTACHMENT_ROUTE_PREFIX, ATTACHMENT_COMMENTS_SUFFIX),
-    body: "none",
-    handler: "attachmentComments",
-    parse: ({ param, url }) => parseAttachmentCommentsRequest(param, url.searchParams),
-    domainFailure: domain.attachmentCommentsDomainFailure,
-  }),
-  defineRoute({
-    family: "agent-api/attachment",
-    method: "GET",
-    match: pathParam(LOCAL_ATTACHMENT_ROUTE_PREFIX),
-    body: "none",
-    handler: "agentAttachment",
-    parse: ({ param }) => decodePathParam(param),
-    respond: forwardResponse,
-  }),
-  defineRoute({
-    family: "agent-api/attachment-upload",
-    method: "POST",
-    match: exactPath(LOCAL_ATTACHMENT_UPLOAD_PATH),
-    body: "none",
-    handler: "agentAttachmentUpload",
-    parse: ({ request }) =>
-      contentLengthRejected(request, ATTACHMENT_UPLOAD_MAX_BYTES, true)
-        ? payloadTooLarge()
-        : request,
-    respond: forwardResponse,
-  }),
-  defineRoute({
-    family: "agent-api/attachment-upload-session-create",
-    method: "POST",
-    match: exactPath(LOCAL_UPLOAD_SESSION_CREATE_PATH),
-    body: "json",
-    handler: "agentAttachmentUploadSessionCreate",
-    parse: ({ payload }) => payload,
-    respond: forwardResponse,
-  }),
-  defineRoute({
-    family: "agent-api/attachment-upload-session-complete",
-    method: "POST",
-    match: pathParam(LOCAL_UPLOAD_SESSION_ROUTE_PREFIX, UPLOAD_SESSION_COMPLETE_SUFFIX),
-    body: "none",
-    handler: "agentAttachmentUploadSessionComplete",
-    parse: ({ param }) => decodePathParam(param),
-    respond: forwardResponse,
-  }),
-  defineRoute({
-    family: "agent-api/attachment-upload-session-get",
-    method: "GET",
-    match: pathParam(LOCAL_UPLOAD_SESSION_ROUTE_PREFIX),
-    body: "none",
-    handler: "agentAttachmentUploadSessionGet",
-    parse: ({ param }) => decodePathParam(param),
-    respond: forwardResponse,
-  }),
-  defineRoute({
-    family: "agent-api/attachment-upload-session-cancel",
-    method: "DELETE",
-    match: pathParam(LOCAL_UPLOAD_SESSION_ROUTE_PREFIX),
-    body: "none",
-    handler: "agentAttachmentUploadSessionCancel",
-    parse: ({ param }) => decodePathParam(param),
-    respond: forwardResponse,
-  }),
+  ...ATTACHMENT_PROXY_ROUTES,
   defineRoute({
     family: "agent-api/reminder",
     method: LOCAL_PROXY_ROUTES.reminders.method,

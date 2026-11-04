@@ -188,6 +188,14 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
   "manual search": {
     syntax: 'coforge manual search "<keywords>" [--intent <text>] [--reason <text>]',
   },
+  label: {
+    syntax: "coforge label list [--json]",
+    example: "coforge label list",
+  },
+  "label list": {
+    syntax: "coforge label list [--json]",
+    example: "coforge label list",
+  },
   user: {
     syntax: "coforge user info <name> [--limit <n>] [--offset <n>] [--json]",
   },

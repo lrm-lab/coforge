@@ -44,6 +44,7 @@ import {
   type AgentMentionExecuteResponse,
   type AgentMentionPendingResponse,
   type AgentThreadListResponse,
+  type AgentLabelListResponse,
   type AgentMentionDeliveryResponse,
   type GitHubCredentialResponse,
 } from "@lrm/coforge-sdk/agent";
@@ -115,17 +116,8 @@ import { formatMessageCheck, type MessageCheckResult } from "#src/message-check-
 import { parseMessageReadArgs, type MessageReadOptions } from "#src/message-read-args";
 
 export type { MessageSearchOptions };
-import {
-  formatChannelAddMember,
-  formatChannelArchive,
-  formatChannelCreate,
-  formatChannelInfo,
-  formatChannelJoin,
-  formatChannelLeave,
-  formatChannelMembers,
-  formatChannelRemoveMember,
-  formatChannelUpdate,
-} from "#src/channel-format";
+import { runChannelCommand } from "#src/channel-commands";
+import { parseLabelArgs, runLabelCommand, type LabelInvocation } from "#src/label-commands";
 import {
   CliError,
   NO_MESSAGE_SENT_NEXT_ACTION,
@@ -153,6 +145,7 @@ import {
 } from "#src/attention-args";
 
 export type { ChannelInvocation, InboxInvocation, ThreadInvocation };
+export type { LabelInvocation } from "#src/label-commands";
 import { formatTaskResult } from "#src/task-format";
 import { heldTaskCliError } from "#src/task-held-result";
 
@@ -316,6 +309,8 @@ export type MessageTransport = {
   artifact?: ArtifactTransport["artifact"];
   setThreadFollowed?(target: string, followed: boolean): Promise<unknown>;
   threadList?(): Promise<AgentThreadListResponse>;
+  /** `coforge label list`: the Workspace's labels. */
+  labelList?(): Promise<AgentLabelListResponse>;
   channel?(command: Omit<ChannelCommand, "idempotencyKey">): Promise<unknown>;
   task?(command: TaskCommand): Promise<TaskResult>;
   taskConversation?: TaskConversationTransport["taskConversation"];
@@ -388,6 +383,7 @@ export function parseArgs(
   | ProfileUpdateInvocation
   | AppConfigInvocation
   | ArtifactInvocation
+  | LabelInvocation
   | MentionInvocation {
   if (args[0] === "whoami") return parseWhoamiArgs(args.slice(1));
   if (args[0] === "version") return parseVersionArgs(args.slice(1));
@@ -402,6 +398,7 @@ export function parseArgs(
   if (args[0] === "reminder") return parseReminderArgs(args.slice(1));
   if (args[0] === "artifact") return parseArtifactArgs(args.slice(1));
   if (args[0] === "task") return parseTaskArgs(args.slice(1));
+  if (args[0] === "label") return parseLabelArgs(args.slice(1));
   if (args[0] === "weekly-report-collect") return parseWeeklyReportCollectArgs(args.slice(1));
   if (args[0] === "weekly-report-key-points") return parseWeeklyReportKeyPointsArgs(args.slice(1));
   if (args[0] === "weekly-report-memory") return parseWeeklyReportMemoryArgs(args.slice(1));
@@ -1005,39 +1002,8 @@ export async function run(args: readonly string[], transport: MessageTransport):
   if (invocation.command === "action-prepare") return runActionPrepare(transport, invocation);
   if (isAttentionInvocation(invocation)) return runAttention(transport, invocation);
   if (invocation.command === "task-conversation") return runTaskConversation(transport, invocation);
-  if (invocation.command === "channel-manage") {
-    if (!transport.channel) throw new Error("Channel management transport is unavailable");
-    const { channel } = invocation;
-    const response = (await transport.channel(channel)) as Record<string, unknown>;
-    if (invocation.json) return response;
-    switch (channel.operation) {
-      case "info":
-        return formatChannelInfo(response as Parameters<typeof formatChannelInfo>[0]);
-      case "members":
-        return formatChannelMembers(response as Parameters<typeof formatChannelMembers>[0]);
-      case "join":
-        return formatChannelJoin(response as Parameters<typeof formatChannelJoin>[0]);
-      case "leave":
-        return formatChannelLeave(response as Parameters<typeof formatChannelLeave>[0]);
-      case "create":
-        return formatChannelCreate(response as Parameters<typeof formatChannelCreate>[0]);
-      case "update":
-        return formatChannelUpdate(response as Parameters<typeof formatChannelUpdate>[0]);
-      case "archive":
-      case "unarchive":
-        return formatChannelArchive(response as Parameters<typeof formatChannelArchive>[0]);
-      case "add-member":
-        return formatChannelAddMember(response as Parameters<typeof formatChannelAddMember>[0]);
-      case "remove-member": {
-        const removeResponse = response as { wasMember: boolean };
-        return formatChannelRemoveMember(
-          channel.target!,
-          (channel.user ?? channel.agent)!,
-          removeResponse.wasMember,
-        );
-      }
-    }
-  }
+  if (invocation.command === "channel-manage") return runChannelCommand(transport, invocation);
+  if (invocation.command === "label-list") return runLabelCommand(transport, invocation);
   if (invocation.command === "inbox-check") return runInboxCheck(transport, invocation);
   if (invocation.command === "attachment-comments") {
     if (!transport.attachmentComments)

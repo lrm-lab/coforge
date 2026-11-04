@@ -12,6 +12,7 @@ import { attachmentRuntime } from "#src/agent-proxy-attachment-runtime";
 import { mentionRuntime } from "#src/agent-proxy-mention-runtime";
 import { conversationRuntime } from "#src/agent-proxy-conversation-runtime";
 import { appRuntime } from "#src/agent-proxy-app-runtime";
+import { workspaceRuntime } from "#src/agent-proxy-workspace-runtime";
 import { createCodeAgentProvider } from "#src/code-agent/registry";
 import {
   DaemonRuntime,
@@ -275,12 +276,8 @@ export async function runDaemon(args: string[], computerVersion?: string): Promi
           workspaceInfo: async (...args) => agentApi().workspaceInfo(...args),
           githubCredential: async (...args) => agentApi().githubCredential(...args),
           githubCommitTrailers: async (...args) => agentApi().githubCommitTrailers(...args),
-          manualGet: async (...args) => agentApi().manualGet(...args),
-          manualSearch: async (...args) => agentApi().manualSearch(...args),
           version: async (...args) => requireRuntime().version(...args),
-          userInfo: async (...args) => agentApi().userInfo(...args),
-          profileShow: async (...args) => agentApi().profileShow(...args),
-          profileUpdate: async (...args) => agentApi().profileUpdate(...args),
+          ...workspaceRuntime(agentApi),
           ...appRuntime(agentApi),
           agentArtifact: async (...args) => agentApi().agentArtifact(...args),
           issueAgentContext: (agentId) => requireRuntime().issueAgentContext(agentId),

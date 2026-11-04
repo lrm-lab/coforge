@@ -14,23 +14,6 @@ import type {
   GitHubCredentialResponse,
   GitHubCommitTrailersRequest,
   GitHubCommitTrailersResponse,
-  AgentManualErrorCode,
-  AgentManualGetRequest,
-  AgentManualGetResponse,
-  AgentManualSearchRequest,
-  AgentManualSearchResponse,
-  AgentUserInfoRequest,
-  AgentUserInfoResponse,
-  AgentUserInfoErrorCode,
-  AgentProfileShowRequest,
-  AgentProfileShowResponse,
-  AgentProfileUpdateRequest,
-  AgentProfileUpdateResponse,
-  AgentProfileErrorCode,
-  AgentAppConfigErrorCode,
-  AgentAppConfigGetRequest,
-  AgentAppConfigResponse,
-  AgentAppConfigUpdateRequest,
 } from "@lrm/coforge-sdk/agent";
 import {
   decodeGitHubCredentialResponse,
@@ -43,21 +26,19 @@ import type {
   WeeklyReportResponse,
   ChannelCommand,
   AgentMessageRequest,
-  WorkspaceInfoRequest,
-  WorkspaceInfoResponse,
   AgentReminderOperationRequest,
   AgentReminderOperationResponse,
 } from "@lrm/coforge-sdk/internal";
 import { AGENT_SEND_REQUEST_TIMEOUT_MS } from "@lrm/coforge-sdk/internal";
 import { AgentTransportError } from "./agent-transport-error";
-import { AgentManualRequestError } from "./agent-manual-request-error";
-import { AgentUserInfoRequestError } from "./agent-user-info-request-error";
-import { AgentProfileRequestError } from "./agent-profile-request-error";
-import { AgentAppConfigRequestError } from "./agent-app-config-request-error";
 import {
   createAgentAttentionHttpClient,
   type AgentAttentionHttpClient,
 } from "./agent-attention-http-clients";
+import {
+  createAgentWorkspaceHttpClient,
+  type AgentWorkspaceHttpClient,
+} from "./agent-workspace-http-clients";
 import { AgentWeeklyReportRequestError } from "./agent-weekly-report-request-error";
 import { AgentUpstreamRefusalError } from "./agent-upstream-refusal-error";
 import {
@@ -65,10 +46,8 @@ import {
   agentHeaders,
   assertAgentResponseOk,
   fetchAgentResponse,
-  getAgentEnvelopeJson,
   getAgentJson,
   isRecord,
-  postAgentEnvelopeJson,
   readAgentResponseJson,
   readUpstreamErrorCode,
   sendAgentJson,
@@ -81,7 +60,7 @@ import {
 
 /** Agent HTTPS clients: contracts, response adapters, and default implementations.
  * Moved verbatim from `daemon-connection.ts`: no behaviour change, only a home. */
-export interface AgentMessageHttpClient extends AgentAttentionHttpClient {
+export interface AgentMessageHttpClient extends AgentAttentionHttpClient, AgentWorkspaceHttpClient {
   requestRead?(input: AgentHttpInput<AgentMessageRequest>): Promise<AgentHistoryResponse>;
   requestSearch?(input: AgentHttpInput<AgentMessageRequest>): Promise<AgentSearchResponse>;
   requestSend?(input: AgentHttpInput<AgentMessageRequest>): Promise<AgentSendDecisionResponse>;
@@ -97,32 +76,12 @@ export interface AgentMessageHttpClient extends AgentAttentionHttpClient {
   requestReminder?(
     input: AgentHttpInput<AgentReminderOperationRequest>,
   ): Promise<AgentReminderOperationResponse>;
-  requestWorkspaceInfo?(
-    input: AgentHttpInput<WorkspaceInfoRequest>,
-  ): Promise<WorkspaceInfoResponse>;
   requestGitHubCredential?(
     input: AgentHttpInput<GitHubCredentialRequest>,
   ): Promise<GitHubCredentialResponse>;
   requestGitHubCommitTrailers?(
     input: AgentHttpInput<GitHubCommitTrailersRequest>,
   ): Promise<GitHubCommitTrailersResponse>;
-  requestManualGet?(input: AgentHttpInput<AgentManualGetRequest>): Promise<AgentManualGetResponse>;
-  requestManualSearch?(
-    input: AgentHttpInput<AgentManualSearchRequest>,
-  ): Promise<AgentManualSearchResponse>;
-  requestUserInfo?(input: AgentHttpInput<AgentUserInfoRequest>): Promise<AgentUserInfoResponse>;
-  requestProfileShow?(
-    input: AgentHttpInput<AgentProfileShowRequest>,
-  ): Promise<AgentProfileShowResponse>;
-  requestProfileUpdate?(
-    input: AgentHttpInput<AgentProfileUpdateRequest>,
-  ): Promise<AgentProfileUpdateResponse>;
-  requestAppConfigGet?(
-    input: AgentHttpInput<AgentAppConfigGetRequest>,
-  ): Promise<AgentAppConfigResponse>;
-  requestAppConfigUpdate?(
-    input: AgentHttpInput<AgentAppConfigUpdateRequest>,
-  ): Promise<AgentAppConfigResponse>;
 }
 
 /**
@@ -176,17 +135,6 @@ export interface AgentWeeklyReportMemoryHttpClient {
     input: AgentHttpInput<import("./weekly-report-memory").WeeklyReportMemoryCommand>,
   ): Promise<import("./weekly-report-memory").WeeklyReportMemoryResult>;
 }
-
-function manualRequestError(errorCode: string, message: string, status: number): Error {
-  return new AgentManualRequestError(errorCode as AgentManualErrorCode, message, status);
-}
-
-function profileRequestError(errorCode: string, message: string, status: number): Error {
-  return new AgentProfileRequestError(errorCode as AgentProfileErrorCode, message, status);
-}
-
-const appConfigError = (errorCode: string, message: string, status: number) =>
-  new AgentAppConfigRequestError(errorCode as AgentAppConfigErrorCode, message, status);
 
 export const createAgentMessageHttpClient = (
   httpClient: HttpFetch = globalThis.fetch,
@@ -291,66 +239,7 @@ export const createAgentMessageHttpClient = (
       what: "agent reaction",
       body: { idempotencyKey: request.idempotencyKey, emoji: request.emoji },
     }),
-  async requestWorkspaceInfo({ request, ...keys }) {
-    const data = await getAgentJson<Omit<WorkspaceInfoResponse, "idempotencyKey">>(httpClient, {
-      ...keys,
-      what: "workspace_info",
-      query: {},
-    });
-    return { ...data, idempotencyKey: request.idempotencyKey };
-  },
-  requestManualGet: ({ request, ...keys }) =>
-    getAgentEnvelopeJson<AgentManualGetResponse>(
-      httpClient,
-      {
-        ...keys,
-        what: "agent manual get",
-        query: { topic: request.topic, intent: request.intent, reason: request.reason },
-      },
-      manualRequestError,
-    ),
-  requestManualSearch: ({ request, ...keys }) =>
-    getAgentEnvelopeJson<AgentManualSearchResponse>(
-      httpClient,
-      {
-        ...keys,
-        what: "agent manual search",
-        query: { query: request.query, intent: request.intent, reason: request.reason },
-      },
-      manualRequestError,
-    ),
-  requestUserInfo: ({ request: _request, ...keys }) =>
-    getAgentEnvelopeJson<AgentUserInfoResponse>(
-      httpClient,
-      { ...keys, what: "agent user info", query: {} },
-      (errorCode, message, status) =>
-        new AgentUserInfoRequestError(errorCode as AgentUserInfoErrorCode, message, status),
-    ),
-  requestProfileShow: ({ request, ...keys }) =>
-    getAgentEnvelopeJson<AgentProfileShowResponse>(
-      httpClient,
-      { ...keys, what: "agent profile show", query: { target: request.target } },
-      profileRequestError,
-    ),
-  requestProfileUpdate: ({ request, ...keys }) =>
-    postAgentEnvelopeJson<AgentProfileUpdateResponse>(
-      httpClient,
-      { ...keys, what: "agent profile update", body: request },
-      profileRequestError,
-    ),
-  requestAppConfigGet: ({ request: _request, ...keys }) =>
-    getAgentEnvelopeJson<AgentAppConfigResponse>(
-      httpClient,
-      { ...keys, what: "agent app config get", query: {} },
-      appConfigError,
-    ),
-  // The App is the URL's; the body is the change alone.
-  requestAppConfigUpdate: ({ request: { appId: _appId, ...change }, ...keys }) =>
-    postAgentEnvelopeJson<AgentAppConfigResponse>(
-      httpClient,
-      { ...keys, what: "agent app config update", method: "PATCH", body: change },
-      appConfigError,
-    ),
+  ...createAgentWorkspaceHttpClient(httpClient),
   ...createAgentAttentionHttpClient(httpClient),
   // Through the shared wire helpers, so a refusal reaches the proxy as the cloud's own status, reason
   // and code, and a network failure as a typed transport failure, never a bare message. A lookup is

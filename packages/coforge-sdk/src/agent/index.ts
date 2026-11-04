@@ -19,6 +19,7 @@ export * from "./mention-actions";
 export * from "./attachment-comments";
 export * from "./inbox-list";
 export * from "./thread-list";
+export * from "./labels";
 export * from "./task-conversations";
 export * from "./mention-delivery";
 export * from "./refusal";

@@ -39,6 +39,7 @@ import type {
   AgentMentionPendingRequest,
   AgentInboxListResponse,
   AgentInboxRequest,
+  AgentLabelListResponse,
   AgentThreadListResponse,
   AgentMentionPendingResponse,
   AgentMentionDeliveryRequest,
@@ -176,6 +177,12 @@ export type AgentProxyRuntime = {
     request: Record<string, never>,
     agentApiKey: string,
   ): Promise<AgentThreadListResponse>;
+  /** `coforge label list`: the Workspace's labels. */
+  labelList?(
+    context: string,
+    request: Record<string, never>,
+    agentApiKey: string,
+  ): Promise<AgentLabelListResponse>;
   mentionPending?(
     context: string,
     request: AgentMentionPendingRequest,

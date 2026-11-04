@@ -20,6 +20,7 @@ import type {
   AgentAttachmentCommentsResponse,
   AgentInboxListResponse,
   AgentInboxRequest,
+  AgentLabelListResponse,
   AgentThreadListResponse,
   AgentMentionPendingResponse,
   AgentProfileShowRequest,
@@ -63,6 +64,7 @@ export type AgentRequestForwarderPorts = Readonly<{
     | "agentMemoryDisposition"
     | "agentOpenviking"
     | "threadList"
+    | "labelList"
     | "inboxList"
     | "mentionPending"
     | "mentionExecute"
@@ -305,6 +307,15 @@ export class AgentRequestForwarder {
       "threadList",
       "Agent thread endpoint is not configured",
     )(agentApiKey);
+  }
+
+  async labelList(
+    context: string,
+    _request: Record<string, never>,
+    agentApiKey: string,
+  ): Promise<AgentLabelListResponse> {
+    this.#ports.authorizedAgent(context, agentApiKey);
+    return this.#transportCall("labelList", "Agent labels endpoint is not configured")(agentApiKey);
   }
 
   async mentionPending(

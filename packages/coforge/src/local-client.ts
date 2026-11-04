@@ -27,11 +27,6 @@ import {
   decodeAgentManualGetResponse,
   decodeAgentManualSearchResponse,
   decodeAgentVersionResponse,
-  decodeAgentProfileErrorResponse,
-  decodeAgentProfileShowResponse,
-  decodeAgentProfileUpdateResponse,
-  decodeAgentUserInfoErrorResponse,
-  decodeAgentUserInfoResponse,
   decodeGitHubCredentialResponse,
   decodeAgentMentionExecuteResponse,
   decodeAgentMentionPendingResponse,
@@ -47,11 +42,8 @@ import {
   type AgentManualGetResponse,
   type AgentManualSearchResponse,
   type AgentVersionResponse,
-  type AgentProfileShowResponse,
-  type AgentProfileUpdateRequest,
-  type AgentProfileUpdateResponse,
   type AgentAttachmentCommentsRequest,
-  type AgentUserInfoResponse,
+  type AgentLabelListResponse,
 } from "@lrm/coforge-sdk/agent";
 import { CliError, MANUAL_NOT_FOUND_NEXT_ACTION } from "./cli-error";
 import type { MessageSearchOptions } from "./message-search-args";
@@ -72,6 +64,8 @@ import { inboxCheckRequest, inboxListRequest } from "./inbox-request";
 import { mentionActionRequest, mentionDeliveryRequest } from "./mention-request";
 import { githubCommitTrailersRequest } from "./github-credential";
 import { taskConversationRequest } from "./task-conversation-request";
+import { labelListRequest } from "./label-request";
+import { profileRequests } from "./profile-request";
 import { readProxyErrorBody } from "./proxy-request";
 
 /** The deadline of every local proxy call but a message send (`AGENT_SEND_LOCAL_DEADLINE_MS`). */
@@ -332,36 +326,9 @@ export function connectLocal(
         decodeAgentManualSearchResponse,
       ),
     version: (): Promise<AgentVersionResponse> => versionRequest(proxyEndpoint, context, proxyUrl),
-    userInfo: (name: string): Promise<AgentUserInfoResponse> =>
-      envelopeRequest(
-        proxyEndpoint,
-        context,
-        proxyUrl,
-        { method: agentApiRoutes.local.users.method, path: agentApiRoutes.local.users.path(name) },
-        decodeAgentUserInfoResponse,
-        decodeAgentUserInfoErrorResponse,
-        "user-info",
-      ),
-    profileShow: (target?: string): Promise<AgentProfileShowResponse> =>
-      envelopeRequest(
-        proxyEndpoint,
-        context,
-        proxyUrl,
-        { ...agentApiRoutes.local.profile.get, query: target ? { target } : {} },
-        decodeAgentProfileShowResponse,
-        decodeAgentProfileErrorResponse,
-        "profile-show",
-      ),
-    profileUpdate: (input: AgentProfileUpdateRequest): Promise<AgentProfileUpdateResponse> =>
-      envelopeRequest(
-        proxyEndpoint,
-        context,
-        proxyUrl,
-        { ...agentApiRoutes.local.profile.update, body: input },
-        decodeAgentProfileUpdateResponse,
-        decodeAgentProfileErrorResponse,
-        "profile-update",
-      ),
+    ...profileRequests(proxyEndpoint, context, proxyUrl),
+    labelList: (): Promise<AgentLabelListResponse> =>
+      labelListRequest(proxyEndpoint, context, proxyUrl),
     ...appConfigRequests(proxyEndpoint, context, proxyUrl),
     threadList: (): Promise<AgentThreadListResponse> =>
       envelopeRequest(
