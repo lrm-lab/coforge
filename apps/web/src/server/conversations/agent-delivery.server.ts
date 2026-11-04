@@ -112,7 +112,9 @@ export class AgentDeliveryPublisher {
   }
 }
 
-const DELIVERY_RETRY_DELAYS_MS = [50, 150, 300] as const;
+/** The backoff between a failed Agent delivery push and its server-side retries: three extra
+ * attempts after the first. Tests count live pushes against this budget. */
+export const DELIVERY_RETRY_DELAYS_MS = [50, 150, 300] as const;
 
 async function publishWithRetry(
   api: Pick<CentrifugoServerApi, "publishBatch">,

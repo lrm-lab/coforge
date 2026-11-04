@@ -11,6 +11,7 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { pendingOpStore } from "./helpers/agent-control-store";
 import { coordinatorChangeNotice } from "#src/server/conversations/channel-coordination.server";
+import { DELIVERY_RETRY_DELAYS_MS } from "#src/server/conversations/agent-delivery.server";
 import { quietCentrifugo, withPublishBatch } from "./helpers/fake-centrifugo";
 
 test("a coordinator notice is one sentence naming who changed it", () => {
@@ -364,9 +365,11 @@ test.skipIf(!connectionString)(
         }),
       );
       await channels.setCoordinator(f.workspace.id, f.owner.id, f.team.id, f.lead.id);
-      expect(attempts).toBe(1);
+      // The one failed push is retried per the delivery-retry policy, not re-publication.
+      const published = 1 + DELIVERY_RETRY_DELAYS_MS.length;
+      expect(attempts).toBe(published);
       await channels.setCoordinator(f.workspace.id, f.owner.id, f.team.id, f.lead.id);
-      expect(attempts).toBe(1);
+      expect(attempts).toBe(published);
       const pending = await f.repo.readPendingAgentDeliveries(f.workspace.id, f.lead.id);
       const recovery = await f.repo.readAgentRecoveryContext(f.workspace.id, f.lead.id);
       expect(pending).toHaveLength(1);
