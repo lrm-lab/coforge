@@ -3,18 +3,12 @@ import type { TaskProjectRef } from "@lrm/coforge-sdk/internal";
 export type { TaskProjectRef } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
+import { TASK_PROJECT_SELECT } from "./task-project-select.server";
 import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
 import { visibleChannelWhere } from "#src/server/conversations/channel-read-access.server";
 import { viewerDirectConversationWhere } from "#src/server/conversations/viewer-direct-conversations.server";
 import type { Member } from "./task-board-ports.server";
 import { UNFINISHED_TASK_STATUSES } from "./task-view.server";
-
-/** What a Task's view names of its Project. */
-export const TASK_PROJECT_SELECT = {
-  id: true,
-  name: true,
-  slug: true,
-} satisfies Prisma.ProjectSelect;
 
 export const taskProjectView = (project: TaskProjectRef): TaskProjectRef => ({
   id: project.id,

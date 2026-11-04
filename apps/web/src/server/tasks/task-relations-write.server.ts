@@ -24,7 +24,7 @@ import type { Member, Transaction } from "./task-board-ports.server";
 import { historyRows } from "./task-history.server";
 import { byName, descend } from "./task-relations.server";
 import { NAMED_CONVERSATION_SELECT, taskName } from "./task-view.server";
-import { TASK_PROJECT_SELECT } from "./task-projects.server";
+import { TASK_PROJECT_SELECT } from "./task-project-select.server";
 
 /**
  * Writes a Task's blockers and parent (`task_dependencies`, `task_parents`) and decides whether a

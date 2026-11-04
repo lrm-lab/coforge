@@ -30,7 +30,7 @@ import { browserSenderName } from "#src/server/conversations/sender-display.serv
 import { peopleReadableBody } from "#src/server/conversations/message-preview-line.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { LABEL_SELECT, labelView } from "./labels.server";
-import { TASK_PROJECT_SELECT } from "./task-projects.server";
+import { TASK_PROJECT_SELECT } from "./task-project-select.server";
 
 /**
  * How a stored Task reads: the rows a Task read selects, the `TaskView` the task board and an
