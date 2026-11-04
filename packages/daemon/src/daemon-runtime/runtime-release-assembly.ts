@@ -4,11 +4,7 @@ import type { AgentRestartConfig } from "#src/agent-runtime/agent-process-manage
 import { daemonIdleFacts } from "./agent-idle-facts";
 import type { ActivityDraft, BusyActivity } from "./agent-activity-publisher";
 import { RuntimeRelease } from "./runtime-release";
-import type {
-  ReleasableLaunch,
-  RuntimeReleasePorts,
-  WakeRestart,
-} from "./runtime-release";
+import type { ReleasableLaunch, RuntimeReleasePorts, WakeRestart } from "./runtime-release";
 
 /** The `RuntimeRelease` construction `runtime.ts` reads as a call: its ports come from the
  * runtime's collaborators, assembled here so the construction site names them, not their

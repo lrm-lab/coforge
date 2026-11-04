@@ -220,7 +220,6 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
     );
   }
 
-
   /** Restarts a live runtime so its next launch reads fresh launch config (a feature changed).
    * Whatever waits for the launch, the delivery that revealed the change included, is presented
    * by it. */

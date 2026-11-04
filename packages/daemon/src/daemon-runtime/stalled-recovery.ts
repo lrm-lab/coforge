@@ -124,7 +124,6 @@ export const UNATTENDED_RECOVERY_LIMIT = 2;
 /** What an unattended recovery may do now: restart, report the limit (once), or nothing. */
 export type UnattendedRecoveryAdmission = "restart" | "limit" | "held";
 
-
 /** The first turn of a relaunch no message asked for: where the old turn stopped, and to go on
  * from there. */
 export function unattendedResumePrompt(silentForMs: number, lastStep: string | undefined): string {

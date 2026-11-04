@@ -97,7 +97,6 @@ import { AgentSessions } from "#src/agent-runtime/agent-session";
 import { AgentWorkspaceQueries } from "./agent-workspace-queries";
 import { AgentMessageAttentionIndex } from "./agent-message-attention-index";
 import { assembleRuntimeRelease } from "./runtime-release-assembly";
-import { daemonIdleFacts } from "./agent-idle-facts";
 import { assembleAgentRequests } from "./agent-request-forwarder";
 import { AgentInboxCoordinator } from "./agent-inbox-coordinator";
 import { AgentStopCoordinator } from "./agent-stop-coordinator";
@@ -1067,7 +1066,6 @@ export class DaemonRuntime {
       launchingAgentIds: this.#agentLaunches.keys(),
     };
   }
-
 
   #agentApiRemindersPorts() {
     return {

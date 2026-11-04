@@ -34,13 +34,11 @@ test("a notice the process accepted and never acted on for 15 minutes is recover
   ).toBe(false);
   // A checked read, an operation, or provider output inside the window means the Agent is
   // acting: never kill it for being quiet on the other two.
-  expect(
-    shouldRecoverStalledRuntime({ ...noticedIdle, lastAgentActionForMs: 0 }),
-  ).toBe(false);
+  expect(shouldRecoverStalledRuntime({ ...noticedIdle, lastAgentActionForMs: 0 })).toBe(false);
   // Nothing ever noticed is not this case.
-  expect(
-    shouldRecoverStalledRuntime({ ...noticedIdle, noticeAcceptedForMs: undefined }),
-  ).toBe(false);
+  expect(shouldRecoverStalledRuntime({ ...noticedIdle, noticeAcceptedForMs: undefined })).toBe(
+    false,
+  );
   expect(shouldRecoverStalledRuntime({ ...noticedIdle, resumable: false })).toBe(false);
   expect(shouldRecoverStalledRuntime({ ...noticedIdle, hasOpenToolCall: true })).toBe(false);
 });

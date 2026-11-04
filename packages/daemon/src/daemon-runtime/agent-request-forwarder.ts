@@ -110,7 +110,6 @@ export type AgentRequestForwarderPorts = Readonly<{
   ) => void;
 }>;
 
-
 /**
  * The Agent's local requests that the daemon only authorizes and forwards over the Agent HTTPS
  * transport, keeping no state of its own: Workspace and user info, GitHub credentials, the
@@ -136,7 +135,10 @@ export function assembleAgentRequests(input: {
     contexts: input.contexts,
     // Every forwarded request authorizes through here, so it stamps the Agent's action clock
     // too: a working Agent is never judged frozen (task #318).
-    authorizedAgent: actionStampingAuthorizedAgent(input.authorizedAgent, input.attention.noticeActionClocks),
+    authorizedAgent: actionStampingAuthorizedAgent(
+      input.authorizedAgent,
+      input.attention.noticeActionClocks,
+    ),
     recordForwardedRead: (agentId, query, result) =>
       settleForwardedTaskRead(input.attention, agentId, query, result),
   });

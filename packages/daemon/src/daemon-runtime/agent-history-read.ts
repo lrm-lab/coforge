@@ -151,8 +151,6 @@ export function settleForwardedTaskRead(
 /** Distinct messages in a delivery list. The same message can appear more than once: a request
  * retried while held is enqueued again so both attempts stay ACK-able, and a redelivery arriving
  * after the dedupe window is a second delivery of one message. A notice counts messages. */
-export function countDistinctMessages(
-  deliveries: readonly { messageId: string }[],
-): number {
+export function countDistinctMessages(deliveries: readonly { messageId: string }[]): number {
   return new Set(deliveries.map((delivery) => delivery.messageId)).size;
 }

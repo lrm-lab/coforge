@@ -111,7 +111,6 @@ function printableSender(
   return { kind, handle: handle ?? "" };
 }
 
-
 /** Daemon-owned volatile attention and model-visible sequence index. */
 export class AgentMessageAttentionIndex {
   readonly #generations = new Map<string, NoticeGeneration>();

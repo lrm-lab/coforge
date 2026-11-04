@@ -29,9 +29,7 @@ export class NoticeActionClocks {
 
 /** The frozen-after-notice ports `RuntimeRelease.stalled` reads, bound to the attention index
  * that owns the clocks. */
-export function noticeActionClockPorts(
-  clocks: () => NoticeActionClocks,
-): Readonly<{
+export function noticeActionClockPorts(clocks: () => NoticeActionClocks): Readonly<{
   noticeAcceptedAt(agentId: string): number | undefined;
   lastAgentActionAt(agentId: string): number | undefined;
 }> {
