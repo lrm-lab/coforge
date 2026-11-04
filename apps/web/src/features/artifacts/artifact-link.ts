@@ -50,11 +50,11 @@ const CODE = /(```[\s\S]*?(?:```|$)|`[^`\n]*`)/;
 const TRAILING = /[.,;:!?]+$/;
 
 /**
- * A message body as it reads once its documents' cards show (task #385): a body that is only one
- * document link says nothing the card does not, so it reads as nothing; elsewhere a bare document
- * link reads as the document's title, still a link. `titles` holds the documents whose cards
- * show; any other link, one the writer already named (`[text](link)`, `<link>`), and one in code
- * stay as written.
+ * A message body as it reads once its documents' cards show (task #385, #514): a line that is only
+ * a document's link says nothing its card below does not, so it reads as nothing (a body of such
+ * lines alone, as nothing at all); elsewhere a bare document link reads as the document's title,
+ * still a link. `titles` holds the documents whose cards show; any other link, one the writer
+ * already named (`[text](link)`, `<link>`), and one in code stay as written.
  */
 export function bodyWithArtifactTitles(body: string, titles: ReadonlyMap<string, string>): string {
   if (titles.size === 0) return body;
@@ -62,8 +62,10 @@ export function bodyWithArtifactTitles(body: string, titles: ReadonlyMap<string,
     const id = [...link.matchAll(DOC_PARAM)][0]?.[1]?.toLowerCase();
     return id === undefined ? undefined : titles.get(id);
   };
-  const sole = body.trim();
-  if (sole.match(APP_LINK)?.[0] === sole && titleOf(sole) !== undefined) return "";
+  const shown = withoutCardLines(body, (line) => {
+    const sole = line.trim();
+    return sole.match(APP_LINK)?.[0] === sole && titleOf(sole) !== undefined;
+  });
   const titled = (text: string) =>
     text.replace(LINK_IN_TEXT, (whole, named: string | undefined, found: string, close) => {
       if (named) return whole;
@@ -74,8 +76,20 @@ export function bodyWithArtifactTitles(body: string, titles: ReadonlyMap<string,
       return `[${label}](${link})${found.slice(link.length)}${close ?? ""}`;
     });
   // Split on code: the odd pieces are code.
-  return body
+  return shown
     .split(CODE)
     .map((piece, at) => (at % 2 ? piece : titled(piece)))
     .join("");
+}
+
+/** `body` without the lines `isCardLine` names, outside fenced code; nothing left over at its end. */
+function withoutCardLines(body: string, isCardLine: (line: string) => boolean): string {
+  let fenced = false;
+  let dropped = false;
+  const kept = body.split("\n").filter((line) => {
+    if (line.trimStart().startsWith("```")) fenced = !fenced;
+    else if (!fenced && isCardLine(line)) return !(dropped = true);
+    return true;
+  });
+  return dropped ? kept.join("\n").trimEnd() : body;
 }

@@ -11,6 +11,16 @@ test("a body that is only a document link reads as nothing beside its card", () 
   expect(bodyWithArtifactTitles(`  ${LINK}\n`, titles)).toBe("");
 });
 
+/** Task #514 (Raft): a link on its own line above its card says the same thing twice. */
+test("a line that is only a document link reads as nothing beside its card", () => {
+  const other = `https://coforge.example/en/w/acme/channel/c1?doc=${ID.replace("4444", "9999")}`;
+  expect(bodyWithArtifactTitles(`Both are up:\n${LINK}\n${other}\n`, titles)).toBe(
+    `Both are up:\n${other}`,
+  );
+  const fenced = `\`\`\`\n${LINK}\n\`\`\``;
+  expect(bodyWithArtifactTitles(fenced, titles)).toBe(fenced);
+});
+
 test("a document link among other words reads as the document's title, still a link", () => {
   expect(bodyWithArtifactTitles(`Draft is here: ${LINK} — have a look`, titles)).toBe(
     `Draft is here: [Launch plan](${LINK}) — have a look`,
