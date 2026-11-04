@@ -14,10 +14,13 @@ describe("feature flags in the deployed Compose files", () => {
     const content = compose.configs?.coforge_feature_flags?.content;
     expect(typeof content).toBe("string");
     const definitions = JSON.parse(content as string) as FlagDefinitions;
-    expect(Object.keys(definitions.flags)).toEqual(["task-conversations"]);
+    // Task #491 stopped pinning experiments to a Workspace in flagd: task-conversations and
+    // artifacts now show for every Workspace, switched on per Workspace in Settings > Experiments,
+    // so the deployed definitions carry no flag rules.
+    expect(Object.keys(definitions.flags)).toEqual([]);
   });
 
-  test("production reads the same kind of inlined definitions, with task conversations for frank only", async () => {
+  test("production reads the same kind of inlined definitions, now with no flag rules", async () => {
     const compose = await readCompose("production");
     const web = compose.services.web;
     expect(web?.environment?.COFORGE_FEATURE_FLAGS_FILE).toBe(FLAGS_PATH);
@@ -25,6 +28,6 @@ describe("feature flags in the deployed Compose files", () => {
     const definitions = JSON.parse(
       compose.configs?.coforge_feature_flags?.content as string,
     ) as FlagDefinitions;
-    expect(Object.keys(definitions.flags)).toEqual(["task-conversations"]);
+    expect(Object.keys(definitions.flags)).toEqual([]);
   });
 });
