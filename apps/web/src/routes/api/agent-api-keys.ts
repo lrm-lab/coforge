@@ -43,7 +43,12 @@ const createAgentApiKeyInputSchema = z.object({
     .regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/)
     .optional(),
 });
-const revokeAgentApiKeyInputSchema = z.object({ apiKey: z.string().min(1) });
+const revokeAgentApiKeyInputSchema = z.object({
+  apiKey: z.string().min(1),
+  // "all" ends every active key of the Agent (a Stop); absent revokes only the named key,
+  // which is also what a server predating `scope` does with the field.
+  scope: z.literal("all").optional(),
+});
 
 type LaunchIdentityComputer = AgentRuntimeContextComputer;
 
@@ -234,7 +239,8 @@ export const Route = createFileRoute("/api/agent-api-keys")({
           }));
         if (!authorized) return Response.json({ error: "forbidden" }, { status: 403 });
         if (apiKey.disabledAt) return Response.json({ error: "unauthorized" }, { status: 401 });
-        await repository.revoke(apiKey.id);
+        if (input.scope === "all") await repository.revokeAll(apiKey);
+        else await repository.revoke(apiKey.id);
         return Response.json({ revoked: true }, { headers: { "cache-control": "no-store" } });
       },
     },

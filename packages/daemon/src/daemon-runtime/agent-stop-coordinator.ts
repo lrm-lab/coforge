@@ -18,7 +18,7 @@ export type AgentStopCoordinatorPorts = {
   activityPublisher: AgentActivityPublisher<ActivityLaunch>;
   desktops: ReturnType<typeof createAgentDesktopHolds>;
   agentApiKeys: Map<string, string>;
-  revokeAgentApiKey: (agentId: string, apiKey: string | undefined) => Promise<void>;
+  revokeAgentApiKey: (agentId: string, apiKey: string | undefined, scope?: "all") => Promise<void>;
   messageAttention: AgentMessageAttentionIndex;
   deliveryQueue: AgentDeliveryQueue;
   runtimeErrorHold: RuntimeErrorDeliveryHold;
@@ -56,7 +56,7 @@ export class AgentStopCoordinator {
     this.ports.desktops.end(agentId);
     activityLaunch?.startup?.dispose();
     void this.ports
-      .revokeAgentApiKey(agentId, this.ports.agentApiKeys.get(agentId))
+      .revokeAgentApiKey(agentId, this.ports.agentApiKeys.get(agentId), "all")
       .catch((error) => {
         logAgentApiKeyRevokeFailed(agentId, error);
       });

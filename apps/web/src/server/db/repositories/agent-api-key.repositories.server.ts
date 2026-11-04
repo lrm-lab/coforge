@@ -12,25 +12,30 @@ export class PrismaAgentApiKeyRepository implements AgentApiKeyRepository {
     await this.db.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT "id" FROM "agents" WHERE "id" = ${record.agentId}::uuid FOR UPDATE`;
       // Overlap rotation: the newest earlier key stays valid until the new one first
-      // authenticates; anything older is revoked now.
+      // authenticates; anything older is revoked now. The newest is picked across revoked
+      // records too — a key revoked before its first use must not resurrect the key before it
+      // on the next mint — and a key minted on another Computer never survives a new mint,
+      // closing the stale key a migration left behind.
       const newest = await tx.agentApiKey.findFirst({
         where: {
           agentId: record.agentId,
           workspaceId: record.workspaceId,
           ownerId: record.ownerId,
-          revokedAt: null,
-          disabledAt: null,
         },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        select: { id: true },
+        select: { id: true, computerId: true, revokedAt: true, disabledAt: true },
       });
+      const keep =
+        newest && !newest.revokedAt && !newest.disabledAt && newest.computerId === record.computerId
+          ? newest.id
+          : undefined;
       await tx.agentApiKey.updateMany({
         where: {
           agentId: record.agentId,
           workspaceId: record.workspaceId,
           ownerId: record.ownerId,
           revokedAt: null,
-          ...(newest ? { id: { not: newest.id } } : {}),
+          ...(keep ? { id: { not: keep } } : {}),
         },
         data: { revokedAt: new Date() },
       });
@@ -61,6 +66,18 @@ export class PrismaAgentApiKeyRepository implements AgentApiKeyRepository {
   async revoke(id: string): Promise<void> {
     await this.db.agentApiKey.updateMany({
       where: { id },
+      data: { revokedAt: new Date() },
+    });
+  }
+
+  async revokeAll(record: AgentApiKeyRecord): Promise<void> {
+    await this.db.agentApiKey.updateMany({
+      where: {
+        agentId: record.agentId,
+        workspaceId: record.workspaceId,
+        ownerId: record.ownerId,
+        revokedAt: null,
+      },
       data: { revokedAt: new Date() },
     });
   }

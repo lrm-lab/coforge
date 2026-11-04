@@ -19,6 +19,7 @@ class MemoryAgentApiKeys implements AgentApiKeyRepository {
   }
   async revokeOlderKeys() {}
   async revoke() {}
+  async revokeAll() {}
 }
 
 const request = (agentToken?: string, daemonApiKey?: string, requestId?: string) =>
@@ -214,6 +215,7 @@ describe("Agent message HTTP authentication", () => {
         ...keys,
         rotate: (record) => keys.rotate(record),
         revoke: () => keys.revoke(),
+        revokeAll: () => keys.revokeAll(),
         revokeOlderKeys: () => keys.revokeOlderKeys(),
         findByHash: (hash) => read("agent key", () => keys.findByHash(hash)),
       },

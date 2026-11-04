@@ -276,7 +276,14 @@ export async function moveAgentToComputer(
     where: { id: input.agentId, computerId: input.fromComputerId, ...ACTIVE_AGENT_WHERE },
     data: { computerId: input.toComputerId },
   });
-  return count === 1;
+  if (count !== 1) return false;
+  // The Agent's keys belong to the Computer that minted them; a move retires them all at once
+  // rather than leaving the old Computer's overlap key valid until the next mint.
+  await tx.agentApiKey.updateMany({
+    where: { agentId: input.agentId, revokedAt: null },
+    data: { revokedAt: new Date() },
+  });
+  return true;
 }
 
 export class RepositoryAgentAuthorization {

@@ -100,7 +100,7 @@ export type AgentLaunchCoordinatorPorts = {
   ) => void;
   disposeLaunchObservations: (agentId: string) => void;
   revokeLocalLaunch: (agentId: string, localContext?: string, proxyToken?: string) => void;
-  revokeAgentApiKey: (agentId: string, apiKey: string | undefined) => Promise<void>;
+  revokeAgentApiKey: (agentId: string, apiKey: string | undefined, scope?: "all") => Promise<void>;
   launchFailureActivity: (
     agentId: string,
     provider: AgentRuntimeConfig["provider"],

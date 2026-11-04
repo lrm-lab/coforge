@@ -56,6 +56,10 @@ export async function requestAgentLaunchConfig(
 export async function revokeAgentApiKey(
   endpoint: AgentApiKeyEndpoint,
   agentApiKey: string,
+  scope?: "all",
 ): Promise<void> {
-  await agentApiKeyRequest(endpoint, "Agent API key revoke", "DELETE", { apiKey: agentApiKey });
+  await agentApiKeyRequest(endpoint, "Agent API key revoke", "DELETE", {
+    apiKey: agentApiKey,
+    ...(scope ? { scope } : {}),
+  });
 }

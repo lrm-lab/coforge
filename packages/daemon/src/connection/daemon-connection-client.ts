@@ -289,7 +289,8 @@ export interface DaemonConnectionClient extends AgentApiConnectionClient {
     requestId?: string;
     launchId?: string;
   }): Promise<AgentLaunchConfig>;
-  revokeAgentApiKey?(agentApiKey: string): Promise<void>;
+  /** `scope: "all"` ends every active key of the Agent (a Stop); absent revokes only the key. */
+  revokeAgentApiKey?(agentApiKey: string, scope?: "all"): Promise<void>;
 }
 
 /** Creates the Daemon connection client owned by the daemon. */

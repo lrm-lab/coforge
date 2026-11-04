@@ -62,7 +62,7 @@ export type RuntimeStopPorts = {
   envelope(): ReturnType<typeof runtimeEnvelope>;
   runtimeInstanceId: string;
   agentApiKeys: Map<string, string>;
-  revokeAgentApiKey(agentId: string, apiKey: string): Promise<void>;
+  revokeAgentApiKey(agentId: string, apiKey: string, scope?: "all"): Promise<void>;
   replaceTransport(): Promise<unknown>;
   consumedSeqs: Pick<AgentConsumedSeqStore, "close">;
   sendAgentStatus(agentId: string, status: "active" | "inactive"): void;
@@ -247,7 +247,7 @@ export class RuntimeStop {
           })
         : undefined,
       ...[...ports.agentApiKeys].map(([agentId, agentApiKey]) =>
-        ports.revokeAgentApiKey(agentId, agentApiKey).catch((error) => {
+        ports.revokeAgentApiKey(agentId, agentApiKey, "all").catch((error) => {
           logAgentApiKeyRevokeFailed(agentId, error);
         }),
       ),

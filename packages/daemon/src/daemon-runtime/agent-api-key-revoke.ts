@@ -12,11 +12,12 @@ export async function revokeAgentApiKey(
   agentApiKeys: Map<string, string>,
   agentId: string,
   agentApiKey: string | undefined,
+  scope?: "all",
 ): Promise<void> {
   if (!agentApiKey) return;
   if (!transport.revokeAgentApiKey) return;
   if (agentApiKeys.get(agentId) === agentApiKey) agentApiKeys.delete(agentId);
-  await transport.revokeAgentApiKey(agentApiKey);
+  await transport.revokeAgentApiKey(agentApiKey, scope);
 }
 
 /**

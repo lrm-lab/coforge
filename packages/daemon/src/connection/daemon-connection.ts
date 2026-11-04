@@ -1353,14 +1353,12 @@ export class DaemonConnection
     return requestAgentLaunchConfig(this.#agentApiKeyEndpoint(), input);
   }
 
-  revokeAgentApiKey(agentApiKey: string): Promise<void> {
-    return revokeAgentApiKey(this.#agentApiKeyEndpoint(), agentApiKey);
+  revokeAgentApiKey(agentApiKey: string, scope?: "all"): Promise<void> {
+    return revokeAgentApiKey(this.#agentApiKeyEndpoint(), agentApiKey, scope);
   }
 
-  /**
-   * Delivers to a listener now, or after the in-flight ready handshake completes. While held, an
-   * item with a `key` replaces the earlier one under it, and a delivery `notice` is capped.
-   */
+  /** Delivers now or after the in-flight ready handshake; a held `key` replaces its earlier
+   * item and `notice` is capped. */
   #deliver<Value extends { agentId?: string }>(
     slot: ListenerSlot<(value: Value) => void>,
     value: Value,

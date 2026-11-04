@@ -217,9 +217,7 @@ export class DaemonRuntime {
   readonly #reportedSessions = new Map<string, RunningMentionIdentity>();
   /** Busy-gated delivery holding for providers with no safe busy path. */
   readonly #deliveryQueue = new AgentDeliveryQueue();
-  /** Launch failures of message-triggered wakes, per Agent: while one owes a cooldown, a delivery
-   * does not launch the Agent again. No attempt cap. The short cooldown stops growing at its
-   * ceiling; a quota failure that names a recovery time waits until then. */
+  /** Launch failures of message-triggered wakes, per Agent. */
   readonly #wakeLaunchFailures = new LaunchFailureBackoff();
   readonly #exitedDelivery = new AgentExitedDelivery({
     hasRuntimeErrorHold: (agentId) => this.#deliveryQueue.explicitHold(agentId) !== undefined,
@@ -685,7 +683,8 @@ export class DaemonRuntime {
       activityPublisher: this.#activityPublisher,
       desktops: this.#desktops,
       agentApiKeys: this.agentApiKeys,
-      revokeAgentApiKey: (agentId, apiKey) => this.#revokeAgentApiKey(agentId, apiKey),
+      revokeAgentApiKey: (agentId, apiKey, scope) =>
+        this.#revokeAgentApiKey(agentId, apiKey, scope),
       messageAttention: this.#messageAttention,
       deliveryQueue: this.#deliveryQueue,
       runtimeErrorHold: this.#runtimeErrorHold,
@@ -749,7 +748,8 @@ export class DaemonRuntime {
           context,
           proxyToken,
         ),
-      revokeAgentApiKey: (agentId, apiKey) => this.#revokeAgentApiKey(agentId, apiKey),
+      revokeAgentApiKey: (agentId, apiKey, scope) =>
+        this.#revokeAgentApiKey(agentId, apiKey, scope),
       launchFailureActivity: (agentId, provider, error) =>
         this.#launchFailureActivity(agentId, provider, error),
       drainAppInboxNotices: (agentId) => this.#inboxCoordinator.drainAppInboxNotices(agentId),
@@ -888,7 +888,8 @@ export class DaemonRuntime {
       envelope: this.#env,
       runtimeInstanceId: this.#runtimeInstanceId,
       agentApiKeys: this.agentApiKeys,
-      revokeAgentApiKey: (agentId, apiKey) => this.#revokeAgentApiKey(agentId, apiKey),
+      revokeAgentApiKey: (agentId, apiKey, scope) =>
+        this.#revokeAgentApiKey(agentId, apiKey, scope),
       replaceTransport: () => this.#replaceTransport(),
       consumedSeqs: this.#consumedSeqs,
       sendAgentStatus: (agentId, status) => this.#sendAgentStatus(agentId, status),
@@ -1384,8 +1385,12 @@ export class DaemonRuntime {
     );
   }
 
-  async #revokeAgentApiKey(agentId: string, agentApiKey: string | undefined): Promise<void> {
-    await revokeAgentApiKey(this.#transport, this.agentApiKeys, agentId, agentApiKey);
+  async #revokeAgentApiKey(
+    agentId: string,
+    agentApiKey: string | undefined,
+    scope?: "all",
+  ): Promise<void> {
+    await revokeAgentApiKey(this.#transport, this.agentApiKeys, agentId, agentApiKey, scope);
   }
 
   async agentMessage(

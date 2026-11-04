@@ -31,8 +31,7 @@ class MemoryAgentApiKeys implements AgentApiKeyRepository {
     const scoped = (current: AgentApiKeyRecord) =>
       current.agentId === record.agentId &&
       current.workspaceId === record.workspaceId &&
-      current.ownerId === record.ownerId &&
-      this.#active(current);
+      current.ownerId === record.ownerId;
     let newest: AgentApiKeyRecord | undefined;
     for (const current of this.records.values())
       if (
@@ -40,8 +39,13 @@ class MemoryAgentApiKeys implements AgentApiKeyRepository {
         (!newest || this.#order.get(current.id)! > this.#order.get(newest.id)!)
       )
         newest = current;
+    const keep =
+      newest && this.#active(newest) && newest.computerId === record.computerId
+        ? newest.id
+        : undefined;
     for (const current of this.records.values())
-      if (scoped(current) && current.id !== newest?.id) current.revokedAt = new Date();
+      if (scoped(current) && this.#active(current) && current.id !== keep)
+        current.revokedAt = new Date();
     this.#order.set(stored.id, this.#sequence++);
     this.records.set(record.apiKeyHash, stored);
   }
@@ -63,7 +67,19 @@ class MemoryAgentApiKeys implements AgentApiKeyRepository {
   }
 
   async revoke(id: string) {
-    for (const record of this.records.values()) if (record.id === id) record.revokedAt = new Date();
+    for (const current of this.records.values())
+      if (current.id === id) current.revokedAt = new Date();
+  }
+
+  async revokeAll(record: AgentApiKeyRecord) {
+    for (const current of this.records.values())
+      if (
+        current.agentId === record.agentId &&
+        current.workspaceId === record.workspaceId &&
+        current.ownerId === record.ownerId &&
+        this.#active(current)
+      )
+        current.revokedAt = new Date();
   }
 }
 
@@ -165,4 +181,86 @@ test("another Computer cannot send with or revoke an Agent API key", async () =>
       computerId: "computer-b",
     }),
   ).toBeFalse();
+});
+
+test("a key revoked before its first use does not resurrect the older key on the next mint", async () => {
+  const repository = new MemoryAgentApiKeys();
+  const input = {
+    agentId: "agent-a",
+    workspaceId: "workspace-a",
+    ownerId: "owner-a",
+    computerId: "computer-a",
+    repository,
+  };
+  const first = await createAgentApiKey(input);
+  const second = await createAgentApiKey(input);
+  const secondId = (await findAgentApiKey(second, repository)).id;
+  // The second key was revoked before it ever authenticated (Stop, failed launch).
+  await repository.revoke(secondId);
+  const third = await createAgentApiKey(input);
+
+  await expect(authenticateAgentApiKey(first, repository)).rejects.toThrow("invalid Agent API key");
+  await expect(authenticateAgentApiKey(second, repository)).rejects.toThrow(
+    "invalid Agent API key",
+  );
+  await expect(authenticateAgentApiKey(third, repository)).resolves.toMatchObject({
+    computerId: "computer-a",
+  });
+});
+
+test("a mint on a new Computer keeps no earlier key of another Computer", async () => {
+  const repository = new MemoryAgentApiKeys();
+  const base = {
+    agentId: "agent-a",
+    workspaceId: "workspace-a",
+    ownerId: "owner-a",
+    repository,
+  };
+  const moved = await createAgentApiKey({ ...base, computerId: "computer-a" });
+  const current = await createAgentApiKey({ ...base, computerId: "computer-b" });
+
+  await expect(authenticateAgentApiKey(moved, repository)).rejects.toThrow("invalid Agent API key");
+  await expect(authenticateAgentApiKey(current, repository)).resolves.toMatchObject({
+    computerId: "computer-b",
+  });
+});
+
+test("revoking one key drops only that key — a failed launch leaves the running key valid", async () => {
+  const repository = new MemoryAgentApiKeys();
+  const input = {
+    agentId: "agent-a",
+    workspaceId: "workspace-a",
+    ownerId: "owner-a",
+    computerId: "computer-a",
+    repository,
+  };
+  const first = await createAgentApiKey(input);
+  const second = await createAgentApiKey(input);
+  await repository.revoke((await findAgentApiKey(second, repository)).id);
+
+  await expect(authenticateAgentApiKey(first, repository)).resolves.toMatchObject({
+    computerId: "computer-a",
+  });
+  await expect(authenticateAgentApiKey(second, repository)).rejects.toThrow(
+    "invalid Agent API key",
+  );
+});
+
+test("a Stop scope ends every active key of the Agent at once", async () => {
+  const repository = new MemoryAgentApiKeys();
+  const input = {
+    agentId: "agent-a",
+    workspaceId: "workspace-a",
+    ownerId: "owner-a",
+    computerId: "computer-a",
+    repository,
+  };
+  const first = await createAgentApiKey(input);
+  const second = await createAgentApiKey(input);
+  await repository.revokeAll(await findAgentApiKey(second, repository));
+
+  await expect(authenticateAgentApiKey(first, repository)).rejects.toThrow("invalid Agent API key");
+  await expect(authenticateAgentApiKey(second, repository)).rejects.toThrow(
+    "invalid Agent API key",
+  );
 });

@@ -35,7 +35,10 @@ export interface AgentApiKeyRepository {
   findByHash(hash: string): Promise<AgentApiKeyRecord | undefined>;
   /** Revokes the Agent's other active keys older than `record`; a no-op when none exist. */
   revokeOlderKeys(record: AgentApiKeyRecord): Promise<void>;
+  /** Revokes exactly the key `id` names — a failed launch drops only its own mint. */
   revoke(id: string): Promise<void>;
+  /** Revokes every active key of `record`'s Agent — a Stop ends the whole overlap window. */
+  revokeAll(record: AgentApiKeyRecord): Promise<void>;
 }
 
 export function isAgentApiKeyBoundToComputer(
