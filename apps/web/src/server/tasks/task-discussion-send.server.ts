@@ -1,3 +1,4 @@
+import { LIVE_TASK_WHERE } from "#src/server/tasks/task-view.server";
 import type { MentionSelectorInput } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
@@ -44,7 +45,7 @@ export async function postTaskMessage(
       select: { id: true },
     }),
     tx.task.findUnique({
-      where: { id: taskId },
+      where: { id: taskId, ...LIVE_TASK_WHERE },
       select: { id: true, discussionConversationId: true },
     }),
   ]);

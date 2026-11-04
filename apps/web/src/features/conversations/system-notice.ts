@@ -46,6 +46,7 @@ export type SystemNotice =
       params: { task: SystemTask; blockers: SystemTask[] } & OwnerParam;
     }
   | { kind: "task.subtasks_finished"; params: { task: SystemTask } & OwnerParam }
+  | { kind: "task.deleted"; params: { actor: SystemPerson; task: SystemTask } }
   | {
       kind: "task.released";
       /** `task`'s last blocker was removed or deleted, so it can start. */

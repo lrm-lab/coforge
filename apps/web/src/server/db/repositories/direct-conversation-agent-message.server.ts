@@ -22,6 +22,7 @@ const TASK_METADATA_SELECT = {
   select: {
     number: true,
     status: true,
+    deletedAt: true,
     owner: {
       select: {
         user: { select: { username: true, displayName: true } },
@@ -219,6 +220,7 @@ function taskStatus(value: string): TaskStatus {
 
 function messageTask(
   task: {
+    deletedAt?: Date | null;
     number: number;
     status: string;
     owner: {
@@ -228,6 +230,9 @@ function messageTask(
   } | null,
 ): MessageTaskMetadata | undefined {
   if (!task) return undefined;
+  // A marked Task is deleted to the reader (task #512): the Agent-side metadata says so.
+  if (task.deletedAt)
+    return { deleted: true, number: task.number, status: taskStatus(task.status) };
   const agent = task.owner?.agent;
   const user = task.owner?.user;
   const handle = agent ? agent.name : user?.username;

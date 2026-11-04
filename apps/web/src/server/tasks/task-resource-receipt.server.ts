@@ -1,5 +1,5 @@
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
-import { taskSelection } from "./task-view.server";
+import { LIVE_TASK_WHERE, taskSelection } from "./task-view.server";
 import { taskViewOf } from "./task-relations.server";
 import {
   REMINDER_SYNC_MESSAGE_TYPE,
@@ -35,9 +35,11 @@ export async function recordResourceReceipt(
   if (!Number.isFinite(fireAt.getTime())) throw new AppError("INVALID_INPUT");
 
   const result = await ports.db.$transaction(async (tx) => {
-    const task = await tx.task.findUnique({
+    const task = await tx.task.findFirst({
       where: {
-        conversationId_number: { conversationId, number: command.number! },
+        conversationId,
+        number: command.number!,
+        ...LIVE_TASK_WHERE,
       },
       select: {
         ...taskSelection,

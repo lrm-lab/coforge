@@ -46,8 +46,14 @@ export type Member = {
 /** The member a Task is assigned to: named in a notice by handle alone. */
 /** The id a member-keyed write needs; a member-less admin is refused where one is required. */
 export function memberId(member: Member): string {
-  if (!member.id) throw new AppError("ACCESS_DENIED");
+  if (!member.id) throw new AppError("ACCESS_DENIED", { errorId: "task-needs-channel-member" });
   return member.id;
+}
+
+/** The key a request-id or receipt names a member-less admin with — an idempotency key, never
+ * a member foreign key: writes that need the member row itself still use `memberId` or `member.id`. */
+export function memberKey(member: Member): string {
+  return member.id ?? `admin:${member.userId}`;
 }
 
 export type Assignee = Omit<Member, "user" | "agent"> & {

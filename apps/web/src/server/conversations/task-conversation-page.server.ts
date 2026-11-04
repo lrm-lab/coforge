@@ -1,3 +1,4 @@
+import { LIVE_TASK_WHERE } from "#src/server/tasks/task-view.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { windowPageFlags } from "#src/lib/conversation-window";
@@ -27,7 +28,7 @@ export class TaskConversationPages {
       conversationId,
     );
     const task = await this.db.task.findUnique({
-      where: { discussionConversationId: conversationId },
+      where: { discussionConversationId: conversationId, ...LIVE_TASK_WHERE },
       select: { conversationId: true, number: true },
     });
     if (!task) throw new AppError("NOT_FOUND");

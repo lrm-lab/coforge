@@ -58,6 +58,7 @@ export function forwardedSuffix(message: AgentMessageRecord): string {
 
 export function taskSuffix(message: AgentMessageRecord): string {
   if (!message.task) return "";
+  if (message.task.deleted) return " [task deleted]";
   const owner = message.task.owner
     ? ` assignee=@${foldUntrustedLine(message.task.owner.handle)}${message.task.owner.deleted ? " [deleted]" : ""}`
     : "";

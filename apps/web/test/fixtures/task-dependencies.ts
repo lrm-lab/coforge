@@ -89,6 +89,16 @@ export async function setup({
       members: { create: [{ userId: bob.id }, { agentId: one.id }] },
     },
   });
+  // A private channel the Workspace owner is not in either: the member-less admin path does
+  // not reach one, so her write is refused like any other non-member's.
+  const secretAdmin = await db.conversation.create({
+    data: {
+      workspaceId: workspace.id,
+      channelName: `deps-secret-admin-${handle}`,
+      visibility: "private",
+      members: { create: [{ userId: bob.id }, { agentId: one.id }] },
+    },
+  });
   const board = new TaskBoard(db, dependencies);
   const principals = {
     alice: { workspaceId: workspace.id, userId: alice.id } as TaskPrincipal,
@@ -101,6 +111,7 @@ export async function setup({
     [other.id, `#${other.channelName}`],
     [secret.id, `#${secret.channelName}`],
     [admin.id, `#${admin.channelName}`],
+    [secretAdmin.id, `#${secretAdmin.channelName}`],
   ]);
   // An Agent names its board by target; a person by conversation id.
   const run = (
@@ -186,6 +197,7 @@ export async function setup({
     finish,
     refusal,
     channel,
+    secretAdmin,
     other,
     admin,
     secret,

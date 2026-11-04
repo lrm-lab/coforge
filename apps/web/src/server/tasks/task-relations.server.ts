@@ -154,7 +154,7 @@ export async function loadTaskRelations(
     db.$queryRaw<{ id: string; total: bigint; finished: bigint }[]>`
       SELECT p."parentTaskId"::text AS id, COUNT(*) AS total,
              COUNT(*) FILTER (WHERE t."status" IN (${Prisma.join(FINISHED_TASK_STATUSES)})) AS finished
-      FROM "task_parents" p JOIN "tasks" t ON t."id" = p."taskId"
+      FROM "task_parents" p JOIN "tasks" t ON t."id" = p."taskId" AND t."deletedAt" IS NULL
       WHERE p."parentTaskId" = ANY(${ids}::uuid[])
       GROUP BY p."parentTaskId"`,
   ]);

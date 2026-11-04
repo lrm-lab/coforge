@@ -43,7 +43,19 @@ export async function waitingChoiceCards(
       // A card past its expiry is no longer waiting, even before the sweep writes the state.
       OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
       payload: { path: ["to"], equals: userId },
-      conversation: readableConversationWhere(workspaceId, { userId }),
+      conversation: {
+        AND: [
+          readableConversationWhere(workspaceId, { userId }),
+          // task #512: a card in a deleted Task's discussion is not waiting — its Task read as
+          // gone the moment the marker landed.
+          {
+            OR: [
+              { taskDiscussionOf: { is: null } },
+              { taskDiscussionOf: { is: { deletedAt: null } } },
+            ],
+          },
+        ],
+      },
     },
     orderBy: { createdAt: "desc" },
     select: {

@@ -40,5 +40,5 @@
   "system_notice_channel_member_added": "{actor} added {members} to this channel.",
   "system_notice_channel_member_removed": "{actor} removed {members} from this channel.",
   "system_notice_actor_unknown": "Someone",
-  "system_notice_task_deleted": "a deleted task"
+  "system_notice_task_deleted": "{actor} deleted {task}"
 }

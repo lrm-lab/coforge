@@ -1,3 +1,4 @@
+import { LIVE_TASK_WHERE } from "#src/server/tasks/task-view.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { CHANNEL_VISIBILITY } from "#src/features/conversations/channel-visibility";
 import type { WorkspaceMemoryCatalog } from "#src/server/workspace-memory/catalog";
@@ -83,6 +84,7 @@ export class PrismaWorkspaceMemoryCatalog implements WorkspaceMemoryCatalog {
               status: "done",
               // Memory reads a finished task through its message; one without a message has none.
               messageId: { not: null },
+              ...LIVE_TASK_WHERE,
               conversationId: { in: conversationIds },
               ...updatedAfter,
             },

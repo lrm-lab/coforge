@@ -1,3 +1,4 @@
+import { LIVE_TASK_WHERE } from "#src/server/tasks/task-view.server";
 import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError, isAppError } from "#src/lib/app-error";
@@ -329,7 +330,10 @@ export async function deleteChannel(
       where: { conversationId: channel.id, agentId: { not: null }, ...ACTIVE_MEMBER_WHERE },
       select: { agentId: true },
     }),
-    db.task.findMany({ where: { conversationId: channel.id }, select: { id: true } }),
+    db.task.findMany({
+      where: { conversationId: channel.id, ...LIVE_TASK_WHERE },
+      select: { id: true },
+    }),
     attachmentKeys(db, { conversationId: channel.id }),
     channelAudience(db, channel),
   ]);

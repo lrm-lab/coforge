@@ -2,7 +2,7 @@ import { MAX_TASK_TREE_DEPTH, taskNameLabel } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
 import type { Transaction } from "./task-board-ports.server";
 import { descend, groupBy } from "./task-relations.server";
-import { NAMED_CONVERSATION_SELECT, taskName } from "./task-view.server";
+import { NAMED_CONVERSATION_SELECT, taskName, LIVE_TASK_WHERE } from "./task-view.server";
 
 /**
  * The reads and walks behind the graph checks of a relation write, and the tree rule those checks
@@ -154,7 +154,7 @@ export async function describe(
   known: ReadonlyMap<string, string>,
 ) {
   const rows = await tx.task.findMany({
-    where: { id: { in: ids.filter((id) => !known.has(id)) } },
+    where: { id: { in: ids.filter((id) => !known.has(id)) }, ...LIVE_TASK_WHERE },
     select: { id: true, number: true, conversation: { select: NAMED_CONVERSATION_SELECT } },
   });
   const labels = new Map(rows.map((row) => [row.id, taskNameLabel(taskName(row, from))]));

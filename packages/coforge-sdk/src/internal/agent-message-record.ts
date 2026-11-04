@@ -42,6 +42,8 @@ export type AgentMessageRecord = {
   attachmentCommentAnchor?: import("../agent/attachment-comments").AgentAttachmentCommentAnchor;
 };
 export type MessageTaskMetadata = {
+  /** `deleted` marks the Task itself deleted in the undo window (task #512). */
+  deleted?: boolean;
   number: number;
   status: import("./tasks").TaskStatus;
   /** `handle` has no leading "@"; `deleted` marks an Agent deleted while still holding the Task. */

@@ -1,5 +1,6 @@
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
 import type { ChannelActor } from "./channel-actor.server";
+import { LIVE_TASK_WHERE } from "#src/server/tasks/task-view.server";
 import { visibleChannelWhere } from "./channel-read-access.server";
 import {
   PG_INTEGER_MAX,
@@ -142,7 +143,11 @@ export async function storeMessageBody(
     taskNumbers.length
       ? (
           await tx.task.findMany({
-            where: { conversationId: scope.conversationId, number: { in: taskNumbers } },
+            where: {
+              conversationId: scope.conversationId,
+              number: { in: taskNumbers },
+              ...LIVE_TASK_WHERE,
+            },
             select: { number: true },
           })
         ).map((task) => task.number)
@@ -194,6 +199,7 @@ export async function storeMessageBody(
     const rows = await tx.task.findMany({
       where: {
         number: { in: numbers },
+        ...LIVE_TASK_WHERE,
         conversation: {
           ...visibleChannelWhere(scope.workspaceId, scope.reader),
           channelName: { in: channelTasks.map((task) => task.name) },
@@ -252,6 +258,7 @@ export async function storeMessageBody(
           where: {
             number: { in: numbers },
             conversationId: { in: direct.map((conversation) => conversation.id) },
+            ...LIVE_TASK_WHERE,
           },
           select: { number: true, conversationId: true },
         })

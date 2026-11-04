@@ -66,9 +66,14 @@ test("a message whose Task was deleted can be claimed again", async () => {
       messageId: message.id,
     });
     expect(duringWindow.claims?.[0]?.success).toBe(false);
-    expect(duringWindow.claims?.[0]?.reason).toBe("this task was just deleted; whoever deleted it can undo it");
+    expect(duringWindow.claims?.[0]?.reason).toBe(
+      "this task was just deleted; whoever deleted it can undo it",
+    );
     expect(duringWindow.claims?.[0]?.number).toBe(number);
-    await db.task.update({ where: { id: (await db.task.findUnique({ where: { messageId: message.id } }))!.id }, data: { deletedAt: new Date(Date.now() - 120_000) } });
+    await db.task.update({
+      where: { id: (await db.task.findUnique({ where: { messageId: message.id } }))!.id },
+      data: { deletedAt: new Date(Date.now() - 120_000) },
+    });
     await new DeletedTaskSweep(db).runOnce();
     const afterSweep = await run(asAgent, { operation: "claim", target, messageId: message.id });
     expect(afterSweep.claims?.[0]?.success).toBe(true);

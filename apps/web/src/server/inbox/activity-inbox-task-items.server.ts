@@ -23,7 +23,7 @@ function taskItemsSql(workspaceId: string, userId: string) {
      AND cm."workspaceId" = ${workspaceId}::uuid
      AND cm."leftAt" IS NULL
      AND c."kind" = 'task_thread'
-    JOIN "tasks" t ON t."discussionConversationId" = c."id"
+    JOIN "tasks" t ON t."discussionConversationId" = c."id" AND t."deletedAt" IS NULL
     JOIN "conversations" b
       ON b."id" = t."conversationId"
      AND b."channelName" IS NOT NULL

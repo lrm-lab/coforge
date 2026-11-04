@@ -1,3 +1,4 @@
+import { LIVE_TASK_WHERE } from "#src/server/tasks/task-view.server";
 import { AppError } from "#src/lib/app-error";
 import type { Transaction } from "./task-board-ports.server";
 
@@ -49,7 +50,7 @@ export async function discussionOf(
 ) {
   if (task.discussionConversationId) return task.discussionConversationId;
   const fresh = await tx.task.findUnique({
-    where: { id: task.id },
+    where: { id: task.id, ...LIVE_TASK_WHERE },
     select: { discussionConversationId: true },
   });
   if (!fresh) throw new AppError("NOT_FOUND");

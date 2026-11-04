@@ -163,6 +163,11 @@ function noticeText(notice: SystemNotice, locale?: Locale): string {
         notice.params.owner,
         locale,
       );
+    case "task.deleted":
+      return m.system_notice_task_deleted(
+        { actor: shown(notice.params.actor), task: reference(notice.params.task, locale) },
+        { locale },
+      );
     case "task.released":
       return addressed(
         m.system_notice_task_released({ task: reference(notice.params.task, locale) }, { locale }),

@@ -40,6 +40,7 @@ import {
   UNFINISHED_TASK_STATUSES,
   readTaskText,
   type SelectedTask,
+  LIVE_TASK_WHERE,
 } from "./task-view.server";
 
 /** The message already has someone else's live task. The refusal names the task and who holds it
@@ -106,6 +107,7 @@ export async function createConversationTasks(
         conversationId: scope.conversationId,
         creatorMemberId: memberId(member),
         requestId: { in: requestIds },
+        ...LIVE_TASK_WHERE,
       },
       orderBy: { number: "asc" },
       select: taskSelection,
@@ -325,6 +327,7 @@ async function assertSourceFree(tx: Transaction, sourceMessageId: string, creato
   const live = await tx.task.findFirst({
     where: {
       sourceMessageId,
+      ...LIVE_TASK_WHERE,
       status: { in: UNFINISHED_TASK_STATUSES },
       ownerMemberId: { not: null, notIn: [creatorMemberId] },
     },

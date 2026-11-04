@@ -161,6 +161,8 @@ export const noticeText = {
   /** The last open sub-task of a Task finished. */
   subtasksFinished: (task: QuotedTask, owner: AssigneeMention | null) =>
     addressed(`✅ All sub-tasks of ${reference(task)} are finished`, owner),
+  /** The sweep's record of a Task removed past its undo window; the marker itself posts none. */
+  taskDeleted: (actor: DisplayName) => `🗑️ ${actor} deleted a task`,
 };
 
 /**

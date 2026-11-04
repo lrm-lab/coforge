@@ -347,7 +347,7 @@ export class Labels {
         COUNT(*)::bigint AS "total",
         MAX(tl."createdAt") AS "lastUsedAt"
       FROM "task_labels" tl
-      JOIN "tasks" t ON t."id" = tl."taskId"
+      JOIN "tasks" t ON t."id" = tl."taskId" AND t."deletedAt" IS NULL
       WHERE t."workspaceId" = ${workspaceId}::uuid
       GROUP BY tl."labelId"`;
     const byLabel = new Map(counts.map((row) => [row.labelId, row]));

@@ -38,6 +38,11 @@ import { TASK_PROJECT_SELECT } from "./task-project-select.server";
  */
 
 /** A Task belongs to a channel or DM; comment-author seats never confer Task authority. */
+/** A Task every ordinary read treats as existing: a `deletedAt`-marked Task is gone to the
+ * board, the list, an Agent's list, a reference, an inbox row, a reminder and every other read
+ * inside the one-minute undo window — only the sweep and `restore` look at it (task #512). */
+export const LIVE_TASK_WHERE = { deletedAt: null } as const;
+
 export const TASK_SCOPE_WHERE = {
   ...VISIBLE_CONVERSATION_WHERE,
   AND: [TARGETABLE_CONVERSATION_WHERE],

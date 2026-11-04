@@ -39,5 +39,5 @@
   "system_notice_channel_member_added": "{actor} 将 {members} 拉进了频道。",
   "system_notice_channel_member_removed": "{actor} 将 {members} 移出了频道。",
   "system_notice_actor_unknown": "有人",
-  "system_notice_task_deleted": "一个已删除的任务"
+  "system_notice_task_deleted": "{actor} 删除了 {task}"
 }

@@ -54,6 +54,19 @@ const READ_ONLY_TASK_OPERATIONS: ReadonlySet<TaskCommand["operation"]> = new Set
   "history",
 ]);
 
+/** The Task operations a Workspace owner/admin may run in a public channel they never joined —
+ * writes not keyed to a channel member row (task #512). claim/unclaim, create, follow and the
+ * resource receipt stay refused: a member row names who holds, follows and claims. */
+const MEMBERLESS_ADMIN_OPERATIONS: ReadonlySet<TaskCommand["operation"]> = new Set([
+  ...READ_ONLY_TASK_OPERATIONS,
+  "delete",
+  "restore",
+  "update",
+  "amend",
+  "assign",
+  "unassign",
+]);
+
 /** Canonical authorization and transaction seam for message-backed Tasks. */
 export class TaskBoard {
   private readonly overviewReads: TaskOverviewReads;
@@ -193,7 +206,11 @@ export class TaskBoard {
     // member row (task #512): history names them by userId, and the readable scope has already
     // refused every private channel they are not in.
     if (scope.channel && !scope.member && !READ_ONLY_TASK_OPERATIONS.has(command.operation)) {
-      if ((scope.workspaceRole !== "owner" && scope.workspaceRole !== "admin") || !principal.userId)
+      if (
+        (scope.workspaceRole !== "owner" && scope.workspaceRole !== "admin") ||
+        !principal.userId ||
+        !MEMBERLESS_ADMIN_OPERATIONS.has(command.operation)
+      )
         throw new AppError("ACCESS_DENIED");
       scope.member = {
         id: null,

@@ -8,7 +8,7 @@ import {
 import { conversationSignalScopes } from "#src/server/conversations/conversation-signal-scope.server";
 import { indexedRequestId } from "./task-request-ids.server";
 import { announceTasks } from "./task-publication.server";
-import { taskSelection } from "./task-view.server";
+import { taskSelection, LIVE_TASK_WHERE } from "./task-view.server";
 import { taskViewOf } from "./task-relations.server";
 import {
   allocateTaskNumbers,
@@ -59,6 +59,7 @@ export async function announceSpawnedTask(
   const task = await ports.db.task.findFirst({
     where: {
       conversationId: conversation.conversationId,
+      ...LIVE_TASK_WHERE,
       sourceMessageId: messageId,
       requestId: await sentTaskRequestId(messageId),
     },

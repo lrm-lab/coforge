@@ -71,7 +71,7 @@ test("a blocker or parent in another conversation, or that does not exist, is re
 });
 
 test("deleting a blocker releases its dependents and deleting a parent leaves its children", async () => {
-  const { db, run, make, show } = await setup();
+  const { db, run, make, show, channel } = await setup();
   try {
     const [blocker, waiting, parent, child] = await make("alice", 4);
     await run("alice", {
@@ -94,7 +94,7 @@ test("deleting a blocker releases its dependents and deleting a parent leaves it
     // task #512: the marker holds the links for the undo window; the sweep's cleanup frees
     // the dependent and orphans the child.
     await db.task.updateMany({
-      where: { number: { in: [blocker!, parent!] } },
+      where: { workspaceId: channel.workspaceId, number: { in: [blocker!, parent!] } },
       data: { deletedAt: new Date(Date.now() - 120_000) },
     });
     await new DeletedTaskSweep(db).runOnce();

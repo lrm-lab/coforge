@@ -28,7 +28,7 @@ import {
   type TaskFollowReason,
 } from "./task-discussion-store.server";
 import { resolveTaskScope } from "./task-scope.server";
-import { TASK_SCOPE_WHERE, taskSelection } from "./task-view.server";
+import { LIVE_TASK_WHERE, TASK_SCOPE_WHERE, taskSelection } from "./task-view.server";
 import { taskViewOf } from "./task-relations.server";
 
 /** Names a task by the board it is on (`target`, an Agent's `#channel`, or `conversationId`, a
@@ -287,7 +287,7 @@ export class TaskConversations {
         workspaceId: principal.workspaceId,
         member: { ...seat, ...ACTIVE_MEMBER_WHERE },
         // The same scope every other read applies: a hidden channel's tasks are not listed.
-        task: { conversation: TASK_SCOPE_WHERE },
+        task: { conversation: TASK_SCOPE_WHERE, ...LIVE_TASK_WHERE },
       },
       orderBy: { createdAt: "desc" },
       select: {
@@ -353,9 +353,11 @@ export class TaskConversations {
       ...(ref.target ? { target: ref.target } : { conversationId: ref.conversationId }),
     });
     if (!scope.member && !(scope.channel && !require.member)) throw new AppError("NOT_FOUND");
-    const task = await this.ports.db.task.findUnique({
+    const task = await this.ports.db.task.findFirst({
       where: {
-        conversationId_number: { conversationId: scope.conversationId, number: ref.number },
+        conversationId: scope.conversationId,
+        number: ref.number,
+        ...LIVE_TASK_WHERE,
       },
       select: {
         id: true,

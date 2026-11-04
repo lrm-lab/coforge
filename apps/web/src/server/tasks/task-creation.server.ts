@@ -19,6 +19,7 @@ import { DUPLICATE_TASK_WINDOW_MS, normalizeTaskTitle } from "./task-command-val
 import { creationChanges, historyRows } from "./task-history.server";
 import {
   hostMessageId,
+  LIVE_TASK_WHERE,
   taskSelection,
   UNFINISHED_TASK_STATUSES,
   type SelectedTask,
@@ -98,6 +99,7 @@ export async function createTasks(
         where: {
           conversationId: scope.conversationId,
           creatorMemberId: { not: memberId(member) },
+          ...LIVE_TASK_WHERE,
           status: { in: UNFINISHED_TASK_STATUSES },
           createdAt: { gte: new Date(Date.now() - DUPLICATE_TASK_WINDOW_MS) },
         },

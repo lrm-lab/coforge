@@ -1,4 +1,4 @@
-import { taskSelection } from "./task-view.server";
+import { LIVE_TASK_WHERE, taskSelection } from "./task-view.server";
 import {
   taskStatusAwaitsReceipt,
   taskStatusMoveAllowed,
@@ -279,9 +279,11 @@ export async function taskHistory(
   conversationId: string,
   command: TaskCommand,
 ): Promise<TaskResult> {
-  const task = await ports.db.task.findUnique({
+  const task = await ports.db.task.findFirst({
     where: {
-      conversationId_number: { conversationId, number: command.number! },
+      conversationId,
+      number: command.number!,
+      ...LIVE_TASK_WHERE,
     },
     select: {
       ...taskSelection,
@@ -305,9 +307,12 @@ export async function restoreTask(
   member: Member,
   command: TaskCommand,
 ): Promise<TaskResult> {
-  const task = await ports.db.task.findUnique({
+  // The one read that looks past LIVE_TASK_WHERE: a restore names the marked row itself.
+  const task = await ports.db.task.findFirst({
     where: {
-      conversationId_number: { conversationId, number: command.number! },
+      conversationId,
+      number: command.number!,
+      deletedAt: { not: null },
     },
     select: {
       id: true,
@@ -319,14 +324,21 @@ export async function restoreTask(
   });
   if (!task?.deletedAt) throw new AppError("NOT_FOUND");
   if (task.creatorMemberId !== member.id) await requireManager(ports.db, workspaceId, member);
-  if (Date.now() - task.deletedAt.getTime() > DELETED_TASK_UNDO_MS)
-    throw new AppError("CONFLICT", { errorId: "task-restore-window-elapsed" });
-  await ports.db.task.update({
-    where: { id: task.id },
+  // task #512: the restore claims the window atomically — `deletedAt >= now - window` in the
+  // same update, so a restore racing the sweep's claim either wins the marker or is refused,
+  // never both. The marker is set with `new Date()` at delete time, so the application clock is
+  // the clock that marked it — the sweep reads the same one.
+  const restored = await ports.db.task.updateMany({
+    where: {
+      id: task.id,
+      deletedAt: { not: null, gte: new Date(Date.now() - DELETED_TASK_UNDO_MS) },
+    },
     data: { deletedAt: null, deletedByMemberId: null, deletedByUserId: null },
   });
+  if (restored.count === 0)
+    throw new AppError("CONFLICT", { errorId: "task-restore-window-elapsed" });
   const neighbours = await relatedTasks(ports.db, task);
-  const restored = await ports.db.task.findMany({
+  const restoredTasks = await ports.db.task.findMany({
     where: {
       id: {
         in: [
@@ -339,16 +351,19 @@ export async function restoreTask(
     },
     select: taskSelection,
   });
-  await announceTasks(
-    ports,
-    { conversationId, workspaceId },
-    async () => (await conversationSignalScopes(ports.db, conversationId, workspaceId)).task,
-    {
-      tasks: await taskViewsOf(ports.db, "people", restored),
-      publicationId: `${task.id}:task-restored`,
-    },
-  );
-  return { tasks: await taskViewsOf(ports.db, ports.reader, restored) };
+  await Promise.all([
+    announceTasks(
+      ports,
+      { conversationId, workspaceId },
+      async () => (await conversationSignalScopes(ports.db, conversationId, workspaceId)).task,
+      {
+        tasks: await taskViewsOf(ports.db, "people", restoredTasks),
+        publicationId: `${task.id}:task-restored`,
+      },
+    ),
+    announceNeighbours(ports, conversationId, neighbours, `${task.id}:task-restored`),
+  ]);
+  return { tasks: await taskViewsOf(ports.db, ports.reader, restoredTasks) };
 }
 
 export async function deleteTask(
@@ -358,9 +373,11 @@ export async function deleteTask(
   member: Member,
   command: TaskCommand,
 ): Promise<TaskResult> {
-  const task = await ports.db.task.findUnique({
+  const task = await ports.db.task.findFirst({
     where: {
-      conversationId_number: { conversationId, number: command.number! },
+      conversationId,
+      number: command.number!,
+      ...LIVE_TASK_WHERE,
     },
     select: {
       id: true,
