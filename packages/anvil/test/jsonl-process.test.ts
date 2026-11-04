@@ -307,3 +307,76 @@ test("the stderr excerpt keeps four scrubbed lines and the process log records t
   expect(logged?.properties.error_message).toBe(excerpt);
   expect(JSON.stringify(logged?.properties)).not.toContain(secret);
 });
+
+/** The reported stderr lines and the captured log record of a process that writes `lines`. */
+async function stderrLog(lines: readonly string[]) {
+  return captureDaemonLogs(async () => {
+    const encoder = new TextEncoder();
+    const closed = Promise.withResolvers<void>();
+    const tree = {
+      child: {
+        pid: 1,
+        exited: Promise.resolve(1),
+        exitCode: 1,
+        stdin: { write: () => true, end: () => undefined, flush: async () => undefined },
+        stdout: { async *[Symbol.asyncIterator]() {} },
+        stderr: {
+          async *[Symbol.asyncIterator]() {
+            for (const line of lines) yield encoder.encode(`${line}\n`);
+          },
+        },
+        kill: () => undefined,
+      },
+      terminate: async () => undefined,
+      waitForExit: async () => true,
+    } satisfies OwnedProcessTree;
+    const process = new JsonlProcess(["unused"], tmpdir(), {}, { spawn: () => tree });
+    const received: string[] = [];
+    process.onStderr((line) => received.push(line));
+    process.onClose(() => closed.resolve());
+    try {
+      await closed.promise;
+      return received;
+    } finally {
+      await process.dispose();
+    }
+  });
+}
+
+test("a stderr flood is logged as its head, an omitted count and its tail", async () => {
+  const secret = "sk-abcdef123456";
+  const lines = Array.from({ length: 210 }, (_, index) => `flood line ${index + 1}`);
+  lines[4] = `token=${secret}`;
+  lines[120] = `token=${secret}`;
+  const { result, records } = await stderrLog(lines);
+  // Listeners still see every reported line; only the process log is bounded.
+  expect(result).toEqual(lines);
+  const logged = records.find((record) => record.properties.event === "code_agent.process.stderr");
+  expect(logged?.properties.lines).toBe(210);
+  const kept = String(logged?.properties.stderr).split("\n");
+  expect(kept).toHaveLength(151);
+  expect(kept.slice(0, 100)).toEqual(
+    lines.slice(0, 100).map((line) => line.replace(`token=${secret}`, "token=[REDACTED]")),
+  );
+  expect(kept[100]).toBe("[60 stderr lines omitted]");
+  expect(kept.slice(101)).toEqual(lines.slice(160));
+  expect(JSON.stringify(logged?.properties)).not.toContain(secret);
+});
+
+test("a stderr flood inside the head-and-tail budget keeps every line", async () => {
+  const lines = Array.from({ length: 140 }, (_, index) => `line ${index + 1}`);
+  const { records } = await stderrLog(lines);
+  const logged = records.find((record) => record.properties.event === "code_agent.process.stderr");
+  expect(String(logged?.properties.stderr).split("\n")).toEqual(lines);
+});
+
+test("a stderr flood a few lines over the budget omits only the middle", async () => {
+  const lines = Array.from({ length: 160 }, (_, index) => `line ${index + 1}`);
+  const { records } = await stderrLog(lines);
+  const logged = records.find((record) => record.properties.event === "code_agent.process.stderr");
+  const kept = String(logged?.properties.stderr).split("\n");
+  expect(kept).toHaveLength(151);
+  expect(kept.slice(0, 100)).toEqual(lines.slice(0, 100));
+  expect(kept[100]).toBe("[10 stderr lines omitted]");
+  expect(kept.slice(101)).toEqual(lines.slice(110));
+});

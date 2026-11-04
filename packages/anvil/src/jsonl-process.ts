@@ -1,4 +1,5 @@
 import { getLogger } from "@logtape/logtape";
+import { redactCredentials } from "@lrm/coforge-sdk/internal";
 import { JsonlProtocolError, JsonlRequestError } from "./jsonl-error";
 import { scrubRuntimeErrorText } from "./runtime-error-text";
 import {
@@ -244,6 +245,21 @@ export class JsonlProcess {
   async #discardStderr(onDiagnostic?: (diagnostic: string) => void): Promise<void> {
     let bytes = 0;
     let lines = 0;
+    // The process log keeps the head and the tail of a reported flood, counting the middle away,
+    // so a runtime's wall of diagnostics cannot bury why it started or how it ended.
+    const logHead: string[] = [];
+    const logTail: string[] = [];
+    let loggedLines = 0;
+    const keepForLog = (reported: string) => {
+      if (!reported.trim()) return;
+      loggedLines++;
+      if (logHead.length < STDERR_LOG_HEAD_LINES) {
+        logHead.push(reported);
+        return;
+      }
+      logTail.push(reported);
+      if (logTail.length > STDERR_LOG_TAIL_LINES) logTail.shift();
+    };
     const decoder = new TextDecoder();
     let line = "";
     let oversized = false;
@@ -276,6 +292,7 @@ export class JsonlProcess {
           const reported = oversized ? "[oversized stderr diagnostic]" : line.replace(/\r$/, "");
           if (reported.trim() && this.#stderrHead.length < JsonlProcess.STDERR_HEAD_LINES)
             this.#stderrHead.push(reported);
+          keepForLog(reported);
           for (const listener of this.#stderrListeners) listener(reported);
           line = "";
           oversized = false;
@@ -288,8 +305,15 @@ export class JsonlProcess {
         const reported = oversized ? "[oversized stderr diagnostic]" : line;
         if (reported.trim() && this.#stderrHead.length < JsonlProcess.STDERR_HEAD_LINES)
           this.#stderrHead.push(reported);
+        keepForLog(reported);
         for (const listener of this.#stderrListeners) listener(reported);
       }
+      const omitted = loggedLines - logHead.length - logTail.length;
+      const logged = [
+        ...logHead,
+        ...(omitted > 0 ? [`[${omitted} stderr lines omitted]`] : []),
+        ...logTail,
+      ];
       const excerpt = this.stderrExcerpt();
       if (bytes > 0)
         logger.warning("Code agent process wrote diagnostics to stderr", {
@@ -298,6 +322,7 @@ export class JsonlProcess {
           bytes,
           lines,
           ...(excerpt ? { error_message: excerpt } : {}),
+          ...(logged.length > 0 ? { stderr: redactCredentials(logged.join("\n")) } : {}),
           outcome: "observed",
         });
     } catch {
@@ -395,6 +420,12 @@ export class JsonlProcess {
 
 /** The UTF-16 length past which a stderr line is reported as oversized. */
 const STDERR_LINE_BOUND = 4096;
+
+/** How many leading reported stderr lines the process log keeps when a runtime floods it. */
+const STDERR_LOG_HEAD_LINES = 100;
+
+/** How many trailing reported stderr lines the process log keeps besides the head. */
+const STDERR_LOG_TAIL_LINES = 50;
 
 /**
  * How many UTF-16 units of `text[start, end)` fit in `room`, never splitting a surrogate pair: a
