@@ -19,6 +19,7 @@ export const taskCommand = z
       "amend",
       "history",
       "delete",
+      "restore",
       "receipt",
     ]),
     idempotencyKey: z.uuid(),

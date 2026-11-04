@@ -23,3 +23,7 @@ test("a Project slug must be a non-empty string no longer than a Project slug ma
   expect(() => taskCommand.parse({ ...amend, project: "" })).toThrow();
   expect(() => taskCommand.parse({ ...amend, project: "x".repeat(101) })).toThrow();
 });
+
+test("a person's page may restore a Task it just deleted (task #507)", () => {
+  expect(taskCommand.parse({ ...amend, operation: "restore" }).operation).toBe("restore");
+});
