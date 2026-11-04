@@ -18,15 +18,21 @@ afterEach(() => {
 test("no REDIS_URL admits every request and logs redis_unavailable once", async () => {
   delete Bun.env.REDIS_URL;
   resetAppRateLimits();
+  // Restored however the test ends (task #525): `bun test` runs every file in one process, and a
+  // later `spyOn(console, "warn")` gets this same spy back, this call already counted in it.
   const warn = spyOn(console, "warn").mockImplementation(() => {});
-  const limits = getAppRateLimits();
-  for (let i = 0; i < 3; i++) {
-    expect(await limits.token.admit("app")).toEqual({ allowed: true });
-    expect(await limits.installation.admit("installation")).toEqual({ allowed: true });
+  try {
+    const limits = getAppRateLimits();
+    for (let i = 0; i < 3; i++) {
+      expect(await limits.token.admit("app")).toEqual({ allowed: true });
+      expect(await limits.installation.admit("installation")).toEqual({ allowed: true });
+    }
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String(warn.mock.calls[0]![0]))).toMatchObject({
+      event: "app_rate_limit:redis_unavailable",
+    });
+    expect(getAppRateLimits()).toBe(limits);
+  } finally {
+    warn.mockRestore();
   }
-  expect(warn).toHaveBeenCalledTimes(1);
-  expect(JSON.parse(String(warn.mock.calls[0]![0]))).toMatchObject({
-    event: "app_rate_limit:redis_unavailable",
-  });
-  expect(getAppRateLimits()).toBe(limits);
 });
