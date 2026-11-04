@@ -260,23 +260,28 @@ describe("Agent message HTTP authentication", () => {
     const warnings: Record<string, unknown>[] = [];
     const warn = console.warn;
     console.warn = (line: string) => void warnings.push(JSON.parse(line));
+    const id = (suffix: string) => `00000000-0000-4000-8000-${suffix.padStart(12, "0")}`;
     try {
       await expect(
         authenticateAgentMessageRequest(
-          request(`sk_agent_${"z".repeat(43)}`, "daemon-token", "req-not-found"),
+          request(`sk_agent_${"z".repeat(43)}`, "daemon-token", id("1")),
           dependencies,
         ),
       ).rejects.toThrow();
       await expect(
-        authenticateAgentMessageRequest(request(apiKey, "daemon-token", "req-scope"), {
+        authenticateAgentMessageRequest(request(apiKey, "daemon-token", id("2")), {
           ...dependencies,
           computerBelongsToWorkspace: async () => false,
         }),
       ).rejects.toThrow();
       keys.record!.revokedAt = new Date();
       await expect(
+        authenticateAgentMessageRequest(request(apiKey, "daemon-token", id("3")), dependencies),
+      ).rejects.toThrow();
+      // A client-supplied request id that is not a UUID is dropped from the warning.
+      await expect(
         authenticateAgentMessageRequest(
-          request(apiKey, "daemon-token", "req-revoked"),
+          request(apiKey, "daemon-token", "req-not-a-uuid"),
           dependencies,
         ),
       ).rejects.toThrow();
@@ -284,9 +289,10 @@ describe("Agent message HTTP authentication", () => {
       console.warn = warn;
     }
     expect(warnings).toEqual([
-      { event: "agent_http.auth_failed", request_id: "req-not-found", reason: "key_not_found" },
-      { event: "agent_http.auth_failed", request_id: "req-scope", reason: "scope_mismatch" },
-      { event: "agent_http.auth_failed", request_id: "req-revoked", reason: "key_revoked" },
+      { event: "agent_http.auth_failed", request_id: id("1"), reason: "key_not_found" },
+      { event: "agent_http.auth_failed", request_id: id("2"), reason: "scope_mismatch" },
+      { event: "agent_http.auth_failed", request_id: id("3"), reason: "key_revoked" },
+      { event: "agent_http.auth_failed", reason: "key_revoked" },
     ]);
     expect(JSON.stringify(warnings)).not.toContain(apiKey);
   });

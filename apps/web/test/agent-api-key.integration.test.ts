@@ -6,6 +6,7 @@ import {
   authenticateAgentApiKey,
   createAgentApiKey,
   hashAgentApiKey,
+  settleAgentApiKeyFirstUse,
   type AgentApiKeyRepository,
 } from "#src/server/agents/agent-api-key.server";
 import { moveAgentToComputer } from "#src/server/db/repositories/agent.repositories.server";
@@ -87,13 +88,25 @@ describe.skipIf(!db)("PrismaAgentApiKeyRepository", () => {
     await expect(authenticateAgentApiKey(first, f.repository)).rejects.toThrow(
       "invalid Agent API key",
     );
-    await expect(authenticateAgentApiKey(second, f.repository)).resolves.toMatchObject({
-      computerId: f.computerA.id,
-    });
-    // The second key's first authentication retired nothing newer: the third is untouched.
+    const secondRecord = await authenticateAgentApiKey(second, f.repository);
+    // The second key's settle retires nothing newer: the third is untouched and marked used.
+    await settleAgentApiKeyFirstUse(secondRecord, f.repository);
     await expect(authenticateAgentApiKey(third, f.repository)).resolves.toMatchObject({
       computerId: f.computerA.id,
     });
+    const thirdRecord = await db!.agentApiKey.findUniqueOrThrow({
+      where: { apiKeyHash: hashAgentApiKey(third) },
+    });
+    await settleAgentApiKeyFirstUse(thirdRecord, f.repository);
+    // The first settle marks the key used; the second is a no-op.
+    await settleAgentApiKeyFirstUse(thirdRecord, f.repository);
+    expect(
+      (
+        await db!.agentApiKey.findUniqueOrThrow({
+          where: { apiKeyHash: hashAgentApiKey(third) },
+        })
+      ).firstUsedAt,
+    ).not.toBeNull();
     expect((await f.activeHashes()).length).toBe(1);
   });
 

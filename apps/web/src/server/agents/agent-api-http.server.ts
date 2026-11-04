@@ -4,6 +4,8 @@ import {
   AgentApiKeyError,
   authenticateAgentApiKey,
   isAgentApiKeyBoundToComputer,
+  settleAgentApiKeyFirstUse,
+  type AgentApiKeyAuthFailure,
   type AgentApiKeyRepository,
 } from "./agent-api-key.server";
 import { verifyDaemonApiKey } from "#src/server/auth/daemon-api-key.server";
@@ -26,6 +28,23 @@ type DaemonPrincipal = {
   computerId: string;
 };
 
+/** The 401 warning: the request id only when the caller sent a real UUID — it is
+ * client-supplied and otherwise unbounded. Key material never appears here. */
+function warnAuthFailed(request: Request, reason: AgentApiKeyAuthFailure): void {
+  const requestId = request.headers.get("x-request-id");
+  console.warn(
+    JSON.stringify({
+      event: "agent_http.auth_failed",
+      request_id:
+        requestId &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestId)
+          ? requestId
+          : undefined,
+      reason,
+    }),
+  );
+}
+
 export async function authenticateAgentMessageRequest(
   request: Request,
   dependencies: {
@@ -44,7 +63,13 @@ export async function authenticateAgentMessageRequest(
     // other go out together: both keys, then the Computer's and the Agent's scope.
     const [record, daemon] = await Promise.all([
       authenticateAgentApiKey(agentAuthorization.slice(7).trim(), dependencies.agentApiKeys),
-      dependencies.verifyDaemonApiKey(daemonAuthorization.slice(7).trim()),
+      dependencies
+        .verifyDaemonApiKey(daemonAuthorization.slice(7).trim())
+        .catch((error: unknown) => {
+          throw error instanceof AgentApiKeyError
+            ? error
+            : new AgentApiKeyError("daemon_key_invalid");
+        }),
     ]);
     if (!isAgentApiKeyBoundToComputer(record, daemon)) throw new AgentApiKeyError("scope_mismatch");
     const [computerInWorkspace, agentActive] = await Promise.all([
@@ -54,6 +79,13 @@ export async function authenticateAgentMessageRequest(
       dependencies.agentIsActive(record.workspaceId, record.agentId),
     ]);
     if (!computerInWorkspace || !agentActive) throw new AgentApiKeyError("scope_mismatch");
+    // The overlap settle writes only after every check passed — a refused request retires no
+    // key — and a settle failure must not turn an authenticated request into a 401.
+    try {
+      await settleAgentApiKeyFirstUse(record, dependencies.agentApiKeys);
+    } catch {
+      warnAuthFailed(request, "internal");
+    }
     return {
       userId: record.ownerId,
       workspaceId: record.workspaceId,
@@ -61,13 +93,7 @@ export async function authenticateAgentMessageRequest(
       agentId: record.agentId,
     };
   } catch (error) {
-    console.warn(
-      JSON.stringify({
-        event: "agent_http.auth_failed",
-        request_id: request.headers.get("x-request-id") ?? undefined,
-        reason: error instanceof AgentApiKeyError ? error.reason : "key_not_found",
-      }),
-    );
+    warnAuthFailed(request, error instanceof AgentApiKeyError ? error.reason : "internal");
     throw new CentrifugoRpcAuthenticationError();
   }
 }

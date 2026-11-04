@@ -102,6 +102,7 @@ import { verifyDaemonApiKey } from "#src/server/auth/daemon-api-key.server";
 import {
   authenticateAgentApiKey,
   isAgentApiKeyBoundToComputer,
+  settleAgentApiKeyFirstUse,
 } from "#src/server/agents/agent-api-key.server";
 import { PrismaAgentApiKeyRepository } from "#src/server/db/repositories/agent-api-key.repositories.server";
 import { PrismaDaemonApiKeyRepository } from "#src/server/db/repositories/daemon-api-key.repositories.server";
@@ -165,6 +166,11 @@ async function requireAuthenticatedCentrifugoUser(
             }))
           )
             throw new Error("daemon credential scope mismatch");
+          // The overlap settle retires older keys only after every scope check passed; its
+          // own failure must not reject an authenticated connection.
+          await settleAgentApiKeyFirstUse(record, new PrismaAgentApiKeyRepository(db)).catch(
+            () => {},
+          );
           return {
             userId: record.ownerId,
             workspaceId: record.workspaceId,

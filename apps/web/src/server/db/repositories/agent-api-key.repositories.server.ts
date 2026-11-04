@@ -48,18 +48,26 @@ export class PrismaAgentApiKeyRepository implements AgentApiKeyRepository {
   }
 
   async revokeOlderKeys(record: AgentApiKeyRecord): Promise<void> {
-    await this.db.agentApiKey.updateMany({
-      where: {
-        agentId: record.agentId,
-        workspaceId: record.workspaceId,
-        revokedAt: null,
-        OR: [
-          { createdAt: { lt: record.createdAt } },
-          // uuid(7) ids order a same-millisecond `createdAt` tie by creation.
-          { createdAt: record.createdAt, id: { lt: record.id } },
-        ],
-      },
-      data: { revokedAt: new Date() },
+    await this.db.$transaction(async (tx) => {
+      // The used mark lands with the retire in one transaction, so a request that settles
+      // never settles twice.
+      await tx.agentApiKey.updateMany({
+        where: { id: record.id, firstUsedAt: null },
+        data: { firstUsedAt: new Date() },
+      });
+      await tx.agentApiKey.updateMany({
+        where: {
+          agentId: record.agentId,
+          workspaceId: record.workspaceId,
+          revokedAt: null,
+          OR: [
+            { createdAt: { lt: record.createdAt } },
+            // uuid(7) ids order a same-millisecond `createdAt` tie by creation.
+            { createdAt: record.createdAt, id: { lt: record.id } },
+          ],
+        },
+        data: { revokedAt: new Date() },
+      });
     });
   }
 

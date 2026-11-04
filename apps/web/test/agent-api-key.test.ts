@@ -5,6 +5,7 @@ import {
   findAgentApiKey,
   hashAgentApiKey,
   isAgentApiKeyBoundToComputer,
+  settleAgentApiKeyFirstUse,
   type AgentApiKeyMintInput,
   type AgentApiKeyRecord,
   type AgentApiKeyRepository,
@@ -56,7 +57,8 @@ class MemoryAgentApiKeys implements AgentApiKeyRepository {
 
   async revokeOlderKeys(record: AgentApiKeyRecord) {
     const mine = this.#order.get(record.id)!;
-    for (const current of this.records.values())
+    for (const current of this.records.values()) {
+      if (current.id === record.id && !current.firstUsedAt) current.firstUsedAt = new Date();
       if (
         current.agentId === record.agentId &&
         current.workspaceId === record.workspaceId &&
@@ -64,6 +66,7 @@ class MemoryAgentApiKeys implements AgentApiKeyRepository {
         this.#order.get(current.id)! < mine
       )
         current.revokedAt = new Date();
+    }
   }
 
   async revoke(id: string) {
@@ -133,10 +136,11 @@ test("a second mint keeps the previous key until the new one first authenticates
   await expect(authenticateAgentApiKey(oldApiKey, repository)).resolves.toMatchObject({
     computerId: "computer-a",
   });
-  await expect(authenticateAgentApiKey(newApiKey, repository)).resolves.toMatchObject({
-    computerId: "computer-a",
-  });
-  // The new key's first successful authentication retired the previous one.
+  const newer = await authenticateAgentApiKey(newApiKey, repository);
+  expect(newer.computerId).toBe("computer-a");
+  // The new key's first settle retired the previous one; the second is a no-op.
+  await settleAgentApiKeyFirstUse(newer, repository);
+  await settleAgentApiKeyFirstUse(newer, repository);
   await expect(authenticateAgentApiKey(oldApiKey, repository)).rejects.toThrow(
     "invalid Agent API key",
   );

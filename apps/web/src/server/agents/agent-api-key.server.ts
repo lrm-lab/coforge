@@ -9,13 +9,19 @@ export type AgentApiKeyRecord = {
   computerId: string;
   revokedAt: Date | null;
   disabledAt: Date | null;
+  firstUsedAt: Date | null;
   createdAt: Date;
 };
 
 const AGENT_API_KEY = /^sk_agent_[A-Za-z0-9_-]{43}$/;
 
 /** Why an Agent credential was refused; logged on the 401. Key material is never logged. */
-export type AgentApiKeyAuthFailure = "key_not_found" | "key_revoked" | "scope_mismatch";
+export type AgentApiKeyAuthFailure =
+  | "key_not_found"
+  | "key_revoked"
+  | "scope_mismatch"
+  | "daemon_key_invalid"
+  | "internal";
 
 export class AgentApiKeyError extends Error {
   constructor(readonly reason: AgentApiKeyAuthFailure) {
@@ -81,6 +87,7 @@ export function createAgentApiKey(input: {
       computerId: input.computerId,
       revokedAt: null,
       disabledAt: null,
+      firstUsedAt: null,
     })
     .then(() => apiKey);
 }
@@ -97,11 +104,20 @@ export async function authenticateAgentApiKey(
   const expected = Buffer.from(record.apiKeyHash);
   if (expected.length !== actual.length || !timingSafeEqual(expected, actual))
     throw new AgentApiKeyError("key_not_found");
-  // Overlap rotation: a successful authentication settles it. The update is conditional on
-  // `record` being newer, so an older key's own request cannot retire a newer one, and it is a
-  // no-op while nothing older is active.
-  await repository.revokeOlderKeys(record);
   return record;
+}
+
+/** Overlap rotation settlement: the first successful authentication marks the key used and
+ * retires every older key. The update is conditional on `record` being newer, so an older
+ * key's own request cannot retire a newer one. Callers run it only after every scope check
+ * has passed, so a refused request retires nothing, and only once per key — later requests
+ * see `firstUsedAt` set and skip the write entirely. */
+export async function settleAgentApiKeyFirstUse(
+  record: AgentApiKeyRecord,
+  repository: AgentApiKeyRepository,
+): Promise<void> {
+  if (record.firstUsedAt) return;
+  await repository.revokeOlderKeys(record);
 }
 
 export async function findAgentApiKey(

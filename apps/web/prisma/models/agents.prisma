@@ -183,6 +183,8 @@ model AgentApiKey {
   computerId  String    @db.Uuid
   revokedAt   DateTime?
   disabledAt  DateTime?
+  /// Set by the first successful authentication; the overlap settle runs only while null.
+  firstUsedAt DateTime?
   createdAt   DateTime  @default(now())
   agent       Agent     @relation(fields: [agentId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
