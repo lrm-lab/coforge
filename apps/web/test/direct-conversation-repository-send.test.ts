@@ -76,6 +76,7 @@ describe("PrismaDirectConversationRepository sending", () => {
         },
       },
       conversationMember: { findMany: async () => [] },
+      messageReference: { createMany: async () => {} },
       threadFollow: { createMany: async () => {} },
     };
     const db = {
@@ -144,9 +145,12 @@ describe("PrismaDirectConversationRepository sending", () => {
       attachment: { findMany: async () => [], update: async () => ({}) },
       task: {
         findMany: async ({ where }: { where: { number: { in: number[] } } }) =>
-          where.number.in.filter((number) => number === 68).map((number) => ({ number })),
+          where.number.in
+            .filter((number) => number === 68)
+            .map((number) => ({ id: `task-${number}`, number })),
       },
       conversationMember: { findMany: async () => [] },
+      messageReference: { createMany: async () => {} },
       threadFollow: { createMany: async () => {} },
     };
     const db = {
