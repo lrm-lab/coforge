@@ -17,8 +17,17 @@ export type AgentAttachmentCommentsRequest = {
   before?: number;
 };
 
+/** Any JSON value: what the anchor's `data` bag may hold — the Web stores it in a JsonB column. */
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
 /** Where in the attachment a comment points; `type` is open, `data` is the type's own fields. */
-export type AgentAttachmentCommentAnchor = { type: string; data: Record<string, unknown> };
+export type AgentAttachmentCommentAnchor = { type: string; data: Record<string, JsonValue> };
 
 export type AgentAttachmentComment = {
   id: string;
@@ -67,7 +76,7 @@ function isResolveAction(
   return isRecord(value) && value.type === "reaction" && value.emoji === "✅";
 }
 
-function isAnchor(value: unknown): value is AgentAttachmentCommentAnchor {
+export function isAttachmentCommentAnchor(value: unknown): value is AgentAttachmentCommentAnchor {
   return isRecord(value) && typeof value.type === "string" && isRecord(value.data);
 }
 
@@ -86,7 +95,7 @@ function isComment(value: unknown): value is AgentAttachmentComment {
       (reaction) =>
         isRecord(reaction) && typeof reaction.emoji === "string" && isCount(reaction.count),
     ) &&
-    (value.anchor === null || isAnchor(value.anchor)) &&
+    (value.anchor === null || isAttachmentCommentAnchor(value.anchor)) &&
     typeof value.resolved === "boolean"
   );
 }

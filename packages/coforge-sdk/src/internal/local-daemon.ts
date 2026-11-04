@@ -16,6 +16,7 @@ import {
   AgentMessageResponseSchema,
 } from "#src/internal/gen/coforge/rpc/v1/local_rpc_pb";
 import { assertValidMessageSender } from "./message-sender";
+import { decodeAgentMessageRecords, encodeAgentMessageRecords } from "./agent-message-records";
 import {
   decodeMessageAttentionSummary,
   encodeMessageAttentionSummary,
@@ -93,7 +94,7 @@ export function encodeLocalAttachment(value: LocalAttachment) {
 export function encodeLocalAttachments(values: readonly LocalAttachment[]) {
   return values.map(encodeLocalAttachment);
 }
-type RawLocalAttachment = {
+export type RawLocalAttachment = {
   id: string;
   fileName: string;
   contentType: string;
@@ -120,54 +121,6 @@ export type {
   AgentPendingMentionAction,
   LocalSearchPaging,
 };
-
-function encodeAgentMessageRecords(records: readonly AgentMessageRecord[]) {
-  for (const m of records)
-    assertValidMessageSender(m.senderKind, m.senderHandle, "Agent message record");
-  return records.map((m) => ({
-    ...m,
-    sequence: BigInt(m.sequence),
-    createdAt: m.createdAt,
-    attachments: encodeLocalAttachments(m.attachments),
-    task: m.task,
-    memoryHint: memoryHintMessage(m.memoryHint),
-  }));
-}
-
-function decodeAgentMessageRecords(
-  records: readonly {
-    id: string;
-    sequence: bigint;
-    senderKind: string;
-    senderHandle: string;
-    senderDescription: string;
-    target: string;
-    body: string;
-    createdAt: string;
-    attachments: readonly RawLocalAttachment[];
-    task?: Parameters<typeof decodeMessageTask>[0];
-    mentionsAgent?: boolean;
-    memoryHint?: { hintId: string; tool: string };
-  }[],
-): AgentMessageRecord[] {
-  return records.map((m) => {
-    assertValidMessageSender(m.senderKind, m.senderHandle, "Agent message record");
-    return {
-      id: m.id,
-      sequence: Number(m.sequence),
-      senderKind: m.senderKind,
-      senderHandle: m.senderHandle,
-      senderDescription: m.senderDescription,
-      target: m.target,
-      body: m.body,
-      createdAt: m.createdAt,
-      attachments: decodeLocalAttachments(m.attachments),
-      ...(m.task ? { task: decodeMessageTask(m.task) } : {}),
-      ...(m.mentionsAgent ? { mentionsAgent: true } : {}),
-      ...(m.memoryHint ? { memoryHint: readMemoryHint(m.memoryHint) } : {}),
-    };
-  });
-}
 
 export function encodeAgentMessageResponse(value: AgentMessageResponse): Uint8Array {
   const safeValue =

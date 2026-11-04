@@ -1,3 +1,4 @@
+import { commentAnchorAt } from "./comment-anchor-format";
 import { foldUntrustedLine } from "@lrm/coforge-sdk/internal";
 import { CliError } from "./cli-error";
 import { channelSummaryBody } from "./message-summary";
@@ -129,7 +130,8 @@ export function coordinationLine(message: AgentMessageRecord): string {
 
 function messageLine(message: AgentMessageRecord, body: string): string {
   const notice = message.nonMemberMention ? `\n${NON_MEMBER_MENTION_NOTICE}` : "";
-  return `${coordinationLine(message)}[target=${message.target} msg=${shortId(message.id)} time=${formatUtcTimestamp(message.createdAt)} type=${message.senderKind}] ${messageSender(message)}: ${fenceMessageBody(body)}${attachmentSuffix(message)}${taskSuffix(message)}${memoryHintSuffix(message)}${forwardedSuffix(message)}${notice}`;
+  const at = commentAnchorAt(message);
+  return `${coordinationLine(message)}[target=${message.target} msg=${shortId(message.id)} time=${formatUtcTimestamp(message.createdAt)} type=${message.senderKind}]${at} ${messageSender(message)}: ${fenceMessageBody(body)}${attachmentSuffix(message)}${taskSuffix(message)}${memoryHintSuffix(message)}${forwardedSuffix(message)}${notice}`;
 }
 
 export const NON_MEMBER_MENTION_NOTICE =

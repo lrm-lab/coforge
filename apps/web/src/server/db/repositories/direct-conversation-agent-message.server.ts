@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import type { MessageTaskMetadata, TaskStatus } from "@lrm/coforge-sdk/internal";
+import { isAttachmentCommentAnchor } from "@lrm/coforge-sdk/agent";
 import type { AttachmentMetadata } from "./direct-conversation.repositories.server";
 import { humanLabel, type HumanNames } from "#src/lib/human-label";
 import {
@@ -55,6 +56,7 @@ export const AGENT_MESSAGE_INCLUDE = {
   actionCard: ACTION_CARD_STATE_SELECT,
   mentions: MESSAGE_MENTIONS_SELECT,
   forward: AGENT_FORWARD_SELECT,
+  attachmentComment: { select: { attachmentId: true, anchorType: true, anchorData: true } },
   // The thread's reply count, so a history line can say how many answers a message has.
   _count: { select: { replies: true } },
 } satisfies Prisma.MessageInclude;
@@ -118,7 +120,6 @@ export const TARGET_CONVERSATION_SELECT = {
 /** `AGENT_MESSAGE_INCLUDE` plus what `messageDeliveryTarget` reads from the conversation. */
 export const AGENT_MESSAGE_WITH_TARGET_INCLUDE = {
   ...AGENT_MESSAGE_INCLUDE,
-  attachmentComment: { select: { attachmentId: true } },
   conversation: { select: TARGET_CONVERSATION_SELECT },
 } satisfies Prisma.MessageInclude;
 
@@ -141,11 +142,26 @@ export function messageDeliveryTarget(
   return deliveryTarget(conversationTarget(message.conversation, targetOf), message.threadRootId);
 }
 
+/** The comment's anchor as the wire sends it: `{type, data}` from its two stored columns, or
+ * undefined for a whole-file comment or a shape the SDK does not accept. */
+function commentAnchor(
+  comment: { anchorType: string | null; anchorData: unknown } | null | undefined,
+) {
+  if (comment?.anchorType === null || comment?.anchorType === undefined) return undefined;
+  const anchor = { type: comment.anchorType, data: comment.anchorData };
+  return isAttachmentCommentAnchor(anchor) ? anchor : undefined;
+}
+
 export function toAgentMessage(
   row: Pick<DirectConversationMessageRow, "id" | "sequence" | "body" | "createdAt"> & {
     sender: Parameters<typeof agentMessageSender>[0];
     task: Parameters<typeof messageTask>[0];
     attachments: AttachmentMetadata[];
+    attachmentComment?: {
+      attachmentId: string;
+      anchorType: string | null;
+      anchorData: unknown;
+    } | null;
     actionCard?: { state: string } | null;
     forward?: StoredAgentForward | null;
     memoryHint?: { id: string; targetAgentId: string; deliveredAt: Date | null } | null;
@@ -158,6 +174,7 @@ export function toAgentMessage(
 ) {
   const task = messageTask(row.task);
   const sender = agentMessageSender(row.sender);
+  const anchor = commentAnchor(row.attachmentComment);
   return {
     id: row.id,
     sequence: row.sequence,
@@ -180,6 +197,7 @@ export function toAgentMessage(
     attachments: row.attachments,
     ...(row._count?.replies ? { replyCount: row._count.replies } : {}),
     ...(task ? { task } : {}),
+    ...(anchor ? { attachmentCommentAnchor: anchor } : {}),
     ...(row.memoryHint?.deliveredAt && row.memoryHint.targetAgentId === readerAgentId
       ? { memoryHint: { hint_id: row.memoryHint.id, tool: "memory_disposition" as const } }
       : {}),

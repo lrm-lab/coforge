@@ -82,6 +82,9 @@ export type AgentMessage = {
   /** Present when this message is a forward: the original it carries. `body` is then only the
    * forwarder's note, possibly empty. */
   forwarded?: ForwardedMessage;
+  /** Present when this message is an attachment comment that names a place in the file: the
+   * anchor's type and data, as `attachment comments` reports them. */
+  attachmentCommentAnchor?: import("./attachment-comments").AgentAttachmentCommentAnchor;
 };
 
 /**

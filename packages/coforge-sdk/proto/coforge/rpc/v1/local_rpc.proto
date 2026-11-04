@@ -31,6 +31,9 @@ message AgentMessageRecord {
   // Present when the sender knows whether this message personally @mentioned the reading Agent.
   optional bool mentions_agent = 11;
   MemoryHintDelivery memory_hint = 12;
+  // Where an attachment comment points, when this message is one: the anchor
+  // {type, data} object as JSON. Absent for ordinary messages.
+  optional string attachment_comment_anchor_json = 13;
 }
 
 message LocalAttachmentMetadata {
