@@ -330,6 +330,9 @@ test("a Workspace owner not in the channel adds a blocker on a public channel", 
   // Alice is a member-less admin here — the row names her by `creatorUserId`, not a member row.
   expect(dep.creatorMemberId).toBeNull();
   expect(dep.creatorUserId).not.toBeNull();
+  // And the Task's history names the acting admin, not "the system" or an empty seat.
+  const history = await run("alice", { operation: "history", number: b! }, admin.id);
+  expect(JSON.stringify(history)).toContain("dep-alice");
 });
 
 test("a member-less admin's set parent writes the member-less creator key too", async () => {
