@@ -17,7 +17,7 @@ import type { Artifacts } from "./artifacts.server";
 export type AgentArtifactServices = {
   db: PrismaClient;
   artifacts: Pick<Artifacts, "history">;
-  documents: Pick<ArtifactDocuments, "create" | "load" | "save" | "revert">;
+  documents: Pick<ArtifactDocuments, "create" | "list" | "load" | "save" | "revert">;
   enabled: (workspaceId: string) => Promise<boolean>;
 };
 
@@ -27,6 +27,7 @@ const { id, version, baseVersion, text, title, description, note, label, history
 /** The web page's rules, for the same fields (`artifacts.functions.ts`). */
 const RULES = {
   create: z.object({ title, target: z.string().optional(), text: text.optional() }),
+  list: z.object({ target: z.string().optional() }),
   read: z.object({ artifact: id, version: version.optional() }),
   push: z.object({
     artifact: id,
@@ -80,6 +81,14 @@ export async function runAgentArtifactOperation(
         title: input.title,
         text: input.text,
       });
+    }
+    case "list": {
+      const input = parsed.data as z.infer<typeof RULES.list>;
+      const conversationId =
+        input.target === undefined
+          ? undefined
+          : await resolveArtifactTarget(services.db, principal, input.target);
+      return services.documents.list(scope, { conversationId });
     }
     case "read": {
       const input = parsed.data as z.infer<typeof RULES.read>;

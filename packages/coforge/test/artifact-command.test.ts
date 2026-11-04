@@ -9,7 +9,7 @@ import {
 } from "../src/artifact-commands";
 import { CliError } from "../src/cli-error";
 
-/** `coforge artifact create|read|push|history|revert` (task #385). */
+/** `coforge artifact create|list|read|push|history|revert` (task #385). */
 
 const ID = "0f8c3b52-6d0e-4f3a-9a51-3c1d2e4f5a6b";
 const servers: { stop(): void }[] = [];
@@ -43,6 +43,14 @@ test("each artifact command parses into its own request", () => {
   expect(parseArgs(["artifact", "history", ID, "--before", "9"])).toMatchObject({
     request: { operation: "history", artifact: ID, before: 9 },
   });
+  expect(parseArgs(["artifact", "list", "--target", "#launch"])).toEqual({
+    command: "artifact",
+    request: { operation: "list", target: "#launch" },
+  });
+  expect(parseArgs(["artifact", "list"])).toEqual({
+    command: "artifact",
+    request: { operation: "list" },
+  });
 });
 
 test("an artifact command missing what it needs names its help", () => {
@@ -62,9 +70,10 @@ test("an artifact command missing what it needs names its help", () => {
 test("artifact --help describes the family and each command", async () => {
   const transport = {} as MessageTransport;
   expect(await run(["artifact", "--help"], transport)).toContain(
-    "coforge artifact create|read|push|history|revert",
+    "coforge artifact create|list|read|push|history|revert",
   );
   expect(await run(["artifact", "push", "--help"], transport)).toContain("ARTIFACT_CONFLICT");
+  expect(await run(["artifact", "list", "--help"], transport)).toContain("coforge artifact list");
 });
 
 function transportAnswering(answer: unknown) {
@@ -135,6 +144,39 @@ test("a conflict prints the document with markers to stdout and fails", async ()
   );
   expect(cli.message).toContain('title: yours "Plan B", theirs "Plan C"');
   expect(cli.suggestedNextAction).toContain(`coforge artifact push ${ID} --base 5`);
+});
+
+test("list prints a line per document, newest first, and how to read one", async () => {
+  const { sent, transport } = transportAnswering([
+    {
+      id: ID,
+      name: "launch-plan",
+      title: "Launch plan",
+      currentVersion: 4,
+      updatedAt: "2026-11-04T02:00:00Z",
+    },
+    {
+      id: "a1",
+      name: "notes",
+      title: "Notes",
+      currentVersion: 1,
+      updatedAt: "2026-11-03T09:00:00Z",
+    },
+  ]);
+  const said = (await runArtifact(
+    invocation(["list", "--target", "#launch"]),
+    transport,
+  )) as string;
+  expect(sent[0]).toEqual({ operation: "list", target: "#launch" });
+  expect(said).toContain(`"Launch plan" (id ${ID}), version 4`);
+  expect(said).toContain('"Notes" (id a1), version 1');
+  expect(said).toContain(`coforge artifact read <id>`);
+});
+
+test("list says plainly when a home has no documents", async () => {
+  const { transport } = transportAnswering([]);
+  const said = (await runArtifact(invocation(["list"]), transport)) as string;
+  expect(said).toBe("No documents here yet.");
 });
 
 test("read prints the version to save over, then the text", async () => {

@@ -74,11 +74,21 @@ export class ArtifactReads {
         entryPath: true,
         homeKey: true,
         currentVersion: true,
+        // Read with the artifact so `canDelete` needs no second query (task #385).
+        authorUserId: true,
+        authorAgentId: true,
       },
     });
     if (!artifact) throw new AppError("NOT_FOUND");
-    await requireArtifactHome(this.db, workspaceId, reader, artifact.homeKey, "read");
-    return artifact;
+    // The access check already read the home's conversation, so its kind comes free (task #385).
+    const { homeKind } = await requireArtifactHome(
+      this.db,
+      workspaceId,
+      reader,
+      artifact.homeKey,
+      "read",
+    );
+    return { ...artifact, homeKind };
   }
 
   /** The artifact and one version (its current one by default) with that version's files. */

@@ -119,6 +119,13 @@ test("an Agent in a channel creates, reads, saves, pages and reverts a document 
 
   const read = await post({ operation: "read", artifact });
   expect(read.body.text).toBe("# Launch plan\n\nShip in May.\n\nRisks: none.\n");
+  // The Agent authored it, so it may delete it; the read also says which kind of home it is in.
+  expect(read.body).toMatchObject({ canDelete: true, homeKind: "channel" });
+
+  // The read-only list finds the document in its channel, newest first.
+  const listed = await post({ operation: "list", target: `#launch-${handle}` });
+  expect(listed.status).toBe(200);
+  expect((listed.body as unknown as { id: string }[]).map((row) => row.id)).toContain(artifact);
 
   const saved = await post({
     operation: "push",

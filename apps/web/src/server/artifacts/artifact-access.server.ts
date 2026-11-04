@@ -16,8 +16,13 @@ export type ArtifactActor =
   | { userId: string; agentId?: undefined }
   | { agentId: string; userId?: undefined };
 
-/** What an actor may do with an artifact's home: read it, and write (create and save) in it. */
-export type ArtifactHomeAccess = { read: boolean; write: boolean };
+/** Which kind of home an artifact lives in: a channel, a DM, or the Workspace. The web page
+ * builds a document's link from this (a channel and a DM route differently). */
+export type ArtifactHomeKind = "channel" | "dm" | "workspace";
+
+/** What an actor may do with an artifact's home: read it, write (create and save) in it, and
+ * which kind of home it is. */
+export type ArtifactHomeAccess = { read: boolean; write: boolean; homeKind: ArtifactHomeKind };
 
 type Db = Pick<PrismaClient, "workspaceMembership" | "agent" | "conversation">;
 
@@ -34,9 +39,12 @@ export async function artifactHomeAccess(
   actor: ArtifactActor,
   homeKey: string,
 ): Promise<ArtifactHomeAccess> {
-  const none = { read: false, write: false };
+  // The home's kind is known from its key alone, except channel vs DM, which the conversation's
+  // `channelName` below settles; a denied home is never read for its kind, so this is enough.
+  const homeKind: ArtifactHomeKind = homeKey === "workspace" ? "workspace" : "dm";
+  const none = { read: false, write: false, homeKind };
   if (!(await inWorkspace(db, workspaceId, actor))) return none;
-  if (homeKey === "workspace") return { read: true, write: true };
+  if (homeKey === "workspace") return { read: true, write: true, homeKind: "workspace" };
   const conversationId = homeKey.startsWith("conversation:")
     ? homeKey.slice("conversation:".length)
     : undefined;
@@ -59,7 +67,11 @@ export async function artifactHomeAccess(
   const member = conversation.members.length > 0;
   const read = conversation.channelName === null ? member : canReadChannel(conversation, member);
   // An archived channel is read only, as it is for messages (`channel-send` refuses it).
-  return { read, write: member && conversation.archivedAt === null };
+  return {
+    read,
+    write: member && conversation.archivedAt === null,
+    homeKind: conversation.channelName === null ? "dm" : "channel",
+  };
 }
 
 /** The actor's access to a home, required: `NOT_FOUND` where it cannot read, as if nothing were
@@ -70,10 +82,11 @@ export async function requireArtifactHome(
   actor: ArtifactActor,
   homeKey: string,
   need: "read" | "write",
-) {
+): Promise<ArtifactHomeAccess> {
   const access = await artifactHomeAccess(db, workspaceId, actor, homeKey);
   if (!access.read) throw new AppError("NOT_FOUND");
   if (need === "write" && !access.write) throw new AppError("ACCESS_DENIED");
+  return access;
 }
 
 /** Whether the actor belongs to the Workspace: a member person, or one of its live Agents. */

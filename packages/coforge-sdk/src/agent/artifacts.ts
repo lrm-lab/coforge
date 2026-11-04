@@ -1,5 +1,5 @@
 /**
- * `coforge artifact create|read|push|history|revert` (task #385): an Agent's documents, one
+ * `coforge artifact create|list|read|push|history|revert` (task #385): an Agent's documents, one
  * operation per request on `POST /api/agent/v1/artifacts`. A document is sent and read as its
  * text, as the web page does; the server checks the `artifacts` experiment and the document's
  * home (a conversation, or the Workspace) for every operation.
@@ -11,6 +11,7 @@ export const ARTIFACT_REQUEST_MAX_BYTES = 8 * 1024 * 1024;
 /** One artifact operation. `target` is `#channel` or `dm:@person`; none is the Workspace. */
 export type AgentArtifactRequest =
   | { operation: "create"; title: string; target?: string; text?: string }
+  | { operation: "list"; target?: string }
   | { operation: "read"; artifact: string; version?: number }
   | {
       operation: "push";
@@ -34,6 +35,7 @@ export type AgentArtifactRequest =
 
 const OPERATION_FIELDS = {
   create: { strings: ["title", "target", "text"], numbers: [], required: ["title"] },
+  list: { strings: ["target"], numbers: [], required: [] },
   read: { strings: ["artifact"], numbers: ["version"], required: ["artifact"] },
   push: {
     strings: ["artifact", "idempotencyKey", "text", "title", "description", "note", "label"],

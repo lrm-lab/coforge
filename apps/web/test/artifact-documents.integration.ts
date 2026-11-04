@@ -91,6 +91,12 @@ test("a new document holds its text as version 1, named from its title, with a p
   const loaded = await documents.load(scope(bob), { artifactId: first.id });
   expect(loaded.text).toBe("# Launch plan\n\nShip in May.\n\nRisks: none.\n");
   expect(loaded.artifact.homeKey).toBe(`conversation:${channelId}`);
+  // A channel document; its kind comes from the home access the read already made (no new query).
+  expect(loaded.homeKind).toBe("channel");
+  // Bob reads it but did not write it and is not an owner/admin: he cannot delete it.
+  expect(loaded.canDelete).toBe(false);
+  // Alice wrote it (and owns the Workspace), so she can.
+  expect((await documents.load(scope(alice), { artifactId: first.id })).canDelete).toBe(true);
 });
 
 test("saving sends text: a new version, its preview, and the merge answers as for any save", async () => {

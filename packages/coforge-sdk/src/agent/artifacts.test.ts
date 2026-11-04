@@ -6,6 +6,11 @@ test("an artifact request is one known operation with exactly its own fields", (
   expect(
     decodeAgentArtifactRequest({ operation: "create", title: "Plan", target: "#launch" }),
   ).toEqual({ operation: "create", title: "Plan", target: "#launch" });
+  expect(decodeAgentArtifactRequest({ operation: "list" })).toEqual({ operation: "list" });
+  expect(decodeAgentArtifactRequest({ operation: "list", target: "#launch" })).toEqual({
+    operation: "list",
+    target: "#launch",
+  });
   expect(
     decodeAgentArtifactRequest({
       operation: "push",

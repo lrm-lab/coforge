@@ -2,7 +2,11 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError, isAppError } from "#src/lib/app-error";
 import { nameToSlug } from "#src/lib/slug";
 import { errorType } from "#src/server/errors/error-type.server";
-import { requireArtifactHome, type ArtifactActor } from "./artifact-access.server";
+import {
+  canDeleteArtifact,
+  requireArtifactHome,
+  type ArtifactActor,
+} from "./artifact-access.server";
 import type { StoredArtifactBlobs } from "./artifact-blobs.server";
 import { ARTIFACT_DOCUMENT_LIMIT } from "./artifact-files.server";
 import type { ArtifactRevert } from "./artifact-revert.server";
@@ -80,8 +84,8 @@ export class ArtifactDocuments {
     }
   }
 
-  /** The document at a version (its current one by default), with its text; a non-document
-   * artifact has none here. */
+  /** The document at a version (its current one by default), with its text and whether the actor
+   * may delete it; a non-document artifact has no text here. */
   async load(scope: DocumentScope, input: { artifactId: string; version?: number }) {
     const read = await this.artifacts.read({ ...reader(scope), ...input });
     const file = read.files.find((entry) => entry.path === read.artifact.entryPath);
@@ -90,7 +94,19 @@ export class ArtifactDocuments {
       file?.kind === "text" &&
       file.sizeBytes <= ARTIFACT_DOCUMENT_LIMIT;
     const bytes = document ? await this.blobs.read(scope.workspaceId, file.sha256) : null;
-    return { ...read, text: bytes ? new TextDecoder().decode(bytes) : "" };
+    // The author came with the read (no second query); the rule is the one `delete` enforces.
+    const canDelete = await canDeleteArtifact(
+      this.db,
+      scope.workspaceId,
+      scope.actor,
+      read.artifact,
+    );
+    return {
+      ...read,
+      text: bytes ? new TextDecoder().decode(bytes) : "",
+      canDelete,
+      homeKind: read.artifact.homeKind,
+    };
   }
 
   /**

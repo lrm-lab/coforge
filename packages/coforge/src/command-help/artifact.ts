@@ -5,10 +5,19 @@ const FILE = "--file <path>  the document's text; `-` reads it from stdin (a quo
 /** The `artifact` family's help (task #385): documents a channel, a DM or the Workspace keeps. */
 export const artifactHelp: Readonly<Record<string, HelpEntry>> = {
   artifact: {
-    syntax: "coforge artifact create|read|push|history|revert ...",
+    syntax: "coforge artifact create|list|read|push|history|revert ...",
     guidance:
       "A document is Markdown text kept in a channel, a DM, or the Workspace, with every version. Whoever can read the conversation reads it; its members write it. The Workspace must have documents switched on (Settings > Experiments).",
     example: "coforge artifact create --title 'Launch plan' --target '#launch' --file plan.md",
+  },
+  "artifact list": {
+    syntax: "coforge artifact list [--target '#channel'|'@name'] [--json]",
+    flags: [
+      "--target  the channel, or the DM with @name (@name~agent for an Agent); none lists the Workspace's",
+    ],
+    guidance:
+      "Lists the documents you can read in a channel, a DM, or the Workspace, newest first. Read-only; use it to check whether a `create` that timed out actually made the document.",
+    example: "coforge artifact list --target '#launch'",
   },
   "artifact create": {
     syntax:

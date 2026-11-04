@@ -6,13 +6,14 @@ import { readProxyErrorBody, requireProxySetup } from "#src/proxy-request";
 import {
   formatArtifactCreated,
   formatArtifactHistory,
+  formatArtifactList,
   formatArtifactRead,
   formatArtifactSave,
   type ArtifactSaveAnswer,
 } from "#src/artifact-format";
 
 /**
- * `coforge artifact create|read|push|history|revert` (task #385): the Agent's documents. A
+ * `coforge artifact create|list|read|push|history|revert` (task #385): the Agent's documents. A
  * document's text comes from `--file <path>`, or stdin with `--file -`; the server applies the
  * web page's rules and merges a save with what others saved since its base.
  */
@@ -31,18 +32,19 @@ type ArtifactRequestDraft =
   | Omit<Extract<AgentArtifactRequest, { operation: "push" }>, "idempotencyKey" | "text">
   | Omit<Extract<AgentArtifactRequest, { operation: "revert" }>, "idempotencyKey">
   | Omit<Extract<AgentArtifactRequest, { operation: "create" }>, "text">
-  | Extract<AgentArtifactRequest, { operation: "read" | "history" }>;
+  | Extract<AgentArtifactRequest, { operation: "list" | "read" | "history" }>;
 
 export type ArtifactTransport = {
   artifact?(request: AgentArtifactRequest): Promise<unknown>;
 };
 
-const OPERATIONS = ["create", "read", "push", "history", "revert"] as const;
+const OPERATIONS = ["create", "list", "read", "push", "history", "revert"] as const;
 type Operation = (typeof OPERATIONS)[number];
 
 /** Each operation's flags: `text` ones take a string, `count` ones a whole number. */
 const FLAGS: Record<Operation, { text: string[]; count: string[]; positional: boolean }> = {
   create: { text: ["--title", "--target", "--file"], count: [], positional: false },
+  list: { text: ["--target"], count: [], positional: false },
   read: { text: ["--output"], count: ["--version"], positional: true },
   push: {
     text: ["--file", "--title", "--description", "--note", "--label"],
@@ -104,6 +106,12 @@ export function parseArtifactArgs(args: readonly string[]): ArtifactInvocation {
         ...options,
       };
     }
+    case "list":
+      return {
+        command: "artifact",
+        request: { operation, ...optional("target", text["--target"]) },
+        ...options,
+      };
     case "read":
       return {
         command: "artifact",
@@ -168,6 +176,8 @@ export async function runArtifact(
   switch (request.operation) {
     case "create":
       return json ? result : formatArtifactCreated(result as never);
+    case "list":
+      return json ? result : formatArtifactList(result as never);
     case "read": {
       const read = result as Parameters<typeof formatArtifactRead>[0];
       if (invocation.output !== undefined) await writeFile(invocation.output, read.text);
@@ -222,8 +232,9 @@ export async function artifactRequest(
   requireProxySetup("artifact", context, proxyUrl);
   const route = agentApiRoutes.proxy.artifacts;
   // Create, push and revert change something, and none of them is replayed when run again: one
-  // that failed on the way may still have landed.
-  const writes = request.operation !== "read" && request.operation !== "history";
+  // that failed on the way may still have landed. Read, list and history only read.
+  const writes =
+    request.operation !== "read" && request.operation !== "list" && request.operation !== "history";
   let response: Response;
   try {
     response = await fetch(proxyEndpoint(route.path), {

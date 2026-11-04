@@ -2,6 +2,9 @@
 
 type Card = { id: string; name: string; title: string; currentVersion: number };
 
+/** A row `artifact list` prints: the card, with when it last changed. */
+type ListRow = Card & { updatedAt: string };
+
 type Read = {
   artifact: { id: string; title: string; currentVersion: number };
   version: { number: number; note?: string | null; label?: string | null } | null;
@@ -45,6 +48,17 @@ export function formatArtifactCreated(card: Card): string {
     `Read it: ${readCommand(card.id)}`,
     `Save over it: ${pushCommand(card.id, card.currentVersion)}`,
   ].join("\n");
+}
+
+/** The readable documents of a home, newest first: one line each (title, id, version, when), and
+ * how to read one. */
+export function formatArtifactList(rows: ListRow[]): string {
+  if (rows.length === 0) return "No documents here yet.";
+  const lines = rows.map(
+    (row) => `${row.updatedAt}  "${row.title}" (id ${row.id}), version ${row.currentVersion}`,
+  );
+  lines.push(`Read one: ${readCommand("<id>")}`);
+  return lines.join("\n");
 }
 
 /** The document's version line and how to save over it; then its text, unless it went to a
