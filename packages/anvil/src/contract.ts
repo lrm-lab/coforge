@@ -336,3 +336,13 @@ export class AgentSessionRecoveryError extends Error {
 export function isHttpErrorStatus(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 400 && value <= 599;
 }
+
+/** The runtime cannot host this session kind — e.g. a Memory Agent's per-conversation
+ * sessions that share one workspace but need separate instruction files. */
+export class RuntimeMemoryUnsupportedError extends Error {
+  readonly code = "runtime_memory_unsupported";
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "RuntimeMemoryUnsupportedError";
+  }
+}

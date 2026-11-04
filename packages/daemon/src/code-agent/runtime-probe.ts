@@ -13,6 +13,10 @@ import {
   logOpenCodeAcpVersionUnsupported,
 } from "@lrm/coforge-anvil/opencode";
 import {
+  isCursorAcpVersionUnsupported,
+  logCursorAcpVersionUnsupported,
+} from "@lrm/coforge-anvil/cursor";
+import {
   VERSION_PROBE_TIMEOUT_MS,
   withDeadline,
   type CodeAgentProbe,
@@ -58,6 +62,47 @@ import {
   readInventoryCache,
   updateInventoryCache,
 } from "./runtime-inventory-cache";
+
+/** Provider version floors the probe and the cached-floor check share. */
+const VERSION_GATES = new Map<
+  ExternalCodeAgentProvider,
+  { unsupported(version: string): boolean; log(name: string, version: string): void }
+>([
+  [
+    RUNTIME_PROVIDER.KIRO,
+    { unsupported: isKiroVersionUnsupported, log: logKiroVersionUnsupported },
+  ],
+  [
+    RUNTIME_PROVIDER.OPENCODE,
+    { unsupported: isOpenCodeAcpVersionUnsupported, log: logOpenCodeAcpVersionUnsupported },
+  ],
+  [
+    RUNTIME_PROVIDER.CURSOR,
+    { unsupported: isCursorAcpVersionUnsupported, log: logCursorAcpVersionUnsupported },
+  ],
+  [
+    RUNTIME_PROVIDER.GROK,
+    { unsupported: isGrokVersionUnsupported, log: logGrokVersionUnsupported },
+  ],
+  [
+    RUNTIME_PROVIDER.ANTIGRAVITY,
+    { unsupported: isAntigravityAcpVersionUnsupported, log: logAntigravityAcpVersionUnsupported },
+  ],
+  [
+    RUNTIME_PROVIDER.COMMAND_CODE,
+    { unsupported: isCommandCodeVersionUnsupported, log: logCommandCodeVersionUnsupported },
+  ],
+  [
+    RUNTIME_PROVIDER.DEVIN,
+    { unsupported: isDevinVersionUnsupported, log: logDevinVersionUnsupported },
+  ],
+]);
+
+const CACHED_FLOOR_PROVIDERS = new Set<ExternalCodeAgentProvider>([
+  RUNTIME_PROVIDER.OPENCODE,
+  RUNTIME_PROVIDER.CURSOR,
+  RUNTIME_PROVIDER.DEVIN,
+]);
 
 const logger = getLogger(["coforge", "daemon", "runtime-inventory"]);
 
@@ -158,29 +203,10 @@ async function probeRuntimeVersion(
             (dshVersionFromOutput(output) ?? output.trim())
           : lastWord(output);
   if (!version) return { kind: "unavailable", code: "probe_failed" };
-  if (provider === RUNTIME_PROVIDER.KIRO && isKiroVersionUnsupported(version)) {
-    logKiroVersionUnsupported(name, version);
-    return { kind: "rejected", version };
-  }
-  if (provider === RUNTIME_PROVIDER.OPENCODE && isOpenCodeAcpVersionUnsupported(version)) {
-    logOpenCodeAcpVersionUnsupported(name, version);
-    return { kind: "rejected", version };
-  }
-  if (provider === RUNTIME_PROVIDER.GROK && isGrokVersionUnsupported(version)) {
-    logGrokVersionUnsupported(name, version);
-    return { kind: "rejected", version };
-  }
-  if (provider === RUNTIME_PROVIDER.ANTIGRAVITY && isAntigravityAcpVersionUnsupported(version)) {
-    logAntigravityAcpVersionUnsupported(name, version);
-    return { kind: "rejected", version };
-  }
-  if (provider === RUNTIME_PROVIDER.COMMAND_CODE && isCommandCodeVersionUnsupported(version)) {
-    logCommandCodeVersionUnsupported(name, version);
-    return { kind: "rejected", version };
-  }
-  if (provider === RUNTIME_PROVIDER.DEVIN && isDevinVersionUnsupported(version)) {
-    logDevinVersionUnsupported(name, version);
-    // A refused version is not a probe miss: the cached runtime must be dropped, not restored.
+  // A refused version is not a probe miss: the cached runtime must be dropped, not restored.
+  const gate = VERSION_GATES.get(provider);
+  if (gate?.unsupported(version)) {
+    gate.log(name, version);
     return { kind: "rejected", version };
   }
   // The preview ACP accepts the verified 0.2.1 line only: any other release is refused, never offered.
@@ -223,16 +249,11 @@ function cachedBelowFloor(
   name: string,
   runtime: RuntimeMetadata | undefined,
 ): boolean {
-  if (runtime === undefined) return false;
-  if (provider === RUNTIME_PROVIDER.OPENCODE && isOpenCodeAcpVersionUnsupported(runtime.version)) {
-    logOpenCodeAcpVersionUnsupported(name, runtime.version);
-    return true;
-  }
-  if (provider === RUNTIME_PROVIDER.DEVIN && isDevinVersionUnsupported(runtime.version)) {
-    logDevinVersionUnsupported(name, runtime.version);
-    return true;
-  }
-  return false;
+  if (runtime === undefined || !CACHED_FLOOR_PROVIDERS.has(provider)) return false;
+  const gate = VERSION_GATES.get(provider);
+  if (!gate?.unsupported(runtime.version)) return false;
+  gate.log(name, runtime.version);
+  return true;
 }
 
 /** An installed runtime that cannot be used keeps its place in the inventory, with the reason, so

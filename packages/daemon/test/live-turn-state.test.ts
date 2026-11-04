@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { CodexProvider } from "@lrm/coforge-anvil/codex";
 import { claudeProvider } from "./fixtures/claude-provider";
 import { kiroProvider } from "./fixtures/kiro-host";
-import { CursorProvider } from "@lrm/coforge-anvil/cursor";
+import { CursorAcpProvider } from "@lrm/coforge-anvil/cursor";
 import { PROCESS_TREE_EXIT_GRACE_MS, VERSION_PROBE_TIMEOUT_MS } from "@lrm/coforge-anvil";
 import { OpenCodeAcpProvider } from "@lrm/coforge-anvil/opencode";
 import { openCodeAcpRuntimeHost } from "#src/code-agent/opencode/acp-host";
@@ -16,7 +16,7 @@ import { grokProvider } from "./fixtures/grok-host";
 import { AntigravityAcpProvider } from "@lrm/coforge-anvil/antigravity";
 import { antigravityAcpRuntimeHost } from "#src/code-agent/antigravity/acp-host";
 import { CoforgeProvider } from "#src/code-agent/pi/provider";
-import { perTurnSessionHost } from "#src/code-agent/per-turn-host";
+import { cursorAcpRuntimeHost } from "#src/code-agent/cursor/acp-host";
 import { anvilRuntimeFixtures } from "./fixtures/anvil-runtime";
 
 const command = (name: string) => [
@@ -31,8 +31,8 @@ const providers = [
   new CodexProvider({ host: codexRuntimeHost, command: command("codex-app-server.ts") }),
   claudeProvider({ command: command("claude-stream-json.ts") }),
   kiroProvider({ command: [process.execPath, anvilRuntimeFixtures.kiro] }),
-  new CursorProvider({
-    host: perTurnSessionHost,
+  new CursorAcpProvider({
+    host: cursorAcpRuntimeHost,
     command: [process.execPath, anvilRuntimeFixtures.cursor],
   }),
   new OpenCodeAcpProvider({

@@ -1,5 +1,5 @@
 /** The pending-interrupt bookkeeping the promise-based code agent sessions share (the Claude Code
- * provider and the per-turn session).
+ * provider and the session).
  *
  * `interrupt()` cannot settle when the turn's own `interrupt()` returns: the turn ends later, a
  * process can close, and a dispose can land while an interrupt is still pending. This holds the

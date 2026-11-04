@@ -35,6 +35,6 @@ export const anvilRuntimeFixtures = {
   kiroClientInfo: new URL("../../../anvil/test/fixtures/kiro-client-info.ts", import.meta.url)
     .pathname,
   invalidJsonl: new URL("../../../anvil/test/fixtures/invalid-jsonl.ts", import.meta.url).pathname,
-  cursor: new URL("../../../anvil/test/fixtures/cursor-agent-fixture.ts", import.meta.url).pathname,
+  cursor: new URL("../../../anvil/test/fixtures/cursor-acp.ts", import.meta.url).pathname,
   opencode: new URL("../../../anvil/test/fixtures/opencode-acp.ts", import.meta.url).pathname,
 };

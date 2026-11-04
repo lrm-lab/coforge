@@ -6,7 +6,7 @@ import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
  * How a provider's session accepts a delivery notice while a turn is already in progress.
  * - `steer`: the provider's own `AgentSession.notify()` safely handles busy delivery on its own
  *   (Claude holds it for a native boundary, Codex sends `turn/steer`, Pi/CoForge steer the live
- *   stream, Cursor queues text for its own next per-turn process, Kiro sends its own ACP
+ *   stream, Cursor steers it into the live turn, Kiro sends its own ACP
  *   `_session/steer` extension) without losing the turn in progress. The daemon keeps calling
  *   `notify()` as soon as a delivery is accepted, exactly as before this module existed.
  * - `queue_until_idle`: the provider's `notify()` has no safe busy path at all — sending it

@@ -88,6 +88,8 @@ export const LAUNCH_FAILURE_REASON = {
   MODEL_PROVIDER_NOT_CONFIGURED: "model_provider_not_configured",
   /** An Agent environment variable names something the runtime cannot use. */
   AGENT_ENVIRONMENT_INVALID: "agent_environment_invalid",
+  /** The runtime cannot host this kind of session (a Memory Agent's conversation sessions). */
+  RUNTIME_MEMORY_UNSUPPORTED: "runtime_memory_unsupported",
   /** No typed error said why. */
   RUNTIME_SPAWN_FAILED: "runtime_spawn_failed",
 } as const;
@@ -107,6 +109,7 @@ const TYPED_REASONS: readonly LaunchFailureReason[] = [
   LAUNCH_FAILURE_REASON.MODEL_NOT_FOUND,
   LAUNCH_FAILURE_REASON.MODEL_PROVIDER_NOT_CONFIGURED,
   LAUNCH_FAILURE_REASON.AGENT_ENVIRONMENT_INVALID,
+  LAUNCH_FAILURE_REASON.RUNTIME_MEMORY_UNSUPPORTED,
 ];
 
 /**
@@ -122,6 +125,7 @@ export const NON_RETRYABLE_LAUNCH_FAILURE_REASONS: readonly LaunchFailureReason[
   LAUNCH_FAILURE_REASON.RUNTIME_UNAVAILABLE,
   LAUNCH_FAILURE_REASON.AGENT_ENVIRONMENT_INVALID,
   LAUNCH_FAILURE_REASON.MODEL_PROVIDER_NOT_CONFIGURED,
+  LAUNCH_FAILURE_REASON.RUNTIME_MEMORY_UNSUPPORTED,
 ];
 
 /** Whether a failed launch is one no retry can fix. */
@@ -210,6 +214,12 @@ function launchFailureDetail(
       return (
         `${runtimeName} is not usable on this Computer. Check its status in Computer settings, ` +
         "then start the Agent again."
+      );
+    case LAUNCH_FAILURE_REASON.RUNTIME_MEMORY_UNSUPPORTED:
+      return (
+        `${runtimeName} cannot run a Memory Agent: its conversation sessions share one ` +
+        "workspace, so one instructions file cannot hold a different briefing for each. " +
+        "Change the Agent's runtime in its settings, then start it again."
       );
     case LAUNCH_FAILURE_REASON.RUNTIME_UNAVAILABLE:
       return (

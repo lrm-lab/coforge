@@ -248,7 +248,7 @@ describe("external Code Agent inventory", () => {
         codex: { path: "/bin/codex", version: "codex-cli 0.151.0\n" },
         claude: { path: "/bin/claude", version: "2.1.0\n" },
         "kiro-cli": { path: "/bin/kiro-cli", version: "kiro-cli 2.21.2\n" },
-        "cursor-agent": { path: "/bin/cursor-agent", version: "2026.08.11-e8db854\n" },
+        "cursor-agent": { path: "/bin/cursor-agent", version: "2026.10.22-27dcf5f\n" },
         pi: { path: "/bin/pi", version: "0.9.1\n" },
       }),
     );
@@ -257,7 +257,7 @@ describe("external Code Agent inventory", () => {
       { provider: "codex", version: "0.151.0", displayName: "Codex" },
       { provider: "claude-code", version: "2.1.0", displayName: "Claude Code" },
       { provider: "kiro", version: "2.21.2", displayName: "Kiro" },
-      { provider: "cursor", version: "2026.08.11-e8db854", displayName: "Cursor CLI" },
+      { provider: "cursor", version: "2026.10.22-27dcf5f", displayName: "Cursor CLI" },
     ]);
   });
 
@@ -355,35 +355,52 @@ describe("external Code Agent inventory", () => {
   test("discovers a Cursor CLI model catalog for an installed runtime", async () => {
     const inventory = await discoverCodeAgentInventory({
       probe: probeFor({
-        "cursor-agent": { path: "/bin/cursor-agent", version: "2026.08.11-e8db854\n" },
+        "cursor-agent": { path: "/bin/cursor-agent", version: "2026.10.22-27dcf5f\n" },
       }),
       commands: {
-        cursor: [process.execPath, anvilRuntimeFixtures.cursor, "models"],
+        cursor: [process.execPath, anvilRuntimeFixtures.cursor],
       },
       environment: {
         HOME: "/fixture/home",
         PATH: "",
-        COFORGE_CURSOR_MODELS_OUTPUT: "Available models\n\nauto - Auto (default)\n",
       },
       piModels: async () => [],
     });
 
     expect(inventory.runtimes).toContainEqual({
       provider: "cursor",
-      version: "2026.08.11-e8db854",
+      version: "2026.10.22-27dcf5f",
       displayName: "Cursor CLI",
     });
     expect(inventory.catalogs.find((catalog) => catalog.provider === "cursor")).toEqual({
       provider: "cursor",
       models: [
         {
-          id: "auto",
+          id: "default",
           displayName: "Auto",
           description: "",
           modelProvider: "",
           reasoningEfforts: [],
           defaultReasoning: "",
           recommended: true,
+        },
+        {
+          id: "claude-sonnet-5",
+          displayName: "claude-sonnet-5",
+          description: "",
+          modelProvider: "",
+          reasoningEfforts: ["high", "medium"],
+          defaultReasoning: "high",
+          recommended: false,
+        },
+        {
+          id: "gpt-5.5",
+          displayName: "gpt-5.5",
+          description: "",
+          modelProvider: "",
+          reasoningEfforts: ["medium"],
+          defaultReasoning: "medium",
+          recommended: false,
         },
       ],
     });

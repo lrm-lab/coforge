@@ -97,6 +97,7 @@ const NON_RETRYABLE_ERROR_CODES = new Set([
   "runtime_login_required",
   "agent_environment_invalid",
   "model_provider_not_configured",
+  "runtime_memory_unsupported",
 ]);
 
 /** Minimum wait before a transient launch failure is allowed to retry on incoming message (10 min). */

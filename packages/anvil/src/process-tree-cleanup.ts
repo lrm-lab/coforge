@@ -18,9 +18,9 @@ export type ProcessTreeCleanupOptions = Readonly<{
  * The one cleanup ladder a code-agent process runs over the tree it owns: ask politely, wait a
  * bounded moment, escalate to a forced terminate, wait again, and only then fail with
  * `AgentProcessCleanupError`; the child's stdin is closed afterwards so nothing can hold the tree
- * open. `JsonlProcess` and the per-turn `TurnProcess` both run it.
+ * open. `JsonlProcess` and the ACP process transports both run it.
  *
- * What the caller waits on afterwards stays the caller's: a `TurnProcess` awaits its own `exited`
+ * What the caller waits on afterwards stays the caller's: a process transport awaits its own `exited`
  * result, while `JsonlProcess` also waits for its adapter's diagnostics to drain.
  */
 export async function cleanupOwnedTree(

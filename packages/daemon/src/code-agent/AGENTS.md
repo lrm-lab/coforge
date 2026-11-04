@@ -122,8 +122,8 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
   instruction mechanism: Codex app-server `developerInstructions`, the Claude
   Code system-prompt-file option, the CoForge Agent resource-loader
   system-prompt override, Grok ACP `_meta.systemPromptOverride`, Command
-  Code's private `--mod` `appendSystemPrompt` hook, and OpenCode's
-  `OPENCODE_CONFIG_CONTENT` instructions file.
+  Code's private `--mod` `appendSystemPrompt` hook, OpenCode's
+  `OPENCODE_CONFIG_CONTENT` instructions file, and Cursor's private `.cursor/rules` file.
 - Current channel roles override names, previous sessions and local memory. Without current coordinator status or explicit human delegation, an Agent must not assign, chase or reprioritize peers. Coordination stays scoped to its channel and grants no extra permissions. Web annotates channel reads with current roles; launches preserve Agent-owned memory.
 - Do not copy the text into a provider. Do not write `AGENTS.md`, `CLAUDE.md`, or an OpenCode
   config file into the user's Agent workspace for a provider that supports native injection.
@@ -155,23 +155,9 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
   `claude-code/`. Preserve their separate environment compositions and evaluation times.
 - Native Claude rules live in [Anvil Claude instructions](../../../anvil/src/claude-code/AGENTS.md).
 
-## Per-turn providers (Cursor)
+## Cursor (`cursor-agent acp`)
 
-- Cursor's partial-output framing rules are in [Anvil Cursor rules](../../../anvil/src/cursor/AGENTS.md).
-- One child process per turn. Anvil `src/per-turn/session.ts` is their one `AgentSession` (state machine,
-  input queue, interrupt, dispose, session identity and its reports, exit handling) and
-  Anvil `src/per-turn/turn-process.ts` their one process wrapper. A provider adds `<provider>/turn-protocol.ts`
-  (argv, environment, stdin mode, record mapping) and calls `createPerTurnSession` from its
-  `provider.ts`, which keeps provider-wide concerns (usage, the version gate). The host injects environment composition and OS process ownership through `per-turn-host.ts`; never copy the Session.
-- Composition, not inheritance: a difference is a `TurnProtocol` field or a `TurnReader` hook. Each
-  one (`instructionsTurn`, `resumedIdentity`, `repeatedSessionId`, `identityReports`,
-  `mintSessionId`, `sanitizeEnvironment`, `lostResume`, reader `end`) records an observed CLI difference. Check the real CLI before adding
-  one or making two providers agree; the fixtures do not prove a binary.
-- The session never parses provider output. A reader emits through the `TurnScope`, synchronously,
-  so events keep the CLI's order. A turn's stdin mode is a CLI fact: `open` for Cursor (`eof` is
-  unverified there).
-- `#spawnTurn` builds the process before it marks the turn running, so a spawn that throws leaves
-  the session idle.
+- One persistent `cursor-agent acp` process per session; rules in [Anvil Cursor instructions](../../../anvil/src/cursor/AGENTS.md).
 
 ## OpenCode (`opencode acp`)
 

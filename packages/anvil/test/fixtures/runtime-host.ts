@@ -1,13 +1,22 @@
 import {
   type CatalogCommandRunner,
   type CliVersionReader,
+  type ProcessTreeSpawner,
   VERSION_PROBE_TIMEOUT_MS,
   withDeadline,
 } from "@lrm/coforge-anvil";
-import type { PerTurnSessionHost } from "@lrm/coforge-anvil/execution";
 
 /** The fixture never spawns descendants. Production tree ownership is tested by daemon. */
-export const fixturePerTurnHost: PerTurnSessionHost = {
+export const fixturePerTurnHost: {
+  buildEnvironment(
+    options: {
+      runtime?: { envVars?: Record<string, string> };
+      environment?: Record<string, string>;
+    },
+    policy: { environment?: Record<string, string> },
+  ): Record<string, string>;
+  processTreeSpawner: ProcessTreeSpawner;
+} = {
   buildEnvironment(options, policy) {
     return { ...options.runtime?.envVars, ...options.environment, ...policy.environment };
   },

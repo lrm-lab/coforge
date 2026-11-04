@@ -19,13 +19,13 @@ import { discoverCommandCodeCatalog } from "@lrm/coforge-anvil/command-code";
 import { discoverDevinCatalog } from "@lrm/coforge-anvil/devin";
 import { devinCatalogWithCachedEfforts } from "#src/code-agent/devin/effort-read";
 import { discoverKiroCatalog, KIRO_ACP_ARGS } from "@lrm/coforge-anvil/kiro";
-import { discoverCursorCatalog } from "@lrm/coforge-anvil/cursor";
+import { discoverCursorAcpCatalog } from "@lrm/coforge-anvil/cursor";
+import { cursorAcpRuntimeHost } from "#src/code-agent/cursor/acp-host";
 import { discoverOpenCodeAcpCatalog } from "@lrm/coforge-anvil/opencode";
 import { discoverGrokCatalog } from "@lrm/coforge-anvil/grok";
 import { discoverAntigravityAcpCatalog } from "@lrm/coforge-anvil/antigravity";
 import { CATALOG_DISCOVERY_TIMEOUT_MS } from "@lrm/coforge-anvil";
 import { discoverPiCatalog, PI_CATALOG_DISCOVERY_TIMEOUT_MS } from "@lrm/coforge-anvil/pi";
-import { runCatalogCommand } from "./catalog-command";
 import { piRuntimeHost } from "./pi/host";
 import { catalogCacheKeyFor, piCacheKeyPaths } from "./catalog-cache-key";
 import type { CodeAgentDiscoveryOptions } from "./discovery-options";
@@ -293,11 +293,11 @@ export async function discoverCodeAgentCatalogs(
     if (executable)
       discoveries.push([
         RUNTIME_PROVIDER.CURSOR,
-        discoverCursorCatalog(
-          commands.cursor ?? [executable, "models"],
+        discoverCursorAcpCatalog(
+          commands.cursor ?? [executable],
           cwd,
           environment,
-          runCatalogCommand,
+          cursorAcpRuntimeHost,
         ).then((catalog) => ({
           keyPaths: [executable],
           catalog,

@@ -1,5 +1,9 @@
 import { expect, test } from "bun:test";
-import { RuntimeLoginRequiredError, RuntimeStartFailedError } from "@lrm/coforge-anvil";
+import {
+  RuntimeLoginRequiredError,
+  RuntimeMemoryUnsupportedError,
+  RuntimeStartFailedError,
+} from "@lrm/coforge-anvil";
 import {
   AgentAuthorizationError,
   isNonRetryableLaunchFailure,
@@ -102,6 +106,11 @@ test("only a reason no retry can fix skips the launch retries", () => {
     new AgentConfigRequestError("server", 503, undefined, "server unavailable"),
   );
   expect(isNonRetryableLaunchFailure(serverError)).toBe(false);
+
+  // A runtime that cannot host a Memory Agent is a person-changes-something failure, not a retry.
+  const memoryUnsupported = new RuntimeMemoryUnsupportedError("Cursor cannot run a Memory Agent");
+  expect(memoryUnsupported.code).toBe("runtime_memory_unsupported");
+  expect(isNonRetryableLaunchFailure(memoryUnsupported)).toBe(true);
 
   // Every other reason keeps the same attempts and backoff.
   expect(isNonRetryableLaunchFailure(new RuntimeStartFailedError("exited 1"))).toBe(false);

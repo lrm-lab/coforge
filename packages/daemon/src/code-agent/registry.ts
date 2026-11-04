@@ -22,7 +22,8 @@ import {
   type RuntimeAuthProvider,
   type CodeAgentProvider,
 } from "@lrm/coforge-anvil";
-import { CursorProvider } from "@lrm/coforge-anvil/cursor";
+import { CursorAcpProvider } from "@lrm/coforge-anvil/cursor";
+import { cursorAcpRuntimeHost } from "#src/code-agent/cursor/acp-host";
 import { OpenCodeAcpProvider } from "@lrm/coforge-anvil/opencode";
 import { openCodeAcpRuntimeHost } from "#src/code-agent/opencode/acp-host";
 import { createKiroAuthHost } from "#src/code-agent/kiro/auth-host";
@@ -34,7 +35,6 @@ import { ClaudeCodeProvider } from "@lrm/coforge-anvil/claude-code";
 import { CodexProvider, CodexRuntimeAuthAdapter } from "@lrm/coforge-anvil/codex";
 import { codexRuntimeHost, createCodexAuthHost } from "#src/code-agent/codex/host";
 import { ClaudeRuntimeAuthAdapter } from "@lrm/coforge-anvil/claude-code";
-import { perTurnSessionHost } from "./per-turn-host";
 import { CoforgeProvider } from "#src/code-agent/pi/provider";
 import { RUNTIME_PROVIDER, type RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import {
@@ -111,8 +111,13 @@ export function createCodeAgentProvider(
       return new ClaudeCodeProvider({ host: claudeRuntimeHost });
     case RUNTIME_PROVIDER.KIRO:
       return new KiroProvider({ host: kiroRuntimeHost });
-    case RUNTIME_PROVIDER.CURSOR:
-      return new CursorProvider({ host: perTurnSessionHost });
+    case RUNTIME_PROVIDER.CURSOR: {
+      const executable = providerExecutable(RUNTIME_PROVIDER.CURSOR, options);
+      return new CursorAcpProvider({
+        host: cursorAcpRuntimeHost,
+        ...(executable ? { command: [executable] } : {}),
+      });
+    }
     case RUNTIME_PROVIDER.OPENCODE: {
       const executable = providerExecutable(RUNTIME_PROVIDER.OPENCODE, options);
       return new OpenCodeAcpProvider({

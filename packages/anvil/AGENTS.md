@@ -5,9 +5,8 @@
 - The root entry exposes provider-neutral contracts, errors, projections and tools only. Import each native runtime from its named subpath (`/cursor`, `/opencode`, `/kiro`, `/grok`, `/command-code`, `/antigravity`, `/pi`, `/dsh`, `/codex`, `/claude-code`) and shared process/session implementations from `/execution`. Never re-export these implementations from the root or import them into neutral modules.
 - Public contracts and exports belong here; daemon imports them by package name. Never import daemon modules, including through relative paths or aliases. `scripts/ci/anvil-boundary.test.ts` checks this direction.
 - OS process trees and executable discovery are ports. The daemon supplies implementations explicitly; Anvil must not construct a platform default, read Workspace configuration, discover executables or read PATH.
-- The host supplies per-turn environment composition through `PerTurnSessionHost.buildEnvironment`. Preserve when it runs and each provider's sanitization and overrides; Anvil never assembles the daemon's launch environment.
+- The host supplies environment composition through each provider runtime host's `buildEnvironment`. Preserve when it runs and each provider's sanitization and overrides; Anvil never assembles the daemon's launch environment.
 - Agent instructions, assigned Skills, Git hooks, runtime inventory and caches stay with the host. Adapters consume the prepared session options; they do not coordinate those policies.
-- `src/per-turn/` owns the one Session state machine, input queue, interrupt/dispose, identity reports and child-process wrapper shared by per-turn adapters. Provider differences belong to `TurnProtocol` fields or `TurnReader` hooks; do not copy the Session or parse provider output there.
 - `src/acp/` owns the one ACP connection and session state machine shared by the ACP adapters. A runtime declares its differences in `AcpRuntimeProfile` (arguments, notifications, configuration, wording) and `AcpSessionProfile` (authentication, session open, turn projection, insertion, admission deadline); do not copy the connection or the session into an adapter.
 - An adapter that emits `compaction-finished` declares `CodeAgentProvider.reportsCompaction = true`; every adapter declares the field, and `packages/daemon/test/provider-compaction-declaration.test.ts` checks the declaration against the emitters. The daemon reads the declaration instead of keeping a runtime-name list.
 - Preserve provider behavior while migrating one contract or runtime slice at a time. Run the package checks and the daemon checks for every slice.
@@ -18,7 +17,7 @@
 | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `src/contract.ts`            | Provider-neutral sessions, provider and auth contracts                                                                        |
 | `src/runtime-auth-status.ts` | Shared runtime auth status values                                                                                             |
-| `src/execution.ts`           | Explicit public entry for JSONL catalog execution, per-turn sessions and process cleanup                                      |
+| `src/execution.ts`           | Explicit public entry for JSONL/ACP catalog execution and process cleanup                                                    |
 | `src/jsonl-error.ts`         | Pure JSONL protocol/request errors, shared by neutral projections and execution                                               |
 | `src/jsonl-process.ts`       | Shared JSONL child protocol, record stream and process lifecycle with required host process ownership                         |
 | `src/process-tree.ts`        | Host process ownership ports, optional terminal transport and shared cleanup deadline policy                                  |
@@ -29,7 +28,6 @@
 | `src/stderr-excerpt.ts`      | Attaches a process's scrubbed stderr head to a failed open, after dispose has drained it                                     |
 | `src/transcript-tail.ts`     | The tail-reader capability and the lines of a transcript/rollout tail                                                         |
 | `src/local-session.ts`       | Shared limits and content-only projections for local Session handoff discovery                                                |
-| `src/per-turn/`              | Shared per-turn session and process execution                                                                                 |
 | `src/acp/`                   | Shared ACP connection, session state machine, profile and turn projection contracts                                           |
 | `src/version-gate.ts`        | Shared version policy and required host version-reader port                                                                   |
 | `src/pi/`                    | Embedded Pi provider, native event/catalog projection and shared SDK Session factory with host capabilities                   |
@@ -39,7 +37,7 @@
 | `src/command-code/`          | Command Code ACP sessions, native model catalog and a private `--mod` instruction bridge                                      |
 | `src/kiro/`                  | Kiro ACP provider, native profile, events, version/catalog policy, enterprise auth and usage parsing with explicit host ports |
 | `src/opencode/`              | OpenCode ACP sessions, version policy, model catalog, and private instruction overlay                                        |
-| `src/cursor/`                | Cursor turn protocol, provider and model catalog parsing                                                                      |
+| `src/cursor/`                | Cursor ACP session, composite model-id resolution, version policy and private rules injection                                 |
 | `src/codex/`                 | Codex sessions, native events, auth, usage, catalog and idle-recycle rollout reads through required host capabilities         |
 | `src/devin/`                 | Devin ACP sessions, always-on rule injection, model/effort selects, auth status and login through host capabilities           |
 | `src/claude-code/`           | Claude sessions, native events, auth, usage, history and catalog through required host capabilities                           |

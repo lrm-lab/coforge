@@ -111,7 +111,6 @@ Directories with their own `AGENTS.md` add rules for that directory only.
 | `src/code-agent/catalog-host.ts`         | Environment and process capabilities for Anvil JSONL catalog execution                                                                                     |
 | `src/code-agent/codex/host.ts`           | Codex environment, client identity, masking, file I/O and native CLI process capabilities                                                                  |
 | `src/code-agent/claude-code/`            | Claude environment, prompt/process I/O, executable discovery and read-only secured file capabilities                                                       |
-| `src/code-agent/per-turn-host.ts`        | Host environment composition and platform process-tree injection for Anvil per-turn execution                                                              |
 | `src/code-agent/version-probe.ts`        | Bounded version subprocess reads with the host environment for Anvil gates                                                                                 |
 | `src/local-session/`                     | Bounded, read-only discovery and briefing extraction for local Claude Code and Codex sessions                                                              |
 | `src/agent-migration/`                   | Agent migration on this Computer: select, pack and upload a workspace; download, verify, commit                                                            |
