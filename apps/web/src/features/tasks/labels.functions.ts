@@ -13,6 +13,8 @@ import { workspaceMemberRole } from "#src/server/workspaces/workspace-membership
 import { LABEL_GROUP_SELECTIONS, LabelGroups } from "#src/server/tasks/label-groups.server";
 
 const labelName = z.string().trim().min(1).max(LABEL_NAME_MAX);
+/** A label's description, as Settings → Labels edits it: a line, not a document. */
+export const LABEL_DESCRIPTION_MAX = 200;
 const labelColor = z.enum(LABEL_COLORS);
 
 /**
@@ -24,6 +26,19 @@ export const loadWorkspaceLabels = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const { user, db, workspaceId } = context;
     const labels = await new Labels(db).list(workspaceId, user.id);
+    const role = await workspaceMemberRole(db, workspaceId, user.id);
+    return { labels, canManage: canManageWorkspaceSettings(role) };
+  });
+
+/**
+ * Settings → Labels (task #508): every label, the archived ones too, with how many Tasks carry it
+ * and when it was last put on one, and whether the viewer manages them. Any member may read it.
+ */
+export const loadLabelSettings = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .handler(async ({ context }) => {
+    const { user, db, workspaceId } = context;
+    const labels = await new Labels(db).list(workspaceId, user.id, { archived: true });
     const role = await workspaceMemberRole(db, workspaceId, user.id);
     return { labels, canManage: canManageWorkspaceSettings(role) };
   });
@@ -48,6 +63,8 @@ export const updateTaskLabel = createServerFn({ method: "POST" })
         id: z.uuid(),
         name: labelName.optional(),
         color: labelColor.optional(),
+        // What the label is for; empty clears it (Settings → Labels, task #508).
+        description: z.string().trim().max(LABEL_DESCRIPTION_MAX).nullable().optional(),
         archived: z.boolean().optional(),
       })
       .strict(),

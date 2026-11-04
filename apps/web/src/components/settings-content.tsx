@@ -15,6 +15,7 @@ import {
 import { GitHubSettings } from "#src/features/integrations/github-settings";
 import type { GitHubCallbackFailure } from "#src/features/integrations/github-callback";
 import { AppsSettings } from "#src/features/apps/apps-settings";
+import { LabelSettings } from "#src/features/tasks/label-settings";
 import { ServerConnectionSettings } from "#src/features/settings/server-connection-settings";
 import {
   ExperimentsSettings,
@@ -207,6 +208,8 @@ export function SettingsContent(props: SettingsContentProps) {
                   )
                 }
               />
+            ) : section === "labels" ? (
+              <LabelSettings />
             ) : section === "applications" ? (
               <AppsSettings actorRole={props.members.actorRole} />
             ) : section === "preferences" ? (

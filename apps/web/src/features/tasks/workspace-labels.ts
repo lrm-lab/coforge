@@ -42,6 +42,8 @@ export function useWorkspaceLabels(enabled: boolean) {
   return {
     labels: query.data?.labels ?? [],
     canManage: query.data?.canManage ?? false,
+    /** Whether `canManage` is known yet, not the default it starts from. */
+    loaded: query.data !== undefined,
     workspaceId,
   };
 }

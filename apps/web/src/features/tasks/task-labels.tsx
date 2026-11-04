@@ -1,5 +1,6 @@
 import type { TaskLabel, TaskView } from "@lrm/coforge-sdk/internal";
 import { useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { Plus } from "@untitledui/icons";
 import { useState } from "react";
@@ -22,6 +23,7 @@ import { LabelDot, ManageableLabelChip, TaskLabelChip } from "./task-label-chip"
 import { TaskFieldTrigger } from "./task-field-trigger";
 import { useCloseOnBack } from "./use-close-on-back";
 import { useWorkspaceLabels, workspaceLabelsKey } from "./workspace-labels";
+import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 
 /** A Task carries at most this many labels (the server refuses a sixth). */
 export const TASK_LABELS_MAX = 5;
@@ -81,6 +83,7 @@ export function TaskLabelsField({
     labels: workspaceLabels,
     workspaceId,
     canManage,
+    loaded: labelsLoaded,
   } = useWorkspaceLabels(open || taskLabels.length > 0);
   // A label deleted (archived) since the Task was read is off it already.
   const archivedIds = new Set(
@@ -88,6 +91,7 @@ export function TaskLabelsField({
   );
   const labels = taskLabels.filter((label) => !archivedIds.has(label.id));
   const queryClient = useQueryClient();
+  const workspaceSlug = useWorkspaceSlug();
   const create = useServerFn(createTaskLabel);
   const { contains } = useFilter({ sensitivity: "base" });
   const [search, setSearch] = useState("");
@@ -221,14 +225,29 @@ export function TaskLabelsField({
                 )}
               </div>
             )}
-            <p className="border-t border-secondary px-3 py-2 text-xs text-tertiary">
-              {full
-                ? m.tasks_labels_full({ max: String(TASK_LABELS_MAX) })
-                : m.tasks_labels_count({
-                    count: String(labels.length),
-                    max: String(TASK_LABELS_MAX),
-                  })}
-            </p>
+            <div className="flex items-center justify-between gap-2 border-t border-secondary px-3 py-2 text-xs">
+              <span className="text-tertiary">
+                {full
+                  ? m.tasks_labels_full({ max: String(TASK_LABELS_MAX) })
+                  : m.tasks_labels_count({
+                      count: String(labels.length),
+                      max: String(TASK_LABELS_MAX),
+                    })}
+              </span>
+              {/* Settings → Labels (task #508): "manage" only for whoever may change them, so it
+                  waits until that is known rather than flipping from "view all". */}
+              {labelsLoaded && (
+                <Link
+                  to="/w/$workspaceSlug/settings"
+                  params={{ workspaceSlug }}
+                  search={{ section: "labels" }}
+                  onClick={() => setOpen(false)}
+                  className="shrink-0 rounded-sm font-medium text-brand-secondary outline-focus-ring hover:underline focus-visible:outline-2"
+                >
+                  {canManage ? m.tasks_labels_manage() : m.tasks_labels_view_all()}
+                </Link>
+              )}
+            </div>
           </AriaAutocomplete>
         </Dropdown.Popover>
       </Dropdown.Root>
