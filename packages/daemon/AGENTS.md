@@ -93,7 +93,7 @@ Directories with their own `AGENTS.md` add rules for that directory only.
 | `index.ts`                           | Process entrypoint and package exports; dependency assembly only                                                                                           |
 | `src/daemon-host/`                   | Login-session startup through launchd, systemd user, and Windows tasks                                                                                     |
 | `src/supervisor/`                    | Machine Coordinator: Workspace binding registry and per-Workspace process lifecycle                                                                        |
-| `src/daemon-runtime/`                | One Workspace child's runtime: cloud use cases, attention, delivery, mention tracking                                                                      |
+| `src/daemon-runtime/`                | One Workspace child's runtime: cloud use cases, attention, delivery, mention tracking, and thread-read indexing                                            |
 | `src/connection/`                    | The Workspace's WSS connection, ordered replay, reconnect, and Agent HTTPS transport                                                                       |
 | `src/pi-chat/`                       | Independent native Pi worker processes and bounded command/event relay on the Workspace connection                                                         |
 | `src/agent-runtime/`                 | Agent lifecycle state machine, control, native Session state, and Activity                                                                                 |
