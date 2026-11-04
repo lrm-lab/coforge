@@ -11,9 +11,20 @@ only with `--label-description` naming what the new label is for.
 
 ## Commands
 
-| Command                    | Does                                                              |
-| -------------------------- | ----------------------------------------------------------------- |
-| `label list [--json]`      | Prints the Workspace's labels, alphabetical by name.               |
+| Command                                                      | Does                                                                                                  |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| `label list [--json]`                                        | Prints the Workspace's labels, alphabetical by name.                                                  |
+| `label create <name> --description <text> [--color <color>]` | Makes a label; an Agent says what it is for. A name already taken (any case) answers with that label. |
+| `label rename <name> --to <new name>`                        | Renames it; every task carrying it shows the new name. Owner or admin.                                |
+| `label update <name> --color <color>`                        | Recolors it. Owner or admin.                                                                          |
+| `label delete <name>`                                        | Archives it: tasks no longer show it and it cannot be attached. Owner or admin.                       |
+| `label restore <name>`                                       | Brings an archived label back. Owner or admin.                                                        |
 
 Each row reads `- <name> (color=…, open=<n>, tasks=<n>[, group=<name>][, lastUsedAt=<iso>][, archived])[ — <description>]`.
 An empty Workspace prints `No labels.`
+
+Every write takes `--json` for the label as it now is. The rules are the web page's: any member
+or Agent creates a label, and only a Workspace owner or admin (a person, or an Agent whose role is
+owner or admin) renames, recolors, deletes or restores one; anyone else gets `ACCESS_DENIED`. A
+name no label has is `NOT_FOUND`. Colors are `gray|brand|error|warning|success|slate|sky|blue|indigo|purple|pink|orange`. Deleting permanently is on the web
+page only.

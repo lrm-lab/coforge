@@ -1,18 +1,77 @@
-import type { AgentLabel, AgentLabelListResponse } from "@lrm/coforge-sdk/agent";
+import type {
+  AgentLabel,
+  AgentLabelListResponse,
+  AgentLabelWriteRequest,
+  AgentLabelWriteResponse,
+} from "@lrm/coforge-sdk/agent";
 
-export type LabelInvocation = { command: "label-list"; json?: boolean };
+/** `label list` carries no request; every write carries the one label write it sends. */
+export type LabelInvocation = {
+  command: "label";
+  request?: AgentLabelWriteRequest;
+  json?: boolean;
+};
 
-const LABEL_USAGE = "Usage: coforge label list [--json]";
+const LABEL_USAGE =
+  "Usage: coforge label list [--json] | coforge label create <name> --description <text> [--color <color>] [--json] | coforge label rename <name> --to <new name> [--json] | coforge label update <name> --color <color> [--json] | coforge label delete|restore <name> [--json]";
 
-/** `label list [--json]`. */
+/** Each write subcommand's flags; every one but `list` names its label first. */
+const WRITE_FLAGS: Record<string, readonly string[]> = {
+  create: ["--description", "--color"],
+  rename: ["--to"],
+  update: ["--color"],
+  delete: [],
+  restore: [],
+};
+
+/** `label list|create|rename|update|delete|restore`. */
 export function parseLabelArgs(args: readonly string[]): LabelInvocation {
-  if (args[0] !== "list") throw new Error(LABEL_USAGE);
-  let json = false;
-  for (let index = 1; index < args.length; index += 1) {
-    if (args[index] === "--json") json = true;
-    else throw new Error(LABEL_USAGE);
+  const [subcommand, ...rest] = args;
+  const json = rest.includes("--json");
+  const options = json ? { json: true } : {};
+  const remaining = rest.filter((arg) => arg !== "--json");
+  if (subcommand === "list") {
+    if (remaining.length) throw new Error(LABEL_USAGE);
+    return { command: "label", ...options };
   }
-  return { command: "label-list", ...(json ? { json: true } : {}) };
+  const flags = subcommand === undefined ? undefined : WRITE_FLAGS[subcommand];
+  const [name, ...pairs] = remaining;
+  if (!flags || !name?.trim() || name.startsWith("--") || pairs.length % 2)
+    throw new Error(LABEL_USAGE);
+  const values: Record<string, string> = {};
+  for (let index = 0; index < pairs.length; index += 2) {
+    const flag = pairs[index]!;
+    const value = pairs[index + 1]!;
+    if (!flags.includes(flag) || flag in values || !value.trim()) throw new Error(LABEL_USAGE);
+    values[flag] = value;
+  }
+  const request = writeRequest(subcommand!, name, values);
+  if (!request) throw new Error(LABEL_USAGE);
+  return { command: "label", request, ...options };
+}
+
+function writeRequest(
+  subcommand: string,
+  label: string,
+  values: Record<string, string>,
+): AgentLabelWriteRequest | undefined {
+  const color = values["--color"];
+  switch (subcommand) {
+    case "create": {
+      const description = values["--description"];
+      if (!description) return undefined;
+      return { operation: "create", name: label, description, ...(color ? { color } : {}) };
+    }
+    case "rename":
+      return values["--to"] ? { operation: "update", label, name: values["--to"] } : undefined;
+    case "update":
+      return color ? { operation: "update", label, color } : undefined;
+    case "delete":
+      return { operation: "update", label, archived: true };
+    case "restore":
+      return { operation: "update", label, archived: false };
+  }
+  return undefined;
 }
 
 function formatLabel(label: AgentLabel): string {
@@ -29,16 +88,35 @@ function formatLabelList({ labels }: AgentLabelListResponse): string {
   return [`Labels (${labels.length}):`, ...labels.map(formatLabel)].join("\n");
 }
 
-/** The transport call `label list` makes. */
+/** What a write did, in the words of the subcommand that asked for it. */
+function formatLabelWrite(request: AgentLabelWriteRequest, { label }: AgentLabelWriteResponse) {
+  if (request.operation === "create") {
+    const description = label.description ? ` — ${label.description}` : "";
+    return `Label ${label.name} (color=${label.color})${description}`;
+  }
+  if (request.name !== undefined) return `Renamed ${request.label} to ${label.name}.`;
+  if (request.color !== undefined) return `Label ${label.name} is now ${label.color}.`;
+  if (request.archived)
+    return `Deleted ${label.name} (archived): tasks no longer show it and it cannot be attached; \`coforge label restore ${label.name}\` brings it back.`;
+  return `Restored ${label.name}.`;
+}
+
+/** The transport calls the `label` commands make. */
 export type LabelTransport = {
   labelList?(): Promise<AgentLabelListResponse>;
+  labelWrite?(request: AgentLabelWriteRequest): Promise<AgentLabelWriteResponse>;
 };
 
-/** Runs `label list` and returns what it prints. */
+/** Runs a `label` command and returns what it prints. */
 export async function runLabelCommand(
   transport: LabelTransport,
   invocation: LabelInvocation,
-): Promise<AgentLabelListResponse | string> {
+): Promise<AgentLabelListResponse | AgentLabelWriteResponse | string> {
+  if (invocation.request) {
+    if (!transport.labelWrite) throw new Error("Label transport is unavailable");
+    const result = await transport.labelWrite(invocation.request);
+    return invocation.json ? result : formatLabelWrite(invocation.request, result);
+  }
   if (!transport.labelList) throw new Error("Label transport is unavailable");
   const result = await transport.labelList();
   return invocation.json ? result : formatLabelList(result);

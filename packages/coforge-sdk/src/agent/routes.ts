@@ -28,6 +28,12 @@ const LABELS_ROUTE = {
   method: "GET",
   path: "/api/agent/v1/labels",
 } as const;
+/** `coforge label create|rename|update|delete|restore` (task #508). Same route under `proxy`,
+ * `local` and `cloud`. */
+const LABEL_WRITE_ROUTE = {
+  method: "POST",
+  path: "/api/agent/v1/labels",
+} as const;
 /** `coforge thread list` and the unread list of `coforge inbox check`. Same routes under `proxy`, `local` and `cloud`. */
 const INBOX_LIST_ROUTE = {
   method: "GET",
@@ -200,6 +206,7 @@ export const agentApiRoutes = {
     threadList: THREAD_LIST_ROUTE,
     inboxList: INBOX_LIST_ROUTE,
     labels: LABELS_ROUTE,
+    labelWrite: LABEL_WRITE_ROUTE,
     artifacts: ARTIFACTS_ROUTE,
     appConfig: APP_CONFIG_ROUTES,
     apps: APP_ROUTES,
@@ -245,6 +252,7 @@ export const agentApiRoutes = {
     threadList: THREAD_LIST_ROUTE,
     inboxList: INBOX_LIST_ROUTE,
     labels: LABELS_ROUTE,
+    labelWrite: LABEL_WRITE_ROUTE,
     artifacts: ARTIFACTS_ROUTE,
     appConfig: APP_CONFIG_ROUTES,
     apps: APP_ROUTES,
@@ -365,6 +373,7 @@ export const agentApiRoutes = {
     threadList: THREAD_LIST_ROUTE,
     inboxList: INBOX_LIST_ROUTE,
     labels: LABELS_ROUTE,
+    labelWrite: LABEL_WRITE_ROUTE,
     artifacts: ARTIFACTS_ROUTE,
     appConfig: APP_CONFIG_ROUTES,
     apps: APP_ROUTES,

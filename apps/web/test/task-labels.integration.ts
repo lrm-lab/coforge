@@ -201,3 +201,40 @@ test("archiving a label takes it off every task, frees its slot, and is for an o
     await db.$disconnect();
   }
 });
+
+test("an Agent creates a label; only an owner or admin Agent renames, archives or restores one", async () => {
+  const { db, principals, refusal } = await setup();
+  try {
+    const workspaceId = principals.alice.workspaceId;
+    const memberAgent = { agentId: principals.one.agentId! };
+    const adminAgent = { agentId: principals.two.agentId! };
+    await db.agent.update({ where: { id: adminAgent.agentId }, data: { role: "admin" } });
+    const labels = new Labels(db);
+
+    const made = await labels.create(workspaceId, memberAgent, {
+      name: "Infra",
+      description: "Servers and deploys",
+    });
+    expect(made.description).toBe("Servers and deploys");
+    expect(
+      (await db.label.findUniqueOrThrow({ where: { id: made.id } })).createdByUserId,
+    ).toBeNull();
+
+    const denied = await refusal(labels.update(workspaceId, memberAgent, made.id, { name: "Ops" }));
+    expect(denied.code).toBe("ACCESS_DENIED");
+
+    const renamed = await labels.update(workspaceId, adminAgent, made.id, { name: "Ops" });
+    expect(renamed.name).toBe("Ops");
+    const archived = await labels.update(workspaceId, adminAgent, made.id, { archived: true });
+    expect(archived.archivedAt).not.toBeNull();
+    const restored = await labels.update(workspaceId, adminAgent, made.id, { archived: false });
+    expect(restored.archivedAt).toBeNull();
+
+    // A deleted Agent is no longer one of the Workspace's actors.
+    await db.agent.update({ where: { id: memberAgent.agentId }, data: { deletedAt: new Date() } });
+    const gone = await refusal(labels.create(workspaceId, memberAgent, { name: "Late" }));
+    expect(gone.code).toBe("ACCESS_DENIED");
+  } finally {
+    await db.$disconnect();
+  }
+});

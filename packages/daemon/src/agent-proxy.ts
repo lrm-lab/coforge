@@ -38,6 +38,7 @@ import { parseMessageRequest } from "./agent-proxy-message-request";
 import { TASK_CONVERSATION_PROXY_ROUTES } from "./agent-proxy-task-routes";
 import { APP_PROXY_ROUTES } from "./agent-proxy-app-routes";
 import { ATTACHMENT_PROXY_ROUTES } from "./agent-proxy-attachment-routes";
+import { LABEL_PROXY_ROUTES } from "./agent-proxy-label-routes";
 
 export type AgentProxy = {
   url: string;
@@ -183,14 +184,7 @@ const ROUTE_TABLE: readonly ProxyRoute[] = [
     handler: "threadList",
     parse: () => ({}),
   }),
-  defineRoute({
-    family: "agent-api/labels",
-    method: LOCAL_PROXY_ROUTES.labels.method,
-    match: exactPath(LOCAL_PROXY_ROUTES.labels.path),
-    body: "none",
-    handler: "labelList",
-    parse: () => ({}),
-  }),
+  ...LABEL_PROXY_ROUTES,
   defineRoute({
     family: "agent-api/mention-pending",
     method: LOCAL_PROXY_ROUTES.mentionActions.pending.method,

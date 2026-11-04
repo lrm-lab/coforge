@@ -40,6 +40,7 @@ import type {
   AgentInboxListResponse,
   AgentInboxRequest,
   AgentLabelListResponse,
+  AgentLabelWriteRequest,
   AgentThreadListResponse,
   AgentMentionPendingResponse,
   AgentMentionDeliveryRequest,
@@ -191,6 +192,13 @@ export type AgentProxyRuntime = {
     request: Record<string, never>,
     agentApiKey: string,
   ): Promise<AgentLabelListResponse>;
+  /** `coforge label create|rename|update|delete|restore` (task #508): forwarded as it is, the
+   * cloud's response answered as it came. */
+  agentLabel?(
+    context: string,
+    request: AgentLabelWriteRequest,
+    agentApiKey: string,
+  ): Promise<Response>;
   mentionPending?(
     context: string,
     request: AgentMentionPendingRequest,

@@ -24,6 +24,7 @@ import type {
   AgentInboxListResponse,
   AgentInboxRequest,
   AgentLabelListResponse,
+  AgentLabelWriteRequest,
   AgentThreadListResponse,
   AgentMentionPendingResponse,
   AgentMentionDeliveryRequest,
@@ -70,6 +71,8 @@ export interface AgentApiConnectionClient {
   ): Promise<AgentAppConfigResponse>;
   threadList?(agentApiKey: string): Promise<AgentThreadListResponse>;
   labelList?(agentApiKey: string): Promise<AgentLabelListResponse>;
+  /** `coforge label create|rename|update|delete|restore`, forwarded as it is (task #508). */
+  agentLabel?(request: AgentLabelWriteRequest, agentApiKey: string): Promise<Response>;
   inboxList?(request: AgentInboxRequest, agentApiKey: string): Promise<AgentInboxListResponse>;
   mentionPending?(
     request: AgentMentionPendingRequest,

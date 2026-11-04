@@ -21,6 +21,7 @@ import type {
   AgentInboxListResponse,
   AgentInboxRequest,
   AgentLabelListResponse,
+  AgentLabelWriteRequest,
   AgentThreadListResponse,
   AgentMentionPendingResponse,
   AgentProfileShowRequest,
@@ -35,7 +36,6 @@ import type {
   GitHubCredentialResponse,
 } from "@lrm/coforge-sdk/agent";
 import type {
-  AgentMessageRecord,
   ChannelCommand,
   WeeklyReportCommand,
   WeeklyReportResponse,
@@ -45,7 +45,7 @@ import type {
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import type { OpenVikingAgentProxyCommand } from "#src/openviking-read-proxy";
 import type { AgentContexts } from "./agent-contexts";
-import { elideForAgent } from "./context-elision";
+import { forwardedTaskReadResponse } from "./forwarded-task-read-response";
 
 import { settleForwardedTaskRead } from "./agent-history-read";
 import { actionStampingAuthorizedAgent } from "./notice-action-clocks";
@@ -77,6 +77,7 @@ export type AgentRequestForwarderPorts = Readonly<{
     | "agentOpenviking"
     | "threadList"
     | "labelList"
+    | "agentLabel"
     | "inboxList"
     | "mentionPending"
     | "mentionExecute"
@@ -298,47 +299,15 @@ export class AgentRequestForwarder {
       request,
       agentApiKey,
     );
-    if (request.route !== "read" || !response.ok) return response;
-    let body: unknown;
-    try {
-      body = await response.clone().json();
-    } catch {
-      return response;
-    }
-    if (
-      !body ||
-      typeof body !== "object" ||
-      !Array.isArray((body as { messages?: unknown }).messages)
-    )
-      return response;
-    const scope = (body as { consumptionScope?: { agentId: string; target: string } })
-      .consumptionScope;
-    if (scope?.agentId === agentId && scope.target)
-      this.#ports.recordForwardedRead?.(agentId, request.query, body);
-    const messages = (body as { messages: unknown[] }).messages;
-    const elided = elideForAgent(
-      this.#ports.contexts,
-      agentId,
-      messages as AgentMessageRecord[],
-      "read",
+    return forwardedTaskReadResponse(
+      {
+        agentId,
+        request,
+        contexts: this.#ports.contexts,
+        recordRead: this.#ports.recordForwardedRead,
+      },
+      response,
     );
-    if (elided === messages) return response;
-    const next = { ...(body as Record<string, unknown>), messages: elided };
-    // The upstream response is fetch's already-decoded body: `content-encoding` still names the
-    // wire compression and `content-length` the old byte count, neither of which describes the
-    // rewritten JSON. Only the media type survives.
-    const headers = new Headers();
-    const contentType = response.headers.get("content-type");
-    if (contentType) headers.set("content-type", contentType);
-    const rewritten = new Response(JSON.stringify(next), {
-      status: response.status,
-      statusText: response.statusText,
-      headers,
-    }) as Response & { messages?: unknown };
-    // `guardDelivery` reads this non-serialized field to release claims if the local client
-    // disconnects before consuming the rewritten response body.
-    rewritten.messages = elided;
-    return rewritten;
   }
 
   async agentArtifact(
@@ -399,6 +368,15 @@ export class AgentRequestForwarder {
   ): Promise<AgentLabelListResponse> {
     this.#ports.authorizedAgent(context, agentApiKey);
     return this.#transportCall("labelList", "Agent labels endpoint is not configured")(agentApiKey);
+  }
+
+  async agentLabel(
+    context: string,
+    request: AgentLabelWriteRequest,
+    agentApiKey: string,
+  ): Promise<Response> {
+    this.#ports.authorizedAgent(context, agentApiKey);
+    return this.#transportCall("agentLabel", NOT_CONNECTED)(request, agentApiKey);
   }
 
   async mentionPending(

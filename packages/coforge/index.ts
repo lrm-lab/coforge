@@ -44,7 +44,6 @@ import {
   type AgentMentionExecuteResponse,
   type AgentMentionPendingResponse,
   type AgentThreadListResponse,
-  type AgentLabelListResponse,
   type AgentMentionDeliveryResponse,
   type GitHubCredentialResponse,
 } from "@lrm/coforge-sdk/agent";
@@ -117,6 +116,7 @@ import { parseMessageReadArgs, type MessageReadOptions } from "#src/message-read
 export type { MessageSearchOptions };
 import { runChannelCommand } from "#src/channel-commands";
 import { parseLabelArgs, runLabelCommand, type LabelInvocation } from "#src/label-commands";
+import type { LabelTransport } from "#src/label-commands";
 import {
   CliError,
   NO_MESSAGE_SENT_NEXT_ACTION,
@@ -269,7 +269,7 @@ export type MentionInvocation =
       resolutionIds: string[];
       json?: boolean;
     };
-export type MessageTransport = {
+export type MessageTransport = LabelTransport & {
   check(target?: string): Promise<MessageCheckResult>;
   read(target: string, options?: MessageReadOptions): Promise<unknown>;
   search?(options: MessageSearchOptions): Promise<unknown>;
@@ -305,8 +305,6 @@ export type MessageTransport = {
   artifact?: ArtifactTransport["artifact"];
   setThreadFollowed?(target: string, followed: boolean): Promise<unknown>;
   threadList?(): Promise<AgentThreadListResponse>;
-  /** `coforge label list`: the Workspace's labels. */
-  labelList?(): Promise<AgentLabelListResponse>;
   channel?(command: Omit<ChannelCommand, "idempotencyKey">): Promise<unknown>;
   task?(command: TaskCommand): Promise<TaskResult>;
   taskConversation?: TaskConversationTransport["taskConversation"];
@@ -936,7 +934,7 @@ export async function run(args: readonly string[], transport: MessageTransport):
   if (isAttentionInvocation(invocation)) return runAttention(transport, invocation);
   if (invocation.command === "task-conversation") return runTaskConversation(transport, invocation);
   if (invocation.command === "channel-manage") return runChannelCommand(transport, invocation);
-  if (invocation.command === "label-list") return runLabelCommand(transport, invocation);
+  if (invocation.command === "label") return runLabelCommand(transport, invocation);
   if (invocation.command === "inbox-check") return runInboxCheck(transport, invocation);
   if (invocation.command === "attachment-comments") {
     if (!transport.attachmentComments)

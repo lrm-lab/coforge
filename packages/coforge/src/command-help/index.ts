@@ -191,8 +191,36 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
     syntax: 'coforge manual search "<keywords>" [--intent <text>] [--reason <text>]',
   },
   label: {
-    syntax: "coforge label list [--json]",
+    syntax: "coforge label list|create|rename|update|delete|restore ...",
     example: "coforge label list",
+  },
+  "label create": {
+    syntax: "coforge label create <name> --description <text> [--color <color>] [--json]",
+    example: "coforge label create Infra --description 'Servers and deploys' --color sky",
+    guidance:
+      "A name the Workspace already has (in any case) answers with that label instead of a second one. Colors: gray|brand|error|warning|success|slate|sky|blue|indigo|purple|pink|orange.",
+  },
+  "label rename": {
+    syntax: "coforge label rename <name> --to <new name> [--json]",
+    example: "coforge label rename Bug --to Defect",
+    guidance: "A Workspace owner or admin only; every task carrying the label shows the new name.",
+  },
+  "label update": {
+    syntax: "coforge label update <name> --color <color> [--json]",
+    example: "coforge label update Bug --color error",
+    guidance:
+      "A Workspace owner or admin only. Colors: gray|brand|error|warning|success|slate|sky|blue|indigo|purple|pink|orange.",
+  },
+  "label delete": {
+    syntax: "coforge label delete <name> [--json]",
+    example: "coforge label delete Old",
+    guidance:
+      "A Workspace owner or admin only. Archives the label: tasks no longer show it and it cannot be attached; `label restore` brings it back.",
+  },
+  "label restore": {
+    syntax: "coforge label restore <name> [--json]",
+    example: "coforge label restore Old",
+    guidance: "A Workspace owner or admin only.",
   },
   "label list": {
     syntax: "coforge label list [--json]",

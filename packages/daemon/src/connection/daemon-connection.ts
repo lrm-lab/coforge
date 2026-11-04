@@ -56,6 +56,7 @@ import type {
   AgentThreadListResponse,
   AgentMentionDeliveryRequest,
   AgentLabelListResponse,
+  AgentLabelWriteRequest,
   AgentSendReconciliationResponse,
 } from "@lrm/coforge-sdk/agent";
 import {
@@ -189,7 +190,12 @@ import {
   decodeAppRegistrationNotice,
   type AppRegistrationNotice,
 } from "@lrm/coforge-sdk/internal/app-registration-notice";
-import { parseAgentApiKey, parseAgentLaunchConfig } from "./agent-launch-response";
+import {
+  requestAgentApiKey,
+  requestAgentLaunchConfig,
+  revokeAgentApiKey,
+  type AgentApiKeyEndpoint,
+} from "./agent-api-key-requests";
 import { controlPayloadShape } from "./control-payload";
 
 import { DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS } from "./shutdown-notice-timeout";
@@ -205,10 +211,10 @@ import {
   adaptAgentSearchResponse,
   adaptAgentSendResponse,
 } from "./agent-message-adapters";
-import { requestAgentConfig } from "./agent-config-request";
 import {
   agentApp,
   agentArtifact,
+  agentLabel,
   agentAttachment,
   agentAttachmentUpload,
   agentAttachmentUploadSessionCancel,
@@ -1315,6 +1321,10 @@ export class DaemonConnection
     return agentArtifact(this.#forwardPorts(), request, agentApiKey);
   }
 
+  agentLabel(request: AgentLabelWriteRequest, agentApiKey: string): Promise<Response> {
+    return agentLabel(this.#forwardPorts(), request, agentApiKey);
+  }
+
   agentApp(request: AgentAppRequest, agentApiKey: string): Promise<Response> {
     return agentApp(this.#forwardPorts(), request, agentApiKey);
   }
@@ -1326,42 +1336,25 @@ export class DaemonConnection
     return agentTaskConversation(this.#forwardPorts(), request, agentApiKey);
   }
 
-  /** One request against the Agent API key endpoint; `what` names the caller in errors. */
-  #agentApiKeyRequest(what: string, method: "POST" | "DELETE", body: unknown) {
-    return requestAgentConfig({
-      url: () => serverEndpoint(this.#serverHttpUrl, what, "/api/agent-api-keys"),
-      what,
-      method,
-      token: this.#token,
-      body: JSON.stringify(body),
-      // Revoking is not retried: one request per key, exactly when its Agent is gone.
-      ...(method === "DELETE" ? { retryDelaysMs: [] } : {}),
-    });
-  }
-
-  async requestAgentApiKey(input: { agentId: string; workspaceId: string }): Promise<string> {
-    const value = (await (
-      await this.#agentApiKeyRequest("Agent API key", "POST", input)
-    ).json()) as {
-      apiKey?: unknown;
+  #agentApiKeyEndpoint(): AgentApiKeyEndpoint {
+    return {
+      url: (what) => serverEndpoint(this.#serverHttpUrl, what, "/api/agent-api-keys"),
+      token: () => this.#token,
     };
-    return parseAgentApiKey(value.apiKey);
   }
 
-  async requestAgentLaunchConfig(input: {
-    agentId: string;
-    workspaceId: string;
-    controlEpoch?: number;
-    requestId?: string;
-    launchId?: string;
-  }): Promise<AgentLaunchConfig> {
-    return parseAgentLaunchConfig(
-      await (await this.#agentApiKeyRequest("Agent launch config", "POST", input)).json(),
-    );
+  requestAgentApiKey(input: { agentId: string; workspaceId: string }): Promise<string> {
+    return requestAgentApiKey(this.#agentApiKeyEndpoint(), input);
   }
 
-  async revokeAgentApiKey(agentApiKey: string): Promise<void> {
-    await this.#agentApiKeyRequest("Agent API key revoke", "DELETE", { apiKey: agentApiKey });
+  requestAgentLaunchConfig(
+    input: Parameters<typeof requestAgentLaunchConfig>[1],
+  ): Promise<AgentLaunchConfig> {
+    return requestAgentLaunchConfig(this.#agentApiKeyEndpoint(), input);
+  }
+
+  revokeAgentApiKey(agentApiKey: string): Promise<void> {
+    return revokeAgentApiKey(this.#agentApiKeyEndpoint(), agentApiKey);
   }
 
   /**

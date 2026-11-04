@@ -17,6 +17,12 @@ import {
   validateLabelOrGroupName,
   type LabelGroupRow,
 } from "./label-groups.server";
+import {
+  assertLabelManager,
+  assertLabelMember,
+  labelCreatorUserId,
+  type LabelActor,
+} from "./label-actor.server";
 
 /**
  * Workspace task labels: the rows, their names and colors, and the task↔label rows a Task write
@@ -356,13 +362,13 @@ export class Labels {
     });
   }
 
-  /** Any member creates a label; a name that already exists returns that label. */
+  /** Any member or Agent creates a label; a name that already exists returns that label. */
   async create(
     workspaceId: string,
-    userId: string,
+    actor: LabelActor,
     input: { name: string; color?: string; description?: string; group?: string },
   ): Promise<LabelRow> {
-    await requireWorkspaceMember(this.db, workspaceId, userId);
+    await assertLabelMember(this.db, workspaceId, actor);
     const name = validateLabelOrGroupName(input.name);
     const color = validateLabelColor(input.color ?? "gray");
     const nameKey = labelNameKey(name);
@@ -382,7 +388,7 @@ export class Labels {
           color,
           description: input.description?.trim() || null,
           groupId: group?.id,
-          createdByUserId: userId,
+          createdByUserId: labelCreatorUserId(actor),
         },
         select: LABEL_SELECT,
       });
@@ -395,10 +401,11 @@ export class Labels {
     }
   }
 
-  /** An owner or admin renames, recolors, describes, groups, archives or unarchives a label. */
+  /** An owner or admin (person or Agent) renames, recolors, describes, groups, archives or
+   * unarchives a label. */
   async update(
     workspaceId: string,
-    userId: string,
+    actor: LabelActor,
     id: string,
     input: {
       name?: string;
@@ -408,7 +415,7 @@ export class Labels {
       archived?: boolean;
     },
   ): Promise<LabelRow> {
-    assertCanManageWorkspaceSettings(await workspaceMemberRole(this.db, workspaceId, userId));
+    await assertLabelManager(this.db, workspaceId, actor);
     const label = await this.db.label.findFirst({
       where: { id, workspaceId },
       select: LABEL_SELECT,

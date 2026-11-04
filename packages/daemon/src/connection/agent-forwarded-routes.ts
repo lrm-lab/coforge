@@ -3,6 +3,7 @@ import { taskConversationHttpRequest } from "@lrm/coforge-sdk/agent";
 import type {
   AgentAppRequest,
   AgentArtifactRequest,
+  AgentLabelWriteRequest,
   AgentTaskConversationRequest,
 } from "@lrm/coforge-sdk/agent";
 import { agentAppCloudRequest } from "./agent-app-cloud-request";
@@ -161,6 +162,21 @@ export function agentTaskConversation(
 }
 
 /** `coforge artifact create|read|push|history|revert`: forwarded as it is (task #385). */
+/** `coforge label create|rename|update|delete|restore` (task #508), the cloud's answer as it came. */
+export function agentLabel(
+  ports: ForwardPorts,
+  request: AgentLabelWriteRequest,
+  agentApiKey: string,
+): Promise<Response> {
+  const route = agentApiRoutes.cloud.labelWrite;
+  return forwardAgentRequest(
+    ports,
+    `Agent label ${request.operation}`,
+    { method: route.method, path: route.path, body: JSON.stringify(request) },
+    agentApiKey,
+  );
+}
+
 export function agentArtifact(
   ports: ForwardPorts,
   request: AgentArtifactRequest,

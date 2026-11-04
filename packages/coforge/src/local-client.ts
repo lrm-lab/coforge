@@ -42,7 +42,6 @@ import {
   type AgentManualSearchResponse,
   type AgentVersionResponse,
   type AgentAttachmentCommentsRequest,
-  type AgentLabelListResponse,
 } from "@lrm/coforge-sdk/agent";
 import { CliError, MANUAL_NOT_FOUND_NEXT_ACTION } from "./cli-error";
 import type { MessageSearchOptions } from "./message-search-args";
@@ -64,7 +63,7 @@ import { inboxCheckRequest, inboxListRequest } from "./inbox-request";
 import { mentionActionRequest, mentionDeliveryRequest } from "./mention-request";
 import { githubCommitTrailersRequest } from "./github-credential";
 import { taskConversationRequest } from "./task-conversation-request";
-import { labelListRequest } from "./label-request";
+import { labelRequests } from "./label-request";
 import { profileRequests } from "./profile-request";
 import { readProxyErrorBody } from "./proxy-request";
 
@@ -294,8 +293,7 @@ export function connectLocal(
     computerUpdateNotice: (): Promise<{ ok: true; notice: string | null }> =>
       computerUpdateNoticeRequest(proxyEndpoint, context, proxyUrl),
     ...profileRequests(proxyEndpoint, context, proxyUrl),
-    labelList: (): Promise<AgentLabelListResponse> =>
-      labelListRequest(proxyEndpoint, context, proxyUrl),
+    ...labelRequests(proxyEndpoint, context, proxyUrl),
     ...appConfigRequests(proxyEndpoint, context, proxyUrl),
     threadList: (): Promise<AgentThreadListResponse> =>
       envelopeRequest(
