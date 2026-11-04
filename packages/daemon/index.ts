@@ -277,6 +277,7 @@ export async function runDaemon(args: string[], computerVersion?: string): Promi
           githubCredential: async (...args) => agentApi().githubCredential(...args),
           githubCommitTrailers: async (...args) => agentApi().githubCommitTrailers(...args),
           version: async (...args) => requireRuntime().version(...args),
+          computerUpdateNotice: async (...args) => requireRuntime().computerUpdateNotice(...args),
           ...workspaceRuntime(agentApi),
           ...appRuntime(agentApi),
           agentArtifact: async (...args) => agentApi().agentArtifact(...args),

@@ -87,7 +87,15 @@ import {
 import { DaemonConnectionRefusedError } from "./daemon-connection-refused-error";
 import { DaemonConnectionStoppedError } from "./daemon-connection-stopped-error";
 import { HELD_NOTICE_CAP, HeldPublications } from "./held-publications";
+import { InboundQuietness } from "./connection-liveness";
 import { encodeDaemonConnectionStatus } from "./connection-status-payload";
+import {
+  sendDaemonReady,
+  sendCodeAgentsUpdate,
+  sendRuntimeAuthLogin,
+  sendRuntimeAuthLogout,
+  sendRuntimeAuthStatus,
+} from "./daemon-ready-send";
 import { AgentObservationPublisher } from "./agent-observation-publisher";
 import {
   daemonConnectRejectionReason,
@@ -191,7 +199,7 @@ import {
 } from "@lrm/coforge-sdk/internal/app-registration-notice";
 import { parseAgentApiKey, parseAgentLaunchConfig } from "./agent-launch-response";
 import { controlPayloadShape } from "./control-payload";
-import { connectionLiveness, INBOUND_STALLED_MS } from "./connection-liveness";
+
 import { DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS } from "./shutdown-notice-timeout";
 import { reportAgentSessionWithRetry } from "./agent-session-report";
 import { getLogger } from "@logtape/logtape";
@@ -303,6 +311,8 @@ export class DaemonConnection
   );
   readonly #notices = new DaemonNoticePublications((method, bytes) => this.#rpc(method, bytes));
   readonly #reconnect = new ListenerSlot<() => void>();
+  readonly #inboundQuiet = new InboundQuietness(() => this.#nowMs());
+  readonly #latestComputerVersion = new ListenerSlot<(version: string) => void>();
   readonly #connectionRefused = new ListenerSlot<(reason: DaemonConnectRejectionReason) => void>();
   /** Set only while `start` waits for the first connection; rejecting it ends that `start`. */
   #failPendingStart: ((error: Error) => void) | undefined;
@@ -357,10 +367,8 @@ export class DaemonConnection
   /** When this connection last carried inbound traffic, by the connection's own clock. Only a
    * publication on the Daemon's channel or an answered status RPC sets it; an open socket does
    * not, which is the whole point. Undefined until the connection first reports connected. */
-  #lastInboundAtMs: number | undefined;
   /** Same log suppression as `#loggedUnknownSessionInvalidateMethod`, but per quiet stretch
    * rather than per connection: cleared the moment anything arrives. */
-  #loggedInboundQuiet = false;
   #statusRpcQueue = Promise.resolve();
 
   constructor(
@@ -397,7 +405,7 @@ export class DaemonConnection
       if (client !== this.#client || channel !== daemonChannel) return;
       // Before any decoding: a frame this Daemon cannot act on still proves the link carries
       // traffic, and the liveness window must not mistake an undecodable frame for silence.
-      this.#markInbound();
+      this.#inboundQuiet.markInbound();
       this.#handleAgentPublication(data, config);
     });
     // centrifuge-js emits `disconnected` only once it has stopped reconnecting; while it retries
@@ -437,7 +445,7 @@ export class DaemonConnection
         const reconnect = this.#hasConnected;
         this.#connected = true;
         this.#hasConnected = true;
-        this.#markInbound();
+        this.#inboundQuiet.markInbound();
         logger.info("Daemon cloud connection established", {
           event: "daemon_connection:connected",
           ...scope,
@@ -637,6 +645,10 @@ export class DaemonConnection
     return this.#reconnect.set(callback);
   }
 
+  onLatestComputerVersion(callback: (version: string) => void): () => void {
+    return this.#latestComputerVersion.set(callback);
+  }
+
   onConnectionRefused(callback: (reason: DaemonConnectRejectionReason) => void): () => void {
     return this.#connectionRefused.set(callback);
   }
@@ -801,13 +813,13 @@ export class DaemonConnection
     const refresh = () => {
       const client = this.#client;
       if (!this.#connected || !client) return;
-      this.#checkInboundLiveness(client, config);
+      this.#inboundQuiet.check(client, config);
       void client
         .rpc(DAEMON_CONNECTION_STATUS_METHOD, encodeDaemonConnectionStatus(config))
         .then(() => {
           // An answered round trip is the only inbound traffic a Workspace with nothing to say
           // produces, so it is what keeps a legitimately quiet connection alive.
-          if (client === this.#client) this.#markInbound();
+          if (client === this.#client) this.#inboundQuiet.markInbound();
         })
         .catch(() => {});
     };
@@ -821,49 +833,6 @@ export class DaemonConnection
 
   #nowMs(): number {
     return this.timing.now ? this.timing.now() : Date.now();
-  }
-
-  #markInbound(): void {
-    this.#lastInboundAtMs = this.#nowMs();
-    this.#loggedInboundQuiet = false;
-  }
-
-  /**
-   * Decides, once per status refresh, whether this connection is still worth believing.
-   *
-   * A socket that stays open is not evidence that anything reaches this Daemon: the incident
-   * this answers kept its socket and its subscription while every control frame it delivered was
-   * dropped as undecodable, and the Agent behind it stayed silent until a person restarted the
-   * Computer. Rebuilding the connection is the one recovery that does not need that person.
-   */
-  #checkInboundLiveness(client: CentrifugeWorkspaceClient, config: DaemonConnectionConfig): void {
-    if (this.#lastInboundAtMs === undefined) return;
-    const ageMs = this.#nowMs() - this.#lastInboundAtMs;
-    const liveness = connectionLiveness(ageMs);
-    if (liveness === "carrying") return;
-    const scope = { workspace_id: config.workspaceId, computer_id: config.computerId };
-    if (liveness === "quiet") {
-      if (this.#loggedInboundQuiet) return;
-      this.#loggedInboundQuiet = true;
-      logger.info("Daemon cloud connection has carried nothing recently", {
-        event: "daemon_connection:inbound_quiet",
-        ...scope,
-        last_inbound_age_ms: ageMs,
-        rebuild_after_ms: INBOUND_STALLED_MS,
-      });
-      return;
-    }
-    logger.warning("Daemon cloud connection carried nothing; rebuilding it", {
-      event: "daemon_connection:inbound_stalled",
-      ...scope,
-      last_inbound_age_ms: ageMs,
-      outcome: "reconnecting",
-    });
-    // Counts as fresh traffic so a connection that takes a while to come back is rebuilt once
-    // per window rather than on every refresh while it reconnects.
-    this.#markInbound();
-    client.disconnect();
-    client.connect();
   }
 
   /** Refuses an Agent request while this connection is not up: each one needs the server. */
@@ -1718,23 +1687,20 @@ export class DaemonConnection
     firstReady?.reject(error);
   }
 
-  async updateCodeAgents(request: DaemonRuntimeCodeAgentsUpdateRequest): Promise<void> {
-    await this.#rpc(
-      DAEMON_RUNTIME_CODE_AGENTS_UPDATE_METHOD,
-      encodeDaemonRuntimeCodeAgentsUpdateRequest(request),
-    );
+  updateCodeAgents(request: DaemonRuntimeCodeAgentsUpdateRequest): Promise<void> {
+    return sendCodeAgentsUpdate((m, d) => this.#rpc(m, d), request);
   }
 
-  async reportRuntimeAuthLogin(report: RuntimeAuthLoginReport): Promise<void> {
-    await this.#rpc(RUNTIME_AUTH_LOGIN_REPORT_METHOD, encodeRuntimeAuthLoginReport(report));
+  reportRuntimeAuthLogin(report: RuntimeAuthLoginReport): Promise<void> {
+    return sendRuntimeAuthLogin((m, d) => this.#rpc(m, d), report);
   }
 
-  async reportRuntimeAuthLogout(report: RuntimeAuthLogoutReport): Promise<void> {
-    await this.#rpc(RUNTIME_AUTH_LOGOUT_REPORT_METHOD, encodeRuntimeAuthLogoutReport(report));
+  reportRuntimeAuthLogout(report: RuntimeAuthLogoutReport): Promise<void> {
+    return sendRuntimeAuthLogout((m, d) => this.#rpc(m, d), report);
   }
 
-  async reportRuntimeAuthStatus(report: RuntimeAuthStatusReport): Promise<void> {
-    await this.#rpc(RUNTIME_AUTH_STATUS_REPORT_METHOD, encodeRuntimeAuthStatusReport(report));
+  reportRuntimeAuthStatus(report: RuntimeAuthStatusReport): Promise<void> {
+    return sendRuntimeAuthStatus((m, d) => this.#rpc(m, d), report);
   }
 
   sendMachineDiskStatus(report: MachineStatusReport): Promise<void> {
@@ -1755,13 +1721,6 @@ export class DaemonConnection
       },
       report,
     );
-  }
-
-  async #sendReady(
-    client: CentrifugeWorkspaceClient,
-    request: DaemonRuntimeReadyRequest,
-  ): Promise<void> {
-    await client.rpc(DAEMON_RUNTIME_READY_METHOD, encodeDaemonRuntimeReadyRequest(request));
   }
 
   #startReadyRecovery(
@@ -1788,7 +1747,9 @@ export class DaemonConnection
       computer_id: request.computerId,
     };
     try {
-      await this.#sendReady(client, request);
+      await sendDaemonReady(client, request, (version) =>
+        this.#latestComputerVersion.current?.(version),
+      );
     } catch (error) {
       if (!recovering()) return;
       // Doubles per failed attempt so an outage is not hammered once a second per daemon.

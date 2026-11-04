@@ -126,6 +126,14 @@ export type AgentProxyRuntime = {
     request: Record<string, never>,
     agentApiKey: string,
   ): Promise<AgentVersionResponse>;
+
+  /** The Computer-update notice a CLI appends to its output, local only like `version`: the
+   * daemon's own deduped line for a newer release, or null. */
+  computerUpdateNotice?(
+    context: string,
+    request: Record<string, never>,
+    agentApiKey: string,
+  ): Promise<{ ok: true; notice: string | null }>;
   userInfo?(
     context: string,
     request: AgentUserInfoRequest,

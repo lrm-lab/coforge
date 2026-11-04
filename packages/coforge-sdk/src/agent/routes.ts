@@ -163,6 +163,7 @@ const ATTACHMENT_UPLOAD_SESSION_ROUTES = {
 export const agentApiRoutes = {
   proxy: {
     workspace: { method: "GET", path: "/api/agent/v1/workspace" },
+    computerUpdateNotice: { method: "GET", path: "/api/agent/v1/computer-update-notice" },
     manual: {
       get: { method: "GET", path: "/api/agent/v1/manual" },
       search: { method: "GET", path: "/api/agent/v1/manual/search" },

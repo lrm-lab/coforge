@@ -180,6 +180,9 @@ export interface DaemonConnectionClient extends AgentApiConnectionClient {
   /** Why the latest connect attempt failed, while the connection is not up. */
   connectFailure?(): string | undefined;
   onReconnect?(callback: () => void): () => void;
+  /** The release feed's newest Computer version as a ready reply named it; nothing when the
+   * server is older or the feed read failed. */
+  onLatestComputerVersion?(callback: (version: string) => void): () => void;
   /** The cloud refused an already-running connection for good; the connection no longer
    * reconnects. A refusal while `start` is connecting rejects `start` instead. */
   onConnectionRefused?(callback: (reason: DaemonConnectRejectionReason) => void): () => void;

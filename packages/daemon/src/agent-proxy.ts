@@ -119,6 +119,14 @@ const ROUTE_TABLE: readonly ProxyRoute[] = [
     parse: () => ({}),
   }),
   defineRoute({
+    family: "agent-api/computer-update-notice",
+    method: LOCAL_PROXY_ROUTES.computerUpdateNotice.method,
+    match: exactPath(LOCAL_PROXY_ROUTES.computerUpdateNotice.path),
+    body: "none",
+    handler: "computerUpdateNotice",
+    parse: () => ({}),
+  }),
+  defineRoute({
     family: "agent-api/user-info",
     method: LOCAL_PROXY_ROUTES.users.method,
     match: pathParam(LOCAL_USER_ROUTE_PREFIX),

@@ -26,3 +26,60 @@ export function connectionLiveness(lastInboundAgeMs: number): ConnectionLiveness
   if (lastInboundAgeMs >= INBOUND_QUIET_MS) return "quiet";
   return "carrying";
 }
+
+import type { CentrifugeWorkspaceClient } from "./centrifuge-workspace-client";
+import type { DaemonConnectionConfig } from "./daemon-connection-client";
+import { getLogger } from "@logtape/logtape";
+
+const livenessLogger = getLogger(["coforge", "daemon", "connection"]);
+
+/**
+ * Whether the connection still looks fed. A socket that stays open is not evidence anything
+ * reaches this Daemon: the incident this answers kept its socket and its subscription while every
+ * control frame it delivered was dropped as undecodable, and the Agent behind it stayed silent
+ * until a person restarted the Computer. Rebuilding the connection is the one recovery that does
+ * not need that person.
+ */
+export class InboundQuietness {
+  #lastInboundAtMs: number | undefined;
+  #loggedInboundQuiet = false;
+
+  constructor(private readonly nowMs: () => number = Date.now) {}
+
+  /** Fresh traffic arrived; the quiet log may say so again next window. */
+  markInbound(): void {
+    this.#lastInboundAtMs = this.nowMs();
+    this.#loggedInboundQuiet = false;
+  }
+
+  /** Once per status refresh: quiet logs once, stalled rebuilds the connection. */
+  check(client: CentrifugeWorkspaceClient, config: DaemonConnectionConfig): void {
+    if (this.#lastInboundAtMs === undefined) return;
+    const ageMs = this.nowMs() - this.#lastInboundAtMs;
+    const liveness = connectionLiveness(ageMs);
+    if (liveness === "carrying") return;
+    const scope = { workspace_id: config.workspaceId, computer_id: config.computerId };
+    if (liveness === "quiet") {
+      if (this.#loggedInboundQuiet) return;
+      this.#loggedInboundQuiet = true;
+      livenessLogger.info("Daemon cloud connection has carried nothing recently", {
+        event: "daemon_connection:inbound_quiet",
+        ...scope,
+        last_inbound_age_ms: ageMs,
+        rebuild_after_ms: INBOUND_STALLED_MS,
+      });
+      return;
+    }
+    livenessLogger.warning("Daemon cloud connection carried nothing; rebuilding it", {
+      event: "daemon_connection:inbound_stalled",
+      ...scope,
+      last_inbound_age_ms: ageMs,
+      outcome: "reconnecting",
+    });
+    // Counts as fresh traffic so a connection that takes a while to come back is rebuilt once
+    // per window rather than on every refresh while it reconnects.
+    this.markInbound();
+    client.disconnect();
+    client.connect();
+  }
+}

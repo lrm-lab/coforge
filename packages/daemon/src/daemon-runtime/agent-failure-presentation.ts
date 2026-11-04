@@ -2,6 +2,8 @@ import { launchFailureActivity } from "#src/agent-runtime/launch-failure";
 import { AgentProcessCleanupError } from "@lrm/coforge-anvil";
 import { runtimeDisplayName } from "#src/daemon-runtime/session-invalidate-activity";
 import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
+import type { agentActivityDrafts } from "./agent-activity-drafts";
+import type { ActivityDraft } from "./agent-activity-publisher";
 
 /** The failure text every deliberate teardown presents instead of a provider error. */
 export const CLEANUP_UNCONFIRMED =
@@ -35,4 +37,17 @@ export function launchFailureDraft(
 export function stopFailureMessage(unconfirmed: boolean): string {
   if (unconfirmed) return CLEANUP_UNCONFIRMED;
   return "Agent runtime could not be stopped.";
+}
+
+/** The error Activity for a launch that did not start: its typed reason rides `runtimeError`
+ * (class `LauncherError`) beside the sentence that explains it. */
+export function buildLaunchFailureActivity(
+  agentId: string,
+  provider: Parameters<typeof launchFailureDraft>[0],
+  error: unknown,
+  drafts: ReturnType<typeof agentActivityDrafts>,
+  unconfirmedCleanup: (agentId: string, error: unknown) => boolean,
+): ActivityDraft {
+  const draft = launchFailureDraft(provider, error, unconfirmedCleanup(agentId, error));
+  return drafts.runtimeError(agentId, draft.detail, draft.runtimeError);
 }

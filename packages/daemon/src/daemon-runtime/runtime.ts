@@ -51,6 +51,17 @@ import type {
 } from "#src/connection/daemon-connection-client";
 import { DaemonConnectionStoppedError } from "#src/connection/daemon-connection-stopped-error";
 import {
+  disposeLaunchObservations,
+  readyRunningAgentIds,
+  revokeLocalLaunch,
+  runningMentionIdentity,
+} from "#src/daemon-runtime/agent-launch-revocation";
+import { ComputerUpdateNotice } from "#src/daemon-runtime/computer-update-notice";
+import {
+  localComputerUpdateNotice,
+  localVersionResponse,
+} from "#src/daemon-runtime/runtime-local-queries";
+import {
   type DaemonConnectRejectionReason,
   type RunnerHoldReason,
   AGENT_MESSAGE_REJECT_METHOD,
@@ -124,7 +135,11 @@ import { runtimeMachineStatus } from "./machine-status-reporter";
 import { agentActivityDrafts } from "./agent-activity-drafts";
 import { sendAgentStatus, type AgentStatusReportPorts } from "./agent-status-report";
 import { agentIdForContext, contextFor } from "./agent-context";
-import { cleanupUnconfirmed, launchFailureDraft } from "./agent-failure-presentation";
+import {
+  cleanupUnconfirmed,
+  buildLaunchFailureActivity,
+  launchFailureDraft,
+} from "./agent-failure-presentation";
 import { RuntimeRelease, wakeRequest, type WakeRestart } from "./runtime-release";
 import { beginWakeLaunch } from "./wake-launch";
 import { AgentFeatureSync } from "./agent-feature-sync";
@@ -188,6 +203,7 @@ export class DaemonRuntime {
   readonly #agentProcessManager: AgentProcessManager;
   readonly #credentials: DaemonCredentialStore;
   readonly #transportFactory: DaemonConnectionClientFactory;
+  readonly #computerUpdateNotice: ComputerUpdateNotice;
   #transport: DaemonConnectionClient;
   #stopPromise: Promise<void> | undefined;
   #stopping = false;
@@ -522,6 +538,10 @@ export class DaemonRuntime {
   ) {
     const runtime = this;
     this.#consumedSeqs = new AgentConsumedSeqStore(this.stateDirectory);
+    this.#computerUpdateNotice = new ComputerUpdateNotice(
+      this.stateDirectory,
+      this.computerVersion,
+    );
     this.#activityPublisher = new AgentActivityPublisher<ActivityLaunch>({
       currentLaunch: (agentId) => this.#currentActivityLaunches.get(agentId),
       get transport() {
@@ -560,6 +580,9 @@ export class DaemonRuntime {
       this.#runtimeAuth,
     );
     this.#transport = transportFactory.create(connection);
+    this.#transport.onLatestComputerVersion?.((version: string) => {
+      void this.#computerUpdateNotice.observeLatest(version);
+    });
     const messages = composeMessages({
       connection,
       stateDirectory,
@@ -740,7 +763,14 @@ export class DaemonRuntime {
         this.#narrateUnavailable(agentId, launch, activity),
       disposeLaunchObservations: (agentId) => this.#disposeLaunchObservations(agentId),
       revokeLocalLaunch: (agentId, context, proxyToken) =>
-        this.#revokeLocalLaunch(agentId, context, proxyToken),
+        revokeLocalLaunch(
+          this.#agentContexts,
+          this.#agentProxyTokens,
+          this.#agentProxy,
+          agentId,
+          context,
+          proxyToken,
+        ),
       revokeAgentApiKey: (agentId, apiKey) => this.#revokeAgentApiKey(agentId, apiKey),
       launchFailureActivity: (agentId, provider, error) =>
         this.#launchFailureActivity(agentId, provider, error),
@@ -842,7 +872,8 @@ export class DaemonRuntime {
       stops: this.#stopState,
       interruptIfBusy: (agentId, launch) => this.#interruptIfBusy(agentId, launch),
       disposeLaunchObservations: (agentId) => this.#disposeLaunchObservations(agentId),
-      revokeLocalLaunch: (agentId) => this.#revokeLocalLaunch(agentId),
+      revokeLocalLaunch: (agentId) =>
+        revokeLocalLaunch(this.#agentContexts, this.#agentProxyTokens, this.#agentProxy, agentId),
       stopCoordinator: this.#stopCoordinator,
       cleanupUnconfirmed: (agentId, error) => this.#cleanupUnconfirmed(agentId, error),
       messageOperations: this.#messageOperations,
@@ -1027,6 +1058,25 @@ export class DaemonRuntime {
     );
   }
 
+  #messageDeliveryPorts() {
+    return {
+      assertRunning: () => this.#assertRunning(),
+      workspaceId: this.#connection.workspaceId,
+      stops: this.#stopState,
+      runnerHold: this.#runnerHold,
+      runtimeRelease: this.#runtimeRelease,
+      sync: this.#sync,
+      exitedDelivery: this.#exitedDelivery,
+      wakeLaunches: this.#wakeLaunches,
+      agentLaunches: this.#agentLaunches,
+      deliveryQueue: this.#deliveryQueue,
+      launchCustody: this.#launchCustody,
+      inputDrain: this.#inputDrain,
+      agentProcessManager: this.#agentProcessManager,
+      mentionDeliveries: this.#mentionDeliveries,
+    };
+  }
+
   #appInboxSyncPorts() {
     return {
       transport: () => this.#transport,
@@ -1052,25 +1102,6 @@ export class DaemonRuntime {
     };
   }
 
-  #messageDeliveryPorts() {
-    return {
-      assertRunning: () => this.#assertRunning(),
-      workspaceId: this.#connection.workspaceId,
-      stops: this.#stopState,
-      runnerHold: this.#runnerHold,
-      runtimeRelease: this.#runtimeRelease,
-      sync: this.#sync,
-      exitedDelivery: this.#exitedDelivery,
-      wakeLaunches: this.#wakeLaunches,
-      agentLaunches: this.#agentLaunches,
-      deliveryQueue: this.#deliveryQueue,
-      launchCustody: this.#launchCustody,
-      inputDrain: this.#inputDrain,
-      agentProcessManager: this.#agentProcessManager,
-      mentionDeliveries: this.#mentionDeliveries,
-    };
-  }
-
   #env = () => runtimeEnvelope(this.#connection);
 
   /** Tears down a launch whose recovery notice was rejected; returns the error to surface. */
@@ -1092,7 +1123,8 @@ export class DaemonRuntime {
         this.#interruptIfBusy(id, current),
       activityPublisher: this.#activityPublisher,
       disposeLaunchObservations: (id: string) => this.#disposeLaunchObservations(id),
-      revokeLocalLaunch: (id: string) => this.#revokeLocalLaunch(id),
+      revokeLocalLaunch: (id: string) =>
+        revokeLocalLaunch(this.#agentContexts, this.#agentProxyTokens, this.#agentProxy, id),
       offlineResidency: this.#offlineResidency,
       stopCoordinator: this.#stopCoordinator,
       drafts: this.#drafts,
@@ -1223,10 +1255,12 @@ export class DaemonRuntime {
   /** The launch and native session a tracked mention may name: the ones last reported for this
    * Agent, while that launch is the one running. */
   #runningMentionIdentity(agentId: string): RunningMentionIdentity | undefined {
-    if (!this.#agentProcessManager.session(agentId)) return undefined;
-    const reported = this.#reportedSessions.get(agentId);
-    const launch = this.#currentActivityLaunches.get(agentId);
-    return reported && launch?.launchId === reported.launchId ? reported : undefined;
+    return runningMentionIdentity(
+      agentId,
+      this.#agentProcessManager,
+      this.#reportedSessions,
+      this.#currentActivityLaunches,
+    );
   }
 
   /** Sends a session report, and remembers the launch and session it names for tracked
@@ -1261,34 +1295,17 @@ export class DaemonRuntime {
 
   /** Forgets one ended launch's observation state without affecting another Agent. */
   #disposeLaunchObservations(agentId: string): void {
-    this.#currentActivityLaunches.get(agentId)?.stalled?.dispose(agentId);
-    this.#phaseBookkeeping.dispose(agentId);
-    this.#usageReport.forget(agentId);
-    this.#fastModeWarned.delete(agentId);
+    disposeLaunchObservations(
+      agentId,
+      this.#currentActivityLaunches,
+      this.#phaseBookkeeping,
+      this.#usageReport,
+      this.#fastModeWarned,
+    );
   }
 
   #readyRunningAgentIds(): string[] {
-    return this.#agentProcessManager
-      .runningAgentIds()
-      .filter(
-        (agentId) =>
-          !this.#agentLaunches.has(agentId) &&
-          !this.#stopState.stopping(agentId) &&
-          !this.#agentProcessManager.isStopping(agentId),
-      );
-  }
-
-  /** Revokes the Agent's local context and proxy token; defaults to whatever is currently issued. */
-  #revokeLocalLaunch(
-    agentId: string,
-    context = this.#agentContexts.get(agentId),
-    proxyToken = this.#agentProxyTokens.get(agentId),
-  ): void {
-    if (context && this.#agentContexts.get(agentId) === context)
-      this.#agentContexts.delete(agentId);
-    if (proxyToken && this.#agentProxyTokens.get(agentId) === proxyToken)
-      this.#agentProxyTokens.delete(agentId);
-    if (proxyToken) this.#agentProxy?.revoke(proxyToken);
+    return readyRunningAgentIds(this.#agentProcessManager, this.#agentLaunches, this.#stopState);
   }
 
   #activity(
@@ -1378,15 +1395,15 @@ export class DaemonRuntime {
     return cleanupUnconfirmed(agentId, error, (id) => this.#agentProcessManager.isStopping(id));
   }
 
-  /** The error Activity for a launch that did not start: its typed reason rides `runtimeError`
-   * (class `LauncherError`) beside the sentence that explains it. */
+  /** The error Activity for a launch that did not start; `agent-failure-presentation` builds it. */
   #launchFailureActivity(
     agentId: string,
     provider: RuntimeProvider,
     error: unknown,
   ): ActivityDraft {
-    const draft = launchFailureDraft(provider, error, this.#cleanupUnconfirmed(agentId, error));
-    return this.#drafts.runtimeError(agentId, draft.detail, draft.runtimeError);
+    return buildLaunchFailureActivity(agentId, provider, error, this.#drafts, (id, err) =>
+      this.#cleanupUnconfirmed(id, err),
+    );
   }
 
   async #revokeAgentApiKey(agentId: string, agentApiKey: string | undefined): Promise<void> {
@@ -1401,26 +1418,27 @@ export class DaemonRuntime {
     return this.#agentOperations.agentMessage(context, request, agentApiKey);
   }
 
-  /**
-   * `coforge version`'s local-only query: answered entirely from this already-running
-   * Workspace child, never forwarded to Web/backend. `computerVersion` is the Computer executable
-   * version this Daemon was launched with (`runDaemon(args, computerVersion)`, `packages/computer/
-   * src/main.ts`'s `__workspace-daemon` dispatch); it bundles both the Computer and Daemon package
-   * roles into one executable, so this is not a second installation.
-   */
+  /** `coforge version`'s local-only query; the answer body lives in `runtime-local-queries`. */
   async version(
     context: string,
     _request: Record<string, never>,
     agentApiKey: string,
   ): Promise<AgentVersionResponse> {
     this.#authorizedAgent(context, agentApiKey);
-    return {
-      ok: true,
-      daemonVersion: COFORGE_DAEMON_VERSION,
-      ...(this.computerVersion ? { computerVersion: this.computerVersion } : {}),
-      daemonPid: process.pid,
+    return localVersionResponse({
+      computerVersion: this.computerVersion,
       startedAt: this.#startedAt,
-    };
+    });
+  }
+
+  /** The deduped Computer-update notice line for a CLI's output tail; assembled locally. */
+  async computerUpdateNotice(
+    context: string,
+    _request: Record<string, never>,
+    agentApiKey: string,
+  ): Promise<{ ok: true; notice: string | null }> {
+    this.#authorizedAgent(context, agentApiKey);
+    return localComputerUpdateNotice(this.#computerUpdateNotice);
   }
 
   memoryFence(agentId: string): string | undefined {
