@@ -4,6 +4,11 @@ import { isRawHttpPath } from "#src/lib/non-localized-path";
 import { paraglideMiddleware } from "#src/paraglide/server";
 import { startAppNotificationQueueAtServerStartFromEnv } from "#src/server/app-notifications/app-notification-queue.server";
 import { publicOrigin } from "#src/server/http/public-origin.server";
+import {
+  artifactSandboxOrigin,
+  isSandboxRequest,
+} from "#src/server/artifacts/artifact-sandbox-config.server";
+import { serveArtifactSandbox } from "#src/server/artifacts/artifact-sandbox-http.server";
 import { installServerLifecycle } from "#src/server/runtime/server-lifecycle.server";
 import { assertStartupConfig } from "#src/server/startup-config.server";
 import { ensureWorkspaceMemoryLifecycle } from "#src/server/workspace-memory/lifecycle.server";
@@ -63,6 +68,9 @@ function addressedUrl(request: Request): URL {
 
 export default {
   async fetch(request: Request): Promise<Response> {
+    // The web-page sandbox origin (task #490) serves its signed pages and nothing else: none of
+    // the application's pages or APIs ever answer on it.
+    if (isSandboxRequest(request, artifactSandboxOrigin())) return serveArtifactSandbox(request);
     return isNonLocalizedRequest(request)
       ? handler.fetch(request)
       : paraglideMiddleware(request, () => handler.fetch(request), {

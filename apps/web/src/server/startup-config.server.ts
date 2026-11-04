@@ -19,6 +19,10 @@ import {
 import { readPublicImageDeliveryConfig } from "#src/server/files/public-image-delivery.server";
 import { readPublicImageStorageConfig } from "#src/server/files/public-image-storage.server";
 import { readWeeklyReportScheduleTickMs } from "#src/server/records/weekly-report-schedule-tick.server";
+import {
+  readArtifactSandboxConfig,
+  rememberArtifactSandboxConfig,
+} from "#src/server/artifacts/artifact-sandbox-config.server";
 
 /**
  * Deployment configuration that must be valid before the server accepts a single request.
@@ -36,7 +40,9 @@ import { readWeeklyReportScheduleTickMs } from "#src/server/records/weekly-repor
  * usable signing keyset, is a boot failure. Feature flags too: an unset
  * `COFORGE_FEATURE_FLAGS_FILE` leaves every flag off; a set path that is not a valid flag
  * definition file is a boot failure. App webhooks too: an unset `COFORGE_APP_WEBHOOK_KEY` leaves them
- * off; a set key shorter than 32 characters is a boot failure.
+ * off; a set key shorter than 32 characters is a boot failure. The web-page sandbox too: an unset
+ * `COFORGE_ARTIFACT_SANDBOX_ORIGIN` leaves web pages off; a set origin that is not https (or
+ * loopback http), has a path, or is the application's own origin is a boot failure.
  */
 export async function assertStartupConfig(env: NodeJS.ProcessEnv = process.env): Promise<void> {
   const config = await readStartupConfig(env);
@@ -59,7 +65,9 @@ async function readStartupConfig(env: NodeJS.ProcessEnv) {
   const authorizationServer = await readAuthorizationServerConfiguration(env);
   const featureFlags = await readFeatureFlagsConfiguration(env);
   const appWebhook = await readAppWebhookConfiguration(env);
+  const artifactSandbox = readArtifactSandboxConfig(env);
   return {
+    artifactSandbox,
     delivery,
     imageDelivery,
     imageStorage,
@@ -73,6 +81,7 @@ async function readStartupConfig(env: NodeJS.ProcessEnv) {
 async function installStartupConfig(config: Awaited<ReturnType<typeof readStartupConfig>>) {
   rememberFileDeliveryConfig(config.delivery);
   rememberAuthorizationServerConfiguration(config.authorizationServer);
+  rememberArtifactSandboxConfig(config.artifactSandbox);
   rememberAppWebhookKey(config.appWebhook.status === "ready" ? config.appWebhook.key : undefined);
   await installFeatureFlags(config.featureFlags);
 }
@@ -87,5 +96,6 @@ function startupConfigSummary(config: Awaited<ReturnType<typeof readStartupConfi
     authorization_server: config.authorizationServer.status === "ready" ? "configured" : "disabled",
     feature_flags: config.featureFlags.status,
     app_webhook: config.appWebhook.status === "ready" ? "configured" : "disabled",
+    artifact_sandbox: config.artifactSandbox ? "configured" : "disabled",
   };
 }
