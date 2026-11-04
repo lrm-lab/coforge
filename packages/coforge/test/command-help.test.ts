@@ -102,3 +102,23 @@ test("task create --help explains atomic assignment and how to undo an accidenta
   // Guidance sits between the form and the example.
   expect(help.indexOf("Atomic assignment:")).toBeLessThan(help.indexOf("Example:"));
 });
+
+test("coforge --help lists the top-level commands, and a group --help lists its commands", async () => {
+  const top = await run(["--help"], transport);
+  expect(top).toContain("Commands:");
+  expect(top).toContain("  message");
+  expect(top).toContain("  task");
+  expect(top).toContain("  app");
+  expect(top).toContain("  whoami");
+
+  const task = await run(["task", "--help"], transport);
+  expect(task).toContain("coforge task");
+  expect(task).toContain("Commands:");
+  expect(task).toContain("  view");
+  expect(task).toContain("  claim");
+
+  const app = commandHelp(["app"]);
+  expect(app).toContain("  update");
+  expect(app).toContain("  marketplace");
+});
+

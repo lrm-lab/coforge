@@ -1,5 +1,6 @@
 import { CliError } from "../cli-error";
 import type { HelpEntry } from "./entry";
+import { appHelp } from "./app";
 import { artifactHelp } from "./artifact";
 import { taskHelp } from "./task";
 
@@ -10,6 +11,7 @@ import { taskHelp } from "./task";
 const COMMANDS: Readonly<Record<string, HelpEntry>> = {
   ...taskHelp,
   ...artifactHelp,
+  ...appHelp,
   message: {
     syntax: "coforge message check|read|search|send|resolve|react ...",
     example: "coforge message check --target '#general'",
@@ -225,20 +227,6 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
   "action prepare": {
     syntax: "coforge action prepare --target <target>",
   },
-  app: {
-    syntax: "coforge app list|config|marketplace|token|invoke ...",
-    example: "coforge app list",
-  },
-  "app config": {
-    syntax:
-      "coforge app config --app <app-id> [--set <key>=<value>]... [--unset <key>]... [--json]",
-  },
-  "app list": {
-    syntax: "coforge app list [--all] [--json]",
-  },
-  "app marketplace": {
-    syntax: "coforge app marketplace [<query>] [--limit <1-50>] [--json]",
-  },
   whoami: {
     syntax: "coforge whoami [--json]",
   },
@@ -305,21 +293,12 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
   "mention delivery": {
     syntax: "coforge mention delivery --message <message-id> [--json]",
   },
-  "app token": {
+  "weekly-report-key-points": {
     syntax:
-      "coforge app token --app <key> [--target <target>] [--timeout <seconds>] --exec <program> [-- <args>...]",
+      "coforge weekly-report-key-points <subcommand> --run-id <uuid> --idempotency-key <uuid>",
   },
-  "app invoke": {
-    syntax: "coforge app invoke <app> <action> [--input <json>] [--json]",
-  },
-  "app prepare": {
-    syntax: "coforge app prepare --target <target>",
-  },
-  "app status": {
-    syntax: "coforge app status --app <key> [--json]",
-  },
-  "app rotate-secret": {
-    syntax: "coforge app rotate-secret --app <key> [--json]",
+  "weekly-report-memory": {
+    syntax: "coforge weekly-report-memory submit",
   },
   "weekly-report-collect": {
     syntax:
@@ -359,17 +338,42 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
   },
 };
 
+/** The command names directly under `prefix` ("" = top level), derived from the COMMANDS keys. */
+function childrenOf(prefix: string): string[] {
+  const names = new Set<string>();
+  for (const key of Object.keys(COMMANDS)) {
+    const rest =
+      prefix === ""
+        ? key
+        : key.startsWith(`${prefix} `)
+          ? key.slice(prefix.length + 1)
+          : "";
+    if (rest) names.add(rest.split(" ")[0]!);
+  }
+  return [...names];
+}
+
 function renderHelp(name: string, entry: HelpEntry): string {
   const lines = [`coforge ${name}`, "", `  ${entry.syntax}`];
   if (entry.flags?.length) lines.push("", ...entry.flags.map((flag) => `  ${flag}`));
   if (entry.guidance) lines.push("", entry.guidance);
+  const children = childrenOf(name);
+  if (children.length) lines.push("", "Commands:", ...children.map((c) => `  ${c}`));
   if (entry.example) lines.push("", `Example: ${entry.example}`);
   return lines.join("\n");
 }
 
-/** The help for the longest command named in `argv`, or undefined when it names none. */
+/** The help for the longest command named in `argv`, or undefined when it names none. An empty
+ * `argv` lists the top-level commands (`coforge --help`). */
 export function commandHelp(argv: readonly string[]): string | undefined {
   const words = argv.filter((arg) => !arg.startsWith("-"));
+  if (words.length === 0)
+    return [
+      "coforge <command>",
+      "",
+      "Commands:",
+      ...childrenOf("").map((name) => `  ${name}`),
+    ].join("\n");
   for (let length = Math.min(words.length, 2); length > 0; length--) {
     const name = words.slice(0, length).join(" ");
     const entry = COMMANDS[name];
@@ -377,6 +381,7 @@ export function commandHelp(argv: readonly string[]): string | undefined {
   }
   return undefined;
 }
+
 
 /** An argument the command cannot accept: what was wrong, and the help that lists the accepted
  * form — never a bare `Usage:` line. */
