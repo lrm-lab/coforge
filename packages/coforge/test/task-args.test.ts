@@ -77,6 +77,19 @@ test("create and amend take --blocked-by and --parent; list takes --ready", () =
   expect(() => parseTaskArgs(["list", ...target, "--ready", "--status", "todo"])).toThrow();
 });
 
+// Task #506: `task list --status` takes several statuses, comma-separated, as the board does.
+test("task list --status takes one status, all, or several comma-separated", () => {
+  const target = ["--target", "#general"];
+  expect(parseTaskArgs(["list", ...target, "--status", "todo"])).toMatchObject({
+    task: { status: "todo" },
+  });
+  const several = parseTaskArgs(["list", ...target, "--status", "in_progress,todo"]);
+  expect(several).toMatchObject({ task: { statuses: ["todo", "in_progress"] } });
+  expect((several as { task: { status?: unknown } }).task.status).toBeUndefined();
+  for (const raw of ["todo,bogus", "all,todo", "todo,", ",todo", "todo,todo"])
+    expect(() => parseTaskArgs(["list", ...target, "--status", raw])).toThrow();
+});
+
 test("create, claim and assign take --anyway to confirm a held review", () => {
   const target = ["--target", "#general"];
   expect(parseTaskArgs(["create", ...target, "--title", "A", "--anyway"])).toMatchObject({

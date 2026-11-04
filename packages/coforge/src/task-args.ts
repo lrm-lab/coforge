@@ -10,6 +10,7 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { CliError } from "#src/cli-error";
 import { unknownCommandError } from "./command-help";
+import { parseTaskListStatus } from "./task-list-status-args";
 import { reviewerIsolationFromEnvironment } from "#src/reviewer-isolation";
 import {
   parseTaskConversationArgs,
@@ -262,7 +263,7 @@ export function parseTaskArgs(
     throw invalidTaskArg(`--peer-kind must be human or agent; got ${peerKind}`);
   if (peerKind !== undefined && !target?.startsWith("@"))
     throw invalidTaskArg("--peer-kind can only be used with a direct @peer target");
-  if (operation === "list") validateTaskListScope(target, mine, one("--status"));
+  if (operation === "list") validateTaskListScope(target, mine);
   if (values.has("--ready") && (mine || one("--status") !== undefined))
     throw invalidTaskArg(
       "--ready lists a conversation's todo tasks; do not combine it with --mine or --status",
@@ -282,7 +283,9 @@ export function parseTaskArgs(
     ...(mine ? { mine: true } : {}),
   };
   if (operation === "list") {
-    task.status = one("--status") as TaskStatus | "all" | undefined;
+    const status = parseTaskListStatus(one("--status"));
+    if ("message" in status) throw invalidTaskArg(status.message);
+    Object.assign(task, status);
     if (values.has("--ready")) task.ready = true;
     const labels = (values.get("--label") ?? []).map((label) => label.trim());
     if (labels.some((label) => !label)) throw invalidTaskArg("--label must name a label");
@@ -503,12 +506,8 @@ function taskReceiptArgs(one: (flag: string) => string | undefined): TaskResourc
   };
 }
 
-const TASK_LIST_STATUSES = ["all", ...TASK_STATUSES] as const;
-
 /** `task list` reads one conversation (`--target`) or this Agent's own Tasks (`--mine`). */
-function validateTaskListScope(target: string | undefined, mine: boolean, status?: string) {
-  if (status !== undefined && !(TASK_LIST_STATUSES as readonly string[]).includes(status))
-    throw invalidTaskArg(`--status must be one of ${TASK_LIST_STATUSES.join("|")}; got ${status}`);
+function validateTaskListScope(target: string | undefined, mine: boolean) {
   if (mine && target) throw invalidTaskArg("--mine cannot be combined with --target");
   if (!mine && !target) throw invalidTaskArg("--target is required (or pass --mine)");
 }

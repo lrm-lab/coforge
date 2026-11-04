@@ -126,6 +126,7 @@ export const taskRequestSchema = z
     alongside: z.boolean().optional(),
     attachmentId: z.uuid().optional(),
     status: z.enum(taskStatuses).optional(),
+    statuses: z.array(z.enum(TASK_STATUSES)).min(1).max(TASK_STATUSES.length).optional(),
     priority: z.enum(TASK_PRIORITIES).optional(),
     labels: z.array(z.string().min(1).max(64)).max(5).optional(),
     removeLabels: z.array(z.string().min(1).max(64)).max(5).optional(),

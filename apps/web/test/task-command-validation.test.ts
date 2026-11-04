@@ -66,6 +66,14 @@ const refused: [string, TaskCommand][] = [
   ],
   ["an unknown status", command({ operation: "list", status: "blocked" as TaskCommand["status"] })],
   ["status all outside list", command({ operation: "update", number: 1, status: "all" })],
+  // Task #506: several statuses are a list's pick only, of known statuses, and not with `status`.
+  ["statuses outside list", command({ operation: "update", number: 1, statuses: ["done"] })],
+  ["an empty statuses pick", command({ operation: "list", statuses: [] })],
+  [
+    "an unknown status among statuses",
+    command({ operation: "list", statuses: ["todo", "blocked" as "todo"] }),
+  ],
+  ["statuses with a status", command({ operation: "list", status: "todo", statuses: ["done"] })],
   ["a zero among numbers", command({ operation: "claim", numbers: [1, 0] })],
   ["a blank message id", command({ operation: "claim", messageIds: ["m-1", " "] })],
   [
@@ -128,6 +136,11 @@ const accepted: [string, TaskPrincipal, TaskCommand][] = [
   ["a person's list", person, command({ operation: "list" })],
   ["a list of every status", person, command({ operation: "list", status: "all" })],
   ["a list of one status", person, command({ operation: "list", status: "in_review" })],
+  [
+    "a list of several statuses",
+    person,
+    command({ operation: "list", statuses: ["todo", "in_progress"] }),
+  ],
   ["a create with one title", person, command({ operation: "create", title: "x".repeat(8_000) })],
   ["a create with titles", person, command({ operation: "create", titles: ["a", "b"] })],
   ["a convert by message id", person, command({ operation: "convert", messageId: "m-1" })],

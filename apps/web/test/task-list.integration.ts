@@ -150,6 +150,17 @@ test("An Agent's own Task list covers its channels and DMs and says what it leav
     const all = await run(asAgent, { operation: "list", mine: true, status: "all" });
     expect(all.tasks.map((task) => task.number)).toContain(finished.number);
     expect(all.tasks).toHaveLength(5);
+    // Task #506: several statuses at once keep exactly those.
+    const picked = await run(asAgent, {
+      operation: "list",
+      mine: true,
+      statuses: ["in_progress", "done"],
+    });
+    expect(new Set(picked.tasks.map((task) => task.status))).toEqual(
+      new Set(["in_progress", "done"]),
+    );
+    expect(picked.tasks.map((task) => task.number)).toContain(finished.number);
+    expect(picked.tasks.map((task) => task.number)).toContain(started.number);
     const done = await run(asAgent, { operation: "list", mine: true, status: "done" });
     expect(done.tasks.map(summary)).toEqual([
       {

@@ -9,7 +9,7 @@ export const taskHelp: Readonly<Record<string, HelpEntry>> = {
   },
   "task list": {
     syntax:
-      "coforge task list (--target <channel> | --mine | --following) [--status all|todo|in_progress|in_review|done|closed] [--ready] [--label <name>]... [--json]",
+      "coforge task list (--target <channel> | --mine | --following) [--status all|todo|in_progress|in_review|done|closed (or several, comma-separated)] [--ready] [--label <name>]... [--json]",
     flags: [
       "--label  only tasks carrying every named label (repeatable)",
       "--ready  todo tasks nobody holds and no open blocker waits on (with --target)",

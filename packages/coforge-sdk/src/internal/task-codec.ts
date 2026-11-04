@@ -141,6 +141,16 @@ export function validateTaskRequest(value: TaskRequest): void {
   )
     throw new Error("invalid Task status");
   if (
+    value.statuses !== undefined &&
+    (value.operation !== "list" ||
+      value.status !== undefined ||
+      !Array.isArray(value.statuses) ||
+      value.statuses.length === 0 ||
+      value.statuses.length > 5 ||
+      !value.statuses.every((status) => statuses.has(status)))
+  )
+    throw new Error("invalid Task statuses");
+  if (
     value.priority !== undefined &&
     (!priorities.has(value.priority) || !["create", "update"].includes(value.operation))
   )

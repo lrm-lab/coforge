@@ -338,6 +338,8 @@ export type TaskCommand = {
   alongside?: boolean;
   attachmentId?: string;
   status?: TaskStatus | "all";
+  /** `list`: several statuses at once (task #506); never with `status`. */
+  statuses?: TaskStatus[];
   expectedRevision?: number;
   /** The model-visible boundary for the task board, carried to the server's freshness gate. */
   seenUpToSeq?: number;

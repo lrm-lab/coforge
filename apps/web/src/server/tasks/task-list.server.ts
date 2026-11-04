@@ -81,8 +81,11 @@ export async function listOwnTasks(
     where: {
       workspaceId: principal.workspaceId,
       owner: actor,
-      status:
-        command.status === "all" ? undefined : (command.status ?? { in: UNFINISHED_TASK_STATUSES }),
+      status: command.statuses
+        ? { in: command.statuses }
+        : command.status === "all"
+          ? undefined
+          : (command.status ?? { in: UNFINISHED_TASK_STATUSES }),
       conversation: scope.conversations,
       ...(labels ?? {}),
     },
@@ -157,7 +160,11 @@ export async function listConversationTasks(
       ...(command.ready
         ? READY_TASK_WHERE
         : {
-            status: command.status === "all" ? undefined : command.status,
+            status: command.statuses
+              ? { in: command.statuses }
+              : command.status === "all"
+                ? undefined
+                : command.status,
           }),
       ...(labels ?? {}),
     },

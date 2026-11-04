@@ -1,4 +1,9 @@
-import { isTaskRef, TASK_PRIORITIES, type TaskCommand } from "@lrm/coforge-sdk/internal";
+import {
+  isTaskRef,
+  TASK_PRIORITIES,
+  TASK_STATUSES,
+  type TaskCommand,
+} from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
 import { LABEL_NAME_MAX, LABELS_PER_TASK_MAX } from "./labels.server";
 import { TASK_PRIORITY_INVALID } from "./task-priority.server";
@@ -42,6 +47,17 @@ export function validateTaskCommand(command: TaskCommand) {
   )
     throw new AppError("INVALID_INPUT");
   if (command.status === "all" && command.operation !== "list") throw new AppError("INVALID_INPUT");
+  // Several statuses are a list's pick only (task #506), of known statuses, never with `status`.
+  if (
+    command.statuses !== undefined &&
+    (command.operation !== "list" ||
+      command.status !== undefined ||
+      !Array.isArray(command.statuses) ||
+      command.statuses.length === 0 ||
+      command.statuses.length > TASK_STATUSES.length ||
+      !command.statuses.every((status) => (TASK_STATUSES as readonly string[]).includes(status)))
+  )
+    throw new AppError("INVALID_INPUT");
   if (command.peerKind !== undefined && !["human", "agent"].includes(command.peerKind))
     throw new AppError("INVALID_INPUT");
   if (command.peerKind !== undefined && !command.target?.startsWith("@"))
