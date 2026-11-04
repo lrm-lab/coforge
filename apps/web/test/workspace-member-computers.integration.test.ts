@@ -168,6 +168,8 @@ async function expectBobComputerOutOfWorkspace(scope: Setup, expectReconnect = t
     userId: scope.bob.id,
     workspaceId: other.id,
     computerId: bobComputer.id,
+    kind: "daemon",
+    apiKeyHash: expect.any(String),
   });
   expect((await scope.connect(keys.bobElsewhere.apiKey)).status).toBe(200);
   expect(await verifyDaemonApiKey(keys.owner.apiKey, repository)).toMatchObject({

@@ -29,6 +29,7 @@ export class PrismaDaemonApiKeyRepository implements DaemonApiKeyRepository {
       SELECT
         k."id"::text AS "id",
         k."api_key_hash" AS "apiKeyHash",
+        k."kind" AS "kind",
         k."workspace_id"::text AS "workspaceId",
         k."computer_id"::text AS "computerId",
         k."owner_id"::text AS "ownerId",

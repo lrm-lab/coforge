@@ -38,6 +38,18 @@ These rules apply to `src/server/computers/`.
   and that membership in one statement (`PrismaDaemonApiKeyRepository.findByHash`)
   for every caller, the connect proxy, the RPC proxy and the daemon's HTTPS
   routes. Keep the check there, never in one caller.
+- A `daemonApiKey` migrates to `sk_computer` (`kind: "computer"`) through
+  `POST /api/computer/swap-key` (issues the new key without revoking the old),
+  `GET /api/computer/self` (the daemon verifies the new key), then
+  `POST /api/computer/confirm-key` (revokes the old key and any prior unconfirmed
+  `sk_computer`s). A repeated `swap-key` revokes the unconfirmed `sk_computer`s
+  first — the server keeps hashes and cannot replay a lost plaintext key. Once
+  the old `daemonApiKey` is confirmed away, downgrading the daemon past the
+  `sk_computer` cutover is unsupported: the old key is revoked and the daemon
+  must re-attach. The computer-self endpoints (`self`, `detach`, `swap-key`,
+  `confirm-key`) authenticate through `authenticateLinkedDaemon` and accept
+  only `kind: "computer"`; the daemon's other routes accept either key during
+  the transition.
 - `computer-lifecycle-memory.server.ts` is the only store of a shutdown
   reason and of the last daemon instance whose return was announced.
 - `computer-workspace-files.server.ts` requests one local Daemon workspace scan

@@ -77,6 +77,51 @@ describe("Centrifugo Connect Proxy", () => {
     });
   });
 
+  test("authenticates an sk_computer key and returns its subscriptions", async () => {
+    const keys = repository();
+    keys.token = await createDaemonApiKeyFactory(keys).create({
+      principal: { userId: "user-1" },
+      workspaceId: "workspace-1",
+      computerId: "computer-1",
+      kind: "computer",
+    });
+    expect(keys.token).toMatch(/^sk_computer_/);
+    const response = await authenticateCentrifugoConnect(
+      connectRequest({ daemonApiKey: keys.token }),
+      {
+        daemonApiKeys: keys,
+        computerBelongsToWorkspace: async () => true,
+        revocationReason: async () => undefined,
+      },
+    );
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.result.user).toBe("user-1");
+    expect(body.result.subs).toHaveProperty("daemon:workspace-1:computer-1");
+  });
+
+  test("refuses an sk_computer key whose Computer detached, for good", async () => {
+    const keys = repository();
+    keys.token = await createDaemonApiKeyFactory(keys).create({
+      principal: { userId: "user-1" },
+      workspaceId: "workspace-1",
+      computerId: "computer-1",
+      kind: "computer",
+    });
+    const response = await authenticateCentrifugoConnect(
+      connectRequest({ daemonApiKey: keys.token }),
+      {
+        daemonApiKeys: keys,
+        computerBelongsToWorkspace: async () => false,
+        revocationReason: async () => undefined,
+      },
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      disconnect: { code: 4502, reason: "computer_unlinked" },
+    });
+  });
+
   test("refuses a live key whose owner is no longer a member of its Workspace for good", async () => {
     const keys = repository();
     keys.token = await createDaemonApiKeyFactory(keys).create({

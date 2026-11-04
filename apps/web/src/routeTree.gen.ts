@@ -42,6 +42,10 @@ import { Route as ApiAppAgentRequestsRequestIdRouteImport } from './routes/api.a
 import { Route as ApiAppInstallationsLookupRouteImport } from './routes/api.app-installations.lookup'
 import { Route as ApiAttachmentsAttachmentIdRouteImport } from './routes/api/attachments.$attachmentId'
 import { Route as ApiComputerAttachRouteImport } from './routes/api/computer/attach'
+import { Route as ApiComputerConfirmKeyRouteImport } from './routes/api/computer/confirm-key'
+import { Route as ApiComputerDetachRouteImport } from './routes/api/computer/detach'
+import { Route as ApiComputerSelfRouteImport } from './routes/api/computer/self'
+import { Route as ApiComputerSwapKeyRouteImport } from './routes/api/computer/swap-key'
 import { Route as ApiComputerWorkspaceRouteImport } from './routes/api/computer/workspace'
 import { Route as ApiDaemonAgentMigrationsRouteImport } from './routes/api/daemon/agent-migrations'
 import { Route as ApiHostsHeartbeatRouteImport } from './routes/api/hosts/heartbeat'
@@ -344,6 +348,26 @@ const ApiAttachmentsAttachmentIdRoute =
 const ApiComputerAttachRoute = ApiComputerAttachRouteImport.update({
   id: '/api/computer/attach',
   path: '/api/computer/attach',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiComputerConfirmKeyRoute = ApiComputerConfirmKeyRouteImport.update({
+  id: '/api/computer/confirm-key',
+  path: '/api/computer/confirm-key',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiComputerDetachRoute = ApiComputerDetachRouteImport.update({
+  id: '/api/computer/detach',
+  path: '/api/computer/detach',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiComputerSelfRoute = ApiComputerSelfRouteImport.update({
+  id: '/api/computer/self',
+  path: '/api/computer/self',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiComputerSwapKeyRoute = ApiComputerSwapKeyRouteImport.update({
+  id: '/api/computer/swap-key',
+  path: '/api/computer/swap-key',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiComputerWorkspaceRoute = ApiComputerWorkspaceRouteImport.update({
@@ -1134,6 +1158,10 @@ export interface FileRoutesByFullPath {
   '/api/app-installations/lookup': typeof ApiAppInstallationsLookupRoute
   '/api/attachments/$attachmentId': typeof ApiAttachmentsAttachmentIdRoute
   '/api/computer/attach': typeof ApiComputerAttachRoute
+  '/api/computer/confirm-key': typeof ApiComputerConfirmKeyRoute
+  '/api/computer/detach': typeof ApiComputerDetachRoute
+  '/api/computer/self': typeof ApiComputerSelfRoute
+  '/api/computer/swap-key': typeof ApiComputerSwapKeyRoute
   '/api/computer/workspace': typeof ApiComputerWorkspaceRoute
   '/api/daemon/agent-migrations': typeof ApiDaemonAgentMigrationsRoute
   '/api/hosts/heartbeat': typeof ApiHostsHeartbeatRoute
@@ -1300,6 +1328,10 @@ export interface FileRoutesByTo {
   '/api/app-installations/lookup': typeof ApiAppInstallationsLookupRoute
   '/api/attachments/$attachmentId': typeof ApiAttachmentsAttachmentIdRoute
   '/api/computer/attach': typeof ApiComputerAttachRoute
+  '/api/computer/confirm-key': typeof ApiComputerConfirmKeyRoute
+  '/api/computer/detach': typeof ApiComputerDetachRoute
+  '/api/computer/self': typeof ApiComputerSelfRoute
+  '/api/computer/swap-key': typeof ApiComputerSwapKeyRoute
   '/api/computer/workspace': typeof ApiComputerWorkspaceRoute
   '/api/daemon/agent-migrations': typeof ApiDaemonAgentMigrationsRoute
   '/api/hosts/heartbeat': typeof ApiHostsHeartbeatRoute
@@ -1465,6 +1497,10 @@ export interface FileRoutesById {
   '/api/app-installations/lookup': typeof ApiAppInstallationsLookupRoute
   '/api/attachments/$attachmentId': typeof ApiAttachmentsAttachmentIdRoute
   '/api/computer/attach': typeof ApiComputerAttachRoute
+  '/api/computer/confirm-key': typeof ApiComputerConfirmKeyRoute
+  '/api/computer/detach': typeof ApiComputerDetachRoute
+  '/api/computer/self': typeof ApiComputerSelfRoute
+  '/api/computer/swap-key': typeof ApiComputerSwapKeyRoute
   '/api/computer/workspace': typeof ApiComputerWorkspaceRoute
   '/api/daemon/agent-migrations': typeof ApiDaemonAgentMigrationsRoute
   '/api/hosts/heartbeat': typeof ApiHostsHeartbeatRoute
@@ -1635,6 +1671,10 @@ export interface FileRouteTypes {
     | '/api/app-installations/lookup'
     | '/api/attachments/$attachmentId'
     | '/api/computer/attach'
+    | '/api/computer/confirm-key'
+    | '/api/computer/detach'
+    | '/api/computer/self'
+    | '/api/computer/swap-key'
     | '/api/computer/workspace'
     | '/api/daemon/agent-migrations'
     | '/api/hosts/heartbeat'
@@ -1801,6 +1841,10 @@ export interface FileRouteTypes {
     | '/api/app-installations/lookup'
     | '/api/attachments/$attachmentId'
     | '/api/computer/attach'
+    | '/api/computer/confirm-key'
+    | '/api/computer/detach'
+    | '/api/computer/self'
+    | '/api/computer/swap-key'
     | '/api/computer/workspace'
     | '/api/daemon/agent-migrations'
     | '/api/hosts/heartbeat'
@@ -1965,6 +2009,10 @@ export interface FileRouteTypes {
     | '/api/app-installations/lookup'
     | '/api/attachments/$attachmentId'
     | '/api/computer/attach'
+    | '/api/computer/confirm-key'
+    | '/api/computer/detach'
+    | '/api/computer/self'
+    | '/api/computer/swap-key'
     | '/api/computer/workspace'
     | '/api/daemon/agent-migrations'
     | '/api/hosts/heartbeat'
@@ -2132,6 +2180,10 @@ export interface RootRouteChildren {
   DotwellKnownOauthAuthorizationServerOidcRoute: typeof DotwellKnownOauthAuthorizationServerOidcRoute
   ApiAppInstallationsLookupRoute: typeof ApiAppInstallationsLookupRoute
   ApiComputerAttachRoute: typeof ApiComputerAttachRoute
+  ApiComputerConfirmKeyRoute: typeof ApiComputerConfirmKeyRoute
+  ApiComputerDetachRoute: typeof ApiComputerDetachRoute
+  ApiComputerSelfRoute: typeof ApiComputerSelfRoute
+  ApiComputerSwapKeyRoute: typeof ApiComputerSwapKeyRoute
   ApiComputerWorkspaceRoute: typeof ApiComputerWorkspaceRoute
   ApiDaemonAgentMigrationsRoute: typeof ApiDaemonAgentMigrationsRoute
   ApiHostsHeartbeatRoute: typeof ApiHostsHeartbeatRoute
@@ -2459,6 +2511,34 @@ declare module '@tanstack/react-router' {
       path: '/api/computer/attach'
       fullPath: '/api/computer/attach'
       preLoaderRoute: typeof ApiComputerAttachRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/computer/confirm-key': {
+      id: '/api/computer/confirm-key'
+      path: '/api/computer/confirm-key'
+      fullPath: '/api/computer/confirm-key'
+      preLoaderRoute: typeof ApiComputerConfirmKeyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/computer/detach': {
+      id: '/api/computer/detach'
+      path: '/api/computer/detach'
+      fullPath: '/api/computer/detach'
+      preLoaderRoute: typeof ApiComputerDetachRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/computer/self': {
+      id: '/api/computer/self'
+      path: '/api/computer/self'
+      fullPath: '/api/computer/self'
+      preLoaderRoute: typeof ApiComputerSelfRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/computer/swap-key': {
+      id: '/api/computer/swap-key'
+      path: '/api/computer/swap-key'
+      fullPath: '/api/computer/swap-key'
+      preLoaderRoute: typeof ApiComputerSwapKeyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/computer/workspace': {
@@ -3638,6 +3718,10 @@ const rootRouteChildren: RootRouteChildren = {
     DotwellKnownOauthAuthorizationServerOidcRoute,
   ApiAppInstallationsLookupRoute: ApiAppInstallationsLookupRoute,
   ApiComputerAttachRoute: ApiComputerAttachRoute,
+  ApiComputerConfirmKeyRoute: ApiComputerConfirmKeyRoute,
+  ApiComputerDetachRoute: ApiComputerDetachRoute,
+  ApiComputerSelfRoute: ApiComputerSelfRoute,
+  ApiComputerSwapKeyRoute: ApiComputerSwapKeyRoute,
   ApiComputerWorkspaceRoute: ApiComputerWorkspaceRoute,
   ApiDaemonAgentMigrationsRoute: ApiDaemonAgentMigrationsRoute,
   ApiHostsHeartbeatRoute: ApiHostsHeartbeatRoute,

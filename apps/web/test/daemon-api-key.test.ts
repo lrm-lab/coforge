@@ -69,6 +69,8 @@ describe("Daemon API key", () => {
       userId: "user-1",
       workspaceId: "workspace-1",
       computerId: "computer-1",
+      kind: "daemon",
+      apiKeyHash: expect.any(String),
     });
   });
 

@@ -122,6 +122,8 @@ test("Agent runtime, status, Message Inbox, and App Inbox cross the real system"
     userId: DEV_BROWSER_USER.id,
     workspaceId,
     computerId: registration.computerId,
+    kind: "daemon",
+    apiKeyHash: expect.any(String),
   });
   const created = await new ManageAgents(
     agents,
@@ -211,8 +213,8 @@ test("Agent runtime, status, Message Inbox, and App Inbox cross the real system"
   const displayEvents: AgentDisplaySnapshot[] = [];
   const statusSubscriptionErrors: unknown[] = [];
   // Mirrors the real browser: one connection token with no channel grants of
-  // its own, and the status channel subscribed without a token, the subscribe
-  // proxy checking it.
+  // its own, the status channel subscribed without a token, the subscribe proxy
+  // checking it.
   const statusClient = new Centrifuge("ws://127.0.0.1:8000/connection/websocket", {
     token: await issueBrowserRealtimeToken({
       userId: DEV_BROWSER_USER.id,
@@ -250,9 +252,8 @@ test("Agent runtime, status, Message Inbox, and App Inbox cross the real system"
       agentId: created.agent.id,
     };
     await waitFor(async () => (await statuses.get(statusScope)) === "active");
-    // These two waits are the regression check for the client-side Agent status
-    // subscription: a subscribe the proxy refused (403) would never
-    // deliver these publications and this would time out instead of passing.
+    // These two waits are the regression check: a refused subscribe (403) would
+    // never deliver these publications and this would time out instead of passing.
     await waitFor(() => statusEvents.some((event) => event.status === "active"));
     await waitFor(() => displayEvents.some((event) => event.activityKind !== "offline"));
     expect(statusSubscriptionErrors).toEqual([]);

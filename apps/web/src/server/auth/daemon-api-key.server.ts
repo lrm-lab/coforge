@@ -7,6 +7,11 @@ export type DaemonApiKeyClaims = {
   readonly userId: string;
   readonly workspaceId: string;
   readonly computerId: string;
+  /** `daemon` is the legacy `daemonApiKey`; `computer` the `sk_computer` a swap-key issued. */
+  readonly kind: "daemon" | "computer";
+  /** The verified key's hash — `confirm-key` revokes the other unconfirmed `sk_computer`s,
+   * never the one that asked. */
+  readonly apiKeyHash: string;
 };
 
 export type DaemonApiKeyRecord = {
@@ -19,6 +24,8 @@ export type DaemonApiKeyRecord = {
   lastUsedAt?: Date | null;
   /** Whether the key's owner is still a member of the key's Workspace, read with the key. */
   ownerIsMember: boolean;
+  /// `daemon` is the legacy `daemonApiKey`; `computer` the `sk_computer` a swap-key issued.
+  kind: "daemon" | "computer";
 };
 
 /** What minting supplies for `replaceActive`: the Prisma client generates the id
@@ -31,7 +38,7 @@ export interface DaemonApiKeyRepository {
   markUsed(id: string, at: Date): Promise<void>;
 }
 
-const DAEMON_API_KEY = /^dk_[A-Za-z0-9_-]{43}$/;
+const DAEMON_API_KEY = /^(dk|sk_computer)_[A-Za-z0-9_-]{43}$/;
 /** Every daemon RPC and Agent HTTP call verifies the key, so its last use is a coarse
  * timestamp: writing it per request would serialize one Computer's traffic on its key row. */
 const LAST_USED_RESOLUTION_MS = 60_000;
@@ -51,6 +58,7 @@ export function createDaemonApiKeyFactory(repository: DaemonApiKeyRepository) {
       principal: { userId: string };
       workspaceId: string;
       computerId: string;
+      kind?: "daemon" | "computer";
     }) {
       const { apiKey, record } = prepareDaemonApiKey(input);
       await repository.replaceActive(record);
@@ -63,12 +71,16 @@ export function prepareDaemonApiKey({
   principal,
   workspaceId,
   computerId,
+  kind = "daemon",
 }: {
   principal: { userId: string };
   workspaceId: string;
   computerId: string;
+  /// `daemon` is the legacy `daemonApiKey`; `computer` the `sk_computer` a swap-key issued.
+  kind?: "daemon" | "computer";
 }) {
-  const apiKey = `dk_${mintOpaqueToken()}`;
+  const apiKey =
+    kind === "computer" ? `sk_computer_${mintOpaqueToken()}` : `dk_${mintOpaqueToken()}`;
   // No explicit id: the Prisma client generates it from the schema's uuid(7)
   // default — API keys keep the project's one id-generation path end to end.
   return {
@@ -79,6 +91,7 @@ export function prepareDaemonApiKey({
       computerId,
       ownerId: principal.userId,
       revokedAt: null,
+      kind,
     } satisfies DaemonApiKeyMint,
   };
 }
@@ -111,6 +124,8 @@ export async function verifyDaemonApiKey(
     userId: record.ownerId,
     workspaceId: record.workspaceId,
     computerId: record.computerId,
+    kind: record.kind,
+    apiKeyHash: record.apiKeyHash,
   };
   if (!record.ownerIsMember) throw new DaemonApiKeyOwnerNotMemberError(claims);
   if (!record.lastUsedAt || now.getTime() - record.lastUsedAt.getTime() >= LAST_USED_RESOLUTION_MS)
