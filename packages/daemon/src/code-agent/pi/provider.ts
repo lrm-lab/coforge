@@ -3,8 +3,11 @@ import { getCoforgeAgentDir, getCoforgeSessionDir } from "@coforge/agent";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { ModelProviderSettingError, type CodeAgentProvider } from "@lrm/coforge-anvil";
 import { createPiAgentSession } from "@lrm/coforge-anvil/pi";
+import { getLogger } from "@logtape/logtape";
 import { evalMemoryOfferOnly } from "#src/code-agent/agent-instructions";
 import { piRuntimeHost } from "./host";
+
+const logger = getLogger(["coforge", "daemon", "code-agent", "pi"]);
 
 /** CoForge Agent uses the same Pi SDK implementation without a child process. */
 export class CoforgeProvider implements CodeAgentProvider {
@@ -13,11 +16,17 @@ export class CoforgeProvider implements CodeAgentProvider {
 
   async createAgentSession(options: AgentSessionOptions): Promise<AgentSession> {
     const runtime = options.runtime;
-    if (runtime?.providerConfig?.kind !== "coforge")
-      throw new ModelProviderSettingError("CoForge runtime provider config is required");
-    if (!runtime.providerConfig.apiKey)
+    if (!runtime) throw new ModelProviderSettingError("CoForge runtime config is required");
+    const providerConfig =
+      runtime.providerConfig?.kind === "coforge" ? runtime.providerConfig : undefined;
+    if (!providerConfig)
+      logger.info("code_agent:provider_config_defaulted", {
+        provider: RUNTIME_PROVIDER.COFORGE,
+        reason: runtime.providerConfig ? "default" : "missing",
+      });
+    if (providerConfig && !providerConfig.apiKey)
       throw new ModelProviderSettingError("CoForge runtime provider API key is required");
-    if (runtime.providerConfig.providerId !== runtime.modelProvider)
+    if (providerConfig && providerConfig.providerId !== runtime.modelProvider)
       throw new ModelProviderSettingError("Pi runtime provider does not match the selected model");
 
     const environment = piRuntimeHost.buildSessionEnvironment(options);
@@ -38,7 +47,7 @@ export class CoforgeProvider implements CodeAgentProvider {
         modelProvider: runtime.modelProvider,
         model: runtime.model,
         reasoning: runtime.reasoning,
-        apiKey: runtime.providerConfig.apiKey,
+        apiKey: providerConfig?.apiKey,
         instructions: options.instructions,
         environment,
         toolProfile: runtime.toolProfile,

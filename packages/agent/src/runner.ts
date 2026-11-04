@@ -444,8 +444,6 @@ export async function createSession(options: {
     throw new Error(
       `${sessionKind === "coforge" ? "CoForge" : "Pi"} sessions must use ${sessionKind === "coforge" ? ".builtin-sessions" : PI_SESSION_DIR}`,
     );
-  if (sessionKind === "coforge" && !options.apiKey)
-    throw new Error("CoForge runtime provider API key is required");
   const { sessionManager, replacedSessionId } = await sessionManagerFor(
     cwd,
     sessionDir,
