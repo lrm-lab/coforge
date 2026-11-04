@@ -41,3 +41,41 @@ export function artifactRoute(
     home.kind === "channel" ? { channelId: home.conversationId } : { dmId: home.conversationId };
   return { ...conversationRoute(target, workspaceSlug), search: { doc: artifactId } };
 }
+
+/** One app link, bare, as a Markdown link's target or in `<…>`, with what stands around it. */
+const LINK_IN_TEXT = new RegExp(String.raw`(\[[^\]]*\]\(|<)?(${APP_LINK.source})(\))?`, "g");
+/** Code, whose text is shown as written. */
+const CODE = /(```[\s\S]*?(?:```|$)|`[^`\n]*`)/;
+/** What ends a sentence after a bare link rather than the link itself, as GFM autolinks read it. */
+const TRAILING = /[.,;:!?]+$/;
+
+/**
+ * A message body as it reads once its documents' cards show (task #385): a body that is only one
+ * document link says nothing the card does not, so it reads as nothing; elsewhere a bare document
+ * link reads as the document's title, still a link. `titles` holds the documents whose cards
+ * show; any other link, one the writer already named (`[text](link)`, `<link>`), and one in code
+ * stay as written.
+ */
+export function bodyWithArtifactTitles(body: string, titles: ReadonlyMap<string, string>): string {
+  if (titles.size === 0) return body;
+  const titleOf = (link: string) => {
+    const id = [...link.matchAll(DOC_PARAM)][0]?.[1]?.toLowerCase();
+    return id === undefined ? undefined : titles.get(id);
+  };
+  const sole = body.trim();
+  if (sole.match(APP_LINK)?.[0] === sole && titleOf(sole) !== undefined) return "";
+  const titled = (text: string) =>
+    text.replace(LINK_IN_TEXT, (whole, named: string | undefined, found: string, close) => {
+      if (named) return whole;
+      const link = found.replace(TRAILING, "");
+      const title = titleOf(link);
+      if (title === undefined) return whole;
+      const label = title.replace(/[[\]\\*_`]/g, (char) => `\\${char}`);
+      return `[${label}](${link})${found.slice(link.length)}${close ?? ""}`;
+    });
+  // Split on code: the odd pieces are code.
+  return body
+    .split(CODE)
+    .map((piece, at) => (at % 2 ? piece : titled(piece)))
+    .join("");
+}

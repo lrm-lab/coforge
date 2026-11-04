@@ -35,7 +35,14 @@ export type ConflictResolution = {
   settings: SettingConflict[];
   textChoices: (ConflictChoice | undefined)[];
   settingChoices: Partial<Record<SettingConflict["name"], ConflictChoice>>;
+  /** Picks kept from the save before (`conflictKey`) on places the other side changed again:
+   * shown as picked, but they count once the viewer confirms them. */
+  again: readonly string[];
 };
+
+/** A conflict's key in `again`: a text conflict by its order, a setting by its name. */
+export const conflictKey = (at: number | SettingConflict["name"]) =>
+  typeof at === "number" ? `text:${at}` : `setting:${at}`;
 
 type TextConflict = Extract<ConflictChunk, { conflict: unknown }>["conflict"];
 
@@ -43,9 +50,10 @@ type TextConflict = Extract<ConflictChunk, { conflict: unknown }>["conflict"];
  * The resolution of a conflict answer. `previous` is what the viewer had picked for the answer
  * before (a save of the picks that came back as a conflict again). That save sent each pick's
  * text as the viewer's side, so a new conflict whose `mine` is the text of an earlier pick is
- * that place again: it keeps the pick (as the viewer's side, or the same own rewrite), and
- * nobody picks twice what they already decided. The document's file is `entryPath` when the
- * answer names it, else its only file.
+ * that place again: it keeps the pick (as the viewer's side, or the same own rewrite), but the
+ * other side changed it again, so the viewer confirms it before it counts (`again`): a save of
+ * kept picks alone would write over what they have not seen. The document's file is `entryPath`
+ * when the answer names it, else its only file.
  */
 export function resolutionOf(
   answer: DocumentConflict,
@@ -61,18 +69,22 @@ export function resolutionOf(
         return choice === undefined ? [] : [{ text: chosen(choice, conflict), choice }];
       })
     : [];
-  const textChoices = conflictsOf(chunks).map((conflict) => {
+  const again: string[] = [];
+  const textChoices = conflictsOf(chunks).map((conflict, at) => {
     const index = picked.findIndex((each) => each.text === conflict.mine);
     if (index === -1) return undefined;
     const [{ choice }] = picked.splice(index, 1);
+    again.push(conflictKey(at));
     return keptChoice(choice, conflict.mine);
   });
   const settingChoices: ConflictResolution["settingChoices"] = {};
   for (const setting of answer.settings) {
     const before = previous?.settings.find((each) => each.name === setting.name);
     const choice = before && previous!.settingChoices[before.name];
-    if (choice && chosen(choice, before) === setting.mine)
+    if (choice && chosen(choice, before) === setting.mine) {
       settingChoices[setting.name] = keptChoice(choice, setting.mine);
+      again.push(conflictKey(setting.name));
+    }
   }
   return {
     currentVersion: answer.currentVersion,
@@ -80,6 +92,7 @@ export function resolutionOf(
     settings: answer.settings,
     textChoices,
     settingChoices,
+    again,
   };
 }
 
@@ -96,13 +109,31 @@ export function conflictsOf(chunks: readonly ConflictChunk[]): TextConflict[] {
   return chunks.flatMap((chunk) => ("conflict" in chunk ? [chunk.conflict] : []));
 }
 
-/** How many conflicts there are and how many are picked. */
+/** How many conflicts there are and how many are picked; a kept pick not yet confirmed is not. */
 export function conflictProgress(resolution: ConflictResolution) {
   const count = resolution.textChoices.length + resolution.settings.length;
+  const settled = (at: number | SettingConflict["name"]) =>
+    !resolution.again.includes(conflictKey(at));
   const picked =
-    resolution.textChoices.filter((choice) => choice !== undefined).length +
-    resolution.settings.filter((setting) => resolution.settingChoices[setting.name]).length;
+    resolution.textChoices.filter((choice, at) => choice !== undefined && settled(at)).length +
+    resolution.settings.filter(
+      (setting) => resolution.settingChoices[setting.name] && settled(setting.name),
+    ).length;
   return { count, picked, done: picked === count };
+}
+
+/** `resolution` with one conflict picked, which also confirms a pick kept from before. */
+export function choose(
+  resolution: ConflictResolution,
+  at: number | SettingConflict["name"],
+  choice: ConflictChoice,
+): ConflictResolution {
+  const again = resolution.again.filter((key) => key !== conflictKey(at));
+  if (typeof at !== "number")
+    return { ...resolution, again, settingChoices: { ...resolution.settingChoices, [at]: choice } };
+  const textChoices = [...resolution.textChoices];
+  textChoices[at] = choice;
+  return { ...resolution, again, textChoices };
 }
 
 /** The document's text with every conflict picked, or null while one is not. */

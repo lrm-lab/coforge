@@ -47,7 +47,13 @@ test("a document opens from its card, saves versions, resolves a conflict and go
     await readFeatureFlagsConfiguration({ COFORGE_FEATURE_FLAGS_FILE: FLAGS }),
   );
   // Centrifugo behind the page's own origin, so a version saved here reaches the page live.
-  const proxy = sameOriginProxy(webOrigin, centrifugoOrigin);
+  // While `held` is set, server-function answers wait for it: a save is caught in flight.
+  let held: Promise<void> | undefined;
+  const proxy = sameOriginProxy(webOrigin, centrifugoOrigin, {
+    afterUpstream: async (url) => {
+      if (held && url.pathname.includes("/_serverFn/")) await held;
+    },
+  });
   const origin = proxy.origin;
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `artifact-docs-${process.pid}`);
@@ -110,7 +116,7 @@ test("a document opens from its card, saves versions, resolves a conflict and go
       title: "Home page launch plan",
       text: PLAN,
     });
-    await documents.create(me, {
+    const notes = await documents.create(me, {
       conversationId: channel.id,
       title: "Weekly sync notes",
       text: "Progress, blockers and next week.",
@@ -128,6 +134,15 @@ test("a document opens from its card, saves versions, resolves a conflict and go
         body: `I wrote the plan up: ${page}?doc=${doc.id}`,
       },
     });
+    await db.message.create({
+      data: {
+        workspaceId,
+        conversationId: channel.id,
+        sequence: 2,
+        senderMemberId: from.id,
+        body: `${page}?doc=${notes.id}`,
+      },
+    });
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1440", "900");
 
@@ -136,6 +151,19 @@ test("a document opens from its card, saves versions, resolves a conflict and go
     const card = `document.querySelector('article[aria-label="Document: Home page launch plan"]')`;
     await browser("wait", "--fn", `${pageHydrated} && ${card} !== null`);
     expect(await evaluate<string>(`${card}.textContent`)).toContain("Ship the new home page");
+    // Beside its card a document's link reads as its title, and a message of the link alone as
+    // the card alone: no long address in the chat.
+    const bodies = `[...document.querySelectorAll(".message-markdown")]`;
+    await browser(
+      "wait",
+      "--fn",
+      `${bodies}.some((body) => body.querySelector("a")?.textContent === "Home page launch plan") && !${bodies}.some((body) => body.textContent.includes("?doc="))`,
+    );
+    expect(
+      await evaluate<boolean>(
+        `document.querySelector('article[aria-label="Document: Weekly sync notes"]') !== null`,
+      ),
+    ).toBe(true);
     await shoot("desktop-1-card");
 
     // Open: beside the chat, editable; a save is a new version.
@@ -202,8 +230,18 @@ test("a document opens from its card, saves versions, resolves a conflict and go
     await shoot("desktop-3-conflict");
     await evaluate(`([...${pane}.querySelectorAll('input[type="radio"]')][0].click(), true)`);
     await browser("wait", "--fn", inPane("1 of 1 conflicts picked"));
+    // While the resolution saves, nothing in it can change and it cannot be thrown away (N1).
+    let release = () => {};
+    held = new Promise((resolve) => (release = resolve));
     await click(button("Save", pane));
     await until(async () => (await version(doc.id)) === 5);
+    await browser(
+      "wait",
+      "--fn",
+      `${button("Discard my changes", pane)}?.disabled === true && [...${pane}.querySelectorAll('input[type="radio"]')].every((radio) => radio.disabled)`,
+    );
+    held = undefined;
+    release();
     expect((await documents.load(me, { artifactId: doc.id })).text).toContain(
       "Week one design and copy",
     );

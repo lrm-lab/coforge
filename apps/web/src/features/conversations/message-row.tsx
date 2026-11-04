@@ -13,7 +13,10 @@ import { m } from "#src/paraglide/messages";
 import { ActionCard } from "./action-card";
 import { MessageSenderLine } from "./message-sender-line";
 import { attachmentMessageDisplayBody } from "./attachment-file-name";
-import { MessageArtifactCards } from "#src/features/artifacts/artifact-card";
+import {
+  MessageArtifactCards,
+  useBodyWithArtifactTitles,
+} from "#src/features/artifacts/artifact-card";
 import { CollapsibleMessageBody } from "./collapsible-message-body";
 import type { ChipMention } from "./message-reference-chips";
 import { messagePlainText } from "./selection-copy";
@@ -216,6 +219,8 @@ export const MessageRow = memo(function MessageRow({
       onToggleReaction,
       onToggleSave,
     });
+  const writtenBody = attachmentMessageDisplayBody(message);
+  const displayBody = useBodyWithArtifactTitles(writtenBody);
   // A system notice renders as one muted line, not a person talking (`SystemMessageRow`).
   if (message.senderKind === "system")
     return (
@@ -227,9 +232,8 @@ export const MessageRow = memo(function MessageRow({
         dateLocale={dateLocale}
       />
     );
-  const displayBody = attachmentMessageDisplayBody(message);
   // A forward's own text is its note; an empty one leaves only the card.
-  const showsBody = !message.forwarded || displayBody.trim() !== "";
+  const showsBody = !message.forwarded || writtenBody.trim() !== "";
   // An own message's ticks follow its last word; one with no text keeps them at its bottom right.
   const textTicks =
     readState && !message.actionCard && displayBody.trim() ? (

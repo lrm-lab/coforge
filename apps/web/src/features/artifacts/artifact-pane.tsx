@@ -247,7 +247,7 @@ function LatestVersion({
   const progress = conflict ? conflictProgress(conflict) : null;
   const editable = editor.status !== "readOnly";
   // Held while a save is in flight: text typed then would miss what the save merges in.
-  const typing = editable && editor.status !== "saving";
+  const typing = editable && !editor.busy;
   return (
     <>
       {editor.baseMoved && (
@@ -315,7 +315,7 @@ function LatestVersion({
             <ArtifactConflictView
               resolution={conflict}
               onChange={editor.setConflict}
-              disabled={editor.status === "saving"}
+              disabled={editor.busy}
             />
           ) : (
             <ArtifactDocumentFields
@@ -343,7 +343,7 @@ function LatestVersion({
                 }))}
           </span>
           {conflict && (
-            <Button size="sm" color="tertiary" onClick={onDiscard}>
+            <Button size="sm" color="tertiary" isDisabled={editor.busy} onClick={onDiscard}>
               {m.doc_conflict_discard()}
             </Button>
           )}
@@ -351,7 +351,7 @@ function LatestVersion({
             size="sm"
             color="primary"
             isDisabled={progress ? !progress.done : false}
-            isLoading={editor.status === "saving"}
+            isLoading={editor.busy}
             onClick={() => void editor.save()}
           >
             {m.doc_save()}

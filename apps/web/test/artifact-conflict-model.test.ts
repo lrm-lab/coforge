@@ -4,6 +4,7 @@ import {
   conflictProgress,
   ownDraft,
   resolutionOf,
+  choose,
   resolvedSettings,
   resolvedText,
   type DocumentConflict,
@@ -77,7 +78,15 @@ test("a save of the picks that conflicts again keeps them where they came back",
   );
   expect(again.textChoices).toEqual(["mine", { own: "mixed\n" }, undefined]);
   expect(again.settingChoices).toEqual({ title: "mine" });
-  expect(conflictProgress(again)).toEqual({ count: 4, picked: 3, done: false });
+  // The other side changed those places again (N3): the picks show, but count once confirmed,
+  // so kept picks alone cannot write over what the viewer has not seen.
+  expect(again.again).toEqual(["text:0", "text:1", "setting:title"]);
+  expect(conflictProgress(again)).toEqual({ count: 4, picked: 0, done: false });
+  const confirmed = choose(choose(choose(again, 0, "mine"), "title", "mine"), 2, "theirs");
+  expect(conflictProgress(confirmed)).toEqual({ count: 4, picked: 3, done: false });
+  const done = choose(confirmed, 1, { own: "mixed\n" });
+  expect(done.again).toEqual([]);
+  expect(conflictProgress(done)).toEqual({ count: 4, picked: 4, done: true });
 });
 
 test("a pick claims one place only, and none whose side is not its text", () => {

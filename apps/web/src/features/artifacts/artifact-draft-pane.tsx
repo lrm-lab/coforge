@@ -10,6 +10,7 @@ import { useArtifactLeaveGuard } from "./artifact-leave-guard";
 import { ArtifactPaneHeader } from "./artifact-pane-header";
 import { PaneFrame } from "./artifact-parts";
 import { refreshArtifact } from "./artifact-queries";
+import { nextSaveAttempt, type SaveAttempt } from "./artifact-save-attempt";
 import {
   closedArtifactSearch,
   openArtifactSearch,
@@ -36,16 +37,21 @@ export function ArtifactDraftPane({
   const [dirty, setDirty] = useState(false);
   /** Set once the draft is a document, so opening it asks nothing. */
   const created = useRef(false);
+  /** The last create sent: retried as it was, it keeps its key, and the server answers with the
+   * document a lost answer already made rather than a second one. */
+  const attempt = useRef<SaveAttempt | null>(null);
   const create = useMutation({
-    mutationFn: () =>
-      createArtifactDocument({
-        data: {
-          conversationId,
-          title: title.trim() || m.doc_untitled(),
-          // The editor holds the text: it is read once, to save.
-          text: editorRef.current?.getMarkdown() ?? "",
-        },
-      }),
+    mutationFn: () => {
+      const draft = {
+        title: title.trim() || m.doc_untitled(),
+        // The editor holds the text: it is read once, to save.
+        text: editorRef.current?.getMarkdown() ?? "",
+      };
+      attempt.current = nextSaveAttempt(attempt.current, { baseVersion: 0, ...draft });
+      return createArtifactDocument({
+        data: { conversationId, idempotencyKey: attempt.current.key, ...draft },
+      });
+    },
     onSuccess: (document) => {
       created.current = true;
       refreshArtifact(queryClient, document.id);

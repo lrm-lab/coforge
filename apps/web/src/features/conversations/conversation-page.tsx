@@ -297,6 +297,8 @@ function ConversationPageBody(props: ConversationPageProps & ConversationPageBod
           <ArtifactPane search={{ doc, docVersion, docFull, docHistory }} />
         ) : (
           <ArtifactDraftPane
+            // A draft belongs to its conversation: another one starts its own.
+            key={props.page.conversation.conversationId}
             conversationId={props.page.conversation.conversationId}
             search={{ docFull }}
           />

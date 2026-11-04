@@ -51,6 +51,8 @@
   "doc_conflict_theirs": "最新版本的",
   "doc_conflict_own": "自己改",
   "doc_conflict_own_hint": "两边的文字都放进来了，改成你要的样子。",
+  "doc_conflict_again": "对方又改了这里",
+  "doc_conflict_confirm": "确认",
   "doc_conflict_base": "看改之前",
   "doc_conflict_base_hide": "收起改之前",
   "doc_conflict_empty": "（删掉了）",

@@ -8,6 +8,8 @@ import { MessageBody } from "#src/features/conversations/message-body";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import {
+  choose,
+  conflictKey,
   ownDraft,
   type ConflictChoice,
   type ConflictResolution,
@@ -50,12 +52,8 @@ export function ArtifactConflictView({
         sides={setting}
         base={setting.base}
         choice={resolution.settingChoices[setting.name]}
-        onChoose={(choice) =>
-          onChange({
-            ...resolution,
-            settingChoices: { ...resolution.settingChoices, [setting.name]: choice },
-          })
-        }
+        again={resolution.again.includes(conflictKey(setting.name))}
+        onChoose={(choice) => onChange(choose(resolution, setting.name, choice))}
       />
     );
   });
@@ -79,11 +77,8 @@ export function ArtifactConflictView({
         base={chunk.conflict.base}
         markdown
         choice={resolution.textChoices[at]}
-        onChoose={(choice) => {
-          const textChoices = [...resolution.textChoices];
-          textChoices[at] = choice;
-          onChange({ ...resolution, textChoices });
-        }}
+        again={resolution.again.includes(conflictKey(at))}
+        onChoose={(choice) => onChange(choose(resolution, at, choice))}
       />
     );
   });
@@ -101,10 +96,14 @@ function ConflictCard({
   base,
   markdown,
   choice,
+  again,
   onChoose,
   disabled,
 }: {
   disabled: boolean;
+  /** A pick kept from the save before on a place the other side changed again: it counts once
+   * confirmed. */
+  again: boolean;
   heading: string;
   sides: { mine: string; theirs: string };
   base: string | null;
@@ -114,7 +113,7 @@ function ConflictCard({
 }) {
   const [showBase, setShowBase] = useState(false);
   const own = typeof choice === "object" ? choice.own : null;
-  const picked = choice !== undefined;
+  const picked = choice !== undefined && !again;
   const text = (value: string) =>
     !value.trim() ? (
       <span className="text-tertiary italic">{m.doc_conflict_empty()}</span>
@@ -157,6 +156,19 @@ function ConflictCard({
           <span aria-hidden="true" className="size-2 rounded-full bg-fg-warning-primary" />
         )}
         <h4 className="min-w-0 flex-1 font-semibold text-primary">{heading}</h4>
+        {again && choice !== undefined && (
+          <>
+            <span className="text-tertiary">{m.doc_conflict_again()}</span>
+            <Button
+              size="xs"
+              color="secondary"
+              isDisabled={disabled}
+              onClick={() => onChoose(choice)}
+            >
+              {m.doc_conflict_confirm()}
+            </Button>
+          </>
+        )}
         {base !== null && (
           <Button size="xs" color="link-gray" onClick={() => setShowBase((shown) => !shown)}>
             {showBase ? m.doc_conflict_base_hide() : m.doc_conflict_base()}

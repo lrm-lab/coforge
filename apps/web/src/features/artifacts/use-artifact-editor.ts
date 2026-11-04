@@ -6,6 +6,7 @@ import { isAppError } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import { saveArtifactDocument } from "./artifacts.functions";
 import {
+  conflictProgress,
   resolutionOf,
   resolvedSettings,
   resolvedText,
@@ -136,11 +137,13 @@ export function useArtifactEditor(artifactId: string) {
   }
 
   async function save() {
-    if (base === null || saving.isPending || readOnly) return;
+    if (base === null || settling || readOnly) return;
     const resolving = conflict;
     const body = resolving ? resolvedText(resolving) : (editorRef.current?.getMarkdown() ?? text);
     const settings = resolving ? resolvedSettings(resolving) : {};
-    if (body === null || settings === null) return;
+    // A pick kept from before counts once confirmed (`again`).
+    if (body === null || settings === null || (resolving && !conflictProgress(resolving).done))
+      return;
     const nextTitle = settings.title ?? (title.trim() || savedTitle);
     const payload = {
       baseVersion: resolving ? resolving.currentVersion : base,
@@ -165,6 +168,9 @@ export function useArtifactEditor(artifactId: string) {
       setConflict(null);
       setPublished(null);
       setDirty(false);
+      // The resolved text shows at once, not the draft from before the conflict while the
+      // version it made is read.
+      if (resolving) setText(body);
       if (saved.status === "nothing") {
         // A resolution that matches the latest version is saved already: show that version.
         if (resolving) await takeLatest();
@@ -231,6 +237,9 @@ export function useArtifactEditor(artifactId: string) {
     text,
     dirty: dirty || conflict !== null,
     status,
+    /** A save is in flight or its version is still being read in: nothing is edited or picked
+     * then, as it would not be in the save or would be replaced by what it reads. */
+    busy: settling,
     error,
     baseMoved,
     conflict,

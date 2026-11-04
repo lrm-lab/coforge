@@ -1,8 +1,9 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
+import { useQueries, useQuery } from "@tanstack/react-query";
 
 import { Button } from "#src/components/base/buttons/button";
 import { m } from "#src/paraglide/messages";
-import { artifactIdsInBody } from "./artifact-link";
+import { artifactIdsInBody, bodyWithArtifactTitles } from "./artifact-link";
 import { ArtifactActor, ArtifactIcon, useArtifactTime, versionLabel } from "./artifact-parts";
 import { artifactCardQuery, useArtifactActor, useArtifactsOn } from "./artifact-queries";
 import { openArtifactSearch, useArtifactNavigation } from "./artifact-search";
@@ -22,6 +23,24 @@ export function MessageArtifactCards({ body }: { body: string }) {
         <ArtifactCardView key={id} artifactId={id} />
       ))}
     </div>
+  );
+}
+
+/** `body` as it reads beside its documents' cards (`bodyWithArtifactTitles`), from the cards
+ * already read: a link reads as written until its card shows. */
+export function useBodyWithArtifactTitles(body: string): string {
+  const on = useArtifactsOn();
+  const cards = useQueries({
+    queries: (on ? artifactIdsInBody(body) : []).map((id) => artifactCardQuery(id)),
+  });
+  const shown = cards.flatMap(({ data }) =>
+    data ? [[data.id, data.title || m.doc_untitled()] as const] : [],
+  );
+  // The cards read anew on every render; their titles, as one string, change far less.
+  const titles = JSON.stringify(shown);
+  return useMemo(
+    () => bodyWithArtifactTitles(body, new Map(JSON.parse(titles) as [string, string][])),
+    [body, titles],
   );
 }
 

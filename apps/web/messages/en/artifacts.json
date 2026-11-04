@@ -51,6 +51,8 @@
   "doc_conflict_theirs": "Latest version's",
   "doc_conflict_own": "Edit myself",
   "doc_conflict_own_hint": "Both sides' text is in here; make it read as you want.",
+  "doc_conflict_again": "They changed this again",
+  "doc_conflict_confirm": "Keep my pick",
   "doc_conflict_base": "Show before",
   "doc_conflict_base_hide": "Hide before",
   "doc_conflict_empty": "(removed)",
