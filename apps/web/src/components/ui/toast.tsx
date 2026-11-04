@@ -18,6 +18,11 @@ const offset = {
   left: "max(1rem, var(--spacing-safe-left))",
 };
 
+/** On a desktop the toasts sit in the bottom right, over a conversation's composer and its send
+ * button: they start above a one-line composer, so the moment after an action (an Undo shown for
+ * ten seconds) leaves the composer free to type and send in (Raft, task #507). */
+const desktopOffset = { ...offset, bottom: "calc(max(1rem, var(--spacing-safe-bottom)) + 4.5rem)" };
+
 export function AppToastProvider({ children }: { children: React.ReactNode }) {
   const desktop = useBreakpoint("md");
 
@@ -29,7 +34,7 @@ export function AppToastProvider({ children }: { children: React.ReactNode }) {
         visibleToasts={3}
         hotkey={["F6"]}
         customAriaLabel={m.navigation_notifications()}
-        offset={offset}
+        offset={desktopOffset}
         mobileOffset={offset}
         style={toastStyle}
         icons={{

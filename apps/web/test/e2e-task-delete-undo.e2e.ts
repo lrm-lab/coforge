@@ -57,25 +57,26 @@ test("a Task deleted from its popup comes back with Undo", async () => {
       await browser("screenshot", join(artifacts, `${name}-dark.png`));
       await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
     };
-    const deleteFromPopup = async (confirmShot?: string) => {
-      await browser(
-        "open",
-        `${origin}/en/w/${workspace.slug}/channel/${channel.id}?task=${number}`,
-      );
+    const inChannel = `${origin}/en/w/${workspace.slug}/channel/${channel.id}?task=${number}`;
+    const onTasksPage = `${origin}/en/w/${workspace.slug}/tasks?task=${channel.id}:${number}`;
+    const deleteFromPopup = async (url: string, confirmShot?: string) => {
+      await browser("open", url);
       await browser(
         "wait",
         "--fn",
         `${pageHydrated} && document.querySelector('[role="dialog"] button[aria-label="More Actions for Task #${number}"]') != null`,
       );
-      await browser(
-        "click",
-        `[role="dialog"] button[aria-label="More Actions for Task #${number}"]`,
-      );
-      await browser(
-        "wait",
-        "--fn",
-        `document.querySelector('[role="menuitem"][data-key="delete"]') != null`,
-      );
+      // The popup is drawn again once its conversation has loaded, which can take a press made
+      // just before: press until the menu is open.
+      const menuOpen = `document.querySelector('[role="menuitem"][data-key="delete"]') != null`;
+      for (let presses = 0; presses < 5 && !(await evaluate<boolean>(menuOpen)); presses++) {
+        await browser(
+          "click",
+          `[role="dialog"] button[aria-label="More Actions for Task #${number}"]`,
+        );
+        await browser("wait", "800");
+      }
+      await browser("wait", "--fn", menuOpen);
       await browser("click", `[role="menuitem"][data-key="delete"]`);
       const confirm = `[...document.querySelectorAll('[role="alertdialog"], [role="dialog"]')].find((el) => el.textContent.includes("Delete Task #${number}?"))`;
       await browser("wait", "--fn", `${confirm} != null`);
@@ -88,9 +89,19 @@ test("a Task deleted from its popup comes back with Undo", async () => {
     };
 
     await browser("set", "viewport", "1280", "900");
-    await deleteFromPopup("confirm");
+    await deleteFromPopup(inChannel, "confirm");
     expect(await deletedAt()).not.toBeNull();
     expect(await evaluate<boolean>(`${toast}.textContent.includes("Undo")`)).toBe(true);
+    // Over a conversation the toast leaves its composer free: nothing of it covers the field.
+    await browser("wait", "800");
+    expect(
+      await evaluate<boolean>(`(() => {
+        const t = ${toast}.getBoundingClientRect();
+        const c = document.querySelector("textarea[data-composer]").closest("form, [data-composer-root]") ?? document.querySelector("textarea[data-composer]").parentElement;
+        const r = c.getBoundingClientRect();
+        return t.bottom <= r.top || t.right <= r.left || t.left >= r.right;
+      })()`),
+    ).toBe(true);
     await shoot("deleted");
 
     // Undo: the Task is back, on the server and on the page.
@@ -108,9 +119,22 @@ test("a Task deleted from its popup comes back with Undo", async () => {
       `${pageHydrated} && [...document.querySelectorAll('[role="dialog"]')].some((el) => el.textContent.includes(${JSON.stringify(title)}))`,
     );
 
+    // From the Tasks page: its row leaves, and Undo puts it back.
+    const row = `[...document.querySelectorAll("a, button, span, p, div")].some((el) => el.textContent.trim() === ${JSON.stringify(title)} && !el.closest('[role="dialog"]'))`;
+    await browser("open", `${origin}/en/w/${workspace.slug}/tasks`);
+    await browser("wait", "--fn", `${pageHydrated} && ${row}`);
+    await deleteFromPopup(onTasksPage);
+    await browser("wait", "--fn", `!(${row})`);
+    await evaluate(
+      `([...${toast}.querySelectorAll("button")].find((el) => el.textContent.trim() === "Undo").setAttribute("data-e2e-undo", ""), true)`,
+    );
+    await browser("click", "[data-e2e-undo]");
+    await browser("wait", "--fn", row);
+    expect(await deletedAt()).toBeNull();
+
     // On a phone the same toast.
     await browser("set", "viewport", "390", "844");
-    await deleteFromPopup();
+    await deleteFromPopup(inChannel);
     await shoot("deleted-phone");
   } finally {
     await browser("close").catch(() => undefined);

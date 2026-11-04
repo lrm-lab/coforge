@@ -36,6 +36,12 @@ export const serverTaskOverviewApi: TaskOverviewApi = {
 
 const taskOverviewQueryKey = (workspaceId: string) => ["task", "overview", workspaceId] as const;
 
+/** Reads the Tasks page's list again, for a change made outside its own commands that it would
+ * not see otherwise: a Task restored from a popup's Undo (task #507). */
+export function refreshTaskOverview(queryClient: QueryClient, workspaceId: string) {
+  void queryClient.invalidateQueries({ queryKey: taskOverviewQueryKey(workspaceId) });
+}
+
 export const taskOverviewQuery = (
   workspaceId: string,
   api: TaskOverviewApi = serverTaskOverviewApi,
