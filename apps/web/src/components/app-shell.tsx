@@ -19,7 +19,6 @@ import { Button as AriaButton } from "react-aria-components";
 import type { NavItemType } from "#src/components/application/app-navigation/config";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { SidebarRail } from "#src/components/layout/sidebar/sidebar-rail";
-import { SetupChecklistCard } from "#src/features/onboarding/setup-checklist-card";
 import { MobileDrawerProvider } from "#src/components/layout/sidebar/mobile-header";
 import {
   SidebarExpanded,
@@ -200,18 +199,9 @@ export function AppShell({
     />
   );
 
-  // The expanded sidebar and the drawer share one footer: the setup checklist above the user card.
-  // The collapsed rail shows neither the card nor the checklist.
-  const expandedFooter = (
-    <div className="flex flex-col gap-3">
-      <SetupChecklistCard
-        workspaceId={workspaceId}
-        workspaceSlug={currentWorkspace.slug}
-        userId={user.id}
-      />
-      <UserMenuCard base={base} user={user} onSignOut={onSignOut} />
-    </div>
-  );
+  // The expanded sidebar and the drawer share one footer: the user card. The collapsed rail
+  // does not show it.
+  const expandedFooter = <UserMenuCard base={base} user={user} onSignOut={onSignOut} />;
 
   return (
     <MobileDrawerProvider>

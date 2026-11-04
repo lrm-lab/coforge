@@ -31,7 +31,7 @@ export const Route = createFileRoute("/w/$workspaceSlug/members")({
     owner: z.enum(["all", "mine"]).default("all").catch("all"),
     profile: profileParamSchema,
     agentTab: agentProfileTabParamSchema,
-    /** The dialog open over the page; the setup checklist links to `create-agent`. */
+    /** The dialog open over the page. */
     setup: z.enum(["create-agent", "invite"]).optional().catch(undefined),
   }),
   loaderDeps: ({ search }) => ({

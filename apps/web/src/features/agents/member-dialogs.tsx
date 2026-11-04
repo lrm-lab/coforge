@@ -1,7 +1,7 @@
 import { InviteMemberDialog } from "#src/features/workspaces/invite-member-dialog";
 import { NewAgentDialog } from "./new-agent-dialog";
 
-/** The Members page dialogs the URL can open; the setup checklist links to `?setup=create-agent`. */
+/** The Members page dialogs the URL can open, as `?setup=create-agent` or `?setup=invite`. */
 export type MemberDialog = "create-agent" | "invite";
 
 /**

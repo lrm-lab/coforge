@@ -14,8 +14,8 @@ import type {
 
 export const GITHUB_STATE_COOKIE = "__Host-coforge-github-state";
 export const GITHUB_INSTALL_STATE_COOKIE = "__Host-coforge-github-install-state";
-/** The Workspace a connection or installation was started from, and where in it the callback
- * returns to: `<slug>` for its Settings, `<slug>:home` for its home page. */
+/** The slug of the Workspace a connection or installation was started from; the callback returns
+ * to that Workspace's Settings. */
 export const GITHUB_RETURN_COOKIE = "__Host-coforge-github-return";
 
 export function githubStateCookie(state: string) {
@@ -35,13 +35,8 @@ function cookieValue(header: string, name: string) {
   );
 }
 
-/** Where in the Workspace the callback returns. A closed set: the cookie never names a path. */
-export const GITHUB_RETURN_TARGETS = ["settings", "home"] as const;
-export type GitHubReturnTarget = (typeof GITHUB_RETURN_TARGETS)[number];
-
-export function githubReturnCookie(workspaceSlug: string, target: GitHubReturnTarget = "settings") {
-  const value = target === "home" && workspaceSlug ? `${workspaceSlug}:home` : workspaceSlug;
-  return `${GITHUB_RETURN_COOKIE}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${workspaceSlug ? 600 : 0}`;
+export function githubReturnCookie(workspaceSlug: string) {
+  return `${GITHUB_RETURN_COOKIE}=${workspaceSlug}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${workspaceSlug ? 600 : 0}`;
 }
 
 export function validGitHubInstallationState(cookie: string, state: string) {
@@ -51,26 +46,16 @@ export function validGitHubInstallationState(cookie: string, state: string) {
   return expected.length === actual.length && timingSafeEqual(expected, actual);
 }
 
-/** The return cookie's Workspace slug and target; anything but `home` is Settings. */
-function returnPlace(cookieHeader: string) {
-  const [slug = "", target, ...extra] = cookieValue(cookieHeader, GITHUB_RETURN_COOKIE).split(":");
-  return { slug, home: target === "home" && extra.length === 0 };
-}
-
 /**
- * Where the callback returns: the Workspace home when the flow was started from there and did not
- * fail, otherwise Settings' Integrations section (which says what went wrong) in the Workspace the
- * flow was started from. For an installation started on GitHub, the Workspace the browser last
- * opened (the connection is the User's, so any of theirs shows it); the app root when neither is
- * known.
+ * Where the callback returns: Settings' Integrations section (which says what went wrong) in the
+ * Workspace the flow was started from. For an installation started on GitHub, the Workspace the
+ * browser last opened (the connection is the User's, so any of theirs shows it); the app root when
+ * neither is known.
  */
 function returnLocation(cookieHeader: string, github?: "connected" | GitHubCallbackFailure) {
-  const place = returnPlace(cookieHeader);
-  const slug = place.slug || readPreferredWorkspaceSlug(cookieHeader);
+  const slug =
+    cookieValue(cookieHeader, GITHUB_RETURN_COOKIE) || readPreferredWorkspaceSlug(cookieHeader);
   if (!slug || !isValidWorkspaceSlug(slug)) return "/";
-  // The flow's own Workspace and a good outcome; a failure is explained in Settings.
-  if (place.slug && place.home && (github === undefined || github === "connected"))
-    return workspacePath(slug);
   return workspacePath(slug, `/settings?section=integrations${github ? `&github=${github}` : ""}`);
 }
 

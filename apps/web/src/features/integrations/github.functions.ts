@@ -1,5 +1,4 @@
 import { createServerFn } from "@tanstack/react-start";
-import { z } from "zod";
 import { getRequest, setResponseHeader } from "@tanstack/react-start/server";
 import { declareNoStore } from "#src/features/no-store-response.server";
 
@@ -11,15 +10,10 @@ import {
 } from "#src/features/auth/function-auth";
 import { configuredGitHub } from "#src/server/integrations/github-config.server";
 import {
-  GITHUB_RETURN_TARGETS,
   githubInstallationStateCookie,
   githubReturnCookie,
   githubStateCookie,
 } from "#src/server/integrations/github-http.server";
-
-/** Where the callback comes back to: Settings (the default) or the Workspace home, from where the
- * setup checklist starts the flow. A closed set, never a path. */
-const startInput = z.object({ returnTo: z.enum(GITHUB_RETURN_TARGETS).optional() }).optional();
 
 async function requiredGitHub() {
   const github = await configuredGitHub();
@@ -36,7 +30,6 @@ type GitHubGate = NonNullable<Awaited<ReturnType<typeof configuredGitHub>>>;
  */
 async function startFlow(
   context: WorkspaceUserContext,
-  input: z.infer<typeof startInput>,
   begin: (
     github: GitHubGate,
   ) => Promise<{ state: string; url: string }> | { state: string; url: string },
@@ -50,10 +43,7 @@ async function startFlow(
     where: { id: context.workspaceId },
     select: { slug: true },
   });
-  setResponseHeader("set-cookie", [
-    stateCookie(attempt.state),
-    githubReturnCookie(slug, input?.returnTo),
-  ]);
+  setResponseHeader("set-cookie", [stateCookie(attempt.state), githubReturnCookie(slug)]);
   return { url: attempt.url };
 }
 
@@ -69,23 +59,15 @@ export const getGitHubConnection = createServerFn({ method: "GET" })
 
 export const startGitHubConnection = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
-  .validator(startInput)
-  .handler(({ context, data }) =>
-    startFlow(
-      context,
-      data,
-      (github) => github.connection.begin(context.user.id),
-      githubStateCookie,
-    ),
+  .handler(({ context }) =>
+    startFlow(context, (github) => github.connection.begin(context.user.id), githubStateCookie),
   );
 
 export const startGitHubReauthorization = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
-  .validator(startInput)
-  .handler(({ context, data }) =>
+  .handler(({ context }) =>
     startFlow(
       context,
-      data,
       (github) => github.connection.begin(context.user.id, "reauthorize"),
       githubStateCookie,
     ),
@@ -93,11 +75,9 @@ export const startGitHubReauthorization = createServerFn({ method: "POST" })
 
 export const startGitHubInstallation = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
-  .validator(startInput)
-  .handler(({ context, data }) =>
+  .handler(({ context }) =>
     startFlow(
       context,
-      data,
       (github) => github.connection.beginInstallation(),
       githubInstallationStateCookie,
     ),

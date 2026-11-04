@@ -41,7 +41,7 @@ The module map of `src/server/`, split out of [`apps/web/AGENTS.md`](../../AGENT
 - `server/integrations/` — GitHub connection, configuration, and webhooks.
 - `server/notifications/` — Web Push and in-page notification delivery (its egress check is `server/egress/`), and a person's account notification settings (pause, quiet hours, preview, sound, a phone's wait while the computer is in use, the device list and test).
 
-- `server/onboarding/` — `SetupChecklist`: which setup steps a member has done in a Workspace, computed from existing rows (no stored progress); `OnboardingWizard`: the first-sign-in wizard's state, assistant configuration (while it has never run) and completion (role saved, `onboardingPendingSince` cleared, assistant started).
+- `server/onboarding/` — `OnboardingWizard`: the first-sign-in wizard's state, assistant configuration (while it has never run) and completion (role saved, `onboardingPendingSince` cleared, assistant started).
 - `server/profiles/` — user avatars.
 - `server/projects/` — project settings, images, and repository file download.
 - `server/records/` — Workspace Records (see the last section).
