@@ -1,5 +1,5 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { ContentEditorRef } from "#src/features/records/report-editor/content-editor";
 import { isAppError } from "#src/lib/app-error";
@@ -13,6 +13,7 @@ import {
   type DocumentConflict,
 } from "./artifact-conflict-model";
 import { artifactDocumentQuery, refreshArtifact, type ArtifactActorRef } from "./artifact-queries";
+import { nextSaveAttempt, type SaveAttempt } from "./artifact-save-attempt";
 
 /** A version someone else published while the document was open. */
 export type PublishedVersion = { number: number; publisher: ArtifactActorRef };
@@ -35,15 +36,20 @@ export function useArtifactEditor(artifactId: string) {
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
   const [dirty, setDirty] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [readOnly, setReadOnly] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [baseMoved, setBaseMoved] = useState(false);
   const [conflict, setConflict] = useState<ConflictResolution | null>(null);
   const [published, setPublished] = useState<PublishedVersion | null>(null);
-  /** One key per save attempt: a retry of the same attempt reuses it, so it saves once. */
-  const attemptKey = useRef<string | null>(null);
+  /** The last save that has not answered: only its exact retry reuses its key. */
+  const attempt = useRef<SaveAttempt | null>(null);
+  /** A save in flight, its failure, and a fresh start on the next edit (TanStack Query). */
+  const saving = useMutation({
+    mutationFn: (input: Parameters<typeof saveArtifactDocument>[0]["data"]) =>
+      saveArtifactDocument({ data: input }),
+  });
   /** The newest version announced while a save was in flight, handled once it has answered. */
+  /** A save from its start until its version is shown (`saving` ends at the answer). */
+  const [settling, setSettling] = useState(false);
   const [missed, setMissed] = useState<{ version: PublishedVersion; announce: boolean } | null>(
     null,
   );
@@ -60,18 +66,26 @@ export function useArtifactEditor(artifactId: string) {
     setText(data.text);
   }, [data, base]);
 
-  /** Shows the latest version in place of the one being edited (nothing is unsaved). */
-  async function takeLatest() {
+  /** Edits so far: an edit made while the latest version is read keeps that version out. */
+  const edits = useRef(0);
+
+  /**
+   * Shows the latest version in place of the one being edited (nothing is unsaved). The read
+   * takes a moment: if the person starts typing meanwhile, their text stays and the next save
+   * merges the latest version, unless they asked to drop their edits (`force`).
+   */
+  async function takeLatest({ force = false } = {}) {
+    const editsBefore = edits.current;
     const latest = await queryClient.fetchQuery({
       ...artifactDocumentQuery(artifactId),
       staleTime: 0,
     });
+    if (!force && edits.current !== editsBefore) return;
     setBase(latest.artifact.currentVersion);
     setSavedTitle(latest.artifact.title);
     setTitle(latest.artifact.title);
     setText(latest.text);
     editorRef.current?.setMarkdown(latest.text);
-    touched.current = false;
     setDirty(false);
     setBaseMoved(false);
   }
@@ -82,7 +96,7 @@ export function useArtifactEditor(artifactId: string) {
     refreshArtifact(queryClient, artifactId);
     // A save of this page's own announces its version too, so while one is in flight the
     // announcement waits for its answer; someone else's later version is taken in after it.
-    if (saving) {
+    if (settling) {
       setMissed((kept) =>
         version.number > (kept?.version.number ?? 0) ? { version, announce } : kept,
       );
@@ -98,44 +112,52 @@ export function useArtifactEditor(artifactId: string) {
   const replayMissed = useEffectEvent((kept: NonNullable<typeof missed>) =>
     onPublished(kept.version, { announce: kept.announce }),
   );
+  // Once the save has settled - answered, and the version it made read in as the base - so the
+  // announcement is weighed against that base.
   useEffect(() => {
-    if (saving || !missed) return;
+    if (settling || !missed) return;
     setMissed(null);
     replayMissed(missed);
-  }, [saving, missed]);
+  }, [settling, missed]);
 
-  /** Whether the person has acted on the text since it was read: the editor reports the text it
-   * was given once it has laid it out, which is no edit. */
-  const touched = useRef(false);
-  function edit(next: { title?: string; text?: string }) {
-    if (next.text !== undefined && next.title === undefined && !touched.current) return;
-    if (next.title !== undefined) setTitle(next.title);
-    if (next.text !== undefined) setText(next.text);
+  /** The person changed the document: at once, while the text itself comes after the editor's
+   * debounce (`ContentEditor` tells only of the person's edits). */
+  function markEdited() {
+    edits.current += 1;
     setDirty(true);
-    setError(null);
+    if (saving.isError) saving.reset();
+  }
+  function edit(next: { title?: string; text?: string }) {
+    if (next.title !== undefined) {
+      setTitle(next.title);
+      markEdited();
+    }
+    if (next.text !== undefined) setText(next.text);
   }
 
   async function save() {
-    if (base === null || saving || readOnly) return;
+    if (base === null || saving.isPending || readOnly) return;
     const resolving = conflict;
     const body = resolving ? resolvedText(resolving) : (editorRef.current?.getMarkdown() ?? text);
     const settings = resolving ? resolvedSettings(resolving) : {};
     if (body === null || settings === null) return;
     const nextTitle = settings.title ?? (title.trim() || savedTitle);
-    attemptKey.current ??= crypto.randomUUID();
-    setSaving(true);
-    setError(null);
+    const payload = {
+      baseVersion: resolving ? resolving.currentVersion : base,
+      text: body,
+      ...(nextTitle !== savedTitle ? { title: nextTitle } : {}),
+      // A description conflict's pick (the page does not edit the description otherwise).
+      ...(settings.description !== undefined ? { description: settings.description } : {}),
+    };
+    attempt.current = nextSaveAttempt(attempt.current, payload);
+    setSettling(true);
     try {
-      const saved = await saveArtifactDocument({
-        data: {
-          artifactId,
-          baseVersion: resolving ? resolving.currentVersion : base,
-          idempotencyKey: attemptKey.current,
-          text: body,
-          ...(nextTitle !== savedTitle ? { title: nextTitle } : {}),
-        },
+      const saved = await saving.mutateAsync({
+        artifactId,
+        idempotencyKey: attempt.current.key,
+        ...payload,
       });
-      attemptKey.current = null;
+      attempt.current = null;
       if (saved.status === "conflict") {
         setConflict(resolutionOf(saved as DocumentConflict, entryPath, resolving ?? undefined));
         return;
@@ -160,19 +182,13 @@ export function useArtifactEditor(artifactId: string) {
         setText(body);
       }
     } catch (cause) {
-      if (isAppError(cause) && cause.errorId === "artifact-base-moved") setBaseMoved(true);
-      else if (isAppError(cause) && cause.code === "ACCESS_DENIED") setReadOnly(true);
-      else
-        setError(
-          m.doc_save_failed({
-            reason:
-              isAppError(cause) && cause.errorId === "artifact-file-too-large"
-                ? m.doc_save_too_large()
-                : m.doc_save_error(),
-          }),
-        );
+      if (isBaseMoved(cause)) {
+        setBaseMoved(true);
+        // The banner's confirmation names the latest version.
+        refreshArtifact(queryClient, artifactId);
+      } else if (isWriteDenied(cause)) setReadOnly(true);
     } finally {
-      setSaving(false);
+      setSettling(false);
     }
   }
 
@@ -180,15 +196,28 @@ export function useArtifactEditor(artifactId: string) {
   async function discard() {
     setConflict(null);
     setPublished(null);
-    attemptKey.current = null;
-    await takeLatest();
+    attempt.current = null;
+    saving.reset();
+    await takeLatest({ force: true });
   }
+
+  const failure = saving.error;
+  // A newer version or lost write access has its own banner, not a failure line.
+  const error =
+    !failure || isBaseMoved(failure) || isWriteDenied(failure)
+      ? null
+      : m.doc_save_failed({
+          reason:
+            isAppError(failure) && failure.errorId === "artifact-file-too-large"
+              ? m.doc_save_too_large()
+              : m.doc_save_error(),
+        });
 
   const status: ArtifactEditorStatus = readOnly
     ? "readOnly"
     : conflict
       ? "conflict"
-      : saving
+      : saving.isPending
         ? "saving"
         : dirty
           ? "unsaved"
@@ -209,9 +238,7 @@ export function useArtifactEditor(artifactId: string) {
     published,
     dismissPublished: () => setPublished(null),
     edit,
-    touch: () => {
-      touched.current = true;
-    },
+    markEdited,
     save,
     discard,
     takeLatest,
@@ -220,3 +247,9 @@ export function useArtifactEditor(artifactId: string) {
 }
 
 export type ArtifactEditor = ReturnType<typeof useArtifactEditor>;
+
+/** The save went over a version that is no longer the latest one the server can merge onto. */
+const isBaseMoved = (cause: unknown) =>
+  isAppError(cause) && cause.errorId === "artifact-base-moved";
+/** The viewer may read the document but no longer write it. */
+const isWriteDenied = (cause: unknown) => isAppError(cause) && cause.code === "ACCESS_DENIED";

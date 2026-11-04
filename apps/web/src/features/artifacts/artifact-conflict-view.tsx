@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Check, Edit05 } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
+import { RadioButton, RadioGroup } from "#src/components/base/radio-buttons/radio-buttons";
 import { TextArea } from "#src/components/base/textarea/textarea";
 import { MessageBody } from "#src/features/conversations/message-body";
 import { cn } from "#src/lib/utils";
@@ -28,15 +29,19 @@ const SETTING_LABEL: Record<SettingConflict["name"], () => string> = {
 export function ArtifactConflictView({
   resolution,
   onChange,
+  disabled = false,
 }: {
   resolution: ConflictResolution;
   onChange: (next: ConflictResolution) => void;
+  /** While the picks are being saved: a pick changed then would not be in the save. */
+  disabled?: boolean;
 }) {
   let index = 0;
   const settingCards = resolution.settings.map((setting) => {
     index += 1;
     return (
       <ConflictCard
+        disabled={disabled}
         key={`setting:${setting.name}`}
         heading={m.doc_conflict_setting({
           index: String(index),
@@ -67,6 +72,7 @@ export function ArtifactConflictView({
     const at = conflictIndex;
     return (
       <ConflictCard
+        disabled={disabled}
         key={position}
         heading={m.doc_conflict_text({ index: String(index) })}
         sides={chunk.conflict}
@@ -96,7 +102,9 @@ function ConflictCard({
   markdown,
   choice,
   onChoose,
+  disabled,
 }: {
+  disabled: boolean;
   heading: string;
   sides: { mine: string; theirs: string };
   base: string | null;
@@ -116,23 +124,19 @@ function ConflictCard({
       <span className="break-words">{value}</span>
     );
   const option = (side: "mine" | "theirs", label: string) => (
-    <label
-      className={cn(
-        "flex cursor-pointer gap-3 border-t border-secondary px-3 py-2.5 hover:bg-primary_hover",
-        choice === side && "bg-brand-primary hover:bg-brand-primary",
-      )}
-    >
-      <input
-        type="radio"
-        className="mt-1 size-4 shrink-0 accent-[var(--color-brand-600)]"
-        checked={choice === side}
-        onChange={() => onChoose(side)}
-      />
-      <span className="flex min-w-0 flex-1 flex-col gap-1">
-        <span className="text-xs font-semibold text-secondary">{label}</span>
-        <span className="text-md text-primary">{text(sides[side])}</span>
-      </span>
-    </label>
+    <RadioButton
+      value={side}
+      size="sm"
+      label={label}
+      hint={<span className="text-md text-primary">{text(sides[side])}</span>}
+      className={({ isSelected, isDisabled }) =>
+        cn(
+          "cursor-pointer gap-3 border-t border-secondary px-3 py-2.5 outline-hidden",
+          !isDisabled && "hover:bg-primary_hover",
+          isSelected && "bg-brand-primary hover:bg-brand-primary",
+        )
+      }
+    />
   );
   return (
     <section
@@ -164,10 +168,16 @@ function ConflictCard({
           {text(base)}
         </div>
       )}
-      <div role="radiogroup" aria-label={heading}>
+      <RadioGroup
+        aria-label={heading}
+        className="gap-0"
+        isDisabled={disabled}
+        value={typeof choice === "string" ? choice : null}
+        onChange={(value) => onChoose(value as "mine" | "theirs")}
+      >
         {option("mine", m.doc_conflict_mine())}
         {option("theirs", m.doc_conflict_theirs())}
-      </div>
+      </RadioGroup>
       <div className="flex flex-col gap-2 border-t border-secondary px-3 py-2.5">
         {own === null ? (
           <div className="flex items-center gap-3">
@@ -175,6 +185,7 @@ function ConflictCard({
               size="xs"
               color="secondary"
               iconLeading={Edit05}
+              isDisabled={disabled}
               onClick={() => onChoose({ own: ownDraft(sides) })}
             >
               {m.doc_conflict_own()}
@@ -185,6 +196,7 @@ function ConflictCard({
             <p className="text-xs text-tertiary">{m.doc_conflict_own_hint()}</p>
             <TextArea
               aria-label={m.doc_conflict_own()}
+              isDisabled={disabled}
               value={own}
               rows={Math.min(10, Math.max(3, own.split("\n").length))}
               onChange={(value) => onChoose({ own: value })}

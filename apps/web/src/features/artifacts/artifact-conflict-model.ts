@@ -39,14 +39,13 @@ export type ConflictResolution = {
 
 type TextConflict = Extract<ConflictChunk, { conflict: unknown }>["conflict"];
 
-const sameConflict = (a: TextConflict, b: TextConflict) =>
-  a.base === b.base && a.mine === b.mine && a.theirs === b.theirs;
-
 /**
  * The resolution of a conflict answer. `previous` is what the viewer had picked for the answer
- * before (a save of the picks that came back as a conflict again): a conflict that is the same as
- * one picked then keeps its pick, so nobody picks twice what did not change. The document's file
- * is `entryPath` when the answer names it, else its only file.
+ * before (a save of the picks that came back as a conflict again). That save sent each pick's
+ * text as the viewer's side, so a new conflict whose `mine` is the text of an earlier pick is
+ * that place again: it keeps the pick (as the viewer's side, or the same own rewrite), and
+ * nobody picks twice what they already decided. The document's file is `entryPath` when the
+ * answer names it, else its only file.
  */
 export function resolutionOf(
   answer: DocumentConflict,
@@ -55,22 +54,25 @@ export function resolutionOf(
 ): ConflictResolution {
   const file = answer.files.find((each) => each.path === entryPath) ?? answer.files[0];
   const chunks = file?.chunks ?? [];
-  const before = previous ? conflictsOf(previous.chunks) : [];
+  // Each earlier pick claims at most one new conflict, in document order.
+  const picked = previous
+    ? conflictsOf(previous.chunks).flatMap((conflict, index) => {
+        const choice = previous.textChoices[index];
+        return choice === undefined ? [] : [{ text: chosen(choice, conflict), choice }];
+      })
+    : [];
   const textChoices = conflictsOf(chunks).map((conflict) => {
-    const index = before.findIndex((each) => sameConflict(each, conflict));
-    return index === -1 ? undefined : previous!.textChoices[index];
+    const index = picked.findIndex((each) => each.text === conflict.mine);
+    if (index === -1) return undefined;
+    const [{ choice }] = picked.splice(index, 1);
+    return keptChoice(choice, conflict.mine);
   });
   const settingChoices: ConflictResolution["settingChoices"] = {};
   for (const setting of answer.settings) {
-    const kept = previous?.settings.find(
-      (each) =>
-        each.name === setting.name &&
-        each.base === setting.base &&
-        each.mine === setting.mine &&
-        each.theirs === setting.theirs,
-    );
-    const choice = kept && previous!.settingChoices[kept.name];
-    if (choice) settingChoices[setting.name] = choice;
+    const before = previous?.settings.find((each) => each.name === setting.name);
+    const choice = before && previous!.settingChoices[before.name];
+    if (choice && chosen(choice, before) === setting.mine)
+      settingChoices[setting.name] = keptChoice(choice, setting.mine);
   }
   return {
     currentVersion: answer.currentVersion,
@@ -80,6 +82,14 @@ export function resolutionOf(
     settingChoices,
   };
 }
+
+const chosen = (choice: ConflictChoice, sides: { mine: string; theirs: string }) =>
+  typeof choice === "string" ? sides[choice] : choice.own;
+
+/** An earlier pick on the place it came back as: its text is now the viewer's side; an own
+ * rewrite stays one, so its box stays open. */
+const keptChoice = (choice: ConflictChoice, mine: string): ConflictChoice =>
+  typeof choice === "string" ? "mine" : { own: mine };
 
 /** The text conflicts, in document order. */
 export function conflictsOf(chunks: readonly ConflictChunk[]): TextConflict[] {
@@ -94,9 +104,6 @@ export function conflictProgress(resolution: ConflictResolution) {
     resolution.settings.filter((setting) => resolution.settingChoices[setting.name]).length;
   return { count, picked, done: picked === count };
 }
-
-const chosen = (choice: ConflictChoice, sides: { mine: string; theirs: string }) =>
-  typeof choice === "string" ? sides[choice] : choice.own;
 
 /** The document's text with every conflict picked, or null while one is not. */
 export function resolvedText(resolution: ConflictResolution): string | null {

@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useBlocker } from "@tanstack/react-router";
-import { AlertCircle, ClockRewind, RefreshCw01 } from "@untitledui/icons";
+import { getRouteApi, useRouter } from "@tanstack/react-router";
+import { AlertCircle, ClockRewind, Copy01, RefreshCw01 } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { useAppToast } from "#src/components/ui/toast";
@@ -12,17 +12,20 @@ import {
 } from "#src/features/conversations/conversation-realtime";
 import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime";
 import { ContentEditor } from "#src/features/records/report-editor/content-editor";
+import { ArtifactDocumentFields } from "./artifact-document-fields";
+import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { isAppError } from "#src/lib/app-error";
-import { cn } from "#src/lib/utils";
+import { copyText } from "#src/lib/clipboard";
 import { m } from "#src/paraglide/messages";
 import { deleteArtifact, revertArtifact } from "./artifacts.functions";
 import { conflictProgress } from "./artifact-conflict-model";
 import { ArtifactConflictView } from "./artifact-conflict-view";
 import { ArtifactHistory } from "./artifact-history";
+import { useArtifactLeaveGuard } from "./artifact-leave-guard";
 import { ArtifactPaneConfirms, type ArtifactConfirming } from "./artifact-pane-confirms";
-import { artifactLink } from "./artifact-link";
+import { artifactRoute } from "./artifact-link";
 import { ArtifactBanner, ArtifactPaneHeader } from "./artifact-pane-header";
-import { actorName } from "./artifact-parts";
+import { actorName, PaneFrame } from "./artifact-parts";
 import {
   artifactDocumentQuery,
   artifactHomeConversation,
@@ -37,6 +40,8 @@ import {
   type ArtifactSearch,
 } from "./artifact-search";
 import { useArtifactEditor, type ArtifactEditor } from "./use-artifact-editor";
+
+const workspaceRoute = getRouteApi("/w/$workspaceSlug");
 
 /**
  * An open document beside the conversation (task #385), or over it in full screen: its header,
@@ -55,18 +60,17 @@ function ArtifactPaneFor({ artifactId, search }: { artifactId: string; search: A
   const toast = useAppToast();
   const navigate = useArtifactNavigation();
   const workspaceId = useCurrentWorkspaceId();
+  const workspaceSlug = useWorkspaceSlug();
+  const viewerId = workspaceRoute.useLoaderData({ select: (data) => data.user.id });
+  const router = useRouter();
   const editor = useArtifactEditor(artifactId);
   const actorOf = useArtifactActor();
   const [confirming, setConfirming] = useState<ArtifactConfirming>(null);
   /** Set once the document is gone, so closing it asks nothing. */
   const deleted = useRef(false);
-  // Leaving this document with unsaved edits asks first: closing it, opening another, going
-  // back, or closing the tab. Another version, full screen or the history keep it open.
-  const blocker = useBlocker({
-    shouldBlockFn: ({ next }) =>
-      editor.dirty && !deleted.current && (next.search as { doc?: string }).doc !== artifactId,
-    enableBeforeUnload: () => editor.dirty,
-    withResolver: true,
+  const leavePrompt = useArtifactLeaveGuard({
+    dirty: () => editor.dirty && !deleted.current,
+    stays: (next) => next.doc === artifactId,
   });
   const old = search.docVersion;
   const oldRead = useQuery({
@@ -91,11 +95,10 @@ function ArtifactPaneFor({ artifactId, search }: { artifactId: string; search: A
     onPublication: ({ data }) => {
       const event = decodeArtifactVersionPublishedEvent(data);
       if (event?.artifactId !== artifactId) return;
-      // The viewer's own versions (a revert, a save from another tab) need no announcing.
-      editor.onPublished(
-        { number: event.number, publisher: event.publisher },
-        { announce: actorOf(event.publisher)?.viewer !== true },
-      );
+      // The viewer's own versions (a revert, a save from another tab) need no announcing; the
+      // viewer is known from the page, before the Workspace directory has loaded.
+      const own = "userId" in event.publisher && event.publisher.userId === viewerId;
+      editor.onPublished({ number: event.number, publisher: event.publisher }, { announce: !own });
     },
   });
 
@@ -108,23 +111,34 @@ function ArtifactPaneFor({ artifactId, search }: { artifactId: string; search: A
           status="readOnly"
           version={0}
           full={Boolean(search.docFull)}
-          history={false}
-          canDelete={false}
-          onToggleHistory={() => {}}
-          onToggleFull={() => navigate({ docFull: search.docFull ? undefined : true })}
-          onCopyLink={() => {}}
-          onDelete={() => {}}
+          onToggleFull={() =>
+            navigate({ docFull: search.docFull ? undefined : true }, { replace: true })
+          }
           onClose={close}
         />
         <p className="p-6 text-sm text-tertiary">{m.doc_load_failed()}</p>
       </PaneFrame>
     );
   const title = editor.title || current?.artifact.title || m.doc_untitled();
-  const copyLink = () =>
-    void navigator.clipboard.writeText(artifactLink(window.location, artifactId)).then(
-      () => toast.success(m.doc_link_copied()),
-      () => toast.error(m.conversation_copy_failed()),
+  // The document's own conversation page, not this one: it opens for whoever reads that page.
+  const route =
+    current &&
+    artifactRoute(
+      workspaceSlug,
+      { kind: current.homeKind, conversationId: home ?? null },
+      artifactId,
     );
+  const copyLink =
+    route &&
+    (() =>
+      void copy(
+        `${window.location.origin}${router.buildLocation(route).publicHref}`,
+        m.doc_link_copied(),
+      ));
+  const copy = async (text: string, done: string) => {
+    if (await copyText(text)) toast.success(done);
+    else toast.error(m.conversation_copy_failed());
+  };
   return (
     <PaneFrame full={search.docFull} history={Boolean(search.docHistory)}>
       <ArtifactPaneHeader
@@ -152,6 +166,7 @@ function ArtifactPaneFor({ artifactId, search }: { artifactId: string; search: A
               number={old!}
               latest={latest}
               text={oldRead.data?.text}
+              failed={oldRead.isError}
               onLatest={() => navigate({ docVersion: undefined }, { replace: true })}
               onRevert={() => setConfirming({ revert: old! })}
             />
@@ -160,6 +175,12 @@ function ArtifactPaneFor({ artifactId, search }: { artifactId: string; search: A
               editor={editor}
               actorName={(actor) => actorName(actorOf(actor))}
               onDiscard={() => setConfirming("discard")}
+              onCopyMine={() =>
+                void copy(
+                  editor.editorRef.current?.getMarkdown() ?? editor.text,
+                  m.doc_mine_copied(),
+                )
+              }
             />
           )}
         </div>
@@ -176,10 +197,10 @@ function ArtifactPaneFor({ artifactId, search }: { artifactId: string; search: A
           </aside>
         )}
       </div>
+      {leavePrompt}
       <ArtifactPaneConfirms
         confirming={confirming}
         onDone={() => setConfirming(null)}
-        leaving={blocker.status === "blocked" ? blocker : null}
         title={title}
         latest={latest}
         dirty={editor.dirty}
@@ -210,43 +231,16 @@ function ArtifactPaneFor({ artifactId, search }: { artifactId: string; search: A
   );
 }
 
-/** The pane beside the conversation; in full screen, the whole page; on a phone, over it. */
-function PaneFrame({
-  full,
-  history,
-  children,
-}: {
-  full?: boolean;
-  history?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <section
-      aria-label={m.doc_pane_label()}
-      className={cn(
-        "@container/doc flex min-h-0 flex-col bg-primary max-md:fixed max-md:inset-0 max-md:z-40 max-md:w-auto",
-        full
-          ? "min-w-0 flex-1"
-          : history
-            ? // The history needs a wider pane; where the chat would be left too narrow beside
-              // it, the pane takes the page until the history closes (ConversationPageBody).
-              "min-w-0 flex-1 @6xl/page:w-[min(64rem,68%)] @6xl/page:flex-none @6xl/page:border-l @6xl/page:border-secondary"
-            : "w-[min(48rem,56%)] shrink-0 border-l border-secondary",
-      )}
-    >
-      {children}
-    </section>
-  );
-}
-
 function LatestVersion({
   editor,
   actorName,
   onDiscard,
+  onCopyMine,
 }: {
   editor: ArtifactEditor;
   actorName: (actor: ArtifactActorRef) => string;
   onDiscard: () => void;
+  onCopyMine: () => void;
 }) {
   const { conflict, published, document } = editor;
   if (!document.data || editor.base === null) return <div aria-busy="true" className="flex-1" />;
@@ -261,14 +255,23 @@ function LatestVersion({
           tone="warning"
           icon={AlertCircle}
           actions={
-            <Button
-              size="xs"
-              color="secondary"
-              iconLeading={RefreshCw01}
-              onClick={() => void editor.discard()}
-            >
-              {m.doc_refresh()}
-            </Button>
+            <>
+              {editor.dirty && (
+                // What is unsaved can be kept elsewhere before the refresh drops it.
+                <Button size="xs" color="link-gray" iconLeading={Copy01} onClick={onCopyMine}>
+                  {m.doc_copy_mine()}
+                </Button>
+              )}
+              <Button
+                size="xs"
+                color="secondary"
+                iconLeading={RefreshCw01}
+                // Unsaved edits are dropped only once the person confirms, as in a conflict.
+                onClick={() => (editor.dirty ? onDiscard() : void editor.discard())}
+              >
+                {m.doc_refresh()}
+              </Button>
+            </>
           }
         >
           {m.doc_base_moved()}
@@ -309,54 +312,22 @@ function LatestVersion({
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-[46rem] px-6 pt-6 pb-16 md:px-10">
           {conflict ? (
-            <ArtifactConflictView resolution={conflict} onChange={editor.setConflict} />
+            <ArtifactConflictView
+              resolution={conflict}
+              onChange={editor.setConflict}
+              disabled={editor.status === "saving"}
+            />
           ) : (
-            <>
-              <textarea
-                // A title is one line that wraps, as a long one would not fit a phone's width.
-                rows={1}
-                aria-label={m.doc_title_placeholder()}
-                placeholder={m.doc_title_placeholder()}
-                value={editor.title}
-                readOnly={!typing}
-                onChange={(event) =>
-                  editor.edit({ title: event.target.value.replace(/[\r\n]+/g, " ") })
-                }
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    editor.editorRef.current?.focus();
-                  }
-                }}
-                className="mb-4 w-full resize-none bg-transparent text-display-md font-semibold text-primary outline-hidden [field-sizing:content] placeholder:text-placeholder"
-              />
-              <div
-                // Only what the person does counts as an edit: the editor also reports the text
-                // it was given once it has laid it out.
-                onPointerDown={editor.touch}
-                onPaste={editor.touch}
-                onBeforeInput={editor.touch}
-                onCompositionStart={editor.touch}
-                onDrop={editor.touch}
-                onKeyDown={(event) => {
-                  editor.touch();
-                  // ⌘S / Ctrl+S saves, as in any editor.
-                  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
-                    event.preventDefault();
-                    void editor.save();
-                  }
-                }}
-              >
-                <ContentEditor
-                  ref={editor.editorRef}
-                  defaultValue={editor.text}
-                  editable={typing}
-                  placeholder={m.doc_body_placeholder()}
-                  debounceMs={150}
-                  onUpdate={(text) => editor.edit({ text })}
-                />
-              </div>
-            </>
+            <ArtifactDocumentFields
+              editorRef={editor.editorRef}
+              title={editor.title}
+              text={editor.text}
+              editable={typing}
+              onTitle={(title) => editor.edit({ title })}
+              onEdit={editor.markEdited}
+              onText={(text) => editor.edit({ text })}
+              onSave={() => void editor.save()}
+            />
           )}
         </div>
       </div>
@@ -395,12 +366,15 @@ function OldVersion({
   number,
   latest,
   text,
+  failed,
   onLatest,
   onRevert,
 }: {
   number: number;
   latest: number;
   text: string | undefined;
+  /** The version could not be read: said so, with the way back to the latest above it. */
+  failed: boolean;
   onLatest: () => void;
   onRevert: () => void;
 }) {
@@ -424,7 +398,9 @@ function OldVersion({
       </ArtifactBanner>
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-[46rem] px-6 pt-6 pb-16 md:px-10">
-          {text === undefined ? (
+          {failed ? (
+            <p className="text-sm text-tertiary">{m.doc_version_load_failed()}</p>
+          ) : text === undefined ? (
             <div aria-busy="true" />
           ) : (
             <ContentEditor editable={false} defaultValue={text} showBubbleMenu={false} />

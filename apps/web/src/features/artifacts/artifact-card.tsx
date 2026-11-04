@@ -38,8 +38,9 @@ function ArtifactCardView({ artifactId }: { artifactId: string }) {
       aria-label={m.doc_card_label({ title })}
       className="group/doc flex w-full max-w-[34rem] cursor-pointer flex-col gap-2 rounded-xl border border-secondary bg-primary p-3 shadow-xs transition hover:border-brand hover:shadow-sm"
       onClick={(event) => {
-        // A click on the card opens it; one that ends a text selection does not.
+        // A click on the card opens it; one that ends a text selection, or presses Open, does not.
         if (window.getSelection()?.toString()) return;
+        if ((event.target as Element).closest("button")) return;
         event.stopPropagation();
         open();
       }}

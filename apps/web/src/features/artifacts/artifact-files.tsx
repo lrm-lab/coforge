@@ -1,22 +1,15 @@
 import { Button as AriaButton, ToggleButton } from "react-aria-components";
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Plus } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
-import { useAppToast } from "#src/components/ui/toast";
 import { ConversationFilesPanel } from "#src/features/conversations/conversation-files";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { createArtifactDocument } from "./artifacts.functions";
 import { ArtifactActor, ArtifactIcon, useArtifactTime, versionLabel } from "./artifact-parts";
-import {
-  artifactListQuery,
-  refreshArtifact,
-  useArtifactActor,
-  type ArtifactCard,
-} from "./artifact-queries";
-import { openArtifactSearch, useArtifactNavigation } from "./artifact-search";
+import { artifactListQuery, useArtifactActor, type ArtifactCard } from "./artifact-queries";
+import { draftArtifactSearch, openArtifactSearch, useArtifactNavigation } from "./artifact-search";
 
 type Filter = "all" | "docs" | "files";
 
@@ -40,7 +33,7 @@ export function ConversationFilesWithDocuments({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 flex-wrap items-center gap-1.5 px-4 pt-4 md:px-6">
-        <div role="group" aria-label={m.doc_filter_all()} className="flex items-center gap-1">
+        <div role="group" aria-label={m.doc_filter_label()} className="flex items-center gap-1">
           <FilterChip on={filter === "all"} onClick={() => setFilter("all")}>
             {m.doc_filter_all()}
           </FilterChip>
@@ -53,7 +46,7 @@ export function ConversationFilesWithDocuments({
           </FilterChip>
         </div>
         <span className="flex-1" />
-        {canCreate && <NewDocumentButton conversationId={conversationId} />}
+        {canCreate && <NewDocumentButton />}
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         {filter !== "files" && (
@@ -90,31 +83,15 @@ function FilterChip({
   );
 }
 
-function NewDocumentButton({ conversationId }: { conversationId: string }) {
-  const queryClient = useQueryClient();
+/** Opens a new document as a draft: it is created on its first save (`ArtifactDraftPane`). */
+function NewDocumentButton() {
   const navigate = useArtifactNavigation();
-  const toast = useAppToast();
-  const [pending, setPending] = useState(false);
   return (
     <Button
       size="sm"
       color="primary"
       iconLeading={Plus}
-      isLoading={pending}
-      onClick={async () => {
-        setPending(true);
-        try {
-          const created = await createArtifactDocument({
-            data: { conversationId, title: m.doc_untitled() },
-          });
-          refreshArtifact(queryClient, created.id);
-          navigate(openArtifactSearch(created.id));
-        } catch {
-          toast.error(m.doc_new_failed());
-        } finally {
-          setPending(false);
-        }
-      }}
+      onClick={() => navigate(draftArtifactSearch)}
     >
       {m.doc_new()}
     </Button>

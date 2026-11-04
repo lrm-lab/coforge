@@ -69,7 +69,13 @@ function HistoryPage({
   onMore?: (before: number) => void;
 }) {
   const { data, isPending, isError } = useQuery(artifactHistoryQuery(artifactId, before));
-  if (isPending) return <li className="px-2 py-2 text-sm text-tertiary">…</li>;
+  if (isPending)
+    return (
+      <li aria-busy="true" className="px-2 py-2 text-sm text-tertiary">
+        <span aria-hidden="true">…</span>
+        <span className="sr-only">{m.doc_loading()}</span>
+      </li>
+    );
   if (isError)
     return <li className="px-2 py-2 text-sm text-error-primary">{m.doc_history_failed()}</li>;
   if (first && data.versions.length === 0)

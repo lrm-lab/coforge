@@ -3,7 +3,6 @@ import { z } from "zod";
 
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { artifactInputs } from "./artifact-inputs";
-import { canDeleteArtifact } from "#src/server/artifacts/artifact-access.server";
 import { productionArtifacts } from "#src/server/artifacts/artifact-composition.server";
 
 /**
@@ -40,17 +39,9 @@ export const loadArtifactCards = createServerFn({ method: "GET" })
 export const loadArtifactDocument = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .validator(z.object({ artifactId: id, version: version.optional() }).strict())
-  .handler(async ({ context, data }) => {
-    const scope = scopeOf(context);
-    const read = await productionArtifacts(context.db).documents.load(scope, data);
-    // Whether the pane offers Delete: the service's own rule, for a document just read.
-    const author = await context.db.artifact.findFirstOrThrow({
-      where: { id: read.artifact.id, workspaceId: scope.workspaceId },
-      select: { authorUserId: true, authorAgentId: true },
-    });
-    const canDelete = await canDeleteArtifact(context.db, scope.workspaceId, scope.actor, author);
-    return { ...read, canDelete };
-  });
+  .handler(({ context, data }) =>
+    productionArtifacts(context.db).documents.load(scopeOf(context), data),
+  );
 
 /** A document's versions, newest first; `before` is the previous page's `nextBefore`. */
 export const loadArtifactHistory = createServerFn({ method: "GET" })

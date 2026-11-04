@@ -51,8 +51,8 @@ export function ArtifactPaneHeader({
   status,
   version,
   full,
-  history,
-  canDelete,
+  history = false,
+  canDelete = false,
   onToggleHistory,
   onToggleFull,
   onCopyLink,
@@ -63,12 +63,15 @@ export function ArtifactPaneHeader({
   status: ArtifactEditorStatus | "old";
   version: number;
   full: boolean;
-  history: boolean;
-  canDelete: boolean;
-  onToggleHistory: () => void;
+  history?: boolean;
+  canDelete?: boolean;
+  /** Absent where there is no history yet (a draft, a document that did not load). */
+  onToggleHistory?: () => void;
   onToggleFull: () => void;
-  onCopyLink: () => void;
-  onDelete: () => void;
+  /** Absent where there is nothing to link to or delete yet: no "more" menu. */
+  onCopyLink?: () => void;
+  /** Offered only with `canDelete`: absent where there is nothing to delete yet. */
+  onDelete?: () => void;
   onClose: () => void;
 }) {
   return (
@@ -77,15 +80,17 @@ export function ArtifactPaneHeader({
       <h2 className="min-w-0 truncate text-sm font-semibold text-primary">{title}</h2>
       <StatusLine status={status} version={version} />
       <span className="flex-1" />
-      <ButtonUtility
-        icon={ClockRewind}
-        size="sm"
-        color="tertiary"
-        tooltip={m.doc_history()}
-        aria-pressed={history}
-        className={cn(history && "bg-active")}
-        onClick={onToggleHistory}
-      />
+      {onToggleHistory && (
+        <ButtonUtility
+          icon={ClockRewind}
+          size="sm"
+          color="tertiary"
+          tooltip={m.doc_history()}
+          aria-pressed={history}
+          className={cn(history && "bg-active")}
+          onClick={onToggleHistory}
+        />
+      )}
       <ButtonUtility
         icon={full ? Minimize01 : Maximize01}
         size="sm"
@@ -94,19 +99,21 @@ export function ArtifactPaneHeader({
         className="max-md:hidden"
         onClick={onToggleFull}
       />
-      <Dropdown.Root>
-        <ButtonUtility icon={DotsHorizontal} size="sm" color="tertiary" tooltip={m.doc_more()} />
-        <Dropdown.Popover placement="bottom end">
-          <Dropdown.Menu
-            aria-label={m.doc_more()}
-            onAction={(key) => (key === "delete" ? onDelete() : onCopyLink())}
-          >
-            <Dropdown.Item id="copy" icon={Link01} label={m.doc_copy_link()} />
-            {canDelete && <Dropdown.Separator />}
-            {canDelete && <Dropdown.Item id="delete" icon={Trash01} label={m.doc_delete()} />}
-          </Dropdown.Menu>
-        </Dropdown.Popover>
-      </Dropdown.Root>
+      {onCopyLink && (
+        <Dropdown.Root>
+          <ButtonUtility icon={DotsHorizontal} size="sm" color="tertiary" tooltip={m.doc_more()} />
+          <Dropdown.Popover placement="bottom end">
+            <Dropdown.Menu
+              aria-label={m.doc_more()}
+              onAction={(key) => (key === "delete" ? onDelete?.() : onCopyLink())}
+            >
+              <Dropdown.Item id="copy" icon={Link01} label={m.doc_copy_link()} />
+              {canDelete && <Dropdown.Separator />}
+              {canDelete && <Dropdown.Item id="delete" icon={Trash01} label={m.doc_delete()} />}
+            </Dropdown.Menu>
+          </Dropdown.Popover>
+        </Dropdown.Root>
+      )}
       <ButtonUtility
         icon={XClose}
         size="sm"

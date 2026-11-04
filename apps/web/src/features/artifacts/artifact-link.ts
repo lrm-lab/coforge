@@ -1,3 +1,5 @@
+import { conversationRoute } from "#src/features/conversations/last-conversation";
+
 /**
  * A document's link (task #385): its home conversation's page with `doc=<id>`, which opens the
  * document beside the chat. A message that carries such a link shows the document's card; the
@@ -21,7 +23,21 @@ export function artifactIdsInBody(body: string, limit = 3): string[] {
   return ids;
 }
 
-/** The link to a document: the conversation page it is shown on, opened at it. */
-export function artifactLink(location: { origin: string; pathname: string }, artifactId: string) {
-  return `${location.origin}${location.pathname}?doc=${artifactId}`;
+/** Where a document lives: a channel, a DM, or the Workspace (`documents.load`'s `homeKind`). */
+export type ArtifactHomeKind = "channel" | "dm" | "workspace";
+
+/**
+ * The route that opens a document: its own conversation's page with `doc=<id>`, whatever page it
+ * was opened on, so the link opens for everyone who can read the conversation. A Workspace
+ * document has no page of its own yet, so no link.
+ */
+export function artifactRoute(
+  workspaceSlug: string,
+  home: { kind: ArtifactHomeKind; conversationId: string | null },
+  artifactId: string,
+) {
+  if (home.kind === "workspace" || !home.conversationId) return undefined;
+  const target =
+    home.kind === "channel" ? { channelId: home.conversationId } : { dmId: home.conversationId };
+  return { ...conversationRoute(target, workspaceSlug), search: { doc: artifactId } };
 }

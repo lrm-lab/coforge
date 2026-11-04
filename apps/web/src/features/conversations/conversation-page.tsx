@@ -6,6 +6,7 @@ import { useConversationAgentProfile } from "#src/features/agents/profile-panel/
 import { useLiveAgent } from "#src/features/agents/workspace-agents-realtime";
 import { ACTIVITY_INBOX_QUERY_PREFIX } from "#src/features/inbox/activity-inbox-queries";
 import { ConversationTaskBoard } from "#src/features/tasks/conversation-task-board";
+import { ArtifactDraftPane } from "#src/features/artifacts/artifact-draft-pane";
 import { ArtifactPane } from "#src/features/artifacts/artifact-pane";
 import { useArtifactsOn } from "#src/features/artifacts/artifact-queries";
 import { ConversationFilesWithDocuments } from "#src/features/artifacts/artifact-files";
@@ -273,25 +274,33 @@ type ConversationPageBodyProps = {
  * conversation and read cursor.
  */
 function ConversationPageBody(props: ConversationPageProps & ConversationPageBodyProps) {
-  const { doc, docVersion, docFull, docHistory } = props.search;
+  const { doc, docVersion, docFull, docHistory, docDraft } = props.search;
   const documents = useArtifactsOn() === true;
-  const main = <ConversationPageMain {...props} documents={documents} />;
-  if (!documents || !doc) return main;
-  // An open document sits beside the conversation, or alone in full screen (task #385).
+  const open = documents && (doc !== undefined || docDraft === true);
+  // The chat keeps one place in the tree whether a document is open or not, so opening one, going
+  // full screen or opening its history only hides the chat: its scroll, open thread and draft stay.
+  // An open document sits beside it, or alone in full screen (task #385).
   return (
     <div className="@container/page flex min-h-0 min-w-0 flex-1">
-      {!docFull && (
-        <div
-          className={cn(
-            "flex min-h-0 min-w-0 flex-1 flex-col",
-            // With the history open, the chat shows only where it still has room (ArtifactPane).
-            docHistory && "hidden @6xl/page:flex",
-          )}
-        >
-          {main}
-        </div>
-      )}
-      <ArtifactPane search={{ doc, docVersion, docFull, docHistory }} />
+      <div
+        className={cn(
+          "flex min-h-0 min-w-0 flex-1 flex-col",
+          open && docFull && "hidden",
+          // With the history open, the chat shows only where it still has room (ArtifactPane).
+          open && !docFull && docHistory && "hidden @6xl/page:flex",
+        )}
+      >
+        <ConversationPageMain {...props} documents={documents} />
+      </div>
+      {open &&
+        (doc ? (
+          <ArtifactPane search={{ doc, docVersion, docFull, docHistory }} />
+        ) : (
+          <ArtifactDraftPane
+            conversationId={props.page.conversation.conversationId}
+            search={{ docFull }}
+          />
+        ))}
     </div>
   );
 }
@@ -319,6 +328,7 @@ function ConversationPageMain({
     docVersion: _docVersion,
     docFull: _docFull,
     docHistory: _docHistory,
+    docDraft: _docDraft,
     ...search
   } = pageSearch;
   const view = useShownConversationTab(requestedView);

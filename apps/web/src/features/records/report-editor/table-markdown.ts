@@ -84,7 +84,9 @@ export function applyTableColwidthsFromMarkdown(editor: Editor, sourceMarkdown: 
   });
 
   if (changed) {
-    editor.view.dispatch(tr);
+    // Laying out the widths the markdown carries is no edit: listeners are not told (tiptap's own
+    // flag, as `setContent(…, { emitUpdate: false })` sets it).
+    editor.view.dispatch(tr.setMeta("preventUpdate", true));
   }
 }
 

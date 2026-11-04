@@ -11,6 +11,7 @@ import {
   forwardRef,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
   type MouseEvent as ReactMouseEvent,
@@ -46,6 +47,12 @@ function stripBlobUrls(md: string): string {
 export type ContentEditorProps = {
   defaultValue?: string;
   onUpdate?: (markdown: string) => void;
+  /** The person changed the content: called at once, while `onUpdate` waits out `debounceMs`.
+   * Content set by the page (the first value, a new `defaultValue`, `setMarkdown`) is no edit. */
+  onEdit?: () => void;
+  /** An edit still waiting out `debounceMs` is told to `onUpdate` when the editor unmounts, so
+   * leaving it loses no typing. Off by default: a caller must expect `onUpdate` while it leaves. */
+  flushOnUnmount?: boolean;
   onBlur?: () => void;
   placeholder?: string;
   className?: string;
@@ -75,6 +82,8 @@ export const ContentEditor = forwardRef<ContentEditorRef, ContentEditorProps>(
     {
       defaultValue = "",
       onUpdate,
+      onEdit,
+      flushOnUnmount = false,
       onBlur,
       placeholder: placeholderText = "",
       className,
@@ -88,6 +97,9 @@ export const ContentEditor = forwardRef<ContentEditorRef, ContentEditorProps>(
     const rootRef = useRef<HTMLDivElement>(null);
     const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
     const onUpdateRef = useRef(onUpdate);
+    const onEditRef = useRef(onEdit);
+    const flushOnUnmountRef = useRef(flushOnUnmount);
+    flushOnUnmountRef.current = flushOnUnmount;
     const onBlurRef = useRef(onBlur);
     const onUploadFileRef = useRef(onUploadFile);
     const mediaModeRef = useRef<"inline" | "external">("inline");
@@ -96,12 +108,14 @@ export const ContentEditor = forwardRef<ContentEditorRef, ContentEditorProps>(
     const markdownEmitEditorRef = useRef<MarkdownEmitEditor | null>(null);
 
     onUpdateRef.current = onUpdate;
+    onEditRef.current = onEdit;
     onBlurRef.current = onBlur;
     onUploadFileRef.current = onUploadFile;
 
     const scheduleMarkdownEmit = (ed: MarkdownEmitEditor) => {
       if (!editable || !onUpdateRef.current || ed.isDestroyed) return;
       const fire = () => {
+        debounceRef.current = undefined;
         if (ed.isDestroyed || ed.view.composing) return;
         const md = stripBlobUrls(ed.getMarkdown()).trimEnd();
         if (md === lastEmittedRef.current) return;
@@ -152,9 +166,11 @@ export const ContentEditor = forwardRef<ContentEditorRef, ContentEditorProps>(
           return true;
         },
       },
-      onUpdate: ({ editor: ed }) => {
+      onUpdate: ({ editor: ed, transaction }) => {
         if (!editable) return;
         dirtyRef.current = true;
+        // Only a change of the content is an edit (tiptap also tells of a switch to editable).
+        if (transaction.docChanged) onEditRef.current?.();
         markdownEmitEditorRef.current = ed as unknown as MarkdownEmitEditor;
         scheduleMarkdownEmit(ed as unknown as MarkdownEmitEditor);
       },
@@ -166,7 +182,8 @@ export const ContentEditor = forwardRef<ContentEditorRef, ContentEditorProps>(
 
     useEffect(() => {
       if (!editor || editor.isDestroyed) return;
-      editor.setEditable(editable);
+      // Making the editor (not) editable is no edit: tiptap would tell `onUpdate` by default.
+      editor.setEditable(editable, false);
     }, [editor, editable]);
 
     useEffect(() => {
@@ -181,7 +198,9 @@ export const ContentEditor = forwardRef<ContentEditorRef, ContentEditorProps>(
         initialMarkdown,
       ).then((doc: unknown) => {
         if (cancelled || editor.isDestroyed) return;
-        editor.commands.setContent(doc as Parameters<typeof editor.commands.setContent>[0]);
+        editor.commands.setContent(doc as Parameters<typeof editor.commands.setContent>[0], {
+          emitUpdate: false,
+        });
         applyTableColwidthsFromMarkdown(editor, defaultValue);
       });
       return () => {
@@ -202,14 +221,23 @@ export const ContentEditor = forwardRef<ContentEditorRef, ContentEditorProps>(
       const next = preprocessMarkdown(defaultValue);
       const current = stripBlobUrls(editor.getMarkdown()).trimEnd();
       if (next.trimEnd() === current) return;
-      editor.commands.setContent(next, { contentType: "markdown" });
+      editor.commands.setContent(next, { contentType: "markdown", emitUpdate: false });
       applyTableColwidthsFromMarkdown(editor, defaultValue);
       lastEmittedRef.current = next.trimEnd();
     }, [defaultValue, editor]);
 
-    useEffect(() => {
+    // `flushOnUnmount`: told while the editor is still there (a layout effect's cleanup runs
+    // before tiptap destroys it).
+    useLayoutEffect(() => {
       return () => {
-        if (debounceRef.current) clearTimeout(debounceRef.current);
+        if (!debounceRef.current) return;
+        clearTimeout(debounceRef.current);
+        debounceRef.current = undefined;
+        if (!flushOnUnmountRef.current) return;
+        const ed = markdownEmitEditorRef.current;
+        if (!ed || ed.isDestroyed || !onUpdateRef.current) return;
+        const md = stripBlobUrls(ed.getMarkdown()).trimEnd();
+        if (md !== lastEmittedRef.current) onUpdateRef.current(md);
       };
     }, []);
 
@@ -230,7 +258,7 @@ export const ContentEditor = forwardRef<ContentEditorRef, ContentEditorProps>(
         setMarkdown: (markdown: string) => {
           if (!editor) return;
           const next = preprocessMarkdown(markdown);
-          editor.commands.setContent(next, { contentType: "markdown" });
+          editor.commands.setContent(next, { contentType: "markdown", emitUpdate: false });
           applyTableColwidthsFromMarkdown(editor, markdown);
           lastEmittedRef.current = stripBlobUrls(next).trimEnd();
           dirtyRef.current = false;

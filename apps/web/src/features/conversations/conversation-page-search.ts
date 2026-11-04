@@ -49,6 +49,7 @@ export function pickConversationPageSearch({
   docVersion,
   docFull,
   docHistory,
+  docDraft,
 }: ConversationPageSearch): ConversationPageSearch {
   // `satisfies` names every field of the shape: one added there must be picked here too.
   return {
@@ -68,6 +69,7 @@ export function pickConversationPageSearch({
     docVersion,
     docFull,
     docHistory,
+    docDraft,
   } satisfies Record<keyof ConversationPageSearch, unknown>;
 }
 

@@ -16,7 +16,9 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
  * its card (title, first two lines); Open shows it beside the chat, to edit and save as a new
  * version; a save over a version someone else changed the same paragraph of asks which side to
  * keep; an older version reads with "Back to latest" and goes back as a new version; full screen;
- * the Files tab lists the channel's documents. Desktop and phone, light and dark.
+ * unsaved edits survive reading an older version and merge with a version someone else saved;
+ * leaving with them asks; the Files tab lists the channel's documents, and New document is
+ * created only on its first save. Desktop and phone, light and dark.
  *
  * Opt-in like the other browser E2Es: real local Web started with a flag file that offers
  * `artifacts` (`/tmp/coforge-flags-docs.json`, read here too). The channel, its people and its
@@ -240,16 +242,44 @@ test("a document opens from its card, saves versions, resolves a conflict and go
       "Draft note.",
     );
     expect(await evaluate<boolean>(inPane("Unsaved changes"))).toBe(true);
+
+    // Lin saves another paragraph meanwhile: the unsaved edit stays, and the save merges both.
+    await documents.save(
+      { workspaceId, actor: { userId: lin.id } },
+      {
+        artifactId: doc.id,
+        baseVersion: 6,
+        idempotencyKey: crypto.randomUUID(),
+        text: (await documents.load(me, { artifactId: doc.id })).text.replace(
+          "# Goal",
+          "# Goal (agreed)",
+        ),
+      },
+    );
+    await browser("wait", "--fn", inPane("published version 7"));
+    expect(await evaluate<string>(`${pane}.querySelector(".ProseMirror").textContent`)).toContain(
+      "Draft note.",
+    );
+    await click(button("Save", pane));
+    await until(async () => (await version(doc.id)) === 8);
+    const merged = (await documents.load(me, { artifactId: doc.id })).text;
+    expect(merged).toContain("# Goal (agreed)");
+    expect(merged).toContain("Draft note.");
+    await browser("wait", "--fn", inPane("Saved · version 8"));
+
+    await editorEnd();
+    await browser("keyboard", "type", " One more.");
+    await browser("wait", "--fn", inPane("Unsaved changes"));
     const dialogButton = (text: string) =>
       `[...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent.trim() === ${JSON.stringify(text)})`;
     await click(`${pane}.querySelector('button[aria-label="Close"]')`);
-    await browser("wait", "--fn", `${dialogButton("Cancel")} != null`);
-    await click(dialogButton("Cancel"));
-    await browser("wait", "--fn", `${dialogButton("Cancel")} == null`);
+    await browser("wait", "--fn", `${dialogButton("Keep Editing")} != null`);
+    await click(dialogButton("Keep Editing"));
+    await browser("wait", "--fn", `${dialogButton("Keep Editing")} == null`);
     expect(await evaluate<boolean>(`${pane} != null`)).toBe(true);
     await click(`${pane}.querySelector('button[aria-label="Close"]')`);
-    await browser("wait", "--fn", `${dialogButton("Close")} != null`);
-    await click(dialogButton("Close"));
+    await browser("wait", "--fn", `${dialogButton("Discard Changes")} != null`);
+    await click(dialogButton("Discard Changes"));
     await browser("wait", "--fn", `${pane} == null`);
 
     // The Files tab: the channel's documents, newest first, and New document.
@@ -260,6 +290,37 @@ test("a document opens from its card, saves versions, resolves a conflict and go
       `${pageHydrated} && document.body.textContent.includes("Weekly sync notes")`,
     );
     await shoot("desktop-6-files");
+
+    // New document is a draft until its first save: closed unwritten, it leaves nothing.
+    const count = () => db.artifact.count({ where: { homeKey: `conversation:${channel.id}` } });
+    const documentsBefore = await count();
+    await click(button("New document"));
+    await browser("wait", "--fn", `${pane}?.querySelector(".ProseMirror") != null`);
+    await click(`${pane}.querySelector('button[aria-label="Close"]')`);
+    await browser("wait", "--fn", `${pane} == null`);
+    expect(await count()).toBe(documentsBefore);
+    await click(button("New document"));
+    await browser("wait", "--fn", `${pane}?.querySelector(".ProseMirror") != null`);
+    await evaluate(`(${pane}.querySelector("textarea").focus(), true)`);
+    await browser("keyboard", "type", "Launch checklist");
+    // Enter moves into the text; tiptap focuses it a frame later.
+    await browser("press", "Enter");
+    await browser(
+      "wait",
+      "--fn",
+      `document.activeElement === ${pane}.querySelector(".ProseMirror")`,
+    );
+    await browser("keyboard", "type", "Copy, images, analytics.");
+    await click(button("Save", pane));
+    await until(async () => (await count()) === documentsBefore + 1);
+    await browser("wait", "--fn", `new URLSearchParams(location.search).get("doc") != null`);
+    await browser("wait", "--fn", inPane("Saved · version 1"));
+    const draft = await db.artifact.findFirstOrThrow({
+      where: { homeKey: `conversation:${channel.id}` },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(draft.title).toBe("Launch checklist");
+    expect((await documents.load(me, { artifactId: draft.id })).text).toContain("analytics");
 
     // The phone: the card, then the document over the chat.
     await browser("set", "viewport", "390", "844");

@@ -6,13 +6,11 @@ import { m } from "#src/paraglide/messages";
 export type ArtifactConfirming = "delete" | "discard" | { revert: number } | null;
 
 /**
- * The document pane's confirmations (task #385): leaving with unsaved edits, discarding them in a
- * conflict, deleting the document, and going back to an older version.
+ * The document pane's confirmations (task #385): discarding unsaved edits, deleting the document, and going back to an older version.
  */
 export function ArtifactPaneConfirms({
   confirming,
   onDone,
-  leaving,
   title,
   latest,
   dirty,
@@ -22,8 +20,6 @@ export function ArtifactPaneConfirms({
 }: {
   confirming: ArtifactConfirming;
   onDone: () => void;
-  /** Leaving the document with unsaved edits, held until the person answers (`useBlocker`). */
-  leaving: { proceed: () => void; reset: () => void } | null;
   title: string;
   latest: number;
   dirty: boolean;
@@ -39,15 +35,6 @@ export function ArtifactPaneConfirms({
   const shared = { onOpenChange: (next: boolean) => !next && onDone() };
   return (
     <>
-      <ConfirmDialog
-        open={leaving !== null}
-        onOpenChange={(next) => !next && leaving?.reset()}
-        title={m.doc_close()}
-        description={m.doc_unsaved_leave()}
-        confirmLabel={m.doc_close()}
-        errorMessage=""
-        onConfirm={async () => leaving?.proceed()}
-      />
       <ConfirmDialog
         {...shared}
         open={open("discard")}
