@@ -99,11 +99,14 @@
   "doc_share_conversation_detail": "Only those who can read the conversation it lives in.",
   "doc_share_workspace": "Everyone in the Workspace",
   "doc_share_workspace_detail": "Any member of the Workspace, in the conversation or not.",
-  "doc_share_read_only": "Only the person who made it, or a Workspace admin, can change this.",
+  "doc_share_read_only": "Only its author, the owner of the Agent that made it, or a Workspace admin can change this.",
   "doc_share_done": "Done",
   "doc_retry": "Try again",
   "doc_refresh_failed": "Couldn't check for changes. What you see may be out of date.",
   "doc_load_failed_title": "Couldn't load this",
   "doc_load_failed_retry": "Something went wrong while loading. Try again in a moment.",
-  "doc_back_to_workspace": "Back to the Workspace"
+  "doc_back_to_workspace": "Back to the Workspace",
+  "doc_share_soon": "Changing who can see it is coming soon. For now, it's the people shown here.",
+  "doc_share_failed": "Couldn't change who can see it. Try again.",
+  "doc_open_in_tab_failed": "Couldn't open the page in a new tab. Try again."
 }

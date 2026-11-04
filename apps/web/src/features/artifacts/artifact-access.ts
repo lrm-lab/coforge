@@ -1,31 +1,45 @@
-import { useState } from "react";
-
-import { useTaskAssignmentAccess } from "#src/features/tasks/use-task-assignment-access";
-import type { ArtifactActorRef } from "./artifact-queries";
+import { useMutation } from "@tanstack/react-query";
 
 /**
  * Who can see an artifact (task #514, Frank: two levels, no public link): the people who can read
- * the conversation it lives in (the default), or every member of the Workspace.
+ * the conversation it lives in, or every member of the Workspace. An artifact of the Workspace
+ * itself (no conversation) has only the second.
  */
 export type ArtifactAccess = "conversation" | "workspace";
 
+/** An artifact's access as its page and Share read it, shaped as task #529 will answer it. */
+export type ArtifactAccessState = {
+  access: ArtifactAccess;
+  /** Whether the viewer may change it: its human author, the owner of the Agent that made it, or
+   * a Workspace owner or admin (task #529 decides); undefined until known. */
+  canChange: boolean | undefined;
+  /** False until the level is stored and enforced (task #529): nothing may be changed yet. */
+  ready: boolean;
+  change: (access: ArtifactAccess) => Promise<void>;
+  pending: boolean;
+  error: Error | null;
+};
+
 /**
- * An artifact's access and whether the viewer may change it.
+ * An artifact's access level.
  *
- * STAND-IN until task #529: the level lives in this page only and starts at the default; who may
- * change it is its human author or a Workspace owner or admin (the rule #529 enforces also lets an
- * Agent's owner change what the Agent made). When #529 lands this becomes its read and its write;
+ * STAND-IN until task #529: the level is not stored or enforced yet, so it reads as its home's
+ * default and is not `ready`: Share shows it, greyed, as coming soon, and nothing changes it. When
+ * #529 lands, `access` and `canChange` come from the artifact's read and `change` is its write;
  * nothing else changes.
  */
-export function useArtifactAccess({
-  author,
-  viewerId,
-}: {
-  author: ArtifactActorRef | undefined;
-  viewerId: string;
-}) {
-  const [access, setAccess] = useState<ArtifactAccess>("conversation");
-  const { canAssignOthers: admin } = useTaskAssignmentAccess();
-  const authored = author != null && "userId" in author && author.userId === viewerId;
-  return { access, canChange: authored || admin, change: setAccess };
+export function useArtifactAccess(home: { kind: "channel" | "dm" | "workspace" } | undefined) {
+  const write = useMutation({
+    mutationFn: async (_access: ArtifactAccess) => {
+      throw new Error("Sharing is not available yet");
+    },
+  });
+  return {
+    access: home?.kind === "workspace" ? "workspace" : "conversation",
+    canChange: undefined,
+    ready: false,
+    change: (access: ArtifactAccess) => write.mutateAsync(access),
+    pending: write.isPending,
+    error: write.error,
+  } satisfies ArtifactAccessState;
 }

@@ -109,8 +109,7 @@ function ArtifactPageFor({
     conversationId: homeId ?? null,
   };
   const homeName = useHomeName(home);
-  const author = current && authorOf(current.artifact);
-  const access = useArtifactAccess({ author, viewerId });
+  const access = useArtifactAccess(home);
   useRealtimeSubscription({
     channel:
       homeId === undefined || !workspaceId
@@ -184,7 +183,12 @@ function ArtifactPageFor({
         }
         onCopyLink={current && (() => void copy(pageHref(), m.doc_link_copied()))}
         onOpenInTab={
-          webPage ? () => void openInTab(artifactId, viewingOld ? old! : latest) : undefined
+          webPage
+            ? () =>
+                void openInTab(artifactId, viewingOld ? old! : latest).catch(() =>
+                  toast.error(m.doc_open_in_tab_failed()),
+                )
+            : undefined
         }
         onDelete={() => setConfirming("delete")}
       />
@@ -302,10 +306,9 @@ function ArtifactPageFor({
         open={sharing}
         onOpenChange={setSharing}
         title={title}
-        home={homeName}
-        access={access.access}
-        canChange={access.canChange}
-        onChange={access.change}
+        homeKind={home?.kind ?? "channel"}
+        homeName={homeName}
+        state={access}
         onCopyLink={() => void copy(pageHref(), m.doc_link_copied())}
       />
       <ArtifactPaneConfirms
@@ -344,7 +347,8 @@ function ArtifactPageFor({
 /**
  * A web page in a tab of its own: the sandbox's link, asked for on the click (it is short-lived).
  * The tab opens at once, so no pop-up blocker takes it for one the page opened by itself, and is
- * cut off from this page before it goes to the link.
+ * cut off from this page before it goes to the link; a link that cannot be had closes it, and
+ * throws for the page to say so.
  */
 async function openInTab(artifactId: string, version: number) {
   const tab = window.open("", "_blank");
@@ -352,8 +356,9 @@ async function openInTab(artifactId: string, version: number) {
   tab.opener = null;
   try {
     tab.location.href = (await loadArtifactSandboxLink({ data: { artifactId, version } })).url;
-  } catch {
+  } catch (cause) {
     tab.close();
+    throw cause;
   }
 }
 
@@ -361,12 +366,6 @@ async function openInTab(artifactId: string, version: number) {
  * or not theirs to read. */
 const isGone = (error: unknown) =>
   isAppError(error) && (error.code === "NOT_FOUND" || error.code === "ACCESS_DENIED");
-
-/** Who made the artifact, from its read: an Agent, a person, or nobody left. */
-function authorOf(artifact: { authorUserId: string | null; authorAgentId: string | null }) {
-  if (artifact.authorAgentId) return { agentId: artifact.authorAgentId };
-  return artifact.authorUserId ? { userId: artifact.authorUserId } : null;
-}
 
 function LoadingBody() {
   return (
