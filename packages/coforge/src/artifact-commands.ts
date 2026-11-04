@@ -13,9 +13,10 @@ import {
 } from "#src/artifact-format";
 
 /**
- * `coforge artifact create|list|read|push|history|revert` (task #385): the Agent's documents. A
- * document's text comes from `--file <path>`, or stdin with `--file -`; the server applies the
- * web page's rules and merges a save with what others saved since its base.
+ * `coforge artifact create|list|read|push|history|revert` (task #385): the Agent's documents, and
+ * web pages (`create --kind html`, task #490). The text (a document's Markdown, a page's HTML)
+ * comes from `--file <path>`, or stdin with `--file -`; the server applies the web page's rules
+ * and merges a document's save with what others saved since its base.
  */
 export type ArtifactInvocation = {
   command: "artifact";
@@ -43,7 +44,11 @@ type Operation = (typeof OPERATIONS)[number];
 
 /** Each operation's flags: `text` ones take a string, `count` ones a whole number. */
 const FLAGS: Record<Operation, { text: string[]; count: string[]; positional: boolean }> = {
-  create: { text: ["--title", "--target", "--file"], count: [], positional: false },
+  create: {
+    text: ["--title", "--target", "--file", "--kind", "--description"],
+    count: [],
+    positional: false,
+  },
   list: { text: ["--target"], count: [], positional: false },
   read: { text: ["--output"], count: ["--version"], positional: true },
   push: {
@@ -100,9 +105,28 @@ export function parseArtifactArgs(args: readonly string[]): ArtifactInvocation {
     case "create": {
       const title = text["--title"]?.trim();
       if (!title) throw invalidArgument(command, "--title is required");
+      const kind = text["--kind"];
+      if (kind !== undefined && kind !== "markdown" && kind !== "html")
+        throw invalidArgument(
+          command,
+          `--kind is markdown (a document) or html (a web page), not "${kind}"`,
+        );
+      const description = text["--description"]?.trim();
+      // A web page says what it is on its card: the line people read before opening it.
+      if (kind === "html" && !description)
+        throw invalidArgument(
+          command,
+          "--kind html needs --description: one line saying what the page shows",
+        );
       return {
         command: "artifact",
-        request: { operation, title, ...optional("target", text["--target"]) },
+        request: {
+          operation,
+          title,
+          ...optional("target", text["--target"]),
+          ...optional("kind", kind),
+          ...optional("description", description),
+        },
         ...options,
       };
     }

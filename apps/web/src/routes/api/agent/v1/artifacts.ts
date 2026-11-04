@@ -6,6 +6,7 @@ import {
   agentErrorResponse,
 } from "#src/server/agents/agent-http-middleware.server";
 import { artifactsEnabled } from "#src/server/artifacts/artifact-access.server";
+import { isFeatureEnabled } from "#src/server/feature-flags/feature-flags.server";
 import { productionArtifacts } from "#src/server/artifacts/artifact-composition.server";
 import {
   runAgentArtifactOperation,
@@ -41,6 +42,7 @@ export const Route = createFileRoute("/api/agent/v1/artifacts")({
           db,
           ...productionArtifacts(db),
           enabled: (workspaceId) => artifactsEnabled(db, workspaceId),
+          webPages: (workspaceId) => isFeatureEnabled("artifact-web-pages", { workspaceId }),
         }),
     },
   },

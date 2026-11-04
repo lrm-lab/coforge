@@ -10,11 +10,26 @@ import {
 } from "./artifact-access.server";
 import type { StoredArtifactBlobs } from "./artifact-blobs.server";
 import { ARTIFACT_DOCUMENT_LIMIT } from "./artifact-files.server";
+import { ARTIFACT_HTML_ENTRY } from "./artifact-sandbox.server";
 import type { ArtifactRevert } from "./artifact-revert.server";
 import type { Artifacts } from "./artifacts.server";
 
 /** A document's one file. */
 export const DOCUMENT_PATH = "document.md";
+
+/**
+ * The kinds a page of one text file comes in (task #490): a document (Markdown, written together,
+ * merged paragraph by paragraph) and a web page (HTML, an Agent's to write, replaced whole and
+ * shown on the sandbox origin). Each names its one file and the name a title of no Latin letters
+ * or digits falls back to. A later kind (a chart, a diagram, slides) is one more row.
+ */
+export const PAGE_KINDS = {
+  markdown: { entryPath: DOCUMENT_PATH, fallbackName: "document" },
+  html: { entryPath: ARTIFACT_HTML_ENTRY, fallbackName: "page" },
+} as const;
+export type PageKind = keyof typeof PAGE_KINDS;
+
+const isPageKind = (kind: string): kind is PageKind => Object.hasOwn(PAGE_KINDS, kind);
 /** Names tried in sequence for a document whose title's name is taken in its home (`plan`,
  * `plan-2`, `plan-3`), before a short random suffix, which a title of no Latin letters or digits
  * (named `document`) reaches soon. */
@@ -36,17 +51,37 @@ export class ArtifactDocuments {
     private readonly blobs: Pick<StoredArtifactBlobs, "upload" | "read">,
   ) {}
 
-  /** A new document in a conversation, or the Workspace when none is named; named from its
-   * title, with `text` (when given) as version 1. An `idempotencyKey` makes the create safe to
-   * retry: the same key with the same title, home and text returns the document already made,
-   * and a different one is a conflict. */
+  /** A new document (or web page, `kind: "html"`) in a conversation, or the Workspace when none
+   * is named; named from its title, with `text` (when given) as version 1. A web page is an
+   * Agent's to make, and says what it is in its `description` (its card's line). An
+   * `idempotencyKey` makes the create safe to retry: the same key with the same kind, title,
+   * description, home and text returns the one already made, and a different one is a
+   * conflict. */
   async create(
     scope: DocumentScope,
-    input: { conversationId?: string; title: string; text?: string; idempotencyKey?: string },
+    input: {
+      conversationId?: string;
+      title: string;
+      kind?: PageKind;
+      description?: string;
+      text?: string;
+      idempotencyKey?: string;
+    },
   ) {
+    const kind = input.kind ?? "markdown";
+    if (!isPageKind(kind)) throw new AppError("INVALID_INPUT", { errorId: "artifact-kind" });
     const title = input.title.trim();
     if (!title || title.length > 200)
       throw new AppError("INVALID_INPUT", { errorId: "artifact-title" });
+    const description = input.description?.trim() ?? "";
+    if (kind === "html") {
+      requireAgent(scope);
+      if (!description)
+        throw new AppError("INVALID_INPUT", {
+          errorId: "artifact-description-required",
+          hint: "a web page says what it is in one line (--description), shown on its card",
+        });
+    }
     // Checked before anything is made, so a refused text leaves no empty document behind.
     if (input.text !== undefined) documentBytes(input.text);
     const home = input.conversationId
@@ -60,8 +95,11 @@ export class ArtifactDocuments {
             homeKey: input.conversationId ? `conversation:${input.conversationId}` : "workspace",
             title,
             text: input.text,
+            // A document made without a description hashes as before web pages did, so a retry
+            // across the deploy still replays.
+            ...(kind === "html" || description ? { kind, description } : {}),
           });
-    const base = nameToSlug(title, 56) || "document";
+    const base = nameToSlug(title, 56) || PAGE_KINDS[kind].fallbackName;
     for (let attempt = 1; ; attempt += 1) {
       const name =
         attempt === 1
@@ -75,8 +113,9 @@ export class ArtifactDocuments {
           home,
           name,
           title,
-          kind: "markdown",
-          entryPath: DOCUMENT_PATH,
+          ...(description ? { description } : {}),
+          kind,
+          entryPath: PAGE_KINDS[kind].entryPath,
           author: scope.actor,
           ...(input.idempotencyKey !== undefined
             ? { idempotencyKey: input.idempotencyKey, requestHash }
@@ -109,8 +148,9 @@ export class ArtifactDocuments {
   async load(scope: DocumentScope, input: { artifactId: string; version?: number }) {
     const read = await this.artifacts.read({ ...reader(scope), ...input });
     const file = read.files.find((entry) => entry.path === read.artifact.entryPath);
+    // A web page's source reads like a document's text (the pane's Source, an Agent's read).
     const document =
-      read.artifact.kind === "markdown" &&
+      isPageKind(read.artifact.kind) &&
       file?.kind === "text" &&
       file.sizeBytes <= ARTIFACT_DOCUMENT_LIMIT;
     const bytes = document ? await this.blobs.read(scope.workspaceId, file.sha256) : null;
@@ -148,18 +188,21 @@ export class ArtifactDocuments {
     },
   ) {
     const { text, ...settings } = input;
+    const bytes = text === undefined ? undefined : documentBytes(text);
+    // Nothing is stored for someone who may not save here, or where documents are off.
+    const artifact = await this.artifacts.reads.artifact(
+      scope.workspaceId,
+      input.artifactId,
+      scope.actor,
+    );
+    await requireArtifactHome(this.db, scope.workspaceId, scope.actor, artifact.homeKey, "write");
+    if (!isPageKind(artifact.kind))
+      throw new AppError("INVALID_INPUT", { errorId: "artifact-kind" });
+    // A web page is an Agent's to write (task #490): a person reads it, its source and history,
+    // and goes back to a version, and asks an Agent for a change. Settings included.
+    if (artifact.kind === "html") requireAgent(scope);
     let files: { path: string; sha256: string }[] = [];
-    if (text !== undefined) {
-      const bytes = documentBytes(text);
-      // Nothing is stored for someone who may not save here, or where documents are off.
-      const artifact = await this.artifacts.reads.artifact(
-        scope.workspaceId,
-        input.artifactId,
-        scope.actor,
-      );
-      await requireArtifactHome(this.db, scope.workspaceId, scope.actor, artifact.homeKey, "write");
-      if (artifact.kind !== "markdown")
-        throw new AppError("INVALID_INPUT", { errorId: "artifact-kind" });
+    if (bytes !== undefined) {
       const blob = await this.blobs.upload({
         workspaceId: scope.workspaceId,
         bytes,
@@ -173,6 +216,9 @@ export class ArtifactDocuments {
       publisher: scope.actor,
       files,
       ...settings,
+      // A web page is replaced whole, so a save starts from the newest version or is refused
+      // (`artifact-base-moved`): even a title someone changed since is not merged under it.
+      ...(artifact.kind === "html" ? { exactBase: true } : {}),
     });
     if (saved.status === "created") await this.#refreshPreview(scope, input.artifactId);
     return saved;
@@ -210,8 +256,19 @@ export class ArtifactDocuments {
 /** A stable hash of a create's inputs, so a retry with the same idempotency key but a different
  * title, home or text is caught as a conflict rather than silently returning the first document.
  * A missing text is distinct from an empty one. */
-function createRequestHash(input: { homeKey: string; title: string; text?: string }): string {
-  const parts = JSON.stringify([input.homeKey, input.title, input.text ?? null]);
+function createRequestHash(input: {
+  homeKey: string;
+  title: string;
+  text?: string;
+  kind?: string;
+  description?: string;
+}): string {
+  const parts = JSON.stringify([
+    input.homeKey,
+    input.title,
+    input.text ?? null,
+    ...(input.kind === undefined ? [] : [input.kind, input.description ?? ""]),
+  ]);
   return createHash("sha256").update(parts).digest("hex");
 }
 
@@ -226,6 +283,15 @@ function documentBytes(text: string) {
 }
 
 const reader = (scope: DocumentScope) => ({ workspaceId: scope.workspaceId, reader: scope.actor });
+
+/** A web page is made and saved by Agents only; a person is refused, and told why. */
+function requireAgent(scope: DocumentScope) {
+  if (scope.actor.agentId === undefined)
+    throw new AppError("ACCESS_DENIED", {
+      errorId: "artifact-page-agent-only",
+      hint: "a web page is written by an Agent: ask one for the change, or go back to a version",
+    });
+}
 
 /**
  * A document's card line: its first two lines with text, without the Markdown marks that open
@@ -246,9 +312,9 @@ export function artifactPreview(text: string): string {
 }
 
 /**
- * Keeps a document's preview from its current version: read after a save, written only while
- * that version is still the current one, best effort (a card shows the previous preview until
- * the next save).
+ * Keeps a document's preview from its current version, and a web page's from its description:
+ * read after a save, written only while that version is still the current one, best effort (a
+ * card shows the previous preview until the next save).
  */
 export async function refreshPreview(
   db: PrismaClient,
@@ -257,10 +323,18 @@ export async function refreshPreview(
   artifactId: string,
 ) {
   const artifact = await db.artifact.findFirst({
-    where: { id: artifactId, workspaceId, kind: "markdown", deletedAt: null },
-    select: { currentVersion: true, entryPath: true },
+    where: { id: artifactId, workspaceId, kind: { in: ["markdown", "html"] }, deletedAt: null },
+    select: { currentVersion: true, entryPath: true, kind: true, description: true },
   });
   if (!artifact || artifact.currentVersion <= 0) return;
+  // A web page's card line is its description (task #490): its source reads as nothing.
+  if (artifact.kind === "html") {
+    await db.artifact.updateMany({
+      where: { id: artifactId, currentVersion: artifact.currentVersion },
+      data: { preview: artifactPreview(artifact.description) },
+    });
+    return;
+  }
   const file = await db.artifactFile.findFirst({
     where: {
       artifactId,

@@ -100,7 +100,7 @@ async function post(body: unknown) {
       body: JSON.stringify(body),
     }),
     { workspaceId, agentId },
-    { db, artifacts, documents, enabled: async () => enabled },
+    { db, artifacts, documents, enabled: async () => enabled, webPages: async () => false },
   );
   return { status: response.status, body: (await response.json()) as Record<string, any> };
 }

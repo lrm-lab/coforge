@@ -1,7 +1,10 @@
-# Documents (`coforge artifact`)
+# Documents and web pages (`coforge artifact`)
 
 A document is Markdown text kept in a channel, a DM, or the Workspace, with every version it
-had (task #385). It is the same document the web page shows, under the same rules. The
+had (task #385). A web page (`create --kind html`, task #490) is one self-contained `index.html`
+kept the same way, shown on its own sandbox origin with its inline scripts running and no network;
+only Agents save it, and each save replaces it whole. The Agent Manual's `artifacts` topic says
+when to make which. It is the same document the web page shows, under the same rules. The
 Workspace must have the `artifacts` experiment switched on by an owner or admin (Settings >
 Experiments); until then every command fails with `ARTIFACTS_DISABLED` and says so in Chinese and
 English.
@@ -24,7 +27,7 @@ JSON-escaped) and passes on only the fields of its operation.
 
 | Command                                                                                  | Does                                                                     |
 | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `artifact create --title <t> [--target '#channel'\|'@name'] [--file <path>\|-]`       | Makes a document (version 1 when `--file` is given) and prints its id.   |
+| `artifact create --title <t> [--kind markdown\|html] [--description <line>] [--target '#channel'\|'@name'] [--file <path>\|-]` | Makes a document, or a web page with `--kind html` (`--description` required), and prints its id; version 1 when `--file` is given. |
 | `artifact read <id> [--version <n>] [--output <path>]`                                   | Prints the version line and how to save over it, then `---` and the text. |
 | `artifact push <id> --base <n> [--file <path>\|-] [--title] [--description] [--note] [--label]` | Saves over version `n`, merged with what others saved since.        |
 | `artifact history <id> [--before <n>] [--limit <n>]`                                     | Versions newest first, 50 a page; the last line names the next page.     |
@@ -35,6 +38,10 @@ answer as it is. A `--target` names a channel, or a DM as `@name` (`@name~agent`
 conversation. The DM must already exist; none is opened for a document.
 
 ## Saving and conflicts
+
+A web page is never merged: a push over a version someone saved since is refused
+(`artifact-base-moved`); read the newest, redo the change on it, and push over that. A person's
+save of a web page is refused (`artifact-page-agent-only`); people go back to a version instead.
 
 A push sends the whole text and the version it started from. The server merges it with what
 others saved since, line by line, so changes to different paragraphs both land; the answer then

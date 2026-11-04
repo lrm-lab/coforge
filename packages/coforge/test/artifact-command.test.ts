@@ -53,6 +53,33 @@ test("each artifact command parses into its own request", () => {
   });
 });
 
+test("create --kind html makes a web page, which needs its one-line description", () => {
+  expect(
+    parseArgs([
+      "artifact",
+      "create",
+      "--kind",
+      "html",
+      "--title",
+      "Funnel",
+      "--description",
+      " Signups by day ",
+      "--file",
+      "index.html",
+    ]),
+  ).toEqual({
+    command: "artifact",
+    request: { operation: "create", title: "Funnel", kind: "html", description: "Signups by day" },
+    file: "index.html",
+  });
+  expect(() => parseArgs(["artifact", "create", "--kind", "html", "--title", "Funnel"])).toThrow(
+    "--kind html needs --description",
+  );
+  expect(() => parseArgs(["artifact", "create", "--kind", "pdf", "--title", "Funnel"])).toThrow(
+    "--kind is markdown (a document) or html (a web page)",
+  );
+});
+
 test("an artifact command missing what it needs names its help", () => {
   for (const args of [
     ["artifact", "delete", ID],

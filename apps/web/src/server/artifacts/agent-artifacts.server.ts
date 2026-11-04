@@ -19,6 +19,8 @@ export type AgentArtifactServices = {
   artifacts: Pick<Artifacts, "history">;
   documents: Pick<ArtifactDocuments, "create" | "list" | "load" | "save" | "revert">;
   enabled: (workspaceId: string) => Promise<boolean>;
+  /** Whether the Workspace may have web pages made (the `artifact-web-pages` flag, task #490). */
+  webPages: (workspaceId: string) => Promise<boolean>;
 };
 
 const { id, version, baseVersion, text, title, description, note, label, historyLimit } =
@@ -29,6 +31,8 @@ const RULES = {
   create: z.object({
     title,
     target: z.string().optional(),
+    kind: z.enum(["markdown", "html"]).optional(),
+    description: description.optional(),
     text: text.optional(),
     idempotencyKey: id.optional(),
   }),
@@ -77,6 +81,12 @@ export async function runAgentArtifactOperation(
   switch (request.operation) {
     case "create": {
       const input = parsed.data as z.infer<typeof RULES.create>;
+      // Off until the pane shows a web page as one: until then nobody could read it properly.
+      if (input.kind === "html" && !(await services.webPages(workspaceId)))
+        throw new AppError("ACCESS_DENIED", {
+          errorId: "artifact-web-pages-off",
+          hint: "web pages are not available yet: make a document (no --kind)",
+        });
       const conversationId =
         input.target === undefined
           ? undefined
@@ -84,6 +94,8 @@ export async function runAgentArtifactOperation(
       return services.documents.create(scope, {
         conversationId,
         title: input.title,
+        ...(input.kind !== undefined ? { kind: input.kind } : {}),
+        ...(input.description !== undefined ? { description: input.description } : {}),
         text: input.text,
         ...(input.idempotencyKey !== undefined ? { idempotencyKey: input.idempotencyKey } : {}),
       });

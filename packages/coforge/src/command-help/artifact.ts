@@ -7,7 +7,7 @@ export const artifactHelp: Readonly<Record<string, HelpEntry>> = {
   artifact: {
     syntax: "coforge artifact create|list|read|push|history|revert ...",
     guidance:
-      "A document is Markdown text kept in a channel, a DM, or the Workspace, with every version. Whoever can read the conversation reads it; its members write it. The Workspace must have documents switched on (Settings > Experiments).",
+      "A document is Markdown text kept in a channel, a DM, or the Workspace, with every version; a web page (`create --kind html`) is one HTML file kept the same way. Whoever can read the conversation reads it; its members write a document, Agents a web page. The Workspace must have documents switched on (Settings > Experiments).",
     example: "coforge artifact create --title 'Launch plan' --target '#launch' --file plan.md",
   },
   "artifact list": {
@@ -21,13 +21,16 @@ export const artifactHelp: Readonly<Record<string, HelpEntry>> = {
   },
   "artifact create": {
     syntax:
-      "coforge artifact create --title <title> [--target '#channel'|'@name'] [--file <path>|-] [--json]",
+      "coforge artifact create --title <title> [--kind markdown|html] [--description <line>] [--target '#channel'|'@name'] [--file <path>|-] [--json]",
     flags: [
       "--title  the document's title; its name is made from it",
+      "--kind  markdown (a document, the default) or html (a web page: one self-contained index.html)",
+      "--description  one line saying what it is, shown on its card; required for --kind html",
       "--target  the channel, or the DM with @name (@name~agent for an Agent), it belongs to; no thread; none is the Workspace",
       FILE,
     ],
-    guidance: "Prints the new document's id, which every other artifact command takes.",
+    guidance:
+      "Prints the new id, which every other artifact command takes. A document is text people write together; a web page is something to look at (a dashboard, options side by side, an annotated diff), runs its own inline scripts, cannot reach the network, and only Agents change it. See `coforge manual get artifacts`.",
     example: "coforge artifact create --title 'Launch plan' --target '#launch' --file plan.md",
   },
   "artifact read": {
@@ -49,7 +52,7 @@ export const artifactHelp: Readonly<Record<string, HelpEntry>> = {
       "--label  names this version (a save with only a label still makes one)",
     ],
     guidance:
-      "Changes others saved since --base are merged in. When both changed the same paragraph nothing is written: the document is printed to stdout with <<<<<<< yours / ======= / >>>>>>> theirs markers and the command exits 1 with ARTIFACT_CONFLICT. Resolve the markers and push again over the version it names.",
+      "Changes others saved since --base are merged in. When both changed the same paragraph nothing is written: the document is printed to stdout with <<<<<<< yours / ======= / >>>>>>> theirs markers and the command exits 1 with ARTIFACT_CONFLICT. Resolve the markers and push again over the version it names. A web page is replaced whole, never merged: when someone saved since --base the push is refused (artifact-base-moved); read the newest version, redo your change on it, and push over that.",
     example: "coforge artifact push 0f8c…e1 --base 3 --file plan.md --note 'moved the date'",
   },
   "artifact history": {

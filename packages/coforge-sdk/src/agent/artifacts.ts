@@ -10,7 +10,17 @@ export const ARTIFACT_REQUEST_MAX_BYTES = 8 * 1024 * 1024;
 
 /** One artifact operation. `target` is `#channel` or `dm:@person`; none is the Workspace. */
 export type AgentArtifactRequest =
-  | { operation: "create"; title: string; target?: string; text?: string; idempotencyKey?: string }
+  | {
+      operation: "create";
+      title: string;
+      target?: string;
+      /** `html` makes a web page (task #490); a document (`markdown`) by default. */
+      kind?: "markdown" | "html";
+      /** One line saying what it is, shown on its card; a web page needs one. */
+      description?: string;
+      text?: string;
+      idempotencyKey?: string;
+    }
   | { operation: "list"; target?: string }
   | { operation: "read"; artifact: string; version?: number }
   | {
@@ -35,7 +45,7 @@ export type AgentArtifactRequest =
 
 const OPERATION_FIELDS = {
   create: {
-    strings: ["title", "target", "text", "idempotencyKey"],
+    strings: ["title", "target", "kind", "description", "text", "idempotencyKey"],
     numbers: [],
     required: ["title"],
   },
