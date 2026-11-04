@@ -147,9 +147,9 @@ function readEarlier(answer: StreamRead, than: StreamRead) {
  * add attention, so it lights the dot without a read. A write of theirs that can clear it, in any
  * of their pages, announces where the inbox stands (`ActivityAttention`), and the dot takes that
  * as it is, unless a message lit it here past the place the server read from, which keeps it lit;
- * when the two places cannot be compared, the dot reads again. Any other `activity.changed.v1` (a
- * mention from outside the channel, a Task assignment) says nothing of which way it went, so it
- * re-reads.
+ * when the two places cannot be compared, the dot reads again. A read that leaves a conversation
+ * read re-reads a lit dot. Any other `activity.changed.v1` (a mention from outside the channel, a
+ * Task assignment) says nothing of which way it went, so it re-reads.
  */
 export function activityNavAttentionRealtime(
   queryClient: QueryClient,
@@ -159,12 +159,24 @@ export function activityNavAttentionRealtime(
   onActivity: () => void;
   onAttention: (attention: ActivityAttention) => void;
   onSubscribed: (recovery: SubscribedRecovery) => void;
+  onRead: () => void;
 } {
   const queryKey = activityNavAttentionQuery().queryKey;
   const channel = userConversationChannel(userId);
-  const reread = () => void queryClient.invalidateQueries({ queryKey });
   // The newest message that lit the dot here, by where it stands in the viewer's channel.
   let litBy: { position: StreamPosition | undefined } | undefined;
+  // A message that lights the dot while a read is under way may be missing from its answer, so
+  // that answer cannot put it out.
+  const reread = () => {
+    const before = litBy;
+    void queryClient.invalidateQueries({ queryKey }).then(() => {
+      if (litBy === before) return;
+      queryClient.setQueryData<ActivityNavAttention>(
+        queryKey,
+        (current) => current && { ...current, hasUnread: true },
+      );
+    });
+  };
   return {
     // The read's stream positions stay: a message delivered here moved the dot without a read.
     onMessage: (event, position) => {
@@ -197,6 +209,12 @@ export function activityNavAttentionRealtime(
           ? { [channel]: streamPosition }
           : (current?.streamPositions ?? {}),
       }));
+    },
+    // A read in an open conversation moves no Activity write, so it says nothing of the dot; when
+    // it leaves that conversation read and the dot is lit (perhaps by a message read since), only
+    // a read of the dot settles it.
+    onRead: () => {
+      if (queryClient.getQueryData<ActivityNavAttention>(queryKey)?.hasUnread) reread();
     },
     // A message published after the dot was read but before the subscription started reaches it
     // only through a read.

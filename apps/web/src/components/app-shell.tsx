@@ -58,11 +58,18 @@ export type AppUser = {
  */
 function useActivityAttention(user: AppUser) {
   const queryClient = useQueryClient();
-  const { onMessage, onActivity, onAttention, onSubscribed } = useMemo(
+  const { onMessage, onActivity, onAttention, onSubscribed, onRead } = useMemo(
     () => activityNavAttentionRealtime(queryClient, user.id),
     [queryClient, user.id],
   );
-  useActivityInboxRealtime({ userId: user.id, onMessage, onActivity, onAttention, onSubscribed });
+  useActivityInboxRealtime({
+    userId: user.id,
+    onMessage,
+    onActivity,
+    onAttention,
+    onSubscribed,
+    onRead,
+  });
   const query = useQuery(activityNavAttentionQuery());
   return query.data?.hasUnread ?? false;
 }
