@@ -114,7 +114,7 @@ export async function runAgentCli(args: readonly string[]): Promise<void> {
     // The once-a-day Computer-update line rides the output tail: the daemon dedups, this side
     // only decides whether a line may follow — never for `--json`, never from an error below.
     const notice = await updateNoticeLine(transport, args);
-    if (notice) console.log(notice);
+    if (notice) console.error(notice);
   } catch (error) {
     if (error instanceof CliError) {
       if (error.stdoutText) console.log(error.stdoutText);
@@ -122,7 +122,7 @@ export async function runAgentCli(args: readonly string[]): Promise<void> {
     } else console.error(thrownMessage(error));
     process.exitCode = error instanceof CliError ? (error.exitCode ?? 1) : 1;
     const notice = await updateNoticeLine(transport, args);
-    if (notice) console.log(notice);
+    if (notice) console.error(notice);
   }
 }
 
