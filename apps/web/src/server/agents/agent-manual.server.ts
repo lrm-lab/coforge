@@ -8,7 +8,9 @@ import {
   ensureTrailingNewline,
   findManualTopic,
   manualDocVersion,
+  manualIndexTopic,
   MANUAL_INDEX_TOPIC,
+  MANUAL_TOPICS,
 } from "#src/server/agents/manual/manual-registry.server";
 import { searchManualTopics } from "#src/server/agents/manual/manual-search.server";
 import {
@@ -118,7 +120,7 @@ export function resolveManualSearch(input: {
   const query = (input.query as string).trim();
   const fieldError = validateManualIntentReason(input.intent, input.reason);
   if (fieldError) return { status: 400, body: { ok: false, ...fieldError } };
-  const results = searchManualTopics(query);
+  const results = searchManualTopics(query, [...MANUAL_TOPICS, manualIndexTopic()]);
   if (results.length === 0)
     return {
       status: 404,

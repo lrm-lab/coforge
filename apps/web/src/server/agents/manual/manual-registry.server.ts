@@ -130,10 +130,45 @@ export function buildManualIndexContent(): string {
     "",
     ...MANUAL_TOPICS.map((topic) => `- ${topic.slug} — ${topic.title}: ${topic.summary}`),
     "",
+    "Commands:",
+    "",
+    ...MANUAL_COMMAND_LINES,
+    "",
     "Run `coforge manual get <slug> --intent <text> --reason <text>` to read a topic, or " +
       '`coforge manual search "<keywords>" --intent <text> --reason <text>` to search by keyword.',
   ];
   return lines.join("\n");
+}
+
+/** The `coforge` command surface, one line per group, so the index — and `manual search` through
+ * it — names every command, `workspace info --projects` included. Kept with the command registry
+ * doc `docs/agent-cli/`. */
+const MANUAL_COMMAND_LINES = [
+  "- message — check|read|search|send|resolve|react|continue",
+  "- inbox — check",
+  "- channel — info|members|join|leave|create|update|archive|unarchive|add-member|remove-member|mute|unmute|lifecycle",
+  "- thread — list|unfollow",
+  "- task — list|show|view|reply|read|follow|unfollow|create|claim|assign|unassign|unclaim|convert|update|amend|history|delete|receipt",
+  "- reminder — schedule|list|cancel|update|snooze|seal|unseal|log|ack|dismiss",
+  "- attachment — view|comments|upload",
+  "- mention — pending|notify|add|delivery",
+  "- artifact — create|read|push|history|revert",
+  "- workspace — info (`--projects` lists the Workspace's projects)",
+  "- user — info; profile — show|update",
+  "- app — list|config|marketplace|token|invoke|prepare|status|rotate-secret|update|logo|clear-logo|transfer-owner|delete|share-link|share-link-status|revoke-share-link|request-publish|request-unpublish",
+  "- weekly-report — templates|inbox|members|workflow|context|list|read; also weekly-report-collect, weekly-report-key-points, weekly-report-memory",
+  "- action — prepare; manual — get|search; whoami; version",
+];
+
+/** The `index` pseudo-topic as a searchable topic, so `manual search` reaches the generated
+ * catalog and the command list, not only the hand-written topics. */
+export function manualIndexTopic(): AgentManualTopic {
+  return {
+    slug: MANUAL_INDEX_TOPIC,
+    title: "CoForge Agent Manual index",
+    summary: "Every Manual topic and every coforge command, by group.",
+    body: buildManualIndexContent(),
+  };
 }
 
 export function findManualTopic(slug: string): AgentManualTopic | undefined {

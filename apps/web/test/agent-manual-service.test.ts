@@ -188,3 +188,14 @@ test("an Agent finds how to call its Workspace's apps by searching for a token",
   if (topic.status !== 200) throw new Error("expected a hit");
   expect(topic.body.content).toContain("coforge app token --app");
 });
+
+test("manual search finds a command through the generated index", () => {
+  const outcome = resolveManualSearch({
+    query: "project",
+    intent: VALID_INTENT,
+    reason: VALID_REASON,
+  });
+  expect(outcome.status).toBe(200);
+  if (outcome.status !== 200) throw new Error("expected a hit");
+  expect(outcome.body.results.some((result) => result.slug === "index")).toBe(true);
+});
