@@ -98,7 +98,7 @@ export function useArtifactEditor(artifactId: string) {
   /** A version announced on the document's home: refresh what lists it, and take it in when
    * nothing is unsaved here. */
   function onPublished(version: PublishedVersion, { announce = true } = {}) {
-    refreshArtifact(queryClient, artifactId);
+    void refreshArtifact(queryClient, artifactId);
     // A save of this page's own announces its version too, so while one is in flight the
     // announcement waits for its answer; someone else's later version is taken in after it.
     if (settling) {
@@ -180,7 +180,7 @@ export function useArtifactEditor(artifactId: string) {
         if (resolving) await takeLatest();
         return;
       }
-      refreshArtifact(queryClient, artifactId);
+      void refreshArtifact(queryClient, artifactId);
       // A replayed save (this attempt already landed) says nothing of what it merged: read it.
       const mergedIn =
         saved.status !== "created" || saved.merged.length > 0 || saved.mergedSettings.length > 0;
@@ -195,7 +195,7 @@ export function useArtifactEditor(artifactId: string) {
       if (isBaseMoved(cause)) {
         setBaseMoved(true);
         // The banner's confirmation names the latest version.
-        refreshArtifact(queryClient, artifactId);
+        void refreshArtifact(queryClient, artifactId);
       } else if (isWriteDenied(cause)) setDenied(true);
     } finally {
       setSettling(false);

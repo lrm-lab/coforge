@@ -15,7 +15,9 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
  * conversation, its two levels, a change of them stored, and one that finds it deleted; for an
  * artifact of the Workspace, one level, and the way back is the Workspace; and one of a
  * conversation the viewer is not in, read only through the Workspace level: the way back is the
- * Workspace, and the editor is read only.
+ * Workspace, the editor and an old version read only, and the narrower level confirmed before it
+ * shuts the viewer out; and in a Workspace where the viewer is a member only, an artifact they
+ * did not make: Share greyed, saying who can change it.
  *
  * Opt-in like the other browser E2Es: real local Web started with the flag file that offers
  * `artifacts` (`/tmp/coforge-flags-docs.json`, read here too). Its texts carry the run's tail,
@@ -62,6 +64,22 @@ test("an artifact's Share: who can see it", async () => {
       members: { create: [{ agentId: agent.id }] },
     },
   });
+  // A Workspace the viewer is only a member of, owned by Noor, whose artifact the viewer reads.
+  const noor = await db.user.create({
+    data: { username: `noor-${tail}`, displayName: "Noor Haddad" },
+  });
+  const other = await db.workspace.create({
+    data: {
+      name: "Share as a member",
+      slug: `e2e-share-member-${tail}`,
+      members: {
+        create: [
+          { userId: noor.id, role: "owner" },
+          { userId: DEV_BROWSER_USER.id, role: "member" },
+        ],
+      },
+    },
+  });
   const settled = () =>
     browser("wait", "--fn", `document.getAnimations().every((a) => a.playState !== "running")`);
   const shoot = async (shot: string) => {
@@ -84,6 +102,9 @@ test("an artifact's Share: who can see it", async () => {
   const share = `[...document.querySelectorAll("main header button")].find((b) => b.textContent.trim() === "Share")`;
   const radios = `[...document.querySelectorAll('[role="dialog"] input[type="radio"]')]`;
   const editor = `${pageHydrated} && document.querySelector("main .ProseMirror") != null`;
+  const text = (needle: string) => `document.body.textContent.includes(${JSON.stringify(needle)})`;
+  const button = (label: string) =>
+    `[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === ${JSON.stringify(label)})`;
   const pageOf = (id: string) => `${origin}/en/w/${workspace.slug}/artifacts/${id}`;
   try {
     await experiments.write(workspaceId, "artifacts", true);
@@ -160,6 +181,70 @@ test("an artifact's Share: who can see it", async () => {
       ),
     ).toBe("false");
     await shoot("2-workspace-read");
+
+    // An old version of it: nothing to go back to it with.
+    await documents.save(bot, {
+      artifactId: leads.id,
+      baseVersion: 1,
+      idempotencyKey: crypto.randomUUID(),
+      text: `Leads, version 2 (run ${tail}).`,
+    });
+    await browser("open", `${pageOf(leads.id)}?version=1`);
+    await browser("wait", "--fn", `${pageHydrated} && ${button("Back to latest")} != null`);
+    expect(await evaluate<boolean>(`${button("Go back to this version")} == null`)).toBe(true);
+
+    // The narrower level would shut the viewer out: asked first, then back to the Workspace.
+    await browser("open", pageOf(leads.id));
+    await browser("wait", "--fn", editor);
+    await press(share);
+    await browser("wait", "--fn", `${radios}.length === 2`);
+    await press(level("People in this conversation"));
+    await until(text("you won't be able to open it yourself"));
+    await shoot("3-lock-out-confirm");
+    await press(button("Keep it"));
+    await until(`!${text("you won't be able to open it yourself")}`);
+    expect(
+      await evaluate<boolean>(
+        `${level("Everyone in the Workspace")}.querySelector("input").checked`,
+      ),
+    ).toBe(true);
+    await press(level("People in this conversation"));
+    await until(text("you won't be able to open it yourself"));
+    await press(button("Change it"));
+    await until(
+      `location.pathname.includes("/w/${workspace.slug}") && !location.pathname.includes("/artifacts/") && ${text("Only people in its conversation can see")}`,
+    );
+    expect((await db.artifact.findUniqueOrThrow({ where: { id: leads.id } })).access).toBe(
+      "conversation",
+    );
+
+    // A member only, of an artifact they did not make: Share greyed, saying who can change it.
+    await experiments.write(other.id, "artifacts", true);
+    const noorChannel = await db.conversation.create({
+      data: {
+        workspaceId: other.id,
+        channelName: `e2e-share-noor-${tail}`,
+        description: "",
+        members: { create: [{ userId: noor.id }, { userId: DEV_BROWSER_USER.id }] },
+      },
+    });
+    const brief = await documents.create(
+      { workspaceId: other.id, actor: { userId: noor.id } },
+      { conversationId: noorChannel.id, title: "Brief", text: `Brief (run ${tail}).` },
+    );
+    await browser("open", `${origin}/en/w/${other.slug}/artifacts/${brief.id}`);
+    await browser("wait", "--fn", editor);
+    await press(share);
+    await browser("wait", "--fn", `${radios}.length === 2`);
+    expect(await evaluate<boolean>(`${radios}.every((radio) => radio.disabled)`)).toBe(true);
+    const group = `document.querySelector('[role="dialog"] [role="radiogroup"]')`;
+    expect(
+      await evaluate<string>(
+        `document.getElementById(${group}.getAttribute("aria-describedby")).textContent`,
+      ),
+    ).toContain("Only its author");
+    await shoot("4-member-greyed");
+    await browser("press", "Escape");
   } finally {
     await browser("close").catch(() => undefined);
     await db.artifact
@@ -175,6 +260,10 @@ test("an artifact's Share: who can see it", async () => {
     await db.conversation
       .deleteMany({ where: { id: { in: [channel.id, closed.id] } } })
       .catch(() => undefined);
+    await db.artifact.deleteMany({ where: { workspaceId: other.id } }).catch(() => undefined);
+    await db.conversation.deleteMany({ where: { workspaceId: other.id } }).catch(() => undefined);
+    await db.workspace.delete({ where: { id: other.id } }).catch(() => undefined);
+    await db.user.delete({ where: { id: noor.id } }).catch(() => undefined);
     await experiments.write(workspaceId, "artifacts", before).catch(() => undefined);
     await db.$disconnect();
   }

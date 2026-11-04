@@ -112,7 +112,12 @@ function ArtifactPageFor({
     conversationId: homeId ?? null,
   };
   const homeName = useHomeName(home);
-  const access = useArtifactAccess(artifactId, current?.artifact);
+  // Narrowed past the viewer: their page is not theirs any more; back to the Workspace, saying so.
+  const access = useArtifactAccess(artifactId, current?.artifact, async () => {
+    deleted.current = true;
+    await router.navigate({ to: "/w/$workspaceSlug", params: { workspaceSlug } });
+    toast.success(m.doc_share_locked_out({ title }));
+  });
   useRealtimeSubscription({
     channel:
       homeId === undefined || !workspaceId
@@ -275,7 +280,9 @@ function ArtifactPageFor({
               text={oldRead.data?.text}
               failed={oldRead.isError}
               onLatest={() => navigate({ version: undefined })}
-              onRevert={() => setConfirming({ revert: old! })}
+              onRevert={
+                current.artifact.canWrite ? () => setConfirming({ revert: old! }) : undefined
+              }
             />
           ) : (
             <LatestVersion
@@ -327,7 +334,7 @@ function ArtifactPageFor({
         onDiscard={editor.discard}
         onDelete={async () => {
           await deleteArtifact({ data: { artifactId } });
-          refreshArtifact(queryClient, artifactId);
+          void refreshArtifact(queryClient, artifactId);
           deleted.current = true;
           backHome();
         }}
@@ -341,7 +348,7 @@ function ArtifactPageFor({
               throw new Error(m.doc_revert_moved());
             throw cause;
           }
-          refreshArtifact(queryClient, artifactId);
+          void refreshArtifact(queryClient, artifactId);
           // Unsaved edits stay: the version this makes is announced, and the next save merges it.
           if (!editor.dirty) await editor.takeLatest();
           navigate({ version: undefined });

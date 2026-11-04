@@ -108,5 +108,9 @@
   "doc_back_to_workspace": "回到工作区",
   "doc_share_failed": "没能改谁能看，请再试一次。",
   "doc_open_in_tab_failed": "没能在新标签页打开，请再试一次。",
-  "doc_share_denied": "你现在不能改谁能看了。"
+  "doc_share_denied": "你现在不能改谁能看了。",
+  "doc_share_lock_out": "改成只有这个会话里的人能看后，你自己也打不开了。",
+  "doc_share_lock_out_confirm": "仍然更改",
+  "doc_share_keep": "不改了",
+  "doc_share_locked_out": "现在只有它所在会话里的人能看“{title}”了。"
 }

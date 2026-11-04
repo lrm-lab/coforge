@@ -67,8 +67,8 @@ export const artifactHistoryQuery = (artifactId: string, before?: number) =>
 
 /** After a document changed: its current read, its history, its cards and its home's list. A
  * kept version's read never changes, so it stays. */
-export function refreshArtifact(queryClient: QueryClient, artifactId: string) {
-  void queryClient.invalidateQueries({
+export function refreshArtifact(queryClient: QueryClient, artifactId: string): Promise<void> {
+  return queryClient.invalidateQueries({
     predicate: ({ queryKey: [root, kind, id, version] }) => {
       if (root !== ARTIFACTS_KEY[0]) return false;
       if (kind === "list") return true;

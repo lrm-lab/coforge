@@ -160,7 +160,8 @@ export function OldVersion({
   /** The version could not be read: said so, with the way back to the latest above it. */
   failed: boolean;
   onLatest: () => void;
-  onRevert: () => void;
+  /** Absent for a viewer who cannot write it. */
+  onRevert?: () => void;
 }) {
   return (
     <>
@@ -169,9 +170,11 @@ export function OldVersion({
         icon={ClockRewind}
         actions={
           <>
-            <Button size="xs" color="secondary" onClick={onRevert}>
-              {m.doc_revert()}
-            </Button>
+            {onRevert && (
+              <Button size="xs" color="secondary" onClick={onRevert}>
+                {m.doc_revert()}
+              </Button>
+            )}
             <Button size="xs" color="primary" onClick={onLatest}>
               {m.doc_back_to_latest()}
             </Button>

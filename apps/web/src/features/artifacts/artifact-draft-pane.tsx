@@ -55,7 +55,7 @@ export function ArtifactDraftPane({
     },
     onSuccess: (document) => {
       created.current = true;
-      refreshArtifact(queryClient, document.id);
+      void refreshArtifact(queryClient, document.id);
       openPage(document.id, { replace: true });
     },
   });

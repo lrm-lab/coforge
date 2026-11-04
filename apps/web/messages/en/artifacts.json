@@ -108,5 +108,9 @@
   "doc_back_to_workspace": "Back to the Workspace",
   "doc_share_failed": "Couldn't change who can see it. Try again.",
   "doc_open_in_tab_failed": "Couldn't open the page in a new tab. Try again.",
-  "doc_share_denied": "You can't change who can see it any more."
+  "doc_share_denied": "You can't change who can see it any more.",
+  "doc_share_lock_out": "After this, only people in this conversation can see it, and you won't be able to open it yourself.",
+  "doc_share_lock_out_confirm": "Change it",
+  "doc_share_keep": "Keep it",
+  "doc_share_locked_out": "Only people in its conversation can see “{title}” now."
 }
