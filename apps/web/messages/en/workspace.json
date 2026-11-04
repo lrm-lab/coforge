@@ -27,6 +27,8 @@
   "project_repository_unavailable": "GitHub is disconnected or unavailable.",
   "project_create_error": "Could not create this project. Check the name, slug, and repository access.",
   "project_tasks": "Tasks",
+  "project_task_tree": "Task tree",
+  "project_task_tree_outside": "not in the filter",
   "project_tasks_empty": "No unfinished Tasks in this project.",
   "project_tasks_loading": "Loading Tasks…",
   "project_tasks_failed": "Tasks could not be loaded.",

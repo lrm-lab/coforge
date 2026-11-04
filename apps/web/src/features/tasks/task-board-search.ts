@@ -30,7 +30,16 @@ export const taskBoardSearchShape = {
   projects: z.string().optional().catch(undefined),
 };
 
-type TaskBoardSearch = z.infer<z.ZodObject<typeof taskBoardSearchShape>>;
+/** A Project page's board view: a conversation's, plus the channel picks (conversation ids) its
+ * task tree offers (task #462), since a Project spans conversations. */
+export const projectTaskBoardSearchShape = {
+  ...conversationTaskBoardSearchShape,
+  channels: z.string().optional().catch(undefined),
+};
+
+type TaskBoardSearch = z.infer<
+  z.ZodObject<typeof taskBoardSearchShape & typeof projectTaskBoardSearchShape>
+>;
 
 /** A board's view as the board reads it, and how it changes it. */
 export type TaskBoardView = ReturnType<typeof useTaskBoardSearch>;
@@ -44,15 +53,16 @@ export type TaskBoardView = ReturnType<typeof useTaskBoardSearch>;
 export function useTaskBoardSearch(search: TaskBoardSearch) {
   const router = useRouter();
   const layout = useTaskLayout(search.layout);
-  const { owners, projects, labels, status, completed } = search;
+  const { owners, projects, labels, channels, status, completed } = search;
   const statuses = useMemo(() => parseStatusParam(status), [status]);
   const filter = useMemo<TaskFilter>(
     () => ({
       owners: parseFilterParam(owners),
       projects: parseFilterParam(projects),
       labels: parseFilterParam(labels),
+      channels: parseFilterParam(channels),
     }),
-    [owners, projects, labels],
+    [owners, projects, labels, channels],
   );
   const completedWindow: FinishedWindow = completed ?? "week";
   return useMemo(() => {
@@ -73,13 +83,16 @@ export function useTaskBoardSearch(search: TaskBoardSearch) {
       // A status pick is a pick like the others: it replaces the address in place.
       changeStatuses: (next: readonly TaskStatus[]) =>
         update({ status: filterParam(parseStatusParam(next.join(","))) }, true),
-      changeLayout: (next: TaskLayout) => update({ layout: next }, false),
+      // Only the list (a Project's task tree) picks channels; the board drops them.
+      changeLayout: (next: TaskLayout) =>
+        update({ layout: next, ...(next === "board" && { channels: undefined }) }, false),
       changeFilter: (next: TaskFilter) =>
         update(
           {
             owners: filterParam(next.owners),
             projects: filterParam(next.projects),
             labels: filterParam(next.labels),
+            channels: filterParam(next.channels ?? []),
           },
           true,
         ),

@@ -24,6 +24,9 @@ export type FilterableTask = {
   count?: number;
   /** Its labels; absent on a counted group, which the server already read for the label pick. */
   labels?: readonly { id: string; name: string; color: string }[];
+  /** The conversation it is in and how a row names it, where a board mixes conversations. */
+  conversationId?: string;
+  source?: { label: string };
 };
 
 export type TaskFilter = {
@@ -31,6 +34,8 @@ export type TaskFilter = {
   projects: readonly string[];
   /** Label ids a Task must all carry, or `none` for the Tasks with no label. */
   labels: readonly string[];
+  /** Conversation ids, on a Project's task tree only (task #462); absent or empty keeps all. */
+  channels?: readonly string[];
 };
 
 /** Whether a Task passes the label pick. A counted group (no labels of its own) was read for it. */
@@ -52,8 +57,29 @@ export function taskMatches(task: FilterableTask, filter: TaskFilter) {
   return (
     (filter.owners.length === 0 || filter.owners.includes(ownerKey(task))) &&
     (filter.projects.length === 0 || filter.projects.includes(projectKey(task))) &&
-    labelsMatch(task, filter.labels)
+    labelsMatch(task, filter.labels) &&
+    (!filter.channels?.length ||
+      (task.conversationId !== undefined && filter.channels.includes(task.conversationId)))
   );
+}
+
+export type ChannelOption = { id: string; name: string; count: number };
+
+/** The conversations to pick from by name, with how many Tasks each has. */
+export function channelOptions(tasks: readonly FilterableTask[]): ChannelOption[] {
+  const byId = new Map<string, ChannelOption>();
+  for (const task of tasks) {
+    if (!task.conversationId) continue;
+    const known = byId.get(task.conversationId);
+    if (known) known.count += task.count ?? 1;
+    else
+      byId.set(task.conversationId, {
+        id: task.conversationId,
+        name: task.source?.label ?? "",
+        count: task.count ?? 1,
+      });
+  }
+  return [...byId.values()].sort((left, right) => left.name.localeCompare(right.name));
 }
 
 export type OwnerOption = {

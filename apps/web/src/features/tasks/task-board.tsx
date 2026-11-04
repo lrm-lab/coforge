@@ -67,6 +67,7 @@ export function TaskBoard<T extends BoardTask>({
   onCommand,
   conversation,
   project = false,
+  tree,
 }: {
   /** The unfinished Tasks, and any the board itself moved to Done or Closed. */
   tasks: readonly T[];
@@ -83,8 +84,12 @@ export function TaskBoard<T extends BoardTask>({
   conversation?: ConversationBoard;
   /** One Project's board, on its page under the page's own header: no Project is offered. */
   project?: boolean;
+  /** What the list layout shows instead of status groups: a Project's task tree (task #462),
+   * which also offers the channel picks. */
+  tree?: ReactNode;
 }) {
   const { statuses, filter, layout, completedWindow, changeWindow: onWindowChange } = view;
+  const showTree = tree !== undefined && layout === "list";
   const [hiddenColumns, setColumnHidden] = useTaskHiddenColumns();
   const [createOpen, setCreateOpen] = useState(false);
   const filtered =
@@ -150,6 +155,7 @@ export function TaskBoard<T extends BoardTask>({
         onWindowChange={onWindowChange}
         conversation={Boolean(conversation)}
         project={project}
+        channels={showTree}
         action={
           onCreateTask && (
             <Button type="button" size="sm" color="secondary" onPress={() => setCreateOpen(true)}>
@@ -164,12 +170,13 @@ export function TaskBoard<T extends BoardTask>({
         </p>
       )}
       <div className="min-h-0 flex-1 overflow-auto p-4 md:p-6">
-        {loading && (
+        {showTree ? tree : null}
+        {!showTree && loading && (
           <p role="status" className="text-sm text-tertiary">
             {m.tasks_loading()}
           </p>
         )}
-        {empty && (
+        {!showTree && empty && (
           <div className="py-16 text-center text-sm">
             <p className="text-tertiary">
               {filtered
@@ -183,35 +190,37 @@ export function TaskBoard<T extends BoardTask>({
             )}
           </div>
         )}
-        <TaskWorkflow
-          tasks={visible}
-          canSetAnyStatus={canSetAnyStatus}
-          layout={layout}
-          statuses={empty || loading ? [] : statuses.length > 0 ? statuses : TASK_STATUSES}
-          paged={paged}
-          hidden={hiddenColumns}
-          onHiddenChange={setColumnHidden}
-          disabled={!onCommand}
-          // A conversation's board says above it when any command, a move included, is refused.
-          showMoveError={!conversation}
-          currentMemberId={(task) => task.currentMemberId ?? null}
-          onMove={async (task, command) => {
-            await onCommand?.(task, command);
-          }}
-          renderTask={(task, controls) => (
-            <BoardTaskCard
-              task={task}
-              controls={controls}
-              list={layout === "list"}
-              relations={relationsOn ? task : undefined}
-              onOpenDetails={() => onOpenTask(task)}
-              renderTitle={renderTitle}
-              onCommand={onCommand ? (command) => onCommand(task, command) : undefined}
-              conversation={conversation}
-              project={project}
-            />
-          )}
-        />
+        {!showTree && (
+          <TaskWorkflow
+            tasks={visible}
+            canSetAnyStatus={canSetAnyStatus}
+            layout={layout}
+            statuses={empty || loading ? [] : statuses.length > 0 ? statuses : TASK_STATUSES}
+            paged={paged}
+            hidden={hiddenColumns}
+            onHiddenChange={setColumnHidden}
+            disabled={!onCommand}
+            // A conversation's board says above it when any command, a move included, is refused.
+            showMoveError={!conversation}
+            currentMemberId={(task) => task.currentMemberId ?? null}
+            onMove={async (task, command) => {
+              await onCommand?.(task, command);
+            }}
+            renderTask={(task, controls) => (
+              <BoardTaskCard
+                task={task}
+                controls={controls}
+                list={layout === "list"}
+                relations={relationsOn ? task : undefined}
+                onOpenDetails={() => onOpenTask(task)}
+                renderTitle={renderTitle}
+                onCommand={onCommand ? (command) => onCommand(task, command) : undefined}
+                conversation={conversation}
+                project={project}
+              />
+            )}
+          />
+        )}
       </div>
       {onCreateTask && (
         <CreateTaskDialog

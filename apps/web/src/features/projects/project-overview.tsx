@@ -109,16 +109,6 @@ export function ProjectOverview({
   );
 }
 
-/** The Project's Tasks as the three groups, for the Tasks tab on a phone, where a board is cramped. */
-export function ProjectTaskGroups({ projectId }: { projectId: string }) {
-  const data = useProjectOverview(projectId);
-  return (
-    <div className="px-page pb-6">
-      <ProjectTaskGroupsOf data={data} />
-    </div>
-  );
-}
-
 function ProjectTaskGroupsOf({ data }: { data: Overview }) {
   if (data.failed) {
     return <p className="mt-8 text-sm text-error-primary">{m.project_tasks_failed()}</p>;

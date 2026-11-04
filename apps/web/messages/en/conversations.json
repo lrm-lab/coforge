@@ -240,6 +240,8 @@
   "tasks_display": "Display",
   "tasks_display_fields": "Show",
   "tasks_filter_owner_is": "Owner is {names}",
+  "tasks_filter_channel": "Channel",
+  "tasks_filter_channel_is": "Channel is {names}",
   "tasks_filter_project_is": "Project is {names}",
   "tasks_filter_status_is": "Status is {name}",
   "tasks_filter_names_more": "{names} +{count}",

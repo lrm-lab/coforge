@@ -11,7 +11,7 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
 /**
  * A Project's Tasks (tasks #460, #504): the Project page's Overview lists its Tasks in progress, up
  * next (a sub-task under its main Task) and recently done; its Tasks tab is the Project's board,
- * with no Project to pick or show, on a phone the same groups; a Task opens its popup over the
+ * with no Project to pick or show, on a phone its task tree; a Task opens its popup over the
  * page. A Task's popup files it under another Project and back. Desktop and phone, light and
  * dark.
  *
@@ -156,18 +156,14 @@ test("a Project page lists its Tasks as a tree, and a Task's popup moves it betw
     expect(await evaluate<string>("location.pathname")).toEndWith(`/projects/${home.slug}`);
     await shoot("desktop-tasks-popup");
 
-    // On a phone the Tasks tab is the groups, not a board.
+    // On a phone the Tasks tab opens on its list layout, the task tree (task #462).
     await browser("set", "viewport", "390", "844");
     await browser("open", `${projectPage}?tab=tasks`);
     await browser(
       "wait",
       "--fn",
-      `${pageHydrated} && document.body.textContent.includes(${JSON.stringify(doneTitle)})`,
+      `${pageHydrated} && document.querySelector('[role="treegrid"]')?.textContent.includes(${JSON.stringify(loneTitle)}) === true`,
     );
-    expect(await evaluate<boolean>(`document.querySelector("[data-task-board]") === null`)).toBe(
-      true,
-    );
-    expect(await evaluate<boolean>(heading("进行中"))).toBe(true);
     await shoot("phone-tasks-tab");
 
     // The popup files the lone Task under the other Project, then back under its own.

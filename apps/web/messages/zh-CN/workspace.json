@@ -27,6 +27,8 @@
   "project_repository_unavailable": "GitHub 未连接或暂时不可用。",
   "project_create_error": "无法创建项目，请检查名称、项目标识和仓库访问权限。",
   "project_tasks": "任务",
+  "project_task_tree": "任务树",
+  "project_task_tree_outside": "不在筛选结果里",
   "project_tasks_empty": "这个项目里没有未完成的任务。",
   "project_tasks_loading": "正在读取任务…",
   "project_tasks_failed": "任务没能读取。",

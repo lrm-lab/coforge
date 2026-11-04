@@ -35,6 +35,7 @@ import {
 import {
   NO_OWNER,
   NO_PROJECT,
+  channelOptions,
   labelOptions,
   NO_LABEL,
   ownerOptions,
@@ -68,6 +69,7 @@ export function TaskToolbar({
   onWindowChange,
   conversation = false,
   project = false,
+  channels: offerChannels = false,
   action,
 }: {
   tasks: readonly FilterableTask[];
@@ -85,6 +87,8 @@ export function TaskToolbar({
   conversation?: boolean;
   /** One Project's board: every Task shares its Project, so none is offered. */
   project?: boolean;
+  /** Offer the channel picks: a Project's task tree, whose Tasks span conversations (task #462). */
+  channels?: boolean;
   /** The board's own button (a conversation's "Create task"), before Display. */
   action?: ReactNode;
 }) {
@@ -128,6 +132,16 @@ export function TaskToolbar({
       })),
     [tasks],
   );
+  const channels = useMemo(
+    () =>
+      channelOptions(tasks).map((option): PickerOption => ({
+        id: option.id,
+        label: option.name,
+        count: option.count,
+      })),
+    [tasks],
+  );
+  const pickedChannels = offerChannels ? (filter.channels ?? []) : [];
   // A pick no listed Task has (a saved link, an older finished Task's owner) has no name here.
   const labelsOf = (options: readonly PickerOption[], picked: readonly string[], none: string) =>
     picked.map(
@@ -157,6 +171,13 @@ export function TaskToolbar({
         }),
         remove: () => onFilterChange({ ...filter, projects: [] }),
       },
+    pickedChannels.length > 0 && {
+      id: "channels",
+      label: m.tasks_filter_channel_is({
+        names: namesLabel(labelsOf(channels, pickedChannels, m.tasks_filter_other())),
+      }),
+      remove: () => onFilterChange({ ...filter, channels: [] }),
+    },
     filter.labels.length > 0 && {
       id: "labels",
       label: m.tasks_filter_labels_are({
@@ -193,6 +214,14 @@ export function TaskToolbar({
                   options={projects}
                   picked={filter.projects}
                   onChange={(picked) => onFilterChange({ ...filter, projects: picked })}
+                />
+              )}
+              {offerChannels && (
+                <FilterSubmenu
+                  name={m.tasks_filter_channel()}
+                  options={channels}
+                  picked={pickedChannels}
+                  onChange={(picked) => onFilterChange({ ...filter, channels: picked })}
                 />
               )}
               <FilterSubmenu

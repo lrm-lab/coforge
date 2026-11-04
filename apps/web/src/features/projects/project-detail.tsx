@@ -20,9 +20,8 @@ import { FileTypeIcon } from "#src/features/files/file-type-icon";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { m } from "#src/paraglide/messages";
 import { Tab, TabList, TabPanel, Tabs } from "#src/components/application/tabs/tabs";
-import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { WorkspaceTaskBoard } from "#src/features/tasks/workspace-task-board";
-import { ProjectOverview, ProjectTaskGroups } from "./project-overview";
+import { ProjectOverview } from "./project-overview";
 import type { getProject, getProjectRepository } from "./projects.functions";
 import { ProjectImage } from "./project-image";
 import { ProjectReadme } from "./project-readme";
@@ -51,7 +50,6 @@ export function ProjectDetail({
   onTabChange: (tab: ProjectTab) => void;
 }) {
   const workspaceSlug = useWorkspaceSlug();
-  const wide = useBreakpoint("md");
   const hasCode = Boolean(project.githubFullName);
   const tab: ProjectTab =
     search.tab === "code" && !hasCode ? "overview" : (search.tab ?? "overview");
@@ -123,11 +121,8 @@ export function ProjectDetail({
           id="tasks"
           className="flex min-h-0 flex-1 flex-col outline-hidden max-md:overflow-y-auto"
         >
-          {wide ? (
-            <WorkspaceTaskBoard search={search} project={project.id} />
-          ) : (
-            <ProjectTaskGroups projectId={project.id} />
-          )}
+          {/* A phone's list layout, its default, is the task tree (task #462). */}
+          <WorkspaceTaskBoard search={search} project={project.id} />
         </TabPanel>
         {hasCode && (
           <TabPanel id="code" className="min-h-0 flex-1 overflow-y-auto outline-hidden">
@@ -153,9 +148,7 @@ export function ProjectDetail({
         )}
       </Tabs>
       {/* Away from the board, a Task row still opens its popup over the page. */}
-      {!(wide && tab === "tasks") && (
-        <WorkspaceTaskBoard search={search} project={project.id} board={false} />
-      )}
+      {tab !== "tasks" && <WorkspaceTaskBoard search={search} project={project.id} board={false} />}
     </main>
   );
 }

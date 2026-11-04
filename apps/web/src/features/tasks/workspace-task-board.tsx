@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
+import { ProjectTaskTreeView } from "#src/features/projects/project-task-tree";
 import { OverviewTaskPopup } from "./overview-task-popup";
 import { TaskBoard } from "./task-board";
 import { useTaskBoardSearch } from "./task-board-search";
@@ -128,6 +129,11 @@ export function WorkspaceTaskBoard({
           renderTitle={renderTaskTitle}
           onCommand={command}
           project={project !== undefined}
+          tree={
+            project === undefined ? undefined : (
+              <ProjectTaskTreeView projectId={project} view={view} onOpenTask={openPopup} />
+            )
+          }
         />
       )}
       {openTask && (

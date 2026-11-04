@@ -4,7 +4,7 @@ import { PageLoadError } from "#src/features/errors/page-load-error";
 import { ProjectsPending } from "#src/features/projects/projects-pending";
 import { ProjectDetail } from "#src/features/projects/project-detail";
 import { getProject, getProjectRepository } from "#src/features/projects/projects.functions";
-import { conversationTaskBoardSearchShape } from "#src/features/tasks/task-board-search";
+import { projectTaskBoardSearchShape } from "#src/features/tasks/task-board-search";
 import { taskOverviewQuery } from "#src/features/tasks/task-overview-collection";
 import { overviewTaskParamSchema } from "#src/features/tasks/task-overview-search";
 import { finishedSummaryQuery } from "#src/features/tasks/use-finished-tasks";
@@ -14,7 +14,7 @@ export const Route = createFileRoute("/w/$workspaceSlug/projects/$projectSlug")(
   // whose popup is open over the page.
   validateSearch: z.object({
     tab: z.enum(["overview", "tasks", "code"]).optional().catch(undefined),
-    ...conversationTaskBoardSearchShape,
+    ...projectTaskBoardSearchShape,
     task: overviewTaskParamSchema,
   }),
   loaderDeps: ({ search }) => ({ completed: search.completed }),
