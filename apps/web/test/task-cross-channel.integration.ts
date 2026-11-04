@@ -96,7 +96,7 @@ test("a private channel's task looks like one that does not exist to someone who
         expect(error.code).toBe("INVALID_INPUT");
         expect(error.hint).toMatch(/^task #\S+ does not exist$/);
       }
-      expect(toPrivate.hint).toBe(`task #${secret.channelName}/${hidden} does not exist`);
+      expect(toPrivate.hint).toBe(`task #${secret.channelName}:#${hidden} does not exist`);
     }
     // A member of it may name it.
     const [mine] = await make("one", 1, { titles: ["mine one"] });
@@ -214,7 +214,7 @@ test("finishing a blocker in another channel tells the dependent's owner in the 
       },
       select: { body: true },
     });
-    expect(message.body).toContain(`#${other.channelName}/${blocker}`);
+    expect(message.body).toContain(`#${other.channelName}:#${blocker}`);
     expect(message.body).toContain(`#${waiting}`);
     // Nothing was posted in the blocker's channel for it.
     expect(

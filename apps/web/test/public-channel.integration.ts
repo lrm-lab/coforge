@@ -74,14 +74,13 @@ test("Agent channel mute suppresses ordinary notices, preserves mentions and rea
     });
     await enrollGeneral(db, workspace.id);
     const published: ReturnType<typeof decodeAgentMessageDelivery>[] = [];
-    let rejectNextPublish = false;
+    let publishOutage = false;
     const channels = new PublicChannels(
       db,
       new RedisMessageRequestIdempotency(redis),
       withPublishBatch({
         publish: async (_channel, payload) => {
-          if (rejectNextPublish) {
-            rejectNextPublish = false;
+          if (publishOutage) {
             throw new Error("controlled publish outage");
           }
           published.push(decodeAgentMessageDelivery(payload));
@@ -313,8 +312,9 @@ test("Agent channel mute suppresses ordinary notices, preserves mentions and rea
       idempotencyKey: crypto.randomUUID(),
       body: "Both Agents were eligible before this publish outage.",
     };
-    rejectNextPublish = true;
+    publishOutage = true;
     await expect(channels.send(retryInput)).rejects.toThrow("controlled publish outage");
+    publishOutage = false;
     const eligibleBeforeMute = await repo.readPendingAgentDeliveries(workspace.id, agent.id);
     const recoveredId = eligibleBeforeMute.at(-1)!.messageId;
     await channels.setAgentMuted(workspace.id, agent.id, "#general", true);

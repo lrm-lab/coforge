@@ -120,12 +120,14 @@ test.skipIf(!connectionString)(
           RETURNING id, sequence
         )
         INSERT INTO tasks (id, "messageId", "conversationId", "workspaceId", number, title, status,
-          "ownerMemberId", "creatorMemberId", "updatedAt")
+          "ownerMemberId", "creatorMemberId", "createdAt", "updatedAt")
         SELECT id, id, ${channel.id}::uuid, ${workspace.id}::uuid, sequence, 'task',
           CASE WHEN sequence > 4000 OR sequence % 2 = 0 THEN 'in_progress' ELSE 'done' END,
           CASE WHEN sequence > 4000 THEN ${mine.id}::uuid
             ELSE (${theirs}::uuid[])[1 + sequence % ${theirs.length}] END,
-          ${creator.id}::uuid, now()
+          ${creator.id}::uuid,
+          -- Distinct createdAt, so the list's "oldest first within a priority" is the sequence order.
+          now() + (sequence * interval '1 millisecond'), now()
         FROM numbered`;
       await db.$executeRaw`ANALYZE tasks, conversation_members, conversations`;
 

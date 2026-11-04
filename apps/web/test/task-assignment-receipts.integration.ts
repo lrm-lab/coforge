@@ -95,8 +95,12 @@ test("assignment receipts survive mute and disconnect without waking unrelated A
     const threads = created.tasks.map((task) => `${target}:${task.messageId}`);
     // The receipts are published concurrently, so they may be published in either order. The
     // daemon does not depend on it: it dedupes by delivery and keeps one read cursor per thread.
-    expect(published).toHaveLength(2);
-    expect(published).toEqual(
+    // Every attempt fails here, so the delivery retry publishes each receipt 1 + its retries times;
+    // what matters is the two distinct deliveries, not the attempt count.
+    const distinctDeliveries = [...new Map(published.map((p) => [p.messageId, p])).values()];
+    expect(distinctDeliveries).toHaveLength(2);
+    expect(published.length).toBeGreaterThanOrEqual(2);
+    expect(distinctDeliveries).toEqual(
       expect.arrayContaining(
         receipts.map((receipt, index) =>
           expect.objectContaining({
@@ -110,9 +114,10 @@ test("assignment receipts survive mute and disconnect without waking unrelated A
         ),
       ),
     );
+    const publishedSoFar = published.length;
     const retried = await board.execute(principal, command);
     expect(retried.assignmentReceipts).toEqual(receipts);
-    expect(published).toHaveLength(2);
+    expect(published).toHaveLength(publishedSoFar);
     // Two Task messages, the creation notice, and the two receipts; the retry wrote nothing.
     expect(await db.message.count({ where: { conversationId: channel.id } })).toBe(5);
     expect(
