@@ -146,6 +146,9 @@ test("an artifact's Share: who can see it", async () => {
     expect(
       await evaluate<string>(`document.querySelector("main header a").getAttribute("href")`),
     ).toEndWith(`/w/${workspace.slug}`);
+    expect(await evaluate<string>(`document.querySelector("main header a").textContent`)).toBe(
+      "Back to the Workspace",
+    );
     expect(
       await evaluate<string>(
         `document.querySelector("main .ProseMirror").getAttribute("contenteditable")`,
