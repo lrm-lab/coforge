@@ -6,9 +6,9 @@ import { getLocale } from "#src/paraglide/runtime";
 import type {
   ActionCardPersonRef,
   ActionCardRef,
-  ActionCardView,
 } from "#src/server/conversations/action-cards.server";
 import { ActionCardAppBody } from "./action-card-app-body";
+import type { ToolActionCardView } from "./action-card-labels";
 import { ActionCardDesktopTakeoverBody, ActionCardPageFillBody } from "./action-card-handoff";
 
 const listFormats = new Map<string, Intl.ListFormat>();
@@ -55,7 +55,7 @@ export function ActionCardObject({
   fillValues,
   setFillValues,
 }: {
-  view: ActionCardView;
+  view: ToolActionCardView;
   fillValues: Record<string, string>;
   setFillValues: Dispatch<SetStateAction<Record<string, string>>>;
 }) {
@@ -117,24 +117,7 @@ export function ActionCardObject({
         {note}
       </>
     );
-  } else if (view.kind === "questions") {
-    // Interim body until the multi-question card UI lands (#449): the text mirror of the card.
-    body = (
-      <>
-        {view.prompt ? <p className="font-semibold text-primary">{view.prompt}</p> : null}
-        {view.questions.map((question) => (
-          <p key={question.id} className="wrap-anywhere text-secondary">
-            {question.prompt}
-            <span className="text-tertiary">
-              {" "}
-              ({question.options.map((option) => option.label).join("; ")})
-            </span>
-          </p>
-        ))}
-        {note}
-      </>
-    );
-  } else if (view.kind !== "choice") {
+  } else {
     body = (
       <>
         <ActionCardAppBody view={view} />

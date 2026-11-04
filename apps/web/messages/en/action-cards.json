@@ -60,5 +60,12 @@
   "action_card_handled_app_recover": "Set owner Agent",
   "action_card_channel_taken": "There's already a channel named #{name}.",
   "action_card_rename": "Rename…",
-  "action_card_refused": "This can't be done as the card has it."
+  "action_card_refused": "This can't be done as the card has it.",
+  "action_card_questions_submit": "Submit",
+  "action_card_questions_submitting": "Submitting…",
+  "action_card_questions_progress": "{answered} of {total} answered",
+  "action_card_questions_many": "Pick any",
+  "action_card_questions_recommended": "Recommended",
+  "action_card_questions_unanswered": "Not answered",
+  "action_card_unknown": "This card needs a newer version of CoForge to show."
 }

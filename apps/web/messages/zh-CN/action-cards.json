@@ -60,5 +60,12 @@
   "action_card_handled_app_recover": "已设为负责 Agent",
   "action_card_channel_taken": "已经有叫 #{name} 的群聊了",
   "action_card_rename": "改个名字…",
-  "action_card_refused": "按卡片上的内容做不了。"
+  "action_card_refused": "按卡片上的内容做不了。",
+  "action_card_questions_submit": "提交",
+  "action_card_questions_submitting": "提交中…",
+  "action_card_questions_progress": "已答 {answered}/{total}",
+  "action_card_questions_many": "可多选",
+  "action_card_questions_recommended": "推荐",
+  "action_card_questions_unanswered": "未作答",
+  "action_card_unknown": "这张卡片需要更新 CoForge 后才能显示。"
 }

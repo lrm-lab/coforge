@@ -3,9 +3,12 @@ import { Link } from "@tanstack/react-router";
 import { formatAgentProfileParam } from "#src/features/agents/profile-panel/profile-panel-search";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { m } from "#src/paraglide/messages";
-import type { ActionCardView } from "#src/server/conversations/action-cards.server";
 import { AnsweredAtTooltip, type FocusableLink } from "./action-card-answered-at";
-import { actionCardHandledVerb } from "./action-card-labels";
+import {
+  actionCardHandledVerb,
+  unhandledKind,
+  type ToolActionCardView,
+} from "./action-card-labels";
 import { namesOf } from "./action-card-object";
 
 /** What a handled card made: its words and, where the thing has an id, where it opens. */
@@ -16,7 +19,7 @@ type Outcome = {
 
 /** The made thing (or, for a card closed without being done, the thing it would have made). Only
  * a done card has a `result`. */
-function outcomeOf(view: ActionCardView): Outcome | undefined {
+function outcomeOf(view: ToolActionCardView): Outcome | undefined {
   switch (view.kind) {
     case "channel:create":
       return {
@@ -58,7 +61,7 @@ function outcomeOf(view: ActionCardView): Outcome | undefined {
         text: view.result ? `${view.result.ownerAgent} → ${view.app.name}` : view.app.name,
       };
     default:
-      return undefined;
+      return unhandledKind(view);
   }
 }
 
@@ -99,7 +102,7 @@ function outcomeLink(
  * message's own time is. A card closed without being done keeps the action and what it named, then
  * says so in gray (task #449).
  */
-export function HandledActionCard({ view }: { view: ActionCardView }) {
+export function HandledActionCard({ view }: { view: ToolActionCardView }) {
   const workspaceSlug = useWorkspaceSlug();
   const outcome = outcomeOf(view);
   const verb = actionCardHandledVerb(view);

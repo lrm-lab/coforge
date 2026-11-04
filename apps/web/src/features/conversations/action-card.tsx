@@ -15,12 +15,14 @@ import {
   commitChoiceActionCard,
   commitDesktopTakeoverActionCard,
   commitPageFillActionCard,
+  commitQuestionsActionCard,
   denyAppGrantActionCard,
   loadActionCardStates,
 } from "./action-cards.functions";
 import { CreateChannelDialog } from "./create-channel-dialog";
 import { ChannelAddMembersDialog } from "./channel-add-members-dialog";
 import { ChoiceActionCard } from "./action-card-choice";
+import { QuestionsActionCard, type QuestionsAnswer } from "./action-card-questions";
 import { HandledActionCard } from "./action-card-handled";
 import { PendingActionCard, type ActionCardFailure } from "./action-card-pending";
 import { channelMembersQueryKey } from "./conversation-query-keys";
@@ -42,7 +44,39 @@ import type { ActionCardView } from "#src/server/conversations/action-cards.serv
 /** Codes for a draft the server refuses as it is, which no Retry of it can change. */
 const REFUSALS = ["INVALID_INPUT", "NOT_FOUND", "ACCESS_DENIED", "AGENT_NOT_VISIBLE"] as const;
 
+/** Every kind this page knows how to draw; a record over the union, so a kind added to the server
+ * view and left out here fails to compile. */
+const KNOWN_KINDS: Record<ActionCardView["kind"], true> = {
+  "channel:create": true,
+  "channel:add_member": true,
+  "agent:create": true,
+  "app:grant_agent": true,
+  "app:register": true,
+  "app:recover_owner": true,
+  "page:fill": true,
+  "desktop:takeover": true,
+  choice: true,
+  questions: true,
+};
+
+/**
+ * A card of a kind this page does not know (one a newer server sends to an older page): said so,
+ * in gray, with nothing to press, never drawn as another kind's card (task #515).
+ */
 export function ActionCard({ card }: { card: ActionCardView }) {
+  if (!Object.hasOwn(KNOWN_KINDS, card.kind))
+    return (
+      <p
+        data-action-card-unknown=""
+        className="mt-1 max-w-md rounded-xl border border-secondary px-3 py-2.5 text-sm text-tertiary"
+      >
+        {m.action_card_unknown()}
+      </p>
+    );
+  return <KnownActionCard card={card} />;
+}
+
+function KnownActionCard({ card }: { card: ActionCardView }) {
   const [view, setView] = useState(card);
   useEffect(() => setView(card), [card]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -59,6 +93,7 @@ export function ActionCard({ card }: { card: ActionCardView }) {
   const commitFill = useServerFn(commitPageFillActionCard);
   const commitDesktop = useServerFn(commitDesktopTakeoverActionCard);
   const commitChoice = useServerFn(commitChoiceActionCard);
+  const commitQuestions = useServerFn(commitQuestionsActionCard);
   const queryClient = useQueryClient();
   const [fillValues, setFillValues] = useState<Record<string, string>>({});
   // Known only to someone in the channel, who alone may commit (task #302).
@@ -157,6 +192,19 @@ export function ActionCard({ card }: { card: ActionCardView }) {
       void queryClient.invalidateQueries({ queryKey: WAITING_CHOICE_CARDS_KEY });
       await refetch();
     } catch {
+      setFailure({ message: m.action_card_error(), retry: true, from: "commit" });
+    }
+  }
+
+  async function submitQuestions(answers: QuestionsAnswer[]) {
+    setFailure(null);
+    try {
+      await commitQuestions({ data: { messageId: view.messageId, answers } });
+      // Answered, it no longer waits on the viewer in Activity.
+      void queryClient.invalidateQueries({ queryKey: WAITING_CHOICE_CARDS_KEY });
+      await refetch();
+    } catch (cause) {
+      if (isAppErrorCode(cause, "CONFLICT")) await refetch().catch(() => {});
       setFailure({ message: m.action_card_error(), retry: true, from: "commit" });
     }
   }
@@ -270,6 +318,16 @@ export function ActionCard({ card }: { card: ActionCardView }) {
     }
   }
 
+  if (view.kind === "questions")
+    return (
+      <QuestionsActionCard
+        view={view}
+        error={failure?.message ?? ""}
+        cancelling={cancelling}
+        onSubmit={submitQuestions}
+        onCancel={() => void doCancel()}
+      />
+    );
   if (view.kind === "choice")
     return (
       <ChoiceActionCard

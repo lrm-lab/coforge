@@ -3,13 +3,13 @@ import { AlertCircle, Clock } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { m } from "#src/paraglide/messages";
-import type { ActionCardView } from "#src/server/conversations/action-cards.server";
 import {
   actionCardCancelLabel,
   actionCardCommitLabel,
   actionCardDeniedReason,
   actionCardEditable,
   actionCardTitle,
+  type ToolActionCardView,
 } from "./action-card-labels";
 import { actionCardIcon } from "./action-card-icons";
 import { ActionCardObject } from "./action-card-object";
@@ -46,7 +46,7 @@ export function PendingActionCard({
   onOpenDesktop,
   onCancel,
 }: {
-  view: ActionCardView;
+  view: ToolActionCardView;
   fillValues: Record<string, string>;
   setFillValues: Dispatch<SetStateAction<Record<string, string>>>;
   failure: ActionCardFailure | null;
