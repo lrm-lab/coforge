@@ -461,4 +461,3 @@ function coldIdleRuntimePlan(restart: AgentRestartConfig, stop: ColdIdleStop): R
 function ageOf(atMs: number | undefined): number | undefined {
   return atMs === undefined ? undefined : Date.now() - atMs;
 }
-
