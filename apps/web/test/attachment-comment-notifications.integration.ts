@@ -86,6 +86,59 @@ test("the uploader and prior commenters are notified as subscribed; the author n
   }
 });
 
+test("a comment on a task discussion image notifies the discussion's participants", async () => {
+  const f = await attachmentCommentsFixture();
+  try {
+    // The file sits on a reply in the task's discussion; `member` uploaded it there.
+    const creatorMemberId = f.conversation.members.find((row) => row.userId === f.owner.id)!.id;
+    const discussion = await f.db.conversation.create({
+      data: {
+        workspaceId: f.workspace.id,
+        kind: "task_thread",
+        members: { create: [{ userId: f.member.id }] },
+      },
+      include: { members: true },
+    });
+    await f.db.task.create({
+      data: {
+        workspaceId: f.workspace.id,
+        conversationId: f.conversation.id,
+        number: 1,
+        title: "Ship it",
+        creatorMemberId,
+        discussionConversationId: discussion.id,
+      },
+    });
+    const reply = await f.db.message.create({
+      data: {
+        workspaceId: f.workspace.id,
+        conversationId: discussion.id,
+        body: "Mock",
+        sequence: 1,
+        senderMemberId: discussion.members[0]!.id,
+      },
+    });
+    await f.db.attachment.update({
+      where: { id: f.attachment.id },
+      data: { conversationId: discussion.id, messageId: reply.id, uploaderId: f.member.id },
+    });
+
+    const { comments, notices, activityChanged } = noticesFor(f);
+    // owner, a board member, comments; member is the uploader and is notified as subscribed.
+    const posted = await comments.post(
+      f.actor,
+      { attachmentId: f.attachment.id, body: "On the task image" },
+      notices,
+    );
+    expect(await pmaOf(f, posted.id)).toMatchObject([
+      { targetUserId: f.member.id, reason: "subscribed" },
+    ]);
+    expect(activityChanged).toEqual([{ workspaceId: f.workspace.id, userId: f.member.id }]);
+  } finally {
+    await f.close();
+  }
+});
+
 test("an @-mentioned member is notified as mentioned, seated, and bypasses mute", async () => {
   const f = await attachmentCommentsFixture();
   try {

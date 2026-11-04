@@ -1,6 +1,6 @@
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import { canReadChannel } from "#src/server/conversations/channel-read-access.server";
-import type { PrismaClient } from "#src/generated/prisma/client";
+import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { humanLabel } from "#src/lib/human-label";
 import type {
   AttachmentCommentAccess,
@@ -20,6 +20,51 @@ const actorOf = (
   id: string,
 ): AttachmentCommentActor =>
   kind === "user" ? { workspaceId, userId: id } : { workspaceId, agentId: id };
+
+/** The conversation fields that decide read/write access, with the candidate members loaded:
+ * the people among `userIds`, every Agent seat, and any deleted-Agent seat (a DM with one is
+ * read only). Used for the attachment's own conversation, and for the board a task discussion
+ * takes its authority from. */
+function conversationAuthoritySelect(userIds: readonly string[]) {
+  return {
+    directKey: true,
+    channelName: true,
+    visibility: true,
+    kind: true,
+    hiddenFromWorkspaceAt: true,
+    archivedAt: true,
+    members: {
+      where: {
+        OR: [
+          { userId: { in: [...userIds] } },
+          { agentId: { not: null } },
+          { agent: { deletedAt: { not: null } } },
+        ],
+      },
+      select: {
+        userId: true,
+        agentId: true,
+        leftAt: true,
+        agent: { select: { deletedAt: true, ownerId: true, visibility: true } },
+      },
+    },
+  } satisfies Prisma.ConversationSelect;
+}
+
+/** The board a task discussion is on — the channel or DM whose read rule governs an attachment
+ * uploaded in the discussion — with the same access fields. Null when the conversation is not a
+ * task discussion (no task points at it), which leaves the discussion as its own authority. */
+async function taskBoardConversation(
+  db: DatabaseScope,
+  discussionConversationId: string,
+  { userIds }: { userIds: readonly string[] },
+) {
+  const task = await db.task.findFirst({
+    where: { discussionConversationId },
+    select: { conversation: { select: conversationAuthoritySelect(userIds) } },
+  });
+  return task?.conversation ?? null;
+}
 
 /**
  * Whether an actor may read or write an attachment's comments, judged only on the file's own
@@ -63,35 +108,19 @@ async function readAccessAmong(
       conversationId: true,
       messageId: true,
       commentThread: { select: { conversationId: true } },
-      conversation: {
-        select: {
-          directKey: true,
-          channelName: true,
-          visibility: true,
-          kind: true,
-          hiddenFromWorkspaceAt: true,
-          archivedAt: true,
-          members: {
-            where: {
-              OR: [
-                { userId: { in: userIds } },
-                { agentId: { not: null } },
-                { agent: { deletedAt: { not: null } } },
-              ],
-            },
-            select: {
-              userId: true,
-              agentId: true,
-              leftAt: true,
-              agent: { select: { deletedAt: true, ownerId: true, visibility: true } },
-            },
-          },
-        },
-      },
+      conversation: { select: conversationAuthoritySelect(userIds) },
     },
   });
   if (!attachment || attachment.workspaceId !== workspaceId) return null;
-  const source = attachment.conversation;
+  // A task's own conversation ("task_thread") is never read on its own seats: a task is read
+  // through the board it is on (task-conversations.server.ts). So an attachment uploaded in a
+  // task discussion takes its read authority from that board's channel or DM, not from the
+  // discussion conversation. Every other kind judges on its own conversation.
+  const source =
+    attachment.conversation.kind === "task_thread"
+      ? ((await taskBoardConversation(db, attachment.conversationId, { userIds })) ??
+        attachment.conversation)
+      : attachment.conversation;
   // One after another: `db` may be a transaction, which runs one query at a time.
   const memberships = userIds.length
     ? await db.workspaceMembership.findMany({
