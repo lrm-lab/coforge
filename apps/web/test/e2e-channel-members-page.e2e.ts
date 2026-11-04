@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
+import { sameOriginProxy } from "./helpers/same-origin-proxy";
 
 /**
  * A channel's members as a page inside its settings panel, in a real browser. The Members summary
@@ -19,9 +20,12 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
  * Agent in it and another outside it, and removes them afterwards. Screenshots are written under
  * `.amp/e2e/channel-members-page/`.
  */
-const origin = Bun.env.COFORGE_E2E_WEB_URL;
-if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
+const webOrigin = Bun.env.COFORGE_E2E_WEB_URL;
+if (!webOrigin || !["localhost", "127.0.0.1"].includes(new URL(webOrigin).hostname))
   throw new Error("COFORGE_E2E_WEB_URL must target the local Web service");
+// Who is online reaches the page over Centrifugo, so it is reached through the page's own origin.
+const centrifugoOrigin = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;
+if (!centrifugoOrigin) throw new Error("COFORGE_E2E_CENTRIFUGO_URL is required");
 const browserPath = Bun.which("agent-browser");
 if (!browserPath) throw new Error("agent-browser is required");
 const databaseUrl = Bun.env.DATABASE_URL;
@@ -30,6 +34,8 @@ if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/channel-members-page");
 
 test("the settings panel shows a channel's members as a page, adds and removes one", async () => {
+  const proxy = sameOriginProxy(webOrigin, centrifugoOrigin);
+  const origin = proxy.origin;
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const session = `channel-members-page-${process.pid}`;
   async function browser(...args: string[]) {
@@ -152,7 +158,14 @@ test("the settings panel shows a channel's members as a page, adds and removes o
     await openMembers();
     await waitFor(`${onRoster} && !${panelHas("Preferences")}`);
     await waitFor(panelHas(inside.displayName));
+    // A person shows an online dot as an Agent shows its status (Frank, 11-04): the viewer has
+    // this page open, so their own row reads online.
+    const viewerRow = `[...${panel}.querySelectorAll("li")].find((row) => row.textContent.includes(${JSON.stringify(DEV_BROWSER_USER.name)}))`;
+    await waitFor(`${viewerRow}?.querySelector(".bg-fg-success-secondary") != null`);
     await browser("screenshot", join(artifacts, "members.png"));
+    await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
+    await browser("screenshot", join(artifacts, "members-dark.png"));
+    await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
 
     // The search narrows the list.
     await browser("fill", 'input[placeholder="Search members…"]', "nobody-matches-this");
@@ -307,6 +320,7 @@ test("the settings panel shows a channel's members as a page, adds and removes o
     await db.conversation.deleteMany({ where: { id: channel.id } }).catch(() => {});
     await db.agent.deleteMany({ where: { id: { in: agentIds } } }).catch(() => {});
     await browser("close").catch(() => undefined);
+    proxy.stop();
     await db.$disconnect();
   }
 }, 300_000);

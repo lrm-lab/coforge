@@ -10,12 +10,15 @@ export function MemberAvatar({
   src,
   size,
   className,
+  alt = name,
 }: {
   userId: string;
   name: string;
   src: string | null;
   size: AvatarProps["size"];
   className?: string;
+  /** "" where a label beside it already names the member, so a reader hears the name once. */
+  alt?: string;
 }) {
   const online = useMemberOnline(userId);
   return (
@@ -24,7 +27,7 @@ export function MemberAvatar({
       className={className}
       name={name}
       userId={userId}
-      alt={name}
+      alt={alt}
       src={src}
       // No dot until presence is known: an unknown state is never drawn as offline.
       status={online === undefined ? undefined : online ? "online" : "offline"}
