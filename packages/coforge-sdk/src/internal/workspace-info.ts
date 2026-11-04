@@ -31,6 +31,9 @@ export type WorkspaceInfoResponse = {
     slug: string;
     githubFullName: string;
     githubHtmlUrl: string;
+    /** The open Tasks filed under this Project in a conversation the calling Agent is a member
+     * of (task #484); absent reads as zero on a server that does not send it. */
+    openTaskCount?: number;
   }[];
   /**
    * The calling Agent's own authoritative identity, mirroring the launch-config response's

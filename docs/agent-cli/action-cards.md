@@ -23,8 +23,7 @@ yet:
   trimming a leading `#`), `visibility` (`public` or `private`; `private`
   is accepted by validation but rejected by the server — not supported
   yet), `description?` (≤500 chars), `initialHumans?`/`initialAgents?`
-  (≤64 handles or UUIDs each), `project?` (a Project's name or slug, or a UUID; it only
-  preselects the form a human reviews), `draftHint?` (≤2000 chars).
+  (≤64 handles or UUIDs each), `draftHint?` (≤2000 chars).
 - **`agent:create`**: `name` (`^[a-z0-9]+(?:-[a-z0-9]+)*$`, ≤64 chars),
   `description?`, `suggestedComputer?`, `requiredComputer?` (handle or
   UUID; at most one of the two), `draftHint?`. No `runtime`, `model`, or
@@ -61,7 +60,7 @@ yet:
   prepare it, and only while the app has no live owner Agent. A Workspace owner or admin commits it
   ([managing an app](app-management.md)).
 
-Identity fields (`initialHumans`, `initialAgents`, `project`, `suggestedComputer`,
+Identity fields (`initialHumans`, `initialAgents`, `suggestedComputer`,
 `requiredComputer`, `channel`, `humans`, `agents`) are handles the Agent
 already knows — `@alice`, `alice`, `#general`, `general` — or a UUID; the
 server resolves each one at prepare time and fails the whole request, naming

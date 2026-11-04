@@ -15,6 +15,7 @@ import {
   agentVisibilityViewerForActor,
   visibleAgentWhere,
 } from "#src/server/agents/agent-visibility.server";
+import { ownTaskScope } from "#src/server/tasks/task-list.server";
 
 export const Route = createFileRoute("/api/agent/v1/workspace")({
   server: {
@@ -25,71 +26,84 @@ export const Route = createFileRoute("/api/agent/v1/workspace")({
         const viewer = await agentVisibilityViewerForActor(db, principal.workspaceId, {
           agentId: principal.agentId,
         });
-        const [workspace, humans, agents, projects, self, serverRole, reader] = await Promise.all([
-          db.workspace.findUnique({
-            where: { id: principal.workspaceId },
-            select: { id: true, name: true, slug: true },
-          }),
-          db.workspaceMembership.findMany({
-            where: { workspaceId: principal.workspaceId },
-            select: {
-              userId: true,
-              role: true,
-              user: { select: { username: true, displayName: true, description: true } },
-            },
-            orderBy: { user: { username: "asc" } },
-          }),
-          db.agent.findMany({
-            where: {
-              workspaceId: principal.workspaceId,
-              ...ACTIVE_AGENT_WHERE,
-              ...visibleAgentWhere(viewer),
-            },
-            select: {
-              id: true,
-              name: true,
-              displayName: true,
-              description: true,
-              role: true,
-              computerId: true,
-              stoppedAt: true,
-            },
-            orderBy: { name: "asc" },
-          }),
-          db.project.findMany({
-            where: { workspaceId: principal.workspaceId },
-            select: {
-              id: true,
-              name: true,
-              slug: true,
-              githubFullName: true,
-              githubHtmlUrl: true,
-            },
-            orderBy: { createdAt: "asc" },
-          }),
-          db.agent.findUnique({
-            where: {
-              id_workspaceId: { id: principal.agentId, workspaceId: principal.workspaceId },
-            },
-            select: {
-              id: true,
-              name: true,
-              runtimeConfig: true,
-              computerId: true,
-              computer: {
-                select: {
-                  name: true,
-                  displayName: true,
-                  platform: true,
-                  osVersion: true,
-                  computerVersion: true,
+        const [workspace, humans, agents, projects, openTasks, self, serverRole, reader] =
+          await Promise.all([
+            db.workspace.findUnique({
+              where: { id: principal.workspaceId },
+              select: { id: true, name: true, slug: true },
+            }),
+            db.workspaceMembership.findMany({
+              where: { workspaceId: principal.workspaceId },
+              select: {
+                userId: true,
+                role: true,
+                user: { select: { username: true, displayName: true, description: true } },
+              },
+              orderBy: { user: { username: "asc" } },
+            }),
+            db.agent.findMany({
+              where: {
+                workspaceId: principal.workspaceId,
+                ...ACTIVE_AGENT_WHERE,
+                ...visibleAgentWhere(viewer),
+              },
+              select: {
+                id: true,
+                name: true,
+                displayName: true,
+                description: true,
+                role: true,
+                computerId: true,
+                stoppedAt: true,
+              },
+              orderBy: { name: "asc" },
+            }),
+            db.project.findMany({
+              where: { workspaceId: principal.workspaceId },
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                githubFullName: true,
+                githubHtmlUrl: true,
+              },
+              orderBy: { createdAt: "asc" },
+            }),
+            // The open Tasks an Agent could reach: filed under the project in a conversation it is a
+            // member of now (its own-list scope, task #484).
+            db.task.groupBy({
+              by: ["projectId"],
+              where: {
+                workspaceId: principal.workspaceId,
+                projectId: { not: null },
+                status: { notIn: ["done", "closed"] },
+                conversation: ownTaskScope({ agentId: principal.agentId }).conversations,
+              },
+              _count: true,
+            }),
+            db.agent.findUnique({
+              where: {
+                id_workspaceId: { id: principal.agentId, workspaceId: principal.workspaceId },
+              },
+              select: {
+                id: true,
+                name: true,
+                runtimeConfig: true,
+                computerId: true,
+                computer: {
+                  select: {
+                    name: true,
+                    displayName: true,
+                    platform: true,
+                    osVersion: true,
+                    computerVersion: true,
+                  },
                 },
               },
-            },
-          }),
-          resolveActorServerRole(db, principal.workspaceId, { agentId: principal.agentId }),
-          agentChannelReader(db, principal.workspaceId, principal.agentId),
-        ]);
+            }),
+            resolveActorServerRole(db, principal.workspaceId, { agentId: principal.agentId }),
+            agentChannelReader(db, principal.workspaceId, principal.agentId),
+          ]);
         if (!workspace) return Response.json({ error: "workspace not found" }, { status: 404 });
         // Same online/offline source the Agents list and `coforge user info` read; one read for
         // the whole list rather than one per Agent, and never a failure of the whole response.
@@ -119,7 +133,10 @@ export const Route = createFileRoute("/api/agent/v1/workspace")({
             activityDetail: availability ?? null,
             role: agent.id === principal.agentId ? (serverRole ?? agent.role) : agent.role,
           })),
-          projects,
+          projects: projects.map((project) => ({
+            ...project,
+            openTaskCount: openTasks.find((row) => row.projectId === project.id)?._count ?? 0,
+          })),
           ...(serverRole ? { serverRole } : {}),
           channels,
           computers,

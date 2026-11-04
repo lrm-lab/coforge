@@ -141,7 +141,7 @@ const agentRow = (agent: Agent) =>
 const humanRow = (human: Human) =>
   withDescription(`@${human.name}${roleLabel(human.role)}`, human.description);
 const projectRow = (project: Project) =>
-  `${foldUntrustedLine(project.name)} (${foldUntrustedLine(project.slug)})${project.githubFullName ? ` github=${foldUntrustedLine(project.githubFullName)}` : ""}`;
+  `${foldUntrustedLine(project.name)} (${foldUntrustedLine(project.slug)})${project.githubFullName ? ` github=${foldUntrustedLine(project.githubFullName)}` : ""}${project.openTaskCount !== undefined ? ` tasks=${project.openTaskCount}` : ""}`;
 function computerRow(computer: WorkspaceInfoComputer): string {
   const system = [computer.platform, computer.osVersion].filter(Boolean).join(" ");
   const parts = [

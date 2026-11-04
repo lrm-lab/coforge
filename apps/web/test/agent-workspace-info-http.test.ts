@@ -97,6 +97,7 @@ function baseDb(selfAgent: unknown, rosterOverride?: unknown[]) {
       findFirst: async () => ({ ownerId: "user-scout-owner", role: "member" }),
     },
     project: { findMany: async () => [] },
+    task: { groupBy: async () => [] },
     conversation: { findMany: async () => [] },
     workspaceComputer: { findMany: async () => [] },
   };
