@@ -1,43 +1,21 @@
+import {
+  AGENT_APP_MARKETPLACE_LIMIT_DEFAULT,
+  AGENT_APP_MARKETPLACE_LIMIT_MAX,
+  AGENT_APP_MARKETPLACE_QUERY_MAX,
+  type AgentAppMarketplaceResponse,
+} from "@lrm/coforge-sdk/agent";
 import { foldUntrustedLine, frameUntrustedText } from "@lrm/coforge-sdk/internal";
 import { CliError } from "#src/cli-error";
 
 /** The longest `query` the marketplace route accepts, after trimming. */
-export const MARKETPLACE_QUERY_MAX_CHARS = 200;
+export const MARKETPLACE_QUERY_MAX_CHARS = AGENT_APP_MARKETPLACE_QUERY_MAX;
 /** `--limit` bounds and default, as the route defines them. */
 export const MARKETPLACE_LIMIT_MIN = 1;
-export const MARKETPLACE_LIMIT_MAX = 50;
-export const MARKETPLACE_LIMIT_DEFAULT = 20;
-
-/** One published app as the Agent may see it: other Workspaces' apps, never its own. */
-export type MarketplaceApp = {
-  key: string;
-  name: string;
-  description: string;
-  category: string;
-  developer: string;
-  homepageUrl?: string;
-  homepageHost?: string;
-  callbackDomains: string[];
-  allowedScopes: string[];
-  permissionGroups: string[];
-  notificationEvents: string[];
-  logoUrl?: string;
-  installCount: number;
-  publishedAt: string;
-  installed: boolean;
-};
-
-/** What the route answers: the page of apps, and whether more matched than it returned. */
-export type MarketplaceResult = {
-  surface: "public_marketplace";
-  metadataTrust: "untrusted_app_supplied";
-  query: string | null;
-  limit: number;
-  truncated: boolean;
-  apps: MarketplaceApp[];
-};
+export const MARKETPLACE_LIMIT_MAX = AGENT_APP_MARKETPLACE_LIMIT_MAX;
+export const MARKETPLACE_LIMIT_DEFAULT = AGENT_APP_MARKETPLACE_LIMIT_DEFAULT;
 
 export type AppMarketplaceInvocation = {
+  command: "app-marketplace";
   query?: string;
   limit: number;
   json: boolean;
@@ -106,7 +84,7 @@ export function parseAppMarketplaceArgs(args: readonly string[]): AppMarketplace
       });
     setQuery(argument);
   }
-  return { ...(query === undefined ? {} : { query }), limit, json };
+  return { command: "app-marketplace", ...(query === undefined ? {} : { query }), limit, json };
 }
 
 /** Every failure the marketplace command reports, whatever its cause: one code, as #100 defines. */
@@ -127,7 +105,7 @@ function installs(count: number): string {
  * and developer names are folded to one line, and the description is framed, so an app cannot
  * forge the list around it.
  */
-export function formatMarketplace(result: MarketplaceResult): string {
+export function formatMarketplace(result: AgentAppMarketplaceResponse): string {
   const header = [
     `Marketplace: ${result.apps.length} ${result.apps.length === 1 ? "app" : "apps"}`,
     result.query ? ` matching ${JSON.stringify(foldUntrustedLine(result.query))}` : "",
@@ -139,7 +117,7 @@ export function formatMarketplace(result: MarketplaceResult): string {
     const marks = [
       app.installed ? "installed" : "not installed",
       installs(app.installCount),
-      `published ${app.publishedAt}`,
+      app.publishedAt ? `published ${app.publishedAt}` : "unpublished",
     ];
     return [
       `- ${foldUntrustedLine(app.key)} — ${foldUntrustedLine(app.name)} (${marks.join(" · ")})`,

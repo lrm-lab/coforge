@@ -10,8 +10,8 @@ import { decodePathParam, parseAppConfigUpdate } from "./agent-proxy-request-par
 import { forwardResponse } from "./agent-proxy-response";
 import { defineRoute, type ProxyRoute } from "./agent-proxy-route";
 
-/** The local proxy's App routes: an App's config, the App list, an App token and an App
- * registration, in the order the proxy matches them. */
+/** The local proxy's App routes: an App's config, the App list, the Marketplace browse, an App
+ * token and an App registration, in the order the proxy matches them. */
 
 const LOCAL_PROXY_ROUTES = agentApiRoutes.proxy;
 // An App's config is `<prefix><appId>/config`.
@@ -49,6 +49,25 @@ export const APP_PROXY_ROUTES: readonly ProxyRoute[] = [
     body: "none",
     handler: "agentApp",
     parse: () => ({ operation: "list" as const }),
+    respond: forwardResponse,
+  }),
+  defineRoute({
+    family: "agent-api/app-marketplace",
+    method: LOCAL_PROXY_ROUTES.apps.marketplace.method,
+    match: exactPath(LOCAL_PROXY_ROUTES.apps.marketplace.path),
+    body: "none",
+    handler: "agentApp",
+    parse: ({ url }) => {
+      const query = url.searchParams.get("query") ?? undefined;
+      const raw = url.searchParams.get("limit");
+      if (raw !== null && raw !== "" && !Number.isInteger(Number(raw))) return badRequest();
+      const limit = raw === null || raw === "" ? undefined : Number(raw);
+      return {
+        operation: "marketplace" as const,
+        ...(query === undefined ? {} : { query }),
+        ...(limit === undefined ? {} : { limit }),
+      };
+    },
     respond: forwardResponse,
   }),
   defineRoute({

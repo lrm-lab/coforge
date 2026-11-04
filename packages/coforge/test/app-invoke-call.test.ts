@@ -116,6 +116,9 @@ async function call(
   const tokenCalls: unknown[] = [];
   const client: AppClient = {
     appList: async () => ({ ok: true, apps: [APP] }),
+    appMarketplace: async () => {
+      throw new Error("unused");
+    },
     appToken: async (appKey, target, scopes) => {
       tokenCalls.push({ appKey, target, scopes });
       return (

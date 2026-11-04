@@ -159,6 +159,8 @@ coforge app config --app <app-id> [--set <key>=<value>]... [--unset <key>]... [-
 | `CONFIG_INVALID`    | An unknown key, a value of the wrong type or out of bounds.                 |
 | `REVISION_CONFLICT` | The config changed after it was read. Run the same command again.           |
 
+`app marketplace` is in [app-marketplace.md](app-marketplace.md).
+
 ## `system.cleaner`
 
 | Key                | Type    | Bounds                   | Default |
@@ -185,9 +187,5 @@ The `PATCH` body is `{ expectedRevision, set, unset, idempotencyKey }` and nothi
 change raises `revision` by one; returning every key to its default keeps the App's row at the
 next revision, because the daemon ignores a revision lower than the one it holds.
 
-`GET /api/agent/v1/apps/marketplace?query=&limit=` (`coforge app marketplace`, Raft's `integration
-marketplace`): the Agent browses, with its own identity, what any member of its Workspace sees in
-the [Marketplace](../app-marketplace.md); it installs nothing. `query` (at most 200 characters, as
-plain text) matches name, key, description or developer; `limit` is 1–50, default 20. It answers
-`{ surface: "public_marketplace", metadataTrust: "untrusted_app_supplied", query, limit, truncated,
-apps }` (types: `@lrm/coforge-sdk/agent` `app-marketplace.ts`); app text is the author's, untrusted.
+`GET /api/agent/v1/apps/marketplace?query=&limit=` is `coforge app marketplace`'s route, in
+[app-marketplace.md](app-marketplace.md).

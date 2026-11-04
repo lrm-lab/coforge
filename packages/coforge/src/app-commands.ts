@@ -13,6 +13,12 @@ import {
 } from "./app-token-request";
 import { runListActions, type AppInvokeInvocation } from "./app-actions";
 import {
+  formatMarketplace,
+  marketplaceFailure,
+  parseAppMarketplaceArgs,
+  type AppMarketplaceInvocation,
+} from "./app-marketplace";
+import {
   APP_MANAGEMENT_SUBCOMMANDS,
   isAppManagementInvocation,
   parseAppManagementArgs,
@@ -40,7 +46,7 @@ export type AppTokenInvocation = {
 };
 
 const APP_USAGE =
-  "Usage: coforge app list [--all | --owned] [--json] | coforge app invoke <app-key> --list-actions [--action <name>] [--json] | coforge app invoke <app-key> <action> [--param key=value]... | [--data-json <object> | --data-file <path|->] [--preflight] [--idempotency-key <key>] [--target <target>] [--timeout <seconds>] [--json] | coforge app token --app <key> [--scope <scope>]... [--target <target>] [--timeout <seconds>] --exec <program> [-- <args>...] | coforge app prepare register --target <target> --name <name> [--redirect-url <url>]... [--client-key <key>] [--homepage-url <url>] [--description <text>] [--when-to-use <text>] [--category <category>] [--agent-manifest-url <url>] [--scope <scope>]... [--draft-hint <text>] | coforge app status (--card <message-id> | --client <key>) [--json] | coforge app rotate-secret --client <key> --output <new path> [--json] | coforge app update --client <key> [--name <n>] [--description <t>] [--when-to-use <t>] [--category <c>] [--homepage-url <u> | --clear-homepage-url] [--redirect-url <u>]... | [--add-redirect-url <u>]... [--agent-manifest-url <u> | --clear-agent-manifest-url] [--scope <scope>]... | [--clear-scopes] [--json] | coforge app logo --client <key> --file <path> [--json] | coforge app clear-logo|delete|share-link-status|revoke-share-link|request-publish|request-unpublish --client <key> [--json] | coforge app transfer-owner --client <key> --to-agent <name> [--json] | coforge app prepare recover-owner --client <key> --to-agent <name> --target <target> [--draft-hint <text>] | coforge app share-link --client <key> [--expires-days <1-365>] [--json]";
+  "Usage: coforge app list [--all | --owned] [--json] | coforge app marketplace [<query>] [--limit <1-50>] [--json] | coforge app invoke <app-key> --list-actions [--action <name>] [--json] | coforge app invoke <app-key> <action> [--param key=value]... | [--data-json <object> | --data-file <path|->] [--preflight] [--idempotency-key <key>] [--target <target>] [--timeout <seconds>] [--json] | coforge app token --app <key> [--scope <scope>]... [--target <target>] [--timeout <seconds>] --exec <program> [-- <args>...] | coforge app prepare register --target <target> --name <name> [--redirect-url <url>]... [--client-key <key>] [--homepage-url <url>] [--description <text>] [--when-to-use <text>] [--category <category>] [--agent-manifest-url <url>] [--scope <scope>]... [--draft-hint <text>] | coforge app status (--card <message-id> | --client <key>) [--json] | coforge app rotate-secret --client <key> --output <new path> [--json] | coforge app update --client <key> [--name <n>] [--description <t>] [--when-to-use <t>] [--category <c>] [--homepage-url <u> | --clear-homepage-url] [--redirect-url <u>]... | [--add-redirect-url <u>]... [--agent-manifest-url <u> | --clear-agent-manifest-url] [--scope <scope>]... | [--clear-scopes] [--json] | coforge app logo --client <key> --file <path> [--json] | coforge app clear-logo|delete|share-link-status|revoke-share-link|request-publish|request-unpublish --client <key> [--json] | coforge app transfer-owner --client <key> --to-agent <name> [--json] | coforge app prepare recover-owner --client <key> --to-agent <name> --target <target> [--draft-hint <text>] | coforge app share-link --client <key> [--expires-days <1-365>] [--json]";
 /** How long the program may run by default; `--timeout` takes 1 to 300 seconds, as the token
  * lives five minutes. */
 export const DEFAULT_APP_TOKEN_TIMEOUT_SECONDS = 60;
@@ -65,12 +71,14 @@ export function parseAppArgs(
   | AppListInvocation
   | AppInvokeInvocation
   | AppTokenInvocation
+  | AppMarketplaceInvocation
   | AppRegistrationInvocation
   | AppManagementInvocation {
   const [subcommand, ...rest] = args;
   const separator = rest.indexOf("--");
   const options = separator === -1 ? rest : rest.slice(0, separator);
   const programArgs = separator === -1 ? [] : rest.slice(separator + 1);
+  if (subcommand === "marketplace") return parseAppMarketplaceArgs(rest);
   if (subcommand === "list") {
     const invocation: AppListInvocation = { command: "app-list" };
     let owned = false;
@@ -177,6 +185,7 @@ export async function runAppCommand(
     | AppListInvocation
     | AppInvokeInvocation
     | AppTokenInvocation
+    | AppMarketplaceInvocation
     | AppRegistrationInvocation
     | AppManagementInvocation,
   client: AppClient,
@@ -184,6 +193,15 @@ export async function runAppCommand(
 ): Promise<number> {
   if (isAppRegistrationInvocation(invocation) || isAppManagementInvocation(invocation))
     throw new Error("the register and management commands run through their own runners");
+  if (invocation.command === "app-marketplace") {
+    const result = await client
+      .appMarketplace(invocation.query, invocation.limit)
+      .catch((error: unknown) => {
+        throw marketplaceFailure(error);
+      });
+    io.stdout(`${invocation.json ? JSON.stringify(result) : formatMarketplace(result)}\n`);
+    return 0;
+  }
   if (invocation.command === "app-list") {
     const { apps } = await client.appList();
     const all = Boolean(invocation.all);

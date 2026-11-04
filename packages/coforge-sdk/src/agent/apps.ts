@@ -1,11 +1,13 @@
 /**
- * Wire contract for `coforge app list` and `coforge app token`: an Agent lists the apps its
- * Workspace installed (and the built-in Agent Apps), and gets a short-lived token to call one.
- * Same `{ ok: false, errorCode, error }` error envelope as `app config`.
+ * Wire contract for `coforge app list`, `coforge app token` and `coforge app marketplace`: an
+ * Agent lists the apps its Workspace installed (and the built-in Agent Apps), gets a short-lived
+ * token to call one, and browses the Marketplace. Same `{ ok: false, errorCode, error }` error
+ * envelope as `app config`.
  */
 
 import { APP_IDENTITY_SCOPES as APP_SCOPES } from "#src/internal/app-scopes";
 import { isRecord } from "#src/internal/json-record";
+import type { AgentAppMarketplaceQuery } from "./app-marketplace";
 import type { AgentAppRegistrationRequest } from "./app-registration";
 
 /** The Agent's access to an installed app: it has a grant (`granted`), its first use grants one
@@ -62,6 +64,7 @@ export type AgentAppTokenRequest = AgentAppTokenBody & { appKey: string };
 export type AgentAppRequest =
   | { operation: "list" }
   | ({ operation: "token" } & AgentAppTokenRequest)
+  | ({ operation: "marketplace" } & AgentAppMarketplaceQuery)
   | AgentAppRegistrationRequest;
 
 /** A token for the app: an RFC 9068 JWT whose audience is the app's client ID, for five minutes. */

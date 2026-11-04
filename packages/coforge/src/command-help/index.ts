@@ -218,7 +218,7 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
     syntax: "coforge action prepare --target <target>",
   },
   app: {
-    syntax: "coforge app list|config|token|invoke ...",
+    syntax: "coforge app list|config|marketplace|token|invoke ...",
     example: "coforge app list",
   },
   "app config": {
@@ -227,6 +227,9 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
   },
   "app list": {
     syntax: "coforge app list [--all] [--json]",
+  },
+  "app marketplace": {
+    syntax: "coforge app marketplace [<query>] [--limit <1-50>] [--json]",
   },
   whoami: {
     syntax: "coforge whoami [--json]",

@@ -61,6 +61,9 @@ async function invoke(args: string[], outcome: ManifestOutcome, apps: AgentAppVi
     appToken: async () => {
       throw new Error("no token is needed to list actions");
     },
+    appMarketplace: async () => {
+      throw new Error("unused");
+    },
   };
   let code = 0;
   try {

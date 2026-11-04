@@ -1,20 +1,24 @@
 import { expect, test } from "bun:test";
+import type { AgentAppMarketplaceResponse, AgentMarketplaceApp } from "@lrm/coforge-sdk/agent";
 import {
   APP_MARKETPLACE_USAGE,
   formatMarketplace,
   marketplaceFailure,
   parseAppMarketplaceArgs,
-  type MarketplaceApp,
 } from "#src/app-marketplace";
+import { parseAppArgs, runAppCommand } from "#src/app-commands";
+import type { AppClient } from "#src/app-client";
 import { CliError } from "#src/cli-error";
 
-const app = (over: Partial<MarketplaceApp> = {}): MarketplaceApp => ({
+const app = (over: Partial<AgentMarketplaceApp> = {}): AgentMarketplaceApp => ({
   key: "acme-github",
   name: "Acme for GitHub",
   description: "Syncs issues",
   category: "developer_tools",
   developer: "Acme",
+  homepageUrl: "https://acme.example/",
   homepageHost: "acme.example",
+  logoUrl: null,
   callbackDomains: ["acme.example"],
   allowedScopes: ["openid"],
   permissionGroups: ["workspace"],
@@ -26,7 +30,11 @@ const app = (over: Partial<MarketplaceApp> = {}): MarketplaceApp => ({
 });
 
 test("the query is one optional positional or --query, trimmed and bounded", () => {
-  expect(parseAppMarketplaceArgs([])).toEqual({ limit: 20, json: false });
+  expect(parseAppMarketplaceArgs([])).toEqual({
+    command: "app-marketplace",
+    limit: 20,
+    json: false,
+  });
   expect(parseAppMarketplaceArgs(["  github  "])).toMatchObject({ query: "github" });
   expect(parseAppMarketplaceArgs(["--query", "github"])).toMatchObject({ query: "github" });
   expect(parseAppMarketplaceArgs(["x".repeat(200)])).toMatchObject({ query: "x".repeat(200) });
@@ -77,6 +85,76 @@ test("the list names installed state, installs and a truncation note", () => {
   expect(output).toContain('Marketplace: 1 app matching "github" (more than 1;');
   expect(output).toContain("installed · 1 install · published 2026-10-30");
   expect(output).toContain("Install an app from the Web app's Marketplace.");
+});
+
+const page = (apps: AgentMarketplaceApp[]): AgentAppMarketplaceResponse => ({
+  surface: "public_marketplace",
+  metadataTrust: "untrusted_app_supplied",
+  query: null,
+  limit: 20,
+  truncated: false,
+  apps,
+});
+
+function marketplaceClient(result: AgentAppMarketplaceResponse | Error) {
+  const calls: unknown[] = [];
+  const client: AppClient = {
+    appList: async () => {
+      throw new Error("unused");
+    },
+    appToken: async () => {
+      throw new Error("unused");
+    },
+    appMarketplace: async (query, limit) => {
+      calls.push({ query, limit });
+      if (result instanceof Error) throw result;
+      return result;
+    },
+  };
+  return { client, calls };
+}
+
+async function marketplace(args: string[], result: AgentAppMarketplaceResponse | Error) {
+  const out: string[] = [];
+  const { client, calls } = marketplaceClient(result);
+  const run = runAppCommand(parseAppArgs(args), client, {
+    stdout: (text) => out.push(Buffer.from(text).toString()),
+    stderr: () => {},
+    env: {},
+  });
+  return { run, calls, stdout: () => out.join("") };
+}
+
+test("coforge app marketplace asks the route and prints the page it answered", async () => {
+  const { run, calls, stdout } = await marketplace(
+    ["marketplace", "acme", "--limit", "5"],
+    page([app({ installed: true })]),
+  );
+  expect(await run).toBe(0);
+  expect(calls).toEqual([{ query: "acme", limit: 5 }]);
+  expect(stdout()).toContain("Marketplace: 1 app");
+  expect(stdout()).toContain("acme-github — Acme for GitHub");
+  expect(stdout()).toContain("installed");
+});
+
+test("coforge app marketplace --json prints the answer, and a bare call browses everything", async () => {
+  const result = page([app()]);
+  const { run, calls, stdout } = await marketplace(["marketplace", "--json"], result);
+  expect(await run).toBe(0);
+  expect(calls).toEqual([{ query: undefined, limit: 20 }]);
+  expect(JSON.parse(stdout())).toEqual(result);
+});
+
+test("a failed browse is INTEGRATION_MARKETPLACE_FAILED, whatever the cause", async () => {
+  const { run } = await marketplace(
+    ["marketplace"],
+    new CliError({
+      code: "NOT_CONNECTED",
+      message: "daemon is not connected",
+      retryable: false,
+    }),
+  );
+  await expect(run).rejects.toMatchObject({ code: "INTEGRATION_MARKETPLACE_FAILED" });
 });
 
 test("an empty result says so, and any failure is INTEGRATION_MARKETPLACE_FAILED", () => {

@@ -36,6 +36,9 @@ function client(
       calls.push(scopes ? { appKey, target, scopes } : { appKey, target });
       return answer;
     },
+    appMarketplace: async () => {
+      throw new Error("unused");
+    },
   };
 }
 
@@ -293,6 +296,9 @@ test("app token asks once more after a lost race (CONFLICT), and reports a secon
       if (answer instanceof CliError) throw answer;
       return answer;
     },
+    appMarketplace: async () => {
+      throw new Error("unused");
+    },
   };
   const invocation = parseAppArgs(["token", "--app", "acme-notes", "--exec", "true"]);
   expect(await runAppCommand(invocation, racing, io)).toBe(1);
@@ -310,6 +316,9 @@ test("a running Computer that predates scoped tokens is reported, and never aske
     appToken: async (_appKey, _target, scopes) => {
       calls.push(scopes);
       throw new CliError({ code: "REQUEST_INVALID", message: "The body must be { target? }" });
+    },
+    appMarketplace: async () => {
+      throw new Error("unused");
     },
   };
   const io = { stdout: () => {}, stderr: () => {}, env: {} };

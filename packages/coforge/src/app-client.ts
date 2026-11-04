@@ -2,16 +2,19 @@ import {
   agentApiRoutes,
   decodeAgentAppErrorResponse,
   decodeAgentAppListResponse,
+  decodeAgentAppMarketplaceResponse,
   decodeAgentAppTokenResponse,
   type AgentAppListResponse,
+  type AgentAppMarketplaceResponse,
   type AgentAppTokenResponse,
 } from "@lrm/coforge-sdk/agent";
 import { envelopeRequest } from "./proxy-request";
 
-/** `coforge app list|token`'s requests, through the daemon's local proxy. */
+/** `coforge app list|token|marketplace`'s requests, through the daemon's local proxy. */
 export type AppClient = {
   appList(): Promise<AgentAppListResponse>;
   appToken(appKey: string, target?: string, scopes?: string[]): Promise<AgentAppTokenResponse>;
+  appMarketplace(query?: string, limit?: number): Promise<AgentAppMarketplaceResponse>;
 };
 
 export function connectAppClient(context: string, proxyUrl: string): AppClient {
@@ -21,7 +24,7 @@ export function connectAppClient(context: string, proxyUrl: string): AppClient {
     url.search = "";
     return url;
   };
-  const { list, token } = agentApiRoutes.local.apps;
+  const { list, token, marketplace } = agentApiRoutes.local.apps;
   return {
     appList: () =>
       envelopeRequest(
@@ -32,6 +35,23 @@ export function connectAppClient(context: string, proxyUrl: string): AppClient {
         decodeAgentAppListResponse,
         decodeAgentAppErrorResponse,
         "app-list",
+      ),
+    appMarketplace: (query, limit) =>
+      envelopeRequest(
+        endpoint,
+        context,
+        proxyUrl,
+        {
+          method: marketplace.method,
+          path: marketplace.path,
+          query: {
+            ...(query === undefined ? {} : { query }),
+            ...(limit === undefined ? {} : { limit: String(limit) }),
+          },
+        },
+        decodeAgentAppMarketplaceResponse,
+        decodeAgentAppErrorResponse,
+        "app-marketplace",
       ),
     // No idempotency key: asking again is harmless, since a waiting request (and its card) is
     // never made twice.

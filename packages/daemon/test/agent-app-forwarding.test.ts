@@ -44,6 +44,43 @@ test("the proxy forwards the app list for the calling Agent and answers the clou
   expect(calls).toEqual([{ context: "agent-a", request: { operation: "list" } }]);
 });
 
+test("the proxy forwards a marketplace browse with its query and limit", async () => {
+  const calls: AgentAppRequest[] = [];
+  const result = {
+    surface: "public_marketplace",
+    metadataTrust: "untrusted_app_supplied",
+    query: "acme",
+    limit: 5,
+    truncated: false,
+    apps: [],
+  };
+  const { token, endpoint } = proxyWith(async (_context, request) => {
+    calls.push(request);
+    return Response.json(result);
+  });
+  const url = endpoint(agentApiRoutes.proxy.apps.marketplace.path);
+  url.search = "?query=acme&limit=5";
+  const response = await fetch(url, { headers: { authorization: `Bearer ${token}` } });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual(result);
+  expect(calls).toEqual([{ operation: "marketplace", query: "acme", limit: 5 }]);
+});
+
+test("a marketplace browse may omit every parameter, and a malformed limit is refused", async () => {
+  const calls: AgentAppRequest[] = [];
+  const { token, endpoint } = proxyWith(async (_context, request) => {
+    calls.push(request);
+    return Response.json({});
+  });
+  const url = endpoint(agentApiRoutes.proxy.apps.marketplace.path);
+  const bare = await fetch(url, { headers: { authorization: `Bearer ${token}` } });
+  expect(bare.status).toBe(200);
+  url.search = "?limit=soon";
+  const bad = await fetch(url, { headers: { authorization: `Bearer ${token}` } });
+  expect(bad.status).toBe(400);
+  expect(calls).toEqual([{ operation: "marketplace" }]);
+});
+
 test("the proxy forwards a token request and carries the cloud's refusal through", async () => {
   const calls: unknown[] = [];
   const refusal = { ok: false, errorCode: "target_invalid", error: "not a member" };
@@ -125,9 +162,10 @@ test("the connection sends each app request to the cloud with the daemon's and t
     hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
+      const url = new URL(request.url);
       seen.push({
         method: request.method,
-        path: new URL(request.url).pathname,
+        path: `${url.pathname}${url.search}`,
         authorization: request.headers.get("authorization"),
         agentApiKey: request.headers.get("x-coforge-agent-api-key"),
         body: request.method === "POST" ? await request.json() : undefined,
@@ -151,7 +189,15 @@ test("the connection sends each app request to the cloud with the daemon's and t
   );
   for (const scopes of [["email"], [], undefined])
     await transport.agentApp({ operation: "token", appKey: "acme", scopes }, AGENT_API_KEY);
-  expect([listed.status, await token.json()]).toEqual([200, { ok: true, status: "not_installed" }]);
+  const market = await transport.agentApp(
+    { operation: "marketplace", query: "acme notes", limit: 5 },
+    AGENT_API_KEY,
+  );
+  expect([listed.status, await token.json(), market.status]).toEqual([
+    200,
+    { ok: true, status: "not_installed" },
+    200,
+  ]);
   expect(seen).toEqual([
     {
       method: "GET",
@@ -174,5 +220,12 @@ test("the connection sends each app request to the cloud with the daemon's and t
       agentApiKey: `Bearer ${AGENT_API_KEY}`,
       body,
     })),
+    {
+      method: "GET",
+      path: "/api/agent/v1/apps/marketplace?query=acme+notes&limit=5",
+      authorization: "Bearer daemon-token",
+      agentApiKey: `Bearer ${AGENT_API_KEY}`,
+      body: undefined,
+    },
   ]);
 });

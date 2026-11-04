@@ -48,11 +48,18 @@ function managementCloudRequest(request: AgentAppManagementRequest): CloudReques
  * request carries a JSON `body` with the target and scopes the Agent gave (an absent one stays
  * absent, an empty `scopes` stays empty); a status names its card or app in the query. */
 export function agentAppCloudRequest(request: AgentAppRequest): CloudRequest {
-  const { list, token } = agentApiRoutes.cloud.apps;
+  const { list, token, marketplace } = agentApiRoutes.cloud.apps;
   const { status, owned } = agentApiRoutes.cloud.appRegistrations;
   switch (request.operation) {
     case "list":
       return { method: list.method, path: list.path };
+    case "marketplace": {
+      const params = new URLSearchParams();
+      if (request.query) params.set("query", request.query);
+      if (request.limit !== undefined) params.set("limit", String(request.limit));
+      const suffix = params.size === 0 ? "" : `?${params}`;
+      return { method: marketplace.method, path: `${marketplace.path}${suffix}` };
+    }
     case "token":
       return {
         method: token.method,
