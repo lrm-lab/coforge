@@ -233,6 +233,44 @@ test.skipIf(!db)(
   },
 );
 
+test.skipIf(!db)(
+  "an owner whose stored name is the literal Unnamed placeholder counts as nameless",
+  async () => {
+    // Account creation stores `Unnamed` when the provider gave no usable name
+    // (`initialDisplayName`): the staging case where `周报助手` was about to become
+    // `Unnamed的周报助手`.
+    const user = await makeUser(db!, "Unnamed");
+    await db!.userPreference.create({ data: { userId: user.id, language: "zh-CN" } });
+    const fx = await makeWorkspace(db!, user.id, { personal: "助手", weekly: "周报助手" });
+    try {
+      const dry = await backfillOwnerAgentNames({ db: db!, dryRun: true, sampleLimit: 1000 });
+      expect(
+        dry.samples.filter((s) => s.agentId === fx.weekly.id || s.agentId === fx.personal.id),
+      ).toEqual([]);
+      await backfillOwnerAgentNames({ db: db!, dryRun: false });
+      expect(await nameOf(db!, fx.personal.id)).toBe("助手");
+      expect(await nameOf(db!, fx.weekly.id)).toBe("周报助手");
+
+      // Naming themselves renames both from the generic; the dry run shows the raw stored name.
+      await db!.user.update({ where: { id: user.id }, data: { displayName: "Unnamed" } });
+      await db!.agent.update({
+        where: { id: fx.weekly.id },
+        data: { displayName: "Unnamed的周报助手" },
+      });
+      const legacy = await backfillOwnerAgentNames({ db: db!, dryRun: true, sampleLimit: 1000 });
+      expect(legacy.samples.find((s) => s.agentId === fx.weekly.id)).toMatchObject({
+        to: "周报助手",
+        ownerDisplayName: "Unnamed",
+      });
+      await saveProfileAndRenameAssistants(db!, user.id, { displayName: "Ada", description: "" });
+      expect(await nameOf(db!, fx.personal.id)).toBe("Ada的助手");
+      expect(await nameOf(db!, fx.weekly.id)).toBe("Ada的周报助手");
+    } finally {
+      await cleanup(db!, user.id, [fx]);
+    }
+  },
+);
+
 async function cleanup(db: PrismaClient, userId: string, workspaces: Pick<Fx, "workspace">[]) {
   for (const { workspace } of workspaces)
     await db.workspace.delete({ where: { id: workspace.id } }).catch(() => undefined);

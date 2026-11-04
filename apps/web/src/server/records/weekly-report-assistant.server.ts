@@ -1,8 +1,11 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
-import { humanLabel } from "#src/lib/human-label";
-import { ownerAgentLanguage, ownerAgentName } from "#src/server/agents/owner-agent-name.server";
+import {
+  ownerAgentLanguage,
+  ownerAgentName,
+  ownerNameForAgent,
+} from "#src/server/agents/owner-agent-name.server";
 import type { Locale } from "#src/paraglide/runtime";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 
@@ -48,7 +51,7 @@ async function assistantLabelForUser(
   });
   if (!user) return WEEKLY_REPORT_ASSISTANT_DISPLAY_NAME;
   return weeklyReportAssistantDisplayName(
-    humanLabel(user),
+    ownerNameForAgent(user.displayName),
     ownerAgentLanguage(user.preferences?.language),
   );
 }

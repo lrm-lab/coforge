@@ -7,7 +7,7 @@ import {
   WEEKLY_REPORT_ASSISTANT_DISPLAY_NAME,
   weeklyReportAssistantDisplayName,
 } from "#src/server/records/weekly-report-assistant.server";
-import { ownerAgentLanguage, ownerAgentName } from "./owner-agent-name.server";
+import { ownerAgentLanguage, ownerAgentName, ownerNameForAgent } from "./owner-agent-name.server";
 
 /**
  * Keeping owner-named assistants in step with their owner (task #495). The personal assistant
@@ -102,15 +102,14 @@ function autoNameCandidates(label: string, kind: OwnerAgentKind): ReadonlySet<st
 const autoName = (naming: OwnerNaming, kind: OwnerAgentKind) =>
   kind === "personal" ? personalAssistantAutoName(naming) : weeklyReportAutoName(naming);
 
-/** The owner's naming from a user row: the raw display name (trimmed, empty when the owner has
- * none — not the `Unnamed` placeholder `humanLabel` would supply, which would otherwise become
- * an assistant's name), and the language. */
+/** The owner's naming from a user row: the display name (`ownerNameForAgent`: trimmed, empty
+ * when the owner has none, including a stored literal `Unnamed`), and the language. */
 export function ownerNamingOf(user: {
   displayName: string | null;
   preferences?: { language: string | null } | null;
 }): OwnerNaming {
   return {
-    label: user.displayName?.trim() ?? "",
+    label: ownerNameForAgent(user.displayName),
     language: ownerAgentLanguage(user.preferences?.language),
   };
 }
@@ -227,7 +226,15 @@ async function applyRename(
 export type OwnerAgentBackfillSummary = {
   scanned: number;
   renamed: number;
-  samples: { agentId: string; from: string; to: string; kind: OwnerAgentKind }[];
+  samples: {
+    agentId: string;
+    from: string;
+    to: string;
+    kind: OwnerAgentKind;
+    /** The owner's stored display name exactly as in the database (null when unset) — dry-run
+     * only, so an operator can see why a name was chosen; never logged by an apply. */
+    ownerDisplayName?: string | null;
+  }[];
 };
 
 const BACKFILL_BATCH = 500;
@@ -268,6 +275,7 @@ export async function backfillOwnerAgentNames(input: {
           from: candidate.displayName,
           to: next,
           kind: candidate.kind,
+          ...(dryRun ? { ownerDisplayName: candidate.owner.displayName } : {}),
         });
       if (!dryRun)
         await db.$transaction((tx) =>
