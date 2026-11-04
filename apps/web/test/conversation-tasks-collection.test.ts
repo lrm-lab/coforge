@@ -438,3 +438,16 @@ test("the Tasks made from one message are held in number order, and a change kee
   expect(tasks.store.state.bySource.get("message-80")![0]!.status).toBe("in_progress");
   expect(tasks.store.state.bySource.get("message-80")![1]).toBe(other);
 });
+
+test("a message's Task is found by the message it is attached to, whatever the Task's own id (task #507)", async () => {
+  const { tasks } = fixture();
+  await unfinishedQuery(tasks).preload();
+  // Older Tasks carry their message's id; one claimed since task #507 has an id of its own.
+  const reclaimed = task(7, { id: "task-own-id-7", messageId: "message-7", revision: 0 });
+  tasks.apply([{ tasks: [reclaimed], deleted: [] }]);
+  expect(tasks.store.state.byMessage.get("message-7")?.id).toBe("task-own-id-7");
+  expect(tasks.store.state.byMessage.get("message-1")?.id).toBe("message-1");
+  // Its deletion takes it off the message too.
+  tasks.apply([{ tasks: [], deleted: ["task-own-id-7"] }]);
+  expect(tasks.store.state.byMessage.has("message-7")).toBe(false);
+});
