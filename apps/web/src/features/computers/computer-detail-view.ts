@@ -63,6 +63,7 @@ export type ComputerDetailView = ComputerIdentity & {
      * keeps its row and hides its runtime column value. */
     provider?: RuntimeProvider;
     runtimeConfig?: { model?: string; modelProvider?: string };
+    runtimeConfigInvalid?: boolean;
     display?: AgentDisplaySnapshot;
   }[];
 };

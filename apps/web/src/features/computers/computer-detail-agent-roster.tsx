@@ -325,6 +325,8 @@ function AgentRosterIdentity({
         {modelLabel ? ` · ${modelLabel}` : ""}
       </span>
     </>
+  ) : agent.runtimeConfigInvalid ? (
+    <span className="truncate text-destructive-primary">{m.agent_profile_runtime_invalid()}</span>
   ) : null;
   return (
     <span className={cn(ROSTER_ROW, "flex w-full min-w-0 items-center")}>

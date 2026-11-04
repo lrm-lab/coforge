@@ -15,6 +15,7 @@ import {
   agentRuntimeConfig,
   assertProviderSelectable,
   publicAgentRuntimeConfig,
+  readableRuntimeConfig,
   requiredRuntimeConfig,
   type AgentRuntimeConfig,
 } from "./agent-runtime-config.server";
@@ -189,13 +190,15 @@ export class ManageAgents {
         reasoning: input.reasoning?.trim() ?? "",
         fastMode: input.fastMode === true,
       };
-      const currentConfig = requiredRuntimeConfig(current);
+      // task #517: a full re-selection rewrites the config without reading the old one — an
+      // unreadable stored config cannot block the repair that would replace it.
+      const currentConfig = readableRuntimeConfig(current.runtimeConfig, current.id);
       const sameProvider =
-        currentConfig.provider.kind === "coforge" &&
+        currentConfig?.provider.kind === "coforge" &&
         currentConfig.runtime === selection.provider &&
         currentConfig.provider.providerId === selection.modelProvider;
       const preservedApiKey =
-        sameProvider && currentConfig.provider.kind === "coforge"
+        sameProvider && currentConfig?.provider.kind === "coforge"
           ? currentConfig.provider.apiKey
           : undefined;
       const encryptedApiKey = apiKeyInput
@@ -213,7 +216,7 @@ export class ManageAgents {
               ...(apiKey ? { apiKey } : {}),
             }
           : { kind: "default" },
-        currentConfig.environment,
+        currentConfig?.environment,
       );
       const runtimeChanged = JSON.stringify(currentConfig) !== JSON.stringify(runtimeConfig);
       const computerChanged = computerId !== current.computerId;

@@ -140,7 +140,12 @@ function AgentProfileTabBody({
 }) {
   const runtimeConfig = profile.runtimeConfig;
   const modelLabel = useAgentModelName(profile.id, runtimeConfig?.model ?? "");
-  const canEditRuntime = canManage && Boolean(onStartRuntimeEdit) && Boolean(runtimeConfig);
+  // An unreadable stored config is repaired by re-selecting the runtime, so the edit opens
+  // for it too (task #517).
+  const canEditRuntime =
+    canManage &&
+    Boolean(onStartRuntimeEdit) &&
+    (Boolean(runtimeConfig) || profile.runtimeConfigInvalid === true);
   const runtimeLabel = runtimeConfig ? runtimeProviderLabel(runtimeConfig.runtime) : "";
   const runtimeIcon = runtimeConfig ? (
     <RuntimeProviderMark provider={runtimeConfig.runtime} className="size-3.5" />
@@ -308,60 +313,69 @@ function AgentProfileTabBody({
           )}
           {canManage && runtimeCredentialDialog}
         </div>
+        {profile.runtimeConfigInvalid === true && (
+          <p className="mt-3 text-sm text-destructive-primary">
+            {m.agent_profile_runtime_invalid()}
+          </p>
+        )}
         <div className="mt-3 flex flex-col gap-3">
-          <FactRow label={m.agent_runtime_field()}>
-            {/* The pill names the runtime only; its card holds the usage (owner only) and the
+          {runtimeConfig && (
+            <>
+              <FactRow label={m.agent_runtime_field()}>
+                {/* The pill names the runtime only; its card holds the usage (owner only) and the
               Agent's context. A runtime with neither has no peek: RuntimeUsage would hand back
               the bare trigger content, not a button. */}
-            <FactBadge>
-              {usageComputer ? (
-                <RuntimeUsage
-                  computerId={usageComputer.id}
-                  runtime={{
-                    provider: runtimeConfig!.runtime,
-                    displayName: runtimeLabel,
-                    version: profile.runtimeVersion,
-                  }}
-                  computerOnline={usageComputer.online}
-                  timeZone={timeZone}
-                  showUsage={profile.runtimeUsageVisible}
-                  trigger={(health) => (
-                    <>
+                <FactBadge>
+                  {usageComputer ? (
+                    <RuntimeUsage
+                      computerId={usageComputer.id}
+                      runtime={{
+                        provider: runtimeConfig!.runtime,
+                        displayName: runtimeLabel,
+                        version: profile.runtimeVersion,
+                      }}
+                      computerOnline={usageComputer.online}
+                      timeZone={timeZone}
+                      showUsage={profile.runtimeUsageVisible}
+                      trigger={(health) => (
+                        <>
+                          {runtimeIcon}
+                          {runtimeLabel}
+                          {/* Trailing, like the Computer page's runtime chips. */}
+                          <UsageHealthDot health={health} />
+                        </>
+                      )}
+                      triggerClassName={RUNTIME_PILL_TRIGGER_CLASS}
+                      footerLabel={context ? m.agent_context_title() : undefined}
+                      footer={
+                        context ? (
+                          <AgentContextSection usage={context} timeZone={timeZone} />
+                        ) : undefined
+                      }
+                    />
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5">
                       {runtimeIcon}
                       {runtimeLabel}
-                      {/* Trailing, like the Computer page's runtime chips. */}
-                      <UsageHealthDot health={health} />
-                    </>
+                    </span>
                   )}
-                  triggerClassName={RUNTIME_PILL_TRIGGER_CLASS}
-                  footerLabel={context ? m.agent_context_title() : undefined}
-                  footer={
-                    context ? (
-                      <AgentContextSection usage={context} timeZone={timeZone} />
-                    ) : undefined
-                  }
-                />
-              ) : (
-                <span className="inline-flex items-center gap-1.5">
-                  {runtimeIcon}
-                  {runtimeLabel}
+                </FactBadge>
+              </FactRow>
+              <FactRow label={m.agent_form_model()}>
+                <span className={runtimeConfig!.model ? "break-words" : ""}>
+                  {runtimeConfig!.model ? modelLabel : m.agent_form_provider_default()}
                 </span>
-              )}
-            </FactBadge>
-          </FactRow>
-          <FactRow label={m.agent_form_model()}>
-            <span className={runtimeConfig!.model ? "break-words" : ""}>
-              {runtimeConfig!.model ? modelLabel : m.agent_form_provider_default()}
-            </span>
-          </FactRow>
-          <FactRow label={m.agent_form_reasoning()}>
-            {runtimeConfig!.reasoning || m.agent_form_provider_default()}
-          </FactRow>
-          <AgentFastModeFact
-            runtime={runtimeConfig!.runtime}
-            requested={profile.runtimeConfig!.fastMode === true}
-            reading={fastMode}
-          />
+              </FactRow>
+              <FactRow label={m.agent_form_reasoning()}>
+                {runtimeConfig!.reasoning || m.agent_form_provider_default()}
+              </FactRow>
+              <AgentFastModeFact
+                runtime={runtimeConfig!.runtime}
+                requested={profile.runtimeConfig!.fastMode === true}
+                reading={fastMode}
+              />
+            </>
+          )}
         </div>
       </section>
 

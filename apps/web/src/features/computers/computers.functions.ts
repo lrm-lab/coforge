@@ -193,7 +193,7 @@ export const listComputers = createServerFn({ method: "GET" })
           online: statuses[index] ?? false,
           runtimeDetecting: detecting[index] ?? false,
           agents: computer.agents.map((agent) => {
-            const config = readableRuntimeConfig(agent.runtimeConfig);
+            const config = readableRuntimeConfig(agent.runtimeConfig, agent.id);
             return {
               id: agent.id,
               name: agent.name,
@@ -201,6 +201,7 @@ export const listComputers = createServerFn({ method: "GET" })
               avatarUrl: agentAvatarUrl(agent.id, agent.avatarMascot),
               provider: config?.runtime,
               runtimeConfig: config ? publicAgentRuntimeConfig(config) : undefined,
+              runtimeConfigInvalid: agent.runtimeConfig != null && !config,
               display: agentDisplayById.get(agent.id),
             };
           }),

@@ -70,7 +70,7 @@ function mapAgent(agent: {
   avatarMascot?: string | null;
   systemKind?: string | null;
 }): AgentRecord {
-  const runtimeConfig = readableRuntimeConfig(agent.runtimeConfig);
+  const runtimeConfig = readableRuntimeConfig(agent.runtimeConfig, agent.id);
   const { computerId, description } = agent;
   return {
     id: agent.id,

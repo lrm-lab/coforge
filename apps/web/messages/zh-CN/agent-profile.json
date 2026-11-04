@@ -22,5 +22,6 @@
   "agent_peer_dm_badge": "Agent 私信",
   "agent_peer_dm_no_messages": "还没有消息",
   "agent_peer_dm_activity_only": "仅动态",
-  "agent_peer_dm_activity_tooltip": "Agent 私信动态"
+  "agent_peer_dm_activity_tooltip": "Agent 私信动态",
+  "agent_profile_runtime_invalid": "运行配置无效，请重新选择运行时。"
 }

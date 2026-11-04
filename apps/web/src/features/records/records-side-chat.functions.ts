@@ -51,7 +51,7 @@ async function readWeeklyReportAssistantStatus(
   };
 }
 
-const normalizeAgentRuntimeConfig = readableRuntimeConfig;
+const normalizeAgentRuntimeConfig = (value: unknown) => readableRuntimeConfig(value);
 
 export const addRecordComment = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])

@@ -160,13 +160,29 @@ export function requiredRuntimeConfig(agent: { runtimeConfig: AgentRuntimeConfig
   return agent.runtimeConfig;
 }
 
+/** The field paths a failed runtime-config parse reports: names only, never the values a
+ * Zod issue carries — a config may hold credentials. */
+function unreadableFieldPath(error: unknown): string {
+  const issues = (error as { issues?: { path?: (string | number)[] }[] }).issues;
+  return (issues ?? [])
+    .map((issue) => (issue.path ?? []).join("."))
+    .filter(Boolean)
+    .join(",");
+}
+
 /** A stored runtime config a read path may show: the parsed config, or `undefined` when the row
  * cannot be read — one bad Agent loses its runtime fields and logs a warning, never the read. */
-export function readableRuntimeConfig(value: unknown): AgentRuntimeConfig | undefined {
+export function readableRuntimeConfig(
+  value: unknown,
+  agentId?: string,
+): AgentRuntimeConfig | undefined {
   try {
     return parseAgentRuntimeConfig(value);
   } catch (error) {
-    console.warn("agent_runtime_config_unreadable", { error });
+    console.warn("agent_runtime_config_unreadable", {
+      agentId,
+      path: unreadableFieldPath(error) || undefined,
+    });
     return undefined;
   }
 }

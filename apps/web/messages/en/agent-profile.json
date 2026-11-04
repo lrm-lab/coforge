@@ -22,5 +22,6 @@
   "agent_peer_dm_badge": "Agent DM",
   "agent_peer_dm_no_messages": "No messages yet",
   "agent_peer_dm_activity_only": "Activity only",
-  "agent_peer_dm_activity_tooltip": "Agent DM Activity"
+  "agent_peer_dm_activity_tooltip": "Agent DM Activity",
+  "agent_profile_runtime_invalid": "The runtime configuration is invalid. Re-select a runtime."
 }

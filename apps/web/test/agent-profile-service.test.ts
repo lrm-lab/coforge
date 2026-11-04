@@ -258,6 +258,19 @@ test("profile update: never accepts a name/Username field (the request type has 
   expect(updateData).not.toHaveProperty("name");
 });
 
+// task #517: a stored runtimeConfig the read cannot parse keeps the profile readable, marks it
+// invalid so the owner re-selects, and never breaks the page the Agent appears on.
+test("profile show: an Agent with an unreadable runtimeConfig still loads, flagged invalid", async () => {
+  const outcome = await resolveAgentProfileShow(
+    baseDb({ agent: { ...AGENT_SCOUT, runtimeConfig: { broken: true } } }) as never,
+    { workspaceId: WORKSPACE_ID, agentId: CALLER_AGENT_ID },
+    "scout",
+  );
+  // The flat profile the task discussion and Agent surfaces read: an unreadable config reads
+  // as no runtime, never a page-breaking throw.
+  expect(outcome).toMatchObject({ body: { profile: { runtime: "", model: "" } } });
+});
+
 test("profile show: a private target Agent invisible to the caller answers agent_not_visible", async () => {
   const ghost = {
     ...AGENT_SCOUT,
