@@ -6,6 +6,7 @@ import { Globe01, MessageTextSquare01, Monitor01, PauseCircle, Phone01 } from "@
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonGroup, ButtonGroupItem } from "#src/components/base/button-group/button-group";
+import { Input } from "#src/components/base/input/input";
 import { Select } from "#src/components/base/select/select";
 import { SelectItem } from "#src/components/base/select/select-item";
 import { Toggle } from "#src/components/base/toggle/toggle";
@@ -13,13 +14,18 @@ import { SettingsCard, SettingsField, SettingsGroup } from "#src/components/sett
 import { useAppToast } from "#src/components/ui/toast";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { isAppError } from "#src/lib/app-error";
-import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import { currentBrowserPushEndpoint } from "./browser-push";
 import {
+  customPauseEnd,
+  localInputValue,
+  PAUSES,
+  pauseEnd,
+  type Pause,
+} from "./notification-pause";
+import {
   getNotificationSettings,
-  sendTestNotificationToDevices,
   updateNotificationSettings,
 } from "./notification-settings.functions";
 import {
@@ -36,19 +42,6 @@ const VERSION_CONFLICT = "notification-settings-version-conflict";
 type Loaded = Awaited<ReturnType<typeof getNotificationSettings>>;
 type Changes = NotificationSettingsChange["changes"];
 
-const PAUSES = ["30m", "1h", "2h", "tomorrow", "week"] as const;
-type Pause = (typeof PAUSES)[number];
-
-/** When a pause picked now ends: a span from now, or tomorrow at 9:00 on this computer's clock. */
-export function pauseEnd(pause: Pause, now: Date): Date {
-  const minutes = { "30m": 30, "1h": 60, "2h": 120, week: 7 * 24 * 60 } as const;
-  if (pause !== "tomorrow") return new Date(now.getTime() + minutes[pause] * 60_000);
-  const end = new Date(now);
-  end.setDate(end.getDate() + 1);
-  end.setHours(9, 0, 0, 0);
-  return end;
-}
-
 /** A minute of the day as the quiet-hours pickers show it, `HH:MM`. */
 export function minuteLabel(minute: number): string {
   const hours = String(Math.floor(minute / 60)).padStart(2, "0");
@@ -63,7 +56,7 @@ const PAUSE_LABELS: Record<Pause, () => string> = {
   "1h": m.notif_pause_1h,
   "2h": m.notif_pause_2h,
   tomorrow: m.notif_pause_tomorrow,
-  week: m.notif_pause_week,
+  custom: m.notif_pause_custom,
 };
 const PREVIEW_LABELS: Record<NotificationPreviewMode, () => string> = {
   full: m.notif_preview_full,
@@ -78,13 +71,6 @@ const MOBILE_LABELS: Record<MobileDelay, () => string> = {
   idle_5m: m.notif_mobile_idle_5m,
   idle_10m: m.notif_mobile_idle_10m,
 };
-type TestOutcome = "sent" | "failed" | "removed" | "unreachable";
-const OUTCOME_LABELS: Record<TestOutcome, () => string> = {
-  sent: m.notif_test_sent,
-  failed: m.notif_test_failed,
-  removed: m.notif_test_removed,
-  unreachable: m.notif_test_unreachable,
-};
 
 /** Why a device's last notification failed, as the person can act on it. */
 function failureReason(reason: string | null): string {
@@ -98,32 +84,63 @@ const when = (iso: string) =>
     new Date(iso),
   );
 
+/** A device as the page names it: its own label, or what kind of device it is. */
+function deviceName(device: { deviceKind: string | null; deviceLabel: string | null }): string {
+  if (device.deviceLabel && device.deviceLabel !== "Browser") return device.deviceLabel;
+  if (device.deviceKind === "mobile") return m.notif_device_mobile();
+  if (device.deviceKind === "desktop") return m.notif_device_desktop();
+  return m.notif_device_browser();
+}
+
+/** A device's last delivery: when it last failed and why, when it last arrived, or never. */
+function deliveryLine(device: {
+  lastSuccessAt: string | null;
+  lastFailureAt: string | null;
+  lastFailureReason: string | null;
+}): string {
+  if (
+    device.lastFailureAt &&
+    (!device.lastSuccessAt || device.lastFailureAt > device.lastSuccessAt)
+  )
+    return m.notif_device_last_failure_reason({
+      time: when(device.lastFailureAt),
+      reason: failureReason(device.lastFailureReason),
+    });
+  if (device.lastSuccessAt)
+    return m.notif_device_last_success({ time: when(device.lastSuccessAt) });
+  return m.notif_device_never();
+}
+
 /**
- * The account's notification settings (task #469, Raft's settings.notifications): a pause and
- * quiet hours, what a notification shows and whether it sounds, how long the phone waits while
- * the person is at a computer, and every device that gets them, with a test to all of them. Each
- * change saves at once from the version it was made from; another device's save in between is
- * shown and the change is asked for again.
+ * The account's notification settings (task #469, in the order of Raft's settings.notifications):
+ * this device, its last delivery and a test to it; a pause (a span, or a time of one's own) and
+ * quiet hours; what a notification shows and whether it sounds, and how long the phone waits
+ * while the person is at a computer. Each change saves at once from the version it was made from;
+ * another device's save in between is shown and the change is asked for again.
  */
 export function NotificationSettingsPanel({
   enabled,
+  onTest,
 }: {
   /** Whether message notifications are on at all; off, these settings do nothing. */
   enabled: boolean;
+  /** Sends this browser a test notification; true once it is sent (a failure says why itself). */
+  onTest: () => Promise<boolean>;
 }) {
   const workspaceSlug = useWorkspaceSlug();
   const queryClient = useQueryClient();
   const toast = useAppToast();
   const load = useServerFn(getNotificationSettings);
   const update = useServerFn(updateNotificationSettings);
-  const sendTest = useServerFn(sendTestNotificationToDevices);
   const query = useQuery({
     queryKey: SETTINGS_KEY,
     queryFn: async () => load({ data: { endpoint: await currentBrowserPushEndpoint() } }),
   });
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [outcomes, setOutcomes] = useState<Record<string, TestOutcome>>({});
+  const [tested, setTested] = useState(false);
+  /** A custom pause being picked: the input's value, or null while none is. */
+  const [until, setUntil] = useState<string | null>(null);
 
   if (query.isError) return <p className="text-sm text-error-primary">{m.notif_load_failed()}</p>;
   const loaded = query.data;
@@ -156,6 +173,10 @@ export function NotificationSettingsPanel({
 
   const paused = settings.pausedUntil && new Date(settings.pausedUntil) > new Date();
   const quiet = settings.quietHours;
+  const here = devices.find((device) => device.current);
+  const HereIcon =
+    here?.deviceKind === "mobile" ? Phone01 : here?.deviceKind === "desktop" ? Monitor01 : Globe01;
+  const customEnd = until === null ? null : customPauseEnd(until, new Date());
 
   return (
     <>
@@ -167,6 +188,38 @@ export function NotificationSettingsPanel({
           {m.notif_off_note()}
         </p>
       )}
+      <SettingsGroup icon={HereIcon} label={m.notif_section_this_device()}>
+        <SettingsCard>
+          <SettingsField
+            inline
+            label={here ? deviceName(here) : m.notif_this_device_none()}
+            description={here ? deliveryLine(here) : m.notif_this_device_none_hint()}
+          >
+            <Button
+              size="sm"
+              color="secondary"
+              isDisabled={testing || !enabled || !here}
+              onPress={async () => {
+                setTesting(true);
+                setTested(false);
+                try {
+                  setTested(await onTest());
+                  await queryClient.invalidateQueries({ queryKey: SETTINGS_KEY });
+                } finally {
+                  setTesting(false);
+                }
+              }}
+            >
+              {testing ? m.notif_test_sending() : m.notif_test_send()}
+            </Button>
+          </SettingsField>
+          {tested && (
+            <p role="status" className="-mt-3 text-sm text-tertiary">
+              {m.notif_test_sent_hint()}
+            </p>
+          )}
+        </SettingsCard>
+      </SettingsGroup>
       <SettingsGroup icon={PauseCircle} label={m.notif_section_pause()}>
         <SettingsCard>
           <SettingsField label={m.notif_pause_title()} description={m.notif_pause_description()}>
@@ -185,21 +238,55 @@ export function NotificationSettingsPanel({
                 </Button>
               </div>
             ) : (
-              <Select
-                aria-label={m.notif_pause_title()}
-                className="max-w-xs"
-                value="off"
-                isDisabled={saving}
-                onChange={(key) => {
-                  const pause = PAUSES.find((each) => each === key);
-                  if (pause) void save({ pausedUntil: pauseEnd(pause, new Date()).toISOString() });
-                }}
-              >
-                <SelectItem id="off" label={m.notif_pause_off()} />
-                {PAUSES.map((pause) => (
-                  <SelectItem key={pause} id={pause} label={PAUSE_LABELS[pause]()} />
-                ))}
-              </Select>
+              <div className="flex flex-col gap-3">
+                <Select
+                  aria-label={m.notif_pause_title()}
+                  className="max-w-xs"
+                  value={until === null ? "off" : "custom"}
+                  isDisabled={saving}
+                  onChange={(key) => {
+                    const pause = PAUSES.find((each) => each === key);
+                    if (pause === "custom") {
+                      setUntil(localInputValue(pauseEnd("tomorrow", new Date())));
+                      return;
+                    }
+                    setUntil(null);
+                    if (pause)
+                      void save({ pausedUntil: pauseEnd(pause, new Date()).toISOString() });
+                  }}
+                >
+                  <SelectItem id="off" label={m.notif_pause_off()} />
+                  {PAUSES.map((pause) => (
+                    <SelectItem key={pause} id={pause} label={PAUSE_LABELS[pause]()} />
+                  ))}
+                </Select>
+                {until !== null && (
+                  <div className="flex flex-wrap items-start gap-3">
+                    <Input
+                      type="datetime-local"
+                      label={m.notif_pause_custom_label()}
+                      className="w-60"
+                      value={until}
+                      onChange={setUntil}
+                      isInvalid={customEnd === null}
+                      hint={customEnd === null ? m.notif_pause_custom_invalid() : undefined}
+                    />
+                    <Button
+                      size="md"
+                      color="primary"
+                      className="mt-6"
+                      isDisabled={saving || customEnd === null}
+                      onPress={() => {
+                        if (!customEnd) return;
+                        setUntil(null);
+                        void save({ pausedUntil: customEnd.toISOString() });
+                      }}
+                    >
+                      {m.notif_pause_apply()}
+                    </Button>
+                  </div>
+                )}
+              </div>
             )}
           </SettingsField>
           <SettingsField
@@ -310,94 +397,6 @@ export function NotificationSettingsPanel({
               ))}
             </Select>
           </SettingsField>
-        </SettingsCard>
-      </SettingsGroup>
-      <SettingsGroup icon={Monitor01} label={m.notif_section_devices()}>
-        <SettingsCard>
-          <p className="text-sm text-tertiary">{m.notif_devices_description()}</p>
-          {devices.length === 0 ? (
-            <p className="text-sm text-tertiary">{m.notif_devices_empty()}</p>
-          ) : (
-            <ul className="flex flex-col divide-y divide-secondary">
-              {devices.map((device) => {
-                const Icon =
-                  device.deviceKind === "mobile"
-                    ? Phone01
-                    : device.deviceKind === "desktop"
-                      ? Monitor01
-                      : Globe01;
-                const outcome = outcomes[device.id];
-                return (
-                  <li
-                    key={device.id}
-                    className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0"
-                  >
-                    <Icon aria-hidden="true" className="size-5 shrink-0 text-fg-quaternary" />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-primary">
-                        {(device.deviceLabel !== "Browser" && device.deviceLabel) ||
-                          (device.deviceKind === "mobile"
-                            ? m.notif_device_mobile()
-                            : device.deviceKind === "desktop"
-                              ? m.notif_device_desktop()
-                              : m.notif_device_browser())}
-                        {device.current && (
-                          <span className="ml-2 text-xs font-normal text-brand-secondary">
-                            {m.notif_device_current()}
-                          </span>
-                        )}
-                      </p>
-                      <p className="truncate text-xs text-tertiary">
-                        {device.lastFailureAt &&
-                        (!device.lastSuccessAt || device.lastFailureAt > device.lastSuccessAt)
-                          ? m.notif_device_last_failure_reason({
-                              time: when(device.lastFailureAt),
-                              reason: failureReason(device.lastFailureReason),
-                            })
-                          : device.lastSuccessAt
-                            ? m.notif_device_last_success({ time: when(device.lastSuccessAt) })
-                            : m.notif_device_never()}
-                      </p>
-                    </div>
-                    {outcome && (
-                      <span
-                        className={cn(
-                          "shrink-0 text-xs font-medium",
-                          outcome === "sent" ? "text-success-primary" : "text-error-primary",
-                        )}
-                      >
-                        {OUTCOME_LABELS[outcome]()}
-                      </span>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-          <div>
-            <Button
-              size="sm"
-              color="secondary"
-              isDisabled={testing || devices.length === 0}
-              onPress={async () => {
-                setTesting(true);
-                setOutcomes({});
-                try {
-                  const result = await sendTest();
-                  setOutcomes(
-                    Object.fromEntries(result.devices.map((device) => [device.id, device.outcome])),
-                  );
-                  await queryClient.invalidateQueries({ queryKey: SETTINGS_KEY });
-                } catch {
-                  toast.error(m.preferences_browser_notifications_test_error());
-                } finally {
-                  setTesting(false);
-                }
-              }}
-            >
-              {testing ? m.notif_test_sending() : m.notif_test_all()}
-            </Button>
-          </div>
         </SettingsCard>
       </SettingsGroup>
     </>

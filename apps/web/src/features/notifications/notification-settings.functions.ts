@@ -1,10 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
-import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
-import { authMiddleware, workspaceUserMiddleware } from "#src/features/auth/function-auth";
+import { authMiddleware } from "#src/features/auth/function-auth";
 import { requireDatabaseClient } from "#src/server/db/client.server";
-import { extractLocaleFromRequest } from "#src/paraglide/runtime";
-import { createWebPushNotifications } from "#src/server/notifications/web-push-composition.server";
 import { PrismaWebPushSubscriptionStore } from "#src/server/notifications/prisma-web-push-subscriptions.server";
 import { NotificationSettingsStore } from "#src/server/notifications/notification-settings.server";
 import { computerActivity } from "#src/server/notifications/notification-redis.server";
@@ -67,23 +64,4 @@ export const reportComputerActivity = createServerFn({ method: "POST" })
   .validator(activityReportSchema)
   .handler(async ({ data, context }) => {
     await computerActivity()?.report(context.user.id, new Date(data.lastInputAt), new Date());
-  });
-
-/** One test notification to each of the person's devices, with each one's outcome. */
-export const sendTestNotificationToDevices = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
-  .handler(async ({ context }) => {
-    const db = requireDatabaseClient();
-    const { slug } = await db.workspace.findUniqueOrThrow({
-      where: { id: context.workspaceId },
-      select: { slug: true },
-    });
-    const notifications = await createWebPushNotifications(db);
-    return {
-      devices: await notifications.sendTestToDevices(
-        context.user.id,
-        extractLocaleFromRequest(getRequest()),
-        slug,
-      ),
-    };
   });

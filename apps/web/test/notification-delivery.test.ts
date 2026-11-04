@@ -7,7 +7,6 @@ import {
 } from "#src/server/notifications/notification-rules.server";
 import type { DeferredPush } from "#src/server/notifications/deferred-mobile-pushes.server";
 import {
-  WebPushDeliveryError,
   WebPushNotifications,
   type MessageWebPushNotification,
   type StoredWebPushSubscription,
@@ -279,38 +278,5 @@ describe("a message's fan-out", () => {
     await notifications.notifyMessage("message-a");
     expect(calls).toBe(1);
     expect(recorded.sort()).toEqual([0, 1, 2, 3, 4].map((index) => `laptop-${index}:true`));
-  });
-});
-
-describe("the Settings test notification", () => {
-  test("goes to every device, whatever the settings, with each one's outcome", async () => {
-    const sent: string[] = [];
-    const removed: string[] = [];
-    const devices = [laptop, phone, oldBrowser];
-    const store: WebPushSubscriptionStore = {
-      notificationForMessage: async () => null,
-      notificationForRecipient: async () => null,
-      deferredNotification: async () => null,
-      settingsFor: async () => ({ settings: DEFAULT_NOTIFICATION_SETTINGS, timeZone: "UTC" }),
-      subscriptionsForUser: async () => devices,
-      saveSubscription: async () => {},
-      removeSubscription: async () => {},
-      removeSubscriptionById: async (id) => void removed.push(id),
-      recordDeliveries: async () => {},
-    };
-    const notifications = new WebPushNotifications(store, {
-      send: async (subscription, payload) => {
-        expect(payload).toMatchObject({ forceDisplay: true, title: "CoForge" });
-        if (subscription.id === "old") throw new WebPushDeliveryError(410);
-        sent.push(subscription.id);
-      },
-    });
-    expect(await notifications.sendTestToDevices("alice", "en", "acme")).toEqual([
-      { id: "laptop", outcome: "sent" },
-      { id: "phone", outcome: "sent" },
-      { id: "old", outcome: "removed" },
-    ]);
-    expect(sent).toEqual(["laptop", "phone"]);
-    expect(removed).toEqual(["old"]);
   });
 });

@@ -317,6 +317,7 @@ function NotificationSettings({
   showAddToHomeScreenGuide,
   onBrowserNotificationsChange,
   onEnableBrowserNotifications,
+  onTestBrowserNotification,
 }: SettingsContentProps) {
   const [saving, guardSave] = useSubmitGuard();
   const unavailableReason = !browserNotificationsConfigured
@@ -389,7 +390,10 @@ function NotificationSettings({
       )}
       {/* The account's rules for every device, and the devices themselves (task #469). */}
       <div className="mt-8 flex flex-col gap-8">
-        <NotificationSettingsPanel enabled={browserNotificationsEnabled} />
+        <NotificationSettingsPanel
+          enabled={browserNotificationsEnabled}
+          onTest={onTestBrowserNotification}
+        />
       </div>
     </div>
   );

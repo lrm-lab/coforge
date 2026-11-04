@@ -402,40 +402,6 @@ export class WebPushNotifications {
     }
   }
 
-  /**
-   * The Settings test (task #467): one notification to every device the person holds, never held
-   * back by a pause, quiet hours or a phone's wait (as on Raft), with each device's outcome so
-   * Settings can show which ones work. Clicking it opens Settings in `workspaceSlug`.
-   */
-  async sendTestToDevices(
-    userId: string,
-    locale: Locale,
-    workspaceSlug: string,
-  ): Promise<Array<{ id: string; outcome: "sent" | "failed" | "removed" | "unreachable" }>> {
-    const devices = await this.subscriptions.subscriptionsForUser(userId);
-    const payload: WebPushPayload = {
-      title: m.preferences_browser_notifications_test_title({}, { locale }),
-      body: m.preferences_browser_notifications_test_body({}, { locale }),
-      url: workspacePath(workspaceSlug, "/settings"),
-      tag: `test:${crypto.randomUUID()}`,
-      forceDisplay: true,
-    };
-    return Promise.all(
-      devices.map(async (device) => {
-        const result = await this.deliver([device], payload);
-        const outcome =
-          result.sent > 0
-            ? ("sent" as const)
-            : result.removed > 0
-              ? ("removed" as const)
-              : result.unreachable > 0
-                ? ("unreachable" as const)
-                : ("failed" as const);
-        return { id: device.id, outcome };
-      }),
-    );
-  }
-
   /** Sends `payload` to each subscription. With `collected`, the outcomes are added to it for one
    * write by the caller instead of being written here. */
   private async deliver(
