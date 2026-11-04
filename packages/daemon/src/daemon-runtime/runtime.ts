@@ -130,7 +130,6 @@ import { AgentFeatureSync } from "./agent-feature-sync";
 import { WakeRecycle } from "./wake-recycle";
 import { AgentMessageOperations } from "./agent-message-operations";
 import { AgentRequestForwarder } from "./agent-request-forwarder";
-import { createAgentRequestForwarder } from "./agent-request-forwarder-factory";
 import { AgentDeliveryQueue } from "./agent-delivery-queue";
 import { ReplyIntentPublisher } from "./reply-intent-publisher";
 import {
@@ -195,6 +194,7 @@ export class DaemonRuntime {
   readonly #agentSessions: AgentSessions;
   readonly #messageAttention: AgentMessageAttentionIndex;
   readonly #messageOperations: AgentMessageOperations;
+  /** The Agent requests the daemon only authorizes and forwards over Agent HTTPS. */
   readonly agentRequests: AgentRequestForwarder;
   readonly #mentionDeliveries: MentionDeliveryTracker;
   /** The launch and native session last reported to the cloud per Agent: the identity a tracked
@@ -559,15 +559,6 @@ export class DaemonRuntime {
       this.#runtimeAuth,
     );
     this.#transport = transportFactory.create(connection);
-    const recovered = { results: lifecycle.recoveredUpgradeResults ?? [], pending: false };
-    this.#upgradeResults = new UpgradeResultReporter({
-      workspaceId: connection.workspaceId,
-      computerId: connection.computerId ?? "",
-      readOperations: lifecycle.readUpgradeOperations ?? (async () => recovered),
-      transport: () => this.#transport,
-      acknowledge: lifecycle.acknowledgeUpgradeResult,
-      schedule: lifecycle.upgradeResultSchedule,
-    });
     const messages = composeMessages({
       connection,
       stateDirectory,
@@ -591,12 +582,14 @@ export class DaemonRuntime {
       agentIdForContext: (context) => this.#agentIdForContext(context),
       runningMentionIdentity: (agentId) => this.#runningMentionIdentity(agentId),
     });
-    this.agentRequests = createAgentRequestForwarder(
-      () => this.#transport,
+    this.agentRequests = new AgentRequestForwarder({
+      get transport() {
+        return runtime.#transport;
+      },
       connection,
-      this.#contexts,
-      this.#authorizedAgent.bind(this),
-    );
+      contexts: this.#contexts,
+      authorizedAgent: (context, agentApiKey) => this.#authorizedAgent(context, agentApiKey),
+    });
     this.#mentionDeliveries = messages.mentionDeliveries;
     this.#messageAttention = messages.messageAttention;
     this.#inboxCoordinator = messages.inboxCoordinator;
@@ -619,11 +612,13 @@ export class DaemonRuntime {
       stopAgent: (agentId) => this.stopAgent(agentId),
       runningAgentIds: () => this.#agentProcessManager.runningAgentIds(),
       forgetLocalAgent: (agentId) => this.#forgetLocalAgent(agentId),
+      upgradeResults: this.lifecycle,
     });
     this.#reminders = services.reminders;
     this.systemCleaner = services.systemCleaner;
     this.#appConfigs = services.appConfigs;
     this.#migrations = services.migrations;
+    this.#upgradeResults = services.upgradeResults;
     const control = composeAgentControl({
       connection,
       runtimeInstanceId: this.#runtimeInstanceId,

@@ -14,6 +14,12 @@ import { FileReminderReceiptStore } from "#src/persistence/reminder-receipt-stor
 import { ReminderScheduler as Reminders } from "#src/agent-reminder/reminder-scheduler";
 import { SystemCleaner as Cleaner } from "#src/system-cleaner/system-cleaner";
 import { agentsDirectory, agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
+import {
+  UpgradeResultReporter,
+  type RecoveredUpgradeResult,
+  type UpgradeOperationsReading,
+} from "./upgrade-result-reporter";
+import type { UnrefTimerSchedule } from "./unref-timer";
 import { CLEANER_APP_ID } from "@lrm/coforge-sdk/internal";
 
 /** What the runtime supplies to one Workspace's reminder, cleaner, App config and migration work. */
@@ -36,6 +42,15 @@ export type RuntimeServicesPorts = {
   stopAgent(agentId: string): Promise<void>;
   runningAgentIds(): readonly string[];
   forgetLocalAgent(agentId: string): void;
+  /** The Coordinator's upgrade-operation lifecycle, read by the result reporter: recovered
+   * terminal results, the durable-operations reader it polls, its timer, and the server-side
+   * acknowledgement. */
+  upgradeResults?: {
+    recoveredUpgradeResults?: RecoveredUpgradeResult[];
+    readUpgradeOperations?(): Promise<UpgradeOperationsReading>;
+    upgradeResultSchedule?: UnrefTimerSchedule;
+    acknowledgeUpgradeResult?(requestId: string): Promise<void>;
+  };
 };
 
 export type RuntimeServices = {
@@ -43,6 +58,7 @@ export type RuntimeServices = {
   systemCleaner: SystemCleaner;
   appConfigs: AgentAppConfigSync;
   migrations: AgentMigrationRunner | undefined;
+  upgradeResults: UpgradeResultReporter;
 };
 
 /**
@@ -100,5 +116,15 @@ export function composeRuntimeServices(ports: RuntimeServicesPorts): RuntimeServ
         stateDirectory,
       })
     : undefined;
-  return { reminders, systemCleaner, appConfigs, migrations };
+  const upgradeLifecycle = ports.upgradeResults ?? {};
+  const recovered = { results: upgradeLifecycle.recoveredUpgradeResults ?? [], pending: false };
+  const upgradeResults = new UpgradeResultReporter({
+    workspaceId: connection.workspaceId,
+    computerId: connection.computerId ?? "",
+    readOperations: upgradeLifecycle.readUpgradeOperations ?? (async () => recovered),
+    transport,
+    acknowledge: upgradeLifecycle.acknowledgeUpgradeResult,
+    schedule: upgradeLifecycle.upgradeResultSchedule,
+  });
+  return { reminders, systemCleaner, appConfigs, migrations, upgradeResults };
 }

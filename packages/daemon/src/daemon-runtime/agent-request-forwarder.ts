@@ -286,10 +286,16 @@ export class AgentRequestForwarder {
     );
     if (elided === messages) return response;
     const next = { ...(body as Record<string, unknown>), messages: elided };
+    // The upstream response is fetch's already-decoded body: `content-encoding` still names the
+    // wire compression and `content-length` the old byte count, neither of which describes the
+    // rewritten JSON. Only the media type survives.
+    const headers = new Headers();
+    const contentType = response.headers.get("content-type");
+    if (contentType) headers.set("content-type", contentType);
     const rewritten = new Response(JSON.stringify(next), {
       status: response.status,
       statusText: response.statusText,
-      headers: response.headers,
+      headers,
     }) as Response & { messages?: unknown };
     // `guardDelivery` reads this non-serialized field to release claims if the local client
     // disconnects before consuming the rewritten response body.
