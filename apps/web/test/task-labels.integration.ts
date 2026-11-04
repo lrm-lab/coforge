@@ -141,8 +141,43 @@ test("any member creates a label; only an owner or admin renames or deletes one"
 
     const [number] = await make("alice", 1, { labels: ["Clients"] });
     const taskId = (await show(number!)).tasks[0]!.id;
+    // Deleting for good is the second step (task #508): a live label is archived first.
+    const live = await refusal(labels.delete(workspaceId, aliceId, fromBob.id));
+    expect(live).toMatchObject({ code: "INVALID_INPUT", errorId: "task-label-not-archived" });
+    expect(await db.taskLabel.count({ where: { taskId } })).toBe(1);
+    await labels.update(workspaceId, aliceId, fromBob.id, { archived: true });
+    // A member still may not, archived or not.
+    expect((await refusal(labels.delete(workspaceId, bobId, fromBob.id))).code).toBe(
+      "ACCESS_DENIED",
+    );
     await labels.delete(workspaceId, aliceId, fromBob.id);
     expect(await db.taskLabel.count({ where: { taskId } })).toBe(0);
+  } finally {
+    await db.$disconnect();
+  }
+});
+
+test("a member reads every label for Settings → Labels, the archived ones and their counts too", async () => {
+  const { db, make, principals } = await setup();
+  try {
+    const workspaceId = principals.alice.workspaceId;
+    const aliceId = principals.alice.userId!;
+    const bobId = principals.bob.userId!;
+    const labels = new Labels(db);
+    const kept = await labels.create(workspaceId, aliceId, { name: "Kept" });
+    const gone = await labels.create(workspaceId, aliceId, { name: "Gone" });
+    await make("alice", 2, { labels: ["Gone"] });
+    await labels.update(workspaceId, aliceId, gone.id, { archived: true });
+
+    // What loadLabelSettings reads, as a plain member (task #508).
+    const all = await labels.list(workspaceId, bobId, { archived: true });
+    expect(all.map((label) => [label.name, Boolean(label.archivedAt), label.taskCount])).toEqual([
+      ["Gone", true, 2],
+      ["Kept", false, 0],
+    ]);
+    expect(all.find((label) => label.id === gone.id)!.lastUsedAt).not.toBeNull();
+    // The pickers' read still leaves the archived ones out.
+    expect((await labels.list(workspaceId, bobId)).map((label) => label.id)).toEqual([kept.id]);
   } finally {
     await db.$disconnect();
   }

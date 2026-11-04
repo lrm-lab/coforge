@@ -1,6 +1,6 @@
 import { useServerFn } from "@tanstack/react-start";
 import { DotsHorizontal } from "@untitledui/icons";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -15,8 +15,13 @@ import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 
 import { LabelColorSwatches } from "./label-color-swatches";
-import { nameTaken, type SettingsLabel } from "./label-settings-model";
-import { deleteTaskLabel, LABEL_DESCRIPTION_MAX, updateTaskLabel } from "./labels.functions";
+import {
+  LABEL_DESCRIPTION_MAX,
+  LABEL_NAME_MAX_LENGTH,
+  nameTaken,
+  type SettingsLabel,
+} from "./label-settings-model";
+import { deleteTaskLabel, updateTaskLabel } from "./labels.functions";
 import { LabelDot } from "./task-label-chip";
 
 /** What a row is doing besides showing the label. */
@@ -34,7 +39,8 @@ function changeError(cause: unknown, name: string) {
  * One label in Settings → Labels (task #508): its color, name and what it is for, how many Tasks
  * carry it and when it was last put on one, and, for an owner or admin, a menu to rename,
  * recolor, describe, archive, restore and (once archived) delete it for good. Every change is
- * the server's to allow; `onChanged` reads the list again.
+ * the server's to allow; `onChanged` reads the list again. Closing an editor puts focus back on
+ * the row's menu button.
  */
 export function LabelSettingsRow({
   label,
@@ -51,12 +57,22 @@ export function LabelSettingsRow({
   const update = useServerFn(updateTaskLabel);
   const remove = useServerFn(deleteTaskLabel);
   const timeZone = useTimeZone();
+  const menuButton = useRef<HTMLButtonElement>(null);
   const [editing, setEditing] = useState<Editing>(null);
   const [draft, setDraft] = useState("");
+  // The color the swatches have selected: the arrow keys move it, Enter or Space saves it.
+  const [colorDraft, setColorDraft] = useState(label.color);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirming, setConfirming] = useState<"archive" | "delete" | null>(null);
   const archived = Boolean(label.archivedAt);
+
+  /** Closes the editor and hands focus back to the row's menu button, not to the page. */
+  function close() {
+    setEditing(null);
+    setError(null);
+    requestAnimationFrame(() => menuButton.current?.focus());
+  }
 
   async function save(change: {
     name?: string;
@@ -70,7 +86,7 @@ export function LabelSettingsRow({
       // The color is one of the palette's, which the server's enum also holds.
       await update({ data: { id: label.id, ...change, color: change.color as never } });
       await onChanged();
-      setEditing(null);
+      close();
     } catch (cause) {
       setError(changeError(cause, change.name ?? label.name));
     } finally {
@@ -80,16 +96,19 @@ export function LabelSettingsRow({
 
   function rename() {
     const name = draft.trim();
-    if (!name || name === label.name) return setEditing(null);
+    if (!name || name === label.name) return close();
     if (nameTaken(labels, name, label.id)) return setError(m.labels_settings_name_taken({ name }));
     void save({ name });
   }
+
+  const saveColor = (color: string) => (color === label.color ? close() : void save({ color }));
 
   const start = (what: Exclude<Editing, null>) => {
     setError(null);
     setDraft(
       what === "rename" ? label.name : what === "description" ? (label.description ?? "") : "",
     );
+    setColorDraft(label.color);
     setEditing(what);
   };
 
@@ -103,20 +122,23 @@ export function LabelSettingsRow({
         <LabelDot color={label.color} />
         <div className="min-w-0 flex-1">
           {editing === "rename" ? (
+            // The refusal is the field's error message, which a screen reader hears with it.
             <Input
               aria-label={m.labels_settings_rename_field({ name: label.name })}
               size="sm"
               value={draft}
+              maxLength={LABEL_NAME_MAX_LENGTH}
               autoFocus
               isDisabled={saving}
               isInvalid={error !== null}
+              hint={error ?? undefined}
               onChange={(next) => {
                 setDraft(next);
                 setError(null);
               }}
               onKeyDown={(event) => {
                 if (event.key === "Enter") rename();
-                if (event.key === "Escape") setEditing(null);
+                if (event.key === "Escape") close();
               }}
             />
           ) : (
@@ -135,9 +157,9 @@ export function LabelSettingsRow({
           )}
         </div>
         {/* How many of them are not finished, on hover or focus. */}
-        <Tooltip title={m.labels_settings_open_count({ count: String(label.openCount) })}>
+        <Tooltip title={m.labels_settings_open_count({ count: label.openCount })}>
           <TooltipTrigger className="h-auto w-auto shrink-0 rounded-sm text-sm text-secondary tabular-nums outline-focus-ring focus-visible:outline-2">
-            {m.labels_settings_task_count({ count: String(label.taskCount) })}
+            {m.labels_settings_task_count({ count: label.taskCount })}
           </TooltipTrigger>
         </Tooltip>
         <span className="hidden w-28 shrink-0 text-right text-sm text-tertiary sm:block">
@@ -148,6 +170,7 @@ export function LabelSettingsRow({
         {canManage ? (
           <Dropdown.Root>
             <ButtonUtility
+              ref={menuButton}
               tooltip={m.labels_settings_actions({ name: label.name })}
               icon={DotsHorizontal}
               size="sm"
@@ -195,17 +218,28 @@ export function LabelSettingsRow({
       </div>
 
       {editing === "color" && (
-        // Picking a color saves it and closes the swatches; Done closes them unchanged.
-        <div className="flex w-fit flex-col gap-2 pl-6">
+        // A click or tap on a swatch saves it; with the keyboard, the arrows move the pick and
+        // Enter or Space saves it. Done closes the swatches unchanged.
+        <div
+          className="flex w-fit flex-col gap-2 pl-6"
+          onKeyDownCapture={(event) => {
+            if (event.key === " ") {
+              // Space on the swatch already picked changes nothing a radio hears: save it here.
+              event.preventDefault();
+              saveColor(colorDraft);
+            }
+            if (event.key === "Escape") close();
+          }}
+        >
           <LabelColorSwatches
-            value={label.color}
-            onChange={() => {}}
-            onPick={(color) => void save({ color })}
-            onSubmit={() => setEditing(null)}
+            value={colorDraft}
+            onChange={setColorDraft}
+            onPick={saveColor}
+            onSubmit={() => saveColor(colorDraft)}
             isDisabled={saving}
           />
           <div>
-            <Button color="tertiary" size="sm" onPress={() => setEditing(null)}>
+            <Button color="tertiary" size="sm" onPress={close}>
               {m.labels_settings_done()}
             </Button>
           </div>
@@ -222,15 +256,17 @@ export function LabelSettingsRow({
             placeholder={m.labels_settings_description_placeholder()}
             autoFocus
             isDisabled={saving}
+            isInvalid={error !== null}
+            hint={error ?? undefined}
             onChange={setDraft}
             onKeyDown={(event) => {
               if (event.key === "Enter") void save({ description: draft.trim() || null });
-              if (event.key === "Escape") setEditing(null);
+              if (event.key === "Escape") close();
             }}
             wrapperClassName="flex-1"
           />
           <div className="flex gap-2">
-            <Button color="tertiary" size="sm" onPress={() => setEditing(null)}>
+            <Button color="tertiary" size="sm" onPress={close}>
               {m.labels_settings_cancel()}
             </Button>
             <Button
@@ -244,7 +280,8 @@ export function LabelSettingsRow({
         </div>
       )}
 
-      {error && (
+      {/* A refused color, restore or other change; the fields show their own. */}
+      {error && editing !== "rename" && editing !== "description" && (
         <p role="alert" className="pl-6 text-sm text-error-primary">
           {error}
         </p>
@@ -253,8 +290,10 @@ export function LabelSettingsRow({
       <ConfirmDialog
         open={confirming === "archive"}
         onOpenChange={(open) => !open && setConfirming(null)}
+        // Archiving can be undone: the primary button, not the red one.
+        tone="default"
         title={m.labels_settings_archive_title({ name: label.name })}
-        description={m.labels_settings_archive_body({ count: String(label.taskCount) })}
+        description={m.labels_settings_archive_body({ count: label.taskCount })}
         confirmLabel={m.labels_settings_archive()}
         errorMessage={(cause) => changeError(cause, label.name)}
         onConfirm={async () => {
@@ -267,7 +306,7 @@ export function LabelSettingsRow({
         open={confirming === "delete"}
         onOpenChange={(open) => !open && setConfirming(null)}
         title={m.labels_settings_delete_title({ name: label.name })}
-        description={m.labels_settings_delete_body({ count: String(label.taskCount) })}
+        description={m.labels_settings_delete_body({ count: label.taskCount })}
         confirmLabel={m.labels_settings_delete()}
         errorMessage={(cause) => changeError(cause, label.name)}
         onConfirm={async () => {

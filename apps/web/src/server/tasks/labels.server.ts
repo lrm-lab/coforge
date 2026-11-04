@@ -466,11 +466,27 @@ export class Labels {
     }
   }
 
-  /** An owner or admin deletes a label; every task it was on loses it (the join rows cascade). */
+  /**
+   * An owner or admin deletes an archived label for good; every task it was on loses it (the
+   * join rows cascade). A live label must be archived first (task #508): permanent delete is the
+   * second step, for the web page, an API caller and an Agent alike.
+   */
   async delete(workspaceId: string, userId: string, id: string): Promise<void> {
     assertCanManageWorkspaceSettings(await workspaceMemberRole(this.db, workspaceId, userId));
-    const deleted = await this.db.label.deleteMany({ where: { id, workspaceId } });
-    if (!deleted.count) throw new AppError("NOT_FOUND");
+    // Only an archived one goes, in the same statement, so a restore in between keeps it.
+    const deleted = await this.db.label.deleteMany({
+      where: { id, workspaceId, archivedAt: { not: null } },
+    });
+    if (deleted.count) return;
+    const live = await this.db.label.findFirst({
+      where: { id, workspaceId },
+      select: { id: true },
+    });
+    if (!live) throw new AppError("NOT_FOUND");
+    throw new AppError("INVALID_INPUT", {
+      errorId: "task-label-not-archived",
+      hint: "archive the label before deleting it for good",
+    });
   }
 
   /**

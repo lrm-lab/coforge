@@ -11,10 +11,9 @@ import { LABEL_COLORS, LABEL_NAME_MAX, Labels } from "#src/server/tasks/labels.s
 import { canManageWorkspaceSettings } from "#src/features/workspaces/workspace-roles";
 import { workspaceMemberRole } from "#src/server/workspaces/workspace-membership.server";
 import { LABEL_GROUP_SELECTIONS, LabelGroups } from "#src/server/tasks/label-groups.server";
+import { labelUpdateInput } from "#src/server/tasks/label-update-input.server";
 
 const labelName = z.string().trim().min(1).max(LABEL_NAME_MAX);
-/** A label's description, as Settings → Labels edits it: a line, not a document. */
-export const LABEL_DESCRIPTION_MAX = 200;
 const labelColor = z.enum(LABEL_COLORS);
 
 /**
@@ -57,18 +56,7 @@ export const createTaskLabel = createServerFn({ method: "POST" })
 /** Renames, recolors or archives a label (archiving takes it off every Task); an owner or admin only. */
 export const updateTaskLabel = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
-  .validator(
-    z
-      .object({
-        id: z.uuid(),
-        name: labelName.optional(),
-        color: labelColor.optional(),
-        // What the label is for; empty clears it (Settings → Labels, task #508).
-        description: z.string().trim().max(LABEL_DESCRIPTION_MAX).nullable().optional(),
-        archived: z.boolean().optional(),
-      })
-      .strict(),
-  )
+  .validator(labelUpdateInput)
   .handler(async ({ context, data }) => {
     const { id, ...input } = data;
     const { user, db, workspaceId } = context;
@@ -77,7 +65,8 @@ export const updateTaskLabel = createServerFn({ method: "POST" })
     return label;
   });
 
-/** Deletes a label from every task; an owner or admin only. */
+/** Deletes an archived label for good, from every task; an owner or admin only (a live label is
+ * archived first, `Labels.delete`). */
 export const deleteTaskLabel = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(z.object({ id: z.uuid() }).strict())

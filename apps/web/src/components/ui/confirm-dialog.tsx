@@ -10,7 +10,8 @@ import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { m } from "#src/paraglide/messages";
 
 /** Confirms an irreversible change (a delete, removing a member, or rotating an app's secret); a
- * refusal stays in the dialog. Every such confirmation uses it. */
+ * refusal stays in the dialog. Every such confirmation uses it. A change that can be undone (an
+ * archive) asks with `tone="default"`: the primary button, not the red one. */
 export function ConfirmDialog({
   open,
   onOpenChange,
@@ -20,6 +21,7 @@ export function ConfirmDialog({
   pendingLabel,
   errorMessage,
   onConfirm,
+  tone = "destructive",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -32,6 +34,8 @@ export function ConfirmDialog({
   errorMessage: string | ((cause: unknown) => string);
   /** Performs the change; throws when it is refused. */
   onConfirm: () => Promise<void>;
+  /** "destructive" (red) for what cannot be undone; "default" for what can. */
+  tone?: "destructive" | "default";
 }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, guard] = useSubmitGuard();
@@ -72,7 +76,12 @@ export function ConfirmDialog({
                 />
               </div>
               <div className="mx-6 mt-4 flex items-start gap-3">
-                <FeaturedIcon color="error" theme="light" size="sm" icon={AlertCircle} />
+                <FeaturedIcon
+                  color={tone === "destructive" ? "error" : "gray"}
+                  theme="light"
+                  size="sm"
+                  icon={AlertCircle}
+                />
                 <Text slot="description" className="text-sm text-secondary">
                   {description}
                 </Text>
@@ -87,7 +96,7 @@ export function ConfirmDialog({
                   {m.controls_cancel()}
                 </DialogCancel>
                 <DialogAction
-                  color="primary-destructive"
+                  color={tone === "destructive" ? "primary-destructive" : "primary"}
                   isLoading={pending}
                   showTextWhileLoading
                   onPress={() => {

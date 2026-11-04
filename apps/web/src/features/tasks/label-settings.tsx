@@ -114,17 +114,20 @@ export function LabelSettings() {
             wrapperClassName="sm:max-w-xs"
             className="flex-1"
           />
-          <Button
-            size="sm"
-            iconLeading={Plus}
-            className="sm:ml-auto"
-            onPress={() => {
-              setAdding(true);
-              setCreateError(null);
-            }}
-          >
-            {m.labels_settings_new()}
-          </Button>
+          {/* Gone while the form is open: its Create label is then the one primary button. */}
+          {!adding && (
+            <Button
+              size="sm"
+              iconLeading={Plus}
+              className="sm:ml-auto"
+              onPress={() => {
+                setAdding(true);
+                setCreateError(null);
+              }}
+            >
+              {m.labels_settings_new()}
+            </Button>
+          )}
         </div>
         {!canManage && query.data && (
           <p className="text-sm text-tertiary">{m.labels_settings_members_note()}</p>

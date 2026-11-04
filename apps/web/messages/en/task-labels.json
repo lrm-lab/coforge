@@ -44,8 +44,26 @@
   "labels_settings_members_note": "Anyone can add a label. Only Workspace owners and admins can rename, recolor, archive or delete them.",
   "labels_settings_ungrouped": "Labels",
   "labels_settings_archived": "Archived ({count})",
-  "labels_settings_task_count": "{count} tasks",
-  "labels_settings_open_count": "{count} not finished",
+  "labels_settings_task_count": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} task",
+        "countPlural=other": "{count} tasks"
+      }
+    }
+  ],
+  "labels_settings_open_count": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} not finished",
+        "countPlural=other": "{count} not finished"
+      }
+    }
+  ],
   "labels_settings_never_used": "Never used",
   "labels_settings_actions": "Actions for {name}",
   "labels_settings_rename": "Rename",
@@ -56,11 +74,29 @@
   "labels_settings_description_placeholder": "What this label is for",
   "labels_settings_archive": "Archive",
   "labels_settings_archive_title": "Archive “{name}”?",
-  "labels_settings_archive_body": "{count} tasks use it. Archived, it stays on those tasks but can’t be put on new ones. You can restore it.",
+  "labels_settings_archive_body": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} task uses it. Archived, it is hidden on that task and can’t be put on new ones; restoring it shows it again.",
+        "countPlural=other": "{count} tasks use it. Archived, it is hidden on those tasks and can’t be put on new ones; restoring it shows it again."
+      }
+    }
+  ],
   "labels_settings_restore": "Restore",
   "labels_settings_delete": "Delete permanently",
   "labels_settings_delete_title": "Delete “{name}” permanently?",
-  "labels_settings_delete_body": "It comes off {count} tasks, and this can’t be undone.",
+  "labels_settings_delete_body": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "It comes off {count} task, and this can’t be undone.",
+        "countPlural=other": "It comes off {count} tasks, and this can’t be undone."
+      }
+    }
+  ],
   "labels_settings_name_taken": "A label named “{name}” already exists.",
   "labels_settings_denied": "Only Workspace owners and admins can change labels.",
   "labels_settings_save_failed": "Couldn’t save that change."

@@ -44,8 +44,24 @@
   "labels_settings_members_note": "所有人都能新建标签；改名、改颜色、归档和删除只有 Workspace 所有者和管理员能做。",
   "labels_settings_ungrouped": "标签",
   "labels_settings_archived": "已归档（{count}）",
-  "labels_settings_task_count": "{count} 个任务",
-  "labels_settings_open_count": "{count} 个未完成",
+  "labels_settings_task_count": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=other": "{count} 个任务"
+      }
+    }
+  ],
+  "labels_settings_open_count": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=other": "{count} 个未完成"
+      }
+    }
+  ],
   "labels_settings_never_used": "从未使用",
   "labels_settings_actions": "{name} 的操作",
   "labels_settings_rename": "重命名",
@@ -56,11 +72,27 @@
   "labels_settings_description_placeholder": "这个标签用来做什么",
   "labels_settings_archive": "归档",
   "labels_settings_archive_title": "归档“{name}”？",
-  "labels_settings_archive_body": "有 {count} 个任务正在用它。归档后它还留在这些任务上，但不能再挂到新任务上，以后可以恢复。",
+  "labels_settings_archive_body": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=other": "{count} 个任务正在用它。归档后它会从这些任务上隐藏，也不能再挂到新任务上；恢复后会重新显示。"
+      }
+    }
+  ],
   "labels_settings_restore": "恢复",
   "labels_settings_delete": "彻底删除",
   "labels_settings_delete_title": "彻底删除“{name}”？",
-  "labels_settings_delete_body": "它会从 {count} 个任务上拿掉，而且不能恢复。",
+  "labels_settings_delete_body": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=other": "它会从 {count} 个任务上拿掉，而且不能恢复。"
+      }
+    }
+  ],
   "labels_settings_name_taken": "已经有一个叫“{name}”的标签了。",
   "labels_settings_denied": "只有 Workspace 所有者和管理员能修改标签。",
   "labels_settings_save_failed": "这次修改没有保存成功。"

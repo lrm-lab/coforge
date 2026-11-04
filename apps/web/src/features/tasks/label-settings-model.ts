@@ -8,6 +8,9 @@
  * browser does not import). */
 export const LABEL_NAME_MAX_LENGTH = 32;
 
+/** The longest description a label takes here: a line, not a document. */
+export const LABEL_DESCRIPTION_MAX = 200;
+
 export type SettingsLabel = {
   id: string;
   name: string;

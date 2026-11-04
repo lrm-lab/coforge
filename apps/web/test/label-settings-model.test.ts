@@ -6,6 +6,7 @@ import {
   nameTaken,
   type SettingsLabel,
 } from "#src/features/tasks/label-settings-model";
+import { labelUpdateInput } from "#src/server/tasks/label-update-input.server";
 import { LABEL_NAME_MAX } from "#src/server/tasks/labels.server";
 
 /** Settings → Labels (task #508): what the page lists, and a name already taken. */
@@ -72,6 +73,15 @@ test("the search matches a name or what the label is for, ignoring case", () => 
 
 test("the page's name limit is the server's", () => {
   expect(LABEL_NAME_MAX_LENGTH).toBe(LABEL_NAME_MAX);
+});
+
+test("updateTaskLabel takes a description of at most 200 characters, or null to clear it", () => {
+  const id = crypto.randomUUID();
+  expect(labelUpdateInput.safeParse({ id, description: "x".repeat(200) }).success).toBe(true);
+  expect(labelUpdateInput.safeParse({ id, description: "x".repeat(201) }).success).toBe(false);
+  expect(labelUpdateInput.safeParse({ id, description: null }).success).toBe(true);
+  // Nothing it does not know: the server's other inputs (group) are not the page's to send.
+  expect(labelUpdateInput.safeParse({ id, group: "Type" }).success).toBe(false);
 });
 
 test("a name is taken by another label in any case, never by the label itself", () => {
