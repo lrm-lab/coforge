@@ -99,3 +99,49 @@ export function settleHistoryRead(
   recordHistoryRead(attention, agentId, requestedTarget, read);
   return page;
 }
+
+/** What a forwarded task-conversation read showed the Agent: `recordHistoryRead` over the
+ * route's response body. Its consumption scope spells `#board:#N` — the discussion's own
+ * canonical target — so replayed deliveries of it dedupe against the cursor the read writes. A
+ * body without this Agent's scope is ignored. */
+export function settleForwardedTaskRead(
+  attention: AgentMessageAttentionIndex,
+  agentId: string,
+  query: Record<string, string> | undefined,
+  result: unknown,
+) {
+  const page = result as AgentMessageTransportResponse;
+  const scope = page?.consumptionScope;
+  if (scope?.agentId !== agentId || !scope.target) return;
+  // The scope carries the conversation id: bind now so the cursor survives a restart, not only
+  // until the next delivery binds it.
+  attention.bindConversation(agentId, scope.target, scope.conversationId);
+  // The unread-empty clear's bound is the attention the read was issued against, as for a
+  // `message read` (`attentionUpperBound`): a delivery that arrived since is not stale.
+  const upperBound = attention
+    .check(agentId)
+    .find((item) => item.target === scope.target)?.latestSequence;
+  const shown: number[] = [];
+  for (const message of page.messages)
+    if (message.target === scope.target) shown.push(message.sequence);
+  // A task read joins no thread context — nothing records `review`, so the thread-mismatch send
+  // guard does not learn a task ref as the channel's latest read.
+  attention.recordHistoryRead(agentId, {
+    spelling: scope.target,
+    target: scope.target,
+    shown,
+    through: query?.around ? 0 : (page.modelSeenUpToSeq ?? 0),
+    review: undefined,
+    scope,
+  });
+  if (
+    !query?.before &&
+    !query?.after &&
+    !query?.around &&
+    query?.unread === "true" &&
+    page.messages.length === 0 &&
+    !page.moreUnread &&
+    upperBound !== undefined
+  )
+    attention.clearThrough(agentId, scope.target, upperBound);
+}

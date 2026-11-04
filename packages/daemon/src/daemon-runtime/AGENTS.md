@@ -81,7 +81,9 @@ Read the [message attention and delivery rules](../../../../docs/agents/daemon-m
   (check, send, the forwarded rest, and Memory's pending-thread read guard). `runtime.ts` only validates the
   request and resolves its canonical target.
 - `agent-request-forwarder.ts` (`DaemonRuntime.agentRequests`) holds the
-  requests the daemon only authorizes and forwards, keeping no state. A
+  requests the daemon only authorizes and forwards. A forwarded task read's
+  `consumptionScope` settles into the attention index (`recordForwardedRead`);
+  everything else keeps no state. A
   request that reads or changes runtime state (Tasks, reminders, the App
   Inbox) stays in `runtime.ts`. Each one refuses a stopped daemon, an unknown
   context, or a malformed Agent API key through `authorizedAgent` first, so

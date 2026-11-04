@@ -83,6 +83,7 @@ import { AgentControl } from "#src/agent-runtime/agent-control";
 import { AgentSessions } from "#src/agent-runtime/agent-session";
 import { AgentWorkspaceQueries } from "./agent-workspace-queries";
 import { AgentMessageAttentionIndex } from "./agent-message-attention-index";
+import { assembleAgentRequests } from "./agent-request-forwarder";
 import { AgentInboxCoordinator } from "./agent-inbox-coordinator";
 import { AgentStopCoordinator } from "./agent-stop-coordinator";
 import { AgentLaunchCoordinator } from "./agent-launch-coordinator";
@@ -579,16 +580,15 @@ export class DaemonRuntime {
       startAgent: (agentId, config, sessionId) =>
         this.#startAgent(agentId, config, undefined, { sessionId }),
       assertRunning: () => this.#assertRunning(),
-      agentIdForContext: (context) => this.#agentIdForContext(context),
+      agentIdForContext: (context) => agentIdForContext(this.#agentContexts, context),
       runningMentionIdentity: (agentId) => this.#runningMentionIdentity(agentId),
     });
-    this.agentRequests = new AgentRequestForwarder({
-      get transport() {
-        return runtime.#transport;
-      },
+    this.agentRequests = assembleAgentRequests({
+      transport: () => runtime.#transport,
       connection,
       contexts: this.#contexts,
       authorizedAgent: (context, agentApiKey) => this.#authorizedAgent(context, agentApiKey),
+      attention: messages.messageAttention,
     });
     this.#mentionDeliveries = messages.mentionDeliveries;
     this.#messageAttention = messages.messageAttention;
@@ -726,7 +726,7 @@ export class DaemonRuntime {
       isStopping: () => this.#stopping,
       assertRunning: () => this.#assertRunning(),
       assertAgentNotStopping: (agentId) => this.#assertAgentNotStopping(agentId),
-      contextFor: (agentId) => this.#contextFor(agentId),
+      contextFor: (agentId) => contextFor(this.#agentContexts, agentId),
       envelope: () => this.#env(),
       reportAgentSession: (report) => this.#reportAgentSession(report),
       sendAgentStatus: (agentId, status) => this.#sendAgentStatus(agentId, status),
@@ -817,7 +817,7 @@ export class DaemonRuntime {
       transport: () => this.#transport,
       assertRunning: () => this.#assertRunning(),
       assertOwnIntent: (probe) => this.#assertOwnIntent(probe),
-      agentIdForContext: (context) => this.#agentIdForContext(context),
+      agentIdForContext: (context) => agentIdForContext(this.#agentContexts, context),
       canonicalAgentMessageTarget: (agentId, target, agentApiKey) =>
         canonicalAgentMessageTarget(
           {
@@ -903,7 +903,7 @@ export class DaemonRuntime {
   /** Resolves the Agent behind a local context and checks its API key; the transport is checked by the caller. */
   #authorizedAgent(context: string, agentApiKey: string | undefined): string {
     this.#assertRunning();
-    const agentId = this.#agentIdForContext(context);
+    const agentId = agentIdForContext(this.#agentContexts, context);
     if (!isAgentApiKey(agentApiKey))
       throw new AgentPreflightError("Agent API key is missing", "AGENT_API_KEY_MISSING");
     return agentId;
@@ -1042,7 +1042,7 @@ export class DaemonRuntime {
   #agentApiRemindersPorts() {
     return {
       assertRunning: () => this.#assertRunning(),
-      agentIdForContext: (context: string) => this.#agentIdForContext(context),
+      agentIdForContext: (context: string) => agentIdForContext(this.#agentContexts, context),
       transport: () => this.#transport,
       workspaceId: this.#connection.workspaceId,
       computerId: this.#connection.computerId,
@@ -1465,14 +1465,6 @@ export class DaemonRuntime {
 
   async drainAppInboxNotices(agentId: string): Promise<void> {
     return drainAppInboxNotices(this.#appInboxSyncPorts(), agentId);
-  }
-
-  #agentIdForContext(context: string): string {
-    return agentIdForContext(this.#agentContexts, context);
-  }
-
-  #contextFor(agentId: string): string {
-    return contextFor(this.#agentContexts, agentId);
   }
 
   issueAgentContext(agentId: string, context: string = crypto.randomUUID()): string {

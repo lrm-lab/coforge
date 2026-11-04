@@ -47,6 +47,9 @@ import type { OpenVikingAgentProxyCommand } from "#src/openviking-read-proxy";
 import type { AgentContexts } from "./agent-contexts";
 import { elideForAgent } from "./context-elision";
 
+import { settleForwardedTaskRead } from "./agent-history-read";
+import type { AgentMessageAttentionIndex } from "./agent-message-attention-index";
+
 export type AgentRequestForwarderPorts = Readonly<{
   /** The current transport; read at each request, since a restart replaces it. */
   readonly transport: Pick<
@@ -92,6 +95,13 @@ export type AgentRequestForwarderPorts = Readonly<{
   /** The Agent a local context was issued to, once the runtime is running and the Agent API key
    * is well formed; otherwise throws that precondition's `AgentPreflightError`. */
   authorizedAgent(context: string, agentApiKey: string | undefined): string;
+  /** Records one forwarded read's consumption scope in the message attention index: a task read
+   * is the only forwarded read whose cursor the daemon keeps — deliveries replay it otherwise. */
+  recordForwardedRead?: (
+    agentId: string,
+    query: Record<string, string> | undefined,
+    result: unknown,
+  ) => void;
 }>;
 
 type ForwardingTransport = AgentRequestForwarderPorts["transport"];
@@ -105,6 +115,29 @@ const NOT_CONNECTED = "daemon connection is not connected";
  * Manual, profile, OpenViking reads, mention recovery, channels, action cards, weekly reports, and
  * attachments. Each keeps its own order of checks and refusal wording.
  */
+/** The runtime's forwarded-request surface: its ports assembled where their wiring lives, so
+ * `runtime.ts` holds a call, not the construction. `transport` is read per request — a restart
+ * replaces it. */
+export function assembleAgentRequests(input: {
+  transport(): AgentRequestForwarderPorts["transport"];
+  connection: AgentRequestForwarderPorts["connection"];
+  contexts?: AgentRequestForwarderPorts["contexts"];
+  authorizedAgent: AgentRequestForwarderPorts["authorizedAgent"];
+  /** The attention index a forwarded task read's consumption settles into. */
+  attention: AgentMessageAttentionIndex;
+}): AgentRequestForwarder {
+  return new AgentRequestForwarder({
+    get transport() {
+      return input.transport();
+    },
+    connection: input.connection,
+    contexts: input.contexts,
+    authorizedAgent: input.authorizedAgent,
+    recordForwardedRead: (agentId, query, result) =>
+      settleForwardedTaskRead(input.attention, agentId, query, result),
+  });
+}
+
 export class AgentRequestForwarder {
   readonly #ports: AgentRequestForwarderPorts;
 
@@ -277,6 +310,10 @@ export class AgentRequestForwarder {
       !Array.isArray((body as { messages?: unknown }).messages)
     )
       return response;
+    const scope = (body as { consumptionScope?: { agentId: string; target: string } })
+      .consumptionScope;
+    if (scope?.agentId === agentId && scope.target)
+      this.#ports.recordForwardedRead?.(agentId, request.query, body);
     const messages = (body as { messages: unknown[] }).messages;
     const elided = elideForAgent(
       this.#ports.contexts,

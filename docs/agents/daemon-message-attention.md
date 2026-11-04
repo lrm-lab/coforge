@@ -27,6 +27,12 @@ Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
 - `runtime.ts` routes thread targets to the existing Agent session and
   canonicalizes short channel/DM thread targets. Threads never create sessions
   or processes.
+- `coforge task read` is forwarded like other task routes, but the forwarder
+  records its `consumptionScope` (`#board:#N`/`@peer:#N`, the delivery's own
+  spelling) through `settleForwardedTaskRead`: the read's sequences count as
+  seen, the scope binds to its conversation immediately so the cursor is
+  durable, and it never records `review` — a task ref is not a thread context
+  the send guard should learn.
 - A delivery counts as consumed when its sequence is at or below its target's
   frontier, or is one of the target's exact seen sequences (`exactSeqs`:
   durable beside the frontier, at most 2500 per target, pruned as the

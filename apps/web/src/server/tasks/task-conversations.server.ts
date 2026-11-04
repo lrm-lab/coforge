@@ -15,6 +15,7 @@ import { allocateSequence } from "#src/server/db/repositories/sequence-allocatio
 import type { Prisma } from "#src/generated/prisma/client";
 import type { Transaction, TaskBoardPorts } from "./task-board-ports.server";
 import { publishTaskConversationMessage } from "./task-publication.server";
+import { taskDiscussionDeliveryTarget } from "./task-discussion-target.server";
 import { markHumanRead } from "#src/server/conversations/human-unread.server";
 import { postUnfollowNotice } from "./task-unfollow-notice.server";
 import type { SystemNotice } from "#src/features/conversations/system-notice";
@@ -161,7 +162,7 @@ export class TaskConversations {
   async read(principal: TaskPrincipal, ref: TaskConversationRef, page: AgentMessagesPage) {
     if (!principal.agentId) throw new AppError("ACCESS_DENIED");
     const agentId = principal.agentId;
-    const { task, boardName } = await this.resolve(principal, ref, { member: true });
+    const { task } = await this.resolve(principal, ref, { member: true });
     if (!task.discussionConversationId)
       return { messages: [], hasOlder: false, hasNewer: false, modelSeenUpToSeq: null };
     const conversationId = task.discussionConversationId;
@@ -176,7 +177,8 @@ export class TaskConversations {
       agentId,
       conversationId,
       threadRootId: null,
-      canonicalTarget: `${boardName}:#${task.number}`,
+      // The delivery spelling is the cursor key: replayed deliveries dedupe against it.
+      ...(await taskDiscussionDeliveryTarget(db, principal.workspaceId, agentId, conversationId)),
       isChannel: false,
       isUserAgentDirectConversation: false,
       page,
