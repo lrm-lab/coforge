@@ -7,7 +7,7 @@ import {
   encodeLocalAttachments,
   type RawLocalAttachment,
 } from "./local-daemon";
-import type { AgentMessageRecord, LocalAttachment } from "./agent-message-record";
+import type { AgentMessageRecord } from "./agent-message-record";
 
 /** Agent message records as the local socket carries them: protobuf `AgentMessageRecord` on the
  * wire, `AgentMessageRecord` in TypeScript. `local-daemon` keeps only the request/response frames. */
