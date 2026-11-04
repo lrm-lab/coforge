@@ -36,6 +36,10 @@ afterAll(() => {
   for (const name of VARIABLES)
     if (saved[name] === undefined) delete Bun.env[name];
     else Bun.env[name] = saved[name];
+  // `bun test` runs every file in one process, so the remembered configuration outlives this
+  // file: put back "no server", what an unbooted process has (task #525). Left ready, it made
+  // oidc-authorization-server.test.ts's "before the boot has remembered" case read 200.
+  rememberAuthorizationServerConfiguration({ status: "disabled" });
 });
 
 type Handler = (context: { request: Request }) => Response | Promise<Response>;
