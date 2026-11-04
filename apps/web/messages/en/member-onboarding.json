@@ -1,0 +1,11 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "member_onboarding_title": "New member onboarding",
+  "member_onboarding_welcome": "Welcome new members",
+  "member_onboarding_welcome_description": "Who sends a welcome by direct message when someone joins the Workspace.",
+  "member_onboarding_assistant": "Each member's assistant",
+  "member_onboarding_off": "No automatic welcome",
+  "member_onboarding_greeting": "New Agents say hello in #general",
+  "member_onboarding_greeting_description": "Agents created from now on post a short introduction in #general. Existing Agents are not affected.",
+  "member_onboarding_load_error": "Couldn't load the onboarding settings."
+}

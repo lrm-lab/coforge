@@ -67,6 +67,7 @@ export type SystemNotice =
       };
     }
   | { kind: "agent_dm.chain_limit" | "agent_dm.rate_limit"; params: Record<string, never> }
+  | { kind: "member.welcome_requested"; params: { newcomer: SystemPerson; agent: SystemPerson } }
   | { kind: "legacy_text"; params: { body: string } };
 
 /** The body and structured content one notice carries. */
@@ -141,6 +142,8 @@ export function isSystemNotice(value: { kind: string; params: unknown }): value 
         (params.previous === null || params.previous === undefined || person(params.previous)) &&
         (params.next === null || params.next === undefined || person(params.next))
       );
+    case "member.welcome_requested":
+      return person(params.newcomer) && person(params.agent);
     case "agent_dm.chain_limit":
     case "agent_dm.rate_limit":
       return true;

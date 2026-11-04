@@ -69,6 +69,7 @@ model Agent {
   attachments               Attachment[]
   attachmentUploadSessions  AttachmentUploadSession[]
   workspaceMemoryAgent      WorkspaceMemoryAgent?
+  onboardingWorkspaces      Workspace[]                @relation("WorkspaceOnboardingAgent")
   migrations                AgentMigration[]
   appConfigs                AgentAppConfig[]
   appGrants                 AppAgentGrant[]

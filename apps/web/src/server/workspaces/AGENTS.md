@@ -77,3 +77,14 @@ These rules apply to `src/server/workspaces/`.
   the table: leaving (never the owner), a channel admin's own channel, and an
   Agent's creator (private-Agent visibility, visibility changes, cancelling
   its action cards).
+- `workspace-onboarding.server.ts` holds who welcomes new members (`onboardingMode`: `assistant`,
+  `agent` or `off`, with `onboardingAgentId`) and the new-Agent `#general` greeting flag. The chosen
+  Agent must be live, public and ordinary (`onboardingAgentWhere`). A change that makes it ineligible
+  (archive, private) calls `clearOnboardingAgent` in its own transaction; a hard delete is covered by
+  the FK and the `workspace_onboarding_agent_removed` trigger, and `workspaces_onboarding_check`
+  holds `agent` exactly when an Agent is set. `admitWorkspaceMember` reads the mode once and records
+  it for the person's own assistant as `WorkspaceMembership.assistantWelcome` (true only under
+  `assistant`; a Workspace creator and earlier members keep true). In `agent` mode it writes the
+  welcome request in the join's transaction (`requestMemberWelcome`: the DM, a system message of kind
+  `member.welcome_requested` and the Agent's delivery); the join link caller publishes it after the
+  commit (`publishMemberWelcome`, best effort, the delivery row keeps it for an offline Agent).

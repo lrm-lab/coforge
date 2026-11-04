@@ -7,6 +7,7 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Toggle } from "#src/components/base/toggle/toggle";
 import { Checkbox } from "#src/components/base/checkbox/checkbox";
 import { WorkspaceMembersPanel } from "#src/features/workspaces/workspace-members-panel";
+import { MemberOnboardingSettings } from "#src/features/workspaces/member-onboarding-settings";
 import {
   canChangeWorkspaceSlug,
   canManageWorkspaceSettings,
@@ -194,12 +195,15 @@ export function SettingsContent(props: SettingsContentProps) {
                 actorRole={props.members.actorRole}
                 members={props.members.members}
                 systemChannels={
-                  // Workspace-wide channel settings: present only for a Workspace owner or admin.
+                  // Workspace-wide settings: present only for a Workspace owner or admin.
                   props.generalChannelHidden !== null && (
-                    <SystemChannelsSettings
-                      hidden={props.generalChannelHidden}
-                      onSave={props.onGeneralChannelHiddenSave}
-                    />
+                    <>
+                      <SystemChannelsSettings
+                        hidden={props.generalChannelHidden}
+                        onSave={props.onGeneralChannelHiddenSave}
+                      />
+                      <MemberOnboardingSettings />
+                    </>
                   )
                 }
               />

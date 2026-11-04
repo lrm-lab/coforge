@@ -9,6 +9,7 @@ import {
   VISIBLE_CONVERSATION_WHERE,
 } from "#src/server/conversations/active-member.server";
 import { joinGeneralChannel } from "#src/server/conversations/general-channel.server";
+import { clearOnboardingAgent } from "#src/server/workspaces/workspace-onboarding.server";
 import type {
   AgentVisibilityChangePreview,
   ChangeAgentVisibilityStore,
@@ -67,6 +68,8 @@ export class PrismaChangeAgentVisibilityStore implements ChangeAgentVisibilitySt
         const generalId = await joinGeneralChannel(tx, input.workspaceId, input.agentId);
         return { changed: true, leftChannelIds: [], joinedChannelIds: [generalId] };
       }
+      // Members can no longer message it, so it stops being the one that welcomes them.
+      await clearOnboardingAgent(tx, input.workspaceId, input.agentId);
       const left = await tx.conversationMember.updateManyAndReturn({
         where: {
           workspaceId: input.workspaceId,

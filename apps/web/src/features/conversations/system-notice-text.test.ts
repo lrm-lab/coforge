@@ -100,6 +100,11 @@ const CASES: [SystemNotice, string, string][] = [
     "Frank An removed @old as coordinator of #team",
     "Frank An 取消了 @old 在 #team 的协调员身份",
   ],
+  [
+    { kind: "member.welcome_requested", params: { newcomer: frank, agent: coder } },
+    "@coder was asked to welcome Frank An",
+    "已请 @coder 欢迎 Frank An",
+  ],
 ];
 
 describe("a system notice in the viewer's language", () => {

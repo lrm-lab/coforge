@@ -16,6 +16,13 @@ export type AgentIntroductionFacts = {
   description?: string;
   /** The creator's (`Agent.ownerId`) username. */
   ownerUsername?: string;
+  /** Whether the assistant's owner is to be welcomed by it: recorded when they joined
+   * (`WorkspaceMembership.assistantWelcome`), whatever the Workspace's mode is now. Absent reads
+   * as true. */
+  assistantWelcome?: boolean;
+  /** The Agent is also to introduce itself in `#general`: its Workspace asks new Agents to, the
+   * Agent is public and `#general` is not hidden. Read where the Start's facts are, never here. */
+  greetGeneral?: boolean;
 };
 
 /**
@@ -33,7 +40,9 @@ export function introductionPromptFor(facts: AgentIntroductionFacts, now: Date) 
       now.getTime() - introductionDueAt.getTime() > AGENT_INTRODUCTION_WINDOW_MS)
   )
     return undefined;
-  if (platformAssistant)
+  if (platformAssistant) {
+    // Someone else welcomed the member when they joined, or nobody did.
+    if (facts.assistantWelcome === false) return undefined;
     return [
       "You are this member’s private CoForge platform assistant, ready for your first conversation.",
       `Proactively send @${creator} a short friendly welcome in their DM using \`coforge message send --target '@${creator}'\`.`,
@@ -43,6 +52,7 @@ export function introductionPromptFor(facts: AgentIntroductionFacts, now: Date) 
       "Send just one welcome; never post it in a channel. If you already welcomed this member, take no further action.",
       "Use the member’s language, or Chinese when unknown.",
     ].join(" ");
+  }
   // Create and edit cap a description; a row older than the cap is cut to it.
   const description = (facts.description ?? "")
     .trim()
@@ -63,7 +73,9 @@ export function introductionPromptFor(facts: AgentIntroductionFacts, now: Date) 
     role,
     `If @${creator} has already written to you, answer that message and introduce yourself in the same reply.`,
     `If you have already introduced yourself to @${creator} in this session, end this turn without taking action.`,
-    "Never post this introduction in a channel.",
+    facts.greetGeneral
+      ? `Send that introduction to @${creator} only as a direct message; never post it in a channel. Then post a separate two-to-three sentence self-introduction in #general with \`coforge message send --target '#general'\`: who you are, what you do, and how to reach you. Post it once; skip it if you already have in #general.`
+      : "Never post this introduction in a channel.",
     "A local final answer is not a delivered message; execute the message send to deliver your reply. After sending a greeting with no request to act on, end this turn and wait.",
     language,
   ].join(" ");
@@ -81,6 +93,12 @@ export interface AgentIntroductionStore {
   /** Clears `introductionDueAt` in one conditional update: only while it is set and `ownerId`
    * created the Agent, so a concurrent or repeated settle changes nothing. */
   settle(input: { workspaceId: string; agentId: string; ownerId: string }): Promise<void>;
+  /** What the Workspace asks of an introduction: whether the Agent's owner is to be welcomed by
+   * it (their membership's record) and whether this Agent also says hello in `#general`. Read only
+   * for an Agent that may owe one. */
+  workspaceFacts(
+    agent: AgentIntroductionSubject,
+  ): Promise<Pick<AgentIntroductionFacts, "assistantWelcome" | "greetGeneral">>;
 }
 
 /** The Agent a Start is for, with what its introduction reads. */
@@ -88,6 +106,7 @@ export type AgentIntroductionSubject = AgentIntroductionFacts & {
   id: string;
   workspaceId: string;
   ownerId: string;
+  visibility?: string;
 };
 
 /**
@@ -103,7 +122,24 @@ export class AgentIntroduction {
    * introduced itself, which settles it. Only an Agent that still owes one is read. A failed read or
    * settle is logged and the prompt is carried; it never blocks the Start.
    */
-  async promptFor(agent: AgentIntroductionSubject, now: Date): Promise<string | undefined> {
+  async promptFor(subject: AgentIntroductionSubject, now: Date): Promise<string | undefined> {
+    if (!introductionPromptFor(subject, now)) return undefined;
+    // The Workspace's part is read only now, for an Agent that may owe an introduction: every
+    // other Start, and every other read of the Agent, pays nothing for it. Unread, the prompt is
+    // the one before these settings existed.
+    let agent = subject;
+    try {
+      agent = { ...subject, ...(await this.store.workspaceFacts(subject)) };
+    } catch (error) {
+      console.warn(
+        JSON.stringify({
+          event: "agent_introduction:workspace_facts_failed",
+          workspace_id: subject.workspaceId,
+          agent_id: subject.id,
+          error_type: errorType(error),
+        }),
+      );
+    }
     const prompt = introductionPromptFor(agent, now);
     if (!prompt) return prompt;
     // A platform assistant with no `introductionDueAt` owes its welcome since it was created;

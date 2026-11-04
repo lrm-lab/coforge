@@ -8,6 +8,7 @@ import {
   type WorkspaceJoinLinkStore,
 } from "#src/server/workspaces/join-links.server";
 import type { WorkspaceMemberRole } from "#src/server/workspaces/member-role.server";
+import type { MemberWelcome } from "#src/server/workspaces/member-welcome.server";
 
 const workspaceId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const ownerId = "11111111-1111-4111-8111-111111111111";
@@ -283,6 +284,37 @@ test("joining by a link admits the visitor as a member, counts one use and tells
   expect(store.roles.get(`${workspaceId}:${visitorId}`)).toBe("member");
   expect((await links.current({ workspaceId, actorUserId: ownerId }))?.useCount).toBe(1);
   expect(announced).toEqual([{ workspaceId, conversationIds: [GENERAL_CHANNEL_ID] }]);
+});
+
+test("an admission that asked an Agent to welcome the visitor publishes the request once it committed", async () => {
+  const { store } = setup();
+  const welcome = { workspaceId, agentId: "agent-1" } as MemberWelcome;
+  const admit = store.admit.bind(store);
+  store.admit = async (input) => {
+    const admission = await admit(input);
+    return admission.status === "admitted" ? { ...admission, welcome } : admission;
+  };
+  const published: MemberWelcome[] = [];
+  const links = new WorkspaceJoinLinks(
+    store,
+    () => NOW,
+    { memberChanged: async () => {} },
+    undefined,
+    async (request) => {
+      published.push(request);
+    },
+  );
+  const link = await links.create({
+    workspaceId,
+    actorUserId: ownerId,
+    maxUses: null,
+    expiresAt: null,
+  });
+
+  await links.join({ token: link.token, userId: visitorId });
+  await links.join({ token: link.token, userId: visitorId });
+
+  expect(published).toEqual([welcome]);
 });
 
 test("a member opening the link again lands in the Workspace without using it up", async () => {

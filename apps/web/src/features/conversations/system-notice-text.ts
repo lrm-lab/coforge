@@ -226,6 +226,11 @@ function noticeText(notice: SystemNotice, locale?: Locale): string {
         );
       return "";
     }
+    case "member.welcome_requested":
+      return m.system_notice_member_welcome_requested({
+        agent: mention(notice.params.agent),
+        newcomer: shown(notice.params.newcomer),
+      });
     case "agent_dm.chain_limit":
       return m.system_notice_agent_dm_chain_limit({}, { locale });
     case "agent_dm.rate_limit":
