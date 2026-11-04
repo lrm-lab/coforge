@@ -6,7 +6,7 @@ import { join } from "node:path";
  * A headless Chrome driven over the DevTools protocol, with no package: launch it, open a page,
  * evaluate an expression in it. For a browser e2e that needs a real browser's enforcement (CSP,
  * iframe sandboxing) but none of the local stack. `COFORGE_E2E_CHROME` names the binary, else the
- * macOS Google Chrome install.
+ * macOS Google Chrome install; `COFORGE_E2E_CHROME_ARGS` adds flags.
  */
 const DEFAULT_CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
@@ -25,6 +25,9 @@ export async function launchHeadlessChrome(path: string) {
       `--user-data-dir=${profile}`,
       "--no-first-run",
       "--no-default-browser-check",
+      // Extra flags from the host, e.g. `--no-sandbox` on a Linux runner without unprivileged user
+      // namespaces (.github/workflows/web-e2e.yml).
+      ...(Bun.env.COFORGE_E2E_CHROME_ARGS?.split(/\s+/).filter(Boolean) ?? []),
       "about:blank",
     ],
     { stdout: "ignore", stderr: "ignore" },

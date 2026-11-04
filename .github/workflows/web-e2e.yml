@@ -63,6 +63,9 @@ jobs:
       # Ubuntu runners have no unprivileged user namespaces for Chrome's sandbox
       # (docs/agents/testing.md); agent-browser reads only this variable for Chrome's flags.
       AGENT_BROWSER_ARGS: --no-sandbox
+      # The same for the files that launch Chrome themselves (apps/web/test/helpers/headless-chrome.ts);
+      # the runner points COFORGE_E2E_CHROME at the Chrome agent-browser installed.
+      COFORGE_E2E_CHROME_ARGS: --no-sandbox
       E2E_OUTPUT: ${{ github.workspace }}/.amp/e2e-ci
 
     steps:

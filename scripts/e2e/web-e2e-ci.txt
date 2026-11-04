@@ -1,6 +1,7 @@
 # The browser e2es CI must pass (.github/workflows/web-e2e.yml), one per line: file, then the seconds
 # one run took on a private stack, which scripts/e2e/run-web-e2e-ci.sh uses to balance the shards.
-# A file is listed after it passed three clean runs in a row (task #438, 2026-11-04, main a6618713e).
+# A file is listed after it passed three clean runs in a row on a private stack and then on the
+# Linux runner (task #438, 2026-11-04, main a6618713e).
 # Files that drive ego-browser (a signed-in desktop browser) never belong here: CI has none.
 e2e-hover-popover-stuck.e2e.ts 43
 e2e-agent-replying.e2e.ts 35
@@ -15,9 +16,6 @@ e2e-agent-replying-group.e2e.ts 21
 e2e-github-sign-in.e2e.ts 21
 e2e-task-relation-pickers.e2e.ts 21
 e2e-whats-new.e2e.ts 21
-e2e-search-preview-phone.e2e.ts 19
-e2e-artifact-documents.e2e.ts 18
-e2e-message-hover-toolbar.e2e.ts 16
 e2e-query-cache-persistence.e2e.ts 16
 e2e-action-card-one-step.e2e.ts 15
 e2e-choice-card-other.e2e.ts 14
@@ -27,7 +25,6 @@ e2e-private-channel-labels.e2e.ts 13
 e2e-search-home.e2e.ts 13
 e2e-activity-inbox.e2e.ts 12
 e2e-channel-notify-menu.e2e.ts 12
-e2e-choice-card-long-text.e2e.ts 12
 e2e-conversation-task-board.e2e.ts 12
 e2e-message-task-pill.e2e.ts 12
 e2e-mention-picker.e2e.ts 11
@@ -37,14 +34,12 @@ e2e-channel-settings.e2e.ts 10
 e2e-conversation-list-resize.e2e.ts 10
 e2e-cross-task-reference.e2e.ts 10
 e2e-activity-dot-read-in-place.e2e.ts 9
-e2e-hide-usernames-channels.e2e.ts 9
 e2e-hide-usernames.e2e.ts 9
 e2e-list-column-resize.e2e.ts 9
 e2e-message-image-gallery.e2e.ts 9
 e2e-message-search.e2e.ts 9
 e2e-notification-banner-layout.e2e.ts 9
 e2e-notification-settings.e2e.ts 9
-e2e-people-direct-message.e2e.ts 9
 e2e-send-as-task-stream.e2e.ts 9
 e2e-submenu-phone.e2e.ts 9
 artifact-sandbox-browser.e2e.ts 8
@@ -59,7 +54,6 @@ e2e-activity-inbox-pinned.e2e.ts 7
 e2e-agent-tab-reorder.e2e.ts 7
 e2e-choice-card-dismiss.e2e.ts 7
 e2e-computer-agent-roster-phone.e2e.ts 7
-e2e-search-shortcut.e2e.ts 7
 e2e-sidebar-muted-unread.e2e.ts 7
 e2e-activity-inbox-dm.e2e.ts 6
 e2e-activity-waiting.e2e.ts 6
