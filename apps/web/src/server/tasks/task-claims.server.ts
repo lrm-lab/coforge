@@ -45,6 +45,7 @@ const CLAIM_REFUSAL = {
   held: "already claimed",
   blocked: "blocked",
   changed: "the task changed while it was being claimed; read it again",
+  justDeleted: "this task was just deleted; whoever deleted it can undo it",
 } as const;
 
 /** What another member's hold on a Task leaves open. Illustrative, not a permission table. */
@@ -155,13 +156,10 @@ export async function convertOrClaim(
         where: { messageId: message.id },
         select: { ...taskSelection, deletedAt: true },
       });
-      // task #512: a marked Task's message is claimable — claiming it undoes the delete inside
-      // the window, restoring the Task with its links instead of failing the messageId unique.
-      if (marked?.deletedAt)
-        await tx.task.update({
-          where: { id: marked.id },
-          data: { deletedAt: null, deletedByMemberId: null, deletedByUserId: null },
-        });
+      // task #512: a marked Task's message refuses a claim inside the undo window — whoever
+      // deleted it restores it; a claimer is not the restorer. Once the sweep removes the row
+      // the message claims into a new Task, the old one's messageId unique no longer in the way.
+      if (marked?.deletedAt) throw new ClaimRefused(CLAIM_REFUSAL.justDeleted, undefined, marked.number);
       existing = marked ?? undefined;
     }
     if (!existing) {

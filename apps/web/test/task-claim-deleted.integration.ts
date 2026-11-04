@@ -3,6 +3,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import type { TaskCommand, TaskPrincipal } from "@lrm/coforge-sdk/internal";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
+import { DeletedTaskSweep } from "#src/server/tasks/deleted-task-sweep.server";
 
 test("a message whose Task was deleted can be claimed again", async () => {
   const connectionString = Bun.env.TASK_TEST_DATABASE_URL ?? Bun.env.DATABASE_URL;
@@ -56,11 +57,22 @@ test("a message whose Task was deleted can be claimed again", async () => {
     expect(first.claims?.[0]?.success).toBe(true);
     const number = first.tasks[0]!.number;
     await run(asAlice, { operation: "delete", conversationId: channel.id, number });
-    const again = await run(asAgent, { operation: "claim", target, messageId: message.id });
-    expect(again.claims?.[0]?.success).toBe(true);
-    // task #512: claiming the deleted Task's message restores it inside the undo window —
-    // it keeps its number, children and dependencies rather than making a new Task.
-    expect(again.tasks[0]!.number).toBe(number);
+    // task #512: inside the undo window a claimer cannot restore the deleted Task — whoever
+    // deleted it does. The claim is refused, the Task stays marked, and only the sweep's
+    // removal frees the message to claim into a new Task.
+    const duringWindow = await run(asAgent, {
+      operation: "claim",
+      target,
+      messageId: message.id,
+    });
+    expect(duringWindow.claims?.[0]?.success).toBe(false);
+    expect(duringWindow.claims?.[0]?.reason).toBe("this task was just deleted; whoever deleted it can undo it");
+    expect(duringWindow.claims?.[0]?.number).toBe(number);
+    await db.task.update({ where: { id: (await db.task.findUnique({ where: { messageId: message.id } }))!.id }, data: { deletedAt: new Date(Date.now() - 120_000) } });
+    await new DeletedTaskSweep(db).runOnce();
+    const afterSweep = await run(asAgent, { operation: "claim", target, messageId: message.id });
+    expect(afterSweep.claims?.[0]?.success).toBe(true);
+    expect(afterSweep.tasks[0]!.number).not.toBe(number);
   } finally {
     await db.workspace.delete({ where: { id: workspace.id } }).catch(() => undefined);
     await db.user.delete({ where: { id: alice.id } }).catch(() => undefined);
