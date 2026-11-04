@@ -1,4 +1,4 @@
-import { type FC, type ReactNode, type RefAttributes, useCallback } from "react";
+import { type FC, type ReactNode, type Ref, type RefAttributes, useCallback } from "react";
 import { Check, ChevronRight, DotsVertical } from "@untitledui/icons";
 import type {
     ButtonProps as AriaButtonProps,
@@ -43,6 +43,8 @@ interface DropdownItemProps extends AriaMenuItemProps {
     leading?: ReactNode;
     /** The selection indicator to be displayed on the item. */
     selectionIndicator?: "checkmark" | "checkbox" | "radio" | "toggle" | "none";
+    /** The item's own `role="menuitem"` element (React 19 passes `ref` as a prop). */
+    ref?: Ref<HTMLDivElement>;
 }
 
 const DropdownItem = ({ label, children, addon, count, icon: Icon, avatarUrl, leading, unstyled, selectionIndicator = "checkmark", ...props }: DropdownItemProps) => {

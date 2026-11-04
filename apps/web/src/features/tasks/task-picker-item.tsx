@@ -19,6 +19,11 @@ const STATUS_ICON: Record<TaskStatus, () => ReactElement> = {
   closed: statusIcon("closed"),
 };
 
+/** Marks a refused row's `role="menuitem"` element unavailable for assistive technology. */
+const markUnavailable = (element: HTMLDivElement | null) => {
+  element?.setAttribute("aria-disabled", "true");
+};
+
 /**
  * One row of a Task picker (parent, blocker, existing sub-task). A row that cannot be picked is not
  * a disabled menu item, which React Aria leaves out of the arrow keys and so out of a screen
@@ -50,6 +55,10 @@ export function TaskPickerItem({
       label={label}
       addon={refusal ?? note}
       aria-label={refusal ? m.tasks_pick_refused({ name: label, reason: refusal }) : undefined}
+      // Read as unavailable, yet still focusable. React Aria writes `aria-disabled` only for a
+      // disabled item (which it takes out of the arrow keys) and passes none through from props,
+      // so the row's own element gets it here.
+      ref={refusal ? markUnavailable : undefined}
       data-refused={refusal ? "" : undefined}
       className={refusal ? "cursor-not-allowed opacity-50" : undefined}
     />

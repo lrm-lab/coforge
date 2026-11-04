@@ -119,16 +119,21 @@ test("an existing Task is put under the open one, and one under another parent i
       await openPicker();
       const row = (title: string) =>
         evaluate<{ text: string; refused: boolean; label: string | null } | null>(
-          `(() => { const el = ${item(title)}; return el ? { text: el.textContent, refused: el.hasAttribute("data-refused"), label: el.getAttribute("aria-label") } : null; })()`,
+          `(() => { const el = ${item(title)}; return el ? { text: el.textContent, refused: el.hasAttribute("data-refused"), label: el.getAttribute("aria-label"), unavailable: el.getAttribute("aria-disabled") } : null; })()`,
         );
-      expect(await row(name("Launch epic"))).toMatchObject({ refused: true });
+      // Read as unavailable on the menuitem itself, yet reachable (below).
+      expect(await row(name("Launch epic"))).toMatchObject({ refused: true, unavailable: "true" });
       expect((await row(name("Launch epic")))!.text).toContain("Above this task");
       // A refused row says why in its accessible name (task #525).
       expect((await row(name("Launch epic")))!.label).toBe(
         `#${epic} ${name("Launch epic")}, unavailable: Above this task`,
       );
       expect((await row(name("Fix login")))!.text).toContain(`Under #${old}`);
-      expect(await row(name("Write the docs"))).toMatchObject({ refused: false, label: null });
+      expect(await row(name("Write the docs"))).toMatchObject({
+        refused: false,
+        label: null,
+        unavailable: null,
+      });
       expect(await row(name("Build the page"))).toBeNull();
       await shoot(`${label}-picker`);
 
