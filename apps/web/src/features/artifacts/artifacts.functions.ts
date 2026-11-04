@@ -118,6 +118,22 @@ export const revertArtifact = createServerFn({ method: "POST" })
     }),
   );
 
+/** Moves an artifact between read tiers (task #529): `conversation` keeps it to its home
+ * conversation's readers, `workspace` widens it to every Workspace member. Its author, the
+ * authoring Agent's owner, or a Workspace owner or admin may; reads never widen writes. */
+export const changeArtifactAccess = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(z.object({ artifactId: id, access: z.enum(["conversation", "workspace"]) }).strict())
+  .handler(async ({ context, data }) => {
+    await productionArtifacts(context.db).artifacts.changeAccess({
+      workspaceId: context.workspaceId,
+      artifactId: data.artifactId,
+      actor: { userId: context.user.id },
+      access: data.access,
+    });
+    return { access: data.access };
+  });
+
 /** Deletes a document: its author's, or a Workspace owner's or admin's. */
 export const deleteArtifact = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])

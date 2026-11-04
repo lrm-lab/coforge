@@ -286,3 +286,31 @@ test("a Workspace without documents says so, whatever was asked", async () => {
     enabled = true;
   }
 });
+
+test("an Agent reads an artifact widened to the Workspace tier", async () => {
+  // Alice writes a document in a private channel the Agent is not in.
+  const artifact = await documents.create(
+    { workspaceId, actor: { userId: alice } },
+    {
+      conversationId: secretId,
+      title: "Secret plan",
+      text: "# Secret\n",
+      idempotencyKey: key(),
+    },
+  );
+  // Before widening the Agent hears nothing; after widening it reads.
+  expect(await post({ operation: "read", artifact: artifact.id })).toMatchObject({ status: 404 });
+  await artifacts.changeAccess({
+    workspaceId,
+    artifactId: artifact.id,
+    actor: { userId: alice },
+    access: "workspace",
+  });
+  const read = await post({ operation: "read", artifact: artifact.id });
+  expect(read.status).toBe(200);
+  expect(read.body).toMatchObject({
+    text: "# Secret\n",
+    // A tier-only reader never learns the private channel's id — only its kind (task #529).
+    artifact: { access: "workspace", canChange: false, homeKey: null, homeKind: "channel" },
+  });
+});

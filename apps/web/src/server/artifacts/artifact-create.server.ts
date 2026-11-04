@@ -54,6 +54,8 @@ export async function createArtifact(
       data: {
         workspaceId: input.workspaceId,
         homeKey: input.homeKey,
+        // A workspace-home artifact's only tier is `workspace` (task #529).
+        access: input.homeKey === "workspace" ? "workspace" : "conversation",
         name: input.name,
         title: input.title ?? "",
         description: input.description ?? "",

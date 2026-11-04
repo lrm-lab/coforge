@@ -12,9 +12,11 @@ import {
 } from "./artifact-files.server";
 import {
   requireArtifactHome,
+  requireArtifactWrite,
   artifactsDisabled,
   artifactsEnabled,
   canDeleteArtifact,
+  changeArtifactAccess,
   type ArtifactActor,
 } from "./artifact-access.server";
 import {
@@ -99,6 +101,7 @@ export class Artifacts {
       where: { id: artifactId, workspaceId, deletedAt: null },
       select: {
         homeKey: true,
+        access: true,
         authorUserId: true,
         authorAgentId: true,
         kind: true,
@@ -168,7 +171,7 @@ export class Artifacts {
     const { homeKey } = live;
     if ((input.note?.length ?? 0) > ARTIFACT_NOTE_LIMIT) invalid("artifact-note");
     if ((input.label?.length ?? 0) > ARTIFACT_LABEL_LIMIT) invalid("artifact-label");
-    await this.requireHome(input.workspaceId, input.publisher, homeKey, "write");
+    await requireArtifactWrite(this.db, input.workspaceId, input.publisher, live, "write");
     const added = [...(input.files ?? [])];
     const deleted = [...new Set(input.deletedPaths ?? [])];
     for (const file of added) if (!artifactPathValid(file.path)) invalid("artifact-file-path");
@@ -415,11 +418,25 @@ export class Artifacts {
     return saved;
   }
 
+  /** Moves the artifact between read tiers (task #529): `conversation` keeps reads to its home
+   * conversation's readers, `workspace` widens them to every Workspace member; writes never
+   * follow the tier. Its author, the authoring Agent's owner, or a Workspace owner or admin may;
+   * an Agent never may. */
+  async changeAccess(input: {
+    workspaceId: string;
+    artifactId: string;
+    actor: ArtifactActor;
+    access: "conversation" | "workspace";
+  }) {
+    if (!(await this.enabled(input.workspaceId))) throw artifactsDisabled();
+    await changeArtifactAccess(this.db, input.workspaceId, input.actor, input);
+  }
+
   /** Soft-deletes the artifact (its name is free again at once); its author's, or a Workspace
    * owner's or admin's, among those who can read it. An Agent deletes only its own. */
   async delete(input: { workspaceId: string; artifactId: string; actor: ArtifactActor }) {
     const artifact = await this.live(input.workspaceId, input.artifactId);
-    await this.requireHome(input.workspaceId, input.actor, artifact.homeKey, "read");
+    await requireArtifactWrite(this.db, input.workspaceId, input.actor, artifact, "read");
     if (!(await canDeleteArtifact(this.db, input.workspaceId, input.actor, artifact)))
       throw new AppError("ACCESS_DENIED");
     await this.db.artifact.updateMany({

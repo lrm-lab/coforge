@@ -5,6 +5,10 @@ model Artifact {
   workspaceId     String            @db.Uuid
   /// conversation:<conversationId> | workspace | public
   homeKey         String
+  /// The read-access tier: `conversation` keeps reads to the home conversation's readers;
+  /// `workspace` widens reads to every Workspace member. Writes never follow the tier.
+  /// A workspace-home artifact is always `workspace` (task #529).
+  access          String            @default("conversation")
   /// Unique within its home; the web URL uses a separate short id.
   name            String
   title           String            @default("")
@@ -30,6 +34,7 @@ model Artifact {
   deletedByAgentId String?          @db.Uuid
   workspace       Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   versions        ArtifactVersion[]
+  accessEvents    ArtifactAccessEvent[]
 
   @@index([workspaceId, homeKey])
   /// The live name is unique per home (`deletedAt IS NULL`), so a soft delete releases it at once.
@@ -76,6 +81,23 @@ model ArtifactVersion {
   @@unique([artifactId, number])
   @@unique([artifactId, idempotencyKey])
   @@map("artifact_versions")
+}
+
+/// One access-tier change (task #529): who moved the artifact from which tier to which, and
+/// when. Content history stays in `ArtifactVersion`; an access change is not a version.
+model ArtifactAccessEvent {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  artifactId   String   @db.Uuid
+  actorUserId  String?  @db.Uuid
+  actorAgentId String?  @db.Uuid
+  /// The tier before and after: conversation | workspace
+  from         String
+  to           String
+  createdAt    DateTime @default(now())
+  artifact     Artifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+
+  @@index([artifactId, createdAt])
+  @@map("artifact_access_events")
 }
 
 /// One file of one version, by content-addressed blob.

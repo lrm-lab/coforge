@@ -91,6 +91,47 @@ async function save(artifactId: string, baseVersion: number, html: string) {
   });
 }
 
+test("a narrowed tier-reader's next link refuses at once", async () => {
+  // A second member authors a document in a private channel the reader is not in, widens it,
+  // then narrows it again: the tier's read reaches the sandbox's own check.
+  const author = (
+    await db.user.create({ data: { username: `sb-author-${handle}`, displayName: "A" } })
+  ).id;
+  await db.workspaceMembership.create({ data: { workspaceId, userId: author, role: "member" } });
+  const channel = (
+    await db.conversation.create({
+      data: { workspaceId, channelName: `closed-${handle}`, visibility: "private" },
+    })
+  ).id;
+  await db.conversationMember.create({
+    data: { conversationId: channel, workspaceId, userId: author },
+  });
+  const page = await artifacts.create({
+    workspaceId,
+    home: { kind: "conversation", conversationId: channel },
+    name: `page-shared-${handle}`,
+    kind: "html",
+    entryPath: "index.html",
+    author: { userId: author },
+  });
+  await artifacts.push({
+    workspaceId,
+    artifactId: page.id,
+    baseVersion: 0,
+    publisher: { userId: author },
+    idempotencyKey: crypto.randomUUID(),
+    files: [{ path: "index.html", sha256: put("<p>shared</p>") }],
+  });
+  await db.artifact.update({ where: { id: page.id }, data: { access: "workspace" } });
+  const link = () =>
+    sandbox.link({ workspaceId, userId, artifactId: page.id, embedderOrigin: APP });
+  await link();
+  await db.artifact.update({ where: { id: page.id }, data: { access: "conversation" } });
+  await expect(link()).rejects.toMatchObject({ code: "NOT_FOUND" });
+  await db.conversation.delete({ where: { id: channel } });
+  await db.user.delete({ where: { id: author } });
+});
+
 test("a link opens its own version, and stops once its reader cannot read the page", async () => {
   const page = await artifacts.create({
     workspaceId,

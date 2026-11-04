@@ -3,11 +3,7 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError, isAppError } from "#src/lib/app-error";
 import { nameToSlug } from "#src/lib/slug";
 import { errorType } from "#src/server/errors/error-type.server";
-import {
-  canDeleteArtifact,
-  requireArtifactHome,
-  type ArtifactActor,
-} from "./artifact-access.server";
+import { canDeleteArtifact, type ArtifactActor } from "./artifact-access.server";
 import type { StoredArtifactBlobs } from "./artifact-blobs.server";
 import { ARTIFACT_DOCUMENT_LIMIT } from "./artifact-files.server";
 import { ARTIFACT_HTML_ENTRY } from "./artifact-sandbox.server";
@@ -154,13 +150,12 @@ export class ArtifactDocuments {
       file?.kind === "text" &&
       file.sizeBytes <= ARTIFACT_DOCUMENT_LIMIT;
     const bytes = document ? await this.blobs.read(scope.workspaceId, file.sha256) : null;
-    // The author came with the read (no second query); the rule is the one `delete` enforces.
-    const canDelete = await canDeleteArtifact(
-      this.db,
-      scope.workspaceId,
-      scope.actor,
-      read.artifact,
-    );
+    // The author came with the read (no second query); the rule is the one `delete` enforces —
+    // and a reader the widened tier let in cannot delete at all: a delete is the home's write
+    // (task #529).
+    const canDelete =
+      read.artifact.homeRead &&
+      (await canDeleteArtifact(this.db, scope.workspaceId, scope.actor, read.artifact));
     return {
       ...read,
       text: bytes ? new TextDecoder().decode(bytes) : "",
@@ -195,7 +190,9 @@ export class ArtifactDocuments {
       input.artifactId,
       scope.actor,
     );
-    await requireArtifactHome(this.db, scope.workspaceId, scope.actor, artifact.homeKey, "write");
+    // A save is the home's write; a reader the widened tier let in hears ACCESS_DENIED, since it
+    // already knows the artifact is there (task #529).
+    if (!artifact.canWrite) throw new AppError("ACCESS_DENIED");
     if (!isPageKind(artifact.kind))
       throw new AppError("INVALID_INPUT", { errorId: "artifact-kind" });
     // A web page is an Agent's to write (task #490): a person reads it, its source and history,

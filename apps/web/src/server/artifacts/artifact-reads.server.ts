@@ -3,8 +3,14 @@ import { AppError } from "#src/lib/app-error";
 import {
   artifactHomeAccess,
   artifactsDisabled,
+  canChangeArtifactAccess,
+  canChangeArtifactAccessWithRole,
+  inWorkspace,
   requireArtifactHome,
+  requireArtifactRead,
+  type ArtifactAccessTier,
   type ArtifactActor,
+  type ArtifactHomeAccess,
 } from "./artifact-access.server";
 
 /** Versions one history page lists by default, and at most. */
@@ -20,6 +26,7 @@ const CARD_SELECT = {
   title: true,
   kind: true,
   homeKey: true,
+  access: true,
   currentVersion: true,
   preview: true,
   authorUserId: true,
@@ -27,21 +34,30 @@ const CARD_SELECT = {
   updatedAt: true,
 } as const;
 
-function card(row: {
-  id: string;
-  name: string;
-  title: string;
-  kind: string;
-  homeKey: string;
-  currentVersion: number;
-  preview: string;
-  authorUserId: string | null;
-  authorAgentId: string | null;
-  updatedAt: Date;
-}) {
+function card(
+  row: {
+    id: string;
+    name: string;
+    title: string;
+    kind: string;
+    homeKey: string;
+    access: string;
+    currentVersion: number;
+    preview: string;
+    authorUserId: string | null;
+    authorAgentId: string | null;
+    updatedAt: Date;
+  },
+  canChange: boolean,
+  homeRead = true,
+) {
   const { authorUserId, authorAgentId, ...shown } = row;
   return {
     ...shown,
+    // A reader the widened tier let in never learns the home's key (task #529).
+    homeKey: homeRead ? row.homeKey : null,
+    access: row.access as ArtifactAccessTier,
+    canChange,
     author: authorAgentId
       ? { agentId: authorAgentId }
       : authorUserId
@@ -49,6 +65,17 @@ function card(row: {
         : null,
   };
 }
+
+/** What the `canChange` rule reads off a card row: the two author columns and the authoring
+ * Agent's owner, looked up once per batch (`authorAgentId` is a bare column, task #529). */
+const accessRuleInput = (
+  row: { authorUserId: string | null; authorAgentId: string | null },
+  owners: ReadonlyMap<string, string>,
+) => ({
+  authorUserId: row.authorUserId,
+  authorAgentId: row.authorAgentId,
+  authorAgentOwnerId: (row.authorAgentId ? owners.get(row.authorAgentId) : undefined) ?? null,
+});
 
 /**
  * Reading artifacts (task #385): one version with its files, and the history, newest first. Both
@@ -73,6 +100,7 @@ export class ArtifactReads {
         kind: true,
         entryPath: true,
         homeKey: true,
+        access: true,
         currentVersion: true,
         // Read with the artifact so `canDelete` needs no second query (task #385).
         authorUserId: true,
@@ -81,14 +109,38 @@ export class ArtifactReads {
     });
     if (!artifact) throw new AppError("NOT_FOUND");
     // The access check already read the home's conversation, so its kind comes free (task #385).
-    const { homeKind } = await requireArtifactHome(
+    const { homeKind, homeRead, write } = await requireArtifactRead(
       this.db,
       workspaceId,
       reader,
-      artifact.homeKey,
-      "read",
+      artifact,
     );
-    return { ...artifact, homeKind };
+    // `authorAgentId` is a bare column, so the owner's id is one more lookup — and only where the
+    // `canChange` rule needs it (task #529).
+    const ownerId = artifact.authorAgentId
+      ? (
+          await this.db.agent.findFirst({
+            where: { id: artifact.authorAgentId },
+            select: { ownerId: true },
+          })
+        )?.ownerId
+      : undefined;
+    return {
+      ...artifact,
+      // A reader the widened tier let in never learns the home's key: a private conversation's
+      // id is not theirs to know (task #529).
+      homeKey: homeRead ? artifact.homeKey : null,
+      homeRead,
+      // Whether the home's own rule lets this reader write; a tier only ever widens reading.
+      canWrite: write,
+      access: artifact.access as ArtifactAccessTier,
+      canChange: await canChangeArtifactAccess(this.db, workspaceId, reader, {
+        authorUserId: artifact.authorUserId,
+        authorAgentId: artifact.authorAgentId,
+        authorAgentOwnerId: ownerId ?? null,
+      }),
+      homeKind,
+    };
   }
 
   /** The artifact and one version (its current one by default) with that version's files. */
@@ -137,7 +189,13 @@ export class ArtifactReads {
       take: LIST_LIMIT,
       select: CARD_SELECT,
     });
-    return rows.map(card);
+    const [role, owners] = await Promise.all([
+      this.#actorRole(input.workspaceId, input.reader),
+      this.#authorOwners(rows),
+    ]);
+    return rows.map((row) =>
+      card(row, canChangeArtifactAccessWithRole(input.reader, role, accessRuleInput(row, owners))),
+    );
   }
 
   /** Cards of the named artifacts the reader may read, in the order named; any other is left
@@ -154,20 +212,55 @@ export class ArtifactReads {
       where: { workspaceId: input.workspaceId, id: { in: ids }, deletedAt: null },
       select: CARD_SELECT,
     });
-    const readable = new Map<string, Promise<boolean>>();
-    const canRead = (homeKey: string) => {
-      if (!readable.has(homeKey))
-        readable.set(
-          homeKey,
-          artifactHomeAccess(this.db, input.workspaceId, input.reader, homeKey).then(
-            (access) => access.read,
-          ),
-        );
-      return readable.get(homeKey)!;
+    const homes = new Map<string, Promise<ArtifactHomeAccess>>();
+    const homeAccess = (homeKey: string) => {
+      if (!homes.has(homeKey))
+        homes.set(homeKey, artifactHomeAccess(this.db, input.workspaceId, input.reader, homeKey));
+      return homes.get(homeKey)!;
     };
+    const member = await inWorkspace(this.db, input.workspaceId, input.reader);
+    const [role, owners] = await Promise.all([
+      this.#actorRole(input.workspaceId, input.reader),
+      this.#authorOwners(rows),
+    ]);
     const kept = new Map<string, ReturnType<typeof card>>();
-    for (const row of rows) if (await canRead(row.homeKey)) kept.set(row.id, card(row));
+    for (const row of rows) {
+      const home = await homeAccess(row.homeKey);
+      // A home's readers share one check; a `workspace` tier widens it per artifact (task #529).
+      if (!(home.read || (row.access === "workspace" && member))) continue;
+      kept.set(
+        row.id,
+        card(
+          row,
+          canChangeArtifactAccessWithRole(input.reader, role, accessRuleInput(row, owners)),
+          home.read,
+        ),
+      );
+    }
     return ids.flatMap((id) => (kept.has(id) ? [kept.get(id)!] : []));
+  }
+
+  /** The authoring Agents' owners, for the batch's `canChange` answers: one lookup per batch. */
+  async #authorOwners(rows: ReadonlyArray<{ authorAgentId: string | null }>) {
+    const ids = [...new Set(rows.flatMap((row) => (row.authorAgentId ? [row.authorAgentId] : [])))];
+    if (ids.length === 0) return new Map<string, string>();
+    const agents = await this.db.agent.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, ownerId: true },
+    });
+    return new Map(agents.map((agent) => [agent.id, agent.ownerId]));
+  }
+
+  /** The actor's Workspace role once for a batch of cards; `null` when the actor is an Agent. */
+  async #actorRole(workspaceId: string, actor: ArtifactActor) {
+    return actor.userId
+      ? (
+          await this.db.workspaceMembership.findUnique({
+            where: { workspaceId_userId: { workspaceId, userId: actor.userId } },
+            select: { role: true },
+          })
+        )?.role
+      : null;
   }
 
   /**
