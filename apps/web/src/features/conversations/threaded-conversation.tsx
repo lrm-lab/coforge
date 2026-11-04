@@ -13,6 +13,7 @@ import { useOpenRelatedTask } from "#src/features/tasks/use-open-related-task";
 import { ConversationTaskDemand } from "#src/features/tasks/conversation-task-demand";
 import { useNumberedTask } from "#src/features/tasks/use-conversation-tasks";
 import { ownsDiscussion } from "#src/features/tasks/task-follow";
+import { useTaskPopupProfile } from "#src/features/tasks/task-popup-profile";
 
 import { ConversationPane } from "./conversation-pane";
 import { SeenByDirectory } from "./message-seen-by";
@@ -155,6 +156,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
     description: "",
     media: <MessageSquare aria-hidden="true" className="size-6 text-tertiary" />,
   };
+  const popupProfile = useTaskPopupProfile(openTask?.id);
   const dialog = openTask ? (
     <TaskDetailDialog
       // One popup instance per task: switching tasks from a chip inside the popup starts fresh.
@@ -176,6 +178,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
               <TaskDiscussionPane
                 {...sidePaneProps}
                 jumpMessage={taskPopup?.landingMessageId}
+                {...popupProfile.openers}
                 conversationId={taskDiscussionId}
                 board={{ conversationId: conversation.conversationId, number: openTask.number }}
                 mentionables={conversation.mentionables}
@@ -190,6 +193,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
                 openTaskRoot && (
                   <ThreadPane
                     {...threadPaneProps(openTaskRoot)}
+                    {...popupProfile.openers}
                     inTaskPopup
                     emptyState={taskRepliesEmpty}
                   />
@@ -209,6 +213,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
         openTaskNumber={openTaskNumber}
       />
       {dialog}
+      {popupProfile.layer}
     </>
   );
   const profileAgentId = agentProfile?.agentId;

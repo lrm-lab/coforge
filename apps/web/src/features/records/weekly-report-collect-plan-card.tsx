@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { OVERLAY_LAYER } from "#src/lib/overlay-layer";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { Edit01 as Edit, Settings01 as Settings } from "@untitledui/icons";
@@ -281,6 +282,7 @@ export function WeeklyReportCollectPlanCard(props: {
     <div className="@container rounded-xl border border-secondary bg-primary p-4">
       {profileAgentId ? (
         <SlideoutOverlay
+          className={OVERLAY_LAYER}
           isOpen
           isDismissable
           onOpenChange={(open) => {

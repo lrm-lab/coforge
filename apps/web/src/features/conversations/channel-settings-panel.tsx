@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { OVERLAY_LAYER } from "#src/lib/overlay-layer";
 import { useServerFn } from "@tanstack/react-start";
 
 import {
@@ -138,6 +139,7 @@ export function ChannelSettingsPanel({
   return (
     <>
       <SlideoutOverlay
+        className={OVERLAY_LAYER}
         isOpen={open}
         isDismissable
         onOpenChange={(next) => (next ? onOpenChange(true) : requestClose())}

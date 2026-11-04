@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { OVERLAY_LAYER } from "#src/lib/overlay-layer";
 import { createPortal } from "react-dom";
 import { Minus, Plus, XClose as X } from "@untitledui/icons";
 
@@ -50,7 +51,7 @@ export function ReportImageZoom({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[60] flex flex-col bg-overlay/80 safe-area-padding"
+      className={`fixed inset-0 ${OVERLAY_LAYER} flex flex-col bg-overlay/80 safe-area-padding`}
       role="dialog"
       aria-modal="true"
       aria-label={alt || m.records_report_image_zoom_in()}

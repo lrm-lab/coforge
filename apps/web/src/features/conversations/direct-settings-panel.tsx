@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { OVERLAY_LAYER } from "#src/lib/overlay-layer";
 import { useServerFn } from "@tanstack/react-start";
 import { Heading } from "react-aria-components";
 import { Settings01 as Settings } from "@untitledui/icons";
@@ -58,7 +59,12 @@ function DirectSettingsPanel({
   ...settings
 }: DirectSettings & { open: boolean; onOpenChange: (open: boolean) => void }) {
   return (
-    <SlideoutOverlay isOpen={open} isDismissable onOpenChange={onOpenChange}>
+    <SlideoutOverlay
+      className={OVERLAY_LAYER}
+      isOpen={open}
+      isDismissable
+      onOpenChange={onOpenChange}
+    >
       <SlideoutModal className="max-w-136">
         <SlideoutDialog aria-label={m.direct_settings_open()} className="gap-0">
           <SettingsPanelHeader>

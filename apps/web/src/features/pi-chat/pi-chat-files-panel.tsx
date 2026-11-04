@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { OVERLAY_LAYER } from "#src/lib/overlay-layer";
 import { Button } from "#src/components/base/buttons/button";
 import { SlideoutMenu } from "#src/components/application/slideout-menus/slideout-menu";
 import { useMediaQuery } from "#src/hooks/use-media-query";
@@ -27,6 +28,7 @@ export function PiChatFilesPanel(props: ComponentProps<typeof PiChatFiles>) {
   if (!desktop)
     return (
       <SlideoutMenu
+        className={OVERLAY_LAYER}
         isOpen
         onOpenChange={(open) => {
           if (!open) props.onClose();

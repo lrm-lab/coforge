@@ -1,4 +1,5 @@
 import { humanLabel } from "#src/lib/human-label";
+import { OVERLAY_LAYER } from "#src/lib/overlay-layer";
 import { useEffectEvent, useLayoutEffect, useMemo, useState, type FormEvent } from "react";
 import { Heading } from "react-aria-components";
 
@@ -263,6 +264,7 @@ export function CreateWeeklyTemplateDialog({
   return (
     <>
       <SlideoutOverlay
+        className={OVERLAY_LAYER}
         isOpen={open}
         isDismissable
         onOpenChange={(next) => (next ? onOpenChange(true) : requestClose())}
