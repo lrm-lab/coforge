@@ -251,6 +251,7 @@ test("a tool call emits start and a matching end", async () => {
     const events: AgentRuntimeEvent[] = [];
     session.subscribe((event) => events.push(event));
     await session.sendMessage("tool-call");
+    await waitFor(() => events.some((e) => e.type === "completed"));
     expect(events).toContainEqual(expect.objectContaining({ type: "tool-start", id: "t1" }));
     expect(events).toContainEqual(
       expect.objectContaining({ type: "tool-end", id: "t1", isError: false }),
