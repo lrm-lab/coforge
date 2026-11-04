@@ -33,6 +33,12 @@ RUN bun run --cwd packages/coforge-sdk generate \
 
 RUN bun run --cwd apps/web build
 
+# One-off operational scripts the runtime image carries, each bundled with its dependencies into a
+# single file (the source tree and workspace deps are not in the final stage). Run as
+# `bun .ops/<name>.js` in the deployed container (.github/workflows/backfill-owner-agent-names.yml).
+RUN bun build apps/web/scripts/backfill-owner-agent-names.ts \
+  --target bun --outfile apps/web/.ops/backfill-owner-agent-names.js
+
 # The migration toolchain only: the schema and migrations it applies join it in the final stage.
 FROM oven/bun:1.4.4-alpine@sha256:4cf82f5686b196504fe119db3fcd9185b191f82ece82c40680e597228ec6070a AS migrate
 WORKDIR /migrate
@@ -57,6 +63,8 @@ COPY --chown=bun:bun apps/web/prisma.config.ts .migrate/prisma.config.ts
 # The deploy gate that checks the pending migrations before they run (scripts/migration-safety).
 COPY --chown=bun:bun scripts/migration-safety .migrate/migration-safety
 COPY --from=build --chown=bun:bun /app/apps/web/.output .output
+# One-off operational scripts, each a self-contained bundle (see the build stage).
+COPY --from=build --chown=bun:bun /app/apps/web/.ops .ops
 
 # Attachment bytes live on a mounted volume, not in the writable container layer.
 # The directory has to exist and be owned by the runtime user in the image: Docker

@@ -192,7 +192,8 @@ describe("WorkspaceMembers", () => {
         {
           id: "detached-agent",
           name: "reviewer",
-          displayName: "Ada Lovelace的周报助手",
+          // Task #495: the directory shows the stored display name, not a name recomputed on read.
+          displayName: "Reviewer",
           description: "Reviews changes",
           avatarUrl: agentAvatarUrl("detached-agent"),
           computerId: null,
@@ -213,14 +214,12 @@ describe("WorkspaceMembers", () => {
     expect(JSON.stringify(result)).not.toContain("avatarMascot");
   });
 
-  test("a weekly-report assistant is shown in its owner's saved language, from the page's own queries", async () => {
+  test("a weekly-report assistant is shown by its stored name, without renaming on read", async () => {
+    // Task #495: the directory reads the stored display name like any other Agent. The owner's
+    // name and language changes rename the assistant directly (`renameOwnerAgents`); the page
+    // neither recomputes the name nor writes it, and asks for no per-row owner language.
     const renamed: string[] = [];
-    const queries: Array<{ select: { owner?: unknown; preferences?: unknown } }> = [];
-    const owners = [
-      { name: "Ada", language: "en", shown: "Ada's Weekly Report Assistant" },
-      { name: "李健", language: "zh-CN", shown: "李健的周报助手" },
-      { name: "Grace", language: null, shown: "Grace的周报助手" },
-    ];
+    const stored = ["Ada's Weekly Report Assistant", "李健的周报助手", "My own name for it"];
     const db = withFakePagination({
       workspaceMembership: { findUnique: async () => ({ userId: "viewer", role: "admin" }) },
       agent: {
@@ -228,26 +227,23 @@ describe("WorkspaceMembers", () => {
           renamed.push(data.displayName);
           return {};
         },
-        findMany: async (query: { select: { owner?: unknown } }) => {
-          queries.push(query);
-          return owners.map(({ name, language }, index) => ({
+        findMany: async () =>
+          stored.map((displayName, index) => ({
             id: `agent-${index}`,
             name: `weekly-${index}`,
-            displayName: "周报助手",
+            displayName,
             description: "",
             avatarMascot: null,
             createdAt: new Date("2026-08-01T00:00:00.000Z"),
             owner: {
               id: `user-${index}`,
               username: `user-${index}`,
-              displayName: name,
+              displayName: `owner-${index}`,
               avatarObjectKey: null,
-              preferences: language ? { language } : null,
             },
             weeklyReportAssistant: { id: `assistant-${index}` },
             computer: null,
-          }));
-        },
+          })),
       },
     }) as unknown as PrismaClient;
 
@@ -257,13 +253,9 @@ describe("WorkspaceMembers", () => {
       limit: 24,
     });
 
-    expect(page.items.map((agent) => agent.displayName)).toEqual(owners.map((o) => o.shown));
-    expect(renamed.sort()).toEqual(owners.map((o) => o.shown).sort());
-    // The language rides on the one Agent query: no read per row.
-    expect(queries).toHaveLength(1);
-    expect(queries[0]!.select.owner).toMatchObject({
-      select: { preferences: { select: { language: true } } },
-    });
+    expect(page.items.map((agent) => agent.displayName)).toEqual(stored);
+    // No rename on read, for any row.
+    expect(renamed).toEqual([]);
   });
 
   test("hides a private Agent owned by someone else from a plain member's directory", async () => {

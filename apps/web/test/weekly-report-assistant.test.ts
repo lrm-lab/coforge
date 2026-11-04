@@ -322,12 +322,15 @@ test("ensureWeeklyReportAssistant creates one assistant per User in a Workspace"
   });
   expect(agents[1]).toMatchObject({ displayName: "Ada Lovelace的周报助手" });
 
+  // Task #495: ensuring an existing assistant no longer renames it. The owner's name and
+  // language changes rename it (`renameOwnerAgents`), and the one-time backfill fixes names
+  // stored under the old rule; ensure must not overwrite a stored name on use.
   agents[0]!.displayName = WEEKLY_REPORT_ASSISTANT_DISPLAY_NAME;
   await ensureWeeklyReportAssistant(db as never, {
     workspaceId: "workspace-1",
     userId: "user-1",
   });
-  expect(agents[0]!.displayName).toBe("李健的周报助手");
+  expect(agents[0]!.displayName).toBe(WEEKLY_REPORT_ASSISTANT_DISPLAY_NAME);
 });
 
 test("ensureWeeklyReportAssistant reclaims an orphan Agent left without an assistant row", async () => {

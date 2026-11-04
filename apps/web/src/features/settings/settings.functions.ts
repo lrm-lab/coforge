@@ -10,6 +10,7 @@ import {
   PrismaUserPreferencesRepository,
   UserPreferences,
 } from "#src/server/db/repositories/user-preferences.repositories.server";
+import { setLanguageAndRenameAssistants } from "#src/server/agents/owner-profile-writes.server";
 
 function preferences() {
   const db = requireDatabaseClient();
@@ -32,8 +33,11 @@ export const saveDateTimePreferences = createServerFn({ method: "POST" })
     };
   });
 
-/** The Language & region page's language switch: the one stored source for outbound text too. */
+/** The Language & region page's language switch: the one stored source for outbound text too.
+ * Changing it renames the person's owner-named assistants in the same transaction (task #495). */
 export const saveLanguagePreference = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(saveLanguagePreferencesInputSchema)
-  .handler(async ({ data, context }) => preferences().setLanguage(context.user.id, data.language));
+  .handler(({ data, context }) =>
+    setLanguageAndRenameAssistants(requireDatabaseClient(), context.user.id, data.language),
+  );

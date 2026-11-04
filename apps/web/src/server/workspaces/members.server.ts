@@ -1,11 +1,7 @@
-import { appNotificationsPossible } from "#src/server/app-notifications/app-notifications.server";
-import { recordAgentProfileUpdated } from "#src/server/app-notifications/agent-events.server";
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import { peopleDirectPeerId } from "#src/features/conversations/direct-key";
 import { AppError } from "#src/lib/app-error";
 import { compareHumanLabels, humanLabel, UNNAMED_PERSON_NAME } from "#src/lib/human-label";
-import { ownerAgentLanguage } from "#src/server/agents/owner-agent-name.server";
-import { weeklyReportAssistantDisplayName } from "#src/server/records/weekly-report-assistant.server";
 import { ACTIVE_AGENT_WHERE, ROSTER_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import {
@@ -33,30 +29,11 @@ export type PeoplePageInput = { query: string; cursor?: string; limit: number };
 
 const contains = (query: string) => ({ contains: query, mode: "insensitive" as const });
 
-/** A person as the name of their weekly-report assistant needs them: the name, and the saved
- * interface language it is worded in (selected with the person, never read per Agent). */
-type AssistantOwner = {
-  username: string;
-  displayName: string | null;
-  preferences?: { language: string | null } | null;
-};
-
-const assistantNameOf = (owner: AssistantOwner) =>
-  weeklyReportAssistantDisplayName(
-    humanLabel(owner),
-    ownerAgentLanguage(owner.preferences?.language),
-  );
-
-/** `preferences` as the select that `AssistantOwner` reads. */
-const OWNER_LANGUAGE_SELECT = { select: { language: true } } as const;
-
-function shownAgentName(agent: {
-  name: string;
-  displayName: string;
-  weeklyReportAssistant?: { id: string } | null;
-  owner?: AssistantOwner | null;
-}): string {
-  if (agent.weeklyReportAssistant && agent.owner) return assistantNameOf(agent.owner);
+/** The name the directory shows: the stored display name, else the system name. Owner-named
+ * assistants are kept current by renaming them when their owner changes (task #495,
+ * `renameOwnerAgents`), so the directory reads the stored name like any other Agent rather than
+ * recomputing it on every read. */
+function shownAgentName(agent: { name: string; displayName: string }): string {
   return agent.displayName.trim() || agent.name;
 }
 
@@ -82,19 +59,16 @@ function createdAgentsSelect(visibleAgents: Prisma.AgentWhereInput) {
 }
 
 /** One of a person's created Agents as the directory and the profile show it. */
-function createdAgentView(
-  agent: {
-    id: string;
-    name: string;
-    displayName: string;
-    avatarMascot: string | null;
-    weeklyReportAssistant: { id: string } | null;
-  },
-  owner: AssistantOwner,
-) {
+function createdAgentView(agent: {
+  id: string;
+  name: string;
+  displayName: string;
+  avatarMascot: string | null;
+  weeklyReportAssistant: { id: string } | null;
+}) {
   return {
     id: agent.id,
-    displayName: shownAgentName({ ...agent, owner }),
+    displayName: shownAgentName(agent),
     avatarUrl: agentAvatarUrl(agent.id, agent.avatarMascot),
   };
 }
@@ -129,39 +103,6 @@ export class WorkspaceMembers {
 
   private visibleAgents(workspaceId: string, viewer: AgentVisibilityViewer) {
     return { workspaceId, ...ACTIVE_AGENT_WHERE, ...visibleAgentWhere(viewer) };
-  }
-
-  /** Writes the owner-based assistant name when the stored label differs, so search, chat,
-   * and the agent profile match the directory. */
-  private async storeAssistantNames(
-    workspaceId: string,
-    agents: Array<{
-      id: string;
-      displayName: string;
-      weeklyReportAssistant?: { id: string } | null;
-      owner?: AssistantOwner | null;
-    }>,
-  ) {
-    await Promise.all(
-      agents.flatMap((agent) => {
-        if (!agent.weeklyReportAssistant || !agent.owner) return [];
-        const shown = assistantNameOf(agent.owner);
-        if (agent.displayName === shown) return [];
-        const rename = {
-          where: { id_workspaceId: { id: agent.id, workspaceId } },
-          data: { displayName: shown },
-        };
-        return [
-          appNotificationsPossible()
-            ? this.db.$transaction(async (tx) => {
-                const renamed = await tx.agent.update(rename);
-                await recordAgentProfileUpdated(tx, workspaceId, agent.id, ["display_name"]);
-                return renamed;
-              })
-            : this.db.agent.update(rename),
-        ];
-      }),
-    );
   }
 
   /** Tab totals; unaffected by any filter or search. */
@@ -214,7 +155,6 @@ export class WorkspaceMembers {
               username: true,
               displayName: true,
               avatarObjectKey: true,
-              preferences: OWNER_LANGUAGE_SELECT,
             },
           },
           weeklyReportAssistant: { select: { id: true } },
@@ -232,7 +172,6 @@ export class WorkspaceMembers {
       })
       // An empty cursor is the first page, as before (`after: ""` would be parsed as an id).
       .withCursor({ limit, after: input.cursor || undefined });
-    await this.storeAssistantNames(workspaceId, agents);
     return {
       items: agents.map((agent) => ({
         id: agent.id,
@@ -292,7 +231,7 @@ export class WorkspaceMembers {
           ownerId: true,
           visibility: true,
           owner: {
-            select: { username: true, displayName: true, preferences: OWNER_LANGUAGE_SELECT },
+            select: { username: true, displayName: true },
           },
           weeklyReportAssistant: { select: { id: true } },
         },
@@ -324,7 +263,6 @@ export class WorkspaceMembers {
         return peerId ? [[peerId, row.conversationId]] : [];
       }),
     );
-    await this.storeAssistantNames(workspaceId, agents);
     return {
       // Listed by the name they are shown by, which the database cannot order by.
       canCreateAgents: canCreateAgents(role),
@@ -374,7 +312,6 @@ export class WorkspaceMembers {
             description: true,
             email: true,
             avatarObjectKey: true,
-            preferences: OWNER_LANGUAGE_SELECT,
             agents: createdAgentsSelect(visibleAgents),
           },
         },
@@ -387,10 +324,6 @@ export class WorkspaceMembers {
     // owner or admin changes anyone's role but the owner's, and removes anyone but the owner and
     // themself (they leave instead).
     const manageable = canManageMembers(viewerRole) && membership.role !== "owner";
-    await this.storeAssistantNames(
-      workspaceId,
-      person.agents.map((agent) => ({ ...agent, owner: person })),
-    );
     return {
       id: person.id,
       displayName: humanLabel(person),
@@ -402,7 +335,7 @@ export class WorkspaceMembers {
       isViewer,
       canChangeRole: manageable,
       canRemove: manageable && !isViewer,
-      createdAgents: person.agents.map((agent) => createdAgentView(agent, person)),
+      createdAgents: person.agents.map((agent) => createdAgentView(agent)),
     };
   }
 
@@ -418,7 +351,6 @@ export class WorkspaceMembers {
         displayName: true,
         description: true,
         avatarObjectKey: true,
-        preferences: OWNER_LANGUAGE_SELECT,
         // Visible Agents this person created. One list feeds the count and the faces: Prisma
         // pushes neither a nested `take` nor a page-scoped filtered `_count` into SQL.
         agents: createdAgentsSelect(visibleAgents),
@@ -426,10 +358,6 @@ export class WorkspaceMembers {
     });
     const byId = new Map(rows.map((person) => [person.id, person]));
     const people = ids.flatMap((id) => byId.get(id) ?? []);
-    await this.storeAssistantNames(
-      workspaceId,
-      people.flatMap((person) => person.agents.map((agent) => ({ ...agent, owner: person }))),
-    );
     return pageOf(
       people.map((person) => ({
         id: person.id,
@@ -440,7 +368,7 @@ export class WorkspaceMembers {
           total: person.agents.length,
           items: person.agents
             .slice(0, CREATED_AGENT_FACES)
-            .map((agent) => createdAgentView(agent, person)),
+            .map((agent) => createdAgentView(agent)),
         },
       })),
       limit,

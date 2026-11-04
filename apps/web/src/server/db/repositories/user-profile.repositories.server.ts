@@ -1,7 +1,7 @@
 import { hasErrorCode } from "@lrm/coforge-sdk/internal";
-import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { humanLabel } from "#src/lib/human-label";
+import type { DatabaseScope } from "#src/server/db/transaction.server";
 import { avatarPresetUrl, isAvatarPresetReference } from "#src/features/profiles/avatar-presets";
 import { personAvatarUrl } from "#src/lib/person-picture";
 import {
@@ -13,7 +13,7 @@ import {
 } from "#src/server/files/public-image-delivery.server";
 
 export class PrismaUserProfileRepository {
-  constructor(private readonly db: PrismaClient) {}
+  constructor(private readonly db: DatabaseScope) {}
 
   async get(userId: string) {
     const profile = await this.db.user.findUnique({

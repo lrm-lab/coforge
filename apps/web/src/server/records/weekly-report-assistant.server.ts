@@ -142,15 +142,16 @@ export async function ensureWeeklyReportAssistant(
         },
       });
       if (existing) {
-        const label = await assistantLabelForUser(tx, input.userId);
         const agent = await tx.agent.findUnique({
           where: {
             workspaceId_name: { workspaceId: input.workspaceId, name: agentName },
           },
           select: { id: true, displayName: true, computerId: true },
         });
-        const patch: { displayName?: string; computerId?: string; runtimeConfig?: object } = {};
-        if (agent && agent.displayName !== label) patch.displayName = label;
+        // The display name is not recomputed here: the owner's name and language changes rename
+        // it directly (task #495, `renameOwnerAgents`), so ensuring the assistant never
+        // overwrites a name the owner chose by hand, nor renames passively on use.
+        const patch: { computerId?: string; runtimeConfig?: object } = {};
         if (agent && !agent.computerId && input.computerId) {
           const computerId = await ownDefaultCloudComputerId(tx, {
             userId: input.userId,
