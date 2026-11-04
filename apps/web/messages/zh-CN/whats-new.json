@@ -1,12 +1,14 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
-  "whats_new_label": "新功能",
+  "whats_new_entry": "新功能",
   "whats_new_close": "关闭",
   "whats_new_got_it": "知道了",
-  "whats_new_more": "还有 {count} 条",
   "whats_new_task_labels_title": "任务可以加标签了",
   "whats_new_task_labels_body": "在任务弹窗里挂上 Bug、设计等标签，看板能按标签筛选。",
   "whats_new_task_labels_demo_task": "修复登录页闪烁",
   "whats_new_task_labels_demo_design": "设计",
-  "whats_new_task_labels_demo_client": "客户"
+  "whats_new_task_labels_demo_client": "客户",
+  "whats_new_back": "上一条",
+  "whats_new_next": "下一条",
+  "whats_new_task_labels_demo_task_2": "客户上手清单"
 }

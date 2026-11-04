@@ -5,7 +5,7 @@ import type { WhatsNewEntryData } from "#src/features/whats-new/whats-new-entrie
 import { WhatsNew, whatsNewClock } from "#src/server/whats-new/whats-new.server";
 
 /**
- * The "What's new" card's server side against real PostgreSQL (task #493): who sees which entry,
+ * "What's new"'s server side against real PostgreSQL (task #493): who sees which entry,
  * dismissals kept on the person's preferences, and entries that wait on an experiment.
  */
 const connectionString = Bun.env.PREFERENCES_TEST_DATABASE_URL ?? Bun.env.DATABASE_URL;
@@ -109,6 +109,33 @@ test("documents wait while the experiment is off, uncounted, and show once it is
       data: { experiments: { artifacts: true } },
     });
     expect(await whatsNew.pending(veteran.id, workspaceId)).toEqual(["documents"]);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("the dialog's dismissal marks several entries at once, and the latest releases stay listed (task #516)", async () => {
+  const { db, whatsNew, workspaceId, veteran, newcomer, cleanup } = await setup();
+  try {
+    await whatsNew.dismiss(veteran.id, "documents", "task-labels");
+    expect(await whatsNew.read(veteran.id, workspaceId)).toEqual({
+      ids: [],
+      recent: ["task-labels", "documents"],
+    });
+    // Dismissing again adds nothing.
+    await whatsNew.dismiss(veteran.id, "task-labels");
+    expect(
+      (await db.userPreference.findUniqueOrThrow({ where: { userId: veteran.id } }))
+        .whatsNewDismissed,
+    ).toEqual(["documents", "task-labels"]);
+    // Someone who joined after the releases still finds them under "What's new".
+    expect((await whatsNew.read(newcomer.id, workspaceId)).recent).toEqual([
+      "task-labels",
+      "documents",
+    ]);
+    // One unknown id refuses the whole batch.
+    await expect(whatsNew.dismiss(newcomer.id, "task-labels", "no-such-entry")).rejects.toThrow();
+    expect((await whatsNew.read(newcomer.id, workspaceId)).ids).toEqual([]);
   } finally {
     await cleanup();
   }

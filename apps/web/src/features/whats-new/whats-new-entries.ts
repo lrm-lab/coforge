@@ -1,10 +1,10 @@
 import type { ExperimentKey } from "#src/server/experiments/experiments.server";
 
 /**
- * The "What's new" entries (task #493), as data the server and the card share. Each ships in the
+ * The "What's new" entries (task #493), as data the server and the sidebar share. Each ships in the
  * code of the release that introduces its feature; `releasedAt` is that release's time, to the
- * minute and unique, so entries have one order. The card's words and picture live in
- * `whats-new-card.tsx` under the same id.
+ * minute and unique, so entries have one order. Each entry's words and picture live in
+ * `whats-new-content.tsx` under the same id.
  */
 export type WhatsNewEntryData = {
   id: string;
@@ -49,5 +49,27 @@ export function pendingWhatsNew(
       );
     })
     .sort((a, b) => Date.parse(a.releasedAt) - Date.parse(b.releasedAt))
+    .map((entry) => entry.id);
+}
+
+/** How many released entries "What's new" shows when nothing is waiting. */
+export const WHATS_NEW_RECENT = 5;
+
+/**
+ * The latest entries released by now, newest first, whether seen or not, and whenever the person
+ * joined: what "What's new" shows when nothing is waiting (task #516).
+ */
+export function recentWhatsNew(
+  entries: readonly WhatsNewEntryData[],
+  viewer: { now: Date; experimentOn: (key: ExperimentKey) => boolean },
+): string[] {
+  return entries
+    .filter(
+      (entry) =>
+        Date.parse(entry.releasedAt) <= viewer.now.getTime() &&
+        (entry.experiment === undefined || viewer.experimentOn(entry.experiment)),
+    )
+    .sort((a, b) => Date.parse(b.releasedAt) - Date.parse(a.releasedAt))
+    .slice(0, WHATS_NEW_RECENT)
     .map((entry) => entry.id);
 }

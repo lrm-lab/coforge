@@ -1,12 +1,14 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
-  "whats_new_label": "New",
+  "whats_new_entry": "What's new",
   "whats_new_close": "Close",
   "whats_new_got_it": "Got it",
-  "whats_new_more": "{count} more",
   "whats_new_task_labels_title": "Labels for Tasks",
   "whats_new_task_labels_body": "Tag Tasks as Bug, Design and more from their popup, then filter the board by label.",
   "whats_new_task_labels_demo_task": "Fix the login page flicker",
   "whats_new_task_labels_demo_design": "Design",
-  "whats_new_task_labels_demo_client": "Client"
+  "whats_new_task_labels_demo_client": "Client",
+  "whats_new_back": "Back",
+  "whats_new_next": "Next",
+  "whats_new_task_labels_demo_task_2": "Client onboarding checklist"
 }

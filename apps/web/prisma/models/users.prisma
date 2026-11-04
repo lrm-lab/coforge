@@ -101,7 +101,7 @@ model UserPreference {
   /// engineer, designer, product, marketing, research, founder. Metadata for the platform
   /// assistant only (it reads it when it introduces itself); never shown in the UI.
   role                        String?
-  /// The "What's new" card (task #493): the ids of the entries the person dismissed. Ids, not a
+  /// "What's new" (tasks #493, #516): the ids of the entries the person dismissed. Ids, not a
   /// "seen through" time, so an entry skipped while its experiment was off still shows once it
   /// is on, after later entries were dismissed.
   whatsNewDismissed           String[]

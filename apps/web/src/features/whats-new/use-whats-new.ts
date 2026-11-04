@@ -2,25 +2,40 @@ import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { dismissWhatsNew, loadWhatsNew } from "./whats-new.functions";
+import { isWhatsNewId, type WhatsNewId } from "./whats-new-entries";
+
+type WhatsNewRead = { ids: string[]; recent: string[] };
 
 const whatsNewQuery = (workspaceId: string | undefined) =>
   queryOptions({
     queryKey: ["whats-new", workspaceId],
-    queryFn: async () => (await loadWhatsNew()).ids,
+    queryFn: (): Promise<WhatsNewRead> => loadWhatsNew(),
     staleTime: 5 * 60_000,
     enabled: workspaceId !== undefined,
   });
 
-/** The entry to show now, how many wait behind it, and the dismissal that marks it seen. */
+/**
+ * The entries still to show, oldest first, the latest released ones for when none are, and the
+ * dismissal that marks some seen. Ids this build does not know (the server is newer) are left out.
+ */
 export function useWhatsNew() {
   const workspaceId = useCurrentWorkspaceId();
   const queryClient = useQueryClient();
-  const ids = useQuery(whatsNewQuery(workspaceId)).data ?? [];
+  const data = useQuery(whatsNewQuery(workspaceId)).data;
   const key = whatsNewQuery(workspaceId).queryKey;
-  const dismiss = (id: string) => {
-    // The next entry shows at once; the save follows, and a failed one shows this entry again.
-    queryClient.setQueryData<string[]>(key, (current) => current?.filter((each) => each !== id));
-    dismissWhatsNew({ data: { id } }).catch(() => queryClient.invalidateQueries({ queryKey: key }));
+  const dismiss = (ids: readonly string[]) => {
+    if (ids.length === 0) return;
+    // The dot goes at once; the save follows, and a failed one brings the entries back.
+    queryClient.setQueryData<WhatsNewRead>(
+      key,
+      (current) =>
+        current && { ...current, ids: current.ids.filter((each) => !ids.includes(each)) },
+    );
+    dismissWhatsNew({ data: { ids: [...ids] } }).catch(() =>
+      queryClient.invalidateQueries({ queryKey: key }),
+    );
   };
-  return { current: ids[0], more: Math.max(0, ids.length - 1), dismiss };
+  const pending: WhatsNewId[] = (data?.ids ?? []).filter(isWhatsNewId);
+  const recent: WhatsNewId[] = (data?.recent ?? []).filter(isWhatsNewId);
+  return { pending, recent, dismiss };
 }

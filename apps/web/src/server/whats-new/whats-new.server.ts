@@ -3,6 +3,7 @@ import { AppError } from "#src/lib/app-error";
 import {
   WHATS_NEW_ENTRIES,
   pendingWhatsNew,
+  recentWhatsNew,
   type WhatsNewEntryData,
 } from "#src/features/whats-new/whats-new-entries";
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
@@ -11,7 +12,7 @@ import { isFeatureEnabled } from "#src/server/feature-flags/feature-flags.server
 import { isDevSkipAuthEnabled } from "#src/server/auth/dev-skip-auth.server";
 
 /**
- * The "What's new" card's reads and writes (task #493). What a person dismissed is stored on
+ * "What's new"'s reads and writes (tasks #493, #516). What a person dismissed is stored on
  * their preferences, so it follows them to every device; which experiments are on is the
  * Workspace's.
  */
@@ -24,6 +25,14 @@ export class WhatsNew {
 
   /** The ids still to show this person in this Workspace, oldest first. */
   async pending(userId: string, workspaceId: string): Promise<string[]> {
+    return (await this.read(userId, workspaceId)).ids;
+  }
+
+  /**
+   * What the sidebar's "What's new" needs (task #516): the entries still to show this person,
+   * oldest first, and the latest released ones, newest first, for when nothing is waiting.
+   */
+  async read(userId: string, workspaceId: string): Promise<{ ids: string[]; recent: string[] }> {
     const [user, workspace] = await Promise.all([
       this.db.user.findUniqueOrThrow({
         where: { id: userId },
@@ -52,28 +61,36 @@ export class WhatsNew {
         on.add(key);
       }
     }
-    return pendingWhatsNew(this.entries, {
-      now: this.now(),
-      joinedAt: user.createdAt,
-      dismissed: user.preferences?.whatsNewDismissed ?? [],
-      experimentOn: (key) => on.has(key),
-    });
+    const now = this.now();
+    const experimentOn = (key: ExperimentKey) => on.has(key);
+    return {
+      ids: pendingWhatsNew(this.entries, {
+        now,
+        joinedAt: user.createdAt,
+        dismissed: user.preferences?.whatsNewDismissed ?? [],
+        experimentOn,
+      }),
+      recent: recentWhatsNew(this.entries, { now, experimentOn }),
+    };
   }
 
-  /** "Got it" or the close button: this entry is seen, on every device. */
-  async dismiss(userId: string, id: string): Promise<void> {
-    // Only an entry this server serves can be dismissed; the ids are not free text.
-    if (!this.entries.some((entry) => entry.id === id)) throw new AppError("INVALID_INPUT");
+  /** "Got it" or closing the dialog: these entries are seen, on every device. */
+  async dismiss(userId: string, ...ids: string[]): Promise<void> {
+    // Only entries this server serves can be dismissed; the ids are not free text.
+    if (!ids.every((id) => this.entries.some((entry) => entry.id === id))) {
+      throw new AppError("INVALID_INPUT");
+    }
     const stored = await this.db.userPreference.findUnique({
       where: { userId },
       select: { whatsNewDismissed: true },
     });
     const dismissed = stored?.whatsNewDismissed ?? [];
-    if (dismissed.includes(id)) return;
+    const added = [...new Set(ids)].filter((id) => !dismissed.includes(id));
+    if (added.length === 0) return;
     await this.db.userPreference.upsert({
       where: { userId },
-      create: { userId, whatsNewDismissed: [id] },
-      update: { whatsNewDismissed: [...dismissed, id] },
+      create: { userId, whatsNewDismissed: added },
+      update: { whatsNewDismissed: { push: added } },
     });
   }
 }

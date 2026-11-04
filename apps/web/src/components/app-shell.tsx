@@ -31,8 +31,7 @@ import {
   activityNavAttentionRealtime,
 } from "#src/features/inbox/activity-inbox-queries";
 import { useActivityInboxRealtime } from "#src/features/inbox/use-activity-inbox-realtime";
-import { useWhatsNew } from "#src/features/whats-new/use-whats-new";
-import { WhatsNewCard } from "#src/features/whats-new/whats-new-card";
+import { WhatsNewRailButton, WhatsNewRow } from "#src/features/whats-new/whats-new-entry";
 import {
   WorkspaceSwitcher,
   type WorkspaceOption,
@@ -201,7 +200,6 @@ export function AppShell({
       : pathname === item.bareHref || pathname.startsWith(`${item.bareHref}/`),
   )?.href;
   const onSidebarClickCapture = useSpaNavigation();
-  const { current: whatsNewId, more: whatsNewMore, dismiss: dismissWhatsNew } = useWhatsNew();
   const workspaceSwitcher = (
     <WorkspaceSwitcher
       workspaces={workspaces}
@@ -211,19 +209,11 @@ export function AppShell({
     />
   );
 
-  // The expanded sidebar and the drawer share one footer: the user card. The collapsed rail
-  // does not show it.
-  // The drawer and the expanded sidebar show the "What's new" card above the user card; the rail
-  // has no room for it.
+  // The expanded sidebar and the drawer share one footer: "What's new" above the user card. The
+  // collapsed rail has the same two as icons.
   const expandedFooter = (
     <>
-      {whatsNewId && (
-        <WhatsNewCard
-          id={whatsNewId}
-          more={whatsNewMore}
-          onDismiss={() => dismissWhatsNew(whatsNewId)}
-        />
-      )}
+      <WhatsNewRow />
       <UserMenuCard base={base} user={user} onSignOut={onSignOut} />
     </>
   );
@@ -260,7 +250,12 @@ export function AppShell({
                 onCreate={onCreateWorkspace}
               />
             }
-            footer={<UserMenuCard compact base={base} user={user} onSignOut={onSignOut} />}
+            footer={
+              <div className="flex w-full flex-col items-center gap-2">
+                <WhatsNewRailButton />
+                <UserMenuCard compact base={base} user={user} onSignOut={onSignOut} />
+              </div>
+            }
           />
         </div>
 

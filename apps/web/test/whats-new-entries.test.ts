@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test";
-import { WHATS_NEW_CONTENT } from "#src/features/whats-new/whats-new-card";
+import { WHATS_NEW_CONTENT } from "#src/features/whats-new/whats-new-content";
 import {
   WHATS_NEW_ENTRIES,
   pendingWhatsNew,
+  recentWhatsNew,
   type WhatsNewEntryData,
 } from "#src/features/whats-new/whats-new-entries";
 
@@ -57,4 +58,18 @@ test("an entry whose experiment is off is skipped, and shows once it is on", () 
   expect(pendingWhatsNew(entries, off)).toEqual([]);
   // Dismissing a later entry meanwhile does not count the skipped one as seen.
   expect(pendingWhatsNew(entries, { ...off, experimentOn: () => true })).toEqual(["needs-docs"]);
+});
+
+test("with nothing waiting, the latest released entries show newest first, seen or not (task #516)", () => {
+  const recent = { now: viewer.now, experimentOn: () => true };
+  // "later" is not released yet; seen entries and the join time do not matter here.
+  expect(recentWhatsNew(entries, recent)).toEqual(["labels", "needs-docs"]);
+  expect(recentWhatsNew(entries, { ...recent, experimentOn: () => false })).toEqual(["labels"]);
+  const many: WhatsNewEntryData[] = Array.from({ length: 8 }, (_, at) => ({
+    id: `entry-${at}`,
+    releasedAt: `2026-11-0${at + 1}T07:00:00Z`,
+  }));
+  expect(
+    recentWhatsNew(many, { now: new Date("2026-12-01T00:00:00Z"), experimentOn: () => true }),
+  ).toEqual(["entry-7", "entry-6", "entry-5", "entry-4", "entry-3"]);
 });
