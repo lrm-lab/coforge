@@ -16,8 +16,8 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
  * `e2e-artifact-documents`): a web page's preview from the sandbox origin, its source, an older
  * version read only with the way back to the latest and no going back to it, Open in new tab on
  * the sandbox's link (and a link that cannot be had, said so), a new version an Agent saves while
- * the page shows; Share greyed as coming soon, and one level for an artifact of the Workspace; one
- * page for an artifact that is not there and one that is not the reader's;
+ * the page shows (Share is `e2e-artifact-share`); one page for an artifact that is not there and
+ * one that is not the reader's;
  * a `?doc=` link with a version opening the page at it; and a read that fails while edits are
  * unsaved keeping the editor and the edits, with Try again.
  *
@@ -221,23 +221,6 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     await until(text("Couldn't open the page in a new tab"));
     refusing = false;
 
-    // Share, before who can see it is stored (task #529): the levels greyed, as coming soon.
-    await press(
-      `[...document.querySelectorAll("main header button")].find((b) => b.textContent.trim() === "Share")`,
-    );
-    const radios = `[...document.querySelectorAll('[role="dialog"] input[type="radio"]')]`;
-    await browser("wait", "--fn", `${radios}.length === 2`);
-    expect(await evaluate<boolean>(`${radios}.every((radio) => radio.disabled)`)).toBe(true);
-    const group = `document.querySelector('[role="dialog"] [role="radiogroup"]')`;
-    expect(
-      await evaluate<string>(
-        `document.getElementById(${group}.getAttribute("aria-describedby")).textContent`,
-      ),
-    ).toContain("coming soon");
-    await shoot("2c-share-soon");
-    await browser("press", "Escape");
-    await browser("wait", "--fn", `document.querySelector('[role="dialog"]') == null`);
-
     // Not there, and not the reader's: one page, saying the same.
     await browser("open", pageOf(crypto.randomUUID()));
     await browser("wait", "--fn", `${pageHydrated} && ${text("Can't open this")}`);
@@ -251,31 +234,6 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     await browser("wait", "--fn", `${pageHydrated} && ${text("Can't open this")}`);
     expect(await evaluate<string>(`document.querySelector("main").textContent`)).toBe(missing);
     expect(await evaluate<boolean>(`${button("Back to the Workspace")} != null`)).toBe(true);
-
-    // An artifact of the Workspace itself: one level, everyone in it; the way back is the Workspace.
-    const notes = await documents.create(
-      { workspaceId, actor: { userId: DEV_BROWSER_USER.id } },
-      { title: "Workspace notes", text: `Notes (run ${tail}).` },
-    );
-    await browser("open", pageOf(notes.id));
-    await browser(
-      "wait",
-      "--fn",
-      `${pageHydrated} && document.querySelector("main .ProseMirror") != null`,
-    );
-    expect(
-      await evaluate<string>(`document.querySelector("main header a").getAttribute("href")`),
-    ).toEndWith(`/w/${workspace.slug}`);
-    await press(
-      `[...document.querySelectorAll("main header button")].find((b) => b.textContent.trim() === "Share")`,
-    );
-    await browser("wait", "--fn", `${radios}.length === 1`);
-    expect(
-      await evaluate<string>(
-        `document.querySelector('[role="dialog"] [role="radiogroup"]').textContent`,
-      ),
-    ).toContain("Everyone in the Workspace");
-    await browser("press", "Escape");
 
     // An address that names no artifact: the page that is not there, at once.
     await browser("open", pageOf("not-an-id"));
@@ -400,12 +358,7 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     proxy.stop();
     await db.artifact
       .deleteMany({
-        where: {
-          OR: [
-            { homeKey: { in: [`conversation:${channel.id}`, `conversation:${closed.id}`] } },
-            { workspaceId, title: "Workspace notes", preview: { contains: tail } },
-          ],
-        },
+        where: { homeKey: { in: [`conversation:${channel.id}`, `conversation:${closed.id}`] } },
       })
       .catch(() => undefined);
     await db.conversation
