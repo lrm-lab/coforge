@@ -30,6 +30,7 @@ export function logAgentStartFailure(intent: AgentStartIntent, error: unknown): 
     agent_id: intent.agentId,
     provider: intent.provider,
     error_code: diagnosticErrorCode(error),
+    error_message: loggedErrorMessage(error),
     ...controlCodeField(error),
     outcome: "failed",
   });
