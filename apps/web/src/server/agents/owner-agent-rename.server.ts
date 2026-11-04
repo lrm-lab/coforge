@@ -231,11 +231,20 @@ export type OwnerAgentBackfillSummary = {
     from: string;
     to: string;
     kind: OwnerAgentKind;
-    /** The owner's stored display name exactly as in the database (null when unset) — dry-run
-     * only, so an operator can see why a name was chosen; never logged by an apply. */
-    ownerDisplayName?: string | null;
+    /** What the owner's stored display name is, as a class only — never the name itself, which
+     * would land in CI logs readable by more people than can read profiles. Dry-run only. */
+    ownerName?: OwnerNameClass;
   }[];
 };
+
+/** `empty`: null or blank; `placeholder`: the literal `UNNAMED_PERSON_NAME`; `named`: a name. */
+export type OwnerNameClass = "empty" | "placeholder" | "named";
+
+function ownerNameClass(displayName: string | null): OwnerNameClass {
+  const name = displayName?.trim() ?? "";
+  if (name.length === 0) return "empty";
+  return name === UNNAMED_PERSON_NAME ? "placeholder" : "named";
+}
 
 const BACKFILL_BATCH = 500;
 
@@ -275,7 +284,7 @@ export async function backfillOwnerAgentNames(input: {
           from: candidate.displayName,
           to: next,
           kind: candidate.kind,
-          ...(dryRun ? { ownerDisplayName: candidate.owner.displayName } : {}),
+          ...(dryRun ? { ownerName: ownerNameClass(candidate.owner.displayName) } : {}),
         });
       if (!dryRun)
         await db.$transaction((tx) =>

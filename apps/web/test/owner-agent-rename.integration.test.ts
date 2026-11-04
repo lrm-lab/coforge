@@ -251,7 +251,7 @@ test.skipIf(!db)(
       expect(await nameOf(db!, fx.personal.id)).toBe("助手");
       expect(await nameOf(db!, fx.weekly.id)).toBe("周报助手");
 
-      // Naming themselves renames both from the generic; the dry run shows the raw stored name.
+      // Naming themselves renames both from the generic; the dry run classes the stored name, never prints it.
       await db!.user.update({ where: { id: user.id }, data: { displayName: "Unnamed" } });
       await db!.agent.update({
         where: { id: fx.weekly.id },
@@ -260,7 +260,7 @@ test.skipIf(!db)(
       const legacy = await backfillOwnerAgentNames({ db: db!, dryRun: true, sampleLimit: 1000 });
       expect(legacy.samples.find((s) => s.agentId === fx.weekly.id)).toMatchObject({
         to: "周报助手",
-        ownerDisplayName: "Unnamed",
+        ownerName: "placeholder",
       });
       await saveProfileAndRenameAssistants(db!, user.id, { displayName: "Ada", description: "" });
       expect(await nameOf(db!, fx.personal.id)).toBe("Ada的助手");
