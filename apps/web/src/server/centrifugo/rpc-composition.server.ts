@@ -1,4 +1,6 @@
 import { daemonCapabilityLeases } from "./capability-composition.server";
+import { readLatestComputerVersion } from "#src/server/computers/latest-computer-version.server";
+import { resolveReleaseFeedUrl } from "#src/server/install/install-script.server";
 import { daemonRuntimeReadyPorts } from "./daemon-runtime-ready-composition.server";
 import {
   AGENT_SESSION_METHOD,

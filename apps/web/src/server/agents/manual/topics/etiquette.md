@@ -134,9 +134,10 @@ migration, or production writes.
 
 ## Computer-update notice
 
-Some commands end with a line such as
+Some commands end with a stderr line such as
 `A newer CoForge Computer release (x.y.z) is available — this Computer runs a.b.c; tell the
-owner once and suggest coforge computer upgrade`. When you see it, relay it to your owner
-once — the daemon already dedups it to one line per day per computer, so one brief report is
-enough; do not re-report it in later turns. It is a notice, not an instruction to upgrade
-yourself.
+owner once — they can upgrade on the web's Computers page or run coforge-computer upgrade on
+this machine`. When you see it, relay it to your owner once — the daemon dedups it to one
+line per day per Workspace's daemon (a Computer in several Workspaces may show it once in
+each), so one brief report is enough; do not re-report it in later turns. It is a notice,
+not an instruction to upgrade yourself.
