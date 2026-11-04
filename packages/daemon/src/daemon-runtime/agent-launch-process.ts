@@ -27,6 +27,7 @@ import {
 } from "./session-invalidate-activity";
 import { ignoredAgentEnvironmentActivity } from "./agent-environment-activity";
 import { requestAgentLaunchConfig } from "./agent-launch-config";
+import { restoreSupersededAgentApiKey } from "./agent-api-key-revoke";
 import { wakeReusedAgent } from "./agent-wake-control";
 import { logAgentApiKeyRevokeFailed } from "./agent-failure-logs";
 import { getLogger } from "@logtape/logtape";
@@ -62,6 +63,9 @@ export async function launchAgentProcess(
   launch.timing = timing;
   timing.phase("admitted");
   let agentApiKey: string | undefined;
+  // The key this launch displaces from the table: a still-running process holds it, and a
+  // failed launch puts it back so that process does not lose its credential mid-flight.
+  let priorAgentApiKey: string | undefined;
   try {
     const launchConfig = await requestAgentLaunchConfig(
       ports.transport(),
@@ -83,6 +87,7 @@ export async function launchAgentProcess(
       config.provider,
     );
     if (skipped) ports.activityPublisher.publish(agentId, launch, skipped);
+    priorAgentApiKey = ports.agentApiKeys.get(agentId);
     ports.agentApiKeys.set(agentId, agentApiKey);
     const proxyToken = ports.agentProxy?.issue(agentId, agentApiKey);
     if (proxyToken) ports.agentProxyTokens.set(agentId, proxyToken);
@@ -350,6 +355,7 @@ export async function launchAgentProcess(
     launch.startup?.dispose();
     ports.revokeLocalLaunch(agentId);
     if (agentApiKey) {
+      restoreSupersededAgentApiKey(ports.agentApiKeys, agentId, agentApiKey, priorAgentApiKey);
       try {
         await ports.revokeAgentApiKey(agentId, agentApiKey);
       } catch (revokeError) {

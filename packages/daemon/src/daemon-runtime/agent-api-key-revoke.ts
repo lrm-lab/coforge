@@ -18,3 +18,20 @@ export async function revokeAgentApiKey(
   if (agentApiKeys.get(agentId) === agentApiKey) agentApiKeys.delete(agentId);
   await transport.revokeAgentApiKey(agentApiKey);
 }
+
+/**
+ * Puts back the key a still-running process holds after a launch that overwrote it failed —
+ * but only while the table still holds the failed launch's key, so a concurrent launch's
+ * newer key is never clobbered. With no prior key to restore the entry is removed, which is
+ * the same outcome the revoke leaves when it runs alone.
+ */
+export function restoreSupersededAgentApiKey(
+  agentApiKeys: Map<string, string>,
+  agentId: string,
+  supersededKey: string,
+  restoredKey: string | undefined,
+): void {
+  if (agentApiKeys.get(agentId) !== supersededKey) return;
+  if (restoredKey === undefined) agentApiKeys.delete(agentId);
+  else agentApiKeys.set(agentId, restoredKey);
+}
