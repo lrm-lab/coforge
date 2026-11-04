@@ -10,6 +10,11 @@ export interface DaemonCredentialStore {
   save(workspaceId: string, computerId: string, apiKey: string): Promise<void>;
   load(workspaceId: string, computerId: string): Promise<string | null>;
   delete(workspaceId: string, computerId: string): Promise<void>;
+}
+
+/** The "already confirmed with the server" marker a key migration keeps beside the credential —
+ * a separate concern from the credential itself: only the migration port asks for it. */
+export interface DaemonCredentialConfirmations {
   /** Whether `apiKey` is the key the daemon already confirmed with the server; a different key
    * stored later reads false again. */
   isConfirmed(workspaceId: string, computerId: string, apiKey: string): Promise<boolean>;
@@ -18,7 +23,9 @@ export interface DaemonCredentialStore {
 }
 
 /** Stores the Daemon API key in its private local state directory. */
-export class FileDaemonCredentialStore implements DaemonCredentialStore {
+export class FileDaemonCredentialStore
+  implements DaemonCredentialStore, DaemonCredentialConfirmations
+{
   readonly #directory: string;
 
   constructor(directory = Bun.env.COFORGE_DAEMON_HOME ?? join(homedir(), ".coforge", "daemon")) {
@@ -90,7 +97,9 @@ export class FileDaemonCredentialStore implements DaemonCredentialStore {
 }
 
 /** Process-local adapter until platform keychain adapters are implemented. */
-export class InMemoryDaemonCredentialStore implements DaemonCredentialStore {
+export class InMemoryDaemonCredentialStore
+  implements DaemonCredentialStore, DaemonCredentialConfirmations
+{
   readonly #tokens = new Map<string, string>();
   readonly #confirmed = new Map<string, string>();
 

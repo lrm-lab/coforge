@@ -1,5 +1,8 @@
 import { getLogger } from "@logtape/logtape";
-import type { DaemonCredentialStore } from "#src/credentials/credential-store";
+import type {
+  DaemonCredentialConfirmations,
+  DaemonCredentialStore,
+} from "#src/credentials/credential-store";
 import type { ComputerSelfClient } from "#src/connection/computer-self-client";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
@@ -20,7 +23,8 @@ const COMPUTER_API_KEY = /^sk_computer_[A-Za-z0-9_-]{43}$/;
  * pre-save `load` covers a configure that rewrote the file while `swap-key` was in flight.
  */
 export async function migrateComputerKey(ports: {
-  credentials: Pick<DaemonCredentialStore, "load" | "save" | "isConfirmed" | "markConfirmed">;
+  credentials: Pick<DaemonCredentialStore, "load" | "save"> &
+    Partial<DaemonCredentialConfirmations>;
   client: ComputerSelfClient | undefined;
   workspaceId: string;
   computerId: string;
@@ -31,7 +35,7 @@ export async function migrateComputerKey(ports: {
   const scope = { workspaceId, computerId };
   if (!client) return apiKey;
   if (apiKey.startsWith("sk_computer_")) {
-    if (await credentials.isConfirmed(workspaceId, computerId, apiKey)) return apiKey;
+    if (await credentials.isConfirmed?.(workspaceId, computerId, apiKey)) return apiKey;
     const confirm = await client.confirmKey(apiKey, signal);
     if (confirm.ok) {
       logger.info("daemon_key:confirm", scope);
@@ -78,14 +82,14 @@ export async function migrateComputerKey(ports: {
 /** The confirmation marker is a hint, never a gate: a failed write only means the next start
  * confirms again. It must not fail the startup it serves. */
 async function markConfirmed(
-  credentials: Pick<DaemonCredentialStore, "markConfirmed">,
+  credentials: Pick<Partial<DaemonCredentialConfirmations>, "markConfirmed">,
   workspaceId: string,
   computerId: string,
   apiKey: string,
   scope: Record<string, string>,
 ): Promise<void> {
   try {
-    await credentials.markConfirmed(workspaceId, computerId, apiKey);
+    await credentials.markConfirmed?.(workspaceId, computerId, apiKey);
   } catch (error) {
     logger.warning("daemon_key:mark_failed", {
       ...scope,

@@ -47,8 +47,9 @@ const ports = (over: {
   client?: ReturnType<typeof fakeClient>["client"] | undefined;
   credentials?: Pick<
     import("#src/credentials/credential-store").DaemonCredentialStore,
-    "load" | "save" | "isConfirmed" | "markConfirmed"
-  >;
+    "load" | "save"
+  > &
+    import("#src/credentials/credential-store").DaemonCredentialConfirmations;
   signal?: AbortSignal;
 }) => ({
   credentials: over.credentials ?? new InMemoryDaemonCredentialStore(),

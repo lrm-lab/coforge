@@ -14,7 +14,10 @@ import type { PiChatFrame } from "@lrm/coforge-sdk/internal/pi-chat-wire";
 import { COFORGE_DAEMON_VERSION } from "#src/version";
 import { createComputerSelfClient } from "#src/connection/computer-self-client";
 import { migrateComputerKey } from "#src/daemon-runtime/computer-key-migration";
-import type { DaemonCredentialStore } from "#src/credentials/credential-store";
+import type {
+  DaemonCredentialConfirmations,
+  DaemonCredentialStore,
+} from "#src/credentials/credential-store";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import { DaemonConnectionStoppedError } from "#src/connection/daemon-connection-stopped-error";
 import { PiChatRelay } from "#src/pi-chat/relay";
@@ -55,7 +58,8 @@ export type RuntimeStartupPorts = {
   /** The Workspace's current transport, read at send time; it is replaced on a failed start. */
   transport: () => DaemonConnectionClient;
   replaceTransport: () => Promise<unknown>;
-  credentials: Pick<DaemonCredentialStore, "load" | "save" | "isConfirmed" | "markConfirmed">;
+  credentials: Pick<DaemonCredentialStore, "load" | "save"> &
+    Partial<DaemonCredentialConfirmations>;
   runtimeInstanceId: string;
   startedAtMs: number;
   computerVersion?: string;
