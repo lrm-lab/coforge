@@ -14,6 +14,7 @@ import { connectAppRegistrationClient } from "./app-registration-client";
 import { runAppRegistrationCommand } from "./app-registration-commands";
 import { COFORGE_CLI_VERSION } from "./version";
 import { CLI_USAGE } from "./usage";
+import { commandHelp } from "./command-help";
 import { thrownMessage } from "@lrm/coforge-sdk/internal";
 
 export async function runAgentCli(args: readonly string[]): Promise<void> {
@@ -34,11 +35,18 @@ export async function runAgentCli(args: readonly string[]): Promise<void> {
 
   try {
     // The app commands own their output and exit code, so neither goes through `run` (`app
-    // token` also owns the program's stdio).
-    if (
-      args[0] === "app" &&
-      ["list", "invoke", "token", "prepare", "status", "rotate-secret"].includes(args[1] ?? "")
-    ) {
+    // token` also owns the program's stdio). `app config` alone stays with `run`. `--help`
+    // keeps `run`'s help lookup — anything after `--` is the token program's, not ours.
+    if (args[0] === "app" && args[1] !== "config") {
+      const separator = args.indexOf("--");
+      const own = separator === -1 ? args : args.slice(0, separator);
+      const help = own.includes("--help")
+        ? commandHelp(own.filter((arg) => arg !== "--help"))
+        : undefined;
+      if (help !== undefined) {
+        process.stdout.write(`${help}\n`);
+        return;
+      }
       const context = Bun.env.COFORGE_AGENT_CONTEXT ?? "";
       const proxyUrl = Bun.env.COFORGE_AGENT_PROXY_URL ?? "";
       const invocation = parseAppArgs(args.slice(1));

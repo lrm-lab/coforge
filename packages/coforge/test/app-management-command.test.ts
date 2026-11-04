@@ -271,3 +271,38 @@ test("the client posts the operation and its fields to the registration route", 
     await server.stop(true);
   }
 });
+
+test("the management subcommands reach the app runner, not the generic dispatcher", async () => {
+  const cli = join(import.meta.dir, "../src/cli.ts");
+  const script = `import { runAgentCli } from ${JSON.stringify(cli)};
+await runAgentCli(["app", "update", "--client", "acme", "--name", "Acme"]);`;
+  const proc = Bun.spawn([process.execPath, "-e", script], {
+    stdout: "pipe",
+    stderr: "pipe",
+    env: {},
+  });
+  const stderr = await new Response(proc.stderr).text();
+  expect(await proc.exited).toBe(1);
+  expect(stderr).not.toContain("is not a command this CLI knows");
+  expect(stderr).toContain("agent context is not configured");
+}, 15_000);
+
+test("`app --help` and `app <command> --help` print the app help and exit 0", async () => {
+  const cli = join(import.meta.dir, "../src/cli.ts");
+  for (const argv of [
+    ["app", "--help"],
+    ["app", "update", "--help"],
+    ["app", "marketplace", "--help"],
+  ]) {
+    const script = `import { runAgentCli } from ${JSON.stringify(cli)};
+await runAgentCli(${JSON.stringify(argv)});`;
+    const proc = Bun.spawn([process.execPath, "-e", script], {
+      stdout: "pipe",
+      stderr: "pipe",
+      env: {},
+    });
+    const stdout = await new Response(proc.stdout).text();
+    expect(await proc.exited).toBe(0);
+    expect(stdout).toContain("coforge app");
+  }
+}, 15_000);
