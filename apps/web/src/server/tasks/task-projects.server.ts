@@ -8,6 +8,7 @@ import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.ser
 import { visibleChannelWhere } from "#src/server/conversations/channel-read-access.server";
 import { viewerDirectConversationWhere } from "#src/server/conversations/viewer-direct-conversations.server";
 import type { Member } from "./task-board-ports.server";
+import { memberId } from "./task-board-ports.server";
 import { UNFINISHED_TASK_STATUSES } from "./task-view.server";
 
 export const taskProjectView = (project: TaskProjectRef): TaskProjectRef => ({
@@ -59,7 +60,7 @@ export async function resolveNewTaskProject(
   if (parent?.project) return parent.project;
   if (!member.userId) return null;
   const lastUsed = await tx.conversationMember.findUniqueOrThrow({
-    where: { id: member.id },
+    where: { id: memberId(member) },
     select: { lastTaskProject: { select: TASK_PROJECT_SELECT } },
   });
   return lastUsed.lastTaskProject;
@@ -73,7 +74,7 @@ export async function rememberTaskProject(
 ) {
   if (member.userId)
     await tx.conversationMember.update({
-      where: { id: member.id },
+      where: { id: memberId(member) },
       data: { lastTaskProjectId: project.id },
     });
 }

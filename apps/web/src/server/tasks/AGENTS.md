@@ -28,6 +28,22 @@ contract is `packages/coforge-sdk/src/internal/tasks.ts`.
   person's name, never their username; an Agent sees their `@handle`.
   `TaskBoard` reads for people unless the Agent Task route passes
   `reader: "agent"`; a realtime Task copy always reads for people.
+- A `delete` is a marker first (task #512): `deletedAt` plus the deleter
+  (`deletedByMemberId`, or `deletedByUserId` for a member-less admin) hides the
+  Task from every board, list and Agent read (`deletedAt: null`) for a
+  one-minute undo window while its children, dependencies and references stay
+  intact — a marked Task's references read `deleted` to everyone. `restore`
+  clears the marker under the same authority and writes no record.
+  `DeletedTaskSweep` (`deleted-task-sweep.server.ts`, the
+  `ensureDeletedTaskSweep` background sweep) removes each marked row once the
+  window passes — `FOR UPDATE SKIP LOCKED` claims it, the delete's original
+  released/subtask-deleted notices post in the same transaction, and the row
+  goes with them; one failure never stalls the others. The deleter a marker
+  names supplies the notices' actor, a member-less admin by userId — `Member.id`
+  is `null` for it, `memberId(member)` refuses a member-keyed write, and the
+  `task_board` scope hands a Workspace owner or admin such a member on a public
+  channel they never joined; a private channel is refused by the readable
+  scope already.
 - Blockers and subtasks are server rules for everyone but a Workspace owner or admin: a Task with
   a blocker not done or closed is refused a claim (reason `blocked`, `blockedBy` lists the open
   numbers) and a status move to In Progress, In Review or Done; a Task with a subtask not done or

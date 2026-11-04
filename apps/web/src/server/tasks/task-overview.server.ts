@@ -174,6 +174,7 @@ export class TaskOverviewReads {
     const tasks = await this.db.task.findMany({
       where: {
         workspaceId,
+        deletedAt: null,
         // Finished Tasks only grow; the board pages them through `finishedPage` instead.
         status: { in: UNFINISHED_TASK_STATUSES },
         conversation: overviewConversationWhere(workspaceId, userId),
@@ -208,6 +209,7 @@ export class TaskOverviewReads {
       where: {
         workspaceId,
         projectId,
+        deletedAt: null,
         status: { in: UNFINISHED_TASK_STATUSES },
         // A channel the reader may see, or their own direct conversation (task #484: a DM Task
         // files under a Project too; another person's DM never shows).
@@ -243,6 +245,7 @@ export class TaskOverviewReads {
     const task = await this.db.task.findFirst({
       where: {
         workspaceId,
+        deletedAt: null,
         conversationId: ref.conversationId,
         number: ref.number,
         conversation: overviewConversationWhere(workspaceId, userId),
@@ -286,6 +289,7 @@ export class TaskOverviewReads {
     const tasks = await this.db.task.findMany({
       where: {
         workspaceId: viewer.workspaceId,
+        deletedAt: null,
         conversationId: readable,
         status: statuses && { in: statuses },
         number: numbers && { in: numbers },
@@ -338,6 +342,7 @@ export class TaskOverviewReads {
     const tasks = await this.db.task.findMany({
       where: {
         ...readable,
+        deletedAt: null,
         status: query.status,
         AND: [
           { updatedAt: { gte: finishedWindowStart(query.window) } },

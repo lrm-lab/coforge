@@ -11,6 +11,7 @@ import {
 } from "#src/server/conversations/message-references.server";
 import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
 import type { Transaction } from "./task-board-ports.server";
+import { memberId } from "./task-board-ports.server";
 import { discussionOf, followTask, joinDiscussion } from "./task-discussion-store.server";
 import { markChoiceCardsAnsweredInChat } from "#src/server/conversations/action-card-answered.server";
 
@@ -39,7 +40,7 @@ export async function postTaskMessage(
   await lockConversation(tx, scope.conversationId);
   const [active, task] = await Promise.all([
     tx.conversationMember.findFirst({
-      where: { id: member.id, conversationId: scope.conversationId, ...ACTIVE_MEMBER_WHERE },
+      where: { id: memberId(member), conversationId: scope.conversationId, ...ACTIVE_MEMBER_WHERE },
       select: { id: true },
     }),
     tx.task.findUnique({
@@ -78,7 +79,7 @@ export async function postTaskMessage(
       bindings: input.mentions,
     },
   );
-  await followTask(tx, scope, taskId, member.id, "replied");
+  await followTask(tx, scope, taskId, memberId(member), "replied");
   // A mention row belongs to a member of the message's own conversation, so each person or Agent
   // named takes a seat in the task's conversation (as the sender did) and follows the task. The
   // seat only keeps their read position; the board is what lets them read.
@@ -105,7 +106,7 @@ export async function postTaskMessage(
     tx.taskFollow.findMany({
       where: {
         taskId,
-        memberId: { not: member.id },
+        memberId: { not: memberId(member) },
         member: { agentId: { not: null }, ...ACTIVE_MEMBER_WHERE, agent: ACTIVE_AGENT_WHERE },
       },
       select: { member: { select: { agentId: true } } },

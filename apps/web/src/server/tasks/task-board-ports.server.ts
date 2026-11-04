@@ -1,3 +1,4 @@
+import { AppError } from "#src/lib/app-error";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import type { HumanNames } from "#src/lib/human-label";
 import type { ConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
@@ -26,7 +27,10 @@ export type TaskBoardPorts = {
 
 /** The acting conversation member; its user/Agent handle names it in Task history and notices. */
 export type Member = {
-  id: string;
+  /** The member row's id; `null` for a Workspace owner/admin managing a public channel's Tasks
+   * without a member row (task #512) — member-scoped writes (last-used Project, follow, the
+   * sender's notice row) do not run for them. */
+  id: string | null;
   userId: string | null;
   agentId: string | null;
   user?: HumanNames | null;
@@ -40,6 +44,12 @@ export type Member = {
    * person's web Task form defaults to it. */
 };
 /** The member a Task is assigned to: named in a notice by handle alone. */
+/** The id a member-keyed write needs; a member-less admin is refused where one is required. */
+export function memberId(member: Member): string {
+  if (!member.id) throw new AppError("ACCESS_DENIED");
+  return member.id;
+}
+
 export type Assignee = Omit<Member, "user" | "agent"> & {
   user?: { username: string } | null;
   agent?: { name: string } | null;

@@ -4,14 +4,22 @@ import { readableConversationWhere } from "#src/server/conversations/channel-rea
 import { TASK_SCOPE_WHERE } from "./task-view.server";
 import type { TaskCommand, TaskPrincipal } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
-import { MEMBER_SELECT, type TaskBoardPorts } from "./task-board-ports.server";
+import { MEMBER_SELECT, type Member, type TaskBoardPorts } from "./task-board-ports.server";
 import { agentDirectKey } from "#src/features/conversations/direct-key";
 
 export async function resolveTaskScope(
   ports: Pick<TaskBoardPorts, "db">,
   principal: TaskPrincipal,
   command: TaskCommand,
-) {
+): Promise<{
+  conversationId: string;
+  workspaceId: string;
+  channel: boolean;
+  channelName: string | null;
+  member?: Member;
+  workspaceRole?: string;
+  actorUser?: { username: string; displayName: string | null };
+}> {
   if ((principal.userId ? 1 : 0) + (principal.agentId ? 1 : 0) !== 1)
     throw new AppError("ACCESS_DENIED");
   if (principal.userId) {
@@ -23,6 +31,7 @@ export async function resolveTaskScope(
           userId: principal.userId,
         },
       },
+      include: { user: { select: { username: true, displayName: true } } },
     });
     if (!workspaceMember) throw new AppError("ACCESS_DENIED");
     const conversation = await ports.db.conversation.findFirst({
@@ -62,6 +71,8 @@ export async function resolveTaskScope(
       channel: conversation.channelName !== null,
       channelName: conversation.channelName,
       member: conversation.members[0],
+      workspaceRole: workspaceMember.role,
+      actorUser: workspaceMember.user,
     };
   }
   const agent = await ports.db.agent.findFirst({

@@ -14,6 +14,7 @@ import { lockConversation } from "#src/server/conversations/conversation-lock.se
 import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
 import type { Prisma } from "#src/generated/prisma/client";
 import type { Transaction, TaskBoardPorts } from "./task-board-ports.server";
+import { memberId } from "./task-board-ports.server";
 import { publishTaskConversationMessage } from "./task-publication.server";
 import { taskDiscussionDeliveryTarget } from "./task-discussion-target.server";
 import { markHumanRead } from "#src/server/conversations/human-unread.server";
@@ -56,7 +57,7 @@ export class TaskConversations {
     const { task, member } = await this.resolve(principal, ref);
     const follow = member
       ? await this.ports.db.taskFollow.findUnique({
-          where: { memberId_taskId: { memberId: member.id, taskId: task.id } },
+          where: { memberId_taskId: { memberId: memberId(member), taskId: task.id } },
           select: { reason: true },
         })
       : null;
@@ -70,7 +71,7 @@ export class TaskConversations {
       this.ports.db.task.findUniqueOrThrow({ where: { id: task.id }, select: taskSelection }),
       member
         ? this.ports.db.taskFollow.findUnique({
-            where: { memberId_taskId: { memberId: member.id, taskId: task.id } },
+            where: { memberId_taskId: { memberId: memberId(member), taskId: task.id } },
             select: { reason: true },
           })
         : null,
@@ -111,7 +112,7 @@ export class TaskConversations {
         postTaskMessage(tx, {
           taskId: task.id,
           scope,
-          member: member!,
+          member: { ...member!, id: memberId(member!) },
           body,
           attachmentIds: input.attachmentIds,
           mentions: input.mentions,
@@ -239,7 +240,7 @@ export class TaskConversations {
 
   async follow(principal: TaskPrincipal, ref: TaskConversationRef) {
     const { task, member, scope, boardName } = await this.resolve(principal, ref, { member: true });
-    const created = await followTask(this.ports.db, scope, task.id, member!.id, "manual");
+    const created = await followTask(this.ports.db, scope, task.id, memberId(member!), "manual");
     // A person's seat is what their Activity lists: a conversation already under way is read
     // from here on, not from its first message.
     if (member!.userId && task.discussionConversationId) {
@@ -265,10 +266,12 @@ export class TaskConversations {
       member: true,
     });
     const removed = await this.ports.db.taskFollow.deleteMany({
-      where: { taskId: task.id, memberId: member!.id },
+      where: { taskId: task.id, memberId: memberId(member!) },
     });
     if (removed.count > 0)
-      await postUnfollowNotice(this.ports, scope, task, member!.id, reason).catch(() => undefined);
+      await postUnfollowNotice(this.ports, scope, task, memberId(member!), reason).catch(
+        () => undefined,
+      );
     return {
       taskRef: `${boardName}:#${task.number}`,
       following: false,

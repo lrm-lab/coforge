@@ -13,8 +13,9 @@ export function findTaskByNumber(
   conversationId: string,
   number: number,
 ) {
-  return client.task.findUnique({
-    where: { conversationId_number: { conversationId, number } },
+  // task #512: a marked Task is gone to every write; only the sweep and restore read it.
+  return client.task.findFirst({
+    where: { conversationId, number, deletedAt: null },
     select: taskSelection,
   });
 }

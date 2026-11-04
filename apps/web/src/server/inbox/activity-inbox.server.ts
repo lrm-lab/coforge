@@ -245,7 +245,7 @@ export class ActivityInbox {
       // The members a channel's group avatar shows, as on the Chat sidebar's row.
       channelListMembers(this.db, workspaceId, [...channelIds]),
       this.db.task.findMany({
-        where: { messageId: { in: rootIds }, workspaceId },
+        where: { messageId: { in: rootIds }, workspaceId, deletedAt: null },
         select: {
           messageId: true,
           number: true,

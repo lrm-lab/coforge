@@ -22,8 +22,6 @@ import {
   noticeNowBlocked,
   noticeReleased,
   noticeStatusFollowUps,
-  noticeSubtaskDeleted,
-  onlyWaitingFor,
   openBlockers,
 } from "./task-gates.server";
 import type {
@@ -33,6 +31,7 @@ import type {
   Transaction,
 } from "./task-board-ports.server";
 import { findTaskByNumber, assertExpectedRevision, commitTaskChange } from "./task-change.server";
+import { DELETED_TASK_UNDO_MS } from "./deleted-task-sweep.server";
 import { withNotices, type NoticeWriter } from "./task-notice-posting.server";
 import { signalTaskChange, announceTasks, announceNeighbours } from "./task-publication.server";
 import { requireManager, isTaskManager } from "./task-assignees.server";
@@ -296,6 +295,62 @@ export async function taskHistory(
   };
 }
 
+/** task #512: undo a delete inside the window — the row's children and dependencies were never
+ * touched, so clearing the marker brings it back whole and writes no record. The authority is
+ * the delete's own: the creator, or a Workspace owner/admin (`requireManager`). */
+export async function restoreTask(
+  ports: TaskBoardPorts,
+  conversationId: string,
+  workspaceId: string,
+  member: Member,
+  command: TaskCommand,
+): Promise<TaskResult> {
+  const task = await ports.db.task.findUnique({
+    where: {
+      conversationId_number: { conversationId, number: command.number! },
+    },
+    select: {
+      id: true,
+      status: true,
+      creatorMemberId: true,
+      workspaceId: true,
+      deletedAt: true,
+    },
+  });
+  if (!task?.deletedAt) throw new AppError("NOT_FOUND");
+  if (task.creatorMemberId !== member.id) await requireManager(ports.db, workspaceId, member);
+  if (Date.now() - task.deletedAt.getTime() > DELETED_TASK_UNDO_MS)
+    throw new AppError("CONFLICT", { errorId: "task-restore-window-elapsed" });
+  await ports.db.task.update({
+    where: { id: task.id },
+    data: { deletedAt: null, deletedByMemberId: null, deletedByUserId: null },
+  });
+  const neighbours = await relatedTasks(ports.db, task);
+  const restored = await ports.db.task.findMany({
+    where: {
+      id: {
+        in: [
+          task.id,
+          ...neighbours
+            .filter((other) => other.conversationId === conversationId)
+            .map((other) => other.id),
+        ],
+      },
+    },
+    select: taskSelection,
+  });
+  await announceTasks(
+    ports,
+    { conversationId, workspaceId },
+    async () => (await conversationSignalScopes(ports.db, conversationId, workspaceId)).task,
+    {
+      tasks: await taskViewsOf(ports.db, "people", restored),
+      publicationId: `${task.id}:task-restored`,
+    },
+  );
+  return { tasks: await taskViewsOf(ports.db, ports.reader, restored) };
+}
+
 export async function deleteTask(
   ports: TaskBoardPorts,
   conversationId: string,
@@ -307,24 +362,29 @@ export async function deleteTask(
     where: {
       conversationId_number: { conversationId, number: command.number! },
     },
-    select: { id: true, status: true, creatorMemberId: true, workspaceId: true },
-  });
-  if (!task) throw new AppError("NOT_FOUND");
-  if (task.creatorMemberId !== member.id) await requireManager(ports.db, workspaceId, member);
-  // Under the conversation lock: read what depended on the Task and tell the owners the delete
-  // frees (it ends their wait, or finishes their subtasks), then delete.
-  const neighbours = await withNotices(
-    ports,
-    { conversationId, workspaceId },
-    async (tx, notices) => {
-      // The links go with the Task; what waited for it or belonged to it reads differently now.
-      const related = await relatedTasks(tx, task);
-      await noticeReleased(notices, member, await onlyWaitingFor(tx, task), task.id);
-      await noticeSubtaskDeleted(tx, notices, member, task);
-      await tx.task.delete({ where: { id: task.id } });
-      return related;
+    select: {
+      id: true,
+      status: true,
+      creatorMemberId: true,
+      workspaceId: true,
+      deletedAt: true,
     },
-  );
+  });
+  if (!task || task.deletedAt) throw new AppError("NOT_FOUND");
+  if (task.creatorMemberId !== member.id) await requireManager(ports.db, workspaceId, member);
+  // task #512: a delete is a marker first — the row stays for the undo window while boards,
+  // lists and Agent reads treat it as gone. The sweep does the real removal and its notices.
+  await withNotices(ports, { conversationId, workspaceId }, async (tx) => {
+    await tx.task.update({
+      where: { id: task.id },
+      data: {
+        deletedAt: new Date(),
+        deletedByMemberId: member.id,
+        deletedByUserId: member.id ? null : (member.userId ?? null),
+      },
+    });
+  });
+  const neighbours = await relatedTasks(ports.db, task);
   await Promise.all([
     announceTasks(
       ports,

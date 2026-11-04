@@ -52,12 +52,20 @@ model Task {
   /// A message may have several tasks; the message is not the task's.
   sourceMessageId              String?             @db.Uuid
   sourceMessage                Message?            @relation("TaskSourceMessage", fields: [sourceMessageId], references: [id], onDelete: SetNull)
+  /// Soft-delete marker: the Task is hidden from boards, lists and Agent reads while set, and
+  /// the deleted-task sweep hard-deletes it once it is a minute old (`DELETED_TASK_UNDO_MS`).
+  /// `deletedByMemberId` names a channel-member deleter; a Workspace owner/admin acting
+  /// without membership carries `deletedByUserId` instead (task #512).
+  deletedAt                    DateTime?
+  deletedByMemberId            String?             @db.Uuid
+  deletedByUserId              String?             @db.Uuid
   /// The task's own conversation (`Conversation.kind` "task_thread"), made by the first reply.
   discussionConversationId     String?             @unique @db.Uuid
   discussion                   Conversation?       @relation("TaskDiscussion", fields: [discussionConversationId], references: [id], onDelete: SetNull)
 
   @@unique([conversationId, number])
   @@unique([messageId, conversationId])
+  @@index([deletedAt], map: "tasks_deletedAt_idx", where: raw("\"deletedAt\" IS NOT NULL"))
   @@unique([id, conversationId])
   @@unique([conversationId, creatorMemberId, requestId])
   @@index([workspaceId, conversationId, status])

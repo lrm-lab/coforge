@@ -1,4 +1,5 @@
 import { test, expect } from "bun:test";
+import { DeletedTaskSweep } from "#src/server/tasks/deleted-task-sweep.server";
 import { setup } from "./fixtures/task-dependencies";
 
 /** Blockers and subtasks against real PostgreSQL: the graph rules and the hard rules every status write passes. */
@@ -90,6 +91,13 @@ test("deleting a blocker releases its dependents and deleting a parent leaves it
 
     await run("alice", { operation: "delete", number: blocker! });
     await run("alice", { operation: "delete", number: parent! });
+    // task #512: the marker holds the links for the undo window; the sweep's cleanup frees
+    // the dependent and orphans the child.
+    await db.task.updateMany({
+      where: { number: { in: [blocker!, parent!] } },
+      data: { deletedAt: new Date(Date.now() - 120_000) },
+    });
+    await new DeletedTaskSweep(db).runOnce();
     expect((await show(waiting!)).tasks[0]).toMatchObject({
       blockedBy: [],
       blocked: false,

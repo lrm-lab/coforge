@@ -36,6 +36,7 @@ const TASK_OPERATIONS = [
   "amend",
   "history",
   "delete",
+  "restore",
   "receipt",
 ] as const;
 type TaskOperation = (typeof TASK_OPERATIONS)[number];
@@ -115,6 +116,7 @@ const TASK_FLAGS: Record<TaskOperation, readonly string[]> = {
   ],
   history: ["--target", "--peer-kind", "--number", "--json"],
   delete: ["--target", "--peer-kind", "--number", "--json"],
+  restore: ["--target", "--peer-kind", "--number", "--json"],
   receipt: [
     "--target",
     "--peer-kind",

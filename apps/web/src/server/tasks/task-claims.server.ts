@@ -23,6 +23,7 @@ import type {
   Member,
   ConversationRef,
 } from "./task-board-ports.server";
+import { memberId } from "./task-board-ports.server";
 import {
   findTaskByNumber,
   commitTaskChange,
@@ -150,18 +151,29 @@ export async function convertOrClaim(
           );
         },
       );
-      existing =
-        (await tx.task.findUnique({
-          where: { messageId: message.id },
-          select: taskSelection,
-        })) ?? undefined;
+      const marked = await tx.task.findFirst({
+        where: { messageId: message.id },
+        select: { ...taskSelection, deletedAt: true },
+      });
+      // task #512: a marked Task's message is claimable — claiming it undoes the delete inside
+      // the window, restoring the Task with its links instead of failing the messageId unique.
+      if (marked?.deletedAt)
+        await tx.task.update({
+          where: { id: marked.id },
+          data: { deletedAt: null, deletedByMemberId: null, deletedByUserId: null },
+        });
+      existing = marked ?? undefined;
     }
     if (!existing) {
       if (!message) {
         if (claim) throw new ClaimRefused(CLAIM_REFUSAL.taskNotFound);
         throw new AppError("NOT_FOUND");
       }
-      existing = await createMessageTask(tx, { ...message, conversationId, workspaceId }, member);
+      existing = await createMessageTask(
+        tx,
+        { ...message, conversationId, workspaceId },
+        { ...member, id: memberId(member) },
+      );
       const [quoted] = await notices.quote([existing]);
       await notices.inConversation({
         body: noticeText.converted(noticeActor(member).displayName, quoted!),
@@ -196,7 +208,7 @@ export async function convertOrClaim(
       existing,
       { ownerMemberId: existing.ownerMemberId, status: existing.status },
       {
-        ownerMemberId: member.id,
+        ownerMemberId: memberId(member),
         claimedAt: new Date(),
         status: existing.status === "todo" ? "in_progress" : existing.status,
       },
@@ -295,7 +307,7 @@ export async function unclaimTask(
       task,
       {
         revision: command.expectedRevision ?? task.revision,
-        ownerMemberId: member.id,
+        ownerMemberId: memberId(member),
         status: { not: "done" },
       },
       withoutAssignee(task),

@@ -81,6 +81,14 @@ export async function setup({
       members: { create: [{ userId: alice.id }, { agentId: one.id }] },
     },
   });
+  // A public channel the Workspace owner (alice) is not in: task #512's non-member admin case.
+  const admin = await db.conversation.create({
+    data: {
+      workspaceId: workspace.id,
+      channelName: `deps-admin-${handle}`,
+      members: { create: [{ userId: bob.id }, { agentId: one.id }] },
+    },
+  });
   const board = new TaskBoard(db, dependencies);
   const principals = {
     alice: { workspaceId: workspace.id, userId: alice.id } as TaskPrincipal,
@@ -92,6 +100,7 @@ export async function setup({
     [channel.id, `#${channel.channelName}`],
     [other.id, `#${other.channelName}`],
     [secret.id, `#${secret.channelName}`],
+    [admin.id, `#${admin.channelName}`],
   ]);
   // An Agent names its board by target; a person by conversation id.
   const run = (
@@ -178,6 +187,7 @@ export async function setup({
     refusal,
     channel,
     other,
+    admin,
     secret,
     one,
     two,

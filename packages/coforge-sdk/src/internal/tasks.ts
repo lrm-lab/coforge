@@ -106,11 +106,13 @@ export function isTaskRef(value: unknown): value is TaskRef {
  * in another conversation is `hidden` unless that is a public channel: the reader may not be able
  * to read it, so nothing but its status shows.
  */
-export type TaskName = { hidden: false; number: number; channel: string | null } | { hidden: true };
+export type TaskName =
+  | { hidden: false; number: number; channel: string | null }
+  | { hidden: true; deleted?: boolean };
 
 /** How text writes a Task's name: `#3`, `#channel:#3`, or, for one the reader may not name, that. */
 export function taskNameLabel(name: TaskName): string {
-  if (name.hidden) return "a task in another channel";
+  if (name.hidden) return name.deleted ? "a deleted task" : "a task in another channel";
   return name.channel === null ? `#${name.number}` : `#${name.channel}:#${name.number}`;
 }
 
@@ -296,6 +298,7 @@ export type TaskCommand = {
     | "amend"
     | "history"
     | "delete"
+    | "restore"
     | "receipt";
   idempotencyKey: string;
   /** Browser callers identify the conversation; Agent callers use its public target. */

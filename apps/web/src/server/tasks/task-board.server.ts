@@ -15,7 +15,13 @@ import {
   withExperimentRead,
 } from "./task-conversations-gate.server";
 import { assignTask, unassignTask } from "./task-assignment.server";
-import { amendTask, deleteTask, taskHistory, updateTaskStatus } from "./task-amendments.server";
+import {
+  amendTask,
+  deleteTask,
+  restoreTask,
+  taskHistory,
+  updateTaskStatus,
+} from "./task-amendments.server";
 import { claimTasks, convertOrClaim, unclaimTask } from "./task-claims.server";
 import { validateTaskCommand } from "./task-command-validation.server";
 import { listConversationTasks, listOwnTasks, showTask } from "./task-list.server";
@@ -183,9 +189,20 @@ export class TaskBoard {
     const scope = presolvedScope ?? (await resolveTaskScope(this.ports, principal, command));
     // A non-member of a channel the Workspace lets them read may read its Tasks: the list, one
     // Task's detail (its downstream list and subtree included) and its history. Only a member
-    // writes.
-    if (scope.channel && !scope.member && !READ_ONLY_TASK_OPERATIONS.has(command.operation))
-      throw new AppError("ACCESS_DENIED");
+    // writes — except a Workspace owner/admin, who manages a public channel's Tasks without a
+    // member row (task #512): history names them by userId, and the readable scope has already
+    // refused every private channel they are not in.
+    if (scope.channel && !scope.member && !READ_ONLY_TASK_OPERATIONS.has(command.operation)) {
+      if ((scope.workspaceRole !== "owner" && scope.workspaceRole !== "admin") || !principal.userId)
+        throw new AppError("ACCESS_DENIED");
+      scope.member = {
+        id: null,
+        userId: principal.userId,
+        agentId: null,
+        user: scope.actorUser,
+        agent: null,
+      };
+    }
     if (!scope.member && !scope.channel) throw new AppError("ACCESS_DENIED");
 
     if (command.operation === "list")
@@ -229,6 +246,8 @@ export class TaskBoard {
     if (command.operation === "history") return taskHistory(ports, scope.conversationId, command);
     if (command.operation === "delete")
       return deleteTask(ports, scope.conversationId, scope.workspaceId, member, command);
+    if (command.operation === "restore")
+      return restoreTask(ports, scope.conversationId, scope.workspaceId, member, command);
     if (command.operation === "receipt")
       return recordResourceReceipt(ports, scope.conversationId, scope.workspaceId, member, command);
     return updateTaskStatus(ports, scope, member, command);

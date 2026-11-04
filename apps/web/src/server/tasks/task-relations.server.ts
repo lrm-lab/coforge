@@ -42,6 +42,7 @@ const LINK_SELECT = {
   number: true,
   title: true,
   status: true,
+  deletedAt: true,
   conversation: { select: NAMED_CONVERSATION_SELECT },
   message: { select: { mentions: BROWSER_MESSAGE_MENTIONS_SELECT } },
 } satisfies Prisma.TaskSelect;
@@ -56,9 +57,10 @@ const linkTitle = (row: LinkRow, reader: TaskReader) =>
 function link(row: LinkRow, reader: TaskReader, from: string): TaskLink {
   const status = storedTaskStatus(row.status);
   const name = taskName(row, from);
-  return name.hidden
-    ? { hidden: true, status }
-    : { ...name, title: linkTitle(row, reader), status };
+  // A marked Task's ref reads as deleted to everyone while the undo window lasts (task #512).
+  if (name.hidden || row.deletedAt)
+    return { hidden: true, status, ...(row.deletedAt ? { deleted: true } : {}) };
+  return { ...name, title: linkTitle(row, reader), status };
 }
 
 /** Names in the order a card lists them: this conversation's first, then by channel, by number;

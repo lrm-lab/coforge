@@ -21,6 +21,7 @@ import {
   treeWithParent,
 } from "./task-relation-graph.server";
 import type { Member, Transaction } from "./task-board-ports.server";
+import { memberId } from "./task-board-ports.server";
 import { historyRows } from "./task-history.server";
 import { byName, descend } from "./task-relations.server";
 import { NAMED_CONVERSATION_SELECT, taskName } from "./task-view.server";
@@ -257,7 +258,7 @@ export async function linkNewTasks(
       blockers.map((blocker) => ({
         taskId: task.id,
         blockedByTaskId: blocker.id,
-        creatorMemberId: member.id,
+        creatorMemberId: memberId(member),
         ...common,
       })),
     ),
@@ -491,7 +492,7 @@ export async function applyRelationPlan(
       data: plan.added.map((blocker) => ({
         taskId: task.id,
         blockedByTaskId: blocker.id,
-        creatorMemberId: member.id,
+        creatorMemberId: memberId(member),
         ...common,
       })),
     });

@@ -24,10 +24,14 @@ export type AssigneeMention = `@${string}` & { readonly [brand]: "mention" };
 export type DisplayName = string & { readonly [brand]: "displayName" };
 
 /** How a notice may name the member who made a change. */
-export type NoticeActor = { memberId: string; handle: Handle; displayName: DisplayName };
+/** A member-less admin's notice still names the actor's handle; its memberId is null (task
+ * #512) and posts no member attribution. */
+export type NoticeActor = { memberId: string | null; handle: Handle; displayName: DisplayName };
 
 type NamedMember = {
-  id: string;
+  /** Null for a Workspace owner/admin acting on a public channel without a member row (task
+   * #512): the notice it posts names no member. */
+  id: string | null;
   user?: HumanNames | null;
   agent?: { name: string; displayName?: string | null } | null;
 };
@@ -62,6 +66,8 @@ export type QuotedTask = {
   channel?: string;
   /** In a channel the notice's readers may not be able to read: named by nothing else. */
   hidden?: true;
+  /** A marked Task in its undo window: named as deleted (task #512). */
+  deleted?: true;
 };
 
 /** Where a Task is, as the conversation a notice is posted in sees it (`placeFrom`). */
@@ -119,7 +125,7 @@ const STATUS_WORDING: Record<TaskStatus, { emoji: string; label: string }> = {
 };
 
 const reference = (task: QuotedTask) => {
-  if (task.hidden) return "a task in another channel";
+  if (task.hidden) return task.deleted ? "a deleted task" : "a task in another channel";
   const name = task.channel ? `#${task.channel}:#${task.number}` : `#${task.number}`;
   return task.title ? `${name} "${task.title}"` : name;
 };

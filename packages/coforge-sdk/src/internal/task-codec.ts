@@ -33,6 +33,7 @@ const operations = new Set<TaskCommand["operation"]>([
   "amend",
   "history",
   "delete",
+  "restore",
   "receipt",
 ]);
 const statuses = new Set<string>(TASK_STATUSES);
@@ -192,7 +193,7 @@ export function validateTaskRequest(value: TaskRequest): void {
       value.messageIds === undefined &&
       !numeric) ||
     (value.operation === "claim" && (numeric || messages)) ||
-    (["show", "unclaim", "history", "delete"].includes(value.operation) &&
+    (["show", "unclaim", "history", "delete", "restore"].includes(value.operation) &&
       value.number !== undefined &&
       value.numbers === undefined &&
       !messages) ||

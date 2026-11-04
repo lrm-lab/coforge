@@ -256,7 +256,9 @@ test("Single-Task writes confirm what the server now holds", () => {
   expect(formatTaskAssigned(task(4, { owner: person("ada") }))).toBe("#4 assigned to @ada.");
   expect(formatTaskAssigned(task(4))).toBe("#4 unassigned — now open.");
   expect(formatTaskStatusUpdated(task(4, { status: "in_review" }))).toBe("#4 moved to in_review.");
-  expect(formatTaskDeleted(4)).toBe("#4 deleted.");
+  expect(formatTaskDeleted(4)).toBe(
+    "#4 deleted. Undo within 1 minute: coforge task restore --number 4",
+  );
 });
 
 test("An amend receipt shows the new revision, its history event and the current card", () => {

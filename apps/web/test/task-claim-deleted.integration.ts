@@ -58,7 +58,9 @@ test("a message whose Task was deleted can be claimed again", async () => {
     await run(asAlice, { operation: "delete", conversationId: channel.id, number });
     const again = await run(asAgent, { operation: "claim", target, messageId: message.id });
     expect(again.claims?.[0]?.success).toBe(true);
-    expect(again.tasks[0]!.number).not.toBe(number);
+    // task #512: claiming the deleted Task's message restores it inside the undo window —
+    // it keeps its number, children and dependencies rather than making a new Task.
+    expect(again.tasks[0]!.number).toBe(number);
   } finally {
     await db.workspace.delete({ where: { id: workspace.id } }).catch(() => undefined);
     await db.user.delete({ where: { id: alice.id } }).catch(() => undefined);

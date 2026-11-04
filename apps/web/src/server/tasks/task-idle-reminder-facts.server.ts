@@ -82,6 +82,7 @@ export async function readIdleTaskFacts(
   const tasks = await db.task.findMany({
     where: {
       workspaceId: agent.workspaceId,
+      deletedAt: null,
       owner: { agentId: agent.agentId },
       status: { in: OPEN_STATUSES },
       conversation: ownTaskScope({ agentId: agent.agentId }).conversations,

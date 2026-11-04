@@ -24,6 +24,7 @@ import {
   type SelectedTask,
 } from "./task-view.server";
 import type { TaskBoardPorts, Member } from "./task-board-ports.server";
+import { memberId } from "./task-board-ports.server";
 import { ensureTaskExecutionSession } from "./task-change.server";
 import { linkCreatedTasks } from "./task-gates.server";
 import { taskViewsOf } from "./task-relations.server";
@@ -58,14 +59,17 @@ export async function createTasks(
   // One receipt per Task, in its own thread; the first keeps the id a single receipt had.
   const receiptIds = await Promise.all(
     titles.map((_, index) =>
-      indexedRequestId(`${member.id}:create:${command.idempotencyKey}:assignment`, index + 1),
+      indexedRequestId(
+        `${memberId(member)}:create:${command.idempotencyKey}:assignment`,
+        index + 1,
+      ),
     ),
   );
   const result = await withNotices(ports, scope, async (tx, notices) => {
     const retried = await tx.task.findMany({
       where: {
         conversationId: scope.conversationId,
-        creatorMemberId: member.id,
+        creatorMemberId: memberId(member),
         requestId: { in: requestIds },
       },
       orderBy: { number: "asc" },
@@ -93,7 +97,7 @@ export async function createTasks(
       const duplicateCandidates = await tx.task.findMany({
         where: {
           conversationId: scope.conversationId,
-          creatorMemberId: { not: member.id },
+          creatorMemberId: { not: memberId(member) },
           status: { in: UNFINISHED_TASK_STATUSES },
           createdAt: { gte: new Date(Date.now() - DUPLICATE_TASK_WINDOW_MS) },
         },
@@ -265,7 +269,7 @@ export async function createTasks(
           id: messageId,
           conversationId: scope.conversationId,
           workspaceId: scope.workspaceId,
-          senderMemberId: member.id,
+          senderMemberId: memberId(member),
           body: stored.body,
           sequence,
           mentions: stored.mentions.length
@@ -302,7 +306,7 @@ export async function createTasks(
               ownerMemberId: assignee?.id,
               status: started ? "in_progress" : "todo",
               claimedAt: started ? new Date() : null,
-              creatorMemberId: member.id,
+              creatorMemberId: memberId(member),
               requestId: requestIds[index],
             },
           },

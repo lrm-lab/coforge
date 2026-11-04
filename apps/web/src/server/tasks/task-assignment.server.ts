@@ -4,6 +4,7 @@ import { AppError } from "#src/lib/app-error";
 import { assigneeMention, noticeActor, noticeText } from "./task-notices.server";
 import { taskViewOf } from "./task-relations.server";
 import type { TaskBoardPorts, Member, ConversationRef } from "./task-board-ports.server";
+import { memberId } from "./task-board-ports.server";
 import {
   findTaskByNumber,
   assertExpectedRevision,
@@ -29,7 +30,7 @@ export async function assignTask(
   )
     throw new AppError("INVALID_INPUT");
   const receiptId = await indexedRequestId(
-    `${member.id}:assign:${command.number}:${command.idempotencyKey}:assignment`,
+    `${memberId(member)}:assign:${command.number}:${command.idempotencyKey}:assignment`,
     1,
   );
   const result = await withNotices(ports, conversation, async (tx, notices) => {

@@ -27,6 +27,7 @@ import type {
   Assignee,
   ConversationRef,
 } from "./task-board-ports.server";
+import { memberId } from "./task-board-ports.server";
 
 export type PostedNotice = ConversationRef & {
   id: string;
@@ -240,7 +241,13 @@ export async function withNotices<T>(
           );
           // A task with no message in the channel: the assignee follows the task.
           if (!task.messageId) {
-            await followTask(tx, conversation, task.id, assignee.id, self ? "claimed" : "assigned");
+            await followTask(
+              tx,
+              conversation,
+              task.id,
+              memberId(assignee),
+              self ? "claimed" : "assigned",
+            );
             return notice;
           }
           // The receipt is the thread's first reply when it starts the thread, so it enrolls as a
@@ -253,7 +260,7 @@ export async function withNotices<T>(
             workspaceId: conversation.workspaceId,
             conversationId: conversation.conversationId,
             root: { id: hostMessageId(task), senderMemberId: root.senderMemberId },
-            participantMemberIds: [assignee.id],
+            participantMemberIds: [memberId(assignee)],
           });
           return notice;
         },
@@ -290,7 +297,7 @@ async function writeNotice(
       mentions: input.mentions
         ? {
             create: {
-              memberId: input.mentions.id,
+              memberId: memberId(input.mentions),
               workspaceId,
               kind: input.mentions.agentId ? "agent" : "user",
               actorId: input.mentions.agentId ?? input.mentions.userId!,

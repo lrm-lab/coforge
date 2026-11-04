@@ -22,6 +22,7 @@ import {
 import { assertCanAssignOther } from "./task-assignment-authority.server";
 import { assigneeMember } from "./task-assignees.server";
 import type { Member, Transaction, TaskBoardPorts } from "./task-board-ports.server";
+import { memberId } from "./task-board-ports.server";
 import { ensureTaskExecutionSession } from "./task-change.server";
 import { findSourceMessage } from "./task-claims.server";
 import { creationChanges, historyRows } from "./task-history.server";
@@ -103,7 +104,7 @@ export async function createConversationTasks(
     const retried = await tx.task.findMany({
       where: {
         conversationId: scope.conversationId,
-        creatorMemberId: member.id,
+        creatorMemberId: memberId(member),
         requestId: { in: requestIds },
       },
       orderBy: { number: "asc" },
@@ -116,7 +117,7 @@ export async function createConversationTasks(
     const source = command.messageId
       ? await findSourceMessage(tx, scope.conversationId, command.messageId)
       : null;
-    if (source && !command.alongside) await assertSourceFree(tx, source.id, member.id);
+    if (source && !command.alongside) await assertSourceFree(tx, source.id, memberId(member));
     const assignee = command.assignee
       ? await assigneeMember(tx, scope.conversationId, scope.workspaceId, command.assignee)
       : null;
@@ -249,7 +250,7 @@ export async function insertConversationTask(
       ownerMemberId: assignee?.id,
       status: started ? "in_progress" : "todo",
       claimedAt: started ? new Date() : null,
-      creatorMemberId: member.id,
+      creatorMemberId: memberId(member),
       requestId: input.requestId,
       sourceMessageId: source?.id,
       projectId: input.project?.id,
@@ -277,7 +278,7 @@ export async function insertConversationTask(
       0,
     ),
   });
-  await followTask(tx, scope, task.id, member.id, "created");
+  await followTask(tx, scope, task.id, memberId(member), "created");
   if (assignee && assignee.id !== member.id)
     await followTask(tx, scope, task.id, assignee.id, "assigned");
   if (assignee?.agentId) await ensureTaskExecutionSession(tx, task, assignee.agentId);

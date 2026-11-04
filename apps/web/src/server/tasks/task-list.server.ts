@@ -81,6 +81,7 @@ export async function listOwnTasks(
     where: {
       workspaceId: principal.workspaceId,
       owner: actor,
+      deletedAt: null,
       status: command.statuses
         ? { in: command.statuses }
         : command.status === "all"
@@ -134,7 +135,7 @@ export async function showTask(
   command: TaskCommand,
 ): Promise<TaskResult> {
   const task = await ports.db.task.findFirst({
-    where: { conversationId, number: command.number },
+    where: { conversationId, number: command.number, deletedAt: null },
     select: taskSelection,
   });
   if (!task) throw new AppError("NOT_FOUND");
@@ -157,6 +158,7 @@ export async function listConversationTasks(
   const tasks = await ports.db.task.findMany({
     where: {
       conversationId: conversationId,
+      deletedAt: null,
       ...(command.ready
         ? READY_TASK_WHERE
         : {

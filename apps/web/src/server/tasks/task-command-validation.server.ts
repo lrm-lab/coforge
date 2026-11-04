@@ -27,6 +27,7 @@ export function validateTaskCommand(command: TaskCommand) {
     "amend",
     "history",
     "delete",
+    "restore",
     "receipt",
   ];
   if (!operations.includes(command.operation) || !command.idempotencyKey)
@@ -189,6 +190,7 @@ export function validateTaskCommand(command: TaskCommand) {
       "amend",
       "history",
       "delete",
+      "restore",
       "receipt",
     ].includes(command.operation) &&
     !command.number

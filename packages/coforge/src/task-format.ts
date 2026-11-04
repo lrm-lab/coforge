@@ -224,7 +224,11 @@ export function formatTaskStatusUpdated(
 }
 
 export function formatTaskDeleted(number: number): string {
-  return `#${number} deleted.`;
+  return `#${number} deleted. Undo within 1 minute: coforge task restore --number ${number}`;
+}
+
+export function formatTaskRestored(number: number): string {
+  return `#${number} restored.`;
 }
 
 /** The current title and description of one board Task. */
@@ -435,6 +439,8 @@ export function formatTaskResult(command: TaskCommand, result: TaskResult): stri
       return formatTasksCreated(target, result);
     case "delete":
       return formatTaskDeleted(command.number!);
+    case "restore":
+      return formatTaskRestored(command.number!);
     case "receipt":
       return formatResourceReceiptRecorded(target, result);
     case "amend":
