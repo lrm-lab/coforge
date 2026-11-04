@@ -66,9 +66,11 @@ test("an online status reply carries the latest Computer version", async () => {
 });
 
 test("a status reply with no latest version answers an empty body", async () => {
-  const method = createDaemonConnectionStatusMethod(
-    { put: async () => {}, get: async () => true, getMany: async () => [] },
-  );
+  const method = createDaemonConnectionStatusMethod({
+    put: async () => {},
+    get: async () => true,
+    getMany: async () => [],
+  });
   const reply = await method(
     new TextEncoder().encode(
       JSON.stringify({

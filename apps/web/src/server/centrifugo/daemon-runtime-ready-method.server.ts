@@ -167,9 +167,7 @@ export const createDaemonRuntimeReadyMethod =
           ),
         );
       const version = await latestComputerVersion?.().catch(() => null);
-      return encodeDaemonRuntimeReadyResponse(
-        version ? { latestComputerVersion: version } : {},
-      );
+      return encodeDaemonRuntimeReadyResponse(version ? { latestComputerVersion: version } : {});
     } catch (error) {
       console.error(
         JSON.stringify({

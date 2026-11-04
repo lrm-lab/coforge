@@ -135,11 +135,7 @@ import { runtimeMachineStatus } from "./machine-status-reporter";
 import { agentActivityDrafts } from "./agent-activity-drafts";
 import { sendAgentStatus, type AgentStatusReportPorts } from "./agent-status-report";
 import { agentIdForContext, contextFor } from "./agent-context";
-import {
-  cleanupUnconfirmed,
-  buildLaunchFailureActivity,
-  launchFailureDraft,
-} from "./agent-failure-presentation";
+import { cleanupUnconfirmed, buildLaunchFailureActivity } from "./agent-failure-presentation";
 import { RuntimeRelease, wakeRequest, type WakeRestart } from "./runtime-release";
 import { beginWakeLaunch } from "./wake-launch";
 import { AgentFeatureSync } from "./agent-feature-sync";
@@ -183,7 +179,6 @@ import {
   type UpgradeOperationsReading,
 } from "./upgrade-result-reporter";
 import type { UnrefTimerSchedule } from "./unref-timer";
-import { COFORGE_DAEMON_VERSION } from "#src/version";
 import type { ReminderScheduler } from "#src/agent-reminder/reminder-scheduler";
 import type { AgentAppConfigSync } from "#src/agent-app-config/agent-app-config-sync";
 import { logAgentOperationFailure } from "./agent-failure-logs";

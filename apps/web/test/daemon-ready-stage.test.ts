@@ -238,9 +238,7 @@ test("the ready reply carries the latest Computer version", async () => {
   });
   const reply = await method(readyPayload(), { principal: principal() });
   expect(reply).not.toHaveProperty("code");
-  expect(
-    decodeDaemonRuntimeReadyResponse(reply as Uint8Array).latestComputerVersion,
-  ).toBe("4.5.7");
+  expect(decodeDaemonRuntimeReadyResponse(reply as Uint8Array).latestComputerVersion).toBe("4.5.7");
 });
 
 test("a ready whose version lookup fails still succeeds with no version", async () => {

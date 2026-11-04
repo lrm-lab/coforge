@@ -72,11 +72,7 @@ import {
 import { AGENT_MESSAGE_ACK_METHOD, AGENT_MESSAGE_REJECT_METHOD } from "./index";
 import { isSeenExactSeqs } from "./freshness-decision";
 import { mentionDeliveryEnvelopeMessage, readMentionDeliveryEnvelope } from "./mention-delivery";
-import type {
-  DaemonRuntimeCodeAgentsUpdateRequest,
-  DaemonRuntimeReadyRequest,
-  DaemonRuntimeReadyResponse,
-} from "./index";
+import type { DaemonRuntimeCodeAgentsUpdateRequest } from "./index";
 
 export function assertUint(value: number, maximum: number, field: string): void {
   if (!Number.isSafeInteger(value) || value < 0 || value > maximum)
