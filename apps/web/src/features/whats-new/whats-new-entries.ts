@@ -18,7 +18,7 @@ export type WhatsNewEntryData = {
 export const WHATS_NEW_ENTRIES = [
   {
     id: "documents",
-    releasedAt: "2026-11-04T07:00:00Z",
+    releasedAt: "2026-11-04T08:00:00Z",
     experiment: "artifacts",
   },
   { id: "task-labels", releasedAt: "2026-11-04T08:01:00Z" },
