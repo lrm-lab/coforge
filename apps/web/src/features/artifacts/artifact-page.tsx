@@ -2,6 +2,9 @@ import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, useRouter } from "@tanstack/react-router";
 
+import { ClockRewind } from "@untitledui/icons";
+
+import { Button } from "#src/components/base/buttons/button";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { useAppToast } from "#src/components/ui/toast";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
@@ -18,6 +21,8 @@ import { m } from "#src/paraglide/messages";
 import { deleteArtifact, revertArtifact } from "./artifacts.functions";
 import { LatestVersion, OldVersion } from "./artifact-document-body";
 import { ArtifactHistory } from "./artifact-history";
+import { ArtifactBanner } from "./artifact-pane-header";
+import { loadArtifactSandboxLink } from "./artifact-sandbox.functions";
 import { useArtifactLeaveGuard } from "./artifact-leave-guard";
 import { useArtifactAccess } from "./artifact-access";
 import { ArtifactPageHeader, useHomeName, type ArtifactHome } from "./artifact-page-header";
@@ -161,9 +166,7 @@ function ArtifactPageFor({
         }
         onCopyLink={current && (() => void copy(pageHref(), m.doc_link_copied()))}
         onOpenInTab={
-          webPage
-            ? () => window.open(pageHref(), "_blank", "noopener,noreferrer") ?? undefined
-            : undefined
+          webPage ? () => void openInTab(artifactId, viewingOld ? old! : latest) : undefined
         }
         onDelete={() => setConfirming("delete")}
       />
@@ -172,13 +175,33 @@ function ArtifactPageFor({
           {!current ? (
             <LoadingBody />
           ) : webPage ? (
-            <ArtifactWebPage
-              key={old ?? latest}
-              artifactId={artifactId}
-              version={viewingOld ? old! : latest}
-              title={title}
-              source={viewingOld ? oldRead.data?.text : current.text}
-            />
+            <>
+              {!viewingOld &&
+                editor.published && (
+                  // An Agent saved a new version: the page shows it already; this says who.
+                  <ArtifactBanner
+                    tone="info"
+                    icon={ClockRewind}
+                    actions={
+                      <Button size="xs" color="link-gray" onClick={editor.dismissPublished}>
+                        {m.doc_close()}
+                      </Button>
+                    }
+                  >
+                    {m.doc_published_banner({
+                      who: actorName(actorOf(editor.published.publisher)),
+                      number: String(editor.published.number),
+                    })}
+                  </ArtifactBanner>
+                )}
+              <ArtifactWebPage
+                key={old ?? latest}
+                artifactId={artifactId}
+                version={viewingOld ? old! : latest}
+                title={title}
+                source={viewingOld ? oldRead.data?.text : current.text}
+              />
+            </>
           ) : viewingOld ? (
             <OldVersion
               key={old}
@@ -259,6 +282,22 @@ function ArtifactPageFor({
       />
     </main>
   );
+}
+
+/**
+ * A web page in a tab of its own: the sandbox's link, asked for on the click (it is short-lived).
+ * The tab opens at once, so no pop-up blocker takes it for one the page opened by itself, and is
+ * cut off from this page before it goes to the link.
+ */
+async function openInTab(artifactId: string, version: number) {
+  const tab = window.open("", "_blank");
+  if (!tab) return;
+  tab.opener = null;
+  try {
+    tab.location.href = (await loadArtifactSandboxLink({ data: { artifactId, version } })).url;
+  } catch {
+    tab.close();
+  }
 }
 
 /** Who made the artifact, from its read: an Agent, a person, or nobody left. */

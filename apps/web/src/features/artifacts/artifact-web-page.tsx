@@ -13,6 +13,8 @@ const sandboxLinkQuery = (artifactId: string, version: number) => ({
   queryFn: () => loadArtifactSandboxLink({ data: { artifactId, version } }),
   staleTime: 0,
   gcTime: 0,
+  // A new link reloads the frame: the page would lose what its reader did in it.
+  refetchOnWindowFocus: false,
 });
 
 /**
