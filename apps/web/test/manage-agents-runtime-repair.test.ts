@@ -107,3 +107,45 @@ test("a CoForge runtime saved back to Pi reads back as Pi", async () => {
     modelProvider: "",
   });
 });
+
+// task #523: a broken stored config (a model the Computer's catalog no longer has) is repaired
+// by a re-selection — the save's `canRun` checks only the NEW selection, never merges the old
+// config's model/modelProvider back in.
+test("a stored config with a stale model is repaired by a Pi Configured save", async () => {
+  const { agentManagement, records } = fixture();
+  records.push({
+    id: "stale-agent",
+    workspaceId: "workspace-1",
+    ownerId: "user-1",
+    name: "stale",
+    displayName: "stale",
+    computerId: "computer-1",
+    runtimeConfig: parseAgentRuntimeConfig({
+      runtime: RUNTIME_PROVIDER.COFORGE,
+      provider: { kind: "coforge", providerId: "openrouter" },
+      model: "a-model-the-catalog-lost",
+      modelProvider: "openrouter",
+      reasoning: "low",
+    }),
+    createdAt: new Date(),
+  });
+
+  // The save names only the new selection — `pi` + Configured (`""`), no old model carried.
+  const result = await agentManagement.update(
+    { userId: "user-1", workspaceId: "workspace-1", role: "admin" as const },
+    {
+      agentId: "stale-agent",
+      description: "",
+      provider: RUNTIME_PROVIDER.PI,
+      computerId: "computer-1",
+      modelProvider: "",
+      model: "",
+    },
+  );
+  expect(result.restart).toBe("published");
+  expect(records[0]!.runtimeConfig).toMatchObject({
+    runtime: RUNTIME_PROVIDER.PI,
+    model: "",
+    modelProvider: "",
+  });
+});

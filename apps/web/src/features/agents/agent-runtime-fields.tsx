@@ -200,7 +200,9 @@ export function AgentRuntimeFields({
       : customModelActive
         ? (customSplit?.modelProvider ?? "")
         : (selectedModel?.modelProvider ??
-          (modelKey === initialModelKey ? (initial?.modelProvider ?? "") : ""));
+          (provider === initial?.provider && modelKey === initialModelKey
+            ? (initial?.modelProvider ?? "")
+            : ""));
   const matchingConfiguredCredential =
     credentialConfigured &&
     initial?.provider === provider &&
@@ -228,7 +230,8 @@ export function AgentRuntimeFields({
   ];
   const modelValue = customModelActive
     ? (customSplit?.model ?? "")
-    : (selectedModel?.id ?? (modelKey === initialModelKey ? initial?.model : ""));
+    : (selectedModel?.id ??
+      (provider === initial?.provider && modelKey === initialModelKey ? initial?.model : ""));
   // Command Code's catalog carries no efforts; they are read for the selected model.
   const effortModelId =
     provider === RUNTIME_PROVIDER.COMMAND_CODE && !failed ? (modelValue ?? "").trim() : "";
