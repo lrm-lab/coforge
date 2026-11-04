@@ -87,7 +87,6 @@ networks:
   centrifugo:
     driver: bridge
     name: coforge_network
-    internal: true
 
 volumes:
   coforge_redis_data:
