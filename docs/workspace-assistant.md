@@ -48,13 +48,36 @@ the model (DeepSeek when configured as that deployment's default); no model or k
 hard-coded into the assistant. Existing explicitly configured Computers are retained.
 
 Creation and old-member backfill publish the normal Agent Start with a private welcome
-prompt. A pending cloud Computer's ready recovery delivers that introduction. Platform
-assistant introductions stay due until the first canonical reply, including after seven
-days offline; ordinary Agents retain their seven-day introduction window. Repeated
+prompt, except for a member in the first-sign-in setup wizard (below). A pending cloud
+Computer's ready recovery delivers that introduction.
+
+Platform assistant introductions stay due until the first canonical reply, including after
+seven days offline; ordinary Agents retain their seven-day introduction window. Repeated
 provisioning, reloads, restarts and session resets do not re-welcome someone who already
-received a reply. A stopped assistant remains stopped. Operational cloud/transport
-failures leave provisioning intact and are logged; a later Workspace/sidebar load or
-manual backfill retries. A deployment without a cloud cluster cannot auto-start it.
+received a reply. A stopped assistant remains stopped.
+
+Operational cloud/transport failures leave provisioning intact and are logged; a later
+Workspace/sidebar load or manual backfill retries. A deployment without a cloud cluster
+cannot auto-start it.
+
+## The setup wizard and the welcome
+
+First sign-in marks the member's own new Workspace pending
+(`WorkspaceMemberPreference.onboardingPendingSince`) and the [setup wizard](design/onboarding-wizard.md)
+opens over it. The assistant is still provisioned (Agent, session, DM, default cloud Computer), but
+it does not introduce itself until the member finishes or skips the wizard: with the mark set,
+no Start the member did not ask for is issued: provisioning, backfill, link join and sidebar load
+publish none (`AgentIntroduction.promptFor` withholds the welcome), and the Daemon's ready recovery or a
+message's wake returns before it starts anything (`holdsStart`), so the assistant stays one the
+wizard can still re-bind. Completing the
+wizard clears the mark and starts the assistant. Members who joined by link, created another
+Workspace, or signed up before the wizard have no mark and are welcomed as before.
+
+The welcome says Agents are teammates the member messages like colleagues. It reads
+`UserPreference.role` when the prompt is made (so a recovery retry has it): a known role gets an
+offer to propose a starter team of Agents for that role, created only after the member agrees;
+otherwise it asks what they are working on. It never asks for the role again; the role is never
+shown in the UI.
 
 The welcome's five clickable choices cover platform features, Tasks/Projects, messages,
 reminders/weekly reports and casual chat. A choice is an ordinary member message sent
@@ -104,6 +127,10 @@ confirming the other retains its context. Verify current-role permissions, revok
 credentials after leaving, new Workspace provisioning and repeatable old-member backfill.
 Exercise channel commands, attachments, Tasks, search/read-around and consecutive message
 checks without advancing the human's unread state.
+For the wizard, sign in as a new person and follow
+[the wizard's rules](design/onboarding-wizard.md): nothing is sent until the last step, then the
+DM opens and the welcome arrives once.
+
 For onboarding, use a fresh and an old Workspace without sending first: verify cloud
 assignment, Pi defaults, one proactive canonical DM per member and the five choices.
 Choose one, reload, and confirm it was sent once and the card stays gone. Repeat backfill,

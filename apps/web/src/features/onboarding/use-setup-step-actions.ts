@@ -1,5 +1,5 @@
 import { useNavigate } from "@tanstack/react-router";
-import { githubStepAction } from "./github-step";
+import { githubSetupAction } from "./github-setup-action";
 import { useStartGitHubFlow } from "./use-start-github-flow";
 import type { SetupStepId } from "./setup-steps";
 import type { loadSetupChecklist } from "./setup-checklist.functions";
@@ -24,7 +24,7 @@ export function useSetupStepActions(workspaceSlug: string, checklist: Checklist)
         });
         return;
       }
-      const action = githubStepAction(checklist.githubStatus);
+      const action = githubSetupAction(checklist.githubStatus);
       if (action) await startFlow(action);
     },
     agent: () =>

@@ -4,11 +4,11 @@ import {
   startGitHubInstallation,
   startGitHubReauthorization,
 } from "#src/features/integrations/github.functions";
-import type { GitHubStepAction } from "./github-step";
+import type { GitHubSetupAction } from "./github-setup-action";
 
 /** Starts the GitHub flow an action names and leaves for GitHub; the callback comes back to the
  * Workspace home. Rejects when the flow could not be started. */
-export function useStartGitHubFlow(): (action: GitHubStepAction) => Promise<void> {
+export function useStartGitHubFlow(): (action: GitHubSetupAction) => Promise<void> {
   const connect = useServerFn(startGitHubConnection);
   const install = useServerFn(startGitHubInstallation);
   const reauthorize = useServerFn(startGitHubReauthorization);

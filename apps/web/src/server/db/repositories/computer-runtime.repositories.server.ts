@@ -54,9 +54,9 @@ function mapRuntime(runtime: {
 export class PrismaComputerRuntimeRepository implements ComputerRuntimeVisibilityRepository {
   constructor(private readonly db: PrismaClient) {}
 
-  async listInWorkspace(workspaceId: string) {
+  async listInWorkspace(workspaceId: string, computerIds?: string[]) {
     const runtimes = await this.db.computerRuntime.findMany({
-      where: { workspaceId },
+      where: { workspaceId, ...(computerIds ? { computerId: { in: computerIds } } : {}) },
       select: runtimeShape,
       orderBy: [{ computerId: "asc" }, { provider: "asc" }],
     });

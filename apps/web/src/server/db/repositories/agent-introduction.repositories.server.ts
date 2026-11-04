@@ -8,6 +8,20 @@ import {
 export class PrismaAgentIntroductionStore implements AgentIntroductionStore {
   constructor(private readonly db: PrismaClient) {}
 
+  async setupFacts(workspaceId: string, ownerId: string) {
+    const [mark, preference] = await Promise.all([
+      this.db.workspaceMemberPreference.findUnique({
+        where: { workspaceId_userId: { workspaceId, userId: ownerId } },
+        select: { onboardingPendingSince: true },
+      }),
+      this.db.userPreference.findUnique({ where: { userId: ownerId }, select: { role: true } }),
+    ]);
+    return {
+      onboardingPending: Boolean(mark?.onboardingPendingSince),
+      ownerRole: preference?.role ?? null,
+    };
+  }
+
   async hasAgentMessage(input: {
     workspaceId: string;
     agentId: string;

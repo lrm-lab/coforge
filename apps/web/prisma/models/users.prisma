@@ -97,6 +97,10 @@ model UserPreference {
   /// Interface language ("en" or "zh-CN"); NULL means the code's default. The server renders
   /// pushes and other outbound text in it, and the browser uses it as the source of truth.
   language                    String?
+  /// What the person mainly does, from the first-sign-in survey (`PERSON_ROLES`): one of
+  /// engineer, designer, product, marketing, research, founder. Metadata for the platform
+  /// assistant only (it reads it when it introduces itself); never shown in the UI.
+  role                        String?
   createdAt                   DateTime @default(now())
   updatedAt                   DateTime @updatedAt
 

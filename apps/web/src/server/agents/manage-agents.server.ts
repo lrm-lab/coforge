@@ -4,7 +4,6 @@ import {
   type AgentStopIntent,
   type RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
-import { runtimeProviderSelectionRefusal } from "#src/features/agents/runtime-provider-selection";
 import { AppError } from "#src/lib/app-error";
 import { AGENT_VISIBILITY, type AgentVisibility } from "#src/features/agents/agent-visibility";
 import { assertAgentLive, assertNotAppBot } from "./active-agent.server";
@@ -12,18 +11,17 @@ import type {
   AgentRecord,
   AgentRepository,
 } from "#src/server/db/repositories/agent.repositories.server";
-import { publicAgentRuntimeConfig } from "./agent-runtime-config.server";
+import {
+  agentRuntimeConfig,
+  assertProviderSelectable,
+  publicAgentRuntimeConfig,
+} from "./agent-runtime-config.server";
 import type { AgentRuntimeCredentials } from "./agent-runtime-credentials.server";
 import type { AgentRuntimeLock } from "./agent-runtime-lock.server";
 import {
   assertCanCreateAgents,
   type WorkspaceMemberRole,
 } from "#src/server/workspaces/member-role.server";
-
-function assertProviderSelectable(provider: unknown) {
-  const refusal = runtimeProviderSelectionRefusal(provider);
-  if (refusal) throw new AppError("INVALID_INPUT", { errorId: refusal });
-}
 
 export type AgentCreateInput = {
   name: string;
@@ -151,14 +149,7 @@ export class ManageAgents {
       ...(input.createRequestId ? { createRequestId: input.createRequestId } : {}),
       // A human-created Agent owes its creator an introduction (`AgentIntroduction`).
       introductionDueAt: new Date(),
-      runtimeConfig: {
-        runtime: selection.provider,
-        provider: storedProvider,
-        model: selection.model,
-        modelProvider: selection.modelProvider,
-        reasoning: selection.reasoning,
-        ...(selection.fastMode ? { fastMode: true } : {}),
-      },
+      runtimeConfig: agentRuntimeConfig(selection, storedProvider),
     });
     try {
       await this.runtimeControl.start(agentStartIntent(agent, input.computerId), principal.userId);
@@ -210,24 +201,17 @@ export class ManageAgents {
       const apiKey = encryptedApiKey ?? preservedApiKey;
       if (selection.provider === RUNTIME_PROVIDER.COFORGE && !apiKey)
         throw new AppError("INVALID_INPUT", { errorId: "agent-api-key-required" });
-      const runtimeConfig: AgentRecord["runtimeConfig"] = {
-        runtime: selection.provider,
-        provider:
-          selection.modelProvider && (selection.provider === RUNTIME_PROVIDER.COFORGE || apiKey)
-            ? {
-                kind: "coforge",
-                providerId: selection.modelProvider,
-                ...(apiKey ? { apiKey } : {}),
-              }
-            : { kind: "default" },
-        model: selection.model,
-        modelProvider: selection.modelProvider,
-        reasoning: selection.reasoning,
-        ...(selection.fastMode ? { fastMode: true } : {}),
-        ...(current.runtimeConfig.environment
-          ? { environment: current.runtimeConfig.environment }
-          : {}),
-      };
+      const runtimeConfig = agentRuntimeConfig(
+        selection,
+        selection.modelProvider && (selection.provider === RUNTIME_PROVIDER.COFORGE || apiKey)
+          ? {
+              kind: "coforge",
+              providerId: selection.modelProvider,
+              ...(apiKey ? { apiKey } : {}),
+            }
+          : { kind: "default" },
+        current.runtimeConfig.environment,
+      );
       const runtimeChanged =
         JSON.stringify(current.runtimeConfig) !== JSON.stringify(runtimeConfig);
       const computerChanged = computerId !== current.computerId;

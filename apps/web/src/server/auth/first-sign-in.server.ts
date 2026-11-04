@@ -282,13 +282,22 @@ class PrismaFirstSignInStore implements FirstSignInStore {
       const names = new PrismaFirstSignInNames(tx);
       const person = await names.lookup(input.user.id);
       const title = person?.displayName ?? input.displayName;
-      const { workspaceId } = await new WorkspaceEnrollment(
-        new PrismaWorkspaceEnrollmentStore(tx),
-      ).ensureForUser(
+      const enrollment = new WorkspaceEnrollment(new PrismaWorkspaceEnrollmentStore(tx));
+      const { workspaceId, created } = await enrollment.ensureForUser(
         { ...input.user, username, displayName: title },
         input.locale,
         input.workspaceSlug,
       );
+      // Only the Workspace this call makes starts the setup wizard, in the same commit as the
+      // Workspace: the assistant provisioned after it finds the mark and stays silent. A repeated
+      // submit, or someone who already has a Workspace, is not put back in it: `update` is empty,
+      // so even a row that exists never gets the mark again.
+      if (created)
+        await tx.workspaceMemberPreference.upsert({
+          where: { workspaceId_userId: { workspaceId, userId: input.user.id } },
+          create: { workspaceId, userId: input.user.id, onboardingPendingSince: new Date() },
+          update: {},
+        });
       const displayName = await names.confirm(
         input.user.id,
         title,

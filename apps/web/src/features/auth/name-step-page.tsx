@@ -11,14 +11,18 @@ import { AuthSplitLayout } from "#src/features/auth/auth-split-layout";
 import { AvatarChoice } from "#src/features/avatars/avatar-choice";
 import { checkWorkspaceSlug, submitDisplayName } from "#src/features/auth/first-sign-in.functions";
 import type { InviteState } from "#src/server/auth/first-sign-in.server";
-import { afterSignInHref, localizedReturnHref } from "#src/features/auth/return-to";
-import { githubStepHref, isDefaultStartPage } from "#src/features/onboarding/github-step";
+import {
+  afterSignInHref,
+  isDefaultStartPage,
+  localizedReturnHref,
+} from "#src/features/auth/return-to";
 import { avatarPresets } from "#src/features/profiles/avatar-presets";
 import {
   checkPersonName,
   PERSON_NAME_MAX_LENGTH,
   type PersonNameProblem,
 } from "#src/features/profiles/person-name";
+import { workspacePath } from "#src/features/workspaces/workspace-url";
 import {
   isReservedWorkspaceSlug,
   isValidWorkspaceSlug,
@@ -162,13 +166,13 @@ export function NameStepPage({
     }
     // The name is saved, so a failure from here on is not a failed save. Stay busy through the
     // navigation: the page is replaced, not returned to.
-    // With nowhere particular to go on to, the new Workspace asks about GitHub first, and so it
-    // does when `returnTo` is an invite that no longer works (its page is a dead end); any other
-    // `returnTo` goes on as it always has.
+    // With nowhere particular to go on to, the person lands in the new Workspace, where the setup
+    // wizard shows; so they do when `returnTo` is an invite that no longer works (its page is a
+    // dead end). Any other `returnTo` goes on as it always has.
     const destination = nameOnly
       ? afterSignInHref(returnTo)
       : invite === "unavailable" || isDefaultStartPage(returnTo)
-        ? localizedReturnHref(githubStepHref(slug))
+        ? localizedReturnHref(workspacePath(slug))
         : afterSignInHref(returnTo);
     try {
       await navigate({ href: destination });

@@ -65,7 +65,7 @@ describe("workspace member preferences", () => {
   function preferences() {
     const saved = { conversation: [] as string[], agentProfile: [] as string[] };
     const repository: WorkspaceMemberPreferencesRepository = {
-      getTabOrders: async () => saved,
+      get: async () => ({ tabOrders: saved, setupPending: false }),
       setTabOrder: async (_workspaceId, _userId, panel, order) => {
         saved[panel] = order;
       },
@@ -74,7 +74,7 @@ describe("workspace member preferences", () => {
   }
 
   test("reads empty orders until the member saves one", async () => {
-    expect(await preferences().members.getTabOrders("workspace-1", "user-1")).toEqual({
+    expect((await preferences().members.get("workspace-1", "user-1")).tabOrders).toEqual({
       conversation: [],
       agentProfile: [],
     });
@@ -84,7 +84,7 @@ describe("workspace member preferences", () => {
     const { members } = preferences();
     await members.setTabOrder("workspace-1", "user-1", "conversation", ["files", "chat", "tasks"]);
     await members.setTabOrder("workspace-1", "user-1", "agentProfile", ["activity", "profile"]);
-    expect(await members.getTabOrders("workspace-1", "user-1")).toEqual({
+    expect((await members.get("workspace-1", "user-1")).tabOrders).toEqual({
       conversation: ["files", "chat", "tasks"],
       agentProfile: ["activity", "profile"],
     });

@@ -1,4 +1,4 @@
-import type { PrismaClient } from "#src/generated/prisma/client";
+import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { DirectConversations } from "#src/server/conversations/direct-conversations.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
@@ -12,6 +12,11 @@ import { AGENT_DISPLAY_NAME_MAX_LENGTH } from "#src/features/agents/agent.schema
 import { isUserLanguage } from "#src/server/db/repositories/user-preferences.repositories.server";
 import { humanLabel, type HumanNames } from "#src/lib/human-label";
 import type { Locale } from "#src/paraglide/runtime";
+import {
+  parseAgentRuntimeConfig,
+  type AgentRuntimeConfig,
+} from "#src/server/agents/agent-runtime-config.server";
+import { getAgentRuntimeLock } from "#src/server/agents/agent-runtime-lock.server";
 
 /** `{name}的助手` / `{name}'s Assistant`, with the owner's name cut to fit an Agent's display name.
  * Without a locale (no request to read one from) it is Chinese. */
@@ -35,6 +40,15 @@ const DEFAULT_RUNTIME = {
   modelProvider: "",
   reasoning: "",
 };
+
+/**
+ * The assistants that have never run: no control state and no session. The one definition of
+ * "never run", for the write that re-binds such an assistant and for any read that asks.
+ */
+export const NEVER_RAN = {
+  controlState: { equals: Prisma.DbNull },
+  currentSessionId: null,
+} satisfies Prisma.AgentWhereInput;
 
 /** Workspace-wide configuration, with a private execution identity for each member. Reuses the
  * ordinary lifecycle so a member's credentials, native history and files all have one owner. */
@@ -169,8 +183,8 @@ export class WorkspaceAssistants {
     }
   }
 
-  /** Only binds unconfigured sessions, never migrates an existing native history. */
-  async bindComputer(workspaceId: string, userId: string, computerId: string) {
+  /** Throws ACCESS_DENIED unless the member owns this Computer and it is connected to the Workspace. */
+  async #requireOwnedComputer(workspaceId: string, userId: string, computerId: string) {
     const computer = await this.db.computer.findFirst({
       where: {
         id: computerId,
@@ -181,12 +195,76 @@ export class WorkspaceAssistants {
       select: { id: true },
     });
     if (!computer) throw new AppError("ACCESS_DENIED");
+  }
+
+  /** Only binds unconfigured sessions, never migrates an existing native history. */
+  async bindComputer(workspaceId: string, userId: string, computerId: string) {
+    await this.#requireOwnedComputer(workspaceId, userId, computerId);
     const session = await this.ensure(workspaceId, userId);
     await this.db.agent.updateMany({
       where: { id: session.agentId, workspaceId, ownerId: userId, computerId: null },
       data: { computerId },
     });
     return session;
+  }
+
+  /**
+   * Re-binds the member's assistant to one of their own Computers with a runtime of their choice,
+   * without a migration: this is allowed only while it has never run (`NEVER_RAN`), so there is no
+   * native history to carry. The Agent's encrypted environment is kept, as `ManageAgents.update`
+   * keeps it. `canRun` is asked only when the write would change something; it answers whether
+   * the Computer can run that runtime for the member. Nothing is started here.
+   */
+  async configure(
+    workspaceId: string,
+    userId: string,
+    input: { computerId: string; runtimeConfig: Omit<AgentRuntimeConfig, "environment"> },
+    canRun: () => Promise<boolean>,
+  ): Promise<void> {
+    await this.#requireOwnedComputer(workspaceId, userId, input.computerId);
+    const { agentId } = await this.ensure(workspaceId, userId);
+    // The reads and `canRun` (which reads more) happen before the lock; the lock covers only the
+    // re-read of the environment and the conditional write, whose `NEVER_RAN` guard decides.
+    const current = await this.db.agent.findUniqueOrThrow({
+      where: { id: agentId },
+      select: { computerId: true, runtimeConfig: true },
+    });
+    const withEnvironment = (stored: unknown) => {
+      const { environment } = parseAgentRuntimeConfig(stored);
+      return { ...input.runtimeConfig, ...(environment ? { environment } : {}) };
+    };
+    // What first sign-in already provisioned (Pi on the default cloud computer) is no write.
+    if (
+      current.computerId === input.computerId &&
+      JSON.stringify(parseAgentRuntimeConfig(current.runtimeConfig)) ===
+        JSON.stringify(withEnvironment(current.runtimeConfig))
+    )
+      return;
+    if (!(await canRun()))
+      throw new AppError("INVALID_INPUT", { errorId: "agent-runtime-unavailable" });
+    await getAgentRuntimeLock().run(agentId, async () => {
+      const latest = await this.db.agent.findUniqueOrThrow({
+        where: { id: agentId },
+        select: { runtimeConfig: true },
+      });
+      // One conditional write: it only lands while nothing has started the assistant.
+      const written = await this.db.agent.updateMany({
+        where: {
+          id: agentId,
+          workspaceId,
+          ownerId: userId,
+          systemKind: WORKSPACE_ASSISTANT_KIND,
+          deletedAt: null,
+          ...NEVER_RAN,
+        },
+        data: {
+          computerId: input.computerId,
+          runtimeConfig: withEnvironment(latest.runtimeConfig),
+        },
+      });
+      if (written.count === 0)
+        throw new AppError("INVALID_INPUT", { errorId: "workspace-assistant-already-started" });
+    });
   }
 
   /**

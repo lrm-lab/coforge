@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Cloud01 as Cloud, Monitor01 as Monitor } from "@untitledui/icons";
 
+import { StatusDot } from "#src/components/ui/status-dot";
+import { Spinner } from "#src/components/ui/spinner";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { m } from "#src/paraglide/messages";
 import { ComputerInstallCommand } from "./computer-install-command";
@@ -91,7 +93,23 @@ export function AddComputerDialog({
                 <ComputerInstallCommand
                   installOrigin={installOrigin}
                   workspaceSlug={workspaceSlug}
-                  connectedComputerName={connectedComputerName}
+                  status={
+                    <div
+                      role="status"
+                      className="flex items-center gap-3 rounded-lg border border-secondary bg-secondary px-4 py-3"
+                    >
+                      {connectedComputerName ? (
+                        <StatusDot tone="online" className="size-2" />
+                      ) : (
+                        <Spinner className="size-4 shrink-0 text-fg-quaternary" />
+                      )}
+                      <p className="text-sm font-medium text-primary">
+                        {connectedComputerName
+                          ? m.computer_add_success_description({ name: connectedComputerName })
+                          : m.computer_waiting_for_connection()}
+                      </p>
+                    </div>
+                  }
                 />
               )}
 

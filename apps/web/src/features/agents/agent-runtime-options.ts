@@ -16,7 +16,7 @@ export function runtimeOptionsFromRuntimes(
     unavailableCode?: RuntimeUnavailableCode | null;
     diagnostic?: string | null;
   }[],
-): Pick<RuntimeOptions, "providers" | "unusable"> {
+): { providers: RuntimeProvider[]; unusable: RuntimeOptions["unusable"] } {
   return {
     providers: runtimes
       .filter((runtime) => !runtime.unavailableCode)

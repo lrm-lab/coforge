@@ -24,7 +24,7 @@ const dong = {
 test("a user with no membership gets a Workspace of their own", async () => {
   const store = memoryStore();
   const first = await new WorkspaceEnrollment(store).ensureForUser(ada, "en");
-  expect(first.workspaceId).toBe("workspace-ada");
+  expect(first).toEqual({ workspaceId: "workspace-ada", created: true });
   expect(store.created).toEqual([{ slug: "ada", name: "Ada's Workspace" }]);
 });
 
@@ -47,15 +47,8 @@ test("an existing membership is left unchanged", async () => {
   await store.createForUser({ slug: "team", name: "Team", userId: ada.id, locale: "en" });
   const enrollment = new WorkspaceEnrollment(store);
   const result = await enrollment.ensureForUser(ada, "zh-CN");
-  expect(result.workspaceId).toBe("workspace-team");
+  expect(result).toEqual({ workspaceId: "workspace-team", created: false });
   expect(store.created).toEqual([{ slug: "team", name: "Team" }]);
-});
-
-test("looking up a missing membership does not create a Workspace", async () => {
-  const store = memoryStore();
-  const enrollment = new WorkspaceEnrollment(store);
-  expect(await enrollment.existingForUser(ada.id)).toBeNull();
-  expect(store.created).toEqual([]);
 });
 
 test("a taken username slug still creates a Workspace for that User", async () => {
@@ -109,6 +102,8 @@ test("two enrollments of the same new User at once make one Workspace, not two",
   ]);
 
   expect(second.workspaceId).toBe(first.workspaceId);
+  // Only the call whose create landed made the Workspace; the other found it.
+  expect([first.created, second.created].sort()).toEqual([false, true]);
   expect(store.created).toEqual([{ slug: "ada", name: "Ada's Workspace" }]);
 });
 

@@ -75,6 +75,7 @@ function fixture(alreadyGreeted = true) {
     { resendForCurrentSession: async () => {} },
   );
   const introductions = new AgentIntroduction({
+    setupFacts: async () => ({ onboardingPending: false, ownerRole: null }),
     hasAgentMessage: async () => alreadyGreeted,
     settle: async () => {
       agent.introductionDueAt = null;

@@ -1,8 +1,10 @@
-import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
+import type { Prisma } from "#src/generated/prisma/client";
 
 import { validateTimeZone } from "#src/lib/dates";
 import { AppError } from "#src/lib/app-error";
 import { isTimeFormat } from "#src/lib/time-format";
+import { isPersonRole, type PersonRole } from "#src/features/onboarding/person-role";
+import type { DatabaseScope } from "#src/server/db/transaction.server";
 
 /** The settings every page reads together, as stored: one row, so one read. */
 export type StoredUserPreferences = {
@@ -22,6 +24,7 @@ export type UserPreferencesRepository = {
   setBrowserNotificationsEnabled(userId: string, enabled: boolean): Promise<boolean>;
   setTimeFormat(userId: string, timeFormat: string | null): Promise<string | null>;
   setLanguage(userId: string, language: UserLanguage | null): Promise<string | null>;
+  setRole(userId: string, role: PersonRole | null): Promise<string | null>;
 };
 
 type PreferenceValues = Omit<
@@ -30,7 +33,8 @@ type PreferenceValues = Omit<
 >;
 
 export class PrismaUserPreferencesRepository implements UserPreferencesRepository {
-  constructor(private readonly db: PrismaClient) {}
+  /** A transaction's client works too, so a caller can save a setting in its own transaction. */
+  constructor(private readonly db: DatabaseScope) {}
 
   /** A user without a row has never saved a preference, so every setting reads as its default. */
   private row(userId: string) {
@@ -76,6 +80,10 @@ export class PrismaUserPreferencesRepository implements UserPreferencesRepositor
   async setLanguage(userId: string, language: UserLanguage | null) {
     return (await this.write(userId, { language })).language;
   }
+
+  async setRole(userId: string, role: PersonRole | null) {
+    return (await this.write(userId, { role })).role;
+  }
 }
 
 export class UserPreferences {
@@ -114,6 +122,11 @@ export class UserPreferences {
   async setLanguage(userId: string, language: UserLanguage | null) {
     if (language !== null && !isUserLanguage(language)) throw new AppError("INVALID_INPUT");
     return this.repository.setLanguage(userId, language);
+  }
+
+  async setRole(userId: string, role: string | null) {
+    if (role !== null && !isPersonRole(role)) throw new AppError("INVALID_INPUT");
+    return this.repository.setRole(userId, role);
   }
 }
 

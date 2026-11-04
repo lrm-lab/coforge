@@ -63,9 +63,48 @@ test("a platform assistant with no introductionDueAt still owes its welcome", ()
   expect(prompt).toContain("CoForge platform assistant");
 });
 
+test("a platform assistant owes no introduction while its owner's setup wizard is pending", () => {
+  const assistant = { systemKind: WORKSPACE_ASSISTANT_KIND, introductionDueAt: null };
+  expect(promptFor({ ...assistant, onboardingPending: true })).toBeUndefined();
+  expect(promptFor({ ...assistant, onboardingPending: false })).toContain("platform assistant");
+  expect(promptFor(assistant)).toContain("platform assistant");
+  // The wizard belongs to the platform assistant; an ordinary Agent's introduction is unaffected.
+  expect(promptFor({ onboardingPending: true })).toContain("introduce yourself to @ada");
+});
+
+test("the platform assistant's welcome says Agents are teammates and offers a starter team for a known role", () => {
+  const prompt = promptFor({
+    systemKind: WORKSPACE_ASSISTANT_KIND,
+    introductionDueAt: null,
+    ownerRole: "designer",
+  });
+  expect(prompt).toContain("Agents are teammates");
+  expect(prompt).toContain("designer");
+  expect(prompt).toContain("starter team of Agents");
+  expect(prompt).toContain("only after");
+  expect(prompt).not.toContain("what they are working on");
+  // The existing starter choices and their rules stay.
+  expect(prompt).toContain("five clickable starter choices");
+});
+
+test("without a known role the welcome asks what the member is working on and never asks their role", () => {
+  for (const ownerRole of [undefined, null, "astronaut"]) {
+    const prompt = promptFor({
+      systemKind: WORKSPACE_ASSISTANT_KIND,
+      introductionDueAt: null,
+      ownerRole,
+    });
+    expect(prompt).toContain("Agents are teammates");
+    expect(prompt).toContain("what they are working on");
+    expect(prompt).not.toContain("starter team of Agents");
+    expect(prompt).toContain("never ask");
+  }
+});
+
 test("a platform assistant's own DM reply settles an unset introductionDueAt", async () => {
   const scopes: { since: Date }[] = [];
   const introductions = new AgentIntroduction({
+    setupFacts: async () => ({ onboardingPending: false, ownerRole: null }),
     hasAgentMessage: async ({ since }) => {
       scopes.push({ since });
       return true;
@@ -125,7 +164,9 @@ function controlFixture(
   options: {
     facts?: Partial<AgentIntroductionFacts>;
     messages?: AgentMessage[];
-    fail?: "read" | "settle";
+    fail?: "read" | "settle" | "setup";
+    /** The owner's setup facts, which only a platform assistant's Start reads. */
+    setup?: { onboardingPending: boolean; ownerRole: string | null };
   } = {},
 ) {
   const agent: AgentControlAgent = {
@@ -148,8 +189,15 @@ function controlFixture(
     ...options.facts,
   };
   const settled: Parameters<AgentIntroductionStore["settle"]>[0][] = [];
+  const reads = { setup: 0, messages: 0 };
   const store: AgentIntroductionStore = {
+    setupFacts: async () => {
+      reads.setup++;
+      if (options.fail === "setup") throw new Error("database unavailable");
+      return options.setup ?? { onboardingPending: false, ownerRole: null };
+    },
     hasAgentMessage: async ({ agentId, directKey, since }) => {
+      reads.messages++;
       if (options.fail === "read") throw new Error("database unavailable");
       return (
         agentId === "agent-a" &&
@@ -184,7 +232,7 @@ function controlFixture(
     model: "",
     reasoning: "",
   };
-  return { control, starts, intent, settled };
+  return { control, starts, intent, settled, reads };
 }
 
 test("the Start that follows an Agent's creation carries its introduction prompt", async () => {
@@ -269,3 +317,107 @@ test.each(["read", "settle"] as const)(
     }
   },
 );
+
+const assistantFacts = { systemKind: WORKSPACE_ASSISTANT_KIND, introductionDueAt: null } as const;
+
+test("a platform assistant's Start carries no welcome while its owner's wizard is pending, and does not look for one", async () => {
+  const { control, starts, intent, reads } = controlFixture({
+    facts: assistantFacts,
+    setup: { onboardingPending: true, ownerRole: "designer" },
+  });
+  await control.publishStart({ ...intent, requestId: "wizard" }, "owner-a");
+  expect(starts).toHaveLength(1);
+  expect(starts[0]!.introductionPrompt).toBeUndefined();
+  expect(reads).toEqual({ setup: 1, messages: 0 });
+});
+
+test("the welcome reads the owner's saved role when it is made", async () => {
+  const { control, starts, intent } = controlFixture({
+    facts: assistantFacts,
+    setup: { onboardingPending: false, ownerRole: "designer" },
+  });
+  await control.publishStart({ ...intent, requestId: "done" }, "owner-a");
+  expect(starts[0]!.introductionPrompt).toContain("they work as: designer");
+});
+
+test("only a platform assistant that owes a welcome reads the owner's setup facts", async () => {
+  // An ordinary Agent, whether or not it owes an introduction, never does.
+  for (const options of [{ facts: { introductionDueAt: null } }, {}]) {
+    const { control, intent, reads } = controlFixture(options);
+    await control.publishStart({ ...intent, requestId: "other" }, "owner-a");
+    expect(reads.setup).toBe(0);
+  }
+  // Nor does an assistant with no creator to welcome.
+  let read = 0;
+  const introductions = new AgentIntroduction({
+    setupFacts: async () => {
+      read++;
+      return { onboardingPending: false, ownerRole: null };
+    },
+    hasAgentMessage: async () => false,
+    settle: async () => {},
+  });
+  await introductions.promptFor(
+    {
+      id: "agent-a",
+      workspaceId: "workspace-a",
+      ownerId: "owner-a",
+      ...assistantFacts,
+      deletedAt: NOW,
+      ownerUsername: "ada",
+    },
+    NOW,
+  );
+  expect(read).toBe(0);
+});
+
+test("a platform assistant whose setup facts cannot be read stays silent rather than welcoming early", async () => {
+  const warn = console.warn;
+  const warnings: unknown[] = [];
+  console.warn = (line: string) => void warnings.push(JSON.parse(line));
+  try {
+    const { control, starts, intent } = controlFixture({ facts: assistantFacts, fail: "setup" });
+    await control.publishStart({ ...intent, requestId: "setup-failed" }, "owner-a");
+    expect(starts).toHaveLength(1);
+    expect(starts[0]!.introductionPrompt).toBeUndefined();
+    expect(warnings).toEqual([
+      expect.objectContaining({
+        event: "agent_introduction:setup_unreadable",
+        agent_id: "agent-a",
+      }),
+    ]);
+  } finally {
+    console.warn = warn;
+  }
+});
+
+test("a Daemon coming ready does not start a platform assistant whose owner's wizard is pending", async () => {
+  const held = controlFixture({
+    facts: assistantFacts,
+    setup: { onboardingPending: true, ownerRole: null },
+  });
+  await held.control.recover({ ...held.intent, requestId: "ready" }, "owner-a");
+  expect(held.starts).toHaveLength(0);
+
+  const done = controlFixture({
+    facts: assistantFacts,
+    setup: { onboardingPending: false, ownerRole: null },
+  });
+  await done.control.recover({ ...done.intent, requestId: "ready" }, "owner-a");
+  expect(done.starts).toHaveLength(1);
+
+  // An unreadable mark holds the Start as well, and an ordinary Agent is never held.
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    const unreadable = controlFixture({ facts: assistantFacts, fail: "setup" });
+    await unreadable.control.recover({ ...unreadable.intent, requestId: "ready" }, "owner-a");
+    expect(unreadable.starts).toHaveLength(0);
+  } finally {
+    console.warn = warn;
+  }
+  const ordinary = controlFixture();
+  await ordinary.control.recover({ ...ordinary.intent, requestId: "ready" }, "owner-a");
+  expect(ordinary.starts).toHaveLength(1);
+  expect(ordinary.reads.setup).toBe(0);
+});

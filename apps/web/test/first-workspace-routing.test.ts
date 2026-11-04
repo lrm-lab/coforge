@@ -43,7 +43,9 @@ const workspaceReads = {
     loadWorkspaceAgents: { agents: [], extraAgents: [], streamPositions: {} },
   },
   "#src/features/settings/settings.functions": { getUserPreferences: {} },
-  "#src/features/panel-tabs/panel-tabs.functions": { getPanelTabOrders: {} },
+  "#src/features/workspaces/member-settings.functions": {
+    loadMemberWorkspaceSettings: { tabOrders: {}, setupPending: false },
+  },
   "#src/features/records/records.functions": { loadRecordsNavAttention: { preview: false } },
 } as const;
 for (const [path, reads] of Object.entries(workspaceReads)) {

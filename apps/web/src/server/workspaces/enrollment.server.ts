@@ -36,25 +36,22 @@ export class WorkspaceEnrollment {
 
   /**
    * `slug` is the URL the person chose for it; it is used as given and a taken one throws the
-   * unique violation. Without one the slug comes from the username.
+   * unique violation. Without one the slug comes from the username. `created` is true only for the
+   * call whose own write made the Workspace, so a caller can tell a new member from a returning one
+   * without reading the membership first.
    */
   async ensureForUser(
     user: EnrollmentUser,
     locale: Locale,
     slug?: string,
-  ): Promise<{ workspaceId: string }> {
+  ): Promise<{ workspaceId: string; created: boolean }> {
     const existing = await this.store.findMembership(user.id);
-    if (existing) return { workspaceId: existing };
+    if (existing) return { workspaceId: existing, created: false };
 
     const name = workspaceDisplayName(user.displayName, locale);
-    const workspaceId = slug
-      ? await this.create({ slug, name, userId: user.id, locale })
-      : await this.createOwnedWorkspace(user.username, user.id, name, locale);
-    return { workspaceId };
-  }
-
-  async existingForUser(userId: string): Promise<string | null> {
-    return this.store.findMembership(userId);
+    return slug
+      ? this.create({ slug, name, userId: user.id, locale })
+      : this.createOwnedWorkspace(user.username, user.id, name, locale);
   }
 
   /**
@@ -67,7 +64,7 @@ export class WorkspaceEnrollment {
     userId: string,
     name: string,
     locale: Locale,
-  ): Promise<string> {
+  ): Promise<{ workspaceId: string; created: boolean }> {
     const slug = nameToWorkspaceSlug(username);
     if (isValidWorkspaceSlug(slug) && !isReservedWorkspaceSlug(slug)) {
       try {
@@ -92,13 +89,13 @@ export class WorkspaceEnrollment {
     name: string;
     userId: string;
     locale: Locale;
-  }): Promise<string> {
+  }): Promise<{ workspaceId: string; created: boolean }> {
     try {
-      return await this.store.createForUser(input);
+      return { workspaceId: await this.store.createForUser(input), created: true };
     } catch (error) {
       if (isUniqueViolation(error)) {
         const concurrent = await this.store.findMembership(input.userId);
-        if (concurrent) return concurrent;
+        if (concurrent) return { workspaceId: concurrent, created: false };
       }
       throw error;
     }

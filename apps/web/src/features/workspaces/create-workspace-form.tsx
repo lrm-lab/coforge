@@ -14,18 +14,15 @@ import {
 
 export type CreateWorkspaceInput = { name: string; slug: string };
 
-/**
- * Creates the Workspace and goes on to its "Connect GitHub" step, which passes straight on to the
- * Workspace home when there is nothing to ask. The Workspace is then the one `/` opens (the server
- * remembers it).
- */
+/** Creates the Workspace and opens its home. The Workspace is then the one `/` opens (the server
+ * remembers it). */
 export function useCreateAndOpenWorkspace(): (input: CreateWorkspaceInput) => Promise<void> {
   const create = useServerFn(createWorkspace);
   const navigate = useNavigate();
   return async (input) => {
     const workspace = await create({ data: input });
     await navigate({
-      to: "/w/$workspaceSlug/connect-github",
+      to: "/w/$workspaceSlug",
       params: { workspaceSlug: workspace.slug },
     });
   };

@@ -27,7 +27,7 @@ The module map of `src/server/`, split out of [`apps/web/AGENTS.md`](../../AGENT
 - `server/centrifugo/` — Centrifugo proxies, RPC receivers, and short-lived result caches.
 - `server/computers/` — Computer registration, metadata, restart and upgrade
   operations, signing a Code Agent runtime in and out (`runtime-auth*`), runtime visibility, explicit model catalog refresh, and what the server remembers across a
-  daemon's shutdown and return.
+  daemon's shutdown and return; `computer-connections.server.ts` is the narrow read of the Computers a member sees, with their connection state and optionally their runtimes, for screens that only pick or wait for one.
 - `server/hosts/` — host-node enrollment, registration, heartbeat, the global online list, and container-computer jobs.
 - `server/conversations/` — public channels, channel authority, stopping and resuming a channel's Agents, direct messages, history, message search, action cards, message forwards, reactions, tracked @mention delivery outcomes (`mention-deliveries`), the daily read-record retention sweep (`message-read-retention`), and conversation realtime.
 - `server/db/` — the Prisma client, repositories (a DM's list preferences apart from its messages; the Agent attention rule in `agent-attention`), and the shared unique-violation check.
@@ -41,7 +41,7 @@ The module map of `src/server/`, split out of [`apps/web/AGENTS.md`](../../AGENT
 - `server/integrations/` — GitHub connection, configuration, and webhooks.
 - `server/notifications/` — Web Push and in-page notification delivery (its egress check is `server/egress/`), and a person's account notification settings (pause, quiet hours, preview, sound, a phone's wait while the computer is in use, the device list and test).
 
-- `server/onboarding/` — `SetupChecklist`: which setup steps a member has done in a Workspace, computed from existing rows (no stored progress).
+- `server/onboarding/` — `SetupChecklist`: which setup steps a member has done in a Workspace, computed from existing rows (no stored progress); `OnboardingWizard`: the first-sign-in wizard's state, assistant configuration (while it has never run) and completion (role saved, `onboardingPendingSince` cleared, assistant started).
 - `server/profiles/` — user avatars.
 - `server/projects/` — project settings, images, and repository file download.
 - `server/records/` — Workspace Records (see the last section).

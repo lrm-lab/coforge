@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { Suspense, lazy, useCallback, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Outlet, createFileRoute, notFound, redirect, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
@@ -30,7 +30,8 @@ import { loadWorkspaceAgents } from "#src/features/agents/workspace-agents.funct
 import { WorkspaceAgentsProvider } from "#src/features/agents/workspace-agents-realtime";
 import { WorkspacePresenceProvider } from "#src/features/workspaces/member-presence";
 import { getUserPreferences } from "#src/features/settings/settings.functions";
-import { getPanelTabOrders } from "#src/features/panel-tabs/panel-tabs.functions";
+import { loadMemberWorkspaceSettings } from "#src/features/workspaces/member-settings.functions";
+import { loadOnboardingWizard } from "#src/features/onboarding/onboarding-wizard.functions";
 import { PanelTabOrderProvider } from "#src/features/panel-tabs/panel-tab-order-context";
 import { useLastLocationMemory } from "#src/features/workspaces/use-last-location-memory";
 import { useSearchShortcut } from "#src/features/search/search-shortcut";
@@ -42,6 +43,13 @@ import { getStartPage } from "#src/features/workspaces/last-location.functions";
 import { rememberQueryCache } from "#src/features/cache-persistence/browser-query-cache";
 import { nameStepRedirect } from "#src/features/auth/name-step-redirect";
 import { signOut } from "#src/features/auth/sign-out";
+
+// Only a member in their first-sign-in setup ever loads it.
+const OnboardingWizard = lazy(() =>
+  import("#src/features/onboarding/onboarding-wizard").then((module) => ({
+    default: module.OnboardingWizard,
+  })),
+);
 
 export const Route = createFileRoute("/w/$workspaceSlug")({
   staleTime: Infinity,
@@ -74,14 +82,14 @@ export const Route = createFileRoute("/w/$workspaceSlug")({
       });
   },
   loader: async ({ location, params, context }) => {
-    const [user, switcher, notifications, workspaceAgents, preferences, tabOrders] =
+    const [user, switcher, notifications, workspaceAgents, preferences, memberSettings] =
       await Promise.all([
         getUserProfile(),
         loadWorkspaceSwitcher(),
         getBrowserNotificationSettings(),
         loadWorkspaceAgents(),
         getUserPreferences(),
-        getPanelTabOrders(),
+        loadMemberWorkspaceSettings(),
         // Shown at once from the cache, and read again in the background once older than its
         // staleTime, as each run of this loader read it before (task #366).
         context.queryClient.ensureQueryData({
@@ -92,11 +100,16 @@ export const Route = createFileRoute("/w/$workspaceSlug")({
     // A person who has not been asked for a display name is asked once, here for a session that
     // predates the step, and comes back to this page.
     if (!user.named) throw nameStepRedirect(location.href);
+    // The setup wizard shows over the Workspace while the member's first-sign-in mark is set. The
+    // mark came with their settings, so a member who finished it costs no further read; one still
+    // in it gets the wizard's state with the page, not after a request of its own.
+    const onboarding = memberSettings.setupPending ? await loadOnboardingWizard() : null;
     return {
       user,
       workspaces: switcher.workspaces,
       currentWorkspace: switcher.current,
       canCreateAgents: switcher.canCreateAgents,
+      onboarding,
       notifications,
       agents: workspaceAgents.agents,
       extraAgents: workspaceAgents.extraAgents,
@@ -104,7 +117,7 @@ export const Route = createFileRoute("/w/$workspaceSlug")({
       timeZone: preferences.timeZone,
       assumedPhone: loadAssumedPhone(),
       timeFormat: preferences.timeFormat,
-      tabOrders,
+      tabOrders: memberSettings.tabOrders,
     };
   },
   component: AppLayout,
@@ -123,6 +136,7 @@ function AppLayout() {
     assumedPhone,
     timeFormat,
     tabOrders,
+    onboarding,
   } = Route.useLoaderData();
   const { queryClient } = Route.useRouteContext();
   const recordsPreview =
@@ -180,6 +194,15 @@ function AppLayout() {
                   {/* Says when the person is at this computer, so a phone's notifications can wait. */}
                   <ComputerActivityReport enabled={notifications.enabled} />
                   <ComputerUpgradeWatcher />
+                  {onboarding && (
+                    <Suspense fallback={null}>
+                      <OnboardingWizard
+                        workspaceId={currentWorkspace.id}
+                        workspaceSlug={currentWorkspace.slug}
+                        initial={onboarding}
+                      />
+                    </Suspense>
+                  )}
                   <NotificationActivationContext
                     value={{
                       publicKey: notifications.publicKey,

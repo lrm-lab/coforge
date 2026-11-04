@@ -1,5 +1,5 @@
 import { isNonLocalizedPath } from "#src/lib/non-localized-path";
-import { deLocalizeHref, localizeHref } from "#src/paraglide/runtime";
+import { deLocalizeHref, locales, localizeHref } from "#src/paraglide/runtime";
 
 /** Longer return paths are dropped: one travels in the sign-in page's URL and is sent back with
  * the form, and nothing legitimate is anywhere near this long. */
@@ -93,6 +93,15 @@ export function signOutHref(returnTo: string | undefined): string {
 function withQuery(path: string, query: URLSearchParams): string {
   const pairs = [...query].map(([name, value]) => `${name}=${encodeURIComponent(value)}`);
   return pairs.length ? `${path}?${pairs.join("&")}` : path;
+}
+
+/** Whether a first sign-in has nowhere particular to go on to: someone arriving through an invite
+ * or join link carries a `returnTo` and goes on there. The start page is `/` or a locale root
+ * (`/en`). */
+export function isDefaultStartPage(returnTo: string | undefined): boolean {
+  if (returnTo === undefined || returnTo === "/") return true;
+  const root = returnTo.replace(/\/$/, "");
+  return locales.some((locale) => root === `/${locale}`);
 }
 
 /** Where a person lands once a sign-in step is done: the page they were going to (a `safeReturnTo`

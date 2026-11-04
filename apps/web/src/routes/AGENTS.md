@@ -11,10 +11,6 @@ These rules apply to `src/routes/`.
   `records`; a direct message is `dm/$dmId`, by its conversation id. Pathless layouts (`_chat`, `_computers`) share chrome between
   pages without adding a URL segment. Old page names are not redirected; a Workspace's former
   slug is: `/w/<former>/…` goes to the same page under its current slug.
-- `w.$workspaceSlug_.connect-github` (`/w/<slug>/connect-github`, the "Connect GitHub" step after creating a
-  Workspace) is not a Workspace page: the `_` suffix escapes the layout, so it has no sidebar and
-  uses `AuthSplitLayout`. It checks sign-in, the name step and membership itself, and passes on to
-  `next` when GitHub is unconfigured, connected, or unreadable.
 - Pages opened before someone is in a Workspace — `login`, `welcome`, `join/$token`,
   `apps/share/$token` (a private app share link: the person picks a Workspace to install in),
   `oauth/verify`, `oidc/auth`, `workspaces/new` — stay outside `/w/$workspaceSlug`; sign-in,
@@ -28,7 +24,7 @@ These rules apply to `src/routes/`.
   personal Workspace, except when `returnTo` is a join page the server confirms is a working invite:
   then only the name is asked and saved, no Workspace is made, and joining is the way in. Sign-in
   never makes a Workspace for someone who has already answered; one in no Workspace goes to
-  `workspaces/new`. `oauth/verify` and `oidc/auth` are not gated: approving a Computer or an app needs no name.
+  `workspaces/new`. Answering lands in the new Workspace, where the setup wizard (`features/onboarding/`, mounted by the layout, no route of its own) shows while the member's `onboardingPendingSince` is set. `oauth/verify` and `oidc/auth` are not gated: approving a Computer or an app needs no name.
 - The page URL names the Workspace: server functions act on it
   (`workspaceUserMiddleware`), and a Workspace the User is not in is a 404
   (for a User in no Workspace at all, `workspaces/new`).

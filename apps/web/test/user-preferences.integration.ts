@@ -84,7 +84,25 @@ test("preferences are removed with their user and legacy values stay constrained
       ),
     ).rejects.toThrow("user_preferences_timeFormat_check");
 
-    await new UserPreferences(new PrismaUserPreferencesRepository(db)).set(user.id, "UTC");
+    const preferences = new UserPreferences(new PrismaUserPreferencesRepository(db));
+    await preferences.set(user.id, "UTC");
+
+    // The role is written like any setting, and joins a caller's transaction when given its client.
+    expect(await preferences.setRole(user.id, "founder")).toBe("founder");
+    await db.$transaction(async (tx) => {
+      await new UserPreferences(new PrismaUserPreferencesRepository(tx)).setRole(
+        user.id,
+        "product",
+      );
+    });
+    expect((await db.userPreference.findUniqueOrThrow({ where: { userId: user.id } })).role).toBe(
+      "product",
+    );
+    await expect(
+      Promise.resolve(
+        db.$executeRaw`UPDATE "user_preferences" SET "role" = 'astronaut' WHERE "userId" = ${user.id}::uuid`,
+      ),
+    ).rejects.toThrow("user_preferences_role_check");
     await db.user.delete({ where: { id: user.id } });
     const [{ count }] = await db.$queryRaw<[{ count: bigint }]>`
       SELECT count(*) FROM "user_preferences" WHERE "userId" = ${user.id}::uuid`;

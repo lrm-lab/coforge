@@ -9,8 +9,11 @@ import {
 } from "#src/features/panel-tabs/panel-tab-order";
 
 export type WorkspaceMemberPreferencesRepository = {
-  /** Each panel's saved tab ids; an empty list when the member never saved one. */
-  getTabOrders(workspaceId: string, userId: string): Promise<Record<TabOrderPanel, string[]>>;
+  /** The member's one row in this Workspace; nothing saved reads as every setting at its default. */
+  get(
+    workspaceId: string,
+    userId: string,
+  ): Promise<{ tabOrders: Record<TabOrderPanel, string[]>; setupPending: boolean }>;
   setTabOrder(
     workspaceId: string,
     userId: string,
@@ -27,14 +30,17 @@ const TAB_ORDER_COLUMNS = {
 export class PrismaWorkspaceMemberPreferencesRepository implements WorkspaceMemberPreferencesRepository {
   constructor(private readonly db: PrismaClient) {}
 
-  async getTabOrders(workspaceId: string, userId: string) {
+  async get(workspaceId: string, userId: string) {
     // A member without a row has never saved a preference in this Workspace.
     const saved = await this.db.workspaceMemberPreference.findUnique({
       where: { workspaceId_userId: { workspaceId, userId } },
     });
     return {
-      conversation: saved?.conversationTabOrder ?? [],
-      agentProfile: saved?.agentProfileTabOrder ?? [],
+      tabOrders: {
+        conversation: saved?.conversationTabOrder ?? [],
+        agentProfile: saved?.agentProfileTabOrder ?? [],
+      },
+      setupPending: Boolean(saved?.onboardingPendingSince),
     };
   }
 
@@ -48,16 +54,26 @@ export class PrismaWorkspaceMemberPreferencesRepository implements WorkspaceMemb
   }
 }
 
-/** A Workspace member's own settings in that Workspace: today, the panels' tab orders. */
+/**
+ * A Workspace member's own settings in that Workspace: the panels' tab orders, and whether the
+ * first-sign-in setup wizard is still pending (`onboardingPendingSince`), read from the same row
+ * so the Workspace page asks for neither twice.
+ */
 export class WorkspaceMemberPreferences {
   constructor(private readonly repository: WorkspaceMemberPreferencesRepository) {}
 
-  /** Saved orders, keeping only ids that are still tabs of their panel. */
-  async getTabOrders(workspaceId: string, userId: string): Promise<TabOrders> {
-    const saved = await this.repository.getTabOrders(workspaceId, userId);
+  /** Saved tab orders, keeping only ids that are still tabs of their panel, and the wizard mark. */
+  async get(
+    workspaceId: string,
+    userId: string,
+  ): Promise<{ tabOrders: TabOrders; setupPending: boolean }> {
+    const saved = await this.repository.get(workspaceId, userId);
     return {
-      conversation: knownTabs("conversation", saved.conversation),
-      agentProfile: knownTabs("agentProfile", saved.agentProfile),
+      tabOrders: {
+        conversation: knownTabs("conversation", saved.tabOrders.conversation),
+        agentProfile: knownTabs("agentProfile", saved.tabOrders.agentProfile),
+      },
+      setupPending: saved.setupPending,
     };
   }
 

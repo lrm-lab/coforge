@@ -4,7 +4,10 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { WorkspaceAssistants } from "#src/server/agents/workspace-assistants.server";
-import { WorkspaceAssistantOnboarding } from "#src/server/agents/workspace-assistant-onboarding.server";
+import {
+  WorkspaceAssistantOnboarding,
+  startAssistantIfOwed,
+} from "#src/server/agents/workspace-assistant-onboarding.server";
 import { DirectConversations } from "#src/server/conversations/direct-conversations.server";
 import { createAgentIntroduction } from "#src/server/db/repositories/agent-introduction.repositories.server";
 import { PrismaAgentControlStore } from "#src/server/db/repositories/agent-control.repositories.server";
@@ -229,6 +232,54 @@ test("old assistants without any reply are enrolled once, even after seven days 
   expect(await createAgentIntroduction(db).promptFor(agent!, new Date())).toContain(
     "CoForge platform assistant",
   );
+});
+
+test("no introduction is carried or started while the member's setup wizard is pending, and one is after it", async () => {
+  const key = { workspaceId_userId: { workspaceId, userId } };
+  await db.workspaceMemberPreference.upsert({
+    where: key,
+    create: { workspaceId, userId, onboardingPendingSince: new Date() },
+    update: { onboardingPendingSince: new Date() },
+  });
+  const control = new PrismaAgentControlStore(db);
+  const published: string[] = [];
+  const publish = async (agent: { id: string }) => {
+    published.push(agent.id);
+  };
+  try {
+    // The prompt every Start asks for (`AgentControl.sendStart`, the Daemon's ready recovery
+    // included) and the onboarding path's own Start both stay silent, and nothing settles.
+    expect(
+      await createAgentIntroduction(db).promptFor((await control.get(agentId))!, new Date()),
+    ).toBeUndefined();
+    await startAssistantIfOwed(db, { agentId }, publish);
+    expect(published).toEqual([]);
+
+    // The wizard finished with a role: the member now gets the welcome, and it knows the role.
+    await db.workspaceMemberPreference.update({
+      where: key,
+      data: { onboardingPendingSince: null },
+    });
+    await db.userPreference.upsert({
+      where: { userId },
+      create: { userId, role: "founder" },
+      update: { role: "founder" },
+    });
+    const prompt = await createAgentIntroduction(db).promptFor(
+      (await control.get(agentId))!,
+      new Date(),
+    );
+    expect(prompt).toContain("CoForge platform assistant");
+    expect(prompt).toContain("founder");
+    await startAssistantIfOwed(db, { agentId }, publish);
+    expect(published).toEqual([agentId]);
+  } finally {
+    await db.workspaceMemberPreference.update({
+      where: key,
+      data: { onboardingPendingSince: null },
+    });
+    await db.userPreference.update({ where: { userId }, data: { role: null } });
+  }
 });
 
 test("stopped assistants stay stopped during onboarding and repeated backfill", async () => {

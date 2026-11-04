@@ -48,6 +48,7 @@ describe("user time zone preferences", () => {
       },
       setTimeFormat: async (_userId, timeFormat) => timeFormat,
       setLanguage: async (_userId, language) => language,
+      setRole: async (_userId, role) => role,
     };
     const preferences = new UserPreferences(repository);
 
@@ -69,12 +70,35 @@ describe("user time zone preferences", () => {
       setBrowserNotificationsEnabled: async (_userId, next) => (enabled = next),
       setTimeFormat: async (_userId, timeFormat) => timeFormat,
       setLanguage: async (_userId, language) => language,
+      setRole: async (_userId, role) => role,
     };
     const preferences = new UserPreferences(repository);
 
     expect(await preferences.getBrowserNotificationsEnabled("user-1")).toBeFalse();
     expect(await preferences.setBrowserNotificationsEnabled("user-1", true)).toBeTrue();
     expect(await preferences.getBrowserNotificationsEnabled("user-1")).toBeTrue();
+  });
+
+  test("saves a role from the closed set and refuses any other", async () => {
+    const saved: (string | null)[] = [];
+    const repository: UserPreferencesRepository = {
+      read: async () => ({ timeZone: null, timeFormat: null, language: null }),
+      setTimeZone: async () => null,
+      getBrowserNotificationsEnabled: async () => false,
+      setBrowserNotificationsEnabled: async (_userId, next) => next,
+      setTimeFormat: async (_userId, timeFormat) => timeFormat,
+      setLanguage: async (_userId, language) => language,
+      setRole: async (_userId, role) => {
+        saved.push(role);
+        return role;
+      },
+    };
+    const preferences = new UserPreferences(repository);
+
+    expect(await preferences.setRole("user-1", "designer")).toBe("designer");
+    expect(await preferences.setRole("user-1", null)).toBeNull();
+    await expect(preferences.setRole("user-1", "astronaut")).rejects.toThrow();
+    expect(saved).toEqual(["designer", null]);
   });
 
   test("formats the same instant in the selected time zone", () => {
@@ -130,6 +154,7 @@ describe("user time zone preferences", () => {
       setBrowserNotificationsEnabled: async (_userId, enabled) => enabled,
       setTimeFormat: async (_userId, timeFormat) => (saved = timeFormat),
       setLanguage: async (_userId, language) => language,
+      setRole: async (_userId, role) => role,
     });
 
     expect((await preferences.read("user-1")).timeFormat).toBeNull();
@@ -151,6 +176,7 @@ describe("user time zone preferences", () => {
       setBrowserNotificationsEnabled: async (_userId, enabled) => enabled,
       setTimeFormat: async (_userId, timeFormat) => timeFormat,
       setLanguage: async (_userId, language) => language,
+      setRole: async (_userId, role) => role,
     });
 
     // A stored time format outside the known set reads as no choice, as the column's own read did.

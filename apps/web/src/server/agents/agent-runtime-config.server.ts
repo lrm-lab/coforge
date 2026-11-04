@@ -1,4 +1,6 @@
 import { parseRuntimeProvider, type RuntimeProvider } from "@lrm/coforge-sdk/internal";
+import { runtimeProviderSelectionRefusal } from "#src/features/agents/runtime-provider-selection";
+import { AppError } from "#src/lib/app-error";
 
 export type EncryptedRuntimeApiKey = {
   keyId: string;
@@ -32,6 +34,35 @@ export type AgentRuntimeConfig = {
   fastMode?: boolean;
   environment?: EncryptedAgentEnvironment;
 };
+
+/** Refuses a runtime provider an Agent cannot be given (`runtimeProviderSelectionRefusal`). */
+export function assertProviderSelectable(provider: unknown) {
+  const refusal = runtimeProviderSelectionRefusal(provider);
+  if (refusal) throw new AppError("INVALID_INPUT", { errorId: refusal });
+}
+
+/** The stored config for what was picked, with the Agent's encrypted environment when it has one. */
+export function agentRuntimeConfig(
+  selection: {
+    provider: RuntimeProvider;
+    model: string;
+    modelProvider: string;
+    reasoning: string;
+    fastMode?: boolean;
+  },
+  provider: AgentRuntimeProviderConfig,
+  environment?: EncryptedAgentEnvironment,
+): AgentRuntimeConfig {
+  return {
+    runtime: selection.provider,
+    provider,
+    model: selection.model,
+    modelProvider: selection.modelProvider,
+    reasoning: selection.reasoning,
+    ...(selection.fastMode ? { fastMode: true } : {}),
+    ...(environment ? { environment } : {}),
+  };
+}
 
 export function parseAgentRuntimeConfig(value: unknown): AgentRuntimeConfig {
   if (!value || typeof value !== "object" || Array.isArray(value))

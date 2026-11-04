@@ -6,7 +6,9 @@ One row per user for active account-level settings (time zone, time format and b
 notifications), keyed by `userId` with `ON DELETE CASCADE`. Every active setting column is
 nullable and NULL means the code default. `conversationOpenMode` is a retired compatibility
 column: its historical closed-set values remain constrained, but the application neither reads
-nor writes them.
+nor writes them. `role` is what the person said they mainly do in the first-sign-in survey
+(`engineer`, `designer`, `product`, `marketing`, `research`, `founder`, guarded by
+`user_preferences_role_check`); metadata the platform assistant reads, never shown in the UI.
 
 ## `user_notification_settings`
 
@@ -25,6 +27,8 @@ One row per Workspace membership for a member's own settings inside that Workspa
 `(workspaceId, userId)` with a foreign key to `workspace_memberships` and `ON DELETE CASCADE`.
 `conversationTabOrder` and `agentProfileTabOrder` are `TEXT[]` tab-id lists (empty = default
 order, first tab opens by default), each limited to its panel's ids by a `CHECK`.
+`onboardingPendingSince` is set when first sign-in makes the member's own Workspace and cleared
+when they finish or skip the setup wizard; NULL (every other membership) means no wizard.
 
 ## `chat_sections`
 

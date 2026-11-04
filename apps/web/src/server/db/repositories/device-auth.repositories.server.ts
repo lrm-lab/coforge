@@ -53,6 +53,18 @@ export class PrismaDeviceAuthorizationStore implements DeviceAuthorizationStore 
     });
   }
 
+  /**
+   * Whether `userId` approved a device sign-in at or after `since`. A grant the daemon already
+   * polled is `consumed`, which still means the person approved it.
+   */
+  async approvedSince(userId: string, since: Date): Promise<boolean> {
+    const grant = await this.db.deviceAuthorization.findFirst({
+      where: { userId, status: { in: ["approved", "consumed"] }, approvedAt: { gte: since } },
+      select: { id: true },
+    });
+    return grant !== null;
+  }
+
   async consume(id: string): Promise<void> {
     await this.db.deviceAuthorization.updateMany({
       where: { id, status: "approved" },

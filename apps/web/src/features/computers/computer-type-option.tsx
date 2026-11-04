@@ -1,5 +1,5 @@
 import { Check } from "@untitledui/icons";
-import type { ComponentType, SVGProps } from "react";
+import type { ComponentType, ReactNode, SVGProps } from "react";
 
 import { Button } from "#src/components/base/buttons/button";
 
@@ -11,12 +11,17 @@ export function ComputerTypeOption({
   icon: Icon,
   label,
   description,
+  status,
+  isDisabled,
   selected,
   onSelect,
 }: {
   icon: ComponentType<SVGProps<SVGSVGElement> & { color?: string; size?: number }>;
   label: string;
   description: string;
+  /** A live line under the description (the cloud computer's state). */
+  status?: ReactNode;
+  isDisabled?: boolean;
   selected: boolean;
   onSelect: () => void;
 }) {
@@ -25,6 +30,7 @@ export function ComputerTypeOption({
       type="button"
       color="secondary"
       aria-pressed={selected}
+      isDisabled={isDisabled}
       className={`relative h-auto flex-col items-stretch justify-start whitespace-normal rounded-xl p-4 text-left shadow-xs ${selected ? "border-brand bg-primary ring-1 ring-brand" : "hover:bg-primary_hover"}`}
       onPress={onSelect}
     >
@@ -39,6 +45,7 @@ export function ComputerTypeOption({
       </span>
       <span className="block text-sm font-semibold">{label}</span>
       <span className="mt-1 block text-sm text-tertiary">{description}</span>
+      {status && <span className="mt-3 block">{status}</span>}
     </Button>
   );
 }

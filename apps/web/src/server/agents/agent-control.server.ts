@@ -58,8 +58,9 @@ export class AgentControl {
     /** Settles the tracked mentions a person's Stop leaves undelivered, and issues them again for
      * a launch that started with its session. */
     mentions?: AgentControlMentions,
-    /** The introduction prompt a Start carries while the Agent owes its creator one. */
-    introductions?: Pick<AgentIntroduction, "promptFor">,
+    /** The introduction prompt a Start carries while the Agent owes its creator one, and whether
+     * the Agent's Start is held until its owner's setup wizard is done. */
+    private readonly introductions?: Pick<AgentIntroduction, "promptFor" | "holdsStart">,
   ) {
     const clock = () => this.clock();
     this.#access = new AgentControlAccess(store);
@@ -118,6 +119,9 @@ export class AgentControl {
     assertAgentLive(agent);
     // The migration starts it itself once it has moved, or once the attempt has ended.
     if (agent.migrating) return;
+    // Nobody asked for this Start (a Daemon coming ready, a message's wake): while the owner's
+    // setup wizard is pending it would also stop the assistant being re-bound.
+    if (await this.introductions?.holdsStart(agent)) return;
     if (agent.state && !terminal(agent.state)) {
       await this.#driver.advance(agent.id, agent.state.requestId, intent);
       return;

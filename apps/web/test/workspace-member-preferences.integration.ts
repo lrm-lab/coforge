@@ -37,13 +37,13 @@ test("each member keeps their own tab order per Workspace, removed with the memb
       new PrismaWorkspaceMemberPreferencesRepository(db),
     );
 
-    expect(await preferences.getTabOrders(workspaceId, userId)).toEqual({
+    expect((await preferences.get(workspaceId, userId)).tabOrders).toEqual({
       conversation: [],
       agentProfile: [],
     });
     await preferences.setTabOrder(workspaceId, userId, "conversation", ["files", "chat", "tasks"]);
     await preferences.setTabOrder(workspaceId, userId, "agentProfile", ["activity", "profile"]);
-    expect(await preferences.getTabOrders(workspaceId, userId)).toEqual({
+    expect((await preferences.get(workspaceId, userId)).tabOrders).toEqual({
       conversation: ["files", "chat", "tasks"],
       agentProfile: ["activity", "profile"],
     });
@@ -52,9 +52,19 @@ test("each member keeps their own tab order per Workspace, removed with the memb
     for (const panel of TAB_ORDER_PANELS) {
       const all: string[] = [...PANEL_TABS[panel]].reverse();
       await preferences.setTabOrder(workspaceId, userId, panel, all);
-      const saved: string[] = (await preferences.getTabOrders(workspaceId, userId))[panel];
+      const saved: string[] = (await preferences.get(workspaceId, userId)).tabOrders[panel];
       expect(saved).toEqual(all);
     }
+
+    // The wizard mark comes from the same row; saving a tab order never sets or clears it.
+    expect((await preferences.get(workspaceId, userId)).setupPending).toBe(false);
+    await db.workspaceMemberPreference.update({
+      where: { workspaceId_userId: { workspaceId, userId } },
+      data: { onboardingPendingSince: new Date() },
+    });
+    expect((await preferences.get(workspaceId, userId)).setupPending).toBe(true);
+    await preferences.setTabOrder(workspaceId, userId, "conversation", ["chat"]);
+    expect((await preferences.get(workspaceId, userId)).setupPending).toBe(true);
 
     await expect(
       Promise.resolve(
@@ -66,7 +76,7 @@ test("each member keeps their own tab order per Workspace, removed with the memb
     await db.workspaceMembership.delete({
       where: { workspaceId_userId: { workspaceId, userId } },
     });
-    expect(await preferences.getTabOrders(workspaceId, userId)).toEqual({
+    expect((await preferences.get(workspaceId, userId)).tabOrders).toEqual({
       conversation: [],
       agentProfile: [],
     });

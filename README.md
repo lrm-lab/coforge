@@ -62,6 +62,7 @@ The architecture invariants every change must respect are in
 | [docs/local-logging.md](docs/local-logging.md) | Computer/Daemon logging contract |
 | [docs/release/](docs/release/README.md) | Release contract: deployment, Computer distribution, installer feed, promotion, rollback |
 | [docs/design/](docs/design/README.md) | Product UI design guidance |
+| [docs/design/onboarding-wizard.md](docs/design/onboarding-wizard.md) | The first-sign-in setup wizard: who sees it, its four steps, the gate on the assistant's introduction, skipping |
 | [docs/design-tokens.md](docs/design-tokens.md) | Design tokens |
 | [docs/operations/aliyun-oss-cdn/](docs/operations/aliyun-oss-cdn/README.md) | OSS/CDN provisioning runbook |
 | [docs/operations/cdn-certificates/](docs/operations/cdn-certificates/README.md) | CDN certificate renewal runbook |

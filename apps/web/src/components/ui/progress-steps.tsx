@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Check } from "@untitledui/icons";
 
+import { Spinner } from "#src/components/ui/spinner";
 import { cn } from "#src/lib/utils";
 
 export type ProgressStepStatus = "incomplete" | "current" | "complete";
@@ -14,13 +15,15 @@ export type ProgressStepItem = {
 /**
  * A vertical list of steps, each marked done, running, or not started. Untitled UI's own Progress
  * steps are PRO-only, so this composes `@untitledui/icons` with semantic tokens. The running step
- * shows a still dot; nothing here animates.
+ * shows a still dot, or a spinner with `spinner` for a list that is waiting on something live.
  */
 export function ProgressSteps({
   items,
+  spinner = false,
   className,
 }: {
   items: ProgressStepItem[];
+  spinner?: boolean;
   className?: string;
 }) {
   return (
@@ -31,7 +34,7 @@ export function ProgressSteps({
           className="flex items-start gap-2.5"
           aria-current={item.status === "current" ? "step" : undefined}
         >
-          <StepMark status={item.status} />
+          <StepMark status={item.status} spinner={spinner} />
           <span className="flex min-w-0 flex-col gap-0.5">
             <span
               className={cn(
@@ -49,9 +52,11 @@ export function ProgressSteps({
   );
 }
 
-function StepMark({ status }: { status: ProgressStepStatus }) {
+function StepMark({ status, spinner }: { status: ProgressStepStatus; spinner: boolean }) {
   if (status === "complete")
     return <Check aria-hidden className="mt-0.5 size-4 shrink-0 text-fg-success-primary" />;
+  if (status === "current" && spinner)
+    return <Spinner aria-hidden className="mt-0.5 size-4 shrink-0 text-fg-quaternary" />;
   if (status === "current")
     return (
       <span aria-hidden className="mt-0.5 flex size-4 shrink-0 items-center justify-center">

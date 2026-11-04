@@ -70,7 +70,11 @@ export const loadWorkspaceSwitcher = createServerFn({ method: "GET" })
     const current = workspaces.find((workspace) => workspace.id === workspaceId)!;
     if (preferredWorkspaceSlugFromRequest() !== current.slug)
       writePreferredWorkspaceSlug(current.slug);
-    return { workspaces, current, canCreateAgents: canCreateAgents(current.role) };
+    return {
+      workspaces,
+      current,
+      canCreateAgents: canCreateAgents(current.role),
+    };
   });
 
 export const loadMemberDirectorySummary = createServerFn({ method: "GET" })

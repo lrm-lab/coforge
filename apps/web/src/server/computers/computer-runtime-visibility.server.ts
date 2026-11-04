@@ -17,7 +17,8 @@ export type ComputerRuntimeRecord = {
 };
 
 export interface ComputerRuntimeVisibilityRepository {
-  listInWorkspace(workspaceId: string): Promise<ComputerRuntimeRecord[]>;
+  /** Every runtime in the Workspace, or only those on `computerIds`. */
+  listInWorkspace(workspaceId: string, computerIds?: string[]): Promise<ComputerRuntimeRecord[]>;
   findInWorkspace(
     workspaceId: string,
     computerId: string,
@@ -56,8 +57,9 @@ export class ComputerRuntimeVisibility {
     private readonly control?: AgentFailureResetControl,
   ) {}
 
-  async list(principal: RuntimePrincipal) {
-    return (await this.runtimes.listInWorkspace(principal.workspaceId)).filter(
+  /** The runtimes this person may see, on `computerIds` only when given. */
+  async list(principal: RuntimePrincipal, computerIds?: string[]) {
+    return (await this.runtimes.listInWorkspace(principal.workspaceId, computerIds)).filter(
       (runtime) => runtime.ownerId === principal.userId || runtime.isPublic,
     );
   }

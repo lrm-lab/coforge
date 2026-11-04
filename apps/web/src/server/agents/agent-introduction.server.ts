@@ -1,6 +1,7 @@
 import { WORKSPACE_ASSISTANT_KIND } from "#src/features/agents/agent-system-kind";
 import { AGENT_PROFILE_DESCRIPTION_MAX_LENGTH } from "#src/features/agents/agent.schemas";
 import { agentDirectKey } from "#src/features/conversations/direct-key";
+import { isPersonRole } from "#src/features/onboarding/person-role";
 import { errorType } from "#src/server/errors/error-type.server";
 
 /** How long after it fell due an Agent still owes its introduction. */
@@ -16,7 +17,25 @@ export type AgentIntroductionFacts = {
   description?: string;
   /** The creator's (`Agent.ownerId`) username. */
   ownerUsername?: string;
+  /** The owner's first-sign-in setup wizard in this Workspace has not finished
+   * (`WorkspaceMemberPreference.onboardingPendingSince`). A platform assistant stays silent until
+   * it has. */
+  onboardingPending?: boolean;
+  /** What the owner said they mainly do (`UserPreference.role`), read each time the prompt is
+   * made so a recovery retry still has it. */
+  ownerRole?: string | null;
 };
+
+/** What the welcome offers next: a starter team suited to a known role, else a question about
+ * their work. The role is never asked for here; it was asked once, in the setup wizard. */
+function starterTeamAdvice(role: string | null | undefined) {
+  if (isPersonRole(role))
+    return [
+      `The member told CoForge they work as: ${role}. Never ask for their role.`,
+      `Offer to propose a starter team of Agents suited to a ${role}, and create Agents only after the member agrees to your proposal.`,
+    ].join(" ");
+  return "You do not know what the member does, and you must never ask for their job title or role; ask what they are working on instead.";
+}
 
 /**
  * The prompt a Start carries while the Agent owes its creator an introduction by DM, else
@@ -26,6 +45,8 @@ export function introductionPromptFor(facts: AgentIntroductionFacts, now: Date) 
   const { introductionDueAt, deletedAt, ownerUsername: creator } = facts;
   const platformAssistant = facts.systemKind === WORKSPACE_ASSISTANT_KIND;
   if (deletedAt || !creator) return undefined;
+  // The owner's setup wizard has not finished: the welcome is still owed, and nothing settles it.
+  if (platformAssistant && facts.onboardingPending) return undefined;
   // A platform assistant provisioned before `introductionDueAt` existed still owes its welcome.
   if (
     !platformAssistant &&
@@ -38,6 +59,8 @@ export function introductionPromptFor(facts: AgentIntroductionFacts, now: Date) 
       "You are this member’s private CoForge platform assistant, ready for your first conversation.",
       `Proactively send @${creator} a short friendly welcome in their DM using \`coforge message send --target '@${creator}'\`.`,
       "Introduce yourself and explain that you can help with platform features, messages/channels, Tasks/Projects, reminders and weekly reports, within this member’s permissions.",
+      "Tell them that Agents are teammates in CoForge: they message an Agent like a colleague, in a DM or a channel.",
+      starterTeamAdvice(facts.ownerRole),
       "The browser supplies five clickable starter choices below your welcome; do not print a second menu or claim email/calendar integrations that are unavailable.",
       `If @${creator} has already written, answer their request and introduce yourself in the same reply; do not interrupt with an onboarding questionnaire.`,
       "Send just one welcome; never post it in a channel. If you already welcomed this member, take no further action.",
@@ -70,6 +93,13 @@ export function introductionPromptFor(facts: AgentIntroductionFacts, now: Date) 
 }
 
 export interface AgentIntroductionStore {
+  /** What the platform assistant's welcome reads about its owner: whether their setup wizard in
+   * this Workspace is still pending (`WorkspaceMemberPreference.onboardingPendingSince`), and
+   * their saved role (`UserPreference.role`). */
+  setupFacts(
+    workspaceId: string,
+    ownerId: string,
+  ): Promise<{ onboardingPending: boolean; ownerRole: string | null }>;
   /** Whether Agent `agentId` sent a message, created at or after `since`, in the direct
    * conversation keyed `directKey`. */
   hasAgentMessage(input: {
@@ -99,13 +129,57 @@ export class AgentIntroduction {
   constructor(private readonly store: AgentIntroductionStore) {}
 
   /**
+   * Whether no Start may be issued for this Agent yet: a platform assistant whose owner's setup
+   * wizard in its Workspace is still pending. The one question every Start that the member did not
+   * ask for puts first (`AgentControl.recover`: Daemon ready recovery and a message's wake;
+   * `startAssistantIfOwed`), since a started assistant is no longer re-bindable by the wizard and
+   * would greet before it finishes. An unreadable mark holds the Start too (fail closed).
+   */
+  async holdsStart(agent: {
+    id: string;
+    workspaceId: string;
+    ownerId: string;
+    systemKind?: string | null;
+  }): Promise<boolean> {
+    if (agent.systemKind !== WORKSPACE_ASSISTANT_KIND) return false;
+    const setup = await this.#setupOf(agent);
+    return !setup || setup.onboardingPending === true;
+  }
+
+  /** The owner's setup facts, or undefined (logged) when they cannot be read. */
+  async #setupOf(agent: { id: string; workspaceId: string; ownerId: string }) {
+    try {
+      return await this.store.setupFacts(agent.workspaceId, agent.ownerId);
+    } catch (error) {
+      console.warn(
+        JSON.stringify({
+          event: "agent_introduction:setup_unreadable",
+          workspace_id: agent.workspaceId,
+          agent_id: agent.id,
+          error_type: errorType(error),
+        }),
+      );
+      return undefined;
+    }
+  }
+
+  /**
    * The prompt this Start carries: undefined when none is owed, and when the Agent has already
    * introduced itself, which settles it. Only an Agent that still owes one is read. A failed read or
    * settle is logged and the prompt is carried; it never blocks the Start.
    */
   async promptFor(agent: AgentIntroductionSubject, now: Date): Promise<string | undefined> {
-    const prompt = introductionPromptFor(agent, now);
-    if (!prompt) return prompt;
+    if (!introductionPromptFor(agent, now)) return undefined;
+    // The welcome waits for the owner's setup wizard and mentions their role, which are read here,
+    // when it is made, and only for the platform assistant that still owes one.
+    let setup: Pick<AgentIntroductionFacts, "onboardingPending" | "ownerRole"> = {};
+    if (agent.systemKind === WORKSPACE_ASSISTANT_KIND) {
+      const read = await this.#setupOf(agent);
+      if (!read) return undefined;
+      setup = read;
+    }
+    const prompt = introductionPromptFor({ ...agent, ...setup }, now);
+    if (!prompt) return undefined;
     // A platform assistant with no `introductionDueAt` owes its welcome since it was created;
     // any canonical DM reply of its own settles it and the column stays unset.
     const since =

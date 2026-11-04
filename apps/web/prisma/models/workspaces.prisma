@@ -144,6 +144,10 @@ model WorkspaceMemberPreference {
   chatSectionOrder     String[]            @default([])
   /// When the member closed the setup checklist in this Workspace; null while it shows.
   setupChecklistDismissedAt DateTime?
+  /// Set when first sign-in made this the member's own Workspace: the setup wizard shows, and the
+  /// platform assistant does not introduce itself, until the member finishes or skips it, which
+  /// clears this. NULL means no wizard (every other member, and every joiner by invite or link).
+  onboardingPendingSince DateTime?
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
 

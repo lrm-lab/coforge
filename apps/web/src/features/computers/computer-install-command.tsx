@@ -1,20 +1,21 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Check, Copy01 as Copy } from "@untitledui/icons";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { ButtonGroup, ButtonGroupItem } from "#src/components/base/button-group/button-group";
-import { StatusDot } from "#src/components/ui/status-dot";
 import { connectionCommands } from "#src/features/install/install-commands";
-import { Spinner } from "#src/components/ui/spinner";
 import { m } from "#src/paraglide/messages";
 
 export function ComputerInstallCommand({
   installOrigin,
   workspaceSlug,
-  connectedComputerName,
+  status,
+  className = "px-6 py-6 sm:px-8",
 }: {
   installOrigin: string;
   workspaceSlug: string | null;
-  connectedComputerName: string | null;
+  /** What the caller says about the connection under the command: waiting, connected, checks. */
+  status: ReactNode;
+  className?: string;
 }) {
   const [windows, setWindows] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -22,7 +23,7 @@ export function ComputerInstallCommand({
   const command = windows ? commands.windows : commands.posix;
 
   return (
-    <div className="space-y-4 px-6 py-6 sm:px-8">
+    <div className={`space-y-4 ${className}`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm font-semibold text-primary">{m.computer_connect_command()}</p>
         <ButtonGroup
@@ -53,21 +54,7 @@ export function ComputerInstallCommand({
           }}
         />
       </div>
-      <div
-        role="status"
-        className="flex items-center gap-3 rounded-lg border border-secondary bg-secondary px-4 py-3"
-      >
-        {connectedComputerName ? (
-          <StatusDot tone="online" className="size-2" />
-        ) : (
-          <Spinner className="size-4 shrink-0 text-fg-quaternary" />
-        )}
-        <p className="text-sm font-medium text-primary">
-          {connectedComputerName
-            ? m.computer_add_success_description({ name: connectedComputerName })
-            : m.computer_waiting_for_connection()}
-        </p>
-      </div>
+      {status}
     </div>
   );
 }

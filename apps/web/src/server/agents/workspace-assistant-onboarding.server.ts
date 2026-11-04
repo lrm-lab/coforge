@@ -69,22 +69,38 @@ export class WorkspaceAssistantOnboarding {
   }
 }
 
+/**
+ * Starts the member's assistant when it owes its introduction: not stopped, not mid-migration, and
+ * `AgentIntroduction` carries a prompt, which it does not while the owner's setup wizard is still
+ * pending or its mark is unreadable. `AgentControl.recover` holds its Starts on the same fact
+ * (`holdsStart`), so the welcome waits for the wizard on every Start the member did not ask for.
+ */
+export function startAssistantIfOwed(
+  db: PrismaClient,
+  { agentId }: { agentId: string },
+  publishStart: (
+    agent: NonNullable<Awaited<ReturnType<PrismaAgentControlStore["get"]>>>,
+  ) => Promise<unknown> = (agent) =>
+    userAgentControl(db).publishStart(agentStartIntent(agent), agent.ownerId),
+) {
+  return getAgentRuntimeLock().run(agentId, async () => {
+    const agent = await new PrismaAgentControlStore(db).get(agentId);
+    if (
+      !agent ||
+      agent.systemKind !== WORKSPACE_ASSISTANT_KIND ||
+      agent.stoppedAt ||
+      agent.migrating
+    )
+      return;
+    if (!(await createAgentIntroduction(db).promptFor(agent, new Date()))) return;
+    await publishStart(agent);
+  });
+}
+
 export function workspaceAssistantOnboarding(db: PrismaClient) {
   return new WorkspaceAssistantOnboarding(db, {
     startCloudComputer: (input) => productionCloudComputers(db).ensureDefault(input),
-    startAgent: ({ userId, agentId }) =>
-      getAgentRuntimeLock().run(agentId, async () => {
-        const agent = await new PrismaAgentControlStore(db).get(agentId);
-        if (
-          !agent ||
-          agent.systemKind !== WORKSPACE_ASSISTANT_KIND ||
-          agent.stoppedAt ||
-          agent.migrating
-        )
-          return;
-        if (!(await createAgentIntroduction(db).promptFor(agent, new Date()))) return;
-        await userAgentControl(db).publishStart(agentStartIntent(agent), userId);
-      }),
+    startAgent: ({ agentId }) => startAssistantIfOwed(db, { agentId }),
   });
 }
 
