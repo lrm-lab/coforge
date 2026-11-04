@@ -2,6 +2,7 @@ import { redirect, useRouter } from "@tanstack/react-router";
 import { z } from "zod";
 
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
+import { loadArtifactsOn } from "./artifacts-on.functions";
 
 /**
  * A document's fields on a conversation page's address (task #385): `docDraft` a new document not
@@ -79,18 +80,30 @@ export function useOpenArtifactPage() {
     void router.navigate({ ...artifactPageRoute(workspaceSlug, artifactId), ...options });
 }
 
+/** The fields of a `?doc=` link, which a conversation page drops when it opens without it. */
+const DOC_LINK_FIELDS = ["doc", "docVersion", "docHistory", "docFull"] as const;
+
 /**
- * A conversation page's `?doc=` link from before an artifact had its own page (task #385): it
- * goes to that page before the conversation loads (a route's `beforeLoad`), whether or not the
- * reader may read the conversation; the artifact's page decides what they see.
+ * A conversation page's `?doc=` link from before an artifact had its own page (task #385), for a
+ * route's `beforeLoad` (a channel, a DM, Activity): it goes to that page before the conversation
+ * loads, whether or not the reader may read the conversation, and the artifact's page decides what
+ * they see. Where artifacts are off it opens the conversation as it did, without the document.
  */
-export function redirectDocLink(workspaceSlug: string, search: ArtifactSearch) {
+export async function redirectDocLink(
+  workspaceSlug: string,
+  search: ArtifactSearch,
+  location: { href: string },
+) {
   if (search.doc === undefined) return;
-  throw redirect({
-    ...artifactPageRoute(workspaceSlug, search.doc, {
-      version: search.docVersion,
-      history: search.docHistory,
-    }),
-    replace: true,
-  });
+  if ((await loadArtifactsOn()).on)
+    throw redirect({
+      ...artifactPageRoute(workspaceSlug, search.doc, {
+        version: search.docVersion,
+        history: search.docHistory,
+      }),
+      replace: true,
+    });
+  const url = new URL(location.href, "http://local");
+  for (const field of DOC_LINK_FIELDS) url.searchParams.delete(field);
+  throw redirect({ href: `${url.pathname}${url.search}${url.hash}`, replace: true });
 }

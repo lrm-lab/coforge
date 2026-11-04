@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, useRouter } from "@tanstack/react-router";
+import { z } from "zod";
 
 import { AlertCircle, ClockRewind, RefreshCw01 } from "@untitledui/icons";
 
@@ -60,6 +61,8 @@ export function ArtifactPage({
   artifactId: string;
   search: ArtifactPageSearch;
 }) {
+  // An address that names no artifact at all is not there: no read could find one.
+  if (!z.uuid().safeParse(artifactId).success) return <ArtifactUnavailable gone />;
   // Another artifact's page starts its editing anew.
   return <ArtifactPageFor key={artifactId} artifactId={artifactId} search={search} />;
 }
@@ -136,6 +139,7 @@ function ArtifactPageFor({
       <>
         <ArtifactUnavailable
           gone={isGone(failure)}
+          retrying={editor.document.isFetching}
           onRetry={() => void editor.document.refetch()}
         />
         {leavePrompt}
@@ -383,7 +387,15 @@ function LoadingBody() {
  * does not say which, so neither does the page (`gone`). A read that failed otherwise, before
  * anything showed, says so and tries again.
  */
-function ArtifactUnavailable({ gone, onRetry }: { gone: boolean; onRetry: () => void }) {
+function ArtifactUnavailable({
+  gone,
+  retrying = false,
+  onRetry,
+}: {
+  gone: boolean;
+  retrying?: boolean;
+  onRetry?: () => void;
+}) {
   const workspaceSlug = useWorkspaceSlug();
   const router = useRouter();
   return (
@@ -395,8 +407,14 @@ function ArtifactUnavailable({ gone, onRetry }: { gone: boolean; onRetry: () => 
         {gone ? m.doc_load_failed() : m.doc_load_failed_retry()}
       </p>
       <div className="flex items-center gap-4">
-        {!gone && (
-          <Button size="sm" color="secondary" iconLeading={RefreshCw01} onClick={onRetry}>
+        {!gone && onRetry && (
+          <Button
+            size="sm"
+            color="secondary"
+            iconLeading={RefreshCw01}
+            isLoading={retrying}
+            onClick={onRetry}
+          >
             {m.doc_retry()}
           </Button>
         )}

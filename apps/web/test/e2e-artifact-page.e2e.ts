@@ -42,8 +42,18 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     }),
   );
   let refusing = false;
+  /** Refuses only the server calls that read this artifact. */
+  let refusingFor: string | null = null;
   const proxy = sameOriginProxy(webOrigin, centrifugoOrigin, {
-    refuse: (url) => refusing && url.pathname.includes("/_serverFn/"),
+    refuse: (url) => {
+      if (!url.pathname.includes("/_serverFn/")) return false;
+      if (refusing) return true;
+      // Every call's payload names the page; only a read of the artifact names it as its data.
+      const payload = decodeURIComponent(url.search);
+      return (
+        refusingFor !== null && payload.includes('"artifactId"') && payload.includes(refusingFor)
+      );
+    },
   });
   const origin = proxy.origin;
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
@@ -89,6 +99,14 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
   const button = (label: string) =>
     `[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === ${JSON.stringify(label)})`;
   const click = (selector: string) => evaluate(`(${selector}.click(), true)`);
+  const until = async (expression: string) => {
+    for (let i = 0; i < 100; i++) {
+      // A read is safe to repeat: while the web page's frame reloads, agent-browser may not answer.
+      if (await evaluate<boolean>(expression).catch(() => false)) return;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    throw new Error(`Timed out waiting for ${expression}`);
+  };
   /** A real click, which a dialog's trigger needs to keep its focus (a scripted one is virtual). */
   const press = async (selector: string) => {
     await evaluate(`(${selector}.setAttribute("data-press", ""), true)`);
@@ -171,7 +189,9 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
       idempotencyKey: crypto.randomUUID(),
       text: html("Signups v3"),
     });
-    await browser("wait", "--fn", text("published version 3"));
+    // Polled here: agent-browser's own wait does not come back on this page (its frame is on
+    // another origin) while the notice is already there.
+    await until(text("published version 3"));
     await shoot("2b-web-new-version");
 
     // Open in new tab: the sandbox's link, in a tab cut off from this one.
@@ -195,7 +215,10 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     await press(`document.querySelector('main header button[aria-label="More actions"]')`);
     await browser("wait", "--fn", `${openItem} != null`);
     await click(openItem);
-    await browser("wait", "--fn", text("Couldn't open the page in a new tab"));
+    // The tab it opened closes again; the session goes back to the app's.
+    await new Promise((r) => setTimeout(r, 1500));
+    await browser("tab", appTab!);
+    await until(text("Couldn't open the page in a new tab"));
     refusing = false;
 
     // Share, before who can see it is stored (task #529): the levels greyed, as coming soon.
@@ -254,6 +277,28 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     ).toContain("Everyone in the Workspace");
     await browser("press", "Escape");
 
+    // An address that names no artifact: the page that is not there, at once.
+    await browser("open", pageOf("not-an-id"));
+    await browser("wait", "--fn", `${pageHydrated} && ${text("Can't open this")}`);
+
+    // A link from before the page in Activity: the page too.
+    await browser("open", `${origin}/en/w/${workspace.slug}/activity?doc=${web.id}`);
+    await browser("wait", "--fn", `location.pathname.endsWith("/artifacts/${web.id}")`);
+
+    // Where artifacts are off, a link from before opens the conversation, without the document.
+    await experiments.write(workspaceId, "artifacts", false);
+    await browser(
+      "open",
+      `${origin}/en/w/${workspace.slug}/channel/${channel.id}?doc=${web.id}&docVersion=1`,
+    );
+    await browser(
+      "wait",
+      "--fn",
+      `${pageHydrated} && location.pathname.endsWith("/channel/${channel.id}")`,
+    );
+    expect(await evaluate<string>("location.search")).not.toContain("doc");
+    await experiments.write(workspaceId, "artifacts", true);
+
     // A link from before the page, with a version: the page at that version.
     const doc = await documents.create(bot, {
       conversationId: channel.id,
@@ -311,8 +356,46 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     expect(
       await evaluate<string>(`document.querySelector("main .ProseMirror").textContent`),
     ).toContain("Unsaved line.");
+
+    // Deleted while edits are unsaved: the page that is not there, and leaving it asks first.
+    await productionArtifacts(db).artifacts.delete({
+      workspaceId,
+      artifactId: doc.id,
+      actor: { agentId: agent.id },
+    });
+    await evaluate(`(window.dispatchEvent(new Event("visibilitychange")), true)`);
+    await browser("wait", "--fn", text("Can't open this"));
+    await press(button("Back to the Workspace"));
+    const keep = `[...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent.trim() === "Keep Editing")`;
+    await browser("wait", "--fn", `${keep} != null`);
+    await shoot("5-deleted-unsaved-leave");
+    // The edits have nowhere to go: discarding them leaves.
+    const discard = `[...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent.trim() === "Discard Changes")`;
+    await click(discard);
+    await browser("wait", "--fn", `!location.pathname.includes("/artifacts/")`);
+
+    // A first read that fails for a moment: said so, and Try again reads it.
+    const later = await documents.create(bot, {
+      conversationId: channel.id,
+      title: "Later",
+      text: `Later (run ${tail}).`,
+    });
+    refusingFor = later.id;
+    await browser("open", pageOf(later.id));
+    await browser("wait", "--fn", pageHydrated);
+    await until(text("Couldn't load this"));
+    expect(await evaluate<boolean>(text("Can't open this"))).toBe(false);
+    await shoot("6-first-read-failed");
+    refusingFor = null;
+    await click(button("Try again"));
+    await browser(
+      "wait",
+      "--fn",
+      `document.querySelector("main .ProseMirror")?.textContent.includes("Later")`,
+    );
   } finally {
     refusing = false;
+    refusingFor = null;
     await browser("close").catch(() => undefined);
     proxy.stop();
     await db.artifact

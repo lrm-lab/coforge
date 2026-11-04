@@ -16,7 +16,8 @@ export const Route = createFileRoute("/w/$workspaceSlug/_chat/channel/$channelId
     message: z.uuid().optional().catch(undefined),
   }),
   // A document link from before its own page goes there first (task #514).
-  beforeLoad: ({ params, search }) => redirectDocLink(params.workspaceSlug, search),
+  beforeLoad: ({ params, search, location }) =>
+    redirectDocLink(params.workspaceSlug, search, location),
   loaderDeps: ({ search }) => conversationPageLoaderDeps(search),
   remountDeps: ({ params }) => params.channelId,
   loader: ({ context, params, deps, parentMatchPromise, cause }) =>

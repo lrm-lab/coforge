@@ -92,7 +92,7 @@ function Preview({
     // The sandbox's wrapper keeps its own origin (`allow-same-origin`, on the sandbox origin, not
     // ours): it frames the page itself, opaque, as `sandboxWrapper` says.
     <iframe
-      title={title}
+      aria-label={title}
       src={link.data.url}
       sandbox="allow-scripts allow-same-origin"
       referrerPolicy="no-referrer"

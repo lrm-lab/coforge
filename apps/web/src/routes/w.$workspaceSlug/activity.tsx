@@ -2,6 +2,8 @@ import { useCallback, useMemo } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { z } from "zod";
 
+import { redirectDocLink } from "#src/features/artifacts/artifact-search";
+
 import {
   conversationPageLoaderDeps,
   loadHostedConversation,
@@ -43,6 +45,9 @@ export const Route = createFileRoute("/w/$workspaceSlug/activity")({
     // The open conversation's tab, Task board view and what it has open, as Chat keeps them.
     ...conversationPageSearchShape,
   }),
+  // A document link from before its own page goes there first (task #514).
+  beforeLoad: ({ params, search, location }) =>
+    redirectDocLink(params.workspaceSlug, search, location),
   loaderDeps: ({ search }) => ({
     filter: search.filter ?? "all",
     open: search.open,
