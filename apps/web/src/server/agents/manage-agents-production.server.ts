@@ -4,7 +4,10 @@ import { PrismaAgentRuntimeCredentialRepository } from "#src/server/db/repositor
 import { ManageAgents } from "./manage-agents.server";
 import { getAgentRuntimeLock } from "./agent-runtime-lock.server";
 import { userAgentRuntimeControl } from "./user-agent-control.server";
-import { computerCanRunAgent } from "./computer-runtime-availability.server";
+import {
+  computerCanRunAgent,
+  computerRuntimeRefusal,
+} from "./computer-runtime-availability.server";
 import {
   AgentRuntimeCredentials,
   readAgentRuntimeCredentialEncryptionKey,
@@ -22,6 +25,8 @@ export function manageAgents(db: Database) {
     {
       canRun: (workspaceId, userId, computerId, config) =>
         computerCanRunAgent(db, { workspaceId, userId }, computerId, config),
+      refusal: (workspaceId, userId, computerId, config) =>
+        computerRuntimeRefusal(db, { workspaceId, userId }, computerId, config),
     },
     runtimeLock,
     () => runtimeCredentials(db, true),

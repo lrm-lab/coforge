@@ -67,3 +67,43 @@ test("a stored runtimeConfig that cannot be parsed still refuses the launch", ()
     expect.objectContaining({ errorId: "agent-runtime-config-unreadable" }),
   );
 });
+
+// task #523: a saved provider/modelProvider change lands — the stored config reads back with
+// the new runtime, not the old one.
+test("a CoForge runtime saved back to Pi reads back as Pi", async () => {
+  const { agentManagement, records } = fixture();
+  records.push({
+    id: "qa-agent",
+    workspaceId: "workspace-1",
+    ownerId: "user-1",
+    name: "qa-agent",
+    displayName: "qa-agent",
+    computerId: "computer-1",
+    runtimeConfig: parseAgentRuntimeConfig({
+      runtime: RUNTIME_PROVIDER.COFORGE,
+      provider: { kind: "coforge", providerId: "openrouter" },
+      model: "m",
+      modelProvider: "openrouter",
+      reasoning: "low",
+    }),
+    createdAt: new Date(),
+  });
+
+  const result = await agentManagement.update(
+    { userId: "user-1", workspaceId: "workspace-1", role: "admin" as const },
+    {
+      agentId: "qa-agent",
+      description: "",
+      provider: RUNTIME_PROVIDER.PI,
+      computerId: "computer-1",
+      modelProvider: "",
+    },
+  );
+
+  expect(result.restart).toBe("published");
+  expect(records[0]!.runtimeConfig).toMatchObject({
+    runtime: RUNTIME_PROVIDER.PI,
+    provider: { kind: "default" },
+    modelProvider: "",
+  });
+});

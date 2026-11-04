@@ -68,6 +68,20 @@ type RuntimeAvailability = {
       hasApiKey: boolean;
     },
   ): Promise<boolean>;
+  /** Why `canRun` refuses this selection, or null when it does not; a save names it to the
+   * person choosing, not a bare "unavailable". */
+  refusal?(
+    workspaceId: string,
+    userId: string,
+    computerId: string,
+    config: {
+      provider: RuntimeProvider;
+      model: string;
+      modelProvider: string;
+      reasoning: string;
+      hasApiKey: boolean;
+    },
+  ): Promise<string | null>;
 };
 
 type AgentUpdateInput = Omit<AgentCreateInput, "computerId" | "name"> & {
@@ -220,14 +234,23 @@ export class ManageAgents {
       );
       const runtimeChanged = JSON.stringify(currentConfig) !== JSON.stringify(runtimeConfig);
       const computerChanged = computerId !== current.computerId;
-      if (
+      const refusal =
         (runtimeChanged || computerChanged) &&
-        !(await this.availability.canRun(principal.workspaceId, principal.userId, computerId, {
+        ((await this.availability.refusal?.(principal.workspaceId, principal.userId, computerId, {
           ...selection,
           hasApiKey: Boolean(apiKey),
-        }))
-      )
-        throw new AppError("INVALID_INPUT", { errorId: "agent-runtime-unavailable" });
+        })) ??
+          ((await this.availability.canRun(principal.workspaceId, principal.userId, computerId, {
+            ...selection,
+            hasApiKey: Boolean(apiKey),
+          }))
+            ? null
+            : "unavailable"));
+      if (refusal)
+        throw new AppError("INVALID_INPUT", {
+          errorId: "agent-runtime-unavailable",
+          details: { reason: refusal },
+        });
       // A stopped Agent has nothing running under the old configuration, so config
       // changes persist without the stop -> ... -> start dance; a confirmed Stop would make a
       // stopped Agent on an offline Computer uneditable. Moving Computers stops the process

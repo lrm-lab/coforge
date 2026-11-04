@@ -55,9 +55,18 @@ const AGENT_ENVIRONMENT_ERROR_MESSAGES: Record<AgentEnvironmentViolation, () => 
  * dialog, the full-page edit dialog and the Profile panel's in-place runtime editor so the
  * surfaces never drift.
  */
+const AGENT_RUNTIME_UNAVAILABLE_REASONS = new Map<string, () => string>([
+  ["not_connected", m.agent_form_runtime_unavailable_not_connected],
+  ["runtime_unconfirmed", m.agent_form_runtime_unavailable_unconfirmed],
+  ["runtime_missing", m.agent_form_runtime_unavailable_missing],
+  ["runtime_unusable", m.agent_form_runtime_unavailable_unusable],
+  ["runtime_not_shared", m.agent_form_runtime_unavailable_not_shared],
+  ["model_missing", m.agent_form_runtime_unavailable_model_missing],
+  ["fast_mode_unsupported", m.agent_form_runtime_unavailable_fast_mode],
+]);
+
 const AGENT_FORM_ERROR_MESSAGES = new Map<string, () => string>([
   ["agent-api-key-required", m.agent_form_api_key_required],
-  ["agent-runtime-unavailable", m.agent_form_runtime_unavailable],
   ["agent-migrating", m.agent_form_migrating],
   ["agent-computer-required", m.agent_form_computer_required],
   ["agent-computer-locked", m.agent_form_computer_locked],
@@ -73,10 +82,17 @@ const AGENT_FORM_ERROR_MESSAGES = new Map<string, () => string>([
 ]);
 
 function agentFormErrorMessage(cause: unknown, fallback: () => string): string {
-  const message = isAppError(cause)
-    ? AGENT_FORM_ERROR_MESSAGES.get(cause.errorId ?? "")
-    : undefined;
-  return (message ?? fallback)();
+  if (isAppError(cause)) {
+    if (cause.errorId === "agent-runtime-unavailable") {
+      const reason = (cause.details as { reason?: string } | undefined)?.reason;
+      return (
+        AGENT_RUNTIME_UNAVAILABLE_REASONS.get(reason ?? "") ?? m.agent_form_runtime_unavailable
+      )();
+    }
+    const message = AGENT_FORM_ERROR_MESSAGES.get(cause.errorId ?? "");
+    if (message) return message();
+  }
+  return fallback();
 }
 
 export function agentUpdateErrorMessage(cause: unknown): string {

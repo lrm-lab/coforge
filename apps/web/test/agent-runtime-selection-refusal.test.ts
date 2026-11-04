@@ -125,3 +125,27 @@ test("without the model catalog only the runtime is judged, and no later refusal
   // With the catalog required, the same selection is refused for the model.
   expect(agentRuntimeSelectionRefusal(claude, inventory({ models: [] }))).toBe("model_missing");
 });
+
+// task #523: Pi + "Configured" (empty modelProvider/model, no apiKey) must not be refused by the
+// catalog-model check — `pi + ""` takes the provider-only path.
+test("a Pi Configured selection with no modelProvider is not refused by the model check", () => {
+  const inventory = {
+    connected: true,
+    reported: new Set([RUNTIME_PROVIDER.PI]),
+    unusable: new Set<RuntimeProvider>(),
+    providers: new Set([RUNTIME_PROVIDER.PI]),
+    models: [] as never[],
+  };
+  expect(
+    agentRuntimeSelectionRefusal(
+      {
+        provider: RUNTIME_PROVIDER.PI,
+        model: "",
+        modelProvider: "",
+        reasoning: "",
+        hasApiKey: false,
+      },
+      inventory,
+    ),
+  ).toBeNull();
+});

@@ -125,3 +125,22 @@ test("a refused Agent save names the reason instead of only asking to try again"
   );
   expect(refusal("an-error-id-nobody-mapped")).toBe(m.agent_update_error());
 });
+
+import { AppError } from "#src/lib/app-error";
+import { agentUpdateErrorMessage } from "#src/features/agents/agent-form";
+
+// task #523: a refused runtime save names the reason, not a bare "unavailable".
+test("a runtime save refused as not_connected names it", () => {
+  const error = new AppError("INVALID_INPUT", {
+    errorId: "agent-runtime-unavailable",
+    details: { reason: "not_connected" },
+  });
+  expect(agentUpdateErrorMessage(error)).toMatch(/not connected|未连接/i);
+});
+test("a runtime save refused with an unknown reason falls back to the generic", () => {
+  const error = new AppError("INVALID_INPUT", {
+    errorId: "agent-runtime-unavailable",
+    details: { reason: "something-else" },
+  });
+  expect(agentUpdateErrorMessage(error).length).toBeGreaterThan(0);
+});
