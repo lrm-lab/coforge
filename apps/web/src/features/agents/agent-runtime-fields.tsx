@@ -33,6 +33,7 @@ import {
   reasoningFieldState,
   runtimeModels,
   splitCustomModel,
+  submittedRuntimeModel,
   type RuntimeOptions,
   type RuntimeSelection,
 } from "./agent-runtime-fields-state";
@@ -193,16 +194,18 @@ export function AgentRuntimeFields({
     : undefined;
   const customSplit = customModelActive ? splitCustomModel(customModelText) : undefined;
   const customInvalid = customModelActive && customModelText.trim() !== "" && !customSplit;
-  const submittedModelProvider = piBuiltin
-    ? piProviderChoice
-    : provider === RUNTIME_PROVIDER.COFORGE
-      ? modelProvider
-      : customModelActive
-        ? (customSplit?.modelProvider ?? "")
-        : (selectedModel?.modelProvider ??
-          (provider === initial?.provider && modelKey === initialModelKey
-            ? (initial?.modelProvider ?? "")
-            : ""));
+  const { modelProvider: submittedModelProvider, model: submittedModel } = submittedRuntimeModel({
+    provider,
+    modelProvider,
+    piBuiltin,
+    piProviderChoice,
+    customModelActive,
+    customSplit,
+    selectedModel,
+    modelKey,
+    initialModelKey,
+    initial,
+  });
   const matchingConfiguredCredential =
     credentialConfigured &&
     initial?.provider === provider &&
@@ -228,10 +231,7 @@ export function AgentRuntimeFields({
     })),
     ...(piConfigured ? [{ id: CUSTOM_MODEL_KEY, label: m.agent_form_model_custom() }] : []),
   ];
-  const modelValue = customModelActive
-    ? (customSplit?.model ?? "")
-    : (selectedModel?.id ??
-      (provider === initial?.provider && modelKey === initialModelKey ? initial?.model : ""));
+  const modelValue = submittedModel;
   // Command Code's catalog carries no efforts; they are read for the selected model.
   const effortModelId =
     provider === RUNTIME_PROVIDER.COMMAND_CODE && !failed ? (modelValue ?? "").trim() : "";

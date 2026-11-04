@@ -186,3 +186,44 @@ export function piBuiltinModels(options: RuntimeOptions | undefined, modelProvid
     (model) => model.modelProvider === modelProvider,
   );
 }
+
+/**
+ * What the runtime form submits for `modelProvider`/`model`: the picked catalog model's own
+ * provider, or the saved pair only while the runtime provider itself is unchanged — a provider
+ * switch submits only what was picked, so a broken stored config cannot reach a new save
+ * (task #523).
+ */
+export function submittedRuntimeModel(params: {
+  provider: RuntimeProvider;
+  modelProvider: string;
+  piBuiltin: boolean;
+  piProviderChoice: string;
+  customModelActive: boolean;
+  customSplit?: { modelProvider: string; model: string };
+  selectedModel?: { modelProvider?: string; id: string };
+  modelKey: string;
+  initialModelKey: string;
+  initial?: RuntimeSelection;
+}): { modelProvider: string; model: string } {
+  // The saved pair only while the runtime provider itself is unchanged; a provider switch
+  // submits only what was picked (task #523).
+  const sameRuntime = params.provider === params.initial?.provider;
+  return {
+    modelProvider: params.piBuiltin
+      ? params.piProviderChoice
+      : params.provider === RUNTIME_PROVIDER.COFORGE
+        ? params.modelProvider
+        : params.customModelActive
+          ? (params.customSplit?.modelProvider ?? "")
+          : (params.selectedModel?.modelProvider ??
+            (sameRuntime && params.modelKey === params.initialModelKey
+              ? (params.initial?.modelProvider ?? "")
+              : "")),
+    model: params.customModelActive
+      ? (params.customSplit?.model ?? "")
+      : (params.selectedModel?.id ??
+        (sameRuntime && params.modelKey === params.initialModelKey
+          ? (params.initial?.model ?? "")
+          : "")),
+  };
+}

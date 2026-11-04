@@ -13,6 +13,7 @@ import {
   piInitialProviderChoice,
   reasoningFieldState,
   splitCustomModel,
+  submittedRuntimeModel,
   type RuntimeOptions,
   type RuntimeSelection,
 } from "#src/features/agents/agent-runtime-fields";
@@ -252,4 +253,44 @@ test("opens not-dirty: a saved custom model absent from the Pi catalog preselect
 
 test("a level the model does not list falls back to the provider default", () => {
   expect(reasoningFieldState(["off", "high", "max"], "low").submitted).toBe("");
+});
+
+// task #523: a provider switch drops the saved model/modelProvider — a `pi` save after a
+// `coforge` + catalog-model config submits empty strings, not the old runtime's pair.
+test("a coforge-to-pi switch submits empty model/modelProvider", () => {
+  const submitted = submittedRuntimeModel({
+    provider: RUNTIME_PROVIDER.PI,
+    modelProvider: "",
+    piBuiltin: false,
+    piProviderChoice: "",
+    customModelActive: false,
+    modelKey: "",
+    initialModelKey: "openrouter--old-model",
+    initial: {
+      provider: RUNTIME_PROVIDER.COFORGE,
+      modelProvider: "openrouter",
+      model: "old-model",
+      reasoning: "",
+    },
+  });
+  expect(submitted).toEqual({ modelProvider: "", model: "" });
+});
+// The same save on the unchanged runtime keeps the stored model/modelProvider.
+test("a save on the same runtime keeps the stored model/modelProvider", () => {
+  const submitted = submittedRuntimeModel({
+    provider: RUNTIME_PROVIDER.COFORGE,
+    modelProvider: "openrouter",
+    piBuiltin: false,
+    piProviderChoice: "",
+    customModelActive: false,
+    modelKey: "openrouter--old-model",
+    initialModelKey: "openrouter--old-model",
+    initial: {
+      provider: RUNTIME_PROVIDER.COFORGE,
+      modelProvider: "openrouter",
+      model: "old-model",
+      reasoning: "",
+    },
+  });
+  expect(submitted).toEqual({ modelProvider: "openrouter", model: "old-model" });
 });
