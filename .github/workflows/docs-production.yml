@@ -2,8 +2,8 @@ name: Publish docs site (production)
 
 # Deploys the public developer docs (apps/docs, VitePress) to https://docs.coforge.cn: a private OSS
 # bucket (coforge-docs-prod, cn-beijing) read by the CDN domain. Production only; there is no docs
-# staging. The `build` job holds no secrets. The `deploy` job runs in the `production` GitHub
-# Environment (required reviewer, protected branches only) and assumes the docs publisher RAM role
+# staging. The `build` job holds no secrets. The `deploy` job runs in the `docs` GitHub
+# Environment (main only, no reviewers) and assumes the docs publisher RAM role
 # through GitHub OIDC, as release-production.yml does. To roll back, dispatch this workflow with an
 # earlier ref; scripts/ci/workflow.test.ts keeps every non-CI workflow dispatch-only, so a push to
 # main starts no publication and an operator dispatches this one from main (apps/docs/AGENTS.md, "Deployment").

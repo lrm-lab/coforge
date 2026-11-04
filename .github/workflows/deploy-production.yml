@@ -1,10 +1,11 @@
 name: Deploy Web (production)
 
 # Promotes one Web image digest that is already healthy in staging. The
-# `production` GitHub Environment carries the required human reviewer, so the
-# deploy job waits for an approval of this exact digest
-# (docs/release/staging-to-production.md). Runtime secrets live on the host
-# under infra/production/secrets; this workflow ships only the Compose assets.
+# `production` GitHub Environment only restricts the deploy to `main`; it has
+# no required reviewer, so a human's approval of this exact digest is the
+# manual dispatch itself (docs/release/staging-to-production.md). Runtime
+# secrets live on the host under infra/production/secrets; this workflow ships
+# only the Compose assets.
 
 on:
   workflow_dispatch:

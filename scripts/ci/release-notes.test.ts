@@ -139,7 +139,7 @@ test("staging checks the notes beside its gates and registers them after publish
   });
 });
 
-test("production checks the notes before the approval gate and registers them after publishing", () => {
+test("production checks the notes before the build and registers them after publishing", () => {
   const check = checkStep(production);
   expect(check.job).toBe("candidate");
   expect(check.step.env?.INPUT_VERSION).toBe("${{ inputs.version }}");
@@ -147,7 +147,7 @@ test("production checks the notes before the approval gate and registers them af
 
   const { job } = registerJob(production);
   expect(job.needs).toBe("publish");
-  // Neither the approval gate nor the publisher role: the job changes notes text, not artifacts.
+  // Neither the `production` environment nor the publisher role: the job changes notes text, not artifacts.
   expect(job.permissions).toEqual({ contents: "read" });
   expect(job.environment).toBeUndefined();
   expect(job.with).toEqual({

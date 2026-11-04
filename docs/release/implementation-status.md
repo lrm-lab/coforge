@@ -5,7 +5,8 @@ test workflow have been removed. The approved standalone Centrifugo, Redis,
 PostgreSQL, and Backend deployment is implemented for the `staging` cloud
 environment through the immutable-digest workflow in
 [Main to staging](main-to-staging.md#cloud-application); production stays
-disabled behind the human approval gate. The release Skill must stop rather
+disabled until an operator enables it — the Environment has no required
+reviewer, so the decision is procedural, not a platform gate. The release Skill must stop rather
 than reconstruct or invoke the removed gateway workflow.
 
 Production local publication is implemented by `release-production.yml` and

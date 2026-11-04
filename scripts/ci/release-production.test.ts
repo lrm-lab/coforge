@@ -97,7 +97,7 @@ test("only the production environment's jobs hold an OIDC token, and they assume
     for (const [jobName, job] of Object.entries(workflow.jobs)) {
       const reachesBucket = job.permissions?.["id-token"] === "write";
       // The Computer candidate verifies production's latest over the read-only reader role
-      // before the approval gate, so it mints a token without an environment; every other
+      // outside the `production` environment, so it mints a token without an environment; every other
       // OIDC job stays behind `environment: production` and its publisher role.
       const readerCandidate = name === "computer" && jobName === "candidate";
       expect(job.environment === "production" || readerCandidate, `${name}.${jobName}`).toBe(

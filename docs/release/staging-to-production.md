@@ -8,12 +8,13 @@ Cloud production promotion is a two-party operation:
    commit, staging deployment run, staging health result, change summary, known
    risks, migration compatibility, production configuration revision, and
    previous healthy production digest.
-2. A human approves or rejects that exact digest through the protected
-   production deployment gate. The Agent that prepared or triggered the
-   promotion cannot satisfy the human gate.
-3. After approval, the Agent runs or resumes the production workflow. The job
-   verifies that its digest matches the approved digest and that the same
-   digest is still recorded healthy in `staging`.
+2. A human reviews the request and approves or rejects that exact digest.
+   Approval is the human's dispatch of the production workflow; the
+   `production` GitHub Environment restricts the run to `main` but has no
+   required reviewer. The Agent that prepared or triggered the promotion
+   cannot substitute for the human's review.
+3. The dispatched run verifies that its digest input matches the approved
+   digest and that the same digest is still recorded healthy in `staging`.
 4. The workflow deploys the digest with the production Compose project. It
    does not rebuild the image, and it pulls it with the same bounded attempts
    as staging ([Main to staging](main-to-staging.md#cloud-application), step 5).
@@ -43,9 +44,11 @@ updating itself from staging. Promotion therefore rebuilds:
    comparison. The Agent also reads that candidate's
    [release notes](release-notes.md) from the staging catalog and passes the same
    English and Chinese text to production.
-2. A human approves or rejects that exact commit and production version. A filename,
-   branch, channel name, or unspecified "latest build" approval is invalid.
-3. After approval, the Agent builds the approved commit against the production
+2. A human reviews the evidence and approves or rejects that exact commit and
+   production version; approval is the human's dispatch of the production
+   workflow with those inputs. A filename, branch, channel name, or
+   unspecified "latest build" approval is invalid.
+3. The dispatched run builds the approved commit against the production
    feed configuration, producing a distinct set of binaries whose intended
    differences from the staging set are the approved release version and the
    compiled-in environment (feed and matching business server addresses).
@@ -60,21 +63,22 @@ updating itself from staging. Promotion therefore rebuilds:
    production local-distribution checks, and records the result.
 7. The workflow registers the release notes for the production version in the
    production release catalog and verifies the read-back. Notes are text, not
-   an artifact: they are checked before the approval gate, and changing them
-   later with `release-notes.yml` needs no new approval.
+   an artifact: they are checked before the build, and changing them
+   later with `release-notes.yml` needs no new release decision.
 
 `release-installer-production.yml` and `release-production.yml` implement
 steps 1 and 3-6 for the installer and the Computer, and `release-production.yml`
-also step 7; the `production` GitHub
-Environment's required reviewer is step 2. The installer goes first, because
-`install.sh` reads `installer/latest` from the same feed. The runbook is
+also step 7; step 2 is the operator's manual dispatch, which the `production`
+GitHub Environment restricts to `main` (it has no required reviewer). The
+installer goes first, because `install.sh` reads `installer/latest` from the
+same feed. The runbook is
 [`operations/production/computer-release.md`](../operations/production/computer-release.md).
 
 Their `without_staging` input skips the staging comparison and checks only the
 commit's and version's shape, and that a Computer version is newer than
-production's `latest`. It exists for a release Frank approves without a
+production's `latest`. It exists for a release Frank runs without a
 staging publication (the first production release, `0.1.0` from `main`, on
-2026-10-12); the run title names it, so the approver sees it.
+2026-10-12); the run title names it, so the operator sees it.
 
 Building a commit other than the approved one, or altering the source between
 approval and build, invalidates the approval. Because the artifacts are rebuilt

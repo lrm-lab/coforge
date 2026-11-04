@@ -20,7 +20,7 @@ dev builds such as `0.1.5-dev.3` and stable production versions such as `0.1.5`:
 - **Production.** `release-production.yml` promotes one staging build: its
   `version` is `staging_version` without the `-dev.<N>` suffix, newer than
   production's `latest`, from the same source commit; its candidate job checks
-  this without credentials, before the approval gate.
+  this without credentials, before the build.
 - **Every feed.** Every publication through `scripts/release/publish.ts`,
   staging, production and installer alike, refuses a version older than that feed's
   `latest` (the same version is a finalize rerun): before uploading anything, or

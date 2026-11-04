@@ -76,7 +76,7 @@ vars only:
 1. Before anything is published, `--check` refuses a missing, blank, or
    oversized note: in staging's `notes-check` job, which runs beside the gates
    and which the publish job also needs, and in production's `candidate` job
-   ahead of the approval gate. A staging withdrawal needs no notes, which is
+   ahead of the build. A staging withdrawal needs no notes, which is
    why staging's inputs are optional in the workflow schema.
 2. After the publication has moved `latest`, a separate `notes` job calls
    `release-notes.yml` to register the notes for the version actually

@@ -3,7 +3,7 @@
 | Concern            | `staging`                                        | `production`                                        |
 | ------------------ | ------------------------------------------------ | --------------------------------------------------- |
 | Trigger            | Operator dispatch from `main`                    | Promotion request for a tested digest               |
-| Authorization      | The dispatch; no approval gate                   | Human approves the exact digest; Agent executes     |
+| Authorization      | The dispatch; no approval gate                   | Human reviews and dispatches the exact digest       |
 | Artifact           | Newly built immutable digest                     | Same digest already healthy in `staging`            |
 | GitHub Environment | `staging`                                        | `production`                                        |
 | Compose project    | `coforge-staging`                                | `coforge-production`                                |
@@ -21,8 +21,8 @@ base-plus-environment configuration before mutation. Environment secrets must
 not be committed, echoed, placed in command arguments, or copied into release
 records.
 
-The MVP provisions only `staging`. Production stays disabled until it has an
-independent environment configuration and an enforceable human approval gate.
-GitHub currently limits required reviewers for private repositories on some
-plans; if the repository plan cannot enforce the gate, do not substitute an
-informal blanket approval or enable production.
+Neither GitHub Environment enforces a required reviewer: `production` is
+protected only by its branch policy, so deployments come from `main`, and
+`staging` carries no protection rules. The human check on production is the
+operator's decision to dispatch, not a platform gate; an Agent must not start
+a production run on its own judgment.

@@ -6,8 +6,8 @@ run-name: ${{ inputs.pointer_only && format('Move the production installer point
 # copies staging's binaries: it builds the approved commit again against https://releases.coforge.cn.
 # The `candidate` job checks that staging published this installer version from this commit; staging
 # publishes only from `main` and only after the installer gates. The `production` GitHub Environment
-# carries the required human reviewer, who approves this exact commit and version. Otherwise this is
-# release-installer-staging.yml: the same jobs, the same scripts, the production bucket and role.
+# restricts runs to `main` and has no required reviewer; the operator's dispatch is the approval.
+# Otherwise this is release-installer-staging.yml with the production bucket and role.
 on:
   workflow_dispatch:
     inputs:
@@ -28,7 +28,7 @@ on:
       without_staging:
         description: >-
           Skip the staging comparison and check the commit and version for shape only. For a
-          release approved without a staging publication.
+          release run without a staging publication.
         required: false
         type: boolean
         default: false

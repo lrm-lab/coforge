@@ -7,8 +7,8 @@ run-name: Publish Computer ${{ inputs.version }} from ${{ inputs.commit }} to pr
 # that staging published staging_version from this commit and that version follows the version rule
 # (docs/release/github-actions.md); the run title names version because a run-name expression cannot
 # strip -dev.N. Staging publishes only from `main` and only after the release gates. The
-# `production` GitHub Environment carries the required human reviewer, who approves this exact
-# commit and version.
+# `production` GitHub Environment restricts the run to `main` and has no required reviewer; the
+# operator's dispatch, which names this exact commit and version, is the human approval.
 # Publish the production installer (release-installer-production.yml) first: install.sh reads
 # `installer/latest` from the same feed.
 on:
@@ -31,7 +31,7 @@ on:
       without_staging:
         description: >-
           Skip the staging comparison: check the commit and version for shape, and the version against
-          production's latest, only. For a release approved without a staging publication.
+          production's latest, only. For a release run without a staging publication.
         required: false
         type: boolean
         default: false
@@ -92,7 +92,7 @@ jobs:
 
       # The inputs are caller-controlled text: they reach the scripts only through env vars, and the
       # scripts validate them before they name any object. Checked here, the notes fail before the
-      # approval gate rather than after the build.
+      # build rather than after it.
       - name: Require both languages of release notes
         env:
           INPUT_VERSION: ${{ inputs.version }}
@@ -234,7 +234,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   # Registered once `latest` has moved, by the reusable notes workflow: it changes notes text, never
-  # artifacts, so it holds the catalog token without the approval gate's environment or the
+  # artifacts, so it holds the catalog token without the `production` environment or the
   # publisher role, and it runs main's script, not the approved commit's, which may predate it.
   # `gh run rerun --failed` repeats only this job if the catalog was unreachable.
   notes:

@@ -6,7 +6,7 @@ run-name: Edit Computer ${{ inputs.version }} release notes in ${{ inputs.enviro
 # moved; dispatched by hand, it rewrites the notes of an already-published version. It is the one
 # place that maps an environment to its catalog origin and token. It changes notes text only, never
 # a release artifact or `latest`, so it holds neither an OSS credential nor the `production` GitHub
-# Environment's approval gate. Called, `github.ref` is the caller's, which publishes only from main.
+# Environment. Called, `github.ref` is the caller's, which publishes only from main.
 on:
   workflow_call:
     inputs:
