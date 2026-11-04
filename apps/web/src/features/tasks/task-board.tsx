@@ -6,7 +6,6 @@ import { Button as AriaButton } from "react-aria-components";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { PageHeader } from "#src/components/layout/page-header";
-import { DeletedAgentBadge } from "#src/features/agents/deleted-agent";
 import type { Mentionable } from "#src/features/conversations/mention-text";
 import { useTaskHiddenColumns } from "#src/features/settings/task-hidden-columns";
 import { cn } from "#src/lib/utils";
@@ -20,7 +19,7 @@ import type { TaskBoardView } from "./task-board-search";
 import type { OverviewTaskCommand } from "./task-overview-collection";
 import type { TaskRelations } from "./task-relation-edits";
 import { TaskToolbar } from "./task-toolbar";
-import { statusLabel, TaskWorkflow, type TaskControls } from "./task-workflow";
+import { TaskWorkflow, type TaskControls } from "./task-workflow";
 import { useCanSetAnyTaskStatus } from "./task-board-authority";
 import { useTaskConversationsOn } from "./use-task-conversations-on";
 import { TaskCardSkeleton } from "./tasks-pending";
@@ -350,14 +349,5 @@ function BoardTaskCard<T extends BoardTask>({
         ))
       }
     />
-  );
-}
-
-export function TaskBadge({ task }: { task: TaskView }) {
-  return (
-    <span className="mt-1 inline-flex flex-wrap items-center gap-1 text-xs text-tertiary">
-      #{task.number} · {statusLabel(task.status)} · {task.owner?.name ?? m.tasks_unassigned()}
-      {task.owner?.deleted && <DeletedAgentBadge />}
-    </span>
   );
 }

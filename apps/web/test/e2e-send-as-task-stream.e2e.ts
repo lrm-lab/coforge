@@ -153,8 +153,9 @@ test("a message sent as a Task shows its Task in the stream, with task conversat
         expect(task.sourceMessageId).not.toBeNull();
       } else expect(task.messageId).not.toBeNull();
 
-      const label = `#${task.number} · To do · Unassigned`;
-      const shows = `${badgeOf(body)}?.textContent.trim() === ${JSON.stringify(label)}`;
+      // The chip under the message names its Task by title (task #449).
+      const parts = [`Ship the release notes (${mode})`];
+      const shows = `(() => { const text = ${badgeOf(body)}?.textContent ?? ""; return ${JSON.stringify(parts)}.every((part) => text.includes(part)); })()`;
       // At once, from the announced Task.
       await waitFor(shows);
       await browser("screenshot", join(artifacts, `stream-${mode}.png`));
@@ -168,7 +169,8 @@ test("a message sent as a Task shows its Task in the stream, with task conversat
       await waitFor(shows, 60_000);
 
       // The badge opens the Task's popup.
-      await browser("eval", `${badgeOf(body)}.click()`);
+      // The chip under the message is the control (task #449): a real click on it.
+      await browser("click", `[data-message-task="${task.number}"] [data-task-status]`);
       await waitFor(`new URL(location.href).searchParams.get("task") === "${task.number}"`);
       await waitFor(
         `[...document.querySelectorAll('[role="dialog"]')].some((dialog) => dialog.textContent.includes(${JSON.stringify(`(${mode})`)}))`,
