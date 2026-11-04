@@ -34,10 +34,10 @@ export function useTaskPopupProfile(taskId: string | undefined): {
   const close = () => setOpened(undefined);
   const open = (next: Profile) => {
     if (!taskId) return;
-    // Closing the profile gives focus back to what had it when it opened. Not the avatar: React
-    // Aria's PreviewTrigger marks every Escape on its trigger handled, open peek or not, and the
-    // popup leaves a handled Escape alone, so the next Escape would not close it. The popup's own
-    // dialog has it instead.
+    // Closing the profile gives focus back to what had it when it opened: the popup's own dialog,
+    // not the avatar. With the avatar keeping it, a press outside the profile left it open (seen
+    // in e2e-task-popup-profile, task #520; not traced further). Escape on the avatar is not the
+    // reason any more: a closed peek's trigger lets it through (`HoverPopover`).
     if (document.activeElement instanceof HTMLElement)
       document.activeElement.closest<HTMLElement>('[role="dialog"]')?.focus();
     setOpened({ ...next, taskId });

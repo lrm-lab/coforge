@@ -1,4 +1,12 @@
-import { forwardRef, useContext, type ReactNode } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  type ForwardedRef,
+  type ReactNode,
+} from "react";
 import {
   Button,
   Focusable,
@@ -103,10 +111,11 @@ export function HoverPopover({
 const PreviewTriggerButton = forwardRef<HTMLButtonElement, ButtonProps>(
   function PreviewTriggerButton({ onPress, ...props }, ref) {
     const closePreview = useClosePreview();
+    const escapeRef = useEscapePassesClosedPeek<HTMLButtonElement>(ref);
     return (
       <Button
         {...props}
-        ref={ref}
+        ref={escapeRef}
         onPress={
           onPress &&
           ((event) => {
@@ -133,6 +142,7 @@ function PreviewTriggerInline({
   children: ReactNode;
 }) {
   const closePreview = useClosePreview();
+  const escapeRef = useEscapePassesClosedPeek<HTMLSpanElement>(null);
   const control = chipControl(
     onPress &&
       (() => {
@@ -142,7 +152,7 @@ function PreviewTriggerInline({
   );
   return (
     <Focusable>
-      <span aria-label={label} className={className} {...control}>
+      <span ref={escapeRef} aria-label={label} className={className} {...control}>
         {children}
       </span>
     </Focusable>
@@ -154,4 +164,50 @@ function PreviewTriggerInline({
 export function useClosePreview(): () => void {
   const preview = useContext(OverlayTriggerStateContext);
   return () => preview?.close();
+}
+
+/**
+ * Escape on a trigger whose peek is closed goes on as if the trigger were not there (task #520).
+ * `PreviewTrigger` marks every Escape on its trigger handled, open peek or not (`usePreviewTrigger`
+ * in react-aria 3.52.1), unlike its own tooltip trigger, which takes Escape only while open. An
+ * overlay the trigger sits in, the Task popup among them, leaves a handled Escape alone, so with
+ * focus on an avatar there it never closed. With no peek open, the press is stopped on the trigger,
+ * before React's root listener hands it to `PreviewTrigger`, and pressed again from the trigger's
+ * parent, where the overlay takes it as any other. An open peek keeps its Escape: it closes alone.
+ * The props `PreviewTrigger` gives the trigger come through a private context, so this works on the
+ * event instead.
+ */
+function useEscapePassesClosedPeek<T extends HTMLElement>(forwarded: ForwardedRef<T> | null) {
+  const element = useRef<T>(null);
+  useEffect(() => {
+    const trigger = element.current;
+    if (!trigger) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.isComposing || event.keyCode === 229) return;
+      if (trigger.getAttribute("aria-expanded") === "true") return;
+      const parent = trigger.parentElement;
+      if (!parent) return;
+      event.stopPropagation();
+      parent.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: event.key,
+          code: event.code,
+          shiftKey: event.shiftKey,
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+        }),
+      );
+    };
+    trigger.addEventListener("keydown", onKeyDown);
+    return () => trigger.removeEventListener("keydown", onKeyDown);
+  }, []);
+  return useCallback(
+    (node: T | null) => {
+      element.current = node;
+      if (typeof forwarded === "function") forwarded(node);
+      else if (forwarded) forwarded.current = node;
+    },
+    [forwarded],
+  );
 }

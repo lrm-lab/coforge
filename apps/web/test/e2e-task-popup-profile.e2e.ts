@@ -151,6 +151,26 @@ test("a profile opened in a Task popup opens over the popup", async () => {
     await browser("wait", "--fn", `${dialogs}.length === 1`);
     expect(await evaluate<boolean>(popupShowsReply)).toBe(true);
 
+    // Tabbed onto the avatar, its peek opens; Escape closes the peek alone, and the next one, with
+    // no peek left to close, the popup (task #520).
+    await browser("open", `${origin}/en/w/${workspace.slug}/channel/${channel.id}?task=${number}`);
+    await browser("wait", "--fn", `${pageHydrated} && ${popupShowsReply}`);
+    const onAvatar = `document.activeElement === document.querySelector(${JSON.stringify(profileButton)})`;
+    for (let tabs = 0; tabs < 60 && !(await evaluate<boolean>(onAvatar)); tabs++)
+      await browser("press", "Tab");
+    expect(await evaluate<boolean>(onAvatar)).toBe(true);
+    const peekOpen = `document.activeElement?.getAttribute("aria-expanded") === "true"`;
+    await browser("wait", "--fn", peekOpen);
+    await browser("press", "Escape");
+    // The peek is a dialog of its own until its exit ends, and a headless page, hidden, never
+    // plays that exit out; it is not counted.
+    const overlays = `${dialogs}.filter((el) => el.dataset.trigger !== "PreviewTrigger")`;
+    await browser("wait", "--fn", `!(${peekOpen}) && ${overlays}.length === 1`);
+    expect(await evaluate<boolean>(popupShowsReply)).toBe(true);
+    expect(await evaluate<boolean>(onAvatar)).toBe(true);
+    await browser("press", "Escape");
+    await browser("wait", "--fn", `${overlays}.length === 0`);
+
     await browser("set", "viewport", "390", "844");
     await browser("open", `${origin}/en/w/${workspace.slug}/channel/${channel.id}?task=${number}`);
     await browser("wait", "--fn", `${pageHydrated} && ${popupShowsReply}`);
