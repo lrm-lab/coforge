@@ -39,6 +39,7 @@ import type { ActivityInboxFilter } from "./activity-inbox.schemas";
 import { ActivityInboxEmpty, ActivityInboxLoadError } from "./activity-inbox-states";
 import { ACTIVITY_LIST_BESIDE_FROM, ActivityConversationPane } from "./activity-conversation-pane";
 import { openedItemKey } from "./activity-open-target";
+import { ActivityTaskPopup } from "./activity-task-popup";
 import { useActivityItemActions } from "./use-activity-item-actions";
 import { ActivityInboxRow } from "./activity-inbox-row";
 import { ActivityInboxTabs } from "./activity-inbox-tabs";
@@ -119,6 +120,10 @@ export function ActivityInboxView({
     () => openedItemKey([...pinned, ...items], opened),
     [pinned, items, opened],
   );
+  // A Task card opens its popup alone over the list (`taskAlone`); anything else, the pane.
+  const taskAlone =
+    opened?.taskAlone && opened.task !== undefined ? { ...opened, task: opened.task } : undefined;
+  const pane = taskAlone ? undefined : opened;
   const refreshList = useCallback(
     () => queryClient.invalidateQueries({ queryKey: ACTIVITY_INBOX_QUERY_PREFIX }),
     [queryClient],
@@ -266,7 +271,7 @@ export function ActivityInboxView({
         "flex min-h-0 flex-col",
         // Raft's list column beside the conversation at `lg`, as wide as its handle keeps it.
         // Narrower, the conversation takes the page in its place; the list stays mounted.
-        opened
+        pane
           ? cn(
               "relative w-list-column shrink-0",
               LIST_BESIDE_CLASSES[ACTIVITY_LIST_BESIDE_FROM].list,
@@ -371,7 +376,7 @@ export function ActivityInboxView({
           fetchNextPage={query.fetchNextPage}
         />
       </div>
-      {opened && (
+      {pane && (
         <ConversationListResizeHandle
           column={LIST_COLUMN}
           visibleFrom={ACTIVITY_LIST_BESIDE_FROM}
@@ -383,10 +388,18 @@ export function ActivityInboxView({
   return (
     <div className="flex h-full min-h-0 min-w-0">
       {list}
-      {opened && (
+      {pane && (
         <ActivityConversationPane
-          key={`${opened.kind}:${opened.id}`}
-          target={opened}
+          key={`${pane.kind}:${pane.id}`}
+          target={pane}
+          onOpen={onOpen}
+          onClose={onClose}
+        />
+      )}
+      {taskAlone && (
+        <ActivityTaskPopup
+          key={`${taskAlone.id}:${taskAlone.task}`}
+          target={taskAlone}
           onOpen={onOpen}
           onClose={onClose}
         />

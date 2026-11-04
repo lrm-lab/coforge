@@ -76,13 +76,14 @@ export function pickConversationPageSearch({
 /**
  * Which conversation a page hosts beside its own content (`HostedConversationPane`): `open` names
  * it (`channel:<id>` or `dm:<id>`, or `thread:channel:<id>` / `thread:dm:<id>` for a pane that
- * shows only its open thread) and `msg` the message its stream lands on. Each field falls back to
+ * shows only its open thread, `task:channel:<id>` for only its open Task's popup) and `msg` the
+ * message its stream lands on. Each field falls back to
  * absent when malformed, so a stale or hand-edited address never breaks the page.
  */
 export const hostedConversationSearchShape = {
   open: z
     .string()
-    .regex(/^(thread:)?(channel|dm):[0-9a-f-]{36}$/)
+    .regex(/^(thread:|task:)?(channel|dm):[0-9a-f-]{36}$/)
     .optional()
     .catch(undefined),
   msg: z.uuid().optional().catch(undefined),
@@ -101,6 +102,9 @@ export type HostedConversationTarget = ConversationPageTarget & {
   threadAlone?: boolean;
   /** The Task, by its number, whose popup opens over the conversation. */
   task?: number;
+  /** Only that Task's popup shows, without the conversation behind it (Activity's Task cards:
+   * Frank, 11-04). */
+  taskAlone?: boolean;
   /** The file whose review opens over the conversation, with its comments, at one of them. */
   attachmentId?: string;
   commentId?: string;
@@ -108,12 +112,13 @@ export type HostedConversationTarget = ConversationPageTarget & {
 
 /**
  * A hosted conversation's `open` param: `channel:<id>` or `dm:<id>`, prefixed `thread:` when the
- * pane shows only its thread.
+ * pane shows only its thread, `task:` when only its Task's popup shows.
  */
 export function hostedConversationOpenParam(
-  target: ConversationPageTarget & Pick<HostedConversationTarget, "threadAlone">,
+  target: ConversationPageTarget & Pick<HostedConversationTarget, "threadAlone" | "taskAlone">,
 ): string {
-  return `${target.threadAlone ? "thread:" : ""}${target.kind}:${target.id}`;
+  const alone = target.threadAlone ? "thread:" : target.taskAlone ? "task:" : "";
+  return `${alone}${target.kind}:${target.id}`;
 }
 
 /** The hosted conversation an address names: `open` at message `msg`. */
@@ -122,9 +127,10 @@ export function parseHostedConversation(
   msg?: string,
 ): HostedConversationTarget | undefined {
   const threadAlone = open?.startsWith("thread:") || undefined;
-  const [kind, id] = open?.replace(/^thread:/, "").split(":") ?? [];
+  const taskAlone = open?.startsWith("task:") || undefined;
+  const [kind, id] = open?.replace(/^(thread|task):/, "").split(":") ?? [];
   if ((kind !== "channel" && kind !== "dm") || !id) return undefined;
-  return { kind, id, messageId: msg, threadAlone };
+  return { kind, id, messageId: msg, threadAlone, taskAlone };
 }
 
 /** The URL hash that names a message: its row's element id, `message-<id>`. */

@@ -1,5 +1,9 @@
 import { expect, test } from "bun:test";
 import {
+  hostedConversationOpenParam,
+  parseHostedConversation,
+} from "#src/features/conversations/conversation-page-search";
+import {
   activityChatLink,
   activityOpenTarget,
   waitingChoiceTarget,
@@ -138,10 +142,25 @@ test("a waiting choice card posted in a thread opens that thread alone, at the c
   });
 });
 
-test("a waiting choice card in a Task's conversation opens the Task over its channel's board", () => {
+test("a waiting choice card in a Task's conversation opens the Task's popup alone", () => {
   expect(
     waitingChoiceTarget(
       card({ channel: null, task: { conversationId: "channel", number: 7, channel: null } }),
     ),
-  ).toEqual({ kind: "channel", id: "channel", task: 7 });
+  ).toEqual({ kind: "channel", id: "channel", task: 7, taskAlone: true });
+});
+
+test("a Task card opens the Task's popup alone, not its channel's chat (Frank, 11-04)", () => {
+  const task = item({ task: { number: 4 } as ActivityInboxItem["task"] });
+  const target = activityOpenTarget(task);
+  expect(target).toEqual({
+    kind: "channel",
+    id: task.place.conversationId,
+    task: 4,
+    taskAlone: true,
+  });
+  // Its address says so, and reads back the same.
+  const open = hostedConversationOpenParam(target);
+  expect(open).toBe(`task:channel:${task.place.conversationId}`);
+  expect(parseHostedConversation(open)?.taskAlone).toBe(true);
 });

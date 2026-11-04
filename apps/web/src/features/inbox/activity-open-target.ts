@@ -15,7 +15,8 @@ import type { ActivityInboxItem } from "#src/server/inbox/activity-inbox.server"
  * Any other item opens at its first unread message (a thread at its first unread reply), where the
  * pane draws its "New messages" divider (task #358). With nothing unread, an item that mentions the
  * viewer opens at its first mention, read or not (#1129), and any other at its newest message. A
- * Task's conversation opens as its popup over the board it is on. A comment on a file opens the
+ * Task's conversation opens as its popup alone, over Activity, not over its channel's chat
+ * (`taskAlone`, Frank 11-04). A comment on a file opens the
  * file's conversation at the message it rides on, with the file's review over it at the comment.
  */
 export function activityOpenTarget({
@@ -28,7 +29,8 @@ export function activityOpenTarget({
   mentionAction,
   attachmentComment,
 }: ActivityInboxItem): HostedConversationTarget {
-  if (task) return { kind: "channel", id: place.conversationId, task: task.number };
+  if (task)
+    return { kind: "channel", id: place.conversationId, task: task.number, taskAlone: true };
   // A comment notification opens the file's own conversation, at the message the file rides on
   // (the comment itself lives in a conversation the UI never shows), and the file's review at the
   // comment: the comments list holds only top-level comments, so a reply is reached through the
@@ -74,10 +76,16 @@ function threadAlone(
 
 /**
  * Where a waiting choice card opens, at the card, to be answered there: a Task's card in its popup
- * over the board, a reply's in its thread alone, any other in its channel or direct conversation.
+ * alone, a reply's in its thread alone, any other in its channel or direct conversation.
  */
 export function waitingChoiceTarget(card: WaitingChoiceCard): HostedConversationTarget {
-  if (card.task) return { kind: "channel", id: card.task.conversationId, task: card.task.number };
+  if (card.task)
+    return {
+      kind: "channel",
+      id: card.task.conversationId,
+      task: card.task.number,
+      taskAlone: true,
+    };
   const kind = card.channel ? "channel" : "dm";
   return card.threadRootId
     ? threadAlone(kind, card.conversationId, card.threadRootId, card.messageId)
