@@ -2,21 +2,21 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
 import { humanLabel } from "#src/lib/human-label";
-import { AGENT_DISPLAY_NAME_MAX_LENGTH } from "#src/features/agents/agent.schemas";
+import { ownerAgentLanguage, ownerAgentName } from "#src/server/agents/owner-agent-name.server";
+import type { Locale } from "#src/paraglide/runtime";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 
 export const WEEKLY_REPORT_ASSISTANT_DISPLAY_NAME = "周报助手";
 
-const WEEKLY_REPORT_ASSISTANT_NAME_SUFFIX = "的周报助手";
-
-/** The name members see: 「李健的周报助手」. A blank person name keeps the generic label. */
-export function weeklyReportAssistantDisplayName(personName: string): string {
+/** The name members see: 「李健的周报助手」 / "Ada's Weekly Report Assistant", the owner's name
+ * cut to fit an Agent's display name. A blank person name keeps the generic label. */
+export function weeklyReportAssistantDisplayName(
+  personName: string,
+  language: Locale = "zh-CN",
+): string {
   const person = personName.trim();
   if (person.length === 0) return WEEKLY_REPORT_ASSISTANT_DISPLAY_NAME;
-  const room = AGENT_DISPLAY_NAME_MAX_LENGTH - WEEKLY_REPORT_ASSISTANT_NAME_SUFFIX.length;
-  const fitted = person.length > room ? person.slice(0, room).trimEnd() : person;
-  if (fitted.length === 0) return WEEKLY_REPORT_ASSISTANT_DISPLAY_NAME;
-  return `${fitted}${WEEKLY_REPORT_ASSISTANT_NAME_SUFFIX}`;
+  return ownerAgentName(person, language === "zh-CN" ? "的周报助手" : "'s Weekly Report Assistant");
 }
 
 async function assistantLabelForUser(
@@ -24,18 +24,33 @@ async function assistantLabelForUser(
     user: {
       findUnique: (args: {
         where: { id: string };
-        select: { username: true; displayName: true };
-      }) => Promise<{ username: string; displayName: string | null } | null>;
+        select: {
+          username: true;
+          displayName: true;
+          preferences: { select: { language: true } };
+        };
+      }) => Promise<{
+        username: string;
+        displayName: string | null;
+        preferences?: { language: string | null } | null;
+      } | null>;
     };
   },
   userId: string,
 ): Promise<string> {
   const user = await tx.user.findUnique({
     where: { id: userId },
-    select: { username: true, displayName: true },
+    select: {
+      username: true,
+      displayName: true,
+      preferences: { select: { language: true } },
+    },
   });
   if (!user) return WEEKLY_REPORT_ASSISTANT_DISPLAY_NAME;
-  return weeklyReportAssistantDisplayName(humanLabel(user));
+  return weeklyReportAssistantDisplayName(
+    humanLabel(user),
+    ownerAgentLanguage(user.preferences?.language),
+  );
 }
 
 export function weeklyReportAssistantAgentName(userId: string): string {

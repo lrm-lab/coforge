@@ -4,6 +4,7 @@ import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import { peopleDirectPeerId } from "#src/features/conversations/direct-key";
 import { AppError } from "#src/lib/app-error";
 import { compareHumanLabels, humanLabel, UNNAMED_PERSON_NAME } from "#src/lib/human-label";
+import { ownerAgentLanguage } from "#src/server/agents/owner-agent-name.server";
 import { weeklyReportAssistantDisplayName } from "#src/server/records/weekly-report-assistant.server";
 import { ACTIVE_AGENT_WHERE, ROSTER_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
@@ -32,15 +33,30 @@ export type PeoplePageInput = { query: string; cursor?: string; limit: number };
 
 const contains = (query: string) => ({ contains: query, mode: "insensitive" as const });
 
+/** A person as the name of their weekly-report assistant needs them: the name, and the saved
+ * interface language it is worded in (selected with the person, never read per Agent). */
+type AssistantOwner = {
+  username: string;
+  displayName: string | null;
+  preferences?: { language: string | null } | null;
+};
+
+const assistantNameOf = (owner: AssistantOwner) =>
+  weeklyReportAssistantDisplayName(
+    humanLabel(owner),
+    ownerAgentLanguage(owner.preferences?.language),
+  );
+
+/** `preferences` as the select that `AssistantOwner` reads. */
+const OWNER_LANGUAGE_SELECT = { select: { language: true } } as const;
+
 function shownAgentName(agent: {
   name: string;
   displayName: string;
   weeklyReportAssistant?: { id: string } | null;
-  owner?: { username: string; displayName: string | null } | null;
+  owner?: AssistantOwner | null;
 }): string {
-  if (agent.weeklyReportAssistant && agent.owner) {
-    return weeklyReportAssistantDisplayName(humanLabel(agent.owner));
-  }
+  if (agent.weeklyReportAssistant && agent.owner) return assistantNameOf(agent.owner);
   return agent.displayName.trim() || agent.name;
 }
 
@@ -74,7 +90,7 @@ function createdAgentView(
     avatarMascot: string | null;
     weeklyReportAssistant: { id: string } | null;
   },
-  owner: { username: string; displayName: string | null },
+  owner: AssistantOwner,
 ) {
   return {
     id: agent.id,
@@ -123,13 +139,13 @@ export class WorkspaceMembers {
       id: string;
       displayName: string;
       weeklyReportAssistant?: { id: string } | null;
-      owner?: { username: string; displayName: string | null } | null;
+      owner?: AssistantOwner | null;
     }>,
   ) {
     await Promise.all(
       agents.flatMap((agent) => {
         if (!agent.weeklyReportAssistant || !agent.owner) return [];
-        const shown = weeklyReportAssistantDisplayName(humanLabel(agent.owner));
+        const shown = assistantNameOf(agent.owner);
         if (agent.displayName === shown) return [];
         const rename = {
           where: { id_workspaceId: { id: agent.id, workspaceId } },
@@ -198,6 +214,7 @@ export class WorkspaceMembers {
               username: true,
               displayName: true,
               avatarObjectKey: true,
+              preferences: OWNER_LANGUAGE_SELECT,
             },
           },
           weeklyReportAssistant: { select: { id: true } },
@@ -274,7 +291,9 @@ export class WorkspaceMembers {
           avatarMascot: true,
           ownerId: true,
           visibility: true,
-          owner: { select: { username: true, displayName: true } },
+          owner: {
+            select: { username: true, displayName: true, preferences: OWNER_LANGUAGE_SELECT },
+          },
           weeklyReportAssistant: { select: { id: true } },
         },
         orderBy: [{ name: "asc" }, { id: "asc" }],
@@ -355,6 +374,7 @@ export class WorkspaceMembers {
             description: true,
             email: true,
             avatarObjectKey: true,
+            preferences: OWNER_LANGUAGE_SELECT,
             agents: createdAgentsSelect(visibleAgents),
           },
         },
@@ -398,6 +418,7 @@ export class WorkspaceMembers {
         displayName: true,
         description: true,
         avatarObjectKey: true,
+        preferences: OWNER_LANGUAGE_SELECT,
         // Visible Agents this person created. One list feeds the count and the faces: Prisma
         // pushes neither a nested `take` nor a page-scoped filtered `_count` into SQL.
         agents: createdAgentsSelect(visibleAgents),

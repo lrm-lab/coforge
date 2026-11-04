@@ -8,8 +8,7 @@ import {
   startDefaultCloudComputer,
 } from "#src/server/workspaces/create-workspace.server";
 import { paginated } from "#src/server/db/pagination.server";
-import { AGENT_DISPLAY_NAME_MAX_LENGTH } from "#src/features/agents/agent.schemas";
-import { isUserLanguage } from "#src/server/db/repositories/user-preferences.repositories.server";
+import { ownerAgentLanguage, ownerAgentName } from "#src/server/agents/owner-agent-name.server";
 import { humanLabel, type HumanNames } from "#src/lib/human-label";
 import type { Locale } from "#src/paraglide/runtime";
 import {
@@ -18,16 +17,10 @@ import {
 } from "#src/server/agents/agent-runtime-config.server";
 import { getAgentRuntimeLock } from "#src/server/agents/agent-runtime-lock.server";
 
-/** `{name}的助手` / `{name}'s Assistant`, with the owner's name cut to fit an Agent's display name.
- * Without a locale (no request to read one from) it is Chinese. */
-function personalAssistantName(owner: Pick<HumanNames, "displayName">, locale: Locale = "zh-CN") {
-  const suffix = locale === "zh-CN" ? "的助手" : "'s Assistant";
-  let name = "";
-  for (const character of humanLabel(owner)) {
-    if (name.length + character.length > AGENT_DISPLAY_NAME_MAX_LENGTH - suffix.length) break;
-    name += character;
-  }
-  return `${name}${suffix}`;
+/** `{name}的助手` / `{name}'s Assistant`, in the owner's saved language, else the request's
+ * `locale`, else Chinese. */
+function personalAssistantName(owner: Pick<HumanNames, "displayName">, language: Locale) {
+  return ownerAgentName(humanLabel(owner), language === "zh-CN" ? "的助手" : "'s Assistant");
 }
 
 export const WORKSPACE_ASSISTANT_DESCRIPTION =
@@ -158,7 +151,7 @@ export class WorkspaceAssistants {
                 workspaceId,
                 ownerId: userId,
                 name: `assistant-${crypto.randomUUID()}`,
-                displayName: personalAssistantName(owner, isUserLanguage(saved) ? saved : locale),
+                displayName: personalAssistantName(owner, ownerAgentLanguage(saved, locale)),
                 description: WORKSPACE_ASSISTANT_DESCRIPTION,
                 systemKind: WORKSPACE_ASSISTANT_KIND,
                 introductionDueAt: new Date(),
