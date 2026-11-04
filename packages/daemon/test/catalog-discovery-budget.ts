@@ -2,10 +2,7 @@ import {
   ANTIGRAVITY_ACP_CATALOG_TIMEOUT_MS,
   ANTIGRAVITY_USAGE_TIMEOUT_MS,
 } from "@lrm/coforge-anvil/antigravity";
-import {
-  OPENCODE_PLAIN_MODELS_TIMEOUT_MS,
-  OPENCODE_VERBOSE_MODELS_TIMEOUT_MS,
-} from "@lrm/coforge-anvil/opencode";
+import { OPENCODE_ACP_CATALOG_TIMEOUT_MS } from "@lrm/coforge-anvil/opencode";
 import { PROCESS_TREE_EXIT_GRACE_MS, CATALOG_DISCOVERY_TIMEOUT_MS } from "@lrm/coforge-anvil";
 import { PI_CATALOG_DISCOVERY_TIMEOUT_MS } from "@lrm/coforge-anvil/pi";
 
@@ -41,11 +38,11 @@ export const SHORT_CATALOG_DISCOVERY_TIMEOUT_MS = 1_500;
 
 /**
  * The longest one OpenCode catalog discovery over a spawned process can run before the product
- * gives its own verdict: the verbose run, then the plain retry, each with its own deadline. A test
+ * gives its own verdict: the `session/new` wait, then the process cleanup ladder. A test
  * that spawns the OpenCode fixture needs at least this, for the same reason as above.
  */
 export const OPENCODE_DISCOVERY_BUDGET_MS =
-  OPENCODE_VERBOSE_MODELS_TIMEOUT_MS + OPENCODE_PLAIN_MODELS_TIMEOUT_MS;
+  OPENCODE_ACP_CATALOG_TIMEOUT_MS + 2 * PROCESS_TREE_EXIT_GRACE_MS;
 
 /**
  * The longest one Antigravity catalog discovery over a spawned process can run before the product

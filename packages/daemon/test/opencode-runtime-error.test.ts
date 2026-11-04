@@ -2,23 +2,21 @@ import { expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { OpenCodeProvider } from "@lrm/coforge-anvil/opencode";
+import { OpenCodeAcpProvider } from "@lrm/coforge-anvil/opencode";
 import { AgentEnvironmentError, type AgentRuntimeEvent } from "@lrm/coforge-anvil";
 import { launchFailureActivity } from "#src/agent-runtime/launch-failure";
-import { perTurnSessionHost } from "#src/code-agent/per-turn-host";
+import { openCodeAcpRuntimeHost } from "#src/code-agent/opencode/acp-host";
 import {
   RUNTIME_ERROR_CLASS,
   classifyRuntimeErrorText,
 } from "#src/agent-runtime/runtime-error-classification";
-import { readVersionOutput } from "#src/code-agent/version-probe";
 import { anvilRuntimeFixtures } from "./fixtures/anvil-runtime";
 
 const INSTRUCTIONS = "Standing OpenCode instructions.";
 const provider = () =>
-  new OpenCodeProvider({
+  new OpenCodeAcpProvider({
     command: [process.execPath, anvilRuntimeFixtures.opencode],
-    host: perTurnSessionHost,
-    versionReader: readVersionOutput,
+    host: openCodeAcpRuntimeHost,
   });
 
 test("OpenCode quota errors retain the daemon rate-limit classification", async () => {
@@ -31,8 +29,7 @@ test("OpenCode quota errors retain the daemon rate-limit classification", async 
       agentWorkspaceDirectory: directory,
       instructions: INSTRUCTIONS,
       environment: {
-        COFORGE_OPENCODE_MODE: "provider-quota",
-        COFORGE_OPENCODE_TURN_DELAY_MS: "120",
+        OPENCODE_ACP_FIXTURE_QUOTA: "1",
       },
     });
     try {
@@ -45,10 +42,12 @@ test("OpenCode quota errors retain the daemon rate-limit classification", async 
       });
       await session.sendMessage("go");
       await completed;
-      expect(events).toContainEqual({
-        type: "error",
-        message: "provider.quota (HTTP 429): Rate limit exceeded. Please try again later.",
-      });
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: "error",
+          message: "provider.quota (HTTP 429): Rate limit exceeded. Please try again later.",
+        }),
+      );
       expect(events).toContainEqual({ type: "completed", status: "failed" });
       // The surfaced text is what the daemon classifies on — pin the classification itself, not
       // just the string, so rewording the prefix cannot silently demote the rate_limited class

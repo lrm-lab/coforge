@@ -54,20 +54,28 @@ test("registry launches OpenCode from its installer path when PATH misses it", a
     const session = await provider.createAgentSession({
       agentWorkspaceDirectory: workspace,
       instructions: "installer path instructions",
-      environment: { COFORGE_OPENCODE_MODE: "text", COFORGE_OPENCODE_LAUNCH_LOG: launchLog },
+      environment: { OPENCODE_ACP_FIXTURE_LOG: launchLog },
     });
     try {
-      // A fresh OpenCode session does not launch until real input. The installer-path binary is
-      // the one that writes this log, and the standing instructions live in the private file.
+      // The ACP session launches `opencode acp` at open; the installer-path binary is the one
+      // that writes this request log, and the standing instructions live in the private file
+      // named by the OPENCODE_CONFIG_CONTENT it received.
       const done = completed(session);
       await session.sendMessage("ping");
       await done;
-      const launch = JSON.parse((await Bun.file(launchLog).text()).trim()) as {
-        prompt: string;
-        configContent: string;
-      };
-      expect(launch.prompt).toBe("ping");
-      const config = JSON.parse(launch.configContent) as { instructions: string[] };
+      const records = (await Bun.file(launchLog).text())
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line)) as Array<{
+        method?: string;
+        params?: { prompt?: { text: string }[] };
+        configContent?: string;
+      }>;
+      expect(records.some((r) => r.method === "initialize")).toBe(true);
+      expect(records.some((r) => r.method === "session/new")).toBe(true);
+      expect(records.some((r) => r.method === "session/prompt")).toBe(true);
+      const entry = records.find((r) => r.configContent);
+      const config = JSON.parse(entry?.configContent ?? "") as { instructions: string[] };
       expect(await Bun.file(config.instructions[0]!).text()).toBe("installer path instructions");
     } finally {
       await session.dispose();

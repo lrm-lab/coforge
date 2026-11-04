@@ -10,13 +10,13 @@ import { claudeProvider } from "./fixtures/claude-provider";
 import { kiroProvider } from "./fixtures/kiro-host";
 import { CursorProvider } from "@lrm/coforge-anvil/cursor";
 import { PROCESS_TREE_EXIT_GRACE_MS, VERSION_PROBE_TIMEOUT_MS } from "@lrm/coforge-anvil";
-import { OpenCodeProvider } from "@lrm/coforge-anvil/opencode";
+import { OpenCodeAcpProvider } from "@lrm/coforge-anvil/opencode";
+import { openCodeAcpRuntimeHost } from "#src/code-agent/opencode/acp-host";
 import { grokProvider } from "./fixtures/grok-host";
 import { AntigravityAcpProvider } from "@lrm/coforge-anvil/antigravity";
 import { antigravityAcpRuntimeHost } from "#src/code-agent/antigravity/acp-host";
 import { CoforgeProvider } from "#src/code-agent/pi/provider";
 import { perTurnSessionHost } from "#src/code-agent/per-turn-host";
-import { readVersionOutput } from "#src/code-agent/version-probe";
 import { anvilRuntimeFixtures } from "./fixtures/anvil-runtime";
 
 const command = (name: string) => [
@@ -35,9 +35,8 @@ const providers = [
     host: perTurnSessionHost,
     command: [process.execPath, anvilRuntimeFixtures.cursor],
   }),
-  new OpenCodeProvider({
-    host: perTurnSessionHost,
-    versionReader: readVersionOutput,
+  new OpenCodeAcpProvider({
+    host: openCodeAcpRuntimeHost,
     command: [process.execPath, anvilRuntimeFixtures.opencode],
   }),
   grokProvider({ command: [process.execPath, anvilRuntimeFixtures.grok] }),
@@ -64,7 +63,7 @@ for (const provider of providers) {
             : {}),
           environment: {
             COFORGE_CURSOR_MODE: "hang",
-            COFORGE_OPENCODE_MODE: "hang",
+            OPENCODE_ACP_FIXTURE_HANG: "1",
             COFORGE_GROK_MODE: "hang",
             COFORGE_GROK_ACP_LOG: join(root, "grok-rpc.jsonl"),
             COFORGE_AGY_MODE: "hang",

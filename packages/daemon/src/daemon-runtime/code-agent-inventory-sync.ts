@@ -10,6 +10,10 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import type { CatalogDiscoveryFailure } from "#src/code-agent/runtime-inventory";
 import { readHostDevinEfforts, type DevinCatalogEfforts } from "#src/code-agent/devin/effort-read";
+import {
+  readHostOpenCodeEfforts,
+  type OpenCodeCatalogEfforts,
+} from "#src/code-agent/opencode/effort-read";
 import { discoverPiModels } from "@coforge/agent";
 import { getLogger } from "@logtape/logtape";
 import {
@@ -69,6 +73,13 @@ export function defaultCodeAgentDiscovery(stateDirectory: string): CodeAgentDisc
 /** What `reportRuntimes` reported, and whether its cached catalogs need a live refresh. */
 export type CodeAgentRuntimesReport = { runtimes: RuntimeMetadata[]; needsCatalogRefresh: boolean };
 
+/** Providers whose per-model `thought_level` list only exists after a model applies — each gets
+ * an effort sweep after the model list reports. */
+const SWEEPABLE_EFFORT_PROVIDERS = new Set<RuntimeProvider>([
+  RUNTIME_PROVIDER.DEVIN,
+  RUNTIME_PROVIDER.OPENCODE,
+]);
+
 /** Keeps the cloud's copy of this Computer's Code Agent runtimes and model catalogs current. */
 export class CodeAgentInventorySync {
   readonly #discovery: CodeAgentDiscovery;
@@ -93,6 +104,12 @@ export class CodeAgentInventorySync {
     version: string | undefined,
     modelIds: readonly string[],
   ) => Promise<DevinCatalogEfforts>;
+  /** OpenCode's `thought_level` sweep; production resolves this Computer's `opencode`. */
+  readonly #openCodeEfforts: (
+    stateDirectory: string | undefined,
+    version: string | undefined,
+    modelIds: readonly string[],
+  ) => Promise<OpenCodeCatalogEfforts>;
 
   constructor(
     discovery: CodeAgentDiscovery,
@@ -104,12 +121,18 @@ export class CodeAgentInventorySync {
       version: string | undefined,
       modelIds: readonly string[],
     ) => Promise<DevinCatalogEfforts>,
+    openCodeEfforts?: (
+      stateDirectory: string | undefined,
+      version: string | undefined,
+      modelIds: readonly string[],
+    ) => Promise<OpenCodeCatalogEfforts>,
   ) {
     this.#runtimeAuth = runtimeAuth;
     this.#discovery = discovery;
     this.#owner = owner;
     this.#isLive = isLive;
     this.#devinEfforts = devinEfforts ?? readHostDevinEfforts;
+    this.#openCodeEfforts = openCodeEfforts ?? readHostOpenCodeEfforts;
     this.#freshness = new CatalogFreshness({
       discovery: this.#discovery,
       owner,
@@ -244,8 +267,8 @@ export class CodeAgentInventorySync {
       await this.#sendInventory(transport, requestId, reported, catalogs);
       this.#reportedRuntimes = reported;
       const resolved =
-        request.provider === RUNTIME_PROVIDER.DEVIN
-          ? await this.#resolveDevinEfforts(reported, catalogs, scope)
+        request.provider && SWEEPABLE_EFFORT_PROVIDERS.has(request.provider)
+          ? await this.#resolveEfforts(request.provider, reported, catalogs, scope)
           : undefined;
       if (resolved && this.#isLive(transport))
         await this.#sendInventory(transport, crypto.randomUUID(), reported, resolved);
@@ -321,9 +344,22 @@ export class CodeAgentInventorySync {
       const reported = reportedWithCatalogFailures(runtimes, failures);
       await this.#sendInventory(transport, requestId, reported, catalogs);
       if (!this.#isLive(transport)) return;
-      const resolved = await this.#resolveDevinEfforts(runtimes, catalogs, scope);
-      if (resolved && this.#isLive(transport))
-        await this.#sendInventory(transport, crypto.randomUUID(), runtimes, resolved);
+      // The sweeps run side by side — a slow one never holds the other's republish — and each
+      // resolves only its own provider's catalog, so the results merge into one follow-up report.
+      const [devinResolved, openCodeResolved] = await Promise.all([
+        this.#resolveEfforts(RUNTIME_PROVIDER.DEVIN, runtimes, catalogs, scope),
+        this.#resolveEfforts(RUNTIME_PROVIDER.OPENCODE, runtimes, catalogs, scope),
+      ]);
+      if ((devinResolved || openCodeResolved) && this.#isLive(transport)) {
+        const merged = catalogs.map((catalog) => {
+          if (catalog.provider === RUNTIME_PROVIDER.DEVIN && devinResolved)
+            return devinResolved.find((entry) => entry.provider === catalog.provider) ?? catalog;
+          if (catalog.provider === RUNTIME_PROVIDER.OPENCODE && openCodeResolved)
+            return openCodeResolved.find((entry) => entry.provider === catalog.provider) ?? catalog;
+          return catalog;
+        });
+        await this.#sendInventory(transport, crypto.randomUUID(), runtimes, merged);
+      }
       logger.info("Code Agent catalog discovery completed", {
         event: "code_agent_catalog:summary_completed",
         ...scope,
@@ -350,15 +386,17 @@ export class CodeAgentInventorySync {
     };
   }
 
-  /** The Devin effort sweep after a report: a throw is one failed read, not a failed report. */
-  async #resolveDevinEfforts(
+  /** An effort sweep after a report: a throw is one failed read, not a failed report. */
+  async #resolveEfforts(
+    provider: RuntimeProvider,
     runtimes: RuntimeMetadata[],
     catalogs: CodeAgentModelCatalog[],
     scope: Record<string, string>,
   ): Promise<CodeAgentModelCatalog[] | undefined> {
-    return this.#devinEffortCatalogs(runtimes, catalogs).catch((error: unknown) => {
-      logger.warning("Devin effort sweep failed", {
-        event: "code_agent_catalog:devin_efforts_failed",
+    return this.#effortCatalogs(provider, runtimes, catalogs).catch((error: unknown) => {
+      logger.warning(`${provider} effort sweep failed`, {
+        event: `code_agent_catalog:${provider}_efforts_failed`,
+        provider,
         ...scope,
         error_code: diagnosticErrorCode(error),
         outcome: "failed",
@@ -368,23 +406,26 @@ export class CodeAgentInventorySync {
   }
 
   /**
-   * Reads the Devin models' `thought_level` choices after the model list already reported and
+   * Reads a provider's models' `thought_level` choices after the model list already reported and
    * returns the catalogs to publish again, or undefined when the sweep adds nothing or leaves a
    * model unread: an unread model is never reported as effort-less — it keeps its
    * cache-published value for this report.
    */
-  async #devinEffortCatalogs(
+  async #effortCatalogs(
+    provider: RuntimeProvider,
     runtimes: RuntimeMetadata[],
     catalogs: CodeAgentModelCatalog[],
   ): Promise<CodeAgentModelCatalog[] | undefined> {
-    const index = catalogs.findIndex((catalog) => catalog.provider === RUNTIME_PROVIDER.DEVIN);
+    const index = catalogs.findIndex((catalog) => catalog.provider === provider);
     const directory = this.#discovery.stateDirectory;
     if (index < 0 || !directory) return undefined;
     const catalog = catalogs[index];
     if (!catalog) return undefined;
-    const read = await this.#devinEfforts(
+    const reader =
+      provider === RUNTIME_PROVIDER.OPENCODE ? this.#openCodeEfforts : this.#devinEfforts;
+    const read = await reader(
       directory,
-      runtimes.find((runtime) => runtime.provider === RUNTIME_PROVIDER.DEVIN)?.version,
+      runtimes.find((runtime) => runtime.provider === provider)?.version,
       catalog.models.map((model) => model.id),
     );
     if (!read.complete) return undefined;

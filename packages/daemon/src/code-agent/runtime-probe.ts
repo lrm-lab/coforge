@@ -9,8 +9,8 @@ import { agentEnvironment } from "./environment";
 import { withoutClaudeCodeMarker } from "@lrm/coforge-anvil/claude-code";
 import { JsonlProcess } from "@lrm/coforge-anvil/execution";
 import {
-  isOpenCodeVersionUnsupported,
-  logOpenCodeVersionUnsupported,
+  isOpenCodeAcpVersionUnsupported,
+  logOpenCodeAcpVersionUnsupported,
 } from "@lrm/coforge-anvil/opencode";
 import {
   VERSION_PROBE_TIMEOUT_MS,
@@ -162,8 +162,8 @@ async function probeRuntimeVersion(
     logKiroVersionUnsupported(name, version);
     return { kind: "rejected", version };
   }
-  if (provider === RUNTIME_PROVIDER.OPENCODE && isOpenCodeVersionUnsupported(version)) {
-    logOpenCodeVersionUnsupported(name, version);
+  if (provider === RUNTIME_PROVIDER.OPENCODE && isOpenCodeAcpVersionUnsupported(version)) {
+    logOpenCodeAcpVersionUnsupported(name, version);
     return { kind: "rejected", version };
   }
   if (provider === RUNTIME_PROVIDER.GROK && isGrokVersionUnsupported(version)) {
@@ -224,8 +224,8 @@ function cachedBelowFloor(
   runtime: RuntimeMetadata | undefined,
 ): boolean {
   if (runtime === undefined) return false;
-  if (provider === RUNTIME_PROVIDER.OPENCODE && isOpenCodeVersionUnsupported(runtime.version)) {
-    logOpenCodeVersionUnsupported(name, runtime.version);
+  if (provider === RUNTIME_PROVIDER.OPENCODE && isOpenCodeAcpVersionUnsupported(runtime.version)) {
+    logOpenCodeAcpVersionUnsupported(name, runtime.version);
     return true;
   }
   if (provider === RUNTIME_PROVIDER.DEVIN && isDevinVersionUnsupported(runtime.version)) {

@@ -1,4 +1,6 @@
 import { antigravityAcpRuntimeHost } from "#src/code-agent/antigravity/acp-host";
+import { openCodeAcpRuntimeHost } from "#src/code-agent/opencode/acp-host";
+import { openCodeCatalogWithCachedEfforts } from "#src/code-agent/opencode/effort-read";
 import { commandCodeRuntimeHost } from "#src/code-agent/command-code/host";
 import { devinRuntimeHost } from "#src/code-agent/devin/host";
 import { grokRuntimeHost } from "#src/code-agent/grok/host";
@@ -18,7 +20,7 @@ import { discoverDevinCatalog } from "@lrm/coforge-anvil/devin";
 import { devinCatalogWithCachedEfforts } from "#src/code-agent/devin/effort-read";
 import { discoverKiroCatalog, KIRO_ACP_ARGS } from "@lrm/coforge-anvil/kiro";
 import { discoverCursorCatalog } from "@lrm/coforge-anvil/cursor";
-import { discoverOpenCodeCatalog } from "@lrm/coforge-anvil/opencode";
+import { discoverOpenCodeAcpCatalog } from "@lrm/coforge-anvil/opencode";
 import { discoverGrokCatalog } from "@lrm/coforge-anvil/grok";
 import { discoverAntigravityAcpCatalog } from "@lrm/coforge-anvil/antigravity";
 import { CATALOG_DISCOVERY_TIMEOUT_MS } from "@lrm/coforge-anvil";
@@ -167,16 +169,20 @@ export async function loadCachedCodeAgentCatalogs(
       changedProviders.push(provider);
     if (!fresh || expired) needsRefresh = true;
   }
-  // The replayed Devin catalog carries the efforts its sweep knew at publish time; overlay the
-  // effort cache so a restart does not hide them, and refresh while a model still lacks a read.
-  const devinIndex = catalogs.findIndex((catalog) => catalog.provider === RUNTIME_PROVIDER.DEVIN);
-  if (devinIndex >= 0 && options.cacheDirectory) {
-    const filled = await devinCatalogWithCachedEfforts(
-      catalogs[devinIndex]!,
+  // A replayed catalog carries the efforts its sweep knew at publish time; overlay the effort
+  // cache so a restart does not hide them, and refresh while a model still lacks a read.
+  for (const [provider, fill] of [
+    [RUNTIME_PROVIDER.DEVIN, devinCatalogWithCachedEfforts],
+    [RUNTIME_PROVIDER.OPENCODE, openCodeCatalogWithCachedEfforts],
+  ] as const) {
+    const index = catalogs.findIndex((catalog) => catalog.provider === provider);
+    if (index < 0 || !options.cacheDirectory) continue;
+    const filled = await fill(
+      catalogs[index]!,
       options.cacheDirectory,
-      runtimes.find((runtime) => runtime.provider === RUNTIME_PROVIDER.DEVIN)?.version,
+      runtimes.find((runtime) => runtime.provider === provider)?.version,
     );
-    catalogs[devinIndex] = filled.catalog;
+    catalogs[index] = filled.catalog;
     if (!filled.complete) needsRefresh = true;
   }
   if (usable(RUNTIME_PROVIDER.DSH)) {
@@ -330,23 +336,29 @@ export async function discoverCodeAgentCatalogs(
         })),
       ]);
   }
-  // OpenCode was the one cacheable provider this refresh had no branch for, so its catalog was
-  // never probed: an Agent whose runtime is OpenCode saw an empty model list in the UI even
-  // though `opencode models` lists models fine on the CLI.
+  // The model list is session/new's model config option, the same select the session's own
+  // `set_config_option` applies to — `opencode models` is no longer read.
   if (usable(RUNTIME_PROVIDER.OPENCODE)) {
     const executable = await resolveExecutable(RUNTIME_PROVIDER.OPENCODE);
     if (executable)
       discoveries.push([
         RUNTIME_PROVIDER.OPENCODE,
-        discoverOpenCodeCatalog(
-          commands.opencode ?? [executable, "models"],
+        discoverOpenCodeAcpCatalog(
+          commands.opencode ?? [executable],
           cwd,
           environment,
-          runCatalogCommand,
-        ).then((catalog) => ({
-          keyPaths: [executable],
-          catalog,
-        })),
+          openCodeAcpRuntimeHost,
+        ).then(async (catalog) => {
+          // A model list publishes at discovery speed: efforts fill from the cache only, and
+          // the inventory-sync sweep reports the catalog again once `thought_level` is read.
+          if (!catalog) return { keyPaths: [executable], catalog };
+          const { catalog: filled } = await openCodeCatalogWithCachedEfforts(
+            catalog,
+            options.cacheDirectory,
+            runtimes.find((runtime) => runtime.provider === RUNTIME_PROVIDER.OPENCODE)?.version,
+          );
+          return { keyPaths: [executable], catalog: filled };
+        }),
       ]);
   }
   // The model list is session/new's model select. Without this branch a refresh never probes

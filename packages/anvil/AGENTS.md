@@ -38,7 +38,7 @@
 | `src/grok/`                  | Grok persistent ACP sessions, native turn events, catalog and usage through host capabilities                                 |
 | `src/command-code/`          | Command Code ACP sessions, native model catalog and a private `--mod` instruction bridge                                      |
 | `src/kiro/`                  | Kiro ACP provider, native profile, events, version/catalog policy, enterprise auth and usage parsing with explicit host ports |
-| `src/opencode/`              | OpenCode turns, version policy, catalog, and private instruction overlay                                                      |
+| `src/opencode/`              | OpenCode ACP sessions, version policy, model catalog, and private instruction overlay                                        |
 | `src/cursor/`                | Cursor turn protocol, provider and model catalog parsing                                                                      |
 | `src/codex/`                 | Codex sessions, native events, auth, usage, catalog and idle-recycle rollout reads through required host capabilities         |
 | `src/devin/`                 | Devin ACP sessions, always-on rule injection, model/effort selects, auth status and login through host capabilities           |

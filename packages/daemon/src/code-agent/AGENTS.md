@@ -38,7 +38,7 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
   cap plus one wait (`PI_CATALOG_DISCOVERY_TIMEOUT_MS`, derived from `PI_MODEL_REFRESH_TIMEOUT_MS`
   in `@coforge/agent`) because that refresh is capped separately and the resource loader runs
   after it. A CLI that fetches its list over the network has its own deadline next to its catalog
-  reader (`opencode models --verbose`, `agy acp`). Explicit refreshes force Pi and forbid Codex's
+  reader (`opencode acp`, `agy acp`). Explicit refreshes force Pi and forbid Codex's
   disk fallback; offline or failed probes are omitted, logged as `code_agent_catalog:discovery_failed`,
   and never cached. Each provider's failure reports back per provider: classified start/version
   failures also mark the runtime's `unavailableCode`/`diagnostic` in the inventory report; a
@@ -155,7 +155,7 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
   `claude-code/`. Preserve their separate environment compositions and evaluation times.
 - Native Claude rules live in [Anvil Claude instructions](../../../anvil/src/claude-code/AGENTS.md).
 
-## Per-turn providers (Cursor, OpenCode)
+## Per-turn providers (Cursor)
 
 - Cursor's partial-output framing rules are in [Anvil Cursor rules](../../../anvil/src/cursor/AGENTS.md).
 - One child process per turn. Anvil `src/per-turn/session.ts` is their one `AgentSession` (state machine,
@@ -167,15 +167,15 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
   one (`instructionsTurn`, `resumedIdentity`, `repeatedSessionId`, `identityReports`,
   `mintSessionId`, `sanitizeEnvironment`, `lostResume`, reader `end`) records an observed CLI difference. Check the real CLI before adding
   one or making two providers agree; the fixtures do not prove a binary.
-- OpenCode does not set `instructionsTurn`. From CLI 2.0.30, every launch, including resume,
-  appends the standing instructions through `OPENCODE_CONFIG_CONTENT`. A fresh memory control
-  session still runs one short turn so the CLI can name the session before conversation recovery.
-  See [Anvil OpenCode instructions](../../../anvil/src/opencode/AGENTS.md).
 - The session never parses provider output. A reader emits through the `TurnScope`, synchronously,
-  so events keep the CLI's order. A turn's stdin mode is a CLI fact: `eof` where the CLI waits for
-  stdin EOF (OpenCode, #652), `open` for Cursor (`eof` is unverified there).
+  so events keep the CLI's order. A turn's stdin mode is a CLI fact: `open` for Cursor (`eof` is
+  unverified there).
 - `#spawnTurn` builds the process before it marks the turn running, so a spawn that throws leaves
   the session idle.
+
+## OpenCode (`opencode acp`)
+
+One persistent `opencode acp` process per session; rules in [Anvil OpenCode instructions](../../../anvil/src/opencode/AGENTS.md).
 
 ## Antigravity (`agy`)
 

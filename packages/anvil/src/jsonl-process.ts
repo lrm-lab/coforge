@@ -41,9 +41,9 @@ export class JsonlProcess {
   #state: ProcessState = { type: "open" };
   #cleanupPromise: Promise<void> | undefined;
   readonly #stderrPromise: Promise<void>;
-  /** The first few stderr lines, for the failure log and for attaching to a session-open error. */
-  readonly #stderrHead: string[] = [];
-  static readonly STDERR_HEAD_LINES = 4;
+  /** The last few stderr lines, for the failure log and for attaching to a surfaced error. */
+  readonly #stderrTail: string[] = [];
+  static readonly STDERR_TAIL_LINES = 4;
 
   constructor(
     command: readonly string[],
@@ -76,7 +76,7 @@ export class JsonlProcess {
 
   /** What stderr has said so far, secrets stripped and capped. Empty until a non-empty line arrives. */
   stderrExcerpt(): string {
-    return this.#stderrHead.length === 0 ? "" : scrubRuntimeErrorText(this.#stderrHead.join("\n"));
+    return this.#stderrTail.length === 0 ? "" : scrubRuntimeErrorText(this.#stderrTail.join("\n"));
   }
 
   onRecord(listener: (record: JsonRecord) => void): () => void {
@@ -290,8 +290,10 @@ export class JsonlProcess {
           if (newline < 0) break;
           lines++;
           const reported = oversized ? "[oversized stderr diagnostic]" : line.replace(/\r$/, "");
-          if (reported.trim() && this.#stderrHead.length < JsonlProcess.STDERR_HEAD_LINES)
-            this.#stderrHead.push(reported);
+          if (reported.trim()) {
+            this.#stderrTail.push(reported);
+            if (this.#stderrTail.length > JsonlProcess.STDERR_TAIL_LINES) this.#stderrTail.shift();
+          }
           keepForLog(reported);
           for (const listener of this.#stderrListeners) listener(reported);
           line = "";
@@ -303,8 +305,10 @@ export class JsonlProcess {
       if (tail && onDiagnostic) onDiagnostic((diagnostic + tail).slice(-16_384));
       if (line) {
         const reported = oversized ? "[oversized stderr diagnostic]" : line;
-        if (reported.trim() && this.#stderrHead.length < JsonlProcess.STDERR_HEAD_LINES)
-          this.#stderrHead.push(reported);
+        if (reported.trim()) {
+          this.#stderrTail.push(reported);
+          if (this.#stderrTail.length > JsonlProcess.STDERR_TAIL_LINES) this.#stderrTail.shift();
+        }
         keepForLog(reported);
         for (const listener of this.#stderrListeners) listener(reported);
       }

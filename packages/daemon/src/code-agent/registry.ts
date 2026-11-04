@@ -23,7 +23,8 @@ import {
   type CodeAgentProvider,
 } from "@lrm/coforge-anvil";
 import { CursorProvider } from "@lrm/coforge-anvil/cursor";
-import { OpenCodeProvider } from "@lrm/coforge-anvil/opencode";
+import { OpenCodeAcpProvider } from "@lrm/coforge-anvil/opencode";
+import { openCodeAcpRuntimeHost } from "#src/code-agent/opencode/acp-host";
 import { createKiroAuthHost } from "#src/code-agent/kiro/auth-host";
 import { KiroRuntimeAuthAdapter } from "@lrm/coforge-anvil/kiro";
 import { KiroProvider } from "@lrm/coforge-anvil/kiro";
@@ -40,8 +41,6 @@ import {
   resolveHostCodeAgentExecutable,
   type ExternalCodeAgentProvider,
 } from "#src/code-agent/runtime-executable";
-import { readVersionOutput } from "./version-probe";
-
 type CodeAgentProviderRegistryOptions = {
   environment?: Readonly<Record<string, string | undefined>>;
   platform?: NodeJS.Platform;
@@ -116,10 +115,9 @@ export function createCodeAgentProvider(
       return new CursorProvider({ host: perTurnSessionHost });
     case RUNTIME_PROVIDER.OPENCODE: {
       const executable = providerExecutable(RUNTIME_PROVIDER.OPENCODE, options);
-      return new OpenCodeProvider({
-        command: executable ? [executable] : undefined,
-        host: perTurnSessionHost,
-        versionReader: readVersionOutput,
+      return new OpenCodeAcpProvider({
+        host: openCodeAcpRuntimeHost,
+        ...(executable ? { command: [executable] } : {}),
       });
     }
     case RUNTIME_PROVIDER.GROK: {

@@ -107,7 +107,9 @@ export class AcpSession implements AgentSession {
       this.#transport = transport;
       transport.process.onFailure((error) => {
         // A prompt's own rejection reports its failure; only a turn the runtime started has no
-        // request left to settle it.
+        // request left to settle it. The stderr tail rides the surfaced message too, not just
+        // the daemon's log.
+        attachStderrExcerpt(transport.process, error);
         if (!this.#native) return;
         this.#failed = true;
         this.#finishNative({
@@ -249,6 +251,7 @@ export class AcpSession implements AgentSession {
         );
       // A terminal RPC failure is an accepted failed turn. Only transport loss leaves delivery
       // unknown; neither outcome permits automatic resending or notice-undelivered.
+      if (!rpcFailure && this.#transport) attachStderrExcerpt(this.#transport.process, error);
       const data = rpcFailure ? asRecord(error.data) : undefined;
       const detail =
         nonEmptyString(data?.detail) ??

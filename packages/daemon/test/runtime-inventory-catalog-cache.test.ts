@@ -115,19 +115,50 @@ test(
       const probe: ExternalCodeAgentProbe = {
         which: (name) => (name === "opencode" ? opencodePath : undefined),
         spawn: () => ({
-          stdout: new Blob(["opencode v2.0.30"]).stream(),
+          stdout: new Blob(["opencode v2.1.0"]).stream(),
           exited: Promise.resolve(0),
         }),
       };
+      // A pre-seeded effort cache proves the discovery's cache fill: the model list itself
+      // comes from session/new's model select on the ACP server.
+      await Bun.write(
+        join(stateDirectory, "opencode-effort-cache.json"),
+        JSON.stringify({
+          version: "2.1.0",
+          entries: [
+            {
+              modelId: "opencode/big-pickle",
+              efforts: ["low", "medium", "high"],
+              probedAt: Date.now(),
+            },
+          ],
+        }),
+      );
       const { catalogs } = await discoverCodeAgentCatalogs(
-        [{ provider: "opencode" as const, version: "2.0.30", displayName: "OpenCode" }],
+        [{ provider: "opencode" as const, version: "2.1.0", displayName: "OpenCode" }],
         {
           cwd: process.cwd(),
           // A fixture home keeps the Pi catalog, discovered in the same pass, off the developer's
           // real Pi configuration; that discovery can run for seconds and was most of this test's
           // time.
-          environment: { PATH: process.env.PATH, HOME: "/fixture/home" },
-          commands: { opencode: [process.execPath, OPENCODE_FIXTURE, "models"] },
+          environment: {
+            PATH: process.env.PATH,
+            HOME: "/fixture/home",
+            OPENCODE_ACP_FIXTURE_CONFIG_OPTIONS: JSON.stringify([
+              {
+                id: "model",
+                name: "Model",
+                category: "model",
+                type: "select",
+                currentValue: "opencode/big-pickle",
+                options: [
+                  { value: "opencode/big-pickle", name: "Big Pickle" },
+                  { value: "aiberm/gpt-5.6-luna", name: "GPT 5.6 Luna" },
+                ],
+              },
+            ]),
+          },
+          commands: { opencode: [process.execPath, OPENCODE_FIXTURE] },
           probe,
           piModels: async () => [],
           cacheDirectory: stateDirectory,
