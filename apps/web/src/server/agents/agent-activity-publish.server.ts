@@ -44,11 +44,7 @@ type AgentActivityPublicationDependencies = ReplyIntentPublicationDependencies &
   proxySecret: string | undefined;
   observe(activity: TrustedAgentActivity): Promise<void>;
   /** Posts the owner's-DM quota system message; absent means no notice surface (tests). */
-  quotaNotice?(input: {
-    workspaceId: string;
-    agentId: string;
-    fingerprint: string;
-  }): Promise<void>;
+  quotaNotice?(input: { workspaceId: string; agentId: string; fingerprint: string }): Promise<void>;
   currentRuntimeFence?(
     workspaceId: string,
     computerId: string,
