@@ -196,14 +196,20 @@ export function QuestionsStepper({
                     // A dot to see, a wider target to press.
                     className="group/dot grid size-5 cursor-pointer place-items-center rounded-full outline-focus-ring data-focus-visible:outline-2"
                   >
+                    {/* One look per state on every card (Raft, task #515): the current question
+                        a longer dash, answered brand, not yet answered gray, skipped (on an
+                        answered card) a ring. */}
                     <span
                       className={cn(
-                        "size-1.5 rounded-full transition-colors",
-                        index === step
-                          ? "bg-fg-secondary"
-                          : answered(drafts[entry.id])
-                            ? "bg-fg-brand-primary"
-                            : "bg-quaternary group-hover/dot:bg-fg-quaternary",
+                        "h-1.5 rounded-full transition-[width,background-color]",
+                        index === step ? "w-3.5" : "w-1.5",
+                        answered(drafts[entry.id])
+                          ? "bg-fg-brand-primary"
+                          : readOnly && anyAnswered
+                            ? "border border-fg-quaternary"
+                            : index === step
+                              ? "bg-fg-tertiary"
+                              : "bg-quaternary group-hover/dot:bg-fg-quaternary",
                       )}
                     />
                   </AriaButton>
