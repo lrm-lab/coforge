@@ -96,7 +96,7 @@ export async function actionCardViews(
       channelIds.add(payload.channelId);
       for (const id of payload.humanIds ?? []) userIds.add(id);
       for (const id of payload.agentIds ?? []) agentIds.add(id);
-    } else if (payload.type === "choice" && payload.to) {
+    } else if ((payload.type === "choice" || payload.type === "questions") && payload.to) {
       userIds.add(payload.to);
     }
     if (card.committedByUserId) userIds.add(card.committedByUserId);

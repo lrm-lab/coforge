@@ -191,17 +191,41 @@ test("the person's own answer on a question carries its text", async () => {
   expect(decoded).toContain("lint only");
 });
 
-test("a submit that leaves a question blank is refused and the card stays pending", async () => {
+test("a question may go unanswered: it is recorded skipped and the Agent hears which (Frank, 11-04)", async () => {
   const messageId = await makeCard();
-  await expect(
-    commitQuestionsCard(
-      db,
-      realtime as never,
-      { workspaceId, actorUserId: userId },
-      { messageId, answers: [{ questionId: "env", selection: ["staging"] }] },
-      { publisher: publisher([]) as never },
-    ),
-  ).rejects.toThrow();
+  const published: unknown[] = [];
+  const result = await commitQuestionsCard(
+    db,
+    realtime as never,
+    { workspaceId, actorUserId: userId },
+    { messageId, answers: [{ questionId: "env", selection: ["staging"] }] },
+    { publisher: publisher(published) as never },
+  );
+  expect(result[1]).toEqual({
+    questionId: "checks",
+    prompt: "Run which checks?",
+    selection: [],
+    skipped: true,
+  });
+  const decoded = new TextDecoder().decode(
+    Uint8Array.from(Object.values((published[0] as { data: Record<string, number> }).data)),
+  );
+  expect(decoded).toContain("Deploy where? → staging · Staging (recommended)");
+  expect(decoded).toContain("Run which checks? → (skipped)");
+});
+
+test("a submit that answers nothing is refused and the card stays pending", async () => {
+  const messageId = await makeCard();
+  for (const answers of [[], [{ questionId: "env", selection: [] }]])
+    await expect(
+      commitQuestionsCard(
+        db,
+        realtime as never,
+        { workspaceId, actorUserId: userId },
+        { messageId, answers },
+        { publisher: publisher([]) as never },
+      ),
+    ).rejects.toThrow();
   const card = await db.actionCard.findUniqueOrThrow({ where: { messageId } });
   expect(card.state).toBe("pending");
 });

@@ -1,11 +1,31 @@
-import { Check, Pencil01 } from "@untitledui/icons";
 import { Checkbox, CheckboxGroup, Radio, RadioGroup } from "react-aria-components";
 import { CHOICE_OTHER_OPTION_ID, CHOICE_OTHER_TEXT_MAX_LENGTH } from "@lrm/coforge-sdk/agent";
 
-import { Badge } from "#src/components/base/badges/badges";
 import type { ActionCardView } from "#src/server/conversations/action-cards.server";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
+
+/**
+ * The key a row is picked with, at the row's start, always in sight (Frank, 11-04, as Grok's
+ * question card shows it): gray, filled brand once the row is picked.
+ */
+export function KeyBadge({ picked, children }: { picked?: boolean; children: React.ReactNode }) {
+  return (
+    <kbd
+      aria-hidden="true"
+      className={cn(
+        "grid size-6 shrink-0 place-items-center rounded-md font-body text-xs font-medium tabular-nums transition-colors",
+        picked ? "bg-brand-solid text-white" : "bg-secondary text-tertiary",
+      )}
+    >
+      {children}
+    </kbd>
+  );
+}
+
+/** A row on a card: no border, its key first, a tint under the pointer (Frank, 11-04). */
+export const CARD_ROW =
+  "flex min-h-9 w-full cursor-pointer items-center gap-3 rounded-lg px-2 py-1.5 text-left text-sm text-primary outline-focus-ring hover:bg-primary_hover max-sm:min-h-11";
 
 export type QuestionsView = Extract<ActionCardView, { kind: "questions" }>;
 export type Question = QuestionsView["questions"][number];
@@ -26,55 +46,53 @@ export function QuestionRows({
   draft,
   canAnswer,
   disabled,
+  readOnly,
   onChange,
 }: {
   question: Question;
   draft?: Draft;
   canAnswer: boolean;
   disabled: boolean;
+  /** Answered: the pick stays marked, the rest gray, nothing changes. */
+  readOnly?: boolean;
   onChange: (draft: Draft) => void;
 }) {
   if (!canAnswer)
     return (
       <ul className="flex flex-col">
-        {question.options.map((option) => (
+        {question.options.map((option, index) => (
           <li
             key={option.id}
-            className="flex items-baseline gap-2.5 px-2.5 py-1 text-sm wrap-anywhere text-secondary"
+            className="flex items-center gap-3 px-2 py-1 text-sm wrap-anywhere text-secondary"
           >
-            <span
-              aria-hidden="true"
-              className="size-1 shrink-0 -translate-y-[0.3em] rounded-full bg-current text-fg-quaternary"
-            />
-            {option.label}
-            {option.recommended && <RecommendedBadge />}
+            <KeyBadge>{index + 1}</KeyBadge>
+            <span className="min-w-0 flex-1">{option.label}</span>
+            {option.recommended && <Recommended />}
           </li>
         ))}
       </ul>
     );
   const many = question.select === "many";
   const selection = draft?.selection ?? [];
-  const rows = question.options.map((option) => {
+  const rows = question.options.map((option, index) => {
     const className = ({ isSelected }: { isSelected: boolean }) =>
       cn(
-        "flex min-h-10 w-full cursor-pointer items-start gap-2.5 rounded-lg border px-2.5 py-2 text-left text-sm text-primary outline-focus-ring max-sm:min-h-11",
-        "hover:bg-primary_hover focus-visible:outline-2 focus-visible:-outline-offset-1 disabled:cursor-default",
-        isSelected
-          ? "border-brand bg-brand-primary_alt hover:bg-brand-primary_alt"
-          : "border-secondary",
+        CARD_ROW,
+        "data-focus-visible:outline-2 data-focus-visible:-outline-offset-1 data-disabled:cursor-default",
+        readOnly && "cursor-default hover:bg-transparent",
+        // Answered, the rest go gray behind the pick; nothing picked yet, they read as asked.
+        readOnly && !isSelected && answered(draft) && "text-quaternary",
       );
     const content = ({ isSelected }: { isSelected: boolean }) => (
       <>
-        <Tick ticked={isSelected} many={many} />
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="flex flex-wrap items-center gap-1.5 wrap-anywhere">
-            {option.label}
-            {option.recommended && <RecommendedBadge />}
-          </span>
+        <KeyBadge picked={isSelected}>{index + 1}</KeyBadge>
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="wrap-anywhere">{option.label}</span>
           {option.description && (
             <span className="text-xs wrap-anywhere text-tertiary">{option.description}</span>
           )}
         </span>
+        {option.recommended && <Recommended />}
       </>
     );
     return many ? (
@@ -82,6 +100,7 @@ export function QuestionRows({
         key={option.id}
         value={option.id}
         data-question-option={option.id}
+        aria-keyshortcuts={index < 9 ? String(index + 1) : undefined}
         className={className}
       >
         {content}
@@ -91,6 +110,7 @@ export function QuestionRows({
         key={option.id}
         value={option.id}
         data-question-option={option.id}
+        aria-keyshortcuts={index < 9 ? String(index + 1) : undefined}
         className={className}
       >
         {content}
@@ -98,14 +118,15 @@ export function QuestionRows({
     );
   });
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col">
       {many ? (
         <CheckboxGroup
           aria-label={question.prompt}
           value={selection}
           isDisabled={disabled}
+          isReadOnly={readOnly}
           onChange={(value) => onChange({ selection: value, text: draft?.text ?? "" })}
-          className="flex flex-col gap-1.5"
+          className="flex flex-col"
         >
           {rows}
         </CheckboxGroup>
@@ -114,72 +135,45 @@ export function QuestionRows({
           aria-label={question.prompt}
           value={selection[0] ?? null}
           isDisabled={disabled}
+          isReadOnly={readOnly}
           onChange={(value) => onChange({ selection: [value], text: "" })}
-          className="flex flex-col gap-1.5"
+          className="flex flex-col"
         >
           {rows}
         </RadioGroup>
       )}
-      {question.other && (
-        <label
-          className={cn(
-            "group/other flex min-h-10 w-full cursor-text items-center gap-2.5 rounded-lg bg-secondary px-2.5 text-sm max-sm:min-h-11",
-            "focus-within:bg-primary focus-within:ring-1 focus-within:ring-brand focus-within:ring-inset",
-            draft?.text.trim() && "bg-primary ring-1 ring-brand ring-inset",
-          )}
-        >
-          <Pencil01
-            aria-hidden="true"
-            className="size-4 shrink-0 text-fg-quaternary group-focus-within/other:text-fg-brand-primary"
-          />
-          <input
-            data-question-other=""
-            type="text"
-            value={draft?.text ?? ""}
-            aria-label={question.other.label || m.action_card_choice_other()}
-            placeholder={question.other.label || m.action_card_choice_other()}
-            maxLength={CHOICE_OTHER_TEXT_MAX_LENGTH}
-            readOnly={disabled}
-            onChange={(event) => {
-              const text = event.target.value;
-              // A single-pick question's own words replace its ticked option.
-              const selection =
-                question.select === "one" && text.trim() ? [] : (draft?.selection ?? []);
-              onChange({ selection, text });
-            }}
-            className="min-w-0 flex-1 bg-transparent py-2 text-primary outline-none placeholder:text-placeholder"
-          />
-        </label>
-      )}
+      {question.other &&
+        (!readOnly || draft?.text.trim()) && (
+          // The person's own words: one more keyed row, typed into where it stands.
+          <label className={cn(CARD_ROW, "cursor-text focus-within:bg-primary_hover")}>
+            <KeyBadge picked={Boolean(draft?.text.trim())}>{question.options.length + 1}</KeyBadge>
+            <input
+              data-question-other=""
+              type="text"
+              value={draft?.text ?? ""}
+              aria-label={question.other.label || m.action_card_choice_other()}
+              placeholder={question.other.label || m.action_card_choice_other()}
+              maxLength={CHOICE_OTHER_TEXT_MAX_LENGTH}
+              readOnly={disabled || readOnly}
+              onChange={(event) => {
+                const text = event.target.value;
+                // A single-pick question's own words replace its ticked option.
+                const selection =
+                  question.select === "one" && text.trim() ? [] : (draft?.selection ?? []);
+                onChange({ selection, text });
+              }}
+              className="min-w-0 flex-1 bg-transparent text-primary outline-none placeholder:text-placeholder"
+            />
+          </label>
+        )}
     </div>
   );
 }
 
-/** A row's mark: a ring that fills for one pick, a box that ticks for several. */
-function Tick({ ticked, many }: { ticked: boolean; many: boolean }) {
+function Recommended() {
   return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        "mt-0.5 grid size-4 shrink-0 place-items-center border",
-        many ? "rounded-[4px]" : "rounded-full",
-        ticked ? "border-brand-solid bg-brand-solid text-white" : "border-primary bg-primary",
-      )}
-    >
-      {ticked &&
-        (many ? (
-          <Check className="size-3" strokeWidth={3} />
-        ) : (
-          <span className="size-1.5 rounded-full bg-white" />
-        ))}
-    </span>
-  );
-}
-
-function RecommendedBadge() {
-  return (
-    <Badge type="pill-color" color="brand" size="sm">
+    <span className="shrink-0 text-xs text-brand-secondary">
       {m.action_card_questions_recommended()}
-    </Badge>
+    </span>
   );
 }

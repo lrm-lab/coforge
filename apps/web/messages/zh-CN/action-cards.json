@@ -67,5 +67,10 @@
   "action_card_questions_many": "可多选",
   "action_card_questions_recommended": "推荐",
   "action_card_questions_unanswered": "未作答",
+  "action_card_questions_next": "下一题",
+  "action_card_questions_skip": "跳过",
+  "action_card_questions_previous_step": "上一题",
+  "action_card_questions_go_to": "第 {number} 题",
+  "action_card_questions_steps": "问题",
   "action_card_unknown": "这张卡片需要更新 CoForge 后才能显示。"
 }

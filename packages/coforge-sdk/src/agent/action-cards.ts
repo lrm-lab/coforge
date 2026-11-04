@@ -200,8 +200,8 @@ const questionsQuestionSchema = z.object({
 
 /**
  * Ask several questions on one card (Claude Code's AskUserQuestion): at most four, each
- * single- or multi-select, and one submit answers them all. The result records per-question
- * `answers`. A single `choice` card stays its own type — a one-question card here behaves the
+ * single- or multi-select, and one submit answers them all, any of them skipped but one at least.
+ * The result records per-question `answers`, a skipped one as `skipped: true`. A single `choice` card stays its own type — a one-question card here behaves the
  * same, but old cards render unchanged.
  */
 export const questionsActionSchema = z.object({

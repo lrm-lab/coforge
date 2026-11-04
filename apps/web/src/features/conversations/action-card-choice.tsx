@@ -405,9 +405,10 @@ function OtherRow({
     <li>
       <label
         className={cn(
-          "group/other flex min-h-10 w-full cursor-text items-center gap-2 rounded-lg bg-secondary px-2.5 text-sm max-sm:min-h-11",
-          "focus-within:bg-primary focus-within:ring-1 focus-within:ring-brand focus-within:ring-inset",
-          failed && cn("bg-primary", FAILED_RING),
+          // One more row, bordered like the options (Frank, 11-04: a filled block stood out).
+          "group/other flex min-h-10 w-full cursor-text items-center gap-2 rounded-lg border border-secondary px-2.5 text-sm max-sm:min-h-11",
+          "hover:bg-primary_hover focus-within:border-brand focus-within:hover:bg-transparent",
+          failed && cn("border-transparent", FAILED_RING),
           picking && !sending && "opacity-50",
         )}
       >

@@ -1,9 +1,6 @@
 import { expect, test } from "bun:test";
 
-import {
-  questionsAnswers,
-  questionsComplete,
-} from "#src/features/conversations/action-card-questions";
+import { questionsAnswers } from "#src/features/conversations/action-card-questions";
 import {
   actionCardTitle,
   type ToolActionCardView,
@@ -14,22 +11,14 @@ const questions = [
   { id: "many", prompt: "Many?", select: "many", options: [{ id: "x", label: "X" }] },
 ] as const satisfies Parameters<typeof questionsAnswers>[0];
 
-test("a questions card can be sent only once every question has an answer (task #515)", () => {
-  expect(questionsComplete([...questions], {})).toBe(false);
-  expect(questionsComplete([...questions], { one: { selection: ["a"], text: "" } })).toBe(false);
-  // Blank words are no answer.
+test("a question left unanswered is left out of the submit, blank words too (Frank, 11-04)", () => {
+  expect(questionsAnswers([...questions], {})).toEqual([]);
   expect(
-    questionsComplete([...questions], {
+    questionsAnswers([...questions], {
       one: { selection: [], text: "  " },
       many: { selection: ["x"], text: "" },
     }),
-  ).toBe(false);
-  expect(
-    questionsComplete([...questions], {
-      one: { selection: [], text: "mine" },
-      many: { selection: ["x"], text: "" },
-    }),
-  ).toBe(true);
+  ).toEqual([{ questionId: "many", selection: ["x"] }]);
 });
 
 test("the person's own words go as `_other` with their text, only when there are some", () => {

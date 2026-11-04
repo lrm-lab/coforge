@@ -133,6 +133,8 @@ export type QuestionsAnswer = {
   questionId: string;
   prompt: string;
   selection: QuestionsAnswerOption[];
+  /** Left unanswered: the person may skip a question (Frank, 11-04); `selection` is empty. */
+  skipped?: true;
 };
 
 /** Records the person's one submit — every question's picked options or own answer — and wakes
@@ -179,17 +181,23 @@ export async function commitQuestionsCard(
   return answers;
 }
 
-/** Every question needs a pick: `one` takes exactly one option, `many` at least one; `_other`
- * needs the question's own-answer row and non-blank text within the cap. */
+/** A question may be skipped, recorded as such; one answered question at least makes a submit.
+ * An answered `one` takes exactly one option, `many` at least one; `_other` needs the question's
+ * own-answer row and non-blank text within the cap. */
 function questionsAnswers(
   payload: ResolvedQuestionsPayload,
   input: { questionId: string; selection: string[]; text?: string }[],
 ): QuestionsAnswer[] {
   const byId = new Map(input.map((entry) => [entry.questionId, entry]));
   if (byId.size !== input.length) throw new AppError("INVALID_INPUT");
-  return payload.questions.map((question) => {
+  if (
+    input.some((entry) => !payload.questions.some((question) => question.id === entry.questionId))
+  )
+    throw new AppError("INVALID_INPUT");
+  const answers = payload.questions.map((question): QuestionsAnswer => {
     const answer = byId.get(question.id);
-    if (!answer || answer.selection.length === 0) throw new AppError("INVALID_INPUT");
+    if (!answer || answer.selection.length === 0)
+      return { questionId: question.id, prompt: question.prompt, selection: [], skipped: true };
     if (question.select === "one" && answer.selection.length !== 1)
       throw new AppError("INVALID_INPUT");
     const selection = answer.selection.map((optionId): QuestionsAnswerOption => {
@@ -216,6 +224,8 @@ function questionsAnswers(
     });
     return { questionId: question.id, prompt: question.prompt, selection };
   });
+  if (answers.every((answer) => answer.skipped)) throw new AppError("INVALID_INPUT");
+  return answers;
 }
 
 /** The submit is a delivery: the Agent that asked is woken with who answered and every
@@ -285,6 +295,7 @@ async function wakeAskingAgent(
     const otherText = answer.selection.find(
       (option) => option.optionId === CHOICE_OTHER_OPTION_ID,
     )?.text;
+    if (answer.skipped) return `${answer.prompt} → (skipped)`;
     return (
       `${answer.prompt} → ${picked}` +
       (otherText !== undefined ? `\n  │ ${fenceUserText(otherText)}` : "")

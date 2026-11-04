@@ -135,9 +135,10 @@ coforge action prepare --target "@alice" <<'COFORGEACTION'
 COFORGEACTION
 ```
 
-The person must answer every question to submit; a multi-select needs at least one pick, a
-question that offers "Something else" needs its text. The delivery names who answered and lists
-each question's prompt with its picks, for example `@alice answered your questions in #general:
-Deploy where? → staging · Staging; Run which checks? → test · test, build · build`. The card's
-`result.answers` records the same per question. A typed chat reply stays a chat reply: interpret it
+The person may skip questions but must answer at least one to submit; an answered multi-select
+has at least one pick, and "Something else" carries its text. The delivery names who answered and
+lists every question's prompt with its picks, a skipped one as `(skipped)`, for example
+`@alice answered your questions in #general: Deploy where? → staging · Staging; Run which checks? →
+(skipped)`. Ask a skipped question again if you still need it. The card's `result.answers` records
+the same per question, a skipped one with `"skipped": true` and no picks. A typed chat reply stays a chat reply: interpret it
 and continue, as with a choice.

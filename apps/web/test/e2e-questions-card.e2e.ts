@@ -106,6 +106,36 @@ test("a questions card takes an answer for every question, then sends them at on
       preparedByAgentId: agent.id,
     },
   });
+  // The same questions asked of someone else: the viewer only sees them, and whom they wait on.
+  const other = await db.workspaceMembership.findFirst({
+    where: { workspaceId, userId: { not: DEV_BROWSER_USER.id } },
+    select: { userId: true },
+  });
+  const otherMessage =
+    other &&
+    (await db.message.create({
+      data: {
+        workspaceId,
+        conversationId: channel.id,
+        sequence: 2,
+        senderMemberId: agentMember.id,
+        body: `And for someone else ${tail}`,
+      },
+    }));
+  if (otherMessage && other) {
+    await db.conversation.update({ where: { id: channel.id }, data: { lastSequence: 2 } });
+    const asked = await db.actionCard.findUniqueOrThrow({ where: { messageId: message.id } });
+    await db.actionCard.create({
+      data: {
+        messageId: otherMessage.id,
+        conversationId: channel.id,
+        workspaceId,
+        kind: "questions",
+        payload: { ...(asked.payload as object), to: other.userId },
+        preparedByAgentId: agent.id,
+      },
+    });
+  }
   const card = `document.querySelector('[data-message-id="${message.id}"] [data-questions-card]')`;
   const cardText = `(${card}?.textContent ?? "")`;
   const submit = `[...(${card}?.querySelectorAll("button") ?? [])].find((el) => el.textContent.includes("Submit"))`;
@@ -119,43 +149,162 @@ test("a questions card takes an answer for every question, then sends them at on
   };
   try {
     await mkdir(artifacts, { recursive: true });
+    const shown = (id: string) => `${card}?.querySelector('[data-question="${id}"]') != null`;
+    const button = (name: string) =>
+      `[...(${card}?.querySelectorAll("button") ?? [])].find((el) => el.textContent.trim() === ${JSON.stringify(name)})`;
+    const press = async (name: string) => {
+      await evaluate(`(${button(name)}.setAttribute("data-e2e-press", ""), true)`);
+      await browser("click", "[data-e2e-press]");
+      await evaluate(
+        `(document.querySelector("[data-e2e-press]")?.removeAttribute("data-e2e-press"), true)`,
+      );
+    };
     await browser("set", "viewport", "1280", "900");
     await browser("open", `${origin}/en/w/${workspace.slug}/channel/${channel.id}`);
-    await browser("wait", "--fn", `${pageHydrated} && ${cardText}.includes("Who hears")`);
-    // Its own card, never another kind's title or buttons.
+    await browser("wait", "--fn", `${pageHydrated} && ${cardText}.includes("Set up the webhook")`);
+    // Its own card, never another kind's; one question at a time, every row's key in sight.
     expect(await evaluate<boolean>(`${cardText}.includes("Add Members")`)).toBe(false);
-    expect(await evaluate<boolean>(`${cardText}.includes("Recommended")`)).toBe(true);
-    expect(await evaluate<boolean>(`${cardText}.includes("0 of 3 answered")`)).toBe(true);
-    expect(await evaluate<boolean>(`${submit}?.disabled === true`)).toBe(true);
+    expect(await evaluate<number>(`${card}.querySelectorAll("[data-question]").length`)).toBe(1);
+    expect(await evaluate<number>(`${card}.querySelectorAll("kbd").length`)).toBe(3);
+    expect(await evaluate<boolean>(`${button("Skip")} != null`)).toBe(true);
     await evaluate(`(${card}.scrollIntoView({ block: "center" }), true)`);
-    await shoot("waiting");
+    await shoot("step-1");
 
-    // One pick, the person's own words, and two of several: only then can it be sent.
+    // A single pick moves on by itself; ← → turn the questions and an answer stays given.
     await browser("click", `[data-question="webhook"] [data-question-option="keep"]`);
-    await browser("fill", `[data-question="agent"] [data-question-other]`, "Ask me each time");
-    await browser("click", `[data-question="notify"] [data-question-option="ops"]`);
-    expect(await evaluate<boolean>(`${submit}?.disabled === true`)).toBe(false);
-    await browser("click", `[data-question="notify"] [data-question-option="owner"]`);
-    await browser("wait", "--fn", `${cardText}.includes("3 of 3 answered")`);
-    await shoot("ready");
+    await browser("wait", "--fn", shown("agent"));
+    await browser("press", "ArrowLeft");
+    await browser("wait", "--fn", shown("webhook"));
+    expect(
+      await evaluate<boolean>(
+        `${card}?.querySelector('[data-question-option="keep"]')?.hasAttribute("data-selected") ?? false`,
+      ),
+    ).toBe(true);
+    // Answered, the way on is Next.
+    expect(await evaluate<boolean>(`${button("Next")} != null`)).toBe(true);
+    await browser("press", "ArrowRight");
+    await browser("wait", "--fn", shown("agent"));
 
-    await browser("find", "role", "button", "click", "--name", "Submit");
-    await browser("wait", "--fn", `${submit} == null && ${cardText}.includes("Ops, Owner")`);
+    // A question may be skipped.
+    await press("Skip");
+    await browser("wait", "--fn", shown("notify"));
+    // Several picks wait; the last question sends.
+    await browser("press", "1");
+    await browser("press", "3");
+    await browser("wait", "400");
+    expect(await evaluate<boolean>(shown("notify"))).toBe(true);
+    expect(await evaluate<boolean>(`${submit}?.disabled === false`)).toBe(true);
+    await shoot("step-many");
+    // A dot goes straight back to its question; its own words, then Enter, go on.
+    await browser("click", `[data-questions-card] [aria-label="Question 2"]`);
+    await browser("wait", "--fn", shown("agent"));
+    await browser("fill", `[data-question="agent"] [data-question-other]`, "Ask me each time");
+    await shoot("step-other");
+    await browser("press", "Enter");
+    await browser("wait", "--fn", shown("notify"));
+
+    // On a phone (the narrow layout draws the card afresh) a sideways swipe turns the questions.
+    await browser("set", "viewport", "390", "844");
+    await browser("wait", "--fn", shown("webhook"));
+    await evaluate(`(${card}.scrollIntoView({ block: "center" }), true)`);
+    await shoot("phone-step");
+    const swipe = (dx: number) =>
+      evaluate(`(() => {
+        const el = ${card}.querySelector("[data-question]");
+        const r = el.getBoundingClientRect();
+        const at = (x) => new Touch({ identifier: 1, target: el, clientX: x, clientY: r.top + 20 });
+        const x = r.left + r.width / 2;
+        el.dispatchEvent(new TouchEvent("touchstart", { bubbles: true, touches: [at(x)], changedTouches: [at(x)] }));
+        el.dispatchEvent(new TouchEvent("touchend", { bubbles: true, touches: [], changedTouches: [at(x + ${dx})] }));
+        return true;
+      })()`);
+    await swipe(-90);
+    await browser("wait", "--fn", shown("agent"));
+    await swipe(90);
+    await browser("wait", "--fn", shown("webhook"));
+    await browser("click", `[data-question="webhook"] [data-question-option="keep"]`);
+    await browser("wait", "--fn", shown("agent"));
+    await press("Skip");
+    await browser("wait", "--fn", shown("notify"));
+    await browser("click", `[data-question="notify"] [data-question-option="ops"]`);
+    await browser("click", `[data-question="notify"] [data-question-option="owner"]`);
+
+    // Offline, the send fails: the card says so and keeps every answer for another try.
+    await browser("set", "offline", "on");
+    await press("Submit");
+    await browser("wait", "--fn", `${card}?.querySelector('[role="alert"]') != null`);
+    await browser("set", "offline", "off");
+    expect(
+      await evaluate<boolean>(
+        `${card}?.querySelector('[data-question-option="owner"]')?.hasAttribute("data-selected") ?? false`,
+      ),
+    ).toBe(true);
+    await shoot("phone-failed");
+    // A slow send shows it is under way and takes no second press.
+    await evaluate(`(() => {
+      const send = window.fetch;
+      window.fetch = (...args) => new Promise((resolve) => setTimeout(() => resolve(send(...args)), 1500));
+      return true;
+    })()`);
+    await press("Submit");
+    // Busy, it takes no presses (React Aria's pending state) until the answer is stored.
+    await browser(
+      "wait",
+      "--fn",
+      `${button("Submitting…")}?.hasAttribute("data-loading") === true`,
+    );
+    await shoot("phone-submitting");
+    await browser("wait", "--fn", `${submit} == null && ${shown("webhook")}`);
     const stored = await db.actionCard.findUniqueOrThrow({ where: { messageId: message.id } });
     expect(stored.state).toBe("executed");
-    const answers = (stored.result as { answers: { questionId: string; selection: unknown[] }[] })
+    const answers = (stored.result as { answers: { questionId: string; skipped?: true }[] })
       .answers;
-    expect(answers.map((answer) => answer.questionId)).toEqual(["webhook", "agent", "notify"]);
-    // Answered, still a card: each question over what was chosen.
-    expect(await evaluate<boolean>(`${cardText}.includes("Ask me each time")`)).toBe(true);
-    await shoot("answered");
-
-    // Read again on a phone: the stored answers, as anyone opening the channel later sees them.
-    await browser("set", "viewport", "390", "844");
-    await browser("open", `${origin}/en/w/${workspace.slug}/channel/${channel.id}`);
-    await browser("wait", "--fn", `${pageHydrated} && ${cardText}.includes("Ops, Owner")`);
-    await evaluate(`(${card}.scrollIntoView({ block: "center" }), true)`);
+    expect(answers.map((answer) => [answer.questionId, answer.skipped ?? false])).toEqual([
+      ["webhook", false],
+      ["agent", true],
+      ["notify", false],
+    ]);
+    // Answered, the same pages as while answering: each pick marked, nothing to press but the
+    // dots; the skipped question says so.
+    expect(await evaluate<number>(`${card}.querySelectorAll("[data-question]").length`)).toBe(1);
+    expect(await evaluate<boolean>(`${button("Back")} == null && ${button("Next")} == null`)).toBe(
+      true,
+    );
+    expect(
+      await evaluate<boolean>(
+        `${card}?.querySelector('[data-question-option="keep"]')?.hasAttribute("data-selected") ?? false`,
+      ),
+    ).toBe(true);
     await shoot("phone-answered");
+    await browser("click", `[data-message-id="${message.id}"] [aria-label="Question 2"]`);
+    await browser("wait", "--fn", `${shown("agent")} && ${cardText}.includes("Not answered")`);
+    await shoot("phone-answered-skipped");
+
+    // Read again on a desktop: the stored answers, as anyone opening the channel later sees them.
+    await browser("set", "viewport", "1280", "900");
+    await browser("open", `${origin}/en/w/${workspace.slug}/channel/${channel.id}`);
+    await browser("wait", "--fn", `${pageHydrated} && ${shown("webhook")}`);
+    await evaluate(`(${card}.scrollIntoView({ block: "center" }), true)`);
+    await shoot("answered");
+    if (otherMessage) {
+      const viewer = `document.querySelector('[data-message-id="${otherMessage.id}"] [data-questions-card]')`;
+      await browser("wait", "--fn", `${viewer} != null`);
+      // The same pages to look through, nothing to pick, and whom it waits on.
+      expect(await evaluate<number>(`${viewer}.querySelectorAll("[data-question]").length`)).toBe(
+        1,
+      );
+      expect(await evaluate<boolean>(`${viewer}.textContent.includes("Not answered")`)).toBe(false);
+      expect(await evaluate<boolean>(`${viewer}.textContent.includes("Waiting for ")`)).toBe(true);
+      expect(
+        await evaluate<number>(`${viewer}.querySelectorAll('[aria-label^="Question "]').length`),
+      ).toBe(3);
+      await evaluate(`(${viewer}.scrollIntoView({ block: "center" }), true)`);
+      await shoot("viewer");
+      await browser("set", "viewport", "390", "844");
+      await browser("wait", "--fn", `${viewer} != null`);
+      await evaluate(`(${viewer}.scrollIntoView({ block: "center" }), true)`);
+      await shoot("viewer-phone");
+    }
   } finally {
     await browser("close").catch(() => undefined);
     await db.conversation.deleteMany({ where: { id: channel.id } }).catch(() => undefined);
