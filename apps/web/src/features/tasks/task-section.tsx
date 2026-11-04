@@ -58,8 +58,8 @@ export function TaskSection({
 }: {
   /** Whether the Task can be filed under a Project: not one in a direct conversation. */
   projectField?: boolean;
-  /** One column under the title (a phone), or a column beside the pages. */
-  layout?: "column" | "sidebar";
+  /** One column under the title, a column beside the pages, or one row of chips (a phone). */
+  layout?: "column" | "sidebar" | "chips";
   task: TaskView;
   onCommand?: (command: DetailCommand) => Promise<void>;
   members?: readonly Mentionable[];
@@ -117,8 +117,26 @@ export function TaskSection({
     // compact grid: a short label and a one-line value per property, two to a row, with nothing
     // shown for a relation it does not have. A value with more behind it opens it in a popover.
     // The creator is History's first entry; History and the sub-tasks are tabs under the grid.
-    <section className={cn("flex flex-col gap-2", layout === "column" && "px-4 sm:px-6")}>
-      <dl data-layout={layout} className={cn("flex flex-col", layout === "sidebar" && "gap-3")}>
+    <section
+      className={cn(
+        "flex flex-col gap-2",
+        layout === "column" && "px-4 sm:px-6",
+        layout === "chips" && "min-w-0",
+      )}
+    >
+      <dl
+        data-layout={layout}
+        className={cn(
+          "flex",
+          layout === "sidebar" && "flex-col gap-3",
+          layout === "column" && "flex-col",
+          // One row that scrolls sideways when it does not fit; the page's edge stays its margin.
+          layout === "chips" &&
+            "gap-1.5 overflow-x-auto px-4 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+        )}
+      >
+        {/* As chips (a phone), what blocks the Task comes right after its status, where the row
+            is seen without scrolling; the rest follow (`order-2`). */}
         <TaskProperty label={m.tasks_overview_status()}>
           <StatusMenu
             task={task}
@@ -130,7 +148,7 @@ export function TaskSection({
             }}
           />
         </TaskProperty>
-        <TaskProperty label={m.tasks_overview_owner()}>
+        <TaskProperty label={m.tasks_overview_owner()} className="[[data-layout=chips]_&]:order-2">
           <AssigneeMenu
             task={task}
             members={assignableMembers}
@@ -145,7 +163,7 @@ export function TaskSection({
           />
         </TaskProperty>
         {projectField && (
-          <TaskProperty label={m.tasks_project()}>
+          <TaskProperty label={m.tasks_project()} className="[[data-layout=chips]_&]:order-2">
             <TaskProjectMenu
               task={task}
               disabled={pending}
@@ -153,7 +171,7 @@ export function TaskSection({
             />
           </TaskProperty>
         )}
-        <TaskProperty label={m.tasks_labels()}>
+        <TaskProperty label={m.tasks_labels()} className="[[data-layout=chips]_&]:order-2">
           <TaskLabelsField
             task={task}
             disabled={pending}
@@ -168,7 +186,11 @@ export function TaskSection({
           />
         </TaskProperty>
         {relations.on && task.parent && (
-          <TaskProperty label={m.tasks_parent()}>
+          <TaskProperty
+            label={m.tasks_parent()}
+            labelInChip
+            className="[[data-layout=chips]_&]:order-2"
+          >
             <TaskParentValue
               parent={task.parent}
               disabled={pending}
@@ -178,7 +200,7 @@ export function TaskSection({
           </TaskProperty>
         )}
         {relations.on && openBlockers(task.blockedBy).length > 0 && (
-          <TaskProperty label={m.tasks_blocked_by()}>
+          <TaskProperty label={m.tasks_blocked_by()} labelInChip>
             <TaskBlockedByValue
               task={task}
               blockedBy={task.blockedBy}
@@ -191,7 +213,7 @@ export function TaskSection({
           </TaskProperty>
         )}
         {relations.on && relations.detail.blocking.length > 0 && (
-          <TaskProperty label={m.tasks_blocking()}>
+          <TaskProperty label={m.tasks_blocking()} labelInChip>
             <TaskBlockingValue blocking={relations.detail.blocking} onOpen={onOpenRelated} />
           </TaskProperty>
         )}

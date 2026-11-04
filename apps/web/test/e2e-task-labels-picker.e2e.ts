@@ -293,16 +293,39 @@ test("labels go on and off a Task, are made from a name, show on cards and filte
     await browser("wait", "--fn", `${filterItem(name("Bug"))} != null`);
     expect(await evaluate<boolean>(`${filterItem(name("Design"))} == null`)).toBe(true);
 
+    await run({
+      operation: "amend",
+      number,
+      description:
+        "The login page flickers white for a moment on a slow connection before the form shows. Seen on Safari and Chrome.",
+    });
     await browser("set", "viewport", "390", "844");
     await browser("open", popup);
-    await browser(
-      "wait",
-      "--fn",
-      `${pageHydrated} && ${dialog}?.textContent.includes(${JSON.stringify(labelled)}) === true`,
+    const chipRow = `${dialog}?.querySelector('dl[data-layout="chips"]')`;
+    await browser("wait", "--fn", `${pageHydrated} && ${chipRow} != null`);
+    // A phone shows the properties as one row of chips under the title, and two lines of the
+    // description, so the discussion keeps the screen.
+    expect(await evaluate<number>(`${chipRow}.getBoundingClientRect().height`)).toBeLessThan(40);
+    expect(
+      await evaluate<boolean>(`${chipRow}.textContent.includes(${JSON.stringify(name("Bug"))})`),
+    ).toBe(true);
+    const description = `${dialog}.querySelector('button[aria-label="Show the whole description"]')`;
+    // How many lines the description shows, open or not.
+    const lines = async () =>
+      Math.round(
+        await evaluate<number>(`(() => {
+          const text = [...${dialog}.querySelectorAll("button[aria-expanded] > span")]
+            .find((el) => el.textContent.includes("flickers"));
+          return text.getBoundingClientRect().height / parseFloat(getComputedStyle(text).lineHeight);
+        })()`),
+      );
+    expect(await lines()).toBe(2);
+    await shoot("phone-0-chips");
+    await evaluate(`(${description}.click(), true)`);
+    expect(await lines()).toBeGreaterThan(2);
+    await evaluate(
+      `(${dialog}.querySelector('button[aria-label="Shorten the description"]').click(), true)`,
     );
-    // A phone's popup may show only the title until its details are asked for.
-    await evaluate(`(${dialog}.querySelector('button[aria-label="Show details"]')?.click(), true)`);
-    await browser("wait", "--fn", `${dialog}.querySelector('[aria-label="Edit labels"]') !== null`);
     await openPicker();
     await shoot("phone-1-picker");
     // Phone: the create state with its swatches, the recolor popover (closed by the back gesture)
@@ -316,6 +339,10 @@ test("labels go on and off a Task, are made from a name, show on cards and filte
     await browser("wait", "--fn", `${menu} === null`);
     // The picker's history entry is popped asynchronously; let it settle before the next opens.
     await Bun.sleep(500);
+    // On a phone the label chips sit in a row that scrolls sideways: bring this one in.
+    await evaluate(
+      `(document.querySelector(${JSON.stringify(chipSelector(name("Bug")))}).scrollIntoView({ inline: "center" }), true)`,
+    );
     await browser("click", chipSelector(name("Bug")));
     await browser(
       "wait",
@@ -330,6 +357,10 @@ test("labels go on and off a Task, are made from a name, show on cards and filte
       `document.querySelector('input[type="radio"][aria-label="Red"]') === null`,
     );
     expect(await evaluate<boolean>(`${dialog} !== null`)).toBe(true);
+    // On a phone the label chips sit in a row that scrolls sideways: bring this one in.
+    await evaluate(
+      `(document.querySelector(${JSON.stringify(chipSelector(name("Bug")))}).scrollIntoView({ inline: "center" }), true)`,
+    );
     await browser("click", chipSelector(name("Bug")));
     await browser("wait", "--fn", `${deleteItem} != null`);
     await evaluate(`(${deleteItem}.click(), true)`);

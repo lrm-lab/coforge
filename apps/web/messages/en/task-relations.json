@@ -41,5 +41,7 @@
   "tasks_project": "Project",
   "tasks_project_none": "No project",
   "tasks_project_change": "Change project",
-  "tasks_project_search": "Find a project"
+  "tasks_project_search": "Find a project",
+  "tasks_description_more": "Show the whole description",
+  "tasks_description_less": "Shorten the description"
 }

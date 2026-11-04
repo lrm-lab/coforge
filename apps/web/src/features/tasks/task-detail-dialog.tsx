@@ -228,7 +228,7 @@ export function TaskDetailDialog({
   const section = (
     <TaskSection
       projectField={!direct}
-      layout={sidebar ? "sidebar" : "column"}
+      layout={sidebar ? "sidebar" : "chips"}
       task={task}
       onCommand={onCommand}
       members={members}
@@ -327,15 +327,16 @@ export function TaskDetailDialog({
                       className="flex items-start gap-2 px-4 pt-2 text-lg font-semibold break-words text-primary sm:px-6"
                     >
                       <TaskStatusIcon status={task.status} className="mt-1 size-5" />
-                      <span className="line-clamp-3 min-w-0">{task.title}</span>
+                      <span className={cn("min-w-0", sidebar ? "line-clamp-3" : "line-clamp-2")}>
+                        {task.title}
+                      </span>
                     </Heading>
-                    {task.description?.trim() && (
-                      // The description under the title, as Linear's issue; long ones are cut.
-                      <p className="line-clamp-6 px-4 text-sm whitespace-pre-wrap text-secondary sm:px-6">
-                        {task.description.trim()}
-                      </p>
-                    )}
+                    {/* On a phone the properties are one row of chips under the title, each its
+                        own control, so the discussion keeps the screen (Frank, 11-04). */}
                     {!sidebar && section}
+                    {task.description?.trim() && (
+                      <TaskDescription text={task.description.trim()} short={!sidebar} />
+                    )}
                   </>
                 }
                 sidebar={sidebar ? section : undefined}
@@ -448,5 +449,28 @@ function TaskTrail({
       )}
       <span className="shrink-0 px-1 tabular-nums">{here}</span>
     </nav>
+  );
+}
+
+/** The description under the title, as Linear's issue. Beside the properties a long one is cut at
+ * six lines; on a phone at two, and a tap shows the rest. */
+function TaskDescription({ text, short }: { text: string; short: boolean }) {
+  const [open, setOpen] = useState(false);
+  const clamp = open ? undefined : short ? "line-clamp-2" : "line-clamp-6";
+  if (!short) {
+    return (
+      <p className={cn("px-4 text-sm whitespace-pre-wrap text-secondary sm:px-6", clamp)}>{text}</p>
+    );
+  }
+  return (
+    <button
+      type="button"
+      aria-expanded={open}
+      aria-label={open ? m.tasks_description_less() : m.tasks_description_more()}
+      onClick={() => setOpen((shown) => !shown)}
+      className="mx-4 text-left text-sm whitespace-pre-wrap text-secondary outline-focus-ring focus-visible:outline-2"
+    >
+      <span className={cn("block", clamp)}>{text}</span>
+    </button>
   );
 }
