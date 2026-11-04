@@ -17,6 +17,7 @@ import {
 import { Button as AriaButton, Heading } from "react-aria-components";
 
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
+import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import type { Mentionable } from "#src/features/conversations/mention-text";
@@ -463,7 +464,8 @@ function TaskDescription({ text, short }: { text: string; short: boolean }) {
     );
   }
   return (
-    <button
+    <Button
+      color="link-gray"
       type="button"
       aria-expanded={open}
       aria-label={open ? m.tasks_description_less() : m.tasks_description_more()}
@@ -471,6 +473,6 @@ function TaskDescription({ text, short }: { text: string; short: boolean }) {
       className="mx-4 text-left text-sm whitespace-pre-wrap text-secondary outline-focus-ring focus-visible:outline-2"
     >
       <span className={cn("block", clamp)}>{text}</span>
-    </button>
+    </Button>
   );
 }
