@@ -2,7 +2,6 @@ import {
   forwardRef,
   useCallback,
   useContext,
-  useEffect,
   useRef,
   type ForwardedRef,
   type ReactNode,
@@ -178,36 +177,40 @@ export function useClosePreview(): () => void {
  * event instead.
  */
 function useEscapePassesClosedPeek<T extends HTMLElement>(forwarded: ForwardedRef<T> | null) {
-  const element = useRef<T>(null);
-  useEffect(() => {
-    const trigger = element.current;
-    if (!trigger) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.isComposing || event.keyCode === 229) return;
-      if (trigger.getAttribute("aria-expanded") === "true") return;
-      const parent = trigger.parentElement;
-      if (!parent) return;
-      event.stopPropagation();
-      parent.dispatchEvent(
-        new KeyboardEvent("keydown", {
-          key: event.key,
-          code: event.code,
-          shiftKey: event.shiftKey,
-          bubbles: true,
-          cancelable: true,
-          composed: true,
-        }),
-      );
-    };
-    trigger.addEventListener("keydown", onKeyDown);
-    return () => trigger.removeEventListener("keydown", onKeyDown);
-  }, []);
+  // Held on the node itself, so a trigger node swapped for another (rendered anew) gets it too.
+  const detach = useRef<() => void>(undefined);
   return useCallback(
     (node: T | null) => {
-      element.current = node;
+      detach.current?.();
+      detach.current = node ? passClosedPeekEscape(node) : undefined;
       if (typeof forwarded === "function") forwarded(node);
       else if (forwarded) forwarded.current = node;
     },
     [forwarded],
   );
+}
+
+/** Lets an Escape on `trigger` with no peek open go on from its parent; returns the detach. The
+ * press sent again is the browser's own only in what it says (`isTrusted` is false): a handler
+ * that ever asks for a trusted Escape would not take it. */
+function passClosedPeekEscape(trigger: HTMLElement) {
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (event.key !== "Escape" || event.isComposing || event.keyCode === 229) return;
+    if (trigger.getAttribute("aria-expanded") === "true") return;
+    const parent = trigger.parentElement;
+    if (!parent) return;
+    event.stopPropagation();
+    parent.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: event.key,
+        code: event.code,
+        shiftKey: event.shiftKey,
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+      }),
+    );
+  };
+  trigger.addEventListener("keydown", onKeyDown);
+  return () => trigger.removeEventListener("keydown", onKeyDown);
 }
