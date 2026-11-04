@@ -23,6 +23,7 @@ import {
   labelCreatorUserId,
   type LabelActor,
 } from "./label-actor.server";
+import { mergeLabels } from "./label-merge.server";
 
 /**
  * Workspace task labels: the rows, their names and colors, and the task↔label rows a Task write
@@ -484,82 +485,6 @@ export class Labels {
     fromId: string,
     intoId: string,
   ): Promise<{ moved: number; dropped: number }> {
-    assertCanManageWorkspaceSettings(await workspaceMemberRole(this.db, workspaceId, userId));
-    if (fromId === intoId) throw new AppError("INVALID_INPUT");
-    const labels = await this.db.label.findMany({
-      where: { workspaceId, id: { in: [fromId, intoId] } },
-      select: LABEL_SELECT,
-    });
-    const from = labels.find((label) => label.id === fromId);
-    const into = labels.find((label) => label.id === intoId);
-    if (!from || !into) throw new AppError("NOT_FOUND");
-    return this.db.$transaction(async (tx) => {
-      const carried = await tx.taskLabel.findMany({
-        where: { labelId: fromId },
-        select: { taskId: true },
-      });
-      let moved = 0;
-      let dropped = 0;
-      for (const { taskId } of carried) {
-        const already = await tx.taskLabel.findUnique({
-          where: { taskId_labelId: { taskId, labelId: intoId } },
-          select: { taskId: true },
-        });
-        if (already) {
-          await tx.taskLabel.delete({ where: { taskId_labelId: { taskId, labelId: fromId } } });
-          dropped += 1;
-          continue;
-        }
-        // A single group allows one label: the one already there goes, `into` takes its place.
-        const clash =
-          into.groupId && into.group?.selection === "single"
-            ? await tx.taskLabel.findFirst({
-                where: {
-                  taskId,
-                  labelId: { notIn: [intoId, fromId] },
-                  label: { groupId: into.groupId },
-                },
-                select: { label: { select: { id: true, name: true, color: true } } },
-              })
-            : null;
-        if (clash) {
-          await tx.taskLabel.delete({
-            where: { taskId_labelId: { taskId, labelId: clash.label.id } },
-          });
-          await this.recordMergeRemoval(tx, taskId, clash.label);
-          dropped += 1;
-        }
-        await tx.taskLabel.update({
-          where: { taskId_labelId: { taskId, labelId: fromId } },
-          data: { labelId: intoId },
-        });
-        moved += 1;
-      }
-      await tx.label.delete({ where: { id: fromId } });
-      return { moved, dropped };
-    });
-  }
-
-  /** A merge's dropped label, as a system history event on the Task it was taken off. */
-  private async recordMergeRemoval(
-    tx: Prisma.TransactionClient,
-    taskId: string,
-    label: TaskLabel,
-  ): Promise<void> {
-    const latest = await tx.taskHistoryEvent.findFirst({
-      where: { taskId },
-      orderBy: { seq: "desc" },
-      select: { seq: true },
-    });
-    await tx.taskHistoryEvent.create({
-      data: {
-        taskId,
-        seq: (latest?.seq ?? 0) + 1,
-        eventType: "labels_changed",
-        actorType: "system",
-        actorName: null,
-        payload: { added: [], removed: [label] },
-      },
-    });
+    return mergeLabels(this.db, workspaceId, userId, fromId, intoId);
   }
 }
