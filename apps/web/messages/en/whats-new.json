@@ -1,0 +1,16 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "whats_new_label": "New",
+  "whats_new_close": "Close",
+  "whats_new_got_it": "Got it",
+  "whats_new_more": "{count} more",
+  "whats_new_documents_title": "Documents in conversations",
+  "whats_new_documents_body": "Plans and notes from Agents are now documents you edit together, every version kept.",
+  "whats_new_documents_demo_title": "Launch plan",
+  "whats_new_documents_demo_version": "Version 3 · edited just now",
+  "whats_new_task_labels_title": "Labels for Tasks",
+  "whats_new_task_labels_body": "Tag Tasks as Bug, Design and more from their popup, then filter the board by label.",
+  "whats_new_task_labels_demo_task": "Fix the login page flicker",
+  "whats_new_task_labels_demo_design": "Design",
+  "whats_new_task_labels_demo_client": "Client"
+}

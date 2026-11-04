@@ -31,6 +31,8 @@ import {
   activityNavAttentionRealtime,
 } from "#src/features/inbox/activity-inbox-queries";
 import { useActivityInboxRealtime } from "#src/features/inbox/use-activity-inbox-realtime";
+import { useWhatsNew } from "#src/features/whats-new/use-whats-new";
+import { WhatsNewCard } from "#src/features/whats-new/whats-new-card";
 import {
   WorkspaceSwitcher,
   type WorkspaceOption,
@@ -103,7 +105,12 @@ function useNavItems(
       sections: CHAT_SECTIONS,
       icon: MessageChatSquare,
     },
-    { label: m.navigation_activity(), ...item("activity"), icon: Activity, badge: activityDot },
+    {
+      label: m.navigation_activity(),
+      ...item("activity"),
+      icon: Activity,
+      badge: activityDot,
+    },
     { label: m.pi_chat_title(), ...item("pi-chat"), icon: Stars01 },
     { label: m.tasks_tab(), ...item("tasks"), icon: ListTodo },
     { label: m.projects_title(), ...item("projects"), icon: Folder },
@@ -173,8 +180,12 @@ export function AppShell({
 }) {
   // pathname is de-localized (src/router.tsx); item.href is localized, so we
   // match on bareHref (with sub-route prefix matching) instead.
-  const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const searchStr = useRouterState({ select: (state) => state.location.searchStr });
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  });
+  const searchStr = useRouterState({
+    select: (state) => state.location.searchStr,
+  });
   const workspaceId = currentWorkspace.id;
   const base = workspacePath(currentWorkspace.slug);
   useEffect(() => {
@@ -197,6 +208,7 @@ export function AppShell({
       : pathname === item.bareHref || pathname.startsWith(`${item.bareHref}/`),
   )?.href;
   const onSidebarClickCapture = useSpaNavigation();
+  const { current: whatsNewId, more: whatsNewMore, dismiss: dismissWhatsNew } = useWhatsNew();
   const workspaceSwitcher = (
     <WorkspaceSwitcher
       workspaces={workspaces}
@@ -208,7 +220,20 @@ export function AppShell({
 
   // The expanded sidebar and the drawer share one footer: the user card. The collapsed rail
   // does not show it.
-  const expandedFooter = <UserMenuCard base={base} user={user} onSignOut={onSignOut} />;
+  // The drawer and the expanded sidebar show the "What's new" card above the user card; the rail
+  // has no room for it.
+  const expandedFooter = (
+    <>
+      {whatsNewId && (
+        <WhatsNewCard
+          id={whatsNewId}
+          more={whatsNewMore}
+          onDismiss={() => dismissWhatsNew(whatsNewId)}
+        />
+      )}
+      <UserMenuCard base={base} user={user} onSignOut={onSignOut} />
+    </>
+  );
 
   return (
     <MobileDrawerProvider>

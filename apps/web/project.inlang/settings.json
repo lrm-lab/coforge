@@ -21,6 +21,7 @@
       "./messages/{locale}/conversation-attachments.json",
       "./messages/{locale}/task-relations.json",
       "./messages/{locale}/task-labels.json",
+      "./messages/{locale}/whats-new.json",
       "./messages/{locale}/task-history-more.json",
       "./messages/{locale}/artifacts.json",
       "./messages/{locale}/channel-notifications.json",
