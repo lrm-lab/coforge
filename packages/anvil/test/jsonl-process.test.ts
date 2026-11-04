@@ -267,11 +267,11 @@ test("the stderr excerpt keeps four scrubbed lines and the process log records t
     const closed = Promise.withResolvers<void>();
     const chunks = [
       "\n",
+      "line one should not be kept\n",
       "Usage limit reached\n",
       `token=${secret}\n`,
-      "line three\n",
       "line four\n",
-      "line five should not be kept\n",
+      "line five\n",
     ];
     const tree = {
       child: {
@@ -299,10 +299,12 @@ test("the stderr excerpt keeps four scrubbed lines and the process log records t
       await process.dispose();
     }
   });
-  const excerpt = "Usage limit reached\ntoken=[REDACTED]\nline three\nline four";
+  // The excerpt is the stderr tail: the earliest lines fall out first, a secret inside the
+  // tail is still scrubbed.
+  const excerpt = "Usage limit reached\ntoken=[REDACTED]\nline four\nline five";
   expect(result).toBe(excerpt);
   expect(result).not.toContain(secret);
-  expect(result).not.toContain("line five");
+  expect(result).not.toContain("line one");
   const logged = records.find((record) => record.properties.event === "code_agent.process.stderr");
   expect(logged?.properties.error_message).toBe(excerpt);
   expect(JSON.stringify(logged?.properties)).not.toContain(secret);
