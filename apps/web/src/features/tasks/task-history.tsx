@@ -8,6 +8,8 @@ import { getRouteApi } from "@tanstack/react-router";
 import { ArrowRight } from "@untitledui/icons";
 
 import { Badge } from "#src/components/base/badges/badges";
+import { ActorName, type NamedActor } from "#src/features/avatars/actor-name";
+import { messageSlots } from "#src/lib/message-slots";
 import { formatDateForDisplay } from "#src/lib/dates";
 import { useTimeFormat } from "#src/lib/time-format-context";
 import { cn } from "#src/lib/utils";
@@ -27,10 +29,14 @@ export function StatusBadge({ status }: { status: TaskStatus }) {
   );
 }
 
+/** Who History names: a person or an Agent by face and name (task #521); the system by name. */
 export type TimelineNames = {
-  actor: (type: TaskHistoryEvent["actorType"], handle: string | null) => string;
-  assignee: (kind: "user" | "agent", id: string) => string;
+  actor: (type: TaskHistoryEvent["actorType"], handle: string | null) => NamedActor | string;
+  assignee: (kind: "user" | "agent", id: string) => NamedActor;
 };
+
+const actorNode = (actor: NamedActor | string) =>
+  typeof actor === "string" ? actor : <ActorName actor={actor} />;
 
 /** The Task popup's change history: its read failing, empty, or the timeline of events. */
 export function TaskHistory({
@@ -87,7 +93,7 @@ function TaskTimeline({
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
             <div className="text-sm font-semibold text-primary">{eventTitle(event)}</div>
             <div className="text-xs text-tertiary">
-              {names.actor(event.actorType, event.actorName)} ·{" "}
+              {actorNode(names.actor(event.actorType, event.actorName))} ·{" "}
               {formatDateForDisplay(event.createdAt, timeZone, locale, timeFormat)}
             </div>
             <EventDetail event={event} names={names} />
@@ -149,7 +155,9 @@ function EventDetail({ event, names }: { event: TaskHistoryEvent; names: Timelin
       return (
         <p className={detail}>
           {assigneeId && assigneeType
-            ? m.tasks_history_assigned_to({ name: names.assignee(assigneeType, assigneeId) })
+            ? messageSlots(m.tasks_history_assigned_to, {
+                name: <ActorName actor={names.assignee(assigneeType, assigneeId)} />,
+              })
             : m.tasks_history_unassigned()}
         </p>
       );

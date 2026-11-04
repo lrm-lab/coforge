@@ -11,6 +11,7 @@ import type { Mentionable } from "#src/features/conversations/mention-text";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { TaskHistory, type TimelineNames } from "./task-history";
+import type { NamedActor } from "#src/features/avatars/actor-name";
 import type { VisibleTaskName } from "./task-relation-edits";
 import { TreeRow } from "./task-relations";
 import { executeTask } from "./tasks.functions";
@@ -187,21 +188,32 @@ export function TaskHistoryPage({ task, members }: HistoryProps) {
 
   // History names its actor by handle and an assignee by User/Agent id: the conversation's
   // members first, then the Task's own owner and creator, who may have left the conversation.
-  const people = [
-    ...(members ?? []).map(({ kind, id, handle, label }) => ({ kind, id, handle, name: label })),
+  const people: (NamedActor & { handle: string })[] = [
+    ...(members ?? []).map(({ kind, id, handle, label, avatarUrl }) => ({
+      kind,
+      id,
+      handle,
+      name: label,
+      avatarUrl,
+    })),
     ...[task.owner, task.creator].filter((person) => person !== null),
   ];
   const unknown = m.tasks_history_unknown_member();
   const names: TimelineNames = {
     actor: (type, handle) => {
       const known = people.find((person) => person.kind === type && person.handle === handle);
-      if (known) return known.name;
+      if (known) return known;
       // A person who has left the conversation is no longer listed, and their username is not a
-      // name to read; an Agent's handle is its name.
-      return type === "user" ? unknown : (handle ?? unknown);
+      // name to read; an Agent's handle is its name. The system has no face.
+      if (type === "system") return handle ?? unknown;
+      return { kind: type, name: type === "user" ? unknown : (handle ?? unknown) };
     },
     assignee: (kind, id) =>
-      people.find((person) => person.kind === kind && person.id === id)?.name ?? unknown,
+      people.find((person) => person.kind === kind && person.id === id) ?? {
+        kind,
+        id,
+        name: unknown,
+      },
   };
 
   return (

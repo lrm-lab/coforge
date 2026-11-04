@@ -10,7 +10,13 @@ export function TaskPerson({
   person,
   className,
 }: {
-  person: { name: string; avatarUrl?: string | null; deleted?: boolean };
+  person: {
+    name: string;
+    avatarUrl?: string | null;
+    deleted?: boolean;
+    kind?: "user" | "agent";
+    id?: string;
+  };
   className?: string;
 }) {
   return (
@@ -24,6 +30,7 @@ export function TaskPerson({
         alt=""
         src={person.avatarUrl ?? undefined}
         deleted={person.deleted}
+        {...faceOf(person)}
       />
       <span className="truncate">{person.name}</span>
       {/* A Task's holder can be a deleted Agent: its Tasks stay readable, so the card says the
@@ -53,6 +60,7 @@ export function TaskOwnerAvatar({ owner }: { owner: TaskView["owner"] }) {
             alt=""
             src={owner.avatarUrl ?? undefined}
             deleted={owner.deleted}
+            {...faceOf(owner)}
           />
         ) : (
           <span className="size-6 shrink-0 rounded-full border border-dashed border-primary" />
@@ -62,3 +70,7 @@ export function TaskOwnerAvatar({ owner }: { owner: TaskView["owner"] }) {
     </span>
   );
 }
+
+/** Who a face is, so an Agent with no picture of its own still shows its mascot. */
+const faceOf = (person: { kind?: "user" | "agent"; id?: string }) =>
+  person.kind === "agent" ? { agentId: person.id } : { userId: person.id };

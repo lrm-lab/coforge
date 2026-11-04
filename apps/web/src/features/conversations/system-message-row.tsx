@@ -4,11 +4,14 @@ import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { clockLabel, formatMonthDayTime } from "#src/lib/dates";
 import { useTimeFormat } from "#src/lib/time-format-context";
 import { useTimeZone } from "#src/lib/time-zone-context";
+import { ActorName, type NamedActor } from "#src/features/avatars/actor-name";
 import { cn } from "#src/lib/utils";
 import { CentredOnRule, DayDivider, UnreadDivider, dayLabel } from "./message-dividers";
 import { ROW_CLASS } from "./message-row";
 import type { MessageView } from "./message-view";
-import { systemNoticeText } from "./system-notice-text";
+import { useMemberDirectory } from "./member-directory";
+import type { Mentionable } from "./mention-text";
+import { systemNoticeParts, systemNoticeText, type NoticePerson } from "./system-notice-text";
 
 /** The day label (`dayLabel`) of the day a folded group is drawn under, its first notice's, so a
  * notice from a later day in it writes its date before its time. Outside a group a notice is under
@@ -16,8 +19,8 @@ import { systemNoticeText } from "./system-notice-text";
 export const SystemGroupDayContext = createContext<string | undefined>(undefined);
 
 /**
- * A system message (task/membership notices, etc.) is not a person talking: it carries no avatar
- * and no sender heading, and renders as one muted line centred on a hairline, its time first, as
+ * A system message (task/membership notices, etc.) is not a person talking: it carries no sender
+ * avatar and no heading, and renders as one muted line centred on a hairline, its time first, as
  * Raft's notices do. It still carries the unread divider and the jump highlight, since the unread
  * run can begin at a notice and a jump can land on one. The wrapper (`li`) is `MessageRow`'s, so
  * a system row costs the browser exactly what a normal one does. A run of two or more notices is
@@ -39,8 +42,11 @@ export function SystemMessageRow({
   const timeFormat = useTimeFormat();
   const timeZone = useTimeZone();
   const groupDay = useContext(SystemGroupDayContext);
-  // In the viewer's language from the notice's kind; an unstructured one reads as its body.
+  // In the viewer's language from the notice's kind; an unstructured one reads as its body. The
+  // line draws each person it names by face (task #521); the tooltip keeps the words alone.
   const text = systemNoticeText(message);
+  const parts = systemNoticeParts(message);
+  const members = useMemberDirectory();
   // A notice from a later day than its group's writes its date, before the same clock.
   const time =
     dateLocale && groupDay && groupDay !== dayLabel(message.createdAt, dateLocale, timeZone)
@@ -79,7 +85,13 @@ export function SystemMessageRow({
                 excludeFromTabOrder
                 className="min-w-0 cursor-default truncate rounded-sm text-left outline-focus-ring focus-visible:outline-2"
               >
-                {text}
+                {parts.map((part, index) =>
+                  typeof part === "string" ? (
+                    part
+                  ) : (
+                    <ActorName key={index} actor={noticeActor(part, members)} />
+                  ),
+                )}
               </TooltipTrigger>
             </Tooltip>
           </span>
@@ -87,4 +99,19 @@ export function SystemMessageRow({
       </div>
     </li>
   );
+}
+
+/** A person a notice names, by the face the conversation's members give them; one who has since
+ * left keeps a face drawn from their name. The name is the notice's own words for them. */
+function noticeActor(
+  { person, text }: NoticePerson,
+  members: readonly Mentionable[] | undefined,
+): NamedActor {
+  const member = members?.find(
+    (candidate) =>
+      candidate.handle === person.handle && (!person.kind || candidate.kind === person.kind),
+  );
+  return member
+    ? { kind: member.kind, id: member.id, name: text, avatarUrl: member.avatarUrl }
+    : { kind: person.kind === "agent" ? "agent" : "user", name: text };
 }

@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { SubmenuTrigger } from "react-aria-components";
@@ -13,6 +13,7 @@ import { useTimeFormat } from "#src/lib/time-format-context";
 import { useTimeZone } from "#src/lib/time-zone-context";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
+import { MemberDirectory, useMemberDirectory } from "./member-directory";
 import { mentionKey, type Mentionable } from "./mention-text";
 import { loadMessageSeenBy } from "./message-seen-by.functions";
 
@@ -24,18 +25,7 @@ import { loadMessageSeenBy } from "./message-seen-by.functions";
  * row gives the time and no name. A message read before read times were kept has none, and keeps
  * the count.
  */
-const SeenByDirectoryContext = createContext<readonly Mentionable[] | undefined>(undefined);
-
-/** The conversation's members, which a seen-by list names its readers from. */
-export function SeenByDirectory({
-  members,
-  children,
-}: {
-  members?: readonly Mentionable[];
-  children: ReactNode;
-}) {
-  return <SeenByDirectoryContext value={members}>{children}</SeenByDirectoryContext>;
-}
+export const SeenByDirectory = MemberDirectory;
 
 type Reader = Pick<Mentionable, "kind" | "id" | "label" | "avatarUrl">;
 
@@ -43,7 +33,7 @@ type Reader = Pick<Mentionable, "kind" | "id" | "label" | "avatarUrl">;
  * so a directory that fills in later still names them); one the directory does not hold (they have
  * since left, or joined after the page was read) is counted but not listed. */
 function useSeenBy(conversationId: string, messageId: string, enabled: boolean) {
-  const directory = useContext(SeenByDirectoryContext);
+  const directory = useMemberDirectory();
   const load = useServerFn(loadMessageSeenBy);
   const { data } = useQuery({
     queryKey: ["conversation", "seen-by", conversationId, messageId],

@@ -49,14 +49,25 @@ const STATUS_LABEL: Record<TaskStatus, (locale?: Locale) => string> = {
   closed: (locale) => m.tasks_status_closed({}, { locale }),
 };
 
-/** Someone acting in a notice is named as people see them; someone it is about (an assignee, a
- * coordinator) as the mention they would be written as. */
-const shown = (person: SystemPerson) => person.displayName || person.handle;
-/** A member record's name as the stored body writes it: a person's display name, an Agent's
- * @handle (Raft's @Dax style). */
-const memberName = (member: SystemPerson & { kind?: string }) =>
-  member.kind === "agent" ? `@${member.handle}` : shown(member);
-const mention = (person: SystemPerson) => `@${person.handle}`;
+/** How a notice writes the people it names: as text, or (`systemNoticeParts`) as a marker the
+ * row puts a face and name in place of. */
+type Names = {
+  /** Someone acting in a notice, as people see them. */
+  shown: (person: SystemPerson) => string;
+  /** A member record's name as the stored body writes it: a person's display name, an Agent's
+   * @handle (Raft's @Dax style). */
+  memberName: (member: SystemPerson & { kind?: string }) => string;
+  /** Someone a notice is about (an assignee, a coordinator), as the mention they would be
+   * written as. */
+  mention: (person: SystemPerson) => string;
+};
+
+const shownText = (person: SystemPerson) => person.displayName || person.handle;
+const TEXT_NAMES: Names = {
+  shown: shownText,
+  memberName: (member) => (member.kind === "agent" ? `@${member.handle}` : shownText(member)),
+  mention: (person) => `@${person.handle}`,
+};
 
 const reference = (task: SystemTask, locale?: Locale) => {
   if (task.hidden) return m.system_notice_task_hidden({}, { locale });
@@ -68,10 +79,15 @@ const reference = (task: SystemTask, locale?: Locale) => {
 };
 
 /** A notice's text, followed by the owner it addresses when it names one. */
-const addressed = (text: string, owner: SystemPerson | null | undefined, locale?: Locale) =>
-  owner ? m.system_notice_addressed({ text, owner: mention(owner) }, { locale }) : text;
+const addressed = (
+  text: string,
+  owner: SystemPerson | null | undefined,
+  locale: Locale | undefined,
+  names: Names,
+) => (owner ? m.system_notice_addressed({ text, owner: names.mention(owner) }, { locale }) : text);
 
-function noticeText(notice: SystemNotice, locale?: Locale): string {
+function noticeText(notice: SystemNotice, locale?: Locale, names: Names = TEXT_NAMES): string {
+  const { shown, memberName, mention } = names;
   switch (notice.kind) {
     case "task.created": {
       const { tasks } = notice.params;
@@ -162,6 +178,7 @@ function noticeText(notice: SystemNotice, locale?: Locale): string {
         ),
         notice.params.owner,
         locale,
+        names,
       );
     case "task.deleted":
       return m.system_notice_task_deleted(
@@ -173,6 +190,7 @@ function noticeText(notice: SystemNotice, locale?: Locale): string {
         m.system_notice_task_released({ task: reference(notice.params.task, locale) }, { locale }),
         notice.params.owner,
         locale,
+        names,
       );
     case "task.subtasks_finished":
       return addressed(
@@ -182,6 +200,7 @@ function noticeText(notice: SystemNotice, locale?: Locale): string {
         ),
         notice.params.owner,
         locale,
+        names,
       );
     case "task.unblocked":
       return addressed(
@@ -194,6 +213,7 @@ function noticeText(notice: SystemNotice, locale?: Locale): string {
         ),
         notice.params.owner,
         locale,
+        names,
       );
     case "task.assigned_you":
       return m.system_notice_task_assigned_you(
@@ -277,4 +297,42 @@ export function systemNoticeText(message: SystemNoticeSource, locale?: Locale): 
   if (!text) return message.body;
   const emoji = notice && KIND_EMOJI[notice.kind];
   return emoji ? `${emoji} ${text}` : text;
+}
+
+/** A person a notice names, with the text a plain notice writes for them. */
+export type NoticePerson = { person: SystemPerson & { kind?: string }; text: string };
+
+/** Stands in for a person while the notice is split around them. */
+const MARK = "\u0000";
+
+/**
+ * The notice as `systemNoticeText` reads, split at the people it names, so the row draws each one's
+ * face before their name (Frank, 11-04, task #521). The words are the same: each person keeps the
+ * text a plain notice writes for them.
+ */
+export function systemNoticeParts(
+  message: SystemNoticeSource,
+  locale?: Locale,
+): (string | NoticePerson)[] {
+  const people: NoticePerson[] = [];
+  const marked =
+    <P extends SystemPerson>(text: (person: P) => string) =>
+    (person: P) => {
+      people.push({ person, text: text(person) });
+      return `${MARK}${people.length - 1}${MARK}`;
+    };
+  const notice = systemNoticeOf(message);
+  const text = notice
+    ? noticeText(notice, locale, {
+        shown: marked(TEXT_NAMES.shown),
+        memberName: marked(TEXT_NAMES.memberName),
+        mention: marked(TEXT_NAMES.mention),
+      })
+    : "";
+  if (!text) return [message.body];
+  const emoji = notice && KIND_EMOJI[notice.kind];
+  return (emoji ? `${emoji} ${text}` : text)
+    .split(MARK)
+    .map((part, index) => (index % 2 === 1 ? people[Number(part)]! : part))
+    .filter((part) => part !== "");
 }
