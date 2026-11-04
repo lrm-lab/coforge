@@ -253,9 +253,10 @@ export function TaskDetailDialog({
           className={cn(
             // On a phone the thread scrolls, never the sheet (the shared Modal scrolls there).
             "flex h-full w-full flex-col overflow-hidden rounded-none max-sm:overflow-hidden max-sm:shadow-none max-sm:safe-area-padding",
-            // The popup hugs what it shows, up to a cap; the discussion keeps a reading height of
-            // its own. With a thread or the side column it is a workspace; else it wraps the task.
-            "sm:h-auto sm:max-h-[min(92vh,64rem)]",
+            // With a discussion the popup is a workspace of one height, whatever the Task's text,
+            // so a long description never squeezes the discussion (Frank, 11-04). Without one it
+            // hugs the Task, up to the same cap.
+            thread ? "sm:h-[min(92vh,48rem)]" : "sm:h-auto sm:max-h-[min(92vh,64rem)]",
             thread || sidebar
               ? "sm:w-[min(60rem,calc(100vw-2rem))]"
               : "sm:w-[min(44rem,calc(100vw-2rem))]",
@@ -454,23 +455,23 @@ function TaskTrail({
 }
 
 /** The description under the title, as Linear's issue. Beside the properties a long one is cut at
- * six lines; on a phone at two, and a tap shows the rest. */
+ * four lines, on a phone at two, and a tap shows the rest. */
 function TaskDescription({ text, short }: { text: string; short: boolean }) {
   const [open, setOpen] = useState(false);
-  const clamp = open ? undefined : short ? "line-clamp-2" : "line-clamp-6";
-  if (!short) {
-    return (
-      <p className={cn("px-4 text-sm whitespace-pre-wrap text-secondary sm:px-6", clamp)}>{text}</p>
-    );
-  }
+  // Cut short so the discussion keeps its room; opened, a long one scrolls in place.
+  const clamp = open ? "max-h-60 overflow-y-auto" : short ? "line-clamp-2" : "line-clamp-4";
   return (
     <Button
       color="link-gray"
       type="button"
       aria-expanded={open}
       aria-label={open ? m.tasks_description_less() : m.tasks_description_more()}
-      onClick={() => setOpen((shown) => !shown)}
-      className="mx-4 text-left text-sm whitespace-pre-wrap text-secondary outline-focus-ring focus-visible:outline-2"
+      onClick={(event) => {
+        // Selecting text in it is reading, not a tap to open or shorten.
+        if (window.getSelection()?.toString()) return event.preventDefault();
+        setOpen((shown) => !shown);
+      }}
+      className="mx-4 text-left text-sm whitespace-pre-wrap text-secondary outline-focus-ring focus-visible:outline-2 sm:mx-6"
     >
       <span className={cn("block", clamp)}>{text}</span>
     </Button>

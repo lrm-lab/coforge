@@ -94,7 +94,8 @@ export function TaskDetailTabs({
               className={cn(
                 "min-h-0 flex-1 outline-hidden",
                 tab === "discussion"
-                  ? "flex h-[min(60vh,40rem)] flex-col max-sm:h-auto"
+                  ? // The popup has one height with a discussion: it takes what the Task leaves.
+                    "flex min-h-64 flex-col max-sm:min-h-0"
                   : "overflow-y-auto",
               )}
             >

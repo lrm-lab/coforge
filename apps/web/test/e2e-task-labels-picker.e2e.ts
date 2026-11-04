@@ -299,6 +299,18 @@ test("labels go on and off a Task, are made from a name, show on cards and filte
       description:
         "The login page flickers white for a moment on a slow connection before the form shows. Seen on Safari and Chrome.",
     });
+    // On a desktop a popup with a discussion has one height, whatever its description: the
+    // discussion keeps its room and the description is cut, to open on a tap.
+    await browser("open", popup);
+    const discussion = `${dialog}?.querySelector('[role="tabpanel"]')`;
+    await browser("wait", "--fn", `${pageHydrated} && ${discussion} != null`);
+    expect(
+      Math.round(await evaluate<number>(`${dialog}.getBoundingClientRect().height`)),
+    ).toBeGreaterThanOrEqual(700);
+    expect(await evaluate<number>(`${discussion}.getBoundingClientRect().height`)).toBeGreaterThan(
+      256,
+    );
+    await shoot("desktop-6-description");
     await browser("set", "viewport", "390", "844");
     await browser("open", popup);
     const chipRow = `${dialog}?.querySelector('dl[data-layout="chips"]')`;
