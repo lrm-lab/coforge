@@ -61,7 +61,7 @@ services:
         export CENTRIFUGO_ENGINE_REDIS_ADDRESS="redis://:$$(cat /run/secrets/redis_password)@redis:6379";
         exec centrifugo -c /centrifugo/config.yaml
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - ./centrifugo:/centrifugo:ro
     secrets:
