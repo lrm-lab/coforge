@@ -84,9 +84,10 @@ export class CodexItemEvents {
     const tool = ONE_CALL_TOOLS.get(item.type);
     if (tool) return id ? [{ type: "tool-start", id, ...tool.start(item), occurredAt }] : [];
     if (item.type === "fileChange") {
-      const itemId = id ?? "file-change";
-      const starts = fileChangeStarts(itemId, item, occurredAt);
-      this.#fileChangeCounts.set(itemId, starts.length);
+      // No call id, no call: Raft does not announce one either (it would only be a placeholder).
+      if (!id) return [];
+      const starts = fileChangeStarts(id, item, occurredAt);
+      this.#fileChangeCounts.set(id, starts.length);
       return starts;
     }
     return [];
@@ -130,7 +131,8 @@ export class CodexItemEvents {
       ];
     }
     if (item.type === "fileChange") {
-      const itemId = id ?? "file-change";
+      if (!id) return [];
+      const itemId = id;
       const seen = this.#fileChangeCounts.get(itemId);
       this.#fileChangeCounts.delete(itemId);
       const failed = item.status === "failed" || item.status === "declined";
@@ -228,7 +230,6 @@ function messageEvent(answerKind: unknown, text: string, record: JsonRecord): Ag
     : { type: "progress", source: "codex_agent_message_non_final", occurredAt: eventTime(record) };
 }
 
-/** Each changed file with its kind: the official `{ type }` object, or a legacy kind string. */
 /** One `tool-start` per path a file change touches, each its own call `<itemId>:<index>`. */
 function fileChangeStarts(
   itemId: string,
@@ -244,6 +245,7 @@ function fileChangeStarts(
   }));
 }
 
+/** Each changed file with its kind: the official `{ type }` object, or a legacy kind string. */
 function fileChanges(item: JsonRecord): Array<{ kind: string | undefined; path: string }> {
   const changes = Array.isArray(item.changes) ? item.changes : [item];
   return changes.flatMap((value) => {

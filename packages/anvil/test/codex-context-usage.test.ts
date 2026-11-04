@@ -25,10 +25,16 @@ test("context usage is the last request's total tokens against the model's windo
   });
 });
 
-test("no reading without a window, from a synthetic zero, or past the window", () => {
+test("no reading without a window; a zero or past-the-window count is reported as is, like Raft", () => {
   expect(codexContextUsage(usage(236_574, 6_900_000, null))).toBeUndefined();
-  expect(codexContextUsage(usage(0, 6_900_000, 258_400))).toBeUndefined();
-  expect(codexContextUsage(usage(300_000, 6_900_000, 258_400))).toBeUndefined();
+  expect(codexContextUsage(usage(0, 6_900_000, 258_400))).toEqual({
+    usedTokens: 0,
+    windowTokens: 258_400,
+  });
+  expect(codexContextUsage(usage(300_000, 6_900_000, 258_400))).toEqual({
+    usedTokens: 300_000,
+    windowTokens: 258_400,
+  });
   expect(codexContextUsage({ tokenUsage: {} })).toBeUndefined();
   expect(codexContextUsage(undefined)).toBeUndefined();
 });

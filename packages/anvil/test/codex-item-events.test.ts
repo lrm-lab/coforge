@@ -205,18 +205,12 @@ describe("CodexItemEvents: file changes", () => {
     ]);
   });
 
-  test("reads a legacy file change without a change list as the one changed file", () => {
-    expect(
-      feed(new CodexItemEvents(), started({ type: "fileChange", kind: "add", path: "/w/a.ts" })),
-    ).toEqual([
-      {
-        type: "tool-start",
-        id: "file-change:0",
-        name: "write_file",
-        input: { file_path: "/w/a.ts" },
-        occurredAt: timestamp,
-      },
-    ]);
+  test("announces nothing for a file change without a call id", () => {
+    const events = new CodexItemEvents();
+    expect(feed(events, started({ type: "fileChange", kind: "add", path: "/w/a.ts" }))).toEqual([]);
+    expect(feed(events, completed({ type: "fileChange", kind: "add", path: "/w/a.ts" }))).toEqual(
+      [],
+    );
   });
 });
 
