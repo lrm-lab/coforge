@@ -328,12 +328,20 @@ export async function storeMessageBody(
   return {
     body: stored.body,
     mentions: mentions.mentions,
-    references: stored.adopted.map((reference, ordinal) => ({
-      kind: reference.kind,
-      targetId: reference.targetId,
-      raw: body.slice(reference.start, reference.end),
-      ordinal,
-    })),
+    references: stored.adopted
+      .filter(
+        (
+          reference,
+        ): reference is typeof reference & {
+          kind: "task" | "channel" | "thread";
+        } => reference.kind !== "mention",
+      )
+      .map((reference, ordinal) => ({
+        kind: reference.kind,
+        targetId: reference.targetId,
+        raw: body.slice(reference.start, reference.end),
+        ordinal,
+      })),
   };
 }
 
