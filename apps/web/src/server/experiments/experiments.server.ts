@@ -16,9 +16,9 @@ import type {
  * `reload` says a change only takes full effect after the page reloads or reconnects.
  */
 export const EXPERIMENTS = {
-  taskConversations: { flag: "task-conversations", defaultEnabled: false, reload: false },
+  taskConversations: { flag: null, defaultEnabled: false, reload: false },
   drafts: { flag: null, defaultEnabled: true, reload: false },
-  artifacts: { flag: "artifacts", defaultEnabled: false, reload: false },
+  artifacts: { flag: null, defaultEnabled: false, reload: false },
 } as const satisfies Record<
   string,
   { flag: FeatureFlag | null; defaultEnabled: boolean; reload: boolean }

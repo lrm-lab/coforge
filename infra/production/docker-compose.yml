@@ -269,14 +269,6 @@ configs:
       {
         "$$schema": "https://flagd.dev/schema/v0/flags.json",
         "flags": {
-          "task-conversations": {
-            "state": "ENABLED",
-            "variants": { "on": true, "off": false },
-            "defaultVariant": "off",
-            "targeting": {
-              "if": [{ "==": [{ "var": "workspaceSlug" }, "frank"] }, "on", "off"]
-            }
-          }
         }
       }
 

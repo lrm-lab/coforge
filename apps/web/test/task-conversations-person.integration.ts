@@ -1,12 +1,7 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
-import { readFeatureFlagsConfiguration } from "#src/server/feature-flags/configuration.server";
-import { installFeatureFlags } from "#src/server/feature-flags/feature-flags.server";
 import {
   announceSpawnedTask,
   sentMessageSpawnsTask,
@@ -17,7 +12,6 @@ const connectionString = Bun.env.TASK_TEST_DATABASE_URL ?? Bun.env.DATABASE_URL;
 if (!connectionString) throw new Error("TASK_TEST_DATABASE_URL must point to local PostgreSQL");
 const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 const suffix = crypto.randomUUID().slice(0, 8);
-let directory = "";
 let workspaceId = "";
 let channelId = "";
 let sourceId = "";
@@ -71,30 +65,10 @@ beforeAll(async () => {
   });
   sourceId = source.id;
   await db.conversation.update({ where: { id: channelId }, data: { lastSequence: 100 } });
-  directory = await mkdtemp(join(tmpdir(), "coforge-task-conv-person-"));
-  const path = join(directory, "flags.json");
-  await writeFile(
-    path,
-    JSON.stringify({
-      $schema: "https://flagd.dev/schema/v0/flags.json",
-      flags: {
-        "task-conversations": {
-          state: "ENABLED",
-          variants: { on: true, off: false },
-          defaultVariant: "on",
-        },
-      },
-    }),
-  );
-  await installFeatureFlags(
-    await readFeatureFlagsConfiguration({ COFORGE_FEATURE_FLAGS_FILE: path }),
-  );
   await experiment(true);
 });
 
 afterAll(async () => {
-  await installFeatureFlags({ status: "disabled" });
-  await rm(directory, { recursive: true, force: true });
   await db.workspace.delete({ where: { id: workspaceId } });
   await db.user.deleteMany({ where: { id: { in: Object.values(people).map((p) => p.id) } } });
   await db.$disconnect();

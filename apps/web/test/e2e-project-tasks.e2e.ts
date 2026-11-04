@@ -5,8 +5,6 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
-import { readFeatureFlagsConfiguration } from "#src/server/feature-flags/configuration.server";
-import { installFeatureFlags } from "#src/server/feature-flags/feature-flags.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
 
@@ -15,8 +13,8 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
  * its main Task, and a Task's popup files it under another Project and back under its channel's.
  * Desktop and phone, light and dark.
  *
- * Opt-in like the other browser E2Es: real local Web started with the `task-conversations` flag
- * file (`/tmp/coforge-flags-tc.json`) and `agent-browser`. Two Projects, a channel
+ * Opt-in like the other browser E2Es: real local Web started as it is and
+ * `agent-browser`. Two Projects, a channel
  * in the first and its Tasks are seeded per run and removed after it. Screenshots are written
  * under `.amp/e2e/project-tasks/`.
  */
@@ -24,12 +22,7 @@ const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/project-tasks");
 
 test("a Project page lists its Tasks as a tree, and a Task's popup moves it between Projects", async () => {
-  // Sub-tasks are Tasks v2, behind the task-conversations flag and the Workspace's experiment.
-  await installFeatureFlags(
-    await readFeatureFlagsConfiguration({
-      COFORGE_FEATURE_FLAGS_FILE: "/tmp/coforge-flags-tc.json",
-    }),
-  );
+  // Sub-tasks are Tasks v2, part of the Workspace's `taskConversations` experiment.
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `project-tasks-${process.pid}`);
   const experiments = new PrismaExperimentsRepository(db);

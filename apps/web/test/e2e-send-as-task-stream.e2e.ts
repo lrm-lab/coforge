@@ -14,8 +14,8 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
  * production's Workspace has it). It shows at once (the Task announced) and after a reload (the
  * message window's read).
  *
- * Opt-in like the other browser E2Es: real local Web + `agent-browser`, the server started with a
- * flag file that offers the `task-conversations` flag (docs/feature-flags.md). Each run seeds its
+ * Opt-in like the other browser E2Es: real local Web + `agent-browser`, the server started as it
+ * is. Each run seeds its
  * own Workspace, so switching the experiment touches no other test. Screenshots are written under
  * `.amp/e2e/send-as-task-stream/`.
  */

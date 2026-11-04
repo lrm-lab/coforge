@@ -23,32 +23,38 @@ afterEach(async () => {
   await rm(directory, { recursive: true, force: true });
 });
 
-/** Boots the flag provider the way the deployed Web does: the Compose file's inline definitions,
- * through the same strict boot validation. */
-async function installDeployed(environment: "staging" | "production"): Promise<void> {
+async function deployedDefinition(environment: "staging" | "production") {
   const compose = Bun.YAML.parse(
     await Bun.file(
       new URL(`../../../infra/${environment}/docker-compose.yml`, import.meta.url),
     ).text(),
   ) as { configs: { coforge_feature_flags: { content: string } } };
+  return compose.configs.coforge_feature_flags.content;
+}
+
+/** Boots the flag provider the way the deployed Web does: the Compose file's inline definitions,
+ * through the same strict boot validation. */
+async function installDeployed(environment: "staging" | "production"): Promise<void> {
   const path = join(directory, "flags.json");
-  await Bun.write(path, compose.configs.coforge_feature_flags.content);
+  await Bun.write(path, await deployedDefinition(environment));
   await installFeatureFlags(
     await readFeatureFlagsConfiguration({ COFORGE_FEATURE_FLAGS_FILE: path }),
   );
 }
 
-test("staging has task conversations on for every Workspace", async () => {
+test("staging's flag file passes boot validation", async () => {
   await installDeployed("staging");
-  expect(await isFeatureEnabled("task-conversations", FRANK)).toBe(true);
-  expect(await isFeatureEnabled("task-conversations", OTHER)).toBe(true);
+  expect(await isFeatureEnabled("task-ref-tokens", OTHER)).toBe(false);
 });
 
-test("production has task conversations on for the frank Workspace only", async () => {
+test("production's flag file passes boot validation", async () => {
   await installDeployed("production");
-  expect(await isFeatureEnabled("task-conversations", FRANK)).toBe(true);
-  expect(await isFeatureEnabled("task-conversations", OTHER)).toBe(false);
-  expect(await isFeatureEnabled("task-conversations", { workspaceId: OTHER.workspaceId })).toBe(
-    false,
-  );
+  expect(await isFeatureEnabled("task-ref-tokens", FRANK)).toBe(false);
+});
+
+test("no deployed flag targets a Workspace by its slug (task #491)", async () => {
+  for (const environment of ["staging", "production"] as const) {
+    const content = await deployedDefinition(environment);
+    expect(content.includes("workspaceSlug")).toBe(false);
+  }
 });

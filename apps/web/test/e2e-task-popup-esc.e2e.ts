@@ -6,8 +6,6 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
-import { readFeatureFlagsConfiguration } from "#src/server/feature-flags/configuration.server";
-import { installFeatureFlags } from "#src/server/feature-flags/feature-flags.server";
 import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
 
 /**
@@ -16,8 +14,7 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
  * properties. Each time Esc returns to the popup it was opened from, and only that one closes on
  * the next Esc. On the channel's page and on the Tasks page, on a desktop and a phone.
  *
- * Opt-in like the other browser E2Es: real local Web started with the `task-conversations` flag
- * file (`/tmp/coforge-flags-tc.json`, read here too), and `agent-browser`. The channel and its
+ * Opt-in like the other browser E2Es: real local Web started as it is, and `agent-browser`. The channel and its
  * Tasks are seeded per run and removed after it. Screenshots are written under
  * `.amp/e2e/task-popup-esc/`.
  */
@@ -25,11 +22,6 @@ const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/task-popup-esc");
 
 test("Esc steps back to the popup a sub-task or a parent was opened from", async () => {
-  await installFeatureFlags(
-    await readFeatureFlagsConfiguration({
-      COFORGE_FEATURE_FLAGS_FILE: "/tmp/coforge-flags-tc.json",
-    }),
-  );
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `task-esc-${process.pid}`);
   const board = new TaskBoard(db);

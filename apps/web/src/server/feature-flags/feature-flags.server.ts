@@ -23,10 +23,6 @@ export const FEATURE_FLAGS = {
     "Applications phase 2: the page an app is set up on after installation, and its status",
   "app-notifications":
     "Applications phase 2: notifying the apps installed in a Workspace of what happens in it",
-  artifacts:
-    "Documents (task #385): versioned documents people and Agents edit together, as an experiment a Workspace owner or admin switches on",
-  "task-conversations":
-    "Task conversations: a task has its own conversation, as an experiment a Workspace owner or admin switches on",
   "task-ref-tokens":
     "Store `#channel:#N` and `dm:@peer:#N` in message bodies (written by the server, read by every client)",
 } as const;

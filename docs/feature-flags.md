@@ -106,7 +106,7 @@ at once. Members see no switch; the server refuses a change from anyone but an o
 An experiment either has a flag or has none. With a flag, the flag decides which Workspaces offer it
 (a flag-less Workspace does not list it and cannot enable it). With `flag: null` every Workspace
 offers it, and a feature that has shipped but that a Workspace may want to turn off is exactly that:
-Drafts is one. The Workspace's own choice (`workspaces.experiments`, a sparse key → boolean map)
+every experiment in the registry today is one. The Workspace's own choice (`workspaces.experiments`, a sparse key → boolean map)
 decides whether it applies, and the entry's `defaultEnabled` is what applies until the choice is
 first made: off for `taskConversations`, on for `drafts`. An explicit stored `false` stays off.
 

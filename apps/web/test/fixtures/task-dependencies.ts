@@ -1,38 +1,10 @@
 import { expect } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import type { TaskCommand, TaskPrincipal } from "@lrm/coforge-sdk/internal";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
-import { readFeatureFlagsConfiguration } from "#src/server/feature-flags/configuration.server";
-import { installFeatureFlags } from "#src/server/feature-flags/feature-flags.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import type { TaskBoardDependencies } from "#src/server/tasks/task-board-ports.server";
-
-/** The Workspace flag that offers the `taskConversations` experiment, on for the whole process. */
-async function offerTasksV2() {
-  const directory = mkdtempSync(join(tmpdir(), "coforge-task-deps-flags-"));
-  process.on("exit", () => rmSync(directory, { recursive: true, force: true }));
-  const path = join(directory, "flags.json");
-  writeFileSync(
-    path,
-    JSON.stringify({
-      $schema: "https://flagd.dev/schema/v0/flags.json",
-      flags: {
-        "task-conversations": {
-          state: "ENABLED",
-          variants: { on: true, off: false },
-          defaultVariant: "on",
-        },
-      },
-    }),
-  );
-  await installFeatureFlags(
-    await readFeatureFlagsConfiguration({ COFORGE_FEATURE_FLAGS_FILE: path }),
-  );
-}
 
 /**
  * A Workspace with two people (one an owner), two Agents and two channels (and a private third),
@@ -43,7 +15,6 @@ export async function setup({
   tasksV2 = true,
   dependencies,
 }: { tasksV2?: boolean; dependencies?: TaskBoardDependencies } = {}) {
-  await offerTasksV2();
   const connectionString = Bun.env.TASK_TEST_DATABASE_URL ?? Bun.env.DATABASE_URL;
   if (!connectionString)
     throw new Error("TASK_TEST_DATABASE_URL or DATABASE_URL must point to local PostgreSQL");

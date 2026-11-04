@@ -6,8 +6,8 @@ made from keeps its own thread.
 
 ## Turning it on
 
-A Workspace owner or admin switches it on under Settings → Experiments, and only where the
-`task-conversations` feature flag is on. The server tells each Agent launch
+A Workspace owner or admin switches it on under Settings → Experiments; every Workspace offers
+the switch. The server tells each Agent launch
 (`identity.features.taskConversations`) and every delivery (`AgentMessageDelivery.features`)
 whether it is on. The commands below are always registered; with the switch off the server
 answers 404 with the Workspace's explanation. When the switch changes while a session runs, the

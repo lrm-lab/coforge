@@ -6,8 +6,6 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
-import { readFeatureFlagsConfiguration } from "#src/server/feature-flags/configuration.server";
-import { installFeatureFlags } from "#src/server/feature-flags/feature-flags.server";
 import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
 
 /**
@@ -16,8 +14,7 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
  * up to the parent's popup, and only there does Esc close. The properties sit beside the pages on a
  * wide screen and under the title on a phone.
  *
- * Opt-in like the other browser E2Es: real local Web started with the `task-conversations` flag
- * file (`/tmp/coforge-flags-tc.json`, read here too), and `agent-browser`. The channels, the Agent
+ * Opt-in like the other browser E2Es: real local Web started as it is, and `agent-browser`. The channels, the Agent
  * and the Tasks are seeded per run and removed after it. Screenshots, light, dark and a phone, are
  * written under `.amp/e2e/task-popup/`.
  */
@@ -26,11 +23,6 @@ const artifacts = join(import.meta.dir, "../../../.amp/e2e/task-popup");
 
 test("a Task popup opened from another steps back to it", async () => {
   // The server under test runs with the same file (COFORGE_FEATURE_FLAGS_FILE).
-  await installFeatureFlags(
-    await readFeatureFlagsConfiguration({
-      COFORGE_FEATURE_FLAGS_FILE: "/tmp/coforge-flags-tc.json",
-    }),
-  );
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `task-popup-${process.pid}`);
   const board = new TaskBoard(db);
