@@ -10,6 +10,7 @@ import {
   type TrustedAgentActivity,
 } from "#src/server/db/repositories/agent-activity.repositories.server";
 import { activityKindForObservation } from "./agent-activity-kind";
+import { noteAgentRuntimeQuotaNotice } from "./agent-runtime-quota-notice.server";
 import { getAgentDisplay, type AgentDisplay } from "./agent-display.server";
 import { ensureAgentActivitySweep } from "./agent-activity-sweep.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
@@ -42,6 +43,12 @@ import type { AgentActivityKind } from "@lrm/coforge-sdk/internal";
 type AgentActivityPublicationDependencies = ReplyIntentPublicationDependencies & {
   proxySecret: string | undefined;
   observe(activity: TrustedAgentActivity): Promise<void>;
+  /** Posts the owner's-DM quota system message; absent means no notice surface (tests). */
+  quotaNotice?(input: {
+    workspaceId: string;
+    agentId: string;
+    fingerprint: string;
+  }): Promise<void>;
   currentRuntimeFence?(
     workspaceId: string,
     computerId: string,
@@ -138,6 +145,18 @@ export async function handleAgentActivityPublication(
     const history = isFillerActivity
       ? Promise.resolve()
       : dependencies.observe({ ...cloudActivity, computerId }).catch(() => {});
+    // A no-reset quota (billing_exhausted) leaves a system message in the owner's DM once per
+    // exhaustion — the banner alone never told anyone why QA went quiet (task #318).
+    const quotaNotice =
+      activity.runtimeError?.errorReason === "billing_exhausted"
+        ? dependencies
+            .quotaNotice?.({
+              workspaceId,
+              agentId: activity.agentId,
+              fingerprint: activity.runtimeError.fingerprint,
+            })
+            .catch(() => {})
+        : Promise.resolve();
     const reduce = (async () => {
       if (!dependencies.currentRuntimeFence || !dependencies.display) return;
       const fence = await dependencies.currentRuntimeFence(
@@ -156,7 +175,7 @@ export async function handleAgentActivityPublication(
           ...snapshot,
         });
     })().catch(() => {});
-    await Promise.all([history, reduce]);
+    await Promise.all([history, reduce, quotaNotice]);
 
     if (audience)
       return relayActivityToPeople(encodeAgentActivity(cloudActivity), audience, dependencies);
@@ -346,6 +365,7 @@ export function createAgentActivityPublicationHandler() {
       ...lookups,
       computerBelongsToWorkspace: computerInWorkspace.check,
       observe: (observation) => activity.record(observation),
+      quotaNotice: (input) => noteAgentRuntimeQuotaNotice(db, input),
       resolveReplyTarget: replyTargets,
       publish: centrifugo
         ? (channel, data, options) => centrifugo.publish(channel, data, options)
