@@ -2,7 +2,6 @@ import { getLogger } from "@logtape/logtape";
 import { isMemoryAgentRuntime } from "@coforge/agent";
 import {
   AGENT_ACTIVITY_DETAIL_KIND,
-  STALLED_RESTART_LIMIT_ERROR,
   thrownMessage,
   type AgentActivityRuntimeError,
 } from "@lrm/coforge-sdk/internal";
@@ -14,11 +13,7 @@ import {
   describeRecycledSession,
   type ColdIdleStop,
 } from "#src/agent-runtime/wake-session-recycle";
-import { fingerprintRuntimeError } from "#src/agent-runtime/runtime-error-activity";
 import { runtimeDisplayName } from "./session-invalidate-activity";
-import { daemonIdleFacts } from "./agent-idle-facts";
-import type { ActivityDraft } from "./agent-activity-publisher";
-import type { AgentActivity } from "@lrm/coforge-sdk/internal";
 import { UnattendedRecoveries, reportUnattendedLimit } from "./stalled-recovery-unattended";
 import { logStalledRecovery } from "./agent-failure-logs";
 import { idleBlocker, type AgentIdleFacts, type ColdIdleAgent } from "./cold-idle-sweep";
@@ -26,7 +21,6 @@ import type { BusyActivity } from "./agent-activity-publisher";
 import type { LaunchRequest } from "./runtime-launch-types";
 import {
   STALLED_RECOVERY_EXIT_TIMEOUT_MS,
-  UNATTENDED_RECOVERY_LIMIT,
   shouldRecoverStalledRuntime,
   unattendedResumePrompt,
   type ProviderProgress,

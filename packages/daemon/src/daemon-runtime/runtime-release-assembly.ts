@@ -1,6 +1,4 @@
-import type { AgentSession } from "@lrm/coforge-anvil";
 import type { AgentActivity } from "@lrm/coforge-sdk/internal";
-import type { AgentRestartConfig } from "#src/agent-runtime/agent-process-manager";
 import { daemonIdleFacts } from "./agent-idle-facts";
 import type { ActivityDraft, BusyActivity } from "./agent-activity-publisher";
 import { RuntimeRelease } from "./runtime-release";
