@@ -48,6 +48,12 @@ import type { AgentContexts } from "./agent-contexts";
 import { elideForAgent } from "./context-elision";
 
 import { settleForwardedTaskRead } from "./agent-history-read";
+import { actionStampingAuthorizedAgent } from "./notice-action-clocks";
+import {
+  NOT_CONNECTED,
+  transportCall,
+  type ForwardingTransport,
+} from "./agent-request-forwarder-transport";
 import type { AgentMessageAttentionIndex } from "./agent-message-attention-index";
 
 export type AgentRequestForwarderPorts = Readonly<{
@@ -104,10 +110,6 @@ export type AgentRequestForwarderPorts = Readonly<{
   ) => void;
 }>;
 
-type ForwardingTransport = AgentRequestForwarderPorts["transport"];
-
-/** The refusal of a forwarded request whose transport is not connected. */
-const NOT_CONNECTED = "daemon connection is not connected";
 
 /**
  * The Agent's local requests that the daemon only authorizes and forwards over the Agent HTTPS
@@ -132,7 +134,9 @@ export function assembleAgentRequests(input: {
     },
     connection: input.connection,
     contexts: input.contexts,
-    authorizedAgent: input.authorizedAgent,
+    // Every forwarded request authorizes through here, so it stamps the Agent's action clock
+    // too: a working Agent is never judged frozen (task #318).
+    authorizedAgent: actionStampingAuthorizedAgent(input.authorizedAgent, input.attention.noticeActionClocks),
     recordForwardedRead: (agentId, query, result) =>
       settleForwardedTaskRead(input.attention, agentId, query, result),
   });
@@ -153,12 +157,7 @@ export class AgentRequestForwarder {
     name: K,
     refusal: string,
   ): NonNullable<ForwardingTransport[K]> {
-    const transport = this.#ports.transport;
-    const call = transport[name];
-    if (!call) throw new Error(refusal);
-    return (call as (...args: never[]) => unknown).bind(transport) as NonNullable<
-      ForwardingTransport[K]
-    >;
+    return transportCall(this.#ports, name, refusal);
   }
 
   async workspaceInfo(

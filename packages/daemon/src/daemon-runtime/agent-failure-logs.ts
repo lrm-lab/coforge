@@ -87,3 +87,15 @@ export function logAgentOperationFailure(
     outcome: "failed",
   });
 }
+
+/** Logs the stall being recovered, before the kill: the Agent's owner reads back why a quiet
+ * Agent restarted — a silent busy turn, a queued turn that never began, or a notice the process
+ * took and never acted on (task #318). */
+export function logStalledRecovery(agentId: string, silentForMs: number): void {
+  logger.warn("Recovering a stalled Agent runtime", {
+    event: "turn_stalled",
+    agent_id: agentId,
+    silent_for_ms: silentForMs,
+    outcome: "recovering",
+  });
+}

@@ -96,6 +96,8 @@ import { AgentControl } from "#src/agent-runtime/agent-control";
 import { AgentSessions } from "#src/agent-runtime/agent-session";
 import { AgentWorkspaceQueries } from "./agent-workspace-queries";
 import { AgentMessageAttentionIndex } from "./agent-message-attention-index";
+import { assembleRuntimeRelease } from "./runtime-release-assembly";
+import { daemonIdleFacts } from "./agent-idle-facts";
 import { assembleAgentRequests } from "./agent-request-forwarder";
 import { AgentInboxCoordinator } from "./agent-inbox-coordinator";
 import { AgentStopCoordinator } from "./agent-stop-coordinator";
@@ -278,36 +280,24 @@ export class DaemonRuntime {
     keep: (m) => this.#exitedDelivery.keepForNextLaunch(m.agentId, m),
     restart: (agentId) => this.#runtimeRelease.restartForFreshConfig(agentId),
   });
-  readonly #runtimeRelease = new RuntimeRelease<ActivityLaunch>({
-    launch: (agentId) => this.#currentActivityLaunches.get(agentId),
-    runtime: (agentId) => this.#agentProcessManager.runtime(agentId),
-    restartConfig: (agentId) => this.#agentProcessManager.restartConfig(agentId),
-    lastBusy: (agentId) => this.#activityPublisher.lastBusy(agentId),
-    queuedForMs: (agentId) => this.#deliveryQueue.queuedForMs(agentId),
-    resumable: (agentId) => this.#runningMentionIdentity(agentId) !== undefined,
-    sessionId: (agentId) => this.#stopState.sessionId(agentId),
-    isStopping: (agentId) => this.#stopState.stopping(agentId),
-    daemonIdleFacts: (agentId) => {
-      const queue = this.#inputDrain.get(agentId);
-      return {
-        working: this.#isWorking(agentId),
-        deliveriesQueued: this.#deliveryQueue.hasQueued(agentId),
-        inputsQueued: queue !== undefined && (queue.items.length > 0 || queue.drain !== undefined),
-        launching: this.#agentLaunches.has(agentId),
-        stopping:
-          this.#stopState.isStopping(agentId) || this.#agentProcessManager.isStopping(agentId),
-        runnerHold: this.#runnerHold !== undefined,
-        migrating: this.#migrations?.holds(agentId) === true,
-      };
-    },
-    hasParkedWork: (agentId) =>
-      this.#deliveryQueue.hasQueued(agentId) || this.#deliveryQueue.hasHeldAppItems(agentId),
-    flushParked: (agentId) => this.#releaseSurvivingHolds(agentId),
-    wake: (agentId, restart) => this.#wakeAgent(agentId, restart),
-    publish: (agentId, launch, ...draft) =>
-      this.#activityPublisher.publish(agentId, launch, this.#activity(agentId, ...draft)),
-    handBackMentions: (agentId) => this.#mentionDeliveries.handBackForRelaunch(agentId),
-    release: (agentId, timeoutMs) => this.#agentProcessManager.release(agentId, timeoutMs),
+  readonly #runtimeRelease: RuntimeRelease<ActivityLaunch> = assembleRuntimeRelease({
+    launches: () => this.#currentActivityLaunches,
+    processManager: () => this.#agentProcessManager,
+    activityPublisher: () => this.#activityPublisher,
+    activity: (agentId, kind, level, detail, extra) =>
+      this.#activity(agentId, kind, level, detail, extra),
+    inputDrain: () => this.#inputDrain,
+    working: (agentId) => this.#isWorking(agentId),
+    deliveryQueue: () => this.#deliveryQueue,
+    agentLaunches: () => this.#agentLaunches,
+    stopState: () => this.#stopState,
+    runnerHold: () => this.#runnerHold,
+    migrations: () => this.#migrations,
+    runningMentionIdentity: (agentId) => this.#runningMentionIdentity(agentId),
+    noticeActionClocks: () => this.#messageAttention.noticeActionClocks,
+    releaseSurvivingHolds: (agentId) => this.#releaseSurvivingHolds(agentId),
+    wakeAgent: (agentId, restart) => this.#wakeAgent(agentId, restart),
+    mentionDeliveries: () => this.#mentionDeliveries,
   });
   /** Stops cold, idle, large-context runtimes; the next launch decides resume or fresh session. */
   readonly #coldIdleSweep = new ColdIdleSweep({
@@ -1077,6 +1067,7 @@ export class DaemonRuntime {
       launchingAgentIds: this.#agentLaunches.keys(),
     };
   }
+
 
   #agentApiRemindersPorts() {
     return {

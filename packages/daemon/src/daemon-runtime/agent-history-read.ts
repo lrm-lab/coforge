@@ -51,6 +51,7 @@ function recordHistoryRead(
       if (message.sequence > visibleSequence) visibleSequence = message.sequence;
     }
   const through = request.around ? 0 : (result.modelSeenUpToSeq ?? 0);
+  attention.noticeActionClocks.noteAgentAction(agentId);
   attention.recordHistoryRead(agentId, {
     spelling: requestedTarget,
     target,
@@ -126,6 +127,7 @@ export function settleForwardedTaskRead(
     if (message.target === scope.target) shown.push(message.sequence);
   // A task read joins no thread context — nothing records `review`, so the thread-mismatch send
   // guard does not learn a task ref as the channel's latest read.
+  attention.noticeActionClocks.noteAgentAction(agentId);
   attention.recordHistoryRead(agentId, {
     spelling: scope.target,
     target: scope.target,
@@ -144,4 +146,13 @@ export function settleForwardedTaskRead(
     upperBound !== undefined
   )
     attention.clearThrough(agentId, scope.target, upperBound);
+}
+
+/** Distinct messages in a delivery list. The same message can appear more than once: a request
+ * retried while held is enqueued again so both attempts stay ACK-able, and a redelivery arriving
+ * after the dedupe window is a second delivery of one message. A notice counts messages. */
+export function countDistinctMessages(
+  deliveries: readonly { messageId: string }[],
+): number {
+  return new Set(deliveries.map((delivery) => delivery.messageId)).size;
 }

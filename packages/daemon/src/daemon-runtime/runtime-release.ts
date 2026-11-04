@@ -16,13 +16,17 @@ import {
 } from "#src/agent-runtime/wake-session-recycle";
 import { fingerprintRuntimeError } from "#src/agent-runtime/runtime-error-activity";
 import { runtimeDisplayName } from "./session-invalidate-activity";
+import { daemonIdleFacts } from "./agent-idle-facts";
+import type { ActivityDraft } from "./agent-activity-publisher";
+import type { AgentActivity } from "@lrm/coforge-sdk/internal";
+import { UnattendedRecoveries, reportUnattendedLimit } from "./stalled-recovery-unattended";
+import { logStalledRecovery } from "./agent-failure-logs";
 import { idleBlocker, type AgentIdleFacts, type ColdIdleAgent } from "./cold-idle-sweep";
 import type { BusyActivity } from "./agent-activity-publisher";
 import type { LaunchRequest } from "./runtime-launch-types";
 import {
   STALLED_RECOVERY_EXIT_TIMEOUT_MS,
   UNATTENDED_RECOVERY_LIMIT,
-  UnattendedRecoveries,
   shouldRecoverStalledRuntime,
   unattendedResumePrompt,
   type ProviderProgress,
@@ -88,6 +92,12 @@ export type RuntimeReleasePorts<L extends ReleasableLaunch> = Readonly<{
   lastBusy(agentId: string): BusyActivity<L> | undefined;
   /** How long the Agent's oldest queued delivery has waited, if any is queued. */
   queuedForMs(agentId: string): number | undefined;
+  /** When the Agent's process last accepted an inbox notice; undefined when none was accepted —
+   * the clock for the frozen-after-notice judgment (task #318). */
+  noticeAcceptedAt?(agentId: string): number | undefined;
+  /** When the Agent last did anything a checked read or an operation counts as. Provider
+   * output's clock is the launch's progress, not this. */
+  lastAgentActionAt?(agentId: string): number | undefined;
   /** The session reported to the cloud can be resumed by a relaunch. */
   resumable(agentId: string): boolean;
   /** The native session this runtime last reported. */
@@ -165,6 +175,11 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
       queuedForMs: this.#ports.queuedForMs(agentId),
       hasOpenToolCall: launch.toolCalls?.hasOpenToolCall ?? false,
       resumable: this.#ports.resumable(agentId),
+      noticeAcceptedForMs: ageOf(this.#ports.noticeAcceptedAt?.(agentId)),
+      lastAgentActionForMs: Math.min(
+        progress.silentForMs(),
+        ageOf(this.#ports.lastAgentActionAt?.(agentId)) ?? Number.POSITIVE_INFINITY,
+      ),
     });
     return stalled ? { launch, session, restart, silentForMs: progress.silentForMs() } : undefined;
   }
@@ -175,12 +190,14 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
    * Agent on the same launch, resuming the session it last reported. Messages meanwhile wait for
    * the relaunch.
    */
+
   async recoverStalled(
     agentId: string,
     stalled: StalledRuntime<L>,
     options: Readonly<{ unattended?: boolean }> = {},
   ): Promise<void> {
     const { launch, session, restart, silentForMs } = stalled;
+    logStalledRecovery(agentId, stalled.silentForMs);
     let resumePrompt: string | undefined;
     if (options.unattended) {
       // No message waits: the restart is the sweep's own, capped per stuck spell (task #404).
@@ -188,7 +205,8 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
       if ((launch.backgroundTasks?.count ?? 0) > 0) return;
       const admission = this.#unattended.admit(agentId, launch, launch.progress?.lastCompletedAtMs);
       if (admission === "held") return;
-      if (admission === "limit") return this.#reportUnattendedLimit(agentId, launch, restart);
+      if (admission === "limit")
+        return reportUnattendedLimit(this.#ports.publish, agentId, launch, restart);
       resumePrompt = unattendedResumePrompt(
         silentForMs,
         this.#ports.lastBusy(agentId)?.activity.detail,
@@ -202,33 +220,6 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
     );
   }
 
-  /** The Agent stalled again after the last unattended restart allowed: its owner sees why, as
-   * an error, and nothing restarts it until a message arrives or someone does. A stall, not a
-   * turn-ending kind: the turn is still live and hung, so a message must still read it as stalled
-   * and restart it. */
-  #reportUnattendedLimit(agentId: string, launch: L, restart: AgentRestartConfig): void {
-    const runtimeName = runtimeDisplayName(restart.config.provider);
-    const text = `The ${runtimeName} runtime stalled again after ${UNATTENDED_RECOVERY_LIMIT} automatic restarts with no message waiting. It is not restarted again until a message arrives or someone restarts it.`;
-    // The reason the profile shows while the process lives (`failureReason`, task #418).
-    this.#ports.publish(
-      agentId,
-      launch,
-      AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_STALLED,
-      "error",
-      text,
-      {
-        runtimeError: {
-          ...STALLED_RESTART_LIMIT_ERROR,
-          fingerprint: fingerprintRuntimeError(text),
-        },
-      },
-    );
-    logger.warn("Agent runtime stalled past its unattended restart limit", {
-      event: "agent.runtime.stalled_recovery_limit",
-      agent_id: agentId,
-      limit: UNATTENDED_RECOVERY_LIMIT,
-    });
-  }
 
   /** Restarts a live runtime so its next launch reads fresh launch config (a feature changed).
    * Whatever waits for the launch, the delivery that revealed the change included, is presented
@@ -465,3 +456,9 @@ function coldIdleRuntimePlan(restart: AgentRestartConfig, stop: ColdIdleStop): R
     },
   };
 }
+
+/** Milliseconds since `atMs`, or undefined for a clock that never fired. */
+function ageOf(atMs: number | undefined): number | undefined {
+  return atMs === undefined ? undefined : Date.now() - atMs;
+}
+

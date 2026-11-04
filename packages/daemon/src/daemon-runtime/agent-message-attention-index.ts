@@ -7,6 +7,8 @@ import type {
 import type { AgentConversationScope } from "@coforge/agent";
 import { isMemoryAgentRuntime } from "@coforge/agent";
 import { getLogger } from "@logtape/logtape";
+import { NoticeActionClocks } from "./notice-action-clocks";
+import { countDistinctMessages } from "./agent-history-read";
 import {
   AGENT_MESSAGE_ACK_METHOD,
   HELD_CONTEXT_LIMIT,
@@ -109,12 +111,6 @@ function printableSender(
   return { kind, handle: handle ?? "" };
 }
 
-/** Distinct messages in a delivery list. The same message can appear more than once: a request
- * retried while held is enqueued again so both attempts stay ACK-able, and a redelivery arriving
- * after the dedupe window is a second delivery of one message. A notice counts messages. */
-function countDistinctMessages(deliveries: readonly AgentMessageDelivery[]): number {
-  return new Set(deliveries.map((delivery) => delivery.messageId)).size;
-}
 
 /** Daemon-owned volatile attention and model-visible sequence index. */
 export class AgentMessageAttentionIndex {
@@ -124,12 +120,15 @@ export class AgentMessageAttentionIndex {
    * its frontier, exact sequences, conversation and review together; aliases and review order
    * belong to the Agent. Message operations update this state and pending attention together. */
   readonly #consumedByAgent = new Map<string, ConsumedAgent>();
+  /** The frozen-after-notice clocks (task #318): notice-accepted and last-agent-action. */
+  readonly noticeActionClocks = new NoticeActionClocks();
   /** The targets with attention in each conversation, learned from their deliveries and pruned with
    * the attention, so a history read's consumption scope settles a conversation's targets however
    * each is spelled. `#attentionConversation` is the way back, for the pruning. */
   readonly #conversationTargets = new Map<string, Map<string, Set<string>>>();
   readonly #attentionConversation = new Map<string, Map<string, string>>();
   readonly #pendingSequences = new Map<string, Map<string, Set<number>>>();
+
   /** The pending sequences that are a Memory Agent's ordinary channel updates: observed in a
    * batch, not delivered to the Agent as messages awaiting it. Pruned with `#pendingSequences`. */
   readonly #observedSequences = new Map<string, Map<string, Set<number>>>();
@@ -651,6 +650,7 @@ export class AgentMessageAttentionIndex {
       .then(() => {
         if (this.#generations.get(message.agentId) === generation) {
           generation.notified.add(message.deliveryId);
+          this.noticeActionClocks.noteNoticeAccepted(message.agentId);
           this.messageReceived(message.agentId, conversation);
         }
         logger.info("Agent accepted inbox notice", {

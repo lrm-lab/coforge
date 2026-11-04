@@ -81,6 +81,13 @@ export type StalledRecoveryFacts = Readonly<{
   hasOpenToolCall: boolean;
   /** The session reported a native session id the relaunch can resume. */
   resumable: boolean;
+  /** How long since the Agent's process last accepted an inbox notice; undefined when none was
+   * ever accepted. The clock for "took the notice but never acted" (task #318). */
+  noticeAcceptedForMs?: number;
+  /** How long since the Agent last did anything the daemon can see: a checked read, an
+   * operation, or provider output. The three silences share this one clock — any still fresh
+   * means the Agent is working. */
+  lastAgentActionForMs?: number;
 }>;
 
 /**
@@ -94,7 +101,19 @@ export function shouldRecoverStalledRuntime(facts: StalledRecoveryFacts): boolea
   const silentTurnStalled = facts.turnBusy && facts.silentForMs >= STALLED_RECOVERY_SILENCE_MS;
   const queuedTurnNeverStarted =
     !facts.turnBusy && !facts.liveTurn && (facts.queuedForMs ?? 0) >= STALLED_RECOVERY_SILENCE_MS;
-  return (silentTurnStalled || queuedTurnNeverStarted) && !facts.hasOpenToolCall && facts.resumable;
+  // A notice the process took, followed by the stall window with no checked read, no operation
+  // and no provider output at all — the accepted-noticed-but-frozen case (task #318). Any of
+  // the three still fresh is a working Agent.
+  const noticedButFrozen =
+    !facts.turnBusy &&
+    !facts.liveTurn &&
+    (facts.noticeAcceptedForMs ?? 0) >= STALLED_RECOVERY_SILENCE_MS &&
+    (facts.lastAgentActionForMs ?? 0) >= STALLED_RECOVERY_SILENCE_MS;
+  return (
+    (silentTurnStalled || queuedTurnNeverStarted || noticedButFrozen) &&
+    !facts.hasOpenToolCall &&
+    facts.resumable
+  );
 }
 
 /** How many times in a row a stalled turn is restarted with no message waiting for it (task
@@ -105,39 +124,6 @@ export const UNATTENDED_RECOVERY_LIMIT = 2;
 /** What an unattended recovery may do now: restart, report the limit (once), or nothing. */
 export type UnattendedRecoveryAdmission = "restart" | "limit" | "held";
 
-type UnattendedRun = { count: number; lastAtMs: number; reportedFor?: object };
-
-/**
- * The run of unattended restarts per Agent. A turn that completes after the last restart ends
- * the run (the relaunch's own progress says so), so the next stall starts a new one. Past the
- * limit nothing here relaunches the Agent, so a different launch than the one reported on was
- * started by someone else (a message, a person): it starts a new run too.
- */
-export class UnattendedRecoveries {
-  readonly #runs = new Map<string, UnattendedRun>();
-
-  /** `launch` is the stalled launch's identity, compared only by reference. */
-  admit(
-    agentId: string,
-    launch: object,
-    lastCompletedAtMs: number | undefined,
-    nowMs = Date.now(),
-  ): UnattendedRecoveryAdmission {
-    let run = this.#runs.get(agentId);
-    if (run && lastCompletedAtMs !== undefined && lastCompletedAtMs > run.lastAtMs) run = undefined;
-    if (run?.reportedFor && run.reportedFor !== launch) run = undefined;
-    run ??= { count: 0, lastAtMs: 0 };
-    this.#runs.set(agentId, run);
-    if (run.count >= UNATTENDED_RECOVERY_LIMIT) {
-      if (run.reportedFor) return "held";
-      run.reportedFor = launch;
-      return "limit";
-    }
-    run.count += 1;
-    run.lastAtMs = nowMs;
-    return "restart";
-  }
-}
 
 /** The first turn of a relaunch no message asked for: where the old turn stopped, and to go on
  * from there. */
