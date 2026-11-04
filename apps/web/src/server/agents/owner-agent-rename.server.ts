@@ -1,6 +1,6 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AGENT_DISPLAY_NAME_MAX_LENGTH } from "#src/features/agents/agent.schemas";
-import { humanLabel } from "#src/lib/human-label";
+import { UNNAMED_PERSON_NAME } from "#src/lib/human-label";
 import type { Locale } from "#src/paraglide/runtime";
 import { recordAgentProfileUpdated } from "#src/server/app-notifications/agent-events.server";
 import {
@@ -25,19 +25,27 @@ import { ownerAgentLanguage, ownerAgentName } from "./owner-agent-name.server";
  */
 
 const PERSONAL_SUFFIX = { "zh-CN": "的助手", en: "'s Assistant" } as const;
+/** The personal assistant's name when its owner has none, by language. */
+export const PERSONAL_GENERIC = { "zh-CN": "助手", en: "Assistant" } as const;
 const OLD_WEEKLY_REPORT_SUFFIX = "的周报助手";
 const LOCALES: readonly Locale[] = ["zh-CN", "en"];
 export type OwnerAgentKind = "personal" | "weekly-report";
 
-/** The owner's current label and the language their assistants are named in. */
+/** The owner's current naming: the raw display name (empty when the owner has none — never the
+ * `Unnamed` placeholder, so a nameless owner keeps the generic assistant name), and the language
+ * the assistants are named in. */
 export type OwnerNaming = { label: string; language: Locale };
 
-/** The personal assistant's auto-name for an owner label and language (`ownerAgentName`). */
+/** The personal assistant's auto-name. A nameless owner keeps the generic 通用助手 / Assistant,
+ * so a blank name is never rendered as `的助手` / `'s Assistant` with nothing before it. */
 export function personalAssistantAutoName({ label, language }: OwnerNaming): string {
-  return ownerAgentName(label, PERSONAL_SUFFIX[language === "zh-CN" ? "zh-CN" : "en"]);
+  const person = label.trim();
+  if (person.length === 0) return PERSONAL_GENERIC[language === "zh-CN" ? "zh-CN" : "en"];
+  return ownerAgentName(person, PERSONAL_SUFFIX[language === "zh-CN" ? "zh-CN" : "en"]);
 }
 
-/** The weekly-report assistant's current auto-name for an owner label and language. */
+/** The weekly-report assistant's auto-name; a nameless owner keeps the generic 周报助手 /
+ * Weekly Report Assistant (`weeklyReportAssistantDisplayName`). */
 export function weeklyReportAutoName({ label, language }: OwnerNaming): string {
   return weeklyReportAssistantDisplayName(label, language);
 }
@@ -58,29 +66,51 @@ export function oldWeeklyReportAutoName(label: string): string {
  * Every name that counts as an auto-name for `label` — so a stored name equal to any of them is
  * one nobody has chosen by hand. Both languages (a user who never saved a language was named in
  * the request's locale, so English and Chinese both count), the pre-#495 weekly-report rule, and
- * the bare generic name an older assistant may still carry.
+ * the bare generic name an older assistant may still carry. For a nameless owner the legacy
+ * placeholder names (`humanLabel`'s `Unnamed` built into a name before this fix) count too, so
+ * the backfill and a rename restore them to the generic instead of taking them for hand-chosen.
  */
 function autoNameCandidates(label: string, kind: OwnerAgentKind): ReadonlySet<string> {
+  const nameless = label.trim().length === 0;
   if (kind === "personal")
-    return new Set(LOCALES.map((language) => personalAssistantAutoName({ label, language })));
+    return new Set([
+      ...LOCALES.map((language) => personalAssistantAutoName({ label, language })),
+      ...(nameless
+        ? LOCALES.map((language) =>
+            ownerAgentName(
+              UNNAMED_PERSON_NAME,
+              PERSONAL_SUFFIX[language === "zh-CN" ? "zh-CN" : "en"],
+            ),
+          )
+        : []),
+    ]);
   return new Set<string>([
     ...LOCALES.map((language) => weeklyReportAutoName({ label, language })),
     oldWeeklyReportAutoName(label),
     WEEKLY_REPORT_ASSISTANT_DISPLAY_NAME,
+    ...(nameless
+      ? [
+          ...LOCALES.map((language) =>
+            weeklyReportAssistantDisplayName(UNNAMED_PERSON_NAME, language),
+          ),
+          oldWeeklyReportAutoName(UNNAMED_PERSON_NAME),
+        ]
+      : []),
   ]);
 }
 
 const autoName = (naming: OwnerNaming, kind: OwnerAgentKind) =>
   kind === "personal" ? personalAssistantAutoName(naming) : weeklyReportAutoName(naming);
 
-/** The owner's label and language as the naming reads them, from a user row. */
+/** The owner's naming from a user row: the raw display name (trimmed, empty when the owner has
+ * none — not the `Unnamed` placeholder `humanLabel` would supply, which would otherwise become
+ * an assistant's name), and the language. */
 export function ownerNamingOf(user: {
-  username: string;
   displayName: string | null;
   preferences?: { language: string | null } | null;
 }): OwnerNaming {
   return {
-    label: humanLabel(user),
+    label: user.displayName?.trim() ?? "",
     language: ownerAgentLanguage(user.preferences?.language),
   };
 }

@@ -183,6 +183,56 @@ test.skipIf(!db)(
   },
 );
 
+test.skipIf(!db)(
+  "an owner with no name keeps the generic assistant names, on rename and in the backfill",
+  async () => {
+    const user = await makeUser(db!, "Ada");
+    await db!.userPreference.create({ data: { userId: user.id, language: "zh-CN" } });
+    const fx = await makeWorkspace(db!, user.id, {
+      personal: "Ada的助手",
+      weekly: "Ada的周报助手",
+    });
+    try {
+      // The owner clears their name (the save reads "Ada" as the previous name, then stores the
+      // blank): both assistants fall back to the generic, never "Unnamed..." (the humanLabel
+      // placeholder must not become a name).
+      await saveProfileAndRenameAssistants(db!, user.id, { displayName: "   ", description: "" });
+      expect(await nameOf(db!, fx.personal.id)).toBe("助手");
+      expect(await nameOf(db!, fx.weekly.id)).toBe("周报助手");
+
+      // A fresh backfill leaves the now-generic names alone (they are the generic auto-name).
+      const before = { p: await nameOf(db!, fx.personal.id), w: await nameOf(db!, fx.weekly.id) };
+      await backfillOwnerAgentNames({ db: db!, dryRun: false });
+      expect(await nameOf(db!, fx.personal.id)).toBe(before.p);
+      expect(await nameOf(db!, fx.weekly.id)).toBe(before.w);
+    } finally {
+      await cleanup(db!, user.id, [fx]);
+    }
+  },
+);
+
+test.skipIf(!db)(
+  "legacy Unnamed... names on a nameless owner are recognised and restored to the generic",
+  async () => {
+    const user = await makeUser(db!, "Ada");
+    await db!.userPreference.create({ data: { userId: user.id, language: "zh-CN" } });
+    // Assistants stored under the pre-fix placeholder names, for an owner who has no name.
+    const fx = await makeWorkspace(db!, user.id, {
+      personal: "Unnamed的助手",
+      weekly: "Unnamed的周报助手",
+    });
+    try {
+      await db!.user.update({ where: { id: user.id }, data: { displayName: "" } });
+      // The backfill treats the placeholder names as auto-names and restores the generic.
+      await backfillOwnerAgentNames({ db: db!, dryRun: false });
+      expect(await nameOf(db!, fx.personal.id)).toBe("助手");
+      expect(await nameOf(db!, fx.weekly.id)).toBe("周报助手");
+    } finally {
+      await cleanup(db!, user.id, [fx]);
+    }
+  },
+);
+
 async function cleanup(db: PrismaClient, userId: string, workspaces: Pick<Fx, "workspace">[]) {
   for (const { workspace } of workspaces)
     await db.workspace.delete({ where: { id: workspace.id } }).catch(() => undefined);

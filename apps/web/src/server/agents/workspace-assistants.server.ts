@@ -8,8 +8,9 @@ import {
   startDefaultCloudComputer,
 } from "#src/server/workspaces/create-workspace.server";
 import { paginated } from "#src/server/db/pagination.server";
-import { ownerAgentLanguage, ownerAgentName } from "#src/server/agents/owner-agent-name.server";
-import { humanLabel, type HumanNames } from "#src/lib/human-label";
+import { ownerAgentLanguage } from "#src/server/agents/owner-agent-name.server";
+import { personalAssistantAutoName } from "#src/server/agents/owner-agent-rename.server";
+import type { HumanNames } from "#src/lib/human-label";
 import type { Locale } from "#src/paraglide/runtime";
 import {
   parseAgentRuntimeConfig,
@@ -18,9 +19,10 @@ import {
 import { getAgentRuntimeLock } from "#src/server/agents/agent-runtime-lock.server";
 
 /** `{name}的助手` / `{name}'s Assistant`, in the owner's saved language, else the request's
- * `locale`, else Chinese. */
+ * `locale`, else Chinese; a nameless owner keeps the generic 助手 / Assistant. The one rule the
+ * rename and backfill also use (`owner-agent-rename.server.ts`), so creation and updates agree. */
 function personalAssistantName(owner: Pick<HumanNames, "displayName">, language: Locale) {
-  return ownerAgentName(humanLabel(owner), language === "zh-CN" ? "的助手" : "'s Assistant");
+  return personalAssistantAutoName({ label: owner.displayName?.trim() ?? "", language });
 }
 
 export const WORKSPACE_ASSISTANT_DESCRIPTION =
