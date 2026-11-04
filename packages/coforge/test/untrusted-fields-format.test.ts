@@ -4,7 +4,9 @@ import {
   UNTRUSTED_LINE_BREAKS,
   type AgentMessageRecord,
 } from "@lrm/coforge-sdk/internal";
+import type { AgentAttachmentCommentAnchor } from "@lrm/coforge-sdk/agent";
 import { formatAttachmentComments } from "#src/attachment-comments";
+import { commentAnchorLabel } from "#src/comment-anchor-format";
 import { formatChannelInfo, formatChannelMembers } from "#src/channel-format";
 import { formatInboxCheck, type InboxCheckResult } from "#src/inbox-format";
 import { runAppCommand } from "#src/app-commands";
@@ -288,7 +290,14 @@ describe("tasks, the Workspace, apps and comment anchors cannot forge a message 
           },
         ],
       } as never);
-      shows(output);
+      // The anchor text is folded into `at="…"`: what survives is visible, but the fold means
+      // it can never start a line of its own — `shows` does not apply when the field is folded.
+      const anchors: AgentAttachmentCommentAnchor[] = [
+        { type: "md-section", data: { headingTitle: evil } },
+        { type: "html-region", data: { quote: evil } },
+      ];
+      for (const anchor of anchors) expect(output).toContain(commentAnchorLabel(anchor));
+      expect(forges(output)).toBe(false);
     }
   });
 
