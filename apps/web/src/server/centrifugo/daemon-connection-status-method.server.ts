@@ -1,4 +1,4 @@
-import { utf8Decoder } from "@lrm/coforge-sdk/internal";
+import { utf8Decoder, utf8Encoder } from "@lrm/coforge-sdk/internal";
 import type { RedisComputerUpgradeStore } from "#src/server/computers/computer-upgrade-store.server";
 import { getComputerStatusCache, type ComputerStatusCache } from "./computer-status.server";
 import type { CentrifugoRpcMethod } from "./rpc-handler.server";
@@ -13,6 +13,9 @@ export function createDaemonConnectionStatusMethod(
     ): Promise<void>;
   },
   upgrades?: Pick<RedisComputerUpgradeStore, "touchIdentity">,
+  /** The release feed's newest Computer version: the heartbeat's answer refreshes it for a
+   * daemon that stays connected for days between readies; a failed read answers no version. */
+  latestComputerVersion?: () => Promise<string | null>,
 ): CentrifugoRpcMethod {
   return async (payload, metadata) => {
     const request = JSON.parse(utf8Decoder.decode(payload)) as {
@@ -47,6 +50,7 @@ export function createDaemonConnectionStatusMethod(
         computerId: request.computerId,
       });
     }
-    return new Uint8Array();
+    const version = await latestComputerVersion?.().catch(() => null);
+    return utf8Encoder.encode(JSON.stringify(version ? { latestComputerVersion: version } : {}));
   };
 }

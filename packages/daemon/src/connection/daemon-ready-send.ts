@@ -1,5 +1,6 @@
 import type { CentrifugeWorkspaceClient } from "./centrifuge-workspace-client";
 import { rpcData } from "./rpc-data";
+import { utf8Decoder } from "@lrm/coforge-sdk/internal";
 import {
   DAEMON_RUNTIME_READY_METHOD,
   decodeDaemonRuntimeReadyResponse,
@@ -68,4 +69,17 @@ export async function sendRuntimeAuthStatus(
   value: RuntimeAuthStatusReport,
 ): Promise<void> {
   await rpc(RUNTIME_AUTH_STATUS_REPORT_METHOD, encodeRuntimeAuthStatusReport(value));
+}
+
+/** The connection-status heartbeat's reply, read best-effort like the ready reply's: the JSON
+ * body's `latestComputerVersion`, or nothing when an older server answers a different shape. */
+export function readStatusLatestVersion(reply: unknown): string | undefined {
+  try {
+    const { latestComputerVersion } = JSON.parse(utf8Decoder.decode(rpcData(reply))) as {
+      latestComputerVersion?: string;
+    };
+    return latestComputerVersion;
+  } catch {
+    return undefined;
+  }
 }

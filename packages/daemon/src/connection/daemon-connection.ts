@@ -6,10 +6,6 @@ import type {
 } from "./daemon-connection-client";
 import {
   decodeRuntimeAuthIntent,
-  encodeRuntimeAuthLoginReport,
-  encodeRuntimeAuthLogoutReport,
-  RUNTIME_AUTH_LOGIN_REPORT_METHOD,
-  RUNTIME_AUTH_LOGOUT_REPORT_METHOD,
   type RuntimeAuthIntent,
   type RuntimeAuthLoginReport,
   type RuntimeAuthLogoutReport,
@@ -33,6 +29,7 @@ import {
 import { DaemonNoticePublications } from "./daemon-notice-publications";
 import { DaemonProviderPublications } from "./daemon-provider-publications";
 import { rpcData } from "./rpc-data";
+import { messageEndpoint, serverEndpoint } from "./daemon-endpoints";
 import { DaemonQueries } from "./daemon-queries";
 import { DaemonConnectionWorkspaceBindings } from "./daemon-connection-workspace-bindings";
 import { agentApiRoutes } from "@lrm/coforge-sdk/agent";
@@ -90,6 +87,7 @@ import { HELD_NOTICE_CAP, HeldPublications } from "./held-publications";
 import { InboundQuietness } from "./connection-liveness";
 import { encodeDaemonConnectionStatus } from "./connection-status-payload";
 import {
+  readStatusLatestVersion,
   sendDaemonReady,
   sendCodeAgentsUpdate,
   sendRuntimeAuthLogin,
@@ -130,18 +128,12 @@ import {
   encodeAgentStatus,
   type AgentMentionDeliveryTransition,
   type AgentMentionDeliveryTerminalError,
-  encodeDaemonRuntimeReadyRequest,
-  encodeDaemonRuntimeCodeAgentsUpdateRequest,
-  encodeRuntimeAuthStatusReport,
-  RUNTIME_AUTH_STATUS_REPORT_METHOD,
   type MachineStatusReport,
   type RuntimeAuthStatusReport,
-  DAEMON_RUNTIME_READY_METHOD,
   DAEMON_RUNTIME_SHUTDOWN_METHOD,
   encodeDaemonRuntimeShutdown,
   type DaemonRuntimeShutdown,
   DAEMON_CONNECTION_STATUS_METHOD,
-  DAEMON_RUNTIME_CODE_AGENTS_UPDATE_METHOD,
   AGENT_STATUS_METHOD,
   type DaemonRuntimeReadyRequest,
   type DaemonRuntimeCodeAgentsUpdateRequest,
@@ -816,10 +808,12 @@ export class DaemonConnection
       this.#inboundQuiet.check(client, config);
       void client
         .rpc(DAEMON_CONNECTION_STATUS_METHOD, encodeDaemonConnectionStatus(config))
-        .then(() => {
+        .then((reply) => {
           // An answered round trip is the only inbound traffic a Workspace with nothing to say
           // produces, so it is what keeps a legitimately quiet connection alive.
           if (client === this.#client) this.#inboundQuiet.markInbound();
+          const version = readStatusLatestVersion(reply);
+          if (version) this.#latestComputerVersion.current?.(version);
         })
         .catch(() => {});
     };
@@ -850,17 +844,6 @@ export class DaemonConnection
     return this.#requireClient().rpc(method, data);
   }
 
-  /** The URL of an Agent message route. */
-  #messageEndpoint(path: string): string {
-    return this.#serverEndpoint("Agent message HTTP", path);
-  }
-
-  /** The server endpoint for one Agent HTTP path; `what` names the caller in the error. */
-  #serverEndpoint(what: string, path: string): string {
-    if (!this.#serverHttpUrl) throw new Error(`${what} endpoint is not configured`);
-    return `${new URL(this.#serverHttpUrl).origin}${path}`;
-  }
-
   sendAgentDeliveryAck(ack: AgentMessageDeliveryAck): Promise<void> {
     return this.#notices.sendDeliveryAck(ack);
   }
@@ -880,7 +863,8 @@ export class DaemonConnection
   /** The server's Agent migration route, over HTTPS with this daemon's API key. */
   agentMigrationServer(): AgentMigrationServer {
     return new AgentMigrationHttpClient({
-      endpoint: () => this.#serverEndpoint("Agent migration", "/api/daemon/agent-migrations"),
+      endpoint: () =>
+        serverEndpoint(this.#serverHttpUrl, "Agent migration", "/api/daemon/agent-migrations"),
       daemonApiKey: () => this.#token,
     });
   }
@@ -907,7 +891,7 @@ export class DaemonConnection
     } = this.agentMessageHttpClient;
     if (request.operation === "check") {
       if (!requestEvents) throw new Error("unsupported Agent message operation: check");
-      const url = this.#messageEndpoint(agentApiRoutes.cloud.events.path);
+      const url = messageEndpoint(this.#serverHttpUrl, agentApiRoutes.cloud.events.path);
       const events = await requestEvents({ url, ...this.#agentKeys(agentApiKey), request });
       return {
         idempotencyKey: events.idempotencyKey,
@@ -925,7 +909,7 @@ export class DaemonConnection
       const path = muted
         ? agentApiRoutes.cloud.channels.mute.path(request.target)
         : agentApiRoutes.cloud.channels.unmute.path(request.target);
-      const url = this.#messageEndpoint(path);
+      const url = messageEndpoint(this.#serverHttpUrl, path);
       const result = await requestChannelMute({
         url,
         ...this.#agentKeys(agentApiKey),
@@ -942,7 +926,10 @@ export class DaemonConnection
     if (request.operation === "thread-unfollow") {
       if (!requestThreadUnfollow)
         throw new Error("unsupported Agent message operation: thread-unfollow");
-      const url = this.#messageEndpoint(agentApiRoutes.cloud.threads.unfollow.path(request.target));
+      const url = messageEndpoint(
+        this.#serverHttpUrl,
+        agentApiRoutes.cloud.threads.unfollow.path(request.target),
+      );
       const result = await requestThreadUnfollow({ url, ...this.#agentKeys(agentApiKey), request });
       return {
         idempotencyKey: result.idempotencyKey,
@@ -954,7 +941,8 @@ export class DaemonConnection
     }
     if (request.operation === "resolve") {
       if (!requestResolve) throw new Error("unsupported Agent message operation: resolve");
-      const url = this.#messageEndpoint(
+      const url = messageEndpoint(
+        this.#serverHttpUrl,
         agentApiRoutes.cloud.messages.resolve.path(request.messageId ?? ""),
       );
       return adaptAgentResolveResponse(
@@ -964,7 +952,8 @@ export class DaemonConnection
     if (request.operation === "react" || request.operation === "unreact") {
       if (!requestReaction)
         throw new Error(`unsupported Agent message operation: ${request.operation}`);
-      const url = this.#messageEndpoint(
+      const url = messageEndpoint(
+        this.#serverHttpUrl,
         agentApiRoutes.cloud.messages.reactions.path(request.messageId ?? ""),
       );
       const method =
@@ -977,21 +966,21 @@ export class DaemonConnection
     }
     if (request.operation === "read") {
       if (!requestRead) throw new Error("unsupported Agent message operation: read");
-      const url = this.#messageEndpoint(agentApiRoutes.cloud.messages.list.path);
+      const url = messageEndpoint(this.#serverHttpUrl, agentApiRoutes.cloud.messages.list.path);
       return adaptAgentHistoryResponse(
         await requestRead({ url, ...this.#agentKeys(agentApiKey), request }),
       );
     }
     if (request.operation === "search") {
       if (!requestSearch) throw new Error("unsupported Agent message operation: search");
-      const url = this.#messageEndpoint(agentApiRoutes.cloud.messages.search.path);
+      const url = messageEndpoint(this.#serverHttpUrl, agentApiRoutes.cloud.messages.search.path);
       return adaptAgentSearchResponse(
         await requestSearch({ url, ...this.#agentKeys(agentApiKey), request }),
       );
     }
     if (request.operation === "send") {
       if (!requestSend) throw new Error("unsupported Agent message operation: send");
-      const url = this.#messageEndpoint(agentApiRoutes.cloud.messages.send.path);
+      const url = messageEndpoint(this.#serverHttpUrl, agentApiRoutes.cloud.messages.send.path);
       return adaptAgentSendResponse(
         await requestSend({ url, ...this.#agentKeys(agentApiKey), request }),
       );
@@ -1008,7 +997,7 @@ export class DaemonConnection
     if (!requestSendReconciliation)
       throw new Error("unsupported Agent message operation: send reconciliation");
     return requestSendReconciliation({
-      url: this.#messageEndpoint(agentApiRoutes.cloud.messages.send.path),
+      url: messageEndpoint(this.#serverHttpUrl, agentApiRoutes.cloud.messages.send.path),
       ...this.#agentKeys(agentApiKey),
       request,
     });
@@ -1023,7 +1012,11 @@ export class DaemonConnection
     if (!this.agentMessageHttpClient.requestWorkspaceInfo)
       throw new Error("Agent workspace_info HTTP client is unavailable");
     return this.agentMessageHttpClient.requestWorkspaceInfo({
-      url: this.#serverEndpoint("Agent workspace_info", agentApiRoutes.cloud.workspace.info.path),
+      url: serverEndpoint(
+        this.#serverHttpUrl,
+        "Agent workspace_info",
+        agentApiRoutes.cloud.workspace.info.path,
+      ),
       ...this.#agentKeys(agentApiKey),
       request,
     });
@@ -1111,7 +1104,11 @@ export class DaemonConnection
     if (!this.agentMessageHttpClient.requestReminder)
       throw new Error("Agent reminder HTTP client is unavailable");
     const response = await this.agentMessageHttpClient.requestReminder({
-      url: this.#serverEndpoint("Agent reminder", agentApiRoutes.cloud.reminders.path),
+      url: serverEndpoint(
+        this.#serverHttpUrl,
+        "Agent reminder",
+        agentApiRoutes.cloud.reminders.path,
+      ),
       agentApiKey,
       daemonApiKey: this.#token,
       request,
@@ -1143,7 +1140,8 @@ export class DaemonConnection
   async agentMemoryDisposition(request: unknown, agentApiKey: string): Promise<unknown> {
     this.#assertConnected();
     return sendAgentJson(fetch, {
-      url: this.#serverEndpoint(
+      url: serverEndpoint(
+        this.#serverHttpUrl,
         "Agent Memory disposition",
         agentApiRoutes.cloud.memoryDisposition.path,
       ),
@@ -1161,7 +1159,11 @@ export class DaemonConnection
     agentApiKey: string,
   ): Promise<unknown> {
     this.#assertConnected();
-    const url = this.#serverEndpoint("Agent OpenViking HTTP", agentApiRoutes.cloud.openviking.path);
+    const url = serverEndpoint(
+      this.#serverHttpUrl,
+      "Agent OpenViking HTTP",
+      agentApiRoutes.cloud.openviking.path,
+    );
     if (request.op === "offer" || request.op === "diagnose") {
       return forwardOpenVikingControl({
         url,
@@ -1181,7 +1183,7 @@ export class DaemonConnection
   async agentTask(request: TaskRequest, agentApiKey: string): Promise<TaskResponse> {
     this.#assertConnected();
     return this.agentTaskHttpClient.execute({
-      url: this.#serverEndpoint("Agent Task HTTP", agentApiRoutes.cloud.tasks.path),
+      url: serverEndpoint(this.#serverHttpUrl, "Agent Task HTTP", agentApiRoutes.cloud.tasks.path),
       ...this.#agentKeys(agentApiKey),
       request,
     });
@@ -1195,7 +1197,7 @@ export class DaemonConnection
     const endpoint = channelEndpointFor(request.operation, request.target);
     return this.agentChannelHttpClient.execute({
       method: endpoint.method,
-      url: this.#serverEndpoint("Agent channel", endpoint.path),
+      url: serverEndpoint(this.#serverHttpUrl, "Agent channel", endpoint.path),
       ...this.#agentKeys(agentApiKey),
       request,
     });
@@ -1207,7 +1209,8 @@ export class DaemonConnection
   ): Promise<AgentActionPrepareResponse> {
     this.#assertConnected();
     return this.agentActionPrepareHttpClient.execute({
-      url: this.#serverEndpoint(
+      url: serverEndpoint(
+        this.#serverHttpUrl,
         "Agent action-prepare HTTP",
         agentApiRoutes.cloud.actionPrepare.path,
       ),
@@ -1222,7 +1225,7 @@ export class DaemonConnection
       assertConnected: () => this.#assertConnected(),
       requireClient: (label: string, routeClient: unknown) =>
         this.#requireAgentClient(label, routeClient),
-      endpoint: (what: string, path: string) => this.#serverEndpoint(what, path),
+      endpoint: (what: string, path: string) => serverEndpoint(this.#serverHttpUrl, what, path),
       keys: (agentApiKey: string) => this.#agentKeys(agentApiKey),
       client,
     };
@@ -1279,7 +1282,7 @@ export class DaemonConnection
   #forwardPorts(): ForwardPorts {
     return {
       assertConnected: () => this.#assertConnected(),
-      endpoint: (what, path) => this.#serverEndpoint(what, path),
+      endpoint: (what, path) => serverEndpoint(this.#serverHttpUrl, what, path),
       keys: (agentApiKey) => this.#agentKeys(agentApiKey),
     };
   }
@@ -1326,7 +1329,7 @@ export class DaemonConnection
   /** One request against the Agent API key endpoint; `what` names the caller in errors. */
   #agentApiKeyRequest(what: string, method: "POST" | "DELETE", body: unknown) {
     return requestAgentConfig({
-      url: () => this.#serverEndpoint(what, "/api/agent-api-keys"),
+      url: () => serverEndpoint(this.#serverHttpUrl, what, "/api/agent-api-keys"),
       what,
       method,
       token: this.#token,

@@ -301,6 +301,10 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
           undefined,
           capabilityLeases,
           getComputerUpgradeStore(),
+          () => {
+            const feedUrl = resolveReleaseFeedUrl();
+            return feedUrl ? readLatestComputerVersion(feedUrl) : Promise.resolve(null);
+          },
         ),
         ...computerRuntimeMethods(db),
         [DAEMON_RUNTIME_USAGE_SCAN_RESULT_METHOD]: createDaemonRuntimeUsageScanResultMethod(),
