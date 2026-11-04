@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { AppError } from "#src/lib/app-error";
+import { AppError, isAppError } from "#src/lib/app-error";
 import {
   agentEnvironmentNameError,
   agentUpdateErrorMessage,
@@ -126,9 +126,6 @@ test("a refused Agent save names the reason instead of only asking to try again"
   expect(refusal("an-error-id-nobody-mapped")).toBe(m.agent_update_error());
 });
 
-import { AppError } from "#src/lib/app-error";
-import { agentUpdateErrorMessage } from "#src/features/agents/agent-form";
-
 // task #523: a refused runtime save names the reason, not a bare "unavailable".
 test("a runtime save refused as not_connected names it", () => {
   const error = new AppError("INVALID_INPUT", {
@@ -143,4 +140,22 @@ test("a runtime save refused with an unknown reason falls back to the generic", 
     details: { reason: "something-else" },
   });
   expect(agentUpdateErrorMessage(error).length).toBeGreaterThan(0);
+});
+
+// task #523: the reason survives the Server Function's error serialization — `isAppError`
+// rehydrates `details` off the wire `message`, so the dialog sees the real reason.
+test("AppError details round-trip through the wire message", () => {
+  const thrown = new AppError("INVALID_INPUT", {
+    errorId: "agent-runtime-unavailable",
+    details: { reason: "not_connected" },
+  });
+  // A Server Function rethrows `Error` — the client gets the message, not the class. Rebuild
+  // what isAppError reads off the wire.
+  const wire = Object.assign(new Error(thrown.message), {
+    name: "AppError",
+    code: "INVALID_INPUT",
+  });
+  expect(isAppError(wire)).toBe(true);
+  expect((wire as unknown as AppError).details).toEqual({ reason: "not_connected" });
+  expect(agentUpdateErrorMessage(wire)).toMatch(/not connected|未连接/i);
 });
