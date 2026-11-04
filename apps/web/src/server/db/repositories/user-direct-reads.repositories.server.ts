@@ -313,6 +313,8 @@ export async function markReadForUser(
   return markHumanRead(ports.db, { conversationId, userId, throughSequence });
 }
 
+/** Advances the person's read position in one DM thread; returns whether the cursor actually
+ * moved, so the caller announces (and runs the Activity check) only on a real advance. */
 export async function markThreadReadForUser(
   ports: DirectConversationPorts,
   workspaceId: string,
@@ -320,7 +322,7 @@ export async function markThreadReadForUser(
   conversationId: string,
   rootMessageId: string,
   throughSequence: number,
-) {
+): Promise<boolean> {
   const root = await resolveMessage(ports, conversationId, rootMessageId, true);
   const latest = await ports.db.message.findFirst({
     where: {
@@ -330,13 +332,13 @@ export async function markThreadReadForUser(
     },
     orderBy: { sequence: "desc" },
   });
-  if (!latest) return;
+  if (!latest) return false;
   const member = await ports.db.conversationMember.findUniqueOrThrow({
     where: {
       conversationId_userId: { conversationId, userId },
     },
   });
-  await advanceThreadRead(
+  return advanceThreadRead(
     ports.db,
     member.id,
     conversationId,

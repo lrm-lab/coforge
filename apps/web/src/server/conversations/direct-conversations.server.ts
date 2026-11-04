@@ -17,7 +17,10 @@ import {
 import { PrismaDirectConversationPreferences } from "#src/server/db/repositories/direct-conversation-preferences.repositories.server";
 import { announceViewerEvent, type ConversationRealtime } from "./conversation-realtime.server";
 import { announceConversationReadChanged } from "./conversation-read-realtime.server";
-import { announceReadMoved } from "#src/server/inbox/activity-attention.server";
+import {
+  announceActivityAttention,
+  announceReadMoved,
+} from "#src/server/inbox/activity-attention.server";
 import { SendDirectMessage } from "./direct-message.server";
 import type { MessageRequestIdempotency } from "./message-request-idempotency.server";
 import { toggleUserMessageReaction } from "./user-message-reactions.server";
@@ -328,17 +331,22 @@ export class DirectConversations {
         userIds: [viewerId],
         event: { type: REALTIME_EVENTS.dmMarked, workspaceId, conversationId, ...viewerState },
       });
-      if (readThroughAdvanced)
+      if (readThroughAdvanced) {
         await announceConversationReadChanged(this.realtime, {
           workspaceId,
           conversationId,
           memberId,
           readThroughSequence: state.readThroughSequence,
         });
+        // The read may have cleared the nav rail's Activity dot (task #496), only when the cursor
+        // actually advanced.
+        await announceActivityAttention(this.db, this.realtime, workspaceId, viewerId);
+      }
     }
   }
 
-  /** Advances the viewer's read position in one thread. */
+  /** Advances the viewer's read position in one thread; when it moved, tells their other pages
+   * where their Activity stands now, so a thread read clears the nav dot (task #496). */
   async markThreadRead(
     workspaceId: string,
     viewerId: string,
@@ -347,13 +355,14 @@ export class DirectConversations {
     throughSequence: number,
   ) {
     await this.authorize(workspaceId, viewerId, conversationId);
-    await this.conversations.markThreadReadForUser(
+    const advanced = await this.conversations.markThreadReadForUser(
       workspaceId,
       viewerId,
       conversationId,
       threadRootId,
       throughSequence,
     );
+    if (advanced) await announceActivityAttention(this.db, this.realtime, workspaceId, viewerId);
   }
 
   /** The viewer's own emoji reaction on a message; returns the message's fresh summaries and

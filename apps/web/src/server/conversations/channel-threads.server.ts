@@ -8,6 +8,7 @@ import {
   visibleAgentWhere,
 } from "#src/server/agents/agent-visibility.server";
 import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
+import { advanceThreadRead } from "#src/server/db/repositories/thread-read-position.server";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
 import { AgentMessageValidationError } from "./agent-message-validation-error.server";
 import {
@@ -256,6 +257,8 @@ export async function unfollowAgentFromThread(
   return { followed: false };
 }
 
+/** Advances the person's read position in one channel thread; returns whether the cursor actually
+ * moved, so the caller announces (and runs the Activity check) only on a real advance. */
 export async function markThreadReadForUser(
   { db }: PublicChannelPorts,
   workspaceId: string,
@@ -263,7 +266,7 @@ export async function markThreadReadForUser(
   channelId: string,
   rootMessageId: string,
   throughSequence: number,
-) {
+): Promise<boolean> {
   await memberChannel(db, workspaceId, userId, channelId);
   const root = await db.message.findFirst({
     where: { id: rootMessageId, conversationId: channelId, threadRootId: null },
@@ -285,10 +288,6 @@ export async function markThreadReadForUser(
       select: { sequence: true },
     }),
   ]);
-  if (!member || !latest) return;
-  await db.$executeRaw`INSERT INTO "thread_reads"
-    ("memberId", "conversationId", "workspaceId", "rootMessageId", "readThroughSequence")
-    VALUES (${member.id}::uuid, ${channelId}::uuid, ${workspaceId}::uuid, ${root.id}::uuid, ${latest.sequence})
-    ON CONFLICT ("memberId", "rootMessageId") DO UPDATE SET "readThroughSequence" =
-      GREATEST("thread_reads"."readThroughSequence", EXCLUDED."readThroughSequence")`;
+  if (!member || !latest) return false;
+  return advanceThreadRead(db, member.id, channelId, workspaceId, root.id, latest.sequence);
 }

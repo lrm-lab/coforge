@@ -54,6 +54,7 @@ import {
   unfollowAgentFromThread,
 } from "./channel-threads.server";
 import type { ConversationRealtime } from "./conversation-realtime.server";
+import { announceActivityAttention } from "#src/server/inbox/activity-attention.server";
 import { toggleUserMessageReaction } from "./user-message-reactions.server";
 import { setChannelVisibility } from "./channel-visibility-change.server";
 
@@ -202,14 +203,14 @@ export class PublicChannels {
     );
   }
 
-  markThreadReadForUser(
+  async markThreadReadForUser(
     workspaceId: string,
     userId: string,
     channelId: string,
     rootMessageId: string,
     throughSequence: number,
   ) {
-    return markThreadReadForUser(
+    const advanced = await markThreadReadForUser(
       this.ports,
       workspaceId,
       userId,
@@ -217,6 +218,9 @@ export class PublicChannels {
       rootMessageId,
       throughSequence,
     );
+    // A thread read can clear the nav rail's Activity dot: tell the person's other pages where
+    // their Activity stands now, only on a real advance (task #496).
+    if (advanced) await announceActivityAttention(this.db, this.realtime, workspaceId, userId);
   }
 
   names(workspaceId: string, userId: string) {

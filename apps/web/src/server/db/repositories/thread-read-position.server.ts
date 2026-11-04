@@ -1,7 +1,9 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { recordReadAdvance } from "#src/server/conversations/human-unread.server";
 
-/** Moves a member's read position in a thread forward to `sequence`, never back. */
+/** Moves a member's read position in a thread forward to `sequence`, never back; returns whether
+ * the position actually advanced (a new row, or an update that raised it), so a caller runs its
+ * announcement only on a real move. */
 export async function advanceThreadRead(
   client: Prisma.TransactionClient | PrismaClient,
   memberId: string,
@@ -9,13 +11,17 @@ export async function advanceThreadRead(
   workspaceId: string,
   rootMessageId: string,
   sequence: number,
-) {
-  // PostgreSQL's atomic upsert preserves monotonic positions across backend replicas.
-  await client.$executeRaw`INSERT INTO "thread_reads"
+): Promise<boolean> {
+  // PostgreSQL's atomic upsert preserves monotonic positions across backend replicas. The
+  // conflict update only fires when it raises the position, so the affected-row count is 1 only
+  // on a real advance (an insert, or an update that moved the cursor) and 0 when the stored
+  // position was already at or past `sequence`.
+  const affected = await client.$executeRaw`INSERT INTO "thread_reads"
     ("memberId", "conversationId", "workspaceId", "rootMessageId", "readThroughSequence")
     VALUES (${memberId}::uuid, ${conversationId}::uuid, ${workspaceId}::uuid, ${rootMessageId}::uuid, ${sequence})
-    ON CONFLICT ("memberId", "rootMessageId") DO UPDATE SET "readThroughSequence" =
-      GREATEST("thread_reads"."readThroughSequence", EXCLUDED."readThroughSequence")`;
+    ON CONFLICT ("memberId", "rootMessageId") DO UPDATE SET "readThroughSequence" = EXCLUDED."readThroughSequence"
+    WHERE EXCLUDED."readThroughSequence" > "thread_reads"."readThroughSequence"`;
+  return affected > 0;
 }
 
 /** Where a member's read position stands: the thread's when `threadRootId` names one, else the
