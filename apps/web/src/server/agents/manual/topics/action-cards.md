@@ -140,5 +140,7 @@ has at least one pick, and "Something else" carries its text. The delivery names
 lists every question's prompt with its picks, a skipped one as `(skipped)`, for example
 `@alice answered your questions in #general: Deploy where? → staging · Staging; Run which checks? →
 (skipped)`. Ask a skipped question again if you still need it. The card's `result.answers` records
-the same per question, a skipped one with `"skipped": true` and no picks. A typed chat reply stays a chat reply: interpret it
-and continue, as with a choice.
+the same per question, a skipped one with `"skipped": true` and no picks. Reading the message
+again, it ends with each question's picks by id, `[action card: executed; deploy=staging;
+checks=(skipped)]`. A typed chat reply stays a chat reply: interpret it and continue, as with a
+choice.

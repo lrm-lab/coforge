@@ -8,7 +8,7 @@ import {
 import type { ActionCardView, ActionCardViewBase } from "./action-card-view.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
-import { fenceUserText } from "./agent-message-view.server";
+import { questionsResultBody } from "./agent-message-view.server";
 import { publishActionCardUpdate } from "./action-card-message.server";
 import { AgentDeliveryPublisher } from "./agent-delivery.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
@@ -284,23 +284,6 @@ async function wakeAskingAgent(
     conversationTarget(message.conversation, targetOf),
     message.threadRootId,
   );
-  const lines = input.answers.map((answer) => {
-    const picked = answer.selection
-      .map((option) =>
-        option.optionId === CHOICE_OTHER_OPTION_ID
-          ? `${option.label} (their own words)`
-          : `${option.optionId} · ${option.label}${option.recommended ? " (recommended)" : ""}`,
-      )
-      .join(", ");
-    const otherText = answer.selection.find(
-      (option) => option.optionId === CHOICE_OTHER_OPTION_ID,
-    )?.text;
-    if (answer.skipped) return `${answer.prompt} → (skipped)`;
-    return (
-      `${answer.prompt} → ${picked}` +
-      (otherText !== undefined ? `\n  │ ${fenceUserText(otherText)}` : "")
-    );
-  });
   await new AgentDeliveryPublisher(publisher ?? createCentrifugoServerApi()).publish(
     input.workspaceId,
     [
@@ -313,7 +296,7 @@ async function wakeAskingAgent(
         deliveryId: delivery.deliveryId,
         sequence: message.sequence,
         createdAtMs: delivery.createdAt.getTime(),
-        body: `${who} answered your questions in ${target}:\n${lines.join("\n")}`,
+        body: questionsResultBody(input.answers, who, target),
         mentions: [],
         target,
         latestSenderKind: "system",

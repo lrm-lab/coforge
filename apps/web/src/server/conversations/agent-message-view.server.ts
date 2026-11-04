@@ -10,6 +10,7 @@ import {
   deliveryMentionsAgent,
   type MessageMentionRef,
 } from "./mentions.server";
+import type { QuestionsAnswer } from "./action-card-questions.server";
 
 declare const readable: unique symbol;
 
@@ -84,11 +85,14 @@ export function actionCardBodySuffix(card: {
     if (Array.isArray(answers)) {
       const parts = answers.flatMap((entry) => {
         if (!entry || typeof entry !== "object") return [];
-        const { questionId, selection } = entry as {
+        const { questionId, selection, skipped } = entry as {
           questionId?: unknown;
           selection?: unknown;
+          skipped?: unknown;
         };
         if (typeof questionId !== "string" || !Array.isArray(selection)) return [];
+        // A question left unanswered is said so, as the wake-up does, not dropped from the line.
+        if (skipped === true) return [`${questionId}=(skipped)`];
         const picked = selection
           .map((option) =>
             option && typeof option === "object" && "optionId" in option
@@ -125,6 +129,33 @@ export function choiceResultBody(
         : "an option";
   const who = chooser?.handle ? `@${chooser.handle}` : "Someone";
   return `${who} answered your choice ${prompt}in ${target}: ${chosen}` as AgentReadableBody;
+}
+
+/** The questions card's answers as the asking Agent reads them, woken or replaying it later: who
+ * answered, where, and each question's prompt over its picks, a skipped one as `(skipped)`. */
+export function questionsResultBody(
+  answers: readonly QuestionsAnswer[],
+  who: string,
+  target: string,
+): AgentReadableBody {
+  const lines = answers.map((answer) => {
+    if (answer.skipped) return `${answer.prompt} → (skipped)`;
+    const picked = answer.selection
+      .map((option) =>
+        option.optionId === CHOICE_OTHER_OPTION_ID
+          ? `${option.label} (their own words)`
+          : `${option.optionId} · ${option.label}${option.recommended ? " (recommended)" : ""}`,
+      )
+      .join(", ");
+    const otherText = answer.selection.find(
+      (option) => option.optionId === CHOICE_OTHER_OPTION_ID,
+    )?.text;
+    return (
+      `${answer.prompt} → ${picked}` +
+      (otherText !== undefined ? `\n  │ ${fenceUserText(otherText)}` : "")
+    );
+  });
+  return `${who} answered your questions in ${target}:\n${lines.join("\n")}` as AgentReadableBody;
 }
 
 /** A forward's snapshot as an Agent reads it. The snapshot body is already plain text. */

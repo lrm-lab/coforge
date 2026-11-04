@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { commitQuestionsCard } from "#src/server/conversations/action-card-questions.server";
+import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 
 const connectionString = Bun.env.DATABASE_URL;
 if (!connectionString) throw new Error("DATABASE_URL must point to local PostgreSQL");
@@ -212,6 +213,16 @@ test("a question may go unanswered: it is recorded skipped and the Agent hears w
   );
   expect(decoded).toContain("Deploy where? → staging · Staging (recommended)");
   expect(decoded).toContain("Run which checks? → (skipped)");
+  // The Agent was offline: the replay reads every answer as the wake-up did, not as a choice's
+  // one option.
+  const pending = await new PrismaDirectConversationRepository(db).readPendingAgentDeliveries(
+    workspaceId,
+    agentId,
+  );
+  const replay = String(pending.find((row) => row.messageId === messageId)?.body);
+  expect(replay).toStartWith(`@quest-${suffix} answered your questions in `);
+  expect(replay).toContain("Deploy where? → staging · Staging (recommended)");
+  expect(replay).toContain("Run which checks? → (skipped)");
 });
 
 test("a submit that answers nothing is refused and the card stays pending", async () => {

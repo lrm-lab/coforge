@@ -1,5 +1,6 @@
 import type { DirectConversationPorts } from "./agent-targets.repositories.server";
 
+import type { QuestionsAnswer } from "#src/server/conversations/action-card-questions.server";
 import {
   TARGET_CONVERSATION_SELECT,
   conversationTarget,
@@ -13,6 +14,7 @@ import { MESSAGE_MENTIONS_SELECT } from "#src/server/conversations/mentions.serv
 import {
   agentDeliveryView,
   choiceResultBody,
+  questionsResultBody,
   type AgentReadableBody,
 } from "#src/server/conversations/agent-message-view.server";
 import { taskReferenceView } from "#src/server/conversations/task-reference-view.server";
@@ -44,6 +46,23 @@ const chooserOf = (choosers: ReadonlyMap<string, string>, userId: string) => {
   const handle = choosers.get(userId);
   return handle ? { handle } : null;
 };
+
+/** A replayed answer: a questions card's every answer, or the one option of a choice. */
+function answerBody(
+  card: {
+    kind: string;
+    payload: unknown;
+    result: unknown;
+    committedByUserId: string | null;
+  } | null,
+  target: string,
+  choosers: ReadonlyMap<string, string>,
+) {
+  const chooser = card?.committedByUserId ? chooserOf(choosers, card.committedByUserId) : null;
+  if (card?.kind !== "questions") return choiceResultBody(card, target, chooser);
+  const answers = (card.result as { answers?: QuestionsAnswer[] } | null)?.answers ?? [];
+  return questionsResultBody(answers, chooser ? `@${chooser.handle}` : "Someone", target);
+}
 
 export async function readPendingAgentDeliveries(
   ports: DirectConversationPorts,
@@ -163,18 +182,9 @@ export async function readPendingAgentDeliveries(
       latestSenderHandle: sender.handle,
       latestSenderDescription: sender.description,
       ...agentDeliveryView(message, agentId, taskViews.get(delivery.deliveryId)),
-      // A choice delivery replays the answer, not the Agent's own card question.
-      ...(delivery.reason === "choice"
-        ? {
-            body: choiceResultBody(
-              actionCard,
-              target,
-              actionCard?.committedByUserId
-                ? chooserOf(choosers, actionCard.committedByUserId)
-                : null,
-            ),
-          }
-        : {}),
+      // A choice delivery replays the answer, not the Agent's own card question: a questions
+      // card's every answer, as its wake-up gave them, or the one option of a choice.
+      ...(delivery.reason === "choice" ? { body: answerBody(actionCard, target, choosers) } : {}),
       // A comment notification's reason rides the envelope on replay exactly as the live push
       // sent it.
       ...(delivery.reason ? { reason: delivery.reason } : {}),
