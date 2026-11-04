@@ -163,6 +163,8 @@ const ATTACHMENT_UPLOAD_SESSION_ROUTES = {
 export const agentApiRoutes = {
   proxy: {
     workspace: { method: "GET", path: "/api/agent/v1/workspace" },
+    // Local-only, like `version`/`inbox`: the Daemon's update-notice store answers it (`coforge`
+    // tails the notice after a command); it is never a web route.
     computerUpdateNotice: { method: "GET", path: "/api/agent/v1/computer-update-notice" },
     manual: {
       get: { method: "GET", path: "/api/agent/v1/manual" },

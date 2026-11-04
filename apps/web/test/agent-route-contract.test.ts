@@ -73,6 +73,10 @@ const NOT_SERVED_BY_WEB = new Map([
     "answered entirely by the Daemon's Agent proxy and never forwarded (comment on proxy.version)",
   ],
   [
+    "/api/agent/v1/computer-update-notice",
+    "the Daemon's update-notice store answers it locally; the CLI tails the notice after a command (comment on proxy.computerUpdateNotice)",
+  ],
+  [
     "/api/agent/v1/inbox",
     "DaemonRuntime.inbox() assembles it from the Agent's own state and never forwards it (comment on proxy.inbox)",
   ],

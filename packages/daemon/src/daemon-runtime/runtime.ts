@@ -67,7 +67,6 @@ import {
 import {
   type DaemonConnectRejectionReason,
   type RunnerHoldReason,
-  AGENT_MESSAGE_REJECT_METHOD,
   MENTION_DELIVERY_TERMINAL_CODES,
   type AgentActivity,
   type AgentMessageResponse,
