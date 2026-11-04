@@ -76,6 +76,17 @@ test("capability-gated rules appear only when the launch has the capability", ()
   expect(capable).toContain("refuse to type it");
 });
 
+test("the Agent is told to ask for decisions with action cards, not typed option lists", () => {
+  const card = "`choice`/`questions` card, not a typed option list";
+  expect(instructions).toContain(card);
+  expect(
+    buildCoforgeAgentInstructions({
+      agentWorkspaceDirectory: directory,
+      capabilities: { memoryDisposition: true, cloudDesktop: true },
+    }),
+  ).toContain(card);
+});
+
 test("message preparation avoids shared files and stops before sending stale contents", () => {
   expect(instructions).toContain("Prefer a quoted here-document");
   expect(instructions).toContain("with a delimiter absent from its body");
