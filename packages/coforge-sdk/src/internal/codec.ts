@@ -31,7 +31,6 @@ import {
 } from "#src/internal/gen/coforge/rpc/v1/workspace_pb";
 import {
   DaemonRuntimeCodeAgentsUpdateRequestSchema,
-  DaemonRuntimeReadyRequestSchema,
   DaemonRuntimeUsageScanRequestSchema,
   DaemonRuntimeUsageScanResponseSchema,
 } from "#src/internal/gen/coforge/rpc/v1/daemon_runtime_pb";
@@ -73,7 +72,11 @@ import {
 import { AGENT_MESSAGE_ACK_METHOD, AGENT_MESSAGE_REJECT_METHOD } from "./index";
 import { isSeenExactSeqs } from "./freshness-decision";
 import { mentionDeliveryEnvelopeMessage, readMentionDeliveryEnvelope } from "./mention-delivery";
-import type { DaemonRuntimeCodeAgentsUpdateRequest, DaemonRuntimeReadyRequest } from "./index";
+import type {
+  DaemonRuntimeCodeAgentsUpdateRequest,
+  DaemonRuntimeReadyRequest,
+  DaemonRuntimeReadyResponse,
+} from "./index";
 
 export function assertUint(value: number, maximum: number, field: string): void {
   if (!Number.isSafeInteger(value) || value < 0 || value > maximum)
@@ -82,38 +85,6 @@ export function assertUint(value: number, maximum: number, field: string): void 
 
 const MAX_AGENT_SESSION_REPORT_BYTES = 32_768;
 const MAX_AGENT_SESSION_INVALIDATE_BYTES = 32_768;
-
-export function encodeDaemonRuntimeReadyRequest(value: DaemonRuntimeReadyRequest): Uint8Array {
-  assertRunningAgentIds(value.runningAgentIds);
-  return toBinary(
-    DaemonRuntimeReadyRequestSchema,
-    create(DaemonRuntimeReadyRequestSchema, {
-      ...value,
-      startedAt: BigInt(value.startedAt),
-    }),
-  );
-}
-
-export function decodeDaemonRuntimeReadyRequest(bytes: Uint8Array): DaemonRuntimeReadyRequest {
-  const value = fromBinary(DaemonRuntimeReadyRequestSchema, bytes);
-  assertRunningAgentIds(value.runningAgentIds);
-  return {
-    protocolMajor: value.protocolMajor,
-    requestId: value.requestId,
-    workspaceId: value.workspaceId,
-    computerId: value.computerId,
-    workerInstanceId: value.workerInstanceId,
-    daemonVersion: value.daemonVersion,
-    ...(value.computerVersion !== undefined ? { computerVersion: value.computerVersion } : {}),
-    ...(value.platform !== undefined ? { platform: value.platform } : {}),
-    ...(value.osVersion !== undefined ? { osVersion: value.osVersion } : {}),
-    startedAt: Number(value.startedAt),
-    runningAgentIds: [...value.runningAgentIds],
-    recoveredRestartRequestIds: [...value.recoveredRestartRequestIds],
-    recoveredUpgradeRequestIds: [...value.recoveredUpgradeRequestIds],
-    ...(value.capabilities.length ? { capabilities: [...value.capabilities] } : {}),
-  };
-}
 
 export {
   encodeComputerRestartIntent,
@@ -124,11 +95,6 @@ export {
   decodeComputerUpgradeResult,
   sanitizeUpgradeErrorText,
 } from "./computer-lifecycle-codec";
-
-function assertRunningAgentIds(agentIds: readonly string[]): void {
-  if (agentIds.some((agentId) => !agentId) || new Set(agentIds).size !== agentIds.length)
-    throw new Error("Daemon running Agent IDs must be non-empty and unique");
-}
 
 export function encodeDaemonRuntimeCodeAgentsUpdateRequest(
   value: DaemonRuntimeCodeAgentsUpdateRequest,

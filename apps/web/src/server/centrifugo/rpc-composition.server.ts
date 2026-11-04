@@ -1,4 +1,5 @@
 import { daemonCapabilityLeases } from "./capability-composition.server";
+import { daemonRuntimeReadyPorts } from "./daemon-runtime-ready-composition.server";
 import {
   AGENT_SESSION_METHOD,
   AGENT_SESSION_INVALIDATE_METHOD,
@@ -13,7 +14,6 @@ import {
   AGENT_CONTROL_RESULT_METHOD,
   APP_CONFIG_SNAPSHOT_METHOD,
 } from "@lrm/coforge-sdk/internal";
-import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { PI_CHAT_FRAME_METHOD } from "@lrm/coforge-sdk/internal/pi-chat-wire";
 import { createPiChatFrameMethod } from "#src/server/pi-chat/pi-chat-frame-receiver.server";
 import { canUsePiChat, getPiChatResults } from "#src/server/pi-chat/pi-chat-production.server";
@@ -65,7 +65,6 @@ import { WorkspaceQueryUseCase } from "#src/server/workspaces/query.server";
 import { getComputerRestartStore } from "#src/server/computers/computer-restart-store.server";
 import { getComputerUpgradeStore } from "#src/server/computers/computer-upgrade-store.server";
 import { createComputerUpgradeResultMethod } from "./computer-upgrade-result-method.server";
-import { recordComputerObservation } from "#src/server/computers/computer-metadata.server";
 import { ComputerLifecycleActivity } from "#src/server/agents/computer-lifecycle-activity.server";
 import { getComputerLifecycleMemory } from "#src/server/computers/computer-lifecycle-memory.server";
 import { AgentActivityRepository } from "#src/server/db/repositories/agent-activity.repositories.server";
@@ -81,13 +80,9 @@ import {
   createMentionDeliveryTransitionMethod,
 } from "./rpc-handler.server";
 import { AgentDeliveryRejections } from "#src/server/agents/agent-delivery-rejection.server";
-import { agentMigrationOrchestrator } from "#src/server/agent-migrations/agent-migration-composition.server";
 import { MentionDeliveryReports } from "#src/server/conversations/mention-deliveries.server";
 import { PrismaMentionDeliveryRepository } from "#src/server/db/repositories/mention-delivery.repositories.server";
-import {
-  PublishAgentRuntimeControl,
-  WorkspaceAgentRecovery,
-} from "#src/server/agents/agent-runtime-control.server";
+import { PublishAgentRuntimeControl } from "#src/server/agents/agent-runtime-control.server";
 import { getAgentRuntimeLock } from "#src/server/agents/agent-runtime-lock.server";
 import { AgentControl } from "#src/server/agents/agent-control.server";
 import { getAgentControlSignal } from "#src/server/agents/agent-control-signal.server";
@@ -277,48 +272,22 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
           db,
         }),
         [WORKSPACE_LIST_METHOD]: createWorkspaceListMethod(query),
-        [DAEMON_RUNTIME_READY_METHOD]: createDaemonRuntimeReadyMethod({
-          recovery: new WorkspaceAgentRecovery(
+        [DAEMON_RUNTIME_READY_METHOD]: createDaemonRuntimeReadyMethod(
+          daemonRuntimeReadyPorts({
+            db,
+            centrifugo,
             agentRepository,
             directConversations,
-            centrifugo,
-            getAgentRuntimeLock(),
             mentionReports,
             sessions,
             control,
             controlStore,
-          ),
-          restarts: getComputerRestartStore(),
-          capabilities: capabilityLeases,
-          reminderRecovery: {
-            snapshotAssigned: async (workspaceId, computerId) => {
-              const agents = await db.agent.findMany({
-                where: { workspaceId, computerId, ...ACTIVE_AGENT_WHERE },
-                select: { id: true, ownerId: true },
-              });
-              await Promise.all(
-                agents.map(async (agent) => {
-                  const bytes = await reminders.snapshot({
-                    protocolMajor: 1,
-                    requestId: crypto.randomUUID(),
-                    workspaceId,
-                    computerId,
-                    agentId: agent.id,
-                    userId: agent.ownerId,
-                  });
-                  await centrifugo.publish(daemonControlChannel(workspaceId, computerId), bytes);
-                }),
-              );
-            },
-          },
-          migrationRecovery: {
-            recover: (workspaceId, computerId) =>
-              agentMigrationOrchestrator(db).recover(workspaceId, computerId),
-          },
-          observe: (scope, observation) => recordComputerObservation(db, scope, observation),
-          upgrades: getComputerUpgradeStore(),
-          lifecycle: computerLifecycle,
-        }),
+            agentRuntimeLock: getAgentRuntimeLock(),
+            reminders,
+            capabilityLeases,
+            computerLifecycle,
+          }),
+        ),
         [DAEMON_RUNTIME_SHUTDOWN_METHOD]: createDaemonRuntimeShutdownMethod(
           computerLifecycle,
           async (scope) => (await getComputerRestartStore().identity?.(scope))?.workerInstanceId,

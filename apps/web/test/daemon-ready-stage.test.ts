@@ -2,6 +2,7 @@ import { expect, spyOn, test } from "bun:test";
 
 import {
   decodeDaemonRuntimeReadyRequest,
+  decodeDaemonRuntimeReadyResponse,
   encodeDaemonRuntimeReadyRequest,
 } from "@lrm/coforge-sdk/internal";
 
@@ -226,4 +227,29 @@ test("overlapping ready calls cannot let the older worker write capabilities las
     startedAt: 2,
     values: ["local-session-handoff:v1"],
   });
+});
+
+/** The ready reply carries the feed's latest Computer version: a daemon on an older Computer
+ * learns it may be stale without a call of its own, and an older server's empty reply decodes
+ * to no version. */
+test("the ready reply carries the latest Computer version", async () => {
+  const method = createDaemonRuntimeReadyMethod({
+    latestComputerVersion: async () => "4.5.7",
+  });
+  const reply = await method(readyPayload(), { principal: principal() });
+  expect(reply).not.toHaveProperty("code");
+  expect(
+    decodeDaemonRuntimeReadyResponse(reply as Uint8Array).latestComputerVersion,
+  ).toBe("4.5.7");
+});
+
+test("a ready whose version lookup fails still succeeds with no version", async () => {
+  const method = createDaemonRuntimeReadyMethod({
+    latestComputerVersion: async () => null,
+  });
+  const reply = await method(readyPayload(), { principal: principal() });
+  expect(reply).not.toHaveProperty("code");
+  expect(decodeDaemonRuntimeReadyResponse(reply as Uint8Array).latestComputerVersion).toBe(
+    undefined,
+  );
 });

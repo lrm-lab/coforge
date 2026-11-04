@@ -44,6 +44,13 @@ message DaemonRuntimeReadyRequest {
   repeated string recovered_upgrade_request_ids = 14;
 }
 
+// The server's answer to a ready. An older server answers empty bytes, which decode to an
+// absent version; `latest_computer_version` is the release feed's newest Computer version, so a
+// daemon whose Computer is older can say so without a call of its own. Additive.
+message DaemonRuntimeReadyResponse {
+  optional string latest_computer_version = 1;
+}
+
 // The Workspace daemon's last word before it closes its connection on purpose: why it is going
 // down. Best effort, never retried; a crash or a lost connection sends nothing. The server records
 // the Computer event in each of the Computer's Agents' Activity. Additive: protocol_major stays 1.

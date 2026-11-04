@@ -84,6 +84,12 @@ export type DaemonRuntimeReadyRequest = {
   recoveredUpgradeRequestIds?: string[];
   capabilities?: string[];
 };
+
+/** The server's answer to a daemon's ready: the release feed's newest Computer version, so a
+ * daemon on an older Computer can say so. Absent from an older server's empty reply. */
+export type DaemonRuntimeReadyResponse = {
+  latestComputerVersion?: string;
+};
 export type ComputerRestartIntent = {
   protocolMajor: number;
   requestId: string;

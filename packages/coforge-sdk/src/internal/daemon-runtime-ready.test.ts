@@ -1,5 +1,8 @@
 import { expect, test } from "bun:test";
-import { decodeDaemonRuntimeReadyRequest, encodeDaemonRuntimeReadyRequest } from "./codec";
+import {
+  decodeDaemonRuntimeReadyRequest,
+  encodeDaemonRuntimeReadyRequest,
+} from "./daemon-runtime-ready-codec";
 
 const ready = {
   protocolMajor: 1,

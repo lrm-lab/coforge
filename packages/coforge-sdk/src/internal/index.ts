@@ -327,8 +327,6 @@ export type {
   AppInboxItem,
 } from "./local-daemon";
 export {
-  encodeDaemonRuntimeReadyRequest,
-  decodeDaemonRuntimeReadyRequest,
   encodeDaemonRuntimeCodeAgentsUpdateRequest,
   decodeDaemonRuntimeCodeAgentsUpdateRequest,
   encodeDaemonRuntimeUsageScanRequest,
@@ -347,6 +345,12 @@ export {
   decodeComputerUpgradeResult,
   sanitizeUpgradeErrorText,
 } from "./codec";
+export {
+  encodeDaemonRuntimeReadyRequest,
+  decodeDaemonRuntimeReadyRequest,
+  encodeDaemonRuntimeReadyResponse,
+  decodeDaemonRuntimeReadyResponse,
+} from "./daemon-runtime-ready-codec";
 export {
   encodeAgentContextUsage,
   decodeAgentContextUsage,

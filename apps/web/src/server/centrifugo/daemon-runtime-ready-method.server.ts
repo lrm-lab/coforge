@@ -1,6 +1,7 @@
 import {
   AGENT_MIGRATION_CAPABILITY,
   decodeDaemonRuntimeReadyRequest,
+  encodeDaemonRuntimeReadyResponse,
 } from "@lrm/coforge-sdk/internal";
 import type { ComputerLifecycleActivity } from "#src/server/agents/computer-lifecycle-activity.server";
 import {
@@ -41,6 +42,9 @@ export type DaemonRuntimeReadyPorts = {
   upgrades?: RedisComputerUpgradeStore;
   /** Started after the ready succeeds, never awaited: Activity rows must not hold the reply. */
   lifecycle?: Pick<ComputerLifecycleActivity, "ready">;
+  /** The release feed's newest Computer version, attached to the reply so a stale Computer
+   * knows without a call of its own; a failed read answers no version. */
+  latestComputerVersion?: () => Promise<string | null>;
 };
 
 export const createDaemonRuntimeReadyMethod =
@@ -53,6 +57,7 @@ export const createDaemonRuntimeReadyMethod =
     observe,
     upgrades,
     lifecycle,
+    latestComputerVersion,
   }: DaemonRuntimeReadyPorts = {}): CentrifugoRpcMethod =>
   async (payload, metadata) => {
     const request = decodeDaemonRuntimeReadyRequest(payload);
@@ -161,7 +166,10 @@ export const createDaemonRuntimeReadyMethod =
             }),
           ),
         );
-      return new Uint8Array();
+      const version = await latestComputerVersion?.().catch(() => null);
+      return encodeDaemonRuntimeReadyResponse(
+        version ? { latestComputerVersion: version } : {},
+      );
     } catch (error) {
       console.error(
         JSON.stringify({
