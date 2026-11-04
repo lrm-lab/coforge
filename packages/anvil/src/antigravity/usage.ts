@@ -1,5 +1,5 @@
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
-import type { AntigravityRuntimeHost } from "./host";
+import type { AntigravityAcpRuntimeHost } from "./acp-host";
 import {
   UsageUnavailableError,
   UsageUnsupportedError,
@@ -46,7 +46,7 @@ export async function readAntigravityUsage(
     environment?: Readonly<Record<string, string | undefined>>;
     timeoutMs?: number;
   } = {},
-  host: AntigravityRuntimeHost,
+  host: Pick<AntigravityAcpRuntimeHost, "catalogCommandRunner" | "readUsageEnvironment">,
 ): Promise<UsageSnapshot> {
   const { output, exitCode } = await host.catalogCommandRunner(
     [...(options.command ?? ["agy"]), "-p", "/usage", "--output-format", "json"],

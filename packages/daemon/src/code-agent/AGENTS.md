@@ -38,7 +38,7 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
   cap plus one wait (`PI_CATALOG_DISCOVERY_TIMEOUT_MS`, derived from `PI_MODEL_REFRESH_TIMEOUT_MS`
   in `@coforge/agent`) because that refresh is capped separately and the resource loader runs
   after it. A CLI that fetches its list over the network has its own deadline next to its catalog
-  reader (`opencode models --verbose`, `agy models`). Explicit refreshes force Pi and forbid Codex's
+  reader (`opencode models --verbose`, `agy acp`). Explicit refreshes force Pi and forbid Codex's
   disk fallback; offline or failed probes are omitted, logged as `code_agent_catalog:discovery_failed`,
   and never cached. Each provider's failure reports back per provider: classified start/version
   failures also mark the runtime's `unavailableCode`/`diagnostic` in the inventory report; a
@@ -155,7 +155,7 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
   `claude-code/`. Preserve their separate environment compositions and evaluation times.
 - Native Claude rules live in [Anvil Claude instructions](../../../anvil/src/claude-code/AGENTS.md).
 
-## Per-turn providers (Cursor, OpenCode, Antigravity)
+## Per-turn providers (Cursor, OpenCode)
 
 - Cursor's partial-output framing rules are in [Anvil Cursor rules](../../../anvil/src/cursor/AGENTS.md).
 - One child process per turn. Anvil `src/per-turn/session.ts` is their one `AgentSession` (state machine,
@@ -173,13 +173,13 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
   See [Anvil OpenCode instructions](../../../anvil/src/opencode/AGENTS.md).
 - The session never parses provider output. A reader emits through the `TurnScope`, synchronously,
   so events keep the CLI's order. A turn's stdin mode is a CLI fact: `eof` where the CLI waits for
-  stdin EOF (OpenCode, #652), `open` for Cursor (`eof` is unverified there), `line` for agy.
+  stdin EOF (OpenCode, #652), `open` for Cursor (`eof` is unverified there).
 - `#spawnTurn` builds the process before it marks the turn running, so a spawn that throws leaves
   the session idle.
 
 ## Antigravity (`agy`)
 
-Native protocol, SSH filtering and quota rules live in [Anvil Antigravity rules](../../../anvil/src/antigravity/AGENTS.md). The host supplies session/command I/O and reads the live usage environment.
+One `agy acp` process per session on the shared ACP machinery — native rules in [Anvil Antigravity rules](../../../anvil/src/antigravity/AGENTS.md). The host (`antigravity/acp-host.ts`) supplies client identity, process, `agy --version` probe, SSH-filtered session and live usage environments.
 
 ## Grok Build (`grok`)
 

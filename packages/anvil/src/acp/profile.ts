@@ -60,6 +60,9 @@ export type AcpNativeTurn = Readonly<{
 export type AcpSteerProfile = Readonly<{
   /** The ACP request that inserts `text` into the session's live turn. */
   request(text: string, sessionId: string): Readonly<{ method: string; params: unknown }>;
+  /** The request's answer can arrive only when the turn it steered ends, past the ACP
+   * deadline a live request otherwise gets. `session/prompt`-as-steer runtimes set this. */
+  unboundedRequest?: boolean;
   /** Reads the request's answer: whether the runtime took the text, and its native id. */
   accepted(response: unknown): { accepted: boolean; id?: string };
   /** Reads a notification's steer outcome, for a runtime that reports delivery itself. */
@@ -121,6 +124,9 @@ export type AcpSessionProfile = Readonly<{
   /** How long an input may wait for the runtime to accept it before the session closes as
    * ambiguous; absent for a runtime whose inputs always settle. */
   admissionTimeoutMs?: number;
+  /** Interrupts the live turn without `session/cancel`, for a runtime that does not implement
+   * it — the Antigravity session kills its process instead. */
+  cancelTurn?(transport: AcpConnection): Promise<void>;
   /** Inserts a notice into the live turn instead of waiting for the next one. */
   steer?: AcpSteerProfile;
   /** Anything the runtime owns outside the process: an instruction mod, private files. */

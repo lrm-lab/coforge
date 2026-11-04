@@ -1,5 +1,5 @@
 import {
-  ANTIGRAVITY_MODELS_TIMEOUT_MS,
+  ANTIGRAVITY_ACP_CATALOG_TIMEOUT_MS,
   ANTIGRAVITY_USAGE_TIMEOUT_MS,
 } from "@lrm/coforge-anvil/antigravity";
 import {
@@ -53,7 +53,7 @@ export const OPENCODE_DISCOVERY_BUDGET_MS =
  * then the process cleanup ladder.
  */
 export const ANTIGRAVITY_DISCOVERY_BUDGET_MS =
-  ANTIGRAVITY_MODELS_TIMEOUT_MS + 2 * PROCESS_TREE_EXIT_GRACE_MS;
+  ANTIGRAVITY_ACP_CATALOG_TIMEOUT_MS + 2 * PROCESS_TREE_EXIT_GRACE_MS;
 
 /** The longest one `agy -p /usage` read can run before the product gives its own verdict: its own
  * deadline, then the process cleanup ladder. */

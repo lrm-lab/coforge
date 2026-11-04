@@ -17,10 +17,10 @@ export const anvilRuntimeFixtures = {
     import.meta.url,
   ).pathname,
   dsh: new URL("../../../anvil/test/fixtures/dsh-acp.ts", import.meta.url).pathname,
-  antigravity: new URL("../../../anvil/test/fixtures/antigravity-fixture.ts", import.meta.url)
+  antigravityAcp: new URL("../../../anvil/test/fixtures/antigravity-acp.ts", import.meta.url)
     .pathname,
-  antigravityModels: new URL(
-    "../../../anvil/test/fixtures/antigravity-models-fixture.ts",
+  antigravityUsage: new URL(
+    "../../../anvil/test/fixtures/antigravity-usage-fixture.ts",
     import.meta.url,
   ).pathname,
   grok: new URL("../../../anvil/test/fixtures/grok-acp-fixture.ts", import.meta.url).pathname,

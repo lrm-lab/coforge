@@ -1,43 +1,39 @@
 import { expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import {
-  PROCESS_TREE_EXIT_GRACE_MS,
-  VERSION_PROBE_TIMEOUT_MS,
-  type AgentRuntimeEvent,
-} from "@lrm/coforge-anvil";
-import { antigravityProvider } from "./fixtures/antigravity-host";
+import { join } from "node:path";
+import { PROCESS_TREE_EXIT_GRACE_MS, VERSION_PROBE_TIMEOUT_MS } from "@lrm/coforge-anvil";
+import { AntigravityAcpProvider } from "@lrm/coforge-anvil/antigravity";
+import { antigravityAcpRuntimeHost } from "#src/code-agent/antigravity/acp-host";
 import { anvilRuntimeFixtures } from "./fixtures/anvil-runtime";
 
 test(
-  "SSH session variables never reach the agy turn",
+  "SSH session variables never reach `agy acp`",
   async () => {
-    const session = await antigravityProvider({
-      command: [process.execPath, anvilRuntimeFixtures.antigravity],
-    }).createAgentSession({
-      agentWorkspaceDirectory: tmpdir(),
-      instructions: "Standing Antigravity instructions.",
-      sessionId: "existing",
-      environment: {
-        COFORGE_AGY_MODE: "text",
-        COFORGE_AGY_LAUNCH_LOG: "",
-        SSH_CLIENT: "10.0.0.1 1 22",
-        SSH_TTY: "/dev/ttys001",
-      },
-    });
-    const events: AgentRuntimeEvent[] = [];
-    const done = Promise.withResolvers<void>();
-    session.subscribe((event) => {
-      events.push(event);
-      if (event.type === "completed") done.resolve();
-    });
+    const root = await mkdtemp(join(tmpdir(), "coforge-agy-acp-env-"));
     try {
-      // The fixture exits 1 if any SSH variable leaked.
-      await session.sendMessage("hi");
-      await done.promise;
-      expect(events.at(-1)).toEqual({ type: "completed", status: "completed" });
+      // The fixture exits(1) on any leaked SSH marker, so a clean session open proves the
+      // launch environment dropped them; an explicit Agent override still applies elsewhere.
+      const session = await new AntigravityAcpProvider({
+        host: antigravityAcpRuntimeHost,
+        command: [process.execPath, anvilRuntimeFixtures.antigravityAcp],
+      }).createAgentSession({
+        agentWorkspaceDirectory: root,
+        instructions: "Standing Antigravity instructions.",
+        environment: {
+          SSH_CLIENT: "fixture-client",
+          SSH_CONNECTION: "fixture-connection",
+          SSH_TTY: "fixture-tty",
+        },
+      });
+      try {
+        expect(session).toHaveProperty("hasLiveTurn", false);
+      } finally {
+        await session.dispose();
+      }
     } finally {
-      await session.dispose();
+      await rm(root, { recursive: true, force: true });
     }
   },
-  VERSION_PROBE_TIMEOUT_MS + 2 * PROCESS_TREE_EXIT_GRACE_MS,
+  30_000 + VERSION_PROBE_TIMEOUT_MS + 2 * PROCESS_TREE_EXIT_GRACE_MS,
 );

@@ -41,6 +41,7 @@ export class AcpSteering {
   /** Steer outcomes that arrived before the answer that named their steer. */
   readonly #earlyOutcomes = new Map<string, "injected" | "cleared">();
   readonly #pending = new Set<Admission>();
+  readonly #inflight = new Set<Promise<void>>();
   #chain: Promise<void> = Promise.resolve();
 
   constructor(
@@ -65,11 +66,27 @@ export class AcpSteering {
       () => this.#pending.delete(admission),
       () => this.#pending.delete(admission),
     );
+    // `session/prompt`-as-steer runtimes send at once — the request is itself a turn the server
+    // interleaves, so it cannot wait on the earlier input's admission or on the prior steer's
+    // turn-ending answer. Bounded-request runtimes keep the one-at-a-time order.
+    if (this.profile.unboundedRequest) {
+      const work = this.#insert(text, options, admission, generation);
+      this.#inflight.add(work);
+      void work.finally(() => this.#inflight.delete(work));
+      return admission.promise;
+    }
     const work = this.#chain
       .then(() => prior)
       .then(() => this.#insert(text, options, admission, generation));
     this.#chain = work.catch(() => undefined);
     return admission.promise;
+  }
+
+  /** Resolves when every `session/prompt`-as-steer in flight has settled. Only
+   * `unboundedRequest` profiles put inserts here, and a steer offered while a drain waits still
+   * joins the turn: keep waiting until the in-flight set stays empty. */
+  async drain(): Promise<void> {
+    while (this.#inflight.size > 0) await Promise.all(this.#inflight);
   }
 
   /** Reads a notification's steer outcome; false when the notification carries none. */

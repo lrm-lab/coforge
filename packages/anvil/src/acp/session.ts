@@ -81,10 +81,12 @@ export class AcpSession implements AgentSession {
           turnIsLive: () => !!this.#active || !!this.#native,
           generation: () => this.#generation,
           request: (method, params) =>
-            this.bounded(
-              this.#requireTransport().connection.agent.request(method, params),
-              this.timeoutMs,
-            ),
+            this.profile.steer?.unboundedRequest
+              ? this.#requireTransport().connection.agent.request(method, params)
+              : this.bounded(
+                  this.#requireTransport().connection.agent.request(method, params),
+                  this.timeoutMs,
+                ),
           dispose: () => this.dispose(),
           emit: (event, options) => this.#emit(event, options),
           markResumable: (options) => this.#markResumable(options),
@@ -118,7 +120,10 @@ export class AcpSession implements AgentSession {
       });
       transport.process.onClose(() => {
         this.#failed = true;
-        void this.#terminate().then(() => this.#exitedNow());
+        // A deliberate interrupt owns the live turn's settlement and its `completed`: let the
+        // turn's finally report before the process's exit disposes the session.
+        const settle = this.#interrupting && this.#turn ? this.#turn : Promise.resolve();
+        void settle.finally(() => this.#terminate().then(() => this.#exitedNow()));
       });
       const initialized = await transport.initialize(this.timeoutMs);
       await this.profile.beforeSession?.(transport, initialized);
@@ -251,7 +256,9 @@ export class AcpSession implements AgentSession {
         (rpcFailure ? nonEmptyString(error.data) : undefined) ??
         (error instanceof Error ? error.message : `${this.profile.label} prompt failed`);
       const named = this.profile.detailMessage?.(detail);
-      if (!this.#disposed)
+      // A deliberate interrupt kills the transport: the turn reports `interrupted`, not the
+      // transport's own "connection closed" complaint.
+      if (!this.#disposed && !(this.#interrupting && !rpcFailure))
         this.#emit(
           named
             ? { type: "error", message: named }
@@ -262,9 +269,16 @@ export class AcpSession implements AgentSession {
               },
           input.options,
         );
-      if (!(error instanceof RequestError)) this.#failed = true;
+      if (!(error instanceof RequestError))
+        if (this.#interrupting) status = "interrupted";
+        else this.#failed = true;
     } finally {
       if (this.#active === input) {
+        // A steer-as-prompt runtime keeps a steer in flight part of this turn: its updates and
+        // its end share the turn reader, and `completed` fires once the last prompt resolves.
+        // For every other runtime this block must stay synchronous — `completed` is emitted in
+        // the same turn that settles the admission, so an awaiting caller never sees it later.
+        if (this.profile.steer?.unboundedRequest) await this.#steering?.drain();
         this.#active = undefined;
         if (input.promptId) remember(this.#completedPrompts, input.promptId);
         this.#steering?.settle();
@@ -427,9 +441,12 @@ export class AcpSession implements AgentSession {
     this.cancelPendingNotices();
     try {
       if (this.#active || this.#native) {
-        await this.#requireTransport().connection.agent.notify("session/cancel", {
-          sessionId: this.#identity!.sessionId,
-        });
+        const transport = this.#requireTransport();
+        if (this.profile.cancelTurn) await this.profile.cancelTurn(transport);
+        else
+          await transport.connection.agent.notify("session/cancel", {
+            sessionId: this.#identity!.sessionId,
+          });
         if (this.#active && this.#turn) await this.bounded(this.#turn, this.timeoutMs);
         if (this.#native) await this.bounded(this.#native.settled.promise, this.timeoutMs);
       }

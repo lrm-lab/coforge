@@ -1,4 +1,4 @@
-import { antigravityRuntimeHost } from "#src/code-agent/antigravity/host";
+import { antigravityAcpRuntimeHost } from "#src/code-agent/antigravity/acp-host";
 import { commandCodeRuntimeHost } from "#src/code-agent/command-code/host";
 import { devinRuntimeHost } from "#src/code-agent/devin/host";
 import { grokRuntimeHost } from "#src/code-agent/grok/host";
@@ -20,7 +20,7 @@ import { discoverKiroCatalog, KIRO_ACP_ARGS } from "@lrm/coforge-anvil/kiro";
 import { discoverCursorCatalog } from "@lrm/coforge-anvil/cursor";
 import { discoverOpenCodeCatalog } from "@lrm/coforge-anvil/opencode";
 import { discoverGrokCatalog } from "@lrm/coforge-anvil/grok";
-import { discoverAntigravityCatalog } from "@lrm/coforge-anvil/antigravity";
+import { discoverAntigravityAcpCatalog } from "@lrm/coforge-anvil/antigravity";
 import { CATALOG_DISCOVERY_TIMEOUT_MS } from "@lrm/coforge-anvil";
 import { discoverPiCatalog, PI_CATALOG_DISCOVERY_TIMEOUT_MS } from "@lrm/coforge-anvil/pi";
 import { runCatalogCommand } from "./catalog-command";
@@ -319,11 +319,11 @@ export async function discoverCodeAgentCatalogs(
     if (executable)
       discoveries.push([
         RUNTIME_PROVIDER.ANTIGRAVITY,
-        discoverAntigravityCatalog(
-          commands.antigravity ?? [executable, "models"],
+        discoverAntigravityAcpCatalog(
+          commands.antigravity ?? [executable],
           cwd,
-          environment,
-          antigravityRuntimeHost.catalogCommandRunner,
+          agentEnvironment(undefined, environment),
+          antigravityAcpRuntimeHost,
         ).then((catalog) => ({
           keyPaths: [executable],
           catalog,

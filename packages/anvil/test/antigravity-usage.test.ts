@@ -11,7 +11,7 @@ import {
 import { fixtureAntigravityHost } from "./fixtures/antigravity-host";
 const USAGE_BUDGET_MS = ANTIGRAVITY_USAGE_TIMEOUT_MS + 2 * PROCESS_TREE_EXIT_GRACE_MS;
 
-const FIXTURE = new URL("./fixtures/antigravity-models-fixture.ts", import.meta.url).pathname;
+const FIXTURE = new URL("./fixtures/antigravity-usage-fixture.ts", import.meta.url).pathname;
 
 function readUsage(environment: Record<string, string> = {}) {
   return readAntigravityUsage(

@@ -12,7 +12,8 @@ import { CursorProvider } from "@lrm/coforge-anvil/cursor";
 import { PROCESS_TREE_EXIT_GRACE_MS, VERSION_PROBE_TIMEOUT_MS } from "@lrm/coforge-anvil";
 import { OpenCodeProvider } from "@lrm/coforge-anvil/opencode";
 import { grokProvider } from "./fixtures/grok-host";
-import { antigravityProvider } from "./fixtures/antigravity-host";
+import { AntigravityAcpProvider } from "@lrm/coforge-anvil/antigravity";
+import { antigravityAcpRuntimeHost } from "#src/code-agent/antigravity/acp-host";
 import { CoforgeProvider } from "#src/code-agent/pi/provider";
 import { perTurnSessionHost } from "#src/code-agent/per-turn-host";
 import { readVersionOutput } from "#src/code-agent/version-probe";
@@ -40,7 +41,10 @@ const providers = [
     command: [process.execPath, anvilRuntimeFixtures.opencode],
   }),
   grokProvider({ command: [process.execPath, anvilRuntimeFixtures.grok] }),
-  antigravityProvider({ command: [process.execPath, anvilRuntimeFixtures.antigravity] }),
+  new AntigravityAcpProvider({
+    host: antigravityAcpRuntimeHost,
+    command: [process.execPath, anvilRuntimeFixtures.antigravityAcp],
+  }),
 ];
 
 for (const provider of providers) {
@@ -64,6 +68,7 @@ for (const provider of providers) {
             COFORGE_GROK_MODE: "hang",
             COFORGE_GROK_ACP_LOG: join(root, "grok-rpc.jsonl"),
             COFORGE_AGY_MODE: "hang",
+            AGY_ACP_FIXTURE_HANG: "1",
           },
         });
         try {

@@ -13,10 +13,10 @@ import { dshRuntimeHost } from "#src/code-agent/dsh/host";
 import { DevinProvider, DevinRuntimeAuthAdapter } from "@lrm/coforge-anvil/devin";
 import { createDevinAuthHost, devinRuntimeHost } from "#src/code-agent/devin/host";
 import { piRuntimeHost } from "#src/code-agent/pi/host";
-import { antigravityRuntimeHost } from "#src/code-agent/antigravity/host";
+import { antigravityAcpRuntimeHost } from "#src/code-agent/antigravity/acp-host";
 import { grokRuntimeHost } from "#src/code-agent/grok/host";
 import { kiroRuntimeHost } from "#src/code-agent/kiro/host";
-import { AntigravityProvider } from "@lrm/coforge-anvil/antigravity";
+import { AntigravityAcpProvider } from "@lrm/coforge-anvil/antigravity";
 import {
   type RuntimeAuthAdapter,
   type RuntimeAuthProvider,
@@ -129,8 +129,13 @@ export function createCodeAgentProvider(
         ...(executable ? { command: [executable] } : {}),
       });
     }
-    case RUNTIME_PROVIDER.ANTIGRAVITY:
-      return new AntigravityProvider({ host: antigravityRuntimeHost });
+    case RUNTIME_PROVIDER.ANTIGRAVITY: {
+      const executable = providerExecutable(RUNTIME_PROVIDER.ANTIGRAVITY, options);
+      return new AntigravityAcpProvider({
+        host: antigravityAcpRuntimeHost,
+        ...(executable ? { command: [executable] } : {}),
+      });
+    }
     case RUNTIME_PROVIDER.DSH: {
       const executable = providerExecutable(RUNTIME_PROVIDER.DSH, options);
       return new DshProvider({

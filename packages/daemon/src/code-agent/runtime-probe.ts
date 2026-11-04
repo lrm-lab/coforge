@@ -37,8 +37,8 @@ import {
   logDevinVersionUnsupported,
 } from "@lrm/coforge-anvil/devin";
 import {
-  isAntigravityVersionUnsupported,
-  logAntigravityVersionUnsupported,
+  isAntigravityAcpVersionUnsupported,
+  logAntigravityAcpVersionUnsupported,
 } from "@lrm/coforge-anvil/antigravity";
 import { probeClaudeCodeVersion } from "@lrm/coforge-anvil/claude-code";
 import { resolveClaudeCodeExecutable } from "#src/code-agent/claude-code/runtime";
@@ -170,8 +170,8 @@ async function probeRuntimeVersion(
     logGrokVersionUnsupported(name, version);
     return { kind: "rejected", version };
   }
-  if (provider === RUNTIME_PROVIDER.ANTIGRAVITY && isAntigravityVersionUnsupported(version)) {
-    logAntigravityVersionUnsupported(name, version);
+  if (provider === RUNTIME_PROVIDER.ANTIGRAVITY && isAntigravityAcpVersionUnsupported(version)) {
+    logAntigravityAcpVersionUnsupported(name, version);
     return { kind: "rejected", version };
   }
   if (provider === RUNTIME_PROVIDER.COMMAND_CODE && isCommandCodeVersionUnsupported(version)) {

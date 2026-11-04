@@ -33,7 +33,7 @@
 | `src/acp/`                   | Shared ACP connection, session state machine, profile and turn projection contracts                                           |
 | `src/version-gate.ts`        | Shared version policy and required host version-reader port                                                                   |
 | `src/pi/`                    | Embedded Pi provider, native event/catalog projection and shared SDK Session factory with host capabilities                   |
-| `src/antigravity/`           | Antigravity per-turn protocol, tool events, version/catalog policy and usage parsing                                          |
+| `src/antigravity/`           | Antigravity `agy acp` session profile, turn events, version/catalog policy and usage parsing                                  |
 | `src/dsh/`                   | DSH ACP, pinned preview version, native catalogs and literal instruction content behind host ports                            |
 | `src/grok/`                  | Grok persistent ACP sessions, native turn events, catalog and usage through host capabilities                                 |
 | `src/command-code/`          | Command Code ACP sessions, native model catalog and a private `--mod` instruction bridge                                      |

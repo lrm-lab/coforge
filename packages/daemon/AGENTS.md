@@ -102,7 +102,7 @@ Directories with their own `AGENTS.md` add rules for that directory only.
 | `src/code-agent/kiro/auth-host.ts`   | Shared process-tree auth, environment and account masking capabilities injected into Kiro                                                                  |
 | `src/code-agent/kiro/usage-host.ts`  | Read-only native Kiro authentication and usage requests; only usage JSON crosses into the adapter                                                          |
 | `src/code-agent/pi/`                 | Built-in CoForge provider/catalog/metadata and Pi host composition; native SDK Session is shared through Anvil                                             |
-| `src/code-agent/antigravity/host.ts` | Session, command, version and live environment capabilities for Antigravity                                                                                |
+| `src/code-agent/antigravity/acp-host.ts` | Client identity, environment (incl. SSH-marker stripping), process, version and usage capabilities for Antigravity's `agy acp` session                     |
 | `src/code-agent/dsh/`                | DSH environment, private launch files and process-scoped catalog discovery; native ACP and plugin content live in Anvil                                    |
 | `src/code-agent/command-code/`       | Command Code host capabilities for its native ACP session                                                                                                  |
 | `src/code-agent/devin/`              | Devin host environment, process, version, auth-login and `thought_level` effort-sweep capabilities for its native ACP session                              |

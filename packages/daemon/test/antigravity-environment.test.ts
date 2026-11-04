@@ -1,11 +1,13 @@
 import { expect, test } from "bun:test";
 import { tmpdir } from "node:os";
-import { antigravityProvider } from "./fixtures/antigravity-host";
+import { AntigravityAcpProvider } from "@lrm/coforge-anvil/antigravity";
+import { antigravityAcpRuntimeHost } from "#src/code-agent/antigravity/acp-host";
 import { anvilRuntimeFixtures } from "./fixtures/anvil-runtime";
 
 test("Antigravity usage reads the current host environment per call and strips inherited SSH markers", async () => {
-  const provider = antigravityProvider({
-    command: [process.execPath, anvilRuntimeFixtures.antigravityModels],
+  const provider = new AntigravityAcpProvider({
+    host: antigravityAcpRuntimeHost,
+    command: [process.execPath, anvilRuntimeFixtures.antigravityUsage],
   });
   const keys = [
     "COFORGE_ANTIGRAVITY_USAGE_OUTPUT",
