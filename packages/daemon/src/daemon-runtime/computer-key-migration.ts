@@ -25,7 +25,7 @@ const COMPUTER_API_KEY = /^sk_computer_[A-Za-z0-9_-]{43}$/;
 export async function migrateComputerKey(ports: {
   credentials: Pick<DaemonCredentialStore, "load" | "save"> &
     Partial<DaemonCredentialConfirmations>;
-  client: ComputerSelfClient | undefined;
+  client: Pick<ComputerSelfClient, "swapKey" | "confirmKey"> | undefined;
   workspaceId: string;
   computerId: string;
   apiKey: string;

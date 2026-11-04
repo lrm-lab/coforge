@@ -29,6 +29,11 @@ message DaemonCommandRequest {
   string expected_server_url = 3;
   optional string workspace_id = 4;
   optional string expected_version = 5;
+  // `daemon:detach` (task #417): the Workspace's Computer and server, so a Workspace the
+  // supervisor has no binding for can still be told to unlink — the computer knows both from
+  // its own registration.
+  optional string computer_id = 8;
+  optional string server_http_url = 9;
 }
 
 message DaemonCommandResponse {
@@ -42,6 +47,10 @@ message DaemonCommandResponse {
   optional string error_code = 6;
   // The Workspace a refusal is about, when it is about one (a parked Workspace).
   optional string workspace_id = 7;
+  // `daemon:detach` (task #417): the server had already revoked the key detach asked about —
+  // the local registration is gone but the machine may still be attached under a newer key, so
+  // the CLI says "key revoked", not "detached".
+  optional bool detach_key_revoked = 8;
 }
 
 message ManagedRuntimeIdentity {

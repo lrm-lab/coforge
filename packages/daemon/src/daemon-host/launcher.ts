@@ -63,11 +63,17 @@ export interface DaemonCommandRunner {
   /** Returns the post-command snapshot of every locally registered binding, so a caller can tell
    * which ones the command actually touched (e.g. an unscoped restart skips disabled bindings). */
   command(
-    operation: "start" | "stop" | "restart",
+    operation: "start" | "stop" | "restart" | "detach",
     workspaceId?: string,
+    /** `daemon:detach` (task #417): the requesting Computer's own id and server, for a binding
+     * the supervisor does not know. */
+    detachTarget?: { computerId: string; serverHttpUrl: string },
   ): Promise<ManagedRuntimeIdentity[]>;
 }
 export type DaemonWorkspaceConfig = {
+  /** `daemon:configure` from a login-style setup (task #417): only it retires the login the
+   * setup used; a one-shot attach leaves no login to retire and sends this unset. */
+  loginSetup?: boolean;
   workspaceId: string;
   computerId: string;
   workspaceRoot: string;
@@ -182,18 +188,24 @@ export class LocalDaemonLauncher implements DaemonLauncher, DaemonCommandRunner 
   }
 
   async command(
-    operation: "start" | "stop" | "restart",
+    operation: "start" | "stop" | "restart" | "detach",
     workspaceId?: string,
+    /** `daemon:detach` (task #417): the Workspace's Computer and server, for a binding the
+     * supervisor does not know. */
+    detachTarget?: { computerId: string; serverHttpUrl: string },
   ): Promise<ManagedRuntimeIdentity[]> {
     await this.ensureRunning();
-    return this.control(operation, workspaceId);
+    return this.control(operation, workspaceId, undefined, undefined, detachTarget);
   }
 
   async control(
-    operation: "start" | "stop" | "restart" | "snapshot" | "upgrade" | "upgrade_ack",
+    operation: "start" | "stop" | "restart" | "snapshot" | "upgrade" | "upgrade_ack" | "detach",
     workspaceId?: string,
     requestId: string = crypto.randomUUID(),
     expectedVersion?: string,
+    /** `daemon:detach` (task #417): the Workspace's Computer and server, so a Workspace the
+     * supervisor has no binding for can still be told to unlink. */
+    detachTarget?: { computerId: string; serverHttpUrl: string },
   ) {
     return this.#withConnection(async (connection) => {
       await this.#verifyHandshake(connection);
@@ -207,6 +219,8 @@ export class LocalDaemonLauncher implements DaemonLauncher, DaemonCommandRunner 
           workspaceId,
           expectedServerUrl: this.#serverUrl,
           expectedVersion,
+          computerId: detachTarget?.computerId,
+          serverHttpUrl: detachTarget?.serverHttpUrl,
         }),
       );
       const commandResponse = decodeDaemonCommandResponse(response.payload);
@@ -220,7 +234,13 @@ export class LocalDaemonLauncher implements DaemonLauncher, DaemonCommandRunner 
           commandResponse.workspaceId,
         );
       }
-      return commandResponse.runtimes ?? [];
+      const runtimes = commandResponse.runtimes ?? [];
+      // `daemon:detach` (task #417): the answer's detach_key_revoked rides the array as a
+      // property, so every non-detach caller keeps the ManagedRuntimeIdentity[] shape.
+      if (operation === "detach")
+        (runtimes as ManagedRuntimeIdentity[] & { detachKeyRevoked?: boolean }).detachKeyRevoked =
+          commandResponse.detachKeyRevoked;
+      return runtimes;
     });
   }
 
@@ -343,6 +363,7 @@ export class LocalDaemonLauncher implements DaemonLauncher, DaemonCommandRunner 
           daemonApiKey: config.daemonApiKey,
           expectedServerUrl: this.#serverUrl,
           serverHttpUrl: config.serverHttpUrl,
+          loginSetup: config.loginSetup,
         }),
       );
       if (responseEnvelope.method !== LOCAL_RPC_METHODS.CONFIGURE)

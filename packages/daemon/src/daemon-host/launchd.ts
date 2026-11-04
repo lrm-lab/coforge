@@ -102,10 +102,11 @@ export class LaunchdDaemonHost implements DaemonLauncher {
   }
 
   command(
-    operation: "start" | "stop" | "restart",
+    operation: "start" | "stop" | "restart" | "detach",
     workspaceId?: string,
+    detachTarget?: { computerId: string; serverHttpUrl: string },
   ): Promise<ManagedRuntimeIdentity[]> {
-    return this.#local.command(operation, workspaceId);
+    return this.#local.command(operation, workspaceId, detachTarget);
   }
 
   /** Boots the user agent out and waits for it to actually leave launchd. `bootout` returns as

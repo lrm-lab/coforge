@@ -80,10 +80,11 @@ export class SystemdUserDaemonHost implements DaemonLauncher {
   }
 
   command(
-    operation: "start" | "stop" | "restart",
+    operation: "start" | "stop" | "restart" | "detach",
     workspaceId?: string,
+    detachTarget?: { computerId: string; serverHttpUrl: string },
   ): Promise<ManagedRuntimeIdentity[]> {
-    return this.#local.command(operation, workspaceId);
+    return this.#local.command(operation, workspaceId, detachTarget);
   }
 
   async stop(): Promise<void> {

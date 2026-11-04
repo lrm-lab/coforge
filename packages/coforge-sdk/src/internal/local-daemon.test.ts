@@ -110,6 +110,42 @@ describe("local daemon RPC", () => {
     ).toEqual(request);
   });
 
+  test("a login-style setup's configure carries loginSetup through the wire decode", () => {
+    // Only a login-style setup may retire the login it replaced; the field survives the codec
+    // so the daemon never retires a one-shot attach's login (task #417).
+    const request = {
+      protocolMajor: 1,
+      requestId: "request-1",
+      workspaceId: "workspace-1",
+      computerId: "computer-1",
+      workspaceRoot: "/workspaces/workspace-1",
+      daemonApiKey: "worker-secret",
+      expectedServerUrl: "https://coforge.example",
+      serverHttpUrl: "https://coforge.example",
+      loginSetup: true,
+    };
+    expect(
+      decodeDaemonRuntimeConfigureRequest(encodeDaemonRuntimeConfigureRequest(request)),
+    ).toEqual(request);
+    const { loginSetup: _loginSetup, ...without } = request;
+    expect(
+      decodeDaemonRuntimeConfigureRequest(encodeDaemonRuntimeConfigureRequest(without)),
+    ).toEqual(without);
+  });
+
+  test("a detach confirmation's revoked key round trips through the command response", () => {
+    // `detach_key_revoked` reaches the CLI: a found-but-revoked key reports revoked, not
+    // detached (task #417).
+    const response = {
+      protocolMajor: 1,
+      requestId: "request-1",
+      accepted: true,
+      runtimes: [],
+      detachKeyRevoked: true,
+    };
+    expect(decodeDaemonCommandResponse(encodeDaemonCommandResponse(response))).toEqual(response);
+  });
+
   test("extracts multiple complete frames and preserves a partial frame", () => {
     const first = frameLocalRpc(new Uint8Array([1]));
     const second = frameLocalRpc(new Uint8Array([2, 3]));

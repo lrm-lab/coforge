@@ -105,3 +105,17 @@ test("a hung server yields to the caller's abort instead of the timeout", async 
   expect(Date.now() - started).toBeLessThan(60_000);
   expect(result.ok).toBe(false);
 });
+
+test("detach reads the 410 computer_key_revoked as a definite key_revoked, not a retry", async () => {
+  before();
+  handler = () => Response.json({ error: "computer_key_revoked" }, { status: 410 });
+  const result = await createComputerSelfClient(base).detach(SK, NEVER);
+  expect(result).toEqual({ ok: true, value: "key_revoked" });
+});
+
+test("detach reads an ordinary 401 as retryable, never a confirmed detach", async () => {
+  before();
+  handler = () => Response.json({ error: "unauthenticated" }, { status: 401 });
+  const result = await createComputerSelfClient(base).detach(SK, NEVER);
+  expect(result).toMatchObject({ ok: false, error: { kind: "retryable" } });
+});

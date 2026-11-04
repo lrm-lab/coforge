@@ -1,13 +1,12 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import {
-  UPGRADE_ERROR_CODE,
-  type RunnerHoldReason,
-  thrownMessage,
-} from "@lrm/coforge-sdk/internal";
+import { type RunnerHoldReason, thrownMessage } from "@lrm/coforge-sdk/internal";
 import { startDaemonLocalRpcServer, type DaemonHoldReport } from "#src/local-rpc";
 import { FileDaemonCredentialStore } from "#src/credentials/credential-store";
+import { createComputerSelfClient } from "#src/connection/computer-self-client";
+import { runWorkspaceCommand } from "./run-supervisor-command";
+import { scheduleRetireSession } from "./retire-session";
 import { DaemonConfigStore } from "#src/persistence/daemon-config";
 import { LocalDaemonLauncher } from "#src/daemon-host/launcher";
 import { acquireSupervisorLock } from "./supervisor-lock";
@@ -44,7 +43,6 @@ import {
 import { COFORGE_DAEMON_SERVER_URL } from "#src/connection/built-server";
 import { launchComputerUpgrade } from "#src/platform/computer-upgrade-launcher";
 import { sweepLeftoverComputerUpgradeJobs } from "#src/platform/computer-upgrade-sweep";
-import { UpgradeLaunchFailedError } from "./upgrade-error";
 import { startLoginShellPathImport } from "./login-shell-path-import";
 import { markStartup, startupTiming } from "#src/platform/startup-timing";
 import {
@@ -413,6 +411,9 @@ async function runWithSupervisorLock(
    */
   const upgradeWatchController = new AbortController();
   const upgradeWatches = new Set<Promise<void>>();
+  /** The pending `retire-session` per Workspace — a new start for the same one cancels the one
+   * it left, and the Coordinator's shutdown cancels them all (task #417). */
+  const retireSessions = new Map<string, { stop(): void }>();
   const watchPendingUpgrade = (workspaceId: string, requestId: string, requestedAt: number) => {
     const watch = watchComputerUpgradeReceipt(
       { workspaceId, requestId, requestedAt },
@@ -499,72 +500,50 @@ async function runWithSupervisorLock(
         runtime: {
           // Answers by the operator deadline too, so setup never times out while the Workspace
           // finishes starting behind the answer.
-          configure: async (config) => {
+          configure: async (config, options) => {
             const { pending } = await supervisor.configure(config, {
               deadline: Date.now() + OPERATOR_COMMAND_BUDGET_MS,
             });
+            // The setup's login goes ~20s after the Workspace daemon is up — a start still
+            // finishing behind `pending` is not one to retire under, so the scheduled call
+            // re-checks the Workspace daemon is actually running before it asks. Only a
+            // login-style setup leaves a login to retire: a one-shot attach leaves none and
+            // must not retire the login a `coforge-computer login` left behind (task #417).
+            if (!pending && config.serverHttpUrl && options?.loginSetup) {
+              retireSessions.get(config.workspaceId)?.stop();
+              retireSessions.set(
+                config.workspaceId,
+                scheduleRetireSession({
+                  selfClient: createComputerSelfClient(config.serverHttpUrl),
+                  credentials: new FileDaemonCredentialStore(
+                    workspaceDirectory(config.workspaceId),
+                  ),
+                  workspaceId: config.workspaceId,
+                  computerId: config.computerId,
+                  serverHttpUrl: config.serverHttpUrl,
+                }),
+              );
+            }
             return pending ? { lifecycleUnderWay: true } : {};
           },
           hold: (reason) => fanOutRunnerHold("hold", reason),
           release: () => fanOutRunnerHold("release"),
-          async command(method, request) {
-            if (method === "daemon:upgrade") {
-              if (!request.workspaceId || !request.expectedVersion)
-                throw new Error("upgrade requires workspace and expected version");
-              const created = await supervisor.recordUpgrade(
-                request.workspaceId,
-                request.requestId,
-                request.expectedVersion,
-              );
-              if (created) {
-                // Pushes down any settlement `recordUpgrade` just applied to the pending operation
-                // it replaced, in addition to the new one, without restarting this Workspace.
-                await refreshChildUpgradeConfig(request.workspaceId);
-                try {
-                  await launchComputerUpgrade(request.requestId, request.expectedVersion, {
-                    stateDirectory,
-                  });
-                } catch (error) {
-                  // `recordUpgrade` already committed a "pending" operation for this request; a
-                  // job that never started must not leave it sitting there for the full pending
-                  // TTL, refusing every later upgrade in the meantime (the requirement this
-                  // record exists for: never leave an operation pending when the launch itself is
-                  // what failed).
-                  const message = thrownMessage(error);
-                  await completeUpgrade(request.workspaceId, request.requestId, {
-                    requestId: request.requestId,
-                    status: "failed",
-                    at: Date.now(),
-                    error: message,
-                    errorCode: UPGRADE_ERROR_CODE.LAUNCH_FAILED,
-                  });
-                  throw new UpgradeLaunchFailedError(message, { cause: error });
-                }
-                watchPendingUpgrade(request.workspaceId, request.requestId, Date.now());
-              }
-            } else if (method === "daemon:upgrade_ack") {
-              if (!request.workspaceId)
-                throw new Error("upgrade acknowledgement requires workspace");
-              if (await supervisor.acknowledgeUpgrade(request.workspaceId, request.requestId))
-                // Drops the now-acknowledged operation from the child's local config too, or a
-                // later reconnect would keep re-reporting the same already-acknowledged result.
-                await refreshChildUpgradeConfig(request.workspaceId);
-            } else if (method !== "daemon:snapshot") {
-              const operation = method.slice("daemon:".length);
-              if (operation !== "start" && operation !== "stop" && operation !== "restart")
-                throw new Error("unknown lifecycle operation");
-              if (operation === "stop") {
-                // Answers by the same deadline: a Workspace it has not stopped yet still shows its
-                // process, which the CLI reports as still stopping.
-                await supervisor.command(operation, request.workspaceId, undefined, {
-                  deadline: Date.now() + OPERATOR_COMMAND_BUDGET_MS,
-                });
-                return view();
-              }
-              return startForOperator(operation, request.workspaceId, request.requestId);
-            }
-            return view();
-          },
+          command: (method, request) =>
+            runWorkspaceCommand({
+              method,
+              request,
+              supervisor,
+              ownServerUrl: COFORGE_DAEMON_SERVER_URL,
+              workspaceDirectory,
+              stateDirectory,
+              refreshChildUpgradeConfig,
+              completeUpgrade,
+              watchPendingUpgrade,
+              launchComputerUpgrade,
+              makeSelfClient: createComputerSelfClient,
+              view,
+              startForOperator,
+            }),
         },
       });
       await new Promise<void>((resolve) => {
@@ -581,6 +560,8 @@ async function runWithSupervisorLock(
     // awaiting them here costs no meaningful time.
     upgradeWatchController.abort();
     await Promise.allSettled(upgradeWatches);
+    for (const session of retireSessions.values()) session.stop();
+    retireSessions.clear();
     let cleaned = false;
     try {
       // Startup/adoption failure must not tear down other already-running units.

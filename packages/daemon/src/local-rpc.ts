@@ -52,13 +52,25 @@ export type DaemonHoldReport = {
 
 type DaemonRuntimePort = Partial<{
   /** May answer before the Workspace's start is done (the Coordinator's deadline). */
-  configure(connection: DaemonConfig): Promise<void | DaemonStarted>;
+  configure(
+    connection: DaemonConfig,
+    options?: {
+      /** `daemon:configure` from a login-style setup (task #417): only it retires the login the
+       * setup used — a one-shot attach leaves no login to retire and sends this false. */
+      loginSetup?: boolean;
+    },
+  ): Promise<void | DaemonStarted>;
   start(): Promise<void>;
   stopAll(): Promise<void>;
   restart(): Promise<void>;
   inbox(context: string, request: LocalInboxRequest): Promise<InboxResponse>;
   scanUsage(provider: string): Promise<UsageScanResponse>;
-  command(method: string, request: DaemonCommandRequest): Promise<ManagedRuntimeIdentity[]>;
+  command(
+    method: string,
+    request: DaemonCommandRequest,
+  ): Promise<
+    ManagedRuntimeIdentity[] | { runtimes: ManagedRuntimeIdentity[]; detachKeyRevoked?: boolean }
+  >;
   hold(reason: RunnerHoldReason): Promise<DaemonHoldReport>;
   release(): Promise<DaemonHoldReport>;
   /** Where a Workspace daemon's latest cloud connect stands; see `WorkspaceParking`. */
@@ -79,6 +91,7 @@ type LocalRpcServerInput = {
 };
 
 const LIFECYCLE_METHODS: ReadonlySet<string> = new Set([
+  LOCAL_RPC_METHODS.DETACH,
   LOCAL_RPC_METHODS.START,
   LOCAL_RPC_METHODS.STOP,
   LOCAL_RPC_METHODS.RESTART,
@@ -271,12 +284,14 @@ class LocalRpcDispatcher {
         accepted: false,
       });
     try {
-      const runtimes = await this.#runLifecycle(method, request);
+      const result = await this.#runLifecycle(method, request);
+      const runtimes = !result ? [] : Array.isArray(result) ? result : result.runtimes;
       return encodeDaemonCommandResponse({
         protocolMajor: 1,
         requestId: request.requestId,
         accepted: true,
         runtimes,
+        detachKeyRevoked: !result || Array.isArray(result) ? undefined : result.detachKeyRevoked,
       });
     } catch (error) {
       // A refused lifecycle command (e.g. `daemon:upgrade` blocked by a pending operation) is a
@@ -306,7 +321,11 @@ class LocalRpcDispatcher {
   async #runLifecycle(
     method: string,
     request: DaemonCommandRequest,
-  ): Promise<ManagedRuntimeIdentity[] | undefined> {
+  ): Promise<
+    | ManagedRuntimeIdentity[]
+    | { runtimes: ManagedRuntimeIdentity[]; detachKeyRevoked?: boolean }
+    | undefined
+  > {
     const { runtime } = this.input;
     if (runtime.command) return runtime.command(method, request);
     if (request.workspaceId) throw new Error("scoped lifecycle requires supervisor");
@@ -331,7 +350,9 @@ class LocalRpcDispatcher {
         Boolean,
       ) &&
       (await this.input.validateCredential(request.daemonApiKey));
-    const adopted = valid ? await this.#adoptConfiguration(request) : undefined;
+    const adopted = valid
+      ? await this.#adoptConfiguration(request, { loginSetup: request.loginSetup })
+      : undefined;
     return encodeDaemonRuntimeConfigureResponse({
       protocolMajor: 1,
       requestId: request.requestId,
@@ -346,12 +367,15 @@ class LocalRpcDispatcher {
    * revoked the one before it), so it stays. A rollback also restores only what this attempt
    * wrote, never a key a newer setup saved since.
    */
-  async #adoptConfiguration(request: {
-    workspaceId: string;
-    computerId: string;
-    workspaceRoot: string;
-    daemonApiKey: string;
-  }): Promise<void | DaemonStarted> {
+  async #adoptConfiguration(
+    request: {
+      workspaceId: string;
+      computerId: string;
+      workspaceRoot: string;
+      daemonApiKey: string;
+    },
+    options?: { loginSetup?: boolean },
+  ): Promise<void | DaemonStarted> {
     const { runtime, credentials, configStore } = this.input;
     const { workspaceId, computerId } = request;
     const saved = await credentials.load(workspaceId, computerId);
@@ -366,7 +390,7 @@ class LocalRpcDispatcher {
     };
     try {
       if (!runtime.configure) throw new Error("daemon configuration is unavailable");
-      const configured = await runtime.configure(connection);
+      const configured = await runtime.configure(connection, options);
       await configStore?.save(connection);
       return configured;
     } catch (error) {

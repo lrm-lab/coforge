@@ -25,6 +25,7 @@ export const LOCAL_RPC_PROTOCOL_MAJOR = 1 as const;
 export const LOCAL_RPC_METHODS = {
   HANDSHAKE: "daemon:handshake",
   CONFIGURE: "daemon-runtime:configure",
+  DETACH: "daemon:detach",
   START: "daemon:start",
   STOP: "daemon:stop",
   RESTART: "daemon:restart",
@@ -254,6 +255,8 @@ export type DaemonRuntimeConfigureRequest = {
   computerId: string;
   expectedServerUrl: string;
   serverHttpUrl?: string;
+  /** `daemon:configure` from a login-style setup — only it retires the login it used. */
+  loginSetup?: boolean;
 };
 export type DaemonRuntimeConfigureResponse = {
   protocolMajor: number;
@@ -268,6 +271,10 @@ export type DaemonCommandRequest = {
   expectedServerUrl: string;
   workspaceId?: string;
   expectedVersion?: string;
+  /** `daemon:detach` (task #417): the Workspace's Computer and server, so a Workspace the
+   * supervisor has no binding for can still be told to unlink. */
+  computerId?: string;
+  serverHttpUrl?: string;
 };
 /** Where a Workspace daemon's latest cloud connect stands. */
 export const WORKSPACE_CLOUD_CONNECTION_STATES = [
@@ -309,6 +316,9 @@ export type DaemonCommandResponse = {
   errorCode?: string;
   /** The Workspace a refusal is about, when it is about one (a parked Workspace). */
   workspaceId?: string;
+  /** `daemon:detach` (task #417): the server had already revoked the key — the local
+   * registration is gone but the machine may still be attached under a newer key. */
+  detachKeyRevoked?: boolean;
 };
 export type LocalRpcRequest = { method: string; payload: Uint8Array };
 export type LocalRpcResponse = { method: string; payload: Uint8Array };
@@ -349,6 +359,7 @@ export function decodeDaemonRuntimeConfigureRequest(
     computerId: v.computerId,
     expectedServerUrl: v.expectedServerUrl,
     serverHttpUrl: v.serverHttpUrl,
+    ...(v.loginSetup ? { loginSetup: true } : {}),
   };
 }
 export function encodeDaemonRuntimeConfigureResponse(
@@ -382,6 +393,8 @@ export function decodeDaemonCommandRequest(bytes: Uint8Array): DaemonCommandRequ
     expectedServerUrl: value.expectedServerUrl,
     workspaceId: value.workspaceId,
     expectedVersion: value.expectedVersion,
+    computerId: value.computerId,
+    serverHttpUrl: value.serverHttpUrl,
   };
 }
 export function encodeDaemonCommandResponse(value: DaemonCommandResponse): Uint8Array {
@@ -407,6 +420,7 @@ export function decodeDaemonCommandResponse(bytes: Uint8Array): DaemonCommandRes
     ...(value.error ? { error: value.error } : {}),
     ...(value.errorCode ? { errorCode: value.errorCode } : {}),
     ...(value.workspaceId ? { workspaceId: value.workspaceId } : {}),
+    ...(value.detachKeyRevoked ? { detachKeyRevoked: true } : {}),
   };
 }
 

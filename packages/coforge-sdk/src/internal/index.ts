@@ -143,7 +143,9 @@ export * from "./upgrade-error-code";
 export const COMPUTER_CLI_COMMANDS = [
   "login",
   "logout",
+  "attach",
   "setup",
+  "detach",
   "install",
   "upgrade",
   "repair",
@@ -408,6 +410,7 @@ export * from "./attachment-limits";
 export * from "./mime-type";
 export * from "./json-record";
 export * from "./agent-environment";
+export * from "./computer-credentials";
 export * from "./mention-delivery";
 
 export {

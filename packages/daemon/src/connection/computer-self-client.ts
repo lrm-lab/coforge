@@ -61,6 +61,81 @@ export function createComputerSelfClient(serverHttpUrl: string, timeoutMs = REQU
         isRecord(body) && body.ok === true ? {} : undefined,
       );
     },
+    /**
+     * `POST /api/computer/detach` (step 3): the machine asks to leave its Workspace. Only a
+     * definite answer deletes anything locally — `detached`, or `already_detached` where the
+     * link and key were gone already; every other answer keeps the binding.
+     */
+    async detach(
+      apiKey: string,
+      signal: AbortSignal,
+    ): Promise<ComputerSelfResult<"detached" | "key_revoked">> {
+      // A 200 `{ok:true}` is one definite yes; a 410 `computer_key_revoked` — the server has
+      // the key but already revoked it or unlinked its Computer — is the other, since the work
+      // detach asked for is done. Anything else keeps the binding.
+      let response: Response;
+      try {
+        response = await fetch(`${serverHttpUrl}/api/computer/detach`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${apiKey}` },
+          signal,
+        });
+      } catch (error) {
+        return {
+          ok: false,
+          error: {
+            kind: "retryable",
+            detail: error instanceof Error ? error.message : String(error),
+          },
+        };
+      }
+      const body = (await response.json().catch(() => undefined)) as
+        | { ok?: boolean; error?: string }
+        | undefined;
+      if (response.ok && body?.ok === true) return { ok: true, value: "detached" };
+      if (response.status === 410 && body?.error === "computer_key_revoked")
+        return { ok: true, value: "key_revoked" };
+      if (response.status === 404 || response.status === 405)
+        return { ok: false, error: { kind: "unsupported", detail: `http ${response.status}` } };
+      return { ok: false, error: { kind: "retryable", detail: `http ${response.status}` } };
+    },
+    /**
+     * `POST /api/computer/retire-session` (step 3): the machine retires the login its setup
+     * left. The Bearer is that login; `x-coforge-computer-key` is the machine's `sk_computer`.
+     * `retired` or `already_retired` is the only definite answer that lets the local
+     * `user-session.json` go.
+     */
+    async retireSession(
+      userToken: string,
+      computerKey: string,
+      signal: AbortSignal,
+    ): Promise<ComputerSelfResult<"retired" | "already_retired">> {
+      let response: Response;
+      try {
+        response = await fetch(`${new URL(serverHttpUrl).origin}/api/computer/retire-session`, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${userToken}`,
+            "x-coforge-computer-key": computerKey,
+          },
+          signal: AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]),
+        });
+      } catch (error) {
+        return {
+          ok: false,
+          error: {
+            kind: "retryable",
+            detail: error instanceof Error ? error.message : String(error),
+          },
+        };
+      }
+      if (!response.ok)
+        return { ok: false, error: { kind: "retryable", detail: `http ${response.status}` } };
+      const body: unknown = await response.json().catch(() => undefined);
+      if (!isRecord(body) || (body.status !== "retired" && body.status !== "already_retired"))
+        return { ok: false, error: { kind: "retryable", detail: "malformed response" } };
+      return { ok: true, value: body.status };
+    },
   };
 }
 

@@ -6,54 +6,26 @@ import {
   thrownMessage,
 } from "@lrm/coforge-sdk/internal";
 import type { DaemonConfig } from "#src/daemon-runtime/runtime";
+import type { DaemonCredentialStore } from "#src/credentials/credential-store";
+import type { ComputerSelfClient } from "#src/connection/computer-self-client";
 import { answeredWithin, holdRunnersUntilQuiescent, type RunnerHoldSnapshot } from "./runner-hold";
 import { UpgradeOperationPendingError } from "./upgrade-error";
 import { WorkspaceParkedError } from "./workspace-health-journal";
 import { WorkspaceLifecycleSupersededError } from "./lifecycle-superseded-error";
+import { SerialQueue } from "./serial-queue";
+import { detachManagedBinding } from "./machine-supervisor-detach";
+import {
+  appendRestartResult,
+  cancelledRestartResults,
+  stopped,
+  workspaceIdOf,
+} from "./machine-supervisor-bindings";
 
 export type RestartProgress = {
   requestId: string;
   phase: "stopping" | "starting";
   previousInstanceId: string | null;
 };
-export type RestartResult =
-  | { requestId: string; status: "completed"; instanceId: string }
-  /** `by`: what took it over; older receipts without it were cancelled by a stop. */
-  | { requestId: string; status: "cancelled"; by?: "stop" | "configure" };
-
-/**
- * The canonical local Computer upgrade operation. `pending` means an external one-shot job was
- * launched and has not supplied terminal evidence yet; `succeeded`/`failed` are the one settled
- * outcome projected to child config/cloud; `acknowledged` means server acceptance and bounded
- * audit history. The immutable result file is evidence applied to this record, not a peer state.
- */
-export type UpgradeOperationState = "pending" | "succeeded" | "failed" | "acknowledged";
-export type UpgradeOperationTerminal = {
-  version?: string;
-  error?: string;
-  /** See `UPGRADE_ERROR_CODE`. Set only when the job (or the Coordinator, on a launch failure)
-   * can name a stable reason for this terminal state. */
-  errorCode?: string;
-  at: number;
-};
-export type UpgradeOperation = {
-  requestId: string;
-  expectedVersion: string;
-  state: UpgradeOperationState;
-  /** When this machine opened the operation, so a stranded one can be aged out. */
-  requestedAt: number;
-  terminal?: UpgradeOperationTerminal;
-};
-/** How many operation records one binding keeps, newest last, including the audit tail. */
-export const UPGRADE_OPERATION_HISTORY = 128;
-/**
- * How long a pending operation may go without a receipt before it is settled as failed. A job
- * that never ran, or whose receipt was lost, must not hold the single pending slot forever. The
- * margin is deliberate: the server's own request TTL is ten minutes, so anything this old has
- * already been given up on upstream.
- */
-export const UPGRADE_OPERATION_PENDING_TTL_MS = 30 * 60_000;
-
 export type ManagedBinding = DaemonConfig & {
   enabled: boolean;
   restart?: RestartProgress;
@@ -67,35 +39,35 @@ export type ManagedBinding = DaemonConfig & {
   /** The last operator command that failed for this Workspace after it had already answered, so
    * `coforge-computer status` can say so; cleared by the next one that succeeds. */
   lastFailure?: LifecycleFailure;
+  /** `daemon:detach` (task #417): the server already answered once, so a retry finishes the
+   * local half alone — stop, unbind, delete the credential — without asking again. */
+  detachConfirmed?: boolean;
+  /** `daemon:detach`: the server answered `computer_key_revoked` (task #417). */
+  detachKeyRevoked?: boolean;
 };
 
-export const LIFECYCLE_FAILURE_OPERATIONS = ["start", "restart", "stop", "configure"] as const;
-export type LifecycleFailure = {
-  operation: (typeof LIFECYCLE_FAILURE_OPERATIONS)[number];
-  message: string;
-  at: number;
-};
-
-/**
- * What a blocking pending operation resolves to when it turns out to already be settle-able
- * (its job's receipt exists, or it has aged past the pending TTL). Structurally the same shape
- * `completeUpgrade` accepts, so `recordUpgrade` can apply it the same way.
- */
-export type PendingUpgradeSettlement = {
-  status: "succeeded" | "failed";
-} & UpgradeOperationTerminal;
-
-/**
- * Given the pending operation blocking a new `recordUpgrade` call, reports its settlement if one
- * is already available (a receipt, or the pending TTL has passed), or `undefined` if it is
- * genuinely still in flight. Reads only - the caller applies the settlement, since this runs
- * inside `recordUpgrade`'s own serialized mutation and must not re-enter it.
- */
-export type PendingUpgradeSettler = (
-  workspaceId: string,
-  requestId: string,
-  requestedAt: number,
-) => Promise<PendingUpgradeSettlement | undefined>;
+export {
+  LIFECYCLE_FAILURE_OPERATIONS,
+  UPGRADE_OPERATION_HISTORY,
+  UPGRADE_OPERATION_PENDING_TTL_MS,
+} from "./machine-supervisor-operations";
+export type {
+  LifecycleFailure,
+  PendingUpgradeSettlement,
+  PendingUpgradeSettler,
+  RestartResult,
+  UpgradeOperation,
+  UpgradeOperationState,
+  UpgradeOperationTerminal,
+} from "./machine-supervisor-operations";
+import {
+  type LifecycleFailure,
+  UPGRADE_OPERATION_HISTORY,
+  type PendingUpgradeSettler,
+  type RestartResult,
+  type UpgradeOperation,
+  type UpgradeOperationTerminal,
+} from "./machine-supervisor-operations";
 
 export class WorkspaceRecoveryError extends AggregateError {}
 export interface BindingStore {
@@ -819,53 +791,36 @@ export class MachineSupervisor {
     await this.processes.stop(binding);
     this.#instances.delete(binding.workspaceId);
   }
+
+  /** `daemon:detach` (task #417 step 3): the Workspace's binding and credential go only on a
+   * definite server answer — see `machine-supervisor-detach.ts`. */
+  detach(
+    workspaceId: string,
+    deps: {
+      credentials: Pick<DaemonCredentialStore, "load" | "delete">;
+      makeSelfClient: (serverHttpUrl: string) => Pick<ComputerSelfClient, "detach">;
+      /** For a Workspace this supervisor has no binding for: the requesting Computer's own id
+       * and server, so its credential's key can still be told to unlink (task #417). */
+      target?: { computerId: string; serverHttpUrl: string };
+    },
+  ): Promise<
+    | { detached: true; keyRevoked?: boolean }
+    | { detached: false; reason: "unconfirmed" | "not_bound" }
+  > {
+    return this.#serialize(() =>
+      detachManagedBinding({
+        workspaceId,
+        bindings: this.#bindings,
+        stop: (binding) => this.#stop(binding),
+        store: (next) => this.#store(next),
+        credentials: deps.credentials,
+        makeSelfClient: deps.makeSelfClient,
+        target: deps.target,
+      }),
+    );
+  }
+
   #serialize<T>(operation: () => Promise<T>): Promise<T> {
     return this.#mutation.run(operation);
   }
-}
-
-/** Runs operations one at a time, in the order they were asked for; a failure does not stop the
- * ones behind it. */
-class SerialQueue {
-  #tail = Promise.resolve();
-  run<T>(operation: () => Promise<T>): Promise<T> {
-    const result = this.#tail.then(operation);
-    this.#tail = result.then(
-      () => {},
-      () => {},
-    );
-    return result;
-  }
-}
-
-const workspaceIdOf = (binding: ManagedBinding) => binding.workspaceId;
-
-/** A binding as a stop leaves it: disabled, its unfinished restart recorded cancelled. */
-function stopped(binding: ManagedBinding): ManagedBinding {
-  if (!binding.enabled && !binding.restart) return binding;
-  return {
-    ...binding,
-    enabled: false,
-    restart: undefined,
-    restartResults: cancelledRestartResults(binding, "stop"),
-  };
-}
-
-/** A binding's restart receipts with its unfinished restart, if any, recorded as cancelled by
- * `by`: a stop or a configure replaced it, and a replay of that request must not restart it. */
-function cancelledRestartResults(
-  binding: ManagedBinding,
-  by: "stop" | "configure",
-): RestartResult[] | undefined {
-  if (!binding.restart) return binding.restartResults;
-  return appendRestartResult(binding, {
-    requestId: binding.restart.requestId,
-    status: "cancelled",
-    by,
-  });
-}
-
-/** A binding's restart receipts with one more, keeping the newest 128. */
-function appendRestartResult(binding: ManagedBinding, result: RestartResult): RestartResult[] {
-  return [...(binding.restartResults ?? []), result].slice(-128);
 }

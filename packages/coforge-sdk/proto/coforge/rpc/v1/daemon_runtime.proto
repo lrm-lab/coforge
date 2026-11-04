@@ -16,6 +16,10 @@ message DaemonRuntimeConfigureRequest {
   string computer_id = 7;
   string expected_server_url = 8;
   optional string server_http_url = 9;
+  // `daemon:configure` from a login-style setup (task #417): only this retires the login the
+  // setup used, ~20s after the Workspace daemon is up; a one-shot attach leaves no login to
+  // retire and sends this false.
+  optional bool login_setup = 10;
 }
 
 message DaemonRuntimeConfigureResponse {
