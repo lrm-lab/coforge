@@ -214,7 +214,6 @@
   "tasks_status_done": "已完成",
   "tasks_status_closed": "已关闭",
   "tasks_overview_status": "状态",
-  "tasks_overview_all": "全部",
   "tasks_overview_owner": "负责人",
   "tasks_overview_empty": "群聊里还没有任务",
   "tasks_overview_direct_elsewhere": "私信里的任务只在该会话的任务页签里显示。",

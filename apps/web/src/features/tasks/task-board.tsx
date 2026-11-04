@@ -15,7 +15,7 @@ import { CreateTaskDialog } from "./create-task-dialog";
 import { isFinishedStatus, type FinishedStatus } from "./finished-tasks";
 import { TASK_TITLE_CLASS, TaskCard } from "./task-card";
 import { TaskDetailMenu, taskMenuButton } from "./task-detail-dialog";
-import { taskMatches, type FilterableTask } from "./task-filters";
+import { statusMatches, taskMatches, type FilterableTask } from "./task-filters";
 import type { TaskBoardView } from "./task-board-search";
 import type { OverviewTaskCommand } from "./task-overview-collection";
 import type { TaskRelations } from "./task-relation-edits";
@@ -82,11 +82,11 @@ export function TaskBoard<T extends BoardTask>({
   onCommand?: (task: T, command: OverviewTaskCommand) => Promise<void>;
   conversation?: ConversationBoard;
 }) {
-  const { status, filter, layout, completedWindow, changeWindow: onWindowChange } = view;
+  const { statuses, filter, layout, completedWindow, changeWindow: onWindowChange } = view;
   const [hiddenColumns, setColumnHidden] = useTaskHiddenColumns();
   const [createOpen, setCreateOpen] = useState(false);
   const filtered =
-    status !== undefined ||
+    statuses.length > 0 ||
     filter.owners.length > 0 ||
     filter.projects.length > 0 ||
     filter.labels.length > 0;
@@ -95,13 +95,13 @@ export function TaskBoard<T extends BoardTask>({
   const visible = useMemo(
     () =>
       [...unfinished, ...done.rows, ...closed.rows].filter(
-        (task) => (!status || task.status === status) && taskMatches(task, filter),
+        (task) => statusMatches(task.status, statuses) && taskMatches(task, filter),
       ),
-    [unfinished, done.rows, closed.rows, status, filter],
+    [unfinished, done.rows, closed.rows, statuses, filter],
   );
   // The owner and Project choices count the finished Tasks too, by their counted groups.
   const choices = useMemo(() => [...unfinished, ...finished.groups], [unfinished, finished.groups]);
-  const finishedShown = FINISHED.filter((value) => !status || status === value).reduce(
+  const finishedShown = FINISHED.filter((value) => statusMatches(value, statuses)).reduce(
     (sum, value) => sum + finished.columns[value].count,
     0,
   );
@@ -138,10 +138,10 @@ export function TaskBoard<T extends BoardTask>({
       <TaskToolbar
         tasks={choices}
         filter={filter}
-        status={status}
+        statuses={statuses}
         layout={layout}
         onFilterChange={view.changeFilter}
-        onStatusChange={view.changeStatus}
+        onStatusesChange={view.changeStatuses}
         onLayoutChange={view.changeLayout}
         completedWindow={completedWindow}
         onWindowChange={onWindowChange}
@@ -183,7 +183,7 @@ export function TaskBoard<T extends BoardTask>({
           tasks={visible}
           canSetAnyStatus={canSetAnyStatus}
           layout={layout}
-          statuses={empty || loading ? [] : status ? [status] : TASK_STATUSES}
+          statuses={empty || loading ? [] : statuses.length > 0 ? statuses : TASK_STATUSES}
           paged={paged}
           hidden={hiddenColumns}
           onHiddenChange={setColumnHidden}

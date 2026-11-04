@@ -44,20 +44,23 @@ import {
 import { statusLabel, type TaskLayout } from "./task-workflow";
 import type { FinishedWindow } from "./finished-tasks";
 
-const ALL_STATUSES = "all";
+/** The status choices in the board's column order; read per render, so the language follows. */
+const STATUS_OPTIONS = (): PickerOption[] =>
+  TASK_STATUSES.map((value) => ({ id: value, label: statusLabel(value) }));
 
 /**
- * A Task board's toolbar: "Filter" (owner, Project and status, each a submenu of choices with
- * how many Tasks each has) followed by one removable chip per filter in use, and "Display" on
+ * A Task board's toolbar: "Filter" (owner, Project, labels and status, each a submenu where
+ * several may be picked; owners, Projects and labels show how many Tasks each has) followed by
+ * one removable chip per filter in use, and "Display" on
  * the right (board or list, and which parts of a Task show).
  */
 export function TaskToolbar({
   tasks,
   filter,
-  status,
+  statuses,
   layout,
   onFilterChange,
-  onStatusChange,
+  onStatusesChange,
   onLayoutChange,
   completedWindow,
   onWindowChange,
@@ -66,10 +69,11 @@ export function TaskToolbar({
 }: {
   tasks: readonly FilterableTask[];
   filter: TaskFilter;
-  status?: TaskStatus;
+  /** The statuses shown; none picked shows every status. */
+  statuses: readonly TaskStatus[];
   layout: TaskLayout;
   onFilterChange: (filter: TaskFilter) => void;
-  onStatusChange: (status?: TaskStatus) => void;
+  onStatusesChange: (statuses: readonly TaskStatus[]) => void;
   onLayoutChange: (layout: TaskLayout) => void;
   /** How far back Done and Closed reach; Display offers it, as Linear's completed issues do. */
   completedWindow: FinishedWindow;
@@ -143,10 +147,10 @@ export function TaskToolbar({
       }),
       remove: () => onFilterChange({ ...filter, labels: [] }),
     },
-    status && {
+    statuses.length > 0 && {
       id: "status",
-      label: m.tasks_filter_status_is({ name: statusLabel(status) }),
-      remove: () => onStatusChange(undefined),
+      label: m.tasks_filter_status_is({ name: namesLabel(statuses.map(statusLabel)) }),
+      remove: () => onStatusesChange([]),
     },
   ].filter((chip) => chip !== false && chip !== undefined);
 
@@ -188,22 +192,15 @@ export function TaskToolbar({
                   });
                 }}
               />
-              <SubmenuTrigger>
-                <Dropdown.Item label={m.tasks_overview_status()} />
-                <Dropdown.SubmenuPopover className="w-52">
-                  <Dropdown.Menu
-                    aria-label={m.tasks_overview_status()}
-                    selectionMode="single"
-                    selectedKeys={[status ?? ALL_STATUSES]}
-                    onAction={(key) => onStatusChange(TASK_STATUSES.find((value) => value === key))}
-                  >
-                    <Dropdown.Item id={ALL_STATUSES} label={m.tasks_overview_all()} />
-                    {TASK_STATUSES.map((value) => (
-                      <Dropdown.Item key={value} id={value} label={statusLabel(value)} />
-                    ))}
-                  </Dropdown.Menu>
-                </Dropdown.SubmenuPopover>
-              </SubmenuTrigger>
+              {/* Several statuses at once, picked like owners and labels (task #506). */}
+              <FilterSubmenu
+                name={m.tasks_overview_status()}
+                options={STATUS_OPTIONS()}
+                picked={statuses}
+                onChange={(picked) =>
+                  onStatusesChange(TASK_STATUSES.filter((value) => picked.includes(value)))
+                }
+              />
             </Dropdown.Menu>
           </Dropdown.Popover>
         </Dropdown.Root>

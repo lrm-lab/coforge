@@ -226,7 +226,6 @@
   "tasks_status_done": "Done",
   "tasks_status_closed": "Closed",
   "tasks_overview_status": "Status",
-  "tasks_overview_all": "All",
   "tasks_overview_owner": "Owner",
   "tasks_overview_empty": "No tasks in channels yet",
   "tasks_overview_direct_elsewhere": "Tasks in direct messages stay on that conversation's Tasks tab.",

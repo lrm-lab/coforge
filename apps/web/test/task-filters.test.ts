@@ -8,7 +8,9 @@ import {
   labelOptions,
   ownerOptions,
   parseFilterParam,
+  parseStatusParam,
   projectOptions,
+  statusMatches,
   taskMatches,
   type FilterableTask,
 } from "#src/features/tasks/task-filters";
@@ -135,4 +137,21 @@ test("a label pick keeps the Tasks carrying all of them, or none for no label", 
     { ...bug, count: 2 },
     { ...ui, count: 1 },
   ]);
+});
+
+// Task #506: the board's status pick takes several statuses. It travels in the address as one
+// comma-separated `status`, so an old link with a single status still reads; unknown or repeated
+// values drop out, and the picks keep the board's column order.
+test("a status pick reads several statuses, in column order, dropping unknown ones", () => {
+  expect(parseStatusParam("in_progress,todo")).toEqual(["todo", "in_progress"]);
+  expect(parseStatusParam("done")).toEqual(["done"]);
+  expect(parseStatusParam("todo,bogus,todo,")).toEqual(["todo"]);
+  expect(parseStatusParam(undefined)).toEqual([]);
+  expect(parseStatusParam("")).toEqual([]);
+});
+
+test("an empty status pick keeps every Task; otherwise a Task's status must be picked", () => {
+  expect(statusMatches("closed", [])).toBe(true);
+  expect(statusMatches("todo", ["todo", "in_progress"])).toBe(true);
+  expect(statusMatches("done", ["todo", "in_progress"])).toBe(false);
 });

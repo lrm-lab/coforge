@@ -1,4 +1,4 @@
-import type { TaskMember } from "@lrm/coforge-sdk/internal";
+import { TASK_STATUSES, type TaskMember, type TaskStatus } from "@lrm/coforge-sdk/internal";
 
 /**
  * A Task board's owner and Project filters, applied to the rows the board shows. Each takes
@@ -127,6 +127,21 @@ export function filterParam(values: readonly string[]): string | undefined {
 
 export function parseFilterParam(value: string | undefined): string[] {
   return value ? value.split(",").filter(Boolean) : [];
+}
+
+/**
+ * The statuses a board shows (task #506): several may be picked, read from one comma-separated
+ * `status` in the address, so a link with a single status still reads. Unknown and repeated values
+ * drop out, and the picks keep the board's column order; none picked shows every status.
+ */
+export function parseStatusParam(value: string | undefined): TaskStatus[] {
+  const picked = new Set(parseFilterParam(value));
+  return TASK_STATUSES.filter((status) => picked.has(status));
+}
+
+/** Whether a Task's status passes the pick; an empty pick keeps every Task. */
+export function statusMatches(status: TaskStatus, picked: readonly TaskStatus[]) {
+  return picked.length === 0 || picked.includes(status);
 }
 
 export type LabelOption = { id: string; name: string; color: string; count: number };
