@@ -36,7 +36,7 @@ import { findTaskByNumber, assertExpectedRevision, commitTaskChange } from "./ta
 import { withNotices, type NoticeWriter } from "./task-notice-posting.server";
 import { signalTaskChange, announceTasks, announceNeighbours } from "./task-publication.server";
 import { requireManager, isTaskManager } from "./task-assignees.server";
-import { TASK_PROJECT_SELECT, resolveTaskProject } from "./task-projects.server";
+import { resolveTaskProject } from "./task-projects.server";
 import { assertCanSetPriority } from "./task-priority.server";
 import { LABELS_PER_TASK_MAX, labelsChange, labelView, resolveTaskLabels } from "./labels.server";
 
@@ -192,17 +192,16 @@ export async function amendTask(
         hint: `a task carries at most ${LABELS_PER_TASK_MAX} labels`,
       });
     const labelChange = labelsChange(addedLabels.map(labelView), removedLabels.map(labelView));
-    // The Project: one named (and pinned), or the conversation's again when cleared.
+    // The Project: one named, or none when cleared (task #484: a Task carries only its own
+    // Project; the conversation no longer lends one).
     let nextProject = task.project ?? null;
-    let nextPinned = task.projectPinned;
     if (projectEdit) {
       const current = await tx.conversation.findUniqueOrThrow({
         where: { id: conversationId },
-        select: { directKey: true, project: { select: TASK_PROJECT_SELECT } },
+        select: { directKey: true },
       });
       if (command.project === null) {
-        nextProject = current.project;
-        nextPinned = false;
+        nextProject = null;
       } else {
         // As at creation: a direct message's Tasks are filed under no Project.
         if (current.directKey)
@@ -211,7 +210,6 @@ export async function amendTask(
             hint: "a direct message's Tasks are not filed under a Project",
           });
         nextProject = await resolveTaskProject(tx, workspaceId, command.project!);
-        nextPinned = true;
       }
     }
     const projectChange: TaskHistoryChange | null =
@@ -242,7 +240,7 @@ export async function amendTask(
       {
         ...(retitled && { title }),
         ...(command.description !== undefined && { description: command.description }),
-        ...(projectEdit && { projectId: nextProject?.id ?? null, projectPinned: nextPinned }),
+        ...(projectEdit && { projectId: nextProject?.id ?? null }),
       },
       {
         relationChanges: [

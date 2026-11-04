@@ -185,7 +185,6 @@ export async function createConversationTasks(
         source,
         labels,
         project,
-        projectPinned: projectChosen,
       });
       tasks.push(task);
       if (notice) notices.push(notice);
@@ -249,7 +248,6 @@ export async function insertConversationTask(
     labels?: readonly LabelRow[];
     /** The Project the new Task is filed under; the conversation's unless it was chosen. */
     project?: TaskProjectRef | null;
-    projectPinned?: boolean;
   },
 ) {
   const { assignee, source } = input;
@@ -271,7 +269,6 @@ export async function insertConversationTask(
       requestId: input.requestId,
       sourceMessageId: source?.id,
       projectId: input.project?.id,
-      projectPinned: input.projectPinned ?? false,
     },
     select: taskSelection,
   });

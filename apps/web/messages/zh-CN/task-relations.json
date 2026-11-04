@@ -41,7 +41,5 @@
   "tasks_project": "项目",
   "tasks_project_none": "无项目",
   "tasks_project_change": "改项目",
-  "tasks_project_search": "找项目",
-  "tasks_project_follow": "跟随频道的项目",
-  "tasks_project_follow_named": "跟随频道（{project}）"
+  "tasks_project_search": "找项目"
 }

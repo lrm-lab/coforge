@@ -77,7 +77,6 @@ export const taskSelection = {
   // An archived label stays on its rows (restoring it brings it back) but is no longer the Task's.
   labels: { where: { label: { archivedAt: null } }, select: { label: { select: LABEL_SELECT } } },
   project: { select: TASK_PROJECT_SELECT },
-  projectPinned: true,
   executionSessions: {
     select: { id: true },
     orderBy: { createdAt: "desc" },
@@ -321,7 +320,6 @@ export function taskView(
       .map(({ label }) => labelView(label))
       .sort((a, b) => a.name.localeCompare(b.name)),
     project: task.project ?? null,
-    projectPinned: task.projectPinned,
     ...(task.discussionConversationId && {
       discussionConversationId: task.discussionConversationId,
       ...(counts && { replyCount: counts.replyCount }),

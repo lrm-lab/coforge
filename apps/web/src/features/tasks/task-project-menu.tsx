@@ -8,22 +8,21 @@ import { listProjects } from "#src/features/projects/projects.functions";
 import { m } from "#src/paraglide/messages";
 import { TaskFieldTrigger } from "./task-field-trigger";
 
-/** The picker's row for "the channel's Project again", by a key no Project slug can be. */
-const FOLLOW = " follow";
+/** The picker's row for "no Project", by a key no Project slug can be. */
+const NONE = " none";
 
 /**
- * A Task's Project in its popup (task #460): the one it is filed under, or none, and a picker of
- * the Workspace's Projects, with "the channel's Project" to file it with its conversation again.
- * The Projects are read when the picker first opens.
+ * A Task's Project in its popup: the one it is filed under, or none, and a picker of the
+ * Workspace's Projects with "None" to clear it. The Projects are read when the picker first opens.
  */
 export function TaskProjectMenu({
   task,
   disabled,
   onSelect,
 }: {
-  task: Pick<TaskView, "project" | "projectPinned">;
+  task: Pick<TaskView, "project">;
   disabled: boolean;
-  /** A Project by slug, or null to file the Task under its conversation's Project again. */
+  /** A Project by slug, or null to file the Task under no Project. */
   onSelect: (project: string | null) => void;
 }) {
   const [wanted, setWanted] = useState(false);
@@ -35,8 +34,6 @@ export function TaskProjectMenu({
     staleTime: 60_000,
   });
   const current = task.project ?? null;
-  // Followed, the Project is the channel's: the follow row names it and holds the check.
-  const pinned = task.projectPinned === true;
   const value = current ? (
     <span className="flex min-w-0 items-center gap-1.5">
       <Face face={{ kind: "project", name: current.name }} />
@@ -58,20 +55,15 @@ export function TaskProjectMenu({
         }
         label={m.tasks_project_change()}
         searchPlaceholder={m.tasks_project_search()}
-        selectedKey={pinned && current ? current.slug : FOLLOW}
+        selectedKey={current?.slug ?? NONE}
         options={[
-          {
-            id: FOLLOW,
-            label: pinned
-              ? m.tasks_project_follow()
-              : m.tasks_project_follow_named({ project: current?.name ?? m.tasks_project_none() }),
-          },
+          { id: NONE, label: m.tasks_project_none() },
           ...(projects.data ?? []).map((project) => ({
             ...projectOption(project),
             id: project.slug,
           })),
         ]}
-        onSelect={(key) => onSelect(key === FOLLOW ? null : key)}
+        onSelect={(key) => onSelect(key === NONE ? null : key)}
       />
     </span>
   );

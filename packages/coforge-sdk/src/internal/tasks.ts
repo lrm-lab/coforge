@@ -178,9 +178,6 @@ export type TaskView = {
   labels?: TaskLabel[];
   /** The Project the Task is filed under; null when it is in none. */
   project?: TaskProjectRef | null;
-  /** Whether the Project was chosen for this Task, rather than followed from its conversation's
-   * (task #460); absent reads as followed. */
-  projectPinned?: boolean;
   /** Absent reads as `none` (an older server does not send it). */
   priority?: TaskPriority;
   createdAt: string;

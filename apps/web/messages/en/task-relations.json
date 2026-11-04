@@ -41,7 +41,5 @@
   "tasks_project": "Project",
   "tasks_project_none": "No project",
   "tasks_project_change": "Change project",
-  "tasks_project_search": "Find a project",
-  "tasks_project_follow": "The channel’s project",
-  "tasks_project_follow_named": "Follow the channel ({project})"
+  "tasks_project_search": "Find a project"
 }

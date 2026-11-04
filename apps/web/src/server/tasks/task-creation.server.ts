@@ -305,7 +305,6 @@ export async function createTasks(
               workspaceId: scope.workspaceId,
               number: firstTaskNumber + index,
               projectId: project?.id,
-              projectPinned: projectChosen,
               // The Task's title is its message's stored body, as a converted Task's is; `view`
               // reads its tokens back as text with the message's mention rows.
               title: stored.body,
