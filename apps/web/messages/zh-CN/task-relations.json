@@ -57,5 +57,8 @@
   "tasks_subtask_move_body_hidden": "{name} 现在是一个你看不到的任务的子任务，会移到 {to} 下面。",
   "tasks_subtask_move_title": "把 {name} 移过来？",
   "tasks_subtask_move_body": "{name} 现在是 {from} 的子任务，会移到 {to} 下面。",
-  "tasks_subtask_move_confirm": "移过来"
+  "tasks_subtask_move_confirm": "移过来",
+  "tasks_pick_refused": "{name}，不可选：{reason}",
+  "tasks_relation_denied_named": "无法关联 {name}：只有相关任务的负责人或创建者，或 Workspace 所有者、管理员，才能修改。",
+  "tasks_relation_invalid_named": "无法关联 {name}：会形成循环、嵌套超过 {depth} 层，或要先等的任务超过 {blockers} 个。"
 }

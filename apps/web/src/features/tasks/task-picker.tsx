@@ -1,5 +1,5 @@
-import { taskNameLabel, type TaskStatus, type TaskView } from "@lrm/coforge-sdk/internal";
-import { useState, type ReactElement } from "react";
+import { taskNameLabel, type TaskView } from "@lrm/coforge-sdk/internal";
+import { useState } from "react";
 import { useFilter } from "react-aria";
 import {
   Autocomplete as AriaAutocomplete,
@@ -20,21 +20,8 @@ import {
   type PickerRules,
   type VisibleTaskName,
 } from "./task-relation-edits";
-import { TaskStatusIcon } from "./task-status-icon";
+import { TaskPickerItem } from "./task-picker-item";
 import { useTaskCandidates } from "./use-task-candidates";
-
-/** The menu's own icon class greys an icon; a status keeps its colour. One component per status,
- * so a row does not remount its icon on every keystroke. */
-const statusIcon = (status: TaskStatus) => () => (
-  <TaskStatusIcon status={status} className="mr-2.5" />
-);
-const STATUS_ICON: Record<TaskStatus, () => ReactElement> = {
-  todo: statusIcon("todo"),
-  in_progress: statusIcon("in_progress"),
-  in_review: statusIcon("in_review"),
-  done: statusIcon("done"),
-  closed: statusIcon("closed"),
-};
 
 type PickerProps = {
   task: Pick<TaskView, "conversationId">;
@@ -85,22 +72,23 @@ function TaskPickerList({ task, rules, parentsFor, label, onPick, disabled }: Pi
       <Dropdown.Menu
         aria-label={label}
         className="max-h-72"
-        disabledKeys={disabled ? shown.map(taskNameLabel) : [...rules.loops]}
+        // Only a change still saving disables the rows; one that would loop stays reachable and
+        // says why (TaskPickerItem), and choosing it does nothing.
+        disabledKeys={disabled ? shown.map(taskNameLabel) : []}
         onAction={(key) => {
           const picked = shown.find((candidate) => taskNameLabel(candidate) === key);
-          if (picked) onPick(picked);
+          if (picked && !rules.loops.has(taskNameLabel(picked))) onPick(picked);
         }}
       >
         {shown.map((candidate) => {
           const name = taskNameLabel(candidate);
           return (
-            <Dropdown.Item
+            <TaskPickerItem
               key={name}
-              id={name}
-              textValue={`${name} ${candidate.title}`}
-              icon={STATUS_ICON[candidate.status]}
-              label={`${name} ${candidate.title}`}
-              addon={rules.loops.has(name) ? m.tasks_blocker_loop() : undefined}
+              name={name}
+              title={candidate.title}
+              status={candidate.status}
+              refusal={rules.loops.has(name) ? m.tasks_blocker_loop() : undefined}
             />
           );
         })}

@@ -118,15 +118,47 @@ test("an existing Task is put under the open one, and one under another parent i
       // The list: the Task above is greyed with why, the one under another parent says where.
       await openPicker();
       const row = (title: string) =>
-        evaluate<{ text: string; disabled: boolean } | null>(
-          `(() => { const el = ${item(title)}; return el ? { text: el.textContent, disabled: el.getAttribute("aria-disabled") === "true" } : null; })()`,
+        evaluate<{ text: string; refused: boolean; label: string | null } | null>(
+          `(() => { const el = ${item(title)}; return el ? { text: el.textContent, refused: el.hasAttribute("data-refused"), label: el.getAttribute("aria-label") } : null; })()`,
         );
-      expect(await row(name("Launch epic"))).toMatchObject({ disabled: true });
+      expect(await row(name("Launch epic"))).toMatchObject({ refused: true });
       expect((await row(name("Launch epic")))!.text).toContain("Above this task");
+      // A refused row says why in its accessible name (task #525).
+      expect((await row(name("Launch epic")))!.label).toBe(
+        `#${epic} ${name("Launch epic")}, unavailable: Above this task`,
+      );
       expect((await row(name("Fix login")))!.text).toContain(`Under #${old}`);
-      expect(await row(name("Write the docs"))).toMatchObject({ disabled: false });
+      expect(await row(name("Write the docs"))).toMatchObject({ refused: false, label: null });
       expect(await row(name("Build the page"))).toBeNull();
       await shoot(`${label}-picker`);
+
+      // The keyboard reaches the refused row (the first one) and Enter on it does nothing.
+      await evaluate(
+        `(document.querySelector('[role="dialog"] input[aria-label="Search by number or title"]').focus(), true)`,
+      );
+      await browser("press", "ArrowDown");
+      // The search field keeps focus and points at the row (virtual focus): the row is marked.
+      const focusedRow = `[...document.querySelectorAll('[role="menuitem"][data-focused]')]`;
+      const focused = () =>
+        evaluate<{ rows: string[]; virtual: boolean }>(
+          `({ rows: ${focusedRow}.map((el) => el.textContent), virtual: document.activeElement.hasAttribute("aria-activedescendant") })`,
+        );
+      // Down the list to it (on the phone the desktop round's Tasks come first).
+      for (
+        let presses = 0;
+        !(await focused()).rows.some((text) => text.includes(name("Launch epic"))) && presses < 12;
+        presses += 1
+      )
+        await browser("press", "ArrowDown");
+      const reached = await focused();
+      expect(reached.virtual).toBe(true);
+      expect(reached.rows).toHaveLength(1);
+      expect(reached.rows[0]).toContain(name("Launch epic"));
+      await shoot(`${label}-picker-keyboard`);
+      await browser("press", "Enter");
+      await Bun.sleep(300);
+      expect(await evaluate<number>(`${dialogs}.length`)).toBe(2);
+      expect(await parentOf(epic!)).toBeNull();
 
       // A free Task joins at once.
       await mark(item(name("Write the docs")), "pick");

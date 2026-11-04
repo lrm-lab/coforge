@@ -27,16 +27,21 @@ import { useTaskRelations, type DetailCommand } from "./use-task-relations";
  * existing Task as a sub-task (task #505). */
 export type RelationPicker = "parent" | "blocker" | "subtask" | "existing-subtask";
 
-type SectionError = "permission" | "denied" | "invalid" | "other";
+export type SectionError = "permission" | "denied" | "invalid" | "other";
 
-function errorText(error: SectionError) {
+/** `subject` names the Task a refused relation change picked (task #525): the server's sentence
+ * stays on the server, but the popup knows which Task it asked about. */
+export function errorText(error: SectionError, subject?: string) {
+  const limits = { depth: MAX_TASK_TREE_DEPTH, blockers: MAX_TASK_BLOCKERS };
   switch (error) {
     case "permission":
       return m.tasks_assignment_requires_workspace_manager();
     case "denied":
-      return m.tasks_relation_denied();
+      return subject ? m.tasks_relation_denied_named({ name: subject }) : m.tasks_relation_denied();
     case "invalid":
-      return m.tasks_relation_invalid({ depth: MAX_TASK_TREE_DEPTH, blockers: MAX_TASK_BLOCKERS });
+      return subject
+        ? m.tasks_relation_invalid_named({ name: subject, ...limits })
+        : m.tasks_relation_invalid(limits);
     case "other":
       return m.tasks_update_failed();
   }
@@ -76,14 +81,15 @@ export function TaskSection({
   const execute = useServerFn(executeTask);
   const writeTasks = useConversationTaskWrites();
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<SectionError | null>(null);
+  const [error, setError] = useState<{ kind: SectionError; subject?: string } | null>(null);
   const access = useTaskAssignmentAccess();
   const canEditAssignment =
     access.canAssignOthers || !task.owner || task.owner.memberId === currentMemberId;
   const assignableMembers = access.canAssignOthers
     ? members
     : members?.filter((member) => member.kind === "user" && member.id === access.userId);
-  async function run(command: DetailCommand) {
+  /** `subject` is the picked Task a relation change is about, named if the server refuses it. */
+  async function run(command: DetailCommand, subject?: string) {
     if (pending) return;
     setPending(true);
     setError(null);
@@ -105,7 +111,10 @@ export function TaskSection({
     } catch (failure) {
       const permission =
         isAppError(failure) && failure.errorId === TASK_ASSIGNMENT_MANAGER_REQUIRED;
-      setError(permission ? "permission" : (relationRefusal(failure) ?? "other"));
+      setError({
+        kind: permission ? "permission" : (relationRefusal(failure) ?? "other"),
+        subject,
+      });
       if (permission) void access.refetch();
     } finally {
       setPending(false);
@@ -262,7 +271,7 @@ export function TaskSection({
       )}
       {error && (
         <p role="alert" className="text-sm text-error-primary">
-          {errorText(error)}
+          {errorText(error.kind, error.subject)}
         </p>
       )}
     </section>

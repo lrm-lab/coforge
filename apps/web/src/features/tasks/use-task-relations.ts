@@ -1,4 +1,4 @@
-import { type TaskCommand, type TaskView } from "@lrm/coforge-sdk/internal";
+import { taskNameLabel, type TaskCommand, type TaskView } from "@lrm/coforge-sdk/internal";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useMemo } from "react";
@@ -85,7 +85,8 @@ export function useTaskRelations({
 }: {
   task: TaskView;
   currentMemberId: string | null;
-  run: (command: DetailCommand) => Promise<void>;
+  /** `subject`: the picked Task the change is about, which a refusal names. */
+  run: (command: DetailCommand, subject?: string) => Promise<void>;
 }) {
   const access = useTaskRelationAccess(task, currentMemberId);
   const execute = useServerFn(executeTask);
@@ -101,7 +102,11 @@ export function useTaskRelations({
   const amendBlockers = (change: { add?: VisibleTaskName; remove?: VisibleTaskName }) => {
     const refs = blockerRefs(task.blockedBy, change);
     if (!refs) return Promise.resolve();
-    return run({ operation: "amend", number, blockedBy: refs, expectedRevision: task.revision });
+    const subject = change.add ?? change.remove;
+    return run(
+      { operation: "amend", number, blockedBy: refs, expectedRevision: task.revision },
+      subject && taskNameLabel(subject),
+    );
   };
 
   return {
@@ -112,12 +117,15 @@ export function useTaskRelations({
     addBlocker: (blocker: VisibleTaskName) => amendBlockers({ add: blocker }),
     removeBlocker: (blocker: VisibleTaskName) => amendBlockers({ remove: blocker }),
     setParent: (parent: VisibleTaskName) =>
-      run({ operation: "amend", number, parent: taskRefOf(parent) }),
+      run({ operation: "amend", number, parent: taskRefOf(parent) }, taskNameLabel(parent)),
     clearParent: () => run({ operation: "amend", number, parent: null }),
     /** Puts an existing Task of this conversation under this one (task #505): the amendment is
      * the sub-task's, its parent set to this Task. This Task's tree is read again after. */
     adoptSubtask: async (subtask: VisibleTaskName) => {
-      await run({ operation: "amend", number: subtask.number, parent: { number } });
+      await run(
+        { operation: "amend", number: subtask.number, parent: { number } },
+        taskNameLabel(subtask),
+      );
       await queryClient.invalidateQueries({ queryKey: ["task", "show", conversationId, number] });
     },
     /** Creates the sub-tasks together, in this Task's conversation, under this Task. */

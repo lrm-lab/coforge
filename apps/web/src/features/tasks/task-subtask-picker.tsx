@@ -1,10 +1,5 @@
-import {
-  taskNameLabel,
-  type TaskLink,
-  type TaskStatus,
-  type TaskView,
-} from "@lrm/coforge-sdk/internal";
-import { useMemo, useState, type ReactElement } from "react";
+import { taskNameLabel, type TaskLink, type TaskView } from "@lrm/coforge-sdk/internal";
+import { useMemo, useState } from "react";
 import { useFilter } from "react-aria";
 import {
   Autocomplete as AriaAutocomplete,
@@ -25,25 +20,18 @@ import {
   type SubtaskCandidate,
   type VisibleTaskName,
 } from "./task-relation-edits";
-import { TaskStatusIcon } from "./task-status-icon";
+import { TaskPickerItem } from "./task-picker-item";
 import { useUnfinishedTasks } from "./use-conversation-tasks";
 
-/** One component per status, so a row does not remount its icon on every keystroke. */
-const statusIcon = (status: TaskStatus) => () => (
-  <TaskStatusIcon status={status} className="mr-2.5" />
-);
-const STATUS_ICON: Record<TaskStatus, () => ReactElement> = {
-  todo: statusIcon("todo"),
-  in_progress: statusIcon("in_progress"),
-  in_review: statusIcon("in_review"),
-  done: statusIcon("done"),
-  closed: statusIcon("closed"),
-};
-
-/** What a row says on its right: why it cannot be picked, or the parent it would leave. */
-function addonOf(candidate: SubtaskCandidate) {
+/** Why a row cannot be picked, if it cannot. */
+function refusalOf(candidate: SubtaskCandidate) {
   if (candidate.refusal === "above") return m.tasks_subtask_above();
   if (candidate.refusal === "denied") return m.tasks_subtask_denied();
+  return undefined;
+}
+
+/** The parent a pickable row would leave. */
+function noteOf(candidate: SubtaskCandidate) {
   if (candidate.from?.hidden) return m.tasks_subtask_under_hidden();
   if (candidate.from) return m.tasks_subtask_under({ name: taskNameLabel(candidate.from) });
   return undefined;
@@ -167,12 +155,12 @@ function SubtaskPicker({
         <Dropdown.Menu
           aria-label={m.tasks_pick_subtask()}
           className="max-h-72"
-          disabledKeys={candidates
-            .filter((candidate) => disabled || candidate.refusal !== null)
-            .map(taskNameLabel)}
+          // Only a change still saving disables the rows; a refused one stays reachable and says
+          // why (TaskPickerItem), and choosing it does nothing.
+          disabledKeys={disabled ? candidates.map(taskNameLabel) : []}
           onAction={(key) => {
             const picked = candidates.find((candidate) => taskNameLabel(candidate) === key);
-            if (!picked) return;
+            if (!picked || picked.refusal !== null) return;
             if (picked.from) setMoving(picked);
             else onPick(picked);
           }}
@@ -191,13 +179,13 @@ function SubtaskPicker({
           {candidates.map((candidate) => {
             const name = taskNameLabel(candidate);
             return (
-              <Dropdown.Item
+              <TaskPickerItem
                 key={name}
-                id={name}
-                textValue={`${name} ${candidate.title}`}
-                icon={STATUS_ICON[candidate.status]}
-                label={`${name} ${candidate.title}`}
-                addon={addonOf(candidate)}
+                name={name}
+                title={candidate.title}
+                status={candidate.status}
+                refusal={refusalOf(candidate)}
+                note={noteOf(candidate)}
               />
             );
           })}

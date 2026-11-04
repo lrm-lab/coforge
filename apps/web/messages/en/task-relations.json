@@ -57,5 +57,8 @@
   "tasks_subtask_move_body_hidden": "{name} is a sub-task of a task you can't view. It will move under {to}.",
   "tasks_subtask_move_title": "Move {name} here?",
   "tasks_subtask_move_body": "{name} is a sub-task of {from}. It will move under {to}.",
-  "tasks_subtask_move_confirm": "Move"
+  "tasks_subtask_move_confirm": "Move",
+  "tasks_pick_refused": "{name}, unavailable: {reason}",
+  "tasks_relation_denied_named": "Couldn't link {name}: only the owner or creator of the tasks involved, or a Workspace owner or admin, can change this.",
+  "tasks_relation_invalid_named": "Couldn't link {name}: that would loop back, nest deeper than {depth} levels, or wait for more than {blockers} tasks."
 }
