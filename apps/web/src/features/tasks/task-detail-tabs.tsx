@@ -119,11 +119,14 @@ export function TaskSubtasksPage({
   task,
   canAdd,
   onAdd,
+  onAddExisting,
   onOpen,
 }: {
   task: TaskView;
   canAdd: boolean;
   onAdd: () => void;
+  /** Puts an existing Task of the conversation under this one (task #505). */
+  onAddExisting: () => void;
   onOpen?: (task: VisibleTaskName) => void;
 }) {
   const { subtree } = useTaskShow(task, true);
@@ -150,9 +153,14 @@ export function TaskSubtasksPage({
       </ul>
       {canAdd && (
         <div className="px-1.5">
-          <Button color="link-gray" size="sm" iconLeading={Plus} onClick={onAdd}>
-            {m.tasks_add_subtask()}
-          </Button>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <Button color="link-gray" size="sm" iconLeading={Plus} onClick={onAdd}>
+              {m.tasks_add_subtask()}
+            </Button>
+            <Button color="link-gray" size="sm" iconLeading={Dataflow02} onClick={onAddExisting}>
+              {m.tasks_add_existing_subtask()}
+            </Button>
+          </div>
         </div>
       )}
     </div>

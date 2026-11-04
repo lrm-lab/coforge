@@ -179,6 +179,67 @@ export function candidateLinks(
   );
 }
 
+/** One of the conversation's Tasks, as the existing-sub-task picker reads it. */
+type SubtaskRow = Pick<TaskView, "number" | "title" | "status" | "owner" | "creator" | "parent">;
+
+/**
+ * A Task the "add existing sub-task" picker lists (task #505): `refusal` says why it cannot be
+ * picked, if it cannot, and `from` is the parent it would leave.
+ * - `above`: it is this Task or one of the Tasks above it, so it would loop back;
+ * - `denied`: the viewer may not change its parent (its owner, its creator or a manager may).
+ */
+export type SubtaskCandidate = VisibleTaskLink & {
+  refusal: "above" | "denied" | null;
+  from: VisibleTaskLink | null;
+};
+
+/** The parent as a row of the same conversation names it, if it is one of them. */
+const ownParentNumber = (row: Pick<TaskView, "parent">) =>
+  row.parent && !row.parent.hidden && row.parent.channel === null ? row.parent.number : null;
+
+/**
+ * The unfinished Tasks of the conversation that could become sub-tasks of `task`, by number. Left
+ * out: `task` itself and its own sub-tasks. The Tasks above it are listed but refused, so their
+ * absence is not a mystery; the chain is followed within the conversation (the server refuses a
+ * loop through another one, and says so). A Task under another parent is offered with that parent,
+ * so the picker can say it moves.
+ */
+export function subtaskCandidates(
+  task: Pick<TaskView, "number" | "parent">,
+  rows: readonly SubtaskRow[],
+  viewer: CandidateViewer,
+): SubtaskCandidate[] {
+  const byNumber = new Map(rows.map((row) => [row.number, row]));
+  const above = new Set<number>();
+  for (
+    let parent = ownParentNumber(task);
+    parent !== null && !above.has(parent);
+    parent = ownParentNumber(byNumber.get(parent) ?? { parent: null })
+  )
+    above.add(parent);
+  return rows
+    .filter(
+      (row) =>
+        row.number !== task.number &&
+        ownParentNumber(row) !== task.number &&
+        !isBlockerSatisfied(row.status),
+    )
+    .sort((a, b) => a.number - b.number)
+    .map((row) => ({
+      hidden: false,
+      number: row.number,
+      channel: null,
+      title: row.title,
+      status: row.status,
+      refusal: above.has(row.number)
+        ? "above"
+        : canEditTaskRelations(row, viewer.memberId, viewer.manager)
+          ? null
+          : "denied",
+      from: row.parent && !row.parent.hidden ? row.parent : null,
+    }));
+}
+
 /** The candidates a picker lists, without those its rules leave out. */
 export const pickable = <T extends VisibleTaskLink>(
   candidates: readonly T[],

@@ -11,6 +11,7 @@ import { TASK_ASSIGNMENT_MANAGER_REQUIRED } from "./task-assignment";
 import { AssigneeMenu } from "./task-assignee-menu";
 import { getTaskMoveCommand } from "./task-move";
 import { TaskPickerDialog } from "./task-picker";
+import { SubtaskPickerDialog } from "./task-subtask-picker";
 import { TaskProperty } from "./task-property";
 import { openBlockers, relationRefusal, type VisibleTaskName } from "./task-relation-edits";
 import { TaskBlockedByValue, TaskBlockingValue, TaskParentValue } from "./task-relation-lines";
@@ -22,8 +23,9 @@ import { useTaskAssignmentAccess } from "./use-task-assignment-access";
 import { useConversationTaskWrites } from "./use-conversation-tasks";
 import { useTaskRelations, type DetailCommand } from "./use-task-relations";
 
-/** What the header menu asked to add: a parent, a blocker or a sub-task, each picked in a dialog. */
-export type RelationPicker = "parent" | "blocker" | "subtask";
+/** What the header menu asked to add, each in a dialog: a parent, a blocker, a new sub-task, or an
+ * existing Task as a sub-task (task #505). */
+export type RelationPicker = "parent" | "blocker" | "subtask" | "existing-subtask";
 
 type SectionError = "permission" | "denied" | "invalid" | "other";
 
@@ -247,6 +249,14 @@ export function TaskSection({
               const refusal = relationRefusal(cause);
               return refusal && errorText(refusal);
             }}
+          />
+          <SubtaskPickerDialog
+            open={picker === "existing-subtask"}
+            onOpenChange={closePicker}
+            task={task}
+            currentMemberId={currentMemberId}
+            disabled={pending}
+            onPick={(subtask) => void relations.adoptSubtask(subtask)}
           />
         </>
       )}

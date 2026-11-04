@@ -114,6 +114,12 @@ export function useTaskRelations({
     setParent: (parent: VisibleTaskName) =>
       run({ operation: "amend", number, parent: taskRefOf(parent) }),
     clearParent: () => run({ operation: "amend", number, parent: null }),
+    /** Puts an existing Task of this conversation under this one (task #505): the amendment is
+     * the sub-task's, its parent set to this Task. This Task's tree is read again after. */
+    adoptSubtask: async (subtask: VisibleTaskName) => {
+      await run({ operation: "amend", number: subtask.number, parent: { number } });
+      await queryClient.invalidateQueries({ queryKey: ["task", "show", conversationId, number] });
+    },
     /** Creates the sub-tasks together, in this Task's conversation, under this Task. */
     createSubtasks: async (titles: string[], idempotencyKey: string) => {
       const result = await execute({

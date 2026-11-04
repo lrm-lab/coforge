@@ -43,5 +43,15 @@
   "tasks_project_change": "Change project",
   "tasks_project_search": "Find a project",
   "tasks_description_more": "Show the whole description",
-  "tasks_description_less": "Shorten the description"
+  "tasks_description_less": "Shorten the description",
+  "tasks_add_existing_subtask": "Add existing task",
+  "tasks_menu_add_existing_subtask": "Add existing task as sub-task…",
+  "tasks_pick_subtask": "Choose a task to add as a sub-task",
+  "tasks_subtask_above": "Above this task",
+  "tasks_subtask_denied": "You can't move it",
+  "tasks_subtask_under": "Under {name}",
+  "tasks_subtask_none": "No other unfinished tasks here",
+  "tasks_subtask_move_title": "Move {name} here?",
+  "tasks_subtask_move_body": "{name} is a sub-task of {from}. It will move under {to}.",
+  "tasks_subtask_move_confirm": "Move"
 }

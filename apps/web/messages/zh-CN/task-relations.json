@@ -43,5 +43,15 @@
   "tasks_project_change": "改项目",
   "tasks_project_search": "找项目",
   "tasks_description_more": "展开描述",
-  "tasks_description_less": "收起描述"
+  "tasks_description_less": "收起描述",
+  "tasks_add_existing_subtask": "添加已有任务",
+  "tasks_menu_add_existing_subtask": "把已有任务设为子任务…",
+  "tasks_pick_subtask": "选择要设为子任务的任务",
+  "tasks_subtask_above": "是它的上级",
+  "tasks_subtask_denied": "你不能移动它",
+  "tasks_subtask_under": "在 {name} 下",
+  "tasks_subtask_none": "这里没有别的未完成任务",
+  "tasks_subtask_move_title": "把 {name} 移过来？",
+  "tasks_subtask_move_body": "{name} 现在是 {from} 的子任务，会移到 {to} 下面。",
+  "tasks_subtask_move_confirm": "移过来"
 }
