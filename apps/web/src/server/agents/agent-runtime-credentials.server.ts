@@ -1,4 +1,8 @@
-import type { AgentRuntimeConfig, EncryptedRuntimeApiKey } from "./agent-runtime-config.server";
+import {
+  requiredRuntimeConfig,
+  type AgentRuntimeConfig,
+  type EncryptedRuntimeApiKey,
+} from "./agent-runtime-config.server";
 
 import { utf8Encoder, utf8Decoder } from "@lrm/coforge-sdk/internal";
 const API_KEY_MIN_LENGTH = 8;
@@ -15,7 +19,7 @@ export type AgentRuntimeCredentialRepository = {
     agentId: string,
     workspaceId: string,
     ownerId: string,
-  ): Promise<{ runtimeConfig: AgentRuntimeConfig } | undefined>;
+  ): Promise<{ runtimeConfig: AgentRuntimeConfig | undefined } | undefined>;
   updateRuntimeConfig(agentId: string, runtimeConfig: AgentRuntimeConfig): Promise<void>;
 };
 
@@ -44,7 +48,7 @@ export class AgentRuntimeCredentials {
       principal.workspaceId,
       principal.userId,
     );
-    return agent ? summary(agent.runtimeConfig.provider) : null;
+    return agent?.runtimeConfig ? summary(agent.runtimeConfig.provider) : null;
   }
 
   async save(
@@ -130,7 +134,7 @@ export class AgentRuntimeCredentials {
       principal.userId,
     );
     if (!agent) throw new Error("Agent runtime credential is not available");
-    return agent.runtimeConfig;
+    return requiredRuntimeConfig(agent);
   }
 
   #key(keyUsages: KeyUsage[]) {

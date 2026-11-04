@@ -249,14 +249,15 @@ describe("ManageAgents", () => {
       computerId: "computer-1",
     });
     const environment = { keyId: "v1", ciphertext: "encrypted-env", nonce: "nonce" };
-    records[0]!.runtimeConfig.environment = environment;
+    const c = records[0]!.runtimeConfig!;
+    c.environment = environment;
     await agentManagement.update(principal, {
       agentId: created.agent.id,
       description: "Builder",
       provider: RUNTIME_PROVIDER.CODEX,
       model: "new-model",
     });
-    expect(records[0]!.runtimeConfig.environment).toEqual(environment);
+    expect(c.environment).toEqual(environment);
     expect(JSON.stringify(await agentManagement.list(principal))).not.toContain("encrypted-env");
     expect(JSON.stringify(starts)).not.toContain("encrypted-env");
   });
@@ -408,7 +409,7 @@ describe("ManageAgents", () => {
         modelProvider: "openai",
       },
     );
-    expect(pi.agent.runtimeConfig.provider).toEqual({ kind: "default" });
+    expect(pi.agent.runtimeConfig!.provider).toEqual({ kind: "default" });
   });
 
   test("defaults modelProvider for persisted runtime configs created before the field", () => {
@@ -613,7 +614,7 @@ describe("ManageAgents", () => {
       },
     );
     expect(controls).toEqual(["stop", "persist", "start"]);
-    expect(records[0]!.runtimeConfig.provider).toMatchObject({
+    expect(records[0]!.runtimeConfig!.provider).toMatchObject({
       apiKey: { ciphertext: "c" },
     });
     controls.length = 0;
@@ -642,7 +643,7 @@ describe("ManageAgents", () => {
         apiKey: "replacement-key-1234",
       },
     );
-    expect(records[0]!.runtimeConfig.provider).toMatchObject({
+    expect(records[0]!.runtimeConfig!.provider).toMatchObject({
       providerId: "anthropic",
       apiKey: { ciphertext: "encrypted:replacement-key-1234" },
     });
@@ -682,7 +683,7 @@ describe("ManageAgents", () => {
       },
     );
     expect(controls).toEqual(["stop", "persist", "start"]);
-    expect(result.agent.runtimeConfig.provider).not.toHaveProperty("apiKey");
+    expect(result.agent.runtimeConfig!.provider).not.toHaveProperty("apiKey");
     expect(JSON.stringify(result)).not.toContain("encrypted:new-secret-1234");
   });
 
@@ -744,7 +745,7 @@ describe("ManageAgents", () => {
     );
     expect(result.restart).toBe("deferred");
     expect(controls).toEqual(["persist"]);
-    expect(records[0]!.runtimeConfig.model).toBe("new");
+    expect(records[0]!.runtimeConfig!.model).toBe("new");
   });
 
   test("does not persist after stop failure and reports a deferred start failure", async () => {

@@ -1,3 +1,4 @@
+import { requiredRuntimeConfig } from "#src/server/agents/agent-runtime-config.server";
 import {
   agentEnvironmentShapeViolation,
   agentEnvironmentViolation,
@@ -24,7 +25,7 @@ export type AgentEnvironmentRepository = {
     agentId: string,
     workspaceId: string,
     ownerId: string,
-  ): Promise<{ runtimeConfig: AgentRuntimeConfig } | undefined>;
+  ): Promise<{ runtimeConfig: AgentRuntimeConfig | undefined } | undefined>;
   updateRuntimeConfig(agentId: string, runtimeConfig: AgentRuntimeConfig): Promise<void>;
 };
 
@@ -68,7 +69,7 @@ export class AgentEnvironment {
       // A deleted Agent has no environment to edit, and no restart either. Answers the
       // same NOT_FOUND a live-view lookup gives, not the authorization failure above it.
       assertAgentLive(agent);
-      const envVars = validateAgentEnvironment(input, agent.runtimeConfig.runtime);
+      const envVars = validateAgentEnvironment(input, requiredRuntimeConfig(agent).runtime);
       const config = await this.#ownedConfig(principal, agentId);
       const { environment: _environment, ...withoutEnvironment } = config;
       const nextConfig = Object.keys(envVars).length
@@ -111,7 +112,7 @@ export class AgentEnvironment {
       principal.userId,
     );
     if (!agent) throw new Error("Agent environment is not available");
-    return agent.runtimeConfig;
+    return requiredRuntimeConfig(agent);
   }
 
   async #encrypt(agentId: string, envVars: Record<string, string>) {

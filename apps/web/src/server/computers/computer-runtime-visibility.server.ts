@@ -1,3 +1,5 @@
+import type { PrismaClient } from "#src/generated/prisma/client";
+import { PrismaComputerRuntimeRepository } from "#src/server/db/repositories/computer-runtime.repositories.server";
 import type { RuntimeProvider, RuntimeUnavailableCode } from "@lrm/coforge-sdk/internal";
 
 export type ComputerRuntimeRecord = {
@@ -139,4 +141,21 @@ export class ComputerRuntimeVisibility {
     }
     return { ...runtime, isPublic };
   }
+}
+
+/** The one runtime an Agent profile's usage popover gate and CLI-version header share: the
+ * Agent's own Computer + runtime, only while both read. One lookup answers both. */
+export async function loadAgentOwnedRuntime(
+  db: PrismaClient,
+  workspaceId: string,
+  userId: string,
+  agent: { computer?: { id: string } | null },
+  runtimeConfig: { runtime: RuntimeProvider } | undefined,
+) {
+  if (!agent.computer || !runtimeConfig) return undefined;
+  return new ComputerRuntimeVisibility(new PrismaComputerRuntimeRepository(db)).ownedRuntime(
+    { workspaceId, userId },
+    agent.computer.id,
+    runtimeConfig.runtime,
+  );
 }

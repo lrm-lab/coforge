@@ -11,7 +11,7 @@ import {
   WEEKLY_REPORT_ASSISTANT_DISPLAY_NAME,
 } from "#src/server/records/weekly-report-assistant.server";
 import { openWeeklyReportAssistantChat } from "#src/server/records/weekly-report-assistant-chat.server";
-import { parseAgentRuntimeConfig } from "#src/server/agents/agent-runtime-config.server";
+import { readableRuntimeConfig } from "#src/server/agents/agent-runtime-config.server";
 import { looksLikeMemberReportRuleIntent } from "./weekly-highlight-extract";
 
 // The Records side chat's server functions: the viewer's weekly report assistant, the chat's
@@ -43,20 +43,15 @@ async function readWeeklyReportAssistantStatus(
     agentId: assistant.agentId,
     displayName: WEEKLY_REPORT_ASSISTANT_DISPLAY_NAME,
     computerConfigured: Boolean(agent.computerId),
-    runtimeConfigured:
-      runtimeConfig.runtime !== "coforge" ||
-      (runtimeConfig.provider.kind === "coforge" && Boolean(runtimeConfig.provider.apiKey)),
-    runtime: runtimeConfig.runtime,
+    runtimeConfigured: runtimeConfig
+      ? runtimeConfig.runtime !== "coforge" ||
+        (runtimeConfig.provider.kind === "coforge" && Boolean(runtimeConfig.provider.apiKey))
+      : false,
+    runtime: runtimeConfig?.runtime,
   };
 }
 
-function normalizeAgentRuntimeConfig(value: unknown) {
-  try {
-    return parseAgentRuntimeConfig(value);
-  } catch {
-    throw new AppError("TEMPORARILY_UNAVAILABLE");
-  }
-}
+const normalizeAgentRuntimeConfig = readableRuntimeConfig;
 
 export const addRecordComment = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])

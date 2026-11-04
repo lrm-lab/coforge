@@ -51,7 +51,7 @@ import { runtimeAuthView } from "#src/server/computers/computer-runtime-auth.ser
 import { runUpgradeComputerAction } from "#src/server/computers/upgrade-computer-action.server";
 import { readAgentWorkspaceScan } from "#src/server/computers/computer-workspace-scan.server";
 import {
-  parseAgentRuntimeConfig,
+  readableRuntimeConfig,
   publicAgentRuntimeConfig,
 } from "#src/server/agents/agent-runtime-config.server";
 import {
@@ -192,15 +192,18 @@ export const listComputers = createServerFn({ method: "GET" })
           }),
           online: statuses[index] ?? false,
           runtimeDetecting: detecting[index] ?? false,
-          agents: computer.agents.map((agent) => ({
-            id: agent.id,
-            name: agent.name,
-            displayName: agent.displayName,
-            avatarUrl: agentAvatarUrl(agent.id, agent.avatarMascot),
-            provider: parseAgentRuntimeConfig(agent.runtimeConfig).runtime,
-            runtimeConfig: publicAgentRuntimeConfig(parseAgentRuntimeConfig(agent.runtimeConfig)),
-            display: agentDisplayById.get(agent.id),
-          })),
+          agents: computer.agents.map((agent) => {
+            const config = readableRuntimeConfig(agent.runtimeConfig);
+            return {
+              id: agent.id,
+              name: agent.name,
+              displayName: agent.displayName,
+              avatarUrl: agentAvatarUrl(agent.id, agent.avatarMascot),
+              provider: config?.runtime,
+              runtimeConfig: config ? publicAgentRuntimeConfig(config) : undefined,
+              display: agentDisplayById.get(agent.id),
+            };
+          }),
           runtimes: computerRuntimes.map(({ ownerId: _ownerId, ...runtime }) => runtime),
         };
       }),

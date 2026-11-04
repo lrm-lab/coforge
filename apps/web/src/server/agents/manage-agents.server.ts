@@ -15,6 +15,8 @@ import {
   agentRuntimeConfig,
   assertProviderSelectable,
   publicAgentRuntimeConfig,
+  requiredRuntimeConfig,
+  type AgentRuntimeConfig,
 } from "./agent-runtime-config.server";
 import type { AgentRuntimeCredentials } from "./agent-runtime-credentials.server";
 import type { AgentRuntimeLock } from "./agent-runtime-lock.server";
@@ -187,13 +189,14 @@ export class ManageAgents {
         reasoning: input.reasoning?.trim() ?? "",
         fastMode: input.fastMode === true,
       };
+      const currentConfig = requiredRuntimeConfig(current);
       const sameProvider =
-        current.runtimeConfig.provider.kind === "coforge" &&
-        current.runtimeConfig.runtime === selection.provider &&
-        current.runtimeConfig.provider.providerId === selection.modelProvider;
+        currentConfig.provider.kind === "coforge" &&
+        currentConfig.runtime === selection.provider &&
+        currentConfig.provider.providerId === selection.modelProvider;
       const preservedApiKey =
-        sameProvider && current.runtimeConfig.provider.kind === "coforge"
-          ? current.runtimeConfig.provider.apiKey
+        sameProvider && currentConfig.provider.kind === "coforge"
+          ? currentConfig.provider.apiKey
           : undefined;
       const encryptedApiKey = apiKeyInput
         ? await this.#encrypt(current.id, selection.modelProvider, apiKeyInput)
@@ -210,10 +213,9 @@ export class ManageAgents {
               ...(apiKey ? { apiKey } : {}),
             }
           : { kind: "default" },
-        current.runtimeConfig.environment,
+        currentConfig.environment,
       );
-      const runtimeChanged =
-        JSON.stringify(current.runtimeConfig) !== JSON.stringify(runtimeConfig);
+      const runtimeChanged = JSON.stringify(currentConfig) !== JSON.stringify(runtimeConfig);
       const computerChanged = computerId !== current.computerId;
       if (
         (runtimeChanged || computerChanged) &&
@@ -271,7 +273,10 @@ export class ManageAgents {
 }
 
 function publicAgent(agent: AgentRecord): AgentRecord {
-  return { ...agent, runtimeConfig: publicAgentRuntimeConfig(agent.runtimeConfig) };
+  return {
+    ...agent,
+    runtimeConfig: agent.runtimeConfig ? publicAgentRuntimeConfig(agent.runtimeConfig) : undefined,
+  };
 }
 
 /** A stop intent for the Agent's current Computer, or an explicit one while it moves. */
@@ -292,10 +297,13 @@ export function agentStartIntent(
   agent: Pick<AgentRecord, "id" | "workspaceId" | "computerId" | "runtimeConfig">,
   computerId?: string,
 ): AgentStartIntent {
-  return { ...agentStopIntent(agent, computerId), ...runtimeStartFields(agent.runtimeConfig) };
+  return {
+    ...agentStopIntent(agent, computerId),
+    ...runtimeStartFields(requiredRuntimeConfig(agent)),
+  };
 }
 
-export function runtimeStartFields(config: AgentRecord["runtimeConfig"]) {
+export function runtimeStartFields(config: AgentRuntimeConfig) {
   const launchProviderConfig =
     config.provider.kind === "coforge"
       ? { kind: config.provider.kind, providerId: config.provider.providerId }

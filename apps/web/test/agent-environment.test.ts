@@ -83,7 +83,7 @@ test("failed environment persistence restores the original runtime and hides sto
   );
   expect(f.events).toEqual(["lock", "stop", "write", "start", "unlock"]);
   expect(f.starts[0]).toMatchObject({ model: "model", provider: RUNTIME_PROVIDER.PI });
-  expect(f.agent.runtimeConfig.environment).toBeUndefined();
+  expect(f.agent.runtimeConfig!.environment).toBeUndefined();
 });
 
 test("only explicit overrides round trip encrypted; empty clears; start/WSS and public config omit secrets", async () => {
@@ -96,16 +96,16 @@ test("only explicit overrides round trip encrypted; empty clears; start/WSS and 
   expect(await f.environment.get(principal, "agent-1")).toEqual({});
   expect(await f.environment.save(principal, "agent-1", envVars)).toEqual({ restart: "published" });
   expect(await f.environment.get(principal, "agent-1")).toEqual(envVars);
-  expect(await f.environment.launchEnvironment("agent-1", f.agent.runtimeConfig)).toEqual(envVars);
-  const first = f.agent.runtimeConfig.environment!;
-  expect(JSON.stringify(f.agent.runtimeConfig)).not.toContain("secret-one");
-  expect(publicAgentRuntimeConfig(f.agent.runtimeConfig)).not.toHaveProperty("environment");
+  expect(await f.environment.launchEnvironment("agent-1", f.agent.runtimeConfig!)).toEqual(envVars);
+  const first = f.agent.runtimeConfig!.environment!;
+  expect(JSON.stringify(f.agent.runtimeConfig!)).not.toContain("secret-one");
+  expect(publicAgentRuntimeConfig(f.agent.runtimeConfig!)).not.toHaveProperty("environment");
   expect(JSON.stringify(f.starts)).not.toContain(first.ciphertext);
   expect(JSON.stringify(f.starts)).not.toContain("secret-one");
   await f.environment.save(principal, "agent-1", envVars);
-  expect(f.agent.runtimeConfig.environment!.nonce).not.toBe(first.nonce);
+  expect(f.agent.runtimeConfig!.environment!.nonce).not.toBe(first.nonce);
   await f.environment.save(principal, "agent-1", {});
-  expect(f.agent.runtimeConfig.environment).toBeUndefined();
+  expect(f.agent.runtimeConfig!.environment).toBeUndefined();
   expect(await f.environment.get(principal, "agent-1")).toEqual({});
 });
 
@@ -124,7 +124,7 @@ test("owner and workspace authorize both reads and writes before control", async
 test("tampered ciphertext, nonce, wrong key and cross-Agent replay fail with safe errors", async () => {
   const f = fixture();
   await f.environment.save(principal, "agent-1", { TOKEN: "unique-secret" });
-  const original = f.agent.runtimeConfig;
+  const original = f.agent.runtimeConfig!;
   for (const environment of [
     { ...original.environment!, ciphertext: "AAAA" },
     { ...original.environment!, nonce: "AAAA" },
@@ -202,13 +202,13 @@ test("a refused variable names the rule it broke, so the editor can say why", as
 
 test("a provider-reserved name refuses only that runtime's Agent", async () => {
   const f = fixture();
-  f.agent.runtimeConfig.runtime = RUNTIME_PROVIDER.CODEX;
+  f.agent.runtimeConfig!.runtime = RUNTIME_PROVIDER.CODEX;
   await expect(
     f.environment.save(principal, "agent-1", { OPENAI_BASE_URL: "https://elsewhere" }),
   ).rejects.toMatchObject({ code: "INVALID_INPUT", errorId: "agent-environment-reserved-name" });
-  f.agent.runtimeConfig.runtime = RUNTIME_PROVIDER.OPENCODE;
+  f.agent.runtimeConfig!.runtime = RUNTIME_PROVIDER.OPENCODE;
   await f.environment.save(principal, "agent-1", { OPENAI_BASE_URL: "https://elsewhere" });
-  expect(f.agent.runtimeConfig.environment).toBeDefined();
+  expect(f.agent.runtimeConfig!.environment).toBeDefined();
 });
 
 test("a stored environment the rule now reserves still reaches the launch, and the editor can show it", async () => {
@@ -233,11 +233,11 @@ test("a stored environment the rule now reserves still reaches the launch, and t
   // the rule existed must not stop the Agent from launching, and the editor still shows it.
   expect(await decryptAgentEnvironment("agent-1", encrypted, key)).toEqual(stored);
   const f = fixture();
-  f.agent.runtimeConfig = { ...f.agent.runtimeConfig, environment: encrypted };
+  f.agent.runtimeConfig = { ...f.agent.runtimeConfig!, environment: encrypted };
   expect(await f.environment.get(principal, "agent-1")).toEqual(stored);
   expect(
     await f.environment.launchEnvironment("agent-1", {
-      ...f.agent.runtimeConfig,
+      ...f.agent.runtimeConfig!,
       environment: encrypted,
     }),
   ).toEqual(stored);

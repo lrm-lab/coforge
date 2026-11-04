@@ -92,7 +92,10 @@ export function parseAgentRuntimeConfig(value: unknown): AgentRuntimeConfig {
   };
 }
 
-export function publicAgentRuntimeConfig(config: AgentRuntimeConfig): AgentRuntimeConfig {
+export function publicAgentRuntimeConfig(
+  config: AgentRuntimeConfig | undefined,
+): AgentRuntimeConfig | undefined {
+  if (!config) return undefined;
   const { environment: _environment, ...publicConfig } = config;
   return {
     ...publicConfig,
@@ -146,4 +149,24 @@ function parseEncryptedApiKey(value: unknown): EncryptedRuntimeApiKey | undefine
   )
     throw new Error("invalid encrypted runtime API key");
   return { keyId, ciphertext, nonce, hint };
+}
+
+/** A stored Agent's runtime config where the caller cannot proceed without one — a write or
+ * compare path. A row whose stored config cannot be read refuses with `CONFLICT` (a read path
+ * omits it instead; see `AgentRecord`). */
+export function requiredRuntimeConfig(agent: { runtimeConfig: AgentRuntimeConfig | undefined }) {
+  if (!agent.runtimeConfig)
+    throw new AppError("CONFLICT", { errorId: "agent-runtime-config-unreadable" });
+  return agent.runtimeConfig;
+}
+
+/** A stored runtime config a read path may show: the parsed config, or `undefined` when the row
+ * cannot be read — one bad Agent loses its runtime fields and logs a warning, never the read. */
+export function readableRuntimeConfig(value: unknown): AgentRuntimeConfig | undefined {
+  try {
+    return parseAgentRuntimeConfig(value);
+  } catch (error) {
+    console.warn("agent_runtime_config_unreadable", { error });
+    return undefined;
+  }
 }

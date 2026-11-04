@@ -44,8 +44,7 @@ import {
 import { workspaceMemberRole } from "#src/server/workspaces/workspace-membership.server";
 import { agentDeletion, changeAgentVisibilityUseCase } from "./agents-lifecycle.functions";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
-import { ComputerRuntimeVisibility } from "#src/server/computers/computer-runtime-visibility.server";
-import { PrismaComputerRuntimeRepository } from "#src/server/db/repositories/computer-runtime.repositories.server";
+import { loadAgentOwnedRuntime } from "#src/server/computers/computer-runtime-visibility.server";
 import { PrismaAgentRuntimeCredentialRepository } from "#src/server/db/repositories/agent-runtime-credential.repositories.server";
 import { readAgentRuntimeCredentialEncryptionKey } from "#src/server/agents/agent-runtime-credentials.server";
 import { ChangeAgentRuntimeCredential } from "#src/server/agents/change-agent-runtime-credential.server";
@@ -55,7 +54,7 @@ import {
   userOwnsLiveComputer,
 } from "#src/server/records/weekly-report-assistant.server";
 import {
-  parseAgentRuntimeConfig,
+  readableRuntimeConfig,
   publicAgentRuntimeConfig,
 } from "#src/server/agents/agent-runtime-config.server";
 import { getAgentStatusCache } from "#src/server/agents/agent-status.server";
@@ -296,18 +295,8 @@ async function loadAgentProfileDetail(context: WorkspaceUserContext, agentId: st
         .get({ workspaceId, computerId: result.computer.id })
         .catch(() => undefined)
     : undefined;
-  const runtimeConfig = parseAgentRuntimeConfig(result.runtimeConfig);
-  // Same rule `scanUsage`/`readUsage` enforce (`computers.functions.ts`): the Runtime badge only
-  // offers the usage popover when a scan against this Computer's runtime would actually be
-  // honoured, so the Profile tab never renders a control the server would refuse. One lookup
-  // (`ownedRuntime`) answers both that gate and the CLI `version` its popover header shows.
-  const ownedRuntime = result.computer
-    ? await new ComputerRuntimeVisibility(new PrismaComputerRuntimeRepository(db)).ownedRuntime(
-        { workspaceId, userId: user.id },
-        result.computer.id,
-        runtimeConfig.runtime,
-      )
-    : undefined;
+  const runtimeConfig = readableRuntimeConfig(result.runtimeConfig);
+  const ownedRuntime = await loadAgentOwnedRuntime(db, workspaceId, user.id, result, runtimeConfig);
   return {
     ...result,
     // The Creator row renders the same identity the rest of the product does (avatar image +

@@ -316,8 +316,8 @@ function AgentRosterIdentity({
   display: ComputerDetailView["agents"][number]["display"];
   status: ReturnType<typeof agentDisplay>;
 }) {
-  const modelLabel = useAgentModelName(agent.id, agent.runtimeConfig.model ?? "");
-  const runtime = (
+  const modelLabel = useAgentModelName(agent.id, agent.runtimeConfig?.model ?? "");
+  const runtime = agent.provider ? (
     <>
       <RuntimeProviderMark provider={agent.provider} className="size-3.5" />
       <span className="truncate">
@@ -325,7 +325,7 @@ function AgentRosterIdentity({
         {modelLabel ? ` · ${modelLabel}` : ""}
       </span>
     </>
-  );
+  ) : null;
   return (
     <span className={cn(ROSTER_ROW, "flex w-full min-w-0 items-center")}>
       <span className="flex min-w-0 flex-1 items-center gap-3">

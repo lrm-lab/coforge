@@ -49,7 +49,11 @@ import { AgentProfileUnavailable } from "./agent-profile-unavailable";
 import { AgentProfileTabs, useAgentProfileTabOrder } from "./agent-profile-tabs";
 import { setupComputerOptions } from "./setup-computers";
 import { AgentProfileTab } from "./agent-profile-tab";
-import { profileRuntimeSelection, profileUpdateInput } from "./agent-profile-runtime";
+import {
+  profileDiagnosticFacts,
+  profileRuntimeSelection,
+  profileUpdateInput,
+} from "./agent-profile-runtime";
 import { AgentWorkspaceTab } from "./agent-workspace-tab";
 import { AgentActivityTab } from "./agent-activity-tab";
 import { AgentAppsTab } from "./agent-apps-tab";
@@ -253,16 +257,7 @@ export function AgentProfilePanel({
     return <AgentProfileUnavailable notVisible={notVisible} back={back} onClose={onClose} />;
   }
 
-  const diagnosticFacts = profile && {
-    id: profile.id,
-    workspaceId: profile.workspaceId,
-    computerId: profile.computerId ?? null,
-    computerVersion: profile.computer?.computerVersion ?? null,
-    runtime: profile.runtimeConfig.runtime,
-    model: profile.runtimeConfig.model,
-    stopped: profile.stopped,
-    status: profile.status.value,
-  };
+  const diagnosticFacts = profile && profileDiagnosticFacts(profile);
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col">
@@ -390,8 +385,8 @@ export function AgentProfilePanel({
                   agentName={profile.displayName || profile.name}
                   currentComputerId={profile.computer.id}
                   canMove={canManage}
-                  runtime={profile.runtimeConfig.runtime}
-                  model={profile.runtimeConfig.model}
+                  runtime={profile.runtimeConfig!.runtime}
+                  model={profile.runtimeConfig!.model}
                 />
               ) : undefined
             }
@@ -399,7 +394,7 @@ export function AgentProfilePanel({
               profile.canChangeVisibility ? (target) => setVisibilityTarget(target) : undefined
             }
             runtimeCredentialDialog={
-              owned && profile.runtimeConfig.provider.kind === "coforge" ? (
+              owned && profile.runtimeConfig?.provider.kind === "coforge" ? (
                 <>
                   <ButtonUtility
                     aria-label={m.agent_runtime_edit()}
@@ -470,14 +465,14 @@ export function AgentProfilePanel({
           />
         )}
       </div>
-      {profile && (
+      {profile?.runtimeConfig && (
         <AgentRuntimeConfigDialog
           open={runtimeEditing}
           onClose={onCancelRuntimeEdit}
           computerId={profile.computer?.id ?? ""}
           computers={setupComputers}
           credentialConfigured={Boolean(profile.runtimeCredential)}
-          initial={profileRuntimeSelection(profile)}
+          initial={profileRuntimeSelection(profile.runtimeConfig)}
           onLoad={onLoadRuntimeOptions}
           environment={environmentState}
           saving={runtimeFormSaving}

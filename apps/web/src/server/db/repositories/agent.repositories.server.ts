@@ -12,7 +12,7 @@ import { AppError } from "#src/lib/app-error";
 import { ACTIVE_AGENT_WHERE, ROSTER_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { enrollGeneralChannel } from "#src/server/conversations/general-channel.server";
 import {
-  parseAgentRuntimeConfig,
+  readableRuntimeConfig,
   type AgentRuntimeConfig,
 } from "#src/server/agents/agent-runtime-config.server";
 import { AGENT_VISIBILITY, type AgentVisibility } from "#src/features/agents/agent-visibility";
@@ -29,7 +29,9 @@ export type AgentRecord = {
   createdAt: Date;
   ownerId: string;
   computerId?: string;
-  runtimeConfig: AgentRuntimeConfig;
+  /** `undefined` when the stored row's config cannot be read — one bad row never fails a read
+   * (the readers then show no runtime); only a write-path caller may treat it as required. */
+  runtimeConfig: AgentRuntimeConfig | undefined;
   /** Set when a user stopped this Agent; undefined/null means not stopped. Config,
    * credential and environment mutations read this to skip the stop→…→start dance. */
   stoppedAt?: Date | null;
@@ -68,12 +70,7 @@ function mapAgent(agent: {
   avatarMascot?: string | null;
   systemKind?: string | null;
 }): AgentRecord {
-  let runtimeConfig;
-  try {
-    runtimeConfig = parseAgentRuntimeConfig(agent.runtimeConfig);
-  } catch {
-    throw new Error(`Agent ${agent.id} has invalid runtime config`);
-  }
+  const runtimeConfig = readableRuntimeConfig(agent.runtimeConfig);
   const { computerId, description } = agent;
   return {
     id: agent.id,
@@ -100,7 +97,8 @@ function mapAgent(agent: {
   };
 }
 
-export type AgentCreateInput = Omit<AgentRecord, "id" | "createdAt"> & {
+export type AgentCreateInput = Omit<AgentRecord, "id" | "createdAt" | "runtimeConfig"> & {
+  runtimeConfig: AgentRuntimeConfig;
   id?: string;
   introductionDueAt?: Date;
   /** Set by a cloud creation; unique per Workspace with it (`Agent.createRequestId`). */

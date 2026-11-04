@@ -111,7 +111,7 @@ function AgentCard({
 }) {
   const profile = useQuery({ ...agentProfileQuery(agentId), staleTime: CARD_PROFILE_STALE_MS });
   const data = profile.data;
-  const modelLabel = useAgentModelName(agentId, data?.runtimeConfig.model ?? "");
+  const modelLabel = useAgentModelName(agentId, data?.runtimeConfig?.model ?? "");
   // Read only once the profile says the viewer gets the panel's Activity tab, as the server does.
   const canSeeActivity = Boolean(data && !data.deletedAt && canManageAgent(data));
   const activity = useAgentRecentActivity(
@@ -179,15 +179,19 @@ function AgentCard({
               <CardFact label={m.agent_profile_computer()}>
                 {data && (data.computer?.label || m.agent_profile_computer_unassigned())}
               </CardFact>
-              <CardFact label={m.agent_runtime_field()}>
-                {data && runtimeProviderLabel(data.runtimeConfig.runtime)}
-              </CardFact>
-              <CardFact label={m.agent_form_model()}>
-                {data && (data.runtimeConfig.model ? modelLabel : m.agent_form_provider_default())}
-              </CardFact>
-              <CardFact label={m.agent_form_reasoning()}>
-                {data && (data.runtimeConfig.reasoning || m.agent_form_provider_default())}
-              </CardFact>
+              {data?.runtimeConfig && (
+                <>
+                  <CardFact label={m.agent_runtime_field()}>
+                    {runtimeProviderLabel(data.runtimeConfig.runtime)}
+                  </CardFact>
+                  <CardFact label={m.agent_form_model()}>
+                    {data.runtimeConfig.model ? modelLabel : m.agent_form_provider_default()}
+                  </CardFact>
+                  <CardFact label={m.agent_form_reasoning()}>
+                    {data.runtimeConfig.reasoning || m.agent_form_provider_default()}
+                  </CardFact>
+                </>
+              )}
             </dl>
           )}
         </div>

@@ -138,15 +138,19 @@ function AgentProfileTabBody({
    * the `deleteAgents` capability and this Agent is a delete target at all. */
   onStartDelete?: () => void;
 }) {
-  const { runtime, model, reasoning } = profile.runtimeConfig;
-  const modelLabel = useAgentModelName(profile.id, model);
-  const canEditRuntime = canManage && Boolean(onStartRuntimeEdit);
-  const runtimeLabel = runtimeProviderLabel(runtime);
-  const runtimeIcon = <RuntimeProviderMark provider={runtime} className="size-3.5" />;
+  const runtimeConfig = profile.runtimeConfig;
+  const modelLabel = useAgentModelName(profile.id, runtimeConfig?.model ?? "");
+  const canEditRuntime = canManage && Boolean(onStartRuntimeEdit) && Boolean(runtimeConfig);
+  const runtimeLabel = runtimeConfig ? runtimeProviderLabel(runtimeConfig.runtime) : "";
+  const runtimeIcon = runtimeConfig ? (
+    <RuntimeProviderMark provider={runtimeConfig.runtime} className="size-3.5" />
+  ) : null;
   const context = profile.deletedAt ? null : contextUsage;
   const usageComputer =
     profile.computer &&
-    (context || (profile.runtimeUsageVisible && RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN[runtime]))
+    runtimeConfig &&
+    (context ||
+      (profile.runtimeUsageVisible && RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN[runtimeConfig.runtime]))
       ? profile.computer
       : undefined;
   const creatorName = humanLabel(profile.owner);
@@ -314,7 +318,7 @@ function AgentProfileTabBody({
                 <RuntimeUsage
                   computerId={usageComputer.id}
                   runtime={{
-                    provider: runtime,
+                    provider: runtimeConfig!.runtime,
                     displayName: runtimeLabel,
                     version: profile.runtimeVersion,
                   }}
@@ -346,16 +350,16 @@ function AgentProfileTabBody({
             </FactBadge>
           </FactRow>
           <FactRow label={m.agent_form_model()}>
-            <span className={model ? "break-words" : ""}>
-              {model ? modelLabel : m.agent_form_provider_default()}
+            <span className={runtimeConfig!.model ? "break-words" : ""}>
+              {runtimeConfig!.model ? modelLabel : m.agent_form_provider_default()}
             </span>
           </FactRow>
           <FactRow label={m.agent_form_reasoning()}>
-            {reasoning || m.agent_form_provider_default()}
+            {runtimeConfig!.reasoning || m.agent_form_provider_default()}
           </FactRow>
           <AgentFastModeFact
-            runtime={runtime}
-            requested={profile.runtimeConfig.fastMode === true}
+            runtime={runtimeConfig!.runtime}
+            requested={profile.runtimeConfig!.fastMode === true}
             reading={fastMode}
           />
         </div>

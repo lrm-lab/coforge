@@ -38,7 +38,7 @@ function fixture(options?: {
         events.push("save");
         if (options?.mutationFails) throw new Error("credential persistence failed");
         agent.runtimeConfig = {
-          ...agent.runtimeConfig,
+          ...agent.runtimeConfig!,
           provider: {
             kind: "coforge",
             providerId: "anthropic",
@@ -92,7 +92,7 @@ describe("ChangeAgentRuntimeCredential", () => {
       new Uint8Array(32).fill(1),
     );
     await credentials.save(principal, "agent-1", "fixture-pi-key");
-    expect(await credentials.launchProviderConfig("agent-1", config)).toHaveProperty(
+    expect(await credentials.launchProviderConfig("agent-1", config!)).toHaveProperty(
       "apiKey",
       "fixture-pi-key",
     );
@@ -116,7 +116,7 @@ describe("ChangeAgentRuntimeCredential", () => {
         start: async (intent) => {
           expect(intent.provider).toBe("pi");
           expect(intent.providerConfig).toEqual({ kind: "coforge", providerId: "openai" });
-          expect(await credentials.launchProviderConfig("agent-1", config)).toEqual({
+          expect(await credentials.launchProviderConfig("agent-1", config!)).toEqual({
             kind: "coforge",
             providerId: "openai",
           });
