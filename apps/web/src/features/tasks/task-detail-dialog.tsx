@@ -17,7 +17,6 @@ import {
 import { Button as AriaButton, Heading } from "react-aria-components";
 
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
-import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import type { Mentionable } from "#src/features/conversations/mention-text";
@@ -35,6 +34,7 @@ import {
   TaskSubtasksPage,
   type TaskDetailTab,
 } from "./task-detail-tabs";
+import { TaskDescription } from "./task-description";
 import { TaskSection, type RelationPicker } from "./task-section";
 import { ownsDiscussion, taskFollowMenuItem, useTaskFollow } from "./task-follow";
 import { isTaskStep } from "./task-popup-steps";
@@ -451,29 +451,5 @@ function TaskTrail({
       )}
       <span className="shrink-0 px-1 tabular-nums">{here}</span>
     </nav>
-  );
-}
-
-/** The description under the title, as Linear's issue. Beside the properties a long one is cut at
- * four lines, on a phone at two, and a tap shows the rest. */
-function TaskDescription({ text, short }: { text: string; short: boolean }) {
-  const [open, setOpen] = useState(false);
-  // Cut short so the discussion keeps its room; opened, a long one scrolls in place.
-  const clamp = open ? "max-h-60 overflow-y-auto" : short ? "line-clamp-2" : "line-clamp-4";
-  return (
-    <Button
-      color="link-gray"
-      type="button"
-      aria-expanded={open}
-      aria-label={open ? m.tasks_description_less() : m.tasks_description_more()}
-      onClick={(event) => {
-        // Selecting text in it is reading, not a tap to open or shorten.
-        if (window.getSelection()?.toString()) return event.preventDefault();
-        setOpen((shown) => !shown);
-      }}
-      className="mx-4 text-left text-sm whitespace-pre-wrap text-secondary outline-focus-ring focus-visible:outline-2 sm:mx-6"
-    >
-      <span className={cn("block", clamp)}>{text}</span>
-    </Button>
   );
 }
