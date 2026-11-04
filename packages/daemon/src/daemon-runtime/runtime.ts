@@ -130,6 +130,7 @@ import { AgentFeatureSync } from "./agent-feature-sync";
 import { WakeRecycle } from "./wake-recycle";
 import { AgentMessageOperations } from "./agent-message-operations";
 import { AgentRequestForwarder } from "./agent-request-forwarder";
+import { createAgentRequestForwarder } from "./agent-request-forwarder-factory";
 import { AgentDeliveryQueue } from "./agent-delivery-queue";
 import { ReplyIntentPublisher } from "./reply-intent-publisher";
 import {
@@ -194,7 +195,6 @@ export class DaemonRuntime {
   readonly #agentSessions: AgentSessions;
   readonly #messageAttention: AgentMessageAttentionIndex;
   readonly #messageOperations: AgentMessageOperations;
-  /** The Agent requests the daemon only authorizes and forwards over Agent HTTPS. */
   readonly agentRequests: AgentRequestForwarder;
   readonly #mentionDeliveries: MentionDeliveryTracker;
   /** The launch and native session last reported to the cloud per Agent: the identity a tracked
@@ -591,13 +591,12 @@ export class DaemonRuntime {
       agentIdForContext: (context) => this.#agentIdForContext(context),
       runningMentionIdentity: (agentId) => this.#runningMentionIdentity(agentId),
     });
-    this.agentRequests = new AgentRequestForwarder({
-      get transport() {
-        return runtime.#transport;
-      },
+    this.agentRequests = createAgentRequestForwarder(
+      () => this.#transport,
       connection,
-      authorizedAgent: (context, agentApiKey) => this.#authorizedAgent(context, agentApiKey),
-    });
+      this.#contexts,
+      this.#authorizedAgent.bind(this),
+    );
     this.#mentionDeliveries = messages.mentionDeliveries;
     this.#messageAttention = messages.messageAttention;
     this.#inboxCoordinator = messages.inboxCoordinator;

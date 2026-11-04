@@ -35,6 +35,7 @@ import type {
   GitHubCredentialResponse,
 } from "@lrm/coforge-sdk/agent";
 import type {
+  AgentMessageRecord,
   ChannelCommand,
   WeeklyReportCommand,
   WeeklyReportResponse,
@@ -43,6 +44,8 @@ import type {
 } from "@lrm/coforge-sdk/internal";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import type { OpenVikingAgentProxyCommand } from "#src/openviking-read-proxy";
+import type { AgentContexts } from "./agent-contexts";
+import { elideForAgent } from "./context-elision";
 
 export type AgentRequestForwarderPorts = Readonly<{
   /** The current transport; read at each request, since a restart replaces it. */
@@ -84,6 +87,8 @@ export type AgentRequestForwarderPorts = Readonly<{
     | "agentAttachmentUploadSessionGet"
   >;
   connection: Readonly<{ workspaceId: string }>;
+  /** Context ledger used by message and task reads to avoid repeating sender introductions. */
+  contexts?: Pick<AgentContexts, "ledger">;
   /** The Agent a local context was issued to, once the runtime is running and the Agent API key
    * is well formed; otherwise throws that precondition's `AgentPreflightError`. */
   authorizedAgent(context: string, agentApiKey: string | undefined): string;
@@ -254,8 +259,42 @@ export class AgentRequestForwarder {
     request: AgentTaskConversationRequest,
     agentApiKey: string,
   ): Promise<Response> {
-    this.#ports.authorizedAgent(context, agentApiKey);
-    return this.#transportCall("agentTaskConversation", NOT_CONNECTED)(request, agentApiKey);
+    const agentId = this.#ports.authorizedAgent(context, agentApiKey);
+    const response = await this.#transportCall("agentTaskConversation", NOT_CONNECTED)(
+      request,
+      agentApiKey,
+    );
+    if (request.route !== "read" || !response.ok) return response;
+    let body: unknown;
+    try {
+      body = await response.clone().json();
+    } catch {
+      return response;
+    }
+    if (
+      !body ||
+      typeof body !== "object" ||
+      !Array.isArray((body as { messages?: unknown }).messages)
+    )
+      return response;
+    const messages = (body as { messages: unknown[] }).messages;
+    const elided = elideForAgent(
+      this.#ports.contexts,
+      agentId,
+      messages as AgentMessageRecord[],
+      "read",
+    );
+    if (elided === messages) return response;
+    const next = { ...(body as Record<string, unknown>), messages: elided };
+    const rewritten = new Response(JSON.stringify(next), {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    }) as Response & { messages?: unknown };
+    // `guardDelivery` reads this non-serialized field to release claims if the local client
+    // disconnects before consuming the rewritten response body.
+    rewritten.messages = elided;
+    return rewritten;
   }
 
   async agentArtifact(
