@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertCircle, Clock, SlashCircle01 } from "@untitledui/icons";
 import { CHOICE_OTHER_OPTION_ID } from "@lrm/coforge-sdk/agent";
 
@@ -12,6 +12,7 @@ import {
   type Question,
   type QuestionsView,
 } from "./action-card-question-rows";
+import { dropDrafts, keepDrafts, keptDrafts } from "./action-card-questions-drafts";
 import { QuestionsStepper } from "./action-card-questions-stepper";
 
 /** One question's answer, as `commitQuestionsActionCard` takes it. */
@@ -55,9 +56,14 @@ export function QuestionsActionCard({
   onSubmit: (answers: QuestionsAnswer[]) => Promise<void>;
   onCancel: () => void;
 }) {
-  const [drafts, setDrafts] = useState<Record<string, Draft>>({});
+  // Drawn afresh (desktop to phone, the channel left and opened again), it picks up where it was.
+  const [drafts, setDrafts] = useState(() => keptDrafts(view.messageId));
   const [submitting, setSubmitting] = useState(false);
   const pending = view.state === "pending";
+  useEffect(() => {
+    if (pending) keepDrafts(view.messageId, drafts);
+    else dropDrafts(view.messageId);
+  }, [view.messageId, pending, drafts]);
   const canAnswer = pending && view.canCommit;
   const waitingOn = pending && !canAnswer ? view.asked?.displayName : undefined;
   const withdrawable = pending && view.canCancel && !canAnswer;

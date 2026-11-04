@@ -203,10 +203,17 @@ test("a questions card takes an answer for every question, then sends them at on
     await browser("press", "Enter");
     await browser("wait", "--fn", shown("notify"));
 
-    // On a phone (the narrow layout draws the card afresh) a sideways swipe turns the questions.
+    // On a phone the narrow layout draws the card afresh; what was answered stays answered, and a
+    // sideways swipe turns the questions.
     await browser("set", "viewport", "390", "844");
     await browser("wait", "--fn", shown("webhook"));
     await evaluate(`(${card}.scrollIntoView({ block: "center" }), true)`);
+    expect(
+      await evaluate<boolean>(
+        `${card}?.querySelector('[data-question-option="keep"]')?.hasAttribute("data-selected") ?? false`,
+      ),
+    ).toBe(true);
+    expect(await evaluate<number>(`${card}.querySelectorAll("[data-step-done]").length`)).toBe(3);
     await shoot("phone-step");
     const swipe = (dx: number) =>
       evaluate(`(() => {
@@ -222,12 +229,22 @@ test("a questions card takes an answer for every question, then sends them at on
     await browser("wait", "--fn", shown("agent"));
     await swipe(90);
     await browser("wait", "--fn", shown("webhook"));
-    await browser("click", `[data-question="webhook"] [data-question-option="keep"]`);
+    await swipe(-90);
     await browser("wait", "--fn", shown("agent"));
+    expect(
+      await evaluate<string>(`${card}.querySelector("[data-question-other]")?.value ?? ""`),
+    ).toBe("Ask me each time");
+    // Its own words taken back, the question is skipped after all.
+    await browser("click", `[data-question="agent"] [data-question-other]`);
+    await browser("press", "End");
+    for (const _ of "Ask me each time") await browser("press", "Backspace");
     await press("Skip");
     await browser("wait", "--fn", shown("notify"));
-    await browser("click", `[data-question="notify"] [data-question-option="ops"]`);
-    await browser("click", `[data-question="notify"] [data-question-option="owner"]`);
+    expect(
+      await evaluate<boolean>(
+        `["ops", "owner"].every((id) => ${card}?.querySelector(\`[data-question-option="\${id}"]\`)?.hasAttribute("data-selected"))`,
+      ),
+    ).toBe(true);
 
     // Offline, the send fails: the card says so and keeps every answer for another try.
     await browser("set", "offline", "on");
