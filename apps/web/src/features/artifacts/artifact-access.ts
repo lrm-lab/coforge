@@ -23,6 +23,8 @@ export type ArtifactAccessState = {
   pending: ArtifactAccess | undefined;
   /** What a change that failed says. */
   error: string | null;
+  /** Forgets a failed change, as Share closes. */
+  dismiss: () => void;
 };
 
 /**
@@ -53,5 +55,8 @@ export function useArtifactAccess(
       : isAppError(cause) && cause.code === "ACCESS_DENIED"
         ? m.doc_share_denied()
         : m.doc_share_failed(),
+    dismiss: () => {
+      if (write.isError) write.reset();
+    },
   };
 }

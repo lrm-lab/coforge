@@ -308,7 +308,10 @@ function ArtifactPageFor({
       {leavePrompt}
       <ArtifactShareDialog
         open={sharing}
-        onOpenChange={setSharing}
+        onOpenChange={(open) => {
+          setSharing(open);
+          if (!open) access.dismiss();
+        }}
         title={title}
         homeKind={home?.kind ?? "channel"}
         homeName={homeName}

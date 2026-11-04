@@ -12,9 +12,10 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
 
 /**
  * Who can see an artifact, from its page's Share (task #514, #529): for an artifact of a
- * conversation, its two levels, and a change of them stored; for an artifact of the Workspace, one
- * level, and the way back is the Workspace; and one of a conversation the viewer is not in, read
- * only through the Workspace level: the way back is the Workspace, and the editor is read only.
+ * conversation, its two levels, a change of them stored, and one that finds it deleted; for an
+ * artifact of the Workspace, one level, and the way back is the Workspace; and one of a
+ * conversation the viewer is not in, read only through the Workspace level: the way back is the
+ * Workspace, and the editor is read only.
  *
  * Opt-in like the other browser E2Es: real local Web started with the flag file that offers
  * `artifacts` (`/tmp/coforge-flags-docs.json`, read here too). Its texts carry the run's tail,
@@ -111,8 +112,12 @@ test("an artifact's Share: who can see it", async () => {
       "workspace",
     );
     await shoot("1-share-workspace");
-    await browser("press", "Escape");
-    await browser("wait", "--fn", `document.querySelector('[role="dialog"]') == null`);
+
+    // Deleted while Share is open: the change finds it gone, and the page says it cannot open it.
+    await db.artifact.update({ where: { id: plan.id }, data: { deletedAt: new Date() } });
+    await press(level("People in"));
+    await until(`document.body.textContent.includes("Can't open this")`);
+    expect(await evaluate<boolean>(`document.querySelector('[role="dialog"]') == null`)).toBe(true);
 
     // An artifact of the Workspace itself: one level, everyone in it; the way back is the Workspace.
     const notes = await documents.create(
