@@ -15,7 +15,7 @@ Part of [Agents UI](AGENTS.md). Rules for `src/features/agents/`.
   (`AgentProfileHeader`), the Agent hover card and the mascot picker (`agent-avatar-dialog.tsx`: all
   twelve idle, the one under the pointer reacting, the selected one still moving). Everything else
   is static: the message stream, in channels and Direct messages alike (the still sticker,
-  `LiveAgentAvatar`, `IdentityAvatar`), group avatars, search and members lists, and the profile
+  `ActorAvatar`), group avatars, search and members lists, and the profile
   card in the Profile tab (the header above it moves instead, so a panel shows one moving mascot).
   A deleted or archived Agent stays still and greyed. In a header the still picture also stays for
   an Agent whose mascot key is not known yet (no live entry, no profile mascot) and for an app bot,

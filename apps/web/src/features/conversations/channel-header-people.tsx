@@ -1,4 +1,4 @@
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { AvatarAddButton } from "#src/components/base/avatar/base-components/avatar-add-button";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { Skeleton } from "#src/components/ui/skeleton";
@@ -53,9 +53,21 @@ export function ChannelHeaderFaces({
           aria-label={m.channel_settings_members()}
         >
           {shown.map((entry) => {
+            const isAgent = Boolean(entry.agentId) || entry.kind === "agent";
+            const agentId = isAgent
+              ? (entry.agentId ?? entry.key.replace(/^agent:/, ""))
+              : undefined;
+            const userId = isAgent
+              ? undefined
+              : (entry.userId ??
+                (entry.key.startsWith("user:") ? entry.key.replace(/^user:/, "") : undefined));
             const avatarNode = (
               <>
-                <IdentityAvatar
+                {/* A channel's faces list its people: each carries its status dot (task #510). */}
+                <ActorAvatar
+                  presence
+                  agentId={agentId}
+                  userId={userId}
                   size="xs"
                   alt=""
                   src={entry.avatarUrl ?? undefined}
@@ -66,8 +78,7 @@ export function ChannelHeaderFaces({
               </>
             );
 
-            if (entry.agentId || entry.kind === "agent") {
-              const agentId = entry.agentId ?? entry.key.replace(/^agent:/, "");
+            if (agentId) {
               return (
                 <AgentHoverCard
                   key={entry.key}
@@ -81,10 +92,6 @@ export function ChannelHeaderFaces({
                 />
               );
             }
-
-            const userId =
-              entry.userId ??
-              (entry.key.startsWith("user:") ? entry.key.replace(/^user:/, "") : undefined);
 
             return (
               <PersonHoverCard
@@ -110,7 +117,8 @@ export function ChannelHeaderFaces({
                 className="inline-flex shrink-0 items-center justify-center rounded-full p-0 leading-none"
                 onPress={onOpenMembers}
               >
-                <IdentityAvatar
+                <ActorAvatar
+                  presence={false}
                   size="xs"
                   alt=""
                   initials={`+${more}`}

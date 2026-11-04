@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { ChevronDown } from "@untitledui/icons";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import type { RecordsCatalog } from "./records-layout";
@@ -132,7 +132,8 @@ export function RecordsMemberWeeksSection({
                             selected={submission.id === selectedRecordId}
                             onSelect={onSelect}
                           >
-                            <IdentityAvatar
+                            <ActorAvatar
+                              presence={false}
                               size="sm"
                               name={author?.displayName}
                               alt={author?.displayName}

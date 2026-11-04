@@ -3,7 +3,7 @@ import type { ChannelVisibility } from "./channel-visibility";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Bell01, Check, Plus } from "@untitledui/icons";
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { Button } from "#src/components/base/buttons/button";
 import { cx } from "#src/utils/cx";
 import { m } from "#src/paraglide/messages";
@@ -144,7 +144,8 @@ export function PendingMentionStrip({
                 leaving.has(mention.resolutionId) && "opacity-0",
               )}
             >
-              <IdentityAvatar
+              <ActorAvatar
+                presence={false}
                 size="xs"
                 alt=""
                 src={mention.targetAvatarUrl}

@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useHydrated } from "@tanstack/react-router";
 import { useReducedMotion } from "motion/react";
 import { Camera01, Check } from "@untitledui/icons";
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import AnimatedGradient from "#src/components/spell/animated-gradient";
 import { heroGradient, useWebGl2 } from "#src/features/landing/landing-brand-panel";
 import { PersonAvatarDialog } from "#src/features/profiles/person-avatar-dialog";
@@ -130,7 +130,8 @@ export function AccountSettings({
             className="relative -mt-12 shrink-0 rounded-full!"
             onPress={() => setAvatarDialogOpen(true)}
           >
-            <IdentityAvatar
+            <ActorAvatar
+              presence={false}
               size="2xl"
               className="size-24"
               name={profile.name}

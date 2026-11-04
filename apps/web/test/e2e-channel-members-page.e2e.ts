@@ -82,6 +82,15 @@ test("the settings panel shows a channel's members as a page, adds and removes o
   const panel = `document.querySelector('[role="dialog"][aria-label="Channel Details and Settings"]')`;
   const panelHas = (text: string) => `${panel}?.textContent.includes(${JSON.stringify(text)})`;
   const onRoster = `${panel}?.querySelector('input[placeholder="Search members…"]') != null`;
+  /** The page as it is, light and dark. */
+  async function shootBoth(name: string) {
+    for (const theme of ["", "-dark"]) {
+      if (theme) await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
+      await browser("wait", "300");
+      await browser("screenshot", join(artifacts, `${name}${theme}.png`));
+    }
+    await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
+  }
   async function openChannel(path: string) {
     await browser("open", `${origin}${path}`);
     await waitFor(
@@ -149,10 +158,58 @@ test("the settings panel shows a channel's members as a page, adds and removes o
         { conversationId: channel.id, workspaceId, agentId: inside.id },
       ],
     });
+    // A message of the viewer's: its face beside it carries the viewer's online dot (task #510).
+    const me = await db.conversationMember.findFirstOrThrow({
+      where: { conversationId: channel.id, userId: DEV_BROWSER_USER.id },
+    });
+    await db.message.create({
+      data: {
+        workspaceId,
+        conversationId: channel.id,
+        sequence: 1,
+        senderMemberId: me.id,
+        body: `Hello members ${process.pid}`,
+      },
+    });
+    // And one of the member Agent's, whose face carries its status dot.
+    const insideMember = await db.conversationMember.findFirstOrThrow({
+      where: { conversationId: channel.id, agentId: inside.id },
+    });
+    await db.message.create({
+      data: {
+        workspaceId,
+        conversationId: channel.id,
+        sequence: 2,
+        senderMemberId: insideMember.id,
+        body: `Hello from the Agent ${process.pid}`,
+      },
+    });
     await mkdir(artifacts, { recursive: true });
 
     await browser("set", "viewport", "1440", "900");
+
+    // One avatar, its dot by where it is (task #510): the faces that list the channel's people,
+    // in the header and the settings' strip, carry their status dot, a person's and an Agent's
+    // alike, and so do the faces beside the messages, the viewer's and the Agent's (Frank, 11-04).
+    const dot = ".bg-fg-success-secondary";
+    const agentDot = ".avatar-status-dot";
+    const messagesWithDots = `document.querySelectorAll("[data-message-id]").length === 2 && [...document.querySelectorAll("[data-message-id]")].every((row) => row.querySelector("${dot}, ${agentDot}") !== null)`;
+    // The header's faces: the "Members" group that holds the viewer's face (the sidebar's
+    // Members link is labelled the same).
+    const headerFaces = `[...document.querySelectorAll('[aria-label="Members"]')].find((el) => !${panel}?.contains(el) && el.textContent.includes(${JSON.stringify(DEV_BROWSER_USER.name)}))`;
+    const chat = `${origin}${workspacePath}/channel/${channel.id}`;
+    await browser("open", chat);
+    await waitFor(`${headerFaces}?.querySelector("${dot}") != null`, 60_000);
+    await waitFor(messagesWithDots);
+    await shootBoth("chat-dots");
+
     await openChannel(`${workspacePath}/channel/${channel.id}`);
+    const named = (root: string) =>
+      `[...${root}.querySelectorAll("button, a, [role=button]")].find((el) => el.textContent.trim() === ${JSON.stringify(DEV_BROWSER_USER.name)})`;
+    await waitFor(`${named(panel)}?.querySelector("${dot}") != null`);
+    await waitFor(`${panel}?.querySelector("${agentDot}") != null`);
+    expect(await evaluate<boolean>(messagesWithDots)).toBe(true);
+    await browser("screenshot", join(artifacts, "dots-where.png"));
 
     // The Members summary opens the page in place of the settings.
     await openMembers();
@@ -277,6 +334,9 @@ test("the settings panel shows a channel's members as a page, adds and removes o
     // A phone has no hover to reveal the actions: each row keeps them behind one menu button, so
     // the name keeps its width, and the menu makes the member a channel admin.
     await browser("set", "viewport", "390", "844");
+    await browser("open", chat);
+    await waitFor(messagesWithDots, 60_000);
+    await shootBoth("phone-chat-dots");
     await openChannel(`${workspacePath}/channel/${channel.id}`);
     await openMembers();
     const actions = `[aria-label="Actions for ${inside.displayName}"]`;

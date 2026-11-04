@@ -4,7 +4,7 @@ import { getRouteApi } from "@tanstack/react-router";
 import { ChevronRight } from "@untitledui/icons";
 import { Heading } from "react-aria-components";
 
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { Button } from "#src/components/base/buttons/button";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { HoverPopover, useClosePreview } from "#src/components/ui/hover-popover";
@@ -134,7 +134,13 @@ function AgentCard({
           <AgentMascotAvatar mascot={mascot} name={displayName} display={display} size="md" />
         ) : (
           // An Agent outside the live roster whose profile has not landed: its still picture.
-          <IdentityAvatar size="md" alt="" src={data?.appBot?.logoUrl ?? src} name={displayName} />
+          <ActorAvatar
+            presence={false}
+            size="md"
+            alt=""
+            src={data?.appBot?.logoUrl ?? src}
+            name={displayName}
+          />
         )}
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-1.5">

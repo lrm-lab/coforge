@@ -42,7 +42,7 @@ import { RecordsMemberWeeksSection } from "./records-member-weeks-section";
 import { useRecordsMemberWeeks } from "./use-records-member-weeks";
 import { CollapsibleSection, RecordLink, SidebarMore, WeekBadge } from "./records-sidebar-parts";
 import { matchesQuery, recordsTabSearch, sidebarPreview, type RecordsTab } from "./records-sidebar";
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { useRecordRefresh } from "./use-record-refresh";
 
 export type { RecordsTab };
@@ -298,7 +298,8 @@ export function RecordsLayout({
                                 setShowMobileList(false);
                               }}
                             >
-                              <IdentityAvatar
+                              <ActorAvatar
+                                presence={false}
                                 size="sm"
                                 name={item.author.displayName}
                                 alt={item.author.displayName}
@@ -432,7 +433,8 @@ export function RecordsLayout({
                               setShowMobileList(false);
                             }}
                           >
-                            <IdentityAvatar
+                            <ActorAvatar
+                              presence={false}
                               size="sm"
                               name={catalog.actorDisplayName}
                               alt={catalog.actorDisplayName}

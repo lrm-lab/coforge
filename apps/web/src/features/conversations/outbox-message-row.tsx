@@ -18,7 +18,7 @@ import type { ChipMention } from "./message-reference-chips";
 import { MessageBody } from "./message-body";
 import { messageRowKind, messagePaddingClass, ROW_CLASS, RUN_START_CLASS } from "./message-row";
 import { canEditUnsent, failureAnnounced, failureNeedsAnnouncing } from "./use-message-outbox";
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
@@ -124,7 +124,9 @@ export function OutboxMessageRow({
     >
       <div className={cn("mx-1 flex px-3 md:mx-3", "gap-3", messagePaddingClass(grouped))}>
         <div className="flex w-9 shrink-0 items-start justify-center">
-          {!grouped && <IdentityAvatar size="sm" name={viewer.name} src={viewer.avatarUrl} />}
+          {!grouped && (
+            <ActorAvatar presence={false} size="sm" name={viewer.name} src={viewer.avatarUrl} />
+          )}
         </div>
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           {!grouped && (

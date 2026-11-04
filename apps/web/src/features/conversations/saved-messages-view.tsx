@@ -4,7 +4,7 @@ import { Link, useRouter } from "@tanstack/react-router";
 import { Bookmark, BookmarkCheck, Copy01, Link01, MessageTextSquare01 } from "@untitledui/icons";
 import { Link as AriaLink } from "react-aria-components";
 
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { PageHeader } from "#src/components/layout/page-header";
@@ -166,7 +166,8 @@ function SavedMessageCard({
               </span>
             )}
             <span className="inline-flex min-w-0 items-center gap-1.5">
-              <IdentityAvatar
+              <ActorAvatar
+                presence={false}
                 size="xs"
                 src={message.senderAvatarUrl ?? null}
                 name={message.senderName}

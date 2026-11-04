@@ -1,7 +1,7 @@
 import { Button as AriaButton } from "react-aria-components";
 import { ChevronRight } from "@untitledui/icons";
 
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { AvatarAddButton } from "#src/components/base/avatar/base-components/avatar-add-button";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { Skeleton } from "#src/components/ui/skeleton";
@@ -63,7 +63,11 @@ export function MembersStrip({
         {shown.map((entry) => (
           <Tooltip key={entry.key} title={entry.displayName}>
             <TooltipTrigger className="shrink-0 rounded-full" onPress={onOpenMembers}>
-              <IdentityAvatar
+              {/* The channel's people at a glance: each with its status dot (task #510). */}
+              <ActorAvatar
+                presence
+                userId={entry.key.startsWith("user:") ? entry.id : undefined}
+                agentId={entry.key.startsWith("agent:") ? entry.id : undefined}
                 size="sm"
                 alt=""
                 src={entry.avatarUrl ?? undefined}
@@ -76,7 +80,7 @@ export function MembersStrip({
         {more > 0 && (
           <Tooltip title={m.channel_settings_members_more({ count: more })}>
             <TooltipTrigger className="shrink-0 rounded-full" onPress={onOpenMembers}>
-              <IdentityAvatar size="sm" alt="" initials={`+${more}`} />
+              <ActorAvatar presence={false} size="sm" alt="" initials={`+${more}`} />
               <span className="sr-only">{m.channel_settings_members_more({ count: more })}</span>
             </TooltipTrigger>
           </Tooltip>

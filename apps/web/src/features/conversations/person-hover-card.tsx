@@ -7,9 +7,8 @@ import { HoverPopover } from "#src/components/ui/hover-popover";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { StatusDot } from "#src/components/ui/status-dot";
 import { memberPersonQuery } from "#src/features/agents/member-directory-queries";
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
-import { MemberAvatar } from "#src/features/workspaces/member-avatar";
 import { useMemberOnline } from "#src/features/workspaces/member-presence";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
@@ -142,9 +141,9 @@ function MemberProfileCard({
     <>
       <div className="flex items-start gap-3 p-3">
         {userId ? (
-          <MemberAvatar size="md" userId={userId} name={name} src={src ?? null} />
+          <ActorAvatar presence size="md" userId={userId} name={name} src={src ?? null} />
         ) : (
-          <IdentityAvatar size="md" alt="" src={src ?? undefined} name={name} />
+          <ActorAvatar presence={false} size="md" alt="" src={src ?? undefined} name={name} />
         )}
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-1.5">

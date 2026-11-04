@@ -21,7 +21,7 @@ import { humanLabel } from "#src/lib/human-label";
 import { computerListUpdateVersion, computerVersionLabel } from "./computer-identity";
 import type { ComputerUpgradeStatus } from "./computer.schemas";
 import { upgradeRunning } from "./computer-upgrade-status";
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 
 export type ComputerListItem = ComputerIdentity &
   ComputerPlatformInfo & {
@@ -147,7 +147,8 @@ export function ComputerLayout({
                         })}
                       >
                         <TooltipTrigger className="shrink-0 rounded-full">
-                          <IdentityAvatar
+                          <ActorAvatar
+                            presence={false}
                             size="xs"
                             name={creatorName}
                             src={computer.creator.avatarUrl}

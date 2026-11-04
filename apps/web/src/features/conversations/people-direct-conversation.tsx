@@ -1,8 +1,8 @@
 import { useMemo } from "react";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { getRouteApi } from "@tanstack/react-router";
 
 import { TabbedHeader } from "#src/components/layout/tabbed-header";
-import { MemberAvatar } from "#src/features/workspaces/member-avatar";
 import { useMemberOnline } from "#src/features/workspaces/member-presence";
 import { m } from "#src/paraglide/messages";
 import { conversationHeaderTabs, type HeaderTabs } from "./conversation-header-tabs";
@@ -47,7 +47,13 @@ export function PeopleDirectConversationHeader({
       identity={
         <>
           <ConversationListButton />
-          <MemberAvatar size="sm" userId={peer.id} name={peer.displayName} src={peer.avatarUrl} />
+          <ActorAvatar
+            presence
+            size="sm"
+            userId={peer.id}
+            name={peer.displayName}
+            src={peer.avatarUrl}
+          />
           <h1 className="min-w-0 flex-1 truncate text-md font-semibold">
             {peer.displayName}
             {self && (

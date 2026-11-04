@@ -6,6 +6,7 @@
   "rules": {
     "coforge/no-native-button": "error",
     "coforge/no-native-select": "error",
-    "coforge/no-native-title": "error"
+    "coforge/no-native-title": "error",
+    "coforge/one-avatar": "error"
   }
 }

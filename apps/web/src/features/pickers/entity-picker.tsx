@@ -11,7 +11,7 @@ import { ChevronDown, Folder, SearchLg } from "@untitledui/icons";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { HintText } from "#src/components/base/input/hint-text";
 import { Label } from "#src/components/base/input/label";
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { channelGlyph } from "#src/features/conversations/channel-name";
 import type { ChannelVisibility } from "#src/features/conversations/channel-visibility";
 import { ProjectImage } from "#src/features/projects/project-image";
@@ -28,7 +28,14 @@ import { m } from "#src/paraglide/messages";
 
 /** What a row shows on its left. */
 export type PickerFace =
-  | { kind: "identity"; name: string; src?: string | null }
+  | {
+      kind: "identity";
+      name: string;
+      src?: string | null;
+      /** A person or an Agent: picking among people, each shows its status dot (task #510). */
+      userId?: string;
+      agentId?: string;
+    }
   | { kind: "project"; name: string; src?: string | null }
   | { kind: "channel"; visibility: ChannelVisibility };
 
@@ -76,7 +83,10 @@ export function Face({ face }: { face: PickerFace }) {
       />
     );
   return (
-    <IdentityAvatar
+    <ActorAvatar
+      presence
+      userId={face.userId}
+      agentId={face.agentId}
       size="xs"
       src={face.src ?? undefined}
       name={face.name}
@@ -269,7 +279,12 @@ export function memberOption(member: {
   return {
     id: `${member.kind}:${member.id}`,
     label: member.label,
-    face: { kind: "identity", name: member.label, src: member.avatarUrl },
+    face: {
+      kind: "identity",
+      name: member.label,
+      src: member.avatarUrl,
+      ...(member.kind === "agent" ? { agentId: member.id } : { userId: member.id }),
+    },
     ...(member.kind === "agent" && agentHandle(member.handle)),
   };
 }

@@ -1,7 +1,7 @@
 import { memo } from "react";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 
 import type { AgentDirectoryEntry } from "#src/features/agents/workspace-agents-realtime";
-import { MemberAvatar } from "#src/features/workspaces/member-avatar";
 import { useStartOfToday } from "#src/lib/start-of-today";
 import { useTimeFormat } from "#src/lib/time-format-context";
 import { useTimeZone } from "#src/lib/time-zone-context";
@@ -195,7 +195,8 @@ export const DirectDirectoryRow = memo(function DirectDirectoryRow({
           agent ? (
             <DirectAgentAvatar agent={agent} />
           ) : peer.kind === "people" ? (
-            <MemberAvatar
+            <ActorAvatar
+              presence
               size="sm"
               className="avatar-dm"
               userId={peer.userId}

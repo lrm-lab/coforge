@@ -10,7 +10,7 @@ import {
   Settings01,
   XCircle,
 } from "@untitledui/icons";
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { Badge } from "#src/components/base/badges/badges";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { PageHeader } from "#src/components/layout/page-header";
@@ -219,7 +219,8 @@ function RepositoryContents({ data, projectSlug }: { data: Repository; projectSl
           <>
             {latestCommit && (
               <div className="flex min-w-0 items-center gap-3 border-b border-secondary px-4 py-3">
-                <IdentityAvatar
+                <ActorAvatar
+                  presence={false}
                   size="xs"
                   src={latestCommit.authorAvatarUrl ?? undefined}
                   name={latestCommit.author}
@@ -347,7 +348,8 @@ function CommitIdentity({
   return (
     <Tooltip title={`${name} · ${role}`} description={email ?? undefined}>
       <TooltipTrigger className="flex rounded-full">
-        <IdentityAvatar
+        <ActorAvatar
+          presence={false}
           size="xs"
           src={avatarUrl ?? undefined}
           name={name}

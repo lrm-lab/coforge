@@ -41,7 +41,7 @@ import type { CreateWorkspaceInput } from "#src/features/workspaces/create-works
 import { m } from "#src/paraglide/messages";
 import { localizeHref } from "#src/paraglide/runtime";
 import { workspacePath } from "#src/features/workspaces/workspace-url";
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 
 export type AppUser = {
   id: string;
@@ -289,7 +289,8 @@ function UserMenuCard({
   compact?: boolean;
 }) {
   const avatar = (
-    <IdentityAvatar
+    <ActorAvatar
+      presence={false}
       size={compact ? "sm" : "md"}
       name={user.name}
       alt={user.name}

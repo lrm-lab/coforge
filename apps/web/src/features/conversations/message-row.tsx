@@ -6,8 +6,7 @@ import type {
   OpenAgentProfile,
   OpenPersonProfile,
 } from "#src/features/agents/profile-panel/open-agent-profile";
-import { LiveAgentAvatar } from "#src/features/agents/live-agent-avatar";
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { ActionCard } from "./action-card";
@@ -183,20 +182,24 @@ export const MessageRow = memo(function MessageRow({
   // An Agent's avatar in the stream carries the same online/working/thinking/error/offline dot the
   // sidebar, conversation header and @-mention popup use, so you can tell whether the Agent that
   // wrote a message is around right now without opening its profile. It reads that one Agent from
-  // the live store. The mascot stays a still sticker in the stream (`mascots.md`). A person's
-  // avatar stays plain here (presence is on the Members page); a deleted Agent shows no dot — not
-  // a presence state.
+  // the live store. The mascot stays a still sticker in the stream (`mascots.md`). A sender's face
+  // carries its status dot, a person's online state as an Agent's (Frank, 11-04, task #510); a
+  // deleted Agent shows no dot — not a presence state.
   const avatar =
     message.senderKind === "agent" && message.senderAgentId ? (
-      <LiveAgentAvatar
+      <ActorAvatar
+        size="sm"
+        presence
         agentId={message.senderAgentId}
         name={message.senderName}
         src={message.senderAvatarUrl}
         deleted={deleted}
       />
     ) : (
-      <IdentityAvatar
+      <ActorAvatar
+        presence
         size="sm"
+        userId={message.senderUserId}
         name={message.senderName}
         src={message.senderAvatarUrl}
         deleted={deleted}

@@ -1,4 +1,5 @@
 import { channelGlyph, ChannelTitle } from "#src/features/conversations/channel-name";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { memo } from "react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { BellOff01, Check, Hash01, Mail01 } from "@untitledui/icons";
@@ -16,8 +17,6 @@ import { systemNoticeText } from "#src/features/conversations/system-notice-text
 import { TASK_STATUS_COLOR } from "#src/features/tasks/task-workflow";
 import { cn } from "#src/lib/utils";
 import { DeletedAgentBadge } from "#src/features/agents/deleted-agent";
-import { LiveAgentAvatar } from "#src/features/agents/live-agent-avatar";
-import { MemberAvatar } from "#src/features/workspaces/member-avatar";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import type { HostedConversationTarget } from "#src/features/conversations/conversation-page-search";
 import { m } from "#src/paraglide/messages";
@@ -248,13 +247,16 @@ export function ActivityItemIcon({ item }: { item: ActivityInboxItem }) {
   const { place } = item;
   if (place.kind === "direct")
     return place.peer.kind === "agent" ? (
-      <LiveAgentAvatar
+      <ActorAvatar
+        size="sm"
+        presence
         agentId={place.peer.agentId}
         name={place.peer.displayName}
         src={place.peer.avatarUrl}
       />
     ) : (
-      <MemberAvatar
+      <ActorAvatar
+        presence
         size="sm"
         userId={place.peer.userId}
         name={place.peer.displayName}

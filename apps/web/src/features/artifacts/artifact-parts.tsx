@@ -1,6 +1,6 @@
 import { File02 } from "@untitledui/icons";
 
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { lastMessageTime } from "#src/features/conversations/last-message-time";
 import { useStartOfToday } from "#src/lib/start-of-today";
 import { useTimeFormat } from "#src/lib/time-format-context";
@@ -48,7 +48,13 @@ export function ArtifactActor({ actor }: { actor: ArtifactActorView | undefined 
   if (!actor) return null;
   return (
     <span className="inline-flex min-w-0 items-center gap-1.5">
-      <IdentityAvatar size="xs" src={actor.avatarUrl} name={actor.name} className="size-4" />
+      <ActorAvatar
+        presence={false}
+        size="xs"
+        src={actor.avatarUrl}
+        name={actor.name}
+        className="size-4"
+      />
       <span className="truncate">{actor.viewer ? m.conversation_you() : actor.name}</span>
     </span>
   );

@@ -58,8 +58,8 @@ These rules apply to `src/features/conversations/`. Forwarding a message (the Fo
   names the person who wrote it (`senderUserId`, Slack's `message.user`); the viewer's own message
   never bumps their badge or brings a closed chat back.
 - A message row's Task, thread and Agent status data is read by the part that
-  shows it, by id, as Mattermost and Telegram Web do. An Agent's avatar
-  (`LiveAgentAvatar`) reads its one Agent through `useLiveAgentDisplay`; the mascot there is a still sticker. The Task a message became
+  shows it, by id, as Mattermost and Telegram Web do. A sender's avatar
+  (`ActorAvatar`) carries its status dot, a person's as an Agent's (task #510); the mascot there is a still sticker. The Task a message became
   (`MessageTask`) and a body's task reference (`TaskReference`) each read one
   Task under `ConversationIdProvider` (see `features/tasks/AGENTS.md`). A
   root's thread preview and thread entries (`thread-summary.tsx`) read that

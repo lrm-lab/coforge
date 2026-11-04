@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { Link, Navigate } from "@tanstack/react-router";
 import { Edit01, Edit03 } from "@untitledui/icons";
 
@@ -11,10 +12,8 @@ import {
   EmptyTitle,
 } from "#src/components/ui/empty";
 import { RelativeTime } from "#src/components/ui/relative-time";
-import { LiveAgentAvatar } from "#src/features/agents/live-agent-avatar";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { overviewTaskQuery } from "#src/features/tasks/use-finished-tasks";
-import { MemberAvatar } from "#src/features/workspaces/member-avatar";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { m } from "#src/paraglide/messages";
 import { channelGlyph } from "./channel-name";
@@ -147,9 +146,9 @@ function DraftFace({ row }: { row: DraftRow }) {
   if (home.kind === "dm") {
     const { name, peer } = home.direct;
     return peer.kind === "people" ? (
-      <MemberAvatar size="sm" userId={peer.userId} name={name} src={peer.avatarUrl} />
+      <ActorAvatar presence size="sm" userId={peer.userId} name={name} src={peer.avatarUrl} />
     ) : (
-      <LiveAgentAvatar agentId={peer.agentId} name={name} src={peer.avatarUrl} />
+      <ActorAvatar size="sm" presence agentId={peer.agentId} name={name} src={peer.avatarUrl} />
     );
   }
   const Glyph = channelGlyph(home.channel);

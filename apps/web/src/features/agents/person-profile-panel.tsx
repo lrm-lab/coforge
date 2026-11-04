@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, Link, useHydrated, useNavigate, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
@@ -28,7 +29,6 @@ import { formatCalendarDate } from "#src/lib/dates";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import { useOpenDirectConversation } from "#src/features/conversations/open-direct-conversation";
-import { MemberAvatar } from "#src/features/workspaces/member-avatar";
 import {
   removeWorkspaceMember,
   updateWorkspaceMemberRole,
@@ -131,7 +131,8 @@ export function PersonProfilePanel({
       {/* Same 48px band and 20px gutter as the Agent panel's header. */}
       <header className="flex h-12 shrink-0 items-center gap-2 border-b border-secondary px-5">
         {back && <BackButton back={back} />}
-        <MemberAvatar
+        <ActorAvatar
+          presence
           size="sm"
           userId={profile.id}
           name={profile.displayName}
@@ -208,7 +209,8 @@ function PersonProfileBody({
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <section className="flex items-center gap-4 border-b border-secondary px-6 py-5">
-        <MemberAvatar
+        <ActorAvatar
+          presence
           size="xl"
           userId={profile.id}
           name={profile.displayName}

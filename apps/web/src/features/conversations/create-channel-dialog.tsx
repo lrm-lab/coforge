@@ -9,7 +9,7 @@ import {
   useUnsavedChangesGuard,
 } from "#src/components/ui/unsaved-changes-dialog";
 import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Checkbox } from "#src/components/base/checkbox/checkbox";
@@ -454,7 +454,10 @@ function CreateChannelForm({
             <ul className="flex flex-col gap-1">
               {selectedGroupChatCandidates(candidates, selectedKeys).map((entry) => (
                 <li key={entry.key} className="flex items-center gap-3 py-1">
-                  <IdentityAvatar
+                  <ActorAvatar
+                    presence
+                    userId={entry.kind === "user" ? entry.id : undefined}
+                    agentId={entry.kind === "agent" ? entry.id : undefined}
                     size="xs"
                     alt=""
                     src={entry.avatarUrl ?? undefined}

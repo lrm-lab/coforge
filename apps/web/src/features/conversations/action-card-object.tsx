@@ -1,6 +1,6 @@
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import type {
@@ -31,7 +31,8 @@ function Faces({ people, label }: { people: ActionCardPersonRef[]; label?: React
     <div className="flex items-center gap-1.5 pt-1">
       <span className="flex shrink-0 gap-1">
         {people.slice(0, 4).map((person) => (
-          <IdentityAvatar
+          <ActorAvatar
+            presence={false}
             key={person.id}
             size="xs"
             src={person.avatarUrl ?? undefined}

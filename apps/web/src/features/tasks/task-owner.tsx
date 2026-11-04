@@ -1,6 +1,6 @@
 import type { TaskView } from "@lrm/coforge-sdk/internal";
 
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { DeletedAgentBadge } from "#src/features/agents/deleted-agent";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
@@ -17,7 +17,8 @@ export function TaskPerson({
     <span
       className={cn("flex min-w-0 items-center gap-2 text-sm font-medium text-primary", className)}
     >
-      <IdentityAvatar
+      <ActorAvatar
+        presence={false}
         size="xs"
         name={person.name}
         alt=""
@@ -45,7 +46,8 @@ export function TaskOwnerAvatar({ owner }: { owner: TaskView["owner"] }) {
       </span>
       <span aria-hidden="true" className="flex">
         {owner ? (
-          <IdentityAvatar
+          <ActorAvatar
+            presence={false}
             size="xs"
             name={owner.name}
             alt=""

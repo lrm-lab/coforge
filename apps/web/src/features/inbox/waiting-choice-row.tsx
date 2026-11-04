@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 
 import { RelativeTime } from "#src/components/ui/relative-time";
-import { LiveAgentAvatar } from "#src/features/agents/live-agent-avatar";
 import { choiceNumber } from "#src/features/conversations/choice-number";
 import { ChannelTitle } from "#src/features/conversations/channel-name";
 import type { HostedConversationTarget } from "#src/features/conversations/conversation-page-search";
@@ -54,7 +54,9 @@ export function WaitingChoiceRow({
         }}
         className={cn(ACTIVITY_ROW_LINK_CLASS, "hover:bg-primary_hover")}
       >
-        <LiveAgentAvatar
+        <ActorAvatar
+          size="sm"
+          presence={false}
           agentId={card.preparedBy.agentId}
           name={card.preparedBy.name}
           src={card.preparedBy.avatarUrl}

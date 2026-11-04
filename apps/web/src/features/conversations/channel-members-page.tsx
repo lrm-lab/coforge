@@ -1,10 +1,10 @@
 import { memo, useCallback, useMemo, useState, type ReactNode } from "react";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Button as AriaButton, Disclosure, DisclosurePanel, Heading } from "react-aria-components";
 import { ChevronDown, DotsHorizontal, Plus, SearchLg, Trash01 } from "@untitledui/icons";
 
-import { MemberAvatar } from "#src/features/workspaces/member-avatar";
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -370,7 +370,8 @@ const MemberRow = memo(function MemberRow({
           triggerClassName={avatarTriggerClassName}
           trigger={
             // A person's online dot, as an Agent's status dot beside it (Frank, 11-04).
-            <MemberAvatar
+            <ActorAvatar
+              presence
               size="sm"
               alt=""
               userId={member.id}

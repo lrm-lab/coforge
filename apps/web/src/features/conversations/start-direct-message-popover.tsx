@@ -4,7 +4,7 @@ import { Heading, Popover as AriaPopover } from "react-aria-components";
 
 import { Dialog } from "#src/components/application/modals/modal";
 import { Tab, TabList, TabPanel, Tabs } from "#src/components/application/tabs/tabs";
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
 import { m } from "#src/paraglide/messages";
@@ -175,7 +175,11 @@ function DirectMessagePicker({ onDone }: { onDone: () => void }) {
                         isDisabled={opening}
                         onPress={() => void select(member.peer)}
                         iconLeading={
-                          <IdentityAvatar
+                          // Picking whom to write to: each with its status dot (task #510).
+                          <ActorAvatar
+                            presence
+                            userId={"userId" in member.peer ? member.peer.userId : undefined}
+                            agentId={"agentId" in member.peer ? member.peer.agentId : undefined}
                             size="xs"
                             alt={member.name}
                             src={member.avatarUrl ?? undefined}

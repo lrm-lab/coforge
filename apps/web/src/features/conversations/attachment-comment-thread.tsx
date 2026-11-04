@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import type { MentionSelectorInput } from "@lrm/coforge-sdk/internal";
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { clockLabel } from "#src/lib/dates";
 import { useTimeFormat } from "#src/lib/time-format-context";
 import { useTimeZone } from "#src/lib/time-zone-context";
@@ -163,7 +163,12 @@ export function CommentRow({
         highlighted && "bg-tertiary",
       )}
     >
-      <IdentityAvatar src={comment.senderAvatarUrl} name={comment.senderName} size="sm" />
+      <ActorAvatar
+        presence={false}
+        src={comment.senderAvatarUrl}
+        name={comment.senderName}
+        size="sm"
+      />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <p className="flex min-h-5 min-w-0 items-baseline gap-2">
           <span className="truncate text-sm font-semibold text-primary">{comment.senderName}</span>

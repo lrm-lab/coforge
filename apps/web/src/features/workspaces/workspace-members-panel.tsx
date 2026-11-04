@@ -15,7 +15,7 @@ import { InviteMemberDialog } from "./invite-member-dialog";
 import { canManageMembers } from "./workspace-roles";
 import { workspaceRoleLabel } from "./workspace-role-label";
 import { removeWorkspaceMember, updateWorkspaceMemberRole } from "./members.functions";
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 
 type MemberRow = {
   userId: string;
@@ -84,7 +84,9 @@ export function WorkspaceMembersPanel(props: {
               return (
                 <li key={member.userId} className="flex h-12 items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-3">
-                    <IdentityAvatar
+                    <ActorAvatar
+                      presence
+                      userId={member.userId}
                       size="sm"
                       name={displayName}
                       alt={displayName}

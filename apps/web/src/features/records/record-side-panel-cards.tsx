@@ -1,7 +1,7 @@
 import { CheckCircle, Link01 as LinkIcon } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 import type { RecordAssistantPayload } from "./weekly-highlight-extract";
@@ -88,7 +88,8 @@ export function AssistantAttachmentCard({
           {shown.length > 0 ? (
             <div className="mt-2 flex items-center">
               {shown.map((person, index) => (
-                <IdentityAvatar
+                <ActorAvatar
+                  presence={false}
                   key={`${person.displayName}-${index}`}
                   size="xs"
                   name={person.displayName}

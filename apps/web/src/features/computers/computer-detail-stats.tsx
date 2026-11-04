@@ -1,7 +1,7 @@
 import { ComputerUpgradeSlot, type ComputerUpgradeSlotState } from "./computer-upgrade-slot";
 import { computerImageVersionLabel, computerVersionLabel } from "./computer-identity";
 import { ComputerDate } from "./computer-detail-date";
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { m } from "#src/paraglide/messages";
 import type { ComputerDetailView } from "./computer-detail-view";
 import {
@@ -72,7 +72,12 @@ export function ComputerDetailStats({
         {computer.creator && (
           <Stat label={m.computer_added_by()}>
             <span className="flex min-w-0 items-center gap-2">
-              <IdentityAvatar size="xs" name={creatorName} src={computer.creator.avatarUrl} />
+              <ActorAvatar
+                presence={false}
+                size="xs"
+                name={creatorName}
+                src={computer.creator.avatarUrl}
+              />
               <span className="truncate">
                 {creatorName} · <ComputerDate value={computer.connectedAt} timeZone={timeZone} />
               </span>

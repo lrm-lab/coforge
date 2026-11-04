@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { Badge } from "#src/components/base/badges/badges";
 import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
 import { useLiveAgents } from "#src/features/agents/workspace-agents-realtime";
@@ -195,7 +195,15 @@ function MentionRow({
           size="xs"
         />
       ) : (
-        <IdentityAvatar size="xs" alt="" src={mention.avatarUrl} name={mention.label} />
+        // Picking whom to mention: a person with their online dot, as the Agent beside (task #510).
+        <ActorAvatar
+          presence
+          userId={mention.id}
+          size="xs"
+          alt=""
+          src={mention.avatarUrl}
+          name={mention.label}
+        />
       )}
       <span className="grid min-w-0 flex-1 grid-cols-[minmax(0,auto)_auto_minmax(0,1fr)] items-center gap-1.5">
         <span

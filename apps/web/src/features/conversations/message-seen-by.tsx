@@ -7,7 +7,7 @@ import { Check, ChevronDown, ChevronUp } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { formatMomentForDisplay } from "#src/lib/dates";
 import { useTimeFormat } from "#src/lib/time-format-context";
 import { useTimeZone } from "#src/lib/time-zone-context";
@@ -89,7 +89,8 @@ function ReaderAvatar({ reader, size = "xs" }: { reader: Reader; size?: "xs" | "
       cornerDot={false}
     />
   ) : (
-    <IdentityAvatar
+    <ActorAvatar
+      presence={false}
       size={size}
       src={reader.avatarUrl ?? undefined}
       userId={reader.id}

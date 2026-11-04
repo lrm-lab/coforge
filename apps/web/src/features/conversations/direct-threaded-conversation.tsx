@@ -1,4 +1,4 @@
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import type { ThreadedConversationProps } from "./conversation-types";
 import { ThreadedConversation } from "./threaded-conversation";
 
@@ -29,7 +29,8 @@ export function DirectThreadedConversation({
       emptyState={{
         ...emptyState,
         media: (
-          <IdentityAvatar
+          <ActorAvatar
+            presence={false}
             size="2xl"
             alt={avatar.name}
             src={avatar.src ?? undefined}

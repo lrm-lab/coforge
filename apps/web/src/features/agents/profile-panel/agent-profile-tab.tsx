@@ -38,7 +38,7 @@ import { AgentFastModeFact, type AgentFastModeReading } from "./agent-fast-mode-
 import { FactRow } from "./agent-fact-row";
 import { AppBotProfile } from "./app-bot-profile";
 import { RoleField, VisibilityField } from "./agent-profile-info-fields";
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { useAgentModelName } from "#src/features/agents/use-agent-model-name";
 
 type AgentProfile = Awaited<ReturnType<typeof getAgentProfile>>;
@@ -277,7 +277,12 @@ function AgentProfileTabBody({
           </FactRow>
           <FactRow label={m.agent_profile_creator()}>
             <span className="flex items-center gap-1.5">
-              <IdentityAvatar size="xs" name={creatorName} src={profile.owner.avatarUrl} />
+              <ActorAvatar
+                presence={false}
+                size="xs"
+                name={creatorName}
+                src={profile.owner.avatarUrl}
+              />
               <span className="truncate">{creatorName}</span>
             </span>
           </FactRow>

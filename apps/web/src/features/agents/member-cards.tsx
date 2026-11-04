@@ -1,7 +1,7 @@
 import { GridListItem } from "react-aria-components";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Archive, Calendar, DotsVertical, Edit01, Monitor01 as Monitor } from "@untitledui/icons";
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
@@ -9,7 +9,6 @@ import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
-import { MemberAvatar } from "#src/features/workspaces/member-avatar";
 import { useMemberOnline } from "#src/features/workspaces/member-presence";
 import type { MemberAgent, MemberPerson } from "#src/features/workspaces/workspaces.functions";
 import { useOpenDirectConversation } from "#src/features/conversations/open-direct-conversation";
@@ -40,7 +39,8 @@ export function PersonCard({ person, selected }: { person: DirectoryPerson; sele
       className={cn(CARD_CLASS, selected && "ring-2 ring-brand")}
     >
       <div className="flex min-w-0 items-center gap-3">
-        <MemberAvatar
+        <ActorAvatar
+          presence
           size="lg"
           userId={person.id}
           name={person.displayName}
@@ -89,7 +89,8 @@ export function PersonCard({ person, selected }: { person: DirectoryPerson; sele
                 <AgentStackFace key={agent.id} agent={agent} />
               ))}
               {more > 0 && (
-                <IdentityAvatar
+                <ActorAvatar
+                  presence={false}
                   size="xs"
                   alt=""
                   initials={`+${more}`}
@@ -231,7 +232,8 @@ export function AgentCard({
         </span>
         <Tooltip title={m.member_created_by()} arrow>
           <TooltipTrigger className="flex min-w-0 cursor-default items-center gap-2 rounded-sm outline-focus-ring focus-visible:outline-2">
-            <IdentityAvatar
+            <ActorAvatar
+              presence={false}
               size="xs"
               alt=""
               src={member.owner.avatarUrl ?? undefined}

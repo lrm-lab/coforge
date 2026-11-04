@@ -6,7 +6,7 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { m } from "#src/paraglide/messages";
 import type { loadWeeklyReportStats } from "./records.functions";
 import { BackToRecords } from "./records-layout";
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 
 export type WeeklyStats = Awaited<ReturnType<typeof loadWeeklyReportStats>>;
 
@@ -88,7 +88,8 @@ export function WeeklyReportStats({
                   <tr key={member.userId}>
                     <td className="px-4 py-3 sm:px-5">
                       <div className="flex items-center gap-2">
-                        <IdentityAvatar
+                        <ActorAvatar
+                          presence={false}
                           size="xs"
                           name={member.displayName}
                           alt={member.displayName}

@@ -1,4 +1,5 @@
 import { channelGlyph } from "#src/features/conversations/channel-name";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { channelLabel } from "#src/features/conversations/channel-visibility";
 import { Link } from "@tanstack/react-router";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
@@ -8,7 +9,6 @@ import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
 import { agentDisplay } from "#src/features/agents/agent-activity-presentation";
 import { formatAgentProfileParam } from "#src/features/agents/profile-panel/profile-panel-search";
 import { useAgentDisplays } from "#src/features/agents/workspace-agents-realtime";
-import { MemberAvatar } from "#src/features/workspaces/member-avatar";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { computerIcon } from "#src/features/computers/computer-identity";
 import { conversationRoute } from "#src/features/conversations/last-conversation";
@@ -211,7 +211,13 @@ function EntityMark({
     // The row's own text names the member.
     return (
       <span aria-hidden="true" className="shrink-0">
-        <MemberAvatar userId={entity.peerId} name={entity.name} src={entity.avatarUrl} size="xs" />
+        <ActorAvatar
+          presence
+          userId={entity.peerId}
+          name={entity.name}
+          src={entity.avatarUrl}
+          size="xs"
+        />
       </span>
     );
   const Icon =

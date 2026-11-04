@@ -6,7 +6,7 @@ import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { FileTypeIcon } from "#src/features/files/file-type-icon";
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { projectDirectoryCommitsQuery } from "./project-tree-queries";
 import { isBrowsable, type TreeEntry } from "./tree-index";
 import { githubUrl as buildGithubUrl } from "./project-file-urls";
@@ -52,7 +52,8 @@ export function DirectoryBody({
             <>
               <span className="flex shrink-0 -space-x-1.5">
                 {latest.people.slice(0, 3).map((person) => (
-                  <IdentityAvatar
+                  <ActorAvatar
+                    presence={false}
                     key={person.name}
                     size="xs"
                     name={person.name}

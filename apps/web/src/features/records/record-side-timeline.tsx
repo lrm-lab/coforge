@@ -1,7 +1,7 @@
 import { memo } from "react";
 
 import { Button } from "#src/components/base/buttons/button";
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { m } from "#src/paraglide/messages";
 import type { WeeklyReportAssistantSuggestion } from "#src/server/records/weekly-report-assistant-suggestion.server";
 import type { ReportBodyRestoreView } from "./records-content";
@@ -97,7 +97,8 @@ export const RecordSideTimeline = memo(function RecordSideTimeline({
           return (
             <article key={item.id} className="space-y-2">
               <div className="flex items-center gap-2">
-                <IdentityAvatar
+                <ActorAvatar
+                  presence={false}
                   size="xs"
                   name={authorName}
                   alt={authorName}
@@ -196,7 +197,8 @@ export const RecordSideTimeline = memo(function RecordSideTimeline({
         return (
           <article key={item.id} className="space-y-2">
             <div className="flex items-center gap-2">
-              <IdentityAvatar
+              <ActorAvatar
+                presence={false}
                 size="xs"
                 alt={authorName}
                 name={authorName}

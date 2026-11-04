@@ -2,7 +2,7 @@ import { actionCardPreviewText } from "./action-card-preview";
 import { ChevronRight, MessageSquare01 as MessageSquare } from "@untitledui/icons";
 
 import { ThreadReplyingLine } from "#src/features/agents/replying-agents-line";
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { RelativeTime } from "#src/components/ui/relative-time";
@@ -105,7 +105,8 @@ export function ThreadPreview({ rootId, onOpen }: ThreadPartProps) {
         {/* The newest few only; the side pane holds the full thread. */}
         {summary.latestReplies.map((reply) => (
           <span key={reply.id} className="flex min-w-0 items-center gap-2">
-            <IdentityAvatar
+            <ActorAvatar
+              presence={false}
               size="xs"
               alt={reply.senderName}
               src={reply.senderAvatarUrl}

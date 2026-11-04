@@ -1,6 +1,6 @@
 import { Badge } from "#src/components/base/badges/badges";
 import { RelativeTime } from "#src/components/ui/relative-time";
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { humanLabel } from "#src/lib/human-label";
 import { m } from "#src/paraglide/messages";
 import type { getAgentProfile } from "#src/features/agents/agents.functions";
@@ -28,7 +28,7 @@ export function AppBotProfile({
     <div className="relative min-h-0 flex-1 overflow-y-auto">
       <section className="border-b border-secondary px-6 py-5">
         <div className="mb-4 flex items-center gap-4">
-          <IdentityAvatar size="xl" name={appBot.appName} src={appBot.logoUrl} />
+          <ActorAvatar presence={false} size="xl" name={appBot.appName} src={appBot.logoUrl} />
           <Badge size="sm" color="brand">
             {m.agent_bot_badge()}
           </Badge>

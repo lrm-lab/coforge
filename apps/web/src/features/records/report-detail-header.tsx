@@ -10,7 +10,7 @@ import {
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
-import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { m } from "#src/paraglide/messages";
 import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
 import { formatWeeklyReportCompletedAt, type ReportBodyRestoreView } from "./records-content";
@@ -64,7 +64,8 @@ export function ReportDetailHeader({
         {returnTo ? <RecordsKeyPointReturnBack returnTo={returnTo} /> : <BackToRecords />}
       </span>
       <div className="flex min-w-0 flex-1 items-start gap-2.5">
-        <IdentityAvatar
+        <ActorAvatar
+          presence={false}
           size="sm"
           name={report.author.displayName}
           alt={report.author.displayName}
