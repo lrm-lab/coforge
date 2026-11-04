@@ -112,6 +112,7 @@ import { Route as WWorkspaceSlugChatDraftsRouteImport } from './routes/w.$worksp
 import { Route as WWorkspaceSlugChatSavedRouteImport } from './routes/w.$workspaceSlug/_chat.saved'
 import { Route as WWorkspaceSlugComputersComputersRouteImport } from './routes/w.$workspaceSlug/_computers.computers'
 import { Route as WWorkspaceSlugAgentAgentIdRouteImport } from './routes/w.$workspaceSlug/agent.$agentId'
+import { Route as WWorkspaceSlugArtifactsArtifactIdRouteImport } from './routes/w.$workspaceSlug/artifacts.$artifactId'
 import { Route as WWorkspaceSlugProjectsIndexRouteImport } from './routes/w.$workspaceSlug/projects.index'
 import { Route as WWorkspaceSlugProjectsProjectSlugRouteImport } from './routes/w.$workspaceSlug/projects.$projectSlug'
 import { Route as WWorkspaceSlugRecordsIndexRouteImport } from './routes/w.$workspaceSlug/records.index'
@@ -729,6 +730,12 @@ const WWorkspaceSlugAgentAgentIdRoute =
     path: '/agent/$agentId',
     getParentRoute: () => WWorkspaceSlugRoute,
   } as any)
+const WWorkspaceSlugArtifactsArtifactIdRoute =
+  WWorkspaceSlugArtifactsArtifactIdRouteImport.update({
+    id: '/artifacts/$artifactId',
+    path: '/artifacts/$artifactId',
+    getParentRoute: () => WWorkspaceSlugRoute,
+  } as any)
 const WWorkspaceSlugProjectsIndexRoute =
   WWorkspaceSlugProjectsIndexRouteImport.update({
     id: '/projects/',
@@ -1225,6 +1232,7 @@ export interface FileRoutesByFullPath {
   '/w/$workspaceSlug/saved': typeof WWorkspaceSlugChatSavedRoute
   '/w/$workspaceSlug/computers': typeof WWorkspaceSlugComputersComputersRoute
   '/w/$workspaceSlug/agent/$agentId': typeof WWorkspaceSlugAgentAgentIdRoute
+  '/w/$workspaceSlug/artifacts/$artifactId': typeof WWorkspaceSlugArtifactsArtifactIdRoute
   '/w/$workspaceSlug/projects/$projectSlug': typeof WWorkspaceSlugProjectsProjectSlugRoute
   '/w/$workspaceSlug/records/$recordId': typeof WWorkspaceSlugRecordsRecordIdRoute
   '/w/$workspaceSlug/records/dashboard': typeof WWorkspaceSlugRecordsDashboardRoute
@@ -1394,6 +1402,7 @@ export interface FileRoutesByTo {
   '/w/$workspaceSlug/saved': typeof WWorkspaceSlugChatSavedRoute
   '/w/$workspaceSlug/computers': typeof WWorkspaceSlugComputersComputersRoute
   '/w/$workspaceSlug/agent/$agentId': typeof WWorkspaceSlugAgentAgentIdRoute
+  '/w/$workspaceSlug/artifacts/$artifactId': typeof WWorkspaceSlugArtifactsArtifactIdRoute
   '/w/$workspaceSlug/projects/$projectSlug': typeof WWorkspaceSlugProjectsProjectSlugRoute
   '/w/$workspaceSlug/records/$recordId': typeof WWorkspaceSlugRecordsRecordIdRoute
   '/w/$workspaceSlug/records/dashboard': typeof WWorkspaceSlugRecordsDashboardRoute
@@ -1566,6 +1575,7 @@ export interface FileRoutesById {
   '/w/$workspaceSlug/_chat/saved': typeof WWorkspaceSlugChatSavedRoute
   '/w/$workspaceSlug/_computers/computers': typeof WWorkspaceSlugComputersComputersRoute
   '/w/$workspaceSlug/agent/$agentId': typeof WWorkspaceSlugAgentAgentIdRoute
+  '/w/$workspaceSlug/artifacts/$artifactId': typeof WWorkspaceSlugArtifactsArtifactIdRoute
   '/w/$workspaceSlug/projects/$projectSlug': typeof WWorkspaceSlugProjectsProjectSlugRoute
   '/w/$workspaceSlug/records/$recordId': typeof WWorkspaceSlugRecordsRecordIdRoute
   '/w/$workspaceSlug/records/dashboard': typeof WWorkspaceSlugRecordsDashboardRoute
@@ -1738,6 +1748,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/saved'
     | '/w/$workspaceSlug/computers'
     | '/w/$workspaceSlug/agent/$agentId'
+    | '/w/$workspaceSlug/artifacts/$artifactId'
     | '/w/$workspaceSlug/projects/$projectSlug'
     | '/w/$workspaceSlug/records/$recordId'
     | '/w/$workspaceSlug/records/dashboard'
@@ -1907,6 +1918,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/saved'
     | '/w/$workspaceSlug/computers'
     | '/w/$workspaceSlug/agent/$agentId'
+    | '/w/$workspaceSlug/artifacts/$artifactId'
     | '/w/$workspaceSlug/projects/$projectSlug'
     | '/w/$workspaceSlug/records/$recordId'
     | '/w/$workspaceSlug/records/dashboard'
@@ -2078,6 +2090,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/_chat/saved'
     | '/w/$workspaceSlug/_computers/computers'
     | '/w/$workspaceSlug/agent/$agentId'
+    | '/w/$workspaceSlug/artifacts/$artifactId'
     | '/w/$workspaceSlug/projects/$projectSlug'
     | '/w/$workspaceSlug/records/$recordId'
     | '/w/$workspaceSlug/records/dashboard'
@@ -3003,6 +3016,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WWorkspaceSlugAgentAgentIdRouteImport
       parentRoute: typeof WWorkspaceSlugRoute
     }
+    '/w/$workspaceSlug/artifacts/$artifactId': {
+      id: '/w/$workspaceSlug/artifacts/$artifactId'
+      path: '/artifacts/$artifactId'
+      fullPath: '/w/$workspaceSlug/artifacts/$artifactId'
+      preLoaderRoute: typeof WWorkspaceSlugArtifactsArtifactIdRouteImport
+      parentRoute: typeof WWorkspaceSlugRoute
+    }
     '/w/$workspaceSlug/projects/': {
       id: '/w/$workspaceSlug/projects/'
       path: '/projects'
@@ -3594,6 +3614,7 @@ interface WWorkspaceSlugRouteChildren {
   WWorkspaceSlugSettingsRoute: typeof WWorkspaceSlugSettingsRoute
   WWorkspaceSlugTasksRoute: typeof WWorkspaceSlugTasksRoute
   WWorkspaceSlugAgentAgentIdRoute: typeof WWorkspaceSlugAgentAgentIdRoute
+  WWorkspaceSlugArtifactsArtifactIdRoute: typeof WWorkspaceSlugArtifactsArtifactIdRoute
   WWorkspaceSlugProjectsProjectSlugRoute: typeof WWorkspaceSlugProjectsProjectSlugRoute
   WWorkspaceSlugProjectsIndexRoute: typeof WWorkspaceSlugProjectsIndexRoute
   WWorkspaceSlugProjectsProjectSlugSettingsRoute: typeof WWorkspaceSlugProjectsProjectSlugSettingsRoute
@@ -3612,6 +3633,8 @@ const WWorkspaceSlugRouteChildren: WWorkspaceSlugRouteChildren = {
   WWorkspaceSlugSettingsRoute: WWorkspaceSlugSettingsRoute,
   WWorkspaceSlugTasksRoute: WWorkspaceSlugTasksRoute,
   WWorkspaceSlugAgentAgentIdRoute: WWorkspaceSlugAgentAgentIdRoute,
+  WWorkspaceSlugArtifactsArtifactIdRoute:
+    WWorkspaceSlugArtifactsArtifactIdRoute,
   WWorkspaceSlugProjectsProjectSlugRoute:
     WWorkspaceSlugProjectsProjectSlugRoute,
   WWorkspaceSlugProjectsIndexRoute: WWorkspaceSlugProjectsIndexRoute,

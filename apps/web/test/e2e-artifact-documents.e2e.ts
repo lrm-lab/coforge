@@ -12,13 +12,14 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
 
 /**
- * Documents in a conversation (task #385, the first batch): a message linking a document shows
- * its card (title, first two lines); Open shows it beside the chat, to edit and save as a new
- * version; a save over a version someone else changed the same paragraph of asks which side to
- * keep; an older version reads with "Back to latest" and goes back as a new version; full screen;
- * unsaved edits survive reading an older version and merge with a version someone else saved;
- * leaving with them asks; the Files tab lists the channel's documents, and New document is
- * created only on its first save. Desktop and phone, light and dark.
+ * Documents in a conversation (task #385, the first batch; #514, their own page): a message
+ * linking a document shows its card (title, first two lines); the card opens the document's own
+ * page, to edit and save as a new version; a save over a version someone else changed the same
+ * paragraph of asks which side to keep; an older version reads with "Back to latest" and goes back
+ * as a new version; unsaved edits survive reading an older version and merge with a version
+ * someone else saved; leaving with them asks; a `?doc=` link opens the page; the Files tab lists
+ * the channel's documents, and New document is created only on its first save. Desktop and phone,
+ * light and dark.
  *
  * Opt-in like the other browser E2Es: real local Web started with a flag file that offers
  * `artifacts` (`/tmp/coforge-flags-docs.json`, read here too). The channel, its people and its
@@ -84,7 +85,8 @@ test("a document opens from its card, saves versions, resolves a conflict and go
     await browser("screenshot", join(artifacts, `${shot}-dark.png`));
     await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
   };
-  const pane = `document.querySelector('section[aria-label="Document"]')`;
+  // The artifact's own page, or a new document's pane beside the chat.
+  const pane = `document.querySelector('[aria-label="Document"]')`;
   const inPane = (text: string) => `(${pane}?.textContent ?? "").includes(${JSON.stringify(text)})`;
   const button = (text: string, within = "document") =>
     `[...${within}.querySelectorAll("button")].find((b) => b.textContent.trim() === ${JSON.stringify(text)})`;
@@ -166,9 +168,10 @@ test("a document opens from its card, saves versions, resolves a conflict and go
     ).toBe(true);
     await shoot("desktop-1-card");
 
-    // Open: beside the chat, editable; a save is a new version.
+    // Open: its own page, editable; a save is a new version.
     await click(button("Home page launch plan", card));
     await browser("wait", "--fn", `${pane}?.querySelector(".ProseMirror") != null`);
+    expect(await evaluate<string>("location.pathname")).toEndWith(`/artifacts/${doc.id}`);
     // Opening is no edit: the pane reads as saved until something is typed.
     await browser("wait", "--fn", inPane("Saved · version 1"));
     await editorEnd();
@@ -261,10 +264,7 @@ test("a document opens from its card, saves versions, resolves a conflict and go
     await until(async () => (await version(doc.id)) === 6);
     await browser("wait", "--fn", `!${inPane("Viewing version")}`);
 
-    // Full screen: the document alone.
-    await click(`${pane}.querySelector('button[aria-label="Full screen"]')`);
-    await browser("wait", "--fn", `new URLSearchParams(location.search).get("docFull") === "true"`);
-    await shoot("desktop-5-full");
+    await shoot("desktop-5-page");
 
     // Unsaved edits stay while an older version is read, and closing with them asks first.
     await editorEnd();
@@ -310,15 +310,21 @@ test("a document opens from its card, saves versions, resolves a conflict and go
     await browser("wait", "--fn", inPane("Unsaved changes"));
     const dialogButton = (text: string) =>
       `[...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent.trim() === ${JSON.stringify(text)})`;
-    await click(`${pane}.querySelector('button[aria-label="Close"]')`);
+    // Back to the channel, from the page's header.
+    const back = `${pane}.querySelector("header a")`;
+    await click(back);
     await browser("wait", "--fn", `${dialogButton("Keep Editing")} != null`);
     await click(dialogButton("Keep Editing"));
     await browser("wait", "--fn", `${dialogButton("Keep Editing")} == null`);
     expect(await evaluate<boolean>(`${pane} != null`)).toBe(true);
-    await click(`${pane}.querySelector('button[aria-label="Close"]')`);
+    await click(back);
     await browser("wait", "--fn", `${dialogButton("Discard Changes")} != null`);
     await click(dialogButton("Discard Changes"));
     await browser("wait", "--fn", `${pane} == null`);
+
+    // A link from before the page (`?doc=`) opens the page.
+    await browser("open", `${page}?doc=${notes.id}`);
+    await browser("wait", "--fn", `location.pathname.endsWith("/artifacts/${notes.id}")`);
 
     // The Files tab: the channel's documents, newest first, and New document.
     await browser("open", `${page}?view=files`);
@@ -351,7 +357,7 @@ test("a document opens from its card, saves versions, resolves a conflict and go
     await browser("keyboard", "type", "Copy, images, analytics.");
     await click(button("Save", pane));
     await until(async () => (await count()) === documentsBefore + 1);
-    await browser("wait", "--fn", `new URLSearchParams(location.search).get("doc") != null`);
+    await browser("wait", "--fn", `location.pathname.includes("/artifacts/")`);
     await browser("wait", "--fn", inPane("Saved · version 1"));
     const draft = await db.artifact.findFirstOrThrow({
       where: { homeKey: `conversation:${channel.id}` },

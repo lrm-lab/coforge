@@ -6,7 +6,7 @@ import { m } from "#src/paraglide/messages";
 import { artifactIdsInBody, bodyWithArtifactTitles } from "./artifact-link";
 import { ArtifactEditedLine, ArtifactIcon, kindLabel, useArtifactTime } from "./artifact-parts";
 import { artifactCardQuery, useArtifactActor, useArtifactsOn } from "./artifact-queries";
-import { openArtifactSearch, useArtifactNavigation } from "./artifact-search";
+import { useOpenArtifactPage } from "./artifact-search";
 
 /**
  * The cards of the artifacts a message links to (task #385, #514): each its kind, title, first
@@ -48,7 +48,7 @@ function ArtifactCardView({ artifactId }: { artifactId: string }) {
   const { data: card } = useQuery(artifactCardQuery(artifactId));
   const actorOf = useArtifactActor();
   const time = useArtifactTime();
-  const navigate = useArtifactNavigation();
+  const openPage = useOpenArtifactPage();
   if (!card) return null;
   const title = card.title || m.doc_untitled();
   const kind = kindLabel(card.kind);
@@ -62,7 +62,7 @@ function ArtifactCardView({ artifactId }: { artifactId: string }) {
         <p className="flex min-w-0 items-baseline gap-2">
           {/* The title is the card's one way in; its hit area covers the whole card. */}
           <AriaButton
-            onPress={() => navigate(openArtifactSearch(card.id))}
+            onPress={() => openPage(card.id)}
             className="min-w-0 truncate text-left text-sm font-semibold text-primary outline-none before:absolute before:inset-0 before:rounded-xl"
           >
             {title}

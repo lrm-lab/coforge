@@ -14,7 +14,7 @@
   "doc_kind_html": "Web page",
   "doc_card_label": "{kind}: {title}",
   "doc_pane_label": "Document",
-  "doc_load_failed": "This document can't be opened: it may have been deleted, or you can't see it.",
+  "doc_load_failed": "It may have been deleted, or you can't see it.",
   "doc_close": "Close",
   "doc_fullscreen": "Full screen",
   "doc_exit_fullscreen": "Exit full screen",
@@ -82,5 +82,13 @@
   "doc_loading": "Loading",
   "doc_version_load_failed": "This version couldn't be loaded. Try again later.",
   "doc_copy_mine": "Copy my text",
-  "doc_mine_copied": "Your text is copied"
+  "doc_mine_copied": "Your text is copied",
+  "doc_back": "Back",
+  "doc_unavailable_title": "Can't open this",
+  "doc_open_in_tab": "Open in new tab",
+  "doc_page_view": "Show",
+  "doc_page_preview": "Preview",
+  "doc_page_source": "Source",
+  "doc_page_agent_hint": "Made by an Agent: ask one in the conversation to change it.",
+  "doc_page_preview_failed": "Couldn't show this page. Try again in a moment."
 }

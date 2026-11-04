@@ -1,12 +1,11 @@
-import { conversationRoute } from "#src/features/conversations/last-conversation";
-
 /**
- * A document's link (task #385): its home conversation's page with `doc=<id>`, which opens the
- * document beside the chat. A message that carries such a link shows the document's card; the
- * link is what "Copy link" gives.
+ * An artifact's link (task #514): its own page, `/w/<slug>/artifacts/<id>`, which "Copy link"
+ * gives; before it, its home conversation's page with `doc=<id>` (task #385), which still opens
+ * it. A message that carries either shows the artifact's card.
  */
 
-const DOC_PARAM = /[?&]doc=([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b/gi;
+const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+const DOC_PARAM = new RegExp(String.raw`(?:[?&]doc=|/w/[^\s/?#]+/artifacts/)(${UUID})\b`, "gi");
 /** A link to a page of this app: `/w/<slug>/…`, with or without a locale or an origin. */
 const APP_LINK =
   /(?:https?:\/\/[^\s/]+)?(?:\/[a-z]{2}(?:-[A-Z]{2})?)?\/w\/[^\s/?#]+\/[^\s)\]>"']*/g;
@@ -21,25 +20,6 @@ export function artifactIdsInBody(body: string, limit = 3): string[] {
       if (ids.length >= limit) return ids;
     }
   return ids;
-}
-
-/** Where a document lives: a channel, a DM, or the Workspace (`documents.load`'s `homeKind`). */
-export type ArtifactHomeKind = "channel" | "dm" | "workspace";
-
-/**
- * The route that opens a document: its own conversation's page with `doc=<id>`, whatever page it
- * was opened on, so the link opens for everyone who can read the conversation. A Workspace
- * document has no page of its own yet, so no link.
- */
-export function artifactRoute(
-  workspaceSlug: string,
-  home: { kind: ArtifactHomeKind; conversationId: string | null },
-  artifactId: string,
-) {
-  if (home.kind === "workspace" || !home.conversationId) return undefined;
-  const target =
-    home.kind === "channel" ? { channelId: home.conversationId } : { dmId: home.conversationId };
-  return { ...conversationRoute(target, workspaceSlug), search: { doc: artifactId } };
 }
 
 /** One app link, bare, as a Markdown link's target or in `<…>`, with what stands around it. */

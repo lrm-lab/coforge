@@ -1,5 +1,6 @@
 import { useEffect, useEffectEvent, useRef, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { Navigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 
 import { useConversationAgentProfile } from "#src/features/agents/profile-panel/open-agent-profile";
@@ -7,8 +8,9 @@ import { useLiveAgent } from "#src/features/agents/workspace-agents-realtime";
 import { ACTIVITY_INBOX_QUERY_PREFIX } from "#src/features/inbox/activity-inbox-queries";
 import { ConversationTaskBoard } from "#src/features/tasks/conversation-task-board";
 import { ArtifactDraftPane } from "#src/features/artifacts/artifact-draft-pane";
-import { ArtifactPane } from "#src/features/artifacts/artifact-pane";
+import { artifactPageRoute } from "#src/features/artifacts/artifact-search";
 import { useArtifactsOn } from "#src/features/artifacts/artifact-queries";
+import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { ConversationFilesWithDocuments } from "#src/features/artifacts/artifact-files";
 import { cn } from "#src/lib/utils";
 import { markPublicChannelRead } from "./channels.functions";
@@ -276,33 +278,31 @@ type ConversationPageBodyProps = {
 function ConversationPageBody(props: ConversationPageProps & ConversationPageBodyProps) {
   const { doc, docVersion, docFull, docHistory, docDraft } = props.search;
   const documents = useArtifactsOn() === true;
-  const open = documents && (doc !== undefined || docDraft === true);
-  // The chat keeps one place in the tree whether a document is open or not, so opening one, going
-  // full screen or opening its history only hides the chat: its scroll, open thread and draft stay.
-  // An open document sits beside it, or alone in full screen (task #385).
+  const workspaceSlug = useWorkspaceSlug();
+  // A document's link from before its own page (task #385) opens that page (task #514).
+  if (documents && doc !== undefined)
+    return (
+      <Navigate
+        {...artifactPageRoute(workspaceSlug, doc, { version: docVersion, history: docHistory })}
+        replace
+      />
+    );
+  const open = documents && docDraft === true;
+  // The chat keeps one place in the tree whether a new document is open or not, so opening one
+  // or going full screen only hides the chat: its scroll, open thread and draft stay.
   return (
     <div className="@container/page flex min-h-0 min-w-0 flex-1">
-      <div
-        className={cn(
-          "flex min-h-0 min-w-0 flex-1 flex-col",
-          open && docFull && "hidden",
-          // With the history open, the chat shows only where it still has room (ArtifactPane).
-          open && !docFull && docHistory && "hidden @6xl/page:flex",
-        )}
-      >
+      <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", open && docFull && "hidden")}>
         <ConversationPageMain {...props} documents={documents} />
       </div>
-      {open &&
-        (doc ? (
-          <ArtifactPane search={{ doc, docVersion, docFull, docHistory }} />
-        ) : (
-          <ArtifactDraftPane
-            // A draft belongs to its conversation: another one starts its own.
-            key={props.page.conversation.conversationId}
-            conversationId={props.page.conversation.conversationId}
-            search={{ docFull }}
-          />
-        ))}
+      {open && (
+        <ArtifactDraftPane
+          // A draft belongs to its conversation: another one starts its own.
+          key={props.page.conversation.conversationId}
+          conversationId={props.page.conversation.conversationId}
+          search={{ docFull }}
+        />
+      )}
     </div>
   );
 }

@@ -12,7 +12,7 @@ import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { ArtifactEditedLine, ArtifactIcon, kindLabel, useArtifactTime } from "./artifact-parts";
 import { artifactListQuery, useArtifactActor, type ArtifactCard } from "./artifact-queries";
-import { draftArtifactSearch, openArtifactSearch, useArtifactNavigation } from "./artifact-search";
+import { draftArtifactSearch, useArtifactNavigation, useOpenArtifactPage } from "./artifact-search";
 
 type Filter = "all" | "files" | "artifacts";
 
@@ -143,13 +143,13 @@ function ArtifactList({
 }
 
 function ArtifactRow({ card }: { card: ArtifactCard }) {
-  const navigate = useArtifactNavigation();
+  const openPage = useOpenArtifactPage();
   const actorOf = useArtifactActor();
   const time = useArtifactTime();
   return (
     <li>
       <AriaButton
-        onPress={() => navigate(openArtifactSearch(card.id))}
+        onPress={() => openPage(card.id)}
         className="flex w-full min-w-0 items-center gap-3 rounded-xl border border-secondary bg-primary p-3 text-left outline-focus-ring hover:border-primary hover:bg-primary_hover data-focus-visible:outline-2"
       >
         <ArtifactIcon kind={card.kind} />

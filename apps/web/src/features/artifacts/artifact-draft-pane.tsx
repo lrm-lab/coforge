@@ -13,7 +13,7 @@ import { refreshArtifact } from "./artifact-queries";
 import { nextSaveAttempt, type SaveAttempt } from "./artifact-save-attempt";
 import {
   closedArtifactSearch,
-  openArtifactSearch,
+  useOpenArtifactPage,
   useArtifactNavigation,
   type ArtifactSearch,
 } from "./artifact-search";
@@ -32,6 +32,7 @@ export function ArtifactDraftPane({
 }) {
   const queryClient = useQueryClient();
   const navigate = useArtifactNavigation();
+  const openPage = useOpenArtifactPage();
   const editorRef = useRef<ContentEditorRef>(null);
   const [title, setTitle] = useState("");
   const [dirty, setDirty] = useState(false);
@@ -55,12 +56,12 @@ export function ArtifactDraftPane({
     onSuccess: (document) => {
       created.current = true;
       refreshArtifact(queryClient, document.id);
-      navigate(openArtifactSearch(document.id), { replace: true });
+      openPage(document.id, { replace: true });
     },
   });
   const leavePrompt = useArtifactLeaveGuard({
     dirty: () => dirty && !created.current,
-    stays: (next) => next.docDraft === true,
+    stays: (next) => next.search.docDraft === true,
   });
   const markEdited = () => {
     setDirty(true);

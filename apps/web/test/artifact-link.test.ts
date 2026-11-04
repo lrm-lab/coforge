@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { artifactIdsInBody, artifactRoute } from "#src/features/artifacts/artifact-link";
+import { artifactIdsInBody } from "#src/features/artifacts/artifact-link";
 
 const a = "0b5a1f2e-1111-4a2b-9c3d-000000000001";
 const b = "0b5a1f2e-2222-4a2b-9c3d-000000000002";
@@ -25,17 +25,8 @@ test("a long body shows at most three cards", () => {
   expect(artifactIdsInBody(body)).toEqual(ids.slice(0, 3));
 });
 
-test("a document's link is its own conversation's page, whichever page it was opened on", () => {
-  expect(artifactRoute("frank", { kind: "channel", conversationId: "c1" }, a)).toEqual({
-    to: "/w/$workspaceSlug/channel/$channelId",
-    params: { workspaceSlug: "frank", channelId: "c1" },
-    search: { doc: a },
-  });
-  expect(artifactRoute("frank", { kind: "dm", conversationId: "d1" }, a)).toEqual({
-    to: "/w/$workspaceSlug/dm/$dmId",
-    params: { workspaceSlug: "frank", dmId: "d1" },
-    search: { doc: a },
-  });
-  // A Workspace document has no page of its own yet.
-  expect(artifactRoute("frank", { kind: "workspace", conversationId: null }, a)).toBeUndefined();
+test("an artifact's own page is its link, beside the conversation links before it", () => {
+  const body = `Plan: https://coforge.cn/zh-CN/w/frank/artifacts/${a} and /w/frank/channel/c1?doc=${b}`;
+  expect(artifactIdsInBody(body)).toEqual([a, b]);
+  expect(artifactIdsInBody(`/w/frank/artifacts/not-a-uuid`)).toEqual([]);
 });

@@ -16,7 +16,7 @@ import { m } from "#src/paraglide/messages";
 import type { ArtifactEditorStatus } from "./use-artifact-editor";
 
 /** What the header says of the document's state, beside its title. */
-function StatusLine({
+export function StatusLine({
   status,
   version,
 }: {
