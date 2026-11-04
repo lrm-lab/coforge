@@ -5,7 +5,9 @@ import type {
   OpenAgentProfile,
   OpenPersonProfile,
 } from "#src/features/agents/profile-panel/open-agent-profile";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { cn } from "#src/lib/utils";
+import { useMemberDirectory } from "./member-directory";
 import { MENTION_CHIP_OPENABLE_CLASS } from "./message-reference-chips";
 import { PersonHoverCard } from "./person-hover-card";
 
@@ -43,7 +45,12 @@ export function AgentMentionChip({
       name={label}
       label={chipLabel(label)}
       inline
-      trigger={children}
+      trigger={
+        <>
+          <MentionFace kind="agent" id={agentId} name={label} />
+          {children}
+        </>
+      }
       triggerClassName={openableChipClassName(className)}
       onOpenProfile={onOpenProfile}
     />
@@ -71,11 +78,41 @@ export function PersonMentionChip({
     <PersonHoverCard
       label={chipLabel(label)}
       inline
-      trigger={children}
+      trigger={
+        <>
+          <MentionFace kind="user" id={userId} name={label} />
+          {children}
+        </>
+      }
       triggerClassName={openableChipClassName(className)}
       onPress={() => onOpenProfile(userId)}
       userId={userId}
       name={label}
     />
+  );
+}
+
+/** The face a mention chip opens with, before its `@name` (Frank, 11-04, task #521): a person's
+ * picture from the conversation's members, an Agent's mascot from its id. Sized to the chip's
+ * line, inside its fill. */
+function MentionFace({ kind, id, name }: { kind: "user" | "agent"; id: string; name: string }) {
+  const member = useMemberDirectory()?.find(
+    (candidate) => candidate.kind === kind && candidate.id === id,
+  );
+  // A box of the face's own size on the text's line: a person's picture and an Agent's sticker
+  // draw differently inside it, and line up the same.
+  return (
+    <span className="mr-0.5 inline-flex size-3.5 items-center justify-center overflow-hidden rounded-full align-middle">
+      <ActorAvatar
+        presence={false}
+        size="xs"
+        name={name}
+        alt=""
+        src={member?.avatarUrl ?? undefined}
+        agentId={kind === "agent" ? id : undefined}
+        userId={kind === "user" ? id : undefined}
+        className="size-3.5 shrink-0"
+      />
+    </span>
   );
 }

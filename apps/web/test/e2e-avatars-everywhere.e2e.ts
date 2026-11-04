@@ -109,11 +109,11 @@ test("names carry their faces", async () => {
         workspaceId,
         channelName: `e2e-faces-notice-${tail}`,
         description: "",
-        lastSequence: 1,
         members: { create: [{ userId: DEV_BROWSER_USER.id }, { agentId: agent.id }] },
       },
     });
     cleanup.push(notices.id);
+    await db.conversation.update({ where: { id: notices.id }, data: { lastSequence: 1 } });
     const notice = await db.message.create({
       data: {
         workspaceId,
@@ -137,6 +137,41 @@ test("names carry their faces", async () => {
         },
       },
     });
+    // A message's @mentions: each chip opens with the face of who it names.
+    const [meIn, agentIn] = await Promise.all([
+      db.conversationMember.findFirstOrThrow({
+        where: { conversationId: notices.id, userId: DEV_BROWSER_USER.id },
+      }),
+      db.conversationMember.findFirstOrThrow({
+        where: { conversationId: notices.id, agentId: agent.id },
+      }),
+    ]);
+    const pinged = await db.message.create({
+      data: {
+        workspaceId,
+        conversationId: notices.id,
+        sequence: 2,
+        senderMemberId: meIn.id,
+        body: `Can @${agent.name} pair with @${DEV_BROWSER_USER.username} on this?`,
+      },
+    });
+    await db.conversation.update({ where: { id: notices.id }, data: { lastSequence: 2 } });
+    for (const [member, kind, actorId, handle] of [
+      [agentIn.id, "agent", agent.id, agent.name],
+      [meIn.id, "user", DEV_BROWSER_USER.id, DEV_BROWSER_USER.username],
+    ] as const)
+      await db.messageMention.create({
+        data: {
+          messageId: pinged.id,
+          memberId: member,
+          conversationId: notices.id,
+          workspaceId,
+          kind,
+          actorId,
+          handle,
+        },
+      });
+    const chips = `document.querySelectorAll('[data-message-id="${pinged.id}"] .message-markdown-mention')`;
     const noticeRow = `document.querySelector('[data-message-id="${notice.id}"] [data-message="system"]')`;
     for (const [width, height, name] of [
       ["1280", "900", "notice"],
@@ -147,6 +182,9 @@ test("names carry their faces", async () => {
       await browser("wait", "--fn", `${pageHydrated} && ${noticeRow} != null`);
       await browser("wait", "500");
       expect(await evaluate<number>(`${noticeRow}.querySelectorAll("img").length`)).toBe(2);
+      expect(
+        await evaluate<number>(`[...${chips}].filter((chip) => chip.querySelector("img")).length`),
+      ).toBe(2);
       await shoot(name);
     }
   } finally {
