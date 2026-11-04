@@ -1,3 +1,4 @@
+import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import {
   withoutSshSessionVariables,
   type AntigravityAcpRuntimeHost,
@@ -12,7 +13,7 @@ import { runCatalogCommand } from "#src/code-agent/catalog-command";
 import { ReplyIntentScanner } from "#src/code-agent/reply-intent-scanner";
 import { isShellToolName } from "#src/code-agent/send-command-target";
 
-const logger = getLogger(["coforge", "daemon", "code-agent", "antigravity"]);
+const logger = getLogger(["coforge", "daemon", "code-agent", RUNTIME_PROVIDER.ANTIGRAVITY]);
 
 export const antigravityAcpRuntimeHost: AntigravityAcpRuntimeHost = {
   clientInfo: { name: "coforge-daemon", version: COFORGE_DAEMON_VERSION },
@@ -24,7 +25,7 @@ export const antigravityAcpRuntimeHost: AntigravityAcpRuntimeHost = {
     const hint = lines.map(scrubStderrHint).join("\n").trim();
     if (hint)
       logger.warn("code_agent:stderr", {
-        provider: "antigravity",
+        provider: RUNTIME_PROVIDER.ANTIGRAVITY,
         stderr_hint: hint,
       });
   },
