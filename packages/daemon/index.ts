@@ -20,6 +20,7 @@ import {
   type DaemonConfig,
 } from "#src/daemon-runtime/runtime";
 import { upgradeOperationsInConfig } from "#src/daemon-runtime/upgrade-result-reporter";
+import { agentApiKeyRegistry } from "#src/agent-api-key-registry";
 import { defaultCodeAgentDiscovery } from "#src/daemon-runtime/code-agent-inventory-sync";
 import { FileDaemonCredentialStore } from "#src/credentials/credential-store";
 import { DaemonConfigStore } from "#src/persistence/daemon-config";
@@ -255,6 +256,7 @@ export async function runDaemon(args: string[], computerVersion?: string): Promi
       const agentApi = () => requireRuntime().agentRequests;
       // Every caller awaits inside a try, so a missing runtime surfaces as a rejected call.
       const agentProxy = startAgentProxy({
+        agentApiKeys: agentApiKeyRegistry(requireRuntime),
         runtime: {
           agentMessage: async (...args) => requireRuntime().agentMessage(...args),
           ...attachmentRuntime(agentApi),

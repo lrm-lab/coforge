@@ -50,11 +50,13 @@ export function channelEndpointFor(
   }
 }
 
-/** Authorization headers every Agent-scoped HTTP request carries. */
+/** Authorization headers every Agent-scoped HTTP request carries, plus one correlation id per
+ * outbound call: the server request log records `x-request-id` as its `request_id`. */
 export function agentHeaders(keys: { agentApiKey: string; daemonApiKey: string }, json = false) {
   return {
     authorization: `Bearer ${keys.daemonApiKey}`,
     "x-coforge-agent-api-key": `Bearer ${keys.agentApiKey}`,
+    "x-request-id": crypto.randomUUID(),
     ...(json ? { "content-type": "application/json" } : {}),
   };
 }

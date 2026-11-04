@@ -374,6 +374,12 @@ const ROUTE_TABLE: readonly ProxyRoute[] = [
 export function startAgentProxy(input: {
   onRequest?: (request: { method: string; path: string }) => void;
   runtime: AgentProxyRuntime;
+  /** The daemon's Agent API key registry, read at each request so a key rotated after `issue`
+   * is the one the next request forwards. `issue` registers the key it was given. */
+  agentApiKeys?: {
+    get(agentId: string): string | undefined;
+    set(agentId: string, agentApiKey: string): void;
+  };
   port?: number;
 }): AgentProxy {
   // This is deliberately a daemon-local Proxy token, not a cloud API key.
@@ -382,6 +388,7 @@ export function startAgentProxy(input: {
   // Agent can make its first request without receiving a new environment
   // variable or running a refresh command.
   const contexts = new Map<string, TokenBinding>();
+  const agentApiKeys = input.agentApiKeys ?? new Map<string, string>();
   const server = Bun.serve({
     // Loopback only: Agents reach the proxy at 127.0.0.1 (see `url` below). Bun's default
     // `0.0.0.0` would expose it to the network and let another local listener bind
@@ -413,7 +420,7 @@ export function startAgentProxy(input: {
 
       // `inbox` declares no key parameter; every other runtime method takes all three.
       const handler = input.runtime[route.handler] as
-        | ((context: string, request: unknown, agentApiKey: string) => Promise<unknown>)
+        | ((context: string, request: unknown, agentApiKey: string | undefined) => Promise<unknown>)
         | undefined;
       if (!handler) return new Response("not found", { status: 404 });
 
@@ -445,13 +452,14 @@ export function startAgentProxy(input: {
           binding,
         });
         if (parsed instanceof Response) return parsed;
-        // Identity is exclusively the token binding, and the Agent API key stays in this trusted
-        // registration: neither is ever read from, or serialized into, the child's request.
+        // Identity is exclusively the token binding, and the Agent API key the daemon's registry
+        // holds for it right now: neither is ever read from, or serialized into, the child's
+        // request.
         const result = await handler.call(
           input.runtime,
           binding.context,
           parsed,
-          binding.agentApiKey,
+          agentApiKeys.get(binding.agentId),
         );
         return guardDelivery(
           route.respond ? route.respond(result as never) : Response.json(result),
@@ -479,7 +487,8 @@ export function startAgentProxy(input: {
       if (!isAgentApiKey(agentApiKey)) throw new Error("invalid Agent API key");
       const token = `sfp_${randomBytes(32).toString("base64url")}`;
       const context = input.runtime.issueAgentContext?.(agentId, token) || token;
-      contexts.set(token, { agentId, context, agentApiKey });
+      agentApiKeys.set(agentId, agentApiKey);
+      contexts.set(token, { agentId, context });
       return token;
     },
     revoke(token) {

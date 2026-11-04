@@ -352,7 +352,7 @@ export class DaemonRuntime {
   readonly #startedAt = Date.now();
   readonly #agentContexts = new Map<string, string>();
   readonly #agentProxyTokens = new Map<string, string>();
-  readonly #agentApiKeys = new Map<string, string>();
+  readonly agentApiKeys = new Map<string, string>();
   /** Agents launched with the weekly-report-collect skill pack. */
   readonly #collectSkillAgents = new Set<string>();
   readonly #agentLaunches = new Map<string, Promise<AgentRuntime>>();
@@ -684,7 +684,7 @@ export class DaemonRuntime {
       processManager: this.#agentProcessManager,
       activityPublisher: this.#activityPublisher,
       desktops: this.#desktops,
-      agentApiKeys: this.#agentApiKeys,
+      agentApiKeys: this.agentApiKeys,
       revokeAgentApiKey: (agentId, apiKey) => this.#revokeAgentApiKey(agentId, apiKey),
       messageAttention: this.#messageAttention,
       deliveryQueue: this.#deliveryQueue,
@@ -708,7 +708,7 @@ export class DaemonRuntime {
       usageReport: this.#usageReport,
       fastModeWarned: this.#fastModeWarned,
       sync: this.#sync,
-      agentApiKeys: this.#agentApiKeys,
+      agentApiKeys: this.agentApiKeys,
       agentProxy: this.#agentProxy,
       agentProxyTokens: this.#agentProxyTokens,
       desktops: this.#desktops,
@@ -887,7 +887,7 @@ export class DaemonRuntime {
       transport: () => this.#transport,
       envelope: this.#env,
       runtimeInstanceId: this.#runtimeInstanceId,
-      agentApiKeys: this.#agentApiKeys,
+      agentApiKeys: this.agentApiKeys,
       revokeAgentApiKey: (agentId, apiKey) => this.#revokeAgentApiKey(agentId, apiKey),
       replaceTransport: () => this.#replaceTransport(),
       consumedSeqs: this.#consumedSeqs,
@@ -1155,7 +1155,7 @@ export class DaemonRuntime {
   }
 
   #failCollectorRunningSlots = (agentId: string, failureReason: string) =>
-    failCollectorRunningSlots(this.#transport, this.#agentApiKeys, agentId, failureReason);
+    failCollectorRunningSlots(this.#transport, this.agentApiKeys, agentId, failureReason);
 
   #currentObservedUsage = (provider: RuntimeProvider) =>
     currentObservedUsage(this.#observedUsage, provider);
@@ -1385,7 +1385,7 @@ export class DaemonRuntime {
   }
 
   async #revokeAgentApiKey(agentId: string, agentApiKey: string | undefined): Promise<void> {
-    await revokeAgentApiKey(this.#transport, this.#agentApiKeys, agentId, agentApiKey);
+    await revokeAgentApiKey(this.#transport, this.agentApiKeys, agentId, agentApiKey);
   }
 
   async agentMessage(

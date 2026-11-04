@@ -31,10 +31,16 @@ const jsonHeaders = { ...authHeaders, "content-type": "application/json" };
 function recordingClient(responseBody: unknown) {
   const calls: Captured[] = [];
   const client = createAgentMessageHttpClient(async (input, init) => {
+    const headers = { ...(init?.headers as Record<string, string>) };
+    // Every outbound call carries one correlation id; the pinned sets below cover the rest.
+    expect(headers["x-request-id"]).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    );
+    delete headers["x-request-id"];
     calls.push({
       url: String(input),
       method: init?.method,
-      headers: { ...(init?.headers as Record<string, string>) },
+      headers,
       body: init?.body as string | undefined,
       hasSignal: init?.signal !== undefined,
     });

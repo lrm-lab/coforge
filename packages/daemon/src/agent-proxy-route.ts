@@ -21,11 +21,12 @@ export function findProxyRoute(
   return undefined;
 }
 
-/** What a Local Proxy token stands for: the Agent, its runtime context and its Agent API key. */
+/** What a Local Proxy token stands for: the Agent and its runtime context. The Agent API key
+ * is not bound here — each request resolves the Agent's current key from the daemon's key
+ * registry, so a key rotated after `issue` still reaches a running process. */
 export type TokenBinding = {
   agentId: string;
   context: string;
-  agentApiKey: string;
   memoryFence?: string;
 };
 export type JsonObject = Record<string, unknown>;
