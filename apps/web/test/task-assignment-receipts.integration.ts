@@ -3,6 +3,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { decodeAgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
+import { DELIVERY_RETRY_DELAYS_MS } from "#src/server/conversations/agent-delivery.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { ConversationHistory } from "#src/server/conversations/conversation-history.server";
 import { withPublishBatch } from "./helpers/fake-centrifugo";
@@ -99,7 +100,7 @@ test("assignment receipts survive mute and disconnect without waking unrelated A
     // what matters is the two distinct deliveries, not the attempt count.
     const distinctDeliveries = [...new Map(published.map((p) => [p.messageId, p])).values()];
     expect(distinctDeliveries).toHaveLength(2);
-    expect(published.length).toBeGreaterThanOrEqual(2);
+    expect(published).toHaveLength(2 * (1 + DELIVERY_RETRY_DELAYS_MS.length));
     expect(distinctDeliveries).toEqual(
       expect.arrayContaining(
         receipts.map((receipt, index) =>
