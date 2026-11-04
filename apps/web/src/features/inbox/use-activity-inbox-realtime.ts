@@ -24,8 +24,8 @@ const REFRESH_DELAY_MS = 300;
  * concerns them (`conversation.activity.v1`, already filtered to the people who may read it), and
  * `onActivity` once per burst for anything else that reached their Activity inbox and, with
  * `refreshOnPins`, for a pin change. The nav rail's Activity dot sets itself from `onMessage`
- * without a read, from `onAttention` when a change says where the inbox stands, and from `onRead`
- * when a read leaves a conversation read; the Activity page re-reads its first page from it.
+ * without a read, and from `onAttention` when a change says where the inbox stands; the Activity
+ * page re-reads its first page from it.
  */
 export function useActivityInboxRealtime({
   userId,
@@ -33,7 +33,6 @@ export function useActivityInboxRealtime({
   onActivity,
   onAttention,
   onSubscribed,
-  onRead,
   refreshOnPins = false,
 }: {
   userId: string;
@@ -47,10 +46,6 @@ export function useActivityInboxRealtime({
   /** The channel became `subscribed`, and may have missed what was published before (see
    * `queryMissedBySubscribe`). */
   onSubscribed?: (recovery: SubscribedRecovery) => void;
-  /** Once per burst, a read left one of the viewer's channels or DMs read, from any of their pages
-   * (`channel.marked.v1` / `dm.marked.v1` with nothing unread, Slack's `channel_marked` /
-   * `im_marked`). */
-  onRead?: () => void;
   refreshOnPins?: boolean;
 }) {
   const onActivityRef = useRef(onActivity);
@@ -65,23 +60,12 @@ export function useActivityInboxRealtime({
   useEffect(() => {
     onAttentionRef.current = onAttention;
   }, [onAttention]);
-  const onReadRef = useRef(onRead);
-  useEffect(() => {
-    onReadRef.current = onRead;
-  }, [onRead]);
   const onSubscribedRef = useRef(onSubscribed);
   useEffect(() => {
     onSubscribedRef.current = onSubscribed;
   }, [onSubscribed]);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const readTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(
-    () => () => {
-      clearTimeout(timer.current);
-      clearTimeout(readTimer.current);
-    },
-    [],
-  );
+  useEffect(() => () => clearTimeout(timer.current), []);
 
   const onPublication = useCallback(
     (publication: RealtimePublication) => {
@@ -97,19 +81,10 @@ export function useActivityInboxRealtime({
       try {
         ({ attention } = decodeActivityChangedEvent(publication.data));
       } catch {
-        // Neither a message nor an Activity signal (the channels also carry other events): a read
-        // moved, or a pin change the caller asked for.
-        if (!onReadRef.current && !refreshOnPins) return;
-        const event = decodeViewerEvent(publication.data);
-        // Only `channel.marked.v1` / `dm.marked.v1` carry what a conversation is left with. A
-        // read-all moves many at once.
-        if (event && "unreadCount" in event) {
-          if (event.unreadCount > 0 || !onReadRef.current) return;
-          clearTimeout(readTimer.current);
-          readTimer.current = setTimeout(() => onReadRef.current?.(), REFRESH_DELAY_MS);
-          return;
-        }
+        // Neither a message nor an Activity signal (the channels also carry other events): only a
+        // pin change the caller asked for refreshes.
         if (!refreshOnPins) return;
+        const event = decodeViewerEvent(publication.data);
         if (event?.type !== "pref.changed.v1" || event.name !== "pins") return;
       }
       if (attention && onAttentionRef.current) return onAttentionRef.current(attention);
