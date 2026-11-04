@@ -31,7 +31,6 @@ import { openLink } from "#src/features/records/report-editor/utils/link-handler
 import {
   MARKDOWN_CHUNK_THRESHOLD,
   parseMarkdownChunked,
-  type MarkdownManagerLike,
 } from "#src/features/records/report-editor/utils/parse-markdown-chunked";
 import { preprocessMarkdown } from "#src/features/records/report-editor/utils/preprocess";
 
@@ -192,20 +191,12 @@ export const ContentEditor = forwardRef<ContentEditorRef, ContentEditorProps>(
         applyTableColwidthsFromMarkdown(editor, defaultValue);
         return;
       }
-      let cancelled = false;
-      void parseMarkdownChunked(
-        editor.storage.markdown as unknown as MarkdownManagerLike,
-        initialMarkdown,
-      ).then((doc: unknown) => {
-        if (cancelled || editor.isDestroyed) return;
-        editor.commands.setContent(doc as Parameters<typeof editor.commands.setContent>[0], {
-          emitUpdate: false,
-        });
-        applyTableColwidthsFromMarkdown(editor, defaultValue);
-      });
-      return () => {
-        cancelled = true;
-      };
+      // The parser is the Markdown extension's manager (`storage.markdown` only holds it), and the
+      // chunked parse is synchronous.
+      const doc = parseMarkdownChunked(editor.storage.markdown.manager, initialMarkdown);
+      if (editor.isDestroyed) return;
+      editor.commands.setContent(doc, { emitUpdate: false });
+      applyTableColwidthsFromMarkdown(editor, defaultValue);
     }, [editor]);
 
     useEffect(() => {
