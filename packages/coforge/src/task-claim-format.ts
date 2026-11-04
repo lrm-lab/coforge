@@ -1,10 +1,7 @@
-import type {
-  TaskClaimConflict,
-  TaskClaimResult,
-  TaskResult,
-} from "@lrm/coforge-sdk/internal";
+import type { TaskClaimConflict, TaskClaimResult, TaskResult } from "@lrm/coforge-sdk/internal";
 import { CliError } from "#src/cli-error";
 import { shortId } from "#src/short-id";
+import { taskRefForTarget } from "#src/task-ref";
 import { blockedClaimRow } from "#src/task-relations-format";
 
 /** How a claim conflict's blocked actions read. */
@@ -43,7 +40,7 @@ function claimRow(claim: TaskClaimResult): string {
 /** Each claim selector's outcome as `coforge task claim` prints it, then the claimed Tasks' threads. */
 export function formatClaimResults(target: string, result: TaskResult): string {
   const claims = result.claims ?? [];
-  const claimed = claims.filter((claim) => claim.success && claim.messageId);
+  const claimed = claims.filter((claim) => claim.success && claim.number !== undefined);
   const failed = claims.length - claims.filter((claim) => claim.success).length;
   const lines = [
     `Claim results (${claims.length - failed} claimed${failed ? `, ${failed} failed` : ""}):`,
@@ -53,10 +50,13 @@ export function formatClaimResults(target: string, result: TaskResult): string {
     lines.push(
       "",
       "Follow up in each task's thread:",
-      ...claimed.map(
-        (claim) =>
-          `#${claim.number} → coforge message send --target "${target}:${shortId(claim.messageId!)}"`,
-      ),
+      ...claimed.map((claim) => {
+        const ref = taskRefForTarget(target, claim.number!);
+        const reply = claim.messageId
+          ? `coforge message send --target "${target}:${shortId(claim.messageId)}"`
+          : `coforge task reply "${ref}"`;
+        return `${ref} → ${reply}`;
+      }),
     );
   return lines.join("\n");
 }

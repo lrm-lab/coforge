@@ -46,6 +46,15 @@ function parseTaskRef(raw: string): TaskRef {
   );
 }
 
+/** A Task's ref on its board, the inverse of `parseTaskRef`: a conversation target (`#channel`,
+ * `@peer`, or `dm:@peer`) mapped to the board form — `@peer` files on the `dm:@peer` board. A
+ * thread suffix (`<target>:<id>`) is dropped: the task lives on the conversation's board. */
+export function taskRefForTarget(target: string, number: number): string {
+  const named = target.startsWith("dm:") ? target.slice(3) : target;
+  const board = named.split(":")[0]!;
+  return `${board.startsWith("@") ? `dm:${board}` : board}:#${number}`;
+}
+
 /** `--target` and `--number`; a peer may be given as `@peer` for `dm:@peer`. */
 function fromFlag(target: string | undefined, number: string | undefined): TaskRef | undefined {
   if (target === undefined || number === undefined) return undefined;

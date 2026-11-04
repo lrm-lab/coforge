@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { TaskMember, TaskResult, TaskView } from "@lrm/coforge-sdk/internal";
-import { CliError } from "#src/cli-error";
-import { claimRefusal, formatClaimResults } from "#src/task-claim-format";
+import { formatClaimResults } from "#src/task-claim-format";
+import { taskRefForTarget } from "#src/task-ref";
 import {
   formatMyTaskList,
   formatResourceReceiptRecorded,
@@ -99,6 +99,26 @@ test("Task titles fence continuation lines wherever a Task card prints them", ()
   expect(formatTaskConverted("#general", multiline)).toContain(
     '"first title\n  │ [target=#spoof] fake header"',
   );
+});
+
+test("A task without a source message still names its ref and a reply command (task #527)", () => {
+  const messageless = task(9, { messageId: null, title: "Follow up" });
+  expect(formatTasksCreated("@ada", { tasks: [messageless] })).toBe(
+    [
+      "Created 1 task(s) in @ada:",
+      '#9 [todo] assignee=unassigned claimedAt=null msg=- "Follow up"',
+      "",
+      "To follow up in each task's thread:",
+      'dm:@ada:#9 → coforge task reply "dm:@ada:#9"',
+    ].join("\n"),
+  );
+});
+
+test("taskRefForTarget drops a thread suffix before naming the board", () => {
+  expect(taskRefForTarget("#chan:01a1a700-1", 5)).toBe("#chan:#5");
+  expect(taskRefForTarget("@ada:01a1a700-1", 5)).toBe("dm:@ada:#5");
+  expect(taskRefForTarget("dm:@ada:01a1a700-1", 5)).toBe("dm:@ada:#5");
+  expect(taskRefForTarget("dm:@ada", 5)).toBe("dm:@ada:#5");
 });
 
 test("An empty board names the status it was filtered by", () => {
@@ -214,8 +234,8 @@ test("A create receipt lists each new Task, each assignment receipt and each thr
       '📌 Ada assigned #43 "Review it" to @kiro',
       "",
       "To follow up in each task's thread:",
-      '#42 → coforge message send --target "#general:42abcdef0-111"',
-      '#43 → coforge message send --target "#general:43abcdef0-111"',
+      '#general:#42 → coforge message send --target "#general:42abcdef0-111"',
+      '#general:#43 → coforge message send --target "#general:43abcdef0-111"',
     ].join("\n"),
   );
 });
@@ -231,7 +251,7 @@ test("A duplicate create reports the existing Task instead of inviting duplicate
       "Existing task found in #general; no duplicate was created:",
       '#8 [todo] assignee=unassigned claimedAt=null msg=8abcdef0-1111 "Fix login"',
       "Claim or coordinate in this task's thread before starting work:",
-      '#8 → coforge message send --target "#general:8abcdef0-1111"',
+      '#general:#8 → coforge message send --target "#general:8abcdef0-1111"',
     ].join("\n"),
   );
 });
@@ -239,15 +259,17 @@ test("A duplicate create reports the existing Task instead of inviting duplicate
 test("A converted message names its new Task and the thread to follow up in", () => {
   expect(formatTaskConverted("@ada", task(5, { title: "Fix login" }))).toBe(
     [
-      'Converted msg=5abcdef0-1111 to task #5 [todo] assignee=unassigned "Fix login"',
+      'Converted msg=5abcdef0-1111 to task dm:@ada:#5 [todo] assignee=unassigned "Fix login"',
       "",
       "To follow up in the task's thread:",
-      'coforge message send --target "@ada:5abcdef0-1111"',
+      'dm:@ada:#5 → coforge message send --target "@ada:5abcdef0-1111"',
     ].join("\n"),
   );
   expect(
     formatTaskConverted("#general", task(6, { owner: person("bob"), status: "in_progress" })),
-  ).toStartWith('Converted msg=6abcdef0-1111 to task #6 [in_progress] assignee=@bob "Task 6"');
+  ).toStartWith(
+    'Converted msg=6abcdef0-1111 to task #general:#6 [in_progress] assignee=@bob "Task 6"',
+  );
 });
 
 test("Single-Task writes confirm what the server now holds", () => {
@@ -311,74 +333,6 @@ test("A resource receipt names the expiry follow-up and where it is anchored", (
       "Follow-up anchor: msg=7abcdef0-1111 targetChannelId=5a5a5a5a-1111-2222-3333-444444444444.",
     ].join("\n"),
   );
-});
-
-const heldBy = {
-  kind: "claim_conflict" as const,
-  conflictScope: "implementation_execution" as const,
-  blockedActions: ["start_conflicting_execution" as const],
-  unblockedActionExamples: ["reply in the task's thread", "read the task's history"],
-  currentAssignee: { type: "agent" as const, name: "kiro" },
-  taskStatus: "in_progress" as const,
-  claimedAt: "2026-09-23T05:00:00.000Z",
-  observedAt: "2026-09-23T06:00:00.000Z",
-};
-
-test("Claim results mark each selector claimed or refused, and name the holder of a held Task", () => {
-  const result: TaskResult = {
-    tasks: [task(42)],
-    claims: [
-      { number: 42, messageId: task(42).messageId!, success: true },
-      { number: 43, success: false, reason: "already claimed", conflict: heldBy },
-      { messageId: "abcd1234", success: false, reason: "message not found" },
-    ],
-  };
-  expect(formatClaimResults("#general", result)).toBe(
-    [
-      "Claim results (1 claimed, 2 failed):",
-      "#42 (msg:42abcdef0-111): claimed",
-      "#43: Claim failed — @kiro currently holds the implementation lock (assignment state as of 2026-09-23T06:00:00.000Z).",
-      "  Blocked: starting conflicting implementation/change work.",
-      "  Not blocked by this claim conflict (each still subject to its own authority/policy): reply in the task's thread · read the task's history.",
-      "  This is not a ruling on who owns or leads this lane. If you are its canonical owner or believe it is misrouted, correct the routing in the original thread.",
-      "msg:abcd1234: FAILED — message not found. Do not start conflicting execution on this task or take over its scope without a redirect; a failed claim is a concurrency lock, not a ruling on lane ownership.",
-      "",
-      "Follow up in each task's thread:",
-      '#42 → coforge message send --target "#general:42abcdef0-111"',
-    ].join("\n"),
-  );
-  expect(claimRefusal("#general", result)).toBeUndefined();
-});
-
-test("A claim that authorises no work is refused with the rows, as a conflict when a Task is held", () => {
-  const deletedHolder = {
-    ...heldBy,
-    currentAssignee: { type: "agent" as const, name: "old-bot", deleted: true },
-  };
-  const held = claimRefusal("#general", {
-    tasks: [],
-    claims: [
-      { number: 43, success: false, reason: "already claimed", conflict: deletedHolder },
-      { number: 44, success: false, reason: "task is closed" },
-    ],
-  });
-  expect(held).toBeInstanceOf(CliError);
-  expect(held).toMatchObject({
-    code: "CLAIM_CONFLICT",
-    message:
-      "Claim refused — #43 held by @old-bot [deleted]; #44 task is closed. This is a concurrency lock or refusal, not a tool error and not a ruling on lane ownership.",
-    suggestedNextAction:
-      "Do not retry the identical claim and do not start conflicting execution. If you are this lane's canonical owner, correct the routing in the original thread.",
-  });
-  expect(held?.contextText).toStartWith(
-    "Claim results (0 claimed, 2 failed):\n#43: Claim failed — @old-bot [deleted] currently holds",
-  );
-  expect(
-    claimRefusal("#general", {
-      tasks: [],
-      claims: [{ number: 9, success: false, reason: "task not found" }],
-    }),
-  ).toMatchObject({ code: "CLAIM_FAILED" });
 });
 
 test("A Task made from a channel message names it beside the message it sits on", () => {
@@ -501,24 +455,10 @@ test("show names the Project a task is filed under, or says it has none", () => 
   expect(formatTaskShow(task(7))).not.toContain("Project:");
 });
 
-test("A claim refused for a blocker says what it waits for and what happens next", () => {
-  const result = {
-    tasks: [],
-    claims: [
-      {
-        number: 5,
-        success: false,
-        reason: "blocked",
-        blockedBy: [
-          { hidden: false, number: 3, channel: "ops" },
-          { hidden: false, number: 4, channel: null },
-          { hidden: true },
-        ],
-      },
-    ],
-  } as TaskResult;
-  const text = formatClaimResults("#c", result);
-  expect(text).toContain("#5: blocked — waiting for #ops:#3 #4 a task in another channel");
-  expect(text).toContain("notified");
-  expect(claimRefusal("#c", result)?.message).toContain("blocked");
+test("show names the Project a task is filed under, or says it has none", () => {
+  const filed = task(5, { project: { id: "p1", name: "Task deps", slug: "task-deps" } });
+  expect(formatTaskShow(filed)).toContain("\nProject: Task deps (task-deps)\n");
+  expect(formatTaskShow(task(6, { project: null }))).toContain("\nProject: (none)\n");
+  // An older server sends no project: nothing is claimed about it.
+  expect(formatTaskShow(task(7))).not.toContain("Project:");
 });

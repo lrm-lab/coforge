@@ -119,8 +119,8 @@ test("Task create sends every title and prints each new Task with its thread", a
       '#2 [todo] assignee=unassigned claimedAt=null msg=2abcdef0-0000 "Review"',
       "",
       "To follow up in each task's thread:",
-      '#1 → coforge message send --target "@ada:1abcdef0-0000"',
-      '#2 → coforge message send --target "@ada:2abcdef0-0000"',
+      'dm:@ada:#1 → coforge message send --target "@ada:1abcdef0-0000"',
+      'dm:@ada:#2 → coforge message send --target "@ada:2abcdef0-0000"',
     ].join("\n"),
   );
 });

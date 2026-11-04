@@ -12,6 +12,7 @@ import { formatMessageLine, formatUtcTimestamp } from "#src/message-format";
 import { shortId } from "#src/short-id";
 import { fenceMessageBody } from "#src/message-body-format";
 import { claimRefusal, formatClaimResults } from "#src/task-claim-format";
+import { taskRefForTarget } from "#src/task-ref";
 import { relationMarks, showRelationLines } from "#src/task-relations-format";
 
 /** The status filter a `task list` was given; `undefined` when none was passed. */
@@ -125,19 +126,22 @@ function assigneeField(task: TaskView): string {
   return `assignee=${task.owner ? `@${task.owner.handle}` : "unassigned"}`;
 }
 
-/** The command that replies in a Task's own thread: its conversation target plus its short id. A
- * Task without a channel message has no such thread. */
+/** The command that replies in a Task's own thread: a message-backed Task's source thread, or a
+ * task conversation's `task reply` when the Task has no source message (task conversations). */
 function threadReplies(target: string, tasks: readonly TaskView[]): string[] {
   return tasks.flatMap((task) => {
-    const reply = threadReply(target, task);
-    return reply ? [`#${task.number} → ${reply}`] : [];
+    const ref = taskRefForTarget(target, task.number);
+    const reply = task.messageId
+      ? `coforge message send --target "${target}:${shortId(task.messageId)}"`
+      : `coforge task reply "${ref}"`;
+    return [`${ref} → ${reply}`];
   });
 }
 
-function threadReply(target: string, task: TaskView): string | null {
+function threadReply(target: string, task: TaskView): string {
   return task.messageId
     ? `coforge message send --target "${target}:${shortId(task.messageId)}"`
-    : null;
+    : `coforge task reply "${taskRefForTarget(target, task.number)}"`;
 }
 
 /** What `coforge task create` made: each new Task, the assignee's receipt, and each Task's thread. */
@@ -190,10 +194,15 @@ export function formatHeldTaskRequest(
 
 /** The Task `coforge task convert` made from a message, and its thread. */
 export function formatTaskConverted(target: string, task: TaskView): string {
+  const reply = threadReply(target, task);
   return [
-    `Converted msg=${task.messageId ? shortId(task.messageId) : "-"} to task #${task.number} [${task.status}] ${assigneeField(task)} "${fenceMessageBody(task.title)}"`,
-    ...(threadReply(target, task)
-      ? ["", "To follow up in the task's thread:", threadReply(target, task)!]
+    `Converted msg=${task.messageId ? shortId(task.messageId) : "-"} to task ${taskRefForTarget(target, task.number)} [${task.status}] ${assigneeField(task)} "${fenceMessageBody(task.title)}"`,
+    ...(reply
+      ? [
+          "",
+          "To follow up in the task's thread:",
+          `${taskRefForTarget(target, task.number)} → ${reply}`,
+        ]
       : []),
   ].join("\n");
 }
