@@ -36,7 +36,7 @@ UI 改动必须列出本次改动受影响的 UI，并给出测试 Todo list，�
 
 ## Browser end-to-end tests
 
-- `apps/web/test/*.e2e.ts` are opt-in: `bun test` does not discover `.e2e.ts`, and CI never runs them. They need a local Web service, `agent-browser`, and a local database. Each file's doc comment states its own prerequisites and what it writes under `.amp/e2e/`.
+- `apps/web/test/*.e2e.ts` are opt-in: `bun test` does not discover `.e2e.ts`, and per-commit CI never runs them; the files listed in `scripts/e2e/web-e2e-ci.txt` run daily in `.github/workflows/web-e2e.yml` ([Web browser e2e](../release/web-e2e.md)). Never run one with `ego-browser`: it drives the signed-in desktop browser of whoever owns the machine. They need a local Web service, `agent-browser`, and a local database. Each file's doc comment states its own prerequisites and what it writes under `.amp/e2e/`.
 - Run one by name: `mise run test:e2e:web` lists them, `mise run test:e2e:web <file>` runs one (the `.e2e.ts` suffix is optional). Use `scripts/e2e/run-web-e2e.sh` directly when you want the listing without mise.
 - **Pass the file as a path, never as a bare name.** `bun test e2e-x.e2e.ts` treats the argument as a _filter_ and runs zero tests, printing only a hint; `bun test ./test/e2e-x.e2e.ts` loads the file. The two spellings differ by one `./`, and `scripts/ci/test-invocations.test.ts` guards the invocations that scripts, `mise.toml` and workflows name.
 - The shared runner defaults `COFORGE_E2E_WEB_URL` to `http://127.0.0.1:8788`, the dev server's port (the same default `run-mobile-overflow.sh` uses). The standard managed stack publishes Web on **8789** instead, so a file run against that one needs `COFORGE_E2E_WEB_URL=http://127.0.0.1:8789`.

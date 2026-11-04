@@ -55,3 +55,21 @@ test("the Web integration Centrifugo has the channel namespaces staging configur
     Object.fromEntries(config.channel.namespaces.map(withoutProxy)),
   );
 });
+
+test("the browser e2e run uses the images staging runs, by digest", async () => {
+  const e2e = Bun.YAML.parse(await Bun.file(".github/workflows/web-e2e.yml").text()) as {
+    jobs: { e2e: { services: Record<string, { image: string }>; env: Record<string, string> } };
+  };
+  // PostgreSQL and Redis are service containers; Centrifugo is started by the runner from the
+  // job's CENTRIFUGO_IMAGE, because its proxies need host networking.
+  const images: Record<(typeof SERVICES)[number], string | undefined> = {
+    postgres: e2e.jobs.e2e.services.postgres?.image,
+    redis: e2e.jobs.e2e.services.redis?.image,
+    centrifugo: e2e.jobs.e2e.env.CENTRIFUGO_IMAGE,
+  };
+  for (const service of SERVICES) {
+    const staging = compose.services[service]?.image;
+    expect(staging, `staging ${service}`).toMatch(/@sha256:[0-9a-f]{64}$/);
+    expect(images[service], `web-e2e ${service}`).toBe(staging);
+  }
+});

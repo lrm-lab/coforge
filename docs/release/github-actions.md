@@ -10,6 +10,7 @@
 | **Publish Computer (production)** | Manually started from `main` with an approved commit, stable version, and release notes | Check the notes and verify the selected staging version's `latest` and manifest identify that commit and that the version follows the version rule below → build that commit against the production feed → upload and verify → update production `latest` → register the notes |
 | **Edit Computer release notes** | Manually started from `main` with an environment, a published version, and notes; also called by both Computer publications | Replace that version's notes in the environment's release catalog and verify the read-back |
 | **Web integration**            | Daily at 19:17 UTC, or manually started | Prepare the checkout and a scratch database → run `mise run test:integration:web` against PostgreSQL, Redis and Centrifugo service containers |
+| **Web browser e2e**            | Daily at 19:47 UTC, or manually started | Two shards, each: install agent-browser and Chrome → build, seed and serve the Web with a Centrifugo container → run its share of `scripts/e2e/web-e2e-ci.txt` |
 
 Every staging workflow is manual. A Web deployment validates, builds, and
 deploys the selected `main` commit whatever it changed. Computer publication's
@@ -17,7 +18,8 @@ run title includes the version. Its build, upload, integrity checks, and
 selector update stay together in one publication transaction; expand that step
 to see each platform and object.
 
-Web integration is a test run, not a release: see [Web integration](web-integration.md).
+Web integration is a test run, not a release: see [Web integration](web-integration.md). So is
+Web browser e2e: see [Web browser e2e](web-e2e.md).
 
 Both Computer publications take the `notes_en` and `notes_zh_cn` inputs and
 fail before building when either is missing, blank, or longer than 16000

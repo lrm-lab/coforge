@@ -72,7 +72,7 @@ test("deploy and release jobs restore nothing from the Actions cache", async () 
       }
     }
   }
-  expect(checked).toBe(22);
+  expect(checked).toBe(23);
 });
 
 test("the aggregate gate executes even after failure and rejects missing, skipped, or cancelled required jobs", () => {
@@ -197,8 +197,9 @@ test("a push to main starts no deployment or publication", async () => {
     const triggers = Object.keys(workflow.on).filter((trigger) => trigger !== "workflow_call");
     // Exemptions: cdn-certificates.yml also runs on a schedule. It is scheduled certificate
     // maintenance, not a deployment (approved by Frank 2026-10-23). web-integration.yml runs the
-    // Web integration suites daily; it deploys and publishes nothing.
-    const scheduled = file === "cdn-certificates.yml" || file === "web-integration.yml";
+    // Web integration suites daily, web-e2e.yml the listed browser e2es (task #438); neither
+    // deploys or publishes anything.
+    const scheduled = ["cdn-certificates.yml", "web-integration.yml", "web-e2e.yml"].includes(file);
     const expected = scheduled ? ["schedule", "workflow_dispatch"] : ["workflow_dispatch"];
     expect(triggers, file).toEqual(expected);
   }
