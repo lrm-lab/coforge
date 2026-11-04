@@ -100,7 +100,7 @@ await mockModuleForFile("#src/server/computers/computer-runtime-visibility.serve
 }));
 await mockModuleForFile("#src/server/db/repositories/agent-api-key.repositories.server", () => ({
   PrismaAgentApiKeyRepository: class {
-    async replaceActive() {
+    async rotate() {
       issued++;
     }
   },

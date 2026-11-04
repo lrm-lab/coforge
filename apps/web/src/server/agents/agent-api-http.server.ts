@@ -1,6 +1,7 @@
 import { encodeReminderSync } from "@lrm/coforge-sdk/internal";
 
 import {
+  AgentApiKeyError,
   authenticateAgentApiKey,
   isAgentApiKeyBoundToComputer,
   type AgentApiKeyRepository,
@@ -38,28 +39,35 @@ export async function authenticateAgentMessageRequest(
     const daemonAuthorization = request.headers.get("authorization");
     const agentAuthorization = request.headers.get("x-coforge-agent-api-key");
     if (!agentAuthorization?.startsWith("Bearer ") || !daemonAuthorization?.startsWith("Bearer "))
-      throw new Error("credentials missing");
+      throw new AgentApiKeyError("key_not_found");
     // Every Agent HTTP call runs this before its route, so the reads that do not depend on each
     // other go out together: both keys, then the Computer's and the Agent's scope.
     const [record, daemon] = await Promise.all([
       authenticateAgentApiKey(agentAuthorization.slice(7).trim(), dependencies.agentApiKeys),
       dependencies.verifyDaemonApiKey(daemonAuthorization.slice(7).trim()),
     ]);
-    if (!isAgentApiKeyBoundToComputer(record, daemon)) throw new Error("credential scope mismatch");
+    if (!isAgentApiKeyBoundToComputer(record, daemon)) throw new AgentApiKeyError("scope_mismatch");
     const [computerInWorkspace, agentActive] = await Promise.all([
       dependencies.computerBelongsToWorkspace(daemon.workspaceId, daemon.computerId),
       // Deleting an Agent revokes its keys, but a key minted before the delete could still be
       // in flight; check the Agent itself so a deleted Agent can never act through the HTTP API.
       dependencies.agentIsActive(record.workspaceId, record.agentId),
     ]);
-    if (!computerInWorkspace || !agentActive) throw new Error("credential scope mismatch");
+    if (!computerInWorkspace || !agentActive) throw new AgentApiKeyError("scope_mismatch");
     return {
       userId: record.ownerId,
       workspaceId: record.workspaceId,
       computerId: daemon.computerId,
       agentId: record.agentId,
     };
-  } catch {
+  } catch (error) {
+    console.warn(
+      JSON.stringify({
+        event: "agent_http.auth_failed",
+        request_id: request.headers.get("x-request-id") ?? undefined,
+        reason: error instanceof AgentApiKeyError ? error.reason : "key_not_found",
+      }),
+    );
     throw new CentrifugoRpcAuthenticationError();
   }
 }

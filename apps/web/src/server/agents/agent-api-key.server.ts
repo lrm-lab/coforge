@@ -9,17 +9,32 @@ export type AgentApiKeyRecord = {
   computerId: string;
   revokedAt: Date | null;
   disabledAt: Date | null;
+  createdAt: Date;
 };
 
 const AGENT_API_KEY = /^sk_agent_[A-Za-z0-9_-]{43}$/;
 
-/** What minting supplies for `replaceActive`: the Prisma client generates the id
- * from the schema default (`uuid(7)`), keeping one id-generation path for the project. */
-export type AgentApiKeyMintInput = Omit<AgentApiKeyRecord, "id">;
+/** Why an Agent credential was refused; logged on the 401. Key material is never logged. */
+export type AgentApiKeyAuthFailure = "key_not_found" | "key_revoked" | "scope_mismatch";
+
+export class AgentApiKeyError extends Error {
+  constructor(readonly reason: AgentApiKeyAuthFailure) {
+    super("invalid Agent API key");
+    this.name = "AgentApiKeyError";
+  }
+}
+
+/** What minting supplies for `rotate`: the Prisma client generates the id and `createdAt`
+ * from the schema defaults (`uuid(7)`, `now()`), keeping one id-generation path for the project. */
+export type AgentApiKeyMintInput = Omit<AgentApiKeyRecord, "id" | "createdAt">;
 
 export interface AgentApiKeyRepository {
-  replaceActive(record: AgentApiKeyMintInput): Promise<void>;
+  /** Mints `record` under the Agent row lock, keeping the newest earlier active key valid
+   * (overlap rotation) and revoking anything older. */
+  rotate(record: AgentApiKeyMintInput): Promise<void>;
   findByHash(hash: string): Promise<AgentApiKeyRecord | undefined>;
+  /** Revokes the Agent's other active keys older than `record`; a no-op when none exist. */
+  revokeOlderKeys(record: AgentApiKeyRecord): Promise<void>;
   revoke(id: string): Promise<void>;
 }
 
@@ -52,10 +67,10 @@ export function createAgentApiKey(input: {
   repository: AgentApiKeyRepository;
 }): Promise<string> {
   const apiKey = generateAgentApiKey();
-  // No explicit id: the Prisma client generates it from the schema's uuid(7)
-  // default — API keys keep the project's one id-generation path end to end.
+  // No explicit id or createdAt: the Prisma client generates them from the schema's
+  // defaults — API keys keep the project's one id-generation path end to end.
   return input.repository
-    .replaceActive({
+    .rotate({
       apiKeyHash: hashAgentApiKey(apiKey),
       agentId: input.agentId,
       workspaceId: input.workspaceId,
@@ -71,13 +86,18 @@ export async function authenticateAgentApiKey(
   apiKey: string,
   repository: AgentApiKeyRepository,
 ): Promise<AgentApiKeyRecord> {
-  if (!AGENT_API_KEY.test(apiKey)) throw new Error("invalid Agent API key");
+  if (!AGENT_API_KEY.test(apiKey)) throw new AgentApiKeyError("key_not_found");
   const actual = Buffer.from(hashAgentApiKey(apiKey));
   const record = await repository.findByHash(actual.toString());
-  if (!record || record.revokedAt || record.disabledAt) throw new Error("invalid Agent API key");
+  if (!record) throw new AgentApiKeyError("key_not_found");
+  if (record.revokedAt || record.disabledAt) throw new AgentApiKeyError("key_revoked");
   const expected = Buffer.from(record.apiKeyHash);
   if (expected.length !== actual.length || !timingSafeEqual(expected, actual))
-    throw new Error("invalid Agent API key");
+    throw new AgentApiKeyError("key_not_found");
+  // Overlap rotation: a successful authentication settles it. The update is conditional on
+  // `record` being newer, so an older key's own request cannot retire a newer one, and it is a
+  // no-op while nothing older is active.
+  await repository.revokeOlderKeys(record);
   return record;
 }
 

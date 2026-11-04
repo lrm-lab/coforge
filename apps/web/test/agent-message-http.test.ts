@@ -10,22 +10,24 @@ import { authenticateAgentMessageRequest } from "#src/server/agents/agent-api-ht
 
 class MemoryAgentApiKeys implements AgentApiKeyRepository {
   record?: AgentApiKeyRecord;
-  async replaceActive(record: AgentApiKeyMintInput) {
-    // Emulate the Prisma client generating the uuid(7) default at create time.
-    this.record = { id: crypto.randomUUID(), ...record };
+  async rotate(record: AgentApiKeyMintInput) {
+    // Emulate the Prisma client generating the uuid(7) and createdAt defaults at create time.
+    this.record = { id: crypto.randomUUID(), createdAt: new Date(), ...record };
   }
   async findByHash(hash: string) {
     return this.record?.apiKeyHash === hash ? this.record : undefined;
   }
+  async revokeOlderKeys() {}
   async revoke() {}
 }
 
-const request = (agentToken?: string, daemonApiKey?: string) =>
+const request = (agentToken?: string, daemonApiKey?: string, requestId?: string) =>
   new Request("https://server.example/api/agent/v1/messages", {
     method: "POST",
     headers: {
       ...(daemonApiKey ? { authorization: `Bearer ${daemonApiKey}` } : {}),
       ...(agentToken ? { "x-coforge-agent-api-key": `Bearer ${agentToken}` } : {}),
+      ...(requestId ? { "x-request-id": requestId } : {}),
     },
   });
 
@@ -210,8 +212,9 @@ describe("Agent message HTTP authentication", () => {
     await authenticateAgentMessageRequest(request(apiKey, "daemon-token"), {
       agentApiKeys: {
         ...keys,
-        replaceActive: (record) => keys.replaceActive(record),
+        rotate: (record) => keys.rotate(record),
         revoke: () => keys.revoke(),
+        revokeOlderKeys: () => keys.revokeOlderKeys(),
         findByHash: (hash) => read("agent key", () => keys.findByHash(hash)),
       },
       verifyDaemonApiKey: () =>
@@ -231,5 +234,58 @@ describe("Agent message HTTP authentication", () => {
         ["agent", ["computer"]],
       ]),
     );
+  });
+
+  test("a refused request warns once with the request id and reason, never key material", async () => {
+    const keys = new MemoryAgentApiKeys();
+    const apiKey = await createAgentApiKey({
+      agentId: "agent-a",
+      workspaceId: "workspace-a",
+      ownerId: "owner-a",
+      computerId: "computer-a",
+      repository: keys,
+    });
+    const dependencies = {
+      agentApiKeys: keys,
+      verifyDaemonApiKey: async () => ({
+        userId: "owner-a",
+        workspaceId: "workspace-a",
+        computerId: "computer-a",
+      }),
+      computerBelongsToWorkspace: async () => true,
+      agentIsActive: async () => true,
+    };
+    const warnings: Record<string, unknown>[] = [];
+    const warn = console.warn;
+    console.warn = (line: string) => void warnings.push(JSON.parse(line));
+    try {
+      await expect(
+        authenticateAgentMessageRequest(
+          request(`sk_agent_${"z".repeat(43)}`, "daemon-token", "req-not-found"),
+          dependencies,
+        ),
+      ).rejects.toThrow();
+      await expect(
+        authenticateAgentMessageRequest(request(apiKey, "daemon-token", "req-scope"), {
+          ...dependencies,
+          computerBelongsToWorkspace: async () => false,
+        }),
+      ).rejects.toThrow();
+      keys.record!.revokedAt = new Date();
+      await expect(
+        authenticateAgentMessageRequest(
+          request(apiKey, "daemon-token", "req-revoked"),
+          dependencies,
+        ),
+      ).rejects.toThrow();
+    } finally {
+      console.warn = warn;
+    }
+    expect(warnings).toEqual([
+      { event: "agent_http.auth_failed", request_id: "req-not-found", reason: "key_not_found" },
+      { event: "agent_http.auth_failed", request_id: "req-scope", reason: "scope_mismatch" },
+      { event: "agent_http.auth_failed", request_id: "req-revoked", reason: "key_revoked" },
+    ]);
+    expect(JSON.stringify(warnings)).not.toContain(apiKey);
   });
 });
