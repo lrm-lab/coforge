@@ -1,4 +1,4 @@
-import { afterAll, expect, mock, test } from "bun:test";
+import { afterAll, afterEach, beforeEach, expect, mock, test } from "bun:test";
 import { mockModuleForFile } from "./helpers/file-module-mock";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { AgentEnvironment } from "#src/server/agents/agent-environment.server";
@@ -18,8 +18,25 @@ let lookups = 0;
 let issued = 0;
 let installedApps: unknown[] = [];
 const appQueries: unknown[] = [];
-const previous = Bun.env.COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY;
-Bun.env.COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY = "07".repeat(32);
+// The route reads its key from the process environment, which a test run inherits from the shell
+// that started it. Both settings are this file's to decide: a shell that sourced
+// `scripts/e2e/e2e-env.sh` exports `..._KEY_FILE`, and with both set the route refuses to read
+// either and answers 503, failing both tests (task #386).
+const KEY_ENV = "COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY";
+const KEY_SETTINGS = [KEY_ENV, `${KEY_ENV}_FILE`] as const;
+let previous: Record<string, string | undefined> = {};
+beforeEach(() => {
+  previous = Object.fromEntries(KEY_SETTINGS.map((name) => [name, Bun.env[name]]));
+  for (const name of KEY_SETTINGS) delete Bun.env[name];
+  Bun.env[KEY_ENV] = "07".repeat(32);
+});
+afterEach(() => {
+  for (const name of KEY_SETTINGS) {
+    const value = previous[name];
+    if (value === undefined) delete Bun.env[name];
+    else Bun.env[name] = value;
+  }
+});
 const db = {
   agent: {
     findFirst: async (query: unknown) => {
@@ -120,8 +137,6 @@ function request(token?: string) {
   } as Parameters<typeof post>[0]);
 }
 afterAll(() => {
-  if (previous === undefined) delete Bun.env.COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY;
-  else Bun.env.COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY = previous;
   mock.restore();
 });
 
