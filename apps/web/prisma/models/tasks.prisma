@@ -193,8 +193,10 @@ model TaskDependency {
   blockedByTaskId String   @db.Uuid
   conversationId  String   @db.Uuid
   workspaceId     String   @db.Uuid
-  /// The conversation member who added the dependency.
-  creatorMemberId String   @db.Uuid
+  /// The conversation member who added the dependency, or the Workspace owner/admin who added
+  /// it without a seat (task #524): one of the two is always set, never neither.
+  creatorMemberId String?  @db.Uuid
+  creatorUserId   String?  @db.Uuid
   createdAt       DateTime @default(now())
   task            Task     @relation("TaskBlockedBy", fields: [taskId], references: [id], onDelete: Cascade)
   blocker         Task     @relation("TaskBlocks", fields: [blockedByTaskId], references: [id], onDelete: Cascade)

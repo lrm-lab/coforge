@@ -56,6 +56,14 @@ export function memberKey(member: Member): string {
   return member.id ?? `admin:${member.userId}`;
 }
 
+/** Who added a `task_dependencies`/`task_parents` row: the member's own id, or a member-less
+ * admin's `userId` — one of the two is always written (task #524). */
+export function creatorKey(
+  member: Member,
+): { creatorMemberId: string } | { creatorUserId: string } {
+  return member.id ? { creatorMemberId: member.id } : { creatorUserId: member.userId! };
+}
+
 export type Assignee = Omit<Member, "user" | "agent"> & {
   user?: { username: string } | null;
   agent?: { name: string } | null;

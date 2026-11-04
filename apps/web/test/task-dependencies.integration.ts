@@ -317,3 +317,52 @@ test("adding a subtask needs the parent's owner, creator or a manager", async ()
     await db.$disconnect();
   }
 });
+
+// task #524: a member-less Workspace owner/admin adds a blocker or parent on a public channel
+// — `creatorUserId` names them where a `creatorMemberId` cannot.
+test("a Workspace owner not in the channel adds a blocker on a public channel", async () => {
+  const { db, run, make, admin } = await setup();
+  const [a, b] = await make("bob", 2, {}, admin.id);
+  await run("alice", { operation: "amend", number: b!, blockedBy: [{ number: a! }] }, admin.id);
+  const dep = await db.taskDependency.findFirstOrThrow({
+    where: { workspaceId: admin.workspaceId },
+  });
+  // Alice is a member-less admin here — the row names her by `creatorUserId`, not a member row.
+  expect(dep.creatorMemberId).toBeNull();
+  expect(dep.creatorUserId).not.toBeNull();
+});
+
+test("a member-less admin's set parent writes the member-less creator key too", async () => {
+  const { db, run, make, admin } = await setup();
+  const [a, b] = await make("bob", 2, {}, admin.id);
+  await run("alice", { operation: "amend", number: b!, parent: { number: a! } }, admin.id);
+  const bId = (
+    await db.task.findFirstOrThrow({
+      where: { conversationId: admin.id, number: b! },
+    })
+  ).id;
+  expect(await db.taskParent.findFirst({ where: { taskId: bId } })).not.toBeNull();
+});
+
+test("a member-less owner's blocker and parent on a private channel are refused", async () => {
+  const { run, make, secretAdmin, refusal } = await setup();
+  const [a, b] = await make("bob", 2, {}, secretAdmin.id);
+  expect(
+    (
+      await refusal(
+        run(
+          "alice",
+          { operation: "amend", number: b!, blockedBy: [{ number: a! }] },
+          secretAdmin.id,
+        ),
+      )
+    ).code,
+  ).toMatch(/NOT_FOUND|ACCESS_DENIED/i);
+  expect(
+    (
+      await refusal(
+        run("alice", { operation: "amend", number: b!, parent: { number: a! } }, secretAdmin.id),
+      )
+    ).code,
+  ).toMatch(/NOT_FOUND|ACCESS_DENIED/i);
+});
