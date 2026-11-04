@@ -26,6 +26,7 @@ export function readDirectConversationMessagesPage(input: {
       workspaceId: input.workspaceId,
       agentId: input.agentId,
       conversationId,
+      seatOptional: resolved.seatOptional,
       threadRootId,
       canonicalTarget,
       isChannel,

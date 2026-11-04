@@ -317,16 +317,27 @@ async function resolveAgentTargetUsing(
         : ports.getAgentChannel(workspaceId, agentId, parentTarget),
     directConversation,
     peerConversation,
+    taskDiscussion: !sendTarget,
   });
   const { conversation, isChannel } = resolved;
   const parentTarget = target.split(":")[0]!;
-  const threadRootId = await targetRoot(ports, conversation.id, target);
+  // A `#channel:<task-discussion id>` resolves its task_thread conversation itself — the `<id>`
+  // names the conversation, not a thread root inside it.
+  const threadRootId = (conversation as { isTaskDiscussionTarget?: boolean }).isTaskDiscussionTarget
+    ? null
+    : await targetRoot(ports, conversation.id, target);
   return {
     conversationId: conversation.id,
     threadRootId,
-    canonicalTarget: deliveryTarget(parentTarget, threadRootId),
+    canonicalTarget: (conversation as { isTaskDiscussionTarget?: boolean }).isTaskDiscussionTarget
+      ? `#${(conversation as unknown as { channelName: string }).channelName}:${conversation.id}`
+      : deliveryTarget(parentTarget, threadRootId),
     isChannel,
     isUserAgentDirectConversation: resolved.isUserAgentDirectConversation,
+    ...(threadRootId === null &&
+    (conversation as { isTaskDiscussionTarget?: boolean }).isTaskDiscussionTarget
+      ? { seatOptional: true as const }
+      : {}),
   };
 }
 

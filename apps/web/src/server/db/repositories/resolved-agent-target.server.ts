@@ -2,6 +2,9 @@ import type { AgentHistoryConsumptionScope } from "@lrm/coforge-sdk/agent";
 
 /** An Agent-facing target (`#channel` or `@user`, optionally `:root`) resolved by `resolveAgentTarget`. */
 export type ResolvedAgentTarget = {
+  /** A task discussion's seat is a read-position convenience only — a resolved task_thread
+   * reads with no seat at all, never refusing (task #522). */
+  seatOptional?: boolean;
   conversationId: string;
   threadRootId: string | null;
   canonicalTarget: string;

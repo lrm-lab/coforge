@@ -117,7 +117,7 @@ export async function personConversationAccess(
       visibility: true,
       kind: true,
       members: { where: { userId, ...ACTIVE_MEMBER_WHERE }, select: { id: true } },
-      ...taskDiscussionBoardSelect(userId),
+      ...taskDiscussionBoardSelect({ userId }),
     },
   });
   if (!conversation) return undefined;

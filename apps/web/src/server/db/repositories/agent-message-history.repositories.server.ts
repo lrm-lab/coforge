@@ -32,6 +32,9 @@ export async function readAgentMessagePage(
     agentId: string;
     conversationId: string;
     threadRootId: string | null;
+    /** A resolved task discussion reads without its own member row; every other conversation
+     * still requires the Agent's seat (task #522). */
+    seatOptional?: boolean;
     canonicalTarget: string;
     isChannel: boolean;
     isUserAgentDirectConversation: boolean;
@@ -48,6 +51,7 @@ export async function readAgentMessagePage(
     workspaceId,
     agentId,
     conversationId,
+    seatOptional,
     threadRootId,
     canonicalTarget,
     isChannel,
@@ -81,15 +85,14 @@ export async function readAgentMessagePage(
         : resolveAnchor(anchorId)
       : undefined,
   ]);
-  if (!agentMember) throw new Error("Agent is not a conversation member");
+  // Only a resolved task discussion reads without its own member row (its seat is a read
+  // position convenience); any other conversation still requires the Agent's seat.
+  if (!agentMember && !seatOptional) throw new Error("Agent is not a conversation member");
   if (anchor && anchor.threadRootId !== threadRootId)
     throw new AgentMessageValidationError("message anchor is outside this target");
-  const readThrough = await readThroughOf(
-    db,
-    agentMember.id,
-    agentMember.agentReadThroughSequence,
-    threadRootId,
-  );
+  const readThrough = agentMember
+    ? await readThroughOf(db, agentMember.id, agentMember.agentReadThroughSequence, threadRootId)
+    : 0;
   const include = AGENT_MESSAGE_INCLUDE;
   const coordination = isChannel
     ? (await readChannelCoordination(db, workspaceId, agentId, [conversationId])).get(
@@ -100,6 +103,7 @@ export async function readAgentMessagePage(
     rows.map((row) => toAgentMessage(row, canonicalTarget, agentId, coordination));
   const isHistoryRead = Boolean(page.before || page.after || page.around);
   const advanceReadThrough = async (sequence: number) => {
+    if (!agentMember) return;
     const publication = await advanceAgentReadPosition({
       db,
       memberId: agentMember.id,

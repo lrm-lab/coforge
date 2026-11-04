@@ -5,7 +5,7 @@ import { CHANNEL_VISIBILITY } from "#src/features/conversations/channel-visibili
  * the board the task sits on: the conversation row has no channel, so the board decides, by the
  * rule that board's own conversation is read under. Select it with the person's member rows.
  */
-export const taskDiscussionBoardSelect = (userId: string) =>
+export const taskDiscussionBoardSelect = (reader: { userId: string } | { agentId: string }) =>
   ({
     taskDiscussionOf: {
       select: {
@@ -15,12 +15,26 @@ export const taskDiscussionBoardSelect = (userId: string) =>
             directKey: true,
             visibility: true,
             hiddenFromWorkspaceAt: true,
-            members: { where: { userId }, select: { leftAt: true } },
+            members: { where: reader, select: { leftAt: true } },
           },
         },
       },
     },
   }) as const;
+
+/**
+ * A task conversation read by an Agent: only an active member of the board — the person's
+ * public-channel rule does not apply to a reader who acts on Tasks by membership alone. */
+export function taskDiscussionAgentAccess(discussion: {
+  taskDiscussionOf: {
+    conversation: Board & { channelName: string | null; members: { leftAt: Date | null }[] };
+  } | null;
+}): "read" | undefined {
+  const board = discussion.taskDiscussionOf?.conversation;
+  if (!board || board.hiddenFromWorkspaceAt) return undefined;
+  if (!board.members.some((member) => member.leftAt === null)) return undefined;
+  return board.channelName !== null ? "read" : undefined;
+}
 
 type Board = {
   channelName: string | null;

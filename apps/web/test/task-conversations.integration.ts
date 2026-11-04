@@ -4,6 +4,7 @@ import { decodeAgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { handleTaskViewGet } from "#src/server/tasks/task-conversation-routes.server";
+
 import {
   agentTaskConversations,
   TaskConversations,
@@ -350,6 +351,16 @@ test("the route answers an Agent authenticated with its owner beside it", async 
 
 // Task #472: an Agent's reply reaches a person's open task popup at once. The popup follows the
 // task conversation's own channel (`message.available.v1`), as it does a person's reply.
+
+
+
+
+
+
+
+
+
+
 test("an Agent's task reply is announced on the task conversation's channel", async () => {
   const published: Array<{ channel: string; data: unknown }> = [];
   const centrifugo = {
