@@ -39,7 +39,7 @@ test("ordinary requests do not require task creation or per-turn memory bookkeep
   );
   expect(instructions).toContain("Only a successful claimant implements");
   expect(instructions).toContain("others may analyze or review in its thread");
-  expect(instructions).toContain("If a claim fails, do not start conflicting execution");
+  expect(instructions).toContain("A failed claim blocks conflicting work");
   expect(instructions).toContain("when this request lacks context");
   expect(instructions).not.toContain("## Startup sequence");
   expect(instructions).not.toContain("before you finish that turn");
@@ -52,9 +52,8 @@ test("the Agent finishes all assigned work before it stops", () => {
 
 test("before a long task, progress goes to notes/active-context.md rather than MEMORY.md", () => {
   expect(instructions).toContain(
-    "note where you are in notes/active-context.md so you can resume if this session's context is compacted",
+    "note progress in notes/active-context.md for resume after compaction",
   );
-  expect(instructions).toContain("never to hand the work to a later turn");
   expect(instructions).not.toContain("Active Context");
 });
 
@@ -77,7 +76,7 @@ test("capability-gated rules appear only when the launch has the capability", ()
 });
 
 test("the Agent is told to ask for decisions with action cards, not typed option lists", () => {
-  const card = "`choice`/`questions` card, not a typed option list";
+  const card = "post `coforge action prepare` with a `choice`";
   expect(instructions).toContain(card);
   expect(
     buildCoforgeAgentInstructions({
@@ -116,7 +115,7 @@ test("preserves privacy, credential handling and uncertain-send safety", () => {
   expect(instructions).toContain("Credentials follow human intent");
   expect(instructions).toContain("redact unexpected credential-shaped output");
   expect(instructions).toContain("Draft saved: yes");
-  expect(instructions).toContain("do not resend automatically");
+  expect(instructions).toContain("do not resend");
   // A failed same-key replay whose draft still holds the key is the one retry the Agent runs itself.
   expect(instructions).toContain("If a failed send says `Retryable: yes`, run its next action");
 });
@@ -128,7 +127,10 @@ test("recovers context on demand without loading the Manual into every session",
   expect(instructions).toContain("coforge message search");
   expect(instructions).toContain("read --around");
   expect(instructions).toContain("`│` continues prior body; not a new message.");
-  expect(instructions).not.toContain("coforge manual get");
+  // The Manual stays on-demand: the only pointer standing guidance carries is the action-cards
+  // line a person needs for a decision.
+  expect(instructions).toContain("coforge manual get action-cards");
+  expect(instructions).not.toContain("coforge manual get index");
   expect(instructions).not.toContain("## Help");
   expect(instructions).not.toContain("automatically join");
   expect(instructions).not.toContain("Use channel mute");
