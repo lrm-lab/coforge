@@ -1,8 +1,9 @@
 model Task {
   id                           String              @id @default(uuid(7)) @db.Uuid
   /// The message a task started as, in `conversationId`. Null for a task made under task
-  /// conversations, which posts no message in the channel; set (and unique) for every earlier task,
-  /// whose `id` was this very value.
+  /// conversations, which posts no message in the channel; set (and unique) for every earlier task.
+  /// A task's `id` is a fresh uuid(7) — `id === messageId` holds only for rows written before
+  /// task #507.
   messageId                    String?             @unique @db.Uuid
   conversationId               String              @db.Uuid
   workspaceId                  String              @db.Uuid

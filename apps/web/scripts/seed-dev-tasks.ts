@@ -69,6 +69,23 @@ export function seedTasks(deps: {
           ownerMemberId: opts.ownerMemberId ?? null,
         },
       });
+    // task #507: one new-shape Task whose `id` is a fresh uuid(7), not its message's.
+    await db.task.upsert({
+      where: { messageId: stableId("task:new-shape:message") },
+      create: {
+        id: stableId("task:new-shape"),
+        messageId: stableId("task:new-shape:message"),
+        conversationId: pendingTasks[0]!.conversationId,
+        workspaceId,
+        number: 999,
+        title: "A task reclaimed after its predecessor was cleaned up",
+        status: "in_progress",
+        creatorMemberId: pendingTasks[0]!.creatorMemberId,
+        ownerMemberId: pendingTasks[0]!.creatorMemberId,
+        requestId: stableId("task-request:new-shape"),
+      },
+      update: {},
+    });
     await db.$executeRaw`
       UPDATE "conversations" AS c
       SET "nextTaskNumber" = t."next"

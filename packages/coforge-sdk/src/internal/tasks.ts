@@ -155,7 +155,9 @@ export type TaskLabel = { id: string; name: string; color: string };
 export type TaskProjectRef = { id: string; name: string; slug: string };
 
 export type TaskView = {
-  /** The task's own id; for a task that started as a message it equals that message's id. */
+  /** The task's own id. A task mints a fresh uuid(7) at create/claim — older tasks that started
+   * as a message still carry their message's id, so `task.id === task.messageId` holds only for
+   * rows written before task #507. */
   id: string;
   /** The channel message the task sits on; null for a task made without one (task conversations). */
   messageId: string | null;

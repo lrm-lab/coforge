@@ -19,7 +19,7 @@ async function fixture() {
     data: {
       slug: `reclaim-${suffix}`,
       name: "Reclaim",
-      members: { create: { userId: owner.id, role: "member" } },
+      members: { create: { userId: owner.id, role: "admin" } },
     },
   });
   const agent = await db.agent.create({
@@ -107,4 +107,185 @@ test("a reclaim on a cleaned-up task gets a fresh task.id", async () => {
   expect(secondTask.id).not.toBe(f.message.id);
   expect(secondTask.id).not.toBe(firstTask.id);
   expect(secondTask.messageId).toBe(f.message.id);
+});
+
+test("a second task's delete and restore publish under its fresh id", async () => {
+  const f = await fixture();
+  const board = new TaskBoard(db);
+  const first = await board.execute(
+    { workspaceId: f.workspace.id, userId: f.owner.id },
+    {
+      operation: "claim",
+      conversationId: f.channel.id,
+      messageIds: [f.message.id],
+      assignee: "@claim",
+      idempotencyKey: crypto.randomUUID(),
+    },
+  );
+  const firstTaskId = first.tasks[0]!.id;
+  await db.task.update({
+    where: { id: firstTaskId },
+    data: { deletedAt: new Date(), deletedByMemberId: f.memberRow.id },
+  });
+  await db.task.deleteMany({ where: { id: firstTaskId, deletedAt: { not: null } } });
+
+  const publications: string[] = [];
+  const board2 = new TaskBoard(db, {
+    realtime: {
+      ...silentRealtime,
+      taskChanged: async (signal) => {
+        publications.push(signal.publicationId);
+      },
+    },
+  });
+  const reclaim = await board2.execute(
+    { workspaceId: f.workspace.id, userId: f.owner.id },
+    {
+      operation: "claim",
+      conversationId: f.channel.id,
+      messageIds: [f.message.id],
+      assignee: "@claim",
+      idempotencyKey: crypto.randomUUID(),
+    },
+  );
+  const secondTaskId = reclaim.tasks[0]!.id;
+  await board2.execute(
+    { workspaceId: f.workspace.id, userId: f.owner.id },
+    {
+      operation: "delete",
+      conversationId: f.channel.id,
+      number: reclaim.tasks[0]!.number,
+      idempotencyKey: crypto.randomUUID(),
+    },
+  );
+  await board2.execute(
+    { workspaceId: f.workspace.id, userId: f.owner.id },
+    {
+      operation: "restore",
+      conversationId: f.channel.id,
+      number: reclaim.tasks[0]!.number,
+      idempotencyKey: crypto.randomUUID(),
+    },
+  );
+  expect(publications).toContain(`${secondTaskId}:task-deleted`);
+  expect(publications).toContain(`${secondTaskId}:task-restored`);
+});
+
+test("an old task's message_references do not point at the reclaimed task", async () => {
+  const f = await fixture();
+  const board = new TaskBoard(db);
+  const first = await board.execute(
+    { workspaceId: f.workspace.id, userId: f.owner.id },
+    {
+      operation: "claim",
+      conversationId: f.channel.id,
+      messageIds: [f.message.id],
+      assignee: "@claim",
+      idempotencyKey: crypto.randomUUID(),
+    },
+  );
+  const firstTaskId = first.tasks[0]!.id;
+  const firstMessage = await db.message.create({
+    data: {
+      workspaceId: f.workspace.id,
+      conversationId: f.channel.id,
+      senderMemberId: f.memberRow.id,
+      sequence: 10,
+      body: `task #${first.tasks[0]!.number} is the first`,
+    },
+  });
+  await db.messageReference.create({
+    data: {
+      messageId: firstMessage.id,
+      conversationId: f.channel.id,
+      workspaceId: f.workspace.id,
+      kind: "task",
+      targetId: firstTaskId,
+      raw: `task #${first.tasks[0]!.number}`,
+      ordinal: 0,
+    },
+  });
+  await db.task.update({
+    where: { id: firstTaskId },
+    data: { deletedAt: new Date(), deletedByMemberId: f.memberRow.id },
+  });
+  await db.task.deleteMany({ where: { id: firstTaskId, deletedAt: { not: null } } });
+
+  const reclaim = await board.execute(
+    { workspaceId: f.workspace.id, userId: f.owner.id },
+    {
+      operation: "claim",
+      conversationId: f.channel.id,
+      messageIds: [f.message.id],
+      assignee: "@claim",
+      idempotencyKey: crypto.randomUUID(),
+    },
+  );
+  const secondTaskId = reclaim.tasks[0]!.id;
+  const references = await db.messageReference.findMany({
+    where: { messageId: firstMessage.id },
+  });
+  expect(references).toHaveLength(1);
+  expect(references[0]!.targetId).toBe(firstTaskId);
+  expect(references[0]!.targetId).not.toBe(secondTaskId);
+});
+
+test("an old task whose id is its message's still reads and writes", async () => {
+  const f = await fixture();
+  const board = new TaskBoard(db);
+  const claimed = await board.execute(
+    { workspaceId: f.workspace.id, userId: f.owner.id },
+    {
+      operation: "claim",
+      conversationId: f.channel.id,
+      messageIds: [f.message.id],
+      assignee: "@claim",
+      idempotencyKey: crypto.randomUUID(),
+    },
+  );
+  const task = await db.task.findUniqueOrThrow({
+    where: { id: claimed.tasks[0]!.id },
+    select: { id: true, messageId: true, number: true },
+  });
+  const read = await board.execute(
+    { workspaceId: f.workspace.id, userId: f.owner.id },
+    {
+      operation: "list",
+      conversationId: f.channel.id,
+      idempotencyKey: crypto.randomUUID(),
+    },
+  );
+  expect(read.tasks.some((t) => t.id === task.id)).toBe(true);
+  await board.execute(
+    { workspaceId: f.workspace.id, userId: f.owner.id },
+    {
+      operation: "update",
+      conversationId: f.channel.id,
+      number: task.number,
+      status: "done",
+      idempotencyKey: crypto.randomUUID(),
+    },
+  );
+  expect(
+    (await db.task.findUniqueOrThrow({ where: { id: task.id }, select: { status: true } })).status,
+  ).toBe("done");
+});
+
+test("createTasks gives the task its own id, not the message's", async () => {
+  const f = await fixture();
+  const board = new TaskBoard(db);
+  const created = await board.execute(
+    { workspaceId: f.workspace.id, userId: f.owner.id },
+    {
+      operation: "create",
+      conversationId: f.channel.id,
+      title: "a task made directly",
+      idempotencyKey: crypto.randomUUID(),
+    },
+  );
+  const task = await db.task.findUniqueOrThrow({
+    where: { id: created.tasks[0]!.id },
+    select: { id: true, messageId: true },
+  });
+  expect(task.id).not.toBe(task.messageId);
 });
