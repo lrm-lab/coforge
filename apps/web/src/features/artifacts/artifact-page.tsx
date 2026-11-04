@@ -19,7 +19,9 @@ import { deleteArtifact, revertArtifact } from "./artifacts.functions";
 import { LatestVersion, OldVersion } from "./artifact-document-body";
 import { ArtifactHistory } from "./artifact-history";
 import { useArtifactLeaveGuard } from "./artifact-leave-guard";
-import { ArtifactPageHeader, type ArtifactHome } from "./artifact-page-header";
+import { useArtifactAccess } from "./artifact-access";
+import { ArtifactPageHeader, useHomeName, type ArtifactHome } from "./artifact-page-header";
+import { ACCESS_ICON, ArtifactShareDialog } from "./artifact-share-dialog";
 import { ArtifactPaneConfirms, type ArtifactConfirming } from "./artifact-pane-confirms";
 import { actorName, isWebPage } from "./artifact-parts";
 import {
@@ -68,6 +70,7 @@ function ArtifactPageFor({
   const editor = useArtifactEditor(artifactId);
   const actorOf = useArtifactActor();
   const [confirming, setConfirming] = useState<ArtifactConfirming>(null);
+  const [sharing, setSharing] = useState(false);
   /** Set once the artifact is gone, so leaving its page asks nothing. */
   const deleted = useRef(false);
   const navigate = (patch: ArtifactPageSearch) =>
@@ -95,6 +98,9 @@ function ArtifactPageFor({
     kind: current.homeKind,
     conversationId: homeId ?? null,
   };
+  const homeName = useHomeName(home);
+  const author = current && authorOf(current.artifact);
+  const access = useArtifactAccess({ author, viewerId });
   useRealtimeSubscription({
     channel:
       homeId === undefined || !workspaceId
@@ -148,6 +154,8 @@ function ArtifactPageFor({
         home={home}
         history={Boolean(search.history)}
         canDelete={current?.canDelete === true}
+        shareIcon={ACCESS_ICON[access.access]}
+        onShare={current && (() => setSharing(true))}
         onToggleHistory={
           current && (() => navigate({ history: search.history ? undefined : true }))
         }
@@ -210,6 +218,16 @@ function ArtifactPageFor({
           )}
       </div>
       {leavePrompt}
+      <ArtifactShareDialog
+        open={sharing}
+        onOpenChange={setSharing}
+        title={title}
+        home={homeName}
+        access={access.access}
+        canChange={access.canChange}
+        onChange={access.change}
+        onCopyLink={() => void copy(pageHref(), m.doc_link_copied())}
+      />
       <ArtifactPaneConfirms
         confirming={confirming}
         onDone={() => setConfirming(null)}
@@ -241,6 +259,12 @@ function ArtifactPageFor({
       />
     </main>
   );
+}
+
+/** Who made the artifact, from its read: an Agent, a person, or nobody left. */
+function authorOf(artifact: { authorUserId: string | null; authorAgentId: string | null }) {
+  if (artifact.authorAgentId) return { agentId: artifact.authorAgentId };
+  return artifact.authorUserId ? { userId: artifact.authorUserId } : null;
 }
 
 function LoadingBody() {

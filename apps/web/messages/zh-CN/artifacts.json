@@ -90,5 +90,15 @@
   "doc_page_preview": "预览",
   "doc_page_source": "源码",
   "doc_page_agent_hint": "由 Agent 制作，要修改请在会话里找 Agent。",
-  "doc_page_preview_failed": "这个网页暂时显示不出来，请稍后再试。"
+  "doc_page_preview_failed": "这个网页暂时显示不出来，请稍后再试。",
+  "doc_share": "分享",
+  "doc_share_title": "分享“{title}”",
+  "doc_share_who": "谁能看",
+  "doc_share_conversation": "{home} 里的人",
+  "doc_share_conversation_dm": "这个会话里的人",
+  "doc_share_conversation_detail": "只有能读它所在会话的人能看。",
+  "doc_share_workspace": "工作区所有成员",
+  "doc_share_workspace_detail": "工作区里的任何成员都能看，不管在不在这个会话里。",
+  "doc_share_read_only": "只有它的作者或工作区管理员能改。",
+  "doc_share_done": "完成"
 }

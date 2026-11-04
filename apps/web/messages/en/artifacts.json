@@ -90,5 +90,15 @@
   "doc_page_preview": "Preview",
   "doc_page_source": "Source",
   "doc_page_agent_hint": "Made by an Agent: ask one in the conversation to change it.",
-  "doc_page_preview_failed": "Couldn't show this page. Try again in a moment."
+  "doc_page_preview_failed": "Couldn't show this page. Try again in a moment.",
+  "doc_share": "Share",
+  "doc_share_title": "Share “{title}”",
+  "doc_share_who": "Who can see it",
+  "doc_share_conversation": "People in {home}",
+  "doc_share_conversation_dm": "People in this conversation",
+  "doc_share_conversation_detail": "Only those who can read the conversation it lives in.",
+  "doc_share_workspace": "Everyone in the Workspace",
+  "doc_share_workspace_detail": "Any member of the Workspace, in the conversation or not.",
+  "doc_share_read_only": "Only the person who made it, or a Workspace admin, can change this.",
+  "doc_share_done": "Done"
 }

@@ -9,6 +9,7 @@ import {
   Trash01,
 } from "@untitledui/icons";
 
+import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Skeleton } from "#src/components/ui/skeleton";
@@ -37,6 +38,8 @@ export function ArtifactPageHeader({
   home,
   history,
   canDelete,
+  shareIcon,
+  onShare,
   onToggleHistory,
   onCopyLink,
   onOpenInTab,
@@ -50,6 +53,10 @@ export function ArtifactPageHeader({
   home: ArtifactHome | undefined;
   history: boolean;
   canDelete: boolean;
+  /** The artifact's access level's icon on the Share button. */
+  shareIcon: typeof ArrowLeft;
+  /** Absent until the artifact is read. */
+  onShare?: () => void;
   onToggleHistory?: () => void;
   onCopyLink?: () => void;
   onOpenInTab?: () => void;
@@ -71,6 +78,11 @@ export function ArtifactPageHeader({
         </>
       )}
       <span className="flex-1" />
+      {onShare && (
+        <Button size="sm" color="secondary" iconLeading={shareIcon} onClick={onShare}>
+          {m.doc_share()}
+        </Button>
+      )}
       {onToggleHistory && (
         <ButtonUtility
           icon={ClockRewind}
@@ -106,14 +118,19 @@ export function ArtifactPageHeader({
   );
 }
 
-/** Back to the conversation the artifact lives in: a channel by its name, a DM as "Back". */
-function BackToHome({ home }: { home: ArtifactHome | undefined }) {
-  const workspaceSlug = useWorkspaceSlug();
+/** A channel home's name as the page says it ("#launch"); undefined for a DM or the Workspace. */
+export function useHomeName(home: ArtifactHome | undefined): string | undefined {
   const workspaceId = useCurrentWorkspaceId() ?? "";
   const channelId = home?.kind === "channel" ? home.conversationId : null;
   const channels = useQuery({ ...channelNamesQuery(workspaceId), enabled: channelId !== null });
   const name = channelId ? channels.data?.find((c) => c.id === channelId)?.name : undefined;
-  const label = name ? `#${name}` : m.doc_back();
+  return name ? `#${name}` : undefined;
+}
+
+/** Back to the conversation the artifact lives in: a channel by its name, a DM as "Back". */
+function BackToHome({ home }: { home: ArtifactHome | undefined }) {
+  const workspaceSlug = useWorkspaceSlug();
+  const label = useHomeName(home) ?? m.doc_back();
   const className =
     "flex min-w-0 shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-sm text-tertiary outline-focus-ring hover:bg-primary_hover hover:text-secondary focus-visible:outline-2";
   const inner = (
