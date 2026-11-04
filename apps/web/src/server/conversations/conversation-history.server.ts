@@ -271,7 +271,7 @@ export class ConversationHistory {
           visibility: true,
           kind: true,
           members: { where: { userId }, select: { id: true, leftAt: true } },
-          ...taskDiscussionBoardSelect(userId),
+          ...taskDiscussionBoardSelect({ userId }),
         },
       }),
     ]);

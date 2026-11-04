@@ -5,7 +5,7 @@ import { CHANNEL_VISIBILITY } from "#src/features/conversations/channel-visibili
  * the board the task sits on: the conversation row has no channel, so the board decides, by the
  * rule that board's own conversation is read under. Select it with the person's member rows.
  */
-export const taskDiscussionBoardSelect = (userId: string) =>
+export const taskDiscussionBoardSelect = (reader: { userId?: string; agentId?: string }) =>
   ({
     taskDiscussionOf: {
       select: {
@@ -15,7 +15,7 @@ export const taskDiscussionBoardSelect = (userId: string) =>
             directKey: true,
             visibility: true,
             hiddenFromWorkspaceAt: true,
-            members: { where: { userId }, select: { leftAt: true } },
+            members: { where: reader, select: { leftAt: true } },
           },
         },
       },
