@@ -2,7 +2,6 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import {
   WHATS_NEW_ENTRIES,
-  isWhatsNewId,
   pendingWhatsNew,
   type WhatsNewEntryData,
 } from "#src/features/whats-new/whats-new-entries";
@@ -63,7 +62,8 @@ export class WhatsNew {
 
   /** "Got it" or the close button: this entry is seen, on every device. */
   async dismiss(userId: string, id: string): Promise<void> {
-    if (!isWhatsNewId(id)) throw new AppError("INVALID_INPUT");
+    // Only an entry this server serves can be dismissed; the ids are not free text.
+    if (!this.entries.some((entry) => entry.id === id)) throw new AppError("INVALID_INPUT");
     const stored = await this.db.userPreference.findUnique({
       where: { userId },
       select: { whatsNewDismissed: true },

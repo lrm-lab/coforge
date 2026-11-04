@@ -9,14 +9,14 @@ import { browserSession, localBrowserE2e } from "./helpers/browser-e2e";
 
 /**
  * The "What's new" card (task #493) in a real browser: a person who joined after the releases sees
- * none; "Got it" brings the next; a second browser (another device) keeps what was dismissed;
- * with documents off in the Workspace, the documents entry is skipped. Desktop and phone.
+ * none; "Got it" brings the next; a second browser (another device) keeps what was dismissed.
+ * Desktop and phone. Entries that wait on an experiment are covered by `whats-new.integration.ts`.
  *
  * Opt-in like the other browser E2Es: real local Web and `agent-browser`. Entries show only from
  * their release time, so to run before it start the Web with `COFORGE_E2E_WHATS_NEW_NOW` (honoured
  * only with the dev sign-in bypass) and pass the same value here. Without it the test checks only
- * what the real time allows. The dev user's dismissals, join time and the Workspace's documents
- * switch are restored after the run. Screenshots go under `.amp/e2e/whats-new/`.
+ * what the real time allows. The dev user's dismissals and join time are restored after the
+ * run. Screenshots go under `.amp/e2e/whats-new/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/whats-new");
@@ -29,9 +29,9 @@ test("the What's new card shows what is new to this person, one at a time, on ev
   });
   const first = browserSession(browserPath, `whats-new-a-${process.pid}`);
   const second = browserSession(browserPath, `whats-new-b-${process.pid}`);
-  const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
+  const { workspace } = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id },
-    include: { workspace: { select: { slug: true, experiments: true } } },
+    include: { workspace: { select: { slug: true } } },
   });
   const user = await db.user.findUniqueOrThrow({
     where: { id: DEV_BROWSER_USER.id },
@@ -43,7 +43,6 @@ test("the What's new card shows what is new to this person, one at a time, on ev
   const restore = {
     createdAt: user.createdAt,
     dismissed: user.preferences?.whatsNewDismissed ?? [],
-    experiments: workspace.experiments,
   };
   const setDismissed = (whatsNewDismissed: string[]) =>
     db.userPreference.upsert({
@@ -51,23 +50,13 @@ test("the What's new card shows what is new to this person, one at a time, on ev
       create: { userId: DEV_BROWSER_USER.id, whatsNewDismissed },
       update: { whatsNewDismissed },
     });
-  const setDocuments = (on: boolean) =>
-    db.workspace.update({
-      where: { id: workspaceId },
-      data: {
-        experiments: {
-          ...((restore.experiments as Record<string, boolean> | null) ?? {}),
-          artifacts: on,
-        },
-      },
-    });
   const joined = new Date("2026-01-01T00:00:00Z");
-  const expected = (dismissed: string[], documents: boolean) =>
+  const expected = (dismissed: string[]) =>
     pendingWhatsNew(WHATS_NEW_ENTRIES, {
       now,
       joinedAt: joined,
       dismissed,
-      experimentOn: (key) => key !== "artifacts" || documents,
+      experimentOn: () => true,
     });
 
   // The desktop sidebar keeps its markup on a phone, hidden: the card meant is the one on screen.
@@ -92,7 +81,6 @@ test("the What's new card shows what is new to this person, one at a time, on ev
     await b.browser("wait", "1500");
   };
   const titles: Record<string, string> = {
-    documents: "Documents in conversations",
     "task-labels": "Labels for Tasks",
   };
   const shown = async (b: typeof first) => (await b.evaluate(title)) as string | null;
@@ -104,12 +92,11 @@ test("the What's new card shows what is new to this person, one at a time, on ev
       data: { createdAt: joined },
     });
     await setDismissed([]);
-    await setDocuments(true);
     await first.browser("set", "viewport", "1280", "860");
     await second.browser("set", "viewport", "1280", "860");
 
     // Every released entry is new to someone who joined before them, oldest first.
-    const queue = expected([], true);
+    const queue = expected([]);
     await open(first);
     expect(await shown(first)).toBe(queue[0] ? titles[queue[0]]! : null);
     if (queue.length === 0) return;
@@ -120,19 +107,11 @@ test("the What's new card shows what is new to this person, one at a time, on ev
       `([...${card}.querySelectorAll("button")].find((b) => b.textContent === "Got it").click(), true)`,
     );
     await first.browser("wait", "500");
-    const rest = expected([queue[0]!], true);
+    const rest = expected([queue[0]!]);
     expect(await shown(first)).toBe(rest[0] ? titles[rest[0]]! : null);
     if (rest[0]) await shoot(first, "desktop-2-next");
     await open(second);
     expect(await shown(second)).toBe(rest[0] ? titles[rest[0]]! : null);
-
-    // With documents off, their entry is skipped, and not counted as seen.
-    await setDismissed([]);
-    await setDocuments(false);
-    await open(second);
-    const withoutDocuments = expected([], false);
-    expect(withoutDocuments).not.toContain("documents");
-    expect(await shown(second)).toBe(withoutDocuments[0] ? titles[withoutDocuments[0]]! : null);
 
     // Someone who joined after every release sees no card.
     await db.user.update({
@@ -143,11 +122,11 @@ test("the What's new card shows what is new to this person, one at a time, on ev
     expect(await shown(second)).toBe(null);
 
     // On a phone the card sits at the foot of the menu, never over the page.
+    await setDismissed([]);
     await db.user.update({
       where: { id: DEV_BROWSER_USER.id },
       data: { createdAt: joined },
     });
-    await setDocuments(true);
     await first.browser("set", "viewport", "390", "844");
     await open(first);
     expect(await first.evaluate(`(${card}) === undefined`)).toBe(true);
@@ -162,10 +141,6 @@ test("the What's new card shows what is new to this person, one at a time, on ev
       data: { createdAt: restore.createdAt },
     });
     await setDismissed(restore.dismissed);
-    await db.workspace.update({
-      where: { id: workspaceId },
-      data: { experiments: restore.experiments ?? {} },
-    });
     await first.browser("close").catch(() => {});
     await second.browser("close").catch(() => {});
     await db.$disconnect();

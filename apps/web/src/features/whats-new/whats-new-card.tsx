@@ -2,7 +2,6 @@ import type { ComponentType } from "react";
 import { XClose } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { ArtifactIcon } from "#src/features/artifacts/artifact-parts";
 import { LABEL_DOT, LABEL_PALETTE } from "#src/features/tasks/label-colors";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
@@ -42,28 +41,7 @@ function LabelsScene() {
   );
 }
 
-function DocumentsScene() {
-  return (
-    <div className="flex h-full items-center px-3">
-      <div className="flex w-full items-center gap-2 rounded-lg bg-primary p-2 shadow-xs ring-1 ring-secondary">
-        <ArtifactIcon size="sm" />
-        <div className="min-w-0">
-          <p className="truncate text-xs font-semibold text-primary">
-            {m.whats_new_documents_demo_title()}
-          </p>
-          <p className="truncate text-xs text-tertiary">{m.whats_new_documents_demo_version()}</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export const WHATS_NEW_CONTENT: Record<WhatsNewId, WhatsNewContent> = {
-  documents: {
-    title: m.whats_new_documents_title,
-    body: m.whats_new_documents_body,
-    illustration: DocumentsScene,
-  },
   "task-labels": {
     title: m.whats_new_task_labels_title,
     body: m.whats_new_task_labels_body,
