@@ -30,8 +30,8 @@ const WAITING_ON_VIEWER = "[data-choice-waiting]";
 /**
  * An Agent's question while it waits is a tool: the question, one bordered row per option, and the
  * person's own answer as a last row that is itself an input. A click (or Enter, or the option's
- * number while the card has focus) sends it at once. Once handled it is no longer a card but one
- * line in the message: the question, then the answer (task #449). Anyone but the asked person sees
+ * number while the card has focus) sends it at once. Once handled it stays a card, the question
+ * over the answer (task #449, Frank 11-04). Anyone but the asked person sees
  * the options as a plain list and whom the card waits on.
  */
 export function ChoiceActionCard({
@@ -128,9 +128,8 @@ export function ChoiceActionCard({
       data-choice-waiting={pending && view.canCommit ? "" : undefined}
       className={cn(
         "outline-focus-ring focus-visible:outline-2",
-        pending
-          ? "group/card mt-1 flex max-w-md flex-col rounded-xl border border-secondary bg-primary px-1.5 pt-3 pb-1.5"
-          : "rounded-sm",
+        "mt-1 flex max-w-md flex-col rounded-xl border border-secondary bg-primary",
+        pending && "group/card px-1.5 pt-3 pb-1.5",
       )}
     >
       {pending ? (

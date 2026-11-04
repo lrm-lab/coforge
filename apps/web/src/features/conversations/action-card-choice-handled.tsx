@@ -1,21 +1,14 @@
-import { useLayoutEffect, useState, type CSSProperties } from "react";
+import { useLayoutEffect, useState } from "react";
+import { CheckCircle, SlashCircle01 } from "@untitledui/icons";
 import { Button as AriaButton } from "react-aria-components";
 import { CHOICE_OTHER_OPTION_ID } from "@lrm/coforge-sdk/agent";
 
 import type { ActionCardView } from "#src/server/conversations/action-cards.server";
+import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { AnsweredAtTooltip } from "./action-card-answered-at";
 
 type ChoiceView = Extract<ActionCardView, { kind: "choice" }>;
-
-/** The question cut to two lines. An inline box: a question that fits on one line keeps the answer
- * beside it, a longer one takes the column's width and the answer starts below it. */
-const TWO_LINES: CSSProperties = {
-  display: "-webkit-inline-box",
-  WebkitBoxOrient: "vertical",
-  WebkitLineClamp: 2,
-  overflow: "hidden",
-};
 
 /** The answer a handled card closed on: the option's label, or the person's own words. */
 export function chosenAnswer(view: ChoiceView): string | undefined {
@@ -34,10 +27,11 @@ function closedWithoutAnswer(view: ChoiceView): string | undefined {
 }
 
 /**
- * The handled card's one line: the question in gray, then what was chosen. The question shows two
- * lines at most, so a run of handled cards reads as answers, not as questions (Raft, #449); a
- * press on a cut question shows the rest. The answer is always whole. Someone else's answer is
- * followed by their name, cut when long; the answer's tooltip names them in full and says when.
+ * The handled card: still a card, as Frank asked (11-04), so a question that was asked and answered
+ * reads as one. The question on top, two lines at most (a press on a cut question shows the rest);
+ * under it what was chosen, behind a check, or in gray why it closed without an answer. Someone
+ * else's answer is followed by their name, cut when long; the answer's tooltip names them in full
+ * and says when.
  */
 export function HandledChoice({ view, answer }: { view: ChoiceView; answer?: string }) {
   const closed = closedWithoutAnswer(view);
@@ -57,47 +51,64 @@ export function HandledChoice({ view, answer }: { view: ChoiceView; answer?: str
     return () => observer.disconnect();
   }, [questionEl, expanded]);
   const question = (
-    <span ref={setQuestionEl} style={expanded ? undefined : TWO_LINES}>
+    <span
+      ref={setQuestionEl}
+      data-handled-question=""
+      className={cn("block", !expanded && "line-clamp-2")}
+    >
       {view.prompt}
     </span>
   );
   const outcome = (
-    <>
-      <span className="font-medium text-primary">{answer}</span>
-      {answeredBy && (
-        <span className="ml-1.5 inline-block max-w-48 truncate align-bottom text-quaternary">
-          · {answeredBy}
-        </span>
-      )}
-    </>
+    <span className="flex min-w-0 items-start gap-1.5">
+      <CheckCircle
+        aria-hidden="true"
+        className="mt-0.5 size-4 shrink-0 text-fg-success-secondary"
+      />
+      <span className="min-w-0">
+        <span className="font-medium text-primary">{answer}</span>
+        {answeredBy && (
+          <span className="ml-1.5 inline-block max-w-48 truncate align-bottom text-quaternary">
+            · {answeredBy}
+          </span>
+        )}
+      </span>
+    </span>
+  );
+  const closedLine = closed && (
+    <span className="flex items-center gap-1.5 text-quaternary">
+      <SlashCircle01 aria-hidden="true" className="size-4 shrink-0" />
+      {closed}
+    </span>
   );
   return (
-    <p className="text-sm wrap-anywhere text-tertiary">
-      {/* The gap trails the question, so a wrapped answer starts flush on its own line. */}
-      {cut && !expanded ? (
-        <AriaButton
-          // Named by the question itself; `aria-expanded` says there is more of it.
-          aria-expanded={false}
-          onPress={() => setExpanded(true)}
-          className="mr-1 cursor-pointer rounded-sm text-left align-bottom outline-focus-ring hover:text-secondary focus-visible:outline-2"
-        >
-          {question}
-        </AriaButton>
-      ) : (
-        <span className="mr-1">{question}</span>
-      )}{" "}
+    <div className="flex flex-col gap-2 px-3 py-2.5 text-sm wrap-anywhere">
+      <div className="font-semibold text-secondary">
+        {cut && !expanded ? (
+          <AriaButton
+            // Named by the question itself; `aria-expanded` says there is more of it.
+            aria-expanded={false}
+            onPress={() => setExpanded(true)}
+            className="block w-full cursor-pointer rounded-sm text-left outline-focus-ring hover:text-primary focus-visible:outline-2"
+          >
+            {question}
+          </AriaButton>
+        ) : (
+          question
+        )}
+      </div>
       {answer === undefined ? (
-        closed &&
+        closedLine &&
         (view.committedAt ? (
           // Who closed it and when, as an answer's tooltip says (task #472).
           <AnsweredAtTooltip
             at={view.committedAt}
             by={view.committedBy?.isViewer ? undefined : view.committedBy?.displayName}
           >
-            <span className="text-quaternary">{closed}</span>
+            {closedLine}
           </AnsweredAtTooltip>
         ) : (
-          <span className="text-quaternary">{closed}</span>
+          closedLine
         ))
       ) : view.committedAt ? (
         <AnsweredAtTooltip at={view.committedAt} by={answeredBy}>
@@ -106,6 +117,6 @@ export function HandledChoice({ view, answer }: { view: ChoiceView; answer?: str
       ) : (
         outcome
       )}
-    </p>
+    </div>
   );
 }

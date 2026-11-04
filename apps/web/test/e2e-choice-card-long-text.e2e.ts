@@ -259,7 +259,7 @@ test("a choice card keeps very long text on screen, wrapped, on a desktop and a 
       expect(await evaluate<number>(lines(question))).toBe(2);
       await browser("screenshot", join(artifacts, `${name}-handled.png`));
       await browser("click", `${card(answeredByPeer)} button[aria-expanded="false"]`);
-      const whole = `document.querySelector('${card(answeredByPeer)} p > span')`;
+      const whole = `document.querySelector('${card(answeredByPeer)} [data-handled-question]')`;
       expect(await evaluate<number>(lines(whole))).toBeGreaterThan(2);
       await browser("screenshot", join(artifacts, `${name}-handled-expanded.png`));
       await evaluate(

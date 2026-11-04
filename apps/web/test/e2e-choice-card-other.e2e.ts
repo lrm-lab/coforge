@@ -240,7 +240,8 @@ test("the asked person answers a choice card in its own last row", async () => {
     await open();
     await browser("wait", "--fn", `${cardText(others)}.includes("· Asked Peer")`);
     expect(await evaluate<string>(cardText(others))).toBe(
-      `Which one, peer? ${suffix} Red· Asked Peer`,
+      // A card still (Frank, 11-04): the question over the answer and who gave it.
+      `Which one, peer? ${suffix}Red· Asked Peer`,
     );
     await browser("click", "textarea[data-composer]");
     await browser("hover", `${card(others)} button`);
