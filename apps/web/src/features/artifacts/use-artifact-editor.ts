@@ -37,7 +37,8 @@ export function useArtifactEditor(artifactId: string) {
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
   const [dirty, setDirty] = useState(false);
-  const [readOnly, setReadOnly] = useState(false);
+  /** A save was refused: the viewer may no longer write here. */
+  const [denied, setDenied] = useState(false);
   const [baseMoved, setBaseMoved] = useState(false);
   const [conflict, setConflict] = useState<ConflictResolution | null>(null);
   const [published, setPublished] = useState<PublishedVersion | null>(null);
@@ -56,6 +57,9 @@ export function useArtifactEditor(artifactId: string) {
   );
 
   const data = document.data;
+  // Read only from the start where the read says the viewer may not write (task #529: a reader
+  // through the Workspace level), or once a save was refused.
+  const readOnly = denied || data?.artifact.canWrite === false;
   const entryPath = data?.artifact.entryPath ?? "document.md";
   // The first read sets what is being edited; later reads replace it only when nothing is
   // unsaved (`takeLatest`).
@@ -192,7 +196,7 @@ export function useArtifactEditor(artifactId: string) {
         setBaseMoved(true);
         // The banner's confirmation names the latest version.
         refreshArtifact(queryClient, artifactId);
-      } else if (isWriteDenied(cause)) setReadOnly(true);
+      } else if (isWriteDenied(cause)) setDenied(true);
     } finally {
       setSettling(false);
     }

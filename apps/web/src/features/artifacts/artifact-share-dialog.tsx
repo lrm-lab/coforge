@@ -19,8 +19,8 @@ const NOTE_ID = "artifact-share-note";
 /**
  * Who can see an artifact (task #514; as Google Docs' "General access" and Notion's Share): one
  * of two levels, the narrower first, and its link; an artifact of the Workspace itself has only
- * the wider. Only those `canChange` names change the level; anyone else sees it greyed, and who
- * can. Until the level is stored (`ready`, task #529) it is greyed for everyone, as coming soon.
+ * the wider. Only those `canChange` names change the level (task #529); anyone else sees it
+ * greyed, and who can.
  */
 export function ArtifactShareDialog({
   open,
@@ -58,13 +58,9 @@ export function ArtifactShareDialog({
       detail: m.doc_share_workspace_detail(),
     },
   ];
-  const { access, canChange, ready, pending, error } = state;
+  const { access, canChange, pending, error } = state;
   // Who may change it is unknown until read: greyed meanwhile, with no word on why.
-  const note = !ready
-    ? m.doc_share_soon()
-    : canChange === false
-      ? m.doc_share_read_only()
-      : undefined;
+  const note = canChange === false ? m.doc_share_read_only() : undefined;
   return (
     <ModalOverlay isOpen={open} onOpenChange={onOpenChange} isDismissable>
       <Modal className="w-[calc(100vw-2rem)] max-w-md">
@@ -88,9 +84,9 @@ export function ArtifactShareDialog({
               </div>
               <RadioGroup
                 aria-label={m.doc_share_who()}
-                value={access}
+                value={pending ?? access}
                 onChange={(value) => void state.change(value as ArtifactAccess).catch(() => {})}
-                isDisabled={!ready || canChange !== true || pending}
+                isDisabled={canChange !== true || pending !== undefined}
                 aria-describedby={note ? NOTE_ID : undefined}
                 className="mt-4 flex flex-col gap-1.5"
               >
@@ -140,7 +136,7 @@ export function ArtifactShareDialog({
               )}
               {error && (
                 <p role="alert" className="mt-3 text-sm text-error-primary">
-                  {m.doc_share_failed()}
+                  {error}
                 </p>
               )}
               <div className="mt-5 flex items-center gap-2">

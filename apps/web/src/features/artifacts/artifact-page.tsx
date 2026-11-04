@@ -112,7 +112,7 @@ function ArtifactPageFor({
     conversationId: homeId ?? null,
   };
   const homeName = useHomeName(home);
-  const access = useArtifactAccess(home);
+  const access = useArtifactAccess(artifactId, current?.artifact);
   useRealtimeSubscription({
     channel:
       homeId === undefined || !workspaceId

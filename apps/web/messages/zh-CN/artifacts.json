@@ -106,7 +106,7 @@
   "doc_load_failed_title": "没加载出来",
   "doc_load_failed_retry": "加载时出了点问题，稍后再试。",
   "doc_back_to_workspace": "回到工作区",
-  "doc_share_soon": "改谁能看的功能即将支持，现在就是这里显示的人能看。",
   "doc_share_failed": "没能改谁能看，请再试一次。",
-  "doc_open_in_tab_failed": "没能在新标签页打开，请再试一次。"
+  "doc_open_in_tab_failed": "没能在新标签页打开，请再试一次。",
+  "doc_share_denied": "你现在不能改谁能看了。"
 }

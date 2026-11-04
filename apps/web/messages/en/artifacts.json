@@ -106,7 +106,7 @@
   "doc_load_failed_title": "Couldn't load this",
   "doc_load_failed_retry": "Something went wrong while loading. Try again in a moment.",
   "doc_back_to_workspace": "Back to the Workspace",
-  "doc_share_soon": "Changing who can see it is coming soon. For now, it's the people shown here.",
   "doc_share_failed": "Couldn't change who can see it. Try again.",
-  "doc_open_in_tab_failed": "Couldn't open the page in a new tab. Try again."
+  "doc_open_in_tab_failed": "Couldn't open the page in a new tab. Try again.",
+  "doc_share_denied": "You can't change who can see it any more."
 }

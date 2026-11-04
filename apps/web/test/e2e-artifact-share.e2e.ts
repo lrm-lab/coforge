@@ -11,9 +11,10 @@ import { installFeatureFlags } from "#src/server/feature-flags/feature-flags.ser
 import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
 
 /**
- * Who can see an artifact, from its page's Share (task #514): for an artifact of a conversation,
- * its two levels greyed as coming soon; for an artifact of the Workspace, one level, and the way
- * back is the Workspace.
+ * Who can see an artifact, from its page's Share (task #514, #529): for an artifact of a
+ * conversation, its two levels, and a change of them stored; for an artifact of the Workspace, one
+ * level, and the way back is the Workspace; and one of a conversation the viewer is not in, read
+ * only through the Workspace level: the way back is the Workspace, and the editor is read only.
  *
  * Opt-in like the other browser E2Es: real local Web started with the flag file that offers
  * `artifacts` (`/tmp/coforge-flags-docs.json`, read here too). Its texts carry the run's tail,
@@ -50,11 +51,28 @@ test("an artifact's Share: who can see it", async () => {
       members: { create: [{ userId: DEV_BROWSER_USER.id }, { agentId: agent.id }] },
     },
   });
+  // A private channel the viewer is not in.
+  const closed = await db.conversation.create({
+    data: {
+      workspaceId,
+      channelName: `e2e-share-closed-${tail}`,
+      description: "",
+      visibility: "private",
+      members: { create: [{ agentId: agent.id }] },
+    },
+  });
   const settled = () =>
     browser("wait", "--fn", `document.getAnimations().every((a) => a.playState !== "running")`);
   const shoot = async (shot: string) => {
     await settled();
     await browser("screenshot", join(artifacts, `${shot}.png`));
+  };
+  const until = async (expression: string) => {
+    for (let i = 0; i < 100; i++) {
+      if (await evaluate<boolean>(expression)) return;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    throw new Error(`Timed out waiting for ${expression}`);
   };
   /** A real click, which a dialog's trigger needs to keep its focus (a scripted one is virtual). */
   const press = async (selector: string) => {
@@ -70,24 +88,29 @@ test("an artifact's Share: who can see it", async () => {
     await experiments.write(workspaceId, "artifacts", true);
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1280", "860");
-    const plan = await documents.create(
-      { workspaceId, actor: { agentId: agent.id } },
-      { conversationId: channel.id, title: "Launch plan", text: `Plan (run ${tail}).` },
-    );
+    const bot = { workspaceId, actor: { agentId: agent.id } };
+    const plan = await documents.create(bot, {
+      conversationId: channel.id,
+      title: "Launch plan",
+      text: `Plan (run ${tail}).`,
+    });
 
-    // Share, before who can see it is stored (task #529): the levels greyed, as coming soon.
+    // The viewer may change who can see it: the change is stored, and shown.
     await browser("open", pageOf(plan.id));
     await browser("wait", "--fn", editor);
     await press(share);
     await browser("wait", "--fn", `${radios}.length === 2`);
-    expect(await evaluate<boolean>(`${radios}.every((radio) => radio.disabled)`)).toBe(true);
-    const group = `document.querySelector('[role="dialog"] [role="radiogroup"]')`;
-    expect(
-      await evaluate<string>(
-        `document.getElementById(${group}.getAttribute("aria-describedby")).textContent`,
-      ),
-    ).toContain("coming soon");
-    await shoot("1-share-soon");
+    expect(await evaluate<boolean>(`${radios}.some((radio) => radio.disabled)`)).toBe(false);
+    const level = (name: string) =>
+      `[...document.querySelectorAll('[role="dialog"] label')].find((l) => l.textContent.includes(${JSON.stringify(name)}))`;
+    await press(level("Everyone in the Workspace"));
+    await until(
+      `${level("Everyone in the Workspace")}.querySelector("input").checked && !${radios}.some((radio) => radio.disabled)`,
+    );
+    expect((await db.artifact.findUniqueOrThrow({ where: { id: plan.id } })).access).toBe(
+      "workspace",
+    );
+    await shoot("1-share-workspace");
     await browser("press", "Escape");
     await browser("wait", "--fn", `document.querySelector('[role="dialog"]') == null`);
 
@@ -109,19 +132,41 @@ test("an artifact's Share: who can see it", async () => {
       ),
     ).toContain("Everyone in the Workspace");
     await browser("press", "Escape");
+
+    // Shared with the Workspace from a channel the viewer is not in: read through that level
+    // alone, with no conversation to go back to, and only read from the first.
+    const leads = await documents.create(bot, {
+      conversationId: closed.id,
+      title: "Leads",
+      text: `Leads (run ${tail}).`,
+    });
+    await db.artifact.update({ where: { id: leads.id }, data: { access: "workspace" } });
+    await browser("open", pageOf(leads.id));
+    await browser("wait", "--fn", editor);
+    expect(
+      await evaluate<string>(`document.querySelector("main header a").getAttribute("href")`),
+    ).toEndWith(`/w/${workspace.slug}`);
+    expect(
+      await evaluate<string>(
+        `document.querySelector("main .ProseMirror").getAttribute("contenteditable")`,
+      ),
+    ).toBe("false");
+    await shoot("2-workspace-read");
   } finally {
     await browser("close").catch(() => undefined);
     await db.artifact
       .deleteMany({
         where: {
           OR: [
-            { homeKey: `conversation:${channel.id}` },
+            { homeKey: { in: [`conversation:${channel.id}`, `conversation:${closed.id}`] } },
             { workspaceId, title: "Workspace notes", preview: { contains: tail } },
           ],
         },
       })
       .catch(() => undefined);
-    await db.conversation.delete({ where: { id: channel.id } }).catch(() => undefined);
+    await db.conversation
+      .deleteMany({ where: { id: { in: [channel.id, closed.id] } } })
+      .catch(() => undefined);
     await experiments.write(workspaceId, "artifacts", before).catch(() => undefined);
     await db.$disconnect();
   }

@@ -1,4 +1,9 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+
+import { isAppError } from "#src/lib/app-error";
+import { m } from "#src/paraglide/messages";
+import { changeArtifactAccess } from "./artifacts.functions";
+import { refreshArtifact } from "./artifact-queries";
 
 /**
  * Who can see an artifact (task #514, Frank: two levels, no public link): the people who can read
@@ -7,39 +12,46 @@ import { useMutation } from "@tanstack/react-query";
  */
 export type ArtifactAccess = "conversation" | "workspace";
 
-/** An artifact's access as its page and Share read it, shaped as task #529 will answer it. */
+/** An artifact's access as its page and Share read it (task #529). */
 export type ArtifactAccessState = {
   access: ArtifactAccess;
   /** Whether the viewer may change it: its human author, the owner of the Agent that made it, or
-   * a Workspace owner or admin (task #529 decides); undefined until known. */
+   * a Workspace owner or admin, as the server judges it; undefined until read. */
   canChange: boolean | undefined;
-  /** False until the level is stored and enforced (task #529): nothing may be changed yet. */
-  ready: boolean;
   change: (access: ArtifactAccess) => Promise<void>;
-  pending: boolean;
-  error: Error | null;
+  /** The level a change in flight goes to, shown chosen meanwhile. */
+  pending: ArtifactAccess | undefined;
+  /** What a change that failed says. */
+  error: string | null;
 };
 
 /**
- * An artifact's access level.
- *
- * STAND-IN until task #529: the level is not stored or enforced yet, so it reads as its home's
- * default and is not `ready`: Share shows it, greyed, as coming soon, and nothing changes it. When
- * #529 lands, `access` and `canChange` come from the artifact's read and `change` is its write;
- * nothing else changes.
+ * An artifact's access level, from its read, and the change of it (task #529). A change that
+ * finds the artifact gone reads it again, so the page shows it is not there; one refused reads it
+ * again too, as who may change it may have changed.
  */
-export function useArtifactAccess(home: { kind: "channel" | "dm" | "workspace" } | undefined) {
+export function useArtifactAccess(
+  artifactId: string,
+  read: { access: string; canChange: boolean } | undefined,
+): ArtifactAccessState {
+  const queryClient = useQueryClient();
   const write = useMutation({
-    mutationFn: async (_access: ArtifactAccess) => {
-      throw new Error("Sharing is not available yet");
-    },
+    mutationFn: (access: ArtifactAccess) => changeArtifactAccess({ data: { artifactId, access } }),
+    onSettled: () => refreshArtifact(queryClient, artifactId),
   });
+  const cause = write.error;
   return {
-    access: home?.kind === "workspace" ? "workspace" : "conversation",
-    canChange: undefined,
-    ready: false,
-    change: (access: ArtifactAccess) => write.mutateAsync(access),
-    pending: write.isPending,
-    error: write.error,
-  } satisfies ArtifactAccessState;
+    access: read?.access === "workspace" ? "workspace" : "conversation",
+    canChange: read?.canChange,
+    change: async (access) => {
+      write.reset();
+      await write.mutateAsync(access);
+    },
+    pending: write.isPending ? write.variables : undefined,
+    error: !cause
+      ? null
+      : isAppError(cause) && cause.code === "ACCESS_DENIED"
+        ? m.doc_share_denied()
+        : m.doc_share_failed(),
+  };
 }
