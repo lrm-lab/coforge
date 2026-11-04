@@ -6,8 +6,6 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { productionArtifacts } from "#src/server/artifacts/artifact-composition.server";
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
-import { readFeatureFlagsConfiguration } from "#src/server/feature-flags/configuration.server";
-import { installFeatureFlags } from "#src/server/feature-flags/feature-flags.server";
 import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
 
@@ -21,32 +19,34 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
  * the channel's documents, and New document is created only on its first save. Desktop and phone,
  * light and dark.
  *
- * Opt-in like the other browser E2Es: real local Web started with a flag file that offers
- * `artifacts` (`/tmp/coforge-flags-docs.json`, read here too). The channel, its people and its
- * documents are seeded per run and removed after it; the Workspace's switch is put back.
- * Screenshots go under `.amp/e2e/artifact-documents/`.
+ * Opt-in like the other browser E2Es: real local Web started as it is. The Documents experiment
+ * is offered to every Workspace (task #491), so no flag file is needed; the run turns the
+ * Workspace's switch on and puts it back. The channel, its people and its documents are seeded per
+ * run and removed after it. Screenshots go under `.amp/e2e/artifact-documents/`.
+ *
+ * Every text a document gets carries the run's tail (task #525). Files are stored once per
+ * content (sha256) and that record lives in the database, which every local worktree shares,
+ * while the bytes live in the storage directory of the worktree that first wrote them: text an
+ * earlier run in another worktree saved is found by its hash here but cannot be read, so the
+ * card's lines and the document come back empty.
  */
 const { origin: webOrigin, browserPath, databaseUrl } = localBrowserE2e();
 const centrifugoOrigin = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;
 if (!centrifugoOrigin) throw new Error("COFORGE_E2E_CENTRIFUGO_URL is required");
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/artifact-documents");
-const FLAGS = "/tmp/coforge-flags-docs.json";
-
-const PLAN = [
-  "# Goal",
-  "",
-  "Ship the new home page on November 15, saying clearly that people and Agents work together.",
-  "",
-  "# Timeline",
-  "",
-  "Week one design, week two build, week three test and ship.",
-  "",
-].join("\n");
+const plan = (tail: string) =>
+  [
+    "# Goal",
+    "",
+    `Ship the new home page on November 15, saying clearly that people and Agents work together (run ${tail}).`,
+    "",
+    "# Timeline",
+    "",
+    "Week one design, week two build, week three test and ship.",
+    "",
+  ].join("\n");
 
 test("a document opens from its card, saves versions, resolves a conflict and goes back", async () => {
-  await installFeatureFlags(
-    await readFeatureFlagsConfiguration({ COFORGE_FEATURE_FLAGS_FILE: FLAGS }),
-  );
   // Centrifugo behind the page's own origin, so a version saved here reaches the page live.
   // While `held` is set, server-function answers wait for it: a save is caught in flight.
   let held: Promise<void> | undefined;
@@ -116,12 +116,12 @@ test("a document opens from its card, saves versions, resolves a conflict and go
     const doc = await documents.create(me, {
       conversationId: channel.id,
       title: "Home page launch plan",
-      text: PLAN,
+      text: plan(tail),
     });
     const notes = await documents.create(me, {
       conversationId: channel.id,
       title: "Weekly sync notes",
-      text: "Progress, blockers and next week.",
+      text: `Progress, blockers and next week (run ${tail}).`,
     });
     const page = `${origin}/en/w/${workspace.slug}/channel/${channel.id}`;
     const from = await db.conversationMember.findFirstOrThrow({
@@ -354,7 +354,7 @@ test("a document opens from its card, saves versions, resolves a conflict and go
       "--fn",
       `document.activeElement === ${pane}.querySelector(".ProseMirror")`,
     );
-    await browser("keyboard", "type", "Copy, images, analytics.");
+    await browser("keyboard", "type", `Copy, images, analytics (run ${tail}).`);
     await click(button("Save", pane));
     await until(async () => (await count()) === documentsBefore + 1);
     await browser("wait", "--fn", `location.pathname.includes("/artifacts/")`);
