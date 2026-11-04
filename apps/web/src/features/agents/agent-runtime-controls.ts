@@ -168,5 +168,7 @@ export function agentControlFailureMessage(cause: unknown) {
   if (isAppErrorCode(cause, "ACCESS_DENIED")) return m.agent_control_access_denied();
   if (isAppErrorCode(cause, "CONFLICT") && cause.errorId === "agent-migrating")
     return m.agent_control_migrating();
+  if (isAppErrorCode(cause, "CONFLICT") && cause.errorId === "agent-runtime-config-unreadable")
+    return m.agent_control_runtime_config_invalid();
   return m.agent_control_submit_error();
 }

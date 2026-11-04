@@ -292,5 +292,6 @@
   "agent_archive_workspace_on_computer": "在 {computer} 上",
   "agent_archive_delete_workspace": "从 Computer 删除工作区",
   "agent_archive_delete_workspace_description": "会删除 {computer} 上该 Agent 工作区里的全部文件，无法恢复。资料页和消息仍然保留。",
-  "agent_error_banner_view_logs": "查看日志"
+  "agent_error_banner_view_logs": "查看日志",
+  "agent_control_runtime_config_invalid": "运行配置无效，请在网页上重新选择运行时。"
 }

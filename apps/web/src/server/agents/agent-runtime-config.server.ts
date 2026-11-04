@@ -64,7 +64,7 @@ export function agentRuntimeConfig(
   };
 }
 
-export function parseAgentRuntimeConfig(value: unknown): AgentRuntimeConfig {
+export function parseAgentRuntimeConfig(value: unknown, agentId?: string): AgentRuntimeConfig {
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new Error("invalid runtime config");
   const runtime = parseRuntimeProvider(Reflect.get(value, "runtime"));
@@ -83,7 +83,7 @@ export function parseAgentRuntimeConfig(value: unknown): AgentRuntimeConfig {
     throw new Error("invalid runtime config");
   return {
     runtime,
-    provider: parseProviderConfig(Reflect.get(value, "provider")),
+    provider: parseProviderConfig(Reflect.get(value, "provider"), agentId),
     model,
     modelProvider: modelProvider ?? "",
     reasoning,
@@ -121,7 +121,13 @@ function parseEncryptedEnvironment(value: unknown): EncryptedAgentEnvironment | 
   return { keyId, ciphertext, nonce };
 }
 
-function parseProviderConfig(value: unknown): AgentRuntimeProviderConfig {
+function parseProviderConfig(value: unknown, agentId?: string): AgentRuntimeProviderConfig {
+  // task #319: a stored config with no `provider` predates the field — it launches on the
+  // daemon's own defaults instead of failing. Every read parses it, so the note stays debug.
+  if (value === undefined) {
+    console.debug("agent_runtime_provider_default", { agentId, path: "provider" });
+    return { kind: "default" };
+  }
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new Error("invalid runtime provider config");
   const kind = Reflect.get(value, "kind");
@@ -177,7 +183,7 @@ export function readableRuntimeConfig(
   agentId?: string,
 ): AgentRuntimeConfig | undefined {
   try {
-    return parseAgentRuntimeConfig(value);
+    return parseAgentRuntimeConfig(value, agentId);
   } catch (error) {
     console.warn("agent_runtime_config_unreadable", {
       agentId,
