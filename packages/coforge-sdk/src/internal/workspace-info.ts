@@ -29,6 +29,8 @@ export type WorkspaceInfoResponse = {
     id: string;
     name: string;
     slug: string;
+    /** What the Workspace wrote about this Project (untrusted text); absent on an older server. */
+    description?: string;
     githubFullName: string;
     githubHtmlUrl: string;
     /** The open Tasks filed under this Project in a conversation the calling Agent is a member

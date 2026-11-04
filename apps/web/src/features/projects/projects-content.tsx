@@ -67,9 +67,6 @@ export function ProjectsContent({
                     <span className="block truncate text-sm text-tertiary">{project.slug}</span>
                   </span>
                 </Link>
-                <span className="text-sm text-tertiary">
-                  {m.project_discussion_count({ count: project.conversations.length })}
-                </span>
               </li>
             ))}
           </ul>

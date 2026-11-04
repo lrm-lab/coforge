@@ -1,4 +1,3 @@
-import { channelLabel, channelVisibilityOf } from "#src/features/conversations/channel-visibility";
 import type { TaskLink, TaskMember, TaskTreeNode, TaskView } from "@lrm/coforge-sdk/internal";
 import {
   CONVERSATION_TASK_NUMBERS_MAX,
@@ -6,8 +5,13 @@ import {
 } from "#src/features/tasks/conversation-task-subset";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
-import { visibleChannelWhere } from "#src/server/conversations/channel-read-access.server";
-import { withProjectIconUrl } from "#src/server/projects/project-images.server";
+import {
+  overviewConversationWhere,
+  overviewRow,
+  overviewRows,
+  overviewSelection,
+  overviewWithDirectsWhere,
+} from "./task-overview-row.server";
 import {
   FINISHED_TASK_STATUSES,
   storedTaskStatus,
@@ -17,7 +21,6 @@ import {
   taskView,
   UNFINISHED_TASK_STATUSES,
   type FinishedTaskStatus,
-  type TaskViewExtras,
 } from "./task-view.server";
 import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
 import { viewsWithCounts } from "./task-discussion-counts.server";
@@ -144,73 +147,6 @@ function finishedFilterWhere({ owners = [], projects = [], labels = [] }: Finish
  * Tasks in a channel hidden from the Workspace, or a private one the viewer is not in, are not
  * listed.
  */
-function overviewConversationWhere(
-  workspaceId: string,
-  userId: string,
-): Prisma.ConversationWhereInput {
-  return visibleChannelWhere(workspaceId, { userId });
-}
-
-function overviewSelection(userId: string) {
-  return {
-    ...taskSelection,
-    project: { select: { id: true, name: true, slug: true, iconObjectKey: true } },
-    conversation: {
-      select: {
-        channelName: true,
-        visibility: true,
-        members: {
-          where: { OR: [{ userId }, { agentId: { not: null } }] },
-          select: {
-            id: true,
-            userId: true,
-            agent: { select: { id: true, name: true, displayName: true } },
-          },
-        },
-      },
-    },
-  } satisfies Prisma.TaskSelect;
-}
-
-/** The page's rows: their relations read together, their discussions not counted. */
-async function overviewRows(
-  db: PrismaClient,
-  userId: string,
-  tasks: Array<Prisma.TaskGetPayload<{ select: ReturnType<typeof overviewSelection> }>>,
-) {
-  const relations = await loadTaskRelations(db, "people", tasks);
-  return tasks.map((task) =>
-    overviewRow(task, userId, { relations: relationsOf(relations, task.id) }),
-  );
-}
-
-function overviewRow(
-  task: Prisma.TaskGetPayload<{ select: ReturnType<typeof overviewSelection> }>,
-  userId: string,
-  extras: TaskViewExtras,
-): TaskOverview["tasks"][number] {
-  const channelName = task.conversation.channelName;
-  const agent = task.conversation.members.find((member) => member.agent !== null)?.agent ?? null;
-  const currentMemberId =
-    task.conversation.members.find((member) => member.userId === userId)?.id ?? null;
-  if (channelName === null && agent === null) throw new AppError("INTERNAL_ERROR");
-  return {
-    ...taskView(task, "people", extras),
-    currentMemberId,
-    source: channelName
-      ? {
-          channelName,
-          agentId: null,
-          label: channelLabel({
-            name: channelName,
-            visibility: channelVisibilityOf(task.conversation),
-          }),
-        }
-      : { channelName: null, agentId: agent!.id, label: agent!.displayName || agent!.name },
-    project: task.project && withProjectIconUrl(task.project),
-  };
-}
-
 /**
  * Which one conversation's Tasks a viewer may list, as `TaskBoard`'s `list` decides it: the
  * conversation's id, or `ACCESS_DENIED`. A finished-work read scoped to one conversation asks it.
@@ -273,7 +209,11 @@ export class TaskOverviewReads {
         workspaceId,
         projectId,
         status: { in: UNFINISHED_TASK_STATUSES },
-        conversation: overviewConversationWhere(workspaceId, userId),
+        // A channel the reader may see, or their own direct conversation (task #484: a DM Task
+        // files under a Project too; another person's DM never shows).
+        conversation: {
+          OR: [overviewWithDirectsWhere(workspaceId, userId)],
+        },
       },
       orderBy: [{ conversationId: "asc" }, { number: "asc" }],
       select: {

@@ -132,8 +132,8 @@ test("deleting a project leaves its tasks filed under none", async () => {
   }
 });
 
-test("a direct message's tasks take no project, and only the owner, creator or an admin changes one", async () => {
-  const { db, run, make, principals, channel, refusal } = await setup();
+test("a direct message's tasks file under a project like a channel's, seen only in that DM", async () => {
+  const { db, board, run, make, show, principals, channel } = await setup();
   try {
     const workspaceId = principals.alice.workspaceId;
     const aliceId = principals.alice.userId!;
@@ -149,21 +149,32 @@ test("a direct message's tasks take no project, and only the owner, creator or a
         members: { create: [{ userId: aliceId }, { userId: bobId }] },
       },
     });
-    const inDm = await refusal(
-      run("alice", { operation: "create", titles: ["dm task"], project: project.slug }, dm.id),
-    );
-    expect(inDm.code).toBe("INVALID_INPUT");
-    expect(inDm.hint).toContain("direct message");
-    // Nor can a direct message's Task be moved into one afterwards.
-    const [dmNumber] = await make("alice", 1, {}, dm.id);
-    const movedIn = await refusal(
-      run("alice", { operation: "amend", number: dmNumber!, project: project.slug }, dm.id),
-    );
-    expect(movedIn.code).toBe("INVALID_INPUT");
-    expect(movedIn.hint).toContain("direct message");
+    // A DM Task takes --project on create and amend like any conversation's.
+    const [dmNumber] = await make("alice", 1, { project: project.slug }, dm.id);
+    expect((await show(dmNumber!, dm.id)).tasks[0]!.project?.id).toBe(project.id);
+    await run("alice", { operation: "amend", number: dmNumber!, project: null }, dm.id);
+    expect((await show(dmNumber!, dm.id)).tasks[0]!.project).toBeNull();
+    await run("alice", { operation: "amend", number: dmNumber!, project: project.slug }, dm.id);
+    expect((await show(dmNumber!, dm.id)).tasks[0]!.project?.id).toBe(project.id);
 
+    // The project page lists it for its own DM readers.
+    const forAlice = await board.projectTasks({ workspaceId, userId: aliceId }, project.id);
+    expect(forAlice.tasks.map((task) => task.number)).toContain(dmNumber);
+    void channel;
+  } finally {
+    await db.$disconnect();
+  }
+});
+
+test("a channel member who is not the owner, creator or an admin may not change a task's project", async () => {
+  const { db, run, make, principals, refusal } = await setup();
+  try {
+    const workspaceId = principals.alice.workspaceId;
+    const suffix = crypto.randomUUID().slice(0, 8);
+    const project = await db.project.create({
+      data: { workspaceId, name: "Docs", slug: `docs-${suffix}` },
+    });
     const [number] = await make("alice", 1);
-    // Bob is a member but neither the owner nor the creator: the Project is theirs to read only.
     const denied = await refusal(
       run("bob", { operation: "amend", number: number!, project: project.slug }),
     );
@@ -172,7 +183,6 @@ test("a direct message's tasks take no project, and only the owner, creator or a
     expect((await run("alice", { operation: "show", number: number! })).tasks[0]!.project?.id).toBe(
       project.id,
     );
-    void channel;
   } finally {
     await db.$disconnect();
   }
@@ -219,6 +229,85 @@ test("the project page lists only readable, unfinished tasks filed under it, wit
       ),
     ).toBe("refused");
     void channel;
+  } finally {
+    await db.$disconnect();
+  }
+});
+
+test("a project's open-task count covers readable channels and own DMs, not others' or finished tasks", async () => {
+  const { db, board, principals, channel } = await setup();
+  try {
+    const workspaceId = principals.alice.workspaceId;
+    const aliceId = principals.alice.userId!;
+    const bobId = principals.bob.userId!;
+    const suffix = crypto.randomUUID().slice(0, 8);
+    const project = await db.project.create({
+      data: { workspaceId, name: "Counted", slug: `counted-${suffix}` },
+    });
+    const outsider = await db.user.create({
+      data: { displayName: `outside-${suffix}`, username: `outside-${suffix}` },
+    });
+    await db.workspaceMembership.create({
+      data: { workspaceId, userId: outsider.id, role: "member" },
+    });
+    // alice's own DM (with the outsider), and a bob↔outsider DM she never sees.
+    const [ownDm, theirDm] = await Promise.all([
+      db.conversation.create({
+        data: {
+          workspaceId,
+          directKey: `user:${aliceId}|user:${outsider.id}`,
+          members: { create: [{ userId: aliceId }, { userId: outsider.id }] },
+        },
+      }),
+      db.conversation.create({
+        data: {
+          workspaceId,
+          directKey: `user:${bobId}|user:${outsider.id}`,
+          members: { create: [{ userId: bobId }, { userId: outsider.id }] },
+        },
+      }),
+    ]);
+    const secret = await db.conversation.create({
+      data: {
+        workspaceId,
+        channelName: `secret-${suffix.slice(0, 6)}`,
+        visibility: "private",
+        members: { create: [{ userId: bobId }] },
+      },
+    });
+    const create = (who: string, conversationId: string, title: string, status?: string) =>
+      board
+        .execute(
+          { workspaceId, userId: who },
+          {
+            operation: "create",
+            idempotencyKey: crypto.randomUUID(),
+            conversationId,
+            titles: [title],
+            project: project.slug,
+          },
+        )
+        .then(async () => {
+          if (status)
+            await db.task.updateMany({
+              where: { workspaceId, conversationId, title },
+              data: { status },
+            });
+        });
+    // Public channel + alice's own DM count for her; a private channel she is not in and a DM
+    // between others do not; done/closed never count.
+    await create(aliceId, channel.id, "public");
+    await create(aliceId, ownDm.id, "own dm");
+    await create(bobId, secret.id, "invisible private");
+    await create(outsider.id, theirDm.id, "others' dm");
+    await create(aliceId, channel.id, "done task", "done");
+    await create(aliceId, channel.id, "closed task", "closed");
+    const { projectOpenTaskCounts } = await import("#src/server/tasks/task-projects.server");
+    const counts = await projectOpenTaskCounts(db, workspaceId, { userId: aliceId });
+    expect(counts.get(project.id)).toBe(2);
+    const bobs = await projectOpenTaskCounts(db, workspaceId, { userId: bobId });
+    // Bob: public channel + the private secret + his DM with the outsider.
+    expect(bobs.get(project.id)).toBe(3);
   } finally {
     await db.$disconnect();
   }

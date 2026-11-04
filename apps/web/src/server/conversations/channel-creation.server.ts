@@ -20,7 +20,6 @@ export function createChannel(
     workspaceId: string;
     name: string;
     creator: ChannelMember;
-    projectId?: string;
     description?: string;
     /** Public unless given (task #302). */
     visibility?: ChannelVisibility;
@@ -32,7 +31,6 @@ export function createChannel(
     data: {
       workspaceId: input.workspaceId,
       channelName: input.name,
-      ...(input.projectId ? { projectId: input.projectId } : {}),
       ...(input.description !== undefined ? { description: input.description } : {}),
       ...(input.visibility ? { visibility: input.visibility } : {}),
       // The creator becomes the channel's first admin; picked members join in the same write.

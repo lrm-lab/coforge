@@ -6,19 +6,12 @@ import type { RepositorySelection } from "#src/server/integrations/github-reposi
 import { gitObjectIdSchema } from "#src/lib/git-object-id";
 import { linkedRepositoryOf } from "#src/server/projects/project-files.server";
 import { AppError, isAppErrorCode } from "#src/lib/app-error";
-import { humanLabel } from "#src/lib/human-label";
 import { ProjectSettings } from "#src/server/projects/project-settings.server";
 import { z } from "zod";
 import { createProjectInput, projectIconUploadInput, updateProjectInput } from "./projects.schemas";
 import { ProjectImages, withProjectIconUrl } from "#src/server/projects/project-images.server";
-import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
-import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
-import {
-  projectDetailSelect,
-  projectListSelect,
-  readProjectChannelActivity,
-} from "#src/server/projects/project-detail.server";
+import { projectDetailSelect, projectListSelect } from "#src/server/projects/project-detail.server";
 
 export const uploadProjectIcon = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
@@ -130,45 +123,10 @@ export const getProject = createServerFn({ method: "GET" })
     const { db, workspaceId } = context;
     const project = await db.project.findFirst({
       where: { workspaceId, slug: data.slug },
-      select: projectDetailSelect(workspaceId, context.user.id),
+      select: projectDetailSelect(),
     });
     if (!project) return null;
-    const { conversations, ...view } = project;
-    const activity = await readProjectChannelActivity(
-      db,
-      conversations.map((conversation) => conversation.id),
-    );
-    const mappedConversations = conversations
-      .map((conversation) => {
-        const { memberCount, messageCount, lastMessage } = activity.get(conversation.id)!;
-        const sender = lastMessage?.sender;
-        const lastSender = sender
-          ? sender.user
-            ? {
-                name: humanLabel(sender.user),
-                avatarUrl: workspaceUserAvatarUrl(
-                  workspaceId,
-                  sender.user.id,
-                  sender.user.avatarObjectKey,
-                ),
-              }
-            : sender.agent
-              ? {
-                  name: sender.agent.displayName,
-                  avatarUrl: agentAvatarUrl(sender.agent.id, sender.agent.avatarMascot),
-                }
-              : null
-          : null;
-        return {
-          ...conversation,
-          memberCount,
-          messageCount,
-          lastActivityAt: (lastMessage?.createdAt ?? conversation.createdAt).toISOString(),
-          lastSender,
-        };
-      })
-      .sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt));
-    return { ...withProjectIconUrl(view), conversations: mappedConversations };
+    return withProjectIconUrl(project);
   });
 
 export const updateProject = createServerFn({ method: "POST" })
@@ -201,7 +159,7 @@ export const listProjects = createServerFn({ method: "GET" })
     const { db, workspaceId } = context;
     const projects = await db.project.findMany({
       where: { workspaceId },
-      select: projectListSelect(workspaceId, context.user.id),
+      select: projectListSelect(),
       orderBy: { createdAt: "asc" },
     });
     return projects.map(withProjectIconUrl);

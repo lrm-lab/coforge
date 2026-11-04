@@ -15,7 +15,7 @@ import {
   agentVisibilityViewerForActor,
   visibleAgentWhere,
 } from "#src/server/agents/agent-visibility.server";
-import { ownTaskScope } from "#src/server/tasks/task-list.server";
+import { projectOpenTaskCounts } from "#src/server/tasks/task-projects.server";
 
 export const Route = createFileRoute("/api/agent/v1/workspace")({
   server: {
@@ -64,23 +64,13 @@ export const Route = createFileRoute("/api/agent/v1/workspace")({
                 id: true,
                 name: true,
                 slug: true,
+                description: true,
                 githubFullName: true,
                 githubHtmlUrl: true,
               },
               orderBy: { createdAt: "asc" },
             }),
-            // The open Tasks an Agent could reach: filed under the project in a conversation it is a
-            // member of now (its own-list scope, task #484).
-            db.task.groupBy({
-              by: ["projectId"],
-              where: {
-                workspaceId: principal.workspaceId,
-                projectId: { not: null },
-                status: { notIn: ["done", "closed"] },
-                conversation: ownTaskScope({ agentId: principal.agentId }).conversations,
-              },
-              _count: true,
-            }),
+            projectOpenTaskCounts(db, principal.workspaceId, { agentId: principal.agentId }),
             db.agent.findUnique({
               where: {
                 id_workspaceId: { id: principal.agentId, workspaceId: principal.workspaceId },
@@ -135,7 +125,7 @@ export const Route = createFileRoute("/api/agent/v1/workspace")({
           })),
           projects: projects.map((project) => ({
             ...project,
-            openTaskCount: openTasks.find((row) => row.projectId === project.id)?._count ?? 0,
+            openTaskCount: openTasks.get(project.id) ?? 0,
           })),
           ...(serverRole ? { serverRole } : {}),
           channels,

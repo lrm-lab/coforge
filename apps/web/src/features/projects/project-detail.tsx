@@ -1,6 +1,5 @@
-import { Suspense, useState } from "react";
-import { Await, Link, useRouter } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
+import { Suspense } from "react";
+import { Await, Link } from "@tanstack/react-router";
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -8,20 +7,16 @@ import {
   Circle,
   Folder,
   GitBranch01,
-  Plus,
   Settings01,
   XCircle,
 } from "@untitledui/icons";
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { Badge } from "#src/components/base/badges/badges";
-import { Button } from "#src/components/base/buttons/button";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { PageHeader } from "#src/components/layout/page-header";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { FileTypeIcon } from "#src/features/files/file-type-icon";
-import { CreateChannelDialog } from "#src/features/conversations/create-channel-dialog";
-import { createPublicChannel } from "#src/features/conversations/channels.functions";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { m } from "#src/paraglide/messages";
 import { ProjectTasksSection } from "./project-tasks";
@@ -41,10 +36,7 @@ export function ProjectDetail({
   project: NonNullable<Awaited<ReturnType<typeof getProject>>>;
   repository: Promise<Repository>;
 }) {
-  const router = useRouter();
   const workspaceSlug = useWorkspaceSlug();
-  const create = useServerFn(createPublicChannel);
-  const [creating, setCreating] = useState(false);
   return (
     <main className="flex h-full min-w-0 flex-col bg-primary">
       <PageHeader
@@ -95,60 +87,7 @@ export function ProjectDetail({
         )}
         <div className="grid gap-6 lg:grid-cols-2">
           <ProjectTasksSection projectId={project.id} />
-          <section className="order-1 min-w-0 lg:order-2">
-            <div className="mb-3 flex min-h-9 items-center justify-between gap-3">
-              <h2 className="text-md font-semibold text-primary">{m.project_discussions()}</h2>
-              <Button
-                size="sm"
-                color="secondary"
-                iconLeading={Plus}
-                onPress={() => setCreating(true)}
-              >
-                {m.project_discussion_create()}
-              </Button>
-            </div>
-            <div className="min-h-52 overflow-hidden rounded-xl border border-secondary">
-              {project.conversations.length ? (
-                <ul className="divide-y divide-secondary">
-                  {project.conversations.map((conversation) => (
-                    <li key={conversation.id}>
-                      <Link
-                        to="/w/$workspaceSlug/channel/$channelId"
-                        params={{ workspaceSlug, channelId: conversation.id }}
-                        className="flex min-w-0 items-center gap-3 px-4 py-4 outline-focus-ring hover:bg-primary_hover focus-visible:outline-2 focus-visible:-outline-offset-2"
-                      >
-                        <IdentityAvatar
-                          size="xs"
-                          src={conversation.lastSender?.avatarUrl ?? undefined}
-                          name={conversation.lastSender?.name}
-                          alt=""
-                        />
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-medium text-primary">
-                            {conversation.channelName}
-                          </span>
-                          <span className="mt-0.5 block truncate text-xs text-tertiary">
-                            {conversation.lastSender
-                              ? `${conversation.lastSender.name} · ${m.project_message_count({ count: conversation.messageCount })}`
-                              : m.project_no_messages()}
-                          </span>
-                        </span>
-                        <RelativeTime
-                          value={conversation.lastActivityAt}
-                          plain
-                          className="shrink-0 text-xs text-tertiary"
-                        />
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="px-4 py-16 text-center text-sm text-tertiary">
-                  {m.project_discussions_empty()}
-                </p>
-              )}
-            </div>
-          </section>
+
           <Suspense
             fallback={
               <>
@@ -167,18 +106,6 @@ export function ProjectDetail({
           </Suspense>
         </div>
       </div>
-      {creating && (
-        <CreateChannelDialog
-          open
-          onOpenChange={setCreating}
-          defaultName={project.slug}
-          offersPrivate
-          onCreate={async (name, _userIds, _agentIds, visibility) => {
-            await create({ data: { name, visibility } });
-            await router.invalidate({ sync: true });
-          }}
-        />
-      )}
     </main>
   );
 }

@@ -70,7 +70,15 @@ const RICH: WorkspaceInfoResponse = {
   ],
   humans: [human("ada", "owner", "Founder"), human("bob")],
   projects: [
-    { id: "p", name: "Core", slug: "core", githubFullName: "acme/core", githubHtmlUrl: "" },
+    {
+      id: "p",
+      name: "Core",
+      slug: "core",
+      description: "The shared backend. Everything else depends on it.",
+      githubFullName: "acme/core",
+      githubHtmlUrl: "",
+      openTaskCount: 3,
+    },
   ],
   computers: [
     {
@@ -212,7 +220,9 @@ test("lists agents and humans with role labels, status and descriptions", () => 
     "@scout (online) (admin) — Reviews pull requests.\n@helper (unknown)\n",
   );
   expect(info(["--humans"])).toContain("@ada (owner) — Founder\n@bob\n");
-  expect(info(["--projects"])).toContain("Core (core) github=acme/core\n");
+  expect(info(["--projects"])).toContain(
+    "Core (core) github=acme/core tasks=3 — The shared backend.\n",
+  );
   expect(info(["--computers"])).toContain("mac-1 [online, darwin 15.6, v1.2.3] — Mac 1\n");
 });
 
@@ -329,4 +339,11 @@ test("fills the Agent workspace path from the environment into the runtime block
     if (previous === undefined) delete Bun.env.COFORGE_CURRENT_AGENT_WORKSPACE_PATH;
     else Bun.env.COFORGE_CURRENT_AGENT_WORKSPACE_PATH = previous;
   }
+});
+
+test("--projects <slug> shows one Project's full description and open-Task count", () => {
+  const text = info(["--projects", "core"]);
+  expect(text).toContain("Core (core) github=acme/core tasks=3");
+  expect(text).toContain("The shared backend. Everything else depends on it.");
+  expect(() => info(["--projects", "nope"])).toThrow("No project named nope is visible");
 });

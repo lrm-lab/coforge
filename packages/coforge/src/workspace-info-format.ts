@@ -141,7 +141,19 @@ const agentRow = (agent: Agent) =>
 const humanRow = (human: Human) =>
   withDescription(`@${human.name}${roleLabel(human.role)}`, human.description);
 const projectRow = (project: Project) =>
-  `${foldUntrustedLine(project.name)} (${foldUntrustedLine(project.slug)})${project.githubFullName ? ` github=${foldUntrustedLine(project.githubFullName)}` : ""}${project.openTaskCount !== undefined ? ` tasks=${project.openTaskCount}` : ""}`;
+  withDescription(
+    `${foldUntrustedLine(project.name)} (${foldUntrustedLine(project.slug)})${project.githubFullName ? ` github=${foldUntrustedLine(project.githubFullName)}` : ""}${project.openTaskCount !== undefined ? ` tasks=${project.openTaskCount}` : ""}`,
+    firstSentence(project.description),
+  );
+
+/** A description's first sentence (or first line), for the per-row hint; the full text comes with
+ * `--projects <slug>`. */
+function firstSentence(description: string | undefined): string | undefined {
+  const text = description?.trim();
+  if (!text) return undefined;
+  const end = text.search(/[。.!?！？\n]/u);
+  return end === -1 ? text : text.slice(0, end + 1);
+}
 function computerRow(computer: WorkspaceInfoComputer): string {
   const system = [computer.platform, computer.osVersion].filter(Boolean).join(" ");
   const parts = [
@@ -259,7 +271,26 @@ function section(
   }
   if (name === "agents") return render("Workspace Agents", [roleNote], result.agents, agentRow);
   if (name === "humans") return render("Workspace Humans", [roleNote], result.humans, humanRow);
-  if (name === "projects") return render("Workspace Projects", [], result.projects, projectRow);
+  if (name === "projects") {
+    if (options.project !== undefined) {
+      const project = result.projects.find(
+        (candidate) =>
+          candidate.slug === options.project ||
+          candidate.name.toLowerCase() === options.project!.toLowerCase(),
+      );
+      if (!project) throw new Error(`No project named ${options.project} is visible`);
+      return `${[
+        `## Workspace Project`,
+        "",
+        projectRow(project),
+        "",
+        ...(project.description?.trim()
+          ? [frameUntrustedText(project.description.trim())]
+          : ["(no description)"]),
+      ].join("\n")}\n`;
+    }
+    return render("Workspace Projects", [], result.projects, projectRow);
+  }
   return render("Workspace Computers", [], result.computers ?? [], computerRow);
 }
 

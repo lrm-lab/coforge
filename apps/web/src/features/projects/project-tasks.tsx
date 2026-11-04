@@ -1,7 +1,15 @@
-import { Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { getRouteApi, Link } from "@tanstack/react-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { useCallback } from "react";
 
+import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
+import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime";
+import {
+  userConversationChannel,
+  workspaceConversationChannel,
+} from "#src/features/conversations/conversation-realtime";
+import { decodeTaskChangedEvent } from "#src/features/tasks/task-realtime";
 import { TaskOwnerAvatar } from "#src/features/tasks/task-owner";
 import { TaskStatusIcon } from "#src/features/tasks/task-status-icon";
 import { loadProjectTasks } from "#src/features/tasks/tasks.functions";
@@ -33,11 +41,33 @@ export function projectTaskForest(tasks: readonly ProjectTask[]): ProjectTaskNod
  * opening in the Tasks page's popup. A private channel's Tasks show only to its members, as the
  * read decides.
  */
+const appRoute = getRouteApi("/w/$workspaceSlug");
+
 export function ProjectTasksSection({ projectId }: { projectId: string }) {
   const load = useServerFn(loadProjectTasks);
+  const queryClient = useQueryClient();
+  const workspaceId = useCurrentWorkspaceId();
+  const userId = appRoute.useLoaderData({ select: (data) => data.user.id });
   const query = useQuery({
     queryKey: ["project-tasks", projectId],
     queryFn: () => load({ data: { projectId } }),
+  });
+  // A Task's Project change arrives as `task.changed.v1` (task #484): the prefix invalidates the
+  // page's one query whichever Project it moved from or to.
+  const onTaskChanged = useCallback(
+    (publication: { data: unknown }) => {
+      if (decodeTaskChangedEvent(publication.data))
+        void queryClient.invalidateQueries({ queryKey: ["project-tasks"] });
+    },
+    [queryClient],
+  );
+  useRealtimeSubscription({
+    channel: workspaceId ? workspaceConversationChannel(workspaceId) : undefined,
+    onPublication: onTaskChanged,
+  });
+  useRealtimeSubscription({
+    channel: userConversationChannel(userId),
+    onPublication: onTaskChanged,
   });
   const tasks = query.data?.tasks ?? [];
   const forest = projectTaskForest(tasks);

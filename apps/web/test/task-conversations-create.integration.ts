@@ -287,3 +287,25 @@ test("a message id that names no message is a not-found result, never a 500", as
   }
   await experiment(true);
 });
+
+test("createConversationTasks files a Task under an explicit Project and defaults an Agent's to none", async () => {
+  await experiment(true);
+  const project = await db.project.create({
+    data: { workspaceId, name: "Conv project", slug: `conv-${suffix}` },
+  });
+  const filed = await run("maker", {
+    operation: "create",
+    title: "Filed",
+    project: project.slug,
+  });
+  const unfiled = await run("maker", { operation: "create", title: "Unfiled" });
+  const tasks = await db.task.findMany({
+    where: { workspaceId },
+    select: { title: true, projectId: true },
+    orderBy: { title: "asc" },
+  });
+  expect(tasks.find((task) => task.title === "Filed")!.projectId).toBe(project.id);
+  expect(tasks.find((task) => task.title === "Unfiled")!.projectId).toBeNull();
+  void filed;
+  void unfiled;
+});

@@ -140,7 +140,6 @@ export async function findChannelById(
       description: true,
       archivedAt: true,
       visibility: true,
-      projectId: true,
     },
   });
   return requireReadableChannel(db, workspaceId, reader, channel);
@@ -163,9 +162,6 @@ export async function viewerChannel(
     db.conversation.findFirst({
       where: channelByIdWhere(workspaceId, channelId),
       include: {
-        project: {
-          select: { id: true, name: true, slug: true, githubFullName: true, githubHtmlUrl: true },
-        },
         coordinatorAgent: { select: { id: true, name: true, displayName: true } },
       },
     }),

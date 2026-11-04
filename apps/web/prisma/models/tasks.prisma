@@ -6,11 +6,10 @@ model Task {
   messageId                    String?             @unique @db.Uuid
   conversationId               String              @db.Uuid
   workspaceId                  String              @db.Uuid
-  /// The Project this Task is filed under. It follows its conversation's Project unless
-  /// `projectPinned` says someone chose this one explicitly.
+  /// The Project this Task is filed under, chosen at creation or by amendment; a conversation
+  /// never lends its own (task #484: `projectPinned` and the channel link drop in release 2).
   projectId                    String?             @db.Uuid
-  /// Whether `projectId` was chosen for this Task (or an ancestor's) rather than inherited from
-  /// the conversation; a pinned Task keeps its Project when the conversation changes.
+  /// Legacy marker from the channel-following model; no longer read or written.
   projectPinned                Boolean             @default(false)
   number                       Int
   title                        String

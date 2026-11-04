@@ -8,11 +8,10 @@ These rules apply to `src/server/projects/`.
   `/api/projects/$projectId/raw/$`, which stays a thin adapter.
 - Project settings are authorized by Workspace membership. Deletion requires
   the user to confirm the project name.
-- Deleting a Project preserves its discussion groups, their memberships, and
-  their messages by clearing the Project relation.
-- Creating a Project never creates a discussion group. Discussion groups are
-  created on demand through `PublicChannels.create(..., projectId)` and use the
-  ordinary channel route; do not add a project-specific channel path.
+- Deleting a Project leaves the Tasks filed under it unfiled (their
+  `projectId` clears); conversations and messages are untouched.
+- A Task carries its own Project (task #484); a conversation never lends one.
+  Do not add a channel-project path or a project-specific channel route.
 - A Project may be created from a public github.com URL without a GitHub
   Connection. Private repositories and later repository changes still require
   the caller's GitHub access.

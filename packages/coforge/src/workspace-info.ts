@@ -5,6 +5,8 @@ export type WorkspaceInfoOptions = {
   agents?: boolean;
   humans?: boolean;
   projects?: boolean;
+  /** With `projects`: one Project's full row, named by slug. */
+  project?: string;
   computers?: boolean;
   full?: boolean;
   json?: boolean;
@@ -59,9 +61,12 @@ export function parseWorkspaceInfoArgs(args: readonly string[]): WorkspaceInfoIn
         "--json",
         ...WORKSPACE_INFO_SECTIONS.map((name) => `--${name}`),
       ].includes(flag)
-    )
+    ) {
       options[flag.slice(2) as "full"] = true;
-    else throw new Error(WORKSPACE_INFO_USAGE);
+      // `--projects <slug>`: one Project's full description and open-Task count.
+      if (flag === "--projects" && args[i + 1] !== undefined && !args[i + 1]!.startsWith("--"))
+        options.project = args[++i];
+    } else throw new Error(WORKSPACE_INFO_USAGE);
   }
   const sections = WORKSPACE_INFO_SECTIONS.filter((section) => options[section]);
   const listModifier =
@@ -74,6 +79,8 @@ export function parseWorkspaceInfoArgs(args: readonly string[]): WorkspaceInfoIn
     throw new Error(`--query, --limit, --offset, and --joined require ${SECTION_LIST}`);
   if (options.joined && sections.some((section) => section !== "channels"))
     throw new Error("--joined can only be used with --channels");
+  if (options.project !== undefined && !sections.every((section) => section === "projects"))
+    throw new Error("<slug> after --projects cannot be combined with another section");
   const parsedLimit = nonNegativeInt(limit, "--limit", 50);
   if (parsedLimit <= 0) throw new Error("--limit must be greater than 0");
   if (limit !== undefined) options.limit = parsedLimit;

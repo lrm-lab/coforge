@@ -17,7 +17,6 @@ import {
   AgentRemindersQuery,
   prismaAgentReminderReadStore,
 } from "#src/server/agents/agent-reminders.server";
-import { projectDetailSelect, projectListSelect } from "#src/server/projects/project-detail.server";
 import { quietCentrifugo } from "./helpers/fake-centrifugo";
 import { MemoryMessageRequestIdempotency } from "./helpers/memory-message-request-idempotency";
 import {
@@ -164,32 +163,6 @@ afterAll(async () => {
   if (extra) await db.computer.delete({ where: { id: extra.computer.id } });
   await fixture.dispose();
 });
-
-test.skipIf(!connectionString)(
-  "a project lists a private channel only to its members",
-  async () => {
-    const { db, ws, people, open, closed, vault } = fixture;
-    const listed = async (userId: string) =>
-      (
-        await db.project.findUniqueOrThrow({
-          where: { id: extra.project.id },
-          select: projectDetailSelect(ws, userId),
-        })
-      ).conversations.map((conversation) => conversation.id);
-    for (const userId of fixture.outsiders) expect(await listed(userId)).toEqual([open.id]);
-    expect(await listed(people.insider)).toEqual([open.id, closed.id, vault.id]);
-    // The projects index counts the same channels.
-    const counted = async (userId: string) =>
-      (
-        await db.project.findUniqueOrThrow({
-          where: { id: extra.project.id },
-          select: projectListSelect(ws, userId),
-        })
-      ).conversations.length;
-    for (const userId of fixture.outsiders) expect(await counted(userId)).toBe(1);
-    expect(await counted(people.insider)).toBe(3);
-  },
-);
 
 test.skipIf(!connectionString)(
   "Workspace memory learns from public channels only, on a retry too",
