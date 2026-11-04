@@ -53,6 +53,9 @@ export type ComputerSetupOptions = {
   credentials: SetupCredentialStore;
   authenticate?: SetupAuthenticator;
   workspaceLookup: WorkspaceLookup;
+  /** `attach --one-shot`: the attach-session credential (the `attach_token` `computer:register`
+   * consumes) instead of the OAuth login (task #417). */
+  oneShotAttach?: (serverUrl: string) => Promise<Credential>;
   registrationFactory: (serverUrl: string, credential: Credential) => SetupRegistration;
   launcher: DaemonLauncher | ((serverUrl: string) => DaemonLauncher);
   metadataProvider: ComputerMetadataProvider;
@@ -64,7 +67,13 @@ export type ComputerSetupOptions = {
 export class ComputerSetup {
   constructor(private readonly options: ComputerSetupOptions) {}
 
-  async run(input: { workspaceSlug?: string; json?: boolean }): Promise<SetupResult> {
+  async run(input: {
+    workspaceSlug?: string;
+    json?: boolean;
+    /** `attach --one-shot`: report the machine, poll the approval page, and register with the
+     * one-shot token it hands back rather than a stored OAuth login (task #417). */
+    oneShot?: boolean;
+  }): Promise<SetupResult> {
     const serverUrl = this.options.serverUrl;
     const profile = await loadBuildProfile(this.options.config, serverUrl, "setup");
     const launcher =
@@ -76,18 +85,32 @@ export class ComputerSetup {
       "The existing Daemon belongs to another server environment.",
       async () => launcher.preflight?.(),
     );
-    let credential: Credential | null = await setupStep(
-      "SETUP_CREDENTIALS_FAILED",
-      "Could not read the local login credential.",
-      () => this.options.credentials.load(serverUrl),
-    );
-    const authenticate = this.options.authenticate;
-    if (!credential && authenticate) {
+    let credential: Credential | null;
+    if (input.oneShot) {
+      if (!this.options.oneShotAttach)
+        throw setupError(
+          "SETUP_ONE_SHOT_UNSUPPORTED",
+          "The one-shot attach is not wired into this build.",
+        );
       credential = await setupStep(
-        "SETUP_OAUTH_FAILED",
-        "OAuth login could not be completed.",
-        () => authenticate.authenticate(serverUrl, input.json ?? false),
+        "SETUP_ATTACH_FAILED",
+        "The one-shot attach could not be completed.",
+        () => this.options.oneShotAttach!(serverUrl),
       );
+    } else {
+      credential = await setupStep(
+        "SETUP_CREDENTIALS_FAILED",
+        "Could not read the local login credential.",
+        () => this.options.credentials.load(serverUrl),
+      );
+      const authenticate = this.options.authenticate;
+      if (!credential && authenticate) {
+        credential = await setupStep(
+          "SETUP_OAUTH_FAILED",
+          "OAuth login could not be completed.",
+          () => authenticate.authenticate(serverUrl, input.json ?? false),
+        );
+      }
     }
     if (!credential)
       throw setupError("SETUP_NOT_LOGGED_IN", "No login credential exists for the current server.");
@@ -95,20 +118,22 @@ export class ComputerSetup {
       await this.options.config.saveCurrentProfile({ serverUrl });
     }
 
-    if (!input.workspaceSlug) {
+    if (!input.workspaceSlug && !input.oneShot) {
       throw setupError(
         "SETUP_WORKSPACE_REQUIRED",
         "Setup requires a target Workspace: pass `--workspace <slug>`, or set COFORGE_SETUP_INTENT for automated setup.",
       );
     }
-    let workspace: AccessibleWorkspace;
+    let workspace: AccessibleWorkspace | undefined;
     try {
       try {
-        workspace = await this.options.workspaceLookup.getBySlug(
-          serverUrl,
-          credential,
-          input.workspaceSlug,
-        );
+        workspace = input.oneShot
+          ? undefined
+          : await this.options.workspaceLookup.getBySlug(
+              serverUrl,
+              credential,
+              input.workspaceSlug!,
+            );
       } catch (error) {
         if (
           !(error instanceof CliError) ||
@@ -117,11 +142,13 @@ export class ComputerSetup {
         )
           throw error;
         credential = await this.options.authenticate.authenticate(serverUrl, input.json ?? false);
-        workspace = await this.options.workspaceLookup.getBySlug(
-          serverUrl,
-          credential,
-          input.workspaceSlug,
-        );
+        workspace = input.oneShot
+          ? undefined
+          : await this.options.workspaceLookup.getBySlug(
+              serverUrl,
+              credential,
+              input.workspaceSlug!,
+            );
       }
     } catch (error) {
       if (error instanceof CliError && error.code === "AUTH_WORKSPACE_GET_FAILED") {
@@ -153,9 +180,9 @@ export class ComputerSetup {
             protocolMajor: 1,
             requestId: this.options.idempotencyKeyProvider.create(
               serverUrl,
-              input.workspaceSlug ?? workspace.slug,
+              input.workspaceSlug ?? workspace?.slug ?? "",
             ),
-            workspaceSlug: workspace.slug,
+            workspaceSlug: workspace?.slug ?? "",
             name: metadata.name,
             displayName: metadata.displayName,
             machineId: metadata.machineId,
@@ -167,11 +194,17 @@ export class ComputerSetup {
             // machine identity only; it must not snapshot provider installs.
             registrationIdempotencyKey: this.options.idempotencyKeyProvider.create(
               serverUrl,
-              `${input.workspaceSlug ?? workspace.slug}:${metadata.machineId}`,
+              `${input.workspaceSlug ?? workspace?.slug ?? ""}:${metadata.machineId}`,
             ),
           }),
       );
-      workspace = { id: response.workspaceId, slug: workspace.slug, name: workspace.name };
+      // The one-shot path resolves no workspace of its own — the token's bound one, which the
+      // response carries, is where this machine landed (task #417).
+      workspace = {
+        id: response.workspaceId,
+        slug: response.workspaceSlug ?? workspace?.slug ?? "",
+        name: workspace?.name ?? response.workspaceSlug ?? "",
+      };
       registeredRegistration = {
         id: response.workspaceId,
         slug: workspace.slug,
@@ -191,6 +224,9 @@ export class ComputerSetup {
             workspaceRoot: this.options.workspaceRoot,
             daemonApiKey: response.daemonApiKey,
             serverHttpUrl: serverUrl,
+            // A login-style setup retires the login it used; a one-shot attach leaves no login
+            // to retire, so this flag goes unset there (task #417).
+            loginSetup: !input.oneShot,
           }),
       );
       daemonStillStarting = started?.lifecycleUnderWay === true;

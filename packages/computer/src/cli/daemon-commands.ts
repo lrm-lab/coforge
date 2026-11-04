@@ -25,6 +25,7 @@ export function createCommand(
   const launcher = createDaemonLauncher(platform, installDirectory, stateDirectory, serverUrl);
   const command = createClientCommand({
     daemon: launcher,
+    config,
     logger,
     resolveWorkspace: async (selector) => {
       const config = new FileComputerConfig(
@@ -47,6 +48,7 @@ export function createCommand(
       await command.start(workspace);
     },
     stop: (workspace) => command.stop(workspace),
+    detach: (workspace) => command.detach(workspace),
     async restart(workspace) {
       await launcher.preflight?.();
       await loadBuildProfile(config, serverUrl, "daemon");

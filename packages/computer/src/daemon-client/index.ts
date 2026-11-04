@@ -6,6 +6,8 @@ import {
   type DaemonCommandRunner,
 } from "@lrm/coforge-daemon";
 import type { Logger } from "@logtape/logtape";
+import type { ComputerConfig } from "#src/local-config";
+import { detachWorkspace, type DetachOutcome } from "#src/detach/detach";
 import {
   isDaemonConnectRejectionReason,
   type DaemonConnectRejectionReason,
@@ -20,6 +22,9 @@ export type LocalWorkspace = { id: string; slug: string };
 
 export function createCommand(input: {
   daemon: DaemonCommandRunner;
+  /** Local registrations — `detach` drops a Workspace's after the server's definite answer. */
+  config?: Pick<ComputerConfig, "loadRegistration" | "discardRegistration"> &
+    Partial<Pick<ComputerConfig, "loadCurrentProfile">>;
   logger?: Logger;
   resolveWorkspace?: (selector: string) => Promise<LocalWorkspace>;
   /** Progress lines for the user's terminal, mirroring what `upgrade` already prints. Omit to
@@ -28,6 +33,9 @@ export function createCommand(input: {
 }): {
   start(workspace?: string): Promise<void>;
   stop(workspace?: string): Promise<void>;
+  /** `daemon:detach` (task #417): the Workspace's registration goes only on the server's
+   * definite answer; `detach_unconfirmed` keeps it and reports so. */
+  detach(workspace?: string): Promise<DetachOutcome>;
   /** Resolves with the post-restart snapshot of every locally registered binding, so a caller can
    * report which ones an unscoped restart left stopped because they were disabled. Start and
    * restart reject with `WORKSPACE_NOT_CONNECTED` when a Workspace they started did not connect. */
@@ -156,6 +164,23 @@ export function createCommand(input: {
           : "CoForge Computer restarted, but not every Workspace is connected yet:",
       );
       return runtimes;
+    },
+    async detach(workspace) {
+      input.logger?.info("Computer detach requested", { event: "computer:detaching" });
+      // The outcome is the caller's to print — a detached registration, an unconfirmed
+      // server answer, a Workspace the supervisor never bound, or no local registration at
+      // all (task #417). Only the daemon-side event is logged here.
+      const outcome = await detachWorkspace(
+        { daemon: input.daemon, config: input.config },
+        workspace,
+      );
+      if (outcome.kind === "detached")
+        input.logger?.info("Computer detached", { event: "computer:detached" });
+      else if (outcome.kind === "unconfirmed")
+        input.logger?.warn("Computer detach unconfirmed; binding kept", {
+          event: "computer:detach_unconfirmed",
+        });
+      return outcome;
     },
   };
 }

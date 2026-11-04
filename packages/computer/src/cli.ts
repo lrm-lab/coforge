@@ -15,6 +15,7 @@ import { isValidComputerWorkspaceSlug } from "#src/workspace/workspace-slug";
 import { writeCliFailure } from "#src/cli/failure-output";
 import { createLoginCommand, createSetupCommand } from "#src/cli/login-setup-commands";
 import { createCommand, createLogsCommand } from "#src/cli/daemon-commands";
+import type { DetachOutcome } from "#src/detach/detach";
 import { createUpdateCommand } from "#src/cli/update-command";
 import { describeUpgradePlan, planUpgrade } from "#src/cli/upgrade-plan";
 import { configureComputerLogger } from "#src/logging/computer-logger";
@@ -36,7 +37,10 @@ export interface LoginCommand {
 }
 
 export interface SetupCommand {
-  run(workspaceSlug: string | undefined, options: { json: boolean }): Promise<void>;
+  run(
+    workspaceSlug: string | undefined,
+    options: { json: boolean; oneShot?: boolean },
+  ): Promise<void>;
 }
 
 /** `--allow-downgrade`: the target may be older than the installed version. */
@@ -57,6 +61,9 @@ export interface UpdateCommand {
 export interface DaemonCommand {
   start(workspace?: string): Promise<void>;
   stop(workspace?: string): Promise<void>;
+  /** `daemon:detach` (task #417): removes this Workspace's registration once the server
+   * confirms the detach; an unconfirmed server answer keeps it and reports so. */
+  detach(workspace?: string): Promise<DetachOutcome>;
   restart(workspace?: string): Promise<void>;
   /** Restarts the Coordinator process itself (not a Workspace runtime) through the platform
    * host, holding runners first. See `coforge-computer restart --supervisor`. */
@@ -134,15 +141,16 @@ export async function runCli(
     json = value;
   });
   program
-    .command("setup")
-    .alias("attach")
-    .description("Attach this Computer to the selected Workspace and start its Daemon.")
+    .command("attach")
+    .description(
+      "Attach this Computer to a Workspace by a one-shot approval: open the printed link and confirm the code",
+    )
     .option(
       "--workspace <slug>",
-      "Workspace slug to join (falls back to COFORGE_SETUP_INTENT when omitted)",
+      "Workspace slug to join (the approval's token decides when omitted)",
     )
     .option("--json", "write one stable JSON result to stdout")
-    .action((options: { json?: boolean; workspace?: string }) => {
+    .action(async (options: { json?: boolean; workspace?: string }) => {
       setupSelected = true;
       json = options.json ?? false;
       const workspaceSlug = resolveSetupWorkspace(options.workspace);
@@ -153,7 +161,32 @@ export async function runCli(
           "workspace-lookup",
         );
       }
-      return dependencies.setup.run(workspaceSlug, { json });
+      return dependencies.setup.run(workspaceSlug, { json, oneShot: true });
+    });
+  program
+    .command("setup")
+    .description("Attach this Computer to the selected Workspace and start its Daemon.")
+    .option(
+      "--workspace <slug>",
+      "Workspace slug to join (falls back to COFORGE_SETUP_INTENT when omitted)",
+    )
+    .option("--json", "write one stable JSON result to stdout")
+    .option(
+      "--one-shot",
+      "Attach without a login on this machine: open the printed link and confirm the code",
+    )
+    .action((options: { json?: boolean; workspace?: string; oneShot?: boolean }) => {
+      setupSelected = true;
+      json = options.json ?? false;
+      const workspaceSlug = resolveSetupWorkspace(options.workspace);
+      if (workspaceSlug !== undefined && !isValidComputerWorkspaceSlug(workspaceSlug)) {
+        throw setupError(
+          "SETUP_WORKSPACE_INVALID",
+          `Workspace slug '${workspaceSlug}' is not valid.`,
+          "workspace-lookup",
+        );
+      }
+      return dependencies.setup.run(workspaceSlug, { json, oneShot: options.oneShot });
     });
   program
     .command("install")
@@ -221,6 +254,30 @@ export async function runCli(
     .action((options: { workspace?: string }) =>
       requireDaemon(dependencies).stop(options.workspace),
     );
+  program
+    .command("detach")
+    .description("Detach this Computer from a Workspace: stop its Daemon and remove its key.")
+    .option("--workspace <slug-or-id>", "Detach this local Workspace binding")
+    .option("--json", "write one stable JSON result to stdout")
+    .action(async (options: { workspace?: string; json?: boolean }) => {
+      json = options.json ?? false;
+      const outcome = await requireDaemon(dependencies).detach(options.workspace);
+      if (outcome.kind === "unconfirmed")
+        io.stdout(
+          `The server could not confirm detaching '${outcome.workspaceSlug}'; the local registration was kept.`,
+        );
+      else if (outcome.kind === "not_bound")
+        io.stdout(
+          `'${outcome.workspaceSlug}' is not bound on this machine's supervisor; the local registration was kept.`,
+        );
+      else if (outcome.kind === "detached") io.stdout(`Detached '${outcome.workspaceSlug}'.`);
+      else if (outcome.kind === "key_revoked")
+        io.stdout(
+          `The key on this computer has already been revoked; detached '${outcome.workspaceSlug}' locally.`,
+        );
+      else if (outcome.kind === "not_attached")
+        io.stdout("This computer is not attached to that Workspace.");
+    });
   program
     .command("restart")
     .description("Restart the Daemon and all configured Daemon Runtimes.")

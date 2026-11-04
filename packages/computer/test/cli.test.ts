@@ -240,6 +240,9 @@ test("restart --supervisor dispatches to restartSupervisor instead of the ordina
       async restart() {
         calls.push("restart");
       },
+      async detach() {
+        return { kind: "detached" as const, workspaceSlug: "w" };
+      },
       async restartSupervisor() {
         calls.push("restartSupervisor");
       },
@@ -264,6 +267,9 @@ test("restart --supervisor and --workspace are mutually exclusive", async () => 
       async stop() {},
       async restart() {
         calls.push("restart");
+      },
+      async detach() {
+        return { kind: "detached" as const, workspaceSlug: "w" };
       },
       async restartSupervisor() {
         calls.push("restartSupervisor");
@@ -290,6 +296,9 @@ test("restart --supervisor is unavailable without a wired dependency", async () 
       async start() {},
       async stop() {},
       async restart() {},
+      async detach() {
+        return { kind: "detached" as const, workspaceSlug: "w" };
+      },
     },
   };
 
@@ -339,6 +348,9 @@ test("status is registered, read-only, and forwards --json without touching life
       },
       async restart() {
         lifecycleCalls.push("restart");
+      },
+      async detach() {
+        return { kind: "detached" as const, workspaceSlug: "w" };
       },
     },
     updater: {
@@ -491,5 +503,38 @@ test("the host command passes its flags to the host process", async () => {
       image: "coforge-computer:local",
       pollIntervalMs: 5000,
     },
+  ]);
+});
+
+test("detach prints the revoked-key and not-attached outcomes", async () => {
+  // A found-but-revoked key says revoked, not detached; a machine with nothing to detach says
+  // so instead of claiming it detached (task #417).
+  const detach = async (outcome: { kind: string; workspaceSlug?: string }) => {
+    const stdout: string[] = [];
+    await runCli(
+      ["detach"],
+      {
+        login: { async run() {} },
+        setup: { async run() {} },
+        daemon: {
+          async start() {},
+          async stop() {},
+          async restart() {},
+          async detach() {
+            return outcome as never;
+          },
+          async restartSupervisor() {},
+        },
+      },
+      { stdout: (line) => stdout.push(line), stderr: () => {} },
+    );
+    return stdout;
+  };
+
+  expect(await detach({ kind: "key_revoked", workspaceSlug: "w" })).toEqual([
+    "The key on this computer has already been revoked; detached 'w' locally.",
+  ]);
+  expect(await detach({ kind: "not_attached" })).toEqual([
+    "This computer is not attached to that Workspace.",
   ]);
 });

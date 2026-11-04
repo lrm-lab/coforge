@@ -11,6 +11,8 @@ import { resolveComputerStateDirectory } from "#src/paths";
 import { COFORGE_SERVER_URL } from "#src/release-channel";
 import { FileComputerConfig, loadBuildProfile } from "#src/local-config";
 import { ComputerSetup } from "#src/setup/computer-setup";
+import { oneShotAttach } from "#src/setup/one-shot-attach";
+import { hostname } from "node:os";
 import { currentComputerNames, currentComputerPlatform } from "#src/platform";
 import { FileMachineIdFallback, resolveMachineId } from "#src/machine-id";
 import { HttpComputerRegisterTransport, HttpWorkspaceRpcTransport } from "#src/cloud-rpc-transport";
@@ -142,6 +144,17 @@ export function createSetupCommand(
     }),
     launcher: (serverUrl) =>
       createDaemonLauncher(platform.os, installDirectory, stateDirectory, serverUrl),
+    oneShotAttach: (serverUrl) =>
+      oneShotAttach(
+        {
+          serverUrl,
+          machineName: currentComputerNames({ platform: platform.os }).name,
+          hostname: hostname(),
+          os: platform.os,
+          write: io.stdout,
+        },
+        fetch,
+      ),
     serverUrl: COFORGE_SERVER_URL,
   });
   return {
@@ -149,6 +162,7 @@ export function createSetupCommand(
       const result = await setup.run({
         workspaceSlug,
         json: options.json,
+        oneShot: options.oneShot,
       });
       writeSetupResult(io.stdout, result, options.json);
     },

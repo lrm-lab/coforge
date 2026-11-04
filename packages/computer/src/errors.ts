@@ -133,6 +133,10 @@ export const SETUP_HINTS = {
   SETUP_CONFIG_READ_FAILED:
     "Repair the Computer profile without changing its environment, then rerun setup.",
   SETUP_OAUTH_FAILED: "Complete OAuth login again, then rerun setup.",
+  SETUP_ONE_SHOT_UNSUPPORTED:
+    "The one-shot attach is not wired into this build; run setup without --one-shot.",
+  SETUP_ATTACH_FAILED:
+    "The one-shot attach did not finish; check the approval link or run setup without --one-shot.",
   SETUP_CREDENTIALS_FAILED: "Check the local credential store, then rerun setup.",
   SETUP_WORKSPACE_LOOKUP_FAILED:
     "Check the server connection and Workspace access, then rerun setup.",

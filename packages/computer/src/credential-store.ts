@@ -4,7 +4,10 @@ import { homedir } from "node:os";
 
 import type { Credential, CredentialRemover, CredentialStore } from "./login";
 import { loginError } from "./errors";
-import { resolveComputerCredentialsDirectory } from "./paths";
+import {
+  computerCredentialFilename,
+  resolveComputerCredentialsDirectory,
+} from "@lrm/coforge-sdk/internal";
 
 /** File-backed credentials rooted by COFORGE_COMPUTER_* environment variables. */
 export class FileCredentialStore implements CredentialStore, CredentialRemover {
@@ -63,8 +66,6 @@ export class FileCredentialStore implements CredentialStore, CredentialRemover {
   }
 
   private pathFor(serverUrl: string): string {
-    const url = new URL(serverUrl);
-    const server = url.hostname.toLowerCase() + (url.port ? `-${url.port}` : "");
-    return join(this.directory, `${server}.json`);
+    return join(this.directory, computerCredentialFilename(serverUrl));
   }
 }

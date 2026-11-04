@@ -5,12 +5,7 @@ import { writeSetupResult } from "#src/cli/setup-output";
 import type { AccessibleWorkspace, Credential } from "#src/login";
 import { CliError } from "#src/errors";
 import { createWorkspaceLookup } from "#src/workspace/lookup";
-
-const credential: Credential = { accessToken: "access-secret", tokenType: "Bearer" };
-const workspaces: AccessibleWorkspace[] = [
-  { id: "workspace-id-a", slug: "workspace-a", name: "Workspace A" },
-  { id: "workspace-id-b", slug: "workspace-b", name: "Workspace B" },
-];
+import { createSetup, credential, workspaces } from "./setup-fixture";
 
 test("setup reauthorizes an expired login once and registers with the replacement credential", async () => {
   const replacement = { accessToken: "replacement", tokenType: "Bearer" };
@@ -614,58 +609,6 @@ test("setup does not save the Daemon credential in Computer", async () => {
   await expect(setup.run({ workspaceSlug: "workspace-a" })).resolves.toBeDefined();
   expect(discarded).toEqual([]);
 });
-
-function createSetup(overrides: Partial<ComputerSetupOptions> = {}): ComputerSetup {
-  return new ComputerSetup({
-    config: {
-      async loadCurrentProfile() {
-        return { serverUrl: "https://coforge.example" };
-      },
-      async saveRegistration() {
-        return "/config/workspaces/id/config.json";
-      },
-      async discardRegistration() {},
-    },
-    credentials: {
-      async load() {
-        return credential;
-      },
-    },
-    workspaceLookup: createWorkspaceLookup(
-      async () => workspaces,
-      async (_serverUrl, _credential, slug) => ({ id: "", slug, name: slug }),
-    ),
-    registrationFactory: (_serverUrl, _credential) => ({
-      async register(request) {
-        return {
-          protocolMajor: request.protocolMajor,
-          requestId: request.requestId,
-          computerId: "computer-id",
-          workspaceId:
-            request.workspaceSlug === "workspace-b" ? "workspace-id-b" : "workspace-id-a",
-          daemonApiKey: "daemon-secret",
-        };
-      },
-    }),
-    launcher: { ensureStarted: async () => ({}) },
-    metadataProvider: {
-      async get() {
-        return {
-          name: "test-computer",
-          displayName: "Test Computer",
-          platform: "linux",
-          osVersion: "bun-test",
-          computerVersion: "test",
-          machineId: "linux:test-machine-id",
-        };
-      },
-    },
-    idempotencyKeyProvider: { create: (_serverUrl, value) => `key:${value}` },
-    serverUrl: "https://coforge.example",
-    ...overrides,
-    workspaceRoot: overrides.workspaceRoot ?? "/home/test-user/coforge-workspaces",
-  });
-}
 
 test("setup whose Daemon answers with the Workspace still starting saves the registration and says so", async () => {
   const saved: string[] = [];
