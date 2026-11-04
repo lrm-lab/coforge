@@ -31,7 +31,7 @@ export type ArtifactInvocation = {
 type ArtifactRequestDraft =
   | Omit<Extract<AgentArtifactRequest, { operation: "push" }>, "idempotencyKey" | "text">
   | Omit<Extract<AgentArtifactRequest, { operation: "revert" }>, "idempotencyKey">
-  | Omit<Extract<AgentArtifactRequest, { operation: "create" }>, "text">
+  | Omit<Extract<AgentArtifactRequest, { operation: "create" }>, "text" | "idempotencyKey">
   | Extract<AgentArtifactRequest, { operation: "list" | "read" | "history" }>;
 
 export type ArtifactTransport = {
@@ -165,7 +165,9 @@ export async function runArtifact(
   const request = {
     ...draft,
     ...(text === undefined ? {} : { text }),
-    ...(draft.operation === "push" || draft.operation === "revert"
+    // create, push and revert each carry a key, so a retry after a lost response does not make a
+    // second document or version.
+    ...(draft.operation === "create" || draft.operation === "push" || draft.operation === "revert"
       ? { idempotencyKey: crypto.randomUUID() }
       : {}),
   } as AgentArtifactRequest;

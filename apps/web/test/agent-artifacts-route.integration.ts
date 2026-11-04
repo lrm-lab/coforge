@@ -211,6 +211,34 @@ test("a channel the Agent reads but may not write refuses a document", async () 
     });
 });
 
+test("an idempotent create replays over the Agent API, and a reused key with new text conflicts", async () => {
+  const idempotencyKey = key();
+  const first = await post({
+    operation: "create",
+    title: "Retry plan",
+    text: "# Retry\n\nOnce.\n",
+    idempotencyKey,
+  });
+  expect(first.status).toBe(200);
+  const replay = await post({
+    operation: "create",
+    title: "Retry plan",
+    text: "# Retry\n\nOnce.\n",
+    idempotencyKey,
+  });
+  expect(replay.status).toBe(200);
+  expect(replay.body.id).toBe(first.body.id);
+  expect(replay.body.currentVersion).toBe(first.body.currentVersion);
+  // The same key with different text is refused, nothing new made.
+  const mismatch = await post({
+    operation: "create",
+    title: "Retry plan",
+    text: "# Retry\n\nTwice.\n",
+    idempotencyKey,
+  });
+  expect(mismatch.status).toBe(409);
+});
+
 test("a channel the Agent cannot read is missing, for making and for reading", async () => {
   expect(
     await post({ operation: "create", title: "Secret", target: `#secret-${handle}` }),

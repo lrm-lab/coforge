@@ -25,6 +25,7 @@ import {
   type ArtifactSettingName,
   type ArtifactSettings,
 } from "./artifact-merge.server";
+import { createArtifact } from "./artifact-create.server";
 import { ArtifactReads } from "./artifact-reads.server";
 import { revertArtifact, type ArtifactRevert } from "./artifact-revert.server";
 import { announceVersion, type ArtifactSignals } from "./artifact-signals.server";
@@ -38,8 +39,6 @@ export type ArtifactHome =
 export type { ArtifactActor };
 export * from "./artifact-files.server";
 
-const NAME = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
-const KINDS = new Set(["html", "markdown", "text", "csv", "image", "pdf", "video", "other"]);
 /** Longer than Prisma's 5 s default: a save may line-merge a 2 MiB document under its lock. */
 const PUSH_TRANSACTION = { timeout: 15_000 };
 export const ARTIFACT_NOTE_LIMIT = 500;
@@ -51,12 +50,6 @@ export function artifactHomeKey(home: ArtifactHome): string {
 
 function invalid(errorId: string): never {
   throw new AppError("INVALID_INPUT", { errorId });
-}
-
-function actorColumns(actor: ArtifactActor) {
-  return actor.agentId
-    ? { authorAgentId: actor.agentId, authorUserId: null }
-    : { authorUserId: actor.userId, authorAgentId: null };
 }
 
 /**
@@ -125,34 +118,20 @@ export class Artifacts {
     kind: string;
     entryPath: string;
     author: ArtifactActor;
+    /** An idempotent create: the client's key, and a hash of this create's inputs. The same key
+     * with the same hash returns the artifact already made; with a different hash it is a
+     * conflict (task #385). */
+    idempotencyKey?: string;
+    requestHash?: string;
   }) {
     // The experiment first: a Workspace without it hears only that, whatever it sent.
     if (!(await this.enabled(input.workspaceId))) throw artifactsDisabled();
-    if (!NAME.test(input.name)) invalid("artifact-name");
-    if (!KINDS.has(input.kind)) invalid("artifact-kind");
-    if (input.description && input.description.length > 1000) invalid("artifact-description");
     // Anyone with the link is a home a later step adds, with its own switch and refusals.
     if (input.home.kind === "public") invalid("artifact-home");
     await this.requireHome(input.workspaceId, input.author, artifactHomeKey(input.home), "write");
-    try {
-      return await this.db.artifact.create({
-        data: {
-          workspaceId: input.workspaceId,
-          homeKey: artifactHomeKey(input.home),
-          name: input.name,
-          title: input.title ?? "",
-          description: input.description ?? "",
-          kind: input.kind,
-          entryPath: input.entryPath,
-          ...actorColumns(input.author),
-        },
-      });
-    } catch (error) {
-      // The live-name unique index is the authority: a soft-deleted row releases the name.
-      if (isUniqueViolation(error))
-        throw new AppError("CONFLICT", { errorId: "artifact-name-taken" });
-      throw error;
-    }
+    // The insert, name/kind validation and idempotent replay live in artifact-create.server.ts.
+    const { home, ...rest } = input;
+    return createArtifact(this.db, { ...rest, homeKey: artifactHomeKey(home) });
   }
 
   async push(input: {
@@ -468,13 +447,4 @@ export class Artifacts {
   revert(input: ArtifactRevert) {
     return revertArtifact(this.reads, (save) => this.push(save), input);
   }
-}
-
-function isUniqueViolation(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error as { code?: unknown }).code === "P2002"
-  );
 }

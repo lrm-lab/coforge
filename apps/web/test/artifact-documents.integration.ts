@@ -125,6 +125,45 @@ test("saving sends text: a new version, its preview, and the merge answers as fo
   expect(card).toMatchObject({ id: doc.id, title: "Notes", preview: "A\nB", currentVersion: 3 });
 });
 
+test("an idempotent create replays the same document, and a different input with one key conflicts", async () => {
+  const key = crypto.randomUUID();
+  const first = await documents.create(scope(alice), {
+    conversationId: channelId,
+    title: "Idem plan",
+    text: "# Idem\n\nOne.\n",
+    idempotencyKey: key,
+  });
+  // The same key with the same inputs returns the same document, and adds no second version.
+  const replay = await documents.create(scope(alice), {
+    conversationId: channelId,
+    title: "Idem plan",
+    text: "# Idem\n\nOne.\n",
+    idempotencyKey: key,
+  });
+  expect(replay.id).toBe(first.id);
+  expect(replay.currentVersion).toBe(first.currentVersion);
+  const loaded = await documents.load(scope(alice), { artifactId: first.id });
+  expect(loaded.artifact.currentVersion).toBe(1);
+  expect(loaded.text).toBe("# Idem\n\nOne.\n");
+  // The same key with different text (or title, or home) is a mistake, not a retry.
+  await expect(
+    documents.create(scope(alice), {
+      conversationId: channelId,
+      title: "Idem plan",
+      text: "# Idem\n\nTwo.\n",
+      idempotencyKey: key,
+    }),
+  ).rejects.toMatchObject({ errorId: "artifact-idempotency-mismatch" });
+  // A fresh key makes a second document.
+  const other = await documents.create(scope(alice), {
+    conversationId: channelId,
+    title: "Idem plan",
+    text: "# Idem\n\nOne.\n",
+    idempotencyKey: crypto.randomUUID(),
+  });
+  expect(other.id).not.toBe(first.id);
+});
+
 test("a list and cards show only documents the reader can read", async () => {
   const open = await documents.create(scope(alice), { conversationId: channelId, title: "Open" });
   const closed = await documents.create(scope(alice), {

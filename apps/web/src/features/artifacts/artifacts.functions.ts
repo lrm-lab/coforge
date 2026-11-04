@@ -72,6 +72,7 @@ export const createArtifactDocument = createServerFn({ method: "POST" })
         conversationId: id.optional(),
         title,
         text: text.optional(),
+        idempotencyKey: id.optional(),
       })
       .strict(),
   )

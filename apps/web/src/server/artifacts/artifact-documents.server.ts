@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError, isAppError } from "#src/lib/app-error";
 import { nameToSlug } from "#src/lib/slug";
@@ -36,10 +37,12 @@ export class ArtifactDocuments {
   ) {}
 
   /** A new document in a conversation, or the Workspace when none is named; named from its
-   * title, with `text` (when given) as version 1. */
+   * title, with `text` (when given) as version 1. An `idempotencyKey` makes the create safe to
+   * retry: the same key with the same title, home and text returns the document already made,
+   * and a different one is a conflict. */
   async create(
     scope: DocumentScope,
-    input: { conversationId?: string; title: string; text?: string },
+    input: { conversationId?: string; title: string; text?: string; idempotencyKey?: string },
   ) {
     const title = input.title.trim();
     if (!title || title.length > 200)
@@ -49,6 +52,15 @@ export class ArtifactDocuments {
     const home = input.conversationId
       ? ({ kind: "conversation", conversationId: input.conversationId } as const)
       : ({ kind: "workspace" } as const);
+    // The create's inputs, hashed, so a retry with the same key but different inputs is caught.
+    const requestHash =
+      input.idempotencyKey === undefined
+        ? undefined
+        : createRequestHash({
+            homeKey: input.conversationId ? `conversation:${input.conversationId}` : "workspace",
+            title,
+            text: input.text,
+          });
     const base = nameToSlug(title, 56) || "document";
     for (let attempt = 1; ; attempt += 1) {
       const name =
@@ -66,13 +78,21 @@ export class ArtifactDocuments {
           kind: "markdown",
           entryPath: DOCUMENT_PATH,
           author: scope.actor,
+          ...(input.idempotencyKey !== undefined
+            ? { idempotencyKey: input.idempotencyKey, requestHash }
+            : {}),
         });
         if (input.text !== undefined)
           await this.save(scope, {
             artifactId: created.id,
             baseVersion: 0,
             text: input.text,
-            idempotencyKey: crypto.randomUUID(),
+            // On a replayed create this save replays too (same key on the same artifact), so a
+            // retry adds no second version; a fresh create gets its version 1.
+            idempotencyKey:
+              input.idempotencyKey === undefined
+                ? crypto.randomUUID()
+                : `${input.idempotencyKey}:v1`,
           });
         return (
           await this.artifacts.reads.cards({ ...reader(scope), artifactIds: [created.id] })
@@ -185,6 +205,14 @@ export class ArtifactDocuments {
       );
     }
   }
+}
+
+/** A stable hash of a create's inputs, so a retry with the same idempotency key but a different
+ * title, home or text is caught as a conflict rather than silently returning the first document.
+ * A missing text is distinct from an empty one. */
+function createRequestHash(input: { homeKey: string; title: string; text?: string }): string {
+  const parts = JSON.stringify([input.homeKey, input.title, input.text ?? null]);
+  return createHash("sha256").update(parts).digest("hex");
 }
 
 /** A document's text as the bytes stored: at most 2 MiB, and text (no NUL), so it reads back as

@@ -26,7 +26,12 @@ const { id, version, baseVersion, text, title, description, note, label, history
 
 /** The web page's rules, for the same fields (`artifacts.functions.ts`). */
 const RULES = {
-  create: z.object({ title, target: z.string().optional(), text: text.optional() }),
+  create: z.object({
+    title,
+    target: z.string().optional(),
+    text: text.optional(),
+    idempotencyKey: id.optional(),
+  }),
   list: z.object({ target: z.string().optional() }),
   read: z.object({ artifact: id, version: version.optional() }),
   push: z.object({
@@ -80,6 +85,7 @@ export async function runAgentArtifactOperation(
         conversationId,
         title: input.title,
         text: input.text,
+        ...(input.idempotencyKey !== undefined ? { idempotencyKey: input.idempotencyKey } : {}),
       });
     }
     case "list": {

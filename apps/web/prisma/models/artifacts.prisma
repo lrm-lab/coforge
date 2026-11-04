@@ -17,6 +17,11 @@ model Artifact {
   entryPath       String
   authorUserId    String?           @db.Uuid
   authorAgentId   String?           @db.Uuid
+  /// The client's key for an idempotent create, and a hash of that create's inputs (task #385):
+  /// the same key with the same inputs replays this row; the same key with different inputs is a
+  /// conflict. Null for an artifact made before this, or by a path that sends no key.
+  idempotencyKey  String?
+  requestHash     String?
   currentVersion  Int               @default(0)
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
@@ -32,6 +37,12 @@ model Artifact {
   /// Its generated `workspaceId_homeKey_name` selector ignores `deletedAt`: look a live name up with
   /// `findFirst` and `deletedAt: null`, never `findUnique` or `upsert` on it.
   @@unique([workspaceId, homeKey, name], where: { deletedAt: null }, map: "artifacts_home_live_name_key")
+  /// An idempotent create's key is unique per Workspace among live artifacts, so a retried create
+  /// returns the one it already made instead of a second. Built `CONCURRENTLY` by migration
+  /// 20261104160100; declared here so `migrate diff` keeps it. Its generated
+  /// `workspaceId_idempotencyKey` selector ignores the partial predicate: look it up with
+  /// `findFirst` and `deletedAt: null`, never `findUnique` or `upsert`.
+  @@unique([workspaceId, idempotencyKey], where: { idempotencyKey: { not: null }, deletedAt: null }, map: "artifacts_idempotency_key")
   @@map("artifacts")
 }
 
