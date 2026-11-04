@@ -147,7 +147,7 @@ test("a waiting choice card in a Task's conversation opens the Task's popup alon
     waitingChoiceTarget(
       card({ channel: null, task: { conversationId: "channel", number: 7, channel: null } }),
     ),
-  ).toEqual({ kind: "channel", id: "channel", task: 7, taskAlone: true });
+  ).toEqual({ kind: "channel", id: "channel", task: 7, taskAlone: true, messageId: "card" });
 });
 
 test("a Task card opens the Task's popup alone, not its channel's chat (Frank, 11-04)", () => {
@@ -158,7 +158,13 @@ test("a Task card opens the Task's popup alone, not its channel's chat (Frank, 1
     id: task.place.conversationId,
     task: 4,
     taskAlone: true,
+    // Nothing unread: its discussion opens at the newest message…
+    messageId: "latest",
   });
+  // …else at the first unread one.
+  expect(activityOpenTarget({ ...task, firstUnreadMessageId: "first-unread" }).messageId).toBe(
+    "first-unread",
+  );
   // Its address says so, and reads back the same.
   const open = hostedConversationOpenParam(target);
   expect(open).toBe(`task:channel:${task.place.conversationId}`);

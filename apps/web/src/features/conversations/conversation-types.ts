@@ -201,4 +201,6 @@ export type TaskPopupControls = {
   closeTask: () => void;
   /** The open Task was deleted from the popup, which then closes. */
   onTaskDeleted?: () => void;
+  /** The discussion message the popup opens at: an Activity card's first unread one. */
+  landingMessageId?: string;
 };

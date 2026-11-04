@@ -16,7 +16,7 @@ import type { ActivityInboxItem } from "#src/server/inbox/activity-inbox.server"
  * pane draws its "New messages" divider (task #358). With nothing unread, an item that mentions the
  * viewer opens at its first mention, read or not (#1129), and any other at its newest message. A
  * Task's conversation opens as its popup alone, over Activity, not over its channel's chat
- * (`taskAlone`, Frank 11-04). A comment on a file opens the
+ * (`taskAlone`, Frank 11-04), its discussion at the same message. A comment on a file opens the
  * file's conversation at the message it rides on, with the file's review over it at the comment.
  */
 export function activityOpenTarget({
@@ -29,8 +29,17 @@ export function activityOpenTarget({
   mentionAction,
   attachmentComment,
 }: ActivityInboxItem): HostedConversationTarget {
+  // A read mention before newer unread messages must not pull the pane back to it, away from
+  // what is new.
+  const anchor = mentionAction ? latest.id : (firstUnreadMessageId ?? firstMentionMessageId);
   if (task)
-    return { kind: "channel", id: place.conversationId, task: task.number, taskAlone: true };
+    return {
+      kind: "channel",
+      id: place.conversationId,
+      task: task.number,
+      taskAlone: true,
+      messageId: anchor ?? latest.id,
+    };
   // A comment notification opens the file's own conversation, at the message the file rides on
   // (the comment itself lives in a conversation the UI never shows), and the file's review at the
   // comment: the comments list holds only top-level comments, so a reply is reached through the
@@ -49,9 +58,6 @@ export function activityOpenTarget({
   // the mention itself.
   const kind = mentionAction || place.kind === "channel" ? "channel" : "dm";
   const rootId = mentionAction ? mentionAction.threadRootId : thread?.root.id;
-  // A read mention before newer unread messages must not pull the pane back to it, away from
-  // what is new.
-  const anchor = mentionAction ? latest.id : (firstUnreadMessageId ?? firstMentionMessageId);
   return rootId
     ? threadAlone(kind, place.conversationId, rootId, anchor ?? undefined)
     : { kind, id: place.conversationId, messageId: anchor ?? latest.id };
@@ -85,6 +91,7 @@ export function waitingChoiceTarget(card: WaitingChoiceCard): HostedConversation
       id: card.task.conversationId,
       task: card.task.number,
       taskAlone: true,
+      messageId: card.messageId,
     };
   const kind = card.channel ? "channel" : "dm";
   return card.threadRootId

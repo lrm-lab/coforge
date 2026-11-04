@@ -175,6 +175,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
           ? () => (
               <TaskDiscussionPane
                 {...sidePaneProps}
+                jumpMessage={taskPopup?.landingMessageId}
                 conversationId={taskDiscussionId}
                 board={{ conversationId: conversation.conversationId, number: openTask.number }}
                 mentionables={conversation.mentionables}

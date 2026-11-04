@@ -12,8 +12,8 @@ import { useChannelConversation } from "#src/features/conversations/use-conversa
 /**
  * A Task card opened on Activity: the Task's popup over Activity, its discussion and composer as
  * a channel shows them, without the channel's chat behind it (Frank, 11-04), as the Tasks page
- * opens one over its board (`OverviewTaskPopup`). Another Task named in it opens the same way;
- * closing it goes back to the list.
+ * opens one over its board (`OverviewTaskPopup`), its discussion at the card's first unread
+ * message. Another Task named in it opens the same way; closing it goes back to the list.
  */
 export function ActivityTaskPopup({
   target,
@@ -57,8 +57,9 @@ function ActivityTaskConversation({
         onOpen({ kind: "channel", id: conversationId, task: number, taskAlone: true }),
       closeTask: onClose,
       onTaskDeleted: onClose,
+      landingMessageId: target.messageId,
     }),
-    [target.id, target.task, onOpen, onClose],
+    [target.id, target.task, target.messageId, onOpen, onClose],
   );
   return <ChannelConversation {...conversationProps} channels={channels} taskPopup={taskPopup} />;
 }

@@ -66,7 +66,12 @@ test("a Task card on Activity opens the Task's popup, not its channel's chat", a
         workspaceId,
         conversationId: channel.id,
         sequence: 1,
-        senderMemberId: me.id,
+        // The Agent's, so it is unread: opening the Task must leave it so.
+        senderMemberId: (
+          await db.conversationMember.findFirstOrThrow({
+            where: { conversationId: channel.id, agentId: agent.id },
+          })
+        ).id,
         body: chatLine,
       },
     });
@@ -79,7 +84,7 @@ test("a Task card on Activity opens the Task's popup, not its channel's chat", a
     } as Parameters<TaskBoard["execute"]>[1]);
     const number = created.tasks[0]!.number;
     const centrifugo = createCentrifugoServerApi();
-    await new TaskConversations(
+    const conversations = new TaskConversations(
       {
         db,
         reader: "agent",
@@ -89,15 +94,26 @@ test("a Task card on Activity opens the Task's popup, not its channel's chat", a
         },
       },
       getMessageRequestIdempotency(),
-    ).reply(
-      { workspaceId, agentId: agent.id },
-      { target: `#${channel.channelName}`, number },
-      {
-        idempotencyKey: crypto.randomUUID(),
-        body: `@${DEV_BROWSER_USER.username} the sign-up flow works ${tail}`,
-        mentions: [],
-      },
     );
+    // More replies than the popup shows at once, all unread: it opens at the first of them, not
+    // at the newest.
+    for (let index = 1; index <= 30; index++)
+      await conversations.reply(
+        { workspaceId, agentId: agent.id },
+        { target: `#${channel.channelName}`, number },
+        {
+          idempotencyKey: crypto.randomUUID(),
+          body:
+            index === 1
+              ? `@${DEV_BROWSER_USER.username} the sign-up flow works ${tail}`
+              : `Step ${index} checked`,
+          mentions: [],
+        },
+      );
+    const firstReply = await db.message.findFirstOrThrow({
+      where: { sender: { agentId: agent.id }, body: { contains: "sign-up flow works" } },
+      select: { id: true },
+    });
 
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1440", "900");
@@ -121,7 +137,19 @@ test("a Task card on Activity opens the Task's popup, not its channel's chat", a
     expect(await evaluate<string>(`new URL(location.href).searchParams.get("open") ?? ""`)).toBe(
       `task:channel:${channel.id}`,
     );
+    // It opens at the first unread reply: in view, inside the popup.
+    const landing = `document.querySelector('[data-message-id="${firstReply.id}"]')`;
+    await browser("wait", "--fn", `${landing} != null`);
     await browser("wait", "500");
+    expect(
+      await evaluate<boolean>(
+        `(() => { const r = ${landing}.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight && ${dialog}.contains(${landing}); })()`,
+      ),
+    ).toBe(true);
+    // The channel stays unread: its chat never opened.
+    expect(
+      (await db.conversationMember.findUniqueOrThrow({ where: { id: me.id } })).readThroughSequence,
+    ).toBe(0);
     await browser("screenshot", join(artifacts, "desktop.png"));
     await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
     await browser("wait", "300");
