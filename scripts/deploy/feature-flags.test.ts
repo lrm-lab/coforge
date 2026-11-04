@@ -15,9 +15,16 @@ describe("feature flags in the deployed Compose files", () => {
     expect(typeof content).toBe("string");
     const definitions = JSON.parse(content as string) as FlagDefinitions;
     // Task #491 stopped pinning experiments to a Workspace in flagd: task-conversations and
-    // artifacts now show for every Workspace, switched on per Workspace in Settings > Experiments,
-    // so the deployed definitions carry no flag rules.
-    expect(Object.keys(definitions.flags)).toEqual([]);
+    // artifacts now show for every Workspace, switched on per Workspace in Settings > Experiments.
+    // The one rule left is artifact-web-pages, on for every Workspace in staging so QA can make
+    // web pages, which an artifact's page previews (task #514); production stays without it.
+    expect(definitions.flags).toEqual({
+      "artifact-web-pages": {
+        state: "ENABLED",
+        variants: { on: true, off: false },
+        defaultVariant: "on",
+      },
+    });
   });
 
   test("production reads the same kind of inlined definitions, now with no flag rules", async () => {

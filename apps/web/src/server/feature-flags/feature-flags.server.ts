@@ -24,7 +24,7 @@ export const FEATURE_FLAGS = {
   "app-notifications":
     "Applications phase 2: notifying the apps installed in a Workspace of what happens in it",
   "artifact-web-pages":
-    "Documents phase 2 (task #490): Agents make web pages (`artifact create --kind html`); off until the pane shows them",
+    "Documents phase 2 (task #490): Agents make web pages (`artifact create --kind html`), which an artifact's page previews (task #514); on in staging, off in production",
   "task-ref-tokens":
     "Store `#channel:#N` and `dm:@peer:#N` in message bodies (written by the server, read by every client)",
 } as const;
