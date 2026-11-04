@@ -1,4 +1,4 @@
-import { File02 } from "@untitledui/icons";
+import { Browser, File02 } from "@untitledui/icons";
 
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { lastMessageTime } from "#src/features/conversations/last-message-time";
@@ -28,17 +28,46 @@ export function useArtifactTime() {
 export const versionLabel = (number: number) =>
   number > 0 ? m.doc_version({ number: String(number) }) : m.doc_version_none();
 
-/** A document's icon tile, as its card and its list row lead with it. */
-export function ArtifactIcon({ size = "md" }: { size?: "sm" | "md" }) {
+/** What an artifact is, from its card's `kind`: a web page (`html`), else a document. */
+export const isWebPage = (kind: string) => kind === "html";
+
+/** The artifact's kind in words, as its card and its row say it beside the title. */
+export const kindLabel = (kind: string) =>
+  isWebPage(kind) ? m.doc_kind_html() : m.doc_kind_markdown();
+
+/** An artifact's kind as a gray tile, as its card, its row and its page lead with it: gray, so
+ * the content keeps the color (Frank, 11-04). */
+export function ArtifactIcon({ kind, size = "md" }: { kind: string; size?: "sm" | "md" }) {
+  const Icon = isWebPage(kind) ? Browser : File02;
   return (
     <span
       aria-hidden="true"
       className={cn(
-        "flex shrink-0 items-center justify-center rounded-lg bg-brand-secondary text-featured-icon-light-fg-brand",
-        size === "md" ? "size-10" : "size-8",
+        "flex shrink-0 items-center justify-center rounded-lg bg-secondary text-fg-tertiary ring-1 ring-secondary ring-inset",
+        size === "md" ? "size-9" : "size-7",
       )}
     >
-      <File02 className={size === "md" ? "size-5" : "size-4"} />
+      <Icon className={size === "md" ? "size-5" : "size-4"} />
+    </span>
+  );
+}
+
+/** The version and who changed it last, when: the line under an artifact's title. */
+export function ArtifactEditedLine({
+  version,
+  actor,
+  time,
+}: {
+  version: number;
+  actor: ArtifactActorView | undefined;
+  time: string;
+}) {
+  return (
+    <span className="flex min-w-0 items-center gap-1.5 text-xs text-tertiary">
+      <span className="shrink-0">{versionLabel(version)}</span>
+      <span aria-hidden="true">·</span>
+      <ArtifactActor actor={actor} />
+      <span className="shrink-0">{time}</span>
     </span>
   );
 }

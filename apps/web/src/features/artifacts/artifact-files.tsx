@@ -4,19 +4,22 @@ import { useQuery } from "@tanstack/react-query";
 import { Plus } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
-import { ConversationFilesPanel } from "#src/features/conversations/conversation-files";
+import {
+  ConversationFilesPanel,
+  conversationFilesQuery,
+} from "#src/features/conversations/conversation-files";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { ArtifactActor, ArtifactIcon, useArtifactTime, versionLabel } from "./artifact-parts";
+import { ArtifactEditedLine, ArtifactIcon, kindLabel, useArtifactTime } from "./artifact-parts";
 import { artifactListQuery, useArtifactActor, type ArtifactCard } from "./artifact-queries";
 import { draftArtifactSearch, openArtifactSearch, useArtifactNavigation } from "./artifact-search";
 
-type Filter = "all" | "docs" | "files";
+type Filter = "all" | "files" | "artifacts";
 
 /**
- * A conversation's Files tab with its documents (task #385, Frank: no Documents entry in the
- * navigation; documents live with the conversation's files): All / Documents / Files, a new
- * document for a member, the documents (most recently changed first) above the files.
+ * A conversation's Files tab with its artifacts (task #385; #514, Frank: All / Files / Artifacts,
+ * documents and web pages together under Artifacts): a new document for a member, and on All the
+ * artifacts (most recently changed first) above the files, each under its heading.
  */
 export function ConversationFilesWithDocuments({
   conversationId,
@@ -28,36 +31,50 @@ export function ConversationFilesWithDocuments({
   onOpenMessage?: (messageId: string) => Promise<void>;
 }) {
   const [filter, setFilter] = useState<Filter>("all");
-  const documents = useQuery(artifactListQuery(conversationId));
-  const count = documents.data?.length;
+  const artifacts = useQuery(artifactListQuery(conversationId));
+  const files = useQuery(conversationFilesQuery(conversationId));
+  const all = filter === "all";
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 flex-wrap items-center gap-1.5 px-4 pt-4 md:px-6">
         <div role="group" aria-label={m.doc_filter_label()} className="flex items-center gap-1">
-          <FilterChip on={filter === "all"} onClick={() => setFilter("all")}>
+          <FilterChip on={all} onClick={() => setFilter("all")}>
             {m.doc_filter_all()}
-          </FilterChip>
-          <FilterChip on={filter === "docs"} onClick={() => setFilter("docs")}>
-            {m.doc_filter_docs()}
-            {count ? <span className="text-tertiary"> {count}</span> : null}
           </FilterChip>
           <FilterChip on={filter === "files"} onClick={() => setFilter("files")}>
             {m.doc_filter_files()}
+            <Count of={files.data?.length} />
+          </FilterChip>
+          <FilterChip on={filter === "artifacts"} onClick={() => setFilter("artifacts")}>
+            {m.doc_filter_artifacts()}
+            <Count of={artifacts.data?.length} />
           </FilterChip>
         </div>
         <span className="flex-1" />
         {canCreate && <NewDocumentButton />}
       </div>
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-        {filter !== "files" && (
-          <DocumentList documents={documents} onlyDocuments={filter === "docs"} />
-        )}
-        {filter !== "docs" && (
-          <ConversationFilesPanel conversationId={conversationId} onOpenMessage={onOpenMessage} />
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto pb-4">
+        {filter !== "files" && <ArtifactList artifacts={artifacts} heading={all} />}
+        {filter !== "artifacts" && (
+          <section aria-label={m.doc_filter_files()} className="flex flex-col">
+            {all && artifacts.data?.length ? (
+              <GroupHeading>{m.doc_filter_files()}</GroupHeading>
+            ) : null}
+            <ConversationFilesPanel conversationId={conversationId} onOpenMessage={onOpenMessage} />
+          </section>
         )}
       </div>
     </div>
   );
+}
+
+function Count({ of }: { of: number | undefined }) {
+  return of ? <span className="text-tertiary"> {of}</span> : null;
+}
+
+/** A group's name on All, where artifacts and files show one above the other. */
+function GroupHeading({ children }: { children: React.ReactNode }) {
+  return <h3 className="px-4 pt-5 text-xs font-medium text-tertiary md:px-6">{children}</h3>;
 }
 
 function FilterChip({
@@ -98,30 +115,34 @@ function NewDocumentButton() {
   );
 }
 
-function DocumentList({
-  documents,
-  onlyDocuments,
+/** The artifacts, or on All nothing when there are none: the files below say the rest. */
+function ArtifactList({
+  artifacts,
+  heading,
 }: {
-  documents: ReturnType<typeof useQuery<ArtifactCard[]>>;
-  onlyDocuments: boolean;
+  artifacts: ReturnType<typeof useQuery<ArtifactCard[]>>;
+  heading: boolean;
 }) {
-  if (documents.isPending) return null;
-  if (documents.isError)
+  if (artifacts.isPending) return null;
+  if (artifacts.isError)
     return <p className="px-4 pt-3 text-sm text-error-primary md:px-6">{m.doc_list_failed()}</p>;
-  if (documents.data.length === 0)
-    return onlyDocuments ? (
+  if (artifacts.data.length === 0)
+    return heading ? null : (
       <p className="px-4 pt-4 text-sm text-tertiary md:px-6">{m.doc_list_empty()}</p>
-    ) : null;
+    );
   return (
-    <ul aria-label={m.doc_filter_docs()} className="flex flex-col gap-2 px-4 pt-4 md:px-6">
-      {documents.data.map((card) => (
-        <DocumentRow key={card.id} card={card} />
-      ))}
-    </ul>
+    <section aria-label={m.doc_filter_artifacts()} className="flex flex-col">
+      {heading && <GroupHeading>{m.doc_filter_artifacts()}</GroupHeading>}
+      <ul className={cn("flex flex-col gap-2 px-4 md:px-6", heading ? "pt-2" : "pt-4")}>
+        {artifacts.data.map((card) => (
+          <ArtifactRow key={card.id} card={card} />
+        ))}
+      </ul>
+    </section>
   );
 }
 
-function DocumentRow({ card }: { card: ArtifactCard }) {
+function ArtifactRow({ card }: { card: ArtifactCard }) {
   const navigate = useArtifactNavigation();
   const actorOf = useArtifactActor();
   const time = useArtifactTime();
@@ -129,24 +150,21 @@ function DocumentRow({ card }: { card: ArtifactCard }) {
     <li>
       <AriaButton
         onPress={() => navigate(openArtifactSearch(card.id))}
-        className="flex w-full min-w-0 items-center gap-3 rounded-xl border border-secondary bg-primary py-2 pr-3 pl-3 text-left outline-focus-ring hover:bg-primary_hover data-focus-visible:outline-2"
+        className="flex w-full min-w-0 items-center gap-3 rounded-xl border border-secondary bg-primary p-3 text-left outline-focus-ring hover:border-primary hover:bg-primary_hover data-focus-visible:outline-2"
       >
-        <ArtifactIcon />
-        <span className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate text-sm font-semibold text-primary">
-            {card.title || m.doc_untitled()}
+        <ArtifactIcon kind={card.kind} />
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="flex min-w-0 items-baseline gap-2">
+            <span className="truncate text-sm font-medium text-primary">
+              {card.title || m.doc_untitled()}
+            </span>
+            <span className="shrink-0 text-xs text-quaternary">{kindLabel(card.kind)}</span>
           </span>
-          <span className="truncate text-xs text-tertiary">
-            {card.preview.replace(/\n/g, " · ") || versionLabel(card.currentVersion)}
-          </span>
-        </span>
-        <span className="flex shrink-0 items-center gap-1 text-xs text-tertiary max-sm:hidden">
-          <ArtifactActor actor={actorOf(card.author)} />
-          <span aria-hidden="true">·</span>
-          {time(card.updatedAt)}
-        </span>
-        <span className="w-14 shrink-0 text-right text-xs text-tertiary">
-          {card.currentVersion > 0 ? versionLabel(card.currentVersion) : ""}
+          <ArtifactEditedLine
+            version={card.currentVersion}
+            actor={actorOf(card.author)}
+            time={time(card.updatedAt)}
+          />
         </span>
       </AriaButton>
     </li>

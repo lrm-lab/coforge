@@ -1,16 +1,16 @@
 import { useMemo } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 
-import { Button } from "#src/components/base/buttons/button";
+import { Button as AriaButton } from "react-aria-components";
 import { m } from "#src/paraglide/messages";
 import { artifactIdsInBody, bodyWithArtifactTitles } from "./artifact-link";
-import { ArtifactActor, ArtifactIcon, useArtifactTime, versionLabel } from "./artifact-parts";
+import { ArtifactEditedLine, ArtifactIcon, kindLabel, useArtifactTime } from "./artifact-parts";
 import { artifactCardQuery, useArtifactActor, useArtifactsOn } from "./artifact-queries";
 import { openArtifactSearch, useArtifactNavigation } from "./artifact-search";
 
 /**
- * The cards of the documents a message links to (task #385): each its title, its first two
- * lines, its version and who changed it last, and Open, which shows it beside the chat. Nothing
+ * The cards of the artifacts a message links to (task #385, #514): each its kind, title, first
+ * two lines, version and who changed it last; the card opens it. Nothing
  * shows while documents are off, for a link the reader may not open, or before the card is read.
  */
 export function MessageArtifactCards({ body }: { body: string }) {
@@ -51,44 +51,36 @@ function ArtifactCardView({ artifactId }: { artifactId: string }) {
   const navigate = useArtifactNavigation();
   if (!card) return null;
   const title = card.title || m.doc_untitled();
-  const open = () => navigate(openArtifactSearch(card.id));
+  const kind = kindLabel(card.kind);
   return (
     <article
-      aria-label={m.doc_card_label({ title })}
-      className="group/doc flex w-full max-w-[34rem] cursor-pointer flex-col gap-2 rounded-xl border border-secondary bg-primary p-3 shadow-xs transition hover:border-brand hover:shadow-sm"
-      onClick={(event) => {
-        // A click on the card opens it; one that ends a text selection, or presses Open, does not.
-        if (window.getSelection()?.toString()) return;
-        if ((event.target as Element).closest("button")) return;
-        event.stopPropagation();
-        open();
-      }}
+      aria-label={m.doc_card_label({ kind, title })}
+      className="relative flex w-full max-w-[34rem] items-start gap-3 rounded-xl border border-secondary bg-primary p-3 shadow-xs transition has-[button:hover]:border-primary has-[button:hover]:shadow-sm has-[button[data-focus-visible]]:outline-2 has-[button[data-focus-visible]]:outline-focus-ring"
     >
-      <div className="flex min-w-0 items-center gap-3">
-        <ArtifactIcon />
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-md font-semibold text-primary">{title}</p>
-          <p className="flex min-w-0 items-center gap-1 text-xs text-tertiary">
-            <span className="shrink-0">{versionLabel(card.currentVersion)}</span>
-            <span aria-hidden="true">·</span>
-            <ArtifactActor actor={actorOf(card.author)} />
-            <span aria-hidden="true">·</span>
-            <span className="shrink-0">{time(card.updatedAt)}</span>
+      <ArtifactIcon kind={card.kind} />
+      <div className="min-w-0 flex-1">
+        <p className="flex min-w-0 items-baseline gap-2">
+          {/* The title is the card's one way in; its hit area covers the whole card. */}
+          <AriaButton
+            onPress={() => navigate(openArtifactSearch(card.id))}
+            className="min-w-0 truncate text-left text-sm font-semibold text-primary outline-none before:absolute before:inset-0 before:rounded-xl"
+          >
+            {title}
+          </AriaButton>
+          <span className="shrink-0 text-xs text-quaternary">{kind}</span>
+        </p>
+        {card.preview && (
+          <p className="mt-0.5 line-clamp-2 text-sm whitespace-pre-line text-tertiary">
+            {card.preview}
           </p>
+        )}
+        <div className="mt-2">
+          <ArtifactEditedLine
+            version={card.currentVersion}
+            actor={actorOf(card.author)}
+            time={time(card.updatedAt)}
+          />
         </div>
-      </div>
-      {card.preview && (
-        <p className="line-clamp-2 text-sm whitespace-pre-line text-secondary">{card.preview}</p>
-      )}
-      <div className="flex justify-end">
-        <Button
-          size="sm"
-          color="link-color"
-          onClick={() => open()}
-          // The card's own click opens it already; the button is its keyboard and reader way in.
-        >
-          {m.doc_card_open()}
-        </Button>
       </div>
     </article>
   );

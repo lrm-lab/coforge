@@ -167,7 +167,7 @@ test("a document opens from its card, saves versions, resolves a conflict and go
     await shoot("desktop-1-card");
 
     // Open: beside the chat, editable; a save is a new version.
-    await click(button("Open", card));
+    await click(button("Home page launch plan", card));
     await browser("wait", "--fn", `${pane}?.querySelector(".ProseMirror") != null`);
     // Opening is no edit: the pane reads as saved until something is typed.
     await browser("wait", "--fn", inPane("Saved · version 1"));
@@ -366,7 +366,7 @@ test("a document opens from its card, saves versions, resolves a conflict and go
     await browser("wait", "--fn", `${pageHydrated} && ${card} !== null`);
     await evaluate(`(${card}.scrollIntoView({ block: "center" }), true)`);
     await shoot("phone-1-card");
-    await click(button("Open", card));
+    await click(button("Home page launch plan", card));
     await browser("wait", "--fn", `${pane}?.querySelector(".ProseMirror") != null`);
     await shoot("phone-2-document");
   } finally {
