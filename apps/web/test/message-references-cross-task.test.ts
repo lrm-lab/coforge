@@ -5,7 +5,7 @@ import { readMessageReferences } from "#src/lib/message-references";
 const resolveMessageReferences = readMessageReferences;
 
 test("replaceTaskReferenceTokens round-trips a stored task token", () => {
-  const body = resolveMessageReferences("refer to task #7").resolve({ task: () => true });
+  const body = resolveMessageReferences("refer to task #7").resolve({ task: () => "task-id" }).body;
   expect(
     replaceTaskReferenceTokens(body, (reference) =>
       reference.kind === "local" ? `task #${reference.number}` : undefined,
@@ -27,18 +27,18 @@ test("cross-conversation task references resolve only when the sender may read t
           ? { conversationId: conversation, channelName: "design" }
           : undefined,
       dmTask: () => undefined,
-    }),
+    }).body,
   ).toBe(`see <@task:c:${conversation}:design:7> and dm:@ada:#9, but not #design:#7x`);
   // Unresolvable whole references stay as written, inner numbers included.
   expect(
     readMessageReferences("#design:#7 and dm:@ada:#9").resolve({
       channelTask: () => undefined,
       dmTask: () => undefined,
-      task: () => true,
-    }),
+      task: () => "task-id",
+    }).body,
   ).toBe("#design:#7 and dm:@ada:#9");
   // A space ends the reference: `#7` after it is this conversation's task.
-  expect(readMessageReferences("#design: #7").resolve({ task: () => true })).toBe(
+  expect(readMessageReferences("#design: #7").resolve({ task: () => "task-id" }).body).toBe(
     "#design: <@task:7>",
   );
 });
@@ -62,7 +62,7 @@ test("cross references in inline and fenced code are never references", () => {
     references.resolve({
       channelTask: () => ({ conversationId: conversation, channelName: "design" }),
       dmTask: () => ({ conversationId: conversation, peerHandle: "ada" }),
-      task: () => true,
-    }),
+      task: () => "task-id",
+    }).body,
   ).toBe(body.replace("then #design:#7", `then <@task:c:${conversation}:design:7>`));
 });

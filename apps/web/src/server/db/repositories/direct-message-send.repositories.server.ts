@@ -7,7 +7,10 @@ import { isAppBot } from "#src/features/agents/agent-system-kind";
 import { AppError } from "#src/lib/app-error";
 import { allocateSequence } from "./sequence-allocation.server";
 import { canDirectMessageAgent } from "#src/server/agents/agent-visibility.server";
-import { storeMessageBody } from "#src/server/conversations/message-references.server";
+import {
+  storeMessageBody,
+  writeMessageReferences,
+} from "#src/server/conversations/message-references.server";
 import { agentMessageSender } from "#src/server/conversations/sender-display.server";
 import {
   attachmentView,
@@ -126,6 +129,13 @@ export async function sendMessage(
         deliveries: { select: { deliveryId: true } },
       },
     });
+    await writeMessageReferences(
+      tx,
+      created,
+      { conversationId, workspaceId: conversation.workspaceId },
+      stored.references,
+    );
+
     const answeredCardIds = await markChoiceCardsAnsweredInChat(tx, {
       workspaceId: conversation.workspaceId,
       conversationId,

@@ -92,3 +92,39 @@ test("an Agent outside the source conversation, or in another Workspace, finds n
     await f.close();
   }
 });
+
+// task #465 review: a comment's resolved `task #N` writes a `message_references` row in the
+// same transaction the comment is stored in.
+test("a comment's `#channel` writes a row; its `task #N` stays text", async () => {
+  const f = await attachmentCommentsFixture();
+  try {
+    const channel = await f.db.conversation.create({
+      data: {
+        workspaceId: f.workspace.id,
+        channelName: `refs-${crypto.randomUUID().slice(0, 8)}`,
+        members: { create: [{ userId: f.actor.userId! }] },
+      },
+    });
+    const channelName = (
+      await f.db.conversation.findUniqueOrThrow({
+        where: { id: channel.id },
+        select: { channelName: true },
+      })
+    ).channelName!;
+    const comments = new AttachmentComments(new PrismaAttachmentCommentStore(f.db));
+    const posted = await comments.post(f.actor, {
+      attachmentId: f.attachment.id,
+      body: `see #${channelName} and task #91`,
+    });
+    const references = await f.db.messageReference.findMany({
+      where: { messageId: posted.id },
+    });
+    expect(references.map((reference) => [reference.kind, reference.targetId])).toEqual([
+      ["channel", channel.id],
+    ]);
+    const stored = await f.db.message.findUniqueOrThrow({ where: { id: posted.id } });
+    expect(stored.body).toContain("task #91");
+  } finally {
+    await f.close();
+  }
+});

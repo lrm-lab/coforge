@@ -10,7 +10,7 @@ import {
   type ResolvedMention,
 } from "@lrm/coforge-sdk/internal";
 import type { Prisma } from "#src/generated/prisma/client";
-import { readMessageReferences } from "#src/lib/message-references";
+import { readMessageReferences } from "@lrm/coforge-sdk/internal/message-references";
 import { isFeatureEnabled } from "#src/server/feature-flags/feature-flags.server";
 import {
   channelThreadRootsWhere,
@@ -109,7 +109,13 @@ export async function storeMessageBody(
     bindings?: readonly MentionSelectorInput[];
   },
   options: { crossTaskReferences?: boolean } = {},
-): Promise<{ body: string; mentions: ResolvedMention[] }> {
+): Promise<{
+  body: string;
+  mentions: ResolvedMention[];
+  /** The body's resolved references, for `message_references` rows (task #465). `targetId` is
+   * the channel's, root message's, or Task's id; `raw` the matched text, `ordinal` its order. */
+  references: { kind: string; targetId: string; raw: string; ordinal: number }[];
+}> {
   const references = readMessageReferences(body);
   const { handles } = references.candidates;
   const threads = references.candidates.threads.slice(0, MAX_THREAD_REFERENCES);
@@ -139,7 +145,7 @@ export async function storeMessageBody(
         : []
       : mentionScope.targets;
   const mentions = resolveMentionTargets(handles, targets, mentionScope.bindings);
-  const knownTasks = new Set(
+  const knownTasks = new Map(
     taskNumbers.length
       ? (
           await tx.task.findMany({
@@ -148,9 +154,9 @@ export async function storeMessageBody(
               number: { in: taskNumbers },
               ...LIVE_TASK_WHERE,
             },
-            select: { number: true },
+            select: { id: true, number: true },
           })
-        ).map((task) => task.number)
+        ).map((task) => [task.number, task.id])
       : [],
   );
   const channelsByName = new Map(
@@ -191,7 +197,10 @@ export async function storeMessageBody(
     (channelTasks.length > 0 || dmTasks.length > 0) &&
     (options.crossTaskReferences ??
       (await isFeatureEnabled("task-ref-tokens", { workspaceId: scope.workspaceId })));
-  const channelTaskByRef = new Map<string, { conversationId: string; channelName: string }>();
+  const channelTaskByRef = new Map<
+    string,
+    { conversationId: string; channelName: string; taskId: string }
+  >();
   if (crossTaskReferences && channelTasks.length) {
     const numbers = [...new Set(channelTasks.map((task) => task.number))].filter(
       (number) => number <= PG_INTEGER_MAX,
@@ -206,6 +215,7 @@ export async function storeMessageBody(
         },
       },
       select: {
+        id: true,
         number: true,
         conversationId: true,
         conversation: { select: { channelName: true } },
@@ -215,9 +225,13 @@ export async function storeMessageBody(
       channelTaskByRef.set(`${row.conversation.channelName}:${row.number}`, {
         conversationId: row.conversationId,
         channelName: row.conversation.channelName!,
+        taskId: row.id,
       });
   }
-  const dmTaskByRef = new Map<string, { conversationId: string; peerHandle: string }>();
+  const dmTaskByRef = new Map<
+    string,
+    { conversationId: string; peerHandle: string; taskId: string }
+  >();
   if (crossTaskReferences && dmTasks.length) {
     // Raft's rule: a bare handle that both a person and an Agent answer is ambiguous and stays
     // text; a `~human`/`~agent` suffix picks the kind.
@@ -260,7 +274,7 @@ export async function storeMessageBody(
             conversationId: { in: direct.map((conversation) => conversation.id) },
             ...LIVE_TASK_WHERE,
           },
-          select: { number: true, conversationId: true },
+          select: { id: true, number: true, conversationId: true },
         })
       : [];
     for (const task of dmTasks) {
@@ -286,29 +300,76 @@ export async function storeMessageBody(
         );
       });
       if (matches.length !== 1) continue;
-      if (!tasks.some((row) => row.conversationId === matches[0]!.id && row.number === task.number))
-        continue;
+      const found = tasks.find(
+        (row) => row.conversationId === matches[0]!.id && row.number === task.number,
+      );
+      if (!found) continue;
       dmTaskByRef.set(`${task.peer}:${task.number}`, {
         conversationId: matches[0]!.id,
         peerHandle: task.peer,
+        taskId: found.id,
       });
     }
   }
+  // `resolve` reports each adopted reference with its offsets — a `bareNumber` the channel
+  // fallback took is one row, not two; `raw` is the body's own slice, never a reconstructed form.
+  const stored = references.resolve({
+    mention: mentions.target,
+    task: (number) => knownTasks.get(number),
+    channelTask: (name, number) => channelTaskByRef.get(`${name}:${number}`),
+    dmTask: (peer, number) => dmTaskByRef.get(`${peer}:${number}`),
+    channel: (name) => channelsByName.get(name),
+    thread: (name, anchor) => {
+      const channel = channelsByName.get(name);
+      const rootId = threadRoots.get(`${name}:${anchor}`);
+      return channel && rootId ? { channelId: channel.id, rootId, name: channel.name } : undefined;
+    },
+  });
   return {
-    body: references.resolve({
-      mention: mentions.target,
-      task: (number) => knownTasks.has(number),
-      channelTask: (name, number) => channelTaskByRef.get(`${name}:${number}`),
-      dmTask: (peer, number) => dmTaskByRef.get(`${peer}:${number}`),
-      channel: (name) => channelsByName.get(name),
-      thread: (name, anchor) => {
-        const channel = channelsByName.get(name);
-        const rootId = threadRoots.get(`${name}:${anchor}`);
-        return channel && rootId
-          ? { channelId: channel.id, rootId, name: channel.name }
-          : undefined;
-      },
-    }),
+    body: stored.body,
     mentions: mentions.mentions,
+    references: stored.adopted.map((reference, ordinal) => ({
+      kind: reference.kind,
+      targetId: reference.targetId,
+      raw: body.slice(reference.start, reference.end),
+      ordinal,
+    })),
   };
+}
+
+/** The `message_references` rows a sent or edited body's resolved references write (task #465):
+ * one per `raw` in first-seen order, `targetId` the channel's, root message's, or Task's id the
+ * sender's own access named — a reference the sender could not resolve writes no row and so
+ * leaks nothing about the target. */
+export async function writeMessageReferences(
+  tx: Pick<Prisma.TransactionClient, "messageReference">,
+  message: { id: string },
+  scope: { conversationId: string; workspaceId: string },
+  references: readonly { kind: string; targetId: string; raw: string; ordinal: number }[],
+) {
+  if (!references.length) return;
+  await tx.messageReference.createMany({
+    data: references.map((reference) => ({
+      messageId: message.id,
+      conversationId: scope.conversationId,
+      workspaceId: scope.workspaceId,
+      kind: reference.kind,
+      targetId: reference.targetId,
+      raw: reference.raw,
+      ordinal: reference.ordinal,
+    })),
+  });
+}
+
+/** The replace an edit runs (task #465): drop the message's `message_references` rows and write
+ * the body's newly resolved set, in the same transaction the body is rewritten in. A message
+ * whose body never changes keeps its rows; a body's references that are gone go with them. */
+export async function replaceMessageReferences(
+  tx: Pick<Prisma.TransactionClient, "messageReference">,
+  message: { id: string },
+  scope: { conversationId: string; workspaceId: string },
+  references: readonly { kind: string; targetId: string; raw: string; ordinal: number }[],
+) {
+  await tx.messageReference.deleteMany({ where: { messageId: message.id } });
+  await writeMessageReferences(tx, message, scope, references);
 }

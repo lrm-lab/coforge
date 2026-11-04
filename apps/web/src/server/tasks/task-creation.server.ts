@@ -9,7 +9,10 @@ import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { AppError } from "#src/lib/app-error";
 import { conversationSignalScopes } from "#src/server/conversations/conversation-signal-scope.server";
 import { MESSAGE_MENTIONS_SELECT } from "#src/server/conversations/mentions.server";
-import { storeMessageBody } from "#src/server/conversations/message-references.server";
+import {
+  storeMessageBody,
+  writeMessageReferences,
+} from "#src/server/conversations/message-references.server";
 import {
   agentMessageSender,
   MESSAGE_SENDER_SELECT,
@@ -322,6 +325,8 @@ export async function createTasks(
           where: { id: command.attachmentId },
           data: { messageId: message.id, position: 0 },
         });
+      await writeMessageReferences(tx, message, scope, stored.references);
+
       if (assignee?.agentId) {
         await ensureTaskExecutionSession(tx, message.task!, assignee.agentId);
         tasks.push(

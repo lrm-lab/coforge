@@ -15,7 +15,7 @@ import { allocateSequence } from "#src/server/db/repositories/sequence-allocatio
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
 import type { ConversationRealtime } from "./conversation-realtime.server";
-import { storeMessageBody } from "./message-references.server";
+import { storeMessageBody, writeMessageReferences } from "./message-references.server";
 import type { SentMessageHook } from "./sent-message-hook.server";
 import type { MessageRequestIdempotency } from "./message-request-idempotency.server";
 
@@ -181,6 +181,8 @@ export class UserDirectConversations {
         },
         select: { id: true, body: true, createdAt: true, sequence: true, threadRootId: true },
       });
+      await writeMessageReferences(tx, message, { conversationId, workspaceId }, stored.references);
+
       await attachToMessage(tx, message.id, attachments);
       await input.withinSend?.(tx, {
         id: message.id,

@@ -21,7 +21,11 @@ import { browserMessageFields } from "./conversation-history.server";
 import type { ConversationRealtime } from "./conversation-realtime.server";
 import { MentionDeliveryIssuer } from "./mention-deliveries.server";
 import { deliveryMentionsAgent } from "./mentions.server";
-import { channelMentionTargets, storeMessageBody } from "./message-references.server";
+import {
+  channelMentionTargets,
+  storeMessageBody,
+  writeMessageReferences,
+} from "./message-references.server";
 import type { MessageRequestIdempotency } from "./message-request-idempotency.server";
 import { pendingMentionActionsForMessage } from "./pending-mention-views.server";
 import {
@@ -177,6 +181,13 @@ export async function sendChannel(
             },
           },
         });
+        await writeMessageReferences(
+          tx,
+          message,
+          { conversationId: channelId, workspaceId },
+          stored.references,
+        );
+
         const answeredCardIds = member.userId
           ? await markChoiceCardsAnsweredInChat(tx, {
               workspaceId,

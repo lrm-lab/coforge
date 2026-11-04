@@ -16,6 +16,7 @@ import { AgentSendRejectedError } from "#src/server/conversations/agent-send-rej
 import {
   channelMentionTargets,
   storeMessageBody,
+  writeMessageReferences,
 } from "#src/server/conversations/message-references.server";
 import { recordThreadCreatedByReply } from "#src/server/app-notifications/channel-events.server";
 import { joinChannelAsAgentIn } from "#src/server/conversations/agent-channel-join.server";
@@ -303,6 +304,13 @@ export async function sendAgentMessage(
       },
       select: messageSelect,
     });
+    await writeMessageReferences(
+      tx,
+      created,
+      { conversationId, workspaceId: conversation.workspaceId },
+      stored.references,
+    );
+
     if (hint) {
       const deliveredAt = new Date();
       await tx.memoryHintRecord.update({

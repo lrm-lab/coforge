@@ -4,11 +4,11 @@ import { readMessageReferences, type MessageReferenceLookup } from "#src/lib/mes
 
 const messageReferenceCandidates = (body: string) => readMessageReferences(body).candidates;
 const resolveMessageReferences = (body: string, lookup: MessageReferenceLookup) =>
-  readMessageReferences(body).resolve(lookup);
+  readMessageReferences(body).resolve(lookup).body;
 
 const DIGITS = { id: "55555555-5555-4555-8555-555555555555", name: "132" };
 const channel = (name: string) => (name === DIGITS.name ? DIGITS : undefined);
-const task132 = (number: number) => number === 132;
+const task132 = (number: number) => (number === 132 ? "task-132" : undefined);
 
 test("a bare #N naming a task of the conversation becomes a task token; any other #N stays text", () => {
   expect(resolveMessageReferences("就是 #132）。先看 #734", { task: task132, channel })).toBe(
@@ -22,10 +22,10 @@ test("a bare #N is a task before it is a channel of the same name", () => {
     taskReferenceToken(132),
   );
   // With no task 132 it falls through to the channel called `132`, and with neither it is text.
-  expect(resolveMessageReferences("#132", { task: () => false, channel })).toBe(
+  expect(resolveMessageReferences("#132", { task: () => undefined, channel })).toBe(
     channelReferenceToken(DIGITS.id, "132"),
   );
-  expect(resolveMessageReferences("#132", { task: () => false })).toBe("#132");
+  expect(resolveMessageReferences("#132", { task: () => undefined })).toBe("#132");
 });
 
 test("a bare #N lists the number as a task candidate and as a channel name", () => {
@@ -91,7 +91,7 @@ test("an escape later in a bare #N's run keeps the task; only the channel readin
   });
   // With no such task the run stays byte-for-byte.
   expect(
-    resolveMessageReferences("#132-\\_b\\_", { task: () => false, channel: withUnderscored }),
+    resolveMessageReferences("#132-\\_b\\_", { task: () => undefined, channel: withUnderscored }),
   ).toBe("#132-\\_b\\_");
 });
 

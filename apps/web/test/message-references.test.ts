@@ -14,7 +14,7 @@ import { readMessageReferences, type MessageReferenceLookup } from "#src/lib/mes
 const messageReferenceCandidates = (body: string) => readMessageReferences(body).candidates;
 /** The stored body once `lookup` answers the candidates. */
 const resolveMessageReferences = (body: string, lookup: MessageReferenceLookup) =>
-  readMessageReferences(body).resolve(lookup);
+  readMessageReferences(body).resolve(lookup).body;
 
 const ADA = {
   key: "member-ada",
@@ -60,7 +60,13 @@ test("long unchanged Unicode prose keeps exact reference offsets and every surro
     channelTasks: [],
     dmTasks: [],
   });
-  expect(read.resolve({ mention: () => ADA, channel, task: (number) => number === 68 })).toBe(
+  expect(
+    read.resolve({
+      mention: () => ADA,
+      channel,
+      task: (number) => (number === 68 ? "task-68" : undefined),
+    }).body,
+  ).toBe(
     `${prefix}<@human:${ADA.id}>\n续行 ${channelReferenceToken(PRODUCT.id, PRODUCT.name)} ${taskReferenceToken(68)} 尾文`,
   );
 });
@@ -69,7 +75,9 @@ test("a recursive ampersand before an autolink keeps later unpositioned referenc
   const body = "@ada &amp;amp; https://example.com @helper #product";
   const read = readMessageReferences(body);
   expect(read.candidates.handles).toEqual(["ada", "helper"]);
-  expect(read.resolve({ mention: (handle) => (handle === "ada" ? ADA : HELPER), channel })).toBe(
+  expect(
+    read.resolve({ mention: (handle) => (handle === "ada" ? ADA : HELPER), channel }).body,
+  ).toBe(
     `<@human:${ADA.id}> &amp;amp; https://example.com <@agent:${HELPER.id}> ${channelReferenceToken(PRODUCT.id, PRODUCT.name)}`,
   );
 });
@@ -79,7 +87,9 @@ test("literal backslashes before an autolink and escaped channel text remain byt
   const read = readMessageReferences(body);
   expect(read.candidates.handles).toEqual(["ada", "helper"]);
   expect(read.candidates.channelNames).toEqual(["random"]);
-  expect(read.resolve({ mention: (handle) => (handle === "ada" ? ADA : HELPER), channel })).toBe(
+  expect(
+    read.resolve({ mention: (handle) => (handle === "ada" ? ADA : HELPER), channel }).body,
+  ).toBe(
     String.raw`<@human:${ADA.id}> \\https://example.com <@agent:${HELPER.id}> \#product ${channelReferenceToken(RANDOM.id, RANDOM.name)}`,
   );
 });
@@ -213,8 +223,8 @@ test("long HTML-looking Unicode prose maps references past unchanged code, autol
     read.resolve({
       mention: (handle) => (handle === "ada" ? ADA : HELPER),
       channel,
-      task: (number) => number === 68,
-    }),
+      task: (number) => (number === 68 ? "task-68" : undefined),
+    }).body,
   ).toBe(
     `<@human:${ADA.id}> ${untouched}\n${prefix}<@agent:${HELPER.id}> ${channelReferenceToken(PRODUCT.id, PRODUCT.name)} ${taskReferenceToken(68)} <tail> <@human:${ADA.id}>`,
   );
@@ -236,8 +246,8 @@ test("HTML-looking quote lines keep reference order and every surrounding byte",
     read.resolve({
       mention: (handle) => (handle === "ada" ? ADA : HELPER),
       channel,
-      task: (number) => number === 68,
-    }),
+      task: (number) => (number === 68 ? "task-68" : undefined),
+    }).body,
   ).toBe(
     `> <section> <@human:${ADA.id}>\n> \`<code @helper>\`\n> &lt;aside> ${channelReferenceToken(PRODUCT.id, PRODUCT.name)}\n> <b>${taskReferenceToken(68)}</b>\n\n<tail> <@agent:${HELPER.id}>`,
   );
@@ -355,7 +365,7 @@ test("a thread reference is read before the channel it names, in code or a link 
 test("a #N:shortid is a thread reference, never task N, even when that task exists", () => {
   expect(
     resolveMessageReferences("#5:abcdef and #132:abcdef12", {
-      task: (number) => number === 5 || number === 132,
+      task: (number) => (number === 5 ? "task-5" : number === 132 ? "task-132" : undefined),
       channel,
       thread,
     }),
@@ -374,11 +384,16 @@ test("thread candidates list each channel name and id once, lower-cased, outside
 });
 
 test("a `task #N` is read as the task before its `#N` could name a channel", () => {
-  expect(resolveMessageReferences("task #132", { channel, task: (n) => n === 132 })).toBe(
-    taskReferenceToken(132),
-  );
+  expect(
+    resolveMessageReferences("task #132", {
+      channel,
+      task: (n) => (n === 132 ? "task-132" : undefined),
+    }),
+  ).toBe(taskReferenceToken(132));
   // Even when N names no task, the words `task #N` are a task reference and never a channel.
-  expect(resolveMessageReferences("task #132", { channel, task: () => false })).toBe("task #132");
+  expect(resolveMessageReferences("task #132", { channel, task: () => undefined })).toBe(
+    "task #132",
+  );
   // A bare `#132` is a channel reference when a channel has that name.
   expect(resolveMessageReferences("#132", { channel })).toBe(
     channelReferenceToken(DIGITS.id, "132"),
@@ -393,7 +408,7 @@ test("mentions, tasks and channels resolve together in one pass", () => {
   expect(
     resolveMessageReferences("@ada see task #7 in #product", {
       mention: resolution.target,
-      task: (n) => n === 7,
+      task: (n) => (n === 7 ? "task-7" : undefined),
       channel,
     }),
   ).toBe(
@@ -508,9 +523,11 @@ test("a reference next to a bare email or URL inside emphasis resolves", () => {
     `*a https://x.io/#random b ${product}*`,
   );
   expect(quoted("_@ada see task #5 x@y.io_")).toBe(`_${ada} see task #5 x@y.io_`);
-  expect(resolveMessageReferences("_see task #5 x@y.io_", { task: (number) => number === 5 })).toBe(
-    `_see ${taskReferenceToken(5)} x@y.io_`,
-  );
+  expect(
+    resolveMessageReferences("_see task #5 x@y.io_", {
+      task: (number) => (number === 5 ? "task-5" : undefined),
+    }),
+  ).toBe(`_see ${taskReferenceToken(5)} x@y.io_`);
 });
 
 // Mentions (the resolution rules the tokenizer carries over unchanged).
@@ -535,77 +552,4 @@ test("unresolved handles and code spans stay as written", () => {
     `hey <@human:${ADA.id}>, \`@ada\` in code, @nobody\n\`\`\`\n@ada fenced\n\`\`\``,
   );
   expect(mentions).toEqual([ADA]);
-});
-
-test("bindings resolve, and a binding that matches no target is ignored", () => {
-  const { body, mentions } = storedBody(
-    "taking this",
-    [ADA, HELPER],
-    [
-      { type: "agent", id: HELPER.id, name: "helper" },
-      { type: "user", id: "99999999-9999-4999-8999-999999999999", name: "ghost" },
-    ],
-  );
-  expect(body).toBe("taking this");
-  expect(mentions).toEqual([HELPER]);
-});
-
-test("a bound handle's plain-text occurrences are rewritten", () => {
-  const { body } = storedBody(
-    "@helper take it, @helper?",
-    [HELPER],
-    [{ type: "agent", id: HELPER.id, name: "helper" }],
-  );
-  expect(body).toBe(`<@agent:${HELPER.id}> take it, <@agent:${HELPER.id}>?`);
-});
-
-test("the Agent wins a handle shared with a User", () => {
-  const frankUser = {
-    key: "member-frank-user",
-    type: "user" as const,
-    id: ADA.id,
-    handle: "frank",
-  };
-  const frankAgent = {
-    key: "member-frank-agent",
-    type: "agent" as const,
-    id: HELPER.id,
-    handle: "frank",
-  };
-  const { body, mentions } = storedBody("hey @frank", [frankUser, frankAgent]);
-  expect(mentions).toEqual([frankAgent]);
-  expect(body).toBe(`hey <@agent:${HELPER.id}>`);
-});
-
-// Tasks (the resolution rules the tokenizer carries over unchanged).
-
-test("task candidates are prose references outside code, deduped in first-seen order", () => {
-  const body = "pairs with task #68 and task #70, again task #68, and `task #99` in code";
-  expect(messageReferenceCandidates(body).taskNumbers).toEqual([68, 70]);
-});
-
-test("a longer word before #N is not the words `task #N`", () => {
-  expect(resolveMessageReferences("mytask #5", { task: (number) => number === 5 })).toBe(
-    `mytask ${taskReferenceToken(5)}`,
-  );
-  expect(messageReferenceCandidates("task #680").taskNumbers).toEqual([680]);
-});
-
-test("the word task is matched case-insensitively", () => {
-  expect(messageReferenceCandidates("Task #5").taskNumbers).toEqual([5]);
-});
-
-test("only numbers that name a real task are tokenized", () => {
-  expect(
-    resolveMessageReferences("task #68 and task #999 and task #70", {
-      task: (number) => number === 68 || number === 70,
-    }),
-  ).toBe(`${taskReferenceToken(68)} and task #999 and ${taskReferenceToken(70)}`);
-});
-
-test("task references inside code spans stay byte-for-byte", () => {
-  const source = "see `task #68` and\n```\ntask #68\n```\nand task #68";
-  expect(resolveMessageReferences(source, { task: () => true })).toBe(
-    `see \`task #68\` and\n\`\`\`\ntask #68\n\`\`\`\nand ${taskReferenceToken(68)}`,
-  );
 });

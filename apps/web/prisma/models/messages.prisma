@@ -19,6 +19,7 @@ model Message {
   threadFollows  ThreadFollow[]
   reactions      MessageReaction[]
   mentions       MessageMention[]
+  references     MessageReference[]
   pendingMentionActions PendingMentionAction[]
   savedBy        SavedMessage[]
   task           Task?
@@ -82,6 +83,34 @@ model MessageMention {
   /// Serves one member's mentions (the Activity inbox's Mentions filter and mention badge).
   @@index([memberId])
   @@map("message_mentions")
+}
+
+/// A body's reference to a channel, a thread's root message, or a Task, stored once send-time
+/// resolution names its target (task #465). `raw` is the matched text (`#general`,
+/// `#general:1a2b`, `task #12`, `#other:#9`, `dm:@alice:#5`) and `ordinal` its first-seen order;
+/// `targetId` is the resolved `conversation.id`, `root.id`, or `task.id`, `null` when the
+/// sender's own access could not resolve it (a reference that is never written leaks nothing).
+/// The parser is `packages/coforge-sdk/src/internal/message-references.ts`.
+model MessageReference {
+  messageId      String   @db.Uuid
+  conversationId String   @db.Uuid
+  workspaceId    String   @db.Uuid
+  /// channel | thread | task
+  kind           String
+  /// The resolved `conversation.id` (channel), `root.id` (thread), or `task.id` (task); a
+  /// reference the sender's access did not name writes no row at all.
+  targetId       String   @db.Uuid
+  /// The matched text, as written (`#general`, `#general:1a2b`, `task #12`, ...).
+  raw            String
+  /// The reference's first-seen order in the body.
+  ordinal        Int
+  createdAt      DateTime @default(now())
+  message        Message  @relation(fields: [messageId, conversationId], references: [id, conversationId], onDelete: Cascade)
+
+  @@id([messageId, ordinal])
+  /// Serves the "which messages name this channel/task/thread" read (task #465 step 3).
+  @@index([targetId])
+  @@map("message_references")
 }
 
 /// An unnotified non-member human/public-Agent mention. The sender acts by resolution id

@@ -20,6 +20,7 @@ import { lockConversation } from "#src/server/conversations/conversation-lock.se
 import {
   channelMentionTargets,
   storeMessageBody,
+  writeMessageReferences,
 } from "#src/server/conversations/message-references.server";
 import { PENDING_MENTION_ACTION_TTL_MS } from "#src/server/conversations/pending-mention-action-recording.server";
 import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
@@ -200,6 +201,12 @@ export class PrismaAttachmentCommentStore implements AttachmentCommentStore {
         },
         include: { deliveries: { select: { deliveryId: true, agentId: true } } },
       });
+      await writeMessageReferences(
+        tx,
+        message,
+        { conversationId, workspaceId: actor.workspaceId },
+        stored.references,
+      );
       if (recipients.users.size)
         await tx.pendingMentionAction.createMany({
           data: [...recipients.users].map(([userId, recipient]) => ({

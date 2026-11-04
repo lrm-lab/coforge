@@ -1,6 +1,6 @@
-import { MENTION_TOKEN_PATTERN, readableBody } from "@lrm/coforge-sdk/internal";
+import { MENTION_TOKEN_PATTERN, readableBody } from "@lrm/coforge-sdk/internal/message-references";
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { readMessageReferences } from "#src/lib/message-references";
+import { readMessageReferences } from "@lrm/coforge-sdk/internal/message-references";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import {
   agentVisibilityViewerForActor,

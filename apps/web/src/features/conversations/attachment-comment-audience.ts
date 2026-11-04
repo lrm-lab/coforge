@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { resolveMentionTargets, type MentionSelectorInput } from "@lrm/coforge-sdk/internal";
-import { readMessageReferences } from "#src/lib/message-references";
+import { resolveMentionTargets, type MentionSelectorInput } from "@lrm/coforge-sdk/internal/message-references";
+import { readMessageReferences } from "@lrm/coforge-sdk/internal/message-references";
 import type { AttachmentCommentAudience } from "#src/server/attachments/attachment-comments.server";
 import { loadAttachmentCommentAudience } from "./attachment-comments.functions";
 import { attachmentCommentsQueryKey } from "./conversation-query-keys";

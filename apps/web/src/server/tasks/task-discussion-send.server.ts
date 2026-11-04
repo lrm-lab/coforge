@@ -9,6 +9,7 @@ import { lockConversation } from "#src/server/conversations/conversation-lock.se
 import {
   channelMentionTargets,
   storeMessageBody,
+  writeMessageReferences,
 } from "#src/server/conversations/message-references.server";
 import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
 import type { Transaction } from "./task-board-ports.server";
@@ -158,6 +159,13 @@ export async function postTaskMessage(
     },
     select: { id: true, sequence: true, createdAt: true, body: true },
   });
+  await writeMessageReferences(
+    tx,
+    message,
+    { conversationId: scope.conversationId, workspaceId: scope.workspaceId },
+    stored.references,
+  );
+
   // A card posted in this conversation waits for the person; their reply here answers it.
   const answeredCardIds = member.userId
     ? await markChoiceCardsAnsweredInChat(tx, {
