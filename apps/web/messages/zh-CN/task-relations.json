@@ -51,6 +51,10 @@
   "tasks_subtask_denied": "你不能移动它",
   "tasks_subtask_under": "在 {name} 下",
   "tasks_subtask_none": "这里没有别的未完成任务",
+  "tasks_subtask_no_match": "没有匹配的任务",
+  "tasks_subtask_loading": "正在加载任务…",
+  "tasks_subtask_under_hidden": "在一个你看不到的任务下",
+  "tasks_subtask_move_body_hidden": "{name} 现在是一个你看不到的任务的子任务，会移到 {to} 下面。",
   "tasks_subtask_move_title": "把 {name} 移过来？",
   "tasks_subtask_move_body": "{name} 现在是 {from} 的子任务，会移到 {to} 下面。",
   "tasks_subtask_move_confirm": "移过来"

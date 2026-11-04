@@ -1,4 +1,9 @@
-import { taskNameLabel, type TaskStatus, type TaskView } from "@lrm/coforge-sdk/internal";
+import {
+  taskNameLabel,
+  type TaskLink,
+  type TaskStatus,
+  type TaskView,
+} from "@lrm/coforge-sdk/internal";
 import { useMemo, useState, type ReactElement } from "react";
 import { useFilter } from "react-aria";
 import {
@@ -39,8 +44,17 @@ const STATUS_ICON: Record<TaskStatus, () => ReactElement> = {
 function addonOf(candidate: SubtaskCandidate) {
   if (candidate.refusal === "above") return m.tasks_subtask_above();
   if (candidate.refusal === "denied") return m.tasks_subtask_denied();
+  if (candidate.from?.hidden) return m.tasks_subtask_under_hidden();
   if (candidate.from) return m.tasks_subtask_under({ name: taskNameLabel(candidate.from) });
   return undefined;
+}
+
+/** The move's question; a parent the viewer cannot name is not named. */
+function moveBody(candidate: SubtaskCandidate, from: TaskLink, to: string) {
+  const name = taskNameLabel(candidate);
+  return from.hidden
+    ? m.tasks_subtask_move_body_hidden({ name, to })
+    : m.tasks_subtask_move_body({ name, from: taskNameLabel(from), to });
 }
 
 type Props = {
@@ -102,7 +116,7 @@ function SubtaskPicker({
   const [search, setSearch] = useState("");
   const [moving, setMoving] = useState<SubtaskCandidate | null>(null);
   const manager = useCanSetAnyTaskStatus();
-  const rows = useUnfinishedTasks(task.conversationId).tasks;
+  const { tasks: rows, loading } = useUnfinishedTasks(task.conversationId);
   const candidates = useMemo(
     () => subtaskCandidates(task, rows, { memberId: currentMemberId, manager }),
     [task, rows, currentMemberId, manager],
@@ -115,13 +129,7 @@ function SubtaskPicker({
         <Heading slot="title" className="text-md font-semibold text-primary">
           {m.tasks_subtask_move_title({ name: taskNameLabel(moving) })}
         </Heading>
-        <p className="text-sm text-tertiary">
-          {m.tasks_subtask_move_body({
-            name: taskNameLabel(moving),
-            from: taskNameLabel(moving.from),
-            to: here,
-          })}
-        </p>
+        <p className="text-sm text-tertiary">{moveBody(moving, moving.from, here)}</p>
         <DialogActions className="mt-2">
           <DialogCancel type="button" onPress={() => setMoving(null)}>
             {m.tasks_create_cancel()}
@@ -168,8 +176,16 @@ function SubtaskPicker({
             if (picked.from) setMoving(picked);
             else onPick(picked);
           }}
+          // Still reading, a search that matches nothing, and a conversation with nothing to offer
+          // each say so differently.
           renderEmptyState={() => (
-            <p className="px-3 py-2 text-sm text-tertiary">{m.tasks_subtask_none()}</p>
+            <p className="px-3 py-2 text-sm text-tertiary">
+              {loading
+                ? m.tasks_subtask_loading()
+                : search.trim()
+                  ? m.tasks_subtask_no_match()
+                  : m.tasks_subtask_none()}
+            </p>
           )}
         >
           {candidates.map((candidate) => {

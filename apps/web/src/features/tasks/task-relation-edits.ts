@@ -190,7 +190,8 @@ type SubtaskRow = Pick<TaskView, "number" | "title" | "status" | "owner" | "crea
  */
 export type SubtaskCandidate = VisibleTaskLink & {
   refusal: "above" | "denied" | null;
-  from: VisibleTaskLink | null;
+  /** Hidden when the viewer cannot name it: the move is still confirmed, without its name. */
+  from: TaskLink | null;
 };
 
 /** The parent as a row of the same conversation names it, if it is one of them. */
@@ -236,7 +237,7 @@ export function subtaskCandidates(
         : canEditTaskRelations(row, viewer.memberId, viewer.manager)
           ? null
           : "denied",
-      from: row.parent && !row.parent.hidden ? row.parent : null,
+      from: row.parent,
     }));
 }
 

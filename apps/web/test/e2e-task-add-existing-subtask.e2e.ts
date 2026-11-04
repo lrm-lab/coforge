@@ -9,7 +9,7 @@ import { TaskBoard } from "#src/server/tasks/task-board.server";
 import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
 
 /**
- * "Add existing task as sub-task" (task #505): from the Task popup's ··· menu, a search over the
+ * "Set an existing task as sub-task" (task #505): from the Task popup's ··· menu, a search over the
  * channel's unfinished Tasks. The Task above the open one is listed greyed ("Above this task"); one
  * under another parent says so, and picking it first asks whether to move it. Each pick is saved
  * as the picked Task's parent. On a wide screen and on a phone.
@@ -99,8 +99,8 @@ test("an existing Task is put under the open one, and one under another parent i
           "more",
         );
         await browser("click", '[data-e2e="more"]');
-        await browser("wait", "--fn", `${item("Add existing task as sub-task")} !== undefined`);
-        await mark(item("Add existing task as sub-task"), "item");
+        await browser("wait", "--fn", `${item("Set an existing task as sub-task")} !== undefined`);
+        await mark(item("Set an existing task as sub-task"), "item");
         await browser("click", '[data-e2e="item"]');
         // "Fix login" is listed both times: under another parent until it is moved here.
         await browser(

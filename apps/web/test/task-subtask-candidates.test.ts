@@ -94,3 +94,13 @@ test("a Task under another parent says which, so the move can be confirmed", () 
   expect(moved!.from && taskNameLabel(moved!.from)).toBe("#7");
   expect(free!.from).toBeNull();
 });
+
+test("a parent the viewer cannot see still counts: the move is confirmed, without its name", () => {
+  const [moved] = subtaskCandidates(
+    { number: 1, parent: null },
+    [row(2, { parent: { hidden: true, status: "todo" } })],
+    me,
+  );
+  // Not null, so the picker says it is under a Task and asks before moving it.
+  expect(moved!.from).toEqual({ hidden: true, status: "todo" });
+});
