@@ -1,59 +1,46 @@
-import {
-  encodeAgentWorkspaceResetRequest,
-  encodeAgentStartIntent,
-  encodeAgentStopIntent,
-  type AgentControlResult,
-  type AgentStartIntent,
-} from "@lrm/coforge-sdk/internal";
-import {
-  daemonControlChannel,
-  type CentrifugoServerApi,
-} from "#src/server/centrifugo/server-api.server";
-import { runtimeStartFields } from "./manage-agents.server";
+import type { AgentControlResult, AgentStartIntent } from "@lrm/coforge-sdk/internal";
+import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { assertAgentLive } from "./active-agent.server";
 import { AppError } from "#src/lib/app-error";
-import { canSeeAgent } from "./agent-visibility.server";
 import type { AgentRuntimeLock } from "./agent-runtime-lock.server";
 import type { AgentSessions } from "./agent-sessions.server";
 import type { AgentIntroduction } from "./agent-introduction.server";
 import { LocalAgentControlSignal, type AgentControlSignal } from "./agent-control-signal.server";
-import {
-  assertHasAgentControlCapability,
-  type WorkspaceMemberRole,
-} from "#src/server/workspaces/member-role.server";
-import { errorType } from "#src/server/errors/error-type.server";
+import { AgentControlAccess } from "./agent-control-access.server";
+import { AgentControlDriver } from "./agent-control-driver.server";
+import { AgentControlBatch } from "./agent-control-batch.server";
+import { AgentControlOperations } from "./agent-control-operations.server";
+import { AgentControlPublisher } from "./agent-control-publisher.server";
+import { AgentControlReceiver, type AgentLaunchClaim } from "./agent-control-receiver.server";
 
 export * from "./agent-control-types.server";
 
 import {
-  type AgentRecoveryFields,
   type AgentControlRecoveryReader,
   type AgentControlAction,
   carriesRecovery,
-  chains,
-  commands,
-  CONTROL_MANY_CONCURRENCY,
-  EXECUTE_CAPABILITY,
+  current,
+  terminal,
   type AgentControlState,
   type AgentControlAgent,
   type AgentControlMentions,
   type AgentControlStore,
   type AgentControlView,
-  agentControlRevision,
-  terminal,
-  view,
-  supersededView,
-  current,
-  operationFence,
-  requireCurrentAgentScope,
   authorizedAgent,
 } from "./agent-control-types.server";
 
 /** One current control operation on the Agent record, not a durable command queue. */
 export class AgentControl {
+  readonly #access: AgentControlAccess;
+  readonly #operations: AgentControlOperations;
+  readonly #publisher: AgentControlPublisher;
+  readonly #driver: AgentControlDriver;
+  readonly #receiver: AgentControlReceiver;
+  readonly #batch: AgentControlBatch;
+
   constructor(
     private readonly store: AgentControlStore,
-    private readonly api: Pick<CentrifugoServerApi, "publish">,
+    api: Pick<CentrifugoServerApi, "publish">,
     private readonly runtimeLock: AgentRuntimeLock,
     private readonly timing: {
       timeoutMs: number;
@@ -63,23 +50,38 @@ export class AgentControl {
        * abandonment/pending decision — that concept was removed entirely. */
       now?: () => number;
     } = { timeoutMs: 7_000 },
-    private readonly sessions?: AgentSessions,
+    sessions?: AgentSessions,
     private readonly signal: AgentControlSignal = new LocalAgentControlSignal(),
     /** Only consulted for a user-initiated `execute({action:"start"})`; Restart/Reset/Full reset
      * and the internal `recover`/`publishStart` paths are unchanged. */
-    private readonly conversations?: AgentControlRecoveryReader,
+    conversations?: AgentControlRecoveryReader,
     /** Settles the tracked mentions a person's Stop leaves undelivered, and issues them again for
      * a launch that started with its session. */
-    private readonly mentions?: AgentControlMentions,
+    mentions?: AgentControlMentions,
     /** The introduction prompt a Start carries while the Agent owes its creator one. */
-    private readonly introductions?: Pick<AgentIntroduction, "promptFor">,
-  ) {}
-
-  /** WeeklyReportAssistant subject launches override the global current session for one start. */
-  readonly #subjectSessionByRequest = new Map<
-    string,
-    { sessionId: string; sessionMode: "create" | "resume" }
-  >();
+    introductions?: Pick<AgentIntroduction, "promptFor">,
+  ) {
+    const clock = () => this.clock();
+    this.#access = new AgentControlAccess(store);
+    this.#operations = new AgentControlOperations(store, this.#access, mentions);
+    this.#publisher = new AgentControlPublisher(
+      store,
+      api,
+      clock,
+      sessions,
+      conversations,
+      introductions,
+    );
+    this.#driver = new AgentControlDriver(store, this.#publisher, signal, timing);
+    this.#receiver = new AgentControlReceiver(store, signal, this.#driver, mentions);
+    this.#batch = new AgentControlBatch(
+      runtimeLock,
+      this.#access,
+      this.#operations,
+      this.#publisher,
+      clock,
+    );
+  }
 
   private clock(): number {
     return (this.timing.now ?? Date.now)();
@@ -109,7 +111,7 @@ export class AgentControl {
   async recover(intent: AgentStartIntent, userId: string, loaded?: AgentControlAgent) {
     const agent = loaded
       ? authorizedAgent(loaded, userId, intent.workspaceId, intent.agentId)
-      : await this.authorized(userId, intent.workspaceId, intent.agentId);
+      : await this.#access.authorized(userId, intent.workspaceId, intent.agentId);
     // Recovery never starts a deleted Agent. `WorkspaceAgentRecovery` already lists
     // deleted Agents separately and stops them instead, so this is the last line of defence for a
     // Daemon `ready` that races a delete.
@@ -117,13 +119,13 @@ export class AgentControl {
     // The migration starts it itself once it has moved, or once the attempt has ended.
     if (agent.migrating) return;
     if (agent.state && !terminal(agent.state)) {
-      await this.advance(agent.id, agent.state.requestId, intent);
+      await this.#driver.advance(agent.id, agent.state.requestId, intent);
       return;
     }
-    const state = await this.begin(agent, "start", intent.requestId);
+    const state = await this.#operations.begin(agent, "start", intent.requestId);
     // `begin` built `state` from `agent` (a retry only after checking the Computer and
     // configuration it publishes did not change), so it is published without reading it back.
-    await this.#publish(agent, state, intent);
+    await this.#publisher.publish(agent, state, intent);
   }
   /** Clears a terminal launch failure on an Agent using CAS and notifying subscribers. */
   async clearLaunchFailure(agentId: string, expectedErrorCode?: string): Promise<boolean> {
@@ -139,43 +141,6 @@ export class AgentControl {
     if (!(await this.store.replace(agent, next))) return false;
     await this.signal.notify(agent.id).catch(() => {});
     return true;
-  }
-  private async advance(agentId: string, requestId: string, recovery?: AgentRecoveryFields) {
-    const agent = await this.store.get(agentId);
-    const state = agent?.state;
-    if (!agent || !state || state.requestId !== requestId || !current(agent, state)) return;
-    if (state.phase === "stopped" || state.phase === "workspace-reset") {
-      const chain = chains[state.action];
-      const completed = state.phase === "stopped" ? "stop" : "reset-workspace";
-      let index = chain.indexOf(completed) + 1;
-      const clearSession = chain[index] === "clear-session";
-      if (clearSession) index++;
-      const next = chain[index];
-      if (next === "clear-session") throw new Error("Invalid Agent control chain");
-      const { identity, launchId: _launch, ...fields } = state;
-      // A chain step that moves into "starting" (e.g. Restart's stop -> start,
-      // Reset session's stop -> clear-session -> start) mints a fresh launchId here, the moment
-      // of the same phase transition `begin()` mints one for a direct `action: "start"` — never
-      // carried forward from the step this operation just finished.
-      const launchId = next === "start" ? crypto.randomUUID() : undefined;
-      if (
-        !(await this.store.replace(
-          agent,
-          {
-            ...fields,
-            phase: next ? commands[next].pending : "completed",
-            sessionSequence: 0,
-            ...(!clearSession && identity ? { identity } : {}),
-            ...(launchId ? { launchId } : {}),
-          },
-          { clearSession },
-        ))
-      )
-        return;
-    }
-    // Reaching this line without a store write above (phase already "starting"/"completed") is
-    // a pure republish of the same command.
-    await this.publishCurrent(agentId, requestId, recovery);
   }
   async execute(input: {
     userId: string;
@@ -195,11 +160,11 @@ export class AgentControl {
     const stoppedAt = input.action === "stop" ? new Date(this.clock()) : null;
     const recovery =
       input.action === "start"
-        ? await this.readRecovery(input.workspaceId, input.agentId)
+        ? await this.#publisher.readRecovery(input.workspaceId, input.agentId)
         : undefined;
     let drivenRequestId = input.requestId;
     await this.runtimeLock.run(input.agentId, async () => {
-      const agent = await this.authorizedForExecute(
+      const agent = await this.#access.authorizedForExecute(
         input.userId,
         input.workspaceId,
         input.agentId,
@@ -223,247 +188,20 @@ export class AgentControl {
         drivenRequestId = inFlight.requestId;
         return;
       }
-      await this.begin(agent, input.action, input.requestId, 1, stoppedAt);
+      await this.#operations.begin(agent, input.action, input.requestId, 1, stoppedAt);
     });
-    return this.drive(input.agentId, drivenRequestId, recovery);
+    return this.#driver.drive(input.agentId, drivenRequestId, recovery);
   }
-  /**
-   * Stops several Agents for one user at once (a channel's "Stop all Agents"): for each Agent the
-   * same durable stop `execute({ action: "stop" })` writes. The stop command is sent without
-   * waiting for the Daemon: `stoppedAt` keeps the intent, and a Daemon that reconnects still
-   * running the Agent is stopped by ready recovery. A command that cannot be sent is tried once
-   * more; if it still fails the Agent is reported as not done, and its operation stays "stopping"
-   * so a later stop sends it again.
-   */
-  stopMany(input: { userId: string; workspaceId: string; agentIds: readonly string[] }) {
-    const stoppedAt = new Date(this.clock());
-    return this.#controlMany(input, "stop", async (agent) => {
-      const state = await this.begin(agent, "stop", crypto.randomUUID(), 1, stoppedAt);
-      return () => this.sendStop(state);
-    });
+  stopMany(input: Parameters<AgentControlBatch["stopMany"]>[0]) {
+    return this.#batch.stopMany(input);
   }
-  /**
-   * Starts several stopped Agents for one user at once (a channel's "Resume all"), each opening
-   * its first turn with `resumePrompt` instead of message recovery: the prompt tells it to catch
-   * up itself. Clears `stoppedAt` like a user Start. The Start is sent without waiting for the
-   * Daemon, and only this once: a Daemon that reconnects before launching gets the same Start
-   * from ready recovery, without the prompt, so it is never delivered twice.
-   */
-  startMany(input: {
-    userId: string;
-    workspaceId: string;
-    agentIds: readonly string[];
-    resumePrompt: string;
-  }) {
-    return this.#controlMany(input, "start", async (agent) => {
-      const state = await this.begin(agent, "start", crypto.randomUUID(), 1, null);
-      return () =>
-        this.sendStart(agent, state, state.launchId, {
-          resumePrompt: input.resumePrompt,
-        });
-    });
-  }
-  /**
-   * Runs one control operation over many Agents for one user: the role is read once, each Agent
-   * is changed under its runtime lock by `change`, and the command it returns is sent after the
-   * lock is released, tried twice at most and never waited on. At most `CONTROL_MANY_CONCURRENCY`
-   * Agents are in flight, since each holds a runtime-lock connection and a transaction.
-   */
-  async #controlMany(
-    input: { userId: string; workspaceId: string; agentIds: readonly string[] },
-    action: AgentControlAction,
-    change: (agent: AgentControlAgent) => Promise<() => Promise<unknown>>,
-  ): Promise<{ agentId: string; done: boolean }[]> {
-    const role = await this.actorRole(input.workspaceId, input.userId, action);
-    const one = async (agentId: string) => {
-      try {
-        const send = await this.runtimeLock.run(agentId, async () =>
-          change(await this.controllableAgent(agentId, input.workspaceId, input.userId, role)),
-        );
-        await send().catch(() => send());
-        return { agentId, done: true };
-      } catch (error) {
-        console.warn(
-          JSON.stringify({
-            event: "agent_control:control_many_failed",
-            action,
-            agent_id: agentId,
-            workspace_id: input.workspaceId,
-            error_type: errorType(error),
-          }),
-        );
-        return { agentId, done: false };
-      }
-    };
-    const results: { agentId: string; done: boolean }[] = [];
-    let next = 0;
-    await Promise.all(
-      Array.from(
-        { length: Math.min(CONTROL_MANY_CONCURRENCY, input.agentIds.length) },
-        async () => {
-          while (next < input.agentIds.length) {
-            const index = next++;
-            results[index] = await one(input.agentIds[index]!);
-          }
-        },
-      ),
-    );
-    return results;
-  }
-  private async authorized(userId: string, workspaceId: string, agentId: string) {
-    return authorizedAgent(await this.store.get(agentId), userId, workspaceId, agentId);
-  }
-  /**
-   * execute() and stopMany() are the user-initiated control paths; they authorize by the actor's
-   * current Workspace membership and Agent-control capability, not by Agent ownership (`authorized()`
-   * above, still used unchanged by recover/publishStart/publishStop).
-   */
-  private async authorizedForExecute(
-    userId: string,
-    workspaceId: string,
-    agentId: string,
-    action: AgentControlAction,
-  ) {
-    const role = await this.actorRole(workspaceId, userId, action);
-    return this.controllableAgent(agentId, workspaceId, userId, role);
-  }
-  private async actorRole(workspaceId: string, userId: string, action: AgentControlAction) {
-    const role = await this.store.memberRole(workspaceId, userId);
-    if (!role) throw new Error("Agent is not authorized or assigned");
-    assertHasAgentControlCapability(role, EXECUTE_CAPABILITY[action]);
-    return role;
-  }
-  private async controllableAgent(
-    agentId: string,
-    workspaceId: string,
-    userId: string,
-    role: WorkspaceMemberRole,
-  ) {
-    const agent = await this.store.get(agentId);
-    if (!agent || agent.workspaceId !== workspaceId)
-      throw new Error("Agent is not authorized or assigned");
-    // A deleted Agent has no user-initiated control surface at all — not even Start.
-    // Only the internal `recover`/`publishStop` paths may still touch one, to reconcile a process
-    // the Daemon reports as running.
-    assertAgentLive(agent);
-    // "any current member may control" stops at a private Agent the actor cannot see —
-    // the same absent shape every other visibility failure uses, never a detail leak. Owner/admin
-    // always passes (`canSeeAgent`'s elevated-role branch), matching the visibility rule's one
-    // carve-out that manage authority does not itself grant DM/open access.
-    if (!canSeeAgent({ kind: "user", userId, role }, agent)) throw new AppError("NOT_FOUND");
-    return agent;
-  }
-  /** A person stopped the Agent: its pending tracked mentions will not be launched. The stop is
-   * already recorded, so a failure here is logged and never fails it. */
-  private async settleStoppedMentions(agent: AgentControlAgent, stoppedAt: Date) {
-    try {
-      await this.mentions?.settleStopped({
-        workspaceId: agent.workspaceId,
-        agentId: agent.id,
-        stoppedAt,
-      });
-    } catch (error) {
-      console.warn(
-        JSON.stringify({
-          event: "agent_control:stopped_mentions_failed",
-          agent_id: agent.id,
-          workspace_id: agent.workspaceId,
-          error_type: errorType(error),
-        }),
-      );
-    }
-  }
-  private async begin(
-    agent: AgentControlAgent,
-    action: AgentControlAction,
-    requestId: string,
-    attempt = 1,
-    /** `undefined` leaves the Agent's persisted stopped state unchanged (every caller
-     * except `execute()` — `recover`, and `begin`'s own CAS retries, must never touch it). */
-    stoppedAt?: Date | null,
-  ): Promise<AgentControlState> {
-    // Every Start, Restart and Reset begins here; a Stop is what a migration itself needs.
-    if (action !== "stop" && agent.migrating)
-      throw new AppError("CONFLICT", { errorId: "agent-migrating" });
-    const old = agent.state;
-    if (old?.requestId === requestId) {
-      if (old.action !== action || !current(agent, old)) throw new Error("Operation scope changed");
-      return old;
-    }
-    // Latest requestId supersedes every state, including Full Reset clearing: increment epoch,
-    // retain identity under the Computer/provider rule, and drop launchId/launchIdentityBound.
-    // Supersession is normal, logged once at info; there is no pending refusal or abandoned state.
-    if (old)
-      console.info(
-        JSON.stringify({
-          event: "agent_control:operation_superseded",
-          agent_id: agent.id,
-          workspace_id: agent.workspaceId,
-          computer_id: agent.computerId,
-          previous_action: old.action,
-          previous_phase: old.phase,
-          previous_epoch: old.epoch,
-          previous_request_id: old.requestId,
-          new_action: action,
-          request_id: requestId,
-          outcome: "superseded",
-        }),
-      );
-    const retain =
-      old && old.computerId === agent.computerId && old.provider === agent.runtimeConfig.runtime;
-    const identity = retain ? old.identity : !old ? agent.identity : undefined;
-    // The server mints one launchId per operation's start step, the moment the
-    // operation enters phase "starting", in this same compare-and-swap write — never later, and
-    // never re-minted for a republish of the same operation (`state.requestId === requestId`
-    // stays idempotent above and never reaches here; `advance()` mints its own when a chain's
-    // stop/clear steps finish and it moves into "starting"). The Daemon no longer mints its own.
-    const state: AgentControlState = {
-      version: 1,
-      protocolMajor: 1,
-      requestId,
-      workspaceId: agent.workspaceId,
-      computerId: agent.computerId,
-      agentId: agent.id,
-      provider: agent.runtimeConfig.runtime,
-      epoch: (old?.epoch ?? 0) + 1,
-      action,
-      phase: action === "start" ? "starting" : "stopping",
-      configRevision: agentControlRevision(agent.runtimeConfig),
-      controlSequence: 0,
-      sessionSequence: 0,
-      ...(identity ? { identity } : {}),
-      ...(action === "start" ? { launchId: crypto.randomUUID() } : {}),
-    };
-    if (
-      await this.store.replace(agent, state, stoppedAt !== undefined ? { stoppedAt } : undefined)
-    ) {
-      if (stoppedAt) await this.settleStoppedMentions(agent, stoppedAt);
-      return state;
-    }
-
-    // Session reports do not take the runtime lock. Reauthorize and rebuild from
-    // their fresh identity, but never absorb a configuration or operation change.
-    const refreshed = await this.authorized(agent.ownerId, agent.workspaceId, agent.id);
-    if (
-      refreshed.computerId !== agent.computerId ||
-      !Bun.deepEquals(refreshed.runtimeConfig, agent.runtimeConfig, true) ||
-      !Bun.deepEquals(
-        refreshed.storedRuntimeConfig ?? refreshed.runtimeConfig,
-        agent.storedRuntimeConfig ?? agent.runtimeConfig,
-        true,
-      ) ||
-      !Bun.deepEquals(operationFence(refreshed.state), operationFence(old), true) ||
-      (refreshed.state?.sessionSequence ?? 0) < (old?.sessionSequence ?? 0)
-    )
-      throw new Error("Agent configuration or control operation changed");
-    if (attempt === 3)
-      throw new Error("Agent control could not begin after 3 compare-and-swap attempts");
-    return this.begin(refreshed, action, requestId, attempt + 1, stoppedAt);
+  startMany(input: Parameters<AgentControlBatch["startMany"]>[0]) {
+    return this.#batch.startMany(input);
   }
 
   /** Caller already holds the existing Agent runtime lock (create/update/recovery). */
   async publishStart(intent: AgentStartIntent, userId: string): Promise<void> {
-    const agent = await this.authorized(userId, intent.workspaceId, intent.agentId);
+    const agent = await this.#access.authorized(userId, intent.workspaceId, intent.agentId);
     // A deleted Agent is never started again. Every configuration, credential and
     // environment mutation funnels its restart through here, so this is the one place that has to
     // hold; `execute()` refuses it earlier, with a user-facing message.
@@ -478,11 +216,11 @@ export class AgentControl {
       // superseding another explicit command, so it always supersedes; `begin`
       // no longer throws "pending" for this.
       if (state.action !== "start") {
-        state = await this.begin(agent, "start", intent.requestId);
+        state = await this.#operations.begin(agent, "start", intent.requestId);
         began = true;
       }
     } else if (!state || state.phase === "failed" || state.action === "stop") {
-      state = await this.begin(agent, "start", intent.requestId);
+      state = await this.#operations.begin(agent, "start", intent.requestId);
       began = true;
     }
     // A configuration restart stopped the Agent first, dropping what its daemon held (already
@@ -490,40 +228,19 @@ export class AgentControl {
     // messages, as a plain Start does. A Daemon-ready recovery Start already carries them.
     const recovery =
       began && !carriesRecovery(intent)
-        ? { ...intent, ...(await this.readRecovery(intent.workspaceId, intent.agentId)) }
+        ? { ...intent, ...(await this.#publisher.readRecovery(intent.workspaceId, intent.agentId)) }
         : intent;
-    await this.publishCurrent(agent.id, state.requestId, recovery);
+    await this.#publisher.publishCurrent(agent.id, state.requestId, recovery);
   }
 
-  /** The unread messages a Start surfaces. A failed read never blocks the Start: the Agent still
-   * reaches those messages through `check`. */
-  private async readRecovery(
-    workspaceId: string,
-    agentId: string,
-  ): Promise<AgentRecoveryFields | undefined> {
-    if (!this.conversations) return undefined;
-    try {
-      return await this.conversations.readAgentRecoveryContext(workspaceId, agentId);
-    } catch (error) {
-      console.warn(
-        JSON.stringify({
-          event: "agent_control:recovery_read_failed",
-          workspace_id: workspaceId,
-          agent_id: agentId,
-          error_type: errorType(error),
-        }),
-      );
-      return undefined;
-    }
-  }
   /** Config/credential changes must confirm stop before mutating configuration. */
   async publishStop(
     input: { agentId: string; workspaceId: string; requestId: string },
     userId: string,
   ) {
-    const agent = await this.authorized(userId, input.workspaceId, input.agentId);
-    const state = await this.begin(agent, "stop", input.requestId);
-    const result = await this.drive(agent.id, state.requestId);
+    const agent = await this.#access.authorized(userId, input.workspaceId, input.agentId);
+    const state = await this.#operations.begin(agent, "stop", input.requestId);
+    const result = await this.#driver.drive(agent.id, state.requestId);
     if (result.phase !== "completed")
       throw new Error(
         result.phase === "superseded"
@@ -534,7 +251,7 @@ export class AgentControl {
 
   /** Native session and control phase used to decide a WeeklyReportAssistant subject switch. */
   async readLaunchPresence(input: { userId: string; workspaceId: string; agentId: string }) {
-    const agent = await this.authorized(input.userId, input.workspaceId, input.agentId);
+    const agent = await this.#access.authorized(input.userId, input.workspaceId, input.agentId);
     return {
       phase: agent.state?.phase ?? null,
       action: agent.state?.action ?? null,
@@ -555,14 +272,11 @@ export class AgentControl {
     sessionMode: "create" | "resume";
   }): Promise<void> {
     const requestId = crypto.randomUUID();
-    this.#subjectSessionByRequest.set(requestId, {
-      sessionId: input.sessionId,
-      sessionMode: input.sessionMode,
-    });
+    const session = { sessionId: input.sessionId, sessionMode: input.sessionMode };
     let drivenRequestId: string = requestId;
-    try {
+    await this.#publisher.withSubjectSession(requestId, session, async () => {
       await this.runtimeLock.run(input.agentId, async () => {
-        const agent = await this.authorized(input.userId, input.workspaceId, input.agentId);
+        const agent = await this.#access.authorized(input.userId, input.workspaceId, input.agentId);
         assertAgentLive(agent);
         const inFlight = agent.state;
         if (
@@ -575,282 +289,17 @@ export class AgentControl {
           drivenRequestId = inFlight.requestId;
           return;
         }
-        await this.begin(agent, "start", requestId, 1, null);
+        await this.#operations.begin(agent, "start", requestId, 1, null);
       });
-      const result = await this.drive(input.agentId, drivenRequestId);
+      const result = await this.#driver.drive(input.agentId, drivenRequestId);
       if (result.phase !== "completed") throw new AppError("TEMPORARILY_UNAVAILABLE");
-    } finally {
-      this.#subjectSessionByRequest.delete(requestId);
-    }
+    });
   }
 
-  private sendStop(state: AgentControlState) {
-    return this.api.publish(
-      daemonControlChannel(state.workspaceId, state.computerId),
-      encodeAgentStopIntent({ ...state, controlEpoch: state.epoch }),
-    );
+  authorizeLaunch(input: AgentLaunchClaim): Promise<void> {
+    return this.#receiver.authorizeLaunch(input);
   }
-  private async publishCurrent(agentId: string, requestId: string, recovery?: AgentRecoveryFields) {
-    const agent = await this.store.get(agentId);
-    const state = agent?.state;
-    if (!agent || !state || state.requestId !== requestId || !current(agent, state))
-      throw new Error("Agent configuration changed");
-    await this.#publish(agent, state, recovery);
-  }
-  /** Sends the command for `state`'s phase; `agent` is the record `state` is current for. */
-  async #publish(
-    agent: AgentControlAgent,
-    state: AgentControlState,
-    recovery?: AgentRecoveryFields,
-  ) {
-    const agentId = agent.id;
-    const { requestId } = state;
-    if (state.phase === "stopping") {
-      await this.sendStop(state);
-    } else if (state.phase === "clearing") {
-      await this.api.publish(
-        daemonControlChannel(state.workspaceId, state.computerId),
-        encodeAgentWorkspaceResetRequest(state),
-      );
-    } else if (state.phase === "starting" || (state.phase === "completed" && recovery)) {
-      // A Restart or Reset ends with a Start after its stop step, which dropped what the daemon
-      // held (already acknowledged). That Start carries the unread messages from the read
-      // boundary, the same recovery a plain Start reads in `execute`.
-      if (!recovery && state.phase === "starting" && state.action !== "start")
-        recovery = await this.readRecovery(state.workspaceId, agentId);
-      // `launchId` should already be minted (`begin()`/`advance()`, the moment this
-      // operation entered "starting"); the only gap is a "starting" row written before this
-      // record shipped. Mint and persist it here, once, before publish — never for a "completed"
-      // republish, which already has one from when it first started.
-      let launchId = state.launchId;
-      if (state.phase === "starting" && !launchId) {
-        launchId = crypto.randomUUID();
-        if (!(await this.store.replace(agent, { ...state, launchId }))) {
-          const refreshed = await this.store.get(agentId);
-          const refreshedLaunchId =
-            refreshed?.state?.requestId === requestId ? refreshed.state.launchId : undefined;
-          if (!refreshedLaunchId) throw new Error("Agent launch could not be assigned an id");
-          launchId = refreshedLaunchId;
-        }
-      }
-      await this.sendStart(agent, state, launchId, { recovery });
-    }
-  }
-  /** Sends `state`'s Start for `agent`, carrying either message recovery or a resume prompt. */
-  private async sendStart(
-    agent: AgentControlAgent,
-    state: AgentControlState,
-    launchId: string | undefined,
-    first: { recovery?: AgentRecoveryFields; resumePrompt?: string },
-  ) {
-    const { requestId, identity } = state;
-    const reset =
-      state.phase !== "completed" &&
-      (state.action === "reset-session" || state.action === "full-reset");
-    const { recovery, resumePrompt } = first;
-    const introductionPrompt = await this.introductions?.promptFor(agent, new Date(this.clock()));
-    const intent: AgentStartIntent = {
-      protocolMajor: 1,
-      requestId,
-      workspaceId: state.workspaceId,
-      computerId: state.computerId,
-      agentId: agent.id,
-      ...runtimeStartFields(agent.runtimeConfig),
-      controlEpoch: state.epoch,
-      ...(launchId ? { launchId } : {}),
-      ...(this.#subjectSessionByRequest.get(requestId)
-        ? this.#subjectSessionByRequest.get(requestId)
-        : !reset &&
-            identity?.sessionId &&
-            (identity.state !== "empty" || state.phase === "completed")
-          ? { sessionId: identity.sessionId }
-          : {}),
-      ...(recovery
-        ? {
-            wakeMessage: recovery.wakeMessage,
-            resumeMessages: recovery.resumeMessages,
-            unreadSummary: recovery.unreadSummary,
-            unreadConversationIds: recovery.unreadConversationIds,
-          }
-        : {}),
-      ...(resumePrompt !== undefined ? { resumePrompt } : {}),
-      ...(introductionPrompt !== undefined ? { introductionPrompt } : {}),
-    };
-    const selected = this.sessions ? await this.sessions.prepare(intent) : intent;
-    await this.api.publish(
-      daemonControlChannel(state.workspaceId, state.computerId),
-      encodeAgentStartIntent(selected),
-    );
-  }
-  private async drive(
-    agentId: string,
-    requestId: string,
-    /** Only ever set by `execute()`'s `"start"` action; threaded into the single `publishCurrent`
-     * call this method itself makes. Chain transitions still go through `advance()`; the Start
-     * that ends a Restart/Reset/Full reset reads its own recovery in `publishCurrent`. */
-    recovery?: AgentRecoveryFields,
-  ): Promise<AgentControlView> {
-    const deadline = Date.now() + this.timing.timeoutMs;
-    let publishedPhase = "";
-    // A signal means the ACK handler already advanced and published the next command.
-    let signaled = false;
-    for (;;) {
-      const agent = await this.store.get(agentId);
-      const state = agent?.state;
-      // A genuine scope change (Agent moved Computer, config revision changed, Agent gone) is
-      // still an error; a requestId that changed while the Agent's own scope is still current
-      // means a newer command superseded this one — report that to the caller
-      // instead of an error, since the newer command is the one actually running now.
-      if (!agent || !state || !current(agent, state))
-        throw new Error("Agent operation scope changed");
-      if (state.requestId !== requestId) return supersededView(state);
-      if (terminal(state)) return view(state);
-      if (state.phase === "stopped" || state.phase === "workspace-reset") {
-        await this.advance(agentId, requestId);
-        continue;
-      }
-      if (signaled) {
-        signaled = false;
-        publishedPhase = state.phase;
-      }
-      if (publishedPhase !== state.phase) {
-        // Publish failure is ambiguous: keep the durable pending state and retry the SAME
-        // request, UNLESS the failure happened because the request was superseded underneath us
-        // in the meantime — re-read to tell the two apart instead of reporting the stale phase.
-        try {
-          await this.publishCurrent(agentId, requestId, recovery);
-        } catch {
-          const latest = await this.store.get(agentId);
-          const latestState = latest?.state;
-          if (
-            latest &&
-            latestState &&
-            latestState.requestId !== requestId &&
-            current(latest, latestState)
-          )
-            return supersededView(latestState);
-          return view(state);
-        }
-        publishedPhase = state.phase;
-        continue;
-      }
-      if (Date.now() >= deadline) return view(state);
-      // Daemon ACKs wake the waiter; the fallback re-read bounds a lost signal.
-      signaled = await this.signal.wait(
-        agentId,
-        Math.min(this.timing.fallbackMs ?? 1_000, deadline - Date.now()),
-      );
-    }
-  }
-
-  /**
-   * Verifies a launch before minting its credential; never accepts user-selected Session IDs.
-   *
-   * `launchId` is minted and persisted by `begin()`/`advance()`/`publishCurrent()` the
-   * moment the operation enters "starting" — before this is ever called. This method only
-   * verifies the Daemon's claimed `launchId` matches that already-stored value; it performs no
-   * write, so there is no compare-and-swap race left to retry here (a concurrent Session write,
-   * e.g. an `agent:session:invalidate`-triggered clear, cannot make a read-only check lose a
-   * race the way the old read-validate-write pass could).
-   */
-  async authorizeLaunch(input: {
-    agentId: string;
-    workspaceId: string;
-    computerId: string;
-    controlEpoch?: number;
-    requestId?: string;
-    launchId?: string;
-  }): Promise<void> {
-    const agent = await this.store.get(input.agentId);
-    if (!agent || agent.workspaceId !== input.workspaceId || agent.computerId !== input.computerId)
-      throw new Error("Agent launch is not authorized");
-    // Whatever the control state says, a Computer never launches an Agent being moved off it.
-    if (agent.migrating) throw new Error("Agent is moving to another Computer");
-    const state = agent.state;
-    if (!state) {
-      if (input.controlEpoch || input.requestId || input.launchId)
-        throw new Error("Unsolicited managed launch");
-      return;
-    }
-    if (!current(agent, state)) throw new Error("Stale Agent launch");
-    const sameScope =
-      state.requestId === input.requestId &&
-      state.epoch === input.controlEpoch &&
-      !!input.launchId &&
-      state.launchId === input.launchId;
-    if (state.phase === "starting") {
-      if (sameScope) return;
-      throw new Error("Stale Agent launch");
-    }
-    // A daemon-initiated wake resends the same requestId/controlEpoch/launchId this
-    // Agent's last managed operation completed under, instead of a fresh managed scope. Accepted
-    // only when that operation finished a chain that ends in `start` under the exact same scope,
-    // and the Agent is not user-stopped — never for a superseded, failed, or stopped
-    // operation. A completed `stop` chain also ends in phase "completed" (`advance()` has no next
-    // step); it carries no `launchId`, so `sameScope` already excludes it, but the action is
-    // checked explicitly so this never depends on that.
-    if (state.phase === "completed" && state.action !== "stop" && sameScope && !agent.stoppedAt)
-      return;
-    throw new Error("Stale Agent launch");
-  }
-  /** RPC ACK follows conditional persistence; never acquires the control waiter's lock. */
-  async result(claim: { workspaceId: string; computerId: string }, result: AgentControlResult) {
-    const agent = await requireCurrentAgentScope(this.store, claim, result);
-    const state = agent.state;
-    if (result.sequence <= state.controlSequence) return;
-    const command = Object.values(commands).find((command) => command.result === result.phase);
-    if (command && state.phase !== command.pending) throw new Error("Unexpected command result");
-    if (result.phase === "started" && (!result.launchId || state.launchId !== result.launchId))
-      throw new Error("Unexpected launch result");
-    if (terminal(state)) throw new Error("Operation already finished");
-    if (result.phase === "workspace-reset" && result.identity)
-      throw new Error("Reset retained old Session");
-    const { identity: oldIdentity, errorCode: _oldError, ...fields } = state;
-    const identity =
-      result.phase === "started" && state.sessionSequence > result.sequence
-        ? oldIdentity
-        : (result.identity ?? oldIdentity);
-    const identityChanged =
-      result.phase === "started" &&
-      !!oldIdentity?.sessionId &&
-      !!result.identity?.sessionId &&
-      oldIdentity.sessionId !== result.identity.sessionId;
-    if (identityChanged && state.launchIdentityBound)
-      throw new Error("Native Session identity changed during launch");
-    const next: AgentControlState = {
-      ...fields,
-      controlSequence: result.sequence,
-      phase: command?.completed ?? "failed",
-      ...(result.phase === "started" && result.identity ? { launchIdentityBound: true } : {}),
-      ...(state.recovered || (identityChanged && oldIdentity?.state !== "empty")
-        ? { recovered: true }
-        : {}),
-      ...(identity ? { identity } : {}),
-      ...(result.errorCode || state.errorCode
-        ? { errorCode: result.errorCode ?? state.errorCode }
-        : {}),
-      ...((command?.completed ?? "failed") === "failed"
-        ? { failedAtMs: state.failedAtMs ?? Date.now() }
-        : {}),
-    };
-    if (!(await this.store.replace(agent, next))) throw new Error("Control result lost its fence");
-    // A launch that started with its session binds the Agent's current identity, as an accepted
-    // session report does. The result's reply does not wait for the re-send, which logs its own
-    // failures (`MentionDeliveryReports`).
-    if (result.phase === "started" && result.identity)
-      void this.mentions?.resendForCurrentSession({
-        workspaceId: agent.workspaceId,
-        computerId: claim.computerId,
-        agentId: agent.id,
-      });
-    if (next.phase === "stopped" || next.phase === "workspace-reset") {
-      // Publish failure stays silent so the waiter's fallback re-read republishes the phase.
-      const advanced = await this.advance(agent.id, next.requestId).then(
-        () => true,
-        () => false,
-      );
-      if (!advanced) return;
-    }
-    await this.signal.notify(agent.id).catch(() => {});
+  result(claim: { workspaceId: string; computerId: string }, result: AgentControlResult) {
+    return this.#receiver.result(claim, result);
   }
 }

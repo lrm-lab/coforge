@@ -47,10 +47,10 @@ these modules have their own rules in `src/server/centrifugo/AGENTS.md`.
 
 ## Control operations
 
-- `agent-control.server.ts` runs Start, Stop, Restart, Reset Session, and Full
+- `AgentControl` runs Start, Stop, Restart, Reset Session, and Full
   Reset as fixed command chains with receipt-driven state transitions and
   request/epoch fences. Operation progress is not a new Agent status and not a
-  durable command mailbox.
+  durable command mailbox. `agent-control.server.ts` is the `AgentControl` facade and keeps its public methods; the jobs behind it live beside it: `agent-control-access` (who may control an Agent), `-operations` (`begin`, the compare-and-swap write of the current operation), `-publisher` (the Start, Stop and reset commands sent to the Daemon), `-driver` (`advance` and `drive`), `-receiver` (`authorizeLaunch` and `result`), `-batch` (`stopMany` and `startMany`), over the shared state and fences in `agent-control-types`. Add logic to the module that owns the job; the facade is under the 20,000-byte size ratchet.
 - Each operation mints one `launchId` when it enters `starting` and supplies it
   in the Start intent. `authorizeLaunch` is read-only: it verifies that id and
   never writes.
