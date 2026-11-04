@@ -26,7 +26,6 @@ import {
   decodeAgentManualErrorResponse,
   decodeAgentManualGetResponse,
   decodeAgentManualSearchResponse,
-  decodeAgentVersionResponse,
   decodeGitHubCredentialResponse,
   decodeAgentMentionExecuteResponse,
   decodeAgentMentionPendingResponse,
@@ -52,6 +51,7 @@ import type { MessageReadOptions } from "./message-read-args";
 import { refusalNextAction } from "./refusal-guidance";
 import { refuseCredentialSolicitationIfNeeded } from "./send-credential-gate";
 import { proxyHttpFailure, proxyTransportFailure } from "./local-proxy-failure";
+import { computerUpdateNoticeRequest, versionRequest } from "./local-readonly-requests";
 import {
   envelopeRequest,
   operationFailedCode,
@@ -97,41 +97,6 @@ async function manualRequest<T>(
     "manual",
     (code) => (code === "knowledge_not_found" ? MANUAL_NOT_FOUND_NEXT_ACTION : undefined),
   );
-}
-
-/**
- * GETs the local-only `/api/agent/v1/version` route: unlike
- * `manualRequest` above, this never reaches Web/backend, so a non-ok response is always a local
- * proxy/daemon condition, never a domain error envelope. A network/timeout failure is reported as
- * "the live daemon could not be queried", matching `coforge version`'s own refusal wording for a
- * daemon that never answered.
- */
-async function versionRequest(
-  proxyEndpoint: (path: string) => URL,
-  context: string,
-  proxyUrl: string,
-): Promise<AgentVersionResponse> {
-  requireProxySetup("version", context, proxyUrl);
-  let response: Response;
-  try {
-    response = await fetch(proxyEndpoint(agentApiRoutes.proxy.version.path), {
-      method: agentApiRoutes.proxy.version.method,
-      headers: { authorization: `Bearer ${context}` },
-      signal: AbortSignal.timeout(10_000),
-    });
-  } catch {
-    throw new CliError({
-      code: "VERSION_FAILED",
-      message:
-        "The live daemon could not be queried: agent proxy request failed (network or timeout).",
-      retryable: false,
-    });
-  }
-  if (!response.ok) {
-    const errorBody = await readProxyErrorBody(response);
-    throw proxyHttpFailure("version", response.status, errorBody, undefined);
-  }
-  return decodeAgentVersionResponse(await response.json().catch(() => undefined));
 }
 
 export function connectLocal(
@@ -326,6 +291,8 @@ export function connectLocal(
         decodeAgentManualSearchResponse,
       ),
     version: (): Promise<AgentVersionResponse> => versionRequest(proxyEndpoint, context, proxyUrl),
+    computerUpdateNotice: (): Promise<{ ok: true; notice: string | null }> =>
+      computerUpdateNoticeRequest(proxyEndpoint, context, proxyUrl),
     ...profileRequests(proxyEndpoint, context, proxyUrl),
     labelList: (): Promise<AgentLabelListResponse> =>
       labelListRequest(proxyEndpoint, context, proxyUrl),

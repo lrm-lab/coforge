@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { run } from "../index";
 import { connectLocal } from "./local-client";
+import { updateNoticeLine } from "./update-notice";
 import { CliError, renderCliError } from "./cli-error";
 import { runGitHubCli, runGitHubCredentialHelper } from "./github-credential";
 import { runGitPrepareCommitMsg } from "./git-prepare-commit-msg";
@@ -33,6 +34,11 @@ export async function runAgentCli(args: readonly string[]): Promise<void> {
     return;
   }
 
+  const transport = connectLocal(
+    Bun.env.COFORGE_DAEMON_SOCKET ?? "",
+    Bun.env.COFORGE_AGENT_CONTEXT ?? "",
+    Bun.env.COFORGE_AGENT_PROXY_URL ?? "",
+  );
   try {
     // The app commands own their output and exit code, so neither goes through `run` (`app
     // token` also owns the program's stdio). `app config` alone stays with `run`. `--help`
@@ -78,11 +84,6 @@ export async function runAgentCli(args: readonly string[]): Promise<void> {
         });
       return;
     }
-    const transport = connectLocal(
-      Bun.env.COFORGE_DAEMON_SOCKET ?? "",
-      Bun.env.COFORGE_AGENT_CONTEXT ?? "",
-      Bun.env.COFORGE_AGENT_PROXY_URL ?? "",
-    );
     if (args[0] === "github" && args[1] === "credential") {
       const output = await runGitHubCredentialHelper(
         args[2],
@@ -110,12 +111,18 @@ export async function runAgentCli(args: readonly string[]): Promise<void> {
     const result = await run(args, transport);
     if (typeof result === "string") console.log(result);
     else if (result !== undefined) console.log(JSON.stringify(result));
+    // The once-a-day Computer-update line rides the output tail: the daemon dedups, this side
+    // only decides whether a line may follow — never for `--json`, never from an error below.
+    const notice = await updateNoticeLine(transport, args);
+    if (notice) console.log(notice);
   } catch (error) {
     if (error instanceof CliError) {
       if (error.stdoutText) console.log(error.stdoutText);
       console.error(renderCliError(error));
     } else console.error(thrownMessage(error));
     process.exitCode = error instanceof CliError ? (error.exitCode ?? 1) : 1;
+    const notice = await updateNoticeLine(transport, args);
+    if (notice) console.log(notice);
   }
 }
 
