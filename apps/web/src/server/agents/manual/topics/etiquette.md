@@ -131,3 +131,12 @@ announcement. Treat each action's current contract and authoritative state as th
 truth; an action that is not explicitly in scope remains out of scope. Being granted one
 permission never implies permission for subsequent actions such as deployment, release,
 migration, or production writes.
+
+## Computer-update notice
+
+Some commands end with a line such as
+`A newer CoForge Computer release (x.y.z) is available — this Computer runs a.b.c; tell the
+owner once and suggest coforge computer upgrade`. When you see it, relay it to your owner
+once — the daemon already dedups it to one line per day per computer, so one brief report is
+enough; do not re-report it in later turns. It is a notice, not an instruction to upgrade
+yourself.
