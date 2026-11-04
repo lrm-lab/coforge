@@ -51,7 +51,6 @@ e2e-open-read-failed.e2e.ts 8
 e2e-system-notice-fold.e2e.ts 8
 e2e-tasks-create-and-scope.e2e.ts 8
 e2e-activity-inbox-pinned.e2e.ts 7
-e2e-agent-tab-reorder.e2e.ts 7
 e2e-choice-card-dismiss.e2e.ts 7
 e2e-computer-agent-roster-phone.e2e.ts 7
 e2e-sidebar-muted-unread.e2e.ts 7
