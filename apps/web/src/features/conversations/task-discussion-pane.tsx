@@ -1,6 +1,7 @@
 import { useMemo, type ComponentProps } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { ConversationTaskDemand } from "#src/features/tasks/conversation-task-demand";
 import { replyToTask } from "#src/features/tasks/task-conversation.functions";
 import { taskFollowQueryKey } from "#src/features/tasks/task-follow";
 import { ConversationPane } from "./conversation-pane";
@@ -63,6 +64,15 @@ export function TaskDiscussionPane({
     );
   return (
     <ComposerScopeProvider value={scope}>
+      {/* The board's Tasks its messages name: nothing else reads them, so without this a reference
+          stayed a bare "#N" unless its Task happened to be read for something else (Frank, 11-04). */}
+      <ConversationTaskDemand
+        conversationId={board.conversationId}
+        messages={messages}
+        hasNewer={false}
+        readWindow={false}
+        openTaskNumber={undefined}
+      />
       <ConversationPane
         {...pane}
         inTaskPopup
