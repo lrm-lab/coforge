@@ -392,3 +392,22 @@ test("structured status wins over contradictory error text and invalid status fa
     httpStatus: 404,
   });
 });
+
+test("Devin's session/prompt -32011 quota error is billing-exhausted, not a generic failure", () => {
+  // The exact text the incident produced (devin_20261103-180029_63556.log):
+  // `ACP: agent error (ResourceExhausted): Your weekly usage quota has been exhausted`,
+  // `session/prompt` JSON-RPC -32011 carrying the same sentence.
+  const incident =
+    "ACP: agent error (ResourceExhausted): Your weekly usage quota has been exhausted. " +
+    "JSON-RPC error -32011: Unknown error";
+  const classified = classifyRuntimeErrorText(incident);
+  expect(classified.errorClass).toBe(RUNTIME_ERROR_CLASS.BILLING);
+  expect(classified.errorReason).toBe("billing_exhausted");
+  expect(classified.takesAgentOffline).toBe(true);
+});
+
+test("Devin's quota sentence alone is billing-exhausted", () => {
+  const classified = classifyRuntimeErrorText("Your weekly usage quota has been exhausted");
+  expect(classified.errorReason).toBe("billing_exhausted");
+  expect(classified.takesAgentOffline).toBe(true);
+});

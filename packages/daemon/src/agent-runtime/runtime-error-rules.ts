@@ -86,6 +86,9 @@ export const RUNTIME_BILLING_EXHAUSTED_PATTERNS = [
   /\byou(?:'|’)ve reached\b[^.]{0,80}\b(?:usage limit|today's limit)\b/i,
   // Codex 0.165 prints this, not "you've reached". "You've hit your session limit" stays out.
   /\byou(?:'|’)ve hit your usage limit\b/i,
+  // Devin's session/prompt ResourceExhausted (-32011) words its account-wide weekly cap this
+  // way; the generic usage/quota wording above does not reach it.
+  /\bweekly usage quota has been exhausted\b/i,
 ];
 
 /** A sticky model-config failure takes the Agent offline even without a named action — mirrored
