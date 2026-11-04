@@ -33,5 +33,6 @@
   "system_notice_coordinator_replaced": "{actor} made {next} the coordinator of #{channel} (replacing {previous})",
   "system_notice_coordinator_removed": "{actor} removed {previous} as coordinator of #{channel}",
   "system_notice_agent_dm_chain_limit": "[CoForge paused] These Agents have exchanged too many messages in a row. They can continue after 10 minutes without a message.",
-  "system_notice_agent_dm_rate_limit": "[CoForge paused] An Agent here has sent too many direct messages to other Agents in the last hour. It can send again when the hour's total drops below the limit."
+  "system_notice_agent_dm_rate_limit": "[CoForge paused] An Agent here has sent too many direct messages to other Agents in the last hour. It can send again when the hour's total drops below the limit.",
+  "system_notice_member_welcome_requested": "{agent} was asked to welcome {newcomer}"
 }

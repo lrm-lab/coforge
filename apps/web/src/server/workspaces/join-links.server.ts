@@ -5,6 +5,7 @@ import {
   type ConversationRealtime,
 } from "#src/server/conversations/conversation-realtime.server";
 import { assertCanManageMembers, type WorkspaceMemberRole } from "./member-role.server";
+import type { MemberWelcome } from "./member-welcome.server";
 
 /** A reusable link anyone signed in can open to join the Workspace as an ordinary member. */
 export type WorkspaceJoinLinkRecord = {
@@ -43,7 +44,7 @@ export type NewWorkspaceJoinLink = {
 };
 
 export type JoinLinkAdmission =
-  | { status: "admitted"; joinedChannelIds: string[] }
+  | { status: "admitted"; joinedChannelIds: string[]; welcome?: MemberWelcome }
   /** The link stopped admitting (revoked, expired or used up) before this join counted. */
   | { status: "inactive" }
   /** The person became a member meanwhile; no use was counted. */
@@ -108,6 +109,8 @@ export class WorkspaceJoinLinks {
       userId: string,
       options: { locale?: Locale },
     ) => Promise<unknown>,
+    /** Publishes the request for an Agent to welcome the person, once the admission committed. */
+    private readonly publishWelcome?: (welcome: MemberWelcome) => Promise<unknown>,
   ) {}
 
   async current(input: { workspaceId: string; actorUserId: string }) {
@@ -173,6 +176,7 @@ export class WorkspaceJoinLinks {
         workspaceId: workspace.id,
         conversationIds: admission.joinedChannelIds,
       });
+      if (admission.welcome) await this.publishWelcome?.(admission.welcome);
     }
     await this.onboardMember?.(workspace.id, input.userId, { locale: input.locale });
     return landing;

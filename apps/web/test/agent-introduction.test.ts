@@ -101,6 +101,35 @@ test("without a known role the welcome asks what the member is working on and ne
   }
 });
 
+test("a platform assistant owes no welcome to a member someone else welcomed when they joined", () => {
+  const facts = { systemKind: WORKSPACE_ASSISTANT_KIND, introductionDueAt: null };
+  expect(promptFor({ ...facts, assistantWelcome: false })).toBeUndefined();
+  expect(promptFor({ ...facts, assistantWelcome: true })).toContain("platform assistant");
+  expect(promptFor(facts)).toContain("platform assistant");
+});
+
+test("an Agent also introduces itself in #general only when its Workspace asks and it can post there", () => {
+  const off = promptFor();
+  expect(off).toContain("Never post this introduction in a channel.");
+  expect(off).not.toContain("#general");
+
+  const on = promptFor({ greetGeneral: true })!;
+  expect(on).toContain("introduce yourself to @ada, who created you, in a direct message");
+  expect(on).toContain("coforge message send --target '#general'");
+  expect(on).toContain("two-to-three sentence self-introduction");
+  expect(on).not.toContain("Never post this introduction in a channel.");
+  expect(on).toContain("only as a direct message");
+  // The greeting adds to the introduction an Agent owes; it never creates one.
+  expect(promptFor({ greetGeneral: true, introductionDueAt: null })).toBeUndefined();
+  expect(
+    promptFor({
+      greetGeneral: true,
+      systemKind: WORKSPACE_ASSISTANT_KIND,
+      introductionDueAt: null,
+    }),
+  ).not.toContain("#general");
+});
+
 test("a platform assistant's own DM reply settles an unset introductionDueAt", async () => {
   const scopes: { since: Date }[] = [];
   const introductions = new AgentIntroduction({
@@ -110,6 +139,7 @@ test("a platform assistant's own DM reply settles an unset introductionDueAt", a
       return true;
     },
     settle: async () => {},
+    workspaceFacts: async () => ({}),
   });
   const prompt = await introductions.promptFor(
     {
@@ -206,6 +236,7 @@ function controlFixture(
         )
       );
     },
+    workspaceFacts: async () => ({}),
     settle: async (input) => {
       if (options.fail === "settle") throw new Error("database unavailable");
       settled.push(input);
@@ -356,6 +387,7 @@ test("only a platform assistant that owes a welcome reads the owner's setup fact
     },
     hasAgentMessage: async () => false,
     settle: async () => {},
+    workspaceFacts: async () => ({}),
   });
   await introductions.promptFor(
     {
@@ -420,4 +452,49 @@ test("a Daemon coming ready does not start a platform assistant whose owner's wi
   await ordinary.control.recover({ ...ordinary.intent, requestId: "ready" }, "owner-a");
   expect(ordinary.starts).toHaveLength(1);
   expect(ordinary.reads.setup).toBe(0);
+});
+
+test("a Start reads the Workspace's onboarding only for an Agent that may owe an introduction", async () => {
+  let reads = 0;
+  const introductions = (facts: () => Promise<{ assistantWelcome?: boolean }>) =>
+    new AgentIntroduction({
+      hasAgentMessage: async () => false,
+      settle: async () => {},
+      // The owner finished the setup wizard (main's check before an assistant welcomes).
+      setupFacts: async () => ({ onboardingPending: false, ownerRole: null }),
+      workspaceFacts: async () => {
+        reads += 1;
+        return facts();
+      },
+    });
+  const assistant = {
+    id: "assistant-a",
+    workspaceId: "workspace-a",
+    ownerId: "user-a",
+    ownerUsername: "ada",
+    systemKind: WORKSPACE_ASSISTANT_KIND,
+  };
+  const now = new Date("2026-11-02T08:00:00Z");
+
+  // Someone else welcomed the member when they joined, or nobody did: the assistant does not.
+  expect(
+    await introductions(async () => ({ assistantWelcome: false })).promptFor(assistant, now),
+  ).toBeUndefined();
+  expect(
+    await introductions(async () => ({ assistantWelcome: true })).promptFor(assistant, now),
+  ).toContain("@ada");
+  // A failed read keeps the welcome as it was before these settings.
+  expect(
+    await introductions(async () => {
+      throw new Error("database unavailable");
+    }).promptFor(assistant, now),
+  ).toContain("@ada");
+
+  // An Agent that owes nothing is not read for it.
+  reads = 0;
+  await introductions(async () => ({})).promptFor(
+    { id: "agent-b", workspaceId: "workspace-a", ownerId: "user-a", ownerUsername: "ada" },
+    now,
+  );
+  expect(reads).toBe(0);
 });

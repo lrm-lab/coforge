@@ -2,6 +2,7 @@ import { recordChannelMembersRemoved } from "#src/server/app-notifications/chann
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { ACTIVE_CHANNEL_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
+import { clearOnboardingAgent } from "#src/server/workspaces/workspace-onboarding.server";
 import type {
   AgentDeletionOutcome,
   AgentDeletionStore,
@@ -48,6 +49,8 @@ export class PrismaAgentDeletionStore implements AgentDeletionStore {
       await tx.workspaceMemoryAgent.deleteMany({
         where: { workspaceId: input.workspaceId, agentId: input.agentId },
       });
+      // No longer the one that welcomes new members: the Workspace falls back to the assistant.
+      await clearOnboardingAgent(tx, input.workspaceId, input.agentId);
 
       const activeChannels = await tx.conversationMember.findMany({
         where: {

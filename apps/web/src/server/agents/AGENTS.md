@@ -120,7 +120,7 @@ these modules have their own rules in `src/server/centrifugo/AGENTS.md`.
   (`conversations.readAgentRecoveryContext`) as a Daemon-ready recovery start.
 - Starts carry `introductionPrompt` up to 7 days after `introductionDueAt`,
   which a person's create sets and the next Start settles once the Agent
-  has a message in its creator's DM. Ordinary introductions send one short DM greeting and ask what help is wanted; they do not read memory or list tasks merely to prepare that greeting, and a local final answer never counts as delivery.
+  has a message in its creator's DM. Ordinary introductions send one short DM greeting and ask what help is wanted; they do not read memory or list tasks merely to prepare that greeting, and a local final answer never counts as delivery. Who welcomes a new member is decided once, when they join, from the Workspace's `onboardingMode` then, and recorded as `WorkspaceMembership.assistantWelcome`; the introduction store reads that record (only for an Agent that may owe an introduction), so a platform assistant gets its welcome prompt only for a member admitted under `assistant`, whatever the mode is later. `newAgentGreeting` adds a #general self-introduction to the prompt of a new public Agent while #general is shown (`greetGeneral`).
 - Ready recovery reconciles a stopped Agent the Daemon still runs with a Stop
   through `AgentControl.publishStop`, without blocking the rest of recovery.
 - `agent-delivery-rejection.server.ts` answers a Daemon's `no_process`

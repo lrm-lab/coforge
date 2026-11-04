@@ -11,6 +11,7 @@ import {
 } from "./join-links.server";
 import { admitWorkspaceMember } from "./member-admission.server";
 import { isWorkspaceMemberRole } from "./member-role.server";
+import { publishMemberWelcome } from "./member-welcome.server";
 import { workspaceIconUrl } from "./workspace-images.server";
 
 const linkSelect = {
@@ -126,12 +127,12 @@ export class PrismaWorkspaceJoinLinkStore implements WorkspaceJoinLinkStore {
           where: { id: input.linkId },
           select: { workspace: { select: { id: true, slug: true } } },
         });
-        const { joinedChannelIds } = await admitWorkspaceMember(tx, {
+        const { joinedChannelIds, welcome } = await admitWorkspaceMember(tx, {
           workspace: link.workspace,
           userId: input.userId,
           role: "member",
         });
-        return { status: "admitted" as const, joinedChannelIds };
+        return { status: "admitted" as const, joinedChannelIds, welcome };
       });
     } catch (error) {
       // They joined meanwhile (the same link opened twice at once): their membership stands and
@@ -163,5 +164,6 @@ export function workspaceJoinLinks(db: PrismaClient) {
         startIfOwed: true,
         ...options,
       }),
+    (welcome) => publishMemberWelcome(db, welcome),
   );
 }

@@ -80,6 +80,7 @@ function fixture(alreadyGreeted = true) {
     settle: async () => {
       agent.introductionDueAt = null;
     },
+    workspaceFacts: async () => ({}),
   });
   const control: AgentControl = new AgentControl(
     store,

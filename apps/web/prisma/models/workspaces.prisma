@@ -9,6 +9,17 @@ model Workspace {
   /// a sparse key → boolean map. NULL, or a key never set, reads as off; a key the registry no
   /// longer lists is ignored.
   experiments            Json?
+  /// Who welcomes a new human member (`server/workspaces/workspace-onboarding.server.ts`): their own
+  /// platform assistant (`assistant`), one chosen Agent (`agent`), or nobody (`off`), held to those
+  /// by `workspaces_onboarding_mode_check`. `workspaces_onboarding_check` holds `agent` exactly when
+  /// `onboardingAgentId` is set; a trigger falls back to `assistant` when that Agent row is
+  /// hard-deleted (the FK sets the column NULL).
+  onboardingMode         String                  @default("assistant")
+  /// The Agent that welcomes new members in `agent` mode; cleared when it is archived or private.
+  onboardingAgentId      String?                 @db.Uuid
+  onboardingAgent        Agent?                  @relation("WorkspaceOnboardingAgent", fields: [onboardingAgentId], references: [id], onDelete: SetNull)
+  /// Whether an Agent created from now on also introduces itself in `#general`.
+  newAgentGreeting       Boolean                 @default(false)
   members                WorkspaceMembership[]
   joinLinks              WorkspaceJoinLink[]
   computers              WorkspaceComputer[]
@@ -119,6 +130,10 @@ model WorkspaceMembership {
   userId      String    @db.Uuid
   /// Workspace role: owner | admin | member. Owner is created at Workspace creation and is immutable.
   role        String    @default("member")
+  /// Whether the member's platform assistant owes them its welcome. Decided once, when a join link
+  /// admits them, from the Workspace's onboarding mode at that moment (true only under `assistant`);
+  /// a Workspace creator and every member from before this column keep the default.
+  assistantWelcome Boolean @default(true)
   createdAt   DateTime  @default(now())
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)

@@ -1,0 +1,11 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "member_onboarding_title": "新成员引导",
+  "member_onboarding_welcome": "欢迎新成员",
+  "member_onboarding_welcome_description": "有人加入工作区时，由谁私信欢迎 ta。",
+  "member_onboarding_assistant": "各自的通用助手",
+  "member_onboarding_off": "不自动欢迎",
+  "member_onboarding_greeting": "新 Agent 在 #general 打招呼",
+  "member_onboarding_greeting_description": "开启后，之后新建的 Agent 会在 #general 发一段简短的自我介绍，现有 Agent 不受影响。",
+  "member_onboarding_load_error": "没能读取新成员引导设置。"
+}

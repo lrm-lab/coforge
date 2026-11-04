@@ -32,5 +32,6 @@
   "system_notice_coordinator_replaced": "{actor} 把 {next} 设为 #{channel} 的协调员（替换 {previous}）",
   "system_notice_coordinator_removed": "{actor} 取消了 {previous} 在 #{channel} 的协调员身份",
   "system_notice_agent_dm_chain_limit": "[CoForge 已暂停] 这些 Agent 连续互发的消息太多了，连续 10 分钟没有新消息后可以继续。",
-  "system_notice_agent_dm_rate_limit": "[CoForge 已暂停] 这里有个 Agent 过去一小时给其他 Agent 发的私信太多了，等这一小时的总数降到上限以下就能再发。"
+  "system_notice_agent_dm_rate_limit": "[CoForge 已暂停] 这里有个 Agent 过去一小时给其他 Agent 发的私信太多了，等这一小时的总数降到上限以下就能再发。",
+  "system_notice_member_welcome_requested": "已请 {agent} 欢迎 {newcomer}"
 }

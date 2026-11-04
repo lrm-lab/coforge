@@ -79,6 +79,13 @@ offer to propose a starter team of Agents for that role, created only after the 
 otherwise it asks what they are working on. It never asks for the role again; the role is never
 shown in the UI.
 
+A Workspace owner or admin chooses in Settings → Members who welcomes a new member:
+the member's own assistant (default, as above), one chosen public Agent, or nobody. Under
+`agent` or `off` the assistant publishes no welcome prompt for that member (it still exists and answers). The choice is made once, when the member joins, and kept on their membership: switching the mode back later does not make an earlier member's assistant welcome them. Under
+`agent` a join writes a system message in the member's DM with that Agent, delivered to it like
+any message, so an offline Agent handles it when it is next ready. Archiving the Agent or making
+it private returns the Workspace to the assistant for members who join after.
+
 The welcome's five clickable choices cover platform features, Tasks/Projects, messages,
 reminders/weekly reports and casual chat. A choice is an ordinary member message sent
 through the existing durable outbox. The card appears when the welcome arrives live,
