@@ -11,6 +11,19 @@ import { hostProcessTable, descendantsOf, type ProcessTable } from "./process-ta
 
 const emptyKillReport = (): OwnedProcessTreeKillReport => ({ killed: [], leftAlone: [] });
 
+/** A live table entry still names the recorded process only when its whole identity holds:
+ * start times carry the table's resolution (one second for `ps lstart`), so a pid recycled
+ * inside that window keeps the same `startedAtMs` — the process group must match too, or a
+ * stranger in another group gets signaled. A recorded entry without a pgid (a table that
+ * cannot report one) falls back to the start-time check. */
+const sameOwnedProcess = (
+  recorded: OwnedProcessIdentity,
+  live: OwnedProcessIdentity | undefined,
+): live is OwnedProcessIdentity =>
+  live !== undefined &&
+  live.startedAtMs === recorded.startedAtMs &&
+  (recorded.pgid === undefined || live.pgid === recorded.pgid);
+
 /** The POSIX owner used directly and inside a native launchd relay. */
 export class PosixProcessOwner implements ProcessTreeSpawner {
   constructor(
@@ -35,8 +48,8 @@ export class PosixProcessOwner implements ProcessTreeSpawner {
         const table = await (this.options.processTable ?? hostProcessTable).list();
         const live = new Map(table.map((entry) => [entry.pid, entry]));
         const main = child.exitCode === null ? live.get(child.pid!) : undefined;
-        const roots = [...terminalMembers.values()].filter(
-          (entry) => live.get(entry.pid)?.startedAtMs === entry.startedAtMs,
+        const roots = [...terminalMembers.values()].filter((entry) =>
+          sameOwnedProcess(entry, live.get(entry.pid)),
         );
         if (main && main.ppid === process.pid) roots.push(main);
         for (const root of roots) {
@@ -65,7 +78,7 @@ export class PosixProcessOwner implements ProcessTreeSpawner {
         ]),
       );
       return turnSnapshot.filter(
-        (entry) => fenced(entry) && live.get(entry.pid)?.startedAtMs === entry.startedAtMs,
+        (entry) => fenced(entry) && sameOwnedProcess(entry, live.get(entry.pid)),
       );
     };
     return {
@@ -74,15 +87,18 @@ export class PosixProcessOwner implements ProcessTreeSpawner {
         const pid = child.pid;
         if (pid === undefined) return;
         const live = options?.terminal ? await observeTerminal() : undefined;
-        try {
-          globalThis.process.kill(-pid, force ? "SIGKILL" : "SIGTERM");
-        } catch (error) {
-          if (!this.#groupIsGone(error)) throw error;
-        }
+        if (child.exitCode === null) {
+          // The pid is still this process (running, or a zombie Bun has not reaped), so its
+          // process group can only hold this tree's members and a broadcast is safe.
+          try {
+            globalThis.process.kill(-pid, force ? "SIGKILL" : "SIGTERM");
+          } catch (error) {
+            if (!this.#groupIsGone(error)) throw error;
+          }
+        } else if (!options?.terminal) await this.#killOrphanedGroupMembers(pid, force);
         if (live)
           for (const member of terminalMembers.values()) {
-            if (live.get(member.pid)?.startedAtMs !== member.startedAtMs || member.pgid === pid)
-              continue;
+            if (!sameOwnedProcess(member, live.get(member.pid)) || member.pgid === pid) continue;
             try {
               process.kill(
                 member.pgid === member.pid ? -member.pid : member.pid,
@@ -128,7 +144,7 @@ export class PosixProcessOwner implements ProcessTreeSpawner {
             continue;
           }
           const live = byPid.get(entry.pid);
-          if (!live || live.startedAtMs !== entry.startedAtMs) {
+          if (!sameOwnedProcess(entry, live)) {
             leftAlone.push(entry.pid);
             continue;
           }
@@ -140,8 +156,9 @@ export class PosixProcessOwner implements ProcessTreeSpawner {
             if (!this.#processGone(error)) throw error;
           }
         }
-        const main = byPid.get(pid);
-        if (main) {
+        // The pid is the child's only while Bun still owns it; once reaped it may name a
+        // stranger, so a presence check is no license to signal it.
+        if (child.exitCode === null) {
           try {
             globalThis.process.kill(pid, "SIGKILL");
             killed.push(pid);
@@ -161,8 +178,8 @@ export class PosixProcessOwner implements ProcessTreeSpawner {
           if (options?.terminal) {
             const live = await observeTerminal();
             if (
-              [...terminalMembers.values()].some(
-                (entry) => live.get(entry.pid)?.startedAtMs === entry.startedAtMs,
+              [...terminalMembers.values()].some((entry) =>
+                sameOwnedProcess(entry, live.get(entry.pid)),
               )
             )
               return true;
@@ -221,6 +238,23 @@ export class PosixProcessOwner implements ProcessTreeSpawner {
 
   #processGone(error: unknown): boolean {
     return (error as { code?: string }).code === "ESRCH";
+  }
+
+  /** Signals each member of the owned child's group by pid, used once the child itself is
+   * reaped and its pid is free for recycling: a `kill(-pgid)` broadcast could then hit a
+   * foreign group that reused the id. A foreign process only enters the group by leading it,
+   * so a live leader at the pid means the membership is mixed and nothing gets signaled. */
+  async #killOrphanedGroupMembers(pid: number, force: boolean): Promise<void> {
+    const table = await (this.options.processTable ?? hostProcessTable).list();
+    if (table.find((entry) => entry.pid === pid)?.pgid === pid) return;
+    for (const entry of table) {
+      if (entry.pgid !== pid) continue;
+      try {
+        globalThis.process.kill(entry.pid, force ? "SIGKILL" : "SIGTERM");
+      } catch (error) {
+        if (!this.#processGone(error)) throw error;
+      }
+    }
   }
 
   async #processExists(pid: number): Promise<boolean> {

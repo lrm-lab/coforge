@@ -438,3 +438,79 @@ test.skipIf(process.platform === "win32")(
   },
   20_000,
 );
+
+test.skipIf(process.platform === "win32")(
+  "a pid recycled within the table's start-time resolution is not signaled",
+  async () => {
+    const env = { PATH: "/usr/bin:/bin" };
+    // The stranger stands in for an unrelated process that reused a snapshot member's pid inside
+    // the same reported second: same startedAtMs, different process group.
+    const stranger = Bun.spawn({ cmd: ["sleep", "30"], stdin: "ignore", env });
+    try {
+      const fence = 1_000_000;
+      let mainPid = 0;
+      let sampled = 0;
+      const tree = new ProcessTreeOwner(undefined, undefined, {
+        processTable: {
+          list: async () => {
+            sampled++;
+            return [
+              { pid: mainPid, ppid: globalThis.process.pid, pgid: mainPid, startedAtMs: fence },
+              {
+                pid: stranger.pid,
+                ppid: mainPid,
+                // The snapshot records the child's own group; by the kill sample the pid belongs
+                // to a stranger in another group at the same reported start second.
+                pgid: sampled === 1 ? 700 : 800,
+                startedAtMs: fence + 1,
+              },
+            ];
+          },
+        },
+      }).spawn(["sleep", "30"], tmpdir(), env);
+      mainPid = tree.child.pid!;
+
+      await tree.terminateForTurn!(false, fence);
+      const report = await tree.terminateForTurn!(true, fence);
+
+      expect(report.leftAlone).toEqual([stranger.pid]);
+      expect(stranger.killed).toBe(false);
+      await tree.child.exited;
+    } finally {
+      stranger.kill("SIGKILL");
+      await stranger.exited;
+    }
+  },
+);
+
+test.skipIf(process.platform === "win32")(
+  "a process still alive at a reaped child's pid is not the child and is not killed",
+  async () => {
+    const env = { PATH: "/usr/bin:/bin" };
+    const stranger = Bun.spawn({ cmd: ["sleep", "30"], stdin: "ignore", env });
+    try {
+      const fence = 1_000_000;
+      let mainPid = 0;
+      const tree = new ProcessTreeOwner(undefined, undefined, {
+        processTable: {
+          list: async () => [
+            // The pid the child once held now names the stranger; Bun already reaped the child.
+            { pid: mainPid, ppid: globalThis.process.pid, pgid: mainPid, startedAtMs: fence },
+            { pid: stranger.pid, ppid: mainPid, pgid: mainPid, startedAtMs: fence + 1 },
+          ],
+        },
+      }).spawn(["sleep", "30"], tmpdir(), env);
+      mainPid = tree.child.pid!;
+      tree.child.kill("SIGKILL");
+      await tree.child.exited;
+
+      const report = await tree.terminateForTurn!(true, fence);
+
+      expect(report.killed).toEqual([stranger.pid]);
+      await stranger.exited;
+    } finally {
+      stranger.kill("SIGKILL");
+      await stranger.exited;
+    }
+  },
+);
