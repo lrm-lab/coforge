@@ -21,7 +21,7 @@ export const WHATS_NEW_ENTRIES = [
     releasedAt: "2026-11-04T07:00:00Z",
     experiment: "artifacts",
   },
-  { id: "task-labels", releasedAt: "2026-11-04T07:01:00Z" },
+  { id: "task-labels", releasedAt: "2026-11-04T08:01:00Z" },
 ] as const satisfies readonly WhatsNewEntryData[];
 
 export type WhatsNewId = (typeof WHATS_NEW_ENTRIES)[number]["id"];
