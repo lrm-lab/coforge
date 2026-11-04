@@ -77,7 +77,7 @@ for (const mode of ["session", "catalog", "usage", "auth-server", "auth-cli"] as
             root,
             inherited,
             codexCatalogHost,
-            1_000,
+            5_000,
             true,
           );
           expect(result?.models[0]?.id).toBe("host-model");
@@ -85,7 +85,7 @@ for (const mode of ["session", "catalog", "usage", "auth-server", "auth-cli"] as
           const result = await readCodexUsage(root, {
             host: codexRuntimeHost,
             command: [executable, "app-server"],
-            timeoutMs: 1_000,
+            timeoutMs: 5_000,
           });
           expect(result?.health).toBe("ok");
         } else {
@@ -93,14 +93,17 @@ for (const mode of ["session", "catalog", "usage", "auth-server", "auth-cli"] as
             host: createCodexAuthHost({ environment: inherited }),
             command: [executable, "app-server"],
           });
+          // The reads stay on the adapters' own budgets (20s status, 60s login): the
+          // assertions here cover environment and identity, not latency, and a real
+          // subprocess under full-suite load can outrun a tighter cap.
           if (mode === "auth-cli")
-            expect(
-              await adapter.readStatus({ workingDirectory: root, timeoutMs: 1_000 }),
-            ).toMatchObject({ state: "logged_in" });
+            expect(await adapter.readStatus({ workingDirectory: root })).toMatchObject({
+              state: "logged_in",
+            });
           else
             expect(
               await adapter.startLogin(
-                { workingDirectory: root, timeoutMs: 1_000 },
+                { workingDirectory: root },
                 {
                   onEvent() {},
                   async prompt() {
