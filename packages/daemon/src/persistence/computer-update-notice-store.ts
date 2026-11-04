@@ -20,7 +20,9 @@ export class ComputerUpdateNoticeStore {
       const value = JSON.parse(await this.#file(this.#path).text()) as Record;
       return value && typeof value === "object" ? value : {};
     } catch {
-      throw new Error(`Computer update notice state is corrupt: ${this.#path}`);
+      // A corrupt notice file is empty state, never a daemon failure: the next write overwrites
+      // it, and nothing about a one-line notice justifies taking the daemon down.
+      return {};
     }
   }
 

@@ -28,5 +28,6 @@ export function localVersionResponse(own: {
 export async function localComputerUpdateNotice(
   notice: ComputerUpdateNotice,
 ): Promise<{ ok: true; notice: string | null }> {
-  return { ok: true, notice: await notice.takeNotice() };
+  // A failed read/write answers "no notice", never an error: the line is best effort.
+  return { ok: true, notice: await notice.takeNotice().catch(() => null) };
 }

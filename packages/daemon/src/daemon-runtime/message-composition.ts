@@ -5,6 +5,12 @@ import type { AgentRuntime } from "#src/agent-runtime/agent-process-manager";
 import type { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
 import type { AgentContexts } from "./agent-contexts";
 import type { AgentDeliveryQueue } from "./agent-delivery-queue";
+import {
+  AGENT_MESSAGE_REJECT_METHOD,
+  type AgentDeliveryRejectionReason,
+  type AgentMessageDelivery,
+  type AgentMessageDeliveryRejection,
+} from "@lrm/coforge-sdk/internal";
 import type { AgentFeatureSync } from "./agent-feature-sync";
 import type { AgentInboxCoordinator } from "./agent-inbox-coordinator";
 import type { AgentLaunchCustody } from "./agent-launch-custody";
@@ -184,4 +190,23 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
       ),
   });
   return { mentionDeliveries, messageAttention, inboxCoordinator, messageOperations };
+}
+
+/** The wire payload of one Agent-message rejection report: the delivery's identity fields plus
+ * the reason, under the reject method the server recognizes. */
+export function agentDeliveryRejection(
+  message: AgentMessageDelivery,
+  reason: AgentDeliveryRejectionReason,
+): AgentMessageDeliveryRejection {
+  return {
+    protocolMajor: message.protocolMajor,
+    requestId: message.requestId,
+    messageId: message.messageId,
+    deliveryId: message.deliveryId,
+    workspaceId: message.workspaceId,
+    agentId: message.agentId,
+    sequence: message.sequence,
+    reason,
+    method: AGENT_MESSAGE_REJECT_METHOD,
+  };
 }

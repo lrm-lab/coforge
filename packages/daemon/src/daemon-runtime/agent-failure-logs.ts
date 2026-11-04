@@ -38,6 +38,14 @@ export function logAgentStartFailure(intent: AgentStartIntent, error: unknown): 
 /** Logs a revoke failure without ever logging the key itself. The failure is recorded and
  * nothing else happens: the server invalidates the key at the Agent's next
  * launch, and the daemon never retries a revoke. */
+export function logComputerUpdateNoticeFailure(error: unknown): void {
+  logger.warning("Computer update notice could not be recorded", {
+    event: "computer_update_notice:failed",
+    error_code: loggedErrorMessage(error),
+    outcome: "failed",
+  });
+}
+
 export function logAgentApiKeyRevokeFailed(agentId: string, error: unknown): void {
   logger.warning("Agent API key revoke failed", {
     event: "agent_api_key:revoke_failed",

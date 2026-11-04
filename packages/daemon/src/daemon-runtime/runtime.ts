@@ -56,7 +56,10 @@ import {
   revokeLocalLaunch,
   runningMentionIdentity,
 } from "#src/daemon-runtime/agent-launch-revocation";
-import { ComputerUpdateNotice } from "#src/daemon-runtime/computer-update-notice";
+import {
+  ComputerUpdateNotice,
+  observeLatestComputerVersion,
+} from "#src/daemon-runtime/computer-update-notice";
 import {
   localComputerUpdateNotice,
   localVersionResponse,
@@ -169,7 +172,7 @@ import { CodeAgentInventorySync, type CodeAgentDiscovery } from "./code-agent-in
 import { RuntimeAuthReporter } from "./runtime-auth-reporter";
 import { RuntimeStartup } from "./runtime-startup";
 import { RuntimeStop } from "./runtime-stop";
-import { composeMessages } from "./message-composition";
+import { composeMessages, agentDeliveryRejection } from "./message-composition";
 import { composeRuntimeServices } from "./runtime-services-composition";
 import { AgentOperations } from "./agent-operations";
 import { composeAgentControl } from "./agent-control-composition";
@@ -181,7 +184,7 @@ import {
 import type { UnrefTimerSchedule } from "./unref-timer";
 import type { ReminderScheduler } from "#src/agent-reminder/reminder-scheduler";
 import type { AgentAppConfigSync } from "#src/agent-app-config/agent-app-config-sync";
-import { logAgentOperationFailure } from "./agent-failure-logs";
+import { logAgentOperationFailure, logComputerUpdateNoticeFailure } from "./agent-failure-logs";
 import { acceptAppRegistrationNotice } from "#src/agent-app-inbox/app-registration-notice";
 import type { AgentVersionResponse } from "@lrm/coforge-sdk/agent";
 
@@ -260,19 +263,9 @@ export class DaemonRuntime {
     dropMentionAsUnknown: (message) =>
       this.#mentionDeliveries.drop(message, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN),
     sendAgentStatus: (agentId, status) => this.#sendAgentStatus(agentId, status),
-    sendAgentDeliveryRejection: async (message, reason) => {
-      await this.#transport.sendAgentDeliveryRejection?.({
-        protocolMajor: message.protocolMajor,
-        requestId: message.requestId,
-        messageId: message.messageId,
-        deliveryId: message.deliveryId,
-        workspaceId: message.workspaceId,
-        agentId: message.agentId,
-        sequence: message.sequence,
-        reason,
-        method: AGENT_MESSAGE_REJECT_METHOD,
-      });
-    },
+    sendAgentDeliveryRejection: (message, reason) =>
+      this.#transport.sendAgentDeliveryRejection?.(agentDeliveryRejection(message, reason)) ??
+      Promise.resolve(),
     hasSession: (agentId) => this.#agentProcessManager.session(agentId) !== undefined,
     redeliver: (message) =>
       void this.handleAgentMessage(message).catch((error) =>
@@ -575,9 +568,11 @@ export class DaemonRuntime {
       this.#runtimeAuth,
     );
     this.#transport = transportFactory.create(connection);
-    this.#transport.onLatestComputerVersion?.((version: string) => {
-      void this.#computerUpdateNotice.observeLatest(version);
-    });
+    observeLatestComputerVersion(
+      this.#transport,
+      this.#computerUpdateNotice,
+      logComputerUpdateNoticeFailure,
+    );
     const messages = composeMessages({
       connection,
       stateDirectory,
