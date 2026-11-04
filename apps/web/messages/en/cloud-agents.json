@@ -11,5 +11,6 @@
   "agent_create_description": "Description",
   "agent_create_kind_label": "Where it runs",
   "agent_create_kind_cloud": "Cloud",
-  "agent_create_kind_local": "Local Computer"
+  "agent_create_kind_local": "Local Computer",
+  "cloud_agent_create_private_note": "This Agent is private: only you can chat with it. To add it to a channel, make it public on its profile first."
 }

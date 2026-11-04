@@ -158,6 +158,10 @@ export function CloudAgentForm({
     >
       <div className="flex flex-col gap-3 px-6 pt-5 pb-2">
         <AgentUsernameField autoFocus={autoFocus} isReadOnly={submitting} />
+        {/* The server makes every cloud Agent private (task #526): say so before it is made. */}
+        {!submitting && (
+          <p className="text-sm text-tertiary">{m.cloud_agent_create_private_note()}</p>
+        )}
         {submitting && (
           <p role="status" className="text-sm text-tertiary">
             {m.cloud_agent_create_preparing()}
