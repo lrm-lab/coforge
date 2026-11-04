@@ -1,9 +1,8 @@
 import { expect, test } from "bun:test";
 import type { TaskMember, TaskResult, TaskView } from "@lrm/coforge-sdk/internal";
 import { CliError } from "#src/cli-error";
+import { claimRefusal, formatClaimResults } from "#src/task-claim-format";
 import {
-  claimRefusal,
-  formatClaimResults,
   formatMyTaskList,
   formatResourceReceiptRecorded,
   formatTaskAmended,
