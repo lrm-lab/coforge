@@ -10,7 +10,14 @@ coforge.cn {
 			roll_size 50mb
 			roll_keep 5
 		}
-		format json
+		# Agent credentials must never reach the log (task #559): Caddy already
+		# redacts Authorization, but X-Coforge-Agent-Api-Key is ours to hide.
+		format filter {
+			wrap json
+			fields {
+				request>headers>X-Coforge-Agent-Api-Key delete
+			}
+		}
 	}
 
 	# HSTS rides only on HTTPS responses; the port-80 redirect is a separate
@@ -47,7 +54,12 @@ usercontent.coforge.cn {
 			roll_size 50mb
 			roll_keep 5
 		}
-		format json
+		format filter {
+			wrap json
+			fields {
+				request>headers>X-Coforge-Agent-Api-Key delete
+			}
+		}
 	}
 
 	handle {
