@@ -76,7 +76,11 @@ export function IdentityAvatar({
       status={props.status}
       badge={props.badge}
     >
-      <StickerPicture src={src} alt={alt} fallback={<StickerInitial initial={initials} />} />
+      <StickerPicture
+        src={src}
+        alt={alt}
+        fallback={<StickerInitial initial={initials} alt={alt} />}
+      />
     </AvatarSticker>
   );
 }

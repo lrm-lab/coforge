@@ -42,6 +42,8 @@ async function notice(conversationId: string, body: string, system: SystemNotice
  * face with no picture shows an initial, which would split "assigned it to @coder" in innerText.
  */
 const pageText = `(() => { const page = document.body.cloneNode(true); page.querySelectorAll("[data-avatar]").forEach((face) => face.remove()); return page.textContent.replace(/\\s+/g, " "); })()`;
+/** The page's words as a screen reader has them: what is `aria-hidden` left out, faces kept. */
+const spokenText = `(() => { const page = document.body.cloneNode(true); page.querySelectorAll('[aria-hidden="true"]').forEach((el) => el.remove()); return page.textContent.replace(/\\s+/g, " "); })()`;
 
 test("notices read in Chinese in the stream and the sidebar, and in English under /", async () => {
   const name = `e2e-notices-${suffix}`;
@@ -85,6 +87,8 @@ test("notices read in Chinese in the stream and the sidebar, and in English unde
   const text = await evaluate<string>(pageText);
   expect(text).toContain("📋 新建了 2 个任务：#4「修复登录」、#5「Ship it」");
   expect(text).toContain("🔄 Coder 把任务 #4「修复登录」移到了进行中");
+  // A face with no picture shows an initial; beside a name it is not read out (task #553).
+  expect(await evaluate<string>(spokenText)).toContain("把任务 #4「修复登录」指派给了 @coder");
   // The sidebar row's preview is the latest notice, in Chinese too.
   expect(text).toContain(`Frank An 把 @coder 设为 #${name} 的协调员`);
 

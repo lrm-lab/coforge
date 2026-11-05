@@ -67,10 +67,14 @@ export function AvatarSticker({
   );
 }
 
-/** The initial a sticker shows, on a small round tile, when its picture cannot load. */
-export function StickerInitial({ initial }: { initial?: string }) {
+/** The initial a sticker shows, on a small round tile, when its picture cannot load. It stands in
+ * for the picture, so it says what the picture's `alt` says: nothing when that is empty (task #553). */
+export function StickerInitial({ initial, alt = "" }: { initial?: string; alt?: string }) {
   return (
-    <span className="m-auto flex size-[82%] items-center justify-center rounded-full bg-tertiary text-xs font-semibold text-quaternary">
+    <span
+      {...(alt ? { role: "img", "aria-label": alt } : { "aria-hidden": true })}
+      className="m-auto flex size-[82%] items-center justify-center rounded-full bg-tertiary text-xs font-semibold text-quaternary"
+    >
       {initial}
     </span>
   );

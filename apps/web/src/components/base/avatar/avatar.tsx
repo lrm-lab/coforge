@@ -103,7 +103,16 @@ export const Avatar = ({
         }
 
         if (initials) {
-            return <span className={cx("text-quaternary", styles[size].initials)}>{initials}</span>;
+            // The initials stand in for the picture, so they say what its `alt` says: nothing beside
+            // a name already given (task #553), that name when it is the only one.
+            return (
+                <span
+                    {...(alt === "" ? { "aria-hidden": true } : alt ? { role: "img", "aria-label": alt } : {})}
+                    className={cx("text-quaternary", styles[size].initials)}
+                >
+                    {initials}
+                </span>
+            );
         }
 
         if (PlaceholderIcon) {
