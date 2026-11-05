@@ -65,7 +65,7 @@ test("an owner deletes a channel from its settings panel", async () => {
   }
 
   const channelName = `e2e-delete-${process.pid}`;
-  const sidebarHasChannel = `[...document.querySelectorAll("a")].some((link) => link.textContent.trim() === ${JSON.stringify(channelName)})`;
+  const sidebarHasChannel = `[...document.querySelectorAll("a")].some((link) => link.getAttribute("aria-label") === ${JSON.stringify(`#${channelName}`)})`;
   const membership = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id, role: "owner" },
     include: { workspace: { select: { slug: true } } },
