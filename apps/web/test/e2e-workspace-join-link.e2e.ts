@@ -111,7 +111,7 @@ test("a signed-in visitor joins a Workspace from its invite link", async () => {
       `Join ${name}`,
     );
     expect(await evaluate<string>(`document.querySelector("main")?.innerText`)).toContain(
-      "It has 1 member.",
+      "It has 1 member and 1 Agent.",
     );
     await browser("screenshot", join(artifacts, "join-page.png"));
 
