@@ -17,7 +17,12 @@ export function productionArtifacts(db: PrismaClient) {
   const artifacts = new Artifacts(db, blobs, {
     signals: centrifugoArtifactSignals(() => createCentrifugoServerApi()),
   });
-  return { artifacts, blobs, documents: new ArtifactDocuments(db, artifacts, blobs), publicLinks: new ArtifactPublicLinks(db) };
+  return {
+    artifacts,
+    blobs,
+    documents: new ArtifactDocuments(db, artifacts, blobs),
+    publicLinks: new ArtifactPublicLinks(db),
+  };
 }
 
 /** Web pages on the sandbox origin (task #490): the same reads and bytes, signed with the

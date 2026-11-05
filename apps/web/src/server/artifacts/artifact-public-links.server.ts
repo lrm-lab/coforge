@@ -19,7 +19,13 @@ export class ArtifactPublicLinks {
     if (!origin) throw new AppError("INVALID_INPUT", { errorId: "artifact-public-origin" });
     return this.db.$transaction(async (tx) => {
       const [artifact] = await tx.$queryRaw<
-        { id: string; homeKey: string; access: string; authorUserId: string | null; authorAgentId: string | null }[]
+        {
+          id: string;
+          homeKey: string;
+          access: string;
+          authorUserId: string | null;
+          authorAgentId: string | null;
+        }[]
       >`SELECT "id", "homeKey", "access", "authorUserId", "authorAgentId" FROM "artifacts"
         WHERE "id" = ${input.artifactId}::uuid AND "workspaceId" = ${input.workspaceId}::uuid
           AND "deletedAt" IS NULL FOR UPDATE`;
@@ -27,20 +33,43 @@ export class ArtifactPublicLinks {
       if (!(await artifactReadAccess(tx, input.workspaceId, { userId: input.userId }, artifact)))
         throw new AppError("NOT_FOUND");
       const ownerId = artifact.authorAgentId
-        ? (await tx.agent.findFirst({ where: { id: artifact.authorAgentId }, select: { ownerId: true } }))?.ownerId
+        ? (
+            await tx.agent.findFirst({
+              where: { id: artifact.authorAgentId },
+              select: { ownerId: true },
+            })
+          )?.ownerId
         : null;
-      if (!(await canChangeArtifactAccess(tx, input.workspaceId, { userId: input.userId }, {
-        authorUserId: artifact.authorUserId,
-        authorAgentId: artifact.authorAgentId,
-        authorAgentOwnerId: ownerId ?? null,
-      }))) throw new AppError("ACCESS_DENIED");
-      const live = await tx.artifactPublicLink.findFirst({ where: { artifactId: artifact.id, revokedAt: null }, select: { token: true } });
+      if (
+        !(await canChangeArtifactAccess(
+          tx,
+          input.workspaceId,
+          { userId: input.userId },
+          {
+            authorUserId: artifact.authorUserId,
+            authorAgentId: artifact.authorAgentId,
+            authorAgentOwnerId: ownerId ?? null,
+          },
+        ))
+      )
+        throw new AppError("ACCESS_DENIED");
+      const live = await tx.artifactPublicLink.findFirst({
+        where: { artifactId: artifact.id, revokedAt: null },
+        select: { token: true },
+      });
       if (!input.enabled) {
-        if (live) await tx.artifactPublicLink.updateMany({ where: { artifactId: artifact.id, revokedAt: null }, data: { revokedAt: new Date(), revokedByUserId: input.userId } });
+        if (live)
+          await tx.artifactPublicLink.updateMany({
+            where: { artifactId: artifact.id, revokedAt: null },
+            data: { revokedAt: new Date(), revokedByUserId: input.userId },
+          });
         return { enabled: false as const };
       }
       if (live) return { enabled: true as const, url: `${origin}/p/${live.token}` };
-      const created = await tx.artifactPublicLink.create({ data: { artifactId: artifact.id, token: mintToken(), createdByUserId: input.userId }, select: { token: true } });
+      const created = await tx.artifactPublicLink.create({
+        data: { artifactId: artifact.id, token: mintToken(), createdByUserId: input.userId },
+        select: { token: true },
+      });
       return { enabled: true as const, url: `${origin}/p/${created.token}` };
     });
   }
