@@ -24,6 +24,7 @@ use crate::contract::{CoordinatorService, LifecycleServiceDefinition};
 use crate::paths::Platform;
 
 mod definition;
+mod detached;
 mod error;
 mod launchd;
 mod port;
@@ -33,6 +34,7 @@ mod windows_task;
 #[cfg(test)]
 pub(crate) mod fakes;
 
+pub use detached::{Detached, Spawn, SystemSpawn};
 pub use error::ServiceError;
 pub use launchd::{Launchd, current_uid};
 pub use port::{CommandLine, CommandOutput, CommandRunner, RunError, SystemRunner};
@@ -170,6 +172,46 @@ pub fn for_platform<'a>(
             Box::new(WindowsTask::new(runner, clock, &names, &system_root)?)
         }
     })
+}
+
+/// Whether this Linux machine has systemd: the manager is running (`/run/systemd/system`, what
+/// `sd_booted` checks) and `systemctl` is on `PATH`. Either missing is the detached case; systemd
+/// present but without a user session bus is not, and stays [`ServiceError::NoSystemdUserSession`].
+pub fn systemd_present(run_directory: &Path, path_variable: Option<&std::ffi::OsStr>) -> bool {
+    run_directory.join("systemd/system").is_dir()
+        && path_variable.is_some_and(|paths| {
+            std::env::split_paths(paths).any(|directory| directory.join("systemctl").is_file())
+        })
+}
+
+/// What the backends of one machine run their work through.
+#[derive(Clone, Copy)]
+pub struct Ports<'a> {
+    pub runner: &'a dyn CommandRunner,
+    pub clock: &'a dyn Clock,
+    pub table: &'a dyn crate::processes::ProcessTable,
+    pub spawner: &'a dyn Spawn,
+}
+
+/// [`for_platform`], except that a Linux machine without systemd gets the [`Detached`] backend:
+/// the Computer's own process in `state_directory`, with no manager behind it.
+pub fn for_machine<'a>(
+    platform: Platform,
+    has_systemd: bool,
+    home: &Path,
+    state_directory: &Path,
+    uid: Option<u32>,
+    ports: Ports<'a>,
+) -> Result<Box<dyn SupervisorService + 'a>, ServiceError> {
+    if platform == Platform::Linux && !has_systemd {
+        return Ok(Box::new(Detached::new(
+            state_directory,
+            ports.table,
+            ports.clock,
+            ports.spawner,
+        )));
+    }
+    for_platform(platform, home, uid, ports.runner, ports.clock)
 }
 
 /// A command that ran to completion, with the line that was run.

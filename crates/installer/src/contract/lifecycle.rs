@@ -23,7 +23,7 @@ pub struct LifecycleProtocol {
 pub struct LifecycleServiceDefinition {
     pub lifecycle_protocol: u32,
     pub version: String,
-    /// `launchd`, `systemd-user`, or `windows-task`.
+    /// `launchd`, `systemd-user`, `windows-task`, or `detached` (Linux without systemd).
     pub manager: String,
     /// The plist, unit, or task XML, as text.
     pub contents: String,

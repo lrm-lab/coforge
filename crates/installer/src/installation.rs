@@ -76,12 +76,21 @@ fn with_ports<T>(
     let clock = SystemClock::new();
     let processes = OsProcesses;
     let lifecycle = Lifecycle::new(&runner);
-    let service = service::for_platform(
+    let service = service::for_machine(
         Platform::current(),
+        service::systemd_present(
+            std::path::Path::new("/run"),
+            std::env::var_os("PATH").as_deref(),
+        ),
         &setup.home,
+        &setup.paths.state_directory,
         service::current_uid(),
-        &runner,
-        &clock,
+        service::Ports {
+            runner: &runner,
+            clock: &clock,
+            table: &processes,
+            spawner: &service::SystemSpawn,
+        },
     )
     .map_err(|error| error.to_string())?;
     let store = setup.store();

@@ -155,3 +155,76 @@ fn every_failure_says_why_and_names_a_command_to_run() {
         assert!(message.len() > 60, "too little to act on: {message}");
     }
 }
+
+fn machine(platform: Platform, has_systemd: bool) -> (Vec<String>, String) {
+    use crate::processes::fakes::FakeTable;
+    let runner = Recording {
+        ran: RefCell::new(Vec::new()),
+    };
+    let home = Scratch::new("for-machine");
+    let clock = VirtualClock::new();
+    let table = FakeTable::new(&clock);
+    let service = for_machine(
+        platform,
+        has_systemd,
+        home.path(),
+        &home.path().join(".coforge/daemon"),
+        Some(501),
+        Ports {
+            runner: &runner,
+            clock: &clock,
+            table: &table,
+            spawner: &SystemSpawn,
+        },
+    )
+    .unwrap();
+    let name = service.display_name();
+    let _ = service.state();
+    (runner.ran.take(), name)
+}
+
+#[test]
+fn linux_without_systemd_gets_the_detached_process_and_asks_no_manager() {
+    let (commands, name) = machine(Platform::Linux, false);
+    assert!(commands.is_empty(), "{commands:?}");
+    assert_eq!(name, "the detached Computer process");
+}
+
+#[test]
+fn linux_with_systemd_keeps_the_user_unit() {
+    let (commands, name) = machine(Platform::Linux, true);
+    assert_eq!(commands.len(), 1);
+    assert_eq!(name, "coforge-daemon.service");
+}
+
+#[test]
+fn macos_and_windows_never_get_the_detached_process() {
+    for platform in [Platform::Darwin, Platform::Windows] {
+        for has_systemd in [true, false] {
+            let (_, name) = machine(platform, has_systemd);
+            assert_ne!(name, "the detached Computer process", "{platform:?}");
+        }
+    }
+    assert_eq!(
+        machine(Platform::Darwin, false).0,
+        vec!["/bin/launchctl print gui/501/cn.coforge.computer.daemon"]
+    );
+}
+
+#[test]
+fn systemd_is_present_only_with_a_running_manager_and_a_systemctl() {
+    let run = Scratch::new("run-dir");
+    let bin = Scratch::new("bin-dir");
+    let path = std::env::join_paths([bin.path()]).unwrap();
+    assert!(!systemd_present(run.path(), Some(&path)), "neither");
+    fs::create_dir_all(run.path().join("systemd/system")).unwrap();
+    assert!(!systemd_present(run.path(), Some(&path)), "no systemctl");
+    fs::write(bin.path().join("systemctl"), "").unwrap();
+    assert!(systemd_present(run.path(), Some(&path)), "both");
+    fs::remove_dir_all(run.path().join("systemd")).unwrap();
+    assert!(
+        !systemd_present(run.path(), Some(&path)),
+        "no running manager"
+    );
+    assert!(!systemd_present(run.path(), None), "no PATH");
+}

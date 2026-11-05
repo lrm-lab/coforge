@@ -111,6 +111,7 @@ How it works is in `src/current.rs` and `src/active.rs`; these are the rules.
   (`Registered::LeftRunning`, a Windows task only: the backend decides, no caller asks first);
   `Registered::stage_line` words the result for `start` and `repair`), start (waits for a process).
   One backend per manager in `src/service/` behind the `CommandRunner` port.
+- `src/service/detached.rs`: the backend for Linux without systemd (`for_machine`): the Computer's own detached process, no boot start, no restart on a crash; the header says how.
 - `src/service/definition.rs`: what the backends share to register a definition: the manager
   check, the byte comparison with the file already in place, the atomic owner-only write, and the
   UTF-16 temporary file `schtasks` reads.
