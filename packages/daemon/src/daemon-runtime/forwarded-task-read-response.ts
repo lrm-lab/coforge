@@ -56,8 +56,25 @@ export async function forwardedTaskReadResponse(
   }
   const scope = (body as { consumptionScope?: { agentId: string; target: string } })
     .consumptionScope;
-  if (scope?.agentId === agentId && scope.target) input.recordRead?.(agentId, request.query, body);
-  else
+  if (scope?.agentId === agentId && scope.target) {
+    input.recordRead?.(agentId, request.query, body);
+    // The recorded boundary is the one value that says whether a read moved the cursor: the
+    // server's `modelSeenUpToSeq` (and its own read position) as this Agent received them.
+    const page = body as {
+      messages: unknown[];
+      modelSeenUpToSeq?: unknown;
+      readPositionAfter?: unknown;
+    };
+    logger.info("Forwarded task read recorded its consumption", {
+      event: "agent.task_read.recorded",
+      agent_id: agentId,
+      target: scope.target,
+      model_seen_up_to_seq: page.modelSeenUpToSeq ?? null,
+      read_position_after: page.readPositionAfter ?? null,
+      messages: page.messages.length,
+      unread: request.query?.unread === "true",
+    });
+  } else
     notRecorded("scope_missing_or_foreign", {
       has_consumption_scope: scope !== undefined,
       scope_agent_matches: scope?.agentId === agentId,
