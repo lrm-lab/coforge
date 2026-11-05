@@ -99,6 +99,13 @@ export {
   windowsDaemonTaskXml,
   windowsTaskUserId,
 } from "#src/daemon-host/index";
+export {
+  clearSupervisorRecord,
+  detectSystemdSupervisor,
+  externalSupervisorOptIn,
+  readSupervisorRecord,
+  writeSupervisorRecord,
+} from "#src/daemon-host/external-supervisor";
 export type { CoordinatorServiceRegistrar } from "#src/daemon-host/launcher";
 export {
   DAEMON_SERVICE_MANAGERS,
@@ -106,24 +113,8 @@ export {
   LocalDaemonLauncher,
   resolveDaemonExecutablePath,
 } from "#src/daemon-host/launcher";
-export {
-  cleanupComputerUpgradeJob,
-  computerUpgradeJobLabel,
-  computerUpgradeJobPaths,
-  computerUpgradeTaskName,
-  computerUpgradeUnitName,
-  launchComputerUpgrade,
-  type ComputerUpgradeJobPaths,
-  type LaunchComputerUpgradeOptions,
-} from "#src/platform/computer-upgrade-launcher";
-export { readComputerUpgradeReceipt } from "#src/platform/computer-upgrade-receipts";
+export * from "#src/platform/upgrade-public";
 export { resolveComputerInstallDirectory } from "#src/platform/computer-install-directory";
-export {
-  readUpgradeReceipt,
-  upgradeReceiptPath,
-  upgradeResultsDirectory,
-  type UpgradeReceiptFile,
-} from "#src/platform/upgrade-receipt-file";
 export {
   acquireProcessLock,
   isLockContention,

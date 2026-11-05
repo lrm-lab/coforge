@@ -29,6 +29,7 @@ import {
   registerLogoutCommand,
   type LogoutCommand,
 } from "#src/cli/logout-command";
+import { recordExternalSupervisor } from "#src/cli/foreground-supervisor";
 import { prepareContainerBinding } from "#src/host/container-binding";
 import { runHostProcess } from "#src/host/run-host";
 
@@ -491,6 +492,7 @@ export async function runComputer(): Promise<void> {
         foreground: {
           run: async () => {
             await prepareContainerBinding(process.env, stateDirectory, COFORGE_DAEMON_SERVER_URL);
+            await recordExternalSupervisor(stateDirectory, io.stderr);
             await runMachineSupervisor([
               "--socket",
               resolveDaemonSocketPath({ platform: platform.os, stateDirectory }),

@@ -10,6 +10,14 @@ import type {
   DaemonWorkspaceConfig,
   LocalDaemonLauncherOptions,
 } from "./launcher";
+import {
+  clearSupervisorRecord,
+  describeSupervisorUnreachable,
+  inspectSupervisor,
+  runSystemctl,
+  type SupervisorRecord,
+  type SystemctlRunner,
+} from "./external-supervisor";
 import { COORDINATOR_SERVICE } from "./service-identity";
 
 type CommandRunner = (command: string[]) => Promise<NativeCommandResult>;
@@ -20,6 +28,8 @@ export class SystemdUserDaemonHost implements DaemonLauncher {
   readonly #registrar: CoordinatorServiceRegistrar;
   readonly #local: LocalDaemonLauncher;
   readonly #unit: string;
+  readonly #stateDirectory: string;
+  readonly #supervisorSystemctl: SystemctlRunner;
 
   constructor(options: {
     homeDirectory: string;
@@ -33,6 +43,8 @@ export class SystemdUserDaemonHost implements DaemonLauncher {
     /** Registers and starts the unit when systemd does not know it. */
     registrar: CoordinatorServiceRegistrar;
     run?: CommandRunner;
+    /** Runs `systemctl` for the externally supervised unit (task #538); tests inject it. */
+    supervisorSystemctl?: SystemctlRunner;
     connect?: LocalDaemonLauncherOptions["connect"];
   }) {
     const serviceName = options.serviceName ?? COORDINATOR_SERVICE.systemdUserUnit;
@@ -48,6 +60,9 @@ export class SystemdUserDaemonHost implements DaemonLauncher {
       options.runtimeHomeDirectory,
     );
     this.#serviceName = serviceName;
+    this.#stateDirectory =
+      options.stateDirectory ?? join(options.homeDirectory, ".coforge", "daemon");
+    this.#supervisorSystemctl = options.supervisorSystemctl ?? runSystemctl;
     this.#local = new LocalDaemonLauncher({
       executablePath: options.executablePath,
       socketPath: options.socketPath,
@@ -74,7 +89,9 @@ export class SystemdUserDaemonHost implements DaemonLauncher {
   }
 
   async ensureRunning(): Promise<void> {
-    if (await this.#unregistered()) await this.#registrar.registerAndStart();
+    const supervised = await this.#supervisedUnit();
+    if (supervised) await this.#supervisorVerb(supervised, "start");
+    else if (await this.#unregistered()) await this.#registrar.registerAndStart();
     else await this.#systemctl("start");
     await this.#local.ensureRunning();
   }
@@ -97,6 +114,7 @@ export class SystemdUserDaemonHost implements DaemonLauncher {
    * `not-found`, or none (no user bus), is left to the `restart()` that follows, which reports
    * systemd's own reason. */
   async assertRestartable(): Promise<void> {
+    if (await this.#supervisedUnit()) return;
     if (await this.#unregistered())
       throw new Error(`systemd has no ${this.#serviceName} unit (LoadState=not-found).`);
   }
@@ -110,13 +128,47 @@ export class SystemdUserDaemonHost implements DaemonLauncher {
    * systemd does not know is registered and started by the `registrar` instead.
    */
   async restart(): Promise<void> {
-    if (await this.#unregistered()) {
+    const supervised = await this.#supervisedUnit();
+    if (supervised) {
+      await this.#supervisorVerb(supervised, "reset-failed").catch(() => undefined);
+      await this.#supervisorVerb(supervised, "restart");
+    } else if (await this.#unregistered()) {
       await this.#registrar.registerAndStart();
     } else {
       await this.#run(["systemctl", "--user", "reset-failed", this.#serviceName]);
       await this.#systemctl("restart");
     }
     await this.#local.ensureRunning();
+  }
+
+  /** The externally supervised unit recorded by a `foreground` Computer, when systemd still
+   * knows it: its start and restart go to that unit and never to a second service beside it.
+   * A recorded unit systemd has forgotten is cleared and the Computer manages itself again; one
+   * `systemctl` cannot be asked about is an error naming what the person can do (task #538). */
+  async #supervisedUnit(): Promise<SupervisorRecord | null> {
+    const view = await inspectSupervisor(this.#stateDirectory, {
+      systemctl: this.#supervisorSystemctl,
+    });
+    if (!view) return null;
+    if (!view.reachable)
+      throw new Error(describeSupervisorUnreachable(view.record, "systemctl did not answer"));
+    if (view.unitLoaded) return view.record;
+    await clearSupervisorRecord(this.#stateDirectory);
+    return null;
+  }
+
+  async #supervisorVerb(
+    record: SupervisorRecord,
+    verb: "start" | "restart" | "reset-failed",
+  ): Promise<void> {
+    const result = await this.#supervisorSystemctl(record.scope, [verb, record.unit]);
+    if (result.code !== 0)
+      throw new Error(
+        describeSupervisorUnreachable(
+          record,
+          `\`systemctl ${verb} ${record.unit}\` exited ${result.code ?? "without a code"}: ${result.stderr.trim() || result.stdout.trim() || "no output"}`,
+        ),
+      );
   }
 
   /** True only when systemd answers that it has no such unit (`LoadState=not-found`). Any other
