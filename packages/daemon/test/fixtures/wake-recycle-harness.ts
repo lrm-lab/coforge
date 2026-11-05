@@ -298,6 +298,12 @@ export async function logged(records: readonly LogRecord[], match: (r: LogRecord
   while (!records.some(match)) await Bun.sleep(1);
   return records.find(match)!;
 }
+/** A sweep that ran after the launch registered. The earliest sweeps can fall inside an async
+ * launch, before the Agent has a session, and log `skipped_not_launched` instead of the outcome
+ * a test is waiting for. */
+export const sweepAfterLaunch = (r: LogRecord) =>
+  r.properties.event === "agent.runtime.cold_idle_sweep" &&
+  !("skipped_not_launched" in r.properties);
 export const sweepWith = (stops: number) => (r: LogRecord) =>
   r.properties.event === "agent.runtime.cold_idle_sweep" && r.properties.stops === stops;
 

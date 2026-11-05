@@ -10,6 +10,7 @@ import {
   logged,
   minutes,
   run,
+  sweepAfterLaunch,
   sweepWith,
   useWakeRecycleEnvironment,
   type HarnessOptions,
@@ -66,10 +67,7 @@ test("a session with no event for an hour is left running when its own record is
   await run({ facts }, async (h, records) => {
     await h.runtime.handleAgentStart(h.intent({ controlEpoch: 1, launchId: "launch-1" }));
     setSystemTime(minutes(90));
-    const sweep = await logged(
-      records,
-      (r) => r.properties.event === "agent.runtime.cold_idle_sweep",
-    );
+    const sweep = await logged(records, sweepAfterLaunch);
     expect(sweep.properties).toMatchObject({ agents: 1, stops: 0, skipped_recent_activity: 1 });
     expect(h.factReads).not.toEqual([]);
     expect(h.sessions[0]!.disposed).toBe(false);
@@ -81,10 +79,7 @@ test("a session whose last event is recent is not even read by the sweep", async
   await run({}, async (h, records) => {
     await h.runtime.handleAgentStart(h.intent({ controlEpoch: 1, launchId: "launch-1" }));
     setSystemTime(minutes(59));
-    const sweep = await logged(
-      records,
-      (r) => r.properties.event === "agent.runtime.cold_idle_sweep",
-    );
+    const sweep = await logged(records, sweepAfterLaunch);
     expect(sweep.properties).toMatchObject({ agents: 1, stops: 0, skipped_recent_event: 1 });
     expect(h.factReads).toEqual([]);
   });
@@ -148,10 +143,7 @@ test.each<[string, AgentRuntimeEvent, string]>([
     await h.runtime.handleAgentStart(h.intent({ controlEpoch: 1, launchId: "launch-1" }));
     h.sessions[0]!.emit(event);
     setSystemTime(minutes(90));
-    const sweep = await logged(
-      records,
-      (r) => r.properties.event === "agent.runtime.cold_idle_sweep",
-    );
+    const sweep = await logged(records, sweepAfterLaunch);
     expect(sweep.properties).toMatchObject({ stops: 0 });
     expect(Object.keys(sweep.properties)).toContain(`skipped_${blocker}`);
     expect(h.sessions[0]!.disposed).toBe(false);
