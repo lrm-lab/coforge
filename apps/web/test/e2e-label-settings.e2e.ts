@@ -225,6 +225,18 @@ test("an owner manages the Workspace's labels on their own page; a member reads 
     await browser("press", "ArrowLeft");
     await browser("press", "Space");
     await until(async () => (await labelRow(docs.id))!.color === "blue");
+    // Space on Done closes the swatches and saves nothing, like Enter or a click on Done.
+    await browser("wait", "--fn", onMenuButton(name("Guides")));
+    await menu(name("Guides"), "Change color");
+    await browser("wait", "--fn", `${picked} != null`);
+    await evaluate(`(${picked}.focus(), true)`);
+    await browser("press", "ArrowRight");
+    await browser("press", "Tab");
+    await browser("wait", "--fn", `document.activeElement?.textContent?.trim() === "Done"`);
+    await browser("press", "Space");
+    await browser("wait", "--fn", `${picked} == null`);
+    await Bun.sleep(300);
+    expect((await labelRow(docs.id))!.color).toBe("blue");
 
     // Archive one two Tasks carry: the question says so; it moves to Archived.
     await menu(name("Bug"), "Archive");
@@ -247,26 +259,48 @@ test("an owner manages the Workspace's labels on their own page; a member reads 
     await browser("wait", "--fn", `${row(name("Bug"))} !== null`);
     await shoot("desktop-5-archived");
 
-    // Restore, archive again, then delete for good: it comes off both Tasks.
+    const dialog = `document.querySelector('[role="dialog"], [role="alertdialog"]')`;
+    const archiveBug = async () => {
+      await menu(name("Bug"), "Archive");
+      await browser("wait", "--fn", `${button("Archive", dialog)} !== undefined`);
+      await click(button("Archive", dialog));
+      await until(async () => (await labelRow(bug.id))!.archivedAt !== null);
+      await browser(
+        "wait",
+        "--fn",
+        `${dialogsOpen} === 0 && ${button("Archived (1)")} !== undefined`,
+      );
+      if (!(await evaluate<boolean>(`${row(name("Bug"))} !== null`)))
+        await click(button("Archived (1)"));
+    };
+
+    // Restore, archive again.
     await menu(name("Bug"), "Restore");
     await until(async () => (await labelRow(bug.id))!.archivedAt === null);
-    await menu(name("Bug"), "Archive");
+    await archiveBug();
+
+    // Someone else restores it while this page still lists it archived: the delete is refused
+    // with why, and closing the question shows it live again.
+    await menu(name("Bug"), "Delete permanently");
+    await browser("wait", "--fn", `${button("Delete permanently", dialog)} !== undefined`);
+    await db.label.update({ where: { id: bug.id }, data: { archivedAt: null } });
+    await click(button("Delete permanently", dialog));
     await browser(
       "wait",
       "--fn",
-      `${button("Archive", `document.querySelector('[role="dialog"], [role="alertdialog"]')`)} !== undefined`,
+      `(${dialog}?.textContent ?? "").includes("It has been restored. To delete it, archive it again first.")`,
     );
-    await click(
-      button("Archive", `document.querySelector('[role="dialog"], [role="alertdialog"]')`),
-    );
-    await until(async () => (await labelRow(bug.id))!.archivedAt !== null);
+    await shoot("desktop-6a-restored-meanwhile");
+    expect(await labelRow(bug.id)).not.toBeNull();
+    await browser("press", "Escape");
     await browser(
       "wait",
       "--fn",
-      `${dialogsOpen} === 0 && ${button("Archived (1)")} !== undefined`,
+      `${dialogsOpen} === 0 && ${button("Archived (1)")} === undefined && ${row(name("Bug"))} !== null`,
     );
-    if (!(await evaluate<boolean>(`${row(name("Bug"))} !== null`)))
-      await click(button("Archived (1)"));
+
+    // Archive it once more, then delete for good: it comes off both Tasks.
+    await archiveBug();
     await menu(name("Bug"), "Delete permanently");
     await browser(
       "wait",

@@ -81,6 +81,8 @@
       }
     }
   ],
+  "labels_settings_archive_body_unused": "归档后它不能再挂到任务上；恢复后可以继续用。",
+  "labels_settings_restored_meanwhile": "它已经被恢复了，要删除请先再归档一次。",
   "labels_settings_restore": "恢复",
   "labels_settings_delete": "彻底删除",
   "labels_settings_delete_title": "彻底删除“{name}”？",

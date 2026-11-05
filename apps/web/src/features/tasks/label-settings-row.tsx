@@ -27,6 +27,10 @@ import { LabelDot } from "./task-label-chip";
 /** What a row is doing besides showing the label. */
 type Editing = "rename" | "color" | "description" | null;
 
+/** A permanent delete refused because the label is no longer archived (restored elsewhere). */
+const notArchived = (cause: unknown) =>
+  isAppError(cause) && cause.errorId === "task-label-not-archived";
+
 /** Why a change was refused, as the row says it. */
 function changeError(cause: unknown, name: string) {
   if (isAppError(cause) && cause.errorId === "task-label-name-taken")
@@ -65,6 +69,9 @@ export function LabelSettingsRow({
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirming, setConfirming] = useState<"archive" | "delete" | null>(null);
+  // The delete was refused as no longer archived: read the list again when its dialog closes.
+  // Not at once, as the row then moves out of the archived list and the refusal with it.
+  const restoredMeanwhile = useRef(false);
   const archived = Boolean(label.archivedAt);
 
   /** Closes the editor and hands focus back to the row's menu button, not to the page. */
@@ -223,7 +230,10 @@ export function LabelSettingsRow({
         <div
           className="flex w-fit flex-col gap-2 pl-6"
           onKeyDownCapture={(event) => {
-            if (event.key === " ") {
+            // Only on a swatch: Space on Done presses Done, which leaves the color as it was.
+            const onSwatch =
+              event.target instanceof HTMLInputElement && event.target.type === "radio";
+            if (event.key === " " && onSwatch) {
               // Space on the swatch already picked changes nothing a radio hears: save it here.
               event.preventDefault();
               saveColor(colorDraft);
@@ -293,7 +303,11 @@ export function LabelSettingsRow({
         // Archiving can be undone: the primary button, not the red one.
         tone="default"
         title={m.labels_settings_archive_title({ name: label.name })}
-        description={m.labels_settings_archive_body({ count: label.taskCount })}
+        description={
+          label.taskCount === 0
+            ? m.labels_settings_archive_body_unused()
+            : m.labels_settings_archive_body({ count: label.taskCount })
+        }
         confirmLabel={m.labels_settings_archive()}
         errorMessage={(cause) => changeError(cause, label.name)}
         onConfirm={async () => {
@@ -304,13 +318,30 @@ export function LabelSettingsRow({
       />
       <ConfirmDialog
         open={confirming === "delete"}
-        onOpenChange={(open) => !open && setConfirming(null)}
+        onOpenChange={(open) => {
+          if (open) return;
+          setConfirming(null);
+          // Someone restored it meanwhile: the list shows it live again once the refusal is read.
+          if (restoredMeanwhile.current) {
+            restoredMeanwhile.current = false;
+            void onChanged().catch(() => {});
+          }
+        }}
         title={m.labels_settings_delete_title({ name: label.name })}
         description={m.labels_settings_delete_body({ count: label.taskCount })}
         confirmLabel={m.labels_settings_delete()}
-        errorMessage={(cause) => changeError(cause, label.name)}
+        errorMessage={(cause) =>
+          notArchived(cause)
+            ? m.labels_settings_restored_meanwhile()
+            : changeError(cause, label.name)
+        }
         onConfirm={async () => {
-          await remove({ data: { id: label.id } });
+          try {
+            await remove({ data: { id: label.id } });
+          } catch (cause) {
+            if (notArchived(cause)) restoredMeanwhile.current = true;
+            throw cause;
+          }
           await onChanged();
           setConfirming(null);
         }}

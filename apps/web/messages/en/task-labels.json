@@ -84,6 +84,8 @@
       }
     }
   ],
+  "labels_settings_archive_body_unused": "Archived, it can’t be put on tasks; restoring it brings it back.",
+  "labels_settings_restored_meanwhile": "It has been restored. To delete it, archive it again first.",
   "labels_settings_restore": "Restore",
   "labels_settings_delete": "Delete permanently",
   "labels_settings_delete_title": "Delete “{name}” permanently?",
