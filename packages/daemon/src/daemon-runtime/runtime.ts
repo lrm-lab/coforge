@@ -156,7 +156,7 @@ import { RuntimeErrorDeliveryHold } from "./runtime-error-delivery-hold";
 import type { ActivityLaunch } from "./activity-launch";
 import { AgentOfflineResidency } from "./agent-offline-residency";
 import { AgentExitedDelivery } from "./agent-exited-delivery";
-import { AgentUsageReport } from "./agent-usage-report";
+import { assembleUsageReport } from "./agent-usage-report-wiring";
 import {
   isTrackedMention,
   MentionDeliveryTracker,
@@ -419,15 +419,14 @@ export class DaemonRuntime {
   };
   readonly #observedUsage = new Map<RuntimeProvider, UsageSnapshot>();
   /** Per-launch context-usage and service-tier readings (`agent-usage-report.ts`). */
-  readonly #usageReport = new AgentUsageReport({
-    sessionId: (agentId) => this.#stopState.sessionId(agentId),
-    envelope: () => this.#env(),
-    daemonInstanceId: () => this.#runtimeInstanceId,
-    recordClientSeq: (agentId, clientSeq) =>
-      this.#agentProcessManager.recordClientSeq(agentId, clientSeq),
-    sendContextUsage: (message) => this.#transport.sendAgentContextUsage?.(message),
-    sendServiceTier: (message) => this.#transport.sendAgentServiceTier?.(message),
-  });
+  readonly #usageReport = assembleUsageReport(
+    (agentId) => this.#stopState.sessionId(agentId),
+    () => this.#env(),
+    () => this.#runtimeInstanceId,
+    (agentId, clientSeq) => this.#agentProcessManager.recordClientSeq(agentId, clientSeq),
+    (message) => this.#transport.sendAgentContextUsage?.(message),
+    (message) => this.#transport.sendAgentServiceTier?.(message),
+  );
   /** Agents whose launch has already been warned that Fast mode was requested but is not applied.
    * One warning per launch, forgotten with the usage report. */
   readonly #fastModeWarned = new Set<string>();
@@ -454,6 +453,7 @@ export class DaemonRuntime {
     (agentId) => this.#currentActivityLaunches.get(agentId),
     (agentId, launch, draft) => this.#activityPublisher.publish(agentId, launch, draft),
     (agentId, detailKind, detail) => this.#activity(agentId, detailKind, "info", detail),
+    (agentId) => this.#usageReport.lastContextUsage(agentId),
   );
   /** Provider-event observation: the runtime's collaborators by reference, its helpers as calls.
    * Assigned at the constructor's end — every collaborator it names exists by then. */

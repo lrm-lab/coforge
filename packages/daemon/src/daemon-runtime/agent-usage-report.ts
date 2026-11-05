@@ -77,6 +77,12 @@ export class AgentUsageReport {
     );
   }
 
+  /** The last context-usage reading for an Agent, for the compaction log: a compaction's token
+   * numbers come from these readings, and a missing one stays missing rather than invented. */
+  lastContextUsage(agentId: string): { usedTokens: number; windowTokens: number } | undefined {
+    return this.#lastContextUsage.get(agentId);
+  }
+
   /** An observed service-tier reading: the same session-id gate and unchanged-reading skip. */
   serviceTier(
     agentId: string,

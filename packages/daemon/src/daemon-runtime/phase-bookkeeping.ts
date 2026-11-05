@@ -1,4 +1,5 @@
 import type { AgentRuntimeEvent } from "@coforge/agent";
+import { getLogger } from "@logtape/logtape";
 import type { AgentActivity } from "@lrm/coforge-sdk/internal";
 import { PhaseTracker } from "#src/agent-runtime/phase-tracker";
 import {
@@ -11,6 +12,8 @@ import {
 import type { ActivityLaunch } from "./activity-launch";
 import type { AgentContexts } from "./agent-contexts";
 import type { ActivityDraft, PublishedActivityLaunch } from "./agent-activity-publisher";
+
+const logger = getLogger(["coforge", "daemon", "daemon-runtime"]);
 
 /** The runtime supplies only where Activity goes: the current launch, its draft builder, and the
  * publisher. Providers report raw phase signals; this module decides what each becomes on the
@@ -26,6 +29,8 @@ export type PhaseBookkeepingPorts = Readonly<{
   /** A finished compaction starts the Agent's context over; a failed one counts toward the
    * session being spent. */
   contexts: Pick<AgentContexts, "newContext" | "compactionFailed" | "compactionSucceeded">;
+  /** The Agent's last context-usage reading: a compaction's token numbers, when one was observed. */
+  contextUsage?(agentId: string): { usedTokens: number; windowTokens: number } | undefined;
 }>;
 
 /**
@@ -35,12 +40,30 @@ export type PhaseBookkeepingPorts = Readonly<{
  */
 export class PhaseBookkeeping {
   readonly #phases: Readonly<Record<RuntimePhase, PhaseTracker>>;
+  /** Where each open compaction started, in tokens, for the one line it logs when it ends. */
+  readonly #compactionBefore = new Map<string, number | undefined>();
 
   constructor(private readonly ports: PhaseBookkeepingPorts) {
     this.#phases = {
       compaction: this.#track("compaction"),
       review: this.#track("review"),
     };
+  }
+
+  /** One line per compaction that ends, with the token numbers the runtime last reported. A
+   * missing reading stays missing — this never invents a number to look complete. */
+  #logCompactionTokens(agentId: string, outcome: "finished" | "inferred" | "interrupted"): void {
+    const tokensBefore = this.#compactionBefore.get(agentId);
+    this.#compactionBefore.delete(agentId);
+    const usage = this.ports.contextUsage?.(agentId);
+    logger.info("Context compaction ended", {
+      event: "agent.runtime.compaction_tokens",
+      agent_id: agentId,
+      outcome,
+      tokens_before: tokensBefore,
+      tokens_after: usage?.usedTokens,
+      window_tokens: usage?.windowTokens,
+    });
   }
 
   #track(phase: RuntimePhase): PhaseTracker {
@@ -64,6 +87,8 @@ export class PhaseBookkeeping {
   ): void {
     if (this.#phases[phase].start(agentId) !== "started") return;
     this.#publish(agentId, launch, RUNTIME_PHASES[phase].started, conversation);
+    if (phase === "compaction")
+      this.#compactionBefore.set(agentId, this.ports.contextUsage?.(agentId)?.usedTokens);
   }
 
   /** Ends an open phase once on its own finish signal. */
@@ -78,6 +103,7 @@ export class PhaseBookkeeping {
     if (phase === "compaction") {
       this.ports.contexts.newContext(agentId);
       this.ports.contexts.compactionSucceeded(agentId);
+      this.#logCompactionTokens(agentId, "finished");
     }
   }
 
@@ -91,6 +117,7 @@ export class PhaseBookkeeping {
     if (this.#phases.compaction.finish(agentId) !== "finished") return;
     this.#publish(agentId, launch, inferredCompactionFinish(inferredFrom), conversation);
     this.ports.contexts.newContext(agentId);
+    this.#logCompactionTokens(agentId, "inferred");
   }
 
   /** Ends an open phase once as interrupted, for a phase that reports interruptions. */
@@ -106,6 +133,7 @@ export class PhaseBookkeeping {
     if (phase !== "compaction") return;
     // A compaction that keeps failing leaves the session unable to make room; past the threshold
     // it is spent, and only a fresh session helps — so this says that instead of retrying.
+    this.#logCompactionTokens(agentId, "interrupted");
     const { terminal } = this.ports.contexts.compactionFailed(agentId);
     if (!terminal) return;
     this.ports.publish(

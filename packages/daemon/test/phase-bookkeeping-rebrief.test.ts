@@ -3,6 +3,7 @@ import { AgentContexts } from "#src/daemon-runtime/agent-contexts";
 import { PhaseBookkeeping } from "#src/daemon-runtime/phase-bookkeeping";
 import type { ActivityLaunch } from "#src/daemon-runtime/activity-launch";
 import type { ActivityDraft } from "#src/daemon-runtime/agent-activity-publisher";
+import { captureDaemonLogs } from "./log-capture";
 
 const launch = { launchId: "launch-a", clientSeq: 0, stopping: false } as ActivityLaunch;
 
@@ -73,4 +74,39 @@ test("the third compaction failure reports a spent session instead of retrying",
     bookkeeping.interrupt("compaction", "agent-a", launch, undefined);
   }
   expect(published.filter((draft) => draft.kind === "runtime_error")).toHaveLength(1);
+});
+
+test("a finished compaction logs the token numbers it started and ended with", async () => {
+  let usage = { usedTokens: 100, windowTokens: 200 };
+  const bookkeeping = new PhaseBookkeeping({
+    launchFor: () => launch,
+    publish: () => {},
+    activityDraft: (_agentId, kind) => ({ kind }) as never,
+    contexts: {
+      newContext: () => {},
+      compactionSucceeded: () => {},
+      compactionFailed: () => ({ consecutive: 1, terminal: false }),
+    },
+    contextUsage: () => usage,
+  });
+  const { records } = await captureDaemonLogs(async () => {
+    bookkeeping.start("compaction", "agent-a", launch, undefined);
+    usage = { usedTokens: 20, windowTokens: 200 };
+    bookkeeping.finish("compaction", "agent-a", launch, undefined);
+  });
+  expect(
+    records
+      .filter(
+        (record: { properties: Record<string, unknown> }) =>
+          record.properties.event === "agent.runtime.compaction_tokens",
+      )
+      .map((record: { properties: Record<string, unknown> }) => record.properties),
+  ).toEqual([
+    expect.objectContaining({
+      outcome: "finished",
+      tokens_before: 100,
+      tokens_after: 20,
+      window_tokens: 200,
+    }),
+  ]);
 });
