@@ -6,9 +6,11 @@ import {
   type ReactNode,
   type TouchEvent,
 } from "react";
+import { ChevronLeft, ChevronRight } from "@untitledui/icons";
 import { Button as AriaButton } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
+import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { answered, QuestionRows, type Draft, type Question } from "./action-card-question-rows";
@@ -44,7 +46,8 @@ export function QuestionsStepper({
   onSubmit: () => void;
   /** What the card has to say over its buttons: why the last send failed. */
   notice?: ReactNode;
-  /** Answered (Frank, 11-04): the same pages, each pick marked; only the dots and ← → remain. */
+  /** Answered (Frank, 11-04): the same pages, each pick marked; the dots and ‹ › turn them, as
+   * ← → and a swipe do (task #531: with the dots alone, nothing showed the way). */
   readOnly?: boolean;
 }) {
   const last = questions.length - 1;
@@ -217,6 +220,26 @@ export function QuestionsStepper({
                 </li>
               ))}
             </ol>
+          )}
+          {readOnly && (
+            <span className="ml-auto flex items-center gap-0.5">
+              <ButtonUtility
+                size="xs"
+                color="tertiary"
+                icon={ChevronLeft}
+                aria-label={m.action_card_questions_previous_step()}
+                isDisabled={step === 0}
+                onClick={() => goTo(step - 1)}
+              />
+              <ButtonUtility
+                size="xs"
+                color="tertiary"
+                icon={ChevronRight}
+                aria-label={m.action_card_questions_next()}
+                isDisabled={isLast}
+                onClick={() => goTo(step + 1)}
+              />
+            </span>
           )}
           {!readOnly && (
             <span className="ml-auto flex items-center gap-2">

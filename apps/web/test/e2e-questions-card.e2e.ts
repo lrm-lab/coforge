@@ -282,7 +282,7 @@ test("a questions card takes an answer for every question, then sends them at on
       ["notify", false],
     ]);
     // Answered, the same pages as while answering: each pick marked, nothing to press but the
-    // dots; the skipped question says so.
+    // dots and ‹ › (no Back, Next or Submit); the skipped question says so.
     expect(await evaluate<number>(`${card}.querySelectorAll("[data-question]").length`)).toBe(1);
     expect(await evaluate<boolean>(`${button("Back")} == null && ${button("Next")} == null`)).toBe(
       true,
@@ -296,6 +296,11 @@ test("a questions card takes an answer for every question, then sends them at on
     await browser("click", `[data-message-id="${message.id}"] [aria-label="Question 2"]`);
     await browser("wait", "--fn", `${shown("agent")} && ${cardText}.includes("Not answered")`);
     await shoot("phone-answered-skipped");
+    // Answered, a sideways swipe still turns the questions (task #531).
+    await swipe(-90);
+    await browser("wait", "--fn", shown("notify"));
+    await swipe(90);
+    await browser("wait", "--fn", shown("agent"));
 
     // Read again on a desktop: the stored answers, as anyone opening the channel later sees them.
     await browser("set", "viewport", "1280", "900");
@@ -303,6 +308,29 @@ test("a questions card takes an answer for every question, then sends them at on
     await browser("wait", "--fn", `${pageHydrated} && ${shown("webhook")}`);
     await evaluate(`(${card}.scrollIntoView({ block: "center" }), true)`);
     await shoot("answered");
+    // Answered, ‹ › turn the questions, each disabled at its end (task #531).
+    const arrow = (name: string) => `${card}?.querySelector('button[aria-label="${name}"]')`;
+    expect(await evaluate<boolean>(`${arrow("Back")}?.disabled === true`)).toBe(true);
+    await evaluate(`(${arrow("Next")}.setAttribute("data-e2e", "next"), true)`);
+    await browser("click", '[data-e2e="next"]');
+    await browser("wait", "--fn", shown("agent"));
+    await browser("click", '[data-e2e="next"]');
+    await browser("wait", "--fn", `${shown("notify")} && ${arrow("Next")}?.disabled === true`);
+    await shoot("answered-last");
+    await evaluate(`(${arrow("Back")}.setAttribute("data-e2e", "back"), true)`);
+    await browser("click", '[data-e2e="back"]');
+    await browser("wait", "--fn", shown("agent"));
+    await browser("click", '[data-e2e="back"]');
+    await browser("wait", "--fn", shown("webhook"));
+    // ← → still turn them from anywhere on the card.
+    await evaluate(
+      `(${card}.querySelector("[data-question] p").setAttribute("data-e2e", "prompt"), true)`,
+    );
+    await browser("click", '[data-e2e="prompt"]');
+    await browser("press", "ArrowRight");
+    await browser("wait", "--fn", shown("agent"));
+    await browser("press", "ArrowLeft");
+    await browser("wait", "--fn", shown("webhook"));
     if (otherMessage) {
       const viewer = `document.querySelector('[data-message-id="${otherMessage.id}"] [data-questions-card]')`;
       await browser("wait", "--fn", `${viewer} != null`);
