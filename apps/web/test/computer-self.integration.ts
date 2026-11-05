@@ -185,17 +185,12 @@ test("a revoked key is refused by authenticateLinkedDaemon before any route runs
   expect((result as Response).status).toBe(401);
 });
 
-test("a dk_ can call detach: a fresh registration undoes itself when its Daemon never started", async () => {
+test("a dk_ cannot call detach", async () => {
   const f = await fixture();
   const claims = await verifyDaemonApiKey(f.daemonApiKey, keys);
   const api = { presence: async () => [], disconnect: async () => {} };
   const result = await detachComputer(db, api, () => {}, claims);
-  expect(result.status).toBe(200);
-  expect(
-    await db.workspaceComputer.findFirst({
-      where: { workspaceId: f.workspace.id, computerId: f.computer.id },
-    }),
-  ).toBeNull();
+  expect(result.status).toBe(403);
 });
 
 test("detach unlinks, revokes every key, notifies and reconnects after commit", async () => {

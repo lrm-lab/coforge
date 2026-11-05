@@ -173,15 +173,6 @@ export function createSetupCommand(
     }),
     launcher: (serverUrl) =>
       createDaemonLauncher(platform.os, installDirectory, stateDirectory, serverUrl),
-    // The fresh `dk_` asks the server to undo a registration whose Daemon never started
-    // (task #417); `detached` and `key_revoked` both mean the record is gone.
-    revokeRegistration: async (daemonApiKey) =>
-      (
-        await createComputerSelfClient(COFORGE_SERVER_URL).detach(
-          daemonApiKey,
-          AbortSignal.timeout(15_000),
-        )
-      ).ok,
     oneShotAttach: (serverUrl, options) =>
       oneShotAttach(
         {

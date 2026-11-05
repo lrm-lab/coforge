@@ -100,18 +100,19 @@ export async function selfComputer(db: Db, principal: DaemonApiKeyClaims) {
 }
 
 /** The computer unlinks itself from the Workspace — `removeComputerFromWorkspace` with the
- * `computerId` its key carries rather than an owner's choice: the key's owner is the Computer's
- * owner, so the membership check passes. Both key kinds may call it: an `sk_computer` is the
- * steady state, and a fresh registration's `dk_` undoes itself when its Daemon never started
- * (task #417). The transaction commits the revocation and the link removal; `notify` and
- * `reconnectDaemon` run after, so the open connection meets the refusal only once the revoke is
- * durable, and a Centrifugo failure leaves the unlink in place. */
+ * `computerId` its key carries rather than an owner's choice: the `sk_computer`'s owner is the
+ * Computer's owner, so the membership check passes. The transaction commits the revocation and
+ * the link removal; `notify` and `reconnectDaemon` run after, so the open connection meets the
+ * refusal only once the revoke is durable, and a Centrifugo failure leaves the unlink in place.
+ * Only `kind: "computer"`. */
 export async function detachComputer(
   db: Pick<PrismaClient, "computer" | "$transaction">,
   api: CentrifugoConnections,
   notify: (computerId: string) => void,
   principal: DaemonApiKeyClaims,
 ) {
+  if (principal.kind !== "computer")
+    return Response.json({ error: "only an sk_computer may detach" }, { status: 403 });
   await removeComputerFromWorkspace(db, {
     userId: principal.userId,
     workspaceId: principal.workspaceId,
