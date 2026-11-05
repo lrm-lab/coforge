@@ -201,7 +201,7 @@ export async function createConversationTasks(
         scope.conversationId,
         parents,
         `${result.tasks[0]!.id}:task-created`,
-      );
+      ).catch(() => undefined);
   }
   return { tasks: await taskViewsOf(ports.db, ports.reader, result.tasks) };
 }

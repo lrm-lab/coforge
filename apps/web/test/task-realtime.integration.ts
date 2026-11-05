@@ -62,7 +62,11 @@ async function boardFor(
     directKey?: string;
     visibility?: "private";
   },
-  options: { workspaceId?: string; agent?: boolean } = {},
+  options: {
+    workspaceId?: string;
+    agent?: boolean;
+    taskChanged?: (signal: TaskChangedSignal) => void | Promise<void>;
+  } = {},
 ) {
   const wsId = options.workspaceId ?? workspaceId;
   const created = await db.conversation.create({
@@ -80,6 +84,7 @@ async function boardFor(
       async memberChanged() {},
       async messageAvailable() {},
       async taskChanged(signal) {
+        if (options.taskChanged) return options.taskChanged(signal);
         announced.push(signal);
       },
     },
@@ -139,17 +144,22 @@ test("a channel's Task writes announce each changed Task to the Workspace, once 
   expect(drain()).toEqual([{ tasks: [], deleted: [second!.id], userId: undefined }]);
 });
 
-test("a Task made under a parent announces the parent's new copy with it", async () => {
-  // Relations are Tasks v2: this Workspace has the experiment on, unlike the file's shared one.
+/** A Workspace with Tasks v2 on: relations exist only there, unlike the file's shared one. */
+async function relationsWorkspace() {
   const relations = await db.workspace.create({
     data: {
-      slug: `task-realtime-relations-${handle}`,
+      slug: `task-realtime-relations-${crypto.randomUUID().slice(0, 8)}`,
       name: "Task realtime relations",
       experiments: { taskConversations: true },
       members: { create: [{ userId: alice.id, role: "owner" }] },
     },
   });
   cleanup.push(() => db.workspace.delete({ where: { id: relations.id } }));
+  return relations;
+}
+
+test("a Task made under a parent announces the parent's new copy with it", async () => {
+  const relations = await relationsWorkspace();
   const { run, announced } = await boardFor(
     { channelName: `realtime-parent-${handle}` },
     { workspaceId: relations.id, agent: false },
@@ -177,6 +187,40 @@ test("a Task made under a parent announces the parent's new copy with it", async
   expect(copies.get(child!.number)?.parent).toMatchObject({
     hidden: false,
     number: parent!.number,
+  });
+});
+
+test("a failed announcement does not fail the create that committed", async () => {
+  const relations = await relationsWorkspace();
+  const parentChannel = `realtime-parent-out-${handle}`;
+  const { run: parentRun } = await boardFor(
+    { channelName: parentChannel },
+    { workspaceId: relations.id, agent: false },
+  );
+  const { run } = await boardFor(
+    { channelName: `realtime-child-out-${handle}` },
+    {
+      workspaceId: relations.id,
+      agent: false,
+      taskChanged: () => {
+        throw new Error("centrifugo is down");
+      },
+    },
+  );
+  const [parent] = (await parentRun({ operation: "create", titles: ["Parent"] })).tasks;
+  // The parent sits in another conversation, so its copy goes through announceNeighbours;
+  // publication is best-effort and must never turn a committed create into a failure a
+  // caller would retry into a duplicate.
+  const created = await run({
+    operation: "create",
+    title: "Child",
+    parent: { number: parent!.number, channel: parentChannel },
+  });
+  expect(created.tasks).toHaveLength(1);
+  expect(created.tasks[0]!.parent).toMatchObject({
+    hidden: false,
+    number: parent!.number,
+    channel: parentChannel,
   });
 });
 
