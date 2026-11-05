@@ -1,33 +1,46 @@
 # The browser e2es CI must pass (.github/workflows/web-e2e.yml), one per line: file, then the seconds
 # one run took on a private stack, which scripts/e2e/run-web-e2e-ci.sh uses to balance the shards.
 # A file is listed after it passed three clean runs in a row on a private stack and then on the
-# Linux runner (task #438, 2026-11-04, main a6618713e).
+# Linux runner (task #438: 2026-11-04, main a6618713e; second batch 2026-11-05, main 30c6ef0a2).
 # Files that drive ego-browser (a signed-in desktop browser) never belong here: CI has none.
+e2e-task-popup-esc.e2e.ts 47
 e2e-hover-popover-stuck.e2e.ts 43
 e2e-agent-replying.e2e.ts 35
 e2e-agent-activity-bottom-pin.e2e.ts 34
+e2e-label-settings.e2e.ts 33
 e2e-password-reset.e2e.ts 29
 e2e-sign-in-flow.e2e.ts 29
 onboarding-wizard.e2e.ts 29
 e2e-task-labels-picker.e2e.ts 27
 e2e-code-sign-in.e2e.ts 26
 e2e-questions-card.e2e.ts 26
+e2e-task-add-existing-subtask.e2e.ts 23
 e2e-agent-replying-group.e2e.ts 21
 e2e-github-sign-in.e2e.ts 21
 e2e-task-relation-pickers.e2e.ts 21
 e2e-whats-new.e2e.ts 21
+e2e-artifact-documents.e2e.ts 18
+e2e-task-delete-undo.e2e.ts 18
 e2e-query-cache-persistence.e2e.ts 16
 e2e-action-card-one-step.e2e.ts 15
+e2e-project-task-tree.e2e.ts 15
 e2e-choice-card-other.e2e.ts 14
 e2e-sidebar-agent-status.e2e.ts 14
 e2e-task-popup-profile.e2e.ts 14
+e2e-attachment-comment-mentions.e2e.ts 14
+e2e-image-comments.e2e.ts 14
+e2e-project-tasks.e2e.ts 14
+e2e-task-popup-steps.e2e.ts 14
 e2e-private-channel-labels.e2e.ts 13
 e2e-search-home.e2e.ts 13
+e2e-avatars-everywhere.e2e.ts 13
 e2e-activity-inbox.e2e.ts 12
 e2e-channel-notify-menu.e2e.ts 12
 e2e-conversation-task-board.e2e.ts 12
 e2e-message-task-pill.e2e.ts 12
 e2e-mention-picker.e2e.ts 11
+e2e-create-task-draft.e2e.ts 11
+e2e-search-entities.e2e.ts 11
 e2e-activity-inbox-phone.e2e.ts 10
 e2e-activity-task-alone.e2e.ts 10
 e2e-channel-settings.e2e.ts 10
@@ -50,14 +63,18 @@ e2e-note-large-open.e2e.ts 8
 e2e-open-read-failed.e2e.ts 8
 e2e-system-notice-fold.e2e.ts 8
 e2e-tasks-create-and-scope.e2e.ts 8
+e2e-chat-client-render.e2e.ts 8
 e2e-activity-inbox-pinned.e2e.ts 7
 e2e-choice-card-dismiss.e2e.ts 7
 e2e-computer-agent-roster-phone.e2e.ts 7
 e2e-sidebar-muted-unread.e2e.ts 7
+e2e-stop-channel-agents.e2e.ts 7
 e2e-activity-inbox-dm.e2e.ts 6
 e2e-activity-waiting.e2e.ts 6
 e2e-modal-keyboard-viewport.e2e.ts 6
 e2e-public-agent-direct-message.e2e.ts 6
+e2e-search-no-vertical-overflow.e2e.ts 6
 e2e-task-discussion-references.e2e.ts 5
+e2e-members-page-no-vertical-overflow.e2e.ts 5
 e2e-agent-apps-prompt.e2e.ts 1
 workspace-assistant.e2e.ts 1
