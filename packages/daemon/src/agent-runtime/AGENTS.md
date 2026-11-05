@@ -147,9 +147,9 @@ Rules for Agent lifecycle, control, Session state, and Activity in
 - The seed no longer writes `notes/work-log.md`: a chronological log is not what the Agent is told
   to keep. A workspace from before that change keeps its file; nothing deletes it.
 - `MEMORY.md` holds the index _and_ the facts — one fact per line — with a `## Pointers` line for
-  each `notes/<topic>.md` that holds long material. The Active Context lives in
-  `notes/active-context.md` and is overwritten as work moves. Older workspaces get the missing
-  notes files, but an existing `MEMORY.md` is never migrated or rewritten.
+  each `notes/<topic>.md` that holds long material. A role is the description the standing prompt
+  carries, never a section here. The Active Context lives in `notes/active-context.md`; older
+  workspaces get the missing notes files, and an existing `MEMORY.md` is never migrated or rewritten.
 - The standing instructions say when to write: a fact goes in at the moment a human decides or
   the Agent hits a pitfall, merging duplicates and dropping stale facts in the same edit; the
   Active Context is overwritten when work starts, finishes or blocks; and `MEMORY.md` is checked

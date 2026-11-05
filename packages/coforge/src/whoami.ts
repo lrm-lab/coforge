@@ -36,7 +36,16 @@ export type WhoamiResult = {
   };
   /** What the server says about this credential; absent when no server check was made. */
   serverConfirmed?: boolean;
-  server?: { agent: { id: string; name: string; displayName: string; role: string | null } };
+  server?: {
+    agent: {
+      id: string;
+      name: string;
+      displayName: string;
+      /** The Agent's description: its role, as the standing prompt carries it each launch. */
+      description: string;
+      role: string | null;
+    };
+  };
   serverError?: string;
   /** The refusal's code when the server answered but refused (for example a rejected credential). */
   serverErrorCode?: string;
@@ -93,8 +102,11 @@ function formatWhoami(result: WhoamiResult): string {
       (result.credential.redacted ? ` redacted=${result.credential.redacted}` : ""),
   );
   if (result.serverConfirmed === true && result.server) {
-    const { name, role } = result.server.agent;
+    const { name, role, description } = result.server.agent;
     lines.push(`Server: confirmed @${name}${role ? ` (${role})` : ""}`);
+    // The description is the Agent's role; flattened so a multi-line one cannot break the block.
+    const oneLine = description.replace(/\s+/gu, " ").trim();
+    if (oneLine) lines.push(`Description: ${oneLine}`);
   } else if (result.serverConfirmed === false) lines.push("Server: unconfirmed");
   return lines.join("\n");
 }
@@ -128,8 +140,12 @@ async function confirmWhoami(
       message: `The server says this credential belongs to agent ${profile.id}, not the locally configured ${local.agentId}.`,
       retryable: false,
     });
-  const { id, name, displayName, role } = profile;
-  return { ...local, serverConfirmed: true, server: { agent: { id, name, displayName, role } } };
+  const { id, name, displayName, description, role } = profile;
+  return {
+    ...local,
+    serverConfirmed: true,
+    server: { agent: { id, name, displayName, description, role } },
+  };
 }
 
 /**

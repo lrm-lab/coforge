@@ -26,7 +26,7 @@ const profile = (id: string) => ({
     id,
     name: "scout",
     displayName: "Scout",
-    description: "",
+    description: "Reviews pull requests for the platform team.",
     role: "admin",
     isSelf: true,
     runtime: "codex",
@@ -53,6 +53,7 @@ test("whoami reports the identity the server confirms for the credential", async
   );
   expect(output).toContain("Agent ID: agent-1");
   expect(output).toContain("Server: confirmed @scout (admin)");
+  expect(output).toContain("Description: Reviews pull requests for the platform team.");
 });
 
 test("whoami --json carries serverConfirmed and the confirmed agent", async () => {
@@ -68,6 +69,7 @@ test("whoami --json carries serverConfirmed and the confirmed agent", async () =
     id: "agent-1",
     name: "scout",
     displayName: "Scout",
+    description: "Reviews pull requests for the platform team.",
     role: "admin",
   });
 });

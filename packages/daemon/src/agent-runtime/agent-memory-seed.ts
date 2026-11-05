@@ -4,17 +4,17 @@ import { AGENT_CODE_DIRECTORY, AGENT_MEMORY_FILE } from "#src/agent-runtime/agen
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { collapseWhitespace } from "@lrm/coforge-anvil";
-import { stripHeadingMarkers } from "#src/code-agent/agent-instructions";
 
 const logger = getLogger(["coforge", "daemon", "agent-runtime", "agent-memory-seed"]);
 
 /** The subset of the server-authored Agent identity (`AgentLaunchIdentity`) the seeded MEMORY.md
- * needs. Declared locally instead of importing that type so this module keeps a narrow,
- * independent seam from the standing-prompt builder. */
+ * needs: only the name for its title. The role is not copied — the standing prompt carries the
+ * current description on every launch, and a copy would go stale the moment an owner edits it.
+ * Declared locally instead of importing that type so this module keeps a narrow, independent seam
+ * from the standing-prompt builder. */
 export type AgentMemorySeedIdentity = {
   name?: string;
   displayName?: string;
-  description?: string;
 };
 
 const ACTIVE_CONTEXT_SEED = `# Active Context
@@ -23,27 +23,22 @@ Current state, not a log: overwrite it when work starts, finishes or blocks — 
 `;
 
 /**
- * Builds the content of a freshly seeded MEMORY.md for one Agent: a title, a Role section, a
- * Rules slot, a Facts area written one fact per line, and Pointers for what is too long to keep
- * here — the shape the Agent Manual's memory topic tells the Agent to keep. MEMORY.md holds the
- * index and the facts themselves; only long material (procedures, reports, reference) lives in
- * notes/<topic>.md behind a one-line pointer, and the Active Context stays in
- * notes/active-context.md.
+ * Builds the content of a freshly seeded MEMORY.md for one Agent: a title, a Rules slot, a Facts
+ * area written one fact per line, and Pointers for what is too long to keep here — the shape the
+ * Agent Manual's memory topic tells the Agent to keep. MEMORY.md holds the index and the facts
+ * themselves; only long material (procedures, reports, reference) lives in notes/<topic>.md
+ * behind a one-line pointer, and the Active Context stays in notes/active-context.md.
  *
- * User-written identity text is sanitised the same way the standing prompt sanitises it: the
- * name is collapsed to a single line so it cannot break the `# <name>` heading, and the
- * description has line-leading `#` characters stripped so it cannot forge extra headings inside
- * the `## Role` section.
+ * There is no Role section: a role is the Agent's description, which the standing prompt carries
+ * from the server on every launch, and a copy here would disagree with it after one edit.
+ *
+ * The name is written by people, so it is collapsed to a single line: it cannot break the
+ * `# <name>` heading.
  */
 export function buildInitialMemoryMd(identity: AgentMemorySeedIdentity): string {
   const rawName = identity.displayName || identity.name;
   const title = rawName ? collapseWhitespace(rawName) : "Agent";
-  const description = identity.description?.trim();
-  const role = description ? stripHeadingMarkers(description) : "No role defined yet.";
   return `# ${title}
-
-## Role
-${role}
 
 ## Rules (never change)
 -

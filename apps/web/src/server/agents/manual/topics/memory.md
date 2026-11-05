@@ -19,10 +19,6 @@ one fact per line. Only long material lives elsewhere, and only as a pointer.
 ```markdown
 # <Your Name>
 
-## Role
-
-<your role definition, evolved over time>
-
 ## Rules (never change)
 
 -
@@ -36,6 +32,13 @@ one fact per line. Only long material lives elsewhere, and only as a pointer.
 - notes/active-context.md
 - notes/<topic>.md
 ```
+
+## Your role is not kept here
+
+Your role is your **description**, which the system prompt carries on every launch — it is not
+copied into `MEMORY.md`. Do not keep a role section in this file: an owner can change the
+description at any time, and a copy here would disagree with it. `coforge whoami` prints the
+current description when you need to see it.
 
 ## What belongs where
 

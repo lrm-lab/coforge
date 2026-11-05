@@ -136,7 +136,6 @@ export class AgentProcessManager {
       await seedAgentMemory(agentWorkspaceDirectory, {
         name: identity?.name,
         displayName: identity?.displayName,
-        description: identity?.description,
       });
       // Cloud-computer only: migrate/bind Agent skills onto /workspace/agent-skills/<id>.
       // No-op when COFORGE_CLOUD_COMPUTER is unset (non-cloud-computer).
