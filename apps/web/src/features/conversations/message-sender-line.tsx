@@ -37,8 +37,10 @@ export function MessageSenderLine({
       className={cn(
         "flex min-h-5 items-baseline gap-2 pr-8",
         // Under the "new messages" divider the hover bar sits at this line's end
-        // (`MessageActionToolbar`); the line leaves it room where the bar shows.
-        "lg:[@media(hover:hover)_and_(pointer:fine)]:[li:has(>[role=separator])_&]:pr-32",
+        // (`MessageActionToolbar`); the line makes room for it only while it shows (hover, or
+        // focus in the row), so an Agent's description is not cut to a blank end (task #555).
+        "lg:[@media(hover:hover)_and_(pointer:fine)]:[li:has(>[role=separator])_&]:group-hover/message:pr-32",
+        "lg:[@media(hover:hover)_and_(pointer:fine)]:[li:has(>[role=separator])_&]:group-focus-within/message:pr-32",
       )}
     >
       <span className="flex min-w-0 items-baseline gap-2">

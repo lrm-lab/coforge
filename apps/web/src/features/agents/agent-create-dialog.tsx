@@ -92,6 +92,8 @@ export function LocalAgentForm({
   const [initialComputerId] = useState(defaults?.computerId ?? computers[0]?.id ?? "");
   const [computerId, setComputerId] = useState(initialComputerId);
   const [isPrivate, setIsPrivate] = useState(false);
+  // A runtime, model or key picked away from the form's defaults is a change too (task #555).
+  const [runtimeChanged, setRuntimeChanged] = useState(false);
   // Signing a runtime in from the not-signed-in notice: the flow's dialog, and the runtimes this
   // dialog has seen signed in since, whose stored report the Computer list may not have yet.
   const [signingIn, setSigningIn] = useState<RuntimeAuthProvider>();
@@ -169,7 +171,7 @@ export function LocalAgentForm({
     <>
       <AgentCreateForm
         onSubmit={submit}
-        changed={computerId !== initialComputerId || isPrivate}
+        changed={computerId !== initialComputerId || isPrivate || runtimeChanged}
         intro={
           !headless && (
             <AgentCreateIntro
@@ -243,6 +245,7 @@ export function LocalAgentForm({
             key={computerId}
             open
             computerId={computerId}
+            onDirtyChange={setRuntimeChanged}
             providerNotice={(provider) =>
               computer &&
               !signedIn.has(`${computerId}:${provider}`) && (
