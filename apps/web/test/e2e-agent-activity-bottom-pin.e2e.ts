@@ -209,17 +209,21 @@ for (const width of [1440, 390])
     const opened = await settledDistance();
     await browser("screenshot", join(artifacts, `${width}-opened.png`));
 
-    // Scrolled up, live rows arriving leave the reader where they are. The scroll event is
-    // dispatched a frame after scrollTop moves, and a row still settling can re-pin to the
-    // bottom in between — retry until the reader's place holds.
-    let scrolledUp = 0;
-    for (let attempt = 0; attempt < 5 && scrolledUp <= 300; attempt++) {
-      await browser(
-        "eval",
-        `(() => { const s=${scroller}; s.dispatchEvent(new WheelEvent("wheel")); s.scrollTop = Math.max(0, s.scrollTop - 600); })()`,
-      );
-      scrolledUp = await settledDistance();
-    }
+    // Scrolled up while a row is still settling (task #567): in one frame the reader's wheel moves
+    // the view up and the newest row grows, so the resize is seen before the scroll is reported.
+    // The reader stays where they scrolled to.
+    await browser(
+      "eval",
+      `new Promise((done) => requestAnimationFrame(() => {
+        const s = ${scroller};
+        s.dispatchEvent(new WheelEvent("wheel", { deltaY: -600, bubbles: true }));
+        s.scrollTop -= 600;
+        s.querySelector("ol > li:last-child").style.paddingBottom = "40px";
+        done(true);
+      }))`,
+    );
+    const scrolledUp = await settledDistance();
+    await browser("screenshot", join(artifacts, `${width}-scrolled-up.png`));
     const topBefore = await evaluate<number>(`Math.round(${scroller}.scrollTop)`);
     await publishRow(`up-${width}-1`);
     await publishRow(`up-${width}-2`);
@@ -229,7 +233,7 @@ for (const width of [1440, 390])
     // Back at the bottom, new rows are followed again.
     await browser(
       "eval",
-      `(() => { const s=${scroller}; s.dispatchEvent(new WheelEvent("wheel")); s.scrollTop = s.scrollHeight; })()`,
+      `(() => { const s=${scroller}; s.dispatchEvent(new WheelEvent("wheel", { deltaY: 600 })); s.scrollTop = s.scrollHeight; })()`,
     );
     await settledDistance();
     await publishRow(`down-${width}-1`);

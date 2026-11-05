@@ -58,3 +58,91 @@ test("an open row with history below it scrolls its top into place and does not 
   expect(pinned).toBe(false);
   expect(history.scrollTop).toBe(1000 - 12);
 });
+
+/**
+ * Scrolling up while rows still settle (task #567): the reader's input reaches the page before the
+ * scroll it asks for is reported, and a row growing in between must not pull them back down.
+ */
+function pinnedAtBottom() {
+  const pin = new ConversationBottomPin();
+  const history = fakeHistory({ scrollHeight: 3000, clientHeight: 600 });
+  pin.pin(history as never, "instant");
+  return { pin, history };
+}
+const input = (history: object, event: Record<string, unknown>) =>
+  ({ target: history, currentTarget: history, ...event }) as never;
+
+test("input toward the top keeps a settling row from re-pinning until the scroll lands", () => {
+  const { pin, history } = pinnedAtBottom();
+  pin.read(input(history, { type: "wheel", deltaY: -120 }));
+  history.scrollHeight = 3080;
+  expect(pin.beforeResize(history)).toBe(false);
+  // Native scroll anchoring's scroll event, still at the bottom, does not end the reader's move.
+  history.scrollTop = history.scrollHeight - history.clientHeight;
+  pin.scroll(history);
+  expect(pin.beforeResize(history)).toBe(false);
+  // The reader's scroll lands away from the bottom: distance decides again.
+  history.scrollTop -= 400;
+  expect(pin.scroll(history)).toBe(400);
+  expect(pin.beforeResize(history)).toBe(false);
+});
+
+test("a small move up that stays within the bottom's tolerance keeps following", () => {
+  const { pin, history } = pinnedAtBottom();
+  pin.read(input(history, { type: "wheel", deltaY: -3 }));
+  history.scrollTop -= 2;
+  expect(pin.scroll(history)).toBe(2);
+  history.scrollHeight = 3080;
+  expect(pin.beforeResize(history)).toBe(true);
+});
+
+test("keys and a downward drag toward the top count as moving up", () => {
+  for (const event of [
+    { type: "keydown", key: "PageUp" },
+    { type: "keydown", key: " ", shiftKey: true },
+  ]) {
+    const { pin, history } = pinnedAtBottom();
+    pin.read(input(history, event));
+    expect(pin.beforeResize(history)).toBe(false);
+  }
+  // The same key in a field being edited inside the history moves its caret instead.
+  const editing = pinnedAtBottom();
+  const field = { tagName: "TEXTAREA", isContentEditable: false };
+  editing.pin.read({
+    type: "keydown",
+    key: "ArrowUp",
+    target: field,
+    currentTarget: editing.history,
+  } as never);
+  expect(editing.pin.beforeResize(editing.history)).toBe(true);
+  const { pin, history } = pinnedAtBottom();
+  pin.read(input(history, { type: "touchmove", touches: [{ identifier: 1, clientY: 300 }] }));
+  expect(pin.beforeResize(history)).toBe(true);
+  pin.read(input(history, { type: "touchmove", touches: [{ identifier: 1, clientY: 340 }] }));
+  expect(pin.beforeResize(history)).toBe(false);
+});
+
+test("input toward the bottom, which scrolls nothing at the end, keeps following", () => {
+  const { pin, history } = pinnedAtBottom();
+  pin.read(input(history, { type: "wheel", deltaY: 120 }));
+  pin.read(input(history, { type: "pointerdown" }));
+  history.scrollHeight = 3080;
+  expect(pin.beforeResize(history)).toBe(true);
+  pin.pin(history as never, "instant");
+  // Up, then back down before anything moved: following again.
+  pin.read(input(history, { type: "wheel", deltaY: -120 }));
+  pin.read(input(history, { type: "keydown", key: "End" }));
+  expect(pin.beforeResize(history)).toBe(true);
+});
+
+test("moving up at the very top, or a jump to the latest, does not stop following", () => {
+  const pin = new ConversationBottomPin();
+  const short = fakeHistory({ scrollHeight: 500, clientHeight: 600 });
+  pin.pin(short as never, "instant");
+  pin.read(input(short, { type: "wheel", deltaY: -120 }));
+  expect(pin.beforeResize(short)).toBe(true);
+  const { pin: other, history } = pinnedAtBottom();
+  other.read(input(history, { type: "wheel", deltaY: -120 }));
+  other.pin(history as never, "instant");
+  expect(other.beforeResize(history)).toBe(true);
+});

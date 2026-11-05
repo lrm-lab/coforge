@@ -6,6 +6,17 @@ export const PIN_TOLERANCE_PX = 4;
 
 type HistoryPosition = Pick<HTMLElement, "scrollTop" | "scrollHeight" | "clientHeight">;
 
+/** The reader's input on the history: a wheel, a key, a touch or a press. */
+type ReadingInput = {
+  type: string;
+  target: EventTarget | null;
+  currentTarget: EventTarget | null;
+  deltaY?: number;
+  key?: string;
+  shiftKey?: boolean;
+  touches?: ArrayLike<{ identifier: number; clientY: number }>;
+};
+
 /**
  * Bottom-follow intent across layout changes and the scroll events those changes trigger.
  * A banner can shrink the viewport before an earlier programmatic scroll is delivered; native
@@ -16,12 +27,21 @@ type HistoryPosition = Pick<HTMLElement, "scrollTop" | "scrollHeight" | "clientH
 export class ConversationBottomPin {
   #distance = 0;
   #pinned: HistoryPosition | undefined;
+  /** Where the history stood when the reader asked to move up, until a scroll shows their move:
+   * a row settling in between must not pull them back (task #567). Native scroll anchoring's
+   * scroll, further down, is not theirs; the first scroll at or above it is, wherever it lands
+   * (a small move that stays at the bottom keeps following). A pin or input toward the bottom
+   * also ends it. */
+  #leavingFrom: number | undefined;
+  /** The last touch point, to tell which way a drag scrolls. */
+  #touch: { identifier: number; clientY: number } | undefined;
 
   pin(history: HTMLDivElement | null, behavior: ScrollBehavior) {
     if (!history) return;
     history.scrollTo({ top: history.scrollHeight, behavior });
     history.scrollTop = history.scrollHeight;
     this.#distance = 0;
+    this.#leavingFrom = undefined;
     this.#pinned = {
       scrollTop: history.scrollTop,
       scrollHeight: history.scrollHeight,
@@ -51,9 +71,31 @@ export class ConversationBottomPin {
     return true;
   }
 
-  readonly read = () => {
+  readonly read = (input?: ReadingInput) => {
     this.#pinned = undefined;
+    const direction = input && this.#direction(input);
+    if (direction === "down") this.#leavingFrom = undefined;
+    else if (direction === "up" && input && scrollsHistoryUp(input))
+      this.#leavingFrom = (input.currentTarget as Element).scrollTop;
   };
+
+  #direction(input: ReadingInput): "up" | "down" | undefined {
+    if (input.type === "wheel" && input.deltaY) return input.deltaY < 0 ? "up" : "down";
+    if (input.type === "keydown" && !isEditing(input.target)) {
+      if (input.key === " ") return input.shiftKey ? "up" : "down";
+      if (input.key === "ArrowUp" || input.key === "PageUp" || input.key === "Home") return "up";
+      if (input.key === "ArrowDown" || input.key === "PageDown" || input.key === "End")
+        return "down";
+    }
+    const touch = input.type === "touchmove" ? input.touches?.[0] : undefined;
+    if (!touch) return undefined;
+    const previous = this.#touch;
+    this.#touch = { identifier: touch.identifier, clientY: touch.clientY };
+    if (previous?.identifier !== touch.identifier || previous.clientY === touch.clientY)
+      return undefined;
+    // A finger moving down drags the content down: the history scrolls toward its top.
+    return touch.clientY > previous.clientY ? "up" : "down";
+  }
 
   scroll(history: HistoryPosition): number | undefined {
     const pinned = this.#pinned;
@@ -66,14 +108,44 @@ export class ConversationBottomPin {
     )
       return undefined;
     this.#pinned = undefined;
-    return (this.#distance = distanceFromBottom(history));
+    this.#distance = distanceFromBottom(history);
+    if (this.#leavingFrom !== undefined && history.scrollTop <= this.#leavingFrom)
+      this.#leavingFrom = undefined;
+    return this.#distance;
   }
 
   beforeResize(history: HistoryPosition): boolean {
-    const wasAtBottom = this.#distance <= PIN_TOLERANCE_PX;
+    const wasAtBottom = this.#leavingFrom === undefined && this.#distance <= PIN_TOLERANCE_PX;
     this.#distance = distanceFromBottom(history);
     return wasAtBottom;
   }
+}
+
+/** Whether the input scrolls the history itself rather than something inside it that can still
+ * scroll up (a code block, a tool's output): scroll chaining gives it to the innermost. */
+function scrollsHistoryUp({ target, currentTarget: history }: ReadingInput): boolean {
+  if (!history || (history as Element).scrollTop <= 0) return false;
+  for (
+    let element = target as Element | null;
+    element && element !== history;
+    element = element.parentElement
+  ) {
+    if (
+      element.scrollTop > 0 &&
+      element.scrollHeight > element.clientHeight &&
+      /auto|scroll/.test(getComputedStyle(element).overflowY)
+    )
+      return false;
+  }
+  return true;
+}
+
+/** A key typed into a field (editing a message in place) moves its caret, not the history. */
+function isEditing(target: EventTarget | null): boolean {
+  const element = target as HTMLElement | null;
+  return (
+    !!element && (element.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(element.tagName))
+  );
 }
 
 function distanceFromBottom(history: HistoryPosition): number {
