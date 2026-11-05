@@ -175,7 +175,31 @@ test("identity key is stable for the state root and Workspace", async () => {
   }
 });
 
+test("adopts a record left under the Windows-only name, and replaces it on the next write", async () => {
+  const cfg = await config();
+  try {
+    await mkdir(cfg.stateDirectory, { recursive: true });
+    const legacy = join(cfg.stateDirectory, "windows-instance.json");
+    await Bun.write(legacy, persistedRecordUnderLegacyName());
+    const instance = new ProcessWorkspaceInstance(
+      cfg,
+      async () => {
+        throw new Error("must adopt the live child");
+      },
+      () => false,
+    );
+    expect(await instance.identity()).toMatchObject({ mainPid: 73, active: false });
+    await instance.stop();
+    // The old name is not left behind to be read again by the next Coordinator.
+    expect(await Bun.file(legacy).exists()).toBe(false);
+  } finally {
+    await rm(cfg.root, { recursive: true, force: true });
+  }
+});
+
 const persistedInvocation = "ABCDEF0123456789ABCDEF0123456789";
+const persistedRecordUnderLegacyName = () =>
+  `{"mainPid":73,"invocationId":"ABCDEF0123456789ABCDEF0123456789"}\n`;
 const persistedRecord = `{"mainPid":73,"invocationId":"${persistedInvocation}","extra":"中文"}`;
 
 for (const [name, bytes] of [
@@ -193,7 +217,7 @@ for (const [name, bytes] of [
     const cfg = await config();
     try {
       await mkdir(cfg.stateDirectory, { recursive: true });
-      const path = join(cfg.stateDirectory, "windows-instance.json");
+      const path = join(cfg.stateDirectory, "process-instance.json");
       await Bun.write(path, bytes);
       const instance = new ProcessWorkspaceInstance(
         cfg,
@@ -227,7 +251,7 @@ for (const [name, bytes] of [
     const cfg = await config();
     try {
       await mkdir(cfg.stateDirectory, { recursive: true });
-      const path = join(cfg.stateDirectory, "windows-instance.json");
+      const path = join(cfg.stateDirectory, "process-instance.json");
       await Bun.write(path, bytes);
       const unexpected = () => {
         throw new Error("must not operate on a damaged record");
@@ -253,7 +277,7 @@ for (const code of ["EISDIR", "ENOTDIR"] as const) {
     const cfg = await config();
     try {
       if (code === "EISDIR")
-        await mkdir(join(cfg.stateDirectory, "windows-instance.json"), { recursive: true });
+        await mkdir(join(cfg.stateDirectory, "process-instance.json"), { recursive: true });
       else {
         await mkdir(dirname(cfg.stateDirectory), { recursive: true });
         await Bun.write(cfg.stateDirectory, "not a directory");
@@ -287,7 +311,7 @@ for (const record of [
     try {
       if (record) {
         await mkdir(cfg.stateDirectory, { recursive: true });
-        await Bun.write(join(cfg.stateDirectory, "windows-instance.json"), JSON.stringify(record));
+        await Bun.write(join(cfg.stateDirectory, "process-instance.json"), JSON.stringify(record));
       }
       const instance = new ProcessWorkspaceInstance(
         cfg,

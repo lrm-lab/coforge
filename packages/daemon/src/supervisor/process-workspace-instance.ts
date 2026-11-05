@@ -21,6 +21,12 @@ export type ProcessSignal = (pid: number, signal?: NodeJS.Signals) => void;
 
 type InstanceRecord = { mainPid: number; invocationId: string };
 
+/** This record's name now that Linux without systemd shares it. */
+const RECORD_FILE = "process-instance.json";
+/** The name it had while only Windows used this class: a Windows install from before the rename
+ * still has the file, so it is read as a fallback and removed on the next write. */
+const LEGACY_RECORD_FILE = "windows-instance.json";
+
 /**
  * Child-process per-Workspace containment for the MVP: one `__workspace-daemon` OS child per
  * binding, with a durable invocation id under the Workspace state directory so Coordinator
@@ -31,6 +37,7 @@ type InstanceRecord = { mainPid: number; invocationId: string };
 export class ProcessWorkspaceInstance implements WorkspaceInstance {
   readonly identityKey: string;
   readonly #recordPath: string;
+  readonly #legacyRecordPath: string;
 
   constructor(
     private readonly config: WorkspaceInstanceConfig,
@@ -43,7 +50,8 @@ export class ProcessWorkspaceInstance implements WorkspaceInstance {
       .update(`${config.stateRoot}\0${config.workspaceId}`)
       .digest("hex")
       .slice(0, 24);
-    this.#recordPath = join(config.stateDirectory, "windows-instance.json");
+    this.#recordPath = join(config.stateDirectory, RECORD_FILE);
+    this.#legacyRecordPath = join(config.stateDirectory, LEGACY_RECORD_FILE);
   }
 
   async ensureStarted(): Promise<number> {
@@ -106,6 +114,7 @@ export class ProcessWorkspaceInstance implements WorkspaceInstance {
       }
     }
     await rm(this.#recordPath, { force: true });
+    await rm(this.#legacyRecordPath, { force: true });
     // A host without a service manager has no Restart unit: Coordinator stop is the intentional
     // lifecycle seam. If SIGKILL beats the child's SIGTERM shutdown, live would stay true and the
     // next start would recordCrash toward the degraded latch. Clear live only when this stop
@@ -130,8 +139,12 @@ export class ProcessWorkspaceInstance implements WorkspaceInstance {
   }
 
   async #readRecord(): Promise<InstanceRecord | null> {
+    return (await this.#readAt(this.#recordPath)) ?? (await this.#readAt(this.#legacyRecordPath));
+  }
+
+  async #readAt(path: string): Promise<InstanceRecord | null> {
     try {
-      const bytes = await Bun.file(this.#recordPath).arrayBuffer();
+      const bytes = await Bun.file(path).arrayBuffer();
       // Keep UTF-8 bytes explicit: BunFile.text() strips BOMs and detects UTF-16 records.
       const value = JSON.parse(Buffer.from(bytes).toString("utf8")) as Partial<InstanceRecord>;
       if (
@@ -153,6 +166,8 @@ export class ProcessWorkspaceInstance implements WorkspaceInstance {
       encoding: "utf8",
       mode: 0o600,
     });
+    // A record read from the old name is superseded, not left to be read again.
+    await rm(this.#legacyRecordPath, { force: true });
   }
 }
 
