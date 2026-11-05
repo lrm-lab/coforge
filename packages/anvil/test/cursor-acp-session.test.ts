@@ -507,3 +507,19 @@ test("initialize advertises the compaction capability, so an agent may report on
     await f.cleanup();
   }
 });
+
+test("a signed-out CLI refuses the session as a login requirement, not a generic launch failure", async () => {
+  const f = await fixture({ CURSOR_ACP_FIXTURE_REQUIRE_LOGIN: "1" });
+  try {
+    const error = await f.provider
+      .createAgentSession(options(f.cwd) as never)
+      .catch((failure: unknown) => failure);
+    // `session/new` answered -32000, as cursor-agent 2026.10.22 does when nobody signed it in.
+    expect(error).toMatchObject({
+      code: "runtime_login_required",
+      detailHint: expect.stringContaining("cursor-agent login"),
+    });
+  } finally {
+    await f.cleanup();
+  }
+});

@@ -5,7 +5,7 @@ import { acpBounded, acpProcess, type AcpConnection } from "#src/acp/connection"
 import type { AcpRuntimeProfile, AcpSessionProfile } from "#src/acp/profile";
 import { AcpSession } from "#src/acp/session";
 import { asRecord, nonEmptyString } from "#src/json-record";
-import { RuntimeModelNotFoundError } from "#src/contract";
+import { RuntimeLoginRequiredError, RuntimeModelNotFoundError } from "#src/contract";
 import type { CursorAcpRuntimeHost } from "./acp-host";
 import { CursorAcpTurnEvents } from "./acp-update-events";
 import { isOldCursorModelId, resolveCursorCompositeId } from "./model-variants";
@@ -16,6 +16,22 @@ export const CURSOR_ACP_TIMEOUT_MS = 120_000;
 
 /** How many trailing stderr lines reach the host when the process closes. */
 const STDERR_TAIL_LINES = 40;
+
+/** `session/new` and `session/load` answer `-32000 Authentication required` when nobody has signed
+ * the CLI in on that Computer. Verified on cursor-agent 2026.10.22: `initialize` advertises
+ * `authMethods: [{ id: "cursor_login" }]` and the refusal's message says to run `agent login`
+ * first. The sign-in is a terminal command on that Computer, not a page of its own. */
+const CURSOR_AUTH_REQUIRED_CODE = -32000;
+
+const CURSOR_NOT_SIGNED_IN =
+  "Cursor CLI is not signed in on this Computer: run `cursor-agent login` there, then start this " +
+  "Agent again.";
+
+function cursorSignInRequired(): RuntimeLoginRequiredError {
+  return new RuntimeLoginRequiredError(CURSOR_NOT_SIGNED_IN, {
+    detailHint: CURSOR_NOT_SIGNED_IN,
+  });
+}
 
 /** `session/load` answers `-32602 Invalid params` with `Session "…" not found` in
  * `data.message` when the stored session is gone — a missing native session is replaced with a
@@ -131,6 +147,8 @@ function cursorSessionProfile(
             /session .{0,80}not found/i.test(
               nonEmptyString(asRecord(error.data)?.message) ?? error.message,
             );
+          if (error instanceof RequestError && error.code === CURSOR_AUTH_REQUIRED_CODE)
+            throw cursorSignInRequired();
           if (!missing) throw error;
           replaced = sessionId;
         }
@@ -140,7 +158,11 @@ function cursorSessionProfile(
           agent.request("session/new", { cwd, mcpServers: [] }),
           timeoutMs,
           "cursor-agent acp session/new timed out",
-        );
+        ).catch((error: unknown) => {
+          if (error instanceof RequestError && error.code === CURSOR_AUTH_REQUIRED_CODE)
+            throw cursorSignInRequired();
+          throw error;
+        });
         opened = nonEmptyString(asRecord(state)?.sessionId);
         if (!opened) throw new Error("cursor-agent acp did not create a session");
         configOptions = readConfigOptions(state);

@@ -131,6 +131,20 @@ for await (const line of console) {
       break;
     case "session/new":
     case "session/load":
+      // A signed-out CLI refuses before any session exists: `-32000 Authentication required`,
+      // as cursor-agent 2026.10.22 does.
+      if (Bun.env.CURSOR_ACP_FIXTURE_REQUIRE_LOGIN) {
+        write({
+          jsonrpc: "2.0",
+          id: request.id,
+          error: {
+            code: -32000,
+            message: "Authentication required",
+            data: { message: "Authentication required. Please run 'agent login' first." },
+          },
+        });
+        break;
+      }
       if (request.method === "session/load" && request.params.sessionId === "missing-session") {
         write({
           jsonrpc: "2.0",
