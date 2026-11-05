@@ -41,9 +41,11 @@ export function useMessageRowActions({
   const makeTask = useMakeTaskFromMessage();
   // The mobile shell (single-pane below `lg`) has no hover to reveal the reply/reaction
   // actions, and keeping the toolbar always visible puts two buttons on every message.
-  // Instead a tap on the row's non-interactive surface (an embed marked `data-no-row-tap`, such as a video's player, is not one) opens a
+  // Instead a tap on the row's non-interactive surface opens a
   // bottom action sheet holding the same actions (the wide desktop shell keeps hover/focus
-  // reveal); the modal overlay
+  // reveal). Whatever is marked `data-no-row-tap` is not that surface: a video's or an audio's
+  // player, and a card the viewer works (a pending card, a choice or questions card, answered too),
+  // whose text a tap would otherwise take focus away from (task #552). The modal overlay
   // owns dismissal (backdrop press, Escape). The switch follows the shell, not only the
   // pointer: a narrow desktop window shows the mobile shell, so it gets sheet interactions
   // too, and a large touchscreen still prefers tapping. The tap target check runs against

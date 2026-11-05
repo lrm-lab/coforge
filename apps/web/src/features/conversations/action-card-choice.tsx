@@ -126,6 +126,7 @@ export function ChoiceActionCard({
       aria-label={view.prompt}
       tabIndex={-1}
       onKeyDown={onCardKeyDown}
+      data-no-row-tap
       data-choice-waiting={pending && view.canCommit ? "" : undefined}
       className={cn(
         "outline-focus-ring focus-visible:outline-2",

@@ -120,6 +120,7 @@ export function QuestionsActionCard({
       role="group"
       aria-label={view.prompt || view.questions[0]?.prompt}
       data-questions-card=""
+      data-no-row-tap
       className={cn(
         "mt-1 flex max-w-md flex-col rounded-xl border border-secondary bg-primary px-1.5 pt-3 pb-1.5",
         canAnswer || pagesOnly ? "gap-2" : "gap-4",
