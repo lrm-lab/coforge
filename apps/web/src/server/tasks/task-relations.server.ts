@@ -203,6 +203,19 @@ export async function taskViewsOf(
 }
 
 /**
+ * The parents the Tasks `tasks` were just linked under, deduplicated: a create's announcement
+ * carries their new copies too, since a new sub-task changes each parent's own view.
+ */
+export async function parentTasksOf(db: Client, tasks: readonly { id: string }[]) {
+  if (!tasks.length) return [];
+  const links = await db.taskParent.findMany({
+    where: { taskId: { in: tasks.map((task) => task.id) } },
+    select: { parent: { select: taskSelection } },
+  });
+  return [...new Map(links.map((link) => [link.parent.id, link.parent])).values()];
+}
+
+/**
  * The Tasks whose own view reads from `taskId`, in one read: those that wait for it (its status
  * decides their `blocked`), its parent (its progress) and its subtasks (their `parent`). A write
  * that changes what these read announces their new copies with its own.

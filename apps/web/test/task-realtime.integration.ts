@@ -56,16 +56,22 @@ beforeAll(async () => {
   );
 });
 
-async function boardFor(conversation: {
-  channelName?: string;
-  directKey?: string;
-  visibility?: "private";
-}) {
+async function boardFor(
+  conversation: {
+    channelName?: string;
+    directKey?: string;
+    visibility?: "private";
+  },
+  options: { workspaceId?: string; agent?: boolean } = {},
+) {
+  const wsId = options.workspaceId ?? workspaceId;
   const created = await db.conversation.create({
     data: {
-      workspaceId,
+      workspaceId: wsId,
       ...conversation,
-      members: { create: [{ userId: alice.id }, { agentId: agent.id }] },
+      members: {
+        create: [{ userId: alice.id }, ...(options.agent === false ? [] : [{ agentId: agent.id }])],
+      },
     },
   });
   const announced: TaskChangedSignal[] = [];
@@ -79,7 +85,7 @@ async function boardFor(conversation: {
     },
   });
   const run = (command: Record<string, unknown>) =>
-    board.execute({ workspaceId, userId: alice.id }, {
+    board.execute({ workspaceId: wsId, userId: alice.id }, {
       idempotencyKey: crypto.randomUUID(),
       conversationId: created.id,
       ...command,
@@ -131,6 +137,47 @@ test("a channel's Task writes announce each changed Task to the Workspace, once 
 
   await run({ operation: "delete", number: second!.number });
   expect(drain()).toEqual([{ tasks: [], deleted: [second!.id], userId: undefined }]);
+});
+
+test("a Task made under a parent announces the parent's new copy with it", async () => {
+  // Relations are Tasks v2: this Workspace has the experiment on, unlike the file's shared one.
+  const relations = await db.workspace.create({
+    data: {
+      slug: `task-realtime-relations-${handle}`,
+      name: "Task realtime relations",
+      experiments: { taskConversations: true },
+      members: { create: [{ userId: alice.id, role: "owner" }] },
+    },
+  });
+  cleanup.push(() => db.workspace.delete({ where: { id: relations.id } }));
+  const { run, announced } = await boardFor(
+    { channelName: `realtime-parent-${handle}` },
+    { workspaceId: relations.id, agent: false },
+  );
+  const [parent] = (await run({ operation: "create", titles: ["Parent"] })).tasks;
+  announced.length = 0;
+  const [child] = (
+    await run({
+      operation: "create",
+      title: "Child",
+      parent: { number: parent!.number },
+    })
+  ).tasks;
+  const change = announced.find((signal) =>
+    signal.tasks.some((task) => task.number === child!.number),
+  );
+  expect(change).toBeDefined();
+  const copies = new Map(change!.tasks.map((task) => [task.number, task]));
+  // The parent's own row did not change, but its sub-task progress did: its copy rides the
+  // same announcement at the same revision, as a neighbour's does on an amendment.
+  expect(copies.get(parent!.number)).toMatchObject({
+    revision: parent!.revision,
+    subtasks: { total: 1, finished: 0 },
+  });
+  expect(copies.get(child!.number)?.parent).toMatchObject({
+    hidden: false,
+    number: parent!.number,
+  });
 });
 
 test("a private channel's Task writes are announced only to its people, never the Workspace", async () => {

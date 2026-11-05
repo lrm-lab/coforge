@@ -28,11 +28,11 @@ import { findSourceMessage } from "./task-claims.server";
 import { creationChanges, historyRows } from "./task-history.server";
 import { postSourceNotice, signalNotices, type PostedNotice } from "./task-notice-posting.server";
 import { noticeActor } from "./task-notices.server";
-import { announceTasks } from "./task-publication.server";
+import { announceNeighbours, announceTasks } from "./task-publication.server";
 import { conversationSignalScopes } from "#src/server/conversations/conversation-signal-scope.server";
 import { indexedRequestId } from "./task-request-ids.server";
 import { linkCreatedTasks } from "./task-gates.server";
-import { taskViewsOf } from "./task-relations.server";
+import { parentTasksOf, taskViewsOf } from "./task-relations.server";
 import { postTaskNotice } from "./task-conversations.server";
 import { followTask } from "./task-discussion-store.server";
 import {
@@ -186,10 +186,22 @@ export async function createConversationTasks(
       scope.conversationId,
       scope.workspaceId,
     );
+    // A Task made under a parent changes the parent's own view (its sub-task progress), so the
+    // parent's new copy is announced with the new Tasks': in this conversation with them, in
+    // another to its own audience, as an amendment's neighbours are.
+    const parents = command.parent ? await parentTasksOf(ports.db, result.tasks) : [];
+    const here = parents.filter((parent) => parent.conversationId === scope.conversationId);
     await announceTasks(ports, scope, async () => scopes.task, {
-      tasks: await taskViewsOf(ports.db, "people", result.tasks),
+      tasks: await taskViewsOf(ports.db, "people", [...result.tasks, ...here]),
       publicationId: `${result.tasks[0]!.id}:task-created`,
     }).catch(() => undefined);
+    if (parents.length)
+      await announceNeighbours(
+        ports,
+        scope.conversationId,
+        parents,
+        `${result.tasks[0]!.id}:task-created`,
+      );
   }
   return { tasks: await taskViewsOf(ports.db, ports.reader, result.tasks) };
 }

@@ -191,13 +191,21 @@ test("the Task popup's menu sets a parent, a Task to wait on and a sub-task", as
       expect((await db.task.findUniqueOrThrow({ where: { id: link!.taskId } })).description).toBe(
         `Copy notes ${tail}`,
       );
-      // The popup lists it under its Sub-tasks tab, read afresh: the copy that follows by
-      // announcement needs the realtime connection this run has no proxy for.
-      await browser("open", page);
+      // The sub-task's trail opens its parent in place, and the parent's Sub-tasks tab appears
+      // once the copy's announcement reaches its view: the front door gives this run the realtime
+      // connection production has, so no reload is needed.
       await browser(
         "wait",
         "--fn",
-        `${pageHydrated} && [...(${popup}?.querySelectorAll('[role="tab"]') ?? [])].some((el) => el.textContent.includes("Sub-tasks"))`,
+        `${dialogs}.length === 1 && document.getAnimations().every((a) => a.playState !== "running")`,
+      );
+      const trailParent = `[...(${popup}?.querySelectorAll('[aria-label="Where this task is"] button') ?? [])].find((el) => el.textContent.includes(${JSON.stringify(title)}))`;
+      await mark(trailParent, "parent-trail");
+      await browser("click", '[data-e2e="parent-trail"]');
+      await browser(
+        "wait",
+        "--fn",
+        `${popup} !== undefined && [...(${popup}?.querySelectorAll('[role="tab"]') ?? [])].some((el) => el.textContent.includes("Sub-tasks"))`,
       );
       await shoot(`${label}-done`);
       void design;
