@@ -155,7 +155,8 @@ describe("SendDirectMessage", () => {
 
     expect(calls).toEqual(["persist", "publish"]);
     expect(publication?.channel).toBe("daemon:workspace-a:computer-a");
-    expect(decodeAgentMessageDelivery(publication!.data)).toEqual({
+    const d = decodeAgentMessageDelivery(publication!.data);
+    expect(d).toEqual({
       protocolMajor: 1,
       requestId: "request-a",
       createdAtMs: persisted.createdAt.getTime(),
@@ -171,8 +172,9 @@ describe("SendDirectMessage", () => {
       latestSenderKind: "human",
       latestSenderHandle: "ada",
       latestSenderDescription: "",
+      attachmentCount: 0,
     });
-    expect(JSON.stringify(decodeAgentMessageDelivery(publication!.data))).not.toContain("user-a");
+    expect(JSON.stringify(d)).not.toContain("user-a");
   });
 
   test("signals browsers after a human message persists and tolerates signal failure", async () => {
