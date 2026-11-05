@@ -412,7 +412,7 @@ test("TaskBoard pages and summarizes one conversation's finished Tasks for the c
   }
 });
 
-test("TaskBoard reads one Task as an overview row, finished or not, only in a channel the viewer sees", async () => {
+test("TaskBoard reads one Task as an overview row, finished or not, only where the viewer sees it", async () => {
   const f = await finishedWorkFixture();
   try {
     const done = await f.task(f.channel, f.viewer.id, "Done long ago", {
@@ -436,9 +436,10 @@ test("TaskBoard reads one Task as an overview row, finished or not, only in a ch
     expect(
       await f.board.overviewTask(scope, { conversationId: f.otherDm.id, number: hidden.number }),
     ).toBeNull();
+    // The viewer's own DM opens, as a Project's task tree lists it (task #462).
     expect(
       await f.board.overviewTask(scope, { conversationId: f.ownDm.id, number: own.number }),
-    ).toBeNull();
+    ).toMatchObject({ title: "In own DM" });
     expect(
       await f.board.overviewTask(scope, { conversationId: f.channel.id, number: 999 }),
     ).toBeNull();

@@ -1,5 +1,6 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
+import { agentDirectKey } from "#src/features/conversations/direct-key";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 
 /**
@@ -56,7 +57,7 @@ export async function finishedWorkFixture() {
       data: {
         workspaceId: workspace.id,
         channelName: data.channelName,
-        directKey: data.agentId ? [data.userId, data.agentId].sort().join(":") : undefined,
+        directKey: data.agentId ? agentDirectKey(data.userId, data.agentId) : undefined,
         members: {
           create: [{ userId: data.userId }, ...(data.agentId ? [{ agentId: data.agentId }] : [])],
         },

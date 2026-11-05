@@ -16,4 +16,6 @@ These rules apply to `src/features/projects/`.
 - The Tasks tab's list layout (a phone's default) is the task tree (task #462,
   `project-task-tree.tsx`): React Aria's `Tree`, each Task under its parent, read from
   `loadProjectTasks`; a filter keeps a passing Task's ancestors greyed, and the channel picks are
-  offered only there.
+  offered only there (the board never applies them, even from a typed address). While the tree
+  shows, the board's Done and Closed reads are off; the toolbar's picks come from the tree's
+  Tasks. A Task of the viewer's own DM opens from it (`overviewTask` reads own DMs too).

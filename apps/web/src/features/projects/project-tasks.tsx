@@ -15,24 +15,15 @@ import { TaskStatusIcon } from "#src/features/tasks/task-status-icon";
 import { loadProjectTasks } from "#src/features/tasks/tasks.functions";
 import { overviewTaskParam } from "#src/features/tasks/task-overview-search";
 import { cn } from "#src/lib/utils";
+import { taskForest } from "./project-task-tree-model";
 
 export type ProjectTask = Awaited<ReturnType<typeof loadProjectTasks>>["tasks"][number];
 export type ProjectTaskNode = { task: ProjectTask; children: ProjectTaskNode[] };
 
-/**
- * The Project's unfinished Tasks as a forest: each Task under its parent when the parent is listed
- * too, otherwise at the top (its parent is finished, elsewhere or not visible). Order is the
- * list's own (by conversation, then number).
- */
+/** The Project's unfinished Tasks as a forest (`taskForest`), in the list's order (by
+ * conversation, then number). */
 export function projectTaskForest(tasks: readonly ProjectTask[]): ProjectTaskNode[] {
-  const nodes = new Map(tasks.map((task) => [task.id, { task, children: [] } as ProjectTaskNode]));
-  const roots: ProjectTaskNode[] = [];
-  for (const node of nodes.values()) {
-    const parent = node.task.parentTaskId ? nodes.get(node.task.parentTaskId) : undefined;
-    if (parent && parent !== node) parent.children.push(node);
-    else roots.push(node);
-  }
-  return roots;
+  return taskForest(tasks);
 }
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
@@ -42,14 +33,16 @@ const appRoute = getRouteApi("/w/$workspaceSlug");
  * `task.changed.v1` (task #484), and the prefix invalidates every Project's read whichever Project
  * it moved from or to. A private channel's Tasks show only to its members, as the read decides.
  */
-export function useProjectTasks(projectId: string) {
+export function useProjectTasks(projectId: string | undefined) {
   const load = useServerFn(loadProjectTasks);
   const queryClient = useQueryClient();
   const workspaceId = useCurrentWorkspaceId();
   const userId = appRoute.useLoaderData({ select: (data) => data.user.id });
   const query = useQuery({
     queryKey: ["project-tasks", projectId],
-    queryFn: () => load({ data: { projectId } }),
+    queryFn: () => load({ data: { projectId: projectId! } }),
+    // The Tasks page shares the board this is read for, and has no Project.
+    enabled: projectId !== undefined,
   });
   const onTaskChanged = useCallback(
     (publication: { data: unknown }) => {
@@ -61,11 +54,11 @@ export function useProjectTasks(projectId: string) {
     [queryClient],
   );
   useRealtimeSubscription({
-    channel: workspaceId ? workspaceConversationChannel(workspaceId) : undefined,
+    channel: projectId && workspaceId ? workspaceConversationChannel(workspaceId) : undefined,
     onPublication: onTaskChanged,
   });
   useRealtimeSubscription({
-    channel: userConversationChannel(userId),
+    channel: projectId ? userConversationChannel(userId) : undefined,
     onPublication: onTaskChanged,
   });
   return query;

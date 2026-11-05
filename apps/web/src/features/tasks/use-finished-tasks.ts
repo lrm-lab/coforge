@@ -129,15 +129,19 @@ export function useFinishedTasks<T extends TaskView>({
   window,
   filter,
   onPage,
+  enabled = true,
 }: {
   scope: FinishedTasksScope;
   window: FinishedWindow;
   filter: TaskFilter;
   onPage: readonly T[];
+  /** False while the board is not shown (a Project's task tree instead): nothing is read. */
+  enabled?: boolean;
 }): FinishedTasks<T | OverviewTaskRow> {
   const queryClient = useQueryClient();
   const summary = useQuery({
     ...finishedSummaryQuery(scope, window, filter.labels),
+    enabled,
     // Another window keeps the old counts on screen until its own arrive.
     placeholderData: keepPreviousData,
   });

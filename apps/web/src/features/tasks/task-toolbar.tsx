@@ -69,7 +69,7 @@ export function TaskToolbar({
   onWindowChange,
   conversation = false,
   project = false,
-  channels: offerChannels = false,
+  tree = false,
   action,
 }: {
   tasks: readonly FilterableTask[];
@@ -87,8 +87,9 @@ export function TaskToolbar({
   conversation?: boolean;
   /** One Project's board: every Task shares its Project, so none is offered. */
   project?: boolean;
-  /** Offer the channel picks: a Project's task tree, whose Tasks span conversations (task #462). */
-  channels?: boolean;
+  /** A Project's task tree shows (task #462): its Tasks span conversations, so the channel picks
+   * are offered; it lists no finished Task and no card, so Display offers only the layout. */
+  tree?: boolean;
   /** The board's own button (a conversation's "Create task"), before Display. */
   action?: ReactNode;
 }) {
@@ -141,7 +142,7 @@ export function TaskToolbar({
       })),
     [tasks],
   );
-  const pickedChannels = offerChannels ? (filter.channels ?? []) : [];
+  const pickedChannels = tree ? (filter.channels ?? []) : [];
   // A pick no listed Task has (a saved link, an older finished Task's owner) has no name here.
   const labelsOf = (options: readonly PickerOption[], picked: readonly string[], none: string) =>
     picked.map(
@@ -216,7 +217,7 @@ export function TaskToolbar({
                   onChange={(picked) => onFilterChange({ ...filter, projects: picked })}
                 />
               )}
-              {offerChannels && (
+              {tree && (
                 <FilterSubmenu
                   name={m.tasks_filter_channel()}
                   options={channels}
@@ -284,6 +285,7 @@ export function TaskToolbar({
           onLayoutChange={onLayoutChange}
           completedWindow={completedWindow}
           onWindowChange={onWindowChange}
+          tree={tree}
           fields={
             conversation ? CONVERSATION_FIELDS : project ? PROJECT_FIELDS : TASK_DISPLAY_FIELDS
           }
@@ -386,12 +388,14 @@ function DisplayMenu({
   completedWindow,
   onWindowChange,
   fields: shownFields,
+  tree,
 }: {
   layout: TaskLayout;
   onLayoutChange: (layout: TaskLayout) => void;
   completedWindow: FinishedWindow;
   onWindowChange: (completedWindow: FinishedWindow) => void;
   fields: readonly TaskDisplayField[];
+  tree: boolean;
 }) {
   const [fields, setFields] = useTaskDisplayFields();
   return (
@@ -437,35 +441,40 @@ function DisplayMenu({
               </Radio>
             ))}
           </RadioGroup>
-          <div className="flex items-center justify-between gap-3 border-t border-secondary pt-3">
-            <span className="text-sm text-secondary">{m.tasks_finished_window()}</span>
-            <Select
-              aria-label={m.tasks_finished_window()}
-              size="sm"
-              className="w-32"
-              selectedKey={completedWindow}
-              onSelectionChange={(key) => {
-                if (key === "week" || key === "month" || key === "all") onWindowChange(key);
-              }}
-            >
-              <Select.Item id="week" label={m.tasks_finished_week()} />
-              <Select.Item id="month" label={m.tasks_finished_month()} />
-              <Select.Item id="all" label={m.tasks_finished_all()} />
-            </Select>
-          </div>
-          {/* One switch per field: on or off at a glance. */}
-          <div className="flex flex-col gap-2.5 border-t border-secondary pt-3">
-            <p className="text-xs font-medium text-tertiary">{m.tasks_display_fields()}</p>
-            {shownFields.map((field) => (
-              <Toggle
-                key={field}
-                size="sm"
-                label={FIELD_LABEL[field]()}
-                isSelected={fields[field]}
-                onChange={(shown) => setFields({ ...fields, [field]: shown })}
-              />
-            ))}
-          </div>
+          {/* The tree's rows are its own, and it lists no finished Task: nothing below applies. */}
+          {!tree && (
+            <>
+              <div className="flex items-center justify-between gap-3 border-t border-secondary pt-3">
+                <span className="text-sm text-secondary">{m.tasks_finished_window()}</span>
+                <Select
+                  aria-label={m.tasks_finished_window()}
+                  size="sm"
+                  className="w-32"
+                  selectedKey={completedWindow}
+                  onSelectionChange={(key) => {
+                    if (key === "week" || key === "month" || key === "all") onWindowChange(key);
+                  }}
+                >
+                  <Select.Item id="week" label={m.tasks_finished_week()} />
+                  <Select.Item id="month" label={m.tasks_finished_month()} />
+                  <Select.Item id="all" label={m.tasks_finished_all()} />
+                </Select>
+              </div>
+              {/* One switch per field: on or off at a glance. */}
+              <div className="flex flex-col gap-2.5 border-t border-secondary pt-3">
+                <p className="text-xs font-medium text-tertiary">{m.tasks_display_fields()}</p>
+                {shownFields.map((field) => (
+                  <Toggle
+                    key={field}
+                    size="sm"
+                    label={FIELD_LABEL[field]()}
+                    isSelected={fields[field]}
+                    onChange={(shown) => setFields({ ...fields, [field]: shown })}
+                  />
+                ))}
+              </div>
+            </>
+          )}
         </AriaDialog>
       </Dropdown.Popover>
     </DialogTrigger>

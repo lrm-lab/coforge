@@ -233,8 +233,10 @@ export class TaskOverviewReads {
   }
 
   /**
-   * One Task as the Tasks page shows it, in any status, or null when the viewer cannot see it
-   * there: the page opens a Task it has not loaded (a finished one past its pages) through this.
+   * One Task as the Tasks page shows it, in any status, or null when the viewer cannot see it:
+   * the page opens a Task it has not loaded (a finished one past its pages) through this. The
+   * viewer's own direct conversations count, as on a Project's page, whose tree lists their Tasks
+   * (task #462); someone else's never do.
    */
   async overviewTask(
     scope: { workspaceId: string; userId: string },
@@ -248,7 +250,7 @@ export class TaskOverviewReads {
         deletedAt: null,
         conversationId: ref.conversationId,
         number: ref.number,
-        conversation: overviewConversationWhere(workspaceId, userId),
+        conversation: overviewWithDirectsWhere(workspaceId, userId),
       },
       select: overviewSelection(userId),
     });

@@ -37,7 +37,11 @@ export function overviewSelection(userId: string) {
         channelName: true,
         visibility: true,
         members: {
-          where: { OR: [{ userId }, { agentId: { not: null } }] },
+          // The viewer's own membership, the Agents, and both sides of a direct conversation
+          // (only ever two): a people-to-people DM is named for the other person.
+          where: {
+            OR: [{ userId }, { agentId: { not: null } }, { conversation: { channelName: null } }],
+          },
           select: {
             id: true,
             userId: true,

@@ -1,9 +1,13 @@
-import { Link, useRouter } from "@tanstack/react-router";
+import { Link, useHydrated, useRouter } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
-import { ProjectTaskTreeView } from "#src/features/projects/project-task-tree";
+import {
+  ProjectTaskTreeSkeleton,
+  ProjectTaskTreeView,
+} from "#src/features/projects/project-task-tree";
+import { useProjectTasks } from "#src/features/projects/project-tasks";
 import { OverviewTaskPopup } from "./overview-task-popup";
 import { TaskBoard } from "./task-board";
 import { useTaskBoardSearch } from "./task-board-search";
@@ -33,7 +37,18 @@ export function WorkspaceTaskBoard({
 }) {
   const { tasks: all, run, refetch } = useTaskOverview();
   const { task: taskParam, ...boardSearch } = search;
-  const view = useTaskBoardSearch(boardSearch);
+  const searched = useTaskBoardSearch(boardSearch);
+  // A Project's list is its task tree (task #462). Until hydration an address naming no layout
+  // cannot tell board from list (a phone opens the list), so a skeleton holds the place.
+  const hydrated = useHydrated();
+  const layoutPending = project !== undefined && boardSearch.layout === undefined && !hydrated;
+  const treeShown = project !== undefined && !layoutPending && searched.layout === "list";
+  const projectTasks = useProjectTasks(treeShown ? project : undefined);
+  // The channel pick is the tree's alone: the board never reads it, even from a typed address.
+  const view = useMemo(
+    () => (treeShown ? searched : { ...searched, filter: { ...searched.filter, channels: [] } }),
+    [treeShown, searched],
+  );
   const workspaceId = useCurrentWorkspaceId() ?? "";
   const router = useRouter();
   const tasks = useMemo(
@@ -46,6 +61,8 @@ export function WorkspaceTaskBoard({
     // A Project's board pages its own Done and Closed; its view never names a Project.
     filter: project ? { ...view.filter, projects: [project] } : view.filter,
     onPage: tasks,
+    // The tree lists unfinished Tasks only: Done and Closed are not read under it.
+    enabled: !treeShown,
   });
   const { refresh: refreshFinished } = finished;
   // A move shows at once and takes the server's copy of the Task; a refused one is back in place.
@@ -130,9 +147,16 @@ export function WorkspaceTaskBoard({
           onCommand={command}
           project={project !== undefined}
           tree={
-            project === undefined ? undefined : (
-              <ProjectTaskTreeView projectId={project} view={view} onOpenTask={openPopup} />
-            )
+            treeShown
+              ? {
+                  node: (
+                    <ProjectTaskTreeView query={projectTasks} view={view} onOpenTask={openPopup} />
+                  ),
+                  tasks: projectTasks.data?.tasks ?? [],
+                }
+              : layoutPending
+                ? { node: <ProjectTaskTreeSkeleton />, tasks: [] }
+                : undefined
           }
         />
       )}

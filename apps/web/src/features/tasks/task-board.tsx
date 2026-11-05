@@ -84,12 +84,12 @@ export function TaskBoard<T extends BoardTask>({
   conversation?: ConversationBoard;
   /** One Project's board, on its page under the page's own header: no Project is offered. */
   project?: boolean;
-  /** What the list layout shows instead of status groups: a Project's task tree (task #462),
-   * which also offers the channel picks. */
-  tree?: ReactNode;
+  /** What shows instead of the board or list, with the Tasks its picks offer: a Project's task
+   * tree (task #462), which also offers the channel picks, or its skeleton. */
+  tree?: { node: ReactNode; tasks: readonly FilterableTask[] };
 }) {
   const { statuses, filter, layout, completedWindow, changeWindow: onWindowChange } = view;
-  const showTree = tree !== undefined && layout === "list";
+  const showTree = tree !== undefined;
   const [hiddenColumns, setColumnHidden] = useTaskHiddenColumns();
   const [createOpen, setCreateOpen] = useState(false);
   const filtered =
@@ -144,7 +144,7 @@ export function TaskBoard<T extends BoardTask>({
     >
       {conversation ? conversation.header : !project && <PageHeader heading={m.tasks_tab()} />}
       <TaskToolbar
-        tasks={choices}
+        tasks={tree ? tree.tasks : choices}
         filter={filter}
         statuses={statuses}
         layout={layout}
@@ -155,7 +155,7 @@ export function TaskBoard<T extends BoardTask>({
         onWindowChange={onWindowChange}
         conversation={Boolean(conversation)}
         project={project}
-        channels={showTree}
+        tree={showTree}
         action={
           onCreateTask && (
             <Button type="button" size="sm" color="secondary" onPress={() => setCreateOpen(true)}>
@@ -170,7 +170,7 @@ export function TaskBoard<T extends BoardTask>({
         </p>
       )}
       <div className="min-h-0 flex-1 overflow-auto p-4 md:p-6">
-        {showTree ? tree : null}
+        {tree?.node}
         {!showTree && loading && (
           <p role="status" className="text-sm text-tertiary">
             {m.tasks_loading()}
