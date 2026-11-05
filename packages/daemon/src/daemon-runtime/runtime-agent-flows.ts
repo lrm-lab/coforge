@@ -28,6 +28,7 @@ import type { AgentRecoveryContext } from "./runtime-launch-intent";
 import type { LaunchRequest } from "./runtime-launch-types";
 import { recoveryOf, runtimeConfigOf } from "./runtime-launch-intent";
 import { usageScanFailure, usageScanReading, usageScanResult } from "./usage-scan-response";
+import { logUsageScan } from "./usage-scan-log";
 import { RUNTIME_PROVIDER_USES_EXTERNAL_CLI } from "@lrm/coforge-sdk/internal";
 
 /** How long a usage read may take before the scan reports it as failed. */
@@ -88,24 +89,37 @@ export async function scanUsage(
   ports: UsageScanPorts,
   provider: RuntimeProvider,
 ): Promise<UsageScanResponse> {
+  const startedAtMs = performance.now();
+  const finish = (result: UsageScanResponse, error?: unknown): UsageScanResponse => {
+    logUsageScan({
+      provider,
+      status: result.status,
+      durationMs: performance.now() - startedAtMs,
+      ...(error === undefined ? {} : { error }),
+    });
+    return result;
+  };
   ports.assertRunning();
   const now = () => new Date();
   // Cursor, OpenCode, Pi, and CoForge have no reader yet. Say that the reader is not connected.
   // Do not claim the official product has no quota endpoint.
   if (!RUNTIME_PROVIDER_USES_EXTERNAL_CLI[provider])
-    return usageScanResult("unsupported", undefined, "Usage reader is not connected yet");
+    return finish(usageScanResult("unsupported", undefined, "Usage reader is not connected yet"));
   const codeAgentProvider = ports.createProvider(provider);
   if (!codeAgentProvider.readUsage)
-    return usageScanResult("unsupported", undefined, "Usage reader is not connected yet");
+    return finish(usageScanResult("unsupported", undefined, "Usage reader is not connected yet"));
   try {
     const snapshot =
       ((await codeAgentProvider.readUsage({
         workingDirectory: ports.workspaceRoot,
         timeoutMs: USAGE_SCAN_READ_TIMEOUT_MS,
       })) as Parameters<typeof usageScanReading>[0] | undefined) ?? ports.observedUsage(provider);
-    return usageScanReading(snapshot, now);
+    return finish(usageScanReading(snapshot, now));
   } catch (error) {
-    return usageScanFailure(error, () => ports.observedUsage(provider), now);
+    return finish(
+      usageScanFailure(error, () => ports.observedUsage(provider), now),
+      error,
+    );
   }
 }
 
