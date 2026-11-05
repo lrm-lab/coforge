@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, expect, test } from "bun:test";
 
 import { attachRunningWorkspace, prepareContainerBinding } from "#src/host/container-binding";
+import { FileDaemonCredentialStore, workspaceStateDirectory } from "@lrm/coforge-daemon";
 
 const daemonKey = `dk_${"b".repeat(43)}`;
 const directories: string[] = [];
@@ -140,3 +141,38 @@ async function files(directory: string): Promise<string[]> {
   await walk(directory);
   return found.sort();
 }
+
+test("a re-attach keeps a confirmed sk_computer over the env's dk_", async () => {
+  const directory = await stateDirectory();
+  const credentials = new FileDaemonCredentialStore(
+    workspaceStateDirectory(directory, "workspace-1"),
+  );
+  const swapped = `sk_computer_${"s".repeat(43)}`;
+  await credentials.save("workspace-1", "computer-1", swapped);
+  await credentials.markConfirmed("workspace-1", "computer-1", swapped);
+  expect(await prepareContainerBinding(env, directory)).toBe(true);
+  // The env carried a fresh `dk_`; a confirmed `sk_computer` is the live machine key and wins.
+  expect(await credentials.load("workspace-1", "computer-1")).toBe(swapped);
+});
+
+test("an unconfirmed sk_computer is replaced by the env's dk_", async () => {
+  const directory = await stateDirectory();
+  const credentials = new FileDaemonCredentialStore(
+    workspaceStateDirectory(directory, "workspace-1"),
+  );
+  await credentials.save("workspace-1", "computer-1", `sk_computer_${"u".repeat(43)}`);
+  expect(await prepareContainerBinding(env, directory)).toBe(true);
+  // Never confirmed server-side — it could already be revoked, so it must not shield the `dk_`
+  // that lets `#open` re-swap.
+  expect(await credentials.load("workspace-1", "computer-1")).toBe(daemonKey);
+});
+
+test("a stored dk_ is still replaced by the env's key on attach", async () => {
+  const directory = await stateDirectory();
+  const credentials = new FileDaemonCredentialStore(
+    workspaceStateDirectory(directory, "workspace-1"),
+  );
+  await credentials.save("workspace-1", "computer-1", `dk_${"a".repeat(43)}`);
+  expect(await prepareContainerBinding(env, directory)).toBe(true);
+  expect(await credentials.load("workspace-1", "computer-1")).toBe(daemonKey);
+});

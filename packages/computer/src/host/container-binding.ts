@@ -57,11 +57,21 @@ export async function prepareContainerBinding(
     ? existing.map((item) => (item.workspaceId === workspaceId ? binding : item))
     : [...existing, binding];
   await bindings.save(next);
-  await new FileDaemonCredentialStore(workspaceStateDirectory(stateDirectory, workspaceId)).save(
-    workspaceId,
-    computerId,
-    daemonApiKey,
+  const credentials = new FileDaemonCredentialStore(
+    workspaceStateDirectory(stateDirectory, workspaceId),
   );
+  // A re-attach arrives with a fresh `dk_` in the environment — a workspace that already swapped to
+  // its own `sk_computer` keeps it only while that key is confirmed. An unconfirmed `sk_computer`
+  // could already be revoked server-side (a lost confirmation), so it must not shield the env's
+  // `dk_` that would let `#open` re-swap (task #417).
+  const stored = await credentials.load(workspaceId, computerId);
+  if (stored && (await credentials.isConfirmed(workspaceId, computerId, stored))) {
+    console.log(
+      `[attach-workspace] workspace ${workspaceId} already holds a confirmed sk_computer; keeping it (ignored the attach's dk_)`,
+    );
+  } else {
+    await credentials.save(workspaceId, computerId, daemonApiKey);
+  }
   return true;
 }
 
