@@ -124,6 +124,7 @@ export async function launchAgentProcess(
     // The session this launch asked to continue, kept before any report can overwrite the
     // reference: whether the provider actually continued it decides "fresh" below.
     const requestedSessionId = recycled ? undefined : reference.sessionId;
+    ports.contexts.noteSession(agentId, requestedSessionId, config.model);
     let reportedSessionId: string | undefined;
     let driverReplacedSessionId: string | undefined;
     // The adapter's own spawn + ACP initialize complete with this call; one phase covers both.

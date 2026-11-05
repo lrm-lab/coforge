@@ -10,7 +10,10 @@ const logger = getLogger(["coforge", "daemon", "agent-contexts"]);
 /** Consecutive compaction failures that make the session spent: Raft's
  * `SESSION_NEEDS_RESET_THRESHOLD` (`sessionCompactionFailureLedger.ts`). */
 export const SESSION_NEEDS_RESET_THRESHOLD = 3;
-const COMPACTION_FAILURES_KEY = "compactionFailureCount";
+const COMPACTION_FAILURES_KEY = "compactionFailures";
+
+/** The session and model a failure count belongs to; a different session or model starts over. */
+type CompactionFailureRecord = { sessionId?: string; model?: string; count: number };
 
 export type CompactionFailureKind =
   | "compaction_failed"
@@ -40,8 +43,37 @@ export class AgentContexts {
 
   constructor(private readonly stateDb: (agentId: string) => AgentStateDb) {}
 
-  /** One compaction failure: the per-Agent count is persisted with its state, so a restart does
-   * not hide a session that keeps failing. An input too large is spent at once. */
+  /** The session and model this launch continues: a count kept for another session or model is
+   * spent on nothing, so it starts over. */
+  noteSession(agentId: string, sessionId: string | undefined, model: string): void {
+    try {
+      const db = this.stateDb(agentId).database;
+      const current = this.#failures(db);
+      if (current && current.sessionId === sessionId && current.model === model) return;
+      writeMeta(
+        db,
+        COMPACTION_FAILURES_KEY,
+        JSON.stringify({ sessionId, model, count: 0 } satisfies CompactionFailureRecord),
+      );
+    } catch {
+      // The count is a safety net, never a reason to fail the launch.
+    }
+  }
+
+  /** Whether this session's compactions failed enough times that it must be reset. */
+  needsSessionReset(agentId: string): boolean {
+    try {
+      return (
+        (this.#failures(this.stateDb(agentId).database)?.count ?? 0) >=
+        SESSION_NEEDS_RESET_THRESHOLD
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  /** One compaction failure: the count belongs to the current session and model, so a new session
+   * or model starts over. An input too large is spent at once. */
   compactionFailed(
     agentId: string,
     kind: CompactionFailureKind = "compaction_failed",
@@ -49,8 +81,13 @@ export class AgentContexts {
     let consecutive = 1;
     try {
       const db = this.stateDb(agentId).database;
-      consecutive = Number(readMeta(db, COMPACTION_FAILURES_KEY) ?? 0) + 1;
-      writeMeta(db, COMPACTION_FAILURES_KEY, String(consecutive));
+      const current = this.#failures(db);
+      consecutive = (current?.count ?? 0) + 1;
+      writeMeta(
+        db,
+        COMPACTION_FAILURES_KEY,
+        JSON.stringify({ ...current, count: consecutive } satisfies CompactionFailureRecord),
+      );
     } catch {
       // The count is a safety net, never a reason to fail the turn.
     }
@@ -76,9 +113,29 @@ export class AgentContexts {
   /** A finished compaction proves the session still compacts: the count starts over. */
   compactionSucceeded(agentId: string): void {
     try {
-      writeMeta(this.stateDb(agentId).database, COMPACTION_FAILURES_KEY, "0");
+      const db = this.stateDb(agentId).database;
+      const current = this.#failures(db);
+      if (current)
+        writeMeta(
+          db,
+          COMPACTION_FAILURES_KEY,
+          JSON.stringify({ ...current, count: 0 } satisfies CompactionFailureRecord),
+        );
     } catch {
       // Nothing to reset when the state cannot be read.
+    }
+  }
+
+  #failures(db: AgentStateDb["database"]): CompactionFailureRecord | undefined {
+    try {
+      const parsed = JSON.parse(
+        readMeta(db, COMPACTION_FAILURES_KEY) ?? "null",
+      ) as Partial<CompactionFailureRecord> | null;
+      return parsed && typeof parsed.count === "number"
+        ? { sessionId: parsed.sessionId, model: parsed.model, count: parsed.count }
+        : undefined;
+    } catch {
+      return undefined;
     }
   }
 

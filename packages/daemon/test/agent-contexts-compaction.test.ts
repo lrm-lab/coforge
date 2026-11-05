@@ -50,6 +50,15 @@ test("three compaction failures mark the session spent, and a finish resets the 
   expect(contexts.compactionFailed("agent-a")).toEqual({ consecutive: 1, terminal: false });
   expect(contexts.compactionFailed("agent-a")).toEqual({ consecutive: 2, terminal: false });
   expect(contexts.compactionFailed("agent-a")).toEqual({ consecutive: 3, terminal: true });
+  expect(contexts.needsSessionReset("agent-a")).toBe(true);
+  // A different session, or a different model, starts the count over.
+  contexts.noteSession("agent-a", "session-b", "model-a");
+  expect(contexts.needsSessionReset("agent-a")).toBe(false);
+  expect(contexts.compactionFailed("agent-a")).toEqual({ consecutive: 1, terminal: false });
+  contexts.noteSession("agent-a", "session-b", "model-b");
+  expect(contexts.compactionFailed("agent-a")).toEqual({ consecutive: 1, terminal: false });
+  contexts.noteSession("agent-a", "session-b", "model-b");
+  expect(contexts.compactionFailed("agent-a")).toEqual({ consecutive: 2, terminal: false });
   contexts.compactionSucceeded("agent-a");
   expect(contexts.compactionFailed("agent-a")).toEqual({ consecutive: 1, terminal: false });
   // An input too large is spent at once: a retry cannot make it smaller.
