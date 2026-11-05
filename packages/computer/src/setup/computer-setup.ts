@@ -55,7 +55,10 @@ export type ComputerSetupOptions = {
   workspaceLookup: WorkspaceLookup;
   /** `attach --one-shot`: the attach-session credential (the `attach_token` `computer:register`
    * consumes) instead of the OAuth login (task #417). */
-  oneShotAttach?: (serverUrl: string) => Promise<Credential>;
+  oneShotAttach?: (
+    serverUrl: string,
+    options?: { onStage?: (stage: string, detail?: Record<string, string>) => void },
+  ) => Promise<Credential>;
   registrationFactory: (serverUrl: string, credential: Credential) => SetupRegistration;
   launcher: DaemonLauncher | ((serverUrl: string) => DaemonLauncher);
   metadataProvider: ComputerMetadataProvider;
@@ -73,6 +76,9 @@ export class ComputerSetup {
     /** `attach --one-shot`: report the machine, poll the approval page, and register with the
      * one-shot token it hands back rather than a stored OAuth login (task #417). */
     oneShot?: boolean;
+    /** `--json` stage evidence (task #417): `started`/`polling`/`approved` reach `oneShotAttach`;
+     * `registered`/`saved` are emitted here with their paths. Undefined outside `--json`. */
+    onStage?: (stage: string, detail?: Record<string, string>) => void;
   }): Promise<SetupResult> {
     const serverUrl = this.options.serverUrl;
     const profile = await loadBuildProfile(this.options.config, serverUrl, "setup");
@@ -95,7 +101,7 @@ export class ComputerSetup {
       credential = await setupStep(
         "SETUP_ATTACH_FAILED",
         "The one-shot attach could not be completed.",
-        () => this.options.oneShotAttach!(serverUrl),
+        () => this.options.oneShotAttach!(serverUrl, { onStage: input.onStage }),
       );
     } else {
       credential = await setupStep(
@@ -236,6 +242,11 @@ export class ComputerSetup {
         "Could not save the Workspace configuration.",
         () => this.options.config.saveRegistration(registration),
       );
+      input.onStage?.("registered", {
+        computerId: registeredRegistration.computerId ?? "",
+        workspaceSlug: workspace?.slug ?? "",
+      });
+      input.onStage?.("saved", { configPath });
     } catch (error) {
       if (error instanceof CliError) throw error;
       throw setupError(

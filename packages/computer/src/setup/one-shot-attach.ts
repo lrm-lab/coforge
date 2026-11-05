@@ -173,6 +173,9 @@ export async function oneShotAttach(
     hostname: string;
     os: string;
     write?: (line: string) => void;
+    /** Structured stage names for `attach --json` evidence (task #417): `started`, `polling`,
+     * `approved`. Human text keeps going to `write`; stages go to `onStage` only. */
+    onStage?: (stage: string, detail?: Record<string, string>) => void;
     /** The poll's wait — injectable so a test does not sleep real seconds. */
     sleep?: (ms: number) => Promise<void>;
   },

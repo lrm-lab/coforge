@@ -75,6 +75,16 @@ export function createLoginCommand(
   };
 }
 
+/** `attach --json` stage evidence (task #417): one JSON line per stage on `stderr`, so `stdout`
+ * stays the single result document. Outside `--json` there is no stage output at all. */
+export function attachStageEmitter(
+  io: { stderr: (line: string) => void },
+  json: boolean | undefined,
+): ((stage: string, detail?: Record<string, string>) => void) | undefined {
+  if (!json) return undefined;
+  return (stage, detail) => io.stderr(JSON.stringify({ stage, ...detail }));
+}
+
 export function createSetupCommand(
   io: { stdout: (line: string) => void; stderr: (line: string) => void },
   config: FileComputerConfig,
@@ -144,7 +154,7 @@ export function createSetupCommand(
     }),
     launcher: (serverUrl) =>
       createDaemonLauncher(platform.os, installDirectory, stateDirectory, serverUrl),
-    oneShotAttach: (serverUrl) =>
+    oneShotAttach: (serverUrl, options) =>
       oneShotAttach(
         {
           serverUrl,
@@ -152,6 +162,7 @@ export function createSetupCommand(
           hostname: hostname(),
           os: platform.os,
           write: io.stdout,
+          onStage: options?.onStage,
         },
         fetch,
       ),
@@ -163,6 +174,7 @@ export function createSetupCommand(
         workspaceSlug,
         json: options.json,
         oneShot: options.oneShot,
+        onStage: attachStageEmitter(io, options.json),
       });
       writeSetupResult(io.stdout, result, options.json);
     },
