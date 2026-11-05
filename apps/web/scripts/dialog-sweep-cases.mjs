@@ -282,7 +282,7 @@ export const DIALOGS = [
       click("tab", "^Tasks$"),
       click("button", "^Create Task$"),
     ],
-    expect: "Add Another",
+    expect: "New task",
   },
   {
     id: "workspace-danger",

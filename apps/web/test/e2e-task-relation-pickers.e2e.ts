@@ -162,13 +162,23 @@ test("the Task popup's menu sets a parent, a Task to wait on and a sub-task", as
       const field = '[role="dialog"] input[placeholder="Task title"]';
       await browser("wait", "--fn", `document.querySelector('${field}') !== null`);
       await browser("fill", field, `Write the copy ${label} ${tail}`);
+      await browser(
+        "fill",
+        '[role="dialog"] textarea[aria-label="Add a description…"]',
+        `Copy notes ${tail}`,
+      );
       await shoot(`${label}-subtask-dialog`);
       await mark(
         `[...document.querySelectorAll('[role="dialog"] button')].find((el) => el.textContent.trim() === "Create Task")`,
         "create",
       );
       await browser("click", '[data-e2e="create"]');
-      await browser("wait", "--fn", `${dialogs}.length === 1`);
+      // The new sub-task opens in the popup, as a Task made on the board does.
+      await browser(
+        "wait",
+        "--fn",
+        `${dialogs}.length === 1 && ${dialogs}[0].querySelector("h2")?.textContent.includes("Write the copy ${label} ${tail}") === true`,
+      );
       await noPageErrors();
       let link = null;
       for (let tries = 0; tries < 40 && !link; tries++) {
@@ -178,6 +188,9 @@ test("the Task popup's menu sets a parent, a Task to wait on and a sub-task", as
         if (!link) await Bun.sleep(250);
       }
       expect(link).not.toBeNull();
+      expect((await db.task.findUniqueOrThrow({ where: { id: link!.taskId } })).description).toBe(
+        `Copy notes ${tail}`,
+      );
       // The popup lists it under its Sub-tasks tab, read afresh: the copy that follows by
       // announcement needs the realtime connection this run has no proxy for.
       await browser("open", page);

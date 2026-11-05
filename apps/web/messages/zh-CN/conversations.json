@@ -149,7 +149,7 @@
   "tasks_new_submit": "创建任务",
   "tasks_create_error": "任务创建失败，请重试。",
   "tasks_create_cancel": "取消",
-  "tasks_create_title_required": "至少填写一个任务标题。",
+  "tasks_create_title_required": "请填写任务标题。",
   "tasks_loading": "正在加载任务…",
   "tasks_empty": "此会话暂无任务",
   "tasks_group_empty": "暂无任务",

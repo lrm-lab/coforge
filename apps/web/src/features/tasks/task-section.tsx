@@ -253,7 +253,12 @@ export function TaskSection({
           <CreateTaskDialog
             open={picker === "subtask"}
             onOpenChange={closePicker}
-            onCreate={(draft, idempotencyKey) => relations.createSubtasks(draft, idempotencyKey)}
+            onCreate={async (draft, idempotencyKey) => {
+              const created = await relations.createSubtasks(draft, idempotencyKey);
+              // The new sub-task opens, as a Task made on the board does.
+              if (created)
+                onOpenRelated?.({ hidden: false, number: created.number, channel: null });
+            }}
             where={{ label: `#${task.number} ${task.title}`, subtask: true }}
             members={members}
             describeError={(cause) => {

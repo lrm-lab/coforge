@@ -151,7 +151,7 @@ test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates
     // No title at all is refused in place.
     await browser("eval", `${byText('[role="dialog"] button', "Create Task")}.click()`);
     await waitFor(
-      `document.querySelector('[role="dialog"] [role="alert"]')?.textContent.includes("at least one task title")`,
+      `document.querySelector('[role="dialog"] [role="alert"]')?.textContent.includes("Add a title for the task.")`,
     );
     await browser("screenshot", join(artifacts, "create-empty.png"));
 

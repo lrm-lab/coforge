@@ -7,11 +7,14 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { DialogAction, DialogCancel } from "#src/components/ui/dialog-actions";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import type { Mentionable } from "#src/features/conversations/mention-text";
+import { isAppError } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
+import { TASK_ASSIGNMENT_MANAGER_REQUIRED } from "./task-assignment";
 import { AssigneeMenu } from "./task-assignee-menu";
 import { TaskLabelsField } from "./task-labels";
 import { TaskProperty } from "./task-property";
 import { TaskStatusIcon } from "./task-status-icon";
+import { useTaskAssignmentAccess } from "./use-task-assignment-access";
 import { useWorkspaceLabels } from "./workspace-labels";
 
 /** What a new Task is made with: its title, and what else was set before it was created. */
@@ -47,7 +50,8 @@ export function CreateTaskDialog({
   describeError?: (cause: unknown) => string | undefined;
   /** Where the Task goes, as the popup's trail names it: `#channel`, or `#12 Parent title`. */
   where?: { label: string; subtask?: boolean };
-  /** Who may be picked as its owner; without them, no owner is offered. */
+  /** Who may be its owner; without them, no owner is offered. Someone who may not assign others
+   * is offered only themselves, as in the popup. */
   members?: readonly Mentionable[];
 }) {
   const [draft, setDraft] = useState(emptyDraft);
@@ -58,6 +62,12 @@ export function CreateTaskDialog({
   // A retry of the same Task reuses its idempotency key, so a create that did land is not repeated.
   const submission = useRef<{ key: string; idempotencyKey: string } | undefined>(undefined);
   const { labels: workspaceLabels } = useWorkspaceLabels(draft.labels.length > 0);
+  const access = useTaskAssignmentAccess();
+  const assignable = access.canAssignOthers
+    ? members
+    : members?.filter((member) => member.kind === "user" && member.id === access.userId);
+  // A Task its creator takes on is made started, as the server makes it.
+  const status = draft.assignee === `user:${access.userId}` ? "in_progress" : "todo";
 
   const owner = members?.find((member) => `${member.kind}:${member.id}` === draft.assignee);
   const draftTask: Pick<TaskView, "owner" | "labels"> = {
@@ -113,6 +123,13 @@ export function CreateTaskDialog({
       setDraft(emptyDraft());
       onOpenChange(false);
     } catch (cause) {
+      // Assigning others was taken away meanwhile: say so, and offer only oneself from now on.
+      if (isAppError(cause) && cause.errorId === TASK_ASSIGNMENT_MANAGER_REQUIRED) {
+        void access.refetch();
+        change({ assignee: undefined });
+        setError(m.tasks_assignment_requires_workspace_manager());
+        return;
+      }
       setError(describeError?.(cause) ?? m.tasks_create_error());
     } finally {
       busy.current = false;
@@ -158,7 +175,7 @@ export function CreateTaskDialog({
                   level={2}
                   className="flex items-start gap-2 px-4 pt-3 sm:px-6"
                 >
-                  <TaskStatusIcon status="todo" className="mt-1.5 size-5" />
+                  <TaskStatusIcon status={status} className="mt-1.5 size-5" />
                   <AriaInput
                     ref={titleRef}
                     aria-label={m.tasks_new_title()}
@@ -176,11 +193,11 @@ export function CreateTaskDialog({
                   data-layout="chips"
                   className="mt-3 flex gap-1.5 overflow-x-auto px-4 pb-0.5 [scrollbar-width:none] sm:px-6 [&::-webkit-scrollbar]:hidden"
                 >
-                  {members && (
+                  {assignable && (
                     <TaskProperty label={m.tasks_overview_owner()}>
                       <AssigneeMenu
                         task={draftTask}
-                        members={members}
+                        members={assignable}
                         disabled={saving}
                         onSelect={(assignee) => change({ assignee: assignee ?? undefined })}
                       />

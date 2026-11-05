@@ -143,6 +143,7 @@ export function useTaskRelations({
       writeTasks(conversationId, [{ tasks: result.tasks, deleted: [] }]);
       // This Task's progress and tree changed; its own copy follows by announcement.
       await queryClient.invalidateQueries({ queryKey: ["task", "show", conversationId, number] });
+      return result.tasks[0];
     },
   };
 }
