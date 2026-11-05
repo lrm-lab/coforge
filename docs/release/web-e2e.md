@@ -17,8 +17,8 @@ digest (`scripts/ci/web-integration-images.test.ts`).
 
 The shards are balanced by the seconds recorded beside each file in the list. The run page's
 summary has a table per shard (file, result, seconds). A failed shard uploads
-`web-e2e-shard-<n>` for a week: each file's output, the Web's and Centrifugo's logs, and the
-screenshots the tests wrote under `.amp/e2e/`.
+`web-e2e-shard-<n>` for a week: each file's output, the Web's, Centrifugo's and the front door's
+logs, and the screenshots the tests wrote under `.amp/e2e/`.
 
 ## What is on the list
 

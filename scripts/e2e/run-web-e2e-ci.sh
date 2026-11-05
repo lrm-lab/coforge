@@ -141,10 +141,13 @@ for file in "${files[@]}"; do
   printf '| %s | %s | %s |\n' "$file" "$result" "$seconds" >> "$summary"
   [ "$result" = pass ] || failed+=("$file")
   # A file that stopped the Web would fail every later one for a reason of its own: stop here.
-  if ! curl -fsS "$COFORGE_E2E_WEB_URL/health" >/dev/null 2>&1; then
-    echo "the Web stopped answering after $file; see web.log" >&2
-    printf '\nThe Web stopped answering after %s; later files did not run.\n' "$file" >> "$summary"
-    failed+=("(Web down after $file)")
+  # The check goes through the front door the pages use, and to the Web behind it as well, so
+  # the message names the log of whichever stopped.
+  if ! curl -fsS "$COFORGE_E2E_WEB_URL/health" >/dev/null 2>&1 || \
+    ! curl -fsS "$web/health" >/dev/null 2>&1; then
+    echo "the Web or its front door stopped answering after $file; see web.log and front.log" >&2
+    printf '\nThe Web or its front door stopped answering after %s; later files did not run.\n' "$file" >> "$summary"
+    failed+=("(Web or front door down after $file)")
     break
   fi
 done

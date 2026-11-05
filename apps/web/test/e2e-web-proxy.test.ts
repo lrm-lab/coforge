@@ -38,6 +38,7 @@ test("the E2E proxy hands on a compressed answer decoded, without its Content-En
     port: 0,
     fetch: () =>
       new Response(Bun.gzipSync("File under review"), {
+        status: 201,
         headers: { "content-type": "text/plain", "content-encoding": "gzip" },
       }),
   });
@@ -46,6 +47,9 @@ test("the E2E proxy hands on a compressed answer decoded, without its Content-En
       new Request("http://proxy.test/api/attachments/1"),
       upstream.url.origin,
     );
+    // The rebuilt response keeps the status line whole: a bare { status } would answer "".
+    expect(response.status).toBe(201);
+    expect(response.statusText).toBe("Created");
     expect(response.headers.get("content-encoding")).toBeNull();
     expect(await response.text()).toBe("File under review");
   } finally {

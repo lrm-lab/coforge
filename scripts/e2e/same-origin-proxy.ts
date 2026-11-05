@@ -12,6 +12,9 @@ type ProxySocketData = {
 const webOrigin = Bun.env.E2E_PROXY_WEB_ORIGIN ?? "http://127.0.0.1:8789";
 const centrifugoOrigin = Bun.env.E2E_PROXY_CENTRIFUGO_ORIGIN ?? "ws://127.0.0.1:8000";
 const port = Number(Bun.env.E2E_PROXY_PORT ?? 8790);
+// Loopback by default: the Web behind it skips sign-in, so it must not answer the LAN. The .amp
+// e2e-proxy service sets E2E_PROXY_HOST=0.0.0.0 because its portal reaches the orb from off it.
+const hostname = Bun.env.E2E_PROXY_HOST ?? "127.0.0.1";
 
 export async function forwardWebRequest(request: Request, origin: string) {
   const url = new URL(request.url);
@@ -25,7 +28,11 @@ export async function forwardWebRequest(request: Request, origin: string) {
     const headers = new Headers(response.headers);
     headers.delete("content-encoding");
     headers.delete("content-length");
-    return new Response(response.body, { status: response.status, headers });
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
   } catch {
     return new Response("Web application is starting", { status: 503 });
   }
@@ -33,7 +40,7 @@ export async function forwardWebRequest(request: Request, origin: string) {
 
 if (import.meta.main) {
   Bun.serve<ProxySocketData>({
-    hostname: "0.0.0.0",
+    hostname,
     port,
     async fetch(request, server) {
       const url = new URL(request.url);
