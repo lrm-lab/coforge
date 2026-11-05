@@ -26,7 +26,9 @@ The module map of `src/server/`, split out of [`apps/web/AGENTS.md`](../../AGENT
 - `server/authorization-server/` — Login with CoForge: the OpenID Connect authorization server for third-party apps (issuer `<origin>/oidc`), its own signing keyset, discovery, JWKS, the authorization endpoint (request checks, Workspace offering, remembered consent, authorization codes), the token and UserInfo endpoints (client authentication, PKCE, single-use redemption, JWT access and ID tokens, the claims each scope releases), minting Agents' app tokens (`mintAgentAccessToken`), and installation tokens (`client_credentials` and their verification, behind `app-data-permissions` or `app-installation-setup`), the installation setup API an app calls (`setup-endpoint`). The Computer device flow stays in `server/auth/`.
 - `server/centrifugo/` — Centrifugo proxies, RPC receivers, and short-lived result caches.
 - `server/computers/` — Computer registration, metadata, restart and upgrade
-  operations, signing a Code Agent runtime in and out (`runtime-auth*`), runtime visibility, explicit model catalog refresh, and what the server remembers across a
+  operations, the hourly sweep that removes registrations whose Daemon never
+  started (`computer-orphan-sweep`), signing a Code Agent runtime in and out
+  (`runtime-auth*`), runtime visibility, explicit model catalog refresh, and what the server remembers across a
   daemon's shutdown and return; `computer-connections.server.ts` is the narrow read of the Computers a member sees, with their connection state and optionally their runtimes, for screens that only pick or wait for one.
 - `server/hosts/` — host-node enrollment, registration, heartbeat, the global online list, and container-computer jobs.
 - `server/conversations/` — public channels, channel authority, stopping and resuming a channel's Agents, direct messages, history, message search, action cards, message forwards, reactions, tracked @mention delivery outcomes (`mention-deliveries`), the daily read-record retention sweep (`message-read-retention`), and conversation realtime.

@@ -77,6 +77,10 @@ export type ComputerSetupOptions = {
   ) => Promise<Credential & { workspaceId?: string; workspaceSlug?: string }>;
   registrationFactory: (serverUrl: string, credential: Credential) => SetupRegistration;
   launcher: DaemonLauncher | ((serverUrl: string) => DaemonLauncher);
+  /** Best-effort undo of a registration whose Daemon never started: the `dk_` register just
+   * minted asks the server to detach this Computer (task #417). True only on the server's
+   * definite answer; anything else leaves the hourly orphan sweep to remove the record. */
+  revokeRegistration?: (daemonApiKey: string) => Promise<boolean>;
   metadataProvider: ComputerMetadataProvider;
   idempotencyKeyProvider: RegistrationIdempotencyKeyProvider;
   workspaceRoot: string;
@@ -255,21 +259,46 @@ export class ComputerSetup {
       // configuration advertises this registration as usable.
       // The Coordinator answers by its deadline: the configuration is taken even when the
       // Workspace is still starting, so the registration below is still saved.
-      const started = await setupStep(
-        "SETUP_DAEMON_START_FAILED",
-        "The Daemon could not be started.",
-        () =>
-          launcher.ensureStarted({
-            workspaceId: response.workspaceId,
-            computerId: response.computerId,
-            workspaceRoot: this.options.workspaceRoot,
-            daemonApiKey: response.daemonApiKey,
-            serverHttpUrl: serverUrl,
-            // A login-style setup retires the login it used; a one-shot attach leaves no login
-            // to retire, so this flag goes unset there (task #417).
-            loginSetup: !input.oneShot,
-          }),
-      );
+      let started: Awaited<ReturnType<DaemonLauncher["ensureStarted"]>>;
+      try {
+        started = await setupStep(
+          "SETUP_DAEMON_START_FAILED",
+          "The Daemon could not be started.",
+          () =>
+            launcher.ensureStarted({
+              workspaceId: response.workspaceId,
+              computerId: response.computerId,
+              workspaceRoot: this.options.workspaceRoot,
+              daemonApiKey: response.daemonApiKey,
+              serverHttpUrl: serverUrl,
+              // A login-style setup retires the login it used; a one-shot attach leaves no login
+              // to retire, so this flag goes unset there (task #417).
+              loginSetup: !input.oneShot,
+            }),
+        );
+      } catch (error) {
+        // The registration already exists server-side; a Daemon that never started leaves an
+        // orphan record. Ask the server to undo it with the dk_ it just minted — best effort:
+        // a failed revoke never masks the start failure, and the hourly sweep removes the
+        // record within the hour anyway (task #417).
+        if (
+          error instanceof CliError &&
+          error.code === "SETUP_DAEMON_START_FAILED" &&
+          this.options.revokeRegistration
+        ) {
+          const revoked = await this.options
+            .revokeRegistration(response.daemonApiKey)
+            .catch(() => false);
+          if (!revoked)
+            throw setupError(
+              "SETUP_DAEMON_START_FAILED",
+              "The Daemon could not be started; its server-side registration could not be revoked and will be removed automatically.",
+              "daemon-start",
+              error,
+            );
+        }
+        throw error;
+      }
       daemonStillStarting = started?.lifecycleUnderWay === true;
       const registration = registeredRegistration;
       configPath = await setupStep(

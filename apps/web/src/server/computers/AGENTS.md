@@ -51,9 +51,15 @@ These rules apply to `src/server/computers/`.
   a `dk_` went, so downgrading past the cutover needs no re-attach
   (`packages/daemon/test/computer-key-migration.test.ts` locks this). The
   computer-self endpoints (`self`, `detach`, `swap-key`,
-  `confirm-key`) authenticate through `authenticateLinkedDaemon` and accept
-  only `kind: "computer"`; the daemon's other routes accept either key during
-  the transition.
+  `confirm-key`) authenticate through `authenticateLinkedDaemon`; all accept only
+  `kind: "computer"` except `detach`, which also takes a fresh registration's `dk_`
+  so a Daemon that never started can undo itself (task #417); the daemon's other
+  routes accept either key during the transition.
+- `computer-orphan-sweep.server.ts` is the hourly sweep for registrations whose
+  Daemon never started: a `workspace_computers` link older than an hour whose
+  Computer never reported `computerVersion` is unlinked with its keys revoked and
+  recorded, and the Computer row is deleted once no link or dependent row remains.
+  `COFORGE_ORPHAN_COMPUTER_SWEEP=dry-run` only counts the candidates.
 - `computer-lifecycle-memory.server.ts` is the only store of a shutdown
   reason and of the last daemon instance whose return was announced.
 - `computer-workspace-files.server.ts` requests one local Daemon workspace scan

@@ -3,7 +3,8 @@ model DaemonApiKey {
   apiKeyHash  String    @unique @map("api_key_hash")
   /// `daemon` is the legacy `daemonApiKey`; `computer` is the `sk_computer` a swap-key issued
   /// (task #417). The daemon's HTTPS/RPC surface accepts either during the transition; the
-  /// computer-self endpoints accept only `computer`.
+  /// computer-self endpoints accept only `computer`, except `detach`, which a fresh `dk_` may
+  /// call to undo a registration whose Daemon never started.
   kind        String    @default("daemon")
   workspaceId String    @map("workspace_id") @db.Uuid
   computerId  String    @map("computer_id") @db.Uuid
