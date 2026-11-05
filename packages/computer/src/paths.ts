@@ -1,5 +1,7 @@
 import { posix, win32 } from "node:path";
 
+import { joinUserDirectory } from "@lrm/coforge-sdk/internal/computer-credentials";
+
 export type PathEnvironment = Readonly<Record<string, string | undefined>>;
 
 export function resolveComputerConfigDirectory(input: {
@@ -11,7 +13,7 @@ export function resolveComputerConfigDirectory(input: {
 }
 
 /** Resolves the Computer credential root without introducing a profile concept. */
-export { resolveComputerCredentialsDirectory } from "@lrm/coforge-sdk/internal";
+export { resolveComputerCredentialsDirectory } from "@lrm/coforge-sdk/internal/computer-credentials";
 
 export function resolveComputerStateDirectory(input: {
   platform: NodeJS.Platform;
@@ -44,8 +46,6 @@ export function resolveComputerBinaryDirectory(input: {
   }
   return joinUserDirectory(input, "computer", "bin");
 }
-
-import { joinPlatformDirectory, joinUserDirectory } from "@lrm/coforge-sdk/internal";
 
 export function resolveDaemonSocketPath(input: {
   platform: NodeJS.Platform;

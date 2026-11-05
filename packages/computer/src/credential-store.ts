@@ -7,7 +7,7 @@ import { loginError } from "./errors";
 import {
   computerCredentialFilename,
   resolveComputerCredentialsDirectory,
-} from "@lrm/coforge-sdk/internal";
+} from "@lrm/coforge-sdk/internal/computer-credentials";
 
 /** File-backed credentials rooted by COFORGE_COMPUTER_* environment variables. */
 export class FileCredentialStore implements CredentialStore, CredentialRemover {

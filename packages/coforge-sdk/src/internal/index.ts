@@ -410,7 +410,6 @@ export * from "./attachment-limits";
 export * from "./mime-type";
 export * from "./json-record";
 export * from "./agent-environment";
-export * from "./computer-credentials";
 export * from "./mention-delivery";
 
 export {

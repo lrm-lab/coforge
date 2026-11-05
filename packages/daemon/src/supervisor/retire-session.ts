@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import {
   computerCredentialFilename,
   resolveComputerCredentialsDirectory,
-} from "@lrm/coforge-sdk/internal";
+} from "@lrm/coforge-sdk/internal/computer-credentials";
 import type { ComputerSelfClient } from "#src/connection/computer-self-client";
 import type { DaemonCredentialStore } from "#src/credentials/credential-store";
 import { getLogger } from "@logtape/logtape";
