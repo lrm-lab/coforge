@@ -16,6 +16,10 @@ test("task conversations on adds the block with the quoted-ref rule", () => {
   expect(on).toContain("--alongside");
   expect(on).toContain("--blocked-by");
   expect(on).toContain("--parent");
+  // A task belongs to a Project when its creator can tell which one; the manual's rule.
+  expect(on).toContain("--project <slug>");
+  expect(on).toContain("coforge workspace info --projects");
+  expect(on).toContain("rather than guessing");
 });
 
 test("task conversations off or absent leaves the prompt exactly as before", () => {
