@@ -71,6 +71,7 @@ export const RUNTIME_AUTH_PROVIDERS = [
   RUNTIME_PROVIDER.KIRO,
   RUNTIME_PROVIDER.COMMAND_CODE,
   RUNTIME_PROVIDER.DEVIN,
+  RUNTIME_PROVIDER.ANTIGRAVITY,
 ] as const;
 export type RuntimeAuthProvider = (typeof RUNTIME_AUTH_PROVIDERS)[number];
 
@@ -170,6 +171,8 @@ export interface RuntimeAuthAdapter {
       timeoutMs?: number;
       onSecret?: RuntimeAuthSecretSink;
       kiroIdentityCenter?: KiroIdentityCenterOptions;
+      /** Antigravity's two OAuth methods — the personal or business account the flow opens. */
+      antigravityMethodId?: "oauth-personal" | "oauth-business";
     },
     interaction: RuntimeAuthLoginInteraction,
   ): Promise<RuntimeAuthLoginResult>;

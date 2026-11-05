@@ -9,6 +9,7 @@ export const RUNTIME_AUTH_PROVIDERS = [
   RUNTIME_PROVIDER.CODEX,
   RUNTIME_PROVIDER.KIRO,
   RUNTIME_PROVIDER.DEVIN,
+  RUNTIME_PROVIDER.ANTIGRAVITY,
 ] as const;
 export type RuntimeAuthProvider = (typeof RUNTIME_AUTH_PROVIDERS)[number];
 export const RUNTIME_AUTH_LOGIN_FAILURE_REASONS = [
@@ -35,6 +36,8 @@ export const RUNTIME_AUTH_FAILURE_DETAIL_CODES = [
   "kiro_external_idp_unsupported",
   /** Codex's app-server answered the login start with an error, so no device code arrived. */
   "codex_login_start_failed",
+  /** Antigravity's browser sign-in needs a desktop session the Computer does not have. */
+  "antigravity_no_desktop",
 ] as const;
 export type RuntimeAuthFailureDetailCode = (typeof RUNTIME_AUTH_FAILURE_DETAIL_CODES)[number];
 export function isRuntimeAuthFailureDetailCode(

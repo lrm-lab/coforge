@@ -9,7 +9,15 @@ import {
 } from "#src/contract";
 
 test("runtime auth is limited to providers with a supported status surface", () => {
-  expect(RUNTIME_AUTH_PROVIDERS).toEqual(["claude-code", "codex", "kiro", "command-code", "devin"]);
+  expect(RUNTIME_AUTH_PROVIDERS).toEqual([
+    "claude-code",
+    "codex",
+    "kiro",
+    "command-code",
+    "devin",
+    "antigravity",
+  ]);
+  expect(isRuntimeAuthProvider("antigravity")).toBe(true);
   expect(isRuntimeAuthProvider("claude-code")).toBe(true);
   expect(isRuntimeAuthProvider("codex")).toBe(true);
   expect(isRuntimeAuthProvider("command-code")).toBe(true);

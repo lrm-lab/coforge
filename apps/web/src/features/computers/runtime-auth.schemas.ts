@@ -13,6 +13,7 @@ export const startRuntimeAuthLoginInputSchema = z
     computerId,
     provider: z.enum(RUNTIME_AUTH_PROVIDERS),
     kiroIdentityCenter: z.object({ startUrl: z.string(), region: z.string() }).optional(),
+    antigravityMethodId: z.enum(["oauth-personal", "oauth-business"]).optional(),
   })
   .superRefine((value, context) => {
     try {

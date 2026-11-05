@@ -308,11 +308,16 @@ function launchFailureDetail(
         "Computer (its own `--version` is the quickest check), then start the Agent again."
       );
     }
-    case LAUNCH_FAILURE_REASON.RUNTIME_LOGIN_REQUIRED:
+    case LAUNCH_FAILURE_REASON.RUNTIME_LOGIN_REQUIRED: {
+      // A runtime that knows where its own sign-in lives names it — Antigravity's is the
+      // Computer page, so its `RuntimeLoginRequiredError` message says exactly that.
+      const message = error instanceof Error ? error.message.trim() : "";
+      if (message) return message;
       return (
         `${runtimeName} needs you to log in on this Computer before it can start. Log in to ` +
         `${runtimeName} there, then start the Agent again.`
       );
+    }
     case LAUNCH_FAILURE_REASON.RUNTIME_SPAWN_FAILED:
       return (
         "Agent runtime could not be started. See `coforge-computer logs` for the cause, then " +

@@ -30,6 +30,15 @@
 - A terminal RPC failure after prompt submission is an accepted failed turn, not an admission
   refusal; a process kill during `interrupt()` reports `completed{interrupted}` without the
   transport's own "connection closed" error.
+- Auth is `agy_acp_server`'s own OAuth in `~/.gemini/antigravity-acp/`, never `agy` CLI's.
+  `authenticate` (`oauth-personal`/`oauth-business`) launches the server's browser flow on a
+  short-lived `agy acp` process — never the running Agent session — and `logout` clears it;
+  `session/new` and `session/load` `-32000 "Authentication required"` are `runtime_login_required`,
+  `-32800` is a cancelled sign-in, and a Computer without a desktop (`canOpenBrowser`: Linux needs
+  `DISPLAY`/`WAYLAND_DISPLAY`, `COFORGE_COMPUTER_CLOUD=1` never qualifies) refuses before spawn.
+  On macOS reached over SSH the flow still starts — the browser attempt fails only at the
+  five-minute timeout, which is by design. The credentials
+  stay on the server's side: the adapter never reads, stores, or logs them.
 - The model catalog is `session/new`'s `model` config option (`acp-catalog.ts`), not
   `agy models`. Per-turn usage is not reported through ACP prompt responses in a shape the
   adapter can attribute per turn — the steer's `usage` covers the merged turn; account usage

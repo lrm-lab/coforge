@@ -16,7 +16,11 @@ import { piRuntimeHost } from "#src/code-agent/pi/host";
 import { antigravityAcpRuntimeHost } from "#src/code-agent/antigravity/acp-host";
 import { grokRuntimeHost } from "#src/code-agent/grok/host";
 import { kiroRuntimeHost } from "#src/code-agent/kiro/host";
-import { AntigravityAcpProvider } from "@lrm/coforge-anvil/antigravity";
+import {
+  AntigravityAcpProvider,
+  AntigravityRuntimeAuthAdapter,
+} from "@lrm/coforge-anvil/antigravity";
+import { createAntigravityAuthHost } from "#src/code-agent/antigravity/auth-host";
 import {
   type RuntimeAuthAdapter,
   type RuntimeAuthProvider,
@@ -79,6 +83,12 @@ export function createRuntimeAuthAdapter(
     }
     case RUNTIME_PROVIDER.DEVIN:
       return new DevinRuntimeAuthAdapter(createDevinAuthHost(options));
+    case RUNTIME_PROVIDER.ANTIGRAVITY: {
+      const executable = providerExecutable(RUNTIME_PROVIDER.ANTIGRAVITY, options) ?? "agy";
+      return new AntigravityRuntimeAuthAdapter(
+        createAntigravityAuthHost({ command: [executable], platform: options.platform }),
+      );
+    }
     case RUNTIME_PROVIDER.CLAUDE_CODE:
       return new ClaudeRuntimeAuthAdapter({
         host: claudeAuthHost,

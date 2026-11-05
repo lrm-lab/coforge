@@ -1,11 +1,13 @@
 import type { InitializeResponse } from "@agentclientprotocol/sdk";
 import { RequestError } from "@agentclientprotocol/sdk";
+import { RuntimeLoginRequiredError } from "#src/contract";
 import type { AgentSession, AgentSessionOptions } from "@coforge/agent";
 import { acpBounded, acpProcess } from "#src/acp/connection";
 import type { AcpRuntimeProfile, AcpSessionProfile } from "#src/acp/profile";
 import { AcpSession } from "#src/acp/session";
 import { asRecord, nonEmptyString } from "#src/json-record";
 import type { AntigravityAcpRuntimeHost } from "./acp-host";
+import { ANTIGRAVITY_AUTH_REQUIRED_CODE } from "./auth";
 import { AntigravityAcpTurnEvents } from "./acp-update-events";
 
 /** How long a production session waits for each bounded ACP answer. */
@@ -129,17 +131,34 @@ function antigravitySessionProfile(
           );
           opened = sessionId;
         } catch (error) {
-          if (!(error instanceof RequestError) || error.code !== ANTIGRAVITY_SESSION_MISSING_CODE)
-            throw error;
+          if (!(error instanceof RequestError)) throw error;
+          if (error.code === ANTIGRAVITY_AUTH_REQUIRED_CODE)
+            throw new RuntimeLoginRequiredError(
+              "Antigravity is not signed in: open the Computer page and choose Log in — a " +
+                "browser opens on that Computer.",
+            );
+          if (error.code !== ANTIGRAVITY_SESSION_MISSING_CODE) throw error;
           replaced = sessionId;
         }
       }
       if (!opened) {
-        const state = await acpBounded(
-          agent.request("session/new", { cwd, mcpServers: [], _meta: meta }),
-          timeoutMs,
-          "agy acp session/new timed out",
-        );
+        let state;
+        try {
+          state = await acpBounded(
+            agent.request("session/new", { cwd, mcpServers: [], _meta: meta }),
+            timeoutMs,
+            "agy acp session/new timed out",
+          );
+        } catch (error) {
+          // `-32000 Authentication required`: the server has its own credentials — the person
+          // signs in from the Computer page, not by running `agy` on a terminal.
+          if (error instanceof RequestError && error.code === ANTIGRAVITY_AUTH_REQUIRED_CODE)
+            throw new RuntimeLoginRequiredError(
+              "Antigravity is not signed in: open the Computer page and choose Log in — a " +
+                "browser opens on that Computer.",
+            );
+          throw error;
+        }
         opened = nonEmptyString(asRecord(state)?.sessionId);
         if (!opened) throw new Error("agy acp did not create a session");
       }

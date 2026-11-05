@@ -21,6 +21,8 @@ message RuntimeAuthLoginStart {
   string login_id = 1;
   string provider = 2;
   optional KiroIdentityCenterOptions kiro_identity_center = 3;
+  // Antigravity's authenticate method: "oauth-personal" or "oauth-business".
+  optional string antigravity_method_id = 4;
 }
 
 message RuntimeAuthLoginCode {

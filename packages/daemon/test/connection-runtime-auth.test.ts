@@ -47,6 +47,13 @@ test("routes all four scoped auth intents and sends login/logout reports only th
     const unsubscribe = transport.onRuntimeAuth((intent) => received.push(intent));
     const intents: RuntimeAuthIntent[] = [
       { ...scope, kind: "login_start", loginId, provider: "codex" },
+      {
+        ...scope,
+        kind: "login_start",
+        loginId: "rtl_agy_1234567890abcdef",
+        provider: "antigravity",
+        antigravityMethodId: "oauth-business",
+      },
       { ...scope, kind: "login_code", loginId, code: "sentinel-private-code" },
       { ...scope, kind: "login_cancel", loginId },
       { ...scope, kind: "logout", requestId: "logout-1", provider: "codex" },
@@ -58,7 +65,7 @@ test("routes all four scoped auth intents and sends login/logout reports only th
       publish(encodeRuntimeAuthIntent(intents[1]!), "daemon:workspace-a:computer-other");
       publish(new TextEncoder().encode(JSON.stringify({ code: "sentinel-private-code", loginId })));
     });
-    expect(received).toEqual(intents);
+    expect(received).toEqual(intents.slice(0, intents.length));
     expect(JSON.stringify(records)).not.toContain("sentinel-private-code");
     const login = { ...scope, loginId, sequence: 1, result: { kind: "cancelled" as const } };
     const logout = { ...scope, requestId: "logout-1", result: { kind: "logged_out" as const } };
@@ -76,7 +83,7 @@ test("routes all four scoped auth intents and sends login/logout reports only th
     ).toEqual(logout);
     unsubscribe();
     publish(encodeRuntimeAuthIntent(intents[0]!));
-    expect(received).toHaveLength(4);
+    expect(received).toHaveLength(intents.length);
   } finally {
     await transport.stop();
   }

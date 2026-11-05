@@ -11,7 +11,11 @@ import {
   type RuntimeAuthScope,
 } from "./runtime-auth-fields";
 
-import { runtimeAuthKiroOptions, type KiroIdentityCenterOptions } from "./runtime-auth-kiro";
+import {
+  runtimeAuthAntigravityMethod,
+  runtimeAuthKiroOptions,
+  type KiroIdentityCenterOptions,
+} from "./runtime-auth-kiro";
 
 const INTENT_TYPE = "coforge.rpc.v1.RuntimeAuthIntent";
 
@@ -22,6 +26,7 @@ export type RuntimeAuthIntent = RuntimeAuthScope &
         loginId: string;
         provider: RuntimeAuthProvider;
         kiroIdentityCenter?: KiroIdentityCenterOptions;
+        antigravityMethodId?: "oauth-personal" | "oauth-business";
       }
     | { kind: "login_code"; loginId: string; code: string }
     | { kind: "login_cancel"; loginId: string }
@@ -35,12 +40,17 @@ function checkIntent(value: RuntimeAuthIntent): RuntimeAuthIntent {
   switch (value.kind) {
     case "login_start": {
       const kiroIdentityCenter = runtimeAuthKiroOptions(value.provider, value.kiroIdentityCenter);
+      const antigravityMethodId = runtimeAuthAntigravityMethod(
+        value.provider,
+        value.antigravityMethodId,
+      );
       return {
         ...base,
         kind: "login_start",
         loginId: loginId(value.loginId),
         provider: providerOf(value.provider),
         ...(kiroIdentityCenter ? { kiroIdentityCenter } : {}),
+        ...(antigravityMethodId ? { antigravityMethodId } : {}),
       };
     }
     case "login_code":
@@ -78,6 +88,7 @@ export function encodeRuntimeAuthIntent(value: RuntimeAuthIntent): Uint8Array {
             loginId: checked.loginId,
             provider: checked.provider,
             kiroIdentityCenter: checked.kiroIdentityCenter,
+            antigravityMethodId: checked.antigravityMethodId,
           },
         };
       case "login_code":

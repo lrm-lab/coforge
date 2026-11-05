@@ -43,6 +43,7 @@ import {
   type LoginState,
   type LoginView,
 } from "./runtime-auth-login-state";
+import { AntigravitySignIn } from "#src/features/computers/antigravity-sign-in";
 import { KiroEnterpriseSignIn } from "./kiro-enterprise-sign-in";
 import { useRuntimeAuthSignals } from "./use-runtime-auth-signals";
 
@@ -64,6 +65,9 @@ const EARLY_VIEW_LIMIT = 16;
 export function RuntimeSignInDialog({ onClose, ...target }: Target & { onClose: () => void }) {
   const [attempt, setAttempt] = useState(0);
   const [kiroIdentityCenter, setKiroIdentityCenter] = useState<KiroIdentityCenterOptions>();
+  const [antigravityMethodId, setAntigravityMethodId] = useState<
+    "oauth-personal" | "oauth-business"
+  >();
   const closeAction = useRef<(() => void) | undefined>(undefined);
   return (
     <ModalOverlay
@@ -79,11 +83,14 @@ export function RuntimeSignInDialog({ onClose, ...target }: Target & { onClose: 
         <Dialog className="text-left">
           {target.provider === RUNTIME_PROVIDER.KIRO && !kiroIdentityCenter ? (
             <KiroEnterpriseSignIn onStart={setKiroIdentityCenter} onClose={onClose} />
+          ) : target.provider === RUNTIME_PROVIDER.ANTIGRAVITY && !antigravityMethodId ? (
+            <AntigravitySignIn onStart={setAntigravityMethodId} onClose={onClose} />
           ) : (
             <SignInAttempt
               key={attempt}
               {...target}
               kiroIdentityCenter={kiroIdentityCenter}
+              antigravityMethodId={antigravityMethodId}
               closeAction={closeAction}
               onRetry={() => {
                 setAttempt((n) => n + 1);
@@ -104,11 +111,13 @@ function SignInAttempt({
   provider,
   runtimeName,
   kiroIdentityCenter,
+  antigravityMethodId,
   closeAction,
   onRetry,
   onClose,
 }: Target & {
   kiroIdentityCenter?: KiroIdentityCenterOptions;
+  antigravityMethodId?: "oauth-personal" | "oauth-business";
   closeAction: RefObject<(() => void) | undefined>;
   onRetry: () => void;
   onClose: () => void;
@@ -163,7 +172,14 @@ function SignInAttempt({
     // second login, and only closing the dialog cancels one.
     if (began.current) return;
     began.current = true;
-    start({ data: { computerId, provider, ...(kiroIdentityCenter ? { kiroIdentityCenter } : {}) } })
+    start({
+      data: {
+        computerId,
+        provider,
+        ...(kiroIdentityCenter ? { kiroIdentityCenter } : {}),
+        ...(antigravityMethodId ? { antigravityMethodId } : {}),
+      },
+    })
       .then((started) => {
         if (started.status !== "started") {
           dispatch({ type: "start_refused", status: started.status });
@@ -469,6 +485,8 @@ function failureText(failure: LoginFailure, runtime: string): string {
         return m.runtime_auth_kiro_external_idp();
       if (failure.detail === "codex_login_start_failed")
         return m.runtime_auth_codex_start_failed({ runtime });
+      if (failure.detail === "antigravity_no_desktop")
+        return m.runtime_auth_antigravity_no_desktop();
       switch (failure.reason) {
         case "timed_out":
           return m.runtime_auth_failed_timed_out();

@@ -23,7 +23,7 @@ function subject(options: {
   let now = 1_000;
   const collector = new RuntimeAuthStatusCollector({
     installedProviders: async () =>
-      options.installed ?? ["claude-code", "codex", "kiro", "command-code", "devin"],
+      options.installed ?? ["claude-code", "codex", "kiro", "command-code", "devin", "antigravity"],
     readStatus: (provider) => {
       reads.push(provider);
       return options.read?.(provider) ?? Promise.resolve({ provider, state: "logged_out" });
@@ -60,6 +60,7 @@ describe("collecting the runtimes' login status", () => {
           { provider: "kiro", state: "logged_out" },
           { provider: "command-code", state: "logged_out" },
           { provider: "devin", state: "logged_out" },
+          { provider: "antigravity", state: "logged_out" },
         ],
       },
     ]);
@@ -75,6 +76,7 @@ describe("collecting the runtimes' login status", () => {
       { provider: "kiro", state: "unavailable", unavailableReason: "not_installed" },
       { provider: "command-code", state: "unavailable", unavailableReason: "not_installed" },
       { provider: "devin", state: "unavailable", unavailableReason: "not_installed" },
+      { provider: "antigravity", state: "unavailable", unavailableReason: "not_installed" },
     ]);
   });
 
@@ -93,6 +95,7 @@ describe("collecting the runtimes' login status", () => {
       { provider: "kiro", state: "unknown" },
       { provider: "command-code", state: "unknown" },
       { provider: "devin", state: "unknown" },
+      { provider: "antigravity", state: "unknown" },
     ]);
   });
 
@@ -137,6 +140,7 @@ describe("collecting the runtimes' login status", () => {
       { provider: "kiro", state: "logged_in" },
       { provider: "command-code", state: "unavailable", unavailableReason: "not_installed" },
       { provider: "devin", state: "unavailable", unavailableReason: "not_installed" },
+      { provider: "antigravity", state: "unavailable", unavailableReason: "not_installed" },
     ]);
   });
 
@@ -145,7 +149,7 @@ describe("collecting the runtimes' login status", () => {
     await collector.refreshProvider("codex");
     expect(reads).toEqual(["codex"]);
     expect(reports).toHaveLength(1);
-    expect(reports[0]!.runtimes).toHaveLength(5);
+    expect(reports[0]!.runtimes).toHaveLength(6);
   });
 
   test("a report that fails is not an error for whoever asked", async () => {

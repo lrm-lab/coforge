@@ -105,6 +105,7 @@ export class RuntimeAuth {
       computerId: string;
       provider: RuntimeAuthProvider;
       kiroIdentityCenter?: KiroIdentityCenterOptions;
+      antigravityMethodId?: "oauth-personal" | "oauth-business";
     },
   ): Promise<{ status: "started"; loginId: string } | { status: "busy" | RuntimeAuthUnavailable }> {
     const scope = await this.authorize(principal, input.computerId);
@@ -124,6 +125,7 @@ export class RuntimeAuth {
         loginId,
         provider: input.provider,
         ...(kiroIdentityCenter ? { kiroIdentityCenter } : {}),
+        ...(input.antigravityMethodId ? { antigravityMethodId: input.antigravityMethodId } : {}),
       });
     } catch {
       // The provider must not stay locked for a login whose intent never left.

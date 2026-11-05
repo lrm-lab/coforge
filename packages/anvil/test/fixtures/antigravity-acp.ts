@@ -1,4 +1,4 @@
-import { appendFile } from "node:fs/promises";
+import { appendFile, readFile, writeFile } from "node:fs/promises";
 if (process.argv.includes("--version")) {
   console.log("1.5.0");
   process.exit(0);
@@ -14,6 +14,18 @@ const configOptions = Bun.env.AGY_ACP_FIXTURE_CONFIG_OPTIONS
   ? JSON.parse(Bun.env.AGY_ACP_FIXTURE_CONFIG_OPTIONS)
   : [];
 const sessionId = "agy-acp-fixture-session";
+// The real server keeps credentials on disk — the fixture's state file is their stand-in, so a
+// `logout` in one process is visible to the next status read's fresh `agy acp`.
+const stateFile = Bun.env.AGY_ACP_FIXTURE_STATE;
+let signedIn = Bun.env.AGY_ACP_FIXTURE_SIGNED_OUT !== "1";
+if (stateFile) {
+  try {
+    signedIn = (await readFile(stateFile, "utf8")).trim() === "1";
+  } catch {}
+}
+const persistSignedIn = async () => {
+  if (stateFile) await writeFile(stateFile, signedIn ? "1" : "0");
+};
 let currentSessionId = sessionId;
 const write = (value: unknown) => console.log(JSON.stringify(value));
 const update = (value: unknown) =>
@@ -37,11 +49,45 @@ for await (const line of console) {
           loadSession: true,
           _meta: { antigravity: { systemPrompt: { append: true } } },
         },
-        authMethods: [],
+        authMethods: [{ id: "oauth-personal" }, { id: "oauth-business" }],
       });
+      break;
+    case "authenticate":
+      if (Bun.env.AGY_ACP_FIXTURE_AUTH_HANG) {
+        // A sign-in that never completes: only disposal or a deadline ends it.
+        heldReply = () => {};
+        break;
+      }
+      if (Bun.env.AGY_ACP_FIXTURE_AUTH_CANCEL) {
+        write({
+          jsonrpc: "2.0",
+          id: request.id,
+          error: { code: -32800, message: "Sign-in was cancelled." },
+        });
+        break;
+      }
+      signedIn = true;
+      await persistSignedIn();
+      reply({});
+      break;
+    case "logout":
+      signedIn = false;
+      await persistSignedIn();
+      reply({});
+      break;
+    case "session/close":
+      reply({});
       break;
     case "session/new":
     case "session/load":
+      if (!signedIn) {
+        write({
+          jsonrpc: "2.0",
+          id: request.id,
+          error: { code: -32000, message: "Authentication required" },
+        });
+        break;
+      }
       if (request.params.sessionId === "missing-session") {
         write({
           jsonrpc: "2.0",

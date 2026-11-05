@@ -33,3 +33,19 @@ export function runtimeAuthKiroOptions(
   if (value !== undefined) throw new Error("Kiro enterprise target belongs to Kiro only");
   return undefined;
 }
+
+const ANTIGRAVITY_METHODS = new Set(["oauth-personal", "oauth-business"]);
+export function runtimeAuthAntigravityMethod(
+  provider: string,
+  value: unknown,
+): "oauth-personal" | "oauth-business" | undefined {
+  if (provider !== RUNTIME_PROVIDER.ANTIGRAVITY) {
+    if (value !== undefined)
+      throw new Error("Antigravity account choice belongs to Antigravity only");
+    return undefined;
+  }
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || !ANTIGRAVITY_METHODS.has(value))
+    throw new Error("Invalid Antigravity account choice");
+  return value as "oauth-personal" | "oauth-business";
+}
