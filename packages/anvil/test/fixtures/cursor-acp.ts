@@ -97,7 +97,9 @@ for await (const line of console) {
   } catch {
     continue;
   }
-  void log(request);
+  // Append before answering: a test that reads the log right after the client sees the reply must
+  // already find the request. A fire-and-forget append lets the reply win the race.
+  await log(request);
   const reply = (result: unknown) => write({ jsonrpc: "2.0", id: request.id, result });
   const sessionEnvelope = () => ({
     sessionId: currentSessionId,
