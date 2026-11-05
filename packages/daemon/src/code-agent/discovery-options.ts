@@ -13,6 +13,7 @@ export type CatalogCommands = {
   antigravity?: readonly string[];
   commandCode?: readonly string[];
   devin?: readonly string[];
+  droid?: readonly string[];
 };
 
 /** Everything one Code Agent discovery pass takes. */

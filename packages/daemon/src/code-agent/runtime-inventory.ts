@@ -47,6 +47,8 @@ import { discoverCodexCatalog } from "@lrm/coforge-anvil/codex";
 import { codexCatalogHost } from "./codex/host";
 import { discoverCoforgeCatalog } from "./pi/catalog";
 import { DshCatalogDiscovery } from "./dsh/catalog";
+import { discoverDroidAcpCatalog } from "@lrm/coforge-anvil/droid";
+import { droidAcpRuntimeHost } from "./droid/acp-host";
 import { agentEnvironment } from "./environment";
 import { getLogger } from "@logtape/logtape";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
@@ -71,6 +73,7 @@ const CACHEABLE_CATALOG_PROVIDERS = [
   RUNTIME_PROVIDER.ANTIGRAVITY,
   RUNTIME_PROVIDER.COMMAND_CODE,
   RUNTIME_PROVIDER.DEVIN,
+  RUNTIME_PROVIDER.DROID,
 ] as const;
 
 async function dshCatalogOptions(options: CodeAgentDiscoveryOptions) {
@@ -359,6 +362,21 @@ export async function discoverCodeAgentCatalogs(
           );
           return { keyPaths: [executable], catalog: filled };
         }),
+      ]);
+  }
+  // The model list is session/new's model select, with each model's `reasoning_effort` read in
+  // the same probe session (verified on 1.4.1).
+  if (usable(RUNTIME_PROVIDER.DROID)) {
+    const executable = await resolveExecutable(RUNTIME_PROVIDER.DROID);
+    if (executable)
+      discoveries.push([
+        RUNTIME_PROVIDER.DROID,
+        discoverDroidAcpCatalog(
+          commands.droid ?? [executable],
+          cwd,
+          environment,
+          droidAcpRuntimeHost,
+        ).then((catalog) => ({ keyPaths: [executable], catalog })),
       ]);
   }
   // The model list is session/new's model select. Without this branch a refresh never probes
