@@ -6,8 +6,6 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { productionArtifacts } from "#src/server/artifacts/artifact-composition.server";
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
-import { readFeatureFlagsConfiguration } from "#src/server/feature-flags/configuration.server";
-import { installFeatureFlags } from "#src/server/feature-flags/feature-flags.server";
 import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
 
 /**
@@ -19,20 +17,14 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
  * shuts the viewer out; and in a Workspace where the viewer is a member only, an artifact they
  * did not make: Share greyed, saying who can change it.
  *
- * Opt-in like the other browser E2Es: real local Web started with the flag file that offers
- * `artifacts` (`/tmp/coforge-flags-docs.json`, read here too). Its texts carry the run's tail,
- * since bytes are stored once per Workspace by their hash. Screenshots go under
- * `.amp/e2e/artifact-share/`.
+ * Opt-in like the other browser E2Es: real local Web with the `artifacts` experiment switched
+ * on per Workspace (it has no flag). Its texts carry the run's tail, since bytes are stored once
+ * per Workspace by their hash. Screenshots go under `.amp/e2e/artifact-share/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/artifact-share");
 
 test("an artifact's Share: who can see it", async () => {
-  await installFeatureFlags(
-    await readFeatureFlagsConfiguration({
-      COFORGE_FEATURE_FLAGS_FILE: "/tmp/coforge-flags-docs.json",
-    }),
-  );
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `artifact-share-${process.pid}`);
   const experiments = new PrismaExperimentsRepository(db);
