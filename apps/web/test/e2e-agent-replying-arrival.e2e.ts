@@ -47,13 +47,15 @@ test("a reply in a thread whose root is not loaded still ends its intent before 
   const name = `e2e-window-${suffix}`;
   const channelId = await fx.createChannel(name);
   const old = await fx.send(channelId, DEV_BROWSER_USER.id, `Old root ${suffix}`);
-  // More top-level messages after the root than a window page holds (20), so opening the channel
-  // at its newest does not load the root.
-  for (let n = 1; n <= 30; n += 1)
+  // Enough top-level messages after the root that opening the channel at its newest does not load
+  // the root: a window page holds 20, and the pane loads older pages while its top is within a
+  // screenful and 600px of view (`OlderMessagesRow`, task #171), so a few pages of short messages
+  // load at once.
+  for (let n = 1; n <= 100; n += 1)
     await fx.send(channelId, DEV_BROWSER_USER.id, `Newer message ${n} of ${suffix}`);
 
   await fx.open(channelId);
-  await fx.untilText(`Newer message 30 of ${suffix}`);
+  await fx.untilText(`Newer message 100 of ${suffix}`);
   expect(await evaluate<boolean>(`document.body.innerText.includes("Old root ${suffix}")`)).toBe(
     false,
   );
