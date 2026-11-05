@@ -1,7 +1,10 @@
+import { getLogger } from "@logtape/logtape";
 import type { AgentTaskConversationRequest } from "@lrm/coforge-sdk/agent";
 import type { AgentMessageRecord } from "@lrm/coforge-sdk/internal";
 import type { AgentContexts } from "./agent-contexts";
 import { elideForAgent } from "./context-elision";
+
+const logger = getLogger(["coforge", "daemon", "runtime"]);
 
 /**
  * A forwarded `coforge task read`'s answer as the Agent gets it: the read's consumption settles
@@ -22,22 +25,44 @@ export async function forwardedTaskReadResponse(
   response: Response,
 ): Promise<Response> {
   const { agentId, request } = input;
-  if (request.route !== "read" || !response.ok) return response;
+  if (request.route !== "read") return response;
+  // Why a task read's cursor was not recorded, field by field: the failure is otherwise invisible,
+  // and a cursor the daemon never wrote turns every replayed delivery into a new notice.
+  const notRecorded = (reason: string, detail: Record<string, unknown> = {}) =>
+    logger.info("Forwarded task read did not record its consumption", {
+      event: "agent.task_read.not_recorded",
+      agent_id: agentId,
+      reason,
+      ...detail,
+    });
+  if (!response.ok) {
+    notRecorded("response_not_ok", { status: response.status });
+    return response;
+  }
   let body: unknown;
   try {
     body = await response.clone().json();
   } catch {
+    notRecorded("body_not_json");
     return response;
   }
   if (
     !body ||
     typeof body !== "object" ||
     !Array.isArray((body as { messages?: unknown }).messages)
-  )
+  ) {
+    notRecorded("body_without_messages");
     return response;
+  }
   const scope = (body as { consumptionScope?: { agentId: string; target: string } })
     .consumptionScope;
   if (scope?.agentId === agentId && scope.target) input.recordRead?.(agentId, request.query, body);
+  else
+    notRecorded("scope_missing_or_foreign", {
+      has_consumption_scope: scope !== undefined,
+      scope_agent_matches: scope?.agentId === agentId,
+      scope_target_present: Boolean(scope?.target),
+    });
   const messages = (body as { messages: unknown[] }).messages;
   const elided = elideForAgent(input.contexts, agentId, messages as AgentMessageRecord[], "read");
   if (elided === messages) return response;
