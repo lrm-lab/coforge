@@ -326,8 +326,7 @@ export type TaskCommand = {
   /** `create`/`amend`: the description a label this command creates gets; without one an unknown
    * label is refused (an Agent must say what a new label is for). */
   labelDescription?: string;
-  /** `create`/`amend`: the Project by slug. `amend` with null files the Task under its
-   * conversation's Project again. */
+  /** `create`/`amend`: the Project by slug. `amend` with null clears the Task's Project. */
   project?: string | null;
   /** `create`: the new Tasks' priority (default `none`). `update`: the new priority, with or
    * without a `status`. */

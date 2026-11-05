@@ -65,6 +65,9 @@ test("validateTaskRequest accepts a relational amend and still rejects an empty 
   expect(() => validateTaskRequest({ ...amend, blockedBy: [] })).not.toThrow();
   expect(() => validateTaskRequest({ ...amend, parent: null })).not.toThrow();
   expect(() => validateTaskRequest({ ...amend, parent: { number: 3 } })).not.toThrow();
+  // A project amendment alone is an amendment too (task #562).
+  expect(() => validateTaskRequest({ ...amend, project: "coforge" })).not.toThrow();
+  expect(() => validateTaskRequest({ ...amend, project: null })).not.toThrow();
   expect(() => validateTaskRequest(amend)).toThrow("missing Task operation argument");
 });
 

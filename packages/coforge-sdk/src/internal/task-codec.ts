@@ -223,7 +223,9 @@ export function validateTaskRequest(value: TaskRequest): void {
         // A relational amendment (`--blocked-by`, `--parent`) carries neither title nor
         // description; the server's amendTask treats it as an amendment of its own.
         value.blockedBy !== undefined ||
-        value.parent !== undefined)) ||
+        value.parent !== undefined ||
+        // A project amendment alone counts too: `project: null` clears it (task #562).
+        value.project !== undefined)) ||
     (value.operation === "receipt" &&
       value.number !== undefined &&
       value.numbers === undefined &&
