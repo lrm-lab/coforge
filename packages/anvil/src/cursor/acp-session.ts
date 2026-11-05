@@ -27,6 +27,14 @@ const CURSOR_NOT_SIGNED_IN =
   "Cursor CLI is not signed in on this Computer: run `cursor-agent login` there, then start this " +
   "Agent again.";
 
+/** Whether a `-32000` answer is the sign-in refusal: the code is JSON-RPC's generic server
+ * error, so only its message decides. Anything else keeps its own failure text. */
+function isSignInRequired(error: unknown): boolean {
+  if (!(error instanceof RequestError) || error.code !== CURSOR_AUTH_REQUIRED_CODE) return false;
+  const message = nonEmptyString(asRecord(error.data)?.message) ?? error.message ?? "";
+  return /authentication required/i.test(message);
+}
+
 function cursorSignInRequired(): RuntimeLoginRequiredError {
   return new RuntimeLoginRequiredError(CURSOR_NOT_SIGNED_IN, {
     detailHint: CURSOR_NOT_SIGNED_IN,
@@ -147,8 +155,7 @@ function cursorSessionProfile(
             /session .{0,80}not found/i.test(
               nonEmptyString(asRecord(error.data)?.message) ?? error.message,
             );
-          if (error instanceof RequestError && error.code === CURSOR_AUTH_REQUIRED_CODE)
-            throw cursorSignInRequired();
+          if (isSignInRequired(error)) throw cursorSignInRequired();
           if (!missing) throw error;
           replaced = sessionId;
         }
@@ -159,8 +166,7 @@ function cursorSessionProfile(
           timeoutMs,
           "cursor-agent acp session/new timed out",
         ).catch((error: unknown) => {
-          if (error instanceof RequestError && error.code === CURSOR_AUTH_REQUIRED_CODE)
-            throw cursorSignInRequired();
+          if (isSignInRequired(error)) throw cursorSignInRequired();
           throw error;
         });
         opened = nonEmptyString(asRecord(state)?.sessionId);

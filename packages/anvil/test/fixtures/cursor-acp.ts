@@ -133,6 +133,15 @@ for await (const line of console) {
     case "session/load":
       // A signed-out CLI refuses before any session exists: `-32000 Authentication required`,
       // as cursor-agent 2026.10.22 does.
+      if (Bun.env.CURSOR_ACP_FIXTURE_SERVER_ERROR) {
+        // JSON-RPC's generic server error, not a sign-in refusal: it must keep its own text.
+        write({
+          jsonrpc: "2.0",
+          id: request.id,
+          error: { code: -32000, message: "Internal server error: workspace index is locked" },
+        });
+        break;
+      }
       if (Bun.env.CURSOR_ACP_FIXTURE_REQUIRE_LOGIN) {
         write({
           jsonrpc: "2.0",

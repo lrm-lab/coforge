@@ -523,3 +523,17 @@ test("a signed-out CLI refuses the session as a login requirement, not a generic
     await f.cleanup();
   }
 });
+
+test("another -32000 is not a sign-in refusal: it keeps its own failure text", async () => {
+  const f = await fixture({ CURSOR_ACP_FIXTURE_SERVER_ERROR: "1" });
+  try {
+    const error = await f.provider
+      .createAgentSession(options(f.cwd) as never)
+      .catch((failure: unknown) => failure);
+    // JSON-RPC's -32000 is generic; only "Authentication required" means a login is missing.
+    expect((error as { code?: string }).code).not.toBe("runtime_login_required");
+    expect((error as Error).message).toContain("workspace index is locked");
+  } finally {
+    await f.cleanup();
+  }
+});
