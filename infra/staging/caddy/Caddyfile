@@ -2,6 +2,19 @@
 # nothing but Caddy's automatic redirect to the same URL over HTTPS.
 {
 	admin off
+
+	# Agent credentials must never reach a log (task #559). The site `log` directive only filters
+	# access logs; when an upstream refuses a connection, Caddy logs the whole request — headers
+	# included, `X-Coforge-Agent-Api-Key` among them — through the default (error) logger, and only
+	# Authorization and Cookie are redacted for it. The same field is deleted there.
+	log default {
+		format filter {
+			wrap json
+			fields {
+				request>headers>X-Coforge-Agent-Api-Key delete
+			}
+		}
+	}
 }
 
 staging.coforge.cn {
