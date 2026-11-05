@@ -110,8 +110,12 @@ describe("collecting the runtimes' login status", () => {
         return gate.promise;
       },
     });
-    const running = collector.refresh();
-    const again = [collector.refresh(), collector.refresh(), collector.refresh()];
+    const running = collector.refresh({ force: true });
+    const again = [
+      collector.refresh({ force: true }),
+      collector.refresh({ force: true }),
+      collector.refresh({ force: true }),
+    ];
     gate.resolve({ provider: "codex", state: "logged_out" });
     await Promise.all([running, ...again]);
     expect(
@@ -130,9 +134,10 @@ describe("collecting the runtimes' login status", () => {
     });
     await collector.refresh();
     reads.length = 0;
-    // The runtime was signed out on the Computer; its page opening is what asks for this.
+    // The runtime was signed out on the Computer; its page opening is what asks for this, and a
+    // page open always probes.
     signedOut.add("codex");
-    await collector.refreshProvider("codex");
+    await collector.refreshProvider("codex", { force: true });
     expect(reads).toEqual(["codex"]);
     expect(reports[1]!.runtimes).toEqual([
       { provider: "claude-code", state: "unavailable", unavailableReason: "not_installed" },
@@ -150,6 +155,32 @@ describe("collecting the runtimes' login status", () => {
     expect(reads).toEqual(["codex"]);
     expect(reports).toHaveLength(1);
     expect(reports[0]!.runtimes).toHaveLength(6);
+  });
+
+  test("an unforced pass inside the minute reuses the last status; a forced one probes again", async () => {
+    const signedOut = new Set<string>();
+    const { collector, reports, reads } = subject({
+      installed: ["codex"],
+      read: async (provider) => ({
+        provider,
+        state: signedOut.has(provider) ? "logged_out" : "logged_in",
+      }),
+    });
+    await collector.refresh();
+    reads.length = 0;
+    signedOut.add("codex");
+    // An inventory report landing moments later must not spawn a second `session/new`.
+    await collector.refresh();
+    expect(reads).toEqual([]);
+    expect(reports[1]!.runtimes.find((status) => status.provider === "codex")?.state).toBe(
+      "logged_in",
+    );
+    // A page open, a login or a logout forces the probe past the throttle.
+    await collector.refreshProvider("codex", { force: true });
+    expect(reads).toEqual(["codex"]);
+    expect(reports[2]!.runtimes.find((status) => status.provider === "codex")?.state).toBe(
+      "logged_out",
+    );
   });
 
   test("a report that fails is not an error for whoever asked", async () => {

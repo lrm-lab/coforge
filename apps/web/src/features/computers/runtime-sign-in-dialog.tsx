@@ -13,7 +13,11 @@ import {
 import { Heading } from "react-aria-components";
 import { useServerFn } from "@tanstack/react-start";
 import { Copy01, LinkExternal01, XClose } from "@untitledui/icons";
-import type { KiroIdentityCenterOptions, RuntimeAuthProvider } from "@lrm/coforge-sdk/internal";
+import {
+  RUNTIME_AUTH_INFO_ANTIGRAVITY_BROWSER_LOGIN,
+  type KiroIdentityCenterOptions,
+  type RuntimeAuthProvider,
+} from "@lrm/coforge-sdk/internal";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -294,7 +298,7 @@ function SignInBody({
           {state.link?.kind === "device_code" && (
             <DeviceCode event={state.link} expiresAtMs={state.expiresAtMs} />
           )}
-          {state.info && <p className="text-tertiary">{state.info}</p>}
+          {state.info && <p className="text-tertiary">{signInInfo(state.info)}</p>}
           {state.prompt !== undefined && !state.checking && (
             <CodeForm
               computerId={computerId}
@@ -315,6 +319,13 @@ function SignInBody({
         </>
       );
   }
+}
+
+/** An `info` event either carries a token this page words itself or a runtime's own sentence. */
+function signInInfo(message: string): string {
+  if (message === RUNTIME_AUTH_INFO_ANTIGRAVITY_BROWSER_LOGIN)
+    return m.runtime_auth_antigravity_hint();
+  return message;
 }
 
 /** A step that waits on something outside the dialog: one small spinner before its line. */

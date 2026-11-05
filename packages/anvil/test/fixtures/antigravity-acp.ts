@@ -71,8 +71,12 @@ for await (const line of console) {
       reply({});
       break;
     case "logout":
-      signedIn = false;
-      await persistSignedIn();
+      // LOGOUT_NOOP: the server acknowledges the call but the account stays signed in — the
+      // adapter must report `still_logged_in` instead of claiming a sign-out.
+      if (!Bun.env.AGY_ACP_FIXTURE_LOGOUT_NOOP) {
+        signedIn = false;
+        await persistSignedIn();
+      }
       reply({});
       break;
     case "session/close":

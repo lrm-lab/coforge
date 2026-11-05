@@ -62,17 +62,17 @@ export class RuntimeAuthReporter {
   }
 
   /** Reads and reports every runtime's status again. Nothing is reported before an inventory is known. */
-  refresh(): Promise<void> {
-    return this.#installed ? this.#collector.refresh() : Promise.resolve();
+  refresh(options: { force?: boolean } = {}): Promise<void> {
+    return this.#installed ? this.#collector.refresh(options) : Promise.resolve();
   }
 
   /**
    * Reads one runtime's status again, as when its page opens on the Computer screen: the runtime
    * may have been signed in or out on the Computer itself, which nothing tells the daemon.
    */
-  refreshProvider(provider: RuntimeAuthProvider): Promise<void> {
+  refreshProvider(provider: RuntimeAuthProvider, options: { force?: boolean } = {}): Promise<void> {
     return this.#installed?.has(provider)
-      ? this.#collector.refreshProvider(provider)
+      ? this.#collector.refreshProvider(provider, options)
       : Promise.resolve();
   }
 

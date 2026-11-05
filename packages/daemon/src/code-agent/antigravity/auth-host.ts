@@ -1,5 +1,6 @@
 import type { AntigravityAuthHost } from "@lrm/coforge-anvil/antigravity";
 import { withoutSshSessionVariables } from "@lrm/coforge-anvil/antigravity";
+import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { agentEnvironment } from "#src/code-agent/environment";
@@ -29,7 +30,7 @@ export function createAntigravityAuthHost(options: {
       withoutSshSessionVariables({}),
       withoutSshSessionVariables(Bun.env),
       undefined,
-      { envVars: undefined, provider: "antigravity" },
+      { envVars: undefined, provider: RUNTIME_PROVIDER.ANTIGRAVITY },
     ),
     processTreeSpawner: processSpawner,
     clientInfo: { name: "coforge-daemon", version: COFORGE_DAEMON_VERSION },

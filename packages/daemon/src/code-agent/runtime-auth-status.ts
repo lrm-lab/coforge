@@ -12,6 +12,10 @@ const logger = getLogger(["coforge", "daemon", "code-agent", "runtime-auth-statu
 
 /** How long one runtime's status read may take before it reads as unknown. */
 export const RUNTIME_AUTH_STATUS_TIMEOUT_MS = 20_000;
+/** A status read costs one `session/new` + `session/close` on a fresh process: an unforced pass
+ * inside this window reuses the last reported status instead of probing back to back. It covers
+ * every provider, not only Antigravity: only a page open, a login or a logout forces a probe. */
+export const RUNTIME_AUTH_STATUS_THROTTLE_MS = 60_000;
 
 /** Every runtime with an auth-status surface, read together. */
 export type RuntimeAuthCollection = {
@@ -48,13 +52,16 @@ export class RuntimeAuthStatusCollector {
   #next: ReadonlySet<RuntimeAuthProvider> | undefined;
   /** The last collection reported, whose statuses a partial pass leaves alone. */
   #last: RuntimeAuthCollection | undefined;
+  /** When each provider was last actually read — an unforced pass inside this window reuses the
+   * last report's status so a status read's `session/new` never probes back to back. */
+  #readAt = new Map<RuntimeAuthProvider, number>();
 
   constructor(dependencies: RuntimeAuthStatusSources) {
     this.#dependencies = dependencies;
   }
 
-  async refresh(options: { requireReport?: boolean } = {}): Promise<void> {
-    const reported = await this.#enqueue();
+  async refresh(options: { requireReport?: boolean; force?: boolean } = {}): Promise<void> {
+    const reported = await this.#enqueue(undefined, options.force === true);
     if (options.requireReport && !reported) throw new Error("Runtime login status report failed");
   }
 
@@ -65,40 +72,46 @@ export class RuntimeAuthStatusCollector {
    */
   async refreshProvider(
     provider: RuntimeAuthProvider,
-    options: { requireReport?: boolean } = {},
+    options: { requireReport?: boolean; force?: boolean } = {},
   ): Promise<void> {
-    const reported = await this.#enqueue(new Set([provider]));
+    const reported = await this.#enqueue(new Set([provider]), options.force === true);
     if (options.requireReport && !reported) throw new Error("Runtime login status report failed");
   }
 
-  #enqueue(providers?: ReadonlySet<RuntimeAuthProvider>): Promise<boolean> {
+  /** A queued pass inherits any asker's force — one page-open or post-login refresh makes the
+   * queued pass bypass the throttle for every provider it covers. */
+  #nextForce = false;
+  #enqueue(providers?: ReadonlySet<RuntimeAuthProvider>, force = false): Promise<boolean> {
     if (!this.#running) {
       this.#next = undefined;
-      return this.#start(providers);
+      return this.#start(providers, force);
     }
     // A queued pass keeps the union of what was asked for: a whole one subsumes partial ones.
     this.#next =
       this.#next === undefined || providers === undefined
         ? undefined
         : new Set([...this.#next, ...providers]);
+    this.#nextForce = this.#nextForce || force;
     this.#again ??= this.#running.then(() => {
       this.#again = undefined;
       const next = this.#next;
+      const nextForce = this.#nextForce;
       this.#next = undefined;
-      return this.#start(next);
+      this.#nextForce = false;
+      return this.#start(next, nextForce);
     });
     return this.#again;
   }
 
-  #start(providers?: ReadonlySet<RuntimeAuthProvider>): Promise<boolean> {
-    const running = this.#collect(providers).finally(() => {
+  #start(providers?: ReadonlySet<RuntimeAuthProvider>, force = false): Promise<boolean> {
+    const running = this.#collect(providers, force).finally(() => {
       if (this.#running === running) this.#running = undefined;
     });
     this.#running = running;
     return running;
   }
 
-  async #collect(providers?: ReadonlySet<RuntimeAuthProvider>): Promise<boolean> {
+  async #collect(providers?: ReadonlySet<RuntimeAuthProvider>, force = false): Promise<boolean> {
     const { installedProviders, report, now = Date.now } = this.#dependencies;
     const installed = new Set(await installedProviders().catch(() => [] as readonly string[]));
     const previous = new Map(this.#last?.runtimes.map((runtime) => [runtime.provider, runtime]));
@@ -106,8 +119,17 @@ export class RuntimeAuthStatusCollector {
       RUNTIME_AUTH_PROVIDERS.map(async (provider) => {
         if (!installed.has(provider))
           return { provider, state: "unavailable", unavailableReason: "not_installed" } as const;
-        const kept = providers && !providers.has(provider) ? previous.get(provider) : undefined;
-        return kept ?? this.#read(provider);
+        if (providers && !providers.has(provider)) {
+          const kept = previous.get(provider);
+          if (kept) return kept;
+        }
+        // Throttle: an unforced pass inside the window reuses the last read's status. A forced
+        // pass — a page open, a login or logout landing — always runs a real probe.
+        const fresh =
+          !force &&
+          this.#last &&
+          now() - (this.#readAt.get(provider) ?? 0) < RUNTIME_AUTH_STATUS_THROTTLE_MS;
+        return fresh ? (previous.get(provider) ?? this.#read(provider)) : this.#read(provider);
       }),
     );
     const collection = { collectedAtMs: now(), runtimes };
@@ -125,6 +147,7 @@ export class RuntimeAuthStatusCollector {
 
   async #read(provider: RuntimeAuthProvider): Promise<RuntimeAuthStatus> {
     const timeoutMs = this.#dependencies.timeoutMs ?? RUNTIME_AUTH_STATUS_TIMEOUT_MS;
+    this.#readAt.set(provider, (this.#dependencies.now ?? Date.now)());
     try {
       const status = await withDeadline(
         this.#dependencies.readStatus(provider),

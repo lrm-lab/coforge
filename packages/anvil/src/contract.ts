@@ -177,7 +177,9 @@ export interface RuntimeAuthAdapter {
     interaction: RuntimeAuthLoginInteraction,
   ): Promise<RuntimeAuthLoginResult>;
   submitCode(options: { operationId: string; code: string }): Promise<void>;
-  cancel(options: { operationId: string }): Promise<void>;
+  /** The daemon's abort signal ends a login; an adapter with a provider-side cancel RPC of its
+   * own may also answer this, and one without leaves it out rather than faking it. */
+  cancel?(options: { operationId: string }): Promise<void>;
   logout(options: {
     workingDirectory: string;
     timeoutMs?: number;
@@ -278,9 +280,13 @@ export class RuntimeStartFailedError extends Error {
  * launch cannot succeed until the login changes. */
 export class RuntimeLoginRequiredError extends Error {
   readonly code = "runtime_login_required";
-  constructor(message: string, options?: ErrorOptions) {
+  /** A runtime that knows where its own sign-in lives says it here — the Activity sentence shows
+   * this instead of the generic "log in there" when set. */
+  readonly detailHint?: string;
+  constructor(message: string, options?: ErrorOptions & { detailHint?: string }) {
     super(message, options);
     this.name = "RuntimeLoginRequiredError";
+    this.detailHint = options?.detailHint;
   }
 }
 

@@ -20,6 +20,18 @@ const STDERR_TAIL_LINES = 40;
  * replaced with a fresh one and reported; any other failure surfaces. */
 const ANTIGRAVITY_SESSION_MISSING_CODE = -32002;
 
+/** What a launch or resume says when the server itself has nobody signed in: the sign-in lives on
+ * the Computer page, so the sentence names that page rather than a terminal command. */
+const ANTIGRAVITY_NOT_SIGNED_IN =
+  "Antigravity is not signed in: open the Computer page and choose Log in — a browser opens on " +
+  "that Computer.";
+
+function antigravitySignInRequired(): RuntimeLoginRequiredError {
+  return new RuntimeLoginRequiredError(ANTIGRAVITY_NOT_SIGNED_IN, {
+    detailHint: ANTIGRAVITY_NOT_SIGNED_IN,
+  });
+}
+
 /** Whether the server declares `_meta.antigravity.systemPrompt.append` on `initialize` — the
  * native standing-instructions channel this runtime requires (the launch refuses without it). */
 export function antigravitySystemPromptAppendDeclared(response: InitializeResponse): boolean {
@@ -132,11 +144,7 @@ function antigravitySessionProfile(
           opened = sessionId;
         } catch (error) {
           if (!(error instanceof RequestError)) throw error;
-          if (error.code === ANTIGRAVITY_AUTH_REQUIRED_CODE)
-            throw new RuntimeLoginRequiredError(
-              "Antigravity is not signed in: open the Computer page and choose Log in — a " +
-                "browser opens on that Computer.",
-            );
+          if (error.code === ANTIGRAVITY_AUTH_REQUIRED_CODE) throw antigravitySignInRequired();
           if (error.code !== ANTIGRAVITY_SESSION_MISSING_CODE) throw error;
           replaced = sessionId;
         }
@@ -153,10 +161,7 @@ function antigravitySessionProfile(
           // `-32000 Authentication required`: the server has its own credentials — the person
           // signs in from the Computer page, not by running `agy` on a terminal.
           if (error instanceof RequestError && error.code === ANTIGRAVITY_AUTH_REQUIRED_CODE)
-            throw new RuntimeLoginRequiredError(
-              "Antigravity is not signed in: open the Computer page and choose Log in — a " +
-                "browser opens on that Computer.",
-            );
+            throw antigravitySignInRequired();
           throw error;
         }
         opened = nonEmptyString(asRecord(state)?.sessionId);

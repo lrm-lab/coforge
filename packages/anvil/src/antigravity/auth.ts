@@ -1,5 +1,8 @@
 import { RequestError } from "@agentclientprotocol/sdk";
-import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
+import {
+  RUNTIME_AUTH_INFO_ANTIGRAVITY_BROWSER_LOGIN,
+  RUNTIME_PROVIDER,
+} from "@lrm/coforge-sdk/internal";
 import { acpBounded, acpProcess } from "#src/acp/connection";
 import type { ProcessTreeSpawner } from "#src/process-tree";
 import {
@@ -48,22 +51,13 @@ export interface AntigravityAuthHost {
 /** One `agy acp` transport for an auth exchange — spawned for the call, dropped afterward. */
 export class AntigravityRuntimeAuthAdapter implements RuntimeAuthAdapter {
   readonly provider = RUNTIME_PROVIDER.ANTIGRAVITY;
-  /** A status read costs a fresh `session/new` + `session/close` — every inventory report, page
-   * open, login and logout probes it, so a 60-second cache keeps the server out of the path. */
-  #statusCache: { at: number; status: RuntimeAuthStatus } | undefined;
   constructor(private readonly host: AntigravityAuthHost) {}
 
-  async readStatus(
-    options: { workingDirectory: string; timeoutMs?: number },
-    forceRefresh = false,
-  ): Promise<RuntimeAuthStatus> {
-    if (!forceRefresh && this.#statusCache && Date.now() - this.#statusCache.at < 60_000)
-      return this.#statusCache.status;
-    const status = await this.#withProcess(options.workingDirectory, (transport) =>
-      this.#loggedIn(transport),
-    );
-    this.#statusCache = { at: Date.now(), status };
-    return status;
+  async readStatus(options: {
+    workingDirectory: string;
+    timeoutMs?: number;
+  }): Promise<RuntimeAuthStatus> {
+    return this.#withProcess(options.workingDirectory, (transport) => this.#loggedIn(transport));
   }
 
   async startLogin(
@@ -88,7 +82,7 @@ export class AntigravityRuntimeAuthAdapter implements RuntimeAuthAdapter {
         detail: `Antigravity login supports ${SUPPORTED_METHODS.join(" and ")}.`,
       };
     const timeoutMs = options.timeoutMs ?? ANTIGRAVITY_AUTH_TIMEOUT_MS;
-    interaction.onEvent({ kind: "info", message: "A browser opens on this Computer." });
+    interaction.onEvent({ kind: "info", message: RUNTIME_AUTH_INFO_ANTIGRAVITY_BROWSER_LOGIN });
     const transport = acpProcess(ANTIGRAVITY_ACP_PROFILE, {
       command: this.host.command,
       cwd: options.workingDirectory,
@@ -109,10 +103,7 @@ export class AntigravityRuntimeAuthAdapter implements RuntimeAuthAdapter {
         timeoutMs,
         "agy acp authenticate timed out",
       );
-      const authStatus = await this.readStatus(
-        { workingDirectory: options.workingDirectory },
-        true,
-      );
+      const authStatus = await this.readStatus({ workingDirectory: options.workingDirectory });
       if (authStatus.state === "logged_in") return { status: "logged_in", authStatus };
       return {
         status: "failed",
@@ -139,10 +130,6 @@ export class AntigravityRuntimeAuthAdapter implements RuntimeAuthAdapter {
 
   async submitCode(): Promise<void> {
     // `authenticate` is a browser flow — no code ever rides back to paste.
-  }
-
-  async cancel(): Promise<void> {
-    // The daemon's abort signal is the cancel path — there is no provider-side cancel RPC.
   }
 
   async logout(options: {
@@ -205,10 +192,12 @@ export class AntigravityRuntimeAuthAdapter implements RuntimeAuthAdapter {
         return loggedOut;
       return { provider: RUNTIME_PROVIDER.ANTIGRAVITY, state: "unknown" };
     } finally {
-      if (probed) {
-        await transport.connection.agent
-          .request("session/close", { sessionId: probed })
-          .catch(() => undefined);
+      if (probed && !transport.closed) {
+        await acpBounded(
+          transport.connection.agent.request("session/close", { sessionId: probed }),
+          ANTIGRAVITY_AUTH_PROBE_TIMEOUT_MS,
+          "agy acp session/close timed out",
+        ).catch(() => undefined);
       }
     }
   }

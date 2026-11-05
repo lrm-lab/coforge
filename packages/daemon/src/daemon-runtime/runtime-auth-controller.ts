@@ -28,10 +28,10 @@ type Ports = {
   createAdapter(provider: RuntimeAuthProvider): RuntimeAuthAdapter;
   reportLogin(report: RuntimeAuthLoginReport): Promise<void>;
   reportLogout(report: RuntimeAuthLogoutReport): Promise<void>;
-  refresh(): Promise<void>;
+  refresh(options?: { force?: boolean }): Promise<void>;
   /** Re-reads one runtime's login status and reports it; a host that can only read them all
    * refreshes them all instead. */
-  refreshProvider?(provider: RuntimeAuthProvider): Promise<void>;
+  refreshProvider?(provider: RuntimeAuthProvider, options?: { force?: boolean }): Promise<void>;
   now?: () => number;
 };
 type Login = {
@@ -107,7 +107,10 @@ export class RuntimeAuthController {
     if (intent.kind === "status_read") {
       // A page opened the runtime: read it again, since nothing tells the daemon about a sign-in
       // or sign-out done on the Computer itself.
-      await (this.ports.refreshProvider ?? (() => this.ports.refresh()))(intent.provider);
+      // A status read is always a real probe — the page asking for it expects fresh truth.
+      await (this.ports.refreshProvider ?? (() => this.ports.refresh()))(intent.provider, {
+        force: true,
+      });
       return;
     }
     if (intent.kind === "logout") {
@@ -193,7 +196,7 @@ export class RuntimeAuthController {
         });
       });
     if (this.#stopped) return;
-    await this.ports.refresh().catch(() => {
+    await this.ports.refresh({ force: true }).catch(() => {
       logger.warning("Runtime authentication status refresh failed", {
         event: "runtime_auth:refresh_failed",
       });
@@ -337,7 +340,7 @@ export class RuntimeAuthController {
       }
       await login.reports;
       if (this.#stopped) return;
-      await this.ports.refresh().catch(() => {
+      await this.ports.refresh({ force: true }).catch(() => {
         logger.warning("Runtime authentication status refresh failed", {
           event: "runtime_auth:refresh_failed",
         });

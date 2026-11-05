@@ -40,6 +40,8 @@ export const RUNTIME_AUTH_FAILURE_DETAIL_CODES = [
   "antigravity_no_desktop",
 ] as const;
 export type RuntimeAuthFailureDetailCode = (typeof RUNTIME_AUTH_FAILURE_DETAIL_CODES)[number];
+/** A login `info` event that carries a token instead of prose: the Computer page words it. */
+export const RUNTIME_AUTH_INFO_ANTIGRAVITY_BROWSER_LOGIN = "antigravity_browser_login";
 export function isRuntimeAuthFailureDetailCode(
   value: unknown,
 ): value is RuntimeAuthFailureDetailCode {

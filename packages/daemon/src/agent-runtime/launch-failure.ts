@@ -4,7 +4,11 @@ import {
   thrownMessage,
   truncateCodePoints,
 } from "@lrm/coforge-sdk/internal";
-import { RuntimeModelNotFoundError, RuntimeStartFailedError } from "@lrm/coforge-anvil";
+import {
+  RuntimeLoginRequiredError,
+  RuntimeModelNotFoundError,
+  RuntimeStartFailedError,
+} from "@lrm/coforge-anvil";
 import { fingerprintRuntimeError } from "./runtime-error-activity";
 import {
   AgentConfigRequestError,
@@ -310,9 +314,10 @@ function launchFailureDetail(
     }
     case LAUNCH_FAILURE_REASON.RUNTIME_LOGIN_REQUIRED: {
       // A runtime that knows where its own sign-in lives names it — Antigravity's is the
-      // Computer page, so its `RuntimeLoginRequiredError` message says exactly that.
-      const message = error instanceof Error ? error.message.trim() : "";
-      if (message) return message;
+      // Computer page. A bare provider message (Kiro's "not logged in") keeps the generic
+      // sentence, which alone carries the next step.
+      const hint = error instanceof RuntimeLoginRequiredError ? error.detailHint : undefined;
+      if (hint) return hint;
       return (
         `${runtimeName} needs you to log in on this Computer before it can start. Log in to ` +
         `${runtimeName} there, then start the Agent again.`

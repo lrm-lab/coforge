@@ -204,8 +204,9 @@ export class RuntimeStartup {
         },
         workingDirectory: connection.workspaceRoot,
         createAdapter: ports.runtimeAuthFactory,
-        refresh: () => ports.runtimeAuth.refresh(),
-        refreshProvider: (provider) => ports.runtimeAuth.refreshProvider(provider),
+        refresh: (options) => ports.runtimeAuth.refresh(options),
+        refreshProvider: (provider, options) =>
+          ports.runtimeAuth.refreshProvider(provider, options),
       });
       this.#authControl = auth?.controller;
       this.#subscribe(auth?.unsubscribe);

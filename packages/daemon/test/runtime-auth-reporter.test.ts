@@ -186,7 +186,7 @@ test("reuses an adapter across refreshes so its account lookup cache survives", 
   });
 
   await reporter.inventoryReported([runtime("command-code")] as RuntimeMetadata[]);
-  await reporter.refresh();
+  await reporter.refresh({ force: true });
   expect(sent).toHaveLength(2);
   expect(adapterCreations).toBe(1);
   expect(whoamiCalls).toBe(1);
@@ -210,6 +210,9 @@ test("recreates adapters when a new inventory is observed", async () => {
 
   await reporter.inventoryReported([runtime("command-code")] as RuntimeMetadata[]);
   await reporter.inventoryObserved([runtime("command-code")] as RuntimeMetadata[]);
+  // The minute's throttle keeps the re-discovery from probing twice; the next real read builds
+  // its adapter from the new inventory rather than reusing the old one.
+  await reporter.refreshProvider("command-code", { force: true });
   expect(adapterCreations).toBe(2);
 });
 
