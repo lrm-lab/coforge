@@ -151,10 +151,16 @@ export async function subscribeAcrossReconnects(
   onMessage: (message: string) => void,
   onGap: () => void,
 ) {
+  let initialConnection = true;
   // Set first, so a connection replaced while subscribing is renewed too. Bun keeps the listener;
   // only the connection must be told the channel again.
   client.onconnect = () => {
+    if (initialConnection) {
+      initialConnection = false;
+      return;
+    }
     client.send("SUBSCRIBE", [channel]).then(onGap, () => {});
   };
   await client.subscribe(channel, onMessage);
+  initialConnection = false;
 }

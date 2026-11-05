@@ -34,6 +34,7 @@ export class LocalCacheInvalidation implements CacheInvalidation {
 /** Cross-instance invalidation: the write may land on a different web instance. */
 export class RedisCacheInvalidation extends LocalCacheInvalidation implements CacheInvalidation {
   private subscription: Promise<void> | undefined;
+  private readonly locallyPublished = new Set<string>();
 
   constructor(
     private readonly channel: string,
@@ -46,7 +47,8 @@ export class RedisCacheInvalidation extends LocalCacheInvalidation implements Ca
   override notify(key: string) {
     this.forget(key);
     // Never block the write on Redis; other instances fall back to their TTL.
-    this.publisher.publish(this.channel, key).catch(() => {});
+    this.locallyPublished.add(key);
+    this.publisher.publish(this.channel, key).catch(() => this.locallyPublished.delete(key));
   }
 
   override forgetWith(forget: (key?: string) => void) {
@@ -59,7 +61,10 @@ export class RedisCacheInvalidation extends LocalCacheInvalidation implements Ca
     this.subscription ??= subscribeAcrossReconnects(
       this.subscriber(),
       this.channel,
-      (message) => this.forget(message),
+      (message) => {
+        if (this.locallyPublished.delete(message)) return;
+        this.forget(message);
+      },
       () => this.forget(),
     ).then(
       () => {},
