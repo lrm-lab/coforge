@@ -188,11 +188,7 @@ test("the add view creates an Agent named by the search, and it joins the channe
     expect(await evaluate<boolean>(panelHas(`Create Agent “`))).toBe(false);
     await clickText(`[role="dialog"] button`, "Create Agent");
     await waitFor(`${agentForm} !== undefined`);
-    await browser(
-      "fill",
-      '[role="dialog"]:has(input[name="name"]) input[name="name"]',
-      agentName,
-    );
+    await browser("fill", '[role="dialog"]:has(input[name="name"]) input[name="name"]', agentName);
     await chooseClaudeCode();
     await clickText(`[role="dialog"] button`, "Create Agent");
     await waitFor(`${agentForm}?.querySelector('[role="alert"]')?.textContent.trim().length > 0`);
