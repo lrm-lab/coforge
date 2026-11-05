@@ -31,10 +31,11 @@ import {
   ArtifactPageHeader,
   useHomeName,
   type ArtifactHome,
+  type ArtifactPaneControls,
 } from "./artifact-page-header";
 import { ACCESS_ICON, ArtifactShareDialog } from "./artifact-share-dialog";
 import { ArtifactPaneConfirms, type ArtifactConfirming } from "./artifact-pane-confirms";
-import { actorName, isWebPage } from "./artifact-parts";
+import { actorName, isWebPage, PaneFrame } from "./artifact-parts";
 import {
   artifactDocumentQuery,
   artifactHomeConversation,
@@ -48,32 +49,48 @@ import { useArtifactEditor } from "./use-artifact-editor";
 
 const workspaceRoute = getRouteApi("/w/$workspaceSlug");
 
+/** Where an artifact shows: on its own page, or beside its conversation's chat (Frank, 11-05),
+ * which keeps the version and history on its own address and closes rather than goes back. */
+type ArtifactPlace = {
+  pane?: ArtifactPaneControls & { onNavigate: (patch: ArtifactPageSearch) => void };
+};
+
 /**
- * An artifact's own page (task #514; before it, the pane beside the chat of task #385): its
- * header, a document's latest version to edit (or an older one to read) or a web page to look at,
- * what others published meanwhile, a save's conflicts, and its versions beside it. The address
- * keeps which version and whether the versions show (`ArtifactPageSearch`).
+ * An artifact's own page (task #514), or the pane beside its conversation's chat (Frank, 11-05,
+ * as Claude opens an artifact beside the conversation): its header, a document's latest version
+ * to edit (or an older one to read) or a web page to look at, what others published meanwhile, a
+ * save's conflicts, and its versions beside it. The address keeps which version and whether the
+ * versions show (`ArtifactPageSearch`).
  */
 export function ArtifactPage({
   artifactId,
   search,
+  pane,
 }: {
   artifactId: string;
   search: ArtifactPageSearch;
-}) {
+} & ArtifactPlace) {
   // An address that names no artifact at all is not there: no read could find one.
-  if (!z.uuid().safeParse(artifactId).success) return <ArtifactUnavailable gone />;
+  if (!z.uuid().safeParse(artifactId).success)
+    return pane ? (
+      <PaneFrame full={pane.full}>
+        <ArtifactUnavailable gone />
+      </PaneFrame>
+    ) : (
+      <ArtifactUnavailable gone />
+    );
   // Another artifact's page starts its editing anew.
-  return <ArtifactPageFor key={artifactId} artifactId={artifactId} search={search} />;
+  return <ArtifactPageFor key={artifactId} artifactId={artifactId} search={search} pane={pane} />;
 }
 
 function ArtifactPageFor({
   artifactId,
   search,
+  pane,
 }: {
   artifactId: string;
   search: ArtifactPageSearch;
-}) {
+} & ArtifactPlace) {
   const queryClient = useQueryClient();
   const toast = useAppToast();
   const router = useRouter();
@@ -86,15 +103,19 @@ function ArtifactPageFor({
   const [sharing, setSharing] = useState(false);
   /** Set once the artifact is gone, so leaving its page asks nothing. */
   const deleted = useRef(false);
-  const navigate = (patch: ArtifactPageSearch) =>
-    void router.navigate({
-      ...artifactPageRoute(workspaceSlug, artifactId),
-      search: (previous: ArtifactPageSearch) => ({ ...previous, ...patch }),
-      replace: true,
-    });
+  const navigate =
+    pane?.onNavigate ??
+    ((patch: ArtifactPageSearch) =>
+      void router.navigate({
+        ...artifactPageRoute(workspaceSlug, artifactId),
+        search: (previous: ArtifactPageSearch) => ({ ...previous, ...patch }),
+        replace: true,
+      }));
   const leavePrompt = useArtifactLeaveGuard({
     dirty: () => editor.dirty && !deleted.current,
-    stays: (next) => next.pathname === router.state.location.pathname,
+    // Beside the chat, the edits stay while this artifact stays open, wherever the chat goes.
+    stays: (next) =>
+      pane ? next.search.doc === artifactId : next.pathname === router.state.location.pathname,
   });
   const old = search.version;
   const current = editor.document.data;
@@ -116,7 +137,8 @@ function ArtifactPageFor({
   // Narrowed past the viewer: their page is not theirs any more; back to the Workspace, saying so.
   const access = useArtifactAccess(artifactId, current?.artifact, async () => {
     deleted.current = true;
-    await router.navigate({ to: "/w/$workspaceSlug", params: { workspaceSlug } });
+    if (pane) pane.onClose();
+    else await router.navigate({ to: "/w/$workspaceSlug", params: { workspaceSlug } });
     toast.success(m.doc_share_locked_out({ title }));
   });
   useRealtimeSubscription({
@@ -140,17 +162,22 @@ function ArtifactPageFor({
   // Gone or not the viewer's (the server says so), or never read: the page is not there. A read
   // that failed once the artifact showed keeps it, and its unsaved edits, with a way to try again.
   const failure = editor.document.error;
-  if (isGone(failure) || (failure && !current))
+  if (isGone(failure) || (failure && !current)) {
+    const unavailable = (
+      <ArtifactUnavailable
+        gone={isGone(failure)}
+        retrying={editor.document.isFetching}
+        onRetry={() => void editor.document.refetch()}
+        onClose={pane?.onClose}
+      />
+    );
     return (
       <>
-        <ArtifactUnavailable
-          gone={isGone(failure)}
-          retrying={editor.document.isFetching}
-          onRetry={() => void editor.document.refetch()}
-        />
+        {pane ? <PaneFrame full={pane.full}>{unavailable}</PaneFrame> : unavailable}
         {leavePrompt}
       </>
     );
+  }
   const kind = current?.artifact.kind;
   const webPage = kind !== undefined && isWebPage(kind);
   const title = editor.title || current?.artifact.title || m.doc_untitled();
@@ -161,7 +188,8 @@ function ArtifactPageFor({
   const pageHref = () =>
     `${window.location.origin}${router.buildLocation(artifactPageRoute(workspaceSlug, artifactId)).publicHref}`;
   const backHome = () => {
-    if (home?.conversationId && home.kind !== "workspace")
+    if (pane) pane.onClose();
+    else if (home?.conversationId && home.kind !== "workspace")
       void router.navigate(
         conversationRoute(
           home.kind === "channel"
@@ -172,12 +200,8 @@ function ArtifactPageFor({
       );
     else void router.navigate({ to: "/w/$workspaceSlug", params: { workspaceSlug } });
   };
-  return (
-    <main
-      aria-labelledby={current ? ARTIFACT_TITLE_ID : undefined}
-      aria-label={current ? undefined : m.doc_pane_label()}
-      className="@container/doc flex h-full min-h-0 min-w-0 flex-1 flex-col bg-primary"
-    >
+  const body = (
+    <>
       <ArtifactPageHeader
         kind={kind}
         title={title}
@@ -201,6 +225,7 @@ function ArtifactPageFor({
             : undefined
         }
         onDelete={() => setConfirming("delete")}
+        pane={pane}
       />
       {failure && (
         <ArtifactBanner
@@ -353,6 +378,17 @@ function ArtifactPageFor({
           navigate({ version: undefined });
         }}
       />
+    </>
+  );
+  return pane ? (
+    <PaneFrame full={pane.full}>{body}</PaneFrame>
+  ) : (
+    <main
+      aria-labelledby={current ? ARTIFACT_TITLE_ID : undefined}
+      aria-label={current ? undefined : m.doc_pane_label()}
+      className="@container/doc flex h-full min-h-0 min-w-0 flex-1 flex-col bg-primary"
+    >
+      {body}
     </main>
   );
 }
@@ -400,18 +436,23 @@ function ArtifactUnavailable({
   gone,
   retrying = false,
   onRetry,
+  onClose,
 }: {
   gone: boolean;
   retrying?: boolean;
   onRetry?: () => void;
+  /** Beside the chat: the way out closes the pane rather than leaving the conversation. */
+  onClose?: () => void;
 }) {
   const workspaceSlug = useWorkspaceSlug();
   const router = useRouter();
+  const Root = onClose ? "div" : "main";
+  const Title = onClose ? "h2" : "h1";
   return (
-    <main className="flex h-full min-w-0 flex-1 flex-col items-center justify-center gap-3 bg-primary px-6 text-center">
-      <h1 className="text-md font-semibold text-primary">
+    <Root className="flex h-full min-w-0 flex-1 flex-col items-center justify-center gap-3 bg-primary px-6 text-center">
+      <Title className="text-md font-semibold text-primary">
         {gone ? m.doc_unavailable_title() : m.doc_load_failed_title()}
-      </h1>
+      </Title>
       <p className="max-w-sm text-sm text-tertiary">
         {gone ? m.doc_load_failed() : m.doc_load_failed_retry()}
       </p>
@@ -430,13 +471,14 @@ function ArtifactUnavailable({
         <Button
           size="sm"
           color="link-gray"
-          onClick={() =>
-            void router.navigate({ to: "/w/$workspaceSlug", params: { workspaceSlug } })
+          onClick={
+            onClose ??
+            (() => void router.navigate({ to: "/w/$workspaceSlug", params: { workspaceSlug } }))
           }
         >
-          {m.doc_back_to_workspace()}
+          {onClose ? m.doc_close() : m.doc_back_to_workspace()}
         </Button>
       </div>
-    </main>
+    </Root>
   );
 }

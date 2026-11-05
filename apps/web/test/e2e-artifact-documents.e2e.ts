@@ -11,11 +11,11 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
 
 /**
  * Documents in a conversation (task #385, the first batch; #514, their own page): a message
- * linking a document shows its card (title, first two lines); the card opens the document's own
- * page, to edit and save as a new version; a save over a version someone else changed the same
+ * linking a document shows its card (title, first two lines); the card opens the document beside
+ * the chat (Frank, 11-05), to edit and save as a new version; a save over a version someone else changed the same
  * paragraph of asks which side to keep; an older version reads with "Back to latest" and goes back
  * as a new version; unsaved edits survive reading an older version and merge with a version
- * someone else saved; leaving with them asks; a `?doc=` link opens the page; the Files tab lists
+ * someone else saved; closing with them asks; a `?doc=` link opens it beside the chat; the Files tab lists
  * the channel's documents, and New document is created only on its first save. Desktop and phone,
  * light and dark.
  *
@@ -85,7 +85,7 @@ test("a document opens from its card, saves versions, resolves a conflict and go
     await browser("screenshot", join(artifacts, `${shot}-dark.png`));
     await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
   };
-  // The artifact's own page, or a new document's pane beside the chat.
+  // The artifact beside the chat, saved or new.
   const pane = `(document.querySelector("main[aria-labelledby]") ?? document.querySelector('section[aria-label="Document"]'))`;
   const inPane = (text: string) => `(${pane}?.textContent ?? "").includes(${JSON.stringify(text)})`;
   const button = (text: string, within = "document") =>
@@ -168,10 +168,14 @@ test("a document opens from its card, saves versions, resolves a conflict and go
     ).toBe(true);
     await shoot("desktop-1-card");
 
-    // Open: its own page, editable; a save is a new version.
+    // Open: beside the chat, which stays; editable; a save is a new version.
     await click(`${card}.querySelector("a")`);
     await browser("wait", "--fn", `${pane}?.querySelector(".ProseMirror") != null`);
-    expect(await evaluate<string>("location.pathname")).toEndWith(`/artifacts/${doc.id}`);
+    expect(await evaluate<string>("location.pathname")).toEndWith(`/channel/${channel.id}`);
+    expect(await evaluate<string | null>(`new URLSearchParams(location.search).get("doc")`)).toBe(
+      doc.id,
+    );
+    expect(await evaluate<boolean>(`${card} !== null && ${card}.checkVisibility()`)).toBe(true);
     // Opening is no edit: the pane reads as saved until something is typed.
     await browser("wait", "--fn", inPane("Saved · version 1"));
     await editorEnd();
@@ -310,8 +314,8 @@ test("a document opens from its card, saves versions, resolves a conflict and go
     await browser("wait", "--fn", inPane("Unsaved changes"));
     const dialogButton = (text: string) =>
       `[...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent.trim() === ${JSON.stringify(text)})`;
-    // Back to the channel, from the page's header.
-    const back = `${pane}.querySelector("header a")`;
+    // Closed from its header.
+    const back = `${pane}.querySelector('header button[aria-label="Close"]')`;
     await click(back);
     await browser("wait", "--fn", `${dialogButton("Keep Editing")} != null`);
     await click(dialogButton("Keep Editing"));
@@ -322,9 +326,10 @@ test("a document opens from its card, saves versions, resolves a conflict and go
     await click(dialogButton("Discard Changes"));
     await browser("wait", "--fn", `${pane} == null`);
 
-    // A link from before the page (`?doc=`) opens the page.
+    // A `?doc=` link opens the document beside the chat.
     await browser("open", `${page}?doc=${notes.id}`);
-    await browser("wait", "--fn", `location.pathname.endsWith("/artifacts/${notes.id}")`);
+    await browser("wait", "--fn", `${pageHydrated} && ${inPane("Weekly sync notes")}`);
+    expect(await evaluate<string>("location.pathname")).toEndWith(`/channel/${channel.id}`);
 
     // The Files tab: the channel's documents, newest first, and New document.
     await browser("open", `${page}?view=files`);
@@ -357,12 +362,17 @@ test("a document opens from its card, saves versions, resolves a conflict and go
     await browser("keyboard", "type", `Copy, images, analytics (run ${tail}).`);
     await click(button("Save", pane));
     await until(async () => (await count()) === documentsBefore + 1);
-    await browser("wait", "--fn", `location.pathname.includes("/artifacts/")`);
-    await browser("wait", "--fn", inPane("Saved · version 1"));
     const draft = await db.artifact.findFirstOrThrow({
       where: { homeKey: `conversation:${channel.id}` },
       orderBy: { createdAt: "desc" },
     });
+    // Saved, it stays beside the chat as the document it now is.
+    await browser(
+      "wait",
+      "--fn",
+      `new URLSearchParams(location.search).get("doc") === "${draft.id}"`,
+    );
+    await browser("wait", "--fn", inPane("Saved · version 1"));
     expect(draft.title).toBe("Launch checklist");
     expect((await documents.load(me, { artifactId: draft.id })).text).toContain("analytics");
 

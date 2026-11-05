@@ -9,12 +9,12 @@ import {
   ConversationFilesPanel,
   conversationFilesQuery,
 } from "#src/features/conversations/conversation-files";
-import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { ArtifactEditedLine, ArtifactIcon, kindLabel, useArtifactTime } from "./artifact-parts";
 import { artifactListQuery, useArtifactActor, type ArtifactCard } from "./artifact-queries";
-import { artifactPageRoute, draftArtifactSearch, useArtifactNavigation } from "./artifact-search";
+import { useArtifactLink } from "./artifact-beside-chat";
+import { draftArtifactSearch, useArtifactNavigation } from "./artifact-search";
 
 type Filter = "all" | "files" | "artifacts";
 
@@ -145,13 +145,13 @@ function ArtifactList({
 }
 
 function ArtifactRow({ card }: { card: ArtifactCard }) {
-  const workspaceSlug = useWorkspaceSlug();
+  const linkTo = useArtifactLink();
   const actorOf = useArtifactActor();
   const time = useArtifactTime();
   return (
     <li>
       <Link
-        {...artifactPageRoute(workspaceSlug, card.id)}
+        {...linkTo(card.id)}
         className="flex w-full min-w-0 items-center gap-3 rounded-xl border border-secondary bg-primary p-3 text-left outline-focus-ring hover:border-primary hover:bg-primary_hover focus-visible:outline-2"
       >
         <ArtifactIcon kind={card.kind} />

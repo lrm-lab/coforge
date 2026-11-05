@@ -1,14 +1,13 @@
 import { redirect, useRouter } from "@tanstack/react-router";
 import { z } from "zod";
 
-import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { loadArtifactsOn } from "./artifacts-on.functions";
 
 /**
- * A document's fields on a conversation page's address (task #385): `docDraft` a new document not
- * saved yet, beside the chat, and `docFull` that draft in full screen. `doc`, `docVersion` and
- * `docHistory` are a link from before an artifact had its own page (task #514), which goes there
- * (`redirectDocLink`). Each falls back to absent when malformed.
+ * An artifact's fields on a conversation page's address (task #385; Frank, 11-05): `doc` the one
+ * open beside the chat, at `docVersion` with its versions shown by `docHistory`; `docDraft` a new
+ * document not saved yet; `docFull` either in full screen. Each falls back to absent when
+ * malformed.
  */
 export const artifactSearchShape = {
   doc: z.uuid().optional().catch(undefined),
@@ -39,6 +38,14 @@ export const draftArtifactSearch: ArtifactSearch = {
   docHistory: undefined,
   docDraft: true,
 };
+
+/** The address of an artifact beside the chat (Frank, 11-05), at its latest version. */
+export const openArtifactSearch = (artifactId: string): ArtifactSearch => ({
+  doc: artifactId,
+  docVersion: undefined,
+  docHistory: undefined,
+  docDraft: undefined,
+});
 
 export const closedArtifactSearch: ArtifactSearch = {
   doc: undefined,
@@ -72,30 +79,24 @@ export const artifactPageRoute = (
     search,
   }) as const;
 
-/** Opens an artifact's own page, from a card, a row, or a draft's first save. */
-export function useOpenArtifactPage() {
-  const router = useRouter();
-  const workspaceSlug = useWorkspaceSlug();
-  return (artifactId: string, options: { replace?: boolean } = {}) =>
-    void router.navigate({ ...artifactPageRoute(workspaceSlug, artifactId), ...options });
-}
-
 /** The fields of a `?doc=` link, which a conversation page drops when it opens without it. */
 const DOC_LINK_FIELDS = ["doc", "docVersion", "docHistory", "docFull"] as const;
 
 /**
- * A conversation page's `?doc=` link from before an artifact had its own page (task #385), for a
- * route's `beforeLoad` (a channel, a DM, Activity): it goes to that page before the conversation
- * loads, whether or not the reader may read the conversation, and the artifact's page decides what
- * they see. Where artifacts are off it opens the conversation as it did, without the document.
+ * A `?doc=` link, for its route's `beforeLoad`. A channel or DM opens it beside its chat
+ * (`besideChat`, Frank, 11-05); where no chat is beside it (Activity) it goes to the artifact's
+ * own page (task #514), which decides what the reader sees. Where artifacts are off it opens the
+ * page as it did, without the document.
  */
 export async function redirectDocLink(
   workspaceSlug: string,
   search: ArtifactSearch,
   location: { href: string },
+  { besideChat = false } = {},
 ) {
   if (search.doc === undefined) return;
-  if ((await loadArtifactsOn()).on)
+  if ((await loadArtifactsOn()).on) {
+    if (besideChat) return;
     throw redirect({
       ...artifactPageRoute(workspaceSlug, search.doc, {
         version: search.docVersion,
@@ -103,6 +104,7 @@ export async function redirectDocLink(
       }),
       replace: true,
     });
+  }
   const url = new URL(location.href, "http://local");
   for (const field of DOC_LINK_FIELDS) url.searchParams.delete(field);
   throw redirect({ href: `${url.pathname}${url.search}${url.hash}`, replace: true });

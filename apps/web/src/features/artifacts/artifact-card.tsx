@@ -3,12 +3,11 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 
 import { Link } from "@tanstack/react-router";
 
-import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { m } from "#src/paraglide/messages";
 import { artifactIdsInBody, bodyWithArtifactTitles } from "./artifact-link";
 import { ArtifactEditedLine, ArtifactIcon, kindLabel, useArtifactTime } from "./artifact-parts";
 import { artifactCardQuery, useArtifactActor, useArtifactsOn } from "./artifact-queries";
-import { artifactPageRoute } from "./artifact-search";
+import { useArtifactLink } from "./artifact-beside-chat";
 
 /**
  * The cards of the artifacts a message links to (task #385, #514): each its kind, title, first
@@ -50,7 +49,7 @@ function ArtifactCardView({ artifactId }: { artifactId: string }) {
   const { data: card } = useQuery(artifactCardQuery(artifactId));
   const actorOf = useArtifactActor();
   const time = useArtifactTime();
-  const workspaceSlug = useWorkspaceSlug();
+  const linkTo = useArtifactLink();
   if (!card) return null;
   const title = card.title || m.doc_untitled();
   const kind = kindLabel(card.kind);
@@ -64,7 +63,7 @@ function ArtifactCardView({ artifactId }: { artifactId: string }) {
         <p className="flex min-w-0 items-baseline gap-2">
           {/* The title is the card's one way in; its hit area covers the whole card. */}
           <Link
-            {...artifactPageRoute(workspaceSlug, card.id)}
+            {...linkTo(card.id)}
             // The message row opens its actions on a click; this click is the card's alone.
             onClick={(event) => event.stopPropagation()}
             className="min-w-0 truncate text-left text-sm font-semibold text-primary outline-none before:absolute before:inset-0 before:rounded-xl"

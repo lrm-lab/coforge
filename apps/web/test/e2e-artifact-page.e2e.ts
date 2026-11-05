@@ -18,7 +18,7 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
  * the sandbox's link (and a link that cannot be had, said so), a new version an Agent saves while
  * the page shows (Share is `e2e-artifact-share`); one page for an artifact that is not there and
  * one that is not the reader's;
- * a `?doc=` link with a version opening the page at it; and a read that fails while edits are
+ * a `?doc=` link opening it beside the chat (Frank, 11-05), at its version; and a read that fails while edits are
  * unsaved keeping the editor and the edits, with Try again.
  *
  * Opt-in like the other browser E2Es: real local Web started with the flag file that offers
@@ -264,7 +264,36 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     expect(await evaluate<string>("location.search")).not.toContain("doc");
     await experiments.write(workspaceId, "artifacts", true);
 
-    // A link from before the page, with a version: the page at that version.
+    // A web page beside the chat: the Agent's message with its card, and the page itself.
+    const chat = `${origin}/en/w/${workspace.slug}/channel/${channel.id}`;
+    const sender = await db.conversationMember.findFirstOrThrow({
+      where: { conversationId: channel.id, agentId: agent.id },
+    });
+    await db.message.create({
+      data: {
+        workspaceId,
+        conversationId: channel.id,
+        sequence: 1,
+        senderMemberId: sender.id,
+        body: `The signup funnel is up: ${chat}?doc=${web.id}`,
+      },
+    });
+    await browser("open", `${chat}?doc=${web.id}`);
+    await browser(
+      "wait",
+      "--fn",
+      `${pageHydrated} && document.querySelector('section[aria-label="Document"] iframe') != null && document.querySelector('article[aria-label="Web page: Signup funnel"]') != null`,
+    );
+    await shoot("7-web-beside-chat");
+    await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
+    await shoot("7-web-beside-chat-dark");
+    await browser("set", "viewport", "390", "844");
+    await shoot("7-web-beside-chat-phone-dark");
+    await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
+    await shoot("7-web-beside-chat-phone");
+    await browser("set", "viewport", "1280", "860");
+
+    // A link with a version: beside the chat at that version, its versions shown.
     const doc = await documents.create(bot, {
       conversationId: channel.id,
       title: "Launch plan",
@@ -280,11 +309,13 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
       "open",
       `${origin}/en/w/${workspace.slug}/channel/${channel.id}?doc=${doc.id}&docVersion=1&docHistory=true`,
     );
-    await browser("wait", "--fn", `location.pathname.endsWith("/artifacts/${doc.id}")`);
-    const params = await evaluate<string>("location.search");
-    expect(new URLSearchParams(params).get("version")).toBe("1");
-    expect(new URLSearchParams(params).get("history")).toBe("true");
     await browser("wait", "--fn", `${pageHydrated} && ${text("Viewing version 1")}`);
+    expect(await evaluate<string>("location.pathname")).toEndWith(`/channel/${channel.id}`);
+    expect(
+      await evaluate<boolean>(
+        `document.querySelector('section[aria-label="Document"] nav') != null`,
+      ),
+    ).toBe(true);
 
     // A read that fails while edits are unsaved: the editor and the edits stay, with Try again.
     await browser("open", pageOf(doc.id));

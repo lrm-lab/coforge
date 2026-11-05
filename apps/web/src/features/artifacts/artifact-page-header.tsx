@@ -6,7 +6,10 @@ import {
   DotsHorizontal,
   LinkExternal01,
   Link01,
+  Maximize01,
+  Minimize01,
   Trash01,
+  XClose,
 } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
@@ -25,12 +28,17 @@ import { ArtifactIcon } from "./artifact-parts";
 /** The page's title, which names its `main`. */
 export const ARTIFACT_TITLE_ID = "artifact-page-title";
 
+/** An artifact beside its conversation's chat (Frank, 11-05): full screen and close in place of
+ * the way back, as the chat is right there. */
+export type ArtifactPaneControls = { full: boolean; onToggleFull: () => void; onClose: () => void };
+
 /** Where an artifact lives, as its page's way back names it. */
 export type ArtifactHome = { kind: "channel" | "dm" | "workspace"; conversationId: string | null };
 
 /**
  * An artifact's page's header (task #514): the way back to its conversation, its kind, title and
  * state, then its versions and more (copy link, open a web page in a tab of its own, delete).
+ * Beside the chat it has no way back, and ends with full screen and close (`pane`).
  */
 export function ArtifactPageHeader({
   kind,
@@ -46,6 +54,7 @@ export function ArtifactPageHeader({
   onCopyLink,
   onOpenInTab,
   onDelete,
+  pane,
 }: {
   /** Undefined until the artifact is read: the header holds its place. */
   kind: string | undefined;
@@ -56,40 +65,65 @@ export function ArtifactPageHeader({
   history: boolean;
   canDelete: boolean;
   /** The artifact's access level's icon on the Share button. */
-  shareIcon: typeof ArrowLeft;
+  shareIcon?: typeof ArrowLeft;
   /** Absent until the artifact is read. */
   onShare?: () => void;
   onToggleHistory?: () => void;
   onCopyLink?: () => void;
   onOpenInTab?: () => void;
   onDelete?: () => void;
+  pane?: ArtifactPaneControls;
 }) {
+  const Title = pane ? "h2" : "h1";
   return (
-    <header className="flex h-14 shrink-0 items-center gap-2 border-b border-secondary px-3 sm:px-4">
-      <BackToHome home={home} />
-      <span aria-hidden="true" className="h-5 w-px shrink-0 bg-border-secondary max-sm:hidden" />
+    <header
+      className={cn(
+        "flex h-14 shrink-0 items-center gap-2 border-b border-secondary",
+        pane ? "pr-2 pl-4" : "px-3 sm:px-4",
+      )}
+    >
+      {!pane && (
+        <>
+          <BackToHome home={home} />
+          <span
+            aria-hidden="true"
+            className="h-5 w-px shrink-0 bg-border-secondary max-sm:hidden"
+          />
+        </>
+      )}
       {kind === undefined ? (
         <Skeleton className="h-4 w-40" />
       ) : (
         <>
           <ArtifactIcon kind={kind} size="sm" />
-          <h1
+          {/* Beside the chat, the conversation's page holds the page's own heading. */}
+          <Title
             id={ARTIFACT_TITLE_ID}
             className="min-w-0 truncate text-sm font-semibold text-primary"
           >
             {title}
-          </h1>
+          </Title>
           <span className="max-sm:hidden">
             <StatusLine status={status} version={version} />
           </span>
         </>
       )}
       <span className="flex-1" />
-      {onShare && (
-        <Button size="sm" color="secondary" iconLeading={shareIcon} onClick={onShare}>
-          {m.doc_share()}
-        </Button>
-      )}
+      {onShare &&
+        (pane ? (
+          // Beside the chat the title needs the room: Share keeps its icon and its tooltip.
+          <ButtonUtility
+            icon={shareIcon}
+            size="sm"
+            color="tertiary"
+            tooltip={m.doc_share()}
+            onClick={onShare}
+          />
+        ) : (
+          <Button size="sm" color="secondary" iconLeading={shareIcon} onClick={onShare}>
+            {m.doc_share()}
+          </Button>
+        ))}
       {onToggleHistory && (
         <ButtonUtility
           icon={ClockRewind}
@@ -120,6 +154,25 @@ export function ArtifactPageHeader({
             </Dropdown.Menu>
           </Dropdown.Popover>
         </Dropdown.Root>
+      )}
+      {pane && (
+        <>
+          <ButtonUtility
+            icon={pane.full ? Minimize01 : Maximize01}
+            size="sm"
+            color="tertiary"
+            tooltip={pane.full ? m.doc_exit_fullscreen() : m.doc_fullscreen()}
+            className="max-md:hidden"
+            onClick={pane.onToggleFull}
+          />
+          <ButtonUtility
+            icon={XClose}
+            size="sm"
+            color="tertiary"
+            tooltip={m.doc_close()}
+            onClick={pane.onClose}
+          />
+        </>
       )}
     </header>
   );

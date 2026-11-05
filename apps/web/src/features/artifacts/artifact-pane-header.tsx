@@ -1,29 +1,18 @@
-import {
-  ClockRewind,
-  DotsHorizontal,
-  File02,
-  Link01,
-  Maximize01,
-  Minimize01,
-  Trash01,
-  XClose,
-} from "@untitledui/icons";
+import type { File02 } from "@untitledui/icons";
 
-import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import type { ArtifactEditorStatus } from "./use-artifact-editor";
 
-/** What the header says of the document's state, beside its title. */
 /** What the header says of the artifact: the editor's state, an old version, or a web page's version. */
 export type ArtifactStatus = ArtifactEditorStatus | "old" | "page";
 
+/** What the header says of the artifact's state, beside its title. */
 export function StatusLine({ status, version }: { status: ArtifactStatus; version: number }) {
   // A web page is never edited here: only its version, with no state dot (Frank, 11-05).
   if (status === "page")
     return (
-      <span role="status" className="shrink-0 text-xs text-tertiary">
+      <span role="status" className="shrink-0 text-xs whitespace-nowrap text-tertiary">
         {m.doc_version({ number: String(version) })}
       </span>
     );
@@ -39,93 +28,13 @@ export function StatusLine({ status, version }: { status: ArtifactStatus; versio
     old: ["bg-fg-quaternary", m.doc_read_only()],
   }[status];
   return (
-    <span role="status" className="flex shrink-0 items-center gap-1.5 text-xs text-tertiary">
+    <span
+      role="status"
+      className="flex shrink-0 items-center gap-1.5 text-xs whitespace-nowrap text-tertiary"
+    >
       <span aria-hidden="true" className={cn("size-1.5 rounded-full", dot)} />
       {label}
     </span>
-  );
-}
-
-/**
- * The document pane's header (task #385): its title and state, then history, full screen, more
- * (copy link, delete) and close, as the mockup draws them.
- */
-export function ArtifactPaneHeader({
-  title,
-  status,
-  version,
-  full,
-  history = false,
-  canDelete = false,
-  onToggleHistory,
-  onToggleFull,
-  onCopyLink,
-  onDelete,
-  onClose,
-}: {
-  title: string;
-  status: ArtifactStatus;
-  version: number;
-  full: boolean;
-  history?: boolean;
-  canDelete?: boolean;
-  /** Absent where there is no history yet (a draft, a document that did not load). */
-  onToggleHistory?: () => void;
-  onToggleFull: () => void;
-  /** Absent where there is nothing to link to or delete yet: no "more" menu. */
-  onCopyLink?: () => void;
-  /** Offered only with `canDelete`: absent where there is nothing to delete yet. */
-  onDelete?: () => void;
-  onClose: () => void;
-}) {
-  return (
-    <header className="flex h-13 shrink-0 items-center gap-2 border-b border-secondary pr-2 pl-4">
-      <File02 aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
-      <h2 className="min-w-0 truncate text-sm font-semibold text-primary">{title}</h2>
-      <StatusLine status={status} version={version} />
-      <span className="flex-1" />
-      {onToggleHistory && (
-        <ButtonUtility
-          icon={ClockRewind}
-          size="sm"
-          color="tertiary"
-          tooltip={m.doc_history()}
-          aria-pressed={history}
-          className={cn(history && "bg-active")}
-          onClick={onToggleHistory}
-        />
-      )}
-      <ButtonUtility
-        icon={full ? Minimize01 : Maximize01}
-        size="sm"
-        color="tertiary"
-        tooltip={full ? m.doc_exit_fullscreen() : m.doc_fullscreen()}
-        className="max-md:hidden"
-        onClick={onToggleFull}
-      />
-      {onCopyLink && (
-        <Dropdown.Root>
-          <ButtonUtility icon={DotsHorizontal} size="sm" color="tertiary" tooltip={m.doc_more()} />
-          <Dropdown.Popover placement="bottom end">
-            <Dropdown.Menu
-              aria-label={m.doc_more()}
-              onAction={(key) => (key === "delete" ? onDelete?.() : onCopyLink())}
-            >
-              <Dropdown.Item id="copy" icon={Link01} label={m.doc_copy_link()} />
-              {canDelete && <Dropdown.Separator />}
-              {canDelete && <Dropdown.Item id="delete" icon={Trash01} label={m.doc_delete()} />}
-            </Dropdown.Menu>
-          </Dropdown.Popover>
-        </Dropdown.Root>
-      )}
-      <ButtonUtility
-        icon={XClose}
-        size="sm"
-        color="tertiary"
-        tooltip={m.doc_close()}
-        onClick={onClose}
-      />
-    </header>
   );
 }
 

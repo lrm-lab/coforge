@@ -7,13 +7,13 @@ import { m } from "#src/paraglide/messages";
 import { createArtifactDocument } from "./artifacts.functions";
 import { ArtifactDocumentFields } from "./artifact-document-fields";
 import { useArtifactLeaveGuard } from "./artifact-leave-guard";
-import { ArtifactPaneHeader } from "./artifact-pane-header";
+import { ArtifactPageHeader } from "./artifact-page-header";
 import { PaneFrame } from "./artifact-parts";
 import { refreshArtifact } from "./artifact-queries";
 import { nextSaveAttempt, type SaveAttempt } from "./artifact-save-attempt";
 import {
   closedArtifactSearch,
-  useOpenArtifactPage,
+  openArtifactSearch,
   useArtifactNavigation,
   type ArtifactSearch,
 } from "./artifact-search";
@@ -32,7 +32,6 @@ export function ArtifactDraftPane({
 }) {
   const queryClient = useQueryClient();
   const navigate = useArtifactNavigation();
-  const openPage = useOpenArtifactPage();
   const editorRef = useRef<ContentEditorRef>(null);
   const [title, setTitle] = useState("");
   const [dirty, setDirty] = useState(false);
@@ -56,7 +55,8 @@ export function ArtifactDraftPane({
     onSuccess: (document) => {
       created.current = true;
       void refreshArtifact(queryClient, document.id);
-      openPage(document.id, { replace: true });
+      // Saved, it is a document like any other, still beside the chat.
+      navigate(openArtifactSearch(document.id), { replace: true });
     },
   });
   const leavePrompt = useArtifactLeaveGuard({
@@ -72,15 +72,20 @@ export function ArtifactDraftPane({
   };
   return (
     <PaneFrame full={search.docFull}>
-      <ArtifactPaneHeader
+      <ArtifactPageHeader
+        kind="markdown"
         title={title.trim() || m.doc_untitled()}
         status={create.isPending ? "saving" : dirty ? "unsaved" : "saved"}
         version={0}
-        full={Boolean(search.docFull)}
-        onToggleFull={() =>
-          navigate({ docFull: search.docFull ? undefined : true }, { replace: true })
-        }
-        onClose={() => navigate(closedArtifactSearch)}
+        home={undefined}
+        history={false}
+        canDelete={false}
+        pane={{
+          full: Boolean(search.docFull),
+          onToggleFull: () =>
+            navigate({ docFull: search.docFull ? undefined : true }, { replace: true }),
+          onClose: () => navigate(closedArtifactSearch),
+        }}
       />
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-[46rem] px-6 pt-6 pb-16 md:px-10">

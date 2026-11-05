@@ -6,7 +6,8 @@ import { useConversationAgentProfile } from "#src/features/agents/profile-panel/
 import { useLiveAgent } from "#src/features/agents/workspace-agents-realtime";
 import { ACTIVITY_INBOX_QUERY_PREFIX } from "#src/features/inbox/activity-inbox-queries";
 import { ConversationTaskBoard } from "#src/features/tasks/conversation-task-board";
-import { ArtifactDraftPane } from "#src/features/artifacts/artifact-draft-pane";
+import { ArtifactsBesideChat } from "#src/features/artifacts/artifact-beside-chat";
+import { ConversationArtifactPane } from "#src/features/artifacts/artifact-side-pane";
 import { useArtifactsOn } from "#src/features/artifacts/artifact-queries";
 import { ConversationFilesWithDocuments } from "#src/features/artifacts/artifact-files";
 import { cn } from "#src/lib/utils";
@@ -273,25 +274,25 @@ type ConversationPageBodyProps = {
  * conversation and read cursor.
  */
 function ConversationPageBody(props: ConversationPageProps & ConversationPageBodyProps) {
-  const { docFull, docDraft } = props.search;
+  const { doc, docVersion, docHistory, docFull, docDraft } = props.search;
   const documents = useArtifactsOn() === true;
-  const open = documents && docDraft === true;
-  // The chat keeps one place in the tree whether a new document is open or not, so opening one
-  // or going full screen only hides the chat: its scroll, open thread and draft stay.
+  const open = documents && (doc !== undefined || docDraft === true);
+  // The chat keeps one place in the tree whether an artifact is open or not, so opening one or
+  // going full screen only hides the chat: its scroll, open thread and draft stay.
   return (
-    <div className="@container/page flex min-h-0 min-w-0 flex-1">
-      <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", open && docFull && "hidden")}>
-        <ConversationPageMain {...props} documents={documents} />
+    <ArtifactsBesideChat>
+      <div className="@container/page flex min-h-0 min-w-0 flex-1">
+        <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", open && docFull && "hidden")}>
+          <ConversationPageMain {...props} documents={documents} />
+        </div>
+        {open && (
+          <ConversationArtifactPane
+            conversationId={props.page.conversation.conversationId}
+            search={{ doc, docVersion, docHistory, docFull, docDraft }}
+          />
+        )}
       </div>
-      {open && (
-        <ArtifactDraftPane
-          // A draft belongs to its conversation: another one starts its own.
-          key={props.page.conversation.conversationId}
-          conversationId={props.page.conversation.conversationId}
-          search={{ docFull }}
-        />
-      )}
-    </div>
+    </ArtifactsBesideChat>
   );
 }
 

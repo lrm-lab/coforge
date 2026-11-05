@@ -15,9 +15,9 @@ export const Route = createFileRoute("/w/$workspaceSlug/_chat/channel/$channelId
     ...conversationPageSearchShape,
     message: z.uuid().optional().catch(undefined),
   }),
-  // A document link from before its own page goes there first (task #514).
+  // A document link opens beside the chat (Frank, 11-05); where artifacts are off, it is dropped.
   beforeLoad: ({ params, search, location }) =>
-    redirectDocLink(params.workspaceSlug, search, location),
+    redirectDocLink(params.workspaceSlug, search, location, { besideChat: true }),
   loaderDeps: ({ search }) => conversationPageLoaderDeps(search),
   remountDeps: ({ params }) => params.channelId,
   loader: ({ context, params, deps, parentMatchPromise, cause }) =>
