@@ -139,6 +139,38 @@ export function QuestionsStepper({
     if (delta) goTo(step + delta);
   };
 
+  // A question's page: its prompt, its note, and its keyed rows.
+  const page = (entry: Question, onPick: (draft: Draft) => void) => {
+    const entryDone = answered(drafts[entry.id]);
+    return (
+      <>
+        <div className="flex items-baseline gap-2 px-2 text-sm">
+          <p className="min-w-0 flex-1 font-semibold wrap-anywhere text-primary">{entry.prompt}</p>
+          {readOnly
+            ? anyAnswered &&
+              !entryDone && (
+                <span className="shrink-0 text-xs text-quaternary">
+                  {m.action_card_questions_unanswered()}
+                </span>
+              )
+            : entry.select === "many" && (
+                <span className="shrink-0 text-xs text-tertiary">
+                  {m.action_card_questions_many()}
+                </span>
+              )}
+        </div>
+        <QuestionRows
+          question={entry}
+          draft={drafts[entry.id]}
+          canAnswer
+          disabled={disabled}
+          readOnly={readOnly}
+          onChange={onPick}
+        />
+      </>
+    );
+  };
+
   return (
     <div
       ref={card}
@@ -146,43 +178,37 @@ export function QuestionsStepper({
       onKeyDownCapture={onKeyDownCapture}
       onKeyDown={onKeyDown}
     >
-      <div
-        ref={body}
-        key={step}
-        tabIndex={-1}
-        data-question={question.id}
-        onTouchStart={onTouchStart}
-        onTouchEnd={onTouchEnd}
-        className={cn(
-          "flex flex-col gap-1.5 outline-none animate-in duration-150 fade-in motion-reduce:animate-none",
-          direction > 0 ? "slide-in-from-right-2" : "slide-in-from-left-2",
-        )}
-      >
-        <div className="flex items-baseline gap-2 px-2 text-sm">
-          <p className="min-w-0 flex-1 font-semibold wrap-anywhere text-primary">
-            {question.prompt}
-          </p>
-          {readOnly
-            ? anyAnswered &&
-              !done && (
-                <span className="shrink-0 text-xs text-quaternary">
-                  {m.action_card_questions_unanswered()}
-                </span>
-              )
-            : question.select === "many" && (
-                <span className="shrink-0 text-xs text-tertiary">
-                  {m.action_card_questions_many()}
-                </span>
+      {/* Every question in one cell, only the current one shown: the card is as tall as its
+          tallest question on every page, so turning them moves nothing below (Frank, 11-05,
+          task #535). A shorter question sits at the top. */}
+      <div className="grid">
+        {questions.map((entry, index) =>
+          index === step ? (
+            <div
+              ref={body}
+              key={`current-${step}`}
+              tabIndex={-1}
+              data-question={question.id}
+              onTouchStart={onTouchStart}
+              onTouchEnd={onTouchEnd}
+              className={cn(
+                "flex flex-col gap-1.5 outline-none [grid-area:1/1] animate-in duration-150 fade-in motion-reduce:animate-none",
+                direction > 0 ? "slide-in-from-right-2" : "slide-in-from-left-2",
               )}
-        </div>
-        <QuestionRows
-          question={question}
-          draft={drafts[question.id]}
-          canAnswer
-          disabled={disabled}
-          readOnly={readOnly}
-          onChange={pick}
-        />
+            >
+              {page(entry, pick)}
+            </div>
+          ) : (
+            <div
+              key={entry.id}
+              aria-hidden="true"
+              inert
+              className="invisible flex flex-col gap-1.5 [grid-area:1/1]"
+            >
+              {page(entry, () => undefined)}
+            </div>
+          ),
+        )}
       </div>
       {notice}
       {(!readOnly || questions.length > 1) && (

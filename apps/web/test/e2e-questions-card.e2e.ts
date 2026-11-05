@@ -150,6 +150,8 @@ test("a questions card takes an answer for every question, then sends them at on
   try {
     await mkdir(artifacts, { recursive: true });
     const shown = (id: string) => `${card}?.querySelector('[data-question="${id}"]') != null`;
+    // The question in sight; the others are stacked under it, unseen, to keep the card's height.
+    const current = `${card}?.querySelector("[data-question]")`;
     const button = (name: string) =>
       `[...(${card}?.querySelectorAll("button") ?? [])].find((el) => el.textContent.trim() === ${JSON.stringify(name)})`;
     const press = async (name: string) => {
@@ -165,7 +167,7 @@ test("a questions card takes an answer for every question, then sends them at on
     // Its own card, never another kind's; one question at a time, every row's key in sight.
     expect(await evaluate<boolean>(`${cardText}.includes("Add Members")`)).toBe(false);
     expect(await evaluate<number>(`${card}.querySelectorAll("[data-question]").length`)).toBe(1);
-    expect(await evaluate<number>(`${card}.querySelectorAll("kbd").length`)).toBe(3);
+    expect(await evaluate<number>(`${current}.querySelectorAll("kbd").length`)).toBe(3);
     expect(await evaluate<boolean>(`${button("Skip")} != null`)).toBe(true);
     await evaluate(`(${card}.scrollIntoView({ block: "center" }), true)`);
     await shoot("step-1");
@@ -177,7 +179,7 @@ test("a questions card takes an answer for every question, then sends them at on
     await browser("wait", "--fn", shown("webhook"));
     expect(
       await evaluate<boolean>(
-        `${card}?.querySelector('[data-question-option="keep"]')?.hasAttribute("data-selected") ?? false`,
+        `${current}?.querySelector('[data-question-option="keep"]')?.hasAttribute("data-selected") ?? false`,
       ),
     ).toBe(true);
     // Answered, the way on is Next.
@@ -210,7 +212,7 @@ test("a questions card takes an answer for every question, then sends them at on
     await evaluate(`(${card}.scrollIntoView({ block: "center" }), true)`);
     expect(
       await evaluate<boolean>(
-        `${card}?.querySelector('[data-question-option="keep"]')?.hasAttribute("data-selected") ?? false`,
+        `${current}?.querySelector('[data-question-option="keep"]')?.hasAttribute("data-selected") ?? false`,
       ),
     ).toBe(true);
     expect(await evaluate<number>(`${card}.querySelectorAll("[data-step-done]").length`)).toBe(3);
@@ -232,7 +234,7 @@ test("a questions card takes an answer for every question, then sends them at on
     await swipe(-90);
     await browser("wait", "--fn", shown("agent"));
     expect(
-      await evaluate<string>(`${card}.querySelector("[data-question-other]")?.value ?? ""`),
+      await evaluate<string>(`${current}.querySelector("[data-question-other]")?.value ?? ""`),
     ).toBe("Ask me each time");
     // Its own words taken back, the question is skipped after all.
     await browser("click", `[data-question="agent"] [data-question-other]`);
@@ -242,7 +244,7 @@ test("a questions card takes an answer for every question, then sends them at on
     await browser("wait", "--fn", shown("notify"));
     expect(
       await evaluate<boolean>(
-        `["ops", "owner"].every((id) => ${card}?.querySelector(\`[data-question-option="\${id}"]\`)?.hasAttribute("data-selected"))`,
+        `["ops", "owner"].every((id) => ${current}?.querySelector(\`[data-question-option="\${id}"]\`)?.hasAttribute("data-selected"))`,
       ),
     ).toBe(true);
 
@@ -253,7 +255,7 @@ test("a questions card takes an answer for every question, then sends them at on
     await browser("set", "offline", "off");
     expect(
       await evaluate<boolean>(
-        `${card}?.querySelector('[data-question-option="owner"]')?.hasAttribute("data-selected") ?? false`,
+        `${current}?.querySelector('[data-question-option="owner"]')?.hasAttribute("data-selected") ?? false`,
       ),
     ).toBe(true);
     await shoot("phone-failed");
@@ -289,12 +291,15 @@ test("a questions card takes an answer for every question, then sends them at on
     );
     expect(
       await evaluate<boolean>(
-        `${card}?.querySelector('[data-question-option="keep"]')?.hasAttribute("data-selected") ?? false`,
+        `${current}?.querySelector('[data-question-option="keep"]')?.hasAttribute("data-selected") ?? false`,
       ),
     ).toBe(true);
     await shoot("phone-answered");
+    // On a phone too, every page keeps the card's height (task #535).
+    const phoneHeight = await evaluate<number>(`${card}.getBoundingClientRect().height`);
     await browser("click", `[data-message-id="${message.id}"] [aria-label="Question 2"]`);
     await browser("wait", "--fn", `${shown("agent")} && ${cardText}.includes("Not answered")`);
+    expect(await evaluate<number>(`${card}.getBoundingClientRect().height`)).toBe(phoneHeight);
     await shoot("phone-answered-skipped");
     // Answered, a sideways swipe still turns the questions (task #531).
     await swipe(-90);
@@ -311,11 +316,16 @@ test("a questions card takes an answer for every question, then sends them at on
     // Answered, ‹ › turn the questions, each disabled at its end (task #531).
     const arrow = (name: string) => `${card}?.querySelector('button[aria-label="${name}"]')`;
     expect(await evaluate<boolean>(`${arrow("Back")}?.disabled === true`)).toBe(true);
+    // Each page is as tall as the tallest, so turning them moves nothing (task #535).
+    const height = () => evaluate<number>(`${card}.getBoundingClientRect().height`);
+    const first = await height();
     await evaluate(`(${arrow("Next")}.setAttribute("data-e2e", "next"), true)`);
     await browser("click", '[data-e2e="next"]');
     await browser("wait", "--fn", shown("agent"));
+    expect(await height()).toBe(first);
     await browser("click", '[data-e2e="next"]');
     await browser("wait", "--fn", `${shown("notify")} && ${arrow("Next")}?.disabled === true`);
+    expect(await height()).toBe(first);
     await shoot("answered-last");
     await evaluate(`(${arrow("Back")}.setAttribute("data-e2e", "back"), true)`);
     await browser("click", '[data-e2e="back"]');
