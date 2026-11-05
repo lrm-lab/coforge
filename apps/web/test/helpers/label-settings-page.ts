@@ -42,7 +42,11 @@ export function labelSettingsPage(
   const dialogsOpen = `document.querySelectorAll('[role="dialog"], [role="alertdialog"]').length`;
   /** A real click on what `selector` names, marked for the browser to find. */
   const press = async (selector: string) => {
-    await browser("wait", "--fn", `${dialogsOpen} === 0 && ${selector} != null && ${settled}`);
+    await browser(
+      "wait",
+      "--fn",
+      `${dialogsOpen} === 0 && ${selector} != null && !(${selector})?.disabled && ${settled}`,
+    );
     await evaluate(
       `([...document.querySelectorAll("[data-e2e]")].forEach((el) => el.removeAttribute("data-e2e")), ${selector}.setAttribute("data-e2e", "press"), true)`,
     );
