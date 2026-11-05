@@ -30,6 +30,8 @@ import { CursorAcpProvider } from "@lrm/coforge-anvil/cursor";
 import { cursorAcpRuntimeHost } from "#src/code-agent/cursor/acp-host";
 import { OpenCodeAcpProvider } from "@lrm/coforge-anvil/opencode";
 import { openCodeAcpRuntimeHost } from "#src/code-agent/opencode/acp-host";
+import { DroidAcpProvider } from "@lrm/coforge-anvil/droid";
+import { droidAcpRuntimeHost } from "#src/code-agent/droid/acp-host";
 import { createKiroAuthHost } from "#src/code-agent/kiro/auth-host";
 import { KiroRuntimeAuthAdapter } from "@lrm/coforge-anvil/kiro";
 import { KiroProvider } from "@lrm/coforge-anvil/kiro";
@@ -168,6 +170,13 @@ export function createCodeAgentProvider(
       return new DevinProvider({
         host: devinRuntimeHost,
         command: [executable ?? RUNTIME_PROVIDER.DEVIN],
+      });
+    }
+    case RUNTIME_PROVIDER.DROID: {
+      const executable = providerExecutable(RUNTIME_PROVIDER.DROID, options);
+      return new DroidAcpProvider({
+        host: droidAcpRuntimeHost,
+        ...(executable ? { command: [executable] } : {}),
       });
     }
     default: {

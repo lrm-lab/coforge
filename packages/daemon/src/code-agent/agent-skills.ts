@@ -158,6 +158,13 @@ export async function listAgentSkills(options: {
           personal(".agents/skills"),
         ];
       break;
+    case RUNTIME_PROVIDER.DROID:
+      // Droid 1.4.1 ships built-in skills (`/skills`), and its workspace/user skill directories
+      // are not documented; the scan uses the Agent Skills standard location the other CLIs here
+      // share until the runtime's own directory is verified on a real launch.
+      locals = [local(".agents/skills")];
+      if (home) globals = [personal(".agents/skills")];
+      break;
     case RUNTIME_PROVIDER.PI:
       locals = [local(".pi/skills", "pi"), local(".agents/skills")];
       if (cloudSkills) {

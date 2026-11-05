@@ -49,6 +49,9 @@ export const AGENT_DELIVERY_MODE: Readonly<Record<RuntimeProvider, AgentDelivery
   [RUNTIME_PROVIDER.DSH]: "steer",
   [RUNTIME_PROVIDER.COMMAND_CODE]: "steer",
   [RUNTIME_PROVIDER.DEVIN]: "steer",
+  // No steer request exists on `droid exec --output-format acp`: the session queues a notice
+  // until the running turn ends (`after_turn`), the way OpenCode's does.
+  [RUNTIME_PROVIDER.DROID]: "steer",
 };
 
 /**

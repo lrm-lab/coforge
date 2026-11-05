@@ -18,6 +18,7 @@ const RUNTIME_DISPLAY_NAME: Record<RuntimeProvider, string> = {
   [RUNTIME_PROVIDER.DSH]: "DeepSeek Harness",
   [RUNTIME_PROVIDER.COMMAND_CODE]: "Command Code",
   [RUNTIME_PROVIDER.DEVIN]: "Devin",
+  [RUNTIME_PROVIDER.DROID]: "Droid",
   [RUNTIME_PROVIDER.PI]: "Pi",
   [RUNTIME_PROVIDER.COFORGE]: "CoForge",
 };

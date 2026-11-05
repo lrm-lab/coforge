@@ -9,14 +9,6 @@ import { agentEnvironment } from "./environment";
 import { withoutClaudeCodeMarker } from "@lrm/coforge-anvil/claude-code";
 import { JsonlProcess } from "@lrm/coforge-anvil/execution";
 import {
-  isOpenCodeAcpVersionUnsupported,
-  logOpenCodeAcpVersionUnsupported,
-} from "@lrm/coforge-anvil/opencode";
-import {
-  isCursorAcpVersionUnsupported,
-  logCursorAcpVersionUnsupported,
-} from "@lrm/coforge-anvil/cursor";
-import {
   VERSION_PROBE_TIMEOUT_MS,
   withDeadline,
   type CodeAgentProbe,
@@ -24,26 +16,12 @@ import {
   within,
 } from "@lrm/coforge-anvil";
 import { stderrHint } from "#src/code-agent/version-probe";
-import { isKiroVersionUnsupported, logKiroVersionUnsupported } from "@lrm/coforge-anvil/kiro";
 import {
   DSH_ACP_VERSION_RANGE,
   dshVersionFromOutput,
   isDshVersionSupported,
 } from "@lrm/coforge-anvil/dsh";
-import { isGrokVersionUnsupported, logGrokVersionUnsupported } from "@lrm/coforge-anvil/grok";
-import {
-  isCommandCodeVersionUnsupported,
-  logCommandCodeVersionUnsupported,
-} from "@lrm/coforge-anvil/command-code";
-import {
-  devinVersionFromOutput,
-  isDevinVersionUnsupported,
-  logDevinVersionUnsupported,
-} from "@lrm/coforge-anvil/devin";
-import {
-  isAntigravityAcpVersionUnsupported,
-  logAntigravityAcpVersionUnsupported,
-} from "@lrm/coforge-anvil/antigravity";
+import { devinVersionFromOutput } from "@lrm/coforge-anvil/devin";
 import { probeClaudeCodeVersion } from "@lrm/coforge-anvil/claude-code";
 import { resolveClaudeCodeExecutable } from "#src/code-agent/claude-code/runtime";
 import { codeAgentExecutableSearchPath } from "#src/platform/code-agent-path";
@@ -62,47 +40,11 @@ import {
   readInventoryCache,
   updateInventoryCache,
 } from "./runtime-inventory-cache";
-
-/** Provider version floors the probe and the cached-floor check share. */
-const VERSION_GATES = new Map<
-  ExternalCodeAgentProvider,
-  { unsupported(version: string): boolean; log(name: string, version: string): void }
->([
-  [
-    RUNTIME_PROVIDER.KIRO,
-    { unsupported: isKiroVersionUnsupported, log: logKiroVersionUnsupported },
-  ],
-  [
-    RUNTIME_PROVIDER.OPENCODE,
-    { unsupported: isOpenCodeAcpVersionUnsupported, log: logOpenCodeAcpVersionUnsupported },
-  ],
-  [
-    RUNTIME_PROVIDER.CURSOR,
-    { unsupported: isCursorAcpVersionUnsupported, log: logCursorAcpVersionUnsupported },
-  ],
-  [
-    RUNTIME_PROVIDER.GROK,
-    { unsupported: isGrokVersionUnsupported, log: logGrokVersionUnsupported },
-  ],
-  [
-    RUNTIME_PROVIDER.ANTIGRAVITY,
-    { unsupported: isAntigravityAcpVersionUnsupported, log: logAntigravityAcpVersionUnsupported },
-  ],
-  [
-    RUNTIME_PROVIDER.COMMAND_CODE,
-    { unsupported: isCommandCodeVersionUnsupported, log: logCommandCodeVersionUnsupported },
-  ],
-  [
-    RUNTIME_PROVIDER.DEVIN,
-    { unsupported: isDevinVersionUnsupported, log: logDevinVersionUnsupported },
-  ],
-]);
-
-const CACHED_FLOOR_PROVIDERS = new Set<ExternalCodeAgentProvider>([
-  RUNTIME_PROVIDER.OPENCODE,
-  RUNTIME_PROVIDER.CURSOR,
-  RUNTIME_PROVIDER.DEVIN,
-]);
+import {
+  cachedBelowFloor,
+  externalRuntimeDisplayName,
+  versionGateFor,
+} from "./runtime-version-floors";
 
 const logger = getLogger(["coforge", "daemon", "runtime-inventory"]);
 
@@ -204,7 +146,7 @@ async function probeRuntimeVersion(
           : lastWord(output);
   if (!version) return { kind: "unavailable", code: "probe_failed" };
   // A refused version is not a probe miss: the cached runtime must be dropped, not restored.
-  const gate = VERSION_GATES.get(provider);
+  const gate = versionGateFor(provider);
   if (gate?.unsupported(version)) {
     gate.log(name, version);
     return { kind: "rejected", version };
@@ -241,20 +183,6 @@ type RuntimeVersionProbe =
       code: "start_failed" | "probe_failed";
       diagnostic?: string;
     };
-
-/** An older daemon cached an OpenCode or Devin build before the floor moved. Serving it, including
- * as a probe-failure fallback, would keep offering a CLI this build refuses to launch. */
-function cachedBelowFloor(
-  provider: ExternalCodeAgentProvider,
-  name: string,
-  runtime: RuntimeMetadata | undefined,
-): boolean {
-  if (runtime === undefined || !CACHED_FLOOR_PROVIDERS.has(provider)) return false;
-  const gate = VERSION_GATES.get(provider);
-  if (!gate?.unsupported(runtime.version)) return false;
-  gate.log(name, runtime.version);
-  return true;
-}
 
 /** An installed runtime that cannot be used keeps its place in the inventory, with the reason, so
  * the Computer page and the Agent runtime picker can say why instead of hiding it. `version` is
@@ -320,28 +248,10 @@ export async function discoverExternalCodeAgents(
             // A cache entry written by an older daemon build must be re-validated against the
             // current minimum before it is trusted; the executable itself has not changed, so a
             // too-old cached version would only reproduce the same gate on a live re-probe.
-            if (
-              provider === RUNTIME_PROVIDER.KIRO &&
-              isKiroVersionUnsupported(cached.runtime.version)
-            ) {
-              logKiroVersionUnsupported(name, cached.runtime.version);
-              return {
-                runtime: unusableRuntime(provider, cached.runtime.version, "version_unsupported"),
-              };
-            }
             if (cachedBelowFloor(provider, name, cached.runtime))
               return {
                 runtime: unusableRuntime(provider, cached.runtime.version, "version_unsupported"),
               };
-            if (
-              provider === RUNTIME_PROVIDER.COMMAND_CODE &&
-              isCommandCodeVersionUnsupported(cached.runtime.version)
-            ) {
-              logCommandCodeVersionUnsupported(name, cached.runtime.version);
-              return {
-                runtime: unusableRuntime(provider, cached.runtime.version, "version_unsupported"),
-              };
-            }
             logger.info("Code Agent runtime probe served from cache", {
               event: "code_agent_runtime:cache_hit",
               provider,
@@ -496,33 +406,4 @@ async function readVersionWithBun(
 export async function killProbeChild(process: ReturnType<CodeAgentProbe["spawn"]>): Promise<void> {
   process.kill?.();
   await process.exited.catch(() => undefined);
-}
-
-function externalRuntimeDisplayName(provider: ExternalCodeAgentProvider): string {
-  switch (provider) {
-    case RUNTIME_PROVIDER.CODEX:
-      return "Codex";
-    case RUNTIME_PROVIDER.CLAUDE_CODE:
-      return "Claude Code";
-    case RUNTIME_PROVIDER.KIRO:
-      return "Kiro";
-    case RUNTIME_PROVIDER.CURSOR:
-      return "Cursor CLI";
-    case RUNTIME_PROVIDER.OPENCODE:
-      return "OpenCode";
-    case RUNTIME_PROVIDER.GROK:
-      return "Grok Build";
-    case RUNTIME_PROVIDER.ANTIGRAVITY:
-      return "Antigravity CLI";
-    case RUNTIME_PROVIDER.COMMAND_CODE:
-      return "Command Code";
-    case RUNTIME_PROVIDER.DEVIN:
-      return "Devin";
-    case RUNTIME_PROVIDER.DSH:
-      return "DeepSeek Harness";
-    default: {
-      const unreachable: never = provider;
-      throw new Error(`Unhandled external Code Agent provider: ${unreachable}`);
-    }
-  }
 }

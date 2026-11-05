@@ -63,6 +63,13 @@ function openCodeInstalledExecutableCandidates(
     : [];
 }
 
+function droidInstalledExecutableCandidates(
+  environment: Readonly<Record<string, string | undefined>>,
+): string[] {
+  const home = homeDirectory(environment);
+  return home ? [join(home, ".local", "bin", RUNTIME_PROVIDER.DROID)] : [];
+}
+
 function grokInstalledExecutableCandidates(
   environment: Readonly<Record<string, string | undefined>>,
   platform: NodeJS.Platform,
@@ -147,6 +154,13 @@ export const externalCodeAgents = [
     provider: RUNTIME_PROVIDER.DEVIN,
     executable: RUNTIME_PROVIDER.DEVIN,
     installedExecutableCandidates: noInstalledExecutableCandidates,
+  },
+  {
+    // Factory Droid's installers (Homebrew, npm) land on PATH; its standalone installer uses
+    // `~/.local/bin` like Codex's.
+    provider: RUNTIME_PROVIDER.DROID,
+    executable: RUNTIME_PROVIDER.DROID,
+    installedExecutableCandidates: droidInstalledExecutableCandidates,
   },
 ] as const;
 

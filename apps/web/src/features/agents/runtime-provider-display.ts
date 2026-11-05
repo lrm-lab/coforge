@@ -12,6 +12,8 @@ import piMark from "@lobehub/icons-static-svg/icons/pi.svg";
 import { m } from "#src/paraglide/messages";
 // Not in @lobehub/icons: the vector mark from Command Code's own site, kept in this repo.
 import commandCodeMark from "./marks/command-code.svg";
+// Not in @lobehub/icons: Factory's rotor mark, from factory.ai/favicon.svg (see the file header).
+import droidMark from "./marks/droid.svg";
 
 /**
  * The one display table for a RuntimeProvider: shared by the Agent runtime picker, the Agent
@@ -32,6 +34,7 @@ export const RUNTIME_PROVIDER_DISPLAY_ORDER: readonly RuntimeProvider[] = [
   RUNTIME_PROVIDER.ANTIGRAVITY,
   RUNTIME_PROVIDER.COMMAND_CODE,
   RUNTIME_PROVIDER.DEVIN,
+  RUNTIME_PROVIDER.DROID,
   RUNTIME_PROVIDER.DSH,
 ];
 
@@ -51,6 +54,7 @@ export function runtimeProviderLabel(provider: RuntimeProvider): string {
     [RUNTIME_PROVIDER.DSH]: "DeepSeek Harness",
     [RUNTIME_PROVIDER.COMMAND_CODE]: "Command Code",
     [RUNTIME_PROVIDER.DEVIN]: "Devin",
+    [RUNTIME_PROVIDER.DROID]: "Droid",
   };
   return labels[provider];
 }
@@ -71,6 +75,7 @@ export const RUNTIME_PROVIDER_MARK: Record<
   [RUNTIME_PROVIDER.DSH]: deepseekMark,
   [RUNTIME_PROVIDER.COMMAND_CODE]: commandCodeMark,
   [RUNTIME_PROVIDER.DEVIN]: devinMark,
+  [RUNTIME_PROVIDER.DROID]: droidMark,
 };
 
 /** Whether that mark is a full-color icon rendered as an `<img>`, as opposed to a monochrome
@@ -90,4 +95,6 @@ export const RUNTIME_PROVIDER_MARK_IS_COLOR_ICON: Record<
   [RUNTIME_PROVIDER.DSH]: true,
   [RUNTIME_PROVIDER.COMMAND_CODE]: false,
   [RUNTIME_PROVIDER.DEVIN]: true,
+  // Monochrome: Factory's guidelines want it white on dark and black on light.
+  [RUNTIME_PROVIDER.DROID]: false,
 };

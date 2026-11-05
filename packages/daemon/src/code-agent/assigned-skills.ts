@@ -35,6 +35,7 @@ export function assignedSkillsDirectory(
     case RUNTIME_PROVIDER.DSH:
     case RUNTIME_PROVIDER.ANTIGRAVITY:
     case RUNTIME_PROVIDER.DEVIN:
+    case RUNTIME_PROVIDER.DROID:
       return join(cwd, ".agents", "skills");
     case RUNTIME_PROVIDER.COMMAND_CODE:
       // Native project root from Command Code CLI 1.87.3 `getProjectSkillsDir`

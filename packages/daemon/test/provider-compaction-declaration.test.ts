@@ -19,6 +19,7 @@ const ADAPTER_DIRS: Readonly<Record<RuntimeProvider, readonly string[]>> = {
   dsh: ["dsh"],
   "command-code": ["command-code"],
   devin: ["devin"],
+  droid: ["droid"],
 };
 
 /** The top-level adapter directory of every file that publishes the context-cut event. */
