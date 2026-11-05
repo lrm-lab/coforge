@@ -89,9 +89,10 @@ export async function postTaskMessage(
     where: { id: { in: stored.mentions.map((mention) => mention.key) } },
     select: { id: true, userId: true, agentId: true, agent: { select: { deletedAt: true } } },
   });
+  const mentionSeats = await joinDiscussionMany(tx, workspaceId, conversationId, mentionedMembers);
   const seatOf = new Map<string, string>();
   for (const named of mentionedMembers) {
-    seatOf.set(named.id, (await joinDiscussion(tx, workspaceId, conversationId, named)).id);
+    seatOf.set(named.id, mentionSeats.get(named.id)!);
     // A deleted Agent keeps its mention token, but follows nothing.
     if (!named.agent?.deletedAt) await followTask(tx, scope, taskId, named.id, "mentioned");
   }
@@ -101,8 +102,12 @@ export async function postTaskMessage(
     where: { taskId, member: { userId: { not: null }, ...ACTIVE_MEMBER_WHERE } },
     select: { member: { select: { userId: true, agentId: true } } },
   });
-  for (const follower of people)
-    await joinDiscussion(tx, workspaceId, conversationId, follower.member);
+  await joinDiscussionMany(
+    tx,
+    workspaceId,
+    conversationId,
+    people.map((follower) => follower.member),
+  );
 
   const [followers, mentionedAgents] = await Promise.all([
     tx.taskFollow.findMany({
@@ -190,4 +195,53 @@ export async function postTaskMessage(
     body: message.body,
     answeredCardIds,
   };
+}
+
+type DiscussionMember = { id?: string; userId: string | null; agentId: string | null };
+
+/** Seats a batch of members and restores soft-left seats without one upsert per member. */
+async function joinDiscussionMany(
+  tx: Transaction,
+  workspaceId: string,
+  conversationId: string,
+  members: readonly DiscussionMember[],
+): Promise<Map<string, string>> {
+  const userIds = [...new Set(members.flatMap((member) => (member.userId ? [member.userId] : [])))];
+  const agentIds = [
+    ...new Set(members.flatMap((member) => (member.agentId ? [member.agentId] : []))),
+  ];
+  const result = new Map<string, string>();
+  if (!userIds.length && !agentIds.length) return result;
+  const where = {
+    conversationId,
+    OR: [
+      ...(userIds.length ? [{ userId: { in: userIds } }] : []),
+      ...(agentIds.length ? [{ agentId: { in: agentIds } }] : []),
+    ],
+  };
+  await tx.conversationMember.createMany({
+    data: [
+      ...userIds.map((userId) => ({ workspaceId, conversationId, userId })),
+      ...agentIds.map((agentId) => ({ workspaceId, conversationId, agentId })),
+    ],
+    skipDuplicates: true,
+  });
+  await tx.conversationMember.updateMany({ where, data: { leftAt: null } });
+  const seats = await tx.conversationMember.findMany({
+    where,
+    select: { id: true, userId: true, agentId: true },
+  });
+  const seatByActor = new Map<string, string>();
+  for (const seat of seats) {
+    if (seat.userId) seatByActor.set(`user:${seat.userId}`, seat.id);
+    else if (seat.agentId) seatByActor.set(`agent:${seat.agentId}`, seat.id);
+  }
+  for (const member of members) {
+    if (!member.id) continue;
+    const actorKey = member.userId ? `user:${member.userId}` : `agent:${member.agentId}`;
+    const seatId = seatByActor.get(actorKey);
+    if (!seatId) throw new Error("task discussion member seat is missing");
+    result.set(member.id, seatId);
+  }
+  return result;
 }
