@@ -31,3 +31,24 @@ test("the E2E proxy returns route redirects to the browser instead of rendering 
     upstream.stop(true);
   }
 });
+
+test("the E2E proxy hands on a compressed answer decoded, without its Content-Encoding", async () => {
+  const upstream = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () =>
+      new Response(Bun.gzipSync("File under review"), {
+        headers: { "content-type": "text/plain", "content-encoding": "gzip" },
+      }),
+  });
+  try {
+    const response = await forwardWebRequest(
+      new Request("http://proxy.test/api/attachments/1"),
+      upstream.url.origin,
+    );
+    expect(response.headers.get("content-encoding")).toBeNull();
+    expect(await response.text()).toBe("File under review");
+  } finally {
+    upstream.stop(true);
+  }
+});

@@ -16,9 +16,16 @@ const port = Number(Bun.env.E2E_PROXY_PORT ?? 8790);
 export async function forwardWebRequest(request: Request, origin: string) {
   const url = new URL(request.url);
   try {
-    return await fetch(new Request(origin + url.pathname + url.search, request), {
+    const response = await fetch(new Request(origin + url.pathname + url.search, request), {
       redirect: "manual",
     });
+    // Bun's fetch has already decoded a compressed body; passed on with its Content-Encoding, the
+    // browser decodes it again and fails (an attachment's text preview never opened, task #438).
+    if (!response.headers.has("content-encoding")) return response;
+    const headers = new Headers(response.headers);
+    headers.delete("content-encoding");
+    headers.delete("content-length");
+    return new Response(response.body, { status: response.status, headers });
   } catch {
     return new Response("Web application is starting", { status: 503 });
   }
