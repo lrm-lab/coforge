@@ -157,12 +157,21 @@ test("a first sign-in is asked for a display name once, and the personal Workspa
     expect(newcomer.welcomedAt).toBeNull();
     expect(await membershipsOf("newcomer")).toHaveLength(0);
     // The page says nothing else: no subtitle, no "signed in as"; the name and the Workspace URL.
-    expect(await evaluate<number>(`document.querySelectorAll("main input").length`)).toBe(2);
+    expect(
+      await evaluate<number>(`document.querySelectorAll("main input:not([type=radio])").length`),
+    ).toBe(2);
     expect(
       await evaluate<string[]>(
         `document.querySelector("main").innerText.split("\\n").map((line) => line.trim()).filter(Boolean)`,
       ),
-    ).toEqual(["Enter your display name", "Display name", "Workspace URL", "/w/", "Continue"]);
+    ).toEqual([
+      "Enter your display name",
+      "Display name",
+      "Avatar",
+      "Workspace URL",
+      "/w/",
+      "Continue",
+    ]);
     expect(await overflowsSideways()).toBe(false);
     await shoot("01-name-step-desktop-1440.png");
     passed(
