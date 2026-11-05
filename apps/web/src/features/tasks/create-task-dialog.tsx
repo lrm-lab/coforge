@@ -82,7 +82,8 @@ export function CreateTaskDialog({
         }
       : null,
     labels: draft.labels.flatMap((name) => {
-      const label = workspaceLabels.find((each) => each.name === name);
+      // The Workspace's labels hold the archived ones too (task #557); a draft names a live one.
+      const label = workspaceLabels.find((each) => each.name === name && !each.archivedAt);
       return label ? [{ id: label.id, name: label.name, color: label.color }] : [];
     }),
   };

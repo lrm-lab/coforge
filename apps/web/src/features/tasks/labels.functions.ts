@@ -19,12 +19,14 @@ const labelColor = z.enum(LABEL_COLORS);
 /**
  * The Workspace's labels, for the task card and its label picker, and whether the viewer may
  * recolor them (an owner or admin, as `Labels.update` decides). Any member may read the labels.
+ * The archived ones come too, marked by `archivedAt`: a Task read before one was archived still
+ * names it, and only the list can say it is gone (task #557). The pickers show the live ones.
  */
 export const loadWorkspaceLabels = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .handler(async ({ context }) => {
     const { user, db, workspaceId } = context;
-    const labels = await new Labels(db).list(workspaceId, user.id);
+    const labels = await new Labels(db).list(workspaceId, user.id, { archived: true });
     const role = await workspaceMemberRole(db, workspaceId, user.id);
     return { labels, canManage: canManageWorkspaceSettings(role) };
   });

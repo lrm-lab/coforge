@@ -16,7 +16,8 @@ export const workspaceLabelsKey = (workspaceId: string) => ["workspace-labels", 
 /**
  * The Workspace's labels for a picker, read once and kept fresh by `label.changed.v1` (and
  * `label.group.changed.v1`, which can rename what a label is listed under), and whether the viewer
- * may recolor and delete them.
+ * may recolor and delete them. The archived ones are among them, marked by `archivedAt`, so a Task
+ * read before one was archived can drop it; a picker offers only the live ones.
  */
 export function useWorkspaceLabels(enabled: boolean) {
   const workspaceId = useCurrentWorkspaceId() ?? "";
