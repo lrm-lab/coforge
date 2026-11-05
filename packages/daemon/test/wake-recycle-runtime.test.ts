@@ -49,7 +49,9 @@ test("the sweep stops a cold, idle, large Agent, which then wakes on its next me
   expect(h.details("runtime_unavailable")).toEqual([FRESH_ACTIVITY]);
   // The briefing is the first input, then the message.
   const [briefing] = fresh.inputs;
-  expect(briefing).toContain('<memory-index file="MEMORY.md"');
+  expect(briefing).toContain("<memory-index>");
+  expect(briefing).toContain('<memory file="MEMORY.md"');
+  expect(briefing).toContain('<active-context file="notes/active-context.md"');
   expect(briefing).toContain(PROVIDER_BRIEFING);
   expect(briefing!.indexOf("<memory-index")).toBeLessThan(briefing!.indexOf(PROVIDER_BRIEFING));
   expect(fresh.inputs.join("\n")).toContain("#general");
@@ -206,7 +208,9 @@ test("a briefing that cannot be built still starts a fresh, bare session", async
   expect(h.sessions[0]!.options.sessionId).toBeUndefined();
   expect(h.reports[0]).toMatchObject({ replacedSessionId: "old-session" });
   expect(h.sessions[0]!.inputs).toHaveLength(1);
-  expect(h.sessions[0]!.inputs[0]).toStartWith("You are starting a fresh session.");
+  // The seeded MEMORY.md/Active Context still ride in the starter, so the Agent need not read them.
+  expect(h.sessions[0]!.inputs[0]).toStartWith("<memory-index>");
+  expect(h.sessions[0]!.inputs[0]).toContain("You are starting a fresh session.");
   expect(records.map((r) => r.properties.event)).toContain("agent.runtime.wake_briefing_failed");
 });
 

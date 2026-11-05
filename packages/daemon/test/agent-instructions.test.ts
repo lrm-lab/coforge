@@ -50,11 +50,15 @@ test("the Agent finishes all assigned work before it stops", () => {
   expect(instructions).toContain("coforge task list --mine");
 });
 
-test("before a long task, the Agent writes notes/active-context.md and keeps MEMORY.md as the index", () => {
-  expect(instructions).toContain("write notes/active-context.md before a long task");
-  expect(instructions).toContain("update it after an important interaction");
-  // Our own resume pointer stays out of the standing prompt; the seeded index carries it.
-  expect(instructions).not.toContain("Active Context");
+test("facts are written when a human decides, and the Active Context is overwritten as work moves", () => {
+  expect(instructions).toContain("it arrives with every fresh session");
+  expect(instructions).toContain("When a human decides or prefers something, or you hit a pitfall");
+  expect(instructions).toContain("merging duplicates and dropping stale facts in the same edit");
+  expect(instructions).toContain(
+    "Overwrite notes/active-context.md when work starts, finishes or blocks",
+  );
+  expect(instructions).toContain("never task lists");
+  expect(instructions).toContain("Check MEMORY.md before asking a human");
 });
 
 test("capability-gated rules appear only when the launch has the capability", () => {
@@ -195,8 +199,8 @@ test("provider-specific rules remain available once when supplied", () => {
   expect(rendered.split("- This runtime uses PowerShell.")).toHaveLength(2);
 });
 
-test("the shared standing guidance stays within a 4096-byte budget", () => {
-  expect(new TextEncoder().encode(instructions).byteLength).toBeLessThanOrEqual(4096);
+test("the shared standing guidance stays within a 4352-byte budget", () => {
+  expect(new TextEncoder().encode(instructions).byteLength).toBeLessThanOrEqual(4352);
 });
 
 test("CLI instructions include a copyable stdin submission example", () => {

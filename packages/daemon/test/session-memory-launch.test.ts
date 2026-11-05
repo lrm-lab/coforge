@@ -91,6 +91,9 @@ test("a fresh session's first input carries its MEMORY.md and stops asking for t
     await subject.runtime.startAgent("agent-a", config);
     await subject.answered;
     expect(subject.inputs[0]).toContain("<memory-index");
+    expect(subject.inputs[0]).toContain('<memory file="MEMORY.md"');
+    // The seeded Active Context is the second file the block carries.
+    expect(subject.inputs[0]).toContain('<active-context file="notes/active-context.md"');
     expect(subject.inputs[0]).toContain("You are starting a fresh session.");
     // The seeded MEMORY.md fits the budget, so the block is complete and the starter says so.
     expect(subject.inputs[0]).not.toContain("read MEMORY.md and");

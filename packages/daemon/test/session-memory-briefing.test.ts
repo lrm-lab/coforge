@@ -8,7 +8,7 @@ import {
   rebriefAfterCompaction,
 } from "#src/agent-runtime/session-memory-briefing";
 import { agentStartupInput } from "#src/agent-runtime/agent-startup";
-import { STARTUP_MEMORY_BLOCK_BUDGET_TOKENS } from "#src/agent-runtime/startup-memory-block";
+import { STARTUP_MEMORY_BUDGET_TOKENS } from "#src/agent-runtime/startup-memory-block";
 import type { AgentInput, AgentInputQueue } from "#src/daemon-runtime/runtime-launch-intent";
 
 const roots: string[] = [];
@@ -52,7 +52,7 @@ test("an empty queue's starter carries the block and stops asking for MEMORY.md"
 
 test("a truncated block tells the starter to read the rest of the file", async () => {
   const directory = await workspace(
-    `# Agent\n\n${"filler line for the budget\n".repeat(STARTUP_MEMORY_BLOCK_BUDGET_TOKENS)}\n# END\n`,
+    `# Agent\n\n${"filler line for the budget\n".repeat(STARTUP_MEMORY_BUDGET_TOKENS)}\n# END\n`,
   );
   const items = queue(starter());
   const block = await attachSessionMemory(items, directory);
