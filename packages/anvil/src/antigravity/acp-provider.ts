@@ -13,6 +13,7 @@ import { readAntigravityUsage } from "./usage";
  */
 export class AntigravityAcpProvider implements CodeAgentProvider {
   readonly provider = RUNTIME_PROVIDER.ANTIGRAVITY;
+  readonly compactionFailure = "does_not_stick";
   readonly reportsCompaction = false;
   readonly #options: AntigravityAcpProviderOptions;
   readonly #host: AntigravityAcpRuntimeHost;

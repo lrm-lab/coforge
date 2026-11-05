@@ -13,6 +13,7 @@ const logger = getLogger(["coforge", "daemon", "code-agent", "pi"]);
 export class CoforgeProvider implements CodeAgentProvider {
   readonly provider = RUNTIME_PROVIDER.COFORGE;
   readonly reportsCompaction = true;
+  readonly compactionFailure = "sticks_to_session";
 
   async createAgentSession(options: AgentSessionOptions): Promise<AgentSession> {
     const runtime = options.runtime;

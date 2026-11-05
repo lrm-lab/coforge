@@ -9,6 +9,7 @@ import { createPiAgentSession } from "./session";
 export class PiProvider implements CodeAgentProvider {
   readonly provider: RuntimeProvider = RUNTIME_PROVIDER.PI;
   readonly reportsCompaction = true;
+  readonly compactionFailure = "sticks_to_session";
 
   readonly #host: PiRuntimeHost;
 

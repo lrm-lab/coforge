@@ -27,6 +27,11 @@ export interface CodeAgentProvider {
    * context was cut. Every adapter declares it; a provider this build does not know is never
    * elided. */
   readonly reportsCompaction?: boolean;
+  /** Whether a session whose context compaction keeps failing stays stuck: Raft declares this per
+   * driver (`PiDriver.session.compactionFailure = "sticks_to_session"`; the other eleven
+   * `"does_not_stick"`). A sticky session is refused for resume once its failures reach the reset
+   * threshold, so the person resets it instead of the daemon reopening the same dead context. */
+  readonly compactionFailure?: "sticks_to_session" | "does_not_stick";
   createAgentSession(options: AgentSessionOptions): Promise<AgentSession>;
   readUsage?(options: {
     workingDirectory: string;

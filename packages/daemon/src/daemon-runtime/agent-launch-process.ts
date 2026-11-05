@@ -7,6 +7,7 @@ import { parseAssignedSkillPacks } from "#src/code-agent/assigned-skills";
 import { agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
 import { ProviderProgress } from "./stalled-recovery";
 import { openLaunchSessionMemory } from "./session-memory-launch";
+import { assertSessionNotSpent } from "./session-reset-guard";
 import { LaunchPhaseTiming } from "./launch-phase-timing";
 import { reportLaunchSession } from "./launch-session-report";
 import {
@@ -125,6 +126,11 @@ export async function launchAgentProcess(
     // reference: whether the provider actually continued it decides "fresh" below.
     const requestedSessionId = recycled ? undefined : reference.sessionId;
     ports.contexts.noteSession(agentId, requestedSessionId, config.model);
+    assertSessionNotSpent({
+      agentId,
+      provider: config.provider,
+      needsReset: ports.contexts.needsSessionReset(agentId),
+    });
     let reportedSessionId: string | undefined;
     let driverReplacedSessionId: string | undefined;
     // The adapter's own spawn + ACP initialize complete with this call; one phase covers both.

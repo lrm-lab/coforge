@@ -14,6 +14,7 @@ import { createCursorInstructions } from "./instructions";
  */
 export class CursorAcpProvider implements CodeAgentProvider {
   readonly provider = RUNTIME_PROVIDER.CURSOR;
+  readonly compactionFailure = "does_not_stick";
   readonly reportsCompaction = false;
   readonly #host: CursorAcpRuntimeHost;
   readonly #command: readonly string[];

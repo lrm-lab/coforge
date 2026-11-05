@@ -7,6 +7,7 @@ import type { DshProviderOptions } from "./host";
 
 export class DshProvider implements CodeAgentProvider {
   readonly provider = RUNTIME_PROVIDER.DSH;
+  readonly compactionFailure = "does_not_stick";
   readonly reportsCompaction = false;
   constructor(private readonly options: DshProviderOptions) {}
   async createAgentSession(options: AgentSessionOptions): Promise<AgentSession> {

@@ -11,6 +11,7 @@ import type { GrokProviderOptions, GrokRuntimeHost } from "./host";
  */
 export class GrokProvider implements CodeAgentProvider {
   readonly provider = RUNTIME_PROVIDER.GROK;
+  readonly compactionFailure = "does_not_stick";
   readonly reportsCompaction = true;
   readonly #host: GrokRuntimeHost;
   readonly #command: readonly string[];
