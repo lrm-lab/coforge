@@ -294,7 +294,7 @@ describe("the sandbox's answer", () => {
     expect(csp.slice(0, -1).join(" ")).not.toMatch(/https?:|\*/);
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
     expect(response.headers.get("referrer-policy")).toBe("no-referrer");
-    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(response.headers.get("cache-control")).toBe("no-store");
   });
 
   test("HEAD has the headers and no body; other methods are refused", async () => {
