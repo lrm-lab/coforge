@@ -21,7 +21,12 @@ const request = {
   computerId: agent.computerId,
   agentId: agent.id,
 };
-const cleanerSettings = { enabled: false, thresholdBytes: 8192, intervalMs: 1_800_000 };
+const cleanerSettings = {
+  enabled: false,
+  thresholdBytes: 8192,
+  activeContextThresholdBytes: 4_000,
+  intervalMs: 1_800_000,
+};
 // A row holds only the keys the Agent overrode, as it set them.
 const stored: StoredAgentAppConfig = {
   appId: CLEANER_APP_ID,
@@ -31,9 +36,15 @@ const stored: StoredAgentAppConfig = {
 const cleanerSchema = {
   enabled: { type: "boolean" },
   threshold_bytes: { type: "integer", minimum: 4096, maximum: 1_073_741_824 },
+  active_context_threshold_bytes: { type: "integer", minimum: 1_000, maximum: 4_194_304 },
   interval_seconds: { type: "integer", minimum: 900, maximum: 604_800 },
 } as const;
-const cleanerDefaults = { enabled: true, threshold_bytes: 8_192, interval_seconds: 3600 };
+const cleanerDefaults = {
+  enabled: true,
+  threshold_bytes: 12_000,
+  active_context_threshold_bytes: 4_000,
+  interval_seconds: 3600,
+};
 
 function harness(
   options: {
@@ -190,7 +201,11 @@ test("an Agent reads an App's schema, defaults, overrides and effective config",
   });
   const partial = { appId: CLEANER_APP_ID, revision: 2, config: { threshold_bytes: 8_192 } };
   expect(await harness({ rows: [partial] }).configs.view(agent.id, CLEANER_APP_ID)).toMatchObject({
-    config: { revision: 2, overrides: { threshold_bytes: 8_192 }, effective: cleanerDefaults },
+    config: {
+      revision: 2,
+      overrides: { threshold_bytes: 8_192 },
+      effective: { ...cleanerDefaults, threshold_bytes: 8_192 },
+    },
   });
   expect(await harness().configs.view(agent.id, "system.unknown")).toEqual({
     state: "app_not_found",

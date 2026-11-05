@@ -6,8 +6,10 @@ one fact per line. Only long material lives elsewhere, and only as a pointer.
 
 ## Layout
 
-- `MEMORY.md` — the index and the facts (aim for about 3KB); it arrives with every fresh session
-- `notes/active-context.md` — the current state: next step, blocker, progress (about 1KB, not a log)
+- `MEMORY.md` — the index and the facts; a fresh session carries its first 3,000 tokens (about
+  12 KB), which is also the System Cleaner's limit for it
+- `notes/active-context.md` — the current state: next step, blocker, progress (about 1,000 tokens
+  ≈ 4 KB, which is also its cleaner limit; not a log)
 - `notes/<topic>.md` — long material only: procedures, reports, reference, exported data
 - `notes/` — also what you produce: reports, exported data, images
 - `code/` — repositories you clone

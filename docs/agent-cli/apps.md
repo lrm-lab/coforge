@@ -163,13 +163,17 @@ coforge app config --app <app-id> [--set <key>=<value>]... [--unset <key>]... [-
 
 ## `system.cleaner`
 
-| Key                | Type    | Bounds                   | Default |
-| ------------------ | ------- | ------------------------ | ------- |
-| `enabled`          | boolean |                          | `true`  |
-| `threshold_bytes`  | integer | 4096 to 1073741824       | 8192    |
-| `interval_seconds` | integer | 900 to 604800            | 3600    |
+| Key                              | Type    | Bounds             | Default |
+| -------------------------------- | ------- | ------------------ | ------- |
+| `enabled`                        | boolean |                    | `true`  |
+| `threshold_bytes`                | integer | 4096 to 1073741824 | 12000   |
+| `active_context_threshold_bytes` | integer | 1000 to 4194304    | 4000    |
+| `interval_seconds`               | integer | 900 to 604800      | 3600    |
 
-The `workspace-cleanup` Agent Manual topic says when to raise `threshold_bytes`.
+`threshold_bytes` bounds `MEMORY.md` and `active_context_threshold_bytes` bounds
+`notes/active-context.md` — the two files a fresh session carries. Each default is that file's
+share of the session block in bytes. The `workspace-cleanup` Agent Manual topic says when to
+raise either one.
 
 ## HTTP
 

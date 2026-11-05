@@ -16,7 +16,12 @@ const cleaner = (ownerAgentId: string, revision = 2): AppConfig => ({
   appId: CLEANER_APP_ID,
   ownerAgentId,
   revision,
-  effective: { enabled: true, thresholdBytes: 8192, intervalMs: 900_000 },
+  effective: {
+    enabled: true,
+    thresholdBytes: 8192,
+    activeContextThresholdBytes: 4_000,
+    intervalMs: 900_000,
+  },
 });
 const sync = (
   agentId: string,
@@ -58,6 +63,7 @@ test("an upsert reaches its App's runtime as one flat config", () => {
         revision: 5,
         enabled: true,
         thresholdBytes: 8192,
+        activeContextThresholdBytes: 4_000,
         intervalMs: 900_000,
       },
     ],

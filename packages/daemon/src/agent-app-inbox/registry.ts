@@ -63,9 +63,11 @@ export function systemCleanerItemId(notificationClass: string, ownerAgentId: str
   return `cleaner:${notificationClass}:${ownerAgentId}`;
 }
 
-/** The System Cleaner's two hint classes and the source kind each one's items carry. */
+/** The System Cleaner's three hint classes and the source kind each one's items carry: one per
+ * file a fresh session carries (MEMORY.md, notes/active-context.md) and one for disk space. */
 export const SYSTEM_CLEANER_CLASSES = {
   memory: { notificationClass: "memory_size", sourceKind: "memory_size" },
+  activeContext: { notificationClass: "active_context_size", sourceKind: "active_context_size" },
   disk: { notificationClass: "disk_space", sourceKind: "disk_space" },
 } as const;
 
@@ -78,7 +80,8 @@ function systemCleanerHint(
     retention: "transient",
     action: { kind: "run_command", commandId },
     command: () => command,
-    summaryMaxChars: 240,
+    // Room for the file's trim guidance plus the command that raises its limit.
+    summaryMaxChars: 320,
     normalizeSourceRef(value) {
       if (!value || typeof value !== "object" || Array.isArray(value))
         throw new Error("cleaner sourceRef must be {kind,id,revision}");
@@ -146,6 +149,11 @@ export const AGENT_APP_REGISTRY: Readonly<
   [SYSTEM_CLEANER_APP_ID]: {
     [SYSTEM_CLEANER_CLASSES.memory.notificationClass]: systemCleanerHint(
       SYSTEM_CLEANER_CLASSES.memory,
+      "app.config",
+      `coforge app config --app ${SYSTEM_CLEANER_APP_ID}`,
+    ),
+    [SYSTEM_CLEANER_CLASSES.activeContext.notificationClass]: systemCleanerHint(
+      SYSTEM_CLEANER_CLASSES.activeContext,
       "app.config",
       `coforge app config --app ${SYSTEM_CLEANER_APP_ID}`,
     ),

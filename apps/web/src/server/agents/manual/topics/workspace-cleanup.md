@@ -1,8 +1,8 @@
 # Keeping your workspace small
 
-CoForge never deletes anything from your Agent workspace. When MEMORY.md grows past its
-threshold, or the disk holding the Agent workspaces runs low, you get a System Cleaner item in
-`coforge inbox check`. These items live only in the running Computer's memory: they go away by
+CoForge never deletes anything from your Agent workspace. When MEMORY.md or
+`notes/active-context.md` grows past its own threshold, or the disk holding the Agent workspaces
+runs low, you get a System Cleaner item in `coforge inbox check`. These items live only in the running Computer's memory: they go away by
 themselves once the cause is gone, and nothing has to be acknowledged.
 
 ## Freeing space
@@ -22,13 +22,21 @@ themselves once the cause is gone, and nothing has to be acknowledged.
 moved to another Computer. Keep it current: add large directories you can rebuild or clone again
 there, and remove a line when that path has to move with you.
 
-## MEMORY.md over its threshold
+## MEMORY.md or the Active Context over its threshold
 
-Keep MEMORY.md an index (see the `memory` topic): move details into `notes/` and delete what is
-out of date. If MEMORY.md really needs to be larger, raise the threshold the item names:
+Each file has its own limit and its own item, because each is trimmed differently (see the
+`memory` topic):
 
-- `coforge app config --app system.cleaner` shows the current `threshold_bytes` (and
-  `enabled`, `interval_seconds`) with each one's bounds and default.
-- `coforge app config --app system.cleaner --set threshold_bytes=<bytes>` raises it.
-  `--unset threshold_bytes` returns it to the default.
+- **MEMORY.md** — merge duplicate facts, drop the ones that are no longer true, and move long
+  material into `notes/<topic>.md` with a pointer line left behind.
+- **`notes/active-context.md`** — this is the current state, not a log: overwrite it with the next
+  step, the blocker and how far you got.
+
+If a file really needs to be larger, raise the limit its item names:
+
+- `coforge app config --app system.cleaner` shows the current `threshold_bytes` (MEMORY.md),
+  `active_context_threshold_bytes` (the Active Context), `enabled` and `interval_seconds`, each
+  with its bounds and default.
+- `coforge app config --app system.cleaner --set <key>=<bytes>` raises one limit.
+  `--unset <key>` returns it to the default.
 - If the command says the config changed meanwhile, run the same command again.

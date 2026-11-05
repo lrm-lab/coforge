@@ -2,11 +2,14 @@ syntax = "proto3";
 
 package coforge.rpc.v1;
 
-// The System Cleaner's effective settings for one Agent.
+// The System Cleaner's effective settings for one Agent. `threshold_bytes` bounds MEMORY.md and
+// `active_context_threshold_bytes` bounds notes/active-context.md, the two files a fresh session
+// carries; each file is measured against its own limit.
 message CleanerAppConfig {
   bool enabled = 1;
   uint32 threshold_bytes = 2;
   uint32 interval_ms = 3;
+  uint32 active_context_threshold_bytes = 4;
 }
 
 // One Agent App's effective configuration for its owner Agent. Each App has its own typed

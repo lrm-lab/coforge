@@ -1,7 +1,7 @@
 import { constants } from "node:fs";
 import { lstat, open } from "node:fs/promises";
 import { join } from "node:path";
-import { AGENT_MEMORY_FILE } from "./agent-workspace-path";
+import { AGENT_ACTIVE_CONTEXT_FILE, AGENT_MEMORY_FILE } from "./agent-workspace-path";
 import { CHARS_PER_TOKEN, estimateTokens } from "@lrm/coforge-anvil";
 
 /** Refuses a symlink at the final component, and never blocks on a swapped-in FIFO. */
@@ -9,9 +9,6 @@ const OPEN_FLAGS =
   constants.O_RDONLY |
   constants.O_NONBLOCK |
   (process.platform === "win32" ? 0 : constants.O_NOFOLLOW);
-
-/** The Active Context's path inside an Agent workspace. */
-export const AGENT_ACTIVE_CONTEXT_FILE = "notes/active-context.md";
 
 function kilobytes(bytes: number): string {
   return `${(bytes / 1024).toFixed(1)} KB`;

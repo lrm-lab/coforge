@@ -49,9 +49,9 @@ export const BUILT_IN_APPS = [
     key: CLEANER_APP_ID,
     name: "System Cleaner",
     description:
-      "Watches the size of an Agent's MEMORY.md and the free disk space for Agent workspaces, and leaves the Agent an App Inbox hint when either needs attention. It never deletes files.",
+      "Watches the size of an Agent's MEMORY.md and notes/active-context.md — the two files a fresh session carries — and the free disk space for Agent workspaces, and leaves the Agent an App Inbox hint when one needs attention. It never deletes files.",
     whenToUse:
-      "Act on its hint to keep MEMORY.md and your workspace small; tune it with coforge app config.",
+      "Act on its hint to keep MEMORY.md, the Active Context and your workspace small; tune it with coforge app config.",
   },
 ] as const satisfies readonly BuiltInApp[];
 
@@ -60,9 +60,14 @@ export type BuiltInAppKey = (typeof BUILT_IN_APPS)[number]["key"];
 /** Only a built-in app has a config: a key that is not one fails to compile here. */
 type BuiltInAppKeyOf<Key extends BuiltInAppKey> = Key;
 
-/** The System Cleaner's settings: whether it runs, the workspace size that triggers it, and how
- * often it looks. */
-export type CleanerAppConfig = { enabled: boolean; thresholdBytes: number; intervalMs: number };
+/** The System Cleaner's settings: whether it runs, the size each file a fresh session carries may
+ * reach before it is flagged, and how often it looks. */
+export type CleanerAppConfig = {
+  enabled: boolean;
+  thresholdBytes: number;
+  activeContextThresholdBytes: number;
+  intervalMs: number;
+};
 
 /** One config key's type as an Agent sees it (`coforge app config`): a boolean, or an integer
  * within inclusive bounds. */
@@ -76,17 +81,24 @@ export type AppConfigValues = Record<string, AppConfigValue>;
 const CLEANER_FIELDS = {
   enabled: { type: "boolean" },
   threshold_bytes: { type: "integer", minimum: 4_096, maximum: 1_073_741_824 },
+  active_context_threshold_bytes: { type: "integer", minimum: 1_000, maximum: 4_194_304 },
   interval_seconds: { type: "integer", minimum: 900, maximum: 604_800 },
 } as const satisfies Record<string, AppConfigField>;
-// 8 KiB, not the reference Computer's 64 KiB: CoForge's earlier MEMORY.md reminder fired there, and it
-// stays well inside the 25KB of MEMORY.md that Claude Code loads into each session.
-const CLEANER_DEFAULT_VALUES = { enabled: true, threshold_bytes: 8_192, interval_seconds: 3_600 };
+// Each default is the character budget of the file it measures: a fresh session carries at most
+// 3,000 tokens of MEMORY.md and 1,000 of the Active Context, at 4 characters per token.
+const CLEANER_DEFAULT_VALUES = {
+  enabled: true,
+  threshold_bytes: 12_000,
+  active_context_threshold_bytes: 4_000,
+  interval_seconds: 3_600,
+};
 const MS_PER_SECOND = 1_000;
 
 /** Cleaner settings from a complete set of its Agent-facing values. */
 const cleanerSettings = (values: AppConfigValues): CleanerAppConfig => ({
   enabled: values.enabled as boolean,
   thresholdBytes: values.threshold_bytes as number,
+  activeContextThresholdBytes: values.active_context_threshold_bytes as number,
   intervalMs: (values.interval_seconds as number) * MS_PER_SECOND,
 });
 
@@ -95,6 +107,10 @@ export const CLEANER_CONFIG_BOUNDS = {
   thresholdBytes: {
     min: CLEANER_FIELDS.threshold_bytes.minimum,
     max: CLEANER_FIELDS.threshold_bytes.maximum,
+  },
+  activeContextThresholdBytes: {
+    min: CLEANER_FIELDS.active_context_threshold_bytes.minimum,
+    max: CLEANER_FIELDS.active_context_threshold_bytes.maximum,
   },
   intervalMs: {
     min: CLEANER_FIELDS.interval_seconds.minimum * MS_PER_SECOND,
@@ -114,20 +130,22 @@ export const fitsAppConfigField = (field: AppConfigField, value: unknown) =>
 const within = (value: unknown, bounds: { min: number; max: number }) =>
   fitsAppConfigField({ type: "integer", minimum: bounds.min, maximum: bounds.max }, value);
 
-/** Cleaner settings exactly as stored or sent: the three keys, each within its bounds. */
+/** Cleaner settings exactly as stored or sent: the four keys, each within its bounds. */
 export function validateCleanerAppConfig(value: unknown): CleanerAppConfig {
   if (
     !isRecord(value) ||
-    // Three keys, each checked below: no extra or missing one.
-    Object.keys(value).length !== 3 ||
+    // Four keys, each checked below: no extra or missing one.
+    Object.keys(value).length !== 4 ||
     typeof value.enabled !== "boolean" ||
     !within(value.thresholdBytes, CLEANER_CONFIG_BOUNDS.thresholdBytes) ||
+    !within(value.activeContextThresholdBytes, CLEANER_CONFIG_BOUNDS.activeContextThresholdBytes) ||
     !within(value.intervalMs, CLEANER_CONFIG_BOUNDS.intervalMs)
   )
     throw new Error("invalid cleaner app config");
   return {
     enabled: value.enabled,
     thresholdBytes: value.thresholdBytes as number,
+    activeContextThresholdBytes: value.activeContextThresholdBytes as number,
     intervalMs: value.intervalMs as number,
   };
 }

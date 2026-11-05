@@ -1,132 +1,27 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AgentAppInbox, type AgentAppItem } from "#src/agent-app-inbox/agent-app-inbox";
+import { SystemCleaner, type MemoryMeasurement } from "#src/system-cleaner/system-cleaner";
 import {
-  SystemCleaner,
-  type CleanerClock,
-  type DiskMeasurement,
-  type MemoryMeasurement,
-} from "#src/system-cleaner/system-cleaner";
+  ACTIVE_CONTEXT_ITEM,
+  cleanupHarnesses,
+  config,
+  DAY_MS,
+  DISK_ITEM,
+  GIB,
+  harness,
+  HOUR_MS,
+  KIB,
+  ManualClock,
+  MEMORY_ITEM,
+  OWNER,
+  PLENTY_OF_DISK,
+  trackRoot,
+  WEEK_MS,
+} from "./fixtures/system-cleaner-harness";
 
-const KIB = 1024;
-const GIB = 1024 ** 3;
-const HOUR_MS = 60 * 60 * 1000;
-const DAY_MS = 24 * HOUR_MS;
-const WEEK_MS = 7 * DAY_MS;
-const OWNER = "agent-a";
-const MEMORY_ITEM = `cleaner:memory_size:${OWNER}`;
-const DISK_ITEM = `cleaner:disk_space:${OWNER}`;
-const PLENTY_OF_DISK: DiskMeasurement = {
-  kind: "measured",
-  availableBytes: 200 * GIB,
-  totalBytes: 500 * GIB,
-};
-const LOW_DISK: DiskMeasurement = {
-  kind: "measured",
-  availableBytes: 10 * GIB,
-  totalBytes: 500 * GIB,
-};
-
-/** A manual clock: timers fire only when a test advances time past them. */
-class ManualClock implements CleanerClock {
-  nowMs = 1_000_000;
-  #nextId = 1;
-  readonly #timers = new Map<number, { atMs: number; run: () => void }>();
-
-  now() {
-    return this.nowMs;
-  }
-  schedule(run: () => void, delayMs: number) {
-    const id = this.#nextId++;
-    this.#timers.set(id, { atMs: this.nowMs + delayMs, run });
-    return id;
-  }
-  cancel(handle: unknown) {
-    this.#timers.delete(handle as number);
-  }
-  pending() {
-    return this.#timers.size;
-  }
-  advance(ms: number) {
-    const target = this.nowMs + ms;
-    for (;;) {
-      const due = [...this.#timers.entries()]
-        .filter(([, timer]) => timer.atMs <= target)
-        .sort((left, right) => left[1].atMs - right[1].atMs)[0];
-      if (!due) break;
-      this.#timers.delete(due[0]);
-      this.nowMs = due[1].atMs;
-      due[1].run();
-    }
-    this.nowMs = target;
-  }
-}
-
-const roots: string[] = [];
-afterEach(() =>
-  Promise.all(roots.splice(0).map((path) => rm(path, { recursive: true, force: true }))),
-);
-
-async function harness() {
-  const stateDirectory = await mkdtemp(join(tmpdir(), "coforge-system-cleaner-"));
-  roots.push(stateDirectory);
-  const clock = new ManualClock();
-  const inboxes = new Map<string, Promise<AgentAppInbox>>();
-  const inbox = (agentId: string) => {
-    const existing = inboxes.get(agentId);
-    if (existing) return existing;
-    const opened = AgentAppInbox.open(stateDirectory, "workspace-a", agentId);
-    inboxes.set(agentId, opened);
-    return opened;
-  };
-  const measured = { memory: 0 as number | undefined, disk: PLENTY_OF_DISK };
-  const measuredPaths: string[] = [];
-  const wakes: { agentId: string; itemId: string }[] = [];
-  const cleaner = new SystemCleaner({
-    agentsDirectory: "/agents-root",
-    clock,
-    measureMemoryFile: async (path): Promise<MemoryMeasurement> => {
-      measuredPaths.push(path);
-      return measured.memory === undefined
-        ? { kind: "not_established", reason: "missing" }
-        : { kind: "measured", bytes: measured.memory };
-    },
-    measureDiskSpace: async () => measured.disk,
-    inbox: {
-      upsert: async (agentId, item) => (await inbox(agentId)).upsert(item),
-      remove: async (agentId, itemId) => (await inbox(agentId)).remove(itemId),
-    },
-    wake: async (agentId, itemId) => {
-      wakes.push({ agentId, itemId });
-    },
-  });
-  const items = async (agentId = OWNER): Promise<AgentAppItem[]> => (await inbox(agentId)).list();
-  /** Advances time an hour (one period) at a time, letting each period's measurements settle
-   * before the next, as they do when real periods are an interval apart. */
-  const period = async (ms = HOUR_MS) => {
-    for (let remaining = ms; remaining > 0; remaining -= HOUR_MS) {
-      clock.advance(Math.min(HOUR_MS, remaining));
-      await cleaner.settled();
-    }
-  };
-  const idle = async (agentId = OWNER) => {
-    cleaner.onAgentWorkingToIdle(agentId);
-    await cleaner.settled();
-  };
-  return { cleaner, clock, measured, measuredPaths, wakes, items, period, idle };
-}
-
-const config = (overrides: Record<string, unknown> = {}) => ({
-  appId: "system.cleaner",
-  ownerAgentId: OWNER,
-  enabled: true,
-  thresholdBytes: 64 * KIB,
-  intervalMs: HOUR_MS,
-  revision: 1,
-  ...overrides,
-});
+afterEach(cleanupHarnesses);
 
 describe("SystemCleaner config", () => {
   test("validates the config envelope and its bounds", async () => {
@@ -157,6 +52,14 @@ describe("SystemCleaner config", () => {
       kind: "invalid",
       reason: "threshold_bytes_invalid",
     });
+    expect(invalid(config({ activeContextThresholdBytes: 999 }))).toEqual({
+      kind: "invalid",
+      reason: "active_context_threshold_bytes_invalid",
+    });
+    expect(invalid(config({ activeContextThresholdBytes: 4 * GIB + 1 }))).toEqual({
+      kind: "invalid",
+      reason: "active_context_threshold_bytes_invalid",
+    });
     expect(invalid(config({ intervalMs: 899_999 }))).toEqual({
       kind: "invalid",
       reason: "interval_ms_invalid",
@@ -169,10 +72,15 @@ describe("SystemCleaner config", () => {
       kind: "invalid",
       reason: "revision_invalid",
     });
-    expect(cleaner.applyConfig(config({ thresholdBytes: 4096, intervalMs: 900_000 }))).toEqual({
-      kind: "applied",
-      activeSchedules: 1,
-    });
+    expect(
+      cleaner.applyConfig(
+        config({
+          thresholdBytes: 4096,
+          activeContextThresholdBytes: 1_000,
+          intervalMs: 900_000,
+        }),
+      ),
+    ).toEqual({ kind: "applied", activeSchedules: 1 });
   });
 
   test("orders configs by revision and refuses a conflicting same revision", async () => {
@@ -230,7 +138,10 @@ describe("SystemCleaner MEMORY.md hint", () => {
     await period(HOUR_MS - 1);
     expect(measuredPaths).toEqual([]);
     await period(1);
-    expect(measuredPaths).toEqual([join("/agents-root", OWNER, "MEMORY.md")]);
+    expect(measuredPaths).toEqual([
+      join("/agents-root", OWNER, "MEMORY.md"),
+      join("/agents-root", OWNER, "notes", "active-context.md"),
+    ]);
     expect(await items()).toEqual([]);
     expect(wakes).toEqual([]);
 
@@ -245,7 +156,7 @@ describe("SystemCleaner MEMORY.md hint", () => {
         action: { kind: "run_command", commandId: "app.config" },
         title: "MEMORY.md has grown to 70.0 KiB (limit 64.0 KiB); next check in 1h",
         summary:
-          "Trim it back to an index: details belong in notes/, and stale entries can go. To allow more, double the limit (or pick a lower value) with coforge app config --app system.cleaner --set threshold_bytes=131072",
+          "Merge duplicate facts, drop stale ones, and move long material to notes/<topic>.md behind a pointer. To allow more, double the limit (or pick a lower value) with coforge app config --app system.cleaner --set threshold_bytes=131072",
       }),
     ]);
     expect(wakes).toEqual([{ agentId: OWNER, itemId: MEMORY_ITEM }]);
@@ -262,7 +173,7 @@ describe("SystemCleaner MEMORY.md hint", () => {
     await period();
     await idle();
     expect((await items()).find((item) => item.itemId === MEMORY_ITEM)?.summary).toBe(
-      "Trim it back to an index: details belong in notes/, and stale entries can go. To allow more, raise the limit to its maximum (or pick a lower value) with coforge app config --app system.cleaner --set threshold_bytes=1073741824",
+      "Merge duplicate facts, drop stale ones, and move long material to notes/<topic>.md behind a pointer. To allow more, raise the limit to its maximum (or pick a lower value) with coforge app config --app system.cleaner --set threshold_bytes=1073741824",
     );
 
     cleaner.applyConfig(config({ revision: 2, thresholdBytes: GIB }));
@@ -270,7 +181,7 @@ describe("SystemCleaner MEMORY.md hint", () => {
     await period();
     await idle();
     expect((await items()).find((item) => item.itemId === MEMORY_ITEM)?.summary).toBe(
-      "Trim it back to an index: details belong in notes/, and stale entries can go. The limit is at its maximum; view or lower it with coforge app config --app system.cleaner",
+      "Merge duplicate facts, drop stale ones, and move long material to notes/<topic>.md behind a pointer. The limit is at its maximum; view or lower it with coforge app config --app system.cleaner",
     );
   });
 
@@ -335,87 +246,6 @@ describe("SystemCleaner MEMORY.md hint", () => {
   });
 });
 
-describe("SystemCleaner workspace cleanup tip", () => {
-  test("accompanies the first memory hint, then at most once a week", async () => {
-    const { cleaner, measured, items, period, idle } = await harness();
-    cleaner.applyConfig(config());
-    measured.memory = 70 * KIB;
-    await period();
-    await idle();
-    expect((await items()).find((item) => item.itemId === DISK_ITEM)).toMatchObject({
-      retention: "transient",
-      action: { kind: "run_command", commandId: "manual.workspace_cleanup" },
-      command: "coforge manual get workspace-cleanup",
-      title:
-        "When it's quiet, remove workspace files you know are unused; check with your owner or creator on anything uncertain",
-      summary:
-        "Only raise files added since your last question, and update .coforgemigrateignore as the workspace changes.",
-    });
-  });
-
-  test("is not repeated within a week of the last one", async () => {
-    const { cleaner, measured, wakes, items, period, idle } = await harness();
-    cleaner.applyConfig(config());
-    measured.memory = 70 * KIB;
-    await period();
-    await idle();
-    expect(wakes).toHaveLength(1);
-    // Simulate the Agent clearing the tip: a new config drops both items.
-    cleaner.applyConfig(config({ revision: 2 }));
-    await cleaner.settled();
-    await period(DAY_MS);
-    await idle();
-    expect((await items()).map((item) => item.itemId)).toEqual([MEMORY_ITEM]);
-  });
-
-  test("low disk brings the tip with how much is free, once per low-disk episode and weekly at most", async () => {
-    const { cleaner, measured, wakes, items, period, idle } = await harness();
-    cleaner.applyConfig(config());
-    measured.disk = LOW_DISK;
-    await period();
-    await idle();
-    expect(await items()).toEqual([
-      expect.objectContaining({
-        itemId: DISK_ITEM,
-        summary:
-          "Only 10.0 GiB of disk space is left. Only raise files added since your last question, and update .coforgemigrateignore as the workspace changes.",
-        command: "coforge manual get workspace-cleanup",
-      }),
-    ]);
-    expect(wakes).toEqual([{ agentId: OWNER, itemId: DISK_ITEM }]);
-
-    // Same low-disk episode: no new tip even after a week.
-    await period(WEEK_MS);
-    await idle();
-    expect(wakes).toHaveLength(1);
-
-    // Disk recovers, then is low again: a new episode tips once the week has passed.
-    measured.disk = PLENTY_OF_DISK;
-    await period();
-    measured.disk = LOW_DISK;
-    await period();
-    await idle();
-    expect(wakes).toHaveLength(2);
-  });
-
-  test("disk is low only under both 20 GiB and 10% free, and a bad reading is ignored", async () => {
-    const { cleaner, measured, wakes, period, idle } = await harness();
-    cleaner.applyConfig(config());
-    for (const disk of [
-      { availableBytes: 15 * GIB, totalBytes: 100 * GIB },
-      { availableBytes: 25 * GIB, totalBytes: 500 * GIB },
-      { availableBytes: 5 * GIB, totalBytes: 0 },
-      { availableBytes: 10 * GIB, totalBytes: 5 * GIB },
-      { availableBytes: Number.NaN, totalBytes: 500 * GIB },
-    ]) {
-      measured.disk = { kind: "measured", ...disk };
-      await period();
-      await idle();
-    }
-    expect(wakes).toEqual([]);
-  });
-});
-
 describe("SystemCleaner lifecycle", () => {
   test("a disabled config, a new config, or removing the owner drops its items", async () => {
     const { cleaner, measured, items, period, idle } = await harness();
@@ -465,7 +295,7 @@ describe("SystemCleaner lifecycle", () => {
 
   test("a measurement that does not answer in time counts as not measurable", async () => {
     const stateDirectory = await mkdtemp(join(tmpdir(), "coforge-system-cleaner-"));
-    roots.push(stateDirectory);
+    trackRoot(stateDirectory);
     const clock = new ManualClock();
     const wakes: string[] = [];
     const cleaner = new SystemCleaner({

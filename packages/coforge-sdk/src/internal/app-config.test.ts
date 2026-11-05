@@ -27,7 +27,12 @@ const cleaner = {
   appId: CLEANER_APP_ID,
   ownerAgentId: "agent-1",
   revision: 3,
-  effective: { enabled: false, thresholdBytes: 8192, intervalMs: 1_800_000 },
+  effective: {
+    enabled: false,
+    thresholdBytes: 8192,
+    activeContextThresholdBytes: 8_000,
+    intervalMs: 1_800_000,
+  },
 } as const;
 const sync = (value: Partial<AppConfigSync> = {}): AppConfigSync => ({
   ...scope,
@@ -96,6 +101,8 @@ test("a known App's row must carry its own settings within their bounds", () => 
   for (const effective of [
     { ...cleaner.effective, thresholdBytes: 4095 },
     { ...cleaner.effective, thresholdBytes: 1_073_741_825 },
+    { ...cleaner.effective, activeContextThresholdBytes: 999 },
+    { ...cleaner.effective, activeContextThresholdBytes: 4_194_305 },
     { ...cleaner.effective, intervalMs: 899_999 },
     { ...cleaner.effective, intervalMs: 604_800_001 },
   ])
@@ -130,29 +137,75 @@ test("a snapshot request round-trips its scope and refuses another protocol", ()
   expect(() => encodeAppConfigSnapshotRequest({ ...scope, protocolMajor: 2 })).toThrow();
 });
 
-test("cleaner settings bound as the reference Computer's do, with an 8 KiB default threshold", () => {
+test("cleaner defaults bound each file a fresh session carries, at its budget in bytes", () => {
   expect(CLEANER_CONFIG_DEFAULTS).toEqual({
     enabled: true,
-    thresholdBytes: 8_192,
+    thresholdBytes: 12_000,
+    activeContextThresholdBytes: 4_000,
     intervalMs: 3_600_000,
   });
   expect(
-    validateCleanerAppConfig({ enabled: true, thresholdBytes: 4096, intervalMs: 900_000 }),
-  ).toEqual({ enabled: true, thresholdBytes: 4096, intervalMs: 900_000 });
+    validateCleanerAppConfig({
+      enabled: true,
+      thresholdBytes: 4096,
+      activeContextThresholdBytes: 1_000,
+      intervalMs: 900_000,
+    }),
+  ).toEqual({
+    enabled: true,
+    thresholdBytes: 4096,
+    activeContextThresholdBytes: 1_000,
+    intervalMs: 900_000,
+  });
   expect(
     validateCleanerAppConfig({
       enabled: false,
       thresholdBytes: 1_073_741_824,
+      activeContextThresholdBytes: 4_194_304,
       intervalMs: 604_800_000,
     }),
-  ).toEqual({ enabled: false, thresholdBytes: 1_073_741_824, intervalMs: 604_800_000 });
+  ).toEqual({
+    enabled: false,
+    thresholdBytes: 1_073_741_824,
+    activeContextThresholdBytes: 4_194_304,
+    intervalMs: 604_800_000,
+  });
   for (const value of [
     null,
     [],
     { enabled: true, thresholdBytes: 65_536 },
-    { enabled: "yes", thresholdBytes: 65_536, intervalMs: 3_600_000 },
-    { enabled: true, thresholdBytes: 65_536.5, intervalMs: 3_600_000 },
-    { enabled: true, thresholdBytes: 65_536, intervalMs: 3_600_000, extra: 1 },
+    { enabled: true, thresholdBytes: 65_536, intervalMs: 3_600_000 },
+    {
+      enabled: "yes",
+      thresholdBytes: 65_536,
+      activeContextThresholdBytes: 4_000,
+      intervalMs: 3_600_000,
+    },
+    {
+      enabled: true,
+      thresholdBytes: 65_536.5,
+      activeContextThresholdBytes: 4_000,
+      intervalMs: 3_600_000,
+    },
+    {
+      enabled: true,
+      thresholdBytes: 65_536,
+      activeContextThresholdBytes: 999,
+      intervalMs: 3_600_000,
+    },
+    {
+      enabled: true,
+      thresholdBytes: 65_536,
+      activeContextThresholdBytes: 4_194_305,
+      intervalMs: 3_600_000,
+    },
+    {
+      enabled: true,
+      thresholdBytes: 65_536,
+      activeContextThresholdBytes: 4_000,
+      intervalMs: 3_600_000,
+      extra: 1,
+    },
   ])
     expect(() => validateCleanerAppConfig(value)).toThrow("cleaner");
 });
@@ -162,16 +215,28 @@ test("an Agent reads and sets the cleaner by snake_case keys in whole seconds", 
   expect(definition.fields).toEqual({
     enabled: { type: "boolean" },
     threshold_bytes: { type: "integer", minimum: 4096, maximum: 1_073_741_824 },
+    active_context_threshold_bytes: { type: "integer", minimum: 1_000, maximum: 4_194_304 },
     interval_seconds: { type: "integer", minimum: 900, maximum: 604_800 },
   });
   expect(definition.defaults).toEqual({
     enabled: true,
-    threshold_bytes: 8_192,
+    threshold_bytes: 12_000,
+    active_context_threshold_bytes: 4_000,
     interval_seconds: 3600,
   });
   expect(
-    definition.settings({ enabled: false, threshold_bytes: 8192, interval_seconds: 1800 }),
-  ).toEqual({ enabled: false, thresholdBytes: 8192, intervalMs: 1_800_000 });
+    definition.settings({
+      enabled: false,
+      threshold_bytes: 8192,
+      active_context_threshold_bytes: 6_000,
+      interval_seconds: 1800,
+    }),
+  ).toEqual({
+    enabled: false,
+    thresholdBytes: 8192,
+    activeContextThresholdBytes: 6_000,
+    intervalMs: 1_800_000,
+  });
 });
 
 test("a revision must be a non-negative integer", () => {

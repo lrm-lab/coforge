@@ -3,6 +3,9 @@ import { join } from "node:path";
 /** The Agent's memory index in its workspace root. */
 export const AGENT_MEMORY_FILE = "MEMORY.md";
 
+/** The Agent's current state, overwritten as work moves, under `notes/`. */
+export const AGENT_ACTIVE_CONTEXT_FILE = "notes/active-context.md";
+
 /** Where an Agent clones the repositories it works on, in its workspace root. */
 export const AGENT_CODE_DIRECTORY = "code";
 
