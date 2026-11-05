@@ -121,11 +121,11 @@ test("a loaded unit is reported with its state", async () => {
   const dir = await recordFor();
   const view = await inspectSupervisor(dir, {
     systemctl: runner({
-      "show -P LoadState coforge-daemon.service": { code: 0, stdout: "loaded\n" },
+      "show -p LoadState -p ActiveState -p MainPID -p KillMode coforge-daemon.service": {
+        code: 0,
+        stdout: "LoadState=loaded\nActiveState=active\nMainPID=4242\nKillMode=control-group\n",
+      },
       "is-enabled coforge-daemon.service": { code: 0, stdout: "enabled\n" },
-      "show -P ActiveState coforge-daemon.service": { code: 0, stdout: "active\n" },
-      "show -P MainPID coforge-daemon.service": { code: 0, stdout: "4242\n" },
-      "show -P KillMode coforge-daemon.service": { code: 0, stdout: "control-group\n" },
     }),
   });
   expect(view).toMatchObject({
@@ -142,7 +142,10 @@ test("a unit systemd no longer knows is reachable but not loaded", async () => {
   const dir = await recordFor();
   const view = await inspectSupervisor(dir, {
     systemctl: runner({
-      "show -P LoadState coforge-daemon.service": { code: 0, stdout: "not-found\n" },
+      "show -p LoadState -p ActiveState -p MainPID -p KillMode coforge-daemon.service": {
+        code: 0,
+        stdout: "LoadState=not-found\nActiveState=inactive\n",
+      },
     }),
   });
   expect(view).toMatchObject({ unitLoaded: false, reachable: true });

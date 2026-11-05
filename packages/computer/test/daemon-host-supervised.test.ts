@@ -47,7 +47,8 @@ async function setup(answers: Record<string, { code: number | null; stdout?: str
   return { host, calls, registrar, stateDirectory };
 }
 
-const LOADED = { "show -P LoadState mine.service": { code: 0, stdout: "loaded\n" } };
+const SHOW = "show -p LoadState -p ActiveState -p MainPID -p KillMode mine.service";
+const LOADED = { [SHOW]: { code: 0, stdout: "LoadState=loaded\nActiveState=active\n" } };
 
 test("a loaded recorded unit is started through itself, not the registrar or our own unit", async () => {
   const { host, calls, registrar } = await setup(LOADED);
@@ -72,7 +73,7 @@ test("a supervised Computer is restartable", async () => {
 
 test("a recorded unit systemd forgot is cleared and the Computer manages itself again", async () => {
   const { host, registrar, stateDirectory } = await setup({
-    "show -P LoadState mine.service": { code: 0, stdout: "not-found\n" },
+    [SHOW]: { code: 0, stdout: "LoadState=not-found\n" },
   });
   // Our own unit is answered "loaded" by the injected runner, so the plain start path runs.
   await host.ensureRunning().catch(() => undefined);

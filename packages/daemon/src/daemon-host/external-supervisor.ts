@@ -10,7 +10,7 @@ import { join } from "node:path";
  * upgrade asks that unit instead of starting a second service beside it. Modeled on Raft's
  * `externalSupervisor.ts`.
  */
-export const EXTERNAL_SUPERVISOR_ENV_VAR = "COFORGE_COMPUTER_EXTERNAL_SUPERVISOR";
+const EXTERNAL_SUPERVISOR_ENV_VAR = "COFORGE_COMPUTER_EXTERNAL_SUPERVISOR";
 const SYSTEMD_INVOCATION_ENV_VAR = "INVOCATION_ID";
 const SUPERVISOR_RECORD_FILE = "supervisor.json";
 const SYSTEMCTL_TIMEOUT_MS = 15_000;
@@ -155,7 +155,7 @@ export async function readSupervisorRecord(
     const raw = JSON.parse(await readFile(recordPath(stateDirectory), "utf8"));
     if (raw?.kind !== "systemd" || (raw.scope !== "user" && raw.scope !== "system")) return null;
     if (typeof raw.unit !== "string" || !raw.unit.endsWith(".service")) return null;
-    if (!/^[A-Za-z0-9:_.@\\-]+$/u.test(raw.unit)) return null;
+    if (!/^[A-Za-z0-9][A-Za-z0-9:_.@\\-]*$/u.test(raw.unit)) return null;
     if (typeof raw.pid !== "number" || typeof raw.invocationId !== "string") return null;
     return {
       kind: "systemd",
@@ -190,7 +190,19 @@ export async function inspectSupervisor(
   const record = await readSupervisorRecord(stateDirectory);
   if (!record) return null;
   const runner = deps.systemctl ?? runSystemctl;
-  const load = await runner(record.scope, ["show", "-P", "LoadState", record.unit]);
+  // One `show` for every property; the exit code says whether systemctl answered at all.
+  const show = await runner(record.scope, [
+    "show",
+    "-p",
+    "LoadState",
+    "-p",
+    "ActiveState",
+    "-p",
+    "MainPID",
+    "-p",
+    "KillMode",
+    record.unit,
+  ]);
   const gone = {
     record,
     unitLoaded: false,
@@ -199,22 +211,25 @@ export async function inspectSupervisor(
     mainPid: null,
     killMode: null,
   };
-  if (load.code === null) return { ...gone, reachable: false };
-  if (load.code !== 0 || load.stdout.trim() !== "loaded") return { ...gone, reachable: true };
-  const [enabled, active, mainPid, killMode] = await Promise.all([
-    runner(record.scope, ["is-enabled", record.unit]).then((r) => r.stdout.trim() || null),
-    showUnitProperty(runner, record.scope, record.unit, "ActiveState"),
-    showUnitProperty(runner, record.scope, record.unit, "MainPID"),
-    showUnitProperty(runner, record.scope, record.unit, "KillMode"),
-  ]);
-  const pid = Number(mainPid);
+  if (show.code === null) return { ...gone, reachable: false };
+  const properties = new Map(
+    show.stdout
+      .split("\n")
+      .map((line) => line.split(/=(.*)/su))
+      .filter((parts): parts is [string, string, string] => parts.length >= 2)
+      .map(([key, value]) => [key, value.trim()] as const),
+  );
+  if (show.code !== 0 || properties.get("LoadState") !== "loaded")
+    return { ...gone, reachable: true };
+  const enabled = await runner(record.scope, ["is-enabled", record.unit]);
+  const pid = Number(properties.get("MainPID"));
   return {
     record,
     unitLoaded: true,
-    enabledState: enabled,
-    activeState: active,
+    enabledState: enabled.stdout.trim() || null,
+    activeState: properties.get("ActiveState") ?? null,
     mainPid: Number.isInteger(pid) && pid > 0 ? pid : null,
-    killMode,
+    killMode: properties.get("KillMode") ?? null,
     reachable: true,
   };
 }

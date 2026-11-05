@@ -166,7 +166,7 @@ export class SystemdUserDaemonHost implements DaemonLauncher {
       throw new Error(
         describeSupervisorUnreachable(
           record,
-          `\`systemctl ${verb} ${record.unit}\` exited ${result.code ?? "without a code"}: ${result.stderr.trim() || result.stdout.trim() || "no output"}`,
+          `\`systemctl ${verb} ${record.unit}\` exited ${result.code ?? "without a code"}: ${nativeCommandDiagnostic(result.stderr) || result.stdout.trim() || "no output"}`,
         ),
       );
   }

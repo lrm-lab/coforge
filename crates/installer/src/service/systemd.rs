@@ -141,16 +141,14 @@ pub struct SystemdUser<'a> {
     clock: &'a dyn Clock,
     cgroup: &'a dyn ProcessCgroup,
     unit: String,
-    /// `<home>/.config/systemd/user/<unit>`.
-    unit_file: PathBuf,
+    /// `<home>/.config/systemd/user/<unit>`; none for a unit a person's own supervisor runs,
+    /// whose registration is theirs and which [`SupervisorService::install`] never writes.
+    unit_file: Option<PathBuf>,
     /// The session-bus variables `systemctl --user` gets when the caller's own environment
     /// lacks them (`UserSessionBus`); empty when nothing was supplied.
     bus_env: Vec<(String, String)>,
     /// `--user`, or none for a unit of the system manager.
     scope_flag: Option<&'static str>,
-    /// The unit is a person's own, run by their supervisor: its registration is theirs, so
-    /// [`SupervisorService::install`] writes nothing.
-    supervised: bool,
 }
 
 impl<'a> SystemdUser<'a> {
@@ -175,10 +173,9 @@ impl<'a> SystemdUser<'a> {
             clock,
             cgroup,
             unit: unit.clone(),
-            unit_file: home.join(".config").join("systemd").join("user").join(unit),
+            unit_file: Some(home.join(".config").join("systemd").join("user").join(unit)),
             bus_env: bus.environment(),
             scope_flag: Some("--user"),
-            supervised: false,
         })
     }
 
@@ -204,10 +201,9 @@ impl<'a> SystemdUser<'a> {
             clock,
             cgroup,
             unit: record.unit.clone(),
-            unit_file: PathBuf::new(),
+            unit_file: None,
             bus_env: if user { bus.environment() } else { Vec::new() },
             scope_flag: user.then_some("--user"),
-            supervised: true,
         })
     }
 
@@ -347,18 +343,18 @@ impl SupervisorService for SystemdUser<'_> {
     }
 
     fn install(&self, definition: &LifecycleServiceDefinition) -> Result<Registered, ServiceError> {
-        if self.supervised {
+        let Some(unit_file) = &self.unit_file else {
             return Ok(Registered::AlreadyInPlace);
-        }
+        };
         definition::require_manager("systemd-user", definition)?;
         // A unit file that already holds the definition is the registration: the Computer wrote
         // it with its own reload and enable, so neither is repeated, and a `systemctl --user
         // disable` a person ran since stays theirs. `daemon-reload` and `enable` do not restart
         // a running unit.
-        if definition::is_in_place(&self.unit_file, &definition.contents) {
+        if definition::is_in_place(unit_file, &definition.contents) {
             return Ok(Registered::AlreadyInPlace);
         }
-        definition::write_private(&self.unit_file, &definition.contents)?;
+        definition::write_private(unit_file, &definition.contents)?;
         let reload = execute(self.runner, self.line(&["daemon-reload"]), COMMAND_BOUND)?;
         if !reload.succeeded() {
             return Err(self.refused(&reload));

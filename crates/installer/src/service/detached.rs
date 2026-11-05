@@ -127,17 +127,11 @@ impl<'a> Detached<'a> {
     fn read_spec(&self) -> Result<Option<Spec>, ServiceError> {
         let path = self.spec_path();
         match fs::read_to_string(&path) {
-            Ok(text) => serde_json::from_str(&text).map(Some).map_err(|error| {
-                ServiceError::FileUnreadable {
-                    path: path.display().to_string(),
-                    detail: error.to_string(),
-                }
-            }),
+            Ok(text) => serde_json::from_str(&text)
+                .map(Some)
+                .map_err(|error| unreadable(&path, error)),
             Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
-            Err(error) => Err(ServiceError::FileUnreadable {
-                path: path.display().to_string(),
-                detail: error.to_string(),
-            }),
+            Err(error) => Err(unreadable(&path, error)),
         }
     }
 
@@ -171,6 +165,13 @@ impl<'a> Detached<'a> {
         if fs::metadata(&log).is_ok_and(|meta| meta.len() > LOG_LIMIT) {
             let _ = fs::rename(&log, self.state_directory.join(format!("{LOG_FILE}.1")));
         }
+    }
+}
+
+fn unreadable(path: &Path, detail: impl std::fmt::Display) -> ServiceError {
+    ServiceError::FileUnreadable {
+        path: path.display().to_string(),
+        detail: detail.to_string(),
     }
 }
 
@@ -217,16 +218,24 @@ impl SupervisorService for Detached<'_> {
     }
 
     fn stop(&self) -> Result<StopOutcome, ServiceError> {
-        let before = self.state()?;
-        if let Some(identity) = self.running()? {
-            terminate(self.table, self.clock, Escalation::default(), &[identity]).map_err(
-                |error| ServiceError::StopTimedOut {
+        let running = self.running()?;
+        let before = match (&running, self.read_spec()?) {
+            (Some(identity), _) => ServiceState::Running {
+                pid: Some(identity.pid),
+            },
+            (None, Some(_)) => ServiceState::Stopped,
+            (None, None) => ServiceState::NotInstalled,
+        };
+        if let Some(identity) = running {
+            let escalation = Escalation::default();
+            terminate(self.table, self.clock, escalation, &[identity]).map_err(|error| {
+                ServiceError::StopTimedOut {
                     service: self.display_name(),
-                    waited: Escalation::default().exit_wait + Escalation::default().kill_wait,
+                    waited: escalation.exit_wait + escalation.kill_wait,
                     observed: error.to_string(),
                     hint: format!("Check the log at {}.", self.log_path().display()),
-                },
-            )?;
+                }
+            })?;
         }
         let _ = fs::remove_file(self.pid_path());
         Ok(StopOutcome { before })

@@ -1,7 +1,8 @@
-import { existsSync, statSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { readFile, rm } from "node:fs/promises";
-import { delimiter, join } from "node:path";
+import { join } from "node:path";
 import type { ManagedRuntimeIdentity } from "@lrm/coforge-sdk/internal";
+import { parseProcStat } from "#src/platform/linux-process-table";
 import { LocalDaemonLauncher } from "./launcher";
 import type {
   CoordinatorServiceRegistrar,
@@ -21,8 +22,8 @@ import type {
  * and the log. This host reads the pid file to know whether the process is that one and signals
  * it to stop, and asks the registrar (the installer's `start`) to start it.
  */
-export const DETACHED_SPEC_FILE = "detached-service.json";
-export const DETACHED_PID_FILE = "detached.pid";
+const DETACHED_SPEC_FILE = "detached-service.json";
+const DETACHED_PID_FILE = "detached.pid";
 /** systemd's default `PATH` for a user service. */
 const DEFAULT_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
 const STOP_WAIT_MS = 15_000;
@@ -33,30 +34,15 @@ const POLL_MS = 50;
 export function systemdPresent(
   deps: { runDirectory?: string; path?: string | undefined } = {},
 ): boolean {
-  const run = deps.runDirectory ?? "/run";
+  if (!existsSync(join(deps.runDirectory ?? "/run", "systemd", "system"))) return false;
   const path = "path" in deps ? deps.path : process.env.PATH;
-  if (!existsSync(join(run, "systemd", "system"))) return false;
-  return (path ?? "")
-    .split(delimiter)
-    .some((directory) => directory && isFile(join(directory, "systemctl")));
-}
-
-function isFile(path: string): boolean {
-  try {
-    return statSync(path).isFile();
-  } catch {
-    return false;
-  }
+  return path !== undefined && Bun.which("systemctl", { PATH: path }) !== null;
 }
 
 /** Field 22 of `/proc/<pid>/stat` (clock ticks since boot), or null when the process is gone. */
 export async function processStartedAt(pid: number): Promise<number | null> {
   try {
-    const stat = await readFile(`/proc/${pid}/stat`, "utf8");
-    // The command name is parenthesised and may hold spaces; the fields start after the last ")".
-    const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
-    const startedAt = Number(fields[19]);
-    return Number.isFinite(startedAt) ? startedAt : null;
+    return parseProcStat(await readFile(`/proc/${pid}/stat`, "utf8"))?.startTicks ?? null;
   } catch {
     return null;
   }
@@ -181,7 +167,6 @@ export class DetachedDaemonHost implements DaemonLauncher {
 
   async restart(): Promise<void> {
     await this.stop();
-    await this.#registrar.registerAndStart();
-    await this.#local.ensureRunning();
+    await this.ensureRunning();
   }
 }
