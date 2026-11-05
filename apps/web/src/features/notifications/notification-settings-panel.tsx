@@ -16,6 +16,7 @@ import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { isAppError } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
+import type { TestDelivery } from "#src/server/notifications/web-push-notifications.server";
 import { currentBrowserPushEndpoint } from "./browser-push";
 import {
   customPauseEnd,
@@ -124,8 +125,9 @@ export function NotificationSettingsPanel({
 }: {
   /** Whether message notifications are on at all; off, these settings do nothing. */
   enabled: boolean;
-  /** Sends this browser a test notification; true once it is sent (a failure says why itself). */
-  onTest: () => Promise<boolean>;
+  /** Sends this browser a test notification: how its push service took it, or null when it could
+   * not be sent at all (that failure says why itself). */
+  onTest: () => Promise<TestDelivery | null>;
 }) {
   const workspaceSlug = useWorkspaceSlug();
   const queryClient = useQueryClient();
@@ -138,7 +140,7 @@ export function NotificationSettingsPanel({
   });
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [tested, setTested] = useState(false);
+  const [tested, setTested] = useState<TestDelivery | null>(null);
   /** A custom pause being picked: the input's value, or null while none is. */
   const [until, setUntil] = useState<string | null>(null);
 
@@ -201,7 +203,7 @@ export function NotificationSettingsPanel({
               isDisabled={testing || !enabled || !here}
               onPress={async () => {
                 setTesting(true);
-                setTested(false);
+                setTested(null);
                 try {
                   setTested(await onTest());
                   await queryClient.invalidateQueries({ queryKey: SETTINGS_KEY });
@@ -214,8 +216,13 @@ export function NotificationSettingsPanel({
             </Button>
           </SettingsField>
           {tested && (
-            <p role="status" className="-mt-3 text-sm text-tertiary">
-              {m.notif_test_sent_hint()}
+            <p
+              role="status"
+              className={`-mt-3 text-sm ${tested === "sent" ? "text-tertiary" : "text-error-primary"}`}
+            >
+              {tested === "sent"
+                ? m.notif_test_delivered()
+                : m.notif_test_not_delivered({ reason: failureReason(tested) })}
             </p>
           )}
         </SettingsCard>

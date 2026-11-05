@@ -155,17 +155,18 @@ function deliveryErrorId() {
   return crypto.randomUUID();
 }
 
+/** How the Settings test reached this browser, in the words its device status uses. */
+export type TestDelivery = "sent" | "removed" | "unreachable" | "failed";
+
 /**
- * Classifies a `sendTest` result into the honest-error decision the Settings test button needs:
- * `"unreachable"` only when every attempted delivery failed because the push service
- * itself could not be reached (never a mix with an ordinary failure or a removed subscription —
- * either of those means the browser's own permission/subscription is the real story), `"failed"`
- * for any other zero-`sent` outcome, `"sent"` otherwise.
+ * Classifies a `sendTest` result for the Settings test button: `"sent"` once any device received
+ * it; otherwise the one way every attempt failed (`"removed"`, `"unreachable"` or `"failed"`, the
+ * reasons a device's status records), and `"failed"` for a mix or nothing attempted.
  */
-export function classifyTestDelivery(result: DeliveryResult): "sent" | "failed" | "unreachable" {
+export function classifyTestDelivery(result: DeliveryResult): TestDelivery {
   if (result.sent > 0) return "sent";
-  if (result.removed === 0 && result.failed === 0 && result.unreachable > 0) return "unreachable";
-  return "failed";
+  const kinds = (["removed", "unreachable", "failed"] as const).filter((kind) => result[kind] > 0);
+  return kinds.length === 1 ? kinds[0] : "failed";
 }
 
 /** What a delivery needs beyond the store and transport (task #467): whether each person is at a

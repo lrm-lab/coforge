@@ -17,7 +17,6 @@ export const APP_ERROR_CODES = [
   "AGENT_DM_RATE_LIMIT",
   "INVALID_TARGET",
   "TARGET_NOT_ACCESSIBLE",
-  "PUSH_SERVICE_UNREACHABLE",
 ] as const;
 
 export type AppErrorCode = (typeof APP_ERROR_CODES)[number];
@@ -55,9 +54,6 @@ export const APP_ERROR_HTTP_STATUS: Record<AppErrorCode, number> = {
   // direct-message scope outside the Workspace. Unknown and unreachable read the same
   // deliberately — the send reveals neither.
   TARGET_NOT_ACCESSIBLE: 403,
-  // The server could not reach this browser's push service: the caller should
-  // retry another way, not treat it as a permanent failure.
-  PUSH_SERVICE_UNREACHABLE: 503,
 };
 
 const APP_ERROR_PREFIX = "COFORGE_APP_ERROR:";

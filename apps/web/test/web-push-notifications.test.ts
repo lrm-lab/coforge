@@ -234,20 +234,26 @@ describe("WebPushNotifications", () => {
       expect(classifyTestDelivery({ sent: 1, failed: 1, removed: 1, unreachable: 1 })).toBe("sent");
     });
 
-    test("unreachable only when every attempted delivery failed that exact way", () => {
+    test("names the one way every attempt failed, in the device status's words", () => {
       expect(classifyTestDelivery({ sent: 0, failed: 0, removed: 0, unreachable: 1 })).toBe(
         "unreachable",
       );
+      expect(classifyTestDelivery({ sent: 0, failed: 0, removed: 1, unreachable: 0 })).toBe(
+        "removed",
+      );
+      expect(classifyTestDelivery({ sent: 0, failed: 1, removed: 0, unreachable: 0 })).toBe(
+        "failed",
+      );
     });
 
-    test("failed when a removed or ordinary failure is mixed in, even alongside unreachable ones", () => {
+    test("failed when the attempts failed different ways, or none was made", () => {
       expect(classifyTestDelivery({ sent: 0, failed: 0, removed: 1, unreachable: 1 })).toBe(
         "failed",
       );
       expect(classifyTestDelivery({ sent: 0, failed: 1, removed: 0, unreachable: 1 })).toBe(
         "failed",
       );
-      expect(classifyTestDelivery({ sent: 0, failed: 1, removed: 0, unreachable: 0 })).toBe(
+      expect(classifyTestDelivery({ sent: 0, failed: 0, removed: 0, unreachable: 0 })).toBe(
         "failed",
       );
     });

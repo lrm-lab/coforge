@@ -98,15 +98,8 @@ export const sendTestBrowserNotification = createServerFn({ method: "POST" })
         errorId: isAppError(reported) ? reported.errorId : undefined,
       });
     }
-    const classification = classifyTestDelivery(result);
-    // "unreachable" means the push service itself could not be reached (staging in mainland China
-    // cannot reach Google's push endpoints for Chrome) — Settings can say that honestly instead of
-    // "check this browser's permission". Both failures quote the batch id the delivery log records.
-    if (classification === "unreachable")
-      throw new AppError("PUSH_SERVICE_UNREACHABLE", { errorId: result.errorId });
-    if (classification === "failed")
-      throw new AppError("TEMPORARILY_UNAVAILABLE", { errorId: result.errorId });
-    return result;
+    // Settings says what happened to this browser's test in its device status's own words.
+    return { delivery: classifyTestDelivery(result) };
   });
 
 /**

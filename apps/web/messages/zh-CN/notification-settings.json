@@ -52,6 +52,7 @@
   "notif_section_this_device": "本机",
   "notif_this_device_none": "这个浏览器还收不到通知。",
   "notif_test_send": "发送测试通知",
-  "notif_test_sent_hint": "测试通知已发出。如果没有看到，请检查浏览器和系统设置是否允许此网站发送通知，并确认勿扰模式已关闭。",
+  "notif_test_delivered": "已送到此浏览器的推送服务。如果没有看到，请检查浏览器和系统设置是否允许此网站发送通知，并确认勿扰模式已关闭。",
+  "notif_test_not_delivered": "没送到：{reason}。",
   "notif_this_device_none_hint": "打开上面的消息通知，并在浏览器里允许通知。"
 }

@@ -15,7 +15,6 @@ import { chooseAvatarPreset, saveUserProfile } from "#src/features/profiles/prof
 import { MEMBER_DIRECTORY_KEY } from "#src/features/agents/member-directory-queries";
 import {
   browserNotificationPermission,
-  showPageNotification,
   syncBrowserPushSubscription,
   shouldShowAddToHomeScreenGuide,
 } from "#src/features/notifications/browser-push";
@@ -37,7 +36,7 @@ import {
   writeHideEmptySidebarSections,
 } from "#src/features/settings/hide-empty-sidebar-sections";
 import { readMessageFullWidth, writeMessageFullWidth } from "#src/features/settings/message-width";
-import { isAppError, isAppErrorCode } from "#src/lib/app-error";
+import { isAppError } from "#src/lib/app-error";
 import type { TimeFormat } from "#src/lib/time-format";
 import { m } from "#src/paraglide/messages";
 import {
@@ -49,7 +48,6 @@ import { ArchivedChannelsGroup } from "#src/features/conversations/archived-chan
 import { ArchivedAgentsGroup } from "#src/features/agents/archived-agents-group";
 import { loadArchivedAgents } from "#src/features/agents/agents.functions";
 import { useRefreshSidebarChannels } from "#src/features/conversations/sidebar-lists";
-import { workspacePath } from "#src/features/workspaces/workspace-url";
 import { WorkspaceDangerZone } from "#src/features/workspaces/workspace-danger-zone";
 import {
   changeWorkspaceSlug,
@@ -114,7 +112,6 @@ function SettingsPage() {
   const [hideEmptySidebarSections, setHideEmptySidebarSections] = useState(false);
   const [messageFullWidth, setMessageFullWidth] = useState(false);
   const { section, github } = Route.useSearch();
-  const { workspaceSlug } = Route.useParams();
   const navigate = Route.useNavigate();
   const {
     timeZone: savedTimeZone,
@@ -259,24 +256,11 @@ function SettingsPage() {
       // The test button is only enabled once permission is granted; "Allow in browser" asks for it.
       const subscription = await registerCurrentBrowser(false);
       if (!subscription) throw new Error("Browser notification permission is not granted");
-      await sendTestNotification({ data: { endpoint: subscription.endpoint } });
-      return true;
+      const { delivery } = await sendTestNotification({
+        data: { endpoint: subscription.endpoint },
+      });
+      return delivery;
     } catch (cause) {
-      // The server could not reach this browser's push service: notifications still
-      // arrive while CoForge is open, so the test shows one from the page itself.
-      if (isAppErrorCode(cause, "PUSH_SERVICE_UNREACHABLE")) {
-        try {
-          await showPageNotification({
-            title: m.preferences_browser_notifications_test_title(),
-            body: m.preferences_browser_notifications_test_body(),
-            tag: `test:${crypto.randomUUID()}`,
-            url: workspacePath(workspaceSlug, "/settings"),
-          });
-          return true;
-        } catch (displayCause) {
-          console.warn("page notification test failed", displayCause);
-        }
-      }
       // A client-side failure with the permission granted is the browser's own push service
       // refusing to create the subscription; name that, and put the raw reason in the console.
       const browserFailed = !isAppError(cause) && browserNotificationPermission() === "granted";
@@ -286,7 +270,7 @@ function SettingsPage() {
           ? m.preferences_browser_notifications_test_browser_failed()
           : m.preferences_browser_notifications_test_error(),
       );
-      return false;
+      return null;
     }
   }
 

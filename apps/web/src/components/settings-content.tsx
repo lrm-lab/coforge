@@ -38,6 +38,7 @@ import { AccountSettings, type AccountProfile } from "./settings-account";
 import { PreferencesSettings } from "./settings-preferences";
 import { WorkspaceProfileSettings } from "./settings-workspace-profile";
 import { LanguageRegionSettings } from "./settings-language-region";
+import type { TestDelivery } from "#src/server/notifications/web-push-notifications.server";
 
 export type Locale = "en" | "zh-CN";
 type Theme = "system" | "light" | "dark";
@@ -84,7 +85,7 @@ export interface SettingsContentProps {
   }) => Promise<void>;
   onBrowserNotificationsChange: (enabled: boolean) => Promise<void>;
   onEnableBrowserNotifications: () => Promise<void>;
-  onTestBrowserNotification: () => Promise<boolean>;
+  onTestBrowserNotification: () => Promise<TestDelivery | null>;
   /** Whether #general is hidden from the Workspace; `null` unless the viewer is an owner or admin,
    * who alone see the System channels section of Settings → Members. */
   generalChannelHidden: boolean | null;
