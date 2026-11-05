@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useFocusVisible } from "react-aria";
 import { Radio as AriaRadio, RadioGroup as AriaRadioGroup } from "react-aria-components";
 
@@ -19,7 +19,6 @@ export function LabelColorSwatches({
   onSubmit,
   onPick,
   isDisabled,
-  tooltips = true,
 }: {
   value: string;
   onChange: (color: string) => void;
@@ -27,9 +26,6 @@ export function LabelColorSwatches({
   /** A swatch clicked or tapped (not one the arrow keys moved to): for a menu that applies it. */
   onPick?: (color: string) => void;
   isDisabled?: boolean;
-  /** Each swatch's name on hover or keyboard focus. Off inside a popover: a tooltip open there
-   * takes Escape for itself, and held open by focus it would keep the popover from closing. */
-  tooltips?: boolean;
 }) {
   const desktop = useBreakpoint("md");
   return (
@@ -58,7 +54,7 @@ export function LabelColorSwatches({
         className="grid grid-cols-5 justify-items-center gap-2"
       >
         {LABEL_PALETTE.map((color) => (
-          <Swatch key={color} color={color} desktop={desktop} tooltip={tooltips} />
+          <Swatch key={color} color={color} desktop={desktop} />
         ))}
       </AriaRadioGroup>
     </div>
@@ -69,34 +65,45 @@ export function LabelColorSwatches({
  * One swatch. Its tooltip is opened by hand, from the swatch's hover and keyboard focus: a radio's
  * input is visually hidden, so the pointer never reaches the element the tooltip trigger listens on.
  */
-function Swatch({
-  color,
-  desktop,
-  tooltip,
-}: {
-  color: string;
-  desktop: boolean;
-  tooltip: boolean;
-}) {
+function Swatch({ color, desktop }: { color: string; desktop: boolean }) {
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
+  // The tooltip's close request (Escape, a key on the swatch, another tooltip opening), kept
+  // until the pointer or focus leaves the swatch: held open by `hovered` or `focused` alone, it
+  // would take every Escape for itself (react-aria's tooltip stops it while open) and a popover
+  // around the swatches could never close on it. The window losing focus blurs the swatch and
+  // closes the tooltip too, but leaves the swatch the active element: that is no one's request,
+  // and the tooltip comes back with the window, as react-aria's own trigger does.
+  const [dismissed, setDismissed] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
   const { isFocusVisible: keyboard } = useFocusVisible();
   return (
     <Tooltip
       title={labelColorName(color)}
-      isOpen={tooltip && (hovered || (focused && keyboard))}
+      isOpen={!dismissed && (hovered || (focused && keyboard))}
+      onOpenChange={(open) => !open && document.hasFocus() && setDismissed(true)}
       delay={0}
     >
       <AriaRadio
         value={color}
         aria-label={labelColorName(color)}
-        onHoverChange={setHovered}
-        onFocusChange={setFocused}
+        onHoverChange={(next) => {
+          setHovered(next);
+          if (!next) setDismissed(false);
+        }}
+        inputRef={input}
+        onFocusChange={(next) => {
+          setFocused(next);
+          if (!next && document.activeElement !== input.current) setDismissed(false);
+        }}
         className={({ isSelected, isFocusVisible: ringed }) =>
           cn(
             "relative flex cursor-pointer items-center justify-center rounded-full outline-hidden",
             desktop ? "size-7" : "size-10",
             "ring-offset-bg-primary",
+            // The input's visually hidden box clips it without scrolling: focus would scroll it to
+            // the input, and react-aria closes a tooltip whose trigger sits in a box that scrolls.
+            "[&>span:has(>input)]:overflow-clip!",
             isSelected && "ring-2 ring-text-primary ring-offset-2",
             ringed && "outline-2 outline-offset-4 outline-focus-ring",
           )

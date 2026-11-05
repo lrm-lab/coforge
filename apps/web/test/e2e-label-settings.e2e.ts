@@ -203,6 +203,14 @@ test("an owner manages the Workspace's labels on their own page; a member reads 
     await browser("wait", "--fn", `${picked} != null`);
     await evaluate(`(${picked}.focus(), true)`);
     await browser("press", "ArrowRight");
+    // The first Escape closes the focused swatch's name, the next the swatches.
+    const shown = `[...document.querySelectorAll('[role="tooltip"]:not([data-exiting])')].map((t) => t.textContent).join()`;
+    await browser("wait", "--fn", `${shown} === "Indigo"`);
+    await browser("press", "Escape");
+    // An Escape the page lets through (react-aria's tooltip stops it but keeps its default)
+    // hides agent-browser's headless page, and a hidden page runs no animation to its end.
+    await browser("tab", "t1");
+    await browser("wait", "--fn", `${shown} === "" && ${swatches} != null`);
     await browser("press", "Escape");
     await browser("wait", "--fn", `${swatches} == null`);
     await Bun.sleep(300);

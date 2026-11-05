@@ -67,7 +67,6 @@ export function LabelColorPicker({
               onChange={setPicked}
               onPick={pick}
               onSubmit={() => pick(picked)}
-              tooltips={false}
             />
           </div>
         </AriaDialog>
