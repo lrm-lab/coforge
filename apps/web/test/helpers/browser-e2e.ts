@@ -50,3 +50,77 @@ export function browserSession(browserPath: string, session: string) {
   }
   return { browser, evaluate };
 }
+
+/**
+ * Waits for a page condition in one agent-browser session, failing with the condition and the
+ * page text after 15 s. The wait child is killed on timeout: agent-browser serializes a
+ * session's commands, so a pending `wait` would hold the page dump behind it until its own
+ * 25 s limit. `run` is the session's command runner (`browserSession().browser`).
+ */
+export function pageWaiter(browserPath: string) {
+  return (
+    session: string,
+    run: (command: string, ...args: string[]) => Promise<string>,
+  ): ((condition: string) => Promise<void>) =>
+    async (condition: string) => {
+      const wait = Bun.spawn([browserPath, "--session", session, "wait", "--fn", condition], {
+        stdout: "ignore",
+        stderr: "pipe",
+      });
+      const met = wait.exited.then(async (code) => {
+        if (code !== 0)
+          throw new Error(`Browser wait failed: ${await new Response(wait.stderr).text()}`);
+      });
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timedOut = new Promise<"timeout">((resolve) => {
+        timer = setTimeout(() => resolve("timeout"), 15_000);
+      });
+      try {
+        if ((await Promise.race([met, timedOut])) === "timeout") {
+          wait.kill("SIGKILL");
+          const page = await run(
+            "eval",
+            `location.pathname + location.search + " | " + document.querySelector("main")?.innerText.slice(0, 600)`,
+          ).catch((error: unknown) => String(error));
+          throw new Error(`Timed out waiting for: ${condition}\nPage: ${page}`);
+        }
+      } finally {
+        clearTimeout(timer);
+        if (wait.exitCode === null) wait.kill("SIGKILL");
+      }
+    };
+}
+
+/** A page expression finding the open menu's item whose text is exactly `label`. */
+export const menuItemNamed = (label: string) =>
+  `[...document.querySelectorAll('[role="menu"] [role="menuitem"]')].find((item) => item.textContent.trim() === ${JSON.stringify(label)})`;
+
+/** A page expression closing the open menu: a DOM-opened menu never held focus, so a page-level
+ * Escape misses it; the keydown has to reach the menu itself. */
+export const escapeOpenMenu = `document.querySelector('[role="menu"]')?.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',code:'Escape',keyCode:27,which:27,bubbles:true,cancelable:true}))`;
+
+/**
+ * Saves `messageId` in `channelId` through a second browser session — the "another tab" whose
+ * save announces `saved.added.v1` to the first session's page. A raw row write would bypass
+ * realtime and leave the first page's Saved list stale until its next full load.
+ */
+export async function saveMessageInOtherTab(options: {
+  browserPath: string;
+  session: string;
+  origin: string;
+  workspacePath: string;
+  channelId: string;
+  messageId: string;
+}) {
+  const { browserPath, session, origin, workspacePath, channelId, messageId } = options;
+  const other = browserSession(browserPath, session);
+  const wait = pageWaiter(browserPath)(session, other.browser);
+  const row = `li[data-message-id="${messageId}"]`;
+  await other.browser("open", `${origin}${workspacePath}/channel/${channelId}`);
+  await wait(pageHydrated);
+  await wait(`document.querySelector('${row}') !== null`);
+  await other.browser("eval", `document.querySelector('${row} [aria-label="More"]').click()`);
+  await wait(`${menuItemNamed("Save Message")} !== undefined`);
+  await other.browser("eval", `${menuItemNamed("Save Message")}.click()`);
+  await wait(`!document.querySelector('[role="menu"]')`);
+}

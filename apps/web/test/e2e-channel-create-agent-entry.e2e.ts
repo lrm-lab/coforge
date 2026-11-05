@@ -181,10 +181,18 @@ test("the add view creates an Agent named by the search, and it joins the channe
     ).toBe("");
     await browser("screenshot", join(artifacts, "joined.png"));
 
-    // The name is taken now: the form says so and the page stays up.
+    // The name is taken now, so the search offers no create-by-name entry for it
+    // (3633f7701); the plain entry's form still says so and the page stays up.
     await browser("fill", 'input[placeholder="Name"]', agentName);
-    await clickText(`[role="dialog"] button`, `Create Agent “${agentName}”`);
+    await waitFor(panelHas(`No members match “${agentName}”`));
+    expect(await evaluate<boolean>(panelHas(`Create Agent “`))).toBe(false);
+    await clickText(`[role="dialog"] button`, "Create Agent");
     await waitFor(`${agentForm} !== undefined`);
+    await browser(
+      "fill",
+      '[role="dialog"]:has(input[name="name"]) input[name="name"]',
+      agentName,
+    );
     await chooseClaudeCode();
     await clickText(`[role="dialog"] button`, "Create Agent");
     await waitFor(`${agentForm}?.querySelector('[role="alert"]')?.textContent.trim().length > 0`);

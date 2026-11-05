@@ -4,7 +4,15 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { browserSession, localBrowserE2e, seededUuid } from "./helpers/browser-e2e";
+import {
+  browserSession,
+  escapeOpenMenu,
+  localBrowserE2e,
+  menuItemNamed,
+  pageWaiter,
+  saveMessageInOtherTab,
+  seededUuid,
+} from "./helpers/browser-e2e";
 
 /**
  * Previewing a result beside the list. On a wide screen a single click shows the result's
@@ -24,26 +32,9 @@ const artifacts = join(import.meta.dir, "../../../.amp/e2e/search-preview");
 
 test("a result previews beside the list and opens on a double click", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
-  const { browser, evaluate } = browserSession(browserPath, `search-preview-${process.pid}`);
-  /** Waits for a page condition, failing with the condition and the page text after 15 s. */
-  const waitFor = (condition: string) => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    return Promise.race([
-      browser("wait", "--fn", condition).finally(() => clearTimeout(timer)),
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => {
-          void browser(
-            "eval",
-            `location.pathname + location.search + " | " + document.querySelector("main")?.innerText.slice(0, 600)`,
-          )
-            .catch((error: unknown) => String(error))
-            .then((page) =>
-              reject(new Error(`Timed out waiting for: ${condition}\nPage: ${page}`)),
-            );
-        }, 15_000);
-      }),
-    ]);
-  };
+  const session = `search-preview-${process.pid}`;
+  const { browser, evaluate } = browserSession(browserPath, session);
+  const waitFor = pageWaiter(browserPath)(session, browser);
   const param = (name: string) =>
     `(new URLSearchParams(location.search).get(${JSON.stringify(name)}) ?? "")`;
   const PREVIEW = '[aria-label="Search preview"]';
@@ -211,10 +202,20 @@ test("a result previews beside the list and opens on a double click", async () =
     expect(await evaluate<string>(param("open"))).toBe(`channel:${channelA}`);
 
     // A thread opens inside the preview (here on the reply just sent), kept in the search URL like
-    // the conversation's own page.
+    // the conversation's own page. The action bar stays mounted at opacity 0 without a
+    // hover-capable pointer, so its button is clicked in the DOM (07647fa17, task #459).
+    const savedRow = `${PREVIEW} li[data-message-id="${saved!.id}"]`;
+    // The reply is the newest row, below the window the preview anchored at: reopen the preview
+    // on it so its row mounts.
+    await browser(
+      "open",
+      `${origin}${workspacePath}/search?q=${encodeURIComponent(phrase)}&open=channel:${channelA}&msg=${saved!.id}&view=chat`,
+    );
+    await waitFor(`document.querySelector('${savedRow}') !== null`);
+    await waitFor(`document.querySelector('${savedRow} [aria-label^="Reply in Thread"]') !== null`);
     await browser(
       "eval",
-      `document.querySelector('${PREVIEW} li[data-message-id="${saved!.id}"] [aria-label^="Reply in Thread"]').click()`,
+      `document.querySelector('${savedRow} [aria-label^="Reply in Thread"]').click()`,
     );
     await waitFor(
       `${param("threadRootId")} === "${saved!.id}" && location.pathname === "${workspacePath}/search"`,
@@ -268,45 +269,54 @@ test("a result previews beside the list and opens on a double click", async () =
       );
     // The preview and Chat share one Saved list: saved in the preview, Chat shows it saved at once,
     // and removing it there shows in the preview again.
-    // Save sits in the row's "…" menu: open it, find the entry by its label.
-    const saveEntry = (label: string) =>
-      `[...document.querySelectorAll('[role="menu"] [role="menuitem"]')].find((item) => item.textContent.trim() === "${label}")`;
-    const openMore = (scope: string) =>
-      browser(
-        "eval",
-        `document.querySelector('${scope} li[data-message-id="${inB.id}"] [aria-label="More"]').click()`,
-      );
+    // Save sits in the row's "…" menu: open it, find the entry by its label. The action bar is
+    // opacity 0 without a hover-capable pointer, so "More" is clicked in the DOM (task #459).
+    const openMore = async (scope: string) => {
+      const more = `${scope} li[data-message-id="${inB.id}"] [aria-label="More"]`;
+      await waitFor(`document.querySelector('${more}') !== null`);
+      await browser("eval", `document.querySelector('${more}').click()`);
+    };
     const toggleSave = async (scope: string, label: string) => {
       await openMore(scope);
-      await waitFor(`${saveEntry(label)} !== undefined`);
-      await browser("eval", `${saveEntry(label)}.click()`);
+      await waitFor(`${menuItemNamed(label)} !== undefined`);
+      await browser("eval", `${menuItemNamed(label)}.click()`);
       await waitFor(`!document.querySelector('[role="menu"]')`);
     };
     const expectSave = async (scope: string, label: string) => {
       await openMore(scope);
-      await waitFor(`${saveEntry(label)} !== undefined`);
-      await browser("press", "Escape");
+      await waitFor(`${menuItemNamed(label)} !== undefined`);
+      await browser("eval", escapeOpenMenu);
       await waitFor(`!document.querySelector('[role="menu"]')`);
     };
     await browser("click", row(inB.id));
+    await waitFor(`document.querySelector('${PREVIEW} li[data-message-id="${inB.id}"]') !== null`);
     await toggleSave(PREVIEW, "Save Message");
     await expectSave(PREVIEW, "Remove from Saved");
+    // The save is fire-and-forget behind its optimistic row: let the Server Function commit
+    // before the next navigation's Saved re-read, which would otherwise drop the row.
+    await Bun.sleep(1_500);
     const opensBefore = await opensOfB();
     await browser("dblclick", row(inB.id));
     await waitFor(`location.pathname === "${workspacePath}/channel/${channelB}"`);
-    // A double click is one open, not two.
-    expect(await opensOfB()).toBe(opensBefore + 1);
+    // The open reaches localStorage a beat after the navigation lands; a double click is one
+    // open, not two.
+    await waitFor(
+      `(JSON.parse(localStorage.getItem(${JSON.stringify(usageKey)}) ?? "{}")["channel:${channelB}"] ?? []).length === ${opensBefore + 1}`,
+    );
     await toggleSave("main", "Remove from Saved");
     await expectSave("main", "Save Message");
     await browser("back");
     await expectSave(PREVIEW, "Save Message");
 
-    // A message saved elsewhere meanwhile (another tab) shows saved when Chat is opened again: each
-    // visit reads the Saved list afresh.
-    await browser("click", `aside a[href="${workspacePath}/tasks"]`);
-    await waitFor(`location.pathname === "${workspacePath}/tasks"`);
-    await db.savedMessage.create({
-      data: { messageId: inB.id, conversationId: channelB, workspaceId, memberId: memberB!.id },
+    // A message saved in another tab shows saved here through the `saved.added.v1` viewer
+    // event, which marks the Saved list stale and re-reads it.
+    await saveMessageInOtherTab({
+      browserPath,
+      session: `search-preview-other-${process.pid}`,
+      origin,
+      workspacePath,
+      channelId: channelB,
+      messageId: inB.id,
     });
     await browser("click", `aside a[href="${workspacePath}"]`);
     await waitFor(

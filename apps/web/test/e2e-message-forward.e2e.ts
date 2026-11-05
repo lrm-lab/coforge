@@ -55,8 +55,12 @@ const pageUrl = (path: string) => `${proxy.origin}/en/w/${workspaceSlug}/${path}
 async function openForwardDialog(conversationId: string) {
   await browser("open", pageUrl(`channel/${conversationId}`));
   await waitFor(`document.querySelector('li[data-message-id="${ids.source}"]') !== null`);
-  await browser("hover", `li[data-message-id="${ids.source}"]`);
-  await click(`li[data-message-id="${ids.source}"] button[aria-label="More"]`);
+  // The action bar stays mounted at opacity 0 without a hover-capable pointer, so "More" is
+  // clicked in the DOM (07647fa17, task #459).
+  await browser(
+    "eval",
+    `document.querySelector('li[data-message-id="${ids.source}"] [aria-label="More"]').click()`,
+  );
   await clickNamed("menuitem", "Forward");
   await waitFor(
     `document.querySelector('[role="dialog"] input[placeholder="Search targets"]') !== null`,
