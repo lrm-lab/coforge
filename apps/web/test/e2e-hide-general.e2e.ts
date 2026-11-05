@@ -61,7 +61,7 @@ test("an owner hides #general from its panel and restores it from Settings → M
     );
     if (!clicked.includes("true")) throw new Error(`"${text}" disappeared before it was clicked`);
   }
-  const sidebarHasGeneral = `[...document.querySelectorAll("a")].some((link) => link.textContent.trim() === "general")`;
+  const sidebarHasGeneral = `[...document.querySelectorAll("a")].some((link) => link.getAttribute("aria-label") === "#general")`;
 
   const membership = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id, role: "owner" },
@@ -144,7 +144,7 @@ test("an owner hides #general from its panel and restores it from Settings → M
     // Opening it within the app after the restore shows it, rather than bouncing back to Chat.
     await browser(
       "eval",
-      `[...document.querySelectorAll("a")].find((link) => link.textContent.trim() === "general").click()`,
+      `[...document.querySelectorAll("a")].find((link) => link.getAttribute("aria-label") === "#general").click()`,
     );
     await waitFor(`location.pathname === "${workspacePath}/channel/${general.id}"`);
     await waitFor(
