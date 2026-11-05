@@ -35,7 +35,8 @@ const squeezeBesideModel = (name: string) => `(() => {
   const time = row.querySelector("time").getBoundingClientRect().width;
   row.style.width = (whole + time + 2 * 8 + 32 + 20) + "px";
   const cut = range.getBoundingClientRect().width > text.getBoundingClientRect().width + 0.01;
-  const model = row.firstElementChild.lastElementChild.getBoundingClientRect().width;
+  // The model is the label after the name; since task #414 an Agent's description follows it.
+  const model = row.firstElementChild.children[1].getBoundingClientRect().width;
   row.style.width = "";
   return { cut, model: Math.round(model) };
 })()`;
