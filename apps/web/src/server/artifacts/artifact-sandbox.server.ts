@@ -1,4 +1,9 @@
 import { AppError } from "#src/lib/app-error";
+import {
+  NO_RATE_LIMIT,
+  type AppRateLimit,
+} from "#src/server/app-rate-limits/app-rate-limit.server";
+import { clientAddress } from "#src/server/http/public-origin.server";
 import type { ArtifactReads } from "./artifact-reads.server";
 import { ARTIFACT_DOCUMENT_LIMIT } from "./artifact-files.server";
 import {
@@ -22,9 +27,15 @@ type SandboxDependencies = {
   origin: string | null;
   secret(): Promise<string>;
   now(): Date;
-  publicPage?(
-    token: string,
-  ): Promise<{ workspaceId: string; artifactId: string; title: string; sha256: string } | null>;
+  publicPage?(token: string): Promise<{
+    workspaceId: string;
+    artifactId: string;
+    title: string;
+    kind: "html" | "markdown";
+    sha256: string;
+  } | null>;
+  publicRateLimit?: AppRateLimit;
+  publicClientAddress?: (request: Request) => string | undefined;
 };
 
 /**
@@ -136,6 +147,14 @@ export class ArtifactSandbox {
 
   private async servePublic(request: Request, token: string, framed: boolean): Promise<Response> {
     if (!this.deps.publicPage) return sandboxRefusal(404, "Not found.");
+    const rateLimit = await (this.deps.publicRateLimit ?? NO_RATE_LIMIT).admit(
+      (this.deps.publicClientAddress ?? clientAddress)(request) ?? "unknown",
+    );
+    if (!rateLimit.allowed) {
+      const response = sandboxRefusal(429, "Too many requests.");
+      response.headers.set("Retry-After", String(rateLimit.retryAfterSeconds));
+      return response;
+    }
     if (
       framed &&
       (request.headers.get("sec-fetch-dest") !== "iframe" ||
@@ -151,6 +170,24 @@ export class ArtifactSandbox {
     }
     const bytes = await this.deps.readBlob(page.workspaceId, page.sha256);
     if (!bytes || bytes.byteLength > ARTIFACT_HTML_LIMIT) return sandboxRefusal(404, "Not found.");
+    if (page.kind === "markdown") {
+      const text = new TextDecoder().decode(bytes);
+      const served = publicMarkdownPage(page.title, text);
+      const headers = new Headers({
+        "Content-Type": "text/html; charset=utf-8",
+        "Content-Security-Policy":
+          "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'",
+        "X-Content-Type-Options": "nosniff",
+        "X-Robots-Tag": "noindex, nofollow",
+        "Referrer-Policy": "no-referrer",
+        "Cache-Control": "no-store",
+      });
+      headers.set("Content-Length", String(served.byteLength));
+      return new Response(request.method === "HEAD" ? null : new Blob([served]), {
+        status: 200,
+        headers,
+      });
+    }
     const served = withWebRtcOff(bytes);
     const headers = sandboxPageHeaders(origins);
     headers.set("X-Robots-Tag", "noindex, nofollow");
@@ -182,6 +219,14 @@ export class ArtifactSandbox {
     if (!entry || entry.sizeBytes > ARTIFACT_HTML_LIMIT) return null;
     return { version: version.number, sha256: entry.sha256 };
   }
+}
+
+function publicMarkdownPage(title: string, text: string): Uint8Array<ArrayBuffer> {
+  const escape = (value: string) =>
+    value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+  return new TextEncoder().encode(
+    `<!doctype html><meta name="robots" content="noindex"><meta charset="utf-8"><title>${escape(title)}</title><style>body{font:16px/1.6 system-ui,sans-serif;max-width:800px;margin:40px auto;padding:0 24px;color:#222}pre{white-space:pre-wrap;overflow-wrap:anywhere}</style><h1>${escape(title)}</h1><pre>${escape(text)}</pre>`,
+  );
 }
 
 /** An http(s) origin and nothing else, so it goes into `frame-ancestors` as it is. */

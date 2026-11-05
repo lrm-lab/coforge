@@ -25,11 +25,17 @@ export class ArtifactPublicLinks {
           access: string;
           authorUserId: string | null;
           authorAgentId: string | null;
+          kind: string;
         }[]
-      >`SELECT "id", "homeKey", "access", "authorUserId", "authorAgentId" FROM "artifacts"
+      >`SELECT "id", "homeKey", "access", "authorUserId", "authorAgentId", "kind" FROM "artifacts"
         WHERE "id" = ${input.artifactId}::uuid AND "workspaceId" = ${input.workspaceId}::uuid
           AND "deletedAt" IS NULL FOR UPDATE`;
       if (!artifact) throw new AppError("NOT_FOUND");
+      if (input.enabled && artifact.kind !== "html" && artifact.kind !== "markdown")
+        throw new AppError("INVALID_INPUT", {
+          errorId: "artifact-public-kind",
+          hint: "public links support HTML and Markdown artifacts",
+        });
       if (!(await artifactReadAccess(tx, input.workspaceId, { userId: input.userId }, artifact)))
         throw new AppError("NOT_FOUND");
       const ownerId = artifact.authorAgentId

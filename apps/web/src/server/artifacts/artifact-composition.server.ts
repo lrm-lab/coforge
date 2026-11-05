@@ -10,6 +10,7 @@ import { ArtifactSandbox } from "./artifact-sandbox.server";
 import { artifactSandboxOrigin } from "./artifact-sandbox-config.server";
 import { ArtifactPublicLinks } from "./artifact-public-links.server";
 import { artifactsEnabled } from "./artifact-access.server";
+import { getAppRateLimits } from "#src/server/app-rate-limits/app-rate-limits-composition.server";
 
 /** The artifact services of production: bytes in the private file bucket, each new version
  * announced over Centrifugo, the experiment read from the Workspace. */
@@ -34,6 +35,7 @@ export function productionArtifactSandbox(db: PrismaClient) {
     reads: artifacts.reads,
     readBlob: (workspaceId, sha256) => blobs.read(workspaceId, sha256),
     origin: artifactSandboxOrigin(),
+    publicRateLimit: getAppRateLimits().publicArtifact,
     secret: () => readSessionSecret(process.env),
     now: () => new Date(),
     publicPage: async (token) => {
@@ -56,7 +58,7 @@ export function productionArtifactSandbox(db: PrismaClient) {
       if (
         !link?.artifact ||
         link.artifact.deletedAt ||
-        link.artifact.kind !== "html" ||
+        !["html", "markdown"].includes(link.artifact.kind) ||
         link.artifact.currentVersion <= 0
       )
         return null;
@@ -77,6 +79,7 @@ export function productionArtifactSandbox(db: PrismaClient) {
             workspaceId: link.artifact.workspaceId,
             artifactId: link.artifact.id,
             title: link.artifact.title,
+            kind: link.artifact.kind as "html" | "markdown",
             sha256: file.sha256,
           }
         : null;
