@@ -13,7 +13,6 @@
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -66,6 +65,7 @@ impl Spawn for SystemSpawn {
     #[cfg(unix)]
     fn spawn(&self, spec: &Spec, log: &Path) -> io::Result<u32> {
         use std::os::unix::process::CommandExt;
+        use std::process::{Command, Stdio};
         let out = fs::OpenOptions::new().create(true).append(true).open(log)?;
         let err = out.try_clone()?;
         let mut command = Command::new(&spec.program);
