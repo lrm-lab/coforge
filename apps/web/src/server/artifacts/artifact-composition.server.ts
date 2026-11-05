@@ -35,5 +35,49 @@ export function productionArtifactSandbox(db: PrismaClient) {
     origin: artifactSandboxOrigin(),
     secret: () => readSessionSecret(process.env),
     now: () => new Date(),
+    publicPage: async (token) => {
+      const link = await db.artifactPublicLink.findFirst({
+        where: { token, revokedAt: null },
+        select: {
+          artifact: {
+            select: {
+              id: true,
+              workspaceId: true,
+              title: true,
+              kind: true,
+              deletedAt: true,
+              currentVersion: true,
+              entryPath: true,
+            },
+          },
+        },
+      });
+      if (
+        !link?.artifact ||
+        link.artifact.deletedAt ||
+        link.artifact.kind !== "html" ||
+        link.artifact.currentVersion <= 0
+      )
+        return null;
+      const version = await db.artifactVersion.findUnique({
+        where: {
+          artifactId_number: { artifactId: link.artifact.id, number: link.artifact.currentVersion },
+        },
+        select: { id: true, entryPath: true },
+      });
+      if (!version || version.entryPath !== link.artifact.entryPath) return null;
+      const file = await db.artifactFile.findUnique({
+        where: { versionId_path: { versionId: version.id, path: version.entryPath } },
+        select: { sha256: true },
+      });
+      return file
+        ? {
+            workspaceId: link.artifact.workspaceId,
+            artifactId: link.artifact.id,
+            title: link.artifact.title,
+            sha256: file.sha256,
+          }
+        : null;
+    },
   });
 }

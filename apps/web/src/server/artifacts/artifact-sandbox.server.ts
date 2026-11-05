@@ -22,6 +22,9 @@ type SandboxDependencies = {
   origin: string | null;
   secret(): Promise<string>;
   now(): Date;
+  publicPage?(
+    token: string,
+  ): Promise<{ workspaceId: string; artifactId: string; title: string; sha256: string } | null>;
 };
 
 /**
@@ -81,6 +84,8 @@ export class ArtifactSandbox {
   async serve(request: Request): Promise<Response> {
     if (request.method !== "GET" && request.method !== "HEAD")
       return sandboxRefusal(405, "Method not allowed.");
+    const publicMatch = /^\/p\/([A-Za-z0-9_-]{43})(\/page)?$/.exec(new URL(request.url).pathname);
+    if (publicMatch) return this.servePublic(request, publicMatch[1]!, publicMatch[2] === "/page");
     const match = /^\/a\/([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)(\/page)?$/.exec(
       new URL(request.url).pathname,
     );
@@ -127,6 +132,33 @@ export class ArtifactSandbox {
     headers.set("Content-Length", String(served.byteLength));
     const body = request.method === "HEAD" ? null : new Blob([served]);
     return new Response(body, { status: 200, headers });
+  }
+
+  private async servePublic(request: Request, token: string, framed: boolean): Promise<Response> {
+    if (!this.deps.publicPage) return sandboxRefusal(404, "Not found.");
+    if (
+      framed &&
+      (request.headers.get("sec-fetch-dest") !== "iframe" ||
+        request.headers.get("sec-fetch-site") !== "same-origin")
+    )
+      return sandboxRefusal(404, "Not found.");
+    const page = await this.deps.publicPage(token);
+    if (!page) return sandboxRefusal(404, "Not found.");
+    const origins = { sandboxOrigin: this.deps.origin!, appOrigin: "none" };
+    if (!framed) {
+      const wrapper = sandboxWrapper({ pagePath: `/p/${token}/page`, ...origins });
+      return request.method === "HEAD" ? new Response(null, wrapper) : wrapper;
+    }
+    const bytes = await this.deps.readBlob(page.workspaceId, page.sha256);
+    if (!bytes || bytes.byteLength > ARTIFACT_HTML_LIMIT) return sandboxRefusal(404, "Not found.");
+    const served = withWebRtcOff(bytes);
+    const headers = sandboxPageHeaders(origins);
+    headers.set("X-Robots-Tag", "noindex, nofollow");
+    headers.set("Content-Length", String(served.byteLength));
+    return new Response(request.method === "HEAD" ? null : new Blob([served]), {
+      status: 200,
+      headers,
+    });
   }
 
   /** The web page the reader may read at `version` (the current one by default): its version
