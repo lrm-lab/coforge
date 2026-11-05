@@ -87,6 +87,18 @@ for await (const line of console) {
       break;
     case "session/new":
     case "session/load":
+      // A logged-out server refuses a session before any configuration exists.
+      if (
+        Bun.env.DROID_ACP_FIXTURE_REQUIRE_LOGIN &&
+        !(await Bun.file(`${Bun.env.DROID_ACP_FIXTURE_STATE_DIR ?? "/nonexistent"}/login`).exists())
+      ) {
+        write({
+          jsonrpc: "2.0",
+          id: request.id,
+          error: { code: -32000, message: "Authentication required" },
+        });
+        break;
+      }
       if (request.method === "session/load" && request.params.sessionId === "missing-session") {
         write({
           jsonrpc: "2.0",

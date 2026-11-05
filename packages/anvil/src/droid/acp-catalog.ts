@@ -90,6 +90,14 @@ export async function discoverDroidAcpCatalog(
     });
     return undefined;
   } finally {
+    // Droid implements `session/close` (verified on 1.4.1; `session/delete` is -32601): close the
+    // probe's session before the process goes, so no saved session is left pretending to be work.
+    if (transport && sessionId && !transport.closed)
+      await acpBounded(
+        transport.connection.agent.request("session/close", { sessionId }),
+        timeoutMs,
+        "droid acp session/close timed out",
+      ).catch(() => undefined);
     if (transport) await transport.dispose().catch(() => {});
   }
 }
