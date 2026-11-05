@@ -114,7 +114,6 @@ model Project {
   // `Co-authored-by` trailer; withheld unless COFORGE_COMMIT_COAUTHOR is set.
   commitCoAuthor       Boolean        @default(true)
   workspace            Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  conversations        Conversation[] @relation("ProjectConversations")
   memberLastTaskProjects ConversationMember[]
   tasks                Task[]
   createdAt            DateTime       @default(now())

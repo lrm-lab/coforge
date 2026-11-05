@@ -21,7 +21,6 @@ model ChatSection {
 model Conversation {
   id             String                 @id @default(uuid(7)) @db.Uuid
   workspaceId    String                 @db.Uuid
-  projectId      String?                @db.Uuid
   coordinatorAgentId String?             @db.Uuid
   directKey      String?
   /// What a conversation not made by people is for: `app_events`, an app's events for one Agent
@@ -59,14 +58,12 @@ model Conversation {
   savedMessages  SavedMessage[]
   messageReads   MessageRead[]
   pins           ConversationPin[]
-  project        Project?               @relation("ProjectConversations", fields: [projectId], references: [id], onDelete: SetNull)
   coordinatorAgent Agent?               @relation("ConversationCoordinator", fields: [coordinatorAgentId, workspaceId], references: [id, workspaceId], onDelete: NoAction)
 
   @@unique([workspaceId, directKey])
   @@unique([workspaceId, channelName])
   @@unique([id, workspaceId])
   @@index([workspaceId])
-  @@index([projectId])
   @@index([coordinatorAgentId])
   @@map("conversations")
 }

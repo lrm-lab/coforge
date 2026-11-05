@@ -44,9 +44,7 @@ Moved out of [`AGENTS.md`](AGENTS.md) to keep it under 200 lines.
   channel cannot join, update, archive, delete or list it, nor add or remove its
   members. A write that names a channel by membership alone (pins, chat sections)
   answers a missing channel and a private one alike.
-- Surfaces beyond the channel's own pages keep to the rule as well: a project
-  lists and counts only the channels the viewer reads (`projectDetailSelect`,
-  `projectListSelect`), a forward to a private channel the forwarder is not in fails
+- Surfaces beyond the channel's own pages keep to the rule as well: a forward to a private channel the forwarder is not in fails
   as `no_access`, an action card neither names nor links it and acts on it only for
   an active member, an Agent's reminder anchored in it links nowhere, an Agent's
   Activity there shows only to its members (`unreadableConversationIds`), and no App event

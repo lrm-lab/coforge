@@ -7,11 +7,8 @@ model Task {
   messageId                    String?             @unique @db.Uuid
   conversationId               String              @db.Uuid
   workspaceId                  String              @db.Uuid
-  /// The Project this Task is filed under, chosen at creation or by amendment; a conversation
-  /// never lends its own (task #484: `projectPinned` and the channel link drop in release 2).
+  /// The Project this Task is filed under, chosen at creation or by amendment.
   projectId                    String?             @db.Uuid
-  /// Legacy marker from the channel-following model; no longer read or written.
-  projectPinned                Boolean             @default(false)
   number                       Int
   title                        String
   description                  String?

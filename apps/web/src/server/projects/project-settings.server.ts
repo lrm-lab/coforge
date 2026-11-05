@@ -73,7 +73,7 @@ export class ProjectSettings {
     };
     const project = await this.db.project.findFirst({ where, select: { iconObjectKey: true } });
     if (!project) throw new AppError("INVALID_INPUT");
-    // The FK's ON DELETE SET NULL preserves channels, memberships and messages.
+    // The FK's ON DELETE SET NULL preserves the Tasks filed under it.
     // Check the current name in the delete itself so a concurrent rename cannot bypass confirmation.
     const result = await this.db.project.deleteMany({
       where: { ...where, iconObjectKey: project.iconObjectKey },

@@ -56,8 +56,7 @@ type CreateChannelDialogProps = {
   ) => Promise<CreatedChannel | void>;
   /** Opens a channel the dialog created (the picker's result state and success). */
   onOpenChannel?: (channelId: string) => void | Promise<void>;
-  /** Prefills, but does not force, the channel name — e.g. the project slug when
-   * creating a project's first discussion group. */
+  /** Prefills, but does not force, the channel name. */
   defaultName?: string;
   /** An Agent-prepared `channel:create` action card's initial humans/Agents: shown as
    * preselected, individually deselectable checkboxes. */

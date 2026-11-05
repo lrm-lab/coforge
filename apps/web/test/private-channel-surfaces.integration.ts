@@ -27,35 +27,17 @@ import {
 
 /**
  * Task #302, step 5: the surfaces outside a channel's own pages keep a private channel to its
- * members too: a project's channel list and count, what Workspace memory learns from, a forward's
+ * members too: what Workspace memory learns from, a forward's
  * destination, a message notification read by id, the channel an action card or an Agent's
  * reminder names, and what an Agent's Activity shows of its work there.
  */
 let fixture: PrivateChannelFixture;
 let extra: Awaited<ReturnType<typeof setUp>>;
 
-/** A project holding all three channels, an Agent's add-member card naming the private one in
+/** An Agent's add-member card naming the private one in
  * the DM of the insider and the owner, and a discussion of the private channel's Task in which the
  * outsider kept a seat (as when the channel turned private after they followed it). */
-async function setUp({
-  db,
-  ws,
-  suffix,
-  token,
-  people,
-  open,
-  closed,
-  vault,
-  direct,
-}: PrivateChannelFixture) {
-  const project = await db.project.create({
-    data: { workspaceId: ws, name: "Launch", slug: `launch-${suffix}` },
-  });
-  await db.conversation.updateMany({
-    where: { id: { in: [open.id, closed.id, vault.id] } },
-    data: { projectId: project.id },
-  });
-
+async function setUp({ db, ws, suffix, token, people, closed, direct }: PrivateChannelFixture) {
   const computer = await db.computer.create({
     data: { ownerId: people.insider, machineId: crypto.randomUUID() },
   });
@@ -146,7 +128,7 @@ async function setUp({
       update: { browserNotificationsEnabled: true },
     });
   }
-  return { project, computer, scout, cardMessage, createMessage, discussionMessage };
+  return { computer, scout, cardMessage, createMessage, discussionMessage };
 }
 
 beforeAll(async () => {

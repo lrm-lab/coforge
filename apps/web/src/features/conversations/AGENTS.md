@@ -22,7 +22,7 @@ These rules apply to `src/features/conversations/`. Forwarding a message (the Fo
 - The sidebar's channel and DM lists live in `sidebar-collections.ts` (collections and changes, tested without React) and `sidebar-lists.ts` (hooks). The chat layout's (`_chat`) loader fetches
   them, in the browser, into the TanStack Query cache (a later page load restores the browser's copy first, `../cache-persistence/`); the same keys back TanStack DB
   collections. Every channel's name (`channelNamesQuery`, for body channel links
-  and the `#` list) lives in the same cache; the create-channel dialog reads projects on open.
+  and the `#` list) lives in the same cache.
 - Realtime keeps every Chat list live, so the loader (run on each navigation inside Chat) reads
   only a list not cached or marked stale (`loadSidebarLists`); a subscribe that may have missed
   something re-reads that channel's lists (`rereadMissedBySubscribe`). Every list is read with the

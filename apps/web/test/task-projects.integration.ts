@@ -8,7 +8,7 @@ import { setup } from "./fixtures/task-dependencies";
  */
 
 test("a task carries only its own project: the channel lends none, a sub-task inherits its parent's, and amend sets or clears it", async () => {
-  const { db, run, make, show, principals, channel, refusal } = await setup();
+  const { db, run, make, show, principals, refusal } = await setup();
   try {
     const workspaceId = principals.alice.workspaceId;
     const suffix = crypto.randomUUID().slice(0, 8);
@@ -18,12 +18,6 @@ test("a task carries only its own project: the channel lends none, a sub-task in
     const beta = await db.project.create({
       data: { workspaceId, name: "Beta", slug: `beta-${suffix}` },
     });
-    // The channel's own projectId (until release 2 removes the column) never lends.
-    await db.conversation.update({
-      where: { id: channel.id },
-      data: { projectId: alpha.id },
-    });
-
     const [number] = await make("alice", 1);
     expect((await show(number!)).tasks[0]!.project).toBeNull();
 
