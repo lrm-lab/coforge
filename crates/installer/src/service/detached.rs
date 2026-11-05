@@ -168,6 +168,19 @@ impl<'a> Detached<'a> {
     }
 }
 
+/// The session id of this process.
+#[cfg(unix)]
+fn own_session() -> Option<u32> {
+    // SAFETY: getsid(2) with 0 takes the calling process and touches no memory.
+    let session = unsafe { libc::getsid(0) };
+    u32::try_from(session).ok()
+}
+
+#[cfg(not(unix))]
+fn own_session() -> Option<u32> {
+    None
+}
+
 fn unreadable(path: &Path, detail: impl std::fmt::Display) -> ServiceError {
     ServiceError::FileUnreadable {
         path: path.display().to_string(),
@@ -188,21 +201,14 @@ impl SupervisorService for Detached<'_> {
         "the detached Computer process".to_owned()
     }
 
+    /// The service leads its own session (`setsid` at the spawn), and so does the upgrade job the
+    /// Coordinator launches (`detached: true`): ancestry would put that job under the service and
+    /// refuse every remote upgrade. Stopping the service reaches only its own session.
     fn caller_is_inside_unit(&self) -> Result<bool, ServiceError> {
         let Some(service) = self.running()? else {
             return Ok(false);
         };
-        let mut pid = std::process::id();
-        for _ in 0..64 {
-            if pid == service.pid {
-                return Ok(true);
-            }
-            match self.table.parent_of(pid) {
-                Ok(Some(parent)) if parent != pid && parent > 1 => pid = parent,
-                _ => return Ok(false),
-            }
-        }
-        Ok(false)
+        Ok(own_session().is_some_and(|session| session == service.pid))
     }
 
     fn state(&self) -> Result<ServiceState, ServiceError> {

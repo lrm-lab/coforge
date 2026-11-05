@@ -265,3 +265,44 @@ mod real_spawn {
         assert_eq!(pid.trim_start_matches("pid="), sid, "{out}");
     }
 }
+
+#[cfg(unix)]
+mod session {
+    use super::*;
+
+    fn own_session_pid() -> u32 {
+        // SAFETY: getsid(2) with 0 takes the calling process and touches no memory.
+        u32::try_from(unsafe { libc::getsid(0) }).unwrap()
+    }
+
+    #[test]
+    fn a_caller_in_the_services_session_is_inside_it_and_any_other_is_not() {
+        let w = world();
+        let table = FakeTable::new(&w.clock);
+        let spawn = FakeSpawn {
+            table: &table,
+            pid: own_session_pid(),
+            started: RefCell::new(Vec::new()),
+            fails: false,
+        };
+        let service = detached(&w, &table, &spawn);
+        assert!(
+            !service.caller_is_inside_unit().unwrap(),
+            "nothing is running"
+        );
+        service.install(&definition("detached", SPEC)).unwrap();
+        service.start().unwrap();
+        assert!(service.caller_is_inside_unit().unwrap());
+
+        let other = world();
+        let other_table = FakeTable::new(&other.clock);
+        let other_spawn = spawner(&other_table, false);
+        let elsewhere = detached(&other, &other_table, &other_spawn);
+        elsewhere.install(&definition("detached", SPEC)).unwrap();
+        elsewhere.start().unwrap();
+        assert!(
+            !elsewhere.caller_is_inside_unit().unwrap(),
+            "its pid is not our session"
+        );
+    }
+}

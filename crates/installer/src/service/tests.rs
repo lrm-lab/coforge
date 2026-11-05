@@ -275,7 +275,12 @@ fn a_supervised_user_unit_is_controlled_as_itself_and_never_registered() {
         commands[0].starts_with("systemctl --user show mine.service"),
         "{commands:?}"
     );
-    assert_eq!(commands.len(), 1, "install ran nothing: {commands:?}");
+    assert!(
+        commands
+            .iter()
+            .all(|c| !c.contains("daemon-reload") && !c.contains("enable")),
+        "install ran nothing: {commands:?}"
+    );
     assert!(
         !wrote_unit,
         "no unit file may be written for a supervised unit"
@@ -293,4 +298,50 @@ fn a_supervised_system_unit_is_asked_without_the_user_flag() {
         commands[0].starts_with("systemctl show coforge.service"),
         "{commands:?}"
     );
+}
+
+/// Answers a `systemctl show` the way systemd does for a unit it has never heard of.
+struct UnitGone;
+
+impl CommandRunner for UnitGone {
+    fn run(&self, _: &CommandLine, _: Duration) -> Result<CommandOutput, RunError> {
+        Ok(CommandOutput {
+            code: 0,
+            stdout: "LoadState=not-found\nActiveState=inactive\nSubState=dead\nMainPID=0\n"
+                .to_owned(),
+            stderr: String::new(),
+        })
+    }
+}
+
+#[test]
+fn a_record_of_a_unit_systemd_forgot_is_dropped_and_the_coordinator_unit_is_used() {
+    use crate::processes::fakes::FakeTable;
+    let home = Scratch::new("for-machine-forgotten");
+    let state = home.path().join(".coforge/daemon");
+    fs::create_dir_all(&state).unwrap();
+    let record = state.join("supervisor.json");
+    fs::write(
+        &record,
+        r#"{"kind":"systemd","scope":"user","unit":"gone.service","invocationId":"i","pid":7,"recordedAt":"t"}"#,
+    )
+    .unwrap();
+    let clock = VirtualClock::new();
+    let table = FakeTable::new(&clock);
+    let service = for_machine(
+        Platform::Linux,
+        true,
+        home.path(),
+        &state,
+        Some(501),
+        Ports {
+            runner: &UnitGone,
+            clock: &clock,
+            table: &table,
+            spawner: &SystemSpawn,
+        },
+    )
+    .unwrap();
+    assert_eq!(service.display_name(), "coforge-daemon.service");
+    assert!(!record.exists(), "the stale record is removed");
 }

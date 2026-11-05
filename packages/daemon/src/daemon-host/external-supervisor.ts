@@ -90,7 +90,8 @@ async function showUnitProperty(
   unit: string,
   property: string,
 ): Promise<string | null> {
-  const result = await runner(scope, ["show", "-P", property, unit]);
+  // `-p <property> --value`: `show -P` needs systemd 246, `--value` only 230.
+  const result = await runner(scope, ["show", "-p", property, "--value", unit]);
   return result.code === 0 ? result.stdout.trim() : null;
 }
 

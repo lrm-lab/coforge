@@ -207,13 +207,19 @@ pub fn for_machine<'a>(
     if platform == Platform::Linux
         && let Some(record) = supervised::read(state_directory)
     {
-        return Ok(Box::new(SystemdUser::supervised(
+        let unit = SystemdUser::supervised(
             ports.runner,
             ports.clock,
             &record,
             &OwnCgroup,
             &OwnSessionBus,
-        )?));
+        )?;
+        // A unit systemd no longer knows is no supervisor: forget the record, as the Computer's
+        // own host does, and manage the service as usual. Any other answer, or none, keeps it.
+        if !matches!(unit.state(), Ok(ServiceState::NotInstalled)) {
+            return Ok(Box::new(unit));
+        }
+        let _ = std::fs::remove_file(state_directory.join("supervisor.json"));
     }
     if platform == Platform::Linux && !has_systemd {
         return Ok(Box::new(Detached::new(

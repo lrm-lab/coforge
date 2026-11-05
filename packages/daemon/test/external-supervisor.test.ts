@@ -59,7 +59,7 @@ const base = {
 
 test("a supervisor is detected only when the unit's MainPID is this process", async () => {
   const mainPid = (stdout: string) =>
-    runner({ "show -P MainPID coforge-daemon.service": { code: 0, stdout } });
+    runner({ "show -p MainPID --value coforge-daemon.service": { code: 0, stdout } });
   expect(await detectSystemdSupervisor({ ...base, systemctl: mainPid("4242\n") })).toEqual({
     kind: "systemd",
     scope: "user",
