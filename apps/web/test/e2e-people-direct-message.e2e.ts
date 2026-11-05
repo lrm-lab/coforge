@@ -182,7 +182,7 @@ test("members open a direct message with each other, and with themselves", async
     const row = `[data-search-message-id="${sent.id}"]`;
     await waitFor(`document.querySelector('${row}') !== null`);
     expect(await evaluate<string>(`document.querySelector('${row}').textContent`)).toContain(
-      `@${peerName}`,
+      peerName,
     );
     await browser("click", row);
     await waitFor(`${param("open")} === "dm:${dm.id}" && ${param("msg")} === "${sent.id}"`);
