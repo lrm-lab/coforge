@@ -62,6 +62,9 @@ export async function runDetachedUpgrade(
     homeDirectory: home,
   }).logPath;
 
+  // No KillMode check for a supervised unit (task #538): a recorded supervisor exists only under
+  // systemd, where this job runs through `systemd-run` in a transient unit outside the supervised
+  // unit's cgroup, so stopping that unit cannot end it. Raft has no `systemd-run` and must check.
   note(`Upgrade ${requestId} starts outside this process; its result is kept on this Computer.`);
   await launch(requestId, options.version, {
     stateDirectory: options.stateDirectory,
