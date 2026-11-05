@@ -130,7 +130,7 @@ export async function upsertChannelMembers(
           : client.conversationMember.upsert({
               where: { conversationId_userId: { conversationId: channelId, userId } },
               create: { workspaceId, conversationId: channelId, userId, readThroughSequence },
-              update: { leftAt: null, readThroughSequence },
+              update: { leftAt: null, readThroughSequence, joinedAt: new Date() },
             }),
       ),
       ...input.agentIds.map((agentId) =>

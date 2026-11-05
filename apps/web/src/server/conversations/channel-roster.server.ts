@@ -55,7 +55,8 @@ export async function joinChannel(
     await tx.conversationMember.upsert({
       where: { conversationId_userId: { conversationId: channelId, userId } },
       create: { workspaceId, userId, conversationId: channelId },
-      update: { leftAt: null },
+      // A returning member's membership starts now; an active one keeps when they joined.
+      update: active === 0 ? { leftAt: null, joinedAt: new Date() } : { leftAt: null },
     });
     await tx.conversationMember.updateMany({
       where: { conversationId: channelId, userId },

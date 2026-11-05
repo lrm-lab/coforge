@@ -31,7 +31,7 @@ export async function readMessageSeenBy(
       workspaceId: input.workspaceId,
       threadRootId: null,
     },
-    select: { senderMemberId: true, sequence: true },
+    select: { senderMemberId: true, sequence: true, createdAt: true },
   });
   if (!message || message.senderMemberId !== authorization.activeMemberId)
     throw new AppError("NOT_FOUND");
@@ -42,6 +42,12 @@ export async function readMessageSeenBy(
       workspaceId: input.workspaceId,
       ...ACTIVE_MEMBER_WHERE,
       id: { not: authorization.activeMemberId },
+      // A person counts only if they were in the conversation when the message was sent (task
+      // #549): joining or being added starts a person's read cursor at the conversation's end, so
+      // a cursor past the message says nothing about whether someone who came later saw it. An
+      // Agent's cursor moves only when it reads (`message read`, a delivery's drain), so an Agent
+      // seated after the message that read it has seen it.
+      OR: [{ agentId: { not: null } }, { joinedAt: { lte: message.createdAt } }],
     },
     select: {
       userId: true,

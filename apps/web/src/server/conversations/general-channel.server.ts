@@ -94,7 +94,7 @@ export async function enrollGeneralChannel(db: Prisma.TransactionClient, workspa
       leftAt: { not: null },
       userId: { in: members.map(({ userId }) => userId) },
     },
-    data: { leftAt: null, readThroughSequence },
+    data: { leftAt: null, readThroughSequence, joinedAt: new Date() },
     select: { userId: true },
   });
   const returnedAgents = await db.conversationMember.updateManyAndReturn({
