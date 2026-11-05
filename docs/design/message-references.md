@@ -97,9 +97,25 @@ enabled); v2 replaces it:
 2. **Write**: parse and write rows plus the readable body; stop writing tokens entirely.
 3. **Read**: web and Agent text render from rows; the token reader stays only for messages written
    before v2.
-4. **Backfill**: a one-off, idempotent pass converts stored tokens to rows and readable text (tokens
-   are unambiguous, so this is safe). Older messages that only ever had plain `#channel:#N` text
-   keep that text; they are not guessed into references.
+4. **Backfill**: a one-off, idempotent pass converts stored tokens to rows (tokens are
+   unambiguous, so this is safe). It reads the stored token forms — `<@channel:uuid:name>`,
+   `<@thread:channel:root:name>` and the three `<@task:…>` shapes — and resolves each by the id it
+   carries: the channel's uuid, the thread's root message id, the task's conversation-and-number.
+   The row's `raw` is the token text, so a reader pairs the row and the token. A token whose id no
+   longer names a live target counts as a failure; prose left in a body (`#name` that never became
+   a token) is a send-time miss and counts only as `unresolvedProse` — re-reading it now would
+   guess an old name onto a channel that may hold it today. Older messages that only ever had
+   plain `#channel:#N` text keep that text; they are not guessed into references. Each apply
+   opens a `message_reference_backfill_runs` row before it scans and records every row it actually
+   inserted in the child `message_reference_backfill_rows` (`runId, messageId, ordinal`), in the
+   same transaction as that batch's `INSERT ... ON CONFLICT DO NOTHING RETURNING` — so a crashed or
+   resumed run still attributes every committed row to it, and `--rollback --run-id` deletes
+   exactly those, never a live send's row that skipped the conflict. A `runId` no run recorded is
+   refused.
+   `raw` keeps two forms: a live send stores the readable text (`#general`), a backfilled row stores
+   the token text (`<@channel:…>`). Step 3's readers handle both. Rewriting the backfilled body's
+   tokens into readable text is **not** part of this step — the body is left as written; only the
+   rows are added.
 5. **Retire**: once the backfill is done and no client writes tokens, the token patterns move to a
    legacy read-only module. No v3.
 

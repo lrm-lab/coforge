@@ -1,0 +1,167 @@
+name: Backfill message_references (task #465)
+
+# One-time (re-runnable) data task: resolve historical messages' stored reference tokens into
+# `message_references` rows by the ids they carry. See
+# apps/web/scripts/backfill-message-references.ts (bundled into the image at
+# .ops/backfill-message-references.js by apps/web/Dockerfile).
+#
+# Dispatched by an operator. The DB is not reachable from CI, so — as the deploys do — this runs
+# the bundled script inside the already-deployed Web container over SSH, using the chosen GitHub
+# Environment's SSH secrets. Run `dry-run` first and read the counts and samples in the log.
+#
+# The production Environment has no required reviewer (task #498), so there is no human gate from
+# the platform: an `apply` or `rollback` to production must repeat a confirmation phrase.
+# Rollback deletes exactly the `(messageId, ordinal)` rows the run it names recorded.
+#
+# Every free-text input is validated against a strict shape in `Validate inputs` and quoted with
+# `printf %q` before it reaches the remote shell — a dispatch's text never runs on the deploy host.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Where to run"
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      mode:
+        description: "dry-run reports only; apply writes; rollback deletes that run's rows"
+        required: true
+        type: choice
+        options:
+          - dry-run
+          - apply
+          - rollback
+      confirm:
+        description: "To apply in production: apply-production. To roll back: rollback-production"
+        required: false
+        type: string
+      fromMessageId:
+        description: "Resume from this Message.id (uuid7, printed on a timed-out run)"
+        required: false
+        type: string
+      batchSize:
+        description: "Messages per batch"
+        required: false
+        type: string
+        default: "500"
+      maxMinutes:
+        description: "Stop after this many minutes and print the resume cursor"
+        required: false
+        type: string
+        default: "12"
+      pauseMs:
+        description: "Pause between batches, milliseconds"
+        required: false
+        type: string
+        default: "100"
+      runId:
+        description: "rollback: the apply run's id (message_reference_backfill_runs)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backfill-message-references-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    name: Run the backfill
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    timeout-minutes: 15
+    steps:
+      - name: Require the confirmation phrase for a production write
+        if: inputs.environment == 'production' && inputs.mode != 'dry-run'
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+          MODE: ${{ inputs.mode }}
+        run: |
+          want=$([ "$MODE" = apply ] && echo apply-production || echo rollback-production)
+          if [ "$CONFIRM" != "$want" ]; then
+            echo "A production $MODE must set confirm to '$want'." >&2
+            exit 1
+          fi
+
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Validate inputs
+        env:
+          FROM_ID: ${{ inputs.fromMessageId }}
+          BATCH_SIZE: ${{ inputs.batchSize }}
+          MAX_MINUTES: ${{ inputs.maxMinutes }}
+          PAUSE_MS: ${{ inputs.pauseMs }}
+          RUN_ID: ${{ inputs.runId }}
+          MODE: ${{ inputs.mode }}
+        run: bash apps/web/scripts/validate-backfill-inputs.sh
+
+      - name: Prepare the SSH identity
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_SSH_HOST: ${{ vars.DEPLOY_SSH_HOST }}
+          DEPLOY_SSH_USER: ${{ vars.DEPLOY_SSH_USER }}
+          DEPLOY_HOST_KEY: ${{ secrets.DEPLOY_SSH_HOST_KEY }}
+        run: |
+          if [ "$DEPLOY_SSH_USER" != "deploy" ]; then
+            echo "DEPLOY_SSH_USER must be the non-root deploy identity" >&2
+            exit 1
+          fi
+          ssh_dir="$(mktemp -d)"
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$ssh_dir/key"
+          printf '%s %s\n' "$DEPLOY_SSH_HOST" "$DEPLOY_HOST_KEY" > "$ssh_dir/known_hosts"
+          chmod 700 "$ssh_dir"
+          chmod 600 "$ssh_dir/key" "$ssh_dir/known_hosts"
+          echo "SSH_DIR=$ssh_dir" >> "$GITHUB_ENV"
+
+      - name: Resolve the Web container
+        env:
+          DEPLOY_SSH_HOST: ${{ vars.DEPLOY_SSH_HOST }}
+          DEPLOY_SSH_USER: ${{ vars.DEPLOY_SSH_USER }}
+          PROJECT: coforge-${{ inputs.environment }}
+        run: |
+          remote() {
+            ssh -i "$SSH_DIR/key" -o UserKnownHostsFile="$SSH_DIR/known_hosts" \
+              -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=8 \
+              "$DEPLOY_SSH_USER@$DEPLOY_SSH_HOST" "$@"
+          }
+          ids="$(remote "docker ps -q --filter label=com.docker.compose.project=$PROJECT \
+            --filter label=com.docker.compose.service=web --filter status=running")"
+          container="$(printf '%s\n' "$ids" | head -n 1)"
+          if [ -z "$container" ]; then
+            echo "No running Web container for $PROJECT" >&2
+            exit 1
+          fi
+          echo "WEB_CONTAINER=$container" >> "$GITHUB_ENV"
+
+      - name: Run the backfill
+        env:
+          DEPLOY_SSH_HOST: ${{ vars.DEPLOY_SSH_HOST }}
+          DEPLOY_SSH_USER: ${{ vars.DEPLOY_SSH_USER }}
+          MODE: ${{ inputs.mode }}
+          FROM_ID: ${{ inputs.fromMessageId }}
+          BATCH_SIZE: ${{ inputs.batchSize }}
+          MAX_MINUTES: ${{ inputs.maxMinutes }}
+          PAUSE_MS: ${{ inputs.pauseMs }}
+          RUN_ID: ${{ inputs.runId }}
+        run: |
+          # One line of validated, %q-quoted args — no multi-line block the remote shell would split.
+          args=""
+          case "$MODE" in
+            dry-run) args="$args --dry-run";;
+            apply)   args="$args --apply";;
+            rollback) args="$args --rollback --run-id $(printf %q "$RUN_ID")";;
+          esac
+          [ -n "$FROM_ID" ] && args="$args --from-message-id $(printf %q "$FROM_ID")"
+          [ -n "$BATCH_SIZE" ] && args="$args --batch-size $(printf %q "$BATCH_SIZE")"
+          [ -n "$MAX_MINUTES" ] && args="$args --max-minutes $(printf %q "$MAX_MINUTES")"
+          [ -n "$PAUSE_MS" ] && args="$args --pause-ms $(printf %q "$PAUSE_MS")"
+          ssh -i "$SSH_DIR/key" -o UserKnownHostsFile="$SSH_DIR/known_hosts" \
+            -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=8 \
+            "$DEPLOY_SSH_USER@$DEPLOY_SSH_HOST" \
+            "docker exec -i -w /app '$WEB_CONTAINER' bun /app/.ops/backfill-message-references.js $args"
