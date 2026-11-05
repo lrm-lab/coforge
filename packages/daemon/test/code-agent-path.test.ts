@@ -23,7 +23,10 @@ function newFakeHome(): string {
 }
 
 afterEach(() => {
-  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+  for (const root of roots.splice(0))
+    // Windows releases a just-exited executable's image lock asynchronously, so the first rm
+    // can hit EBUSY/EPERM; rm's own retry ladder absorbs that teardown lag (task #545).
+    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
 });
 
 /** Filesystem-backed cases always run against the host platform: the fixtures are real
@@ -109,6 +112,22 @@ describe("npm-installed Codex discovery through the public seam", () => {
       });
       expect(build.success).toBe(true);
       copyFileSync(launcher, hostJoin(bin, "codex-fake-node.exe"));
+      // First execution of a freshly written fixture exe pays the OS's scan/startup cost —
+      // on a loaded Windows runner that exceeded the probe's five-second budget (task #545).
+      // One unmeasured `--version` warms both exes (the launcher resolves the interpreter
+      // through PATH and spawns it) before the timed discovery runs.
+      const pathKey = Object.keys(Bun.env).find((name) => name.toUpperCase() === "PATH") ?? "PATH";
+      const warmupEnv = {
+        ...Bun.env,
+        [pathKey]: [bin, Bun.env[pathKey] ?? ""].join(hostDelimiter),
+      };
+      const warmup = Bun.spawn({
+        cmd: [launcher, "--version"],
+        stdout: "ignore",
+        stderr: "ignore",
+        env: warmupEnv,
+      });
+      expect(await warmup.exited).toBe(0);
     } else {
       // macOS execve refuses a shebang line without its newline (ENOEXEC); npm's launchers end it.
       writeFileSync(hostJoin(bin, "codex"), "#!/usr/bin/env codex-fake-node\n", { mode: 0o755 });
