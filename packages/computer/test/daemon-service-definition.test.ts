@@ -31,6 +31,7 @@ const MACHINES = {
   },
   linux: {
     platform: "linux",
+    hasSystemd: true,
     homeDirectory: "/home/example",
     uid: 1000,
     environment: {},
@@ -74,6 +75,24 @@ test("Linux: the systemd user unit runs the active executable with this user's s
       ENDPOINT,
     ),
     path: "/home/example/.config/systemd/user/coforge-daemon.service",
+  });
+});
+
+test("Linux without systemd: the definition is the detached spec, with no credential in it", () => {
+  const definition = resolveServiceDefinition({ ...MACHINES.linux, hasSystemd: false });
+
+  expect(definition.manager).toBe("detached");
+  expect(definition.path).toBe("/home/example/.coforge/daemon/detached-service.json");
+  expect(JSON.parse(definition.contents)).toEqual({
+    program: "/home/example/.coforge/computer/install/active/coforge-computer",
+    args: [
+      "__daemon",
+      "--socket",
+      "/home/example/.coforge/daemon/daemon.sock",
+      "--state-directory",
+      "/home/example/.coforge/daemon",
+    ],
+    env: { COFORGE_DAEMON_CONNECTION_ENDPOINT: ENDPOINT },
   });
 });
 

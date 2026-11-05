@@ -5,8 +5,15 @@ Rules for login-session startup in `src/daemon-host/`. They extend
 
 - This directory owns startup through launchd, systemd user, and Windows task
   integration. It does not own Computer commands.
-- Never fall back to a detached process when the platform manager is
-  unavailable. Computer exposes foreground supervision as an explicit mode.
+- Three ways the Coordinator runs, and who starts it in each: (1) a platform manager (launchd,
+  systemd user, Windows task) starts it; (2) a Linux machine without systemd (`/run/systemd/system`
+  missing or no `systemctl` on `PATH`, `systemdPresent`) runs the Computer's own detached process,
+  started by the installer's `Detached` backend (`DetachedDaemonHost`), with no start at boot and no
+  restart after a crash, which `status` says; (3) a Computer declared externally supervised
+  (`COFORGE_COMPUTER_EXTERNAL_SUPERVISOR`, verified by `external-supervisor.ts`) is started and
+  restarted only through its recorded unit and never gets a second service beside it. A machine with
+  systemd but no user session bus is none of these: it is an error that says what to do, never a
+  quiet detached process. Foreground supervision stays an explicit mode.
 - Each host exposes `serviceDefinition()`, the text of its service file and, where the manager keeps
   one on disk, its `path`. The Computer's `__lifecycle service-definition` hands the text (not the
   path) to the installer, and `status` compares the file at `path` with it; do not render a second

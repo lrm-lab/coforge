@@ -38,6 +38,9 @@ export type SupervisorStatus = {
   pid: number | null;
   socketPath: string;
   rpc: SupervisorRpcStatus;
+  /** True on a Linux machine without systemd: the Computer's own detached process, with no
+   * manager to start it at boot or after a crash (task #538). */
+  detached?: true;
   /** Absent where the platform manager keeps no service file (Windows Task Scheduler). */
   serviceDefinition?: ServiceDefinitionStatus;
 };
@@ -194,7 +197,7 @@ export interface StatusPorts {
   resolveRealPath(path: string): Promise<string | null>;
   activeBinaryPath: string;
   coordinatorLabel: string;
-  probeCoordinator(): Promise<{ loaded: boolean; pid: number | null }>;
+  probeCoordinator(): Promise<{ loaded: boolean; pid: number | null; detached?: true }>;
   /** The service file this Computer would register (`expected`) beside the text on disk (`onDisk`,
    * null when the file does not exist), or null where the platform manager keeps no file.
    * Rejects when the file cannot be read. */

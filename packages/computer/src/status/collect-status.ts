@@ -87,6 +87,7 @@ async function collectSupervisor(
     label: ports.coordinatorLabel,
     loaded: coordinator.loaded,
     pid: coordinator.pid,
+    ...(coordinator.detached ? { detached: true as const } : {}),
     socketPath: ports.socketPath,
     rpc: snapshot.reachable
       ? { reachable: true, runtimeCount: snapshot.runtimes.length }

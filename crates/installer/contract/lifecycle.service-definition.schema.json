@@ -15,7 +15,8 @@
       "enum": [
         "launchd",
         "systemd-user",
-        "windows-task"
+        "windows-task",
+        "detached"
       ]
     },
     "contents": {

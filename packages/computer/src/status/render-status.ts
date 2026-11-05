@@ -63,6 +63,11 @@ function renderSupervisor(report: ComputerStatusReport): string[] {
     "Supervisor",
     `  Coordinator job:       ${terminalText(supervisor.label)}`,
     `  Loaded:                ${supervisor.loaded ? "yes" : "no"}`,
+    ...(supervisor.detached
+      ? [
+          "  Run mode:              detached process (no systemd): it does not start at boot and is not restarted if it crashes",
+        ]
+      : []),
     ...renderServiceDefinition(supervisor),
     `  PID:                   ${supervisor.pid ?? "-"}`,
     `  Socket:                ${terminalText(supervisor.socketPath)}`,

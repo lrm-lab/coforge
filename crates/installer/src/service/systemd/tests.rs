@@ -198,6 +198,11 @@ fn no_user_bus_is_reported_as_no_user_session_with_the_way_out() {
     assert!(message.contains("`su` or `sudo`"), "{message}");
     assert!(message.contains("ssh <user>@<host>"), "{message}");
     assert!(message.contains("machinectl shell <user>@"), "{message}");
+    assert!(
+        message.contains("loginctl enable-linger <user>"),
+        "{message}"
+    );
+    assert!(message.contains("coforge-computer foreground"), "{message}");
 }
 
 #[test]

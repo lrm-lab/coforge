@@ -12,6 +12,8 @@ import {
   workspaceSocketPath,
   workspaceStateDirectory,
   WorkspaceHealthJournal,
+  detachedPid,
+  systemdPresent,
 } from "@lrm/coforge-daemon";
 import {
   currentMachine,
@@ -107,7 +109,11 @@ export function createStatusPorts(input: CreateStatusPortsInput): StatusPorts {
     },
     async probeCoordinator() {
       if (input.platform === "darwin") return probeDarwinCoordinator(coordinatorLabel);
-      if (input.platform === "linux") return probeLinuxCoordinator(coordinatorLabel);
+      if (input.platform === "linux") {
+        if (systemdPresent()) return probeLinuxCoordinator(coordinatorLabel);
+        const pid = await detachedPid(input.stateDirectory);
+        return { loaded: pid !== null, pid, detached: true as const };
+      }
       return probeWindowsCoordinator(coordinatorLabel, {
         resolvePid: async () => {
           try {

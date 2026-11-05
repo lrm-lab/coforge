@@ -25,6 +25,8 @@ export type DaemonHostMachine = {
   environment: PathEnvironment;
   /** Windows only: the task's user id. Defaults to the signed-in user. */
   windowsUserId?: string;
+  /** Linux only: whether systemd is present. Read from the machine when absent (task #538). */
+  hasSystemd?: boolean;
 };
 
 /** The user and process facts of the machine this process runs on. */
@@ -91,6 +93,7 @@ function buildDaemonHost(
     homeDirectory: machine.homeDirectory,
     uid: machine.uid,
     userId: machine.windowsUserId,
+    hasSystemd: machine.hasSystemd,
     registrar,
   });
 }

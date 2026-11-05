@@ -84,7 +84,10 @@ impl fmt::Display for ServiceError {
                 formatter,
                 "`{command}` failed: {} This shell has no systemd user session, which a `su` \
                  or `sudo` shell never gets. Open this user's own login session - \
-                 `ssh <user>@<host>`, or `machinectl shell <user>@` - and run the command there.",
+                 `ssh <user>@<host>`, or `machinectl shell <user>@` - and run the command there. If that \
+                 user has no login session on this machine, run `loginctl enable-linger <user>` \
+                 once and retry from that user's session, or run `coforge-computer foreground` \
+                 under a supervisor of your own.",
                 sentence(diagnostic)
             ),
             Self::NoLaunchdDomain {

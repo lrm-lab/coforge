@@ -116,6 +116,8 @@ test("a shell with no systemd user session says so and gives the commands that o
   expect(error.message).toContain("no systemd user session");
   expect(error.message).toContain("su");
   expect(error.message).toContain("machinectl shell");
+  expect(error.message).toContain("loginctl enable-linger <user>");
+  expect(error.message).toContain("coforge-computer foreground");
   expect(registrar.calls).toBe(0);
 });
 

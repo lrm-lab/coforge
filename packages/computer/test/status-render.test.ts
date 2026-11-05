@@ -470,3 +470,15 @@ test("renderStatusHuman leaves out the service definition where the report has n
 
   expect(text).not.toContain("Service definition");
 });
+
+test("renderStatusHuman says a detached Coordinator has no boot start and no restart on a crash", () => {
+  const detached = renderStatusHuman({
+    ...REPORT,
+    platform: "linux",
+    supervisor: { ...REPORT.supervisor, detached: true },
+  }).join("\n");
+  expect(detached).toContain("detached process (no systemd)");
+  expect(detached).toContain("does not start at boot");
+  expect(detached).toContain("not restarted if it crashes");
+  expect(renderStatusHuman(REPORT).join("\n")).not.toContain("detached process");
+});

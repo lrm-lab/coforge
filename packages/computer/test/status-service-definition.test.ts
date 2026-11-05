@@ -25,7 +25,7 @@ async function portsFor(platform: SupportedStatusPlatform) {
       serverUrl: "https://coforge.test",
       registrations: { listRegistrations: async () => [] },
       environment: {},
-      machine: { homeDirectory: home, uid: 501, environment: {} },
+      machine: { homeDirectory: home, uid: 501, environment: {}, hasSystemd: true },
     }),
   };
 }

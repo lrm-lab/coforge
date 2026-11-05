@@ -99,6 +99,7 @@ export {
   windowsDaemonTaskXml,
   windowsTaskUserId,
 } from "#src/daemon-host/index";
+export { detachedPid, systemdPresent } from "#src/daemon-host/detached";
 export {
   clearSupervisorRecord,
   detectSystemdSupervisor,
