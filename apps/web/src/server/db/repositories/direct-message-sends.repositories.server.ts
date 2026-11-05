@@ -177,7 +177,15 @@ export async function sendAgentMessage(
           where: { id: hint.messageId },
           select: messageSelect,
         });
-        return { ...existing, attachments: [] };
+        return {
+          ...existing,
+          deliveries: existing.deliveries.map((delivery) => ({
+            deliveryId: delivery.deliveryId,
+            agentId: delivery.agentId,
+            computerId: delivery.agent.computerId,
+          })),
+          attachments: [],
+        };
       }
     }
     if (!sender) throw new AgentSendRejectedError(403, "agent is not a conversation member");
@@ -274,6 +282,9 @@ export async function sendAgentMessage(
         : [];
     if (hint && !recipients.includes(hint.targetAgentId))
       throw new AgentSendRejectedError(403, "Memory Hint target delivery is missing");
+    // Keep the message write flat: nested relation creates make Prisma read the message and each
+    // relation back while this transaction holds the conversation's sequence lock. The send
+    // already has the mention payload and recipient Agent ids in memory.
     const created = await tx.message.create({
       data: {
         conversationId,
@@ -282,27 +293,15 @@ export async function sendAgentMessage(
         threadRootId: root?.id,
         body: stored.body,
         sequence,
-        mentions: stored.mentions.length
-          ? {
-              create: stored.mentions.map((mention) => ({
-                memberId: mention.key,
-                workspaceId: conversation.workspaceId,
-                kind: mention.type,
-                actorId: mention.id,
-                handle: mention.handle,
-              })),
-            }
-          : undefined,
-        deliveries: {
-          create: recipients.map((wakeAgentId) => ({
-            workspaceId: conversation.workspaceId,
-            conversationId,
-            agentId: wakeAgentId,
-            sequence,
-          })),
-        },
       },
-      select: messageSelect,
+      select: {
+        id: true,
+        body: true,
+        createdAt: true,
+        sequence: true,
+        // Carried so the browser signal can exclude thread replies from channel unread.
+        threadRootId: true,
+      },
     });
     await writeMessageReferences(
       tx,
@@ -310,7 +309,39 @@ export async function sendAgentMessage(
       { conversationId, workspaceId: conversation.workspaceId },
       stored.references,
     );
-
+    if (stored.mentions.length)
+      await tx.messageMention.createMany({
+        data: stored.mentions.map((mention) => ({
+          messageId: created.id,
+          conversationId,
+          memberId: mention.key,
+          workspaceId: conversation.workspaceId,
+          kind: mention.type,
+          actorId: mention.id,
+          handle: mention.handle,
+        })),
+      });
+    // Generate UUIDv7 ids in Bun so the raw insert keeps the repository's id-order contract while
+    // returning each recipient's Computer in the same statement as the delivery rows.
+    const deliveryIds = recipients.map(() => Bun.randomUUIDv7());
+    const deliveries = recipients.length
+      ? await tx.$queryRaw<{ deliveryId: string; agentId: string; computerId: string | null }[]>`
+          WITH inserted AS (
+            INSERT INTO "agent_message_deliveries"
+              ("deliveryId", "messageId", "workspaceId", "conversationId", "agentId", "sequence")
+            SELECT delivery."deliveryId", ${created.id}::uuid, ${conversation.workspaceId}::uuid,
+              ${conversationId}::uuid, delivery."agentId", ${sequence}
+            FROM unnest(${deliveryIds}::uuid[], ${recipients}::uuid[]) WITH ORDINALITY
+              AS delivery("deliveryId", "agentId", position)
+            ORDER BY delivery.position
+            RETURNING "deliveryId", "agentId"
+          )
+          SELECT inserted."deliveryId"::text AS "deliveryId", inserted."agentId"::text AS "agentId",
+            agent."computerId"::text AS "computerId"
+          FROM inserted
+          JOIN "agents" agent ON agent."id" = inserted."agentId"
+          ORDER BY array_position(${recipients}::uuid[], inserted."agentId")`
+      : [];
     if (hint) {
       const deliveredAt = new Date();
       await tx.memoryHintRecord.update({
@@ -355,7 +386,16 @@ export async function sendAgentMessage(
         }),
       ),
     );
-    return { ...created, attachments };
+    return {
+      ...created,
+      mentions: stored.mentions.map((mention) => ({
+        kind: mention.type,
+        actorId: mention.id,
+        handle: mention.handle,
+      })),
+      deliveries,
+      attachments,
+    };
   });
   // Never falls back to the internal Agent id: a missing name fails loudly. A joining send's
   // `sender` came from the transaction above; the throws before it keep it non-null here.
@@ -373,7 +413,7 @@ export async function sendAgentMessage(
     deliveries: result.deliveries.map((delivery) => ({
       deliveryId: delivery.deliveryId,
       agentId: delivery.agentId,
-      computerId: delivery.agent.computerId,
+      computerId: delivery.computerId,
     })),
     target: conversation.channelName
       ? deliveryTarget(`#${conversation.channelName}`, root?.id)
