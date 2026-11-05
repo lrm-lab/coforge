@@ -5,7 +5,7 @@ import { join } from "node:path";
 /**
  * Response types after Start's production request/response wrapping. Requires a built local Web
  * served with the seeded development browser user, PostgreSQL and COFORGE_DEV_SKIP_AUTH=1.
- * Agent requests have no API keys and must remain unauthorized. The attachment id names no row.
+ * Agent requests have no API keys and must remain unauthorized.
  * Run with COFORGE_E2E_WEB_URL and a path: bun test ./test/e2e-http-response-types.e2e.ts.
  * Writes the observed HTTP contracts to .amp/e2e/http-response-types/responses.json.
  */
@@ -26,12 +26,6 @@ test("built HTTP routes preserve plain-text health and error responses", async (
       body: "unauthorized",
     },
     { path: "/api/agent/v1/channels", method: "POST", status: 401, body: "unauthorized" },
-    {
-      path: "/api/attachments/11111111-1111-4111-8111-111111111111",
-      method: "GET",
-      status: 404,
-      body: "not found",
-    },
   ];
   const observed = await Promise.all(
     cases.map(async (entry) => {
@@ -64,6 +58,13 @@ test("explicit JSON and binary response types survive the same built server", as
   expect(json.status).toBe(200);
   expect(json.headers.get("content-type")).toContain("application/json");
   expect((await json.json()).keys).toBeArray();
+
+  // An attachment download that fails says which failure it was, as JSON (7b49efadd): here the id
+  // names no row.
+  const missing = await fetch(`${origin}/api/attachments/11111111-1111-4111-8111-111111111111`);
+  expect(missing.status).toBe(404);
+  expect(missing.headers.get("content-type")).toContain("application/json");
+  expect(await missing.json()).toEqual({ error: "not_found" });
 
   const font = (await readdir(assets)).find((name) => name.endsWith(".woff2"));
   if (!font) throw new Error("A production Web build with .woff2 assets is required");
