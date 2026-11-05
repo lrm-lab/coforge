@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { resolve } from "node:path";
 import {
   ArtifactSandboxConfigError,
   isSandboxRequest,
@@ -61,33 +62,47 @@ describe("the sandbox origin's configuration", () => {
       );
   });
 
-  test("refuses the application's host, a subdomain of it, or its parent, by any setting naming it", () => {
+  test("refuses the application's own host, by any setting naming it", () => {
     const refused = [
       [APP, { COFORGE_OIDC_ISSUER: `${APP}/oidc` }, "must not be the application's own host"],
       // Another port is still the same host: the gate matches by name.
       ["https://app.example:8443", { COFORGE_OIDC_ISSUER: `${APP}/oidc` }, "own host"],
       // Named by the GitHub callback alone.
       [APP, { COFORGE_GITHUB_CALLBACK_URL: `${APP}/auth/github/callback` }, "own host"],
-      // A subdomain or a parent: a parent domain's cookies would reach the sandbox. (Siblings,
-      // `app.x` beside `pages.x`, pass this check though they are one site too: pick a domain of
-      // its own, as production's coforgeusercontent.com is.)
-      ["https://pages.app.example", { COFORGE_OIDC_ISSUER: `${APP}/oidc` }, "subdomain"],
-      ["https://example", { COFORGE_OIDC_ISSUER: `${APP}/oidc` }, "subdomain"],
     ] as const;
     for (const [origin, env, message] of refused)
       expect(() =>
         readArtifactSandboxConfig({ COFORGE_ARTIFACT_SANDBOX_ORIGIN: origin, ...env }, () => {}),
       ).toThrow(message);
-    // A sibling of a different name is not a subdomain either way.
-    expect(
-      readArtifactSandboxConfig(
-        {
-          COFORGE_ARTIFACT_SANDBOX_ORIGIN: "https://myapp.example",
-          COFORGE_OIDC_ISSUER: `${APP}/oidc`,
-        },
-        () => {},
-      ),
-    ).toEqual({ origin: "https://myapp.example" });
+  });
+
+  test("allows a subdomain of the application (task #544): cookies stay host-only", () => {
+    for (const origin of [
+      "https://usercontent.app.example",
+      // A parent too: nothing host-only reaches up or down, and the page is an opaque origin.
+      "https://example",
+    ])
+      expect(() =>
+        readArtifactSandboxConfig(
+          { COFORGE_ARTIFACT_SANDBOX_ORIGIN: origin, COFORGE_OIDC_ISSUER: `${APP}/oidc` },
+          () => {},
+        ),
+      ).not.toThrow();
+  });
+
+  test("no cookie the application sets carries a Domain attribute", async () => {
+    // The sandbox may be a subdomain of the application only while every cookie stays
+    // host-only: a `Domain=` attribute would send it to the sandbox too (task #544).
+    const web = resolve(import.meta.dir, "..");
+    const violations: string[] = [];
+    for await (const path of new Bun.Glob("src/**/*.{ts,tsx}").scan(web)) {
+      const source = await Bun.file(resolve(web, path)).text();
+      // A cookie attribute sits after a quote or `;` in the cookie string; a bare `domain =`
+      // in code or prose is not one.
+      for (const match of source.matchAll(/[;"'`]\s*domain\s*=/gi))
+        violations.push(`${path}: ${match[0].trim()}`);
+    }
+    expect(violations, "A cookie with Domain reaches the sandbox subdomain").toEqual([]);
   });
 
   test("with nothing naming the application, boots with a warning", () => {

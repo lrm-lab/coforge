@@ -99,6 +99,9 @@ services:
       # docs/release/local-feed-hosting.md requires a production entry point to install the
       # production build, never the staging one.
       COFORGE_RELEASE_FEED_URL: https://releases.coforge.cn
+      # Web-page artifacts' sandbox origin (task #544): a coforge.cn subdomain until the
+      # dedicated domain's filing clears; Caddy routes it to web like the app.
+      COFORGE_ARTIFACT_SANDBOX_ORIGIN: https://usercontent.coforge.cn
       # SHA-256 of the release-catalog publish token (docs/release/release-notes.md). Not a
       # secret: the plaintext token lives only in the GitHub repository secret
       # COFORGE_RELEASE_CATALOG_TOKEN_PRODUCTION; without this value every publish answers 503.

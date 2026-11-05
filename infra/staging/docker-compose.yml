@@ -96,6 +96,9 @@ services:
       # docs/release/local-feed-hosting.md requires a staging entry point to install the staging
       # build, never the production one.
       COFORGE_RELEASE_FEED_URL: https://releases-staging.coforge.cn
+      # Web-page artifacts' sandbox origin (task #544): a coforge.cn subdomain until the
+      # dedicated domain's filing clears; Caddy routes it to web like the app.
+      COFORGE_ARTIFACT_SANDBOX_ORIGIN: https://staging-usercontent.coforge.cn
       # Browser address of this deployment's Swarm desktop proxy. The browser
       # opens it directly. Staging cannot reach that proxy, so this is not the
       # site origin. The Open desktop button is absent when this is empty.

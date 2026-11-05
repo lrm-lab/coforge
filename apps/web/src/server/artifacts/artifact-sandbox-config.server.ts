@@ -15,14 +15,15 @@ import {
  *   host, for a local stack. Unset leaves web pages off: a link to one is refused, and nothing is
  *   served.
  *
- * It must not share a host with the application, nor be a subdomain of it or the other way
- * round: the sandbox host is matched by name alone, so the same name would hand the whole site to
- * the sandbox, and a parent domain's cookies would ride along to a subdomain. This is not a
- * same-site check: a sibling (`pages.x.com` beside `app.x.com`) passes it while being one site
- * with the application, so give the sandbox a registrable domain of its own. The application's
- * host is read from the settings that name it (`COFORGE_OIDC_ISSUER`, `COFORGE_GITHUB_CALLBACK_URL`);
- * with none set, boot goes on with a warning. Locally, give the sandbox the other loopback name
- * (`http://127.0.0.1:<port>` beside an app on `localhost`).
+ * It must not be the application's own host: the sandbox host is matched by name alone, so the
+ * same name would hand the whole site to the sandbox. A subdomain of the application is allowed
+ * (task #544: `usercontent.coforge.cn` until the dedicated domain's filing clears): every cookie
+ * the application sets is host-only, so none reaches a subdomain, and the sandboxed page is an
+ * opaque origin besides. `test/artifact-sandbox.test.ts` fails if a cookie ever gains a
+ * `Domain` attribute. The application's host is read from the settings that name it
+ * (`COFORGE_OIDC_ISSUER`, `COFORGE_GITHUB_CALLBACK_URL`); with none set, boot goes on with a
+ * warning. Locally, give the sandbox the other loopback name (`http://127.0.0.1:<port>` beside an
+ * app on `localhost`).
  *
  * Read and checked at boot (`startup-config.server.ts`): a set value that breaks these rules
  * stops the deployment instead of failing the first page someone opens.
@@ -64,8 +65,6 @@ export function readArtifactSandboxConfig(
     );
   for (const application of applications) {
     if (sandbox === application) throw RULE.fail(`${ENV} must not be the application's own host`);
-    if (sandbox.endsWith(`.${application}`) || application.endsWith(`.${sandbox}`))
-      throw RULE.fail(`${ENV} must not be a subdomain of the application's host, nor its parent`);
   }
   return { origin };
 }

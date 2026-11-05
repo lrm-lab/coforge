@@ -63,3 +63,16 @@ research.coforge.cn {
 		reverse_proxy piresearch:8766
 	}
 }
+
+# Web-page artifacts' sandbox (task #544): the web app tells sandbox requests
+# apart by Host alone, so this site needs only the app's proxy — no realtime or
+# desktop routes. Until coforgeusercontent.com's filing clears this is a
+# coforge.cn subdomain; host-only cookies keep it off the app's session.
+staging-usercontent.coforge.cn {
+	handle {
+		encode
+		reverse_proxy web:3000 {
+			header_up X-Request-Id {http.request.uuid}
+		}
+	}
+}
