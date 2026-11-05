@@ -209,12 +209,17 @@ for (const width of [1440, 390])
     const opened = await settledDistance();
     await browser("screenshot", join(artifacts, `${width}-opened.png`));
 
-    // Scrolled up, live rows arriving leave the reader where they are.
-    await browser(
-      "eval",
-      `(() => { const s=${scroller}; s.dispatchEvent(new WheelEvent("wheel")); s.scrollTop -= 600; })()`,
-    );
-    const scrolledUp = await settledDistance();
+    // Scrolled up, live rows arriving leave the reader where they are. The scroll event is
+    // dispatched a frame after scrollTop moves, and a row still settling can re-pin to the
+    // bottom in between — retry until the reader's place holds.
+    let scrolledUp = 0;
+    for (let attempt = 0; attempt < 5 && scrolledUp <= 300; attempt++) {
+      await browser(
+        "eval",
+        `(() => { const s=${scroller}; s.dispatchEvent(new WheelEvent("wheel")); s.scrollTop = Math.max(0, s.scrollTop - 600); })()`,
+      );
+      scrolledUp = await settledDistance();
+    }
     const topBefore = await evaluate<number>(`Math.round(${scroller}.scrollTop)`);
     await publishRow(`up-${width}-1`);
     await publishRow(`up-${width}-2`);
