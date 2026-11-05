@@ -149,7 +149,7 @@ test("the thread pane shows its title, actions, replies marker and thread compos
       `[...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent.trim())`,
     );
     expect(items[0]).toBe("View in Channel");
-    expect(items[1]).toMatch(/^(Follow|Unfollow) thread$/);
+    expect(items[1]).toMatch(/^(Follow|Unfollow) Thread$/);
     await browser("screenshot", join(artifacts, "actions-menu.png"));
 
     await browser("find", "role", "menuitem", "click", "--name", "View in Channel");
