@@ -10,9 +10,9 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
 
 /**
  * An Agent's error reads on its Computer's roster (task #450). The status column takes a share of
- * the spare width instead of a fixed 9rem, an error wraps to at most two lines and its whole
- * sentence is the row's tooltip. At phone width, where the status is only a dot, an error's
- * sentence stacks under the runtime line.
+ * the spare width instead of a fixed 9rem, and an error reads in full, wrapped (93ed6c863: a tap
+ * cannot open a tooltip, so there is none). At phone width, where the status is only a dot, an
+ * error's sentence stacks under the runtime line.
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The Computer and its
  * Agents are seeded per run and removed after it. Screenshots are written under
@@ -111,7 +111,7 @@ test("an Agent's error on the Computer roster wraps to two lines and stays reada
       await evaluate(`${section}.scrollIntoView({ block: "start" }) ?? true`);
     };
 
-    // Desktop: two lines at most, and the whole sentence in the row's tooltip.
+    // Desktop: the whole sentence, wrapped, nothing cut.
     await browser("set", "viewport", "1440", "900");
     await open();
     const desktop = await evaluate<{
@@ -123,23 +123,12 @@ test("an Agent's error on the Computer roster wraps to two lines and stays reada
       const lineHeight = parseFloat(getComputedStyle(el).lineHeight);
       return { lines: Math.round(el.getBoundingClientRect().height / lineHeight), width: Math.round(el.getBoundingClientRect().width), cut: el.scrollHeight > el.clientHeight };
     })()`);
-    // Two lines, and the rest of the sentence was cut there, not merely short enough to fit.
-    expect(desktop.lines).toBe(2);
-    expect(desktop.cut).toBe(true);
+    // More than one line, and none of it cut.
+    expect(desktop.lines).toBeGreaterThan(1);
+    expect(desktop.cut).toBe(false);
     // Wider than the old fixed 9rem column could ever give it.
     expect(desktop.width).toBeGreaterThan(144);
-    await evaluate(
-      `${row}.querySelector("button").setAttribute("data-e2e-failing-row", "") ?? true`,
-    );
-    // React Aria opens a tooltip on hover once the page has seen a pointer press (its interaction
-    // modality starts unset); a person has always clicked something by then, a fresh page has not.
-    await browser("click", "#computer-agents-on-computer");
-    await browser("hover", "[data-e2e-failing-row]");
-    await browser(
-      "wait",
-      "--fn",
-      `document.querySelector('[role="tooltip"]')?.textContent.includes(${JSON.stringify(ERROR)}) === true`,
-    );
+    expect(await evaluate<string>(`${label}.textContent`)).toBe(`Error: ${ERROR}`);
     // The runtime column is as wide as its longest line, uncut.
     expect(
       await evaluate<{ runtimeCut: boolean }>(`(() => {
@@ -167,14 +156,10 @@ test("an Agent's error on the Computer roster wraps to two lines and stays reada
     await browser("screenshot", join(artifacts, "1440-dark.png"));
     await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
 
-    // A narrower desktop: still columns, the error still two lines at most.
+    // A narrower desktop: still columns, the error still whole.
     await browser("set", "viewport", "1024", "800");
     await open();
-    expect(
-      await evaluate<number>(
-        `Math.round(${label}.getBoundingClientRect().height / parseFloat(getComputedStyle(${label}).lineHeight))`,
-      ),
-    ).toBeLessThanOrEqual(2);
+    expect(await evaluate<boolean>(`${label}.scrollHeight > ${label}.clientHeight`)).toBe(false);
     expect(await evaluate<boolean>(`document.documentElement.scrollWidth <= innerWidth`)).toBe(
       true,
     );
@@ -200,7 +185,7 @@ test("an Agent's error on the Computer roster wraps to two lines and stays reada
     })()`);
     expect(phone.inFlow).toBe(true);
     expect(phone.width).toBeGreaterThan(150);
-    expect(phone.lines).toBe(2);
+    expect(phone.lines).toBeGreaterThan(1);
     expect(phone.fits).toBe(true);
     await browser("screenshot", join(artifacts, "390.png"));
   } finally {
