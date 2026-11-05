@@ -1,8 +1,7 @@
 import type { AgentActivity } from "@lrm/coforge-sdk/internal";
 import type { ActivityDraft } from "./agent-activity-publisher";
 import type { ActivityLaunch } from "./activity-launch";
-import type { AgentContexts } from "./agent-contexts";
-import { PhaseBookkeeping } from "./phase-bookkeeping";
+import { PhaseBookkeeping, type PhaseBookkeepingPorts } from "./phase-bookkeeping";
 
 /**
  * Assembles a launch's phase bookkeeping from the runtime's own callbacks: where its Activity goes,
@@ -11,7 +10,7 @@ import { PhaseBookkeeping } from "./phase-bookkeeping";
  * runtime file is at its size limit.
  */
 export function assemblePhaseBookkeeping(
-  contexts: Pick<AgentContexts, "newContext">,
+  contexts: PhaseBookkeepingPorts["contexts"],
   currentLaunch: (agentId: string) => ActivityLaunch | undefined,
   publish: (agentId: string, launch: ActivityLaunch, draft: ActivityDraft) => void,
   activity: (agentId: string, kind: AgentActivity["detailKind"], detail: string) => ActivityDraft,

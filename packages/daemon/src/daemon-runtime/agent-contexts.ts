@@ -2,9 +2,20 @@ import { getLogger } from "@logtape/logtape";
 import { parseRuntimeProvider, thrownMessage } from "@lrm/coforge-sdk/internal";
 import { createCodeAgentProvider } from "#src/code-agent/registry";
 import { AgentContextLedger } from "#src/persistence/agent-context-ledger";
+import { readMeta, writeMeta } from "#src/persistence/agent-state-db";
 import type { AgentStateDb } from "#src/persistence/agent-state-db";
 
 const logger = getLogger(["coforge", "daemon", "agent-contexts"]);
+
+/** Consecutive compaction failures that make the session spent: Raft's
+ * `SESSION_NEEDS_RESET_THRESHOLD` (`sessionCompactionFailureLedger.ts`). */
+export const SESSION_NEEDS_RESET_THRESHOLD = 3;
+const COMPACTION_FAILURES_KEY = "compactionFailureCount";
+
+export type CompactionFailureKind =
+  | "compaction_failed"
+  | "compaction_recovery_exhausted"
+  | "compaction_input_too_large";
 
 /** The adapter's own declaration; a provider this build does not know is never elided. */
 function reportsCompaction(provider: string): boolean {
@@ -28,6 +39,48 @@ export class AgentContexts {
   readonly #reportsCompaction = new Map<string, boolean>();
 
   constructor(private readonly stateDb: (agentId: string) => AgentStateDb) {}
+
+  /** One compaction failure: the per-Agent count is persisted with its state, so a restart does
+   * not hide a session that keeps failing. An input too large is spent at once. */
+  compactionFailed(
+    agentId: string,
+    kind: CompactionFailureKind = "compaction_failed",
+  ): { consecutive: number; terminal: boolean } {
+    let consecutive = 1;
+    try {
+      const db = this.stateDb(agentId).database;
+      consecutive = Number(readMeta(db, COMPACTION_FAILURES_KEY) ?? 0) + 1;
+      writeMeta(db, COMPACTION_FAILURES_KEY, String(consecutive));
+    } catch {
+      // The count is a safety net, never a reason to fail the turn.
+    }
+    const terminal =
+      kind === "compaction_input_too_large" || consecutive >= SESSION_NEEDS_RESET_THRESHOLD;
+    logger.warn("Context compaction failed", {
+      event: "agent.runtime.compaction_failed",
+      agent_id: agentId,
+      failure_kind: kind,
+      consecutive,
+      terminal,
+    });
+    if (terminal)
+      logger.error("Context compaction exhausted the session", {
+        event: "agent.runtime.compaction_recovery_exhausted",
+        agent_id: agentId,
+        failure_kind: kind,
+        consecutive,
+      });
+    return { consecutive, terminal };
+  }
+
+  /** A finished compaction proves the session still compacts: the count starts over. */
+  compactionSucceeded(agentId: string): void {
+    try {
+      writeMeta(this.stateDb(agentId).database, COMPACTION_FAILURES_KEY, "0");
+    } catch {
+      // Nothing to reset when the state cannot be read.
+    }
+  }
 
   ledger(agentId: string): AgentContextLedger | undefined {
     if (!this.#reportsCompaction.get(agentId)) return undefined;

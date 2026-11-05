@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AgentContexts } from "#src/daemon-runtime/agent-contexts";
+import { AgentStateDb } from "#src/persistence/agent-state-db";
 import type { AgentInput, AgentInputCompletion } from "#src/daemon-runtime/runtime-launch-intent";
 import { captureDaemonLogs } from "./log-capture";
 
@@ -40,4 +41,20 @@ test("the ledger stays off for a runtime that reports no compaction", async () =
   contexts.newContext("agent-a", "cursor");
   expect(opened()).toBe(false);
   expect(contexts.ledger("agent-a")).toBeUndefined();
+});
+
+test("three compaction failures mark the session spent, and a finish resets the count", async () => {
+  const root = await mkdtemp(join(tmpdir(), "coforge-compaction-failures-"));
+  roots.push(root);
+  const contexts = new AgentContexts((agentId) => AgentStateDb.open(root, agentId));
+  expect(contexts.compactionFailed("agent-a")).toEqual({ consecutive: 1, terminal: false });
+  expect(contexts.compactionFailed("agent-a")).toEqual({ consecutive: 2, terminal: false });
+  expect(contexts.compactionFailed("agent-a")).toEqual({ consecutive: 3, terminal: true });
+  contexts.compactionSucceeded("agent-a");
+  expect(contexts.compactionFailed("agent-a")).toEqual({ consecutive: 1, terminal: false });
+  // An input too large is spent at once: a retry cannot make it smaller.
+  expect(contexts.compactionFailed("agent-a", "compaction_input_too_large")).toEqual({
+    consecutive: 2,
+    terminal: true,
+  });
 });

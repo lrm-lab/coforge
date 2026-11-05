@@ -23,8 +23,9 @@ export type PhaseBookkeepingPorts = Readonly<{
     detailKind: AgentActivity["detailKind"],
     detail: string,
   ): ActivityDraft;
-  /** A finished compaction starts the Agent's context over, and re-briefs it with its MEMORY.md. */
-  contexts: Pick<AgentContexts, "newContext">;
+  /** A finished compaction starts the Agent's context over; a failed one counts toward the
+   * session being spent. */
+  contexts: Pick<AgentContexts, "newContext" | "compactionFailed" | "compactionSucceeded">;
 }>;
 
 /**
@@ -74,7 +75,10 @@ export class PhaseBookkeeping {
   ): void {
     if (this.#phases[phase].finish(agentId) !== "finished") return;
     this.#publish(agentId, launch, RUNTIME_PHASES[phase].finished, conversation);
-    if (phase === "compaction") this.ports.contexts.newContext(agentId);
+    if (phase === "compaction") {
+      this.ports.contexts.newContext(agentId);
+      this.ports.contexts.compactionSucceeded(agentId);
+    }
   }
 
   /** Ends an open compaction once, before the Activity that established its completion. */
@@ -99,6 +103,20 @@ export class PhaseBookkeeping {
     const interrupted = RUNTIME_PHASES[phase].interrupted;
     if (!interrupted || this.#phases[phase].interrupt(agentId) !== "interrupted") return;
     this.#publish(agentId, launch, interrupted, conversation);
+    if (phase !== "compaction") return;
+    // A compaction that keeps failing leaves the session unable to make room; past the threshold
+    // it is spent, and only a fresh session helps — so this says that instead of retrying.
+    const { terminal } = this.ports.contexts.compactionFailed(agentId);
+    if (!terminal) return;
+    this.ports.publish(
+      agentId,
+      launch,
+      this.ports.activityDraft(
+        agentId,
+        "runtime_error",
+        "Context compaction failed repeatedly; reset the session from the Agent page (Reset Session & Restart).",
+      ),
+    );
   }
 
   /** Closes an open phase with no Activity row — the review's quiet ending at a turn's end. */

@@ -22,6 +22,8 @@ function subject() {
         if (runtime === undefined) rebriefs.push(agentId);
         rebrief(agentId, runtime);
       },
+      compactionFailed: () => ({ consecutive: 1, terminal: false }),
+      compactionSucceeded: () => {},
     },
   });
   return { bookkeeping, rebriefs };
@@ -48,4 +50,27 @@ test("a finished review is no context cut", () => {
   bookkeeping.start("review", "agent-a", launch, undefined);
   bookkeeping.finish("review", "agent-a", launch, undefined);
   expect(rebriefs).toEqual([]);
+});
+
+test("the third compaction failure reports a spent session instead of retrying", () => {
+  let failures = 0;
+  const published: { kind?: string }[] = [];
+  const bookkeeping = new PhaseBookkeeping({
+    launchFor: () => launch,
+    publish: (_agentId, _launch, draft) => published.push(draft as { kind?: string }),
+    activityDraft: (_agentId, kind) => ({ kind }) as never,
+    contexts: {
+      newContext: () => {},
+      compactionSucceeded: () => {},
+      compactionFailed: () => {
+        failures++;
+        return { consecutive: failures, terminal: failures >= 3 };
+      },
+    },
+  });
+  for (let round = 0; round < 3; round++) {
+    bookkeeping.start("compaction", "agent-a", launch, undefined);
+    bookkeeping.interrupt("compaction", "agent-a", launch, undefined);
+  }
+  expect(published.filter((draft) => draft.kind === "runtime_error")).toHaveLength(1);
 });
