@@ -29,6 +29,7 @@
   "doc_save_failed": "Couldn't save: {reason}",
   "doc_save_too_large": "the text is too large (2 MB at most)",
   "doc_save_error": "a network or server error. Your changes are kept.",
+  "doc_save_offline": "you're offline. Your changes are kept and save once you're back online.",
   "doc_read_only": "Read only",
   "doc_read_only_hint": "You can't edit this document",
   "doc_someone": "Someone",

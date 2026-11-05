@@ -29,6 +29,7 @@
   "doc_save_failed": "没能保存：{reason}",
   "doc_save_too_large": "正文太大（最多 2 MB）",
   "doc_save_error": "网络或服务出错，改动还在。",
+  "doc_save_offline": "当前离线，改动还在，联网后会自动保存。",
   "doc_read_only": "只读",
   "doc_read_only_hint": "你不能编辑这份文档",
   "doc_someone": "有人",

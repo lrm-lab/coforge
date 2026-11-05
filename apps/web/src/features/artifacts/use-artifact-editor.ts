@@ -1,5 +1,5 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { onlineManager, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { ContentEditorRef } from "#src/features/records/report-editor/content-editor";
 import { isAppError } from "#src/lib/app-error";
@@ -51,6 +51,11 @@ export function useArtifactEditor(artifactId: string) {
   const saving = useMutation({
     mutationFn: (input: Parameters<typeof saveArtifactDocument>[0]["data"]) =>
       saveArtifactDocument({ data: input }),
+    // Offline, a save fails at once and says so, with Try again (task #514, item 10). Query's
+    // default (`online`) instead pauses it until the browser is back online, so "Saving…" stayed
+    // up with no end and nothing to press:
+    // https://tanstack.com/query/latest/docs/framework/react/guides/network-mode
+    networkMode: "always",
   });
   /** The newest version announced while a save was in flight, handled once it has answered. */
   /** A save from its start until its version is shown (`saving` ends at the answer). */
@@ -128,7 +133,9 @@ export function useArtifactEditor(artifactId: string) {
     setEditTick(edits.current);
     setStalled(false);
     setDirty(true);
-    if (saving.isError) saving.reset();
+    // Typing again tries again, but not while offline: that would only fail once more, and the
+    // failure line would blink away and back at every pause; the return online saves it all.
+    if (saving.isError && onlineManager.isOnline()) saving.reset();
   }
   function edit(next: { title?: string; text?: string }) {
     if (next.title !== undefined) {
@@ -243,6 +250,17 @@ export function useArtifactEditor(artifactId: string) {
     return () => clearTimeout(timer);
   }, [armed, editTick, text, title]);
 
+  // A save that failed while offline goes again by itself once the browser is back online, as
+  // the paused save used to; Try again stays for the person who would rather not wait.
+  const retryOnline = useEffectEvent(() => void save());
+  const retryable = saving.isError && !isBaseMoved(saving.error) && !isWriteDenied(saving.error);
+  useEffect(() => {
+    if (!retryable) return;
+    return onlineManager.subscribe((online) => {
+      if (online) retryOnline();
+    });
+  }, [retryable]);
+
   const failure = saving.error;
   // A newer version or lost write access has its own banner, not a failure line.
   const error =
@@ -252,7 +270,9 @@ export function useArtifactEditor(artifactId: string) {
           reason:
             isAppError(failure) && failure.errorId === "artifact-file-too-large"
               ? m.doc_save_too_large()
-              : m.doc_save_error(),
+              : onlineManager.isOnline()
+                ? m.doc_save_error()
+                : m.doc_save_offline(),
         });
 
   const status: ArtifactEditorStatus = readOnly
