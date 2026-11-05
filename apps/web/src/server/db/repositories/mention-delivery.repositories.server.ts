@@ -407,9 +407,8 @@ export class PrismaMentionDeliveryRepository {
     });
   }
 
-  /** An ACK without an envelope: the daemon could not say whether the mention reached the
-   * session. A mention sent as a wake carries no envelope either, so its ACK lands here too —
-   * without this it would stay pending and be re-sent on every new session. */
+  /** An ACK without an envelope for a delivery that was sent with one: the daemon could not say
+   * whether the mention reached the session. */
   async settleUnechoed(
     input: { workspaceId: string; computerId: string; agentId: string; deliveryId: string },
     now: Date,
@@ -421,6 +420,7 @@ export class PrismaMentionDeliveryRepository {
         agentId: input.agentId,
         agent: { computerId: input.computerId },
         mentionOutcome: ISSUABLE_OUTCOME,
+        mentionLaunchId: { not: null },
       },
       data: { mentionOutcome: "unknown" satisfies MentionOutcome, mentionSettledAt: now },
     });

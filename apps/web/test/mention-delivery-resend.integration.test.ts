@@ -224,27 +224,3 @@ test.skipIf(!connectionString)(
     }
   },
 );
-
-test.skipIf(!connectionString)(
-  "a mention settled by its wake ACK is not sent again when the Agent's session is accepted or its daemon readies",
-  async () => {
-    const t = await setup();
-    try {
-      const sent = await t.send(`@dave-${t.suffix} wake up`);
-      await t.ack(t.pushTo(sent.deliveries, t.dave.id));
-      expect(await t.row(sent.id, t.dave.id)).toMatchObject({ mentionOutcome: "unknown" });
-
-      // Dave's launch reports its session and its daemon comes back ready: nothing resends it.
-      await t.launch(t.dave.id, "launch-dave-1", "native-dave-1");
-      t.published.length = 0;
-      await t.sessionAccepted(t.dave.id);
-      await t.ready([t.bob.id, t.carol.id, t.dave.id]);
-      expect(
-        t.published.filter((push) => push.agentId === t.dave.id && push.messageId === sent.id),
-      ).toEqual([]);
-      expect(await t.row(sent.id, t.dave.id)).toMatchObject({ mentionOutcome: "unknown" });
-    } finally {
-      await t.cleanup();
-    }
-  },
-);

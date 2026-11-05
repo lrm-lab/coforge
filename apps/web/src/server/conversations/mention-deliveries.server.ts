@@ -1,8 +1,7 @@
 /**
  * Tracked mentions persist on delivery rows. Running launches receive session-bound envelopes:
  * ACK means delivered; terminal errors mean lost (with category) or unknown. Stopped/deleted/
- * unassigned Agents are not launched; other inactive Agents wake without an envelope, and their
- * ACK settles them unknown like any unechoed one.
+ * unassigned Agents are not launched; other inactive Agents wake without an envelope and remain pending.
  * Delivered/lost are final except an echoed ACK overrides Stop; unknown remains revisable.
  * Pending missing/stale envelopes reissue for the current launch on session acceptance or daemon ready,
  * never on a timer.
@@ -143,13 +142,12 @@ const SETTLED_BY_CODE: Record<
 const UNCLASSIFIED = { outcome: "lost", reason: "unclassified" } as const;
 const NOT_LAUNCHED = { outcome: "lost", reason: "not_launched" } as const;
 
-/** Whether an ACK can still settle this tracked mention: pending or unknown whatever envelope it
- * went out with — a wake carries none, and its ACK still settles it — or settled only by a
- * person's Stop, which only an echoed envelope ACK overrides. */
+/** Whether an ACK can still settle this tracked mention: sent with an envelope, and open or
+ * settled only by a person's Stop. */
 function settleableByAck(state: TrackedMentionState) {
+  if (!state.mentionLaunchId) return false;
   if (state.mentionOutcome === "pending" || state.mentionOutcome === "unknown") return true;
   return (
-    state.mentionLaunchId !== null &&
     state.mentionOutcome === "lost" &&
     state.mentionReasonCategory === "not_launched" &&
     state.mentionTerminalCode === null
