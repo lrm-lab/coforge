@@ -142,7 +142,8 @@ export const SETUP_HINTS = {
     "Check the server connection and Workspace access, then rerun setup.",
   SETUP_COMPUTER_REGISTER_FAILED:
     "Check the server connection and Computer permissions, then rerun setup.",
-  SETUP_DAEMON_START_FAILED: "Check the local Daemon and workspace path, then rerun setup.",
+  SETUP_DAEMON_START_FAILED:
+    "Check the local Daemon and workspace path, then rerun setup. On a machine without a service manager (no systemd), start `coforge-computer foreground` under your own supervisor first.",
   SETUP_CONFIG_WRITE_FAILED: "Check the configuration directory permissions, then rerun setup.",
   SETUP_ALREADY_ATTACHED_INVALID:
     "This computer's credential is no longer valid: ask a workspace admin to remove it on the web, or run `coforge-computer detach`, then attach again.",
