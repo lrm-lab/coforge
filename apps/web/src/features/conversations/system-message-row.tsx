@@ -89,7 +89,7 @@ export function SystemMessageRow({
                   typeof part === "string" ? (
                     part
                   ) : (
-                    <ActorName key={index} actor={noticeActor(part, members)} />
+                    <ActorName key={index} actor={noticeActor(part, members)} inline />
                   ),
                 )}
               </TooltipTrigger>
