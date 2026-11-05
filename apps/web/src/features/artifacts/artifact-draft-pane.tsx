@@ -12,7 +12,7 @@ import { ArtifactPageHeader } from "./artifact-page-header";
 import { PaneFrame } from "./artifact-parts";
 import { refreshArtifact } from "./artifact-queries";
 import { nextSaveAttempt, type SaveAttempt } from "./artifact-save-attempt";
-import { AUTOSAVE_MS } from "./use-artifact-editor";
+import { AUTOSAVE_MS } from "./artifact-autosave";
 import {
   closedArtifactSearch,
   openArtifactSearch,

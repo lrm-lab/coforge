@@ -19,10 +19,13 @@ export function LatestVersion({
   editor,
   onDiscard,
   onCopyMine,
+  onRetry,
 }: {
   editor: ArtifactEditor;
   onDiscard: () => void;
   onCopyMine: () => void;
+  /** Try Again on a failed save: it saves, and reads the artifact again if that failed too. */
+  onRetry: () => void;
 }) {
   const { document } = editor;
   const [focusEnd] = useState(() => {
@@ -84,12 +87,7 @@ export function LatestVersion({
       {editable && editor.error && (
         <footer className="flex shrink-0 flex-wrap items-center gap-2 border-t border-secondary px-4 py-2.5">
           <span className="min-w-0 flex-1 text-sm text-tertiary">{editor.error}</span>
-          <Button
-            size="sm"
-            color="primary"
-            isLoading={editor.busy}
-            onClick={() => void editor.save()}
-          >
+          <Button size="sm" color="primary" isLoading={editor.busy} onClick={onRetry}>
             {m.doc_retry()}
           </Button>
         </footer>

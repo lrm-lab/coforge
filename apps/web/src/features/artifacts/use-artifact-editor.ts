@@ -5,6 +5,7 @@ import type { ContentEditorRef } from "#src/features/records/report-editor/conte
 import { isAppError } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import { saveArtifactDocument } from "./artifacts.functions";
+import { AUTOSAVE_MS, canAutosave } from "./artifact-autosave";
 import { keepingMine, type DocumentConflict } from "./artifact-conflict-model";
 import { artifactDocumentQuery, refreshArtifact, type ArtifactActorRef } from "./artifact-queries";
 import { nextSaveAttempt, type SaveAttempt } from "./artifact-save-attempt";
@@ -19,9 +20,6 @@ export type ArtifactEditorStatus = "saved" | "unsaved" | "saving" | "readOnly";
 const MAX_CONFLICT_RETRIES = 3;
 
 type SavePayload = { baseVersion: number; text: string; title?: string; description?: string };
-
-/** How long typing rests before what was typed saves by itself (Frank, 11-05: no Save button). */
-export const AUTOSAVE_MS = 1000;
 
 /**
  * The open document's editing (task #385): the version it was read at (`base`), the title and
@@ -42,6 +40,8 @@ export function useArtifactEditor(artifactId: string) {
   const [dirty, setDirty] = useState(false);
   /** Counts the person's edits, so a pending save waits for typing to rest. */
   const [editTick, setEditTick] = useState(0);
+  /** The last save gave up on conflicts it kept meeting: the next edit saves again. */
+  const [stalled, setStalled] = useState(false);
   /** A save was refused: the viewer may no longer write here. */
   const [denied, setDenied] = useState(false);
   const [baseMoved, setBaseMoved] = useState(false);
@@ -126,6 +126,7 @@ export function useArtifactEditor(artifactId: string) {
   function markEdited() {
     edits.current += 1;
     setEditTick(edits.current);
+    setStalled(false);
     setDirty(true);
     if (saving.isError) saving.reset();
   }
@@ -181,7 +182,10 @@ export function useArtifactEditor(artifactId: string) {
       }
       // Still racing: what is typed stays unsaved, and the next edit saves it again.
       const done = saved;
-      if (done.status === "conflict") return false;
+      if (done.status === "conflict") {
+        setStalled(true);
+        return false;
+      }
       // Typed while the save was in flight: that stays unsaved, for the next save.
       const typedSince = edits.current !== editsAtStart;
       if (!typedSince) setDirty(false);
@@ -222,16 +226,22 @@ export function useArtifactEditor(artifactId: string) {
     await takeLatest({ force: true });
   }
 
-  // Typing that rests saves by itself; a failed save waits for the next edit (`markEdited`), and
-  // a moved base for the person's answer.
+  // Typing that rests saves by itself (`canAutosave`).
   const autosave = useEffectEvent(() => void save());
-  const canAutosave =
-    dirty && !settling && !readOnly && !baseMoved && !saving.isError && base !== null;
+  const armed = canAutosave({
+    dirty,
+    loaded: base !== null,
+    readOnly,
+    saving: settling,
+    failed: saving.isError,
+    baseMoved,
+    stalled,
+  });
   useEffect(() => {
-    if (!canAutosave) return;
+    if (!armed) return;
     const timer = setTimeout(autosave, AUTOSAVE_MS);
     return () => clearTimeout(timer);
-  }, [canAutosave, editTick, text, title]);
+  }, [armed, editTick, text, title]);
 
   const failure = saving.error;
   // A newer version or lost write access has its own banner, not a failure line.

@@ -228,6 +228,15 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     await browser("wait", "--fn", `${pageHydrated} && ${text("Can't open this")}`);
     expect(await evaluate<string>(`document.querySelector("main").textContent`)).toBe(missing);
     expect(await evaluate<boolean>(`${button("Back to the Workspace")} != null`)).toBe(true);
+    // A `?doc=` link into that conversation, once the Workspace may read it: the artifact's own
+    // page, as the conversation is not the reader's to open.
+    await db.artifact.update({ where: { id: secret.id }, data: { access: "workspace" } });
+    await browser("open", `${origin}/en/w/${workspace.slug}/channel/${closed.id}?doc=${secret.id}`);
+    await browser(
+      "wait",
+      "--fn",
+      `location.pathname.endsWith("/artifacts/${secret.id}") && document.querySelector("main .ProseMirror") != null`,
+    );
 
     // An address that names no artifact: the page that is not there, at once.
     await browser("open", pageOf("not-an-id"));
@@ -303,7 +312,8 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     );
     expect(await evaluate<string>("location.pathname")).toEndWith(`/channel/${channel.id}`);
 
-    // A read and a save that fail: the editor and the edits stay, with Try again for each.
+    // A read and then a save that fail: the editor and the edits stay, with one notice and one
+    // Try again, which saves and reads again.
     await browser("open", pageOf(doc.id));
     await browser(
       "wait",
@@ -323,12 +333,21 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
       })()`);
     await toEnd();
     refusing = true;
-    await browser("keyboard", "type", " Unsaved line.");
-    await browser("wait", "--fn", text("Couldn't save"));
     // The page reads the document again when its tab comes back (TanStack Query hears
     // `visibilitychange` on window: https://tanstack.com/query/v5/docs/reference/focusManager).
     await evaluate(`(window.dispatchEvent(new Event("visibilitychange")), true)`);
     await browser("wait", "--fn", text("Couldn't check for changes"));
+    await browser("keyboard", "type", " Unsaved line.");
+    await browser(
+      "wait",
+      "--fn",
+      `${text("Couldn't save")} && !${text("Couldn't check for changes")}`,
+    );
+    expect(
+      await evaluate<number>(
+        `[...document.querySelectorAll("main button")].filter((b) => b.textContent.trim() === "Try again").length`,
+      ),
+    ).toBe(1);
     expect(
       await evaluate<string>(`document.querySelector("main .ProseMirror").textContent`),
     ).toContain("Unsaved line.");
@@ -336,11 +355,11 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     await shoot("4-read-failed-unsaved");
     refusing = false;
     await click(button("Try again"));
-    await browser("wait", "--fn", `!${text("Couldn't check for changes")}`);
-    expect(
-      await evaluate<string>(`document.querySelector("main .ProseMirror").textContent`),
-    ).toContain("Unsaved line.");
-    await click(button("Try again"));
+    await browser(
+      "wait",
+      "--fn",
+      `!${text("Couldn't save")} && !${text("Couldn't check for changes")}`,
+    );
     for (let i = 0; i < 50; i++) {
       if ((await documents.load(bot, { artifactId: doc.id })).text.includes("Unsaved line.")) break;
       await new Promise((r) => setTimeout(r, 100));

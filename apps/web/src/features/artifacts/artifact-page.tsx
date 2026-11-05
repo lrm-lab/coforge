@@ -180,7 +180,8 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
         onDelete={() => setConfirming("delete")}
         pane={pane}
       />
-      {failure && (
+      {/* A failed save says so below, with one Try Again that reads the artifact again too. */}
+      {failure && !editor.error && (
         <ArtifactBanner
           tone="warning"
           icon={AlertCircle}
@@ -216,6 +217,10 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
             <LatestVersion
               editor={editor}
               onDiscard={() => setConfirming("discard")}
+              onRetry={() => {
+                if (failure) void editor.document.refetch();
+                void editor.save();
+              }}
               onCopyMine={() =>
                 void copy(
                   editor.editorRef.current?.getMarkdown() ?? editor.text,

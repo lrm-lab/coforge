@@ -11,8 +11,7 @@ import { productionArtifacts } from "#src/server/artifacts/artifact-composition.
  * experiment and the document's home (a conversation, or the Workspace).
  */
 
-const { id, version, text, title, description, note, label, historyLimit, baseVersion } =
-  artifactInputs;
+const { id, version, text, title, description, note, label, baseVersion } = artifactInputs;
 
 const scopeOf = (context: { workspaceId: string; user: { id: string } }) => ({
   workspaceId: context.workspaceId,
@@ -43,26 +42,6 @@ export const loadArtifactDocument = createServerFn({ method: "GET" })
     productionArtifacts(context.db).documents.load(scopeOf(context), data),
   );
 
-/** A document's versions, newest first; `before` is the previous page's `nextBefore`. */
-export const loadArtifactHistory = createServerFn({ method: "GET" })
-  .middleware([workspaceUserMiddleware])
-  .validator(
-    z
-      .object({
-        artifactId: id,
-        before: version.optional(),
-        limit: historyLimit.optional(),
-      })
-      .strict(),
-  )
-  .handler(({ context, data }) =>
-    productionArtifacts(context.db).artifacts.history({
-      workspaceId: context.workspaceId,
-      reader: { userId: context.user.id },
-      ...data,
-    }),
-  );
-
 /** A new document in a conversation (or the Workspace), named from its title. */
 export const createArtifactDocument = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
@@ -82,7 +61,7 @@ export const createArtifactDocument = createServerFn({ method: "POST" })
 
 /**
  * Saves a document over the version the page shows (`baseVersion`). The answer is `created`,
- * `nothing`, or `conflict` (nothing written: resolve, then save over `currentVersion`).
+ * `nothing`, or `conflict` (nothing written: the page saves again over `currentVersion`).
  */
 export const saveArtifactDocument = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
@@ -102,20 +81,6 @@ export const saveArtifactDocument = createServerFn({ method: "POST" })
   )
   .handler(({ context, data }) =>
     productionArtifacts(context.db).documents.save(scopeOf(context), data),
-  );
-
-/** Goes back to version `to`: saved as a new version over `baseVersion`, which must be current. */
-export const revertArtifact = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
-  .validator(
-    z.object({ artifactId: id, to: version, baseVersion: version, idempotencyKey: id }).strict(),
-  )
-  .handler(({ context, data }) =>
-    productionArtifacts(context.db).documents.revert({
-      workspaceId: context.workspaceId,
-      actor: { userId: context.user.id },
-      ...data,
-    }),
   );
 
 /** Moves an artifact between read tiers (task #529): `conversation` keeps it to its home
