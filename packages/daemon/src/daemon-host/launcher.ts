@@ -176,6 +176,15 @@ export class LocalDaemonLauncher implements DaemonLauncher, DaemonCommandRunner 
     return this.#waitForHandshake(input);
   }
 
+  /** Whether a Daemon answers the local handshake now, whoever started it. */
+  async isRunning(): Promise<boolean> {
+    try {
+      return (await this.#handshake()) !== false;
+    } catch {
+      return false;
+    }
+  }
+
   async ensureRunning(): Promise<void> {
     if (await this.#handshake()) return;
     await this.#waitForHandshake();

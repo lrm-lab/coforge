@@ -136,7 +136,10 @@ export class DetachedDaemonHost implements DaemonLauncher {
   }
 
   async ensureRunning(): Promise<void> {
-    if (!(await this.#pid())) await this.#registrar.registerAndStart();
+    // A Computer the person already runs (`foreground` under their own supervisor, or a start
+    // from another shell) answers the handshake: use it, and never start a second one.
+    if (!(await this.#pid()) && !(await this.#local.isRunning()))
+      await this.#registrar.registerAndStart();
     await this.#local.ensureRunning();
   }
 
