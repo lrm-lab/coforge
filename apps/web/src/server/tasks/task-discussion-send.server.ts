@@ -164,12 +164,9 @@ export async function postTaskMessage(
     },
     select: { id: true, sequence: true, createdAt: true, body: true },
   });
-  await writeMessageReferences(
-    tx,
-    message,
-    { conversationId: scope.conversationId, workspaceId: scope.workspaceId },
-    stored.references,
-  );
+  // The rows belong to the message, which lives in the task's own conversation, not the channel
+  // whose board the references were resolved against (task #558: a mismatch broke the foreign key).
+  await writeMessageReferences(tx, message, { conversationId, workspaceId }, stored.references);
 
   // A card posted in this conversation waits for the person; their reply here answers it.
   const answeredCardIds = member.userId
