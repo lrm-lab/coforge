@@ -88,6 +88,12 @@ export type StalledRecoveryFacts = Readonly<{
    * operation, or provider output. The three silences share this one clock — any still fresh
    * means the Agent is working. */
   lastAgentActionForMs?: number;
+  /** A retryable failure's backoff currently holds this Agent's deliveries — a rate limit waiting
+   * for its reported reset, or another retryable error waiting out its delay. Nothing about a
+   * restart shortens that wait, and the reference Computer 1.0.60 does not even consider a
+   * runtime it is holding for a provider limit (`markRuntimeProgressStaleIfNeeded` runs only for
+   * a working turn). */
+  recoveryHold?: boolean;
 }>;
 
 /**
@@ -98,17 +104,20 @@ export type StalledRecoveryFacts = Readonly<{
  * that never got a turn (the sweep already requires one to be waiting).
  */
 export function shouldRecoverStalledRuntime(facts: StalledRecoveryFacts): boolean {
+  // Held for a provider limit or another retryable failure: the wait is the plan, not a stall.
+  if (facts.recoveryHold) return false;
   const silentTurnStalled = facts.turnBusy && facts.silentForMs >= STALLED_RECOVERY_SILENCE_MS;
   const queuedTurnNeverStarted =
     !facts.turnBusy && !facts.liveTurn && (facts.queuedForMs ?? 0) >= STALLED_RECOVERY_SILENCE_MS;
-  // A notice the process took, followed by the stall window with no checked read, no operation
-  // and no provider output at all — the accepted-noticed-but-frozen case (task #318). Any of
-  // the three still fresh is a working Agent.
+  // A notice the process took and then did nothing about for the whole stall window — the
+  // accepted-noticed-but-frozen case (task #318). The action must be *older than the notice*: an
+  // Agent that acted after taking it has answered, and being idle since is not being frozen.
+  const noticeAcceptedForMs = facts.noticeAcceptedForMs ?? 0;
   const noticedButFrozen =
     !facts.turnBusy &&
     !facts.liveTurn &&
-    (facts.noticeAcceptedForMs ?? 0) >= STALLED_RECOVERY_SILENCE_MS &&
-    (facts.lastAgentActionForMs ?? 0) >= STALLED_RECOVERY_SILENCE_MS;
+    noticeAcceptedForMs >= STALLED_RECOVERY_SILENCE_MS &&
+    (facts.lastAgentActionForMs ?? Number.POSITIVE_INFINITY) > noticeAcceptedForMs;
   return (
     (silentTurnStalled || queuedTurnNeverStarted || noticedButFrozen) &&
     !facts.hasOpenToolCall &&

@@ -18,6 +18,7 @@ import { UnattendedRecoveries, reportUnattendedLimit } from "./stalled-recovery-
 import { logStalledRecovery } from "./agent-failure-logs";
 import { idleBlocker, type AgentIdleFacts, type ColdIdleAgent } from "./cold-idle-sweep";
 import type { BusyActivity } from "./agent-activity-publisher";
+import type { DeliveryHoldReason } from "./agent-delivery-queue";
 import type { LaunchRequest } from "./runtime-launch-types";
 import {
   STALLED_RECOVERY_EXIT_TIMEOUT_MS,
@@ -86,6 +87,8 @@ export type RuntimeReleasePorts<L extends ReleasableLaunch> = Readonly<{
   lastBusy(agentId: string): BusyActivity<L> | undefined;
   /** How long the Agent's oldest queued delivery has waited, if any is queued. */
   queuedForMs(agentId: string): number | undefined;
+  /** Why the Agent's deliveries are explicitly held right now, if they are. */
+  explicitHold?(agentId: string): DeliveryHoldReason | undefined;
   /** When the Agent's process last accepted an inbox notice; undefined when none was accepted —
    * the clock for the frozen-after-notice judgment (task #318). */
   noticeAcceptedAt?(agentId: string): number | undefined;
@@ -170,6 +173,7 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
       hasOpenToolCall: launch.toolCalls?.hasOpenToolCall ?? false,
       resumable: this.#ports.resumable(agentId),
       noticeAcceptedForMs: ageOf(this.#ports.noticeAcceptedAt?.(agentId)),
+      recoveryHold: this.#ports.explicitHold?.(agentId) !== undefined,
       lastAgentActionForMs: Math.min(
         progress.silentForMs(),
         ageOf(this.#ports.lastAgentActionAt?.(agentId)) ?? Number.POSITIVE_INFINITY,

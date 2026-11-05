@@ -3,6 +3,7 @@ import { daemonIdleFacts } from "./agent-idle-facts";
 import type { ActivityDraft, BusyActivity } from "./agent-activity-publisher";
 import { RuntimeRelease } from "./runtime-release";
 import type { ReleasableLaunch, RuntimeReleasePorts, WakeRestart } from "./runtime-release";
+import type { DeliveryHoldReason } from "./agent-delivery-queue";
 
 /** The `RuntimeRelease` construction `runtime.ts` reads as a call: its ports come from the
  * runtime's collaborators, assembled here so the construction site names them, not their
@@ -33,6 +34,7 @@ export function assembleRuntimeRelease<L extends ReleasableLaunch>(input: {
   working(agentId: string): boolean;
   deliveryQueue(): {
     queuedForMs(agentId: string): number | undefined;
+    explicitHold(agentId: string): DeliveryHoldReason | undefined;
     hasQueued(agentId: string): boolean;
     hasHeldAppItems(agentId: string): boolean;
   };
@@ -64,6 +66,7 @@ export function assembleRuntimeRelease<L extends ReleasableLaunch>(input: {
     sessionId: (agentId) => input.stopState().sessionId(agentId),
     isStopping: (agentId) => input.stopState().stopping(agentId),
     queuedForMs: (agentId) => input.deliveryQueue().queuedForMs(agentId),
+    explicitHold: (agentId) => input.deliveryQueue().explicitHold(agentId),
     daemonIdleFacts: (agentId) =>
       daemonIdleFacts({
         queue: input.inputDrain().get(agentId),

@@ -7,6 +7,7 @@ import {
   classifyRuntimeErrorText,
 } from "#src/agent-runtime/runtime-error-classification";
 import {
+  QUOTA_RESET_BACKOFF_MAX_MS,
   RUNTIME_ERROR_DELIVERY_BACKOFF_BASE_MS,
   RUNTIME_ERROR_DELIVERY_BACKOFF_MAX_MS,
   RUNTIME_ERROR_DELIVERY_BACKOFF_JITTER_RATIO,
@@ -115,12 +116,26 @@ test("fence.reset clears the streak for that Agent only", () => {
   expect(fence.note("agent-2", "cccccccc").attempts).toBe(2);
 });
 
-test("a retry-not-before time in the future is the whole delay, with no exponential or jitter", () => {
+test("a retry-not-before time in the future is the delay, capped at an hour", () => {
   const backoff = new RuntimeErrorDeliveryBackoff({ jitterRandom: () => 1 });
   const now = Date.parse("2026-10-21T13:00:00.000Z");
   const reset = "2026-10-21T16:00:00.000Z";
   const state = backoff.recordFailure("agent-1", RUNTIME_ERROR_CLASS.RATE_LIMIT, now, reset);
-  expect(state).toEqual({ attempts: 1, delayMs: 3 * 60 * 60_000, untilMs: Date.parse(reset) });
+  // The reference Computer 1.0.60 waits for a reported reset, but no single wait exceeds an hour;
+  // the hold re-arms when this one ends.
+  expect(state).toEqual({
+    attempts: 1,
+    delayMs: QUOTA_RESET_BACKOFF_MAX_MS,
+    untilMs: now + QUOTA_RESET_BACKOFF_MAX_MS,
+  });
+});
+
+test("a reset inside the cap is waited on exactly, with no exponential or jitter", () => {
+  const backoff = new RuntimeErrorDeliveryBackoff({ jitterRandom: () => 1 });
+  const now = Date.parse("2026-10-21T13:00:00.000Z");
+  const reset = "2026-10-21T13:20:00.000Z";
+  const state = backoff.recordFailure("agent-1", RUNTIME_ERROR_CLASS.RATE_LIMIT, now, reset);
+  expect(state).toEqual({ attempts: 1, delayMs: 20 * 60_000, untilMs: Date.parse(reset) });
 });
 
 test.each([

@@ -140,11 +140,13 @@ test("a Claude quota limit holds deliveries until its reported reset time", asyn
       runtimeError: { errorClass: "RateLimitError", errorReason: "quota_exhausted" },
     });
 
-    // Not the exponential backoff's first release, nor its cap: the reset time.
+    // Not the exponential backoff's first release, nor its cap: the reset time, capped at an
+    // hour (Raft's QUOTA_RESET_BACKOFF_MAX_MS), so this three-hour reset is waited on in three
+    // stretches, each one ending in a retry that reports the limit again.
     jest.advanceTimersByTime(RUNTIME_ERROR_DELIVERY_BACKOFF_MAX_MS * 2);
     await Promise.resolve();
     expect(notices).toEqual([]);
-    jest.advanceTimersByTime(3 * HOUR_MS);
+    jest.advanceTimersByTime(HOUR_MS);
     await noticed;
     expect(notices).toHaveLength(1);
   } finally {
@@ -152,18 +154,19 @@ test("a Claude quota limit holds deliveries until its reported reset time", asyn
   }
 });
 
-test("a reset time beyond the longest timer delay still holds until it", async () => {
+test("a reset time beyond the hour is retried an hour later instead of waited on at once", async () => {
   const { runtime, notices, acknowledged, emit, noticed, deliver } = await harness();
   jest.useFakeTimers();
   try {
-    // Past 2^31 - 1 ms, where a single timer would fire at once.
+    // Thirty days out: no single wait may exceed an hour (Raft's QUOTA_RESET_BACKOFF_MAX_MS),
+    // and a retry at the hour reports the limit again, which re-arms the next wait.
     failOnQuota(emit, new Date(Date.now() + 30 * DAY_MS).toISOString());
     await deliver(1);
     await acknowledged;
-    jest.advanceTimersByTime(29 * DAY_MS);
+    jest.advanceTimersByTime(HOUR_MS - 60_000);
     await Promise.resolve();
     expect(notices).toEqual([]);
-    jest.advanceTimersByTime(DAY_MS);
+    jest.advanceTimersByTime(2 * 60_000);
     await noticed;
     expect(notices).toHaveLength(1);
   } finally {

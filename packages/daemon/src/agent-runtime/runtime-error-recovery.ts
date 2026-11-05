@@ -37,6 +37,10 @@ export const RUNTIME_ERROR_DELIVERY_BACKOFF_MAX_MS = 5 * 60_000;
 /** Extra delay added on top of the capped exponential delay, as a fraction of it, drawn from an
  * injectable random source so a computed delay is deterministic in tests. */
 export const RUNTIME_ERROR_DELIVERY_BACKOFF_JITTER_RATIO = 0.1;
+/** The longest wait a reported quota reset may impose at once: sixty minutes, the reference
+ * Computer 1.0.60's `QUOTA_RESET_BACKOFF_MAX_MS` (`providerLimitBackoffDelayMs`). A reset further
+ * away re-arms when it ends rather than being waited on in one stretch. */
+export const QUOTA_RESET_BACKOFF_MAX_MS = 60 * 60_000;
 /** Consecutive same-fingerprint failures before the caller stops retrying that fingerprint. */
 export const RUNTIME_ERROR_FINGERPRINT_FENCE_THRESHOLD = 3;
 
@@ -76,14 +80,15 @@ export type RuntimeErrorDeliveryBackoffState = Readonly<{
 
 export class RuntimeErrorDeliveryBackoff {
   readonly #streaks = new Map<string, { attempts: number; latestClass: RuntimeErrorClass }>();
+  /** When the Agent's current backoff ends, for callers that must not act meanwhile. */
+  readonly #until = new Map<string, number>();
 
   constructor(private readonly options: RuntimeErrorDeliveryBackoffOptions = {}) {}
 
   /** Records one retryable failure for `agentId` and returns the delay the next release owes:
-   * until `notBefore` (ISO) when that is still ahead, however far, else the exponential delay.
-   * The reference Computer 1.0.51 (darwin-arm64, release 463fd642-65db-4902-ae9b-c22fbae0e6a0,
-   * sha256 364ec010…c78e, observed 2026-10-21) waits for an exhausted quota's reported reset the
-   * same way, but caps that wait at an hour; this one is uncapped by product decision. */
+   * until `notBefore` (ISO) when that is still ahead, capped at `QUOTA_RESET_BACKOFF_MAX_MS`, else
+   * the exponential delay. The cap matches the reference Computer 1.0.60's
+   * `providerLimitBackoffDelayMs`; a reset further out re-arms when the capped wait ends. */
   recordFailure(
     agentId: string,
     errorClass: RuntimeErrorClass,
@@ -95,8 +100,9 @@ export class RuntimeErrorDeliveryBackoff {
     const notBeforeMs = notBefore === undefined ? Number.NaN : Date.parse(notBefore);
     const delayMs =
       notBeforeMs > now
-        ? notBeforeMs - now
+        ? Math.min(notBeforeMs - now, QUOTA_RESET_BACKOFF_MAX_MS)
         : runtimeErrorDeliveryBackoffDelayMs(attempts, this.options);
+    this.#until.set(agentId, now + delayMs);
     return { attempts, delayMs, untilMs: now + delayMs };
   }
 
@@ -105,6 +111,7 @@ export class RuntimeErrorDeliveryBackoff {
   reset(agentId: string): number {
     const attempts = this.attempts(agentId);
     this.#streaks.delete(agentId);
+    this.#until.delete(agentId);
     return attempts;
   }
 
@@ -119,6 +126,7 @@ export class RuntimeErrorDeliveryBackoff {
 
   clear(): void {
     this.#streaks.clear();
+    this.#until.clear();
   }
 }
 
