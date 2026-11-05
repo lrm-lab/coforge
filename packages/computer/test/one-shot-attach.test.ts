@@ -118,3 +118,30 @@ test("polling stops at the session's deadline instead of forever", async () => {
     oneShotAttach(machine, fetchFor([expiredStart(), Response.json({ error: "attach_pending" })])),
   ).rejects.toMatchObject({ code: "ATTACH_EXPIRED" });
 });
+
+test("the approved stage leaves out the fields the server did not send", async () => {
+  const stages: [string, Record<string, string> | undefined][] = [];
+  const responses = [
+    Response.json({
+      sessionId: "s1",
+      deviceCode: "cd_x",
+      userCode: "ABCD",
+      approveUrl: "https://coforge.example/a",
+      expiresInSeconds: 600,
+      intervalSeconds: 1,
+    }),
+    Response.json({ attachToken: "at_x", expiresInSeconds: 60 }),
+  ];
+  await oneShotAttach(
+    {
+      serverUrl: "https://coforge.example",
+      machineName: "m",
+      hostname: "h",
+      os: "linux",
+      sleep: async () => {},
+      onStage: (stage, detail) => stages.push([stage, detail]),
+    },
+    (async () => responses.shift()!) as unknown as typeof fetch,
+  );
+  expect(stages.find(([stage]) => stage === "approved")?.[1]).toEqual({});
+});

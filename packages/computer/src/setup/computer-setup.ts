@@ -14,6 +14,8 @@ export type SetupResult = {
   workspace: AccessibleWorkspace;
   configPath: string;
   serverUrl?: string;
+  /** The machine was already attached and its stored key still worked: nothing was registered. */
+  resumed?: true;
   /** The Daemon took the configuration, but the Workspace was still starting when it answered. */
   daemonStillStarting?: true;
 };
@@ -45,7 +47,19 @@ export interface SetupAuthenticator {
   authenticate(serverUrl: string, json: boolean): Promise<Credential>;
 }
 
+/** What a re-run of setup/attach on an already-attached Workspace needs: the Daemon's stored
+ * key and a live check of it (task #417; Raft's `resumeExistingAttachment`). */
+export interface SetupResumePort {
+  storedKey(workspaceId: string, computerId: string): Promise<string | null>;
+  self(
+    apiKey: string,
+    signal: AbortSignal,
+  ): Promise<{ state: "live" | "revoked" | "forbidden" | "unsupported" | "unreachable" }>;
+}
+
 export type ComputerSetupOptions = {
+  /** Without it, an existing attachment is not resumed. */
+  resume?: SetupResumePort;
   config: Pick<ComputerConfig, "loadCurrentProfile"> &
     Partial<Pick<ComputerConfig, "saveCurrentProfile">> &
     Required<Pick<ComputerConfig, "saveRegistration" | "discardRegistration">> &
@@ -57,8 +71,10 @@ export type ComputerSetupOptions = {
    * consumes) instead of the OAuth login (task #417). */
   oneShotAttach?: (
     serverUrl: string,
-    options?: { onStage?: (stage: string, detail?: Record<string, string>) => void },
-  ) => Promise<Credential>;
+    options?: {
+      onStage?: (stage: string, detail?: Record<string, string>) => void;
+    },
+  ) => Promise<Credential & { workspaceId?: string; workspaceSlug?: string }>;
   registrationFactory: (serverUrl: string, credential: Credential) => SetupRegistration;
   launcher: DaemonLauncher | ((serverUrl: string) => DaemonLauncher);
   metadataProvider: ComputerMetadataProvider;
@@ -91,6 +107,12 @@ export class ComputerSetup {
       "The existing Daemon belongs to another server environment.",
       async () => launcher.preflight?.(),
     );
+    // Re-running setup on an attached Workspace resumes it; it never creates a second
+    // attachment. Replacing one takes `detach` first (task #417).
+    if (input.workspaceSlug) {
+      const resumed = await this.resumeAttached(input.workspaceSlug, serverUrl, launcher, input);
+      if (resumed) return resumed;
+    }
     let credential: Credential | null;
     if (input.oneShot) {
       if (!this.options.oneShotAttach)
@@ -116,6 +138,19 @@ export class ComputerSetup {
           "OAuth login could not be completed.",
           () => authenticate.authenticate(serverUrl, input.json ?? false),
         );
+      }
+    }
+    if (input.oneShot && !input.workspaceSlug) {
+      // The token's bound Workspace is only known after the poll; if this machine is already
+      // attached there, resume — the token is not consumed (task #417).
+      const bound = credential as Credential & {
+        workspaceSlug?: string;
+        workspaceId?: string;
+      };
+      const selector = bound.workspaceId ?? bound.workspaceSlug;
+      if (selector) {
+        const resumed = await this.resumeAttached(selector, serverUrl, launcher, input);
+        if (resumed) return resumed;
       }
     }
     if (!credential)
@@ -262,6 +297,91 @@ export class ComputerSetup {
       configPath,
       serverUrl,
       ...(daemonStillStarting ? { daemonStillStarting: true } : {}),
+    };
+  }
+
+  /** The existing attachment of `selector` (a slug or id), resumed when its stored key is live;
+   * `undefined` when this machine holds none. A dead or unverifiable key is an error, never a
+   * fresh attachment. */
+  private async resumeAttached(
+    selector: string,
+    serverUrl: string,
+    launcher: DaemonLauncher,
+    input: {
+      onStage?: (stage: string, detail?: Record<string, string>) => void;
+    },
+  ): Promise<SetupResult | undefined> {
+    const { config, resume } = this.options;
+    if (!resume || !config.loadRegistration) return undefined;
+    const registration = await setupStep(
+      "SETUP_ALREADY_ATTACHED_READ_FAILED",
+      "The local Workspace registrations could not be read.",
+      () => config.loadRegistration!(selector),
+    );
+    if (!registration) return undefined;
+    const key = registration.computerId
+      ? await setupStep(
+          "SETUP_ALREADY_ATTACHED_READ_FAILED",
+          "The stored credential of this computer could not be read.",
+          () => resume.storedKey(registration.id, registration.computerId!),
+        )
+      : null;
+    if (!key)
+      throw setupError(
+        "SETUP_ALREADY_ATTACHED_INVALID",
+        `This computer is attached to '${registration.slug}' but holds no usable credential.`,
+      );
+    // A key the Daemon has not yet swapped for its own `sk_computer` is still the attach's
+    // `dk_`: `/self` answers a live one 403 (valid, but not a linked Computer key) and a dead
+    // one 401. A live `dk_` resumes and the Daemon's key migration swaps it; an `sk_` that is
+    // forbidden is gone.
+    const checked = await resume.self(key, AbortSignal.timeout(15_000));
+    const state =
+      checked.state === "forbidden" ? (key.startsWith("dk_") ? "live" : "revoked") : checked.state;
+    if (state === "unsupported")
+      throw setupError(
+        "SETUP_ALREADY_ATTACHED_UNSUPPORTED",
+        `The server cannot verify this computer's attachment to '${registration.slug}'.`,
+      );
+    if (state === "revoked")
+      throw setupError(
+        "SETUP_ALREADY_ATTACHED_INVALID",
+        `This computer's credential for '${registration.slug}' is no longer valid.`,
+      );
+    if (state === "unreachable")
+      throw setupError(
+        "SETUP_ALREADY_ATTACHED_UNREACHABLE",
+        `Could not verify this computer's existing attachment to '${registration.slug}'.`,
+      );
+    const started = await setupStep(
+      "SETUP_DAEMON_START_FAILED",
+      "The Daemon could not be started.",
+      () =>
+        launcher.ensureStarted({
+          workspaceId: registration.id,
+          computerId: registration.computerId!,
+          workspaceRoot: this.options.workspaceRoot,
+          daemonApiKey: key,
+          serverHttpUrl: serverUrl,
+          loginSetup: false,
+        }),
+    );
+    const configPath = await setupStep(
+      "SETUP_CONFIG_WRITE_FAILED",
+      "Could not save the Workspace configuration.",
+      () => config.saveRegistration(registration),
+    );
+    input.onStage?.("resumed", { workspaceSlug: registration.slug });
+    return {
+      workspace: {
+        id: registration.id,
+        slug: registration.slug,
+        name: registration.slug,
+      },
+      configPath,
+      serverUrl,
+      resumed: true,
+      ...(started?.lifecycleUnderWay === true ? { daemonStillStarting: true as const } : {}),
     };
   }
 }

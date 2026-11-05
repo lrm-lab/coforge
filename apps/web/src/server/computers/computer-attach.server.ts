@@ -23,7 +23,15 @@ export type AttachPollResult =
   | { kind: "slow_down" }
   | { kind: "expired" }
   | { kind: "denied" }
-  | { kind: "token"; attachToken: string; expiresInSeconds: number };
+  | {
+      kind: "token";
+      attachToken: string;
+      expiresInSeconds: number;
+      /** The Workspace the approver bound the session to, so a machine can tell it is already
+       * attached there before it spends the token (task #417). */
+      workspaceId: string | null;
+      workspaceSlug: string | null;
+    };
 
 const mintDeviceCode = () => `cd_${mintOpaqueToken()}`;
 const mintAttachToken = () => `at_${mintOpaqueToken()}`;
@@ -84,7 +92,8 @@ export async function startAttachSession(
  * copy, so a poll cannot replay a token it already handed out.
  */
 export async function pollAttachSession(
-  db: Pick<PrismaClient, "computerAttachSession"> & Pick<PrismaClient, "$transaction">,
+  db: Pick<PrismaClient, "computerAttachSession" | "workspace"> &
+    Pick<PrismaClient, "$transaction">,
   input: { deviceCode: string },
   now: Date = new Date(),
 ): Promise<AttachPollResult> {
@@ -96,9 +105,10 @@ export async function pollAttachSession(
         attachTokenHash: string | null;
         expiresAt: Date;
         lastPolledAt: Date | null;
+        workspaceId: string | null;
       }[]
     >`SELECT "id", "status", "attach_token_hash" AS "attachTokenHash", "expires_at" AS "expiresAt",
-             "last_polled_at" AS "lastPolledAt"
+             "last_polled_at" AS "lastPolledAt", "approved_workspace_id" AS "workspaceId"
         FROM "computer_attach_sessions"
         WHERE "device_code_hash" = ${hash(input.deviceCode)}
         FOR UPDATE`;
@@ -127,10 +137,18 @@ export async function pollAttachSession(
       where: { id: session.id },
       data: { attachTokenHash: hash(attachToken), attachTokenExpiresAt: tokenExpiresAt },
     });
+    const workspace = session.workspaceId
+      ? await tx.workspace.findUnique({
+          where: { id: session.workspaceId },
+          select: { slug: true },
+        })
+      : null;
     return {
       kind: "token",
       attachToken,
       expiresInSeconds: Math.round((tokenExpiresAt.getTime() - now.getTime()) / 1000),
+      workspaceId: session.workspaceId,
+      workspaceSlug: workspace?.slug ?? null,
     };
   });
 }

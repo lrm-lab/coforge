@@ -178,6 +178,7 @@ export {
   type DaemonCredentialStore,
 } from "#src/credentials/credential-store";
 export type { AgentMessageHttpClient } from "#src/connection/agent-http-clients";
+export { createComputerSelfClient } from "#src/connection/computer-self-client";
 export { DaemonConnection } from "#src/connection/daemon-connection";
 export type {
   DaemonConnectionClient,

@@ -95,7 +95,7 @@ async function attachPoll(
   /** The session's own expiry: polling ends on it plus a minute's margin, so a dropped poll,
    * a 429 or a run of 5xx never retries past when the token could still come (task #417). */
   expiresInSeconds: number,
-): Promise<string> {
+): Promise<{ attachToken: string; workspaceId?: string; workspaceSlug?: string }> {
   let interval = POLL_INTERVAL_MS;
   const deadline = Date.now() + (expiresInSeconds + 60) * 1000;
   let consecutiveServerErrors = 0;
@@ -119,9 +119,14 @@ async function attachPoll(
       continue;
     }
     const body = (await response.json().catch(() => undefined)) as
-      | { error?: string; attachToken?: string }
+      | { error?: string; attachToken?: string; workspaceId?: string; workspaceSlug?: string }
       | undefined;
-    if (response.ok && body?.attachToken) return body.attachToken;
+    if (response.ok && body?.attachToken)
+      return {
+        attachToken: body.attachToken,
+        workspaceId: typeof body.workspaceId === "string" ? body.workspaceId : undefined,
+        workspaceSlug: typeof body.workspaceSlug === "string" ? body.workspaceSlug : undefined,
+      };
     if (response.status >= 500) {
       consecutiveServerErrors += 1;
       if (consecutiveServerErrors >= 5)
@@ -180,7 +185,12 @@ export async function oneShotAttach(
     sleep?: (ms: number) => Promise<void>;
   },
   fetchImplementation: typeof fetch = fetch,
-): Promise<{ accessToken: string; tokenType: string }> {
+): Promise<{
+  accessToken: string;
+  tokenType: string;
+  workspaceId?: string;
+  workspaceSlug?: string;
+}> {
   const write = input.write ?? (() => {});
   const started = await attachStart(
     input.serverUrl,
@@ -189,7 +199,7 @@ export async function oneShotAttach(
   );
   write(`Approve this computer at ${started.approveUrl}`);
   write(`and confirm the code it shows matches: ${started.userCode}`);
-  const attachToken = await attachPoll(
+  const approved = await attachPoll(
     input.serverUrl,
     started.deviceCode,
     fetchImplementation,
@@ -197,5 +207,14 @@ export async function oneShotAttach(
     input.sleep ?? Bun.sleep,
     started.expiresInSeconds,
   );
-  return { accessToken: attachToken, tokenType: "Bearer" };
+  input.onStage?.("approved", {
+    ...(approved.workspaceId ? { workspaceId: approved.workspaceId } : {}),
+    ...(approved.workspaceSlug ? { workspaceSlug: approved.workspaceSlug } : {}),
+  });
+  return {
+    accessToken: approved.attachToken,
+    tokenType: "Bearer",
+    workspaceId: approved.workspaceId,
+    workspaceSlug: approved.workspaceSlug,
+  };
 }

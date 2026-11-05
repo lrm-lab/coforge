@@ -28,7 +28,12 @@ export const Route = createFileRoute("/api/computer/attach/poll")({
             return Response.json({ error: "access_denied" }, { status: 400 });
           case "token":
             return Response.json(
-              { attachToken: result.attachToken, expiresInSeconds: result.expiresInSeconds },
+              {
+                attachToken: result.attachToken,
+                expiresInSeconds: result.expiresInSeconds,
+                ...(result.workspaceId ? { workspaceId: result.workspaceId } : {}),
+                ...(result.workspaceSlug ? { workspaceSlug: result.workspaceSlug } : {}),
+              },
               { status: 200 },
             );
         }

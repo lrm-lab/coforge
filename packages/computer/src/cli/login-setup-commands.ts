@@ -10,7 +10,12 @@ import { FileCredentialStore } from "#src/credential-store";
 import { resolveComputerStateDirectory } from "#src/paths";
 import { COFORGE_SERVER_URL } from "#src/release-channel";
 import { FileComputerConfig, loadBuildProfile } from "#src/local-config";
-import { ComputerSetup } from "#src/setup/computer-setup";
+import {
+  createComputerSelfClient,
+  FileDaemonCredentialStore,
+  workspaceStateDirectory,
+} from "@lrm/coforge-daemon";
+import { ComputerSetup, type SetupResumePort } from "#src/setup/computer-setup";
 import { oneShotAttach } from "#src/setup/one-shot-attach";
 import { hostname } from "node:os";
 import { currentComputerNames, currentComputerPlatform } from "#src/platform";
@@ -85,6 +90,19 @@ export function attachStageEmitter(
   return (stage, detail) => io.stderr(JSON.stringify({ stage, ...detail }));
 }
 
+/** The resume preflight's ports: a Workspace's own `sk_computer` lives under that Workspace's
+ * state directory, which is where the Daemon reads it too (task #417). */
+export function createResumePort(stateDirectory: string, serverUrl: string): SetupResumePort {
+  return {
+    storedKey: (workspaceId, computerId) =>
+      new FileDaemonCredentialStore(workspaceStateDirectory(stateDirectory, workspaceId)).load(
+        workspaceId,
+        computerId,
+      ),
+    self: (apiKey, signal) => createComputerSelfClient(serverUrl).self(apiKey, signal),
+  };
+}
+
 export function createSetupCommand(
   io: { stdout: (line: string) => void; stderr: (line: string) => void },
   config: FileComputerConfig,
@@ -124,6 +142,7 @@ export function createSetupCommand(
       },
     },
     idempotencyKeyProvider: { create: registrationIdempotencyKey },
+    resume: createResumePort(stateDirectory, COFORGE_SERVER_URL),
     authenticate: {
       async authenticate(serverUrl, json) {
         const login = new ComputerLogin({

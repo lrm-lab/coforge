@@ -62,6 +62,32 @@ export function createComputerSelfClient(serverHttpUrl: string, timeoutMs = REQU
       );
     },
     /**
+     * `GET /api/computer/self`: whether a stored `sk_computer` is still live for this Computer —
+     * the resume preflight (task #417). `live` is a 200; `revoked` a 401 (the key
+     * is gone for good); `forbidden` a 403 (the key is valid but not a linked Computer key — a live
+     * `dk_` answers this); `unsupported` a 404/405 (a server without this route); `unreachable` a
+     * network failure or 5xx.
+     */
+    async self(
+      apiKey: string,
+      signal: AbortSignal,
+    ): Promise<{ state: "live" | "revoked" | "forbidden" | "unsupported" | "unreachable" }> {
+      try {
+        const response = await fetch(`${new URL(serverHttpUrl).origin}/api/computer/self`, {
+          method: "GET",
+          headers: { authorization: `Bearer ${apiKey}` },
+          signal: AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]),
+        });
+        if (response.ok) return { state: "live" };
+        if (response.status === 401) return { state: "revoked" };
+        if (response.status === 403) return { state: "forbidden" };
+        if (response.status === 404 || response.status === 405) return { state: "unsupported" };
+        return { state: "unreachable" };
+      } catch {
+        return { state: "unreachable" };
+      }
+    },
+    /**
      * `POST /api/computer/detach` (step 3): the machine asks to leave its Workspace. Only a
      * definite answer deletes anything locally — `detached`, or `already_detached` where the
      * link and key were gone already; every other answer keeps the binding.

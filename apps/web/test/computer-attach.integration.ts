@@ -176,6 +176,12 @@ test("the approved poll hands one token once; consume resolves it to the bound w
   expect(first).toMatchObject({ kind: "token" });
   const attachToken = (first as { attachToken: string }).attachToken;
   expect(attachToken).toMatch(/^at_[A-Za-z0-9_-]{43}$/);
+  // The poll names the bound Workspace, so the machine can resume before spending the token.
+  const bound = await db.workspace.findUniqueOrThrow({
+    where: { id: workspaceId },
+    select: { slug: true },
+  });
+  expect(first).toMatchObject({ workspaceId, workspaceSlug: bound.slug });
   // A second poll does not hand it out again — the hash it kept is the only copy. Past the
   // interval it answers pending, and inside it slow_down; neither replays the token.
   expect(await pollAttachSession(db, { deviceCode: session.deviceCode })).toEqual({

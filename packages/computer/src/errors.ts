@@ -144,6 +144,14 @@ export const SETUP_HINTS = {
     "Check the server connection and Computer permissions, then rerun setup.",
   SETUP_DAEMON_START_FAILED: "Check the local Daemon and workspace path, then rerun setup.",
   SETUP_CONFIG_WRITE_FAILED: "Check the configuration directory permissions, then rerun setup.",
+  SETUP_ALREADY_ATTACHED_INVALID:
+    "This computer's credential is no longer valid: ask a workspace admin to remove it on the web, or run `coforge-computer detach`, then attach again.",
+  SETUP_ALREADY_ATTACHED_UNREACHABLE:
+    "The server could not be reached to check this computer's existing attachment; try again shortly. Nothing was changed.",
+  SETUP_ALREADY_ATTACHED_UNSUPPORTED:
+    "The server is too old to verify this computer's existing attachment; ask for the server to be upgraded.",
+  SETUP_ALREADY_ATTACHED_READ_FAILED:
+    "Check the local configuration and credential permissions, or name the Workspace by its exact id, then rerun setup.",
   SETUP_FAILED: "Check your login and server configuration, then rerun setup.",
   SETUP_NOT_LOGGED_IN: "Complete Device Code login, then rerun setup.",
   SETUP_REGISTRATION_UNAVAILABLE:

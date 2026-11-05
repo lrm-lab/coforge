@@ -119,3 +119,27 @@ test("detach reads an ordinary 401 as retryable, never a confirmed detach", asyn
   const result = await createComputerSelfClient(base).detach(SK, NEVER);
   expect(result).toMatchObject({ ok: false, error: { kind: "retryable" } });
 });
+
+test("self maps 200, 401, 403, 404, 405 and 5xx to live, revoked, unsupported and unreachable", async () => {
+  const cases: [number, "live" | "revoked" | "forbidden" | "unsupported" | "unreachable"][] = [
+    [200, "live"],
+    [401, "revoked"],
+    [403, "forbidden"],
+    [404, "unsupported"],
+    [405, "unsupported"],
+    [500, "unreachable"],
+    [503, "unreachable"],
+  ];
+  for (const [status, state] of cases) {
+    before();
+    handler = () => new Response("{}", { status });
+    expect(await createComputerSelfClient(base).self(SK, NEVER)).toEqual({ state });
+    expect(requests).toEqual([{ path: "/api/computer/self", authorization: `Bearer ${SK}` }]);
+  }
+});
+
+test("self reports a refused connection as unreachable", async () => {
+  expect(await createComputerSelfClient("http://127.0.0.1:1").self(SK, NEVER)).toEqual({
+    state: "unreachable",
+  });
+});
