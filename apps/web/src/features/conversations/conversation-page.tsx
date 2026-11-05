@@ -4,7 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 
 import { useConversationAgentProfile } from "#src/features/agents/profile-panel/open-agent-profile";
 import { useLiveAgent } from "#src/features/agents/workspace-agents-realtime";
-import { ACTIVITY_INBOX_QUERY_PREFIX } from "#src/features/inbox/activity-inbox-queries";
+import { ACTIVITY_INBOX_LISTS_KEY } from "#src/features/inbox/activity-inbox-queries";
 import { ConversationTaskBoard } from "#src/features/tasks/conversation-task-board";
 import { ArtifactsBesideChat } from "#src/features/artifacts/artifact-beside-chat";
 import { ConversationArtifactPane } from "#src/features/artifacts/artifact-side-pane";
@@ -337,15 +337,17 @@ function ConversationPageMain({
     markSeen(unreadKey, topLevelEnd);
   }, [markSeen, unreadKey, topLevelEnd, threadAlone]);
   // A conversation opened from Activity is read here, not by its row (task #358), so its first
-  // read in each visit refreshes Activity, and so does reading to the latest. Not every message that
-  // arrives while it is open: that would refetch Activity's whole list per message.
+  // read in each visit refreshes Activity's lists, and so does reading to the latest. Not every
+  // message that arrives while it is open: that would refetch Activity's whole list per message.
+  // The nav dot is not read again: a read that moved the cursor has the server announce where the
+  // dot stands (task #496), and one that moved nothing leaves it as it was.
   const queryClient = useQueryClient();
   const refreshedActivity = useRef<string | undefined>(undefined);
   const advance = (throughSequence: number, label: string, refreshActivity: boolean) =>
     void persistReadCursor(() => readCursor.advance(throughSequence), label).then(() => {
       markOpenReadStale(queryClient, conversation.conversationId);
       if (refreshActivity)
-        void queryClient.invalidateQueries({ queryKey: ACTIVITY_INBOX_QUERY_PREFIX });
+        void queryClient.invalidateQueries({ queryKey: ACTIVITY_INBOX_LISTS_KEY });
     });
   // The cursor's write is rebuilt each render around the same conversation; the effect reruns only
   // when what it reads changes. It waits, like the divider, for this open's read of where the
