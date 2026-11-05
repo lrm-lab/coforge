@@ -120,6 +120,7 @@ test("on a phone a row opens its conversation in place of the Activity list", as
       .find((button) => button.textContent.trim().startsWith("1 reply"))
       .click() ?? true`);
     await browser("wait", "--fn", `location.search.includes("threadRootId=${rootId}")`);
+    await browser("wait", "--fn", shownInPane(replyId));
     await browser("find", "role", "button", "click", "--name", "Back to chat");
     await browser("wait", "--fn", `!location.search.includes("threadRootId")`);
     await browser("find", "role", "button", "click", "--name", "Back to Activity");
