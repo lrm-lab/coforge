@@ -9,6 +9,7 @@ import { LabelGroups } from "#src/server/tasks/label-groups.server";
 import { Labels } from "#src/server/tasks/labels.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import { labelSettingsPage } from "./helpers/label-settings-page";
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
 
 /**
@@ -92,44 +93,10 @@ test("an owner manages the Workspace's labels on their own page; a member reads 
       } as Parameters<TaskBoard["execute"]>[1]);
 
     const page = `${origin}/en/w/${workspace.slug}/settings?section=labels`;
-    const row = (label: string) =>
-      `document.querySelector('[data-label-row=${JSON.stringify(label)}]')`;
-    const button = (text: string, within = "document") =>
-      `[...${within}.querySelectorAll("button")].find((b) => b.textContent.trim() === ${JSON.stringify(text)})`;
-    const item = (text: string) =>
-      `[...document.querySelectorAll('[role="menuitem"]')].find((el) => el.textContent.trim() === ${JSON.stringify(text)})`;
-    const click = (selector: string) => evaluate(`(${selector}.click(), true)`);
-    const settled = `document.getAnimations().every((a) => a.playState !== "running")`;
-    const shoot = async (shot: string) => {
-      await browser("wait", "--fn", settled);
-      await browser("screenshot", join(artifacts, `${shot}.png`));
-      await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
-      await browser("screenshot", join(artifacts, `${shot}-dark.png`));
-      await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
-    };
-    const menu = async (label: string, action: string) => {
-      await browser("wait", "--fn", `${dialogsOpen} === 0 && ${settled}`);
-      // An earlier row's mark would be clicked first.
-      await evaluate(
-        `([...document.querySelectorAll("[data-e2e]")].forEach((el) => el.removeAttribute("data-e2e")), true)`,
-      );
-      await evaluate(
-        `(${row(label)}.querySelector('button[aria-label="Actions for ${label}"]').setAttribute("data-e2e", "more"), true)`,
-      );
-      await browser("click", '[data-e2e="more"]');
-      await browser("wait", "--fn", `${item(action)} !== undefined`);
-      await evaluate(`(${item(action)}.setAttribute("data-e2e", "item"), true)`);
-      await browser("click", '[data-e2e="item"]');
-    };
-    const dialogsOpen = `document.querySelectorAll('[role="dialog"], [role="alertdialog"]').length`;
-    /** A real click on what `selector` names, marked for the browser to find. */
-    const press = async (selector: string) => {
-      await browser("wait", "--fn", `${dialogsOpen} === 0 && ${selector} != null && ${settled}`);
-      await evaluate(
-        `([...document.querySelectorAll("[data-e2e]")].forEach((el) => el.removeAttribute("data-e2e")), ${selector}.setAttribute("data-e2e", "press"), true)`,
-      );
-      await browser("click", '[data-e2e="press"]');
-    };
+    const { row, button, click, shoot, menu, dialogsOpen, press } = labelSettingsPage(
+      { browser, evaluate },
+      artifacts,
+    );
     const until = async (check: () => Promise<boolean>) => {
       for (let i = 0; i < 60 && !(await check()); i++) await Bun.sleep(100);
       expect(await check()).toBe(true);
