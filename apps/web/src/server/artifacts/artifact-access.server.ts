@@ -1,12 +1,7 @@
-import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
+import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { isWorkspaceAdminRole } from "#src/features/workspaces/workspace-roles";
-import {
-  ACTIVE_MEMBER_WHERE,
-  DIRECT_CONVERSATION_WHERE,
-  VISIBLE_CONVERSATION_WHERE,
-} from "#src/server/conversations/active-member.server";
-import { canReadChannel } from "#src/server/conversations/channel-read-access.server";
+import { actorConversationAccess } from "#src/server/conversations/channel-read-access.server";
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { Experiments } from "#src/server/experiments/experiments.server";
 import { isFeatureEnabled } from "#src/server/feature-flags/feature-flags.server";
@@ -50,29 +45,11 @@ export async function artifactHomeAccess(
     ? homeKey.slice("conversation:".length)
     : undefined;
   if (!conversationId || !UUID.test(conversationId)) return none;
-  const conversation = await db.conversation.findFirst({
-    where: {
-      id: conversationId,
-      workspaceId,
-      ...VISIBLE_CONVERSATION_WHERE,
-      OR: [{ channelName: { not: null } }, DIRECT_CONVERSATION_WHERE],
-    },
-    select: {
-      channelName: true,
-      visibility: true,
-      archivedAt: true,
-      members: { where: { ...memberOf(actor), ...ACTIVE_MEMBER_WHERE }, select: { id: true } },
-    },
-  });
-  if (!conversation) return none;
-  const member = conversation.members.length > 0;
-  const read = conversation.channelName === null ? member : canReadChannel(conversation, member);
-  // An archived channel is read only, as it is for messages (`channel-send` refuses it).
-  return {
-    read,
-    write: member && conversation.archivedAt === null,
-    homeKind: conversation.channelName === null ? "dm" : "channel",
-  };
+  // The conversation's own read/write rule lives in `server/conversations` (task #542): the
+  // artifacts module asks the port, never the conversation tables.
+  const access = await actorConversationAccess(db, workspaceId, actor, conversationId);
+  if (!access) return none;
+  return { read: access.read, write: access.write, homeKind: access.kind };
 }
 
 /** The read tier an artifact carries (task #529): `conversation` keeps reads to its home
@@ -299,11 +276,6 @@ export async function canDeleteArtifact(
   });
   return isWorkspaceAdminRole(membership?.role);
 }
-
-const memberOf = (actor: ArtifactActor) =>
-  (actor.userId
-    ? { userId: actor.userId }
-    : { agentId: actor.agentId }) satisfies Prisma.ConversationMemberWhereInput;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

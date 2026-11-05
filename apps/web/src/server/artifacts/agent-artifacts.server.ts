@@ -5,10 +5,9 @@ import { artifactInputs } from "#src/features/artifacts/artifact-inputs";
 import { AppError } from "#src/lib/app-error";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import {
-  ACTIVE_MEMBER_WHERE,
-  DIRECT_CONVERSATION_WHERE,
-  VISIBLE_CONVERSATION_WHERE,
-} from "#src/server/conversations/active-member.server";
+  directConversationIdBetween,
+  visibleChannelIdByName,
+} from "#src/server/conversations/channel-read-access.server";
 import { artifactsDisabled } from "./artifact-access.server";
 import type { ArtifactDocuments } from "./artifact-documents.server";
 import type { Artifacts } from "./artifacts.server";
@@ -164,12 +163,10 @@ export async function resolveArtifactTarget(
     });
   const { workspaceId, agentId } = principal;
   if (channel) {
-    const found = await db.conversation.findFirst({
-      where: { workspaceId, channelName: channel, ...VISIBLE_CONVERSATION_WHERE },
-      select: { id: true },
-    });
-    if (!found) throw new AppError("NOT_FOUND");
-    return found.id;
+    // A lookup only: whether the Agent may write there is the artifact service's to answer.
+    const id = await visibleChannelIdByName(db, workspaceId, channel);
+    if (id === undefined) throw new AppError("NOT_FOUND");
+    return id;
   }
   const [user, agent] = await Promise.all([
     peerKind === "agent"
@@ -191,23 +188,10 @@ export async function resolveArtifactTarget(
     throw new AppError("AMBIGUOUS_TARGET", {
       hint: `@${peer} is a person and an Agent: name @${peer}~human or @${peer}~agent`,
     });
-  const peers = [
-    ...(user ? [{ userId: user.id }] : []),
-    ...(otherAgent ? [{ agentId: otherAgent.id }] : []),
-  ];
-  for (const member of peers) {
-    const found = await db.conversation.findFirst({
-      where: {
-        workspaceId,
-        ...DIRECT_CONVERSATION_WHERE,
-        AND: [
-          { members: { some: { agentId, ...ACTIVE_MEMBER_WHERE } } },
-          { members: { some: { ...member, ...ACTIVE_MEMBER_WHERE } } },
-        ],
-      },
-      select: { id: true },
-    });
-    if (found) return found.id;
+  const peerMember = user ? { userId: user.id } : otherAgent ? { agentId: otherAgent.id } : null;
+  if (peerMember) {
+    const id = await directConversationIdBetween(db, workspaceId, { agentId }, peerMember);
+    if (id !== undefined) return id;
   }
   throw new AppError("NOT_FOUND");
 }

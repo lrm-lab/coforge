@@ -126,6 +126,83 @@ export async function personConversationAccess(
   return canReadChannel(conversation, conversation.members.length > 0) ? "read" : "private";
 }
 
+/**
+ * What `actor` — a person or an Agent — may do in one channel or DM, for a caller that holds
+ * only the conversation's id and must not read the conversation tables itself (the artifacts
+ * module's home rule, task #542): `read` is `canReadChannel`'s answer — a DM's active members
+ * only — `write` adds an unarchived home, and `kind` names which it is. `undefined` is a
+ * conversation the Workspace cannot see or that is not a channel or a DM.
+ */
+export async function actorConversationAccess(
+  db: Pick<PrismaClient, "conversation">,
+  workspaceId: string,
+  actor: ChannelActor,
+  conversationId: string,
+): Promise<{ read: boolean; write: boolean; kind: "channel" | "dm" } | undefined> {
+  const conversation = await db.conversation.findFirst({
+    where: {
+      id: conversationId,
+      workspaceId,
+      ...VISIBLE_CONVERSATION_WHERE,
+      OR: [{ channelName: { not: null } }, DIRECT_CONVERSATION_WHERE],
+    },
+    select: {
+      channelName: true,
+      visibility: true,
+      archivedAt: true,
+      members: {
+        where: { ...channelActorMemberWhere(actor), ...ACTIVE_MEMBER_WHERE },
+        select: { id: true },
+      },
+    },
+  });
+  if (!conversation) return undefined;
+  const member = conversation.members.length > 0;
+  return {
+    read: conversation.channelName === null ? member : canReadChannel(conversation, member),
+    write: member && conversation.archivedAt === null,
+    kind: conversation.channelName === null ? "dm" : "channel",
+  };
+}
+
+/** The id of the Workspace's channel named `name`, hidden ones aside — a lookup, not a read
+ * grant: the caller applies its own access rule (the artifacts module's `#channel` target,
+ * task #542). `undefined` when no such channel exists. */
+export async function visibleChannelIdByName(
+  db: Pick<PrismaClient, "conversation">,
+  workspaceId: string,
+  channelName: string,
+) {
+  const channel = await db.conversation.findFirst({
+    where: { workspaceId, channelName, ...VISIBLE_CONVERSATION_WHERE },
+    select: { id: true },
+  });
+  return channel?.id;
+}
+
+/** The id of the direct conversation `memberA` and `memberB` share, both actively seated — a
+ * lookup, never an open: a DM that does not exist answers `undefined` (the artifacts module's
+ * `@name` target, task #542). */
+export async function directConversationIdBetween(
+  db: Pick<PrismaClient, "conversation">,
+  workspaceId: string,
+  memberA: ChannelActor,
+  memberB: ChannelActor,
+) {
+  const conversation = await db.conversation.findFirst({
+    where: {
+      workspaceId,
+      ...DIRECT_CONVERSATION_WHERE,
+      AND: [
+        { members: { some: { ...channelActorMemberWhere(memberA), ...ACTIVE_MEMBER_WHERE } } },
+        { members: { some: { ...channelActorMemberWhere(memberB), ...ACTIVE_MEMBER_WHERE } } },
+      ],
+    },
+    select: { id: true },
+  });
+  return conversation?.id;
+}
+
 /** The conversations a person acts on a message in (save, react, download a file): a channel by
  * `visibleChannelWhere`, or a DM, which the caller still checks is theirs by their member row. */
 export function readableConversationWhere(workspaceId: string, reader: { userId: string }) {

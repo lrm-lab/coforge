@@ -28,6 +28,16 @@ Moved out of [`AGENTS.md`](AGENTS.md) to keep it under 200 lines.
   `conversationSignalScopes`), never the Workspace channel, as an Agent's live
   Activity there does (`cachedActivityAudience`), and leaving it ends
   the leaver's subscriptions to it (`announceConversationsRevoked` (`channel-membership-signals.server.ts`)).
+- `actorConversationAccess` is the same answer for a `ChannelActor` (a person or
+  an Agent) that another module needs — today the artifacts module's home
+  access (`server/artifacts/artifact-access.server.ts`, task #542). It returns
+  `undefined` for a conversation the actor cannot see at all, else
+  `{ read, write, kind }` where `write` is an active member of an unarchived
+  channel or DM. Other modules ask it; they never query the conversation
+  tables for a home access rule. The same file holds the two lookups another
+  module resolves a target name through — `visibleChannelIdByName` (`#name`,
+  hidden channels aside) and `directConversationIdBetween` (the DM two members
+  share, never opened) — for the artifacts module's `coforge artifact` target.
 - A person who cannot read a channel gets the `NOT_FOUND` a missing one gets, and
   reading comes before authority: `viewerChannel`, `memberChannel` and
   `findChannelById` read through the rule, so an owner or admin outside a private
