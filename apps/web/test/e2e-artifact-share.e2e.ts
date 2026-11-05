@@ -15,7 +15,7 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
  * conversation, its two levels, a change of them stored, and one that finds it deleted; for an
  * artifact of the Workspace, one level, and the way back is the Workspace; and one of a
  * conversation the viewer is not in, read only through the Workspace level: the way back is the
- * Workspace, the editor and an old version read only, and the narrower level confirmed before it
+ * Workspace, the editor read only, and the narrower level confirmed before it
  * shuts the viewer out; and in a Workspace where the viewer is a member only, an artifact they
  * did not make: Share greyed, saying who can change it.
  *
@@ -181,17 +181,6 @@ test("an artifact's Share: who can see it", async () => {
       ),
     ).toBe("false");
     await shoot("2-workspace-read");
-
-    // An old version of it: nothing to go back to it with.
-    await documents.save(bot, {
-      artifactId: leads.id,
-      baseVersion: 1,
-      idempotencyKey: crypto.randomUUID(),
-      text: `Leads, version 2 (run ${tail}).`,
-    });
-    await browser("open", `${pageOf(leads.id)}?version=1`);
-    await browser("wait", "--fn", `${pageHydrated} && ${button("Back to latest")} != null`);
-    expect(await evaluate<boolean>(`${button("Go back to this version")} == null`)).toBe(true);
 
     // The narrower level would shut the viewer out: asked first, then back to the Workspace.
     await browser("open", pageOf(leads.id));

@@ -24,10 +24,6 @@ export function useArtifactTime() {
     });
 }
 
-/** "Version N", or "Not saved yet" for a document with no version. */
-export const versionLabel = (number: number) =>
-  number > 0 ? m.doc_version({ number: String(number) }) : m.doc_version_none();
-
 /** What an artifact is, from its card's `kind`: a web page (`html`), else a document. */
 export const isWebPage = (kind: string) => kind === "html";
 
@@ -54,18 +50,14 @@ export function ArtifactIcon({ kind, size = "md" }: { kind: string; size?: "sm" 
 
 /** The version and who changed it last, when: the line under an artifact's title. */
 export function ArtifactEditedLine({
-  version,
   actor,
   time,
 }: {
-  version: number;
   actor: ArtifactActorView | undefined;
   time: string;
 }) {
   return (
     <span className="flex min-w-0 items-center gap-1.5 text-xs text-tertiary">
-      <span className="shrink-0">{versionLabel(version)}</span>
-      <span aria-hidden="true">·</span>
       <ArtifactActor actor={actor} />
       <span className="shrink-0">{time}</span>
     </span>

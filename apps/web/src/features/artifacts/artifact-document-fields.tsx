@@ -19,6 +19,7 @@ export function ArtifactDocumentFields({
   onEdit,
   onText,
   onSave,
+  autoFocus,
 }: {
   editorRef: RefObject<ContentEditorRef | null>;
   title: string;
@@ -31,6 +32,8 @@ export function ArtifactDocumentFields({
   /** The text after the editor's debounce; a draft reads it from `editorRef` when it saves. */
   onText?: (text: string) => void;
   onSave: () => void;
+  /** The text takes the caret at its end once shown (a draft just created). */
+  autoFocus?: "end";
 }) {
   return (
     <>
@@ -62,6 +65,7 @@ export function ArtifactDocumentFields({
           ref={editorRef}
           defaultValue={text}
           editable={editable}
+          autoFocus={autoFocus}
           placeholder={m.doc_body_placeholder()}
           debounceMs={150}
           flushOnUnmount

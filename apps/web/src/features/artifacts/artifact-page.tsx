@@ -1,9 +1,9 @@
 import { useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { getRouteApi, useRouter } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "@tanstack/react-router";
 import { z } from "zod";
 
-import { AlertCircle, ClockRewind, RefreshCw01 } from "@untitledui/icons";
+import { AlertCircle, RefreshCw01 } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Skeleton } from "#src/components/ui/skeleton";
@@ -19,9 +19,8 @@ import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { isAppError } from "#src/lib/app-error";
 import { copyText } from "#src/lib/clipboard";
 import { m } from "#src/paraglide/messages";
-import { deleteArtifact, revertArtifact } from "./artifacts.functions";
-import { LatestVersion, OldVersion } from "./artifact-document-body";
-import { ArtifactHistory } from "./artifact-history";
+import { deleteArtifact } from "./artifacts.functions";
+import { LatestVersion } from "./artifact-document-body";
 import { ArtifactBanner } from "./artifact-pane-header";
 import { loadArtifactSandboxLink } from "./artifact-sandbox.functions";
 import { useArtifactLeaveGuard } from "./artifact-leave-guard";
@@ -35,41 +34,24 @@ import {
 } from "./artifact-page-header";
 import { ACCESS_ICON, ArtifactShareDialog } from "./artifact-share-dialog";
 import { ArtifactPaneConfirms, type ArtifactConfirming } from "./artifact-pane-confirms";
-import { actorName, isWebPage, PaneFrame } from "./artifact-parts";
-import {
-  artifactDocumentQuery,
-  artifactHomeConversation,
-  refreshArtifact,
-  useArtifactActor,
-} from "./artifact-queries";
+import { isWebPage, PaneFrame } from "./artifact-parts";
+import { artifactHomeConversation, refreshArtifact } from "./artifact-queries";
 import { decodeArtifactVersionPublishedEvent } from "./artifact-realtime";
-import { artifactPageRoute, type ArtifactPageSearch } from "./artifact-search";
+import { artifactPageRoute } from "./artifact-search";
 import { ArtifactWebPage } from "./artifact-web-page";
 import { useArtifactEditor } from "./use-artifact-editor";
 
-const workspaceRoute = getRouteApi("/w/$workspaceSlug");
-
 /** Where an artifact shows: on its own page, or beside its conversation's chat (Frank, 11-05),
- * which keeps the version and history on its own address and closes rather than goes back. */
-type ArtifactPlace = {
-  pane?: ArtifactPaneControls & { onNavigate: (patch: ArtifactPageSearch) => void };
-};
+ * which closes rather than goes back. */
+type ArtifactPlace = { pane?: ArtifactPaneControls };
 
 /**
  * An artifact's own page (task #514), or the pane beside its conversation's chat (Frank, 11-05,
- * as Claude opens an artifact beside the conversation): its header, a document's latest version
- * to edit (or an older one to read) or a web page to look at, what others published meanwhile, a
- * save's conflicts, and its versions beside it. The address keeps which version and whether the
- * versions show (`ArtifactPageSearch`).
+ * as Claude opens an artifact beside the conversation): its header, a document to edit, saved as
+ * typing rests, or a web page to look at, and a save's conflicts. No versions show (Frank, 11-05):
+ * they stay behind it, so that edits made at once merge.
  */
-export function ArtifactPage({
-  artifactId,
-  search,
-  pane,
-}: {
-  artifactId: string;
-  search: ArtifactPageSearch;
-} & ArtifactPlace) {
+export function ArtifactPage({ artifactId, pane }: { artifactId: string } & ArtifactPlace) {
   // An address that names no artifact at all is not there: no read could find one.
   if (!z.uuid().safeParse(artifactId).success)
     return pane ? (
@@ -80,52 +62,29 @@ export function ArtifactPage({
       <ArtifactUnavailable gone />
     );
   // Another artifact's page starts its editing anew.
-  return <ArtifactPageFor key={artifactId} artifactId={artifactId} search={search} pane={pane} />;
+  return <ArtifactPageFor key={artifactId} artifactId={artifactId} pane={pane} />;
 }
 
-function ArtifactPageFor({
-  artifactId,
-  search,
-  pane,
-}: {
-  artifactId: string;
-  search: ArtifactPageSearch;
-} & ArtifactPlace) {
+function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & ArtifactPlace) {
   const queryClient = useQueryClient();
   const toast = useAppToast();
   const router = useRouter();
   const workspaceId = useCurrentWorkspaceId();
   const workspaceSlug = useWorkspaceSlug();
-  const viewerId = workspaceRoute.useLoaderData({ select: (data) => data.user.id });
   const editor = useArtifactEditor(artifactId);
-  const actorOf = useArtifactActor();
   const [confirming, setConfirming] = useState<ArtifactConfirming>(null);
   const [sharing, setSharing] = useState(false);
   /** Set once the artifact is gone, so leaving its page asks nothing. */
   const deleted = useRef(false);
-  const navigate =
-    pane?.onNavigate ??
-    ((patch: ArtifactPageSearch) =>
-      void router.navigate({
-        ...artifactPageRoute(workspaceSlug, artifactId),
-        search: (previous: ArtifactPageSearch) => ({ ...previous, ...patch }),
-        replace: true,
-      }));
   const leavePrompt = useArtifactLeaveGuard({
     dirty: () => editor.dirty && !deleted.current,
+    save: editor.save,
     // Beside the chat, the edits stay while this artifact stays open, wherever the chat goes.
     stays: (next) =>
       pane ? next.search.doc === artifactId : next.pathname === router.state.location.pathname,
   });
-  const old = search.version;
   const current = editor.document.data;
-  // An older version's text, for a document; a web page shows its old version from the sandbox.
-  const oldRead = useQuery({
-    ...artifactDocumentQuery(artifactId, old),
-    enabled: old !== undefined && current !== undefined && !isWebPage(current.artifact.kind),
-  });
   const latest = current?.artifact.currentVersion ?? 0;
-  const viewingOld = old !== undefined && old !== latest;
 
   const homeKey = current?.artifact.homeKey;
   const homeId = homeKey ? artifactHomeConversation(homeKey) : undefined;
@@ -153,9 +112,8 @@ function ArtifactPageFor({
     onPublication: ({ data }) => {
       const event = decodeArtifactVersionPublishedEvent(data);
       if (event?.artifactId !== artifactId) return;
-      // The viewer's own versions (a revert, a save from another tab) need no announcing.
-      const own = "userId" in event.publisher && event.publisher.userId === viewerId;
-      editor.onPublished({ number: event.number, publisher: event.publisher }, { announce: !own });
+      // Taken in quietly: nothing says who changed it (Frank, 11-05).
+      editor.onPublished({ number: event.number, publisher: event.publisher });
     },
   });
 
@@ -205,21 +163,16 @@ function ArtifactPageFor({
       <ArtifactPageHeader
         kind={kind}
         title={title}
-        status={viewingOld ? "old" : webPage ? "page" : editor.status}
-        version={viewingOld ? old! : (editor.base ?? 0)}
+        status={webPage ? "page" : editor.status}
         home={home}
-        history={Boolean(search.history)}
         canDelete={current?.canDelete === true}
         shareIcon={ACCESS_ICON[access.access]}
         onShare={current && (() => setSharing(true))}
-        onToggleHistory={
-          current && (() => navigate({ history: search.history ? undefined : true }))
-        }
         onCopyLink={current && (() => void copy(pageHref(), m.doc_link_copied()))}
         onOpenInTab={
           webPage
             ? () =>
-                void openInTab(artifactId, viewingOld ? old! : latest).catch(() =>
+                void openInTab(artifactId, latest).catch(() =>
                   toast.error(m.doc_open_in_tab_failed()),
                 )
             : undefined
@@ -252,66 +205,16 @@ function ArtifactPageFor({
             <LoadingBody />
           ) : webPage ? (
             <>
-              {viewingOld && (
-                // An older web page reads only: no going back to it, as a person does not write
-                // web pages (task #490); the way back to the latest is the one action.
-                <ArtifactBanner
-                  tone="info"
-                  icon={ClockRewind}
-                  actions={
-                    <Button
-                      size="xs"
-                      color="primary"
-                      onClick={() => navigate({ version: undefined })}
-                    >
-                      {m.doc_back_to_latest()}
-                    </Button>
-                  }
-                >
-                  {m.doc_old_banner({ number: String(old), latest: String(latest) })}
-                </ArtifactBanner>
-              )}
-              {!viewingOld &&
-                editor.published && (
-                  // An Agent saved a new version: the page shows it already; this says who.
-                  <ArtifactBanner
-                    tone="info"
-                    icon={ClockRewind}
-                    actions={
-                      <Button size="xs" color="link-gray" onClick={editor.dismissPublished}>
-                        {m.doc_close()}
-                      </Button>
-                    }
-                  >
-                    {m.doc_published_banner({
-                      who: actorName(actorOf(editor.published.publisher)),
-                      number: String(editor.published.number),
-                    })}
-                  </ArtifactBanner>
-                )}
               <ArtifactWebPage
-                key={old ?? latest}
+                key={latest}
                 artifactId={artifactId}
-                version={viewingOld ? old! : latest}
+                version={latest}
                 title={title}
               />
             </>
-          ) : viewingOld ? (
-            <OldVersion
-              key={old}
-              number={old!}
-              latest={latest}
-              text={oldRead.data?.text}
-              failed={oldRead.isError}
-              onLatest={() => navigate({ version: undefined })}
-              onRevert={
-                current.artifact.canWrite ? () => setConfirming({ revert: old! }) : undefined
-              }
-            />
           ) : (
             <LatestVersion
               editor={editor}
-              actorName={(actor) => actorName(actorOf(actor))}
               onDiscard={() => setConfirming("discard")}
               onCopyMine={() =>
                 void copy(
@@ -322,19 +225,6 @@ function ArtifactPageFor({
             />
           )}
         </div>
-        {search.history &&
-          current && (
-            // Beside the artifact when the page has room for both, over its right edge when not.
-            <aside className="absolute inset-y-0 right-0 flex w-72 shrink-0 flex-col border-l border-secondary bg-primary shadow-lg @3xl/doc:static @3xl/doc:shadow-none">
-              <ArtifactHistory
-                // Pages are cut at fixed versions: a new version starts them again from the top.
-                key={latest}
-                artifactId={artifactId}
-                shown={old}
-                onShow={(version) => navigate({ version })}
-              />
-            </aside>
-          )}
       </div>
       {leavePrompt}
       <ArtifactShareDialog
@@ -353,29 +243,12 @@ function ArtifactPageFor({
         confirming={confirming}
         onDone={() => setConfirming(null)}
         title={title}
-        latest={latest}
-        dirty={editor.dirty}
         onDiscard={editor.discard}
         onDelete={async () => {
           await deleteArtifact({ data: { artifactId } });
           void refreshArtifact(queryClient, artifactId);
           deleted.current = true;
           backHome();
-        }}
-        onRevert={async (to) => {
-          try {
-            await revertArtifact({
-              data: { artifactId, to, baseVersion: latest, idempotencyKey: crypto.randomUUID() },
-            });
-          } catch (cause) {
-            if (isAppError(cause) && cause.errorId === "artifact-base-moved")
-              throw new Error(m.doc_revert_moved());
-            throw cause;
-          }
-          void refreshArtifact(queryClient, artifactId);
-          // Unsaved edits stay: the version this makes is announced, and the next save merges it.
-          if (!editor.dirty) await editor.takeLatest();
-          navigate({ version: undefined });
         }}
       />
     </>

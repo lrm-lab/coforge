@@ -2,19 +2,12 @@ import { queryOptions, useQuery, type QueryClient } from "@tanstack/react-query"
 
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { useWorkspaceDirectory } from "#src/features/conversations/workspace-directory-query";
-import {
-  listArtifacts,
-  loadArtifactCards,
-  loadArtifactDocument,
-  loadArtifactHistory,
-} from "./artifacts.functions";
+import { listArtifacts, loadArtifactCards, loadArtifactDocument } from "./artifacts.functions";
 import { loadArtifactsOn } from "./artifacts-on.functions";
 
 /** A document as a list row and a card show it (`listArtifacts`, `loadArtifactCards`). */
 export type ArtifactCard = Awaited<ReturnType<typeof listArtifacts>>[number];
 export type ArtifactDocument = Awaited<ReturnType<typeof loadArtifactDocument>>;
-export type ArtifactHistoryPage = Awaited<ReturnType<typeof loadArtifactHistory>>;
-export type ArtifactHistoryVersion = ArtifactHistoryPage["versions"][number];
 /** Who published or wrote: a person or an Agent, or nobody left (a deleted account). */
 export type ArtifactActorRef = { userId: string } | { agentId: string } | null;
 
@@ -56,13 +49,6 @@ export const artifactDocumentQuery = (artifactId: string, version?: number) =>
     queryKey: [...ARTIFACTS_KEY, "document", artifactId, version ?? "current"],
     queryFn: () => loadArtifactDocument({ data: { artifactId, version } }),
     staleTime: version === undefined ? 0 : Infinity,
-  });
-
-export const artifactHistoryQuery = (artifactId: string, before?: number) =>
-  queryOptions({
-    queryKey: [...ARTIFACTS_KEY, "history", artifactId, before ?? "latest"],
-    queryFn: () => loadArtifactHistory({ data: { artifactId, before, limit: 30 } }),
-    staleTime: 0,
   });
 
 /** After a document changed: its current read, its history, its cards and its home's list. A

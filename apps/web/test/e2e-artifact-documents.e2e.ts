@@ -12,12 +12,13 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
 /**
  * Documents in a conversation (task #385, the first batch; #514, their own page): a message
  * linking a document shows its card (title, first two lines); the card opens the document beside
- * the chat (Frank, 11-05), to edit and save as a new version; a save over a version someone else changed the same
- * paragraph of asks which side to keep; an older version reads with "Back to latest" and goes back
- * as a new version; unsaved edits survive reading an older version and merge with a version
- * someone else saved; closing with them asks; a `?doc=` link opens it beside the chat; the Files tab lists
- * the channel's documents, and New document is created only on its first save. Desktop and phone,
- * light and dark.
+ * the chat (Frank, 11-05), where edits save by themselves once typing rests, with no versions to
+ * show; a save over text someone else changed in the same paragraph keeps the viewer's, asking
+ * nothing;
+ * what someone else saves elsewhere merges with what is being typed; closing saves what is left
+ * first; a `?doc=` link opens it beside the chat; the Files tab lists the channel's documents,
+ * and New document is created once typing rests, closed unwritten leaving nothing. Desktop and
+ * phone, light and dark.
  *
  * Opt-in like the other browser E2Es: real local Web started as it is. The Documents experiment
  * is offered to every Workspace (task #491), so no flag file is needed; the run turns the
@@ -46,15 +47,9 @@ const plan = (tail: string) =>
     "",
   ].join("\n");
 
-test("a document opens from its card, saves versions, resolves a conflict and goes back", async () => {
+test("a document opens beside the chat, saves by itself and keeps the viewer's text", async () => {
   // Centrifugo behind the page's own origin, so a version saved here reaches the page live.
-  // While `held` is set, server-function answers wait for it: a save is caught in flight.
-  let held: Promise<void> | undefined;
-  const proxy = sameOriginProxy(webOrigin, centrifugoOrigin, {
-    afterUpstream: async (url) => {
-      if (held && url.pathname.includes("/_serverFn/")) await held;
-    },
-  });
+  const proxy = sameOriginProxy(webOrigin, centrifugoOrigin);
   const origin = proxy.origin;
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `artifact-docs-${process.pid}`);
@@ -168,7 +163,7 @@ test("a document opens from its card, saves versions, resolves a conflict and go
     ).toBe(true);
     await shoot("desktop-1-card");
 
-    // Open: beside the chat, which stays; editable; a save is a new version.
+    // Open: beside the chat, which stays; typing saves by itself once it rests.
     await click(`${card}.querySelector("a")`);
     await browser("wait", "--fn", `${pane}?.querySelector(".ProseMirror") != null`);
     expect(await evaluate<string>("location.pathname")).toEndWith(`/channel/${channel.id}`);
@@ -176,31 +171,38 @@ test("a document opens from its card, saves versions, resolves a conflict and go
       doc.id,
     );
     expect(await evaluate<boolean>(`${card} !== null && ${card}.checkVisibility()`)).toBe(true);
-    // Opening is no edit: the pane reads as saved until something is typed.
-    await browser("wait", "--fn", inPane("Saved · version 1"));
+    // No versions and no Save button: only the document.
+    expect(await evaluate<boolean>(inPane("version"))).toBe(false);
+    expect(await evaluate<boolean>(`${button("Save", pane)} == null`)).toBe(true);
     await editorEnd();
     await browser("keyboard", "type", " Owners: design coforge-ui.");
-    await browser("wait", "--fn", inPane("Unsaved changes"));
     await shoot("desktop-2-editing");
-    await click(button("Save", pane));
     await until(async () => (await version(doc.id)) === 2);
-    await browser("wait", "--fn", inPane("Saved · version 2"));
+    expect((await documents.load(me, { artifactId: doc.id })).text).toContain("coforge-ui.");
 
-    // Lin changes the timeline while the viewer changes it too: the save asks which to keep.
-    await documents.save(
-      { workspaceId, actor: { userId: lin.id } },
-      {
-        artifactId: doc.id,
-        baseVersion: 2,
-        idempotencyKey: crypto.randomUUID(),
-        text: (await documents.load(me, { artifactId: doc.id })).text.replace(
-          "Week one design, week two build, week three test and ship.",
-          "Nov 1–7 design (coforge-ui); Nov 8–14 build (builder); Nov 15 ship (Frank).",
-        ),
-      },
+    // Lin changes the timeline while nothing is unsaved: the pane takes it in, saying nothing.
+    const linSaves = async (from: string, to: string) => {
+      const latest = await version(doc.id);
+      await documents.save(
+        { workspaceId, actor: { userId: lin.id } },
+        {
+          artifactId: doc.id,
+          baseVersion: latest,
+          idempotencyKey: crypto.randomUUID(),
+          text: (await documents.load(me, { artifactId: doc.id })).text.replace(from, to),
+        },
+      );
+    };
+    const editorText = `${pane}.querySelector(".ProseMirror").textContent`;
+    await linSaves(
+      "Week one design, week two build, week three test and ship.",
+      "Nov 1–7 design (coforge-ui); Nov 8–14 build (builder); Nov 15 ship (Frank).",
     );
-    await browser("wait", "--fn", inPane("published version 3"));
-    // Nothing was unsaved: the pane took version 3 in. Edit the same paragraph from version 2.
+    await browser("wait", "--fn", `${editorText}.includes("Nov 1–7")`);
+    expect(await evaluate<boolean>(inPane("published"))).toBe(false);
+
+    // The viewer rewrites that paragraph while Lin changes it again, before the save goes:
+    // nothing asks, and the viewer's text stays (Frank, 11-05: no co-editing to see).
     await evaluate(`(() => {
       const para = [...${pane}.querySelectorAll(".ProseMirror p")].find((p) => p.textContent.startsWith("Nov 1"));
       ${pane}.querySelector(".ProseMirror").focus();
@@ -216,115 +218,35 @@ test("a document opens from its card, saves versions, resolves a conflict and go
       "type",
       "Week one design and copy, week two build, ship on the 15th.",
     );
-    await browser("wait", "--fn", inPane("Unsaved changes"));
-    // A save over version 2, as a page that had not taken version 3 in would make.
-    await documents.save(
-      { workspaceId, actor: { userId: lin.id } },
-      {
-        artifactId: doc.id,
-        baseVersion: 3,
-        idempotencyKey: crypto.randomUUID(),
-        text: (await documents.load(me, { artifactId: doc.id })).text.replace(
-          "Nov 15 ship (Frank).",
-          "Nov 15 test and ship (Frank).",
-        ),
-      },
+    await linSaves("Nov 15 ship (Frank).", "Nov 15 test and ship (Frank).");
+    await until(async () =>
+      (await documents.load(me, { artifactId: doc.id })).text.includes("Week one design and copy"),
     );
-    await browser("wait", "--fn", inPane("published version 4"));
-    await click(button("Save", pane));
-    await browser("wait", "--fn", inPane("Conflicts · not saved"));
-    expect(await evaluate<boolean>(inPane("conflicts with your changes"))).toBe(true);
-    await shoot("desktop-3-conflict");
-    await evaluate(`([...${pane}.querySelectorAll('input[type="radio"]')][0].click(), true)`);
-    await browser("wait", "--fn", inPane("1 of 1 conflicts picked"));
-    // While the resolution saves, nothing in it can change and it cannot be thrown away (N1).
-    let release = () => {};
-    held = new Promise((resolve) => (release = resolve));
-    await click(button("Save", pane));
-    await until(async () => (await version(doc.id)) === 5);
-    await browser(
-      "wait",
-      "--fn",
-      `${button("Discard my changes", pane)}?.disabled === true && [...${pane}.querySelectorAll('input[type="radio"]')].every((radio) => radio.disabled)`,
-    );
-    held = undefined;
-    release();
-    expect((await documents.load(me, { artifactId: doc.id })).text).toContain(
-      "Week one design and copy",
+    expect(await evaluate<boolean>(inPane("onflict"))).toBe(false);
+    expect(await evaluate<boolean>(`${pane}.querySelector('input[type="radio"]') == null`)).toBe(
+      true,
     );
 
-    // History: version 1 reads with "Back to latest" and goes back as version 6.
-    await click(`${pane}.querySelector('button[aria-label="Version history"]')`);
-    await browser("wait", "--fn", inPane("Version 1"));
-    const row = (n: number) =>
-      `[...${pane}.querySelectorAll("nav li button")].find((b) => b.textContent.startsWith("Version ${n}"))`;
-    await click(row(1));
-    await browser("wait", "--fn", inPane("Viewing version 1"));
-    await shoot("desktop-4-old-version");
-    await click(button("Go back to this version", pane));
-    const confirm = `[...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent.trim() === "Go back to this version")`;
-    await browser("wait", "--fn", `${confirm} != null`);
-    await click(confirm);
-    await until(async () => (await version(doc.id)) === 6);
-    await browser("wait", "--fn", `!${inPane("Viewing version")}`);
-
-    await shoot("desktop-5-page");
-
-    // Unsaved edits stay while an older version is read, and closing with them asks first.
+    // Lin saves another paragraph while the viewer types: both stay, merged.
     await editorEnd();
     await browser("keyboard", "type", " Draft note.");
-    await browser("wait", "--fn", inPane("Unsaved changes"));
-    // The history is still open from going back.
-    await browser("wait", "--fn", `${row(2)} != null`);
-    await click(row(2));
-    await browser("wait", "--fn", inPane("Viewing version 2"));
-    await click(button("Back to latest", pane));
-    await browser("wait", "--fn", `${pane}?.querySelector(".ProseMirror") != null`);
-    expect(await evaluate<string>(`${pane}.querySelector(".ProseMirror").textContent`)).toContain(
-      "Draft note.",
-    );
-    expect(await evaluate<boolean>(inPane("Unsaved changes"))).toBe(true);
+    await linSaves("# Goal", "# Goal (agreed)");
+    await until(async () => {
+      const text = (await documents.load(me, { artifactId: doc.id })).text;
+      return text.includes("# Goal (agreed)") && text.includes("Draft note.");
+    });
+    await browser("wait", "--fn", `${editorText}.includes("Goal (agreed)")`);
+    await shoot("desktop-5-page");
 
-    // Lin saves another paragraph meanwhile: the unsaved edit stays, and the save merges both.
-    await documents.save(
-      { workspaceId, actor: { userId: lin.id } },
-      {
-        artifactId: doc.id,
-        baseVersion: 6,
-        idempotencyKey: crypto.randomUUID(),
-        text: (await documents.load(me, { artifactId: doc.id })).text.replace(
-          "# Goal",
-          "# Goal (agreed)",
-        ),
-      },
-    );
-    await browser("wait", "--fn", inPane("published version 7"));
-    expect(await evaluate<string>(`${pane}.querySelector(".ProseMirror").textContent`)).toContain(
-      "Draft note.",
-    );
-    await click(button("Save", pane));
-    await until(async () => (await version(doc.id)) === 8);
-    const merged = (await documents.load(me, { artifactId: doc.id })).text;
-    expect(merged).toContain("# Goal (agreed)");
-    expect(merged).toContain("Draft note.");
-    await browser("wait", "--fn", inPane("Saved · version 8"));
-
+    // Closing with an edit not yet saved saves it on the way out, asking nothing.
     await editorEnd();
     await browser("keyboard", "type", " One more.");
-    await browser("wait", "--fn", inPane("Unsaved changes"));
-    const dialogButton = (text: string) =>
-      `[...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent.trim() === ${JSON.stringify(text)})`;
-    // Closed from its header.
-    const back = `${pane}.querySelector('header button[aria-label="Close"]')`;
-    await click(back);
-    await browser("wait", "--fn", `${dialogButton("Keep Editing")} != null`);
-    await click(dialogButton("Keep Editing"));
-    await browser("wait", "--fn", `${dialogButton("Keep Editing")} == null`);
-    expect(await evaluate<boolean>(`${pane} != null`)).toBe(true);
-    await click(back);
-    await browser("wait", "--fn", `${dialogButton("Discard Changes")} != null`);
-    await click(dialogButton("Discard Changes"));
+    await click(`${pane}.querySelector('header button[aria-label="Close"]')`);
     await browser("wait", "--fn", `${pane} == null`);
+    expect(await evaluate<boolean>(`document.querySelector('[role="dialog"]') == null`)).toBe(true);
+    await until(async () =>
+      (await documents.load(me, { artifactId: doc.id })).text.includes("One more."),
+    );
 
     // A `?doc=` link opens the document beside the chat.
     await browser("open", `${page}?doc=${notes.id}`);
@@ -340,7 +262,7 @@ test("a document opens from its card, saves versions, resolves a conflict and go
     );
     await shoot("desktop-6-files");
 
-    // New document is a draft until its first save: closed unwritten, it leaves nothing.
+    // New document is a draft until typing rests: closed unwritten, it leaves nothing.
     const count = () => db.artifact.count({ where: { homeKey: `conversation:${channel.id}` } });
     const documentsBefore = await count();
     await click(button("New document"));
@@ -360,19 +282,17 @@ test("a document opens from its card, saves versions, resolves a conflict and go
       `document.activeElement === ${pane}.querySelector(".ProseMirror")`,
     );
     await browser("keyboard", "type", `Copy, images, analytics (run ${tail}).`);
-    await click(button("Save", pane));
     await until(async () => (await count()) === documentsBefore + 1);
     const draft = await db.artifact.findFirstOrThrow({
       where: { homeKey: `conversation:${channel.id}` },
       orderBy: { createdAt: "desc" },
     });
-    // Saved, it stays beside the chat as the document it now is.
+    // Created, it stays beside the chat as the document it now is, the caret still in its text.
     await browser(
       "wait",
       "--fn",
-      `new URLSearchParams(location.search).get("doc") === "${draft.id}"`,
+      `new URLSearchParams(location.search).get("doc") === "${draft.id}" && document.activeElement === ${pane}?.querySelector(".ProseMirror")`,
     );
-    await browser("wait", "--fn", inPane("Saved · version 1"));
     expect(draft.title).toBe("Launch checklist");
     expect((await documents.load(me, { artifactId: draft.id })).text).toContain("analytics");
 

@@ -78,11 +78,7 @@ function ArtifactCardView({ artifactId }: { artifactId: string }) {
           </p>
         )}
         <div className="mt-2">
-          <ArtifactEditedLine
-            version={card.currentVersion}
-            actor={actorOf(card.author)}
-            time={time(card.updatedAt)}
-          />
+          <ArtifactEditedLine actor={actorOf(card.author)} time={time(card.updatedAt)} />
         </div>
       </div>
     </article>

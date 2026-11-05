@@ -5,15 +5,12 @@ import { loadArtifactsOn } from "./artifacts-on.functions";
 
 /**
  * An artifact's fields on a conversation page's address (task #385; Frank, 11-05): `doc` the one
- * open beside the chat, at `docVersion` with its versions shown by `docHistory`; `docDraft` a new
- * document not saved yet; `docFull` either in full screen. Each falls back to absent when
+ * open beside the chat, `docDraft` a new document not saved yet, `docFull` either in full screen. Each falls back to absent when
  * malformed.
  */
 export const artifactSearchShape = {
   doc: z.uuid().optional().catch(undefined),
-  docVersion: z.coerce.number().int().positive().optional().catch(undefined),
   docFull: z.boolean().optional().catch(undefined),
-  docHistory: z.boolean().optional().catch(undefined),
   docDraft: z.boolean().optional().catch(undefined),
 };
 
@@ -34,49 +31,26 @@ export function useArtifactNavigation() {
 /** The address of a new document, unsaved until its first save. */
 export const draftArtifactSearch: ArtifactSearch = {
   doc: undefined,
-  docVersion: undefined,
-  docHistory: undefined,
   docDraft: true,
 };
 
 /** The address of an artifact beside the chat (Frank, 11-05), at its latest version. */
 export const openArtifactSearch = (artifactId: string): ArtifactSearch => ({
   doc: artifactId,
-  docVersion: undefined,
-  docHistory: undefined,
   docDraft: undefined,
 });
 
 export const closedArtifactSearch: ArtifactSearch = {
   doc: undefined,
-  docVersion: undefined,
   docFull: undefined,
-  docHistory: undefined,
   docDraft: undefined,
 };
 
-/**
- * An artifact's own page's address (task #514, `/w/<slug>/artifacts/<id>`): `version` an older
- * version shown read-only, `history` its versions beside it. Each falls back to absent when
- * malformed.
- */
-export const artifactPageSearchShape = {
-  version: z.coerce.number().int().positive().optional().catch(undefined),
-  history: z.boolean().optional().catch(undefined),
-};
-
-export type ArtifactPageSearch = z.output<z.ZodObject<typeof artifactPageSearchShape>>;
-
 /** The route of an artifact's own page, for a `Link`, `navigate` or `buildLocation`. */
-export const artifactPageRoute = (
-  workspaceSlug: string,
-  artifactId: string,
-  search: ArtifactPageSearch = {},
-) =>
+export const artifactPageRoute = (workspaceSlug: string, artifactId: string) =>
   ({
     to: "/w/$workspaceSlug/artifacts/$artifactId",
     params: { workspaceSlug, artifactId },
-    search,
   }) as const;
 
 /** The fields of a `?doc=` link, which a conversation page drops when it opens without it. */
@@ -98,10 +72,7 @@ export async function redirectDocLink(
   if ((await loadArtifactsOn()).on) {
     if (besideChat) return;
     throw redirect({
-      ...artifactPageRoute(workspaceSlug, search.doc, {
-        version: search.docVersion,
-        history: search.docHistory,
-      }),
+      ...artifactPageRoute(workspaceSlug, search.doc),
       replace: true,
     });
   }

@@ -57,6 +57,8 @@ export type ContentEditorProps = {
   className?: string;
   debounceMs?: number;
   editable?: boolean;
+  /** Takes the caret once ready, at the end of the content. */
+  autoFocus?: "end";
   onUploadFile?: (file: File) => Promise<UploadResult | null>;
   showBubbleMenu?: boolean;
 };
@@ -88,6 +90,7 @@ export const ContentEditor = forwardRef<ContentEditorRef, ContentEditorProps>(
       className,
       debounceMs = 300,
       editable = true,
+      autoFocus,
       onUploadFile,
       showBubbleMenu = true,
     },
@@ -150,6 +153,7 @@ export const ContentEditor = forwardRef<ContentEditorRef, ContentEditorProps>(
       contentType: "markdown",
       immediatelyRender: false,
       editable,
+      autofocus: autoFocus ?? false,
       editorProps: {
         attributes: {
           class: "rich-text-editor ProseMirror focus:outline-none",

@@ -162,11 +162,7 @@ function ArtifactRow({ card }: { card: ArtifactCard }) {
             </span>
             <span className="shrink-0 text-xs text-quaternary">{kindLabel(card.kind)}</span>
           </span>
-          <ArtifactEditedLine
-            version={card.currentVersion}
-            actor={actorOf(card.author)}
-            time={time(card.updatedAt)}
-          />
+          <ArtifactEditedLine actor={actorOf(card.author)} time={time(card.updatedAt)} />
         </span>
       </Link>
     </li>

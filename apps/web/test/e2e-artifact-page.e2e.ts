@@ -13,13 +13,12 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
 
 /**
  * An artifact's own page beyond editing a document (task #514; editing is
- * `e2e-artifact-documents`): a web page's preview from the sandbox origin, an older
- * version read only with the way back to the latest and no going back to it, Open in new tab on
- * the sandbox's link (and a link that cannot be had, said so), a new version an Agent saves while
- * the page shows (Share is `e2e-artifact-share`); one page for an artifact that is not there and
- * one that is not the reader's;
- * a `?doc=` link opening it beside the chat (Frank, 11-05), at its version; and a read that fails while edits are
- * unsaved keeping the editor and the edits, with Try again.
+ * `e2e-artifact-documents`): a web page's preview from the sandbox origin, with no versions shown
+ * (Frank, 11-05), Open in new tab on the sandbox's link (and a link that cannot be had, said so),
+ * a new version an Agent saves while the page shows taken in quietly (Share is
+ * `e2e-artifact-share`); one page for an artifact that is not there and one that is not the
+ * reader's; a `?doc=` link opening it beside the chat (Frank, 11-05); and a read and a save that
+ * fail keeping the editor and the edits, with Try again.
  *
  * Opt-in like the other browser E2Es: real local Web started with the flag file that offers
  * `artifacts` (`/tmp/coforge-flags-docs.json`, read here too), with
@@ -153,8 +152,8 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
         `document.getElementById(document.querySelector("main").getAttribute("aria-labelledby")).textContent`,
       ),
     ).toBe("Signup funnel");
-    // Only its version: a web page is not edited here.
-    expect(await evaluate<boolean>(text("Version 2"))).toBe(true);
+    // No version and no save state: a web page is not edited here.
+    expect(await evaluate<boolean>(text("Version"))).toBe(false);
     expect(await evaluate<boolean>(text("Saved"))).toBe(false);
     await shoot("1-web-preview");
     const dark = (on: boolean) =>
@@ -174,22 +173,7 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
       ),
     ).toBe(false);
 
-    // Version 1: read only, the way back to the latest, and no going back to it.
-    await browser("open", pageOf(web.id, "?version=1"));
-    await browser("wait", "--fn", `${pageHydrated} && ${text("Viewing version 1")}`);
-    expect(await evaluate<boolean>(`${button("Back to latest")} != null`)).toBe(true);
-    expect(await evaluate<boolean>(`${button("Go back to this version")} == null`)).toBe(true);
-    // It shows version 1 itself, from a link of its own.
-    await browser(
-      "wait",
-      "--fn",
-      `document.querySelector("main iframe") != null && document.querySelector("main iframe").src !== ${JSON.stringify(frame)}`,
-    );
-    await shoot("2-web-old-version");
-    await click(button("Back to latest"));
-    await browser("wait", "--fn", `!new URLSearchParams(location.search).has("version")`);
-
-    // The Agent saves version 3 while the page shows: it says who, and shows it.
+    // The Agent saves a new version while the page shows: it shows it, saying nothing.
     await documents.save(bot, {
       artifactId: web.id,
       baseVersion: 2,
@@ -197,8 +181,11 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
       text: html("Signups v3"),
     });
     // Polled here: agent-browser's own wait does not come back on this page (its frame is on
-    // another origin) while the notice is already there.
-    await until(text("published version 3"));
+    // another origin) while the new frame is already there.
+    await until(
+      `document.querySelector("main iframe") != null && document.querySelector("main iframe").src !== ${JSON.stringify(frame)}`,
+    );
+    expect(await evaluate<boolean>(text("published"))).toBe(false);
     await shoot("2b-web-new-version");
 
     // Open in new tab: the sandbox's link, in a tab cut off from this one.
@@ -293,7 +280,7 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     await shoot("7-web-beside-chat-phone");
     await browser("set", "viewport", "1280", "860");
 
-    // A link with a version: beside the chat at that version, its versions shown.
+    // A link from when versions showed: beside the chat, at the latest.
     const doc = await documents.create(bot, {
       conversationId: channel.id,
       title: "Launch plan",
@@ -309,34 +296,35 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
       "open",
       `${origin}/en/w/${workspace.slug}/channel/${channel.id}?doc=${doc.id}&docVersion=1&docHistory=true`,
     );
-    await browser("wait", "--fn", `${pageHydrated} && ${text("Viewing version 1")}`);
+    await browser(
+      "wait",
+      "--fn",
+      `${pageHydrated} && document.querySelector('section[aria-label="Document"] .ProseMirror')?.textContent.includes("Friday")`,
+    );
     expect(await evaluate<string>("location.pathname")).toEndWith(`/channel/${channel.id}`);
-    expect(
-      await evaluate<boolean>(
-        `document.querySelector('section[aria-label="Document"] nav') != null`,
-      ),
-    ).toBe(true);
 
-    // A read that fails while edits are unsaved: the editor and the edits stay, with Try again.
+    // A read and a save that fail: the editor and the edits stay, with Try again for each.
     await browser("open", pageOf(doc.id));
     await browser(
       "wait",
       "--fn",
       `${pageHydrated} && document.querySelector("main .ProseMirror") != null`,
     );
-    await evaluate(`(() => {
-      const editor = document.querySelector("main .ProseMirror");
-      editor.focus();
-      const range = document.createRange();
-      range.selectNodeContents(editor.lastElementChild);
-      range.collapse(false);
-      getSelection().removeAllRanges();
-      getSelection().addRange(range);
-      return true;
-    })()`);
-    await browser("keyboard", "type", " Unsaved line.");
-    await browser("wait", "--fn", text("Unsaved changes"));
+    const toEnd = () =>
+      evaluate(`(() => {
+        const editor = document.querySelector("main .ProseMirror");
+        editor.focus();
+        const range = document.createRange();
+        range.selectNodeContents(editor.lastElementChild);
+        range.collapse(false);
+        getSelection().removeAllRanges();
+        getSelection().addRange(range);
+        return true;
+      })()`);
+    await toEnd();
     refusing = true;
+    await browser("keyboard", "type", " Unsaved line.");
+    await browser("wait", "--fn", text("Couldn't save"));
     // The page reads the document again when its tab comes back (TanStack Query hears
     // `visibilitychange` on window: https://tanstack.com/query/v5/docs/reference/focusManager).
     await evaluate(`(window.dispatchEvent(new Event("visibilitychange")), true)`);
@@ -352,8 +340,20 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     expect(
       await evaluate<string>(`document.querySelector("main .ProseMirror").textContent`),
     ).toContain("Unsaved line.");
+    await click(button("Try again"));
+    for (let i = 0; i < 50; i++) {
+      if ((await documents.load(bot, { artifactId: doc.id })).text.includes("Unsaved line.")) break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    expect((await documents.load(bot, { artifactId: doc.id })).text).toContain("Unsaved line.");
 
-    // Deleted while edits are unsaved: the page that is not there, and leaving it asks first.
+    // Deleted while edits are unsaved: the page that is not there, and leaving it asks first,
+    // as the edits cannot be saved on the way out.
+    refusing = true;
+    await toEnd();
+    await browser("keyboard", "type", " Unsaved two.");
+    await browser("wait", "--fn", text("Couldn't save"));
+    refusing = false;
     await productionArtifacts(db).artifacts.delete({
       workspaceId,
       artifactId: doc.id,

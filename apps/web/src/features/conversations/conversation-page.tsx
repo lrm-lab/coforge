@@ -274,7 +274,7 @@ type ConversationPageBodyProps = {
  * conversation and read cursor.
  */
 function ConversationPageBody(props: ConversationPageProps & ConversationPageBodyProps) {
-  const { doc, docVersion, docHistory, docFull, docDraft } = props.search;
+  const { doc, docFull, docDraft } = props.search;
   const documents = useArtifactsOn() === true;
   const open = documents && (doc !== undefined || docDraft === true);
   // The chat keeps one place in the tree whether an artifact is open or not, so opening one or
@@ -288,7 +288,7 @@ function ConversationPageBody(props: ConversationPageProps & ConversationPageBod
         {open && (
           <ConversationArtifactPane
             conversationId={props.page.conversation.conversationId}
-            search={{ doc, docVersion, docHistory, docFull, docDraft }}
+            search={{ doc, docFull, docDraft }}
           />
         )}
       </div>
@@ -316,9 +316,7 @@ function ConversationPageMain({
     profile,
     agentTab,
     doc: _doc,
-    docVersion: _docVersion,
     docFull: _docFull,
-    docHistory: _docHistory,
     docDraft: _docDraft,
     ...search
   } = pageSearch;

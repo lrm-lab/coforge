@@ -5,28 +5,31 @@ import type { ContentEditorRef } from "#src/features/records/report-editor/conte
 import { isAppError } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import { saveArtifactDocument } from "./artifacts.functions";
-import {
-  conflictProgress,
-  resolutionOf,
-  resolvedSettings,
-  resolvedText,
-  type ConflictResolution,
-  type DocumentConflict,
-} from "./artifact-conflict-model";
+import { keepingMine, type DocumentConflict } from "./artifact-conflict-model";
 import { artifactDocumentQuery, refreshArtifact, type ArtifactActorRef } from "./artifact-queries";
 import { nextSaveAttempt, type SaveAttempt } from "./artifact-save-attempt";
 
-/** A version someone else published while the document was open. */
+/** A version published on the document's home while it was open: someone else's, or a save of
+ * this page's own. */
 export type PublishedVersion = { number: number; publisher: ArtifactActorRef };
 
-export type ArtifactEditorStatus = "saved" | "unsaved" | "saving" | "conflict" | "readOnly";
+export type ArtifactEditorStatus = "saved" | "unsaved" | "saving" | "readOnly";
+
+/** A save that keeps meeting a new conflict gives up after this many, until the next edit. */
+const MAX_CONFLICT_RETRIES = 3;
+
+type SavePayload = { baseVersion: number; text: string; title?: string; description?: string };
+
+/** How long typing rests before what was typed saves by itself (Frank, 11-05: no Save button). */
+export const AUTOSAVE_MS = 1000;
 
 /**
  * The open document's editing (task #385): the version it was read at (`base`), the title and
  * text as edited, and a save over `base` that answers created (merged with what others saved
- * meanwhile), nothing, or a conflict, which the page resolves and saves over the latest version.
- * A version someone else publishes is taken in at once when nothing is unsaved; otherwise the
- * next save merges it.
+ * meanwhile), nothing, or a conflict, which saves again keeping the viewer's side (`keepingMine`).
+ * Edits save by themselves once typing rests (`AUTOSAVE_MS`); typing goes on while a save is in
+ * flight. A version someone else publishes is taken in at once when nothing is unsaved;
+ * otherwise the next save merges it.
  */
 export function useArtifactEditor(artifactId: string) {
   const queryClient = useQueryClient();
@@ -37,11 +40,11 @@ export function useArtifactEditor(artifactId: string) {
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
   const [dirty, setDirty] = useState(false);
+  /** Counts the person's edits, so a pending save waits for typing to rest. */
+  const [editTick, setEditTick] = useState(0);
   /** A save was refused: the viewer may no longer write here. */
   const [denied, setDenied] = useState(false);
   const [baseMoved, setBaseMoved] = useState(false);
-  const [conflict, setConflict] = useState<ConflictResolution | null>(null);
-  const [published, setPublished] = useState<PublishedVersion | null>(null);
   /** The last save that has not answered: only its exact retry reuses its key. */
   const attempt = useRef<SaveAttempt | null>(null);
   /** A save in flight, its failure, and a fresh start on the next edit (TanStack Query). */
@@ -52,9 +55,7 @@ export function useArtifactEditor(artifactId: string) {
   /** The newest version announced while a save was in flight, handled once it has answered. */
   /** A save from its start until its version is shown (`saving` ends at the answer). */
   const [settling, setSettling] = useState(false);
-  const [missed, setMissed] = useState<{ version: PublishedVersion; announce: boolean } | null>(
-    null,
-  );
+  const [missed, setMissed] = useState<PublishedVersion | null>(null);
 
   const data = document.data;
   // Read only from the start where the read says the viewer may not write (task #529: a reader
@@ -97,26 +98,21 @@ export function useArtifactEditor(artifactId: string) {
 
   /** A version announced on the document's home: refresh what lists it, and take it in when
    * nothing is unsaved here. */
-  function onPublished(version: PublishedVersion, { announce = true } = {}) {
+  function onPublished(version: PublishedVersion) {
     void refreshArtifact(queryClient, artifactId);
     // A save of this page's own announces its version too, so while one is in flight the
     // announcement waits for its answer; someone else's later version is taken in after it.
     if (settling) {
-      setMissed((kept) =>
-        version.number > (kept?.version.number ?? 0) ? { version, announce } : kept,
-      );
+      setMissed((kept) => (version.number > (kept?.number ?? 0) ? version : kept));
       return;
     }
     if (base === null || version.number <= base) return;
-    if (announce || dirty || conflict) setPublished(version);
-    if (!dirty && !conflict) void takeLatest();
+    if (!dirty) void takeLatest();
   }
 
   // Once the save has answered (and its version is shown), the version announced meanwhile is
   // handled as any other: below the new base it is this save's own or already in it.
-  const replayMissed = useEffectEvent((kept: NonNullable<typeof missed>) =>
-    onPublished(kept.version, { announce: kept.announce }),
-  );
+  const replayMissed = useEffectEvent((kept: NonNullable<typeof missed>) => onPublished(kept));
   // Once the save has settled - answered, and the version it made read in as the base - so the
   // announcement is weighed against that base.
   useEffect(() => {
@@ -129,6 +125,7 @@ export function useArtifactEditor(artifactId: string) {
    * debounce (`ContentEditor` tells only of the person's edits). */
   function markEdited() {
     edits.current += 1;
+    setEditTick(edits.current);
     setDirty(true);
     if (saving.isError) saving.reset();
   }
@@ -140,63 +137,79 @@ export function useArtifactEditor(artifactId: string) {
     if (next.text !== undefined) setText(next.text);
   }
 
-  async function save() {
-    if (base === null || settling || readOnly) return;
-    const resolving = conflict;
-    const body = resolving ? resolvedText(resolving) : (editorRef.current?.getMarkdown() ?? text);
-    const settings = resolving ? resolvedSettings(resolving) : {};
-    // A pick kept from before counts once confirmed (`again`).
-    if (body === null || settings === null || (resolving && !conflictProgress(resolving).done))
-      return;
-    const nextTitle = settings.title ?? (title.trim() || savedTitle);
-    const payload = {
-      baseVersion: resolving ? resolving.currentVersion : base,
+  /** Sends one save, its key kept for an exact retry of it. */
+  async function send(payload: SavePayload) {
+    attempt.current = nextSaveAttempt(attempt.current, payload);
+    const saved = await saving.mutateAsync({
+      artifactId,
+      idempotencyKey: attempt.current.key,
+      ...payload,
+    });
+    attempt.current = null;
+    return saved;
+  }
+
+  /** Saves what is edited; true once nothing is left unsaved. */
+  async function save(): Promise<boolean> {
+    if (base === null || settling || readOnly) return false;
+    const body = editorRef.current?.getMarkdown() ?? text;
+    const nextTitle = title.trim() || savedTitle;
+    let payload: SavePayload = {
+      baseVersion: base,
       text: body,
       ...(nextTitle !== savedTitle ? { title: nextTitle } : {}),
-      // A description conflict's pick (the page does not edit the description otherwise).
-      ...(settings.description !== undefined ? { description: settings.description } : {}),
     };
-    attempt.current = nextSaveAttempt(attempt.current, payload);
+    const editsAtStart = edits.current;
     setSettling(true);
     try {
-      const saved = await saving.mutateAsync({
-        artifactId,
-        idempotencyKey: attempt.current.key,
-        ...payload,
-      });
-      attempt.current = null;
-      if (saved.status === "conflict") {
-        setConflict(resolutionOf(saved as DocumentConflict, entryPath, resolving ?? undefined));
-        return;
+      let saved = await send(payload);
+      // Someone else changed the same place meanwhile: the viewer's side stays, saved over their
+      // version (again, should they save once more in between).
+      let resolved = false;
+      for (let tries = 0; saved.status === "conflict" && tries < MAX_CONFLICT_RETRIES; tries++) {
+        const mine = keepingMine(saved as DocumentConflict, entryPath);
+        payload = {
+          baseVersion: mine.baseVersion,
+          text: mine.text,
+          ...(mine.settings.title !== undefined ? { title: mine.settings.title } : {}),
+          ...(mine.settings.description !== undefined
+            ? { description: mine.settings.description }
+            : {}),
+        };
+        saved = await send(payload);
+        resolved = true;
       }
-      setConflict(null);
-      setPublished(null);
-      setDirty(false);
-      // The resolved text shows at once, not the draft from before the conflict while the
-      // version it made is read.
-      if (resolving) setText(body);
-      if (saved.status === "nothing") {
-        // A resolution that matches the latest version is saved already: show that version.
-        if (resolving) await takeLatest();
-        return;
-      }
+      // Still racing: what is typed stays unsaved, and the next edit saves it again.
+      const done = saved;
+      if (done.status === "conflict") return false;
+      // Typed while the save was in flight: that stays unsaved, for the next save.
+      const typedSince = edits.current !== editsAtStart;
+      if (!typedSince) setDirty(false);
+      if (done.status === "nothing") return !typedSince;
       void refreshArtifact(queryClient, artifactId);
       // A replayed save (this attempt already landed) says nothing of what it merged: read it.
       const mergedIn =
-        saved.status !== "created" || saved.merged.length > 0 || saved.mergedSettings.length > 0;
-      // What others saved meanwhile is in the new version: show it as saved.
-      if (mergedIn || resolving) await takeLatest();
-      else {
-        setBase(saved.number);
+        resolved ||
+        done.status !== "created" ||
+        done.merged.length > 0 ||
+        done.mergedSettings.length > 0;
+      // What others saved meanwhile is in the new version: show it as saved. Text typed since
+      // keeps the old base instead, so the next save merges it over that version again rather
+      // than reading as the merged-in changes taken out.
+      if (mergedIn) {
+        if (!typedSince) await takeLatest();
+      } else {
+        setBase(done.number);
         setSavedTitle(nextTitle);
-        setText(body);
+        if (!typedSince) setText(body);
       }
+      return !typedSince;
     } catch (cause) {
       if (isBaseMoved(cause)) {
         setBaseMoved(true);
-        // The banner's confirmation names the latest version.
         void refreshArtifact(queryClient, artifactId);
       } else if (isWriteDenied(cause)) setDenied(true);
+      return false;
     } finally {
       setSettling(false);
     }
@@ -204,12 +217,21 @@ export function useArtifactEditor(artifactId: string) {
 
   /** Drops what is unsaved and shows the latest version. */
   async function discard() {
-    setConflict(null);
-    setPublished(null);
     attempt.current = null;
     saving.reset();
     await takeLatest({ force: true });
   }
+
+  // Typing that rests saves by itself; a failed save waits for the next edit (`markEdited`), and
+  // a moved base for the person's answer.
+  const autosave = useEffectEvent(() => void save());
+  const canAutosave =
+    dirty && !settling && !readOnly && !baseMoved && !saving.isError && base !== null;
+  useEffect(() => {
+    if (!canAutosave) return;
+    const timer = setTimeout(autosave, AUTOSAVE_MS);
+    return () => clearTimeout(timer);
+  }, [canAutosave, editTick, text, title]);
 
   const failure = saving.error;
   // A newer version or lost write access has its own banner, not a failure line.
@@ -225,13 +247,11 @@ export function useArtifactEditor(artifactId: string) {
 
   const status: ArtifactEditorStatus = readOnly
     ? "readOnly"
-    : conflict
-      ? "conflict"
-      : saving.isPending
-        ? "saving"
-        : dirty
-          ? "unsaved"
-          : "saved";
+    : saving.isPending
+      ? "saving"
+      : dirty
+        ? "unsaved"
+        : "saved";
 
   return {
     document,
@@ -239,17 +259,13 @@ export function useArtifactEditor(artifactId: string) {
     base,
     title,
     text,
-    dirty: dirty || conflict !== null,
+    dirty,
     status,
     /** A save is in flight or its version is still being read in: nothing is edited or picked
      * then, as it would not be in the save or would be replaced by what it reads. */
     busy: settling,
     error,
     baseMoved,
-    conflict,
-    setConflict,
-    published,
-    dismissPublished: () => setPublished(null),
     edit,
     markEdited,
     save,
