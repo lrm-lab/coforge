@@ -126,7 +126,7 @@ test("a sign-up from a working invite is asked for a name only and joins without
     stack = await startSignInStack({ people, webPort, artifacts });
     const { origin } = stack;
     const onNameStepHere = onNameStep(origin);
-    const fieldNames = `[...document.querySelectorAll("main input")].map((input) => input.name)`;
+    const fieldNames = `[...document.querySelectorAll("main input:not([type=radio])")].map((input) => input.name)`;
     const noticeText = `(document.querySelector("main form [role=status]")?.textContent ?? null)`;
     const inAppAt = (path: string) =>
       `location.origin === ${JSON.stringify(origin)} && location.pathname.includes(${JSON.stringify(path)}) && document.body.innerText.includes("general")`;
