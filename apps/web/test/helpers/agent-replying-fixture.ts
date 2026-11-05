@@ -95,11 +95,14 @@ export function setupAgentReplying({ artifactsName }: { artifactsName: string })
     return stdout;
   }
 
-  /** Runs an expression in the page and parses the JSON it returns. */
+  /** Runs an expression in the page and parses the JSON it returns. An expression with no value
+   * (a `localStorage.setItem`, an `?.click()`) stringifies to `undefined`, which agent-browser
+   * prints bare: that is no JSON, and the call returns `undefined`. */
   async function evaluate<T>(expression: string): Promise<T> {
     const printed = (
       await browser("eval", `(async () => JSON.stringify(await (${expression})))()`)
     ).trim();
+    if (printed === "undefined" || printed === "null") return undefined as T;
     return JSON.parse(JSON.parse(printed)) as T;
   }
 
