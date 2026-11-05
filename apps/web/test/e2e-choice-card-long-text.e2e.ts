@@ -184,7 +184,10 @@ test("a choice card keeps very long text on screen, wrapped, on a desktop and a 
         if (el.getBoundingClientRect().right > column.right + 0.5) overflowing.push("card past column");
         for (const node of el.querySelectorAll("p, span, li, button")) {
           // A long answerer's name is cut on purpose (the answer's tooltip names them in full).
-          const nameCut = node.textContent.startsWith("· ");
+          // The name sits inside the "· " line, beside its face (task #521).
+          let nameCut = false;
+          for (let up = node; up && up !== el; up = up.parentElement)
+            if (up.textContent.startsWith("· ")) nameCut = true;
           if (!nameCut && node.scrollWidth > node.clientWidth + 1 && getComputedStyle(node).overflowX !== "visible")
             overflowing.push("cut: " + node.textContent.slice(0, 30));
           // Nothing inside runs past the column either, where an ancestor would clip it.
