@@ -5,8 +5,13 @@ type ProxySocketData = {
   pending: Array<string | Uint8Array<ArrayBuffer>>;
 };
 
-const webOrigin = "http://127.0.0.1:8789";
-const centrifugoOrigin = "ws://127.0.0.1:8000";
+// One origin for a browser e2e page, as the managed stack and production have: the Web client
+// opens `${location.host}/connection/websocket`, which goes to Centrifugo, and everything else to
+// the Web. The defaults are the managed stack's (`.amp/services.yaml`); the CI runner
+// (`run-web-e2e-ci.sh`) sets its own ports.
+const webOrigin = Bun.env.E2E_PROXY_WEB_ORIGIN ?? "http://127.0.0.1:8789";
+const centrifugoOrigin = Bun.env.E2E_PROXY_CENTRIFUGO_ORIGIN ?? "ws://127.0.0.1:8000";
+const port = Number(Bun.env.E2E_PROXY_PORT ?? 8790);
 
 export async function forwardWebRequest(request: Request, origin: string) {
   const url = new URL(request.url);
@@ -22,7 +27,7 @@ export async function forwardWebRequest(request: Request, origin: string) {
 if (import.meta.main) {
   Bun.serve<ProxySocketData>({
     hostname: "0.0.0.0",
-    port: 8790,
+    port,
     async fetch(request, server) {
       const url = new URL(request.url);
       if (url.pathname.startsWith("/connection/")) {
@@ -66,5 +71,5 @@ if (import.meta.main) {
     },
   });
 
-  console.log("E2E same-origin WebSocket proxy listening on 8790");
+  console.log(`E2E same-origin WebSocket proxy listening on ${port}`);
 }

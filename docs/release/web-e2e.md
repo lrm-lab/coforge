@@ -8,7 +8,10 @@ there are no retries.
 Each of the two shards runs `scripts/e2e/run-web-e2e-ci.sh <shard> 2`: it builds the Web, runs
 the migrations, both dev seeds (`seed-dev-data.ts`, then the full `seed-dev.ts`, which many files
 depend on), starts a Centrifugo container on the host network so its proxies reach the Web, serves
-the Web on `127.0.0.1:8788` and runs its share of the list one file per `bun test` process.
+the Web on `127.0.0.1:8788` behind a front door on `127.0.0.1:8790`
+(`scripts/e2e/same-origin-proxy.ts`: `/connection/*` to Centrifugo, the rest to the Web, one
+origin as in production, so a page's realtime connects; the files open the front door) and runs
+its share of the list one file per `bun test` process.
 PostgreSQL and Redis are service containers. All three images are the ones staging runs, by
 digest (`scripts/ci/web-integration-images.test.ts`).
 

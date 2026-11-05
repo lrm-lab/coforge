@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Runs one shard of the browser e2es CI must pass (scripts/e2e/web-e2e-ci.txt) against a stack it
 # builds itself: the Web, built and served on 127.0.0.1:8788, a Centrifugo container that proxies to
-# it, and the PostgreSQL and Redis the caller provides (the workflow's service containers).
+# it, a front door on 127.0.0.1:8790 that gives the pages one origin for both (same-origin-proxy.ts),
+# and the PostgreSQL and Redis the caller provides (the workflow's service containers).
 #
 #   scripts/e2e/run-web-e2e-ci.sh <shard> <shards>          e.g. 1 2
 #   scripts/e2e/run-web-e2e-ci.sh <shard> <shards> --list   only print that shard's files
@@ -24,6 +25,8 @@ root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 list="$root/scripts/e2e/web-e2e-ci.txt"
 output="${E2E_OUTPUT:-$root/.amp/e2e-ci}"
 web_port=8788
+# The pages' one origin (`same-origin-proxy.ts`): /connection/* to Centrifugo, the rest to the Web.
+front_port=8790
 
 # The shard's files: longest first, each to whichever shard has the fewest seconds so far.
 # (A read loop, not mapfile: macOS still ships bash 3.2, and the list test runs there too.)
@@ -50,7 +53,9 @@ export REDIS_URL="${REDIS_URL:-redis://127.0.0.1:6379}"
 export COFORGE_CENTRIFUGO_API_URL=http://127.0.0.1:8000/api
 export COFORGE_CENTRIFUGO_API_KEY=e2e-api-key
 export COFORGE_CENTRIFUGO_PROXY_SECRET=e2e-proxy-secret
-export COFORGE_E2E_WEB_URL="http://127.0.0.1:$web_port"
+# The files open the front door, not the Web: a page served by the Web alone has no
+# /connection/websocket and stays Offline (task #438).
+export COFORGE_E2E_WEB_URL="http://127.0.0.1:$front_port"
 export COFORGE_E2E_CENTRIFUGO_URL=http://127.0.0.1:8000
 export COFORGE_FILE_STORAGE_DIR="$output/files"
 # Files that launch Chrome themselves (helpers/headless-chrome.ts) default to the macOS install;
@@ -90,6 +95,7 @@ trap 'docker logs coforge-e2e-centrifugo > "$output/logs/centrifugo.log" 2>&1 ||
   mkdir -p "$output/screenshots"
   find "$root/.amp/e2e" -mindepth 1 -maxdepth 1 -type d -exec cp -R {} "$output/screenshots/" \; 2>/dev/null || true
   [ -n "${web_pid:-}" ] && kill "$web_pid" 2>/dev/null || true
+  [ -n "${front_pid:-}" ] && kill "$front_pid" 2>/dev/null || true
   docker rm -f coforge-e2e-centrifugo >/dev/null 2>&1 || true' EXIT
 
 # Built with NODE_ENV=production, served with NODE_ENV=development and skip-auth: the order
@@ -110,6 +116,14 @@ for _ in $(seq 1 90); do
   sleep 1
 done
 curl -fsS "$web/health" >/dev/null
+E2E_PROXY_PORT=$front_port E2E_PROXY_WEB_ORIGIN="$web" E2E_PROXY_CENTRIFUGO_ORIGIN=ws://127.0.0.1:8000 \
+  bun "$root/scripts/e2e/same-origin-proxy.ts" > "$output/logs/front.log" 2>&1 &
+front_pid=$!
+for _ in $(seq 1 30); do
+  curl -fsS "$COFORGE_E2E_WEB_URL/health" >/dev/null 2>&1 && break
+  sleep 1
+done
+curl -fsS "$COFORGE_E2E_WEB_URL/health" >/dev/null
 
 failed=()
 summary="$output/summary.md"
@@ -127,7 +141,7 @@ for file in "${files[@]}"; do
   printf '| %s | %s | %s |\n' "$file" "$result" "$seconds" >> "$summary"
   [ "$result" = pass ] || failed+=("$file")
   # A file that stopped the Web would fail every later one for a reason of its own: stop here.
-  if ! curl -fsS "$web/health" >/dev/null 2>&1; then
+  if ! curl -fsS "$COFORGE_E2E_WEB_URL/health" >/dev/null 2>&1; then
     echo "the Web stopped answering after $file; see web.log" >&2
     printf '\nThe Web stopped answering after %s; later files did not run.\n' "$file" >> "$summary"
     failed+=("(Web down after $file)")
