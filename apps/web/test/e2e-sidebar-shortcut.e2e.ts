@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
+import { browserSession, localBrowserE2e, pageWaiter } from "./helpers/browser-e2e";
 
 /**
  * Task #232: Cmd+B (Ctrl+B off Apple platforms) collapses and expands the desktop sidebar, also
@@ -14,43 +15,18 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
  * against the dev database. It creates nothing and clears the preference key it sets.
  * Screenshots are written under `.amp/e2e/sidebar-shortcut/`.
  */
-const origin = Bun.env.COFORGE_E2E_WEB_URL;
-if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
-  throw new Error("COFORGE_E2E_WEB_URL must target the local Web service");
-const browserPath = Bun.which("agent-browser");
-if (!browserPath) throw new Error("agent-browser is required");
-const databaseUrl = Bun.env.DATABASE_URL;
-if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
-  throw new Error("DATABASE_URL must target local PostgreSQL");
+const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/sidebar-shortcut");
 
 test("Cmd/Ctrl+B toggles the sidebar, except in a rich-text editor", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const session = `sidebar-shortcut-${process.pid}`;
-  async function browser(...args: string[]) {
-    const child = Bun.spawn([browserPath!, "--session", session, ...args], {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const [stdout, stderr, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    if (code !== 0) throw new Error(`Browser ${args[0]} failed: ${stderr}`);
-    return stdout;
-  }
-  async function evaluate<T>(expression: string): Promise<T> {
-    return JSON.parse(JSON.parse(await browser("eval", `JSON.stringify(${expression})`))) as T;
-  }
+  const { browser, evaluate } = browserSession(browserPath, session);
+  const wait = pageWaiter(browserPath)(session, browser);
   const collapsed = () =>
     evaluate<boolean>(`document.documentElement.classList.contains("sidebar-collapsed")`);
   const waitCollapsed = (value: boolean) =>
-    browser(
-      "wait",
-      "--fn",
-      `document.documentElement.classList.contains("sidebar-collapsed") === ${value}`,
-    );
+    wait(`document.documentElement.classList.contains("sidebar-collapsed") === ${value}`);
   /** The shortcut as the page's platform spells it, for `press` and the tooltip. */
   const apple = () => evaluate<boolean>(`/Mac|iPhone|iPad|iPod/i.test(navigator.platform)`);
   const COLLAPSE = 'button[aria-label="Collapse sidebar"]';
@@ -76,14 +52,14 @@ test("Cmd/Ctrl+B toggles the sidebar, except in a rich-text editor", async () =>
     await browser("open", `${origin}/en/w/${membership.workspace.slug}`);
     await browser("eval", `localStorage.removeItem("coforge-sidebar-expanded")`);
     await browser("reload");
-    await browser("wait", "--fn", `document.querySelector('${COLLAPSE}') !== null`);
+    await wait(`document.querySelector('${COLLAPSE}') !== null`);
     expect(await collapsed()).toBe(false);
     const mac = await apple();
     const [press, label] = mac ? ["Meta+b", "⌘B"] : ["Control+b", "Ctrl+B"];
 
     // The collapse button's tooltip names the shortcut.
     await hover(COLLAPSE);
-    await browser("wait", "--fn", `document.querySelector('[role="tooltip"]') !== null`);
+    await wait(`document.querySelector('[role="tooltip"]') !== null`);
     expect(await tooltip()).toBe(`Collapse sidebar${label}`);
     await browser("screenshot", join(artifacts, "collapse-tooltip.png"));
 
@@ -94,11 +70,7 @@ test("Cmd/Ctrl+B toggles the sidebar, except in a rich-text editor", async () =>
       "hide",
     );
     await hover(EXPAND);
-    await browser(
-      "wait",
-      "--fn",
-      `document.querySelector('[role="tooltip"]')?.textContent === "Expand Sidebar${label}"`,
-    );
+    await wait(`document.querySelector('[role="tooltip"]')?.textContent === "Expand Sidebar${label}"`);
     await browser("screenshot", join(artifacts, "expand-tooltip.png"));
     await browser("focus", "textarea");
     await browser("press", press);

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import { browserSession, localBrowserE2e, pageHydrated, pageWaiter } from "./helpers/browser-e2e";
 import { inPane, waitFor } from "./helpers/activity-inbox-e2e";
 import { dividerBetween, inView, postLive, row, seedChannel } from "./helpers/open-unread-e2e";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
@@ -27,6 +27,7 @@ const artifacts = join(import.meta.dir, "../../../.amp/e2e/activity-open-unread"
 test("a channel and a thread opened from Activity land on the first message unread for the viewer", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `activity-open-unread-${process.pid}`);
+  const wait = pageWaiter(browserPath)(`activity-open-unread-${process.pid}`, browser);
   try {
     const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
       where: { userId: DEV_BROWSER_USER.id },
@@ -60,17 +61,15 @@ test("a channel and a thread opened from Activity land on the first message unre
 
     await browser("set", "viewport", "1440", "900");
     await browser("open", activity);
-    await browser(
-      "wait",
-      "--fn",
+    await wait(
       `${row("E2E open-unread newest")} !== null && ${row("E2E open-unread thread root")} !== null && ${pageHydrated}`,
     );
     // Two new: the viewer's own message is not one.
     expect(await evaluate<string>(row("E2E open-unread newest"))).toContain("2 new");
 
     await browser("find", "text", "E2E open-unread newest", "click");
-    await browser("wait", "--fn", inPane(channel.ids[2]!));
-    await browser("wait", "--fn", dividerBetween(channel.ids[1]!, channel.ids[2]!));
+    await wait(inPane(channel.ids[2]!));
+    await wait(dividerBetween(channel.ids[1]!, channel.ids[2]!));
     await browser("screenshot", join(artifacts, "channel.png"));
     // The pane reads the channel, after its divider is placed.
     await waitFor(
@@ -80,9 +79,9 @@ test("a channel and a thread opened from Activity land on the first message unre
     );
 
     await browser("find", "text", "E2E open-unread thread root", "click");
-    await browser("wait", "--fn", `location.search.includes("threadRootId=${threadRoot}")`);
-    await browser("wait", "--fn", inPane(thread.ids[3]!));
-    await browser("wait", "--fn", dividerBetween(thread.ids[2]!, thread.ids[3]!));
+    await wait(`location.search.includes("threadRootId=${threadRoot}")`);
+    await wait(inPane(thread.ids[3]!));
+    await wait(dividerBetween(thread.ids[2]!, thread.ids[3]!));
     await browser("screenshot", join(artifacts, "thread.png"));
     await waitFor(
       async () =>
@@ -97,7 +96,7 @@ test("a channel and a thread opened from Activity land on the first message unre
 
     // Back on Activity, both rows are read.
     await browser("open", activity);
-    await browser("wait", "--fn", `${row("E2E open-unread newest")} !== null && ${pageHydrated}`);
+    await wait(`${row("E2E open-unread newest")} !== null && ${pageHydrated}`);
     expect(await evaluate<string>(row("E2E open-unread newest"))).not.toMatch(/\d+ new/);
     expect(await evaluate<string>(row("E2E open-unread thread root"))).not.toMatch(/\d+ new/);
   } finally {
@@ -109,6 +108,7 @@ test("a channel and a thread opened from Activity land on the first message unre
 test("a channel with a mention already read opens on its new unread message, not the mention", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `activity-open-mention-${process.pid}`);
+  const wait = pageWaiter(browserPath)(`activity-open-mention-${process.pid}`, browser);
   try {
     const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
       where: { userId: DEV_BROWSER_USER.id },
@@ -142,12 +142,12 @@ test("a channel with a mention already read opens on its new unread message, not
     await browser("set", "viewport", "1440", "900");
     // On Activity's Unread view, where the card leaves the list once the pane has read it.
     await browser("open", `${origin}/en/w/${workspace.slug}/activity?filter=unread`);
-    await browser("wait", "--fn", `${row("E2E open-mention unread")} !== null && ${pageHydrated}`);
+    await wait(`${row("E2E open-mention unread")} !== null && ${pageHydrated}`);
 
     await browser("find", "text", "E2E open-mention unread", "click");
-    await browser("wait", "--fn", inPane(unread));
-    await browser("wait", "--fn", dividerBetween(channel.ids.at(-2)!, unread));
-    await browser("wait", "--fn", inView(unread));
+    await wait(inPane(unread));
+    await wait(dividerBetween(channel.ids.at(-2)!, unread));
+    await wait(inView(unread));
     // The pane reads the channel; the divider stays, and the card leaves the Unread view.
     await waitFor(
       async () =>
@@ -157,7 +157,7 @@ test("a channel with a mention already read opens on its new unread message, not
     );
     await browser("wait", "1500");
     await browser("screenshot", join(artifacts, "mention-read.png"));
-    await browser("wait", "--fn", dividerBetween(channel.ids.at(-2)!, unread));
+    await wait(dividerBetween(channel.ids.at(-2)!, unread));
     expect(await evaluate<boolean>(inView(mention))).toBe(false);
   } finally {
     await browser("close").catch(() => undefined);
@@ -168,6 +168,7 @@ test("a channel with a mention already read opens on its new unread message, not
 test("a channel opened again from Activity, with a message that came live since, shows its divider", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser } = browserSession(browserPath, `activity-open-again-${process.pid}`);
+  const wait = pageWaiter(browserPath)(`activity-open-again-${process.pid}`, browser);
   const realtime = new CentrifugoConversationRealtime(createCentrifugoServerApi());
   try {
     const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
@@ -188,17 +189,13 @@ test("a channel opened again from Activity, with a message that came live since,
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1440", "900");
     await browser("open", `${origin}/en/w/${workspace.slug}/activity`);
-    await browser(
-      "wait",
-      "--fn",
-      `${row("E2E open-again first unread")} !== null && ${pageHydrated}`,
-    );
+    await wait(`${row("E2E open-again first unread")} !== null && ${pageHydrated}`);
 
     // QA's #video-gen (task #358): the viewer reads a channel longer than a page from Activity,
     // opens another conversation, all within the page, and a message comes into the channel
     // meanwhile. Reopened, the pane jumps to it while its stale window refetches.
     await browser("find", "text", "E2E open-again first unread", "click");
-    await browser("wait", "--fn", inPane(channel.ids.at(-1)!));
+    await wait(inPane(channel.ids.at(-1)!));
     await waitFor(
       async () =>
         (await db.conversationMember.findUniqueOrThrow({ where: { id: channel.viewer.id } }))
@@ -206,7 +203,7 @@ test("a channel opened again from Activity, with a message that came live since,
         read.length + 1,
     );
     await browser("find", "text", "E2E open-again elsewhere", "click");
-    await browser("wait", "--fn", inPane(other.ids[0]!));
+    await wait(inPane(other.ids[0]!));
     const later = await postLive(db, realtime, {
       channelId: channel.channelId,
       workspaceId,
@@ -219,14 +216,14 @@ test("a channel opened again from Activity, with a message that came live since,
       "eval",
       `[...document.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent.startsWith("Unread")).click()`,
     );
-    await browser("wait", "--fn", `${row("E2E open-again later unread")} !== null`);
+    await wait(`${row("E2E open-again later unread")} !== null`);
     // Staging's round trips, not a local server's: every read the reopened pane makes is slow.
     await browser(
       "eval",
       `(() => { const f = window.fetch; window.fetch = (...a) => new Promise((r) => setTimeout(r, 700)).then(() => f(...a)); return true; })()`,
     );
     await browser("find", "text", "e2e-open-unread-again", "click");
-    await browser("wait", "--fn", inPane(later));
+    await wait(inPane(later));
     // The divider stays over the new message after the pane has read it.
     await waitFor(
       async () =>
@@ -236,7 +233,7 @@ test("a channel opened again from Activity, with a message that came live since,
     );
     await browser("wait", "1000");
     await browser("screenshot", join(artifacts, "open-again.png"));
-    await browser("wait", "--fn", dividerBetween(channel.ids.at(-1)!, later));
+    await wait(dividerBetween(channel.ids.at(-1)!, later));
   } finally {
     await browser("close").catch(() => undefined);
     await db.$disconnect();
