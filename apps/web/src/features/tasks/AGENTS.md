@@ -136,8 +136,9 @@ workspaceId]` Query its loader fills (`task-overview-collection.ts`,
   own included, stay on that conversation's Tasks tab (the server scopes every
   Workspace-page read, so its realtime listens on the Workspace channel only).
   The page creates no Tasks: new ones start from a conversation's Tasks tab
-  (`CreateTaskDialog`), titles only, several at once in one `create` with
-  `titles`, so all of them are created or none.
+  (`CreateTaskDialog`, laid out as the Task popup: where it goes, a To do title, owner and
+  label chips, a description). One Task per dialog, which replaced several titles at once
+  (Frank, 11-05). Its Project follows the conversation and is changed in the popup.
 - Blockers, parent and sub-tasks (Tasks v2, `useTaskConversationsOn() === true`; off or unknown:
   no relation UI, no `show` read, no menu items, no card marks) show on every card from the Task's
   own view (`blockedBy`, `blocked`, `parent`, `subtasks`) and in the popup (`TaskSection`:

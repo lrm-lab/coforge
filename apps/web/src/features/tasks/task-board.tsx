@@ -10,7 +10,7 @@ import type { Mentionable } from "#src/features/conversations/mention-text";
 import { useTaskHiddenColumns } from "#src/features/settings/task-hidden-columns";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { CreateTaskDialog } from "./create-task-dialog";
+import { CreateTaskDialog, type TaskDraft } from "./create-task-dialog";
 import { isFinishedStatus, type FinishedStatus } from "./finished-tasks";
 import { TASK_TITLE_CLASS, TaskCard } from "./task-card";
 import { TaskDetailMenu, taskMenuButton } from "./task-detail-dialog";
@@ -44,8 +44,8 @@ export type ConversationBoard = {
   direct?: boolean;
   loading?: boolean;
   error?: string;
-  /** Creates the Tasks together, in the given order. */
-  onCreateTask?: (titles: string[], idempotencyKey: string) => Promise<TaskView[]>;
+  /** Creates a Task from the create dialog's draft. */
+  onCreateTask?: (draft: TaskDraft, idempotencyKey: string) => Promise<TaskView[]>;
   /** Shows a single Task just created from the board. */
   onOpenCreated: (task: TaskView) => void | Promise<void>;
 };
@@ -226,10 +226,11 @@ export function TaskBoard<T extends BoardTask>({
         <CreateTaskDialog
           open={createOpen}
           onOpenChange={setCreateOpen}
-          onCreate={async (titles, idempotencyKey) => {
-            const created = await onCreateTask(titles, idempotencyKey);
-            // One new Task opens: its message in the chat, or, made without one, its popup.
-            // Several stay on the board, where they now show in To do.
+          where={conversation?.name ? { label: conversation.name } : undefined}
+          members={conversation?.members}
+          onCreate={async (draft, idempotencyKey) => {
+            const created = await onCreateTask(draft, idempotencyKey);
+            // The new Task opens: its message in the chat, or, made without one, its popup.
             if (created.length === 1) await conversation?.onOpenCreated(created[0]!);
           }}
         />

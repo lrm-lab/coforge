@@ -413,10 +413,10 @@ function ConversationPageMain({
         onOpenMessage={openTaskThread}
         onCreateTask={
           isMember
-            ? async (titles, idempotencyKey) => {
+            ? async (draft, idempotencyKey) => {
                 const tasks = await taskView.command({
                   operation: "create",
-                  titles,
+                  ...draft,
                   idempotencyKey,
                 });
                 await page.invalidate();

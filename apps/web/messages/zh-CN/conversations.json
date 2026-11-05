@@ -142,32 +142,14 @@
   "tasks_drag": "移动任务 #{number}",
   "tasks_create": "创建任务",
   "tasks_title": "标题",
+  "tasks_new_task": "新建任务",
+  "tasks_new_subtask": "新建子任务",
+  "tasks_new_title": "任务标题",
+  "tasks_new_description": "添加描述…",
+  "tasks_new_submit": "创建任务",
   "tasks_create_error": "任务创建失败，请重试。",
   "tasks_create_cancel": "取消",
   "tasks_create_title_required": "至少填写一个任务标题。",
-  "tasks_create_row_label": "任务 {number}",
-  "tasks_create_remove_row": "移除任务 {number}",
-  "tasks_create_add_another": "再加一个",
-  "tasks_create_heading": [
-    {
-      "declarations": ["input count", "local p = count: plural"],
-      "selectors": ["p"],
-      "match": {
-        "p=one": "创建任务",
-        "p=other": "创建任务"
-      }
-    }
-  ],
-  "tasks_create_submit": [
-    {
-      "declarations": ["input count", "local p = count: plural"],
-      "selectors": ["p"],
-      "match": {
-        "p=one": "创建任务",
-        "p=other": "创建 {count} 个任务"
-      }
-    }
-  ],
   "tasks_loading": "正在加载任务…",
   "tasks_empty": "此会话暂无任务",
   "tasks_group_empty": "暂无任务",

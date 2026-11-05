@@ -14,6 +14,7 @@ import {
   type TaskDetailRelations,
   type VisibleTaskName,
 } from "./task-relation-edits";
+import type { TaskDraft } from "./create-task-dialog";
 import { executeTask } from "./tasks.functions";
 import { useTaskConversationsOn } from "./use-task-conversations-on";
 import { useConversationTaskWrites } from "./use-conversation-tasks";
@@ -128,12 +129,12 @@ export function useTaskRelations({
       );
       await queryClient.invalidateQueries({ queryKey: ["task", "show", conversationId, number] });
     },
-    /** Creates the sub-tasks together, in this Task's conversation, under this Task. */
-    createSubtasks: async (titles: string[], idempotencyKey: string) => {
+    /** Creates a sub-task from the create dialog's draft, in this Task's conversation, under it. */
+    createSubtasks: async (draft: TaskDraft, idempotencyKey: string) => {
       const result = await execute({
         data: {
           operation: "create",
-          titles,
+          ...draft,
           parent: { number },
           idempotencyKey,
           conversationId,

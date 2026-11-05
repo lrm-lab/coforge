@@ -1,53 +1,104 @@
-import { Plus, XClose } from "@untitledui/icons";
+import type { TaskView } from "@lrm/coforge-sdk/internal";
+import { ChevronRight, XClose } from "@untitledui/icons";
 import { useRef, useState, type FormEvent } from "react";
+import { Heading, Input as AriaInput, TextArea } from "react-aria-components";
 
-import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { Input } from "#src/components/base/input/input";
+import { DialogAction, DialogCancel } from "#src/components/ui/dialog-actions";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
+import type { Mentionable } from "#src/features/conversations/mention-text";
 import { m } from "#src/paraglide/messages";
-import { DialogHeader } from "#src/components/application/modals/dialog-header";
-import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
+import { AssigneeMenu } from "./task-assignee-menu";
+import { TaskLabelsField } from "./task-labels";
+import { TaskProperty } from "./task-property";
+import { TaskStatusIcon } from "./task-status-icon";
+import { useWorkspaceLabels } from "./workspace-labels";
+
+/** What a new Task is made with: its title, and what else was set before it was created. */
+export type TaskDraft = {
+  title: string;
+  description?: string;
+  /** The assignee bound by id (`user:<id>` or `agent:<id>`). */
+  assignee?: string;
+  /** Label names. */
+  labels?: string[];
+};
 
 /**
- * New Tasks in the conversation: one title per row, "Add another" for more, all created together
- * in one request (so all of them or none).
+ * A new Task, laid out as the Task popup lays out a Task (Frank, 11-05: "按照我们目前 task 的设计"):
+ * where it goes above (the conversation, or the Task it is a step of), its title beside its To do
+ * status, its owner and labels as the popup's chips, then its description. One Task per dialog
+ * (Frank, 11-05: "就一次建一个吧"). The Project follows the conversation, as any new Task's does;
+ * the popup changes it afterwards.
  */
 export function CreateTaskDialog({
   open,
   onOpenChange,
   onCreate,
   describeError,
+  where,
+  members,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreate: (titles: string[], idempotencyKey: string) => Promise<void>;
+  onCreate: (draft: TaskDraft, idempotencyKey: string) => Promise<void>;
   /** Words a refusal the caller knows the reason for (a sub-task under a Task that cannot take
    * one); anything else reads as the plain failure. */
   describeError?: (cause: unknown) => string | undefined;
+  /** Where the Task goes, as the popup's trail names it: `#channel`, or `#12 Parent title`. */
+  where?: { label: string; subtask?: boolean };
+  /** Who may be picked as its owner; without them, no owner is offered. */
+  members?: readonly Mentionable[];
 }) {
-  const [rows, setRows] = useState(newRows);
+  const [draft, setDraft] = useState(emptyDraft);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const busy = useRef(false);
-  // A retry of the same titles reuses its idempotency key, so a create that did land is not repeated.
+  const titleRef = useRef<HTMLInputElement>(null);
+  // A retry of the same Task reuses its idempotency key, so a create that did land is not repeated.
   const submission = useRef<{ key: string; idempotencyKey: string } | undefined>(undefined);
-  const count = rows.length;
+  const { labels: workspaceLabels } = useWorkspaceLabels(draft.labels.length > 0);
 
-  function setRow(id: string, title: string) {
+  const owner = members?.find((member) => `${member.kind}:${member.id}` === draft.assignee);
+  const draftTask: Pick<TaskView, "owner" | "labels"> = {
+    owner: owner
+      ? {
+          memberId: "",
+          kind: owner.kind,
+          id: owner.id,
+          name: owner.label,
+          handle: owner.handle,
+          avatarUrl: owner.avatarUrl ?? null,
+        }
+      : null,
+    labels: draft.labels.flatMap((name) => {
+      const label = workspaceLabels.find((each) => each.name === name);
+      return label ? [{ id: label.id, name: label.name, color: label.color }] : [];
+    }),
+  };
+
+  function change(patch: Partial<typeof draft>) {
     setError("");
-    setRows((current) => current.map((row) => (row.id === id ? { id, title } : row)));
+    setDraft((current) => ({ ...current, ...patch }));
   }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (busy.current) return;
-    const titles = rows.map((row) => row.title.trim()).filter(Boolean);
-    if (titles.length === 0) {
+    const title = draft.title.trim();
+    if (!title) {
       setError(m.tasks_create_title_required());
+      titleRef.current?.focus();
       return;
     }
-    const key = JSON.stringify(titles);
+    const description = draft.description.trim();
+    const made: TaskDraft = {
+      title,
+      ...(description && { description }),
+      ...(draft.assignee && { assignee: draft.assignee }),
+      ...(draft.labels.length > 0 && { labels: draft.labels }),
+    };
+    const key = JSON.stringify(made);
     const request =
       submission.current?.key === key
         ? submission.current
@@ -57,9 +108,9 @@ export function CreateTaskDialog({
     setSaving(true);
     setError("");
     try {
-      await onCreate(titles, request.idempotencyKey);
+      await onCreate(made, request.idempotencyKey);
       submission.current = undefined;
-      setRows(newRows());
+      setDraft(emptyDraft());
       onOpenChange(false);
     } catch (cause) {
       setError(describeError?.(cause) ?? m.tasks_create_error());
@@ -69,72 +120,112 @@ export function CreateTaskDialog({
     }
   }
 
+  const heading = where?.subtask ? m.tasks_new_subtask() : m.tasks_new_task();
   return (
-    <ModalOverlay isOpen={open} onOpenChange={(value) => !busy.current && onOpenChange(value)}>
-      <Modal className="w-[calc(100vw-2rem)] max-w-md">
-        <Dialog className="p-6">
+    <ModalOverlay
+      isOpen={open}
+      onOpenChange={(value) => !busy.current && onOpenChange(value)}
+      isDismissable
+      className="max-sm:items-stretch max-sm:px-0 max-sm:[--modal-pb:0px] max-sm:[--modal-pt:0px]"
+    >
+      <Modal className="flex w-full flex-col overflow-hidden max-sm:h-full max-sm:rounded-none max-sm:safe-area-padding sm:w-[min(44rem,calc(100vw-2rem))]">
+        <Dialog aria-label={heading} className="flex min-h-0 flex-1 flex-col">
           {({ close }) => (
-            <>
-              <DialogHeader
-                title={m.tasks_create_heading({ count })}
-                onClose={close}
-                className="px-0 pt-0"
-              />
-              <form onSubmit={(event) => void submit(event)} className="mt-5 flex flex-col gap-3">
-                <div className="flex flex-col gap-2">
-                  {rows.map((row, index) => (
-                    <div key={row.id} className="flex items-center gap-1">
-                      <Input
-                        aria-label={m.tasks_create_row_label({ number: index + 1 })}
-                        placeholder={m.tasks_create_row_label({ number: index + 1 })}
-                        value={row.title}
-                        onChange={(value) => setRow(row.id, value)}
-                        maxLength={500}
-                        isDisabled={saving}
-                        autoFocus={index === count - 1}
-                        wrapperClassName="flex-1"
-                      />
-                      {count > 1 && (
-                        <ButtonUtility
-                          size="xs"
-                          color="tertiary"
-                          icon={XClose}
-                          aria-label={m.tasks_create_remove_row({ number: index + 1 })}
-                          isDisabled={saving}
-                          onClick={() =>
-                            setRows((current) => current.filter(({ id }) => id !== row.id))
-                          }
-                        />
-                      )}
-                    </div>
-                  ))}
-                </div>
-                <Button
-                  type="button"
+            <form onSubmit={(event) => void submit(event)} className="flex min-h-0 flex-1 flex-col">
+              {/* Where it goes, as the popup's trail: the conversation, or the Task above it. */}
+              <div className="flex shrink-0 items-center gap-1 pt-2 pr-3 pl-4 sm:pl-6">
+                <p className="flex min-w-0 flex-1 items-center gap-1 text-sm text-tertiary">
+                  {where && (
+                    <>
+                      <span className="truncate">{where.label}</span>
+                      <ChevronRight aria-hidden="true" className="size-3.5 shrink-0" />
+                    </>
+                  )}
+                  <span className="shrink-0 text-secondary">{heading}</span>
+                </p>
+                <ButtonUtility
+                  icon={XClose}
                   size="sm"
-                  color="secondary"
-                  iconLeading={Plus}
+                  color="tertiary"
+                  aria-label={m.tasks_close()}
                   isDisabled={saving}
-                  className="self-start"
-                  onPress={() => setRows((current) => [...current, newRow()])}
+                  onClick={close}
+                />
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <Heading
+                  slot="title"
+                  level={2}
+                  className="flex items-start gap-2 px-4 pt-3 sm:px-6"
                 >
-                  {m.tasks_create_add_another()}
-                </Button>
-                {error && (
-                  <p role="alert" className="text-sm text-error-primary">
-                    {error}
-                  </p>
-                )}
-                <DialogActions className="mt-2">
-                  <DialogCancel type="button" isDisabled={saving} onPress={close}>
-                    {m.tasks_create_cancel()}
-                  </DialogCancel>
-                  <DialogAction type="submit" isLoading={saving}>
-                    {m.tasks_create_submit({ count })}
-                  </DialogAction>
-                </DialogActions>
-              </form>
-            </>
+                  <TaskStatusIcon status="todo" className="mt-1.5 size-5" />
+                  <AriaInput
+                    ref={titleRef}
+                    aria-label={m.tasks_new_title()}
+                    placeholder={m.tasks_new_title()}
+                    value={draft.title}
+                    onChange={(event) => change({ title: event.target.value })}
+                    maxLength={500}
+                    disabled={saving}
+                    autoFocus
+                    className="min-w-0 flex-1 bg-transparent text-lg font-semibold text-primary outline-hidden placeholder:font-medium placeholder:text-placeholder"
+                  />
+                </Heading>
+                {/* The popup's chips: its owner and labels, each its own control. */}
+                <div
+                  data-layout="chips"
+                  className="mt-3 flex gap-1.5 overflow-x-auto px-4 pb-0.5 [scrollbar-width:none] sm:px-6 [&::-webkit-scrollbar]:hidden"
+                >
+                  {members && (
+                    <TaskProperty label={m.tasks_overview_owner()}>
+                      <AssigneeMenu
+                        task={draftTask}
+                        members={members}
+                        disabled={saving}
+                        onSelect={(assignee) => change({ assignee: assignee ?? undefined })}
+                      />
+                    </TaskProperty>
+                  )}
+                  <TaskProperty label={m.tasks_labels()}>
+                    <TaskLabelsField
+                      task={draftTask}
+                      disabled={saving}
+                      onChange={({ add = [], remove = [] }) =>
+                        change({
+                          labels: [
+                            ...draft.labels.filter((name) => !remove.includes(name)),
+                            ...add.filter((name) => !draft.labels.includes(name)),
+                          ],
+                        })
+                      }
+                    />
+                  </TaskProperty>
+                </div>
+                <TextArea
+                  aria-label={m.tasks_new_description()}
+                  placeholder={m.tasks_new_description()}
+                  value={draft.description}
+                  onChange={(event) => change({ description: event.target.value })}
+                  maxLength={50_000}
+                  disabled={saving}
+                  rows={4}
+                  className="mt-4 block w-full resize-none bg-transparent px-4 pb-4 text-sm text-primary outline-hidden placeholder:text-placeholder sm:px-6"
+                />
+              </div>
+              {error && (
+                <p role="alert" className="shrink-0 px-4 pb-2 text-sm text-error-primary sm:px-6">
+                  {error}
+                </p>
+              )}
+              <div className="flex shrink-0 items-center justify-end gap-2 border-t border-secondary px-4 py-3 sm:px-6">
+                <DialogCancel type="button" isDisabled={saving} onPress={close}>
+                  {m.tasks_create_cancel()}
+                </DialogCancel>
+                <DialogAction type="submit" isLoading={saving}>
+                  {m.tasks_new_submit()}
+                </DialogAction>
+              </div>
+            </form>
           )}
         </Dialog>
       </Modal>
@@ -142,6 +233,9 @@ export function CreateTaskDialog({
   );
 }
 
-/** A title row; its id keeps each input's state with it when an earlier row is removed. */
-const newRow = () => ({ id: crypto.randomUUID(), title: "" });
-const newRows = () => [newRow()];
+const emptyDraft = () => ({
+  title: "",
+  description: "",
+  assignee: undefined as string | undefined,
+  labels: [] as string[],
+});

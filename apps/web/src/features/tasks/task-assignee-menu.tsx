@@ -14,7 +14,7 @@ export function AssigneeMenu({
   disabled,
   onSelect,
 }: {
-  task: TaskView;
+  task: Pick<TaskView, "owner">;
   members?: readonly Mentionable[];
   disabled: boolean;
   /** The picked member bound by id (`user:<id>` or `agent:<id>`), or null for no one. */

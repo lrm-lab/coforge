@@ -154,32 +154,14 @@
   "tasks_drag": "Move task #{number}",
   "tasks_create": "Create Task",
   "tasks_title": "Title",
+  "tasks_new_task": "New task",
+  "tasks_new_subtask": "New sub-task",
+  "tasks_new_title": "Task title",
+  "tasks_new_description": "Add a description…",
+  "tasks_new_submit": "Create Task",
   "tasks_create_error": "The task could not be created. Try again.",
   "tasks_create_cancel": "Cancel",
   "tasks_create_title_required": "Add at least one task title.",
-  "tasks_create_row_label": "Task {number}",
-  "tasks_create_remove_row": "Remove task {number}",
-  "tasks_create_add_another": "Add Another",
-  "tasks_create_heading": [
-    {
-      "declarations": ["input count", "local p = count: plural"],
-      "selectors": ["p"],
-      "match": {
-        "p=one": "Create Task",
-        "p=other": "Create Tasks"
-      }
-    }
-  ],
-  "tasks_create_submit": [
-    {
-      "declarations": ["input count", "local p = count: plural"],
-      "selectors": ["p"],
-      "match": {
-        "p=one": "Create Task",
-        "p=other": "Create {count} Tasks"
-      }
-    }
-  ],
   "tasks_loading": "Loading tasks…",
   "tasks_empty": "No tasks in this conversation",
   "tasks_group_empty": "No tasks",

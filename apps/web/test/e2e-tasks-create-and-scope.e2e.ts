@@ -26,7 +26,7 @@ if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
   throw new Error("DATABASE_URL must target local PostgreSQL");
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/tasks-create-and-scope");
 
-test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates several at once", async () => {
+test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates them one after another", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const session = `tasks-create-${process.pid}`;
   async function browser(...args: string[]) {
@@ -60,12 +60,13 @@ test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates
   const byText = (selector: string, text: string) =>
     `[...document.querySelectorAll(${JSON.stringify(selector)})].filter((element) => element.textContent.trim() === ${JSON.stringify(text)}).at(-1)`;
   const bodyHas = (text: string) => `document.body.textContent.includes(${JSON.stringify(text)})`;
-  const dialogOpen = `document.querySelector('[role="dialog"] input[aria-label="Task 1"]') !== null`;
+  const dialogOpen = `document.querySelector('[role="dialog"] input[aria-label="Task title"]') !== null`;
+  const titleField = '[role="dialog"] input[aria-label="Task title"]';
 
   const suffix = `${process.pid}-${Date.now()}`;
   const channelTitle = `Channel work ${suffix}`;
   const directTitle = `Direct work ${suffix}`;
-  const created = [`First new ${suffix}`, `Second new ${suffix}`];
+  const created = [`First new ${suffix}`];
   const membership = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id },
     include: { workspace: { select: { slug: true } } },
@@ -154,24 +155,51 @@ test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates
     );
     await browser("screenshot", join(artifacts, "create-empty.png"));
 
-    await browser("fill", '[role="dialog"] input[aria-label="Task 1"]', created[0]!);
-    await browser("eval", `${byText('[role="dialog"] button', "Add Another")}.click()`);
-    await waitFor(`document.querySelector('[role="dialog"] input[aria-label="Task 2"]') !== null`);
-    await browser("fill", '[role="dialog"] input[aria-label="Task 2"]', created[1]!);
-    await waitFor(`${byText('[role="dialog"] button', "Create 2 Tasks")} !== undefined`);
-    await browser("screenshot", join(artifacts, "create-two.png"));
-    await browser("eval", `${byText('[role="dialog"] button', "Create 2 Tasks")}.click()`);
-
-    // Both land in the channel together, the dialog closes, and the board shows them.
+    // The dialog is laid out as the Task popup: where it goes, a To do title, then the details.
+    expect(
+      await browser(
+        "eval",
+        `document.querySelector('[role="dialog"]').textContent.includes("#${channel.channelName}")`,
+      ),
+    ).toContain("true");
+    // One Task per dialog: it lands with what was set, and the dialog closes.
+    await browser("fill", titleField, created[0]!);
+    await browser(
+      "fill",
+      '[role="dialog"] textarea[aria-label="Add a description…"]',
+      `Notes for ${suffix}`,
+    );
+    for (const theme of ["light", "dark"] as const) {
+      if (theme === "dark")
+        await browser("eval", `document.documentElement.classList.add("dark-mode")`);
+      await browser("screenshot", join(artifacts, `create-${theme}.png`));
+    }
+    await browser("eval", `document.documentElement.classList.remove("dark-mode")`);
+    await browser("eval", `${byText('[role="dialog"] button', "Create Task")}.click()`);
     await waitFor(`!(${dialogOpen})`);
-    await waitFor(`${bodyHas(created[0]!)} && ${bodyHas(created[1]!)}`);
+    await waitFor(bodyHas(created[0]!));
     const rows = await db.task.findMany({
       where: { conversationId: channel.id, title: { in: created } },
-      orderBy: { number: "asc" },
-      select: { title: true, status: true },
+      select: { title: true, status: true, description: true },
     });
-    expect(rows).toEqual(created.map((title) => ({ title, status: "todo" })));
+    expect(rows).toEqual([
+      { title: created[0]!, status: "todo", description: `Notes for ${suffix}` },
+    ]);
     await browser("screenshot", join(artifacts, "created.png"));
+
+    // On a phone the dialog is a full sheet, as the Task popup is.
+    await browser("set", "viewport", "390", "844");
+    await browser("open", `${origin}${workspacePath}/channel/${channel.id}?view=tasks`);
+    await waitFor(bodyHas(created[0]!), 60_000);
+    for (let attempt = 0; !(await browser("eval", dialogOpen)).includes("true"); attempt += 1) {
+      if (attempt === 10) throw new Error("the create dialog never opened on a phone");
+      await browser("eval", `${byText("button", "Create Task")}?.click()`);
+      await Bun.sleep(500);
+    }
+    await browser("fill", titleField, `Phone ${suffix}`);
+    await browser("screenshot", join(artifacts, "create-phone.png"));
+    await browser("eval", `document.documentElement.classList.add("dark-mode")`);
+    await browser("screenshot", join(artifacts, "create-phone-dark.png"));
   } finally {
     await db.conversation
       .deleteMany({ where: { id: { in: [channel.id, direct.id] } } })

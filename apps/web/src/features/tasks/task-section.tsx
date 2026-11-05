@@ -253,7 +253,9 @@ export function TaskSection({
           <CreateTaskDialog
             open={picker === "subtask"}
             onOpenChange={closePicker}
-            onCreate={relations.createSubtasks}
+            onCreate={(draft, idempotencyKey) => relations.createSubtasks(draft, idempotencyKey)}
+            where={{ label: `#${task.number} ${task.title}`, subtask: true }}
+            members={members}
             describeError={(cause) => {
               const refusal = relationRefusal(cause);
               return refusal && errorText(refusal);
