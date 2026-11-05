@@ -28,6 +28,8 @@ Rules for `src/system-cleaner/`. They extend `packages/daemon/AGENTS.md`.
   forgets them along with every other piece of cleaner state.
 - Record a tip's timestamp only after its item was minted. A mint the inbox refuses is logged
   and dropped, never thrown.
+- A hint is the only signal that a file is over its limit: the cleaner never creates a reminder
+  and never wakes an Agent just to tidy memory. Existing reminders belong to their owner.
 - The daemon never edits or deletes workspace files for a hint. The disk item points at the
   `workspace-cleanup` Agent Manual topic; keep that slug in step with
   `apps/web/src/server/agents/manual/`.

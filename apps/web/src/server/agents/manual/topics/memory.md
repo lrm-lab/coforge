@@ -59,6 +59,8 @@ one fact per line. Only long material lives elsewhere, and only as a pointer.
   rewritten in place, not appended.
 - Overwrite `notes/active-context.md` when work starts, finishes or blocks.
 - Check `MEMORY.md` before asking a human: the answer may already be there.
+- No reminder will ask you to tidy memory. The only signal that a file is over its limit is the
+  System Cleaner item described in the `workspace-cleanup` topic — act on it then.
 
 ## Recovery
 

@@ -154,6 +154,8 @@ Rules for Agent lifecycle, control, Session state, and Activity in
   the Agent hits a pitfall, merging duplicates and dropping stale facts in the same edit; the
   Active Context is overwritten when work starts, finishes or blocks; and `MEMORY.md` is checked
   before asking a human. Never per-turn maintenance.
+- No tidy-up reminder is scheduled and none is created: writing is event-driven, a file over its
+  limit is only the cleaner's hint, and an owner's existing reminder is never cleaned up.
 
 ## Idle recycle of a cold, large session
 

@@ -158,6 +158,7 @@ test("the memory topic keeps the facts in MEMORY.md instead of a reference-only 
   expect(body).not.toContain("directory card");
   expect(body).not.toContain("work-log");
   expect(body).not.toContain("user-preferences");
+  expect(body).toContain("No reminder will ask you to tidy memory");
   expect(searchManualTopics("facts in MEMORY.md").map((result) => result.slug)).toContain("memory");
 });
 
