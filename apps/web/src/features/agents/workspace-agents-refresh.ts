@@ -1,8 +1,10 @@
+import { useCallback, useState } from "react";
 import type { ExtraAgent } from "./extra-agent";
 import type { LiveAgent } from "./workspace-agents-realtime";
 
 /** How `WorkspaceAgentsProvider` reads its Agents again: the extras' Query, the store entry an
- * extra becomes, what a refresh hands the status hook, and the debounce of directory changes. */
+ * extra becomes, what a refresh hands the status hook, the roster it hands it, and the debounce of
+ * directory changes. */
 
 export const extraAgentsQueryKey = (workspaceId: string | undefined) =>
   ["extra-agents", workspaceId ?? null] as const;
@@ -21,6 +23,28 @@ export function refreshedAgents(
   extras: readonly ExtraAgent[] | undefined,
 ): LiveAgent[] {
   return extras ? [...roster, ...extras.map(extraLiveAgent)] : roster;
+}
+
+/**
+ * The roster `useAgentStatuses` builds the store on: the page's read, until a refresh reads a newer
+ * one (`keep`), and the page's again once it reads anew. The status hook re-merges the store from
+ * this roster whenever the extras change, so the page's read alone took back every Agent added
+ * since, like one just created and its DM in the sidebar (task #551).
+ */
+export function useLatestRoster(loaded: LiveAgent[], workspaceId: string | undefined) {
+  const [state, setState] = useState({ loaded, workspaceId, roster: loaded });
+  let current = state;
+  if (state.loaded !== loaded || state.workspaceId !== workspaceId) {
+    current = { loaded, workspaceId, roster: loaded };
+    setState(current);
+  }
+  // A read for a Workspace the page has left is not this one's.
+  const keep = useCallback(
+    (readFor: string | undefined, roster: LiveAgent[]) =>
+      setState((held) => (held.workspaceId === readFor ? { ...held, roster } : held)),
+    [],
+  );
+  return [current.roster, keep] as const;
 }
 
 type TimeoutScheduler = {

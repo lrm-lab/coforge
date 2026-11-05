@@ -38,6 +38,7 @@ import {
   extraAgentsQueryKey,
   extraLiveAgent,
   refreshedAgents,
+  useLatestRoster,
 } from "./workspace-agents-refresh";
 import { heldDisplayAgentIds } from "./extra-agents-held";
 import { createDisplayWatchRegistry, DisplayWatcherContext } from "./watched-agent-displays";
@@ -164,6 +165,7 @@ export function WorkspaceAgentsProvider({
     () => (extraAgentsQuery.data ?? []).map(extraLiveAgent),
     [extraAgentsQuery.data],
   );
+  const [latestRoster, keepRoster] = useLatestRoster(agents, workspaceId);
   const refreshWithExtras = useCallback(async (): Promise<LiveAgent[]> => {
     const [roster, extras] = await Promise.all([
       refreshAgents(),
@@ -178,14 +180,15 @@ export function WorkspaceAgentsProvider({
             .catch(() => queryClient.getQueryData<ExtraAgent[]>(extraAgentsQueryKey(workspaceId)))
         : undefined,
     ]);
+    keepRoster(workspaceId, roster);
     return refreshedAgents(roster, extras);
-  }, [refreshAgents, readExtraAgents, queryClient, workspaceId]);
+  }, [refreshAgents, readExtraAgents, queryClient, workspaceId, keepRoster]);
 
   // `useAgentStatuses` derives its own per-Agent status subscriptions from its own current
   // state (see agent-status-realtime.ts), so a freshly-private Agent is subscribed the moment
   // it learns about it — no lag from an external, previous-render list.
   const { agents: visibleAgents, refresh: refreshDirectory } = useAgentStatuses<LiveAgent>({
-    agents,
+    agents: latestRoster,
     workspaceId,
     refresh: refreshWithExtras,
     extraAgents,
