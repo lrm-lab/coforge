@@ -1,10 +1,15 @@
 import { expect, test } from "bun:test";
-import { createHash } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
+import {
+  browserSession,
+  localBrowserE2e,
+  pageWaiter,
+  seededUuid,
+} from "./helpers/browser-e2e";
 
 /**
  * The search page's filters in a real browser. From, Scope, Channel and Time narrow the results
@@ -16,60 +21,14 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. Seeds are deterministic
  * and reset on every run. Screenshots are written under `.amp/e2e/search-filters/`.
  */
-const origin = Bun.env.COFORGE_E2E_WEB_URL;
-if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
-  throw new Error("COFORGE_E2E_WEB_URL must target the local Web service");
-const browserPath = Bun.which("agent-browser");
-if (!browserPath) throw new Error("agent-browser is required");
-const databaseUrl = Bun.env.DATABASE_URL;
-if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
-  throw new Error("DATABASE_URL must target local PostgreSQL");
+const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/search-filters");
-
-/** Deterministic id (seed-dev's sha256→UUID shape), so a rerun updates instead of duplicating. */
-function seededUuid(key: string): string {
-  const hash = createHash("sha256").update(key).digest("hex");
-  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-8${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
-}
 
 test("search filters narrow results, survive a reload, and clear together", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const session = `search-filters-${process.pid}`;
-  async function browser(...args: string[]) {
-    const child = Bun.spawn([browserPath!, "--session", session, ...args], {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const [stdout, stderr, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    if (code !== 0) throw new Error(`Browser ${args[0]} failed: ${stderr}`);
-    return stdout;
-  }
-  async function evaluate<T>(expression: string): Promise<T> {
-    return JSON.parse(JSON.parse(await browser("eval", `JSON.stringify(${expression})`))) as T;
-  }
-  /** Waits for a page condition, failing with the condition itself after 15 s. */
-  const waitFor = (condition: string) => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    return Promise.race([
-      browser("wait", "--fn", condition).finally(() => clearTimeout(timer)),
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => {
-          void browser(
-            "eval",
-            `location.search + " | " + document.querySelector("main")?.innerText`,
-          )
-            .catch((error: unknown) => String(error))
-            .then((page) =>
-              reject(new Error(`Timed out waiting for: ${condition}\nPage: ${page}`)),
-            );
-        }, 15_000);
-      }),
-    ]);
-  };
+  const { browser, evaluate } = browserSession(browserPath, session);
+  const waitFor = pageWaiter(browserPath)(session, browser);
   const find = (selector: string, predicate: string) =>
     `[...document.querySelectorAll(${JSON.stringify(selector)})].find((element) => ${predicate})`;
   /** A filter chip: a button in the filter bar whose text starts with `prefix`. */
