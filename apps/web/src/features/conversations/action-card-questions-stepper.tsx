@@ -6,14 +6,18 @@ import {
   type ReactNode,
   type TouchEvent,
 } from "react";
-import { ChevronLeft, ChevronRight } from "@untitledui/icons";
 import { Button as AriaButton } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
-import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { answered, QuestionRows, type Draft, type Question } from "./action-card-question-rows";
+import {
+  isTextEntry,
+  releaseQuestionsCard,
+  setActiveQuestionsCard,
+  useIsActiveQuestionsCard,
+} from "./action-card-questions-active";
 import { moveStep, swipeDelta } from "./action-card-questions-steps";
 
 /** A single pick moves on once its key has filled. */
@@ -58,6 +62,10 @@ export function QuestionsStepper({
   const touch = useRef<{ x: number; y: number }>(undefined);
   const autoNext = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(autoNext.current), []);
+  // The card ← → turn while focus is elsewhere: the one under the pointer or last focused.
+  const [self] = useState(() => Symbol("questions card"));
+  const active = useIsActiveQuestionsCard(self);
+  useEffect(() => () => releaseQuestionsCard(self), [self]);
   // A question turned from inside the card keeps focus in it: the row pressed went with its step.
   const focusFollows = useRef(false);
   useEffect(() => {
@@ -74,6 +82,24 @@ export function QuestionsStepper({
     focusFollows.current = Boolean(card.current?.contains(document.activeElement));
     setStep(clamped);
   };
+  // Active, the arrows turn this card from anywhere on the page but a text field or another
+  // control that keeps its own arrows; inside the card, its own handler takes them.
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target;
+      if (isTextEntry(target)) return;
+      if (target instanceof Node && card.current?.contains(target)) return;
+      if (target instanceof Element && target.closest(ARROW_OWNERS)) return;
+      event.preventDefault();
+      goTo(step + (event.key === "ArrowRight" ? 1 : -1));
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  });
+
   const question = questions[step];
   if (!question) return null;
   const isLast = step === last;
@@ -174,9 +200,15 @@ export function QuestionsStepper({
   return (
     <div
       ref={card}
+      data-keys-active={active ? "" : undefined}
       className="flex flex-col gap-3"
       onKeyDownCapture={onKeyDownCapture}
       onKeyDown={onKeyDown}
+      onPointerEnter={() => setActiveQuestionsCard(self)}
+      onPointerLeave={() => {
+        if (!card.current?.contains(document.activeElement)) releaseQuestionsCard(self);
+      }}
+      onFocus={() => setActiveQuestionsCard(self)}
     >
       {/* Every question in one cell, only the current one shown: the card is as tall as its
           tallest question on every page, so turning them moves nothing below (Frank, 11-05,
@@ -248,23 +280,32 @@ export function QuestionsStepper({
             </ol>
           )}
           {readOnly && (
-            <span className="ml-auto flex items-center gap-0.5">
-              <ButtonUtility
-                size="xs"
-                color="tertiary"
-                icon={ChevronLeft}
-                aria-label={m.action_card_questions_previous_step()}
-                isDisabled={step === 0}
-                onClick={() => goTo(step - 1)}
-              />
-              <ButtonUtility
-                size="xs"
-                color="tertiary"
-                icon={ChevronRight}
-                aria-label={m.action_card_questions_next()}
-                isDisabled={isLast}
-                onClick={() => goTo(step + 1)}
-              />
+            // The way through the pages as the keys that do it: ← →, keycaps like the rows' own
+            // keys, clicked or pressed. On the one card the arrows turn they are filled; on any
+            // other they wait, quieter.
+            <span className="ml-auto flex items-center gap-1">
+              {(
+                [
+                  ["←", "ArrowLeft", m.action_card_questions_previous_step(), step === 0, -1],
+                  ["→", "ArrowRight", m.action_card_questions_next(), isLast, 1],
+                ] as const
+              ).map(([glyph, key, label, end, delta]) => (
+                <AriaButton
+                  key={key}
+                  aria-label={label}
+                  aria-keyshortcuts={key}
+                  isDisabled={end}
+                  onPress={() => goTo(step + delta)}
+                  className={cn(
+                    "grid size-6 cursor-pointer place-items-center rounded-md font-body text-xs font-medium outline-focus-ring transition-colors data-disabled:cursor-default data-disabled:opacity-40 data-focus-visible:outline-2",
+                    active
+                      ? "bg-secondary text-tertiary data-hovered:bg-tertiary"
+                      : "text-quaternary data-hovered:bg-secondary",
+                  )}
+                >
+                  <span aria-hidden="true">{glyph}</span>
+                </AriaButton>
+              ))}
             </span>
           )}
           {!readOnly && (
@@ -303,3 +344,7 @@ export function QuestionsStepper({
     </div>
   );
 }
+
+/** Controls that use the arrows themselves: a key pressed in one is theirs, not a card's. */
+const ARROW_OWNERS =
+  '[role="menu"], [role="listbox"], [role="tablist"], [role="radiogroup"], [role="slider"], [role="grid"], [role="treegrid"], [role="tree"], [role="dialog"]';

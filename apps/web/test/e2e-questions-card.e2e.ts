@@ -354,6 +354,22 @@ test("a questions card takes an answer for every question, then sends them at on
         await evaluate<number>(`${viewer}.querySelectorAll('[aria-label^="Question "]').length`),
       ).toBe(3);
       await evaluate(`(${viewer}.scrollIntoView({ block: "center" }), true)`);
+      // Two cards: ← → turn the one under the pointer, the only one whose keys are filled, even
+      // with focus elsewhere; in the message box they stay the caret's.
+      const hinted = (c: string) => `${c}.querySelector("[data-keys-active]") != null`;
+      // The scroll settles first, so the pointer lands where the card is.
+      await browser("wait", "400");
+      await browser("hover", `[data-message-id="${otherMessage.id}"] [data-questions-card]`);
+      await browser("wait", "--fn", `${hinted(viewer)} && !${hinted(card)}`);
+      await evaluate(`(document.activeElement?.blur(), true)`);
+      await browser("press", "ArrowRight");
+      const viewerOn = (id: string) => `${viewer}.querySelector('[data-question="${id}"]') != null`;
+      await browser("wait", "--fn", viewerOn("agent"));
+      expect(await evaluate<boolean>(shown("webhook"))).toBe(true);
+      await evaluate(`(document.querySelector("textarea").focus(), true)`);
+      await browser("press", "ArrowLeft");
+      await browser("wait", "300");
+      expect(await evaluate<boolean>(viewerOn("agent"))).toBe(true);
       await shoot("viewer");
       await browser("set", "viewport", "390", "844");
       await browser("wait", "--fn", `${viewer} != null`);
