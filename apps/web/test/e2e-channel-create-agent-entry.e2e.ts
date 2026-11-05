@@ -153,10 +153,11 @@ test("the add view creates an Agent named by the search, and it joins the channe
     );
     const form = await evaluate<{ name: string; visibilityDisabled: boolean }>(`(() => {
       const dialog = ${agentForm};
-      const visibility = [...dialog.querySelectorAll("button")].find((button) => button.getAttribute("aria-label")?.startsWith("Visibility"));
+      // The visibility is the "Make Private" option card's checkbox (4a4fc89db).
+      const makePrivate = [...dialog.querySelectorAll('input[type="checkbox"]')].find((input) => input.closest("label")?.textContent.includes("Make Private"));
       return {
         name: dialog.querySelector('input[name="name"]').value,
-        visibilityDisabled: visibility?.disabled === true || visibility?.getAttribute("data-disabled") === "true",
+        visibilityDisabled: makePrivate?.disabled === true,
       };
     })()`);
     expect(form).toEqual({ name: agentName, visibilityDisabled: true });
