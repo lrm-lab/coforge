@@ -12,7 +12,25 @@ import { fixturePerTurnHost } from "./fixtures/runtime-host";
 
 const FIXTURE = new URL("./fixtures/droid-auth.ts", import.meta.url).pathname;
 
-function ownedProcess(child: ReturnType<typeof Bun.spawn>): DroidAuthProcess {
+/** `Bun.spawn` with piped stdio: the overload returns the streams, which this test relies on. */
+type PipedChild = {
+  stdout: ReadableStream<Uint8Array>;
+  stderr: ReadableStream<Uint8Array>;
+  stdin: { write(value: string): unknown };
+  exited: Promise<number>;
+  kill(signal?: string): void;
+};
+
+const spawnPiped = (options: {
+  cmd: string[];
+  cwd: string;
+  env: Record<string, string>;
+  stdin: "pipe";
+  stdout: "pipe";
+  stderr: "pipe";
+}): PipedChild => Bun.spawn(options) as unknown as PipedChild;
+
+function ownedProcess(child: PipedChild): DroidAuthProcess {
   return {
     output: new Response(
       new ReadableStream<Uint8Array>({
@@ -55,7 +73,7 @@ async function fixture(environment: Record<string, string> = {}) {
     factoryApiKeyConfigured: false,
     spawn: (args, cwd) =>
       ownedProcess(
-        Bun.spawn({
+        spawnPiped({
           cmd: [process.execPath, FIXTURE, ...args],
           cwd,
           env,

@@ -31,6 +31,7 @@ export const anvilRuntimeFixtures = {
   commandCode: new URL("../../../anvil/test/fixtures/command-code-acp.ts", import.meta.url)
     .pathname,
   devin: new URL("../../../anvil/test/fixtures/devin-acp.ts", import.meta.url).pathname,
+  droid: new URL("../../../anvil/test/fixtures/droid-acp.ts", import.meta.url).pathname,
   kiro: new URL("../../../anvil/test/fixtures/kiro-acp.ts", import.meta.url).pathname,
   kiroClientInfo: new URL("../../../anvil/test/fixtures/kiro-client-info.ts", import.meta.url)
     .pathname,

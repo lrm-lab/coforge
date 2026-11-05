@@ -172,6 +172,8 @@ for await (const line of console) {
         sessionUpdate: "agent_message_chunk",
         content: { type: "text", text: `echo ${text}` },
       });
+      // The real server reports the session's context reading with each turn's answer.
+      update({ sessionUpdate: "usage_update", used: 348, size: 250_000 });
       reply({ stopReason: "end_turn" });
       break;
     }

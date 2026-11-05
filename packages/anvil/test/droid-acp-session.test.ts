@@ -210,6 +210,25 @@ test("a process kill mid-turn keeps the stored conversation on reload", async ()
   }
 });
 
+test("a turn reports the session's context reading from usage_update", async () => {
+  const f = await fixture();
+  try {
+    const session = await f.provider.createAgentSession(options(f.cwd) as never);
+    const events: AgentRuntimeEvent[] = [];
+    session.subscribe((event) => events.push(event));
+    await session.sendMessage("hello");
+    await waitFor(() => events.some((e) => e.type === "completed"));
+    expect(events).toContainEqual({
+      type: "context-usage",
+      usedTokens: 348,
+      windowTokens: 250_000,
+    });
+    await session.dispose();
+  } finally {
+    await f.cleanup();
+  }
+});
+
 test("a tool call emits start and a matching end", async () => {
   const f = await fixture();
   try {
