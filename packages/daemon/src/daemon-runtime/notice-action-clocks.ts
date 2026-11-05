@@ -1,4 +1,4 @@
-import type { AttentionDecisionOutcome } from "./agent-message-attention-index";
+import type { AttentionDecisionOutcome } from "./agent-message-attention-decision-log";
 
 /** Per-Agent clocks for the frozen-after-notice judgment (task #318): when the process last
  * accepted an inbox notice, and when it last did anything a checked read or operation counts

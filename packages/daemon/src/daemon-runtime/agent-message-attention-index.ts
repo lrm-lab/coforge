@@ -38,6 +38,10 @@ import { inboxPreviewLimit } from "./inbox-preview";
 import { buildNoticeRows, PreviewSeen, renderNoticeRows } from "./inbox-preview-rows";
 import { MemoryChannelUpdates, type MemoryChannelUpdateSchedule } from "./memory-channel-updates";
 import { LatestThreadReadIndex } from "./latest-thread-read-index";
+import {
+  logAttentionDecision,
+  type AttentionDecisionOutcome,
+} from "./agent-message-attention-decision-log";
 import type {
   AgentConsumedSeqEntry,
   AgentConsumedSeqPort,
@@ -52,9 +56,6 @@ import {
 } from "./agent-message-attention-index-helpers";
 
 const logger = getLogger(["coforge", "daemon", "message-attention"]);
-
-/** What the daemon decided for one delivery (`agent.message.attention_decision`). */
-export type AttentionDecisionOutcome = "notified" | "held" | "consumed" | "already_notified";
 
 export type MessageAttention = Readonly<{
   target: string;
@@ -216,6 +217,13 @@ export class AgentMessageAttentionIndex {
     const generation = this.#generation(message.agentId);
     if (generation.seenDeliveryIds.has(message.deliveryId)) {
       if (!generation.notified.has(message.deliveryId)) {
+        // The Agent read this before the server re-sent it (a lost acknowledgement): nothing to
+        // announce, and the replay is acknowledged so it stops coming back.
+        if (this.#alreadyRead(message.agentId, message)) {
+          this.logDecision(message, "consumed");
+          await this.acknowledge(message);
+          return;
+        }
         if (this.#isOrdinaryMemoryUpdate(message)) {
           this.acknowledgeCustody(message);
           await this.#memoryUpdates.add(message);
@@ -237,10 +245,7 @@ export class AgentMessageAttentionIndex {
       return;
     }
     this.#remember(generation, message.deliveryId);
-    if (
-      this.#consumed(message) ||
-      this.#previewSeen.has(message.agentId, message.target ?? "", message.sequence)
-    ) {
+    if (this.#alreadyRead(message.agentId, message)) {
       this.logDecision(message, "consumed");
       await this.acknowledge(message);
       return;
@@ -288,7 +293,10 @@ export class AgentMessageAttentionIndex {
       this.#remember(generation, message.deliveryId);
       this.logDecision(message, "notified");
       await this.#notify(message, this.#recordAttention(message));
-    } else if (!generation.notified.has(message.deliveryId)) {
+    } else if (
+      !generation.notified.has(message.deliveryId) &&
+      !this.#alreadyRead(message.agentId, message)
+    ) {
       const attempt = generation.notificationAttempts.get(message.deliveryId);
       this.logDecision(message, attempt ? "already_notified" : "notified");
       await (attempt ?? this.#notify(message));
@@ -296,30 +304,24 @@ export class AgentMessageAttentionIndex {
     return this.#generations.get(message.agentId) === generation ? "told" : "gone";
   }
 
-  /**
-   * Logs what the daemon decided for one delivery: whether it notified the Agent's session now,
-   * held it for a later notice, found it already consumed (with the frontier that covered it), or
-   * found its notice already given. Without this line every outcome looks the same in the log,
-   * because `agent.message.delivery_indexed` is written after the decision either way.
-   */
+  /** What the daemon decided for one delivery: `agent-message-attention-decision-log.ts`. */
   logDecision(message: AgentMessageDelivery, outcome: AttentionDecisionOutcome): void {
     const target = message.target ?? "";
-    logger.info("Agent delivery attention decided", {
-      event: "agent.message.attention_decision",
-      workspace_id: message.workspaceId,
-      agent_id: message.agentId,
-      delivery_id: message.deliveryId,
-      message_id: message.messageId,
-      target,
-      sequence: message.sequence,
-      tracked_mention: isTrackedMention(message),
+    logAttentionDecision(
+      message,
       outcome,
-      model_seen_seq: this.modelSeenSequence(message.agentId, target),
-      exact_seen: containsSorted(
-        this.#consumedByAgent.get(message.agentId)?.targets.get(target)?.exactSeqs,
-        message.sequence,
-      ),
-    });
+      this.modelSeenSequence(message.agentId, target),
+      this.#consumedByAgent.get(message.agentId)?.targets.get(target)?.exactSeqs,
+    );
+  }
+
+  /** Whether the Agent already has this delivery: read past it, or shown its preview line. A
+   * replayed delivery whose acknowledgement was lost still must not be announced again. */
+  #alreadyRead(agentId: string, message: AgentMessageDelivery & { target: string }): boolean {
+    return (
+      this.#consumed(message) ||
+      this.#previewSeen.has(agentId, message.target ?? "", message.sequence)
+    );
   }
 
   /** Whether the Agent's current session accepted a notice of this delivery. */
@@ -377,10 +379,7 @@ export class AgentMessageAttentionIndex {
     for (const message of held) {
       if (!hasDeliveryScope(message)) continue;
       settled.push(message);
-      if (
-        this.#consumed(message) ||
-        this.#previewSeen.has(agentId, message.target ?? "", message.sequence)
-      ) {
+      if (this.#alreadyRead(agentId, message)) {
         this.logDecision(message, "consumed");
         continue;
       }
@@ -389,10 +388,7 @@ export class AgentMessageAttentionIndex {
         continue;
       }
       this.#remember(generation, message.deliveryId);
-      if (
-        this.#consumed(message) ||
-        this.#previewSeen.has(agentId, message.target ?? "", message.sequence)
-      ) {
+      if (this.#alreadyRead(agentId, message)) {
         this.logDecision(message, "consumed");
         continue;
       }
