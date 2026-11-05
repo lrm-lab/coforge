@@ -39,3 +39,10 @@
 - Skills need no adapter work: Devin discovers the Agent workspace's `.agents/skills` (CoForge's
   layout) plus `.devin/skills`, `.cognition/skills`, `~/.config/devin/skills` and
   `~/.agents/skills`.
+
+- Busy input waits for the current turn: the adapter supplies no `steer`, because the ACP server
+  (`devin acp`, verified on 3000.11.234) does not advertise the pre-standard
+  `_meta.steering` extension in its `initialize` result, and ACP offers no standard interjection.
+  A second prompt sent while a turn runs is therefore queued for the next turn. If a later CLI
+  advertises `_meta.steering`, add an `AcpSteerProfile` here rather than another mechanism — the
+  measured effect today is a 6–13 s p50 wait before a notice reaches the session (`#319`).
