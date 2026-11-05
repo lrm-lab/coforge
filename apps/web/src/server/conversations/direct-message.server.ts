@@ -108,6 +108,7 @@ export class SendDirectMessage {
       input.idempotencyKey,
       input.conversationId,
       { ...message, agentId: message.agentId },
+      input.attachmentIds?.length ?? 0,
       input.forwarded,
     );
     return message;
@@ -290,6 +291,7 @@ export class SendDirectMessage {
     idempotencyKey: string,
     conversationId: string,
     message: Awaited<ReturnType<DirectConversationRepository["sendMessage"]>>,
+    attachmentCount: number,
     forwarded?: ForwardedMessage,
   ) {
     if (!message) throw new Error("message publication is unavailable");
@@ -336,6 +338,7 @@ export class SendDirectMessage {
           latestSenderKind: message.latestSenderKind,
           latestSenderHandle: message.latestSenderHandle,
           latestSenderDescription: message.latestSenderDescription,
+          attachmentCount,
         },
       ],
     );

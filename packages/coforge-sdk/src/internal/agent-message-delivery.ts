@@ -42,6 +42,12 @@ export type AgentMessageDelivery = {
    * "subscribed". Absent on ordinary channel, DM and non-member-mention deliveries and from an
    * older server. */
   reason?: string;
+  /** The message's attachment count. A delivery with one or more is never read in full from a
+   * preview. Absent from a server that predates it: the daemon then treats it as unknown. */
+  attachmentCount?: number;
+  /** "app" when the message is an App event rather than a person's or an Agent's text. Absent
+   * from a server that predates it. */
+  source?: "app";
 };
 
 export function encodeAgentMessageDelivery(value: AgentMessageDelivery): Uint8Array {
@@ -56,6 +62,11 @@ export function encodeAgentMessageDelivery(value: AgentMessageDelivery): Uint8Ar
       value.latestSenderHandle ?? "",
       "Agent message delivery",
     );
+  if (value.attachmentCount !== undefined)
+    assertUint(value.attachmentCount, 0xffffffff, "Agent message attachment count");
+  if (value.source !== undefined && value.source !== "app")
+    throw new Error("agent message delivery source must be app");
+
   return toBinary(
     AgentMessageDeliverySchema,
     create(AgentMessageDeliverySchema, {
@@ -81,6 +92,8 @@ export function encodeAgentMessageDelivery(value: AgentMessageDelivery): Uint8Ar
       createdAtMs: value.createdAtMs === undefined ? undefined : BigInt(value.createdAtMs),
       taskConversations: value.features?.taskConversations,
       reason: value.reason,
+      attachmentCount: value.attachmentCount,
+      source: value.source,
     }),
   );
 }
@@ -132,5 +145,7 @@ export function decodeAgentMessageDelivery(bytes: Uint8Array): AgentMessageDeliv
       ? { features: { taskConversations: value.taskConversations } }
       : {}),
     ...(value.reason ? { reason: value.reason } : {}),
+    ...(value.attachmentCount !== undefined ? { attachmentCount: value.attachmentCount } : {}),
+    ...(value.source === "app" ? { source: "app" as const } : {}),
   };
 }

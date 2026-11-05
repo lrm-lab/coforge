@@ -339,6 +339,7 @@ export async function sendChannel(
       latestSenderKind: sender.kind,
       latestSenderHandle: sender.handle,
       latestSenderDescription: sender.description,
+      attachmentCount: new Set(attachmentIds ?? []).size,
       mentionsAgent: deliveryMentionsAgent(message.mentions, delivery.agentId),
       taskView: taskViews.get(delivery.agentId),
     })),

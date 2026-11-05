@@ -322,6 +322,13 @@ message AgentMessageDelivery {
   // "mentioned" (the message @-named it) or "subscribed" (it uploaded the attachment or commented
   // before). Unset on ordinary channel, DM and non-member-mention deliveries.
   optional string reason = 22;
+  // How many attachments the message carries. A delivery with one or more is never treated as
+  // read in full from a preview. Unset from a server that predates it, which the daemon reads as
+  // "unknown" (and therefore not in full).
+  optional uint32 attachment_count = 23;
+  // Where a message not written by a person or an Agent came from: "app" for an App event. Unset
+  // on ordinary deliveries and from a server that predates it.
+  optional string source = 24;
 }
 
 // The recipient Agent's launch and native session a tracked @mention delivery was issued for.

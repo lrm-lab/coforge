@@ -210,6 +210,49 @@ test("round-trips an Agent direct message delivery", () => {
   expect(decodeAgentMessageDelivery(encodeAgentMessageDelivery(delivery))).toEqual(delivery);
 });
 
+test("round-trips the attachment count and the App source, keeping an explicit zero", () => {
+  const delivery = {
+    protocolMajor: 1,
+    requestId: "request-a",
+    messageId: "message-a",
+    deliveryId: "delivery-a",
+    sequence: 42,
+    workspaceId: "workspace-a",
+    conversationId: "conversation-a",
+    agentId: "agent-a",
+    body: "Please inspect the repository",
+    method: AGENT_MESSAGE_METHOD,
+    attachmentCount: 0,
+    source: "app" as const,
+  } as const;
+  expect(decodeAgentMessageDelivery(encodeAgentMessageDelivery(delivery))).toEqual(delivery);
+  const withAttachments = { ...delivery, attachmentCount: 3 };
+  expect(decodeAgentMessageDelivery(encodeAgentMessageDelivery(withAttachments))).toEqual(
+    withAttachments,
+  );
+});
+
+test("refuses a delivery whose source or attachment count is not one it knows", () => {
+  const delivery = {
+    protocolMajor: 1,
+    requestId: "request-a",
+    messageId: "message-a",
+    deliveryId: "delivery-a",
+    sequence: 42,
+    workspaceId: "workspace-a",
+    conversationId: "conversation-a",
+    agentId: "agent-a",
+    body: "Please inspect the repository",
+    method: AGENT_MESSAGE_METHOD,
+  } as const;
+  expect(() => encodeAgentMessageDelivery({ ...delivery, source: "other" as never })).toThrow(
+    "source",
+  );
+  expect(() => encodeAgentMessageDelivery({ ...delivery, attachmentCount: -1 })).toThrow(
+    "attachment count",
+  );
+});
+
 test("refuses an Agent delivery with no request id", () => {
   const delivery = {
     protocolMajor: 1,

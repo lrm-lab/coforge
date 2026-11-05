@@ -134,6 +134,8 @@ export class AgentEvents {
       latestSenderKind: "system",
       latestSenderHandle: "",
       latestSenderDescription: "",
+      attachmentCount: 0,
+      source: "app",
     }).catch(() => {});
     return { status: "queued", eventId: stored.eventId };
   }
