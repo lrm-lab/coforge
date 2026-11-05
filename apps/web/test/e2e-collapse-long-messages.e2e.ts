@@ -75,7 +75,13 @@ test("a member turns off collapsing long messages for one channel and back on", 
   const showMore = `[...document.querySelectorAll("button")].some((button) => button.textContent.trim() === "Show More")`;
   try {
     const member = await db.conversationMember.create({
-      data: { conversationId: channel.id, workspaceId, userId: DEV_BROWSER_USER.id },
+      // Collapsing is off unless a member turns it on (task #280); this member has it on.
+      data: {
+        conversationId: channel.id,
+        workspaceId,
+        userId: DEV_BROWSER_USER.id,
+        collapseLongMessages: true,
+      },
     });
     await db.message.create({
       data: {
