@@ -1,15 +1,14 @@
-# Workspace memory: MEMORY.md as a directory card
+# Workspace memory: MEMORY.md holds the index and the facts
 
 Your Agent workspace is a persistent, agent-owned working area; files you create here survive
-across turns. Treat **MEMORY.md** as a directory card, not a diary: it holds only references,
-points to everything, and does not contain everything.
+across turns. **MEMORY.md** carries two things: a short index, and the durable facts themselves —
+one fact per line. Only long material lives elsewhere, and only as a pointer.
 
 ## Layout
 
-- `MEMORY.md` — index, aim for about 60 lines / 3KB
-- `notes/active-context.md` — Active Context: current task, next step, pointers (≤ 5 lines)
-- `notes/<topic>.md` — details by topic (preferences, channels, domain, other Agents)
-- `notes/work-log.md` — chronological history (append only; do not read every turn)
+- `MEMORY.md` — the index and the facts (aim for about 3KB); it arrives with every fresh session
+- `notes/active-context.md` — the current state: next step, blocker, progress (about 1KB, not a log)
+- `notes/<topic>.md` — long material only: procedures, reports, reference, exported data
 - `notes/` — also what you produce: reports, exported data, images
 - `code/` — repositories you clone
 
@@ -26,56 +25,45 @@ points to everything, and does not contain everything.
 
 -
 
-## Index
+## Facts
+
+- <one durable fact per line>
+
+## Pointers
 
 - notes/active-context.md
-- notes/work-log.md
+- notes/<topic>.md
 ```
 
-- Aim to keep `MEMORY.md` around 60 lines / 3KB. It holds references only; the Active Context
-  is not a MEMORY.md section.
-- `notes/active-context.md` ≤ 5 lines: the current task, the next step, and pointers to
-  details. Before a long task, write it so an interrupted task can resume.
-- Do not put PIDs, numeric results, hashes, timestamps, or message ids in MEMORY.md.
-- Before writing MEMORY.md, decide: index entry or detail? Details go in `notes/`; MEMORY.md
-  only gets a pointer line.
-- When `notes/active-context.md` is over 5 lines, sink old entries into `notes/work-log.md`.
+## What belongs where
 
-## What to memorize
+- **A fact** is one line: a decision a human made, a preference they stated, a project convention,
+  an environment quirk, a pitfall you hit. Write it in `MEMORY.md` itself, not in a note behind a
+  pointer.
+- **Long material** — a procedure with many steps, a reference table, a report — goes in
+  `notes/<topic>.md`, with one pointer line in `MEMORY.md` saying what it is for. Do not copy the
+  material itself into `MEMORY.md`.
+- **The current state** — what you are doing, the next step, what blocks you — goes in
+  `notes/active-context.md`, overwritten as it changes. It is not a log and holds no task list.
+- Do not put PIDs, numeric results, hashes, timestamps, or message ids in `MEMORY.md`.
 
-Record these in `notes/`, not as prose in MEMORY.md:
+## When to write
 
-1. **User preferences** — How the user likes things done, communication style, tool
-   preferences, recurring patterns in their requests.
-2. **World/project context** — The project structure, tech stack, architectural decisions,
-   team conventions, deployment patterns.
-3. **Domain knowledge** — Domain-specific terminology, conventions, best practices you learn
-   through tasks.
-4. **Work history** — What has been done, decisions made and why, problems solved, approaches
-   that worked or failed. Append to `notes/work-log.md`.
-5. **Channel context** — What each channel is about, who participates, what's being discussed,
-   ongoing tasks per channel.
-6. **Other Agents** — What other Agents do, their specialties, collaboration patterns, how to
-   work with them effectively.
+- When a human decides something or states a preference, edit the matching fact in `MEMORY.md` at
+  that moment.
+- When you hit a pitfall (a command that failed for a non-obvious reason, an environment quirk), add
+  that fact.
+- In the same edit, merge duplicates and drop facts that are no longer true; a fact that changed is
+  rewritten in place, not appended.
+- Overwrite `notes/active-context.md` when work starts, finishes or blocks.
+- Check `MEMORY.md` before asking a human: the answer may already be there.
 
-Suggested files:
+## Recovery
 
-- `notes/user-preferences.md` — User's preferences and conventions
-- `notes/channels.md` — Summary of each channel and its purpose
-- `notes/work-log.md` — Important decisions and completed work (append only)
-- `notes/<domain>.md` — Domain-specific knowledge
+Both files arrive with every fresh session (and again after the provider compacts the context), so
+you do not need to read them first. Read other notes only when a specific task needs them:
+`notes/active-context.md` says where you were.
 
 Clone repositories into `code/` and keep what you produce in `notes/`, not the Agent workspace
-root. If you are moved to another Computer, `notes/` moves with you but `code/` does not: you
-clone it again there, so push code changes you want to keep. Update notes
-proactively: when you learn something important, write it in `notes/` and add a one-line
-pointer in MEMORY.md if it is new.
-
-## Recovery and updates
-
-Read MEMORY.md and relevant notes when resuming without sufficient context, not on every turn;
-`notes/active-context.md` says what you were doing.
-Provider compaction may retain a summary; do not assume all context was lost.
-Save useful cross-session facts, decisions, or unfinished progress when needed. Ordinary requests
-need no before/after bookkeeping. The layout above is guidance when maintaining memory, not a
-prerequisite for doing the user's work.
+root. If you are moved to another Computer, `notes/` moves with you but `code/` does not: you clone
+it again there, so push code changes you want to keep.

@@ -149,6 +149,18 @@ test("the tasks topic carries the full task reference removed from the standing 
   expect(body).toContain("**Splitting tasks for parallel execution:**");
 });
 
+test("the memory topic keeps the facts in MEMORY.md instead of a reference-only index", () => {
+  const body = findManualTopic("memory")?.body ?? "";
+  expect(body).toContain("## Facts");
+  expect(body).toContain("## Pointers");
+  expect(body).toContain("one fact per line");
+  expect(body).not.toContain("holds references only");
+  expect(body).not.toContain("directory card");
+  expect(body).not.toContain("work-log");
+  expect(body).not.toContain("user-preferences");
+  expect(searchManualTopics("facts in MEMORY.md").map((result) => result.slug)).toContain("memory");
+});
+
 test("P3 topics hold the how-to moved out of the standing prompt", () => {
   expect(findManualTopic("channels")?.body).toContain("coforge channel mute --target '#general'");
   expect(findManualTopic("reminders")?.body).toContain(

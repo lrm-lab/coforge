@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildInitialMemoryMd, seedAgentMemory } from "#src/agent-runtime/agent-memory-seed";
 
-test("buildInitialMemoryMd renders the displayName, role, and an index of notes, with no active context", () => {
+test("buildInitialMemoryMd renders the displayName, role, a facts area and pointers, with no active context", () => {
   const content = buildInitialMemoryMd({
     name: "scout",
     displayName: "Scout",
@@ -18,9 +18,13 @@ Reviews pull requests for the platform team.
 ## Rules (never change)
 -
 
-## Index
-- notes/active-context.md   当前任务、下一步、指针（≤5 行）
-- notes/work-log.md   按时间的完整历史
+## Facts
+<!-- One fact per line. When a human decides or prefers something, or you hit a pitfall, edit the
+line here and merge duplicates. -->
+
+## Pointers
+- notes/active-context.md   current state: next step, blocker, progress (overwrite it as work moves)
+- notes/<topic>.md   long material (procedures, reports, reference); one line here pointing at it
 `);
   expect(content).not.toContain("Active Context");
   expect(content).not.toContain("First startup");
@@ -57,14 +61,12 @@ test("seedAgentMemory writes MEMORY.md into the Agent workspace with owner-only 
     );
     const stats = await stat(memoryPath);
     expect(stats.mode & 0o777).toBe(0o600);
-    const workLog = await readFile(join(workspace, "notes", "work-log.md"), "utf8");
-    expect(workLog).toContain("Chronological history");
-    expect(workLog).toContain("follow the pointer in notes/active-context.md");
-    expect(workLog).not.toContain("MEMORY.md Active Context");
+    // The seed no longer creates a chronological work log: the facts live in MEMORY.md.
+    await expect(stat(join(workspace, "notes", "work-log.md"))).rejects.toThrow();
     const activeContextPath = join(workspace, "notes", "active-context.md");
     const activeContext = await readFile(activeContextPath, "utf8");
     expect(activeContext).toContain("# Active Context");
-    expect(activeContext).toContain("up to 5 lines");
+    expect(activeContext).toContain("Current state, not a log");
     expect(activeContext.trimEnd().split("\n").length).toBeLessThanOrEqual(5);
     expect((await stat(activeContextPath)).mode & 0o777).toBe(0o600);
     // As in the reference Computer, the workspace is not made ready for git: no .gitignore.
@@ -92,9 +94,9 @@ test("seedAgentMemory never overwrites an existing MEMORY.md, byte for byte", as
     expect(await readFile(memoryPath, "utf8")).toBe(ownedContent);
     expect((await stat(join(workspace, "notes"))).isDirectory()).toBe(true);
     expect((await stat(join(workspace, "code"))).isDirectory()).toBe(true);
-    expect(await readFile(join(workspace, "notes", "work-log.md"), "utf8")).toContain(
-      "Chronological history",
-    );
+    // A workspace seeded before the work log was dropped still gets the notes layout, but no
+    // new work log is written for it either.
+    await expect(stat(join(workspace, "notes", "work-log.md"))).rejects.toThrow();
     expect(await readFile(join(workspace, "notes", "active-context.md"), "utf8")).toContain(
       "# Active Context",
     );

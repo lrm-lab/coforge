@@ -140,18 +140,20 @@ Rules for Agent lifecycle, control, Session state, and Activity in
 
 ## Agent memory seed
 
-- `agent-memory-seed.ts` seeds a starter `MEMORY.md`, `notes/active-context.md`,
-  `notes/work-log.md` and the migration ignore file `.coforgemigrateignore`
-  (which leaves `code/` behind by default) right after the workspace directory
-  is created. It
-  only creates files (`flag: "wx"`, `EEXIST` ignored) and never overwrites one
-  the Agent already wrote. A seed failure is logged and never fails the launch.
-- `MEMORY.md` holds references only; the Active Context lives in
-  `notes/active-context.md`. Older workspaces get the missing notes files, but
-  an existing `MEMORY.md` is never migrated or rewritten.
-- `MEMORY.md` is the Agent's index and recovery point. The standing instructions say so and ask
-  for an update after an important interaction or a new fact — never per-turn maintenance — and
-  point at `notes/active-context.md` before a long task.
+- `agent-memory-seed.ts` seeds a starter `MEMORY.md`, `notes/active-context.md` and the migration
+  ignore file `.coforgemigrateignore` (which leaves `code/` behind by default) right after the
+  workspace directory is created. It only creates files (`flag: "wx"`, `EEXIST` ignored) and never
+  overwrites one the Agent already wrote. A seed failure is logged and never fails the launch.
+- The seed no longer writes `notes/work-log.md`: a chronological log is not what the Agent is told
+  to keep. A workspace from before that change keeps its file; nothing deletes it.
+- `MEMORY.md` holds the index _and_ the facts — one fact per line — with a `## Pointers` line for
+  each `notes/<topic>.md` that holds long material. The Active Context lives in
+  `notes/active-context.md` and is overwritten as work moves. Older workspaces get the missing
+  notes files, but an existing `MEMORY.md` is never migrated or rewritten.
+- The standing instructions say when to write: a fact goes in at the moment a human decides or
+  the Agent hits a pitfall, merging duplicates and dropping stale facts in the same edit; the
+  Active Context is overwritten when work starts, finishes or blocks; and `MEMORY.md` is checked
+  before asking a human. Never per-turn maintenance.
 
 ## Idle recycle of a cold, large session
 
@@ -182,9 +184,11 @@ Rules for Agent lifecycle, control, Session state, and Activity in
   invalidate, no new reason), leaves the session reference alone until the new session is reported,
   and makes the briefing the launch's first input. A briefing that cannot be built still starts a
   fresh session. No resume when the launch carries a `resumePrompt` or `create`s its session.
-- `startup-memory-block.ts` is the MEMORY.md section: the head of the regular file within
-  `STARTUP_MEMORY_BLOCK_BUDGET_TOKENS` (4,000), never through a symlink. That one budget covers
-  every fresh session, not only a recycle.
+- `startup-memory-block.ts` builds the block from two files, each cut to its own share and never
+  through a symlink: `MEMORY.md` within `STARTUP_MEMORY_BUDGET_TOKENS` (3,000) and
+  `notes/active-context.md` within `STARTUP_ACTIVE_CONTEXT_BUDGET_TOKENS` (1,000). A share is not
+  lent to the other file, a file with nothing to show contributes no section, and the same block
+  covers every fresh session, not only a recycle.
 - `session-memory-briefing.ts` is the one assembly: a fresh session's block rides in its starter
   when nothing else is queued, and is its own short reference turn ahead of a real delivery;
   `rebriefAfterCompaction` queues the same block again after a runtime reports a finished

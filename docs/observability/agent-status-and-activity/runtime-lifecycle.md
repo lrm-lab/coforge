@@ -31,9 +31,10 @@
 - **唤醒**：下一条消息照常走已退出 Agent 的唤醒路径。launch 注册之后才读取 session 事实并决定
   是否恢复（`daemon-runtime/wake-recycle.ts`）。回收时不带 session id 启动，session 上报以
   `replacedSessionId` 携带旧 id（不发 `agent:session:invalidate`），新 session 上报前保留旧引用，
-  因此 launch 失败时下次仍用旧 id。launch 的第一条输入是简报：`MEMORY.md` 开头（预算内，不跟随
-  符号链接）加 provider 从旧 transcript 整理出的近况；简报建不出来时仍以空白新 session 启动。带
-  `resumePrompt` 或以 `create` 方式启动的 launch 不回收。
+  因此 launch 失败时下次仍用旧 id。launch 的第一条输入是简报：`MEMORY.md` 与
+  `notes/active-context.md` 的开头（各自份额内，不跟随符号链接）加 provider 从旧 transcript 整理出
+  的近况；简报建不出来时仍以空白新 session 启动。带 `resumePrompt` 或以 `create` 方式启动的 launch
+  不回收。
 
 | 日志事件                               | 级别       | 含义                                                                                                                                      |
 | -------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
@@ -45,8 +46,8 @@
 | `agent.runtime.wake_recycle`           | info       | 唤醒时的决定：`outcome=resume`（带 `reason`）或 `outcome=recycle`（带 `prior_session_id`、`idle_ms`、`prior_context_tokens`、是否有简报） |
 | `agent.runtime.wake_recycle_failed`    | warn       | 决定过程出错，按恢复处理                                                                                                                  |
 | `agent.runtime.wake_briefing_failed`   | warn       | provider 简报建不出来，以不带它的新 session 启动                                                                                          |
-| `agent.runtime.session_memory`         | info       | 一个 fresh session 的首条输入带上了 `MEMORY.md` 段（`has_memory_block`）                                                                  |
-| `agent.runtime.compaction_rebrief`     | info       | 运行时报告上下文压缩完成，`MEMORY.md` 段重新排在下一条输入前（`has_memory_block`）                                                        |
+| `agent.runtime.session_memory`         | info       | 一个 fresh session 的首条输入带上了 `MEMORY.md`/`active-context` 段（`has_memory_block`）                                                 |
+| `agent.runtime.compaction_rebrief`     | info       | 运行时报告上下文压缩完成，同一份两文件段重新排在下一条输入前（`has_memory_block`）                                                        |
 
 | 环境变量                                  | 默认                          | 含义                                                                             |
 | ----------------------------------------- | ----------------------------- | -------------------------------------------------------------------------------- |
@@ -56,6 +57,6 @@
 | `COFORGE_WAKE_RECYCLE_SWEEP_MS`           | `600000`                      | sweep 周期；只读 Daemon 自身环境                                                 |
 | `COFORGE_WAKE_RECYCLE_PANEL_TOKENS`       | `8000`                        | provider 简报的 token 预算                                                       |
 
-`MEMORY.md` 段的 token 预算不属于回收：每个 fresh session（首次启动、provider 丢失 session 后的重建、`create`、Memory Agent 的每个新 conversation）和每次上下文压缩完成后都用同一个 4000 token 预算，见 `STARTUP_MEMORY_BLOCK_BUDGET_TOKENS`。
+这两段的 token 预算不属于回收：每个 fresh session（首次启动、provider 丢失 session 后的重建、`create`、Memory Agent 的每个新 conversation）和每次上下文压缩完成后都按同样的份额注入——`MEMORY.md` 3000 token（`STARTUP_MEMORY_BUDGET_TOKENS`）、`notes/active-context.md` 1000 token（`STARTUP_ACTIVE_CONTEXT_BUDGET_TOKENS`），两份份额不互相借。
 
 除 sweep 周期外，Agent 自己的 runtime 环境变量覆盖 Daemon 的环境，两者都覆盖 provider 声明的冷却间隔；空值在两级都视为未设置，无法解析的值回落为默认。

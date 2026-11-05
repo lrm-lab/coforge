@@ -17,21 +17,18 @@ export type AgentMemorySeedIdentity = {
   description?: string;
 };
 
-const WORK_LOG_SEED = `# Work log
-
-Chronological history. Append only. Do not read this file every turn — follow the pointer in notes/active-context.md.
-`;
-
 const ACTIVE_CONTEXT_SEED = `# Active Context
 
-Before a long task, replace this line with up to 5 lines: the current task, the next step, and pointers to details, so an interrupted task can resume.
+Current state, not a log: overwrite it when work starts, finishes or blocks — next step, blocker, progress only.
 `;
 
 /**
  * Builds the content of a freshly seeded MEMORY.md for one Agent: a title, a Role section, a
- * Rules slot, and an Index pointing at notes/active-context.md and notes/work-log.md — the
- * directory-card shape the Agent Manual's memory topic tells the Agent to keep for on-demand
- * recovery. MEMORY.md holds references only; the Active Context lives in notes/active-context.md.
+ * Rules slot, a Facts area written one fact per line, and Pointers for what is too long to keep
+ * here — the shape the Agent Manual's memory topic tells the Agent to keep. MEMORY.md holds the
+ * index and the facts themselves; only long material (procedures, reports, reference) lives in
+ * notes/<topic>.md behind a one-line pointer, and the Active Context stays in
+ * notes/active-context.md.
  *
  * User-written identity text is sanitised the same way the standing prompt sanitises it: the
  * name is collapsed to a single line so it cannot break the `# <name>` heading, and the
@@ -51,9 +48,13 @@ ${role}
 ## Rules (never change)
 -
 
-## Index
-- notes/active-context.md   当前任务、下一步、指针（≤5 行）
-- notes/work-log.md   按时间的完整历史
+## Facts
+<!-- One fact per line. When a human decides or prefers something, or you hit a pitfall, edit the
+line here and merge duplicates. -->
+
+## Pointers
+- notes/active-context.md   current state: next step, blocker, progress (overwrite it as work moves)
+- notes/<topic>.md   long material (procedures, reports, reference); one line here pointing at it
 `;
 }
 
@@ -72,12 +73,13 @@ async function writeNewFile(path: string, content: string): Promise<void> {
 
 /**
  * Writes the seeded MEMORY.md and notes/active-context.md into an Agent's workspace on its first
- * launch, and creates the `notes/` / `code/` layout plus notes/work-log.md and the migration
- * ignore file that leaves `code/` behind by default. Never overwrites an existing file — once written, an Agent owns each of them and
- * this seed step never touches it again (`flag: "wx"` fails with `EEXIST`, which is swallowed
- * here). After a Full Reset clears the Agent workspace (the record store's `clearWorkspace`), the
- * files are gone along with every other workspace file, so the next launch's call to this
- * function seeds them again with no special-casing required.
+ * launch, and creates the `notes/` / `code/` layout plus the migration ignore file that leaves
+ * `code/` behind by default. Never overwrites an existing file — once written, an Agent owns each
+ * of them and this seed step never touches it again (`flag: "wx"` fails with `EEXIST`, which is
+ * swallowed here). A workspace from before the seed wrote no notes/work-log.md keeps whatever it
+ * has; nothing is deleted. After a Full Reset clears the Agent workspace (the record store's
+ * `clearWorkspace`), the files are gone along with every other workspace file, so the next
+ * launch's call to this function seeds them again with no special-casing required.
  *
  * Missing directories and notes files are created even when MEMORY.md already exists, so an older
  * workspace still gets the layout, including notes/active-context.md. An existing MEMORY.md is
@@ -99,7 +101,6 @@ export async function seedAgentMemory(
     await mkdir(notesDirectory, { recursive: true });
     await mkdir(join(agentWorkspaceDirectory, AGENT_CODE_DIRECTORY), { recursive: true });
     await writeNewFile(join(notesDirectory, "active-context.md"), ACTIVE_CONTEXT_SEED);
-    await writeNewFile(join(notesDirectory, "work-log.md"), WORK_LOG_SEED);
     await ensureAgentMigrationIgnoreFile(agentWorkspaceDirectory);
   } catch (error) {
     if ((error as { code?: string }).code === "EEXIST") return;

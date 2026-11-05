@@ -27,8 +27,9 @@ export type WakeRecycleConfig = Readonly<{
   enabled: boolean;
   minContextTokens: number;
   minColdGapMs: number;
-  /** Token budget of the provider's briefing. The MEMORY.md block's budget is the same for every
-   * fresh session (`STARTUP_MEMORY_BLOCK_BUDGET_TOKENS`), never a recycle-only setting. */
+  /** Token budget of the provider's briefing. The memory block's two shares are the same for
+   * every fresh session (`STARTUP_MEMORY_BUDGET_TOKENS` and
+   * `STARTUP_ACTIVE_CONTEXT_BUDGET_TOKENS`), never a recycle-only setting. */
   panelTokens: number;
 }>;
 

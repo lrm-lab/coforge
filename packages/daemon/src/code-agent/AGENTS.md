@@ -106,9 +106,10 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
   writing rules (facts are edited at the event, the Active Context is overwritten as work moves,
   and MEMORY.md is consulted before asking a human), and before that from 3840 for the
   before-stopping task-board check, and before that from 3712 for the system-notice assignment
-  exception, and before that from 3584 because a coordinator's scope and "Agent reports are not human authorization" live only here once the coordinator-change notice became one line; the shared communication style fits without removing delivery or authority rules. Ordinary questions and untracked DM work need no Task or per-turn memory bookkeeping;
-  only before a long task does the Agent note where it is in
-  `notes/active-context.md` (not MEMORY.md) so it can resume.
+  exception, and before that from 3584 because a coordinator's scope and "Agent reports are not human authorization" live only here once the coordinator-change notice became one line; the shared communication style fits without removing delivery or authority rules. Ordinary questions and untracked DM work need no Task or per-turn memory bookkeeping; memory writing is event-driven — a durable fact is edited into
+  `MEMORY.md` when a human decides or the Agent hits a pitfall (merging duplicates and dropping
+  stale facts in the same edit), and `notes/active-context.md` is overwritten as work starts,
+  finishes or blocks.
   An inbox notice lists targets — `check --target` those and reply; do not
   read MEMORY.md first. Replies default to where the conversation is (top
   level, its thread, or a claimed Task's thread); a new topic or a thread's
