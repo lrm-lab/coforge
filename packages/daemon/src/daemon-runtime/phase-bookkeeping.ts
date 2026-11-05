@@ -69,7 +69,7 @@ export class PhaseBookkeeping {
     outcome: "finished" | "inferred" | "interrupted",
     reported?: CompactionTokens,
   ): void {
-    const startedAt = this.#compactionBefore.get(agentId);
+    const observedBefore = this.#compactionBefore.get(agentId);
     this.#compactionBefore.delete(agentId);
     this.#compactionAttempts.delete(agentId);
     const usage = this.ports.contextUsage?.(agentId);
@@ -77,7 +77,7 @@ export class PhaseBookkeeping {
       event: "agent.runtime.compaction_tokens",
       agent_id: agentId,
       outcome,
-      tokens_before: reported?.tokensBefore ?? startedAt,
+      tokens_before: reported?.tokensBefore ?? observedBefore,
       tokens_after: reported?.tokensAfter ?? usage?.usedTokens,
       window_tokens: reported?.windowTokens ?? usage?.windowTokens,
     });
