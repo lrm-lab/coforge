@@ -18,7 +18,7 @@ import {
   setActiveQuestionsCard,
   useIsActiveQuestionsCard,
 } from "./action-card-questions-active";
-import { moveStep, swipeDelta } from "./action-card-questions-steps";
+import { dragOffset, moveStep, swipeAxis, swipeDelta } from "./action-card-questions-steps";
 
 /** A single pick moves on once its key has filled. */
 const AUTO_NEXT_MS = 180;
@@ -59,7 +59,8 @@ export function QuestionsStepper({
   const [direction, setDirection] = useState<1 | -1>(1);
   const card = useRef<HTMLDivElement>(null);
   const body = useRef<HTMLDivElement>(null);
-  const touch = useRef<{ x: number; y: number }>(undefined);
+  const pages = useRef<HTMLDivElement>(null);
+  const touch = useRef<{ x: number; y: number; axis?: "x" | "y" }>(undefined);
   const autoNext = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(autoNext.current), []);
   // The card ← → turn while focus is elsewhere: the one under the pointer or last focused.
@@ -152,15 +153,32 @@ export function QuestionsStepper({
     event.stopPropagation();
     goTo(step + (event.key === "ArrowRight" ? 1 : -1));
   };
+  // A finger moving sideways carries the question with it, the next one coming in from the edge
+  // (task #560: nothing showed the card could be swiped); let go far enough and it turns.
+  const drag = (offset: number | undefined) => {
+    const grid = pages.current;
+    if (!grid) return;
+    grid.toggleAttribute("data-dragging", offset !== undefined);
+    grid.style.setProperty("--drag", `${offset ?? 0}px`);
+  };
   const onTouchStart = (event: TouchEvent) => {
     const point = event.touches[0];
     touch.current = point && { x: point.clientX, y: point.clientY };
+  };
+  const onTouchMove = (event: TouchEvent) => {
+    const start = touch.current;
+    const point = event.touches[0];
+    if (!start || !point || questions.length < 2) return;
+    const dx = point.clientX - start.x;
+    start.axis ??= swipeAxis(dx, point.clientY - start.y);
+    if (start.axis === "x") drag(dragOffset(dx, step < last, step > 0));
   };
   const onTouchEnd = (event: TouchEvent) => {
     const start = touch.current;
     const point = event.changedTouches[0];
     touch.current = undefined;
-    if (!start || !point) return;
+    drag(undefined);
+    if (!start || !point || start.axis === "y") return;
     const delta = swipeDelta(point.clientX - start.x, point.clientY - start.y);
     if (delta) goTo(step + delta);
   };
@@ -212,35 +230,63 @@ export function QuestionsStepper({
     >
       {/* Every question in one cell, only the current one shown: the card is as tall as its
           tallest question on every page, so turning them moves nothing below (Frank, 11-05,
-          task #535). A shorter question sits at the top. */}
-      <div className="grid">
-        {questions.map((entry, index) =>
-          index === step ? (
+          task #535). A shorter question sits at the top. On a touch screen the next question shows
+          its edge at the right, the way a carousel shows there is more to swipe to (task #560);
+          the strip it shows in stays on the last question too, so no page is wider than another. */}
+      <div
+        ref={pages}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onTouchCancel={onTouchEnd}
+        className={cn(
+          "group/pages grid touch-pan-y",
+          // Clipped on a touch screen only: on a desktop the rows' focus rings reach past the edge.
+          questions.length > 1 &&
+            "pointer-coarse:grid-cols-[minmax(0,1fr)_--spacing(6)] pointer-coarse:overflow-x-clip pointer-coarse:mask-r-from-[calc(100%-var(--spacing)*6)]",
+        )}
+      >
+        {questions.map((entry, index) => {
+          // The page under a finger and the ones either side move with it; let go, they go back.
+          const follows =
+            "[transform:translateX(var(--drag,0px))] transition-transform duration-200 ease-out group-data-dragging/pages:transition-none motion-reduce:transition-none";
+          return index === step ? (
             <div
               ref={body}
               key={`current-${step}`}
               tabIndex={-1}
               data-question={question.id}
-              onTouchStart={onTouchStart}
-              onTouchEnd={onTouchEnd}
-              className={cn(
-                "flex flex-col gap-1.5 outline-none [grid-area:1/1] animate-in duration-150 fade-in motion-reduce:animate-none",
-                direction > 0 ? "slide-in-from-right-2" : "slide-in-from-left-2",
-              )}
+              className={cn(follows, "flex flex-col gap-1.5 outline-none [grid-area:1/1]")}
             >
-              {page(entry, pick)}
+              <div
+                className={cn(
+                  "flex flex-col gap-1.5 animate-in duration-150 fade-in motion-reduce:animate-none",
+                  direction > 0 ? "slide-in-from-right-2" : "slide-in-from-left-2",
+                )}
+              >
+                {page(entry, pick)}
+              </div>
             </div>
           ) : (
             <div
               key={entry.id}
               aria-hidden="true"
               inert
-              className="invisible flex flex-col gap-1.5 [grid-area:1/1]"
+              data-question-peek={Math.abs(index - step) === 1 ? "" : undefined}
+              className={cn(
+                follows,
+                "invisible flex flex-col gap-1.5 [grid-area:1/1]",
+                // Beside the current page, a gap away: the one after shows in the strip.
+                index === step + 1 &&
+                  "pointer-coarse:visible pointer-coarse:translate-x-[calc(100%+--spacing(1))]",
+                index === step - 1 &&
+                  "pointer-coarse:visible pointer-coarse:-translate-x-[calc(100%+--spacing(1))]",
+              )}
             >
               {page(entry, () => undefined)}
             </div>
-          ),
-        )}
+          );
+        })}
       </div>
       {notice}
       {(!readOnly || questions.length > 1) && (
@@ -254,8 +300,8 @@ export function QuestionsStepper({
                     aria-current={index === step ? "step" : undefined}
                     data-step-done={answered(drafts[entry.id]) ? "" : undefined}
                     onPress={() => goTo(index)}
-                    // A dot to see, a wider target to press.
-                    className="group/dot grid size-5 cursor-pointer place-items-center rounded-full outline-focus-ring data-focus-visible:outline-2"
+                    // A dot to see, a wider target to press: wider again under a finger.
+                    className="group/dot grid size-5 cursor-pointer place-items-center rounded-full outline-focus-ring data-focus-visible:outline-2 pointer-coarse:size-8"
                   >
                     {/* One look per state on every card (Raft, task #515), in grays (Frank:
                         no purple but the main button): the current question a longer dash,
@@ -283,7 +329,9 @@ export function QuestionsStepper({
             // The way through the pages as the keys that do it: ← →, keycaps like the rows' own
             // keys, clicked or pressed. On the one card the arrows turn they are filled; on any
             // other they wait, quieter.
-            <span className="ml-auto flex items-center gap-1">
+            // Under a finger they are 32px keys spaced apart, each pressed anywhere in a 44px
+            // square around it (task #560; Apple's minimum touch target, WCAG 2.5.5).
+            <span className="ml-auto flex items-center gap-1 pointer-coarse:gap-3">
               {(
                 [
                   ["←", "ArrowLeft", m.action_card_questions_previous_step(), step === 0, -1],
@@ -297,7 +345,7 @@ export function QuestionsStepper({
                   isDisabled={end}
                   onPress={() => goTo(step + delta)}
                   className={cn(
-                    "grid size-6 cursor-pointer place-items-center rounded-md font-body text-xs font-medium outline-focus-ring transition-colors data-disabled:cursor-default data-disabled:opacity-40 data-focus-visible:outline-2",
+                    "relative grid size-6 cursor-pointer place-items-center rounded-md font-body text-xs font-medium outline-focus-ring transition-colors data-disabled:cursor-default data-disabled:opacity-40 data-focus-visible:outline-2 pointer-coarse:size-8 pointer-coarse:text-sm pointer-coarse:before:absolute pointer-coarse:before:-inset-1.5",
                     active
                       ? "bg-secondary text-tertiary data-hovered:bg-tertiary"
                       : "text-quaternary data-hovered:bg-secondary",

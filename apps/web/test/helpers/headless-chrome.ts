@@ -61,8 +61,12 @@ export async function launchHeadlessChrome(path: string) {
   }
 
   /** A new tab at `url`, and an evaluator in its top document. `everyDocument` runs first in
-   * every document the tab loads, frames included (`Page.addScriptToEvaluateOnNewDocument`). */
-  async function open(url: string, options: { everyDocument?: string } = {}) {
+   * every document the tab loads, frames included (`Page.addScriptToEvaluateOnNewDocument`);
+   * `phone` opens it as a touch phone of that size, `(pointer: coarse)` and touch events. */
+  async function open(
+    url: string,
+    options: { everyDocument?: string; phone?: { width: number; height: number } } = {},
+  ) {
     const { targetId } = await send<{ targetId: string }>("Target.createTarget", {
       url: "about:blank",
     });
@@ -77,6 +81,18 @@ export async function launchHeadlessChrome(path: string) {
         { source: options.everyDocument },
         sessionId,
       );
+    if (options.phone) {
+      await send(
+        "Emulation.setDeviceMetricsOverride",
+        { ...options.phone, deviceScaleFactor: 2, mobile: true },
+        sessionId,
+      );
+      await send(
+        "Emulation.setTouchEmulationEnabled",
+        { enabled: true, maxTouchPoints: 5 },
+        sessionId,
+      );
+    }
     await send("Page.navigate", { url }, sessionId);
     async function evaluate<T>(expression: string): Promise<T> {
       const { result, exceptionDetails } = await send<{
@@ -86,7 +102,9 @@ export async function launchHeadlessChrome(path: string) {
       if (exceptionDetails) throw new Error(exceptionDetails.text);
       return result.value as T;
     }
-    return { evaluate, close: () => send("Target.closeTarget", { targetId }) };
+    /** A DevTools command to this tab, e.g. `Input.dispatchTouchEvent`. */
+    const command = <T>(method: string, params: object = {}) => send<T>(method, params, sessionId);
+    return { evaluate, command, close: () => send("Target.closeTarget", { targetId }) };
   }
 
   async function close() {

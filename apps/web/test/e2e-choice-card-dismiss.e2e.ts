@@ -105,7 +105,7 @@ test("the Agent's owner sees whom a choice card waits on and can withdraw it", a
     await browser(
       "wait",
       "--fn",
-      `${cardText}.includes("Waiting for Asked Peer") && ${pageHydrated}`,
+      `${cardText}.includes("Waiting for @Asked Peer") && ${pageHydrated}`,
     );
     // Not the asked person: the options are listed, not pressable, so Dismiss is the one button.
     expect(
