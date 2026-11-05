@@ -195,11 +195,15 @@ test.skipIf(!connectionString)(
         mentionOutcome: "pending",
         mentionLaunchId: null,
       });
-      // The daemon takes custody of the wake: the delivery is received, the mention stays pending.
+      // Its ACK can carry no envelope, so it settles the mention unknown, not pending.
       await t.ack(push);
       const row = await t.row(sent.id, t.dave.id);
-      expect(row).toMatchObject({ mentionOutcome: "pending", mentionSettledAt: null });
+      expect(row).toMatchObject({
+        mentionOutcome: "unknown",
+        mentionLaunchId: null,
+      });
       expect(row.receivedAt).toBeInstanceOf(Date);
+      expect(row.mentionSettledAt).toBeInstanceOf(Date);
     } finally {
       await t.cleanup();
     }
@@ -613,7 +617,6 @@ test.skipIf(!connectionString)(
       const sent = await t.send(`@dave-${t.suffix} wake up`);
       const wake = t.pushTo(sent.deliveries, t.dave.id);
       expect(wake.mentionDelivery).toBeUndefined();
-      await t.ack(wake);
       expect(await t.row(sent.id, t.dave.id)).toMatchObject({
         mentionOutcome: "pending",
         mentionLaunchId: null,
@@ -708,7 +711,6 @@ test.skipIf(!connectionString)(
       // Dave's launch reports its session as a sequenced snapshot.
       const daveStart = await start(t.dave.id);
       const woken = await t.send(`@dave-${t.suffix} wake up`);
-      await t.ack(t.pushTo(woken.deliveries, t.dave.id));
       const snapshot = createAgentSessionMethod(
         t.sessions,
         new AgentSessionReceiver(store, async () => "daemon-1", t.mentions),
@@ -788,7 +790,6 @@ test.skipIf(!connectionString)(
       await t.launch(t.bob.id, "launch-bob-2", "native-bob-2");
       const after = await t.send(`@bob-${t.suffix} after the relaunch`);
       const woken = await t.send(`@dave-${t.suffix} wake up`);
-      await t.ack(t.pushTo(woken.deliveries, t.dave.id));
       await t.launch(t.dave.id, "launch-dave-1", "native-dave-1");
 
       t.published.length = 0;
@@ -837,7 +838,7 @@ test.skipIf(!connectionString)(
 );
 
 test.skipIf(!connectionString)(
-  "at daemon ready, a running Agent with no session yet gets a stale mention as a wake, and a plain ACK leaves it pending",
+  "at daemon ready, a running Agent with no session yet gets a stale mention as a wake, and a plain ACK settles it unknown",
   async () => {
     const t = await setup();
     try {
@@ -856,7 +857,7 @@ test.skipIf(!connectionString)(
         mentionLaunchId: null,
       });
       await t.ack(push);
-      expect(await t.row(sent.id, t.bob.id)).toMatchObject({ mentionOutcome: "pending" });
+      expect(await t.row(sent.id, t.bob.id)).toMatchObject({ mentionOutcome: "unknown" });
     } finally {
       await t.cleanup();
     }
