@@ -23,11 +23,23 @@ import type { AgentDeliveryQueue } from "./agent-delivery-queue";
 /** The longest delay one `setTimeout` honours (a signed 32-bit millisecond count). */
 const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
 
+/** The durable half of a backoff: what a Daemon restart must find again (the reference
+ * Computer's `lifecycleRecords`). */
+export type RuntimeErrorBackoffPersistence = Readonly<{
+  save(
+    agentId: string,
+    state: Readonly<{ untilMs: number; reason: "rate_limit_backoff" | "runtime_error_backoff" }>,
+  ): void;
+  clear(agentId: string): void;
+}>;
+
 export type RuntimeErrorDeliveryHoldPorts = Readonly<{
   /** Owns the explicit hold; this module only decides when it starts and ends. */
   deliveryQueue: Pick<AgentDeliveryQueue, "hold" | "release" | "explicitHold">;
   /** Attempts delivery of what a released hold gave back, never blocking the caller. */
   flush(agentId: string, held: AgentMessageDelivery[]): void;
+  /** Where a backoff outlives the process; absent when the caller keeps it in memory only. */
+  store?: RuntimeErrorBackoffPersistence;
 }>;
 
 /**
@@ -88,8 +100,39 @@ export class RuntimeErrorDeliveryHold {
         ? "rate_limit_backoff"
         : "runtime_error_backoff",
     );
+    this.#ports.store?.save(agentId, {
+      untilMs: backoff.untilMs,
+      reason:
+        classification.errorClass === RUNTIME_ERROR_CLASS.RATE_LIMIT
+          ? "rate_limit_backoff"
+          : "runtime_error_backoff",
+    });
     this.#scheduleRelease(agentId, backoff.untilMs);
     return undefined;
+  }
+
+  /**
+   * Re-arms the backoffs a previous Daemon recorded (the reference Computer's
+   * `restoreProviderLimitBackoff`): each still-future wait holds its Agent's deliveries again and
+   * keeps the release timer; an already-expired one is dropped. Records whose wait ended while
+   * the Daemon was down are not retried from a stale premise.
+   */
+  restore(
+    records: readonly Readonly<{
+      agentId: string;
+      untilMs: number;
+      reason: "rate_limit_backoff" | "runtime_error_backoff";
+    }>[],
+  ): void {
+    const now = Date.now();
+    for (const record of records) {
+      if (record.untilMs <= now) {
+        this.#ports.store?.clear(record.agentId);
+        continue;
+      }
+      this.#ports.deliveryQueue.hold(record.agentId, record.reason);
+      this.#scheduleRelease(record.agentId, record.untilMs);
+    }
   }
 
   /** Class state belongs to the launch. Raft calls this runtime_error_class_fence.tripped. */
@@ -154,6 +197,7 @@ export class RuntimeErrorDeliveryHold {
     this.#clearReleaseTimer(agentId);
     this.#backoff.reset(agentId);
     this.#fence.reset(agentId);
+    this.#ports.store?.clear(agentId);
   }
 
   /**
@@ -178,6 +222,7 @@ export class RuntimeErrorDeliveryHold {
     this.#clearReleaseTimer(agentId);
     if (!this.#isFenced(agentId)) this.#releaseHeld(agentId);
     this.#backoff.reset(agentId);
+    this.#ports.store?.clear(agentId);
   }
 
   /**
@@ -207,7 +252,10 @@ export class RuntimeErrorDeliveryHold {
       () => {
         this.#releaseTimers.delete(agentId);
         if (remainingMs > MAX_TIMER_DELAY_MS) this.#scheduleRelease(agentId, untilMs);
-        else this.#releaseHeld(agentId);
+        else {
+          this.#releaseHeld(agentId);
+          this.#ports.store?.clear(agentId);
+        }
       },
       Math.min(Math.max(0, remainingMs), MAX_TIMER_DELAY_MS),
     );

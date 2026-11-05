@@ -152,7 +152,7 @@ import {
   type ActivityDraft,
   type BusyAgentReport,
 } from "./agent-activity-publisher";
-import { RuntimeErrorDeliveryHold } from "./runtime-error-delivery-hold";
+import { assembleRuntimeErrorDeliveryHold } from "./assemble-runtime-error-hold";
 import type { ActivityLaunch } from "./activity-launch";
 import { AgentOfflineResidency } from "./agent-offline-residency";
 import { AgentExitedDelivery } from "./agent-exited-delivery";
@@ -328,9 +328,8 @@ export class DaemonRuntime {
     inputQueue: (agentId) => this.#inputDrain.get(agentId),
     hasQueuedDeliveries: (agentId) => this.#deliveryQueue.hasQueued(agentId),
   });
-  /** Per-Agent delivery hold after retryable runtime errors: backoff, fingerprint fence, and the
-   * backoff's release timer. */
-  readonly #runtimeErrorHold = new RuntimeErrorDeliveryHold({
+  readonly #runtimeErrorHold = assembleRuntimeErrorDeliveryHold({
+    stateDirectory: () => this.stateDirectory,
     deliveryQueue: this.#deliveryQueue,
     flush: (agentId, held) => this.#flushHeldDeliveries(agentId, held),
   });
