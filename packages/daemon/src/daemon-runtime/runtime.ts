@@ -14,7 +14,7 @@ import { attachFreshSessionMemoryPort } from "./session-memory-hooks";
 import { rebindAgent } from "./agent-rebind";
 import { AgentLaunchCustody } from "./agent-launch-custody";
 import { AgentContexts } from "./agent-contexts";
-import { PhaseBookkeeping } from "./phase-bookkeeping";
+import { assemblePhaseBookkeeping } from "./phase-bookkeeping-wiring";
 import { type RuntimeEventObservationPorts } from "./runtime-event-observation";
 import {
   canonicalAgentMessageTarget,
@@ -449,13 +449,12 @@ export class DaemonRuntime {
     session: (agentId: string) => this.#agentProcessManager.session(agentId),
   });
   readonly #contexts = new AgentContexts((agentId) => this.#consumedSeqs.stateDb(agentId));
-  readonly #phaseBookkeeping = new PhaseBookkeeping({
-    contexts: this.#contexts,
-    launchFor: (agentId) => this.#currentActivityLaunches.get(agentId),
-    publish: (agentId, launch, draft) => this.#activityPublisher.publish(agentId, launch, draft),
-    activityDraft: (agentId, detailKind, detail) =>
-      this.#activity(agentId, detailKind, "info", detail),
-  });
+  readonly #phaseBookkeeping = assemblePhaseBookkeeping(
+    this.#contexts,
+    (agentId) => this.#currentActivityLaunches.get(agentId),
+    (agentId, launch, draft) => this.#activityPublisher.publish(agentId, launch, draft),
+    (agentId, detailKind, detail) => this.#activity(agentId, detailKind, "info", detail),
+  );
   /** Provider-event observation: the runtime's collaborators by reference, its helpers as calls.
    * Assigned at the constructor's end — every collaborator it names exists by then. */
   readonly #observationPorts: RuntimeEventObservationPorts;
