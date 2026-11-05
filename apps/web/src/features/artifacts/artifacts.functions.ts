@@ -134,6 +134,18 @@ export const changeArtifactAccess = createServerFn({ method: "POST" })
     return { access: data.access };
   });
 
+export const setArtifactLinkSharing = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(z.object({ artifactId: id, enabled: z.boolean() }).strict())
+  .handler(({ context, data }) =>
+    productionArtifacts(context.db).publicLinks.set({
+      workspaceId: context.workspaceId,
+      artifactId: data.artifactId,
+      userId: context.user.id,
+      enabled: data.enabled,
+    }),
+  );
+
 /** Deletes a document: its author's, or a Workspace owner's or admin's. */
 export const deleteArtifact = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])

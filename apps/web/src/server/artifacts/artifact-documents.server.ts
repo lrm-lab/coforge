@@ -215,7 +215,7 @@ export class ArtifactDocuments {
       ...settings,
       // A web page is replaced whole, so a save starts from the newest version or is refused
       // (`artifact-base-moved`): even a title someone changed since is not merged under it.
-      ...(artifact.kind === "html" ? { exactBase: true } : {}),
+      ...(artifact.kind === "html" || scope.actor.agentId ? { exactBase: true } : {}),
     });
     if (saved.status === "created") await this.#refreshPreview(scope, input.artifactId);
     return saved;

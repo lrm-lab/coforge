@@ -58,7 +58,8 @@ const RULES = {
 
 /**
  * One `coforge artifact` operation, as the Agent (task #385). The rules are the web page's: the
- * same input limits, and the artifact service's experiment check, access rules and merge. The
+ * same input limits, and the artifact service's experiment check and access rules. Agent saves
+ * must use the current version and never merge over a person's newer save. The
  * experiment is checked first, so a Workspace without documents answers `artifacts-disabled`
  * whatever was asked.
  */
