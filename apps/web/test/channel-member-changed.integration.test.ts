@@ -144,8 +144,16 @@ test.skipIf(!connectionString)(
       // The page's server functions build the service like this, with no publisher injected.
       await new PublicChannels(db).join(workspace.id, bob.id, team.id);
 
-      // The channel's pages hear its member list changed; Bob's own pages hear he joined.
-      expect(published).toHaveLength(2);
+      // The channel's pages hear its member list changed; Bob's own pages hear he joined. The
+      // join's membership record (task #411) is announced as a message besides.
+      const typeOf = (sent: unknown) =>
+        (sent as { params: { data: { type: string } } }).params.data.type;
+      expect(published.map(typeOf).sort()).toEqual([
+        "channel.joined.v1",
+        "conversation.activity.v1",
+        "member.changed.v1",
+        "message.available.v1",
+      ]);
       expect(published).toEqual(
         expect.arrayContaining([
           {

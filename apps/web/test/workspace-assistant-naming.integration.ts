@@ -2,7 +2,6 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { AGENT_DISPLAY_NAME_MAX_LENGTH } from "#src/features/agents/agent.schemas";
-import { UNNAMED_PERSON_NAME } from "#src/lib/human-label";
 import { WorkspaceAssistants } from "#src/server/agents/workspace-assistants.server";
 import { WorkspaceAssistantOnboarding } from "#src/server/agents/workspace-assistant-onboarding.server";
 import {
@@ -102,10 +101,11 @@ test("an assistant is named in the owner's saved interface language, then the re
   expect(await assistantName(unsaved)).toBe("Frank's Assistant");
 });
 
-test("an assistant of an unnamed member reads Unnamed, and its name never outgrows an Agent's limit", async () => {
+test("an assistant of an unnamed member keeps the generic name, and its name never outgrows an Agent's limit", async () => {
   const unnamed = await member("  ", "named-blank");
   await new WorkspaceAssistants(db).ensure(workspaceId, unnamed.id, { locale: "en" });
-  expect(await assistantName(unnamed)).toBe(`${UNNAMED_PERSON_NAME}'s Assistant`);
+  // A nameless owner keeps the generic name, never one built from the Unnamed placeholder (task #495).
+  expect(await assistantName(unnamed)).toBe("Assistant");
   const longName = "名".repeat(80);
   for (const [language, tail] of [
     ["zh-CN", "的助手"],

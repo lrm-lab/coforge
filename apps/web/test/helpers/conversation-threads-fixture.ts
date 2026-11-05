@@ -46,9 +46,13 @@ export async function setup() {
   });
   const channels = new PublicChannels(db);
   const team = await channels.create(workspace.id, ada.id, `team-${suffix}`);
-  await channels.join(workspace.id, bob.id, team.id);
-  await db.conversationMember.create({
-    data: { conversationId: team.id, workspaceId: workspace.id, agentId: agent.id },
+  // Bob and Nova are made members directly: a join would also write its membership record
+  // (task #411) into the windows these tests pin.
+  await db.conversationMember.createMany({
+    data: [
+      { conversationId: team.id, workspaceId: workspace.id, userId: bob.id },
+      { conversationId: team.id, workspaceId: workspace.id, agentId: agent.id },
+    ],
   });
   const memberOf = (conversationId: string, who: { userId: string } | { agentId: string }) =>
     db.conversationMember.findFirstOrThrow({ where: { conversationId, ...who } });

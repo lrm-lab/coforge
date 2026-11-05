@@ -1,5 +1,14 @@
 import { test, expect } from "bun:test";
+import {
+  DELETED_TASK_UNDO_MS,
+  DeletedTaskSweep,
+} from "#src/server/tasks/deleted-task-sweep.server";
 import { setup } from "./fixtures/task-dependencies";
+
+/** A delete is a marker first; the sweep past its undo window removes the Task and posts what it
+ * frees (task #512). */
+const sweep = (db: ConstructorParameters<typeof DeletedTaskSweep>[0], workspaceId: string) =>
+  new DeletedTaskSweep(db).runOnce(new Date(Date.now() + 2 * DELETED_TASK_UNDO_MS), workspaceId);
 
 /** The notices that tell a task's owner when its blockers or subtasks change, against real PostgreSQL. */
 
@@ -100,7 +109,7 @@ test("reopening a finished blocker tells the owners of the started tasks that wa
 });
 
 test("a blocker that goes away without finishing releases an owned task, unless its owner did it", async () => {
-  const { db, run, make, notices, one } = await setup();
+  const { db, run, make, notices, one, channel } = await setup();
   try {
     const [removed, byOwner, nobody, deleted, stillBlocked, other] = await make("alice", 6);
     const waiting = await make("alice", 4);
@@ -136,6 +145,7 @@ test("a blocker that goes away without finishing releases an owned task, unless 
     await run("one", { operation: "amend", number: amendedByOwner!, blockedBy: [] });
     await run("alice", { operation: "amend", number: unowned!, blockedBy: [] });
     await run("alice", { operation: "delete", number: deleted! });
+    await sweep(db, channel.workspaceId);
 
     const released = async (number: number) =>
       (await notices(number)).filter((notice) => notice.kind === "task.released");
@@ -207,7 +217,7 @@ test("removing a blocker from a task that already finished tells nobody", async 
 });
 
 test("deleting the last open subtask tells the parent's owner; an earlier one does not", async () => {
-  const { db, run, make, notices, one } = await setup();
+  const { db, run, make, notices, one, channel } = await setup();
   try {
     const [parent] = await make("alice", 1);
     await run("alice", { operation: "assign", number: parent!, assignee: `agent:${one.id}` });
@@ -215,8 +225,10 @@ test("deleting the last open subtask tells the parent's owner; an earlier one do
     const finished = async () =>
       (await notices(parent!)).filter((notice) => notice.kind === "task.subtasks_finished");
     await run("alice", { operation: "delete", number: first! });
+    await sweep(db, channel.workspaceId);
     expect(await finished()).toEqual([]);
     await run("alice", { operation: "delete", number: second! });
+    await sweep(db, channel.workspaceId);
     expect(await finished()).toEqual([{ kind: "task.subtasks_finished", agents: [one.id] }]);
   } finally {
     await db.$disconnect();

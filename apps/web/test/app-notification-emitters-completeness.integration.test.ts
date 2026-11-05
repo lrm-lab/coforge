@@ -4,7 +4,8 @@ import { AgentChannelManagement } from "#src/server/conversations/agent-channel-
 import { enrollGeneralChannel } from "#src/server/conversations/general-channel.server";
 import { createOwnedWorkspace } from "#src/server/db/repositories/workspace-slugs.repositories.server";
 import { attachDefaultMemoryAgent } from "#src/server/workspace-memory/default-memory-agent.server";
-import { WorkspaceMembers } from "#src/server/workspaces/members.server";
+import { ownerNamingOf, weeklyReportAutoName } from "#src/server/agents/owner-agent-rename.server";
+import { saveProfileAndRenameAssistants } from "#src/server/agents/owner-profile-writes.server";
 import { defineEmitterCases, emitterCase } from "./helpers/app-notification-emitter-cases";
 import { agentIn, channelOf, personIn, unique } from "./helpers/app-notification-emitter-domain";
 import { emitterDatabaseUrl } from "./helpers/app-notification-emitters";
@@ -51,13 +52,21 @@ const environment = defineEmitterCases([
       await env.db.weeklyReportAssistant.create({
         data: { workspaceId: fixture.workspace.id, userId: fixture.owner.id, agentId: agent.id },
       });
+      // Its name still follows the owner's, so the owner's rename renames it (task #495).
+      const owner = await env.db.user.findUniqueOrThrow({
+        where: { id: fixture.owner.id },
+        select: { displayName: true, preferences: { select: { language: true } } },
+      });
+      await env.db.agent.update({
+        where: { id: agent.id },
+        data: { displayName: weeklyReportAutoName(ownerNamingOf(owner)) },
+      });
       return agent;
     },
     act: (env, fixture) =>
-      new WorkspaceMembers(env.db).agentPage(fixture.workspace.id, fixture.owner.id, {
-        owner: "all",
-        query: "",
-        limit: 20,
+      saveProfileAndRenameAssistants(env.db, fixture.owner.id, {
+        displayName: `Renamed ${unique()}`,
+        description: "",
       }),
     data: (_fixture, agent) => ({ agent_id: agent.id, fields: ["display_name"] }),
     refuse: (_fixture, agent) => ({ table: "agents", column: "id", value: agent.id }),

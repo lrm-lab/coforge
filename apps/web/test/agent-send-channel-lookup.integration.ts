@@ -151,7 +151,10 @@ test.skipIf(!runnable)(
         select: { leftAt: true },
       });
       expect(member.leftAt).toBeNull();
-      expect(await db.message.count({ where: { workspaceId } })).toBe(1);
+      // The send itself, beside the rejoin's membership record (task #411).
+      expect(
+        await db.message.count({ where: { workspaceId, senderMemberId: { not: null } } }),
+      ).toBe(1);
     });
   },
 );

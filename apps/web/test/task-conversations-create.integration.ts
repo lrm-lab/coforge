@@ -90,7 +90,7 @@ test("with the experiment off a message is still claimed as a task, as before", 
   await experiment(false);
   const claimed = await run("worker", { operation: "claim", messageId: sourceId });
   expect(claimed.tasks[0]!.messageId).toBe(sourceId);
-  expect(claimed.tasks[0]!.id).toBe(sourceId);
+  expect(claimed.tasks[0]!.id).not.toBe(sourceId);
   await db.task.deleteMany({ where: { workspaceId } });
 });
 

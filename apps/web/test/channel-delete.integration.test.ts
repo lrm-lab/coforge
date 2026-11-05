@@ -108,12 +108,20 @@ test.skipIf(!connectionString)(
       const creatorRow = await db.conversationMember.findUniqueOrThrow({
         where: { conversationId_userId: { conversationId: team.id, userId: creator.id } },
       });
+      // The Agent's addition left its membership record (task #411): write after it.
+      const base =
+        (
+          await db.message.aggregate({
+            where: { conversationId: team.id },
+            _max: { sequence: true },
+          })
+        )._max.sequence ?? 0;
       const message = await db.message.create({
         data: {
           workspaceId: workspace.id,
           conversationId: team.id,
           senderMemberId: creatorRow.id,
-          sequence: 1,
+          sequence: base + 1,
           body: "soon gone",
         },
       });
@@ -122,7 +130,7 @@ test.skipIf(!connectionString)(
           workspaceId: workspace.id,
           conversationId: team.id,
           senderMemberId: creatorRow.id,
-          sequence: 2,
+          sequence: base + 2,
           body: "a reply",
           threadRootId: message.id,
         },

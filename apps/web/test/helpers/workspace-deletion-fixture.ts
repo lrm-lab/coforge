@@ -191,12 +191,16 @@ export async function setup() {
   const agentRow = await db.conversationMember.findFirstOrThrow({
     where: { conversationId: team.id, agentId: agent.id },
   });
+  // Membership changes left their records (task #411): write after them.
+  const base =
+    (await db.message.aggregate({ where: { conversationId: team.id }, _max: { sequence: true } }))
+      ._max.sequence ?? 0;
   const written = await db.message.create({
     data: {
       workspaceId: workspace.id,
       conversationId: team.id,
       senderMemberId: memberRow.id,
-      sequence: 1,
+      sequence: base + 1,
       body: "the member wrote this",
     },
   });
@@ -205,7 +209,7 @@ export async function setup() {
       workspaceId: workspace.id,
       conversationId: team.id,
       senderMemberId: memberRow.id,
-      sequence: 2,
+      sequence: base + 2,
       body: "and replied",
       threadRootId: written.id,
     },
@@ -225,7 +229,7 @@ export async function setup() {
       workspaceId: workspace.id,
       conversationId: team.id,
       senderMemberId: agentRow.id,
-      sequence: 10,
+      sequence: base + 10,
       body: "shall I create a channel?",
     },
   });

@@ -140,7 +140,7 @@ test.skipIf(!Bun.env.TASK_TEST_DATABASE_URL && !Bun.env.DATABASE_URL)(
 test.skipIf(!Bun.env.TASK_TEST_DATABASE_URL && !Bun.env.DATABASE_URL)(
   "a Workspace admin deletes and edits a public-channel Task without joining; a member is refused in a private one",
   async () => {
-    const { db: _db, run, make, admin, secret, secretAdmin, refusal } = await setup();
+    const { db, run, make, admin, secret, secretAdmin, refusal, principals } = await setup();
     const [one] = await make("one", 1, {}, admin.id);
     // Alice owns the Workspace but never joined the channel: the public-board write is hers.
     await run("alice", { operation: "amend", number: one, title: `renamed-${one}` }, admin.id);
@@ -154,13 +154,24 @@ test.skipIf(!Bun.env.TASK_TEST_DATABASE_URL && !Bun.env.DATABASE_URL)(
     const [three] = await make("one", 1, {}, secretAdmin.id);
     await refusal(run("alice", { operation: "delete", number: three }, secretAdmin.id));
 
-    // A member-keyed write is refused with its own errorId — the owner can manage the public
-    // channel's Tasks but cannot name a blocker there without joining it.
+    // The owner also names a blocker there without joining it (task #524), recorded as hers.
     const [four, five] = await make("one", 2, {}, admin.id);
-    const needMember = await refusal(
-      run("alice", { operation: "amend", number: four, blockedBy: [{ number: five }] }, admin.id),
+    await run(
+      "alice",
+      { operation: "amend", number: four, blockedBy: [{ number: five }] },
+      admin.id,
     );
-    expect(needMember.errorId).toBe("task-needs-channel-member");
+    const blocker = await db.taskDependency.findFirstOrThrow({
+      where: { task: { conversationId: admin.id, number: four } },
+      select: { creatorMemberId: true, creatorUserId: true },
+    });
+    expect(blocker.creatorMemberId).toBeNull();
+    expect(blocker.creatorUserId).toBe(principals.alice.userId!);
+    // A write that needs her seat is still refused: she cannot create a Task there without joining.
+    const needMember = await refusal(
+      run("alice", { operation: "create", title: "needs a seat" }, admin.id),
+    );
+    expect(needMember.code).toBe("ACCESS_DENIED");
   },
 );
 

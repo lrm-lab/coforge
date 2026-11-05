@@ -53,7 +53,11 @@ test("a channel message reaches the browser in one shape from open, updates and 
       { async memberChanged() {}, async messageAvailable() {} },
     );
     const channel = await channels.create(workspace.id, alice.id, "projection");
-    await channels.join(workspace.id, bob.id, channel.id);
+    // Bob is made a member directly: a join would also write its membership record (task #411)
+    // into the window this test pins.
+    await db.conversationMember.create({
+      data: { conversationId: channel.id, workspaceId: workspace.id, userId: bob.id },
+    });
     const agentMember = await db.conversationMember.create({
       data: { conversationId: channel.id, workspaceId: workspace.id, agentId: agent.id },
     });

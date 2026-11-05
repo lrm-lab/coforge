@@ -233,7 +233,9 @@ test.skipIf(!connectionString)(
         "[CoForge current channel role: member; coordinator=none]",
       );
       expect(
-        await f.db.message.count({ where: { conversationId: f.team.id, senderMemberId: null } }),
+        await f.db.systemMessage.count({
+          where: { conversationId: f.team.id, kind: "channel.coordinator_changed" },
+        }),
       ).toBe(0);
     } finally {
       await f.cleanup();

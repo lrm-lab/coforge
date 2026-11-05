@@ -233,7 +233,12 @@ test.skipIf(!connectionString)(
       const preview = await channels.open(workspace.id, bob.id, team.id);
       expect(preview.senderMemberId).toBe("");
       expect(preview.threads[root.id]!.unread).toBe(0);
-      expect(preview.messages.map((message) => message.id)).toEqual([root.id, other.id]);
+      // Besides the leave's own membership record (task #411).
+      expect(
+        preview.messages
+          .filter((message) => message.senderKind !== "system")
+          .map((message) => message.id),
+      ).toEqual([root.id, other.id]);
     } finally {
       await teardown();
     }
