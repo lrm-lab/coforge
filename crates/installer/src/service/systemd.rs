@@ -146,6 +146,11 @@ pub struct SystemdUser<'a> {
     /// The session-bus variables `systemctl --user` gets when the caller's own environment
     /// lacks them (`UserSessionBus`); empty when nothing was supplied.
     bus_env: Vec<(String, String)>,
+    /// `--user`, or none for a unit of the system manager.
+    scope_flag: Option<&'static str>,
+    /// The unit is a person's own, run by their supervisor: its registration is theirs, so
+    /// [`SupervisorService::install`] writes nothing.
+    supervised: bool,
 }
 
 impl<'a> SystemdUser<'a> {
@@ -172,16 +177,51 @@ impl<'a> SystemdUser<'a> {
             unit: unit.clone(),
             unit_file: home.join(".config").join("systemd").join("user").join(unit),
             bus_env: bus.environment(),
+            scope_flag: Some("--user"),
+            supervised: false,
+        })
+    }
+
+    /// The unit a person's own supervisor runs the Computer under (`supervisor.json`, written by
+    /// `coforge-computer foreground` once systemd confirmed it): stopped and started as any unit,
+    /// never registered, so no second service appears beside it (task #538).
+    pub fn supervised(
+        runner: &'a dyn CommandRunner,
+        clock: &'a dyn Clock,
+        record: &super::supervised::SupervisedUnit,
+        cgroup: &'a dyn ProcessCgroup,
+        bus: &'a dyn UserSessionBus,
+    ) -> Result<Self, ServiceError> {
+        if !is_valid_unit_name(&record.unit) {
+            return Err(ServiceError::InvalidIdentity {
+                what: "supervised systemd unit",
+                value: record.unit.clone(),
+            });
+        }
+        let user = record.scope == super::supervised::Scope::User;
+        Ok(Self {
+            runner,
+            clock,
+            cgroup,
+            unit: record.unit.clone(),
+            unit_file: PathBuf::new(),
+            bus_env: if user { bus.environment() } else { Vec::new() },
+            scope_flag: user.then_some("--user"),
+            supervised: true,
         })
     }
 
     /// One `systemctl` command with the session-bus environment, when there is one to add.
     fn line(&self, args: &[&str]) -> CommandLine {
-        CommandLine::new(SYSTEMCTL, args.iter().copied()).with_env(self.bus_env.iter().cloned())
+        CommandLine::new(
+            SYSTEMCTL,
+            self.scope_flag.into_iter().chain(args.iter().copied()),
+        )
+        .with_env(self.bus_env.iter().cloned())
     }
 
     fn systemctl(&self, verb: &str, bound: Duration) -> Result<Attempt, ServiceError> {
-        execute(self.runner, self.line(&["--user", verb, &self.unit]), bound)
+        execute(self.runner, self.line(&[verb, &self.unit]), bound)
     }
 
     /// What systemd says about the unit, in one read-only call.
@@ -189,7 +229,6 @@ impl<'a> SystemdUser<'a> {
         let attempt = execute(
             self.runner,
             self.line(&[
-                "--user",
                 "show",
                 &self.unit,
                 "--property=LoadState",
@@ -308,6 +347,9 @@ impl SupervisorService for SystemdUser<'_> {
     }
 
     fn install(&self, definition: &LifecycleServiceDefinition) -> Result<Registered, ServiceError> {
+        if self.supervised {
+            return Ok(Registered::AlreadyInPlace);
+        }
         definition::require_manager("systemd-user", definition)?;
         // A unit file that already holds the definition is the registration: the Computer wrote
         // it with its own reload and enable, so neither is repeated, and a `systemctl --user
@@ -317,11 +359,7 @@ impl SupervisorService for SystemdUser<'_> {
             return Ok(Registered::AlreadyInPlace);
         }
         definition::write_private(&self.unit_file, &definition.contents)?;
-        let reload = execute(
-            self.runner,
-            self.line(&["--user", "daemon-reload"]),
-            COMMAND_BOUND,
-        )?;
+        let reload = execute(self.runner, self.line(&["daemon-reload"]), COMMAND_BOUND)?;
         if !reload.succeeded() {
             return Err(self.refused(&reload));
         }

@@ -28,6 +28,7 @@ mod detached;
 mod error;
 mod launchd;
 mod port;
+mod supervised;
 mod systemd;
 mod windows_task;
 
@@ -203,6 +204,17 @@ pub fn for_machine<'a>(
     uid: Option<u32>,
     ports: Ports<'a>,
 ) -> Result<Box<dyn SupervisorService + 'a>, ServiceError> {
+    if platform == Platform::Linux
+        && let Some(record) = supervised::read(state_directory)
+    {
+        return Ok(Box::new(SystemdUser::supervised(
+            ports.runner,
+            ports.clock,
+            &record,
+            &OwnCgroup,
+            &OwnSessionBus,
+        )?));
+    }
     if platform == Platform::Linux && !has_systemd {
         return Ok(Box::new(Detached::new(
             state_directory,

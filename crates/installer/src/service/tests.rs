@@ -228,3 +228,69 @@ fn systemd_is_present_only_with_a_running_manager_and_a_systemctl() {
     );
     assert!(!systemd_present(run.path(), None), "no PATH");
 }
+
+fn supervised_machine(record: &str, scope_system: bool) -> (Vec<String>, String, bool) {
+    use crate::processes::fakes::FakeTable;
+    let runner = Recording {
+        ran: RefCell::new(Vec::new()),
+    };
+    let home = Scratch::new("for-machine-supervised");
+    let state = home.path().join(".coforge/daemon");
+    fs::create_dir_all(&state).unwrap();
+    fs::write(state.join("supervisor.json"), record).unwrap();
+    let clock = VirtualClock::new();
+    let table = FakeTable::new(&clock);
+    let service = for_machine(
+        Platform::Linux,
+        true,
+        home.path(),
+        &state,
+        Some(501),
+        Ports {
+            runner: &runner,
+            clock: &clock,
+            table: &table,
+            spawner: &SystemSpawn,
+        },
+    )
+    .unwrap();
+    let name = service.display_name();
+    let _ = service.state();
+    let registered = service
+        .install(&crate::service::fakes::definition("systemd-user", "[Unit]"))
+        .unwrap();
+    let wrote_unit = home.path().join(".config/systemd/user").exists();
+    assert_eq!(registered, Registered::AlreadyInPlace, "{scope_system}");
+    (runner.ran.take(), name, wrote_unit)
+}
+
+#[test]
+fn a_supervised_user_unit_is_controlled_as_itself_and_never_registered() {
+    let (commands, name, wrote_unit) = supervised_machine(
+        r#"{"kind":"systemd","scope":"user","unit":"mine.service","invocationId":"i","pid":7,"recordedAt":"t"}"#,
+        false,
+    );
+    assert_eq!(name, "mine.service");
+    assert!(
+        commands[0].starts_with("systemctl --user show mine.service"),
+        "{commands:?}"
+    );
+    assert_eq!(commands.len(), 1, "install ran nothing: {commands:?}");
+    assert!(
+        !wrote_unit,
+        "no unit file may be written for a supervised unit"
+    );
+}
+
+#[test]
+fn a_supervised_system_unit_is_asked_without_the_user_flag() {
+    let (commands, name, _) = supervised_machine(
+        r#"{"kind":"systemd","scope":"system","unit":"coforge.service","invocationId":"i","pid":7,"recordedAt":"t"}"#,
+        true,
+    );
+    assert_eq!(name, "coforge.service");
+    assert!(
+        commands[0].starts_with("systemctl show coforge.service"),
+        "{commands:?}"
+    );
+}
