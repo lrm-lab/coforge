@@ -98,7 +98,7 @@ Rules for the machine Coordinator in `src/supervisor/`. They extend
 - On macOS, `launchd-workspace-instance.ts` implements the instance seam on top
   of `platform/launchd-job.ts`. Workspace startup reconciles only its own Agent
   job prefix before accepting new work.
-- On Windows, `windows-workspace-instance.ts` runs one `__workspace-daemon` OS
+- On Windows, `process-workspace-instance.ts` runs one `__workspace-daemon` OS
   child per Workspace with a durable invocation id. With no OS failure restart,
   the Coordinator's reconcile loop (`windows-workspace-reconcile.ts`) re-runs
   `MachineSupervisor.reconcile` to restart a dead child. Health latching stays

@@ -1,7 +1,8 @@
 import { join } from "node:path";
+import { systemdPresent } from "#src/daemon-host/detached";
 import { LaunchdWorkspaceInstance } from "./launchd-workspace-instance";
 import { SystemdWorkspaceInstance } from "./systemd-workspace-instance";
-import { WindowsWorkspaceInstance } from "./windows-workspace-instance";
+import { ProcessWorkspaceInstance } from "./process-workspace-instance";
 import {
   workspaceStateDirectory,
   type WorkspaceInstance,
@@ -41,15 +42,18 @@ export function workspaceInstanceConfig(
   };
 }
 
-/** Contains a Workspace with `platform`'s service manager: launchd, a Windows child, or systemd. */
+/** Contains a Workspace with what `platform` offers: launchd, systemd, or a child process when
+ * there is no service manager (Windows, and Linux without systemd — `task #538`'s detection). */
 export function platformWorkspaceInstance(
   config: WorkspaceInstanceConfig,
   platform: NodeJS.Platform,
+  hasSystemd: () => boolean = systemdPresent,
 ): WorkspaceInstance {
   if (platform === "darwin") return new LaunchdWorkspaceInstance(config);
-  if (platform === "win32") return new WindowsWorkspaceInstance(config);
+  if (platform === "win32") return new ProcessWorkspaceInstance(config);
   if (platform !== "linux")
     throw new Error("per-Workspace OS containment is not implemented on this platform");
+  if (!hasSystemd()) return new ProcessWorkspaceInstance(config);
   return new SystemdWorkspaceInstance(config, async (args) => {
     const command = Bun.spawn(["systemctl", "--user", ...args], {
       stdin: "ignore",

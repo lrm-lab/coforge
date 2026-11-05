@@ -9,34 +9,34 @@ import {
   type WorkspaceInstanceConfig,
 } from "./workspace-instance";
 
-export type WindowsWorkspaceSpawn = (input: {
+export type ProcessWorkspaceSpawn = (input: {
   command: string[];
   cwd: string;
   env: Record<string, string>;
 }) => Promise<{ pid: number }>;
 
-export type WindowsProcessProbe = (pid: number) => boolean;
+export type ProcessProbe = (pid: number) => boolean;
 
-export type WindowsProcessSignal = (pid: number, signal?: NodeJS.Signals) => void;
+export type ProcessSignal = (pid: number, signal?: NodeJS.Signals) => void;
 
 type InstanceRecord = { mainPid: number; invocationId: string };
 
 /**
- * Windows per-Workspace containment for the MVP: one `__workspace-daemon` OS child per
+ * Child-process per-Workspace containment for the MVP: one `__workspace-daemon` OS child per
  * binding, with a durable invocation id under the Workspace state directory so Coordinator
  * recovery can adopt the same instance after a crash. External Agent process trees remain
  * fail-closed in `ProcessTreeOwner` until Job Objects land; this seam only owns the Workspace
  * daemon process itself.
  */
-export class WindowsWorkspaceInstance implements WorkspaceInstance {
+export class ProcessWorkspaceInstance implements WorkspaceInstance {
   readonly identityKey: string;
   readonly #recordPath: string;
 
   constructor(
     private readonly config: WorkspaceInstanceConfig,
-    private readonly spawnChild: WindowsWorkspaceSpawn = defaultSpawn,
-    private readonly isAlive: WindowsProcessProbe = defaultIsAlive,
-    private readonly signalProcess: WindowsProcessSignal = defaultSignal,
+    private readonly spawnChild: ProcessWorkspaceSpawn = defaultSpawn,
+    private readonly isAlive: ProcessProbe = defaultIsAlive,
+    private readonly signalProcess: ProcessSignal = defaultSignal,
   ) {
     validateWorkspaceEndpoint(config.daemonConnectionEndpoint);
     this.identityKey = new Bun.CryptoHasher("sha256")
@@ -106,11 +106,11 @@ export class WindowsWorkspaceInstance implements WorkspaceInstance {
       }
     }
     await rm(this.#recordPath, { force: true });
-    // Windows has no systemd/launchd Restart unit: Coordinator stop is the intentional lifecycle
-    // seam. If SIGKILL beats the child's SIGTERM shutdown, live would stay true and the next
-    // start would recordCrash toward the degraded latch. Clear live only when this stop actually
-    // signalled a live PID — an already-dead child must keep live so the replacement can count
-    // the unexpected death (macOS/Linux never enter this class).
+    // A host without a service manager has no Restart unit: Coordinator stop is the intentional
+    // lifecycle seam. If SIGKILL beats the child's SIGTERM shutdown, live would stay true and the
+    // next start would recordCrash toward the degraded latch. Clear live only when this stop
+    // actually signalled a live PID — an already-dead child must keep live so the replacement can
+    // count the unexpected death.
     if (signalled) {
       await new WorkspaceHealthJournal(
         workspaceHealthJournalPath(this.config.stateDirectory),

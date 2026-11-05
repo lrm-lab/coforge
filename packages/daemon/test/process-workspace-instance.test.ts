@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { WindowsWorkspaceInstance } from "#src/supervisor/windows-workspace-instance";
+import { ProcessWorkspaceInstance } from "#src/supervisor/process-workspace-instance";
 import type { WorkspaceInstanceConfig } from "#src/supervisor/workspace-instance";
 import {
   WorkspaceHealthJournal,
@@ -30,7 +30,7 @@ test("ensureStarted spawns __workspace-daemon once and reuses a live PID", async
   const spawns: { command: string[]; env: Record<string, string> }[] = [];
   let alive = true;
   try {
-    const instance = new WindowsWorkspaceInstance(
+    const instance = new ProcessWorkspaceInstance(
       cfg,
       async (input) => {
         spawns.push({ command: input.command, env: input.env });
@@ -73,7 +73,7 @@ test("stop clears the durable instance record after signalling the child", async
   const signals: Array<{ pid: number; signal?: NodeJS.Signals }> = [];
   let alive = true;
   try {
-    const instance = new WindowsWorkspaceInstance(
+    const instance = new ProcessWorkspaceInstance(
       cfg,
       async () => ({ pid: 77 }),
       () => alive,
@@ -92,7 +92,7 @@ test("stop clears the durable instance record after signalling the child", async
 });
 
 test("stop clears the health live marker after an intentional Windows SIGTERM/SIGKILL", async () => {
-  // Upgrade/reload stops go through WindowsWorkspaceInstance.stop. If SIGKILL wins the race
+  // Upgrade/reload stops go through ProcessWorkspaceInstance.stop. If SIGKILL wins the race
   // before the child's SIGTERM shutdown runs recordGracefulStop, the next start would count a
   // crash and trip the degraded latch. Clearing live here is Windows-only and intentional.
   const cfg = await config();
@@ -105,7 +105,7 @@ test("stop clears the health live marker after an intentional Windows SIGTERM/SI
       `${JSON.stringify({ schemaVersion: 1, live: true, crashes: [] })}\n`,
       { mode: 0o600 },
     );
-    const instance = new WindowsWorkspaceInstance(
+    const instance = new ProcessWorkspaceInstance(
       cfg,
       async () => ({ pid: 88 }),
       () => alive,
@@ -133,7 +133,7 @@ test("stop does not clear the live marker when the Windows child was already dea
       `${JSON.stringify({ schemaVersion: 1, live: true, crashes: [] })}\n`,
       { mode: 0o600 },
     );
-    const instance = new WindowsWorkspaceInstance(
+    const instance = new ProcessWorkspaceInstance(
       cfg,
       async () => ({ pid: 99 }),
       () => false,
@@ -152,17 +152,17 @@ test("stop does not clear the live marker when the Windows child was already dea
 test("identity key is stable for the state root and Workspace", async () => {
   const cfg = await config();
   try {
-    const a = new WindowsWorkspaceInstance(
+    const a = new ProcessWorkspaceInstance(
       cfg,
       async () => ({ pid: 1 }),
       () => false,
     );
-    const same = new WindowsWorkspaceInstance(
+    const same = new ProcessWorkspaceInstance(
       cfg,
       async () => ({ pid: 1 }),
       () => false,
     );
-    const b = new WindowsWorkspaceInstance(
+    const b = new ProcessWorkspaceInstance(
       { ...cfg, workspaceId: "workspace-b" },
       async () => ({ pid: 1 }),
       () => false,
@@ -189,13 +189,13 @@ for (const [name, bytes] of [
     ]),
   ],
 ] as const) {
-  test(`adopts an existing Windows instance record with ${name} without rewriting it`, async () => {
+  test(`adopts an existing process instance record with ${name} without rewriting it`, async () => {
     const cfg = await config();
     try {
       await mkdir(cfg.stateDirectory, { recursive: true });
       const path = join(cfg.stateDirectory, "windows-instance.json");
       await Bun.write(path, bytes);
-      const instance = new WindowsWorkspaceInstance(
+      const instance = new ProcessWorkspaceInstance(
         cfg,
         async () => {
           throw new Error("must adopt the live child");
@@ -223,7 +223,7 @@ for (const [name, bytes] of [
   ],
   ["truncated JSON", Buffer.from('{"mainPid":')],
 ] as const) {
-  test(`propagates a Windows instance record's ${name} parse failure before process operations`, async () => {
+  test(`propagates a process instance record's ${name} parse failure before process operations`, async () => {
     const cfg = await config();
     try {
       await mkdir(cfg.stateDirectory, { recursive: true });
@@ -232,7 +232,7 @@ for (const [name, bytes] of [
       const unexpected = () => {
         throw new Error("must not operate on a damaged record");
       };
-      const instance = new WindowsWorkspaceInstance(
+      const instance = new ProcessWorkspaceInstance(
         cfg,
         async () => unexpected(),
         unexpected,
@@ -249,7 +249,7 @@ for (const [name, bytes] of [
 }
 
 for (const code of ["EISDIR", "ENOTDIR"] as const) {
-  test(`propagates a Windows instance record's ${code} read failure before process operations`, async () => {
+  test(`propagates a process instance record's ${code} read failure before process operations`, async () => {
     const cfg = await config();
     try {
       if (code === "EISDIR")
@@ -261,7 +261,7 @@ for (const code of ["EISDIR", "ENOTDIR"] as const) {
       const unexpected = () => {
         throw new Error("must not operate on an unreadable record");
       };
-      const instance = new WindowsWorkspaceInstance(
+      const instance = new ProcessWorkspaceInstance(
         cfg,
         async () => unexpected(),
         unexpected,
@@ -289,7 +289,7 @@ for (const record of [
         await mkdir(cfg.stateDirectory, { recursive: true });
         await Bun.write(join(cfg.stateDirectory, "windows-instance.json"), JSON.stringify(record));
       }
-      const instance = new WindowsWorkspaceInstance(
+      const instance = new ProcessWorkspaceInstance(
         cfg,
         async () => {
           started = true;
