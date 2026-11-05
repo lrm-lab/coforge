@@ -89,7 +89,8 @@ test("a phone viewport never scrolls the message stream sideways, even with long
 
     await browser("open", `${origin}${workspacePath}/channel/${channel.id}`);
     await browser("set", "viewport", "390", "844", "3");
-    await browser("wait", "--url", `**/channel/${channel.id}`);
+    // The channel opens on its Chat view, `?view=chat`: the path alone says it is the channel.
+    await browser("wait", "--fn", `location.pathname.endsWith("/channel/${channel.id}")`);
     // Consecutive notices fold into one summary line (task #412): open every group, so the long
     // notices this test seeded are drawn as rows.
     await browser("wait", "--fn", `document.querySelector("li[data-system-group]") !== null`);
