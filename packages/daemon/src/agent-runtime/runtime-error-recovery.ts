@@ -80,8 +80,6 @@ export type RuntimeErrorDeliveryBackoffState = Readonly<{
 
 export class RuntimeErrorDeliveryBackoff {
   readonly #streaks = new Map<string, { attempts: number; latestClass: RuntimeErrorClass }>();
-  /** When the Agent's current backoff ends, for callers that must not act meanwhile. */
-  readonly #until = new Map<string, number>();
 
   constructor(private readonly options: RuntimeErrorDeliveryBackoffOptions = {}) {}
 
@@ -102,7 +100,6 @@ export class RuntimeErrorDeliveryBackoff {
       notBeforeMs > now
         ? Math.min(notBeforeMs - now, QUOTA_RESET_BACKOFF_MAX_MS)
         : runtimeErrorDeliveryBackoffDelayMs(attempts, this.options);
-    this.#until.set(agentId, now + delayMs);
     return { attempts, delayMs, untilMs: now + delayMs };
   }
 
@@ -111,7 +108,6 @@ export class RuntimeErrorDeliveryBackoff {
   reset(agentId: string): number {
     const attempts = this.attempts(agentId);
     this.#streaks.delete(agentId);
-    this.#until.delete(agentId);
     return attempts;
   }
 
@@ -126,7 +122,6 @@ export class RuntimeErrorDeliveryBackoff {
 
   clear(): void {
     this.#streaks.clear();
-    this.#until.clear();
   }
 }
 

@@ -51,3 +51,7 @@ test("a delivery held for another retryable failure waits out its delay too", ()
 test("without a hold, the same queued delivery is still a stall", () => {
   expect(subject(undefined).stalled("agent-a")).toBeDefined();
 });
+
+test("a fingerprint fence does not silence the judgment: that hold never ends on its own", () => {
+  expect(subject("fingerprint_fence").stalled("agent-a")).toBeDefined();
+});

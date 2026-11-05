@@ -29,6 +29,12 @@ import {
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
 
+/** Whether the Agent's deliveries are held waiting out a retryable failure. A fingerprint fence
+ * holds them too, but that hold does not end on its own, so it must not silence the judgment. */
+function heldForRetry(reason: DeliveryHoldReason | undefined): boolean {
+  return reason === "rate_limit_backoff" || reason === "runtime_error_backoff";
+}
+
 /** What ending a live runtime needs of the Agent's current launch. */
 export type ReleasableLaunch = {
   /** Mutes the launch's Activity down to its final frames. */
@@ -173,7 +179,7 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
       hasOpenToolCall: launch.toolCalls?.hasOpenToolCall ?? false,
       resumable: this.#ports.resumable(agentId),
       noticeAcceptedForMs: ageOf(this.#ports.noticeAcceptedAt?.(agentId)),
-      recoveryHold: this.#ports.explicitHold?.(agentId) !== undefined,
+      recoveryHold: heldForRetry(this.#ports.explicitHold?.(agentId)),
       lastAgentActionForMs: Math.min(
         progress.silentForMs(),
         ageOf(this.#ports.lastAgentActionAt?.(agentId)) ?? Number.POSITIVE_INFINITY,

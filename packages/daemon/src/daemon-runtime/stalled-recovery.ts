@@ -90,9 +90,10 @@ export type StalledRecoveryFacts = Readonly<{
   lastAgentActionForMs?: number;
   /** A retryable failure's backoff currently holds this Agent's deliveries — a rate limit waiting
    * for its reported reset, or another retryable error waiting out its delay. Nothing about a
-   * restart shortens that wait, and the reference Computer 1.0.60 does not even consider a
-   * runtime it is holding for a provider limit (`markRuntimeProgressStaleIfNeeded` runs only for
-   * a working turn). */
+   * restart shortens that wait. This blocks only the two judgments about *waiting* work: a queued
+   * delivery whose turn never began, and a notice taken but never acted on. A turn that is
+   * actually running is judged on its own silence: a hold may exist while such a turn is still
+   * in flight, and a genuinely hung one must stay recoverable. */
   recoveryHold?: boolean;
 }>;
 
@@ -104,16 +105,20 @@ export type StalledRecoveryFacts = Readonly<{
  * that never got a turn (the sweep already requires one to be waiting).
  */
 export function shouldRecoverStalledRuntime(facts: StalledRecoveryFacts): boolean {
-  // Held for a provider limit or another retryable failure: the wait is the plan, not a stall.
-  if (facts.recoveryHold) return false;
   const silentTurnStalled = facts.turnBusy && facts.silentForMs >= STALLED_RECOVERY_SILENCE_MS;
+  // A retryable failure's backoff is a planned wait, not a stall (Raft's
+  // `queueDeliveriesForRuntimeErrorBackoff`): nothing about a restart shortens it.
   const queuedTurnNeverStarted =
-    !facts.turnBusy && !facts.liveTurn && (facts.queuedForMs ?? 0) >= STALLED_RECOVERY_SILENCE_MS;
+    !facts.recoveryHold &&
+    !facts.turnBusy &&
+    !facts.liveTurn &&
+    (facts.queuedForMs ?? 0) >= STALLED_RECOVERY_SILENCE_MS;
   // A notice the process took and then did nothing about for the whole stall window — the
   // accepted-noticed-but-frozen case (task #318). The action must be *older than the notice*: an
   // Agent that acted after taking it has answered, and being idle since is not being frozen.
   const noticeAcceptedForMs = facts.noticeAcceptedForMs ?? 0;
   const noticedButFrozen =
+    !facts.recoveryHold &&
     !facts.turnBusy &&
     !facts.liveTurn &&
     noticeAcceptedForMs >= STALLED_RECOVERY_SILENCE_MS &&

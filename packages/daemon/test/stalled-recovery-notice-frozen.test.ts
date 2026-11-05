@@ -46,6 +46,18 @@ test("a notice the process accepted and never acted on for 15 minutes is recover
   // An Agent held for a provider limit or another retryable failure is waiting on purpose: a
   // restart cannot shorten that wait (Raft's providerLimitBackoffDelayMs).
   expect(shouldRecoverStalledRuntime({ ...noticedIdle, recoveryHold: true })).toBe(false);
+  // The hold never silences a turn that is actually running: that one is judged on its own
+  // silence, and a genuinely hung turn stays recoverable.
+  expect(
+    shouldRecoverStalledRuntime({
+      turnBusy: true,
+      liveTurn: true,
+      silentForMs: STALLED_RECOVERY_SILENCE_MS,
+      hasOpenToolCall: false,
+      resumable: true,
+      recoveryHold: true,
+    }),
+  ).toBe(true);
   // Nothing ever noticed is not this case.
   expect(shouldRecoverStalledRuntime({ ...noticedIdle, noticeAcceptedForMs: undefined })).toBe(
     false,
