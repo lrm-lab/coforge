@@ -149,6 +149,9 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
       noticePrefix: (agentId) => ports.sync.noticePrefix(agentId),
     },
   );
+  // A new context (a launch, or a finished compaction) drops the previews the model no longer
+  // holds: those messages read as unread again instead of counting as shown (task #424).
+  ports.contexts.onNewContext((agentId) => messageAttention.clearPreviewSeen(agentId));
   const inboxCoordinator = new InboxCoordinator({
     workspaceId: connection.workspaceId,
     stateDirectory: ports.stateDirectory,

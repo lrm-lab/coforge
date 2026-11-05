@@ -12,6 +12,7 @@ import { countDistinctMessages } from "./agent-history-read";
 import {
   AGENT_MESSAGE_ACK_METHOD,
   HELD_CONTEXT_LIMIT,
+  SEEN_EXACT_SEQS_LIMIT,
   isValidMessageSender,
   mergeSeenExactSeqs,
   threadRootTarget,
@@ -33,6 +34,8 @@ import {
   type NoticeGeneration,
 } from "./agent-wakeup-unavailable-error";
 import { inboxNoticeText } from "./inbox-notice-text";
+import { inboxPreviewLimit } from "./inbox-preview";
+import { buildNoticeRows, PreviewSeen, renderNoticeRows } from "./inbox-preview-rows";
 import { MemoryChannelUpdates, type MemoryChannelUpdateSchedule } from "./memory-channel-updates";
 import { LatestThreadReadIndex } from "./latest-thread-read-index";
 import type {
@@ -82,19 +85,6 @@ const PENDING_WINDOW_LIMIT = HELD_CONTEXT_LIMIT;
  * arrival time is what a locally built preview can honestly show. */
 export type PendingWindowEntry = { delivery: AgentMessageDelivery; receivedAt: number };
 
-/** The fields `#localViewRows` reads — a live delivery or a recovery message. */
-type LocalViewItem = {
-  target?: string;
-  messageId: string;
-  sequence?: number;
-};
-
-type LocalViewRow = {
-  target: string;
-  newIds: Set<string>;
-  heldIds: Set<string>;
-};
-
 /**
  * Validates a `(kind, handle)` pair before it can reach a model-visible notice:
  * the kind must be one of the closed values and the handle must match the public
@@ -136,6 +126,9 @@ export class AgentMessageAttentionIndex {
   readonly #conversationTargets = new Map<string, Map<string, Set<string>>>();
   readonly #attentionConversation = new Map<string, Map<string, string>>();
   readonly #pendingSequences = new Map<string, Map<string, Set<number>>>();
+  /** Sequences a notice previewed in full (task #424): a send reports them as seen, and a
+   * delivery of one stays quiet. Volatile by design — a new context clears it. */
+  readonly #previewSeen = new PreviewSeen();
 
   /** The pending sequences that are a Memory Agent's ordinary channel updates: observed in a
    * batch, not delivered to the Agent as messages awaiting it. Pruned with `#pendingSequences`. */
@@ -244,7 +237,10 @@ export class AgentMessageAttentionIndex {
       return;
     }
     this.#remember(generation, message.deliveryId);
-    if (this.#consumed(message)) {
+    if (
+      this.#consumed(message) ||
+      this.#previewSeen.has(message.agentId, message.target ?? "", message.sequence)
+    ) {
       this.logDecision(message, "consumed");
       await this.acknowledge(message);
       return;
@@ -381,7 +377,10 @@ export class AgentMessageAttentionIndex {
     for (const message of held) {
       if (!hasDeliveryScope(message)) continue;
       settled.push(message);
-      if (this.#consumed(message)) {
+      if (
+        this.#consumed(message) ||
+        this.#previewSeen.has(agentId, message.target ?? "", message.sequence)
+      ) {
         this.logDecision(message, "consumed");
         continue;
       }
@@ -390,7 +389,10 @@ export class AgentMessageAttentionIndex {
         continue;
       }
       this.#remember(generation, message.deliveryId);
-      if (this.#consumed(message)) {
+      if (
+        this.#consumed(message) ||
+        this.#previewSeen.has(agentId, message.target ?? "", message.sequence)
+      ) {
         this.logDecision(message, "consumed");
         continue;
       }
@@ -510,9 +512,16 @@ export class AgentMessageAttentionIndex {
     // through `coforge message check`. DM and channel share `#localViewRows` (one target per
     // line, no body). `recordModelSeen` is not advanced here — the server cursor has not moved,
     // and `check` is what advances it (and records what it showed as exact sequences).
-    const recoveryRows = this.#localViewRows(recoveredMessages, []);
     const rows = [
-      ...this.#renderLocalViewRows(recoveryRows),
+      ...renderNoticeRows(
+        buildNoticeRows({
+          announced: recoveredMessages,
+          queued: [],
+          agentId,
+          previewLimit: 0,
+          previewedInFull: () => false,
+        }).rows,
+      ),
       ...summaryOnly.map(
         ([target, count]) => `${target} ${count} new message${count === 1 ? "" : "s"}`,
       ),
@@ -569,47 +578,6 @@ export class AgentMessageAttentionIndex {
    * `held` is a fact only this daemon has: those messages have not been shown to the model yet.
    * They are presented again when the queue releases them, unless a read covers them first.
    */
-  #localViewRows(
-    announced: readonly LocalViewItem[],
-    queued: readonly LocalViewItem[],
-  ): LocalViewRow[] {
-    const announcedIds = new Set(announced.map((delivery) => delivery.messageId));
-    const byTarget = new Map<string, LocalViewRow>();
-    const rowFor = (target: string) => {
-      const existing = byTarget.get(target);
-      if (existing) return existing;
-      const created: LocalViewRow = {
-        target,
-        newIds: new Set<string>(),
-        heldIds: new Set<string>(),
-      };
-      byTarget.set(target, created);
-      return created;
-    };
-    for (const delivery of announced) {
-      // `receive` rejects a delivery without a target before it can be held, so this only narrows
-      // the wire type; a targetless delivery has no line to appear on either way.
-      if (!delivery.target) continue;
-      rowFor(delivery.target).newIds.add(delivery.messageId);
-    }
-    for (const delivery of queued) {
-      if (!delivery.target || announcedIds.has(delivery.messageId)) continue;
-      rowFor(delivery.target).heldIds.add(delivery.messageId);
-    }
-    return [...byTarget.values()];
-  }
-
-  #renderLocalViewRows(rows: readonly LocalViewRow[]): string[] {
-    return rows.map((row) => {
-      const parts: string[] = [];
-      if (row.newIds.size)
-        parts.push(`${row.newIds.size} new message${row.newIds.size === 1 ? "" : "s"}`);
-      if (row.heldIds.size)
-        parts.push(`${row.heldIds.size} held message${row.heldIds.size === 1 ? "" : "s"}`);
-      return `${row.target} ${parts.join(" · ")}`;
-    });
-  }
-
   #notify(
     message: AgentMessageDelivery,
     attention?: MessageAttention,
@@ -634,7 +602,15 @@ export class AgentMessageAttentionIndex {
       (delivery) =>
         !this.#isMemory(message.agentId) || delivery.conversationId === message.conversationId,
     );
-    const rows = this.#renderLocalViewRows(this.#localViewRows(announced, queued));
+    const view = buildNoticeRows({
+      announced,
+      queued,
+      agentId: message.agentId,
+      previewLimit: inboxPreviewLimit(),
+      previewedInFull: (target, sequence) =>
+        this.#previewSeen.has(message.agentId, target, sequence),
+    });
+    const rows = renderNoticeRows(view.rows);
     const totalCount = countDistinctMessages([...announced, ...queued]);
     const notice = (this.hold.noticePrefix?.(message.agentId) ?? "") + inboxNoticeText(rows);
     // The session names these back if the notice never reaches the model (`notice-undelivered`).
@@ -658,6 +634,7 @@ export class AgentMessageAttentionIndex {
       .then(() => {
         if (this.#generations.get(message.agentId) === generation) {
           generation.notified.add(message.deliveryId);
+          this.#previewSeen.record(message.agentId, view.whole);
           this.noticeActionClocks.noteNoticeAccepted(message.agentId);
           this.messageReceived(message.agentId, conversation);
         }
@@ -835,14 +812,32 @@ export class AgentMessageAttentionIndex {
   }
 
   /** The exact sequences a send reports for `target` (`seenExactSeqs`): those above its
-   * frontier, ascending, at most `SEEN_EXACT_SEQS_LIMIT`. Returned as held, never copied. */
+   * frontier, ascending, at most `SEEN_EXACT_SEQS_LIMIT` — the read-recorded ones plus what a
+   * notice previewed in full (`#previewSeen`). Returned as held, never copied. */
   seenExactSequences(agentId: string, target: string): readonly number[] {
-    return this.#consumedState(agentId).targets.get(target)?.exactSeqs ?? NO_SEQUENCES;
+    return (
+      this.#previewSeen.mergeExact(
+        agentId,
+        target,
+        this.#consumedState(agentId).targets.get(target)?.exactSeqs,
+        SEEN_EXACT_SEQS_LIMIT,
+      ) ?? NO_SEQUENCES
+    );
   }
 
-  /** Whether the Agent was shown anything of `target` one by one above its frontier. */
+  /** Whether the Agent was shown anything of `target` one by one above its frontier, by a read
+   * or by a notice that previewed the whole message. */
   hasExactSeen(agentId: string, target: string): boolean {
-    return (this.#consumedState(agentId).targets.get(target)?.exactSeqs?.length ?? 0) > 0;
+    return (
+      (this.#consumedState(agentId).targets.get(target)?.exactSeqs?.length ?? 0) > 0 ||
+      (this.#previewSeen.recorded(agentId, target)?.size ?? 0) > 0
+    );
+  }
+
+  /** The Agent's context started over: a preview the model no longer holds is not a shown
+   * message, so its sequences stop counting and the messages read as unread again. */
+  clearPreviewSeen(agentId: string): void {
+    this.#previewSeen.clear(agentId);
   }
 
   /** The spelling `target`'s consumed state is kept under. */

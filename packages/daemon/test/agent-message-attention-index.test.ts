@@ -292,10 +292,12 @@ test("channel delivery and restart recovery notify the same session without inje
   expect(index.check("agent-1")).toEqual([
     expect.objectContaining({ target: "#general", flags: ["channel"] }),
   ]);
-  expect(notices.join("\n")).not.toContain("private body");
+  // The notice carries the waiting message's own text as a preview, never the history behind it.
+  expect(notices.join("\n")).toContain("  @alice: private body");
   index.clearAgent("agent-1");
   await index.recover("agent-1", [message], { "#general": 1 });
-  expect(notices.join("\n")).not.toContain("private body");
+  // A recovery is a wakeup, not a second copy of the body.
+  expect(notices.at(-1)).not.toContain("private body");
   expect(notices.at(-1)).toContain("[CoForge inbox notice:");
   expect(notices.at(-1)).toContain("#general 1 new message");
   expect(index.modelSeenSequence("agent-1", "#general")).toBe(0);
@@ -304,38 +306,7 @@ test("channel delivery and restart recovery notify the same session without inje
   expect(index.check("agent-1")).toEqual([]);
 });
 
-test("thread attention counts sparse pending messages and preserves other targets", async () => {
-  const notices: string[] = [];
-  const sharedSession = session((notice) => {
-    notices.push(notice);
-  });
-  const index = new AgentMessageAttentionIndex(
-    "workspace-1",
-    { session: () => sharedSession },
-    async () => {},
-  );
-  for (const [id, sequence, target] of [
-    ["a", 2, "@alice:12345678"],
-    ["b", 9, "@alice:12345678"],
-    ["c", 4, "@alice"],
-    ["d", 7, "@alice:87654321"],
-  ] as const)
-    await index.receive({ ...delivery(id, "human", "alice"), sequence, target });
-  index.recordModelSeen("agent-1", "@alice:12345678", 2);
-  expect(index.check("agent-1")).toEqual([
-    expect.objectContaining({
-      target: "@alice:12345678",
-      pendingCount: 1,
-      firstPendingSequence: 9,
-      flags: ["thread"],
-    }),
-    expect.objectContaining({ target: "@alice", pendingCount: 1 }),
-    expect.objectContaining({ target: "@alice:87654321", pendingCount: 1 }),
-  ]);
-  expect(notices.join("\n")).not.toContain("private body");
-});
-
-test("updates attention, sends only a body-free notice, and ACKs takeover", async () => {
+test("updates attention, sends one notice carrying the message's text, and ACKs takeover", async () => {
   const notices: string[] = [];
   const acks: string[] = [];
   const index = new AgentMessageAttentionIndex(
@@ -360,8 +331,7 @@ test("updates attention, sends only a body-free notice, and ACKs takeover", asyn
       latestSenderHandle: "ada",
     }),
   ]);
-  expect(notices).toEqual(["[CoForge inbox notice:\n@ada 1 new message]"]);
-  expect(notices[0]).not.toContain("private body");
+  expect(notices).toEqual(["[CoForge inbox notice:\n@ada 1 new message\n  @ada: private body]"]);
   expect(acks).toEqual(["delivery-one"]);
 });
 

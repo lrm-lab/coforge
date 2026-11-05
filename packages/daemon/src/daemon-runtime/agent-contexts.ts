@@ -145,6 +145,16 @@ export class AgentContexts {
     return new AgentContextLedger(this.stateDb(agentId).database);
   }
 
+  /** Listeners told when an Agent's context starts over (a launch or a finished compaction), for
+   * state that only the model's current context makes true. */
+  readonly #newContextListeners = new Set<(agentId: string) => void>();
+
+  /** Registers a context-reset listener; returns its removal. */
+  onNewContext(listener: (agentId: string) => void): () => void {
+    this.#newContextListeners.add(listener);
+    return () => this.#newContextListeners.delete(listener);
+  }
+
   /** The Agent's context starts over: a launch, whose `runtime` is then the one in use (its
    * session may be new), or a finished compaction. */
   newContext(agentId: string, runtime?: string): void {
@@ -162,6 +172,13 @@ export class AgentContexts {
         agent_id: agentId,
         error: thrownMessage(error),
       });
+    }
+    for (const listener of this.#newContextListeners) {
+      try {
+        listener(agentId);
+      } catch {
+        // A listener must never fail a launch or a compaction bookkeeping step.
+      }
     }
   }
 }
