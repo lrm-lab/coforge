@@ -8,6 +8,7 @@ import { Artifacts } from "./artifacts.server";
 import { readSessionSecret } from "#src/server/auth/config.server";
 import { ArtifactSandbox } from "./artifact-sandbox.server";
 import { artifactSandboxOrigin } from "./artifact-sandbox-config.server";
+import { ArtifactPublicLinks } from "./artifact-public-links.server";
 
 /** The artifact services of production: bytes in the private file bucket, each new version
  * announced over Centrifugo, the experiment read from the Workspace. */
@@ -16,7 +17,7 @@ export function productionArtifacts(db: PrismaClient) {
   const artifacts = new Artifacts(db, blobs, {
     signals: centrifugoArtifactSignals(() => createCentrifugoServerApi()),
   });
-  return { artifacts, blobs, documents: new ArtifactDocuments(db, artifacts, blobs) };
+  return { artifacts, blobs, documents: new ArtifactDocuments(db, artifacts, blobs), publicLinks: new ArtifactPublicLinks(db) };
 }
 
 /** Web pages on the sandbox origin (task #490): the same reads and bytes, signed with the

@@ -35,6 +35,7 @@ model Artifact {
   workspace       Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   versions        ArtifactVersion[]
   accessEvents    ArtifactAccessEvent[]
+  publicLinks     ArtifactPublicLink[]
 
   @@index([workspaceId, homeKey])
   /// The live name is unique per home (`deletedAt IS NULL`), so a soft delete releases it at once.
@@ -49,6 +50,23 @@ model Artifact {
   /// `findFirst` and `deletedAt: null`, never `findUnique` or `upsert`.
   @@unique([workspaceId, idempotencyKey], where: { idempotencyKey: { not: null }, deletedAt: null }, map: "artifacts_idempotency_key")
   @@map("artifacts")
+}
+
+/// Audit trail for an artifact's "anyone with the link" share. Only one row may be live.
+model ArtifactPublicLink {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  artifactId      String    @db.Uuid
+  token           String
+  createdByUserId String    @db.Uuid
+  createdAt       DateTime  @default(now())
+  revokedAt       DateTime?
+  revokedByUserId String?   @db.Uuid
+  artifact        Artifact  @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@unique([artifactId], where: { revokedAt: null }, map: "artifact_public_links_live_key")
+  @@index([artifactId, revokedAt])
+  @@map("artifact_public_links")
 }
 
 /// One immutable published version. A push sends only changed files; unlisted ones carry over

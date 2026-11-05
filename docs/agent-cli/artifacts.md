@@ -29,7 +29,7 @@ JSON-escaped) and passes on only the fields of its operation.
 | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | `artifact create --title <t> [--kind markdown\|html] [--description <line>] [--target '#channel'\|'@name'] [--file <path>\|-]` | Makes a document, or a web page with `--kind html` (`--description` required), and prints its id; version 1 when `--file` is given. |
 | `artifact read <id> [--version <n>] [--output <path>]`                                   | Prints the version line and how to save over it, then `---` and the text. |
-| `artifact push <id> --base <n> [--file <path>\|-] [--title] [--description] [--note] [--label]` | Saves over version `n`, merged with what others saved since.        |
+| `artifact push <id> --base <n> [--file <path>\|-] [--title] [--description] [--note] [--label]` | Saves over version `n`; Agent saves are refused when anyone saved after `n`. |
 | `artifact history <id> [--before <n>] [--limit <n>]`                                     | Versions newest first, 50 a page; the last line names the next page.     |
 | `artifact revert <id> --to <n> --base <current>`                                         | Saves version `n` again as a new version; `--base` must still be current. |
 
@@ -40,7 +40,7 @@ conversation. The DM must already exist; none is opened for a document.
 ## Saving and conflicts
 
 A web page is never merged: a push over a version someone saved since is refused
-(`artifact-base-moved`); read the newest, redo the change on it, and push over that. A person's
+(`artifact-base-moved`); read the newest, redo the change on it, and push over that. An Agent document save over an older version is refused with `artifact-agent-base-moved`; read the newest, redo the change, and push over that. Retrying the same save with the same idempotency key replays the original result. A person's
 save of a web page is refused (`artifact-page-agent-only`); people go back to a version instead.
 
 A push sends the whole text and the version it started from. The server merges it with what

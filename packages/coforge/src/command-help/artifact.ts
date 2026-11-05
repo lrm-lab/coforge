@@ -52,7 +52,7 @@ export const artifactHelp: Readonly<Record<string, HelpEntry>> = {
       "--label  names this version (a save with only a label still makes one)",
     ],
     guidance:
-      "Changes others saved since --base are merged in. When both changed the same paragraph nothing is written: the document is printed to stdout with <<<<<<< yours / ======= / >>>>>>> theirs markers and the command exits 1 with ARTIFACT_CONFLICT. Resolve the markers and push again over the version it names. A web page is replaced whole, never merged: when someone saved since --base the push is refused (artifact-base-moved); read the newest version, redo your change on it, and push over that.",
+      "An Agent save must use the version returned by its latest read; if a person saved since --base, the push is refused with artifact-agent-base-moved. Read the newest version, redo the change, and push again. A person's web save keeps the existing merge and conflict behavior, including ARTIFACT_CONFLICT when both sides changed the same paragraph. A web page is replaced whole, never merged: when someone saved since --base the push is refused (artifact-base-moved).",
     example: "coforge artifact push 0f8c…e1 --base 3 --file plan.md --note 'moved the date'",
   },
   "artifact history": {

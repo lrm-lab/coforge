@@ -231,12 +231,15 @@ export class Artifacts {
       if (replay)
         return { status: "replayed", versionId: replay.id, number: replay.number } as const;
 
-      if (
-        input.baseVersion > current ||
-        input.baseVersion < 0 ||
-        (input.exactBase && input.baseVersion !== current)
-      )
+      if (input.baseVersion > current || input.baseVersion < 0)
         throw new AppError("CONFLICT", { errorId: "artifact-base-moved" });
+      if (input.exactBase && input.baseVersion !== current)
+        throw new AppError("CONFLICT", {
+          errorId: input.publisher.agentId ? "artifact-agent-base-moved" : "artifact-base-moved",
+          hint: input.publisher.agentId
+            ? "the artifact changed after you read it; read the newest version before saving again"
+            : undefined,
+        });
 
       // A version's files, and the settings it recorded; before the first version, none of either.
       const versionAt = async (number: number) => {
