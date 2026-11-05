@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { AgentRuntimeEvent, AgentSession, AgentSessionOptions } from "@coforge/agent";
@@ -402,3 +402,25 @@ for (const action of ["stop", "purge"] as const)
       await session.dispose().catch(() => {});
     }
   });
+
+test("a fresh conversation opens with the Agent's MEMORY.md, a resumed one does not", async () => {
+  const f = await fixture();
+  await mkdir(f.work, { recursive: true });
+  await writeFile(join(f.work, "MEMORY.md"), "# Agent\n\n## Role\nMemory steward.\n", "utf8");
+  let session = await f.open();
+  try {
+    await session.notify!("alpha first", { conversation: a });
+    expect(f.calls[1]!.messages[0]).toContain("<memory-index");
+    expect(f.calls[1]!.messages[0]).toContain("Memory steward.");
+    expect(f.calls[1]!.messages[0]).toContain("alpha first");
+    const first = await f.calls[1]!.session.readSessionIdentity!();
+    await session.dispose();
+    session = await f.open();
+    await session.notify!("alpha after restart", { conversation: a });
+    expect(f.calls.at(-1)!.options.sessionId).toBe(first!.sessionId);
+    expect(f.calls.at(-1)!.messages).toEqual(["alpha after restart"]);
+  } finally {
+    await session.dispose();
+    await rm(f.directory, { recursive: true, force: true });
+  }
+});

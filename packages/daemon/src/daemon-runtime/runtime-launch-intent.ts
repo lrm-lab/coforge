@@ -28,7 +28,10 @@ export type AgentInput =
   | { kind: "recovery"; context: AgentRecoveryContext; completion: AgentInputCompletion }
   | { kind: "delivery"; message: AgentMessageDelivery; completion: AgentInputCompletion }
   | { kind: "startup"; text: string; completion: AgentInputCompletion }
-  | { kind: "prompt"; text: string; introduction?: true; completion: AgentInputCompletion };
+  | { kind: "prompt"; text: string; introduction?: true; completion: AgentInputCompletion }
+  /** A MEMORY.md block ahead of a fresh session's or a compacted context's next real input: a
+   * turn of its own, and context rather than a request. */
+  | { kind: "memory"; text: string; completion: AgentInputCompletion };
 
 /** Whether any queued input has something to say, so the startup starter has nothing to add:
  * the input drain skips the starter when this holds for the inputs behind it. */
@@ -37,6 +40,7 @@ export function queueHasInputContent(items: readonly AgentInput[]): boolean {
     (item) =>
       item.kind === "delivery" ||
       item.kind === "prompt" ||
+      item.kind === "memory" ||
       (item.kind === "recovery" && recoveryHasContent(item.context)),
   );
 }

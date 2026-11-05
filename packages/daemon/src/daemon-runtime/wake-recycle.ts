@@ -1,7 +1,7 @@
 import { getLogger } from "@logtape/logtape";
 import { thrownMessage, type RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import { agentStartupInput } from "#src/agent-runtime/agent-startup";
-import { buildStartupMemoryBlock } from "#src/agent-runtime/startup-memory-block";
+import { startupMemoryBlock } from "#src/agent-runtime/startup-memory-block";
 import {
   composeWakeSections,
   decideWakeRecycle,
@@ -113,10 +113,7 @@ export class WakeRecycle {
       return undefined;
     }
     const [memoryBlock, providerBriefing] = await Promise.all([
-      buildStartupMemoryBlock({
-        agentWorkspaceDirectory: request.agentWorkspaceDirectory,
-        budgetTokens: config.memoryTokens,
-      }),
+      startupMemoryBlock(request.agentWorkspaceDirectory),
       // A briefing that cannot be built leaves a bare fresh session, never a failed wake.
       provider
         .readRecycleBriefing?.({

@@ -212,6 +212,24 @@ export function observeLaunchEvent(
   observeRuntimeEvent(ports.observation, agentId, launch, config, runtime, controlled, event);
 }
 
+/** The launch-event gate bound to a runtime: its launch map and observation ports are read per
+ * event, so the observer can exist before the constructor finished wiring them. */
+export function launchEventObserver(
+  ports: () => {
+    currentLaunch(agentId: string): ActivityLaunch | undefined;
+    observation: RuntimeEventObservationPorts;
+  },
+) {
+  return (
+    agentId: string,
+    launch: ActivityLaunch,
+    config: AgentRuntimeConfig,
+    runtime: AgentRuntime,
+    controlled: boolean,
+    event: AgentRuntimeEvent,
+  ): void => observeLaunchEvent(ports(), agentId, launch, config, runtime, controlled, event);
+}
+
 /** Resolves a thread target to its parent plus anchor by reading that parent once. */
 export function canonicalAgentMessageTarget(
   ports: {

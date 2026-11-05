@@ -78,6 +78,20 @@ export class AgentInputDrain {
     return completion;
   }
 
+  /** Puts an input at the front of this Agent's queue, creating it if no input is pending. */
+  prepend(
+    agentId: string,
+    create: (completion: AgentInputCompletion) => AgentInput,
+  ): Promise<void> {
+    const queue = this.#queues.get(agentId) ?? { items: [], closed: false };
+    if (queue.closed) return Promise.reject(new Error(`Agent runtime is stopping: ${agentId}`));
+    const completion = new Promise<void>((resolve, reject) => {
+      queue.items.unshift(create({ resolve, reject }));
+    });
+    this.#queues.set(agentId, queue);
+    return completion;
+  }
+
   ensure(agentId: string): void {
     const queue = this.#queues.get(agentId);
     if (
@@ -130,10 +144,13 @@ export class AgentInputDrain {
           if (session && launch) await this.ports.runStartup(agentId, session, launch, item.text);
         } else if (item.kind === "prompt") {
           await this.ports.runPrompt(agentId, item.text, item.introduction);
+        } else if (item.kind === "memory") {
+          // Context, not a request: it opens a turn of its own ahead of the real input.
+          if (this.ports.sessionFor(agentId)) await this.ports.runPrompt(agentId, item.text);
         } else await this.ports.recoverAttention(agentId, item.context);
       } catch (error) {
         if (
-          (item.kind === "recovery" || item.kind === "startup") &&
+          (item.kind === "recovery" || item.kind === "startup" || item.kind === "memory") &&
           this.ports.isLaunching(agentId)
         ) {
           if (this.ports.isStopping(agentId)) {

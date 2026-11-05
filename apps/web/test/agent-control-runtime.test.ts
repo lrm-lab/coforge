@@ -24,6 +24,7 @@ import {
   type AgentStartIntent,
 } from "@lrm/coforge-sdk/internal";
 import type { AgentSessionOptions } from "@coforge/agent";
+import { logicalControlSteps } from "./fixtures/control-intent-steps";
 
 test("cloud and daemon preserve Restart identity, reset sessions, fence Full Reset replay and report recovery", async () => {
   // macOS resolves os.tmpdir() through the /var -> /private/var symlink, which the
@@ -372,7 +373,8 @@ test("a Start that meets an already-running process rebinds it: one process, pre
           readSessionIdentity: async () => identity,
           sendMessage: async () => {},
           notify: async (notice: string) => {
-            notices.push(notice);
+            // A fresh session's MEMORY.md turn is context, not a message notice.
+            if (!notice.includes("not a request")) notices.push(notice);
           },
           subscribe: () => () => {},
           onExit: () => () => {},
@@ -656,48 +658,3 @@ test("Full Reset completes, not fails, when the workspace clear cannot finish", 
     await rm(root, { recursive: true, force: true });
   }
 });
-
-function decodePrimitive(bytes: Uint8Array) {
-  try {
-    decodeAgentStopIntent(bytes);
-    return "stop";
-  } catch {}
-  try {
-    decodeAgentWorkspaceResetRequest(bytes);
-    return "workspace-reset";
-  } catch {}
-  decodeAgentStartIntent(bytes);
-  return "start";
-}
-
-function logicalControlSteps(publications: Uint8Array[]) {
-  // Control transport is at-least-once; duplicate publications must preserve
-  // the stable request and payload, while Daemon performs the operation once.
-  const seen = new Map<string, string>();
-  return publications.flatMap((bytes) => {
-    const step = decodePrimitive(bytes);
-    const requestId = decodeControlRequestId(bytes);
-    const key = `${step}:${requestId}`;
-    const encoded = bytes.toBase64();
-    const previous = seen.get(key);
-    if (previous !== undefined) {
-      expect(encoded).toBe(previous);
-      return [];
-    }
-    seen.set(key, encoded);
-    return [step];
-  });
-}
-
-function decodeControlRequestId(bytes: Uint8Array) {
-  for (const decode of [
-    decodeAgentStopIntent,
-    decodeAgentWorkspaceResetRequest,
-    decodeAgentStartIntent,
-  ]) {
-    try {
-      return decode(bytes).requestId;
-    } catch {}
-  }
-  throw new Error("Unknown control publication");
-}

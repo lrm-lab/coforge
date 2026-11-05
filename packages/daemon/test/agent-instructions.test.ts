@@ -40,7 +40,7 @@ test("ordinary requests do not require task creation or per-turn memory bookkeep
   expect(instructions).toContain("Only a successful claimant implements");
   expect(instructions).toContain("others may analyze or review in its thread");
   expect(instructions).toContain("A failed claim blocks conflicting work");
-  expect(instructions).toContain("when this request lacks context");
+  expect(instructions).toContain("MEMORY.md is your index and recovery point");
   expect(instructions).not.toContain("## Startup sequence");
   expect(instructions).not.toContain("before you finish that turn");
 });
@@ -50,10 +50,10 @@ test("the Agent finishes all assigned work before it stops", () => {
   expect(instructions).toContain("coforge task list --mine");
 });
 
-test("before a long task, progress goes to notes/active-context.md rather than MEMORY.md", () => {
-  expect(instructions).toContain(
-    "note progress in notes/active-context.md for resume after compaction",
-  );
+test("before a long task, the Agent writes notes/active-context.md and keeps MEMORY.md as the index", () => {
+  expect(instructions).toContain("write notes/active-context.md before a long task");
+  expect(instructions).toContain("update it after an important interaction");
+  // Our own resume pointer stays out of the standing prompt; the seeded index carries it.
   expect(instructions).not.toContain("Active Context");
 });
 
@@ -123,7 +123,6 @@ test("preserves privacy, credential handling and uncertain-send safety", () => {
 test("recovers context on demand without loading the Manual into every session", () => {
   expect(instructions).toContain("coforge message check --target");
   expect(instructions).toContain("Do not announce the notice or read MEMORY.md first");
-  expect(instructions).toContain("an inbox notice is not missing context");
   expect(instructions).toContain("coforge message search");
   expect(instructions).toContain("read --around");
   expect(instructions).toContain("`│` continues prior body; not a new message.");

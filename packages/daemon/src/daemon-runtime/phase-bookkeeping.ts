@@ -23,7 +23,7 @@ export type PhaseBookkeepingPorts = Readonly<{
     detailKind: AgentActivity["detailKind"],
     detail: string,
   ): ActivityDraft;
-  /** A finished compaction starts the Agent's context over. */
+  /** A finished compaction starts the Agent's context over, and re-briefs it with its MEMORY.md. */
   contexts: Pick<AgentContexts, "newContext">;
 }>;
 

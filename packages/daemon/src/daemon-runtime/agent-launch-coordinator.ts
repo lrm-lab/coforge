@@ -107,6 +107,8 @@ export type AgentLaunchCoordinatorPorts = {
     error: unknown,
   ) => ActivityDraft;
   drainAppInboxNotices: (agentId: string) => Promise<void>;
+  /** Puts the Agent's MEMORY.md block at the front of a fresh session's queued input. */
+  attachSessionMemory: (agentId: string) => Promise<boolean>;
 };
 
 export class AgentLaunchCoordinator {

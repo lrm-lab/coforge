@@ -205,6 +205,22 @@ export async function launchAgentProcess(
       },
     );
     timing.phase("provider_session");
+    // Every fresh session — a first launch, one the provider lost, an explicit create — opens with
+    // its MEMORY.md block; a recycle already put its own briefing in, and a resume needs none.
+    // Read after the provider started, so a brand-new workspace has its seeded MEMORY.md.
+    const freshSession =
+      recycled === undefined &&
+      (reference.sessionMode === "create" || reference.sessionId === undefined);
+    const memoryBlock = freshSession
+      ? await ports.attachSessionMemory(agentId).catch(() => false)
+      : false;
+    if (freshSession)
+      logger.info("Agent fresh session memory block", {
+        event: "agent.runtime.session_memory",
+        agent_id: agentId,
+        launch_id: launch.launchId,
+        has_memory_block: memoryBlock === true,
+      });
     if (parseAssignedSkillPacks(launchConfig.assignedSkillPacks).includes("weekly-report-collect"))
       ports.collectSkillAgents.add(agentId);
     if (ports.stops.stopping(agentId)) {

@@ -30,6 +30,21 @@ export type StartupMemoryBlock = Readonly<{
   complete: boolean;
 }>;
 
+/** The one budget every fresh session's block is cut to: a launch, a session rebuilt after the
+ * provider lost it, a Memory Agent conversation, and an idle recycle. It is a share of the
+ * context, never a target — a shorter file costs only what it is. */
+export const STARTUP_MEMORY_BLOCK_BUDGET_TOKENS = 4_000;
+
+/** The block for one fresh session at the shared budget; `undefined` when there is nothing to show. */
+export function startupMemoryBlock(
+  agentWorkspaceDirectory: string,
+): Promise<StartupMemoryBlock | undefined> {
+  return buildStartupMemoryBlock({
+    agentWorkspaceDirectory,
+    budgetTokens: STARTUP_MEMORY_BLOCK_BUDGET_TOKENS,
+  });
+}
+
 /**
  * The Agent's MEMORY.md as an XML-delimited block for the first input of a fresh session: its
  * head within `budgetTokens`, and whether that is all of it, so the Agent need not read it again.

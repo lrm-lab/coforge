@@ -8,6 +8,10 @@ import type {
 } from "@coforge/agent";
 import { AgentSessionRecoveryError } from "@lrm/coforge-anvil";
 import { memoryConversationInstructions } from "#src/code-agent/agent-instructions";
+import {
+  startupMemoryBlock,
+  type StartupMemoryBlock,
+} from "#src/agent-runtime/startup-memory-block";
 
 export interface ConversationSessionStore {
   get(controlSessionId: string, conversationId: string): Promise<AgentSessionIdentity | undefined>;
@@ -31,6 +35,8 @@ type Conversation = {
   closed: boolean;
   creating?: Promise<AgentSession>;
   session?: AgentSession;
+  /** A session that started fresh, not resumed: the first notice opens with MEMORY.md. */
+  memory?: StartupMemoryBlock;
 };
 type PendingNotice = {
   session: AgentSession;
@@ -102,9 +108,14 @@ export class MemoryConversationSessions implements AgentSession {
       ? await Promise.race([conversation.creating!, conversation.cancelled, this.#stopSignal])
       : this.dependencies.primary;
     if (conversation && scope) conversation.scope.target = scope.target;
+    // A conversation session that started fresh opens with the Agent's MEMORY.md, in the same
+    // turn as its first notice: the context is shared, the native histories are not.
+    const memory = conversation?.memory;
+    if (conversation) conversation.memory = undefined;
+    const text = memory ? `${memory.text}\n\n${message}` : message;
     await this.#admit(
       session,
-      () => (session.notify ? session.notify(message, options) : session.sendMessage(message)),
+      () => (session.notify ? session.notify(text, options) : session.sendMessage(text)),
       conversation,
     );
   }
@@ -217,6 +228,7 @@ export class MemoryConversationSessions implements AgentSession {
     if (!controlId) throw new Error("Memory Agent control session identity is not available");
     const stored = await store?.get(controlId, scope.conversationId);
     this.#assertAdmission(conversation);
+    let fresh = stored === undefined;
     const persist = (identity: AgentSessionIdentity): Promise<void> => {
       const write = store?.set(controlId, scope.conversationId, identity) ?? Promise.resolve();
       this.#writes.add(write);
@@ -253,6 +265,7 @@ export class MemoryConversationSessions implements AgentSession {
       )
         throw error;
       this.#assertAdmission(conversation);
+      fresh = true;
       child = await open(crypto.randomUUID(), "create");
     }
     this.#children.add(child);
@@ -269,6 +282,7 @@ export class MemoryConversationSessions implements AgentSession {
       if (!this.#closed && this.#active === child)
         this.#observe(child, { type: "completed", status: "failed", conversation: { ...scope } });
     });
+    if (fresh) conversation.memory = await startupMemoryBlock(options.agentWorkspaceDirectory);
     if (this.#stopping || conversation.closed) {
       await child.dispose();
       this.#assertAdmission(conversation);

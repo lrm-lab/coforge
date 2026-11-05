@@ -3,6 +3,7 @@ import { parseRuntimeProvider, thrownMessage } from "@lrm/coforge-sdk/internal";
 import { createCodeAgentProvider } from "#src/code-agent/registry";
 import { AgentContextLedger } from "#src/persistence/agent-context-ledger";
 import type { AgentStateDb } from "#src/persistence/agent-state-db";
+import { rebriefCompactedSessionMemory, type SessionMemoryHooks } from "./session-memory-hooks";
 
 const logger = getLogger(["coforge", "daemon", "agent-contexts"]);
 
@@ -27,7 +28,11 @@ export class AgentContexts {
   /** Whether this Agent's adapter reports a finished compaction; absent before its first launch. */
   readonly #reportsCompaction = new Map<string, boolean>();
 
-  constructor(private readonly stateDb: (agentId: string) => AgentStateDb) {}
+  constructor(
+    private readonly stateDb: (agentId: string) => AgentStateDb,
+    /** Read per event: the hooks' runtime collaborators do not exist when this field is built. */
+    private readonly memory: () => SessionMemoryHooks,
+  ) {}
 
   ledger(agentId: string): AgentContextLedger | undefined {
     if (!this.#reportsCompaction.get(agentId)) return undefined;
@@ -38,6 +43,8 @@ export class AgentContexts {
   /** The Agent's context starts over: a launch, whose `runtime` is then the one in use (its
    * session may be new), or a finished compaction. */
   newContext(agentId: string, runtime?: string): void {
+    // No runtime means a finished compaction, and a cut context needs its MEMORY.md again.
+    if (!runtime) void rebriefCompactedSessionMemory(this.memory(), agentId);
     if (runtime) this.#reportsCompaction.set(agentId, reportsCompaction(runtime));
     try {
       this.ledger(agentId)?.advance();

@@ -149,8 +149,9 @@ Rules for Agent lifecycle, control, Session state, and Activity in
 - `MEMORY.md` holds references only; the Active Context lives in
   `notes/active-context.md`. Older workspaces get the missing notes files, but
   an existing `MEMORY.md` is never migrated or rewritten.
-- Seed `MEMORY.md` for on-demand recovery. Do not require per-turn memory
-  maintenance in the standing instructions.
+- `MEMORY.md` is the Agent's index and recovery point. The standing instructions say so and ask
+  for an update after an important interaction or a new fact — never per-turn maintenance — and
+  point at `notes/active-context.md` before a long task.
 
 ## Idle recycle of a cold, large session
 
@@ -181,5 +182,12 @@ Rules for Agent lifecycle, control, Session state, and Activity in
   invalidate, no new reason), leaves the session reference alone until the new session is reported,
   and makes the briefing the launch's first input. A briefing that cannot be built still starts a
   fresh session. No resume when the launch carries a `resumePrompt` or `create`s its session.
-- `startup-memory-block.ts` is the briefing's MEMORY.md section: the head of the regular file within
-  its token budget, never through a symlink.
+- `startup-memory-block.ts` is the MEMORY.md section: the head of the regular file within
+  `STARTUP_MEMORY_BLOCK_BUDGET_TOKENS` (4,000), never through a symlink. That one budget covers
+  every fresh session, not only a recycle.
+- `session-memory-briefing.ts` is the one assembly: a fresh session's block rides in its starter
+  when nothing else is queued, and is its own short reference turn ahead of a real delivery;
+  `rebriefAfterCompaction` queues the same block again after a runtime reports a finished
+  compaction (or one inferred from resumed output, tool use or the turn's end). Every fresh launch
+  — first start, a session the provider lost, an explicit create — and every fresh Memory Agent
+  conversation gets it; a resume never does.

@@ -15,7 +15,6 @@ const WAKE_RECYCLE_ENV = {
   minColdGapMs: "COFORGE_WAKE_RECYCLE_MIN_COLD_GAP_MS",
   sweepMs: "COFORGE_WAKE_RECYCLE_SWEEP_MS",
   panelTokens: "COFORGE_WAKE_RECYCLE_PANEL_TOKENS",
-  memoryTokens: "COFORGE_WAKE_RECYCLE_MEMORY_TOKENS",
 } as const;
 
 const DEFAULT_WAKE_RECYCLE_MIN_CONTEXT_TOKENS = 128_000;
@@ -23,16 +22,14 @@ const DEFAULT_WAKE_RECYCLE_MIN_CONTEXT_TOKENS = 128_000;
 const DEFAULT_WAKE_RECYCLE_MIN_COLD_GAP_MS = 60 * 60_000;
 const DEFAULT_WAKE_RECYCLE_SWEEP_MS = 10 * 60_000;
 const DEFAULT_WAKE_RECYCLE_PANEL_TOKENS = 8_000;
-const DEFAULT_WAKE_RECYCLE_MEMORY_TOKENS = 4_000;
 
 export type WakeRecycleConfig = Readonly<{
   enabled: boolean;
   minContextTokens: number;
   minColdGapMs: number;
-  /** Token budget of the provider's briefing. */
+  /** Token budget of the provider's briefing. The MEMORY.md block's budget is the same for every
+   * fresh session (`STARTUP_MEMORY_BLOCK_BUDGET_TOKENS`), never a recycle-only setting. */
   panelTokens: number;
-  /** Token budget of the MEMORY.md block. */
-  memoryTokens: number;
 }>;
 
 type Environment = Readonly<Record<string, string | undefined>>;
@@ -76,8 +73,6 @@ export function resolveWakeRecycleConfig(
       DEFAULT_WAKE_RECYCLE_MIN_COLD_GAP_MS,
     panelTokens:
       positiveInteger(pick(WAKE_RECYCLE_ENV.panelTokens)) ?? DEFAULT_WAKE_RECYCLE_PANEL_TOKENS,
-    memoryTokens:
-      positiveInteger(pick(WAKE_RECYCLE_ENV.memoryTokens)) ?? DEFAULT_WAKE_RECYCLE_MEMORY_TOKENS,
   };
 }
 

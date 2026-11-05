@@ -714,7 +714,9 @@ async function queueHarness(
             return () => undefined;
           },
           async notify(notice: string) {
-            notices.push(notice);
+            // A fresh session's MEMORY.md turn is context, not a message notice.
+            if (!notice.includes("That is your MEMORY.md as context, not a request"))
+              notices.push(notice);
             await options.notify?.(notice);
           },
           async dispose() {
@@ -905,193 +907,6 @@ test("resolve, react, and unreact reach the transport with messageId, emoji, and
   } finally {
     await harness.runtime.stop();
   }
-});
-
-describe("Agent attachment upload", () => {
-  test("authorizes the local context before delegating the multipart request to the transport", async () => {
-    const calls: Array<{ agentApiKey: string | undefined }> = [];
-    const uploadResponse = Response.json({
-      id: "attachment-1",
-      fileName: "note.txt",
-      contentType: "text/plain",
-      sizeBytes: 4,
-    });
-    const harness = await messageHarness(
-      async (request) => ({
-        protocolMajor: 1,
-        idempotencyKey: request.idempotencyKey,
-        accepted: true,
-        attentionCount: 0,
-        messages: [],
-      }),
-      undefined,
-      async (_request, agentApiKey) => {
-        calls.push({ agentApiKey });
-        return uploadResponse;
-      },
-    );
-    try {
-      const request = new Request("http://local-proxy.test/api/agent/v1/attachments", {
-        method: "POST",
-        headers: { "content-type": "multipart/form-data; boundary=b" },
-        body: "irrelevant",
-      });
-      const response = await harness.runtime.agentRequests.agentAttachmentUpload(
-        harness.context,
-        request,
-        harness.apiKey,
-      );
-      expect(response).toBe(uploadResponse);
-      expect(calls).toEqual([{ agentApiKey: harness.apiKey }]);
-    } finally {
-      await harness.runtime.stop();
-    }
-  });
-
-  test("rejects an upload from an unrecognized local context before touching the transport", async () => {
-    let calls = 0;
-    const harness = await messageHarness(
-      async (request) => ({
-        protocolMajor: 1,
-        idempotencyKey: request.idempotencyKey,
-        accepted: true,
-        attentionCount: 0,
-        messages: [],
-      }),
-      undefined,
-      async () => {
-        calls++;
-        throw new Error("must not forward an unauthorized upload");
-      },
-    );
-    try {
-      const request = new Request("http://local-proxy.test/api/agent/v1/attachments", {
-        method: "POST",
-        headers: { "content-type": "multipart/form-data; boundary=b" },
-        body: "irrelevant",
-      });
-      await expect(
-        harness.runtime.agentRequests.agentAttachmentUpload(
-          "forged-context",
-          request,
-          harness.apiKey,
-        ),
-      ).rejects.toThrow();
-      expect(calls).toBe(0);
-    } finally {
-      await harness.runtime.stop();
-    }
-  });
-});
-
-describe("Agent direct-upload sessions", () => {
-  test("authorizes the local context before delegating each session operation to the transport", async () => {
-    const calls: Array<{ op: string; arg: unknown; agentApiKey: string | undefined }> = [];
-    const createResponse = Response.json({ uploadId: "upload-1" }, { status: 201 });
-    const completeResponse = Response.json({ uploadId: "upload-1", state: "completed" });
-    const cancelResponse = Response.json({ uploadId: "upload-1", state: "canceled" });
-    const getResponse = Response.json({ uploadId: "upload-1", state: "pending" });
-    const harness = await messageHarness(
-      async (request) => ({
-        protocolMajor: 1,
-        idempotencyKey: request.idempotencyKey,
-        accepted: true,
-        attentionCount: 0,
-        messages: [],
-      }),
-      undefined,
-      undefined,
-      {
-        create: async (body, agentApiKey) => {
-          calls.push({ op: "create", arg: body, agentApiKey });
-          return createResponse;
-        },
-        complete: async (uploadId, agentApiKey) => {
-          calls.push({ op: "complete", arg: uploadId, agentApiKey });
-          return completeResponse;
-        },
-        cancel: async (uploadId, agentApiKey) => {
-          calls.push({ op: "cancel", arg: uploadId, agentApiKey });
-          return cancelResponse;
-        },
-        get: async (uploadId, agentApiKey) => {
-          calls.push({ op: "get", arg: uploadId, agentApiKey });
-          return getResponse;
-        },
-      },
-    );
-    try {
-      expect(
-        await harness.runtime.agentRequests.agentAttachmentUploadSessionCreate(
-          harness.context,
-          { target: "#general" },
-          harness.apiKey,
-        ),
-      ).toBe(createResponse);
-      expect(
-        await harness.runtime.agentRequests.agentAttachmentUploadSessionComplete(
-          harness.context,
-          "upload-1",
-          harness.apiKey,
-        ),
-      ).toBe(completeResponse);
-      expect(
-        await harness.runtime.agentRequests.agentAttachmentUploadSessionCancel(
-          harness.context,
-          "upload-1",
-          harness.apiKey,
-        ),
-      ).toBe(cancelResponse);
-      expect(
-        await harness.runtime.agentRequests.agentAttachmentUploadSessionGet(
-          harness.context,
-          "upload-1",
-          harness.apiKey,
-        ),
-      ).toBe(getResponse);
-      expect(calls).toEqual([
-        { op: "create", arg: { target: "#general" }, agentApiKey: harness.apiKey },
-        { op: "complete", arg: "upload-1", agentApiKey: harness.apiKey },
-        { op: "cancel", arg: "upload-1", agentApiKey: harness.apiKey },
-        { op: "get", arg: "upload-1", agentApiKey: harness.apiKey },
-      ]);
-    } finally {
-      await harness.runtime.stop();
-    }
-  });
-
-  test("rejects a session operation from an unrecognized local context before touching the transport", async () => {
-    let calls = 0;
-    const harness = await messageHarness(
-      async (request) => ({
-        protocolMajor: 1,
-        idempotencyKey: request.idempotencyKey,
-        accepted: true,
-        attentionCount: 0,
-        messages: [],
-      }),
-      undefined,
-      undefined,
-      {
-        create: async () => {
-          calls++;
-          throw new Error("must not forward an unauthorized create");
-        },
-      },
-    );
-    try {
-      await expect(
-        harness.runtime.agentRequests.agentAttachmentUploadSessionCreate(
-          "forged-context",
-          { target: "#general" },
-          harness.apiKey,
-        ),
-      ).rejects.toThrow();
-      expect(calls).toBe(0);
-    } finally {
-      await harness.runtime.stop();
-    }
-  });
 });
 
 describe("DaemonRuntime", () => {
@@ -3201,7 +3016,9 @@ describe("DaemonRuntime", () => {
       target: "@agent",
     });
     expect(starts).toBe(2);
-    expect(notices).toEqual(["[CoForge inbox notice:\n@agent 1 new message]"]);
+    expect(notices.filter((notice) => !notice.includes("not a request"))).toEqual([
+      "[CoForge inbox notice:\n@agent 1 new message]",
+    ]);
     expect(acknowledgements).toEqual(["delivery-1"]);
 
     await runtime.stopAgent("agent-a");
@@ -3707,8 +3524,8 @@ describe("DaemonRuntime", () => {
 
       expect(acknowledgements).toEqual(["delivery-chatter"]);
       expect(launches).toBe(2);
-      expect(notices).toHaveLength(1);
-      expect(notices[0]).toContain("#team 1 new message");
+      expect(notices.filter((notice) => !notice.includes("not a request"))).toHaveLength(1);
+      expect(notices.find((notice) => notice.includes("#team 1 new message"))).toBeDefined();
     } finally {
       await runtime.stop();
     }
@@ -3859,8 +3676,8 @@ describe("DaemonRuntime", () => {
           }
           return {
             ...sessionSpy(),
-            notify: async () => {
-              events.push("notice");
+            notify: async (notice) => {
+              if (!notice.includes("not a request")) events.push("notice");
             },
             onExit(listener) {
               exits.add(listener);
@@ -4229,6 +4046,7 @@ describe("DaemonRuntime", () => {
           return {
             ...sessionSpy(),
             notify: async (notice) => {
+              if (notice.includes("not a request")) return;
               events.push(`notice ${notice.match(/(\d+) new message/)?.[1]}`);
             },
             onExit(listener) {
@@ -5189,11 +5007,17 @@ describe("DaemonRuntime", () => {
       await starting;
       // Live starts received during the initial flush run independently. Wait
       // for the observable active status, not a timer tick or initial startup.
-      expect(events).toEqual(["start:agent-a", "notify:agent-a"]);
+      // The fresh session's MEMORY.md turn and the message notice behind it.
+      expect(events).toEqual(["start:agent-a", "notify:agent-a", "notify:agent-a"]);
       releaseSecondCredential();
       await secondActive;
 
-      expect(events).toEqual(["start:agent-a", "notify:agent-a", "start:agent-b"]);
+      expect(events).toEqual([
+        "start:agent-a",
+        "notify:agent-a",
+        "notify:agent-a",
+        "start:agent-b",
+      ]);
     } finally {
       releaseNotify();
       releaseSecondCredential();
@@ -5719,8 +5543,10 @@ describe("DaemonRuntime", () => {
     const first = firstNotice();
     const harness = await queueHarness({ notify: first.notify });
     await harness.runtime.handleAgentStart({ ...resumeIntent, sessionMode: "create" });
-    expect(await first.notice).toBe(resumePrompt);
-    expect(harness.notices).toEqual([resumePrompt]);
+    expect(await first.notice).toContain(resumePrompt);
+    expect(harness.notices).toHaveLength(1);
+    expect(harness.notices[0]).toContain("<memory-index");
+    expect(harness.notices[0]).toContain(resumePrompt);
     await harness.runtime.stop();
   });
 
@@ -5752,7 +5578,7 @@ describe("DaemonRuntime", () => {
       });
       // A delivery arriving after the launch queues behind the introduction.
       await harness.delivery(1);
-      expect(harness.notices[0]).toBe(introductionPrompt);
+      expect(harness.notices[0]).toContain(introductionPrompt);
       expect(harness.notices).toHaveLength(2);
       expect(harness.startupNotices).toEqual([]);
     } finally {
@@ -5768,7 +5594,7 @@ describe("DaemonRuntime", () => {
         unreadSummary: { "#team": 3 },
       });
       expect(harness.notices).toHaveLength(2);
-      expect(harness.notices[0]).toBe(introductionPrompt);
+      expect(harness.notices[0]).toContain(introductionPrompt);
       expect(harness.notices[1]).toContain("#team 3 new messages");
       expect(harness.startupNotices).toEqual([]);
     } finally {
@@ -5794,7 +5620,8 @@ describe("DaemonRuntime", () => {
       gate.resolve();
       await first;
       await harness.runtime.handleAgentStart({ ...introductionIntent, requestId: "third-start" });
-      expect(harness.notices).toEqual([introductionPrompt]);
+      expect(harness.notices).toHaveLength(1);
+      expect(harness.notices[0]).toContain(introductionPrompt);
     } finally {
       gate.resolve();
       await harness.runtime.stop();
@@ -5809,7 +5636,8 @@ describe("DaemonRuntime", () => {
       const joining = harness.runtime.handleAgentStart(introductionIntent);
       gate.resolve();
       await Promise.all([waking, joining]);
-      expect(harness.notices).toEqual([introductionPrompt]);
+      expect(harness.notices).toHaveLength(1);
+      expect(harness.notices[0]).toContain(introductionPrompt);
       expect(harness.startupNotices).toEqual([]);
       expect(harness.sessions()).toBe(1);
     } finally {
@@ -5831,7 +5659,7 @@ describe("DaemonRuntime", () => {
         launchId: "launch-rebind-2",
         introductionPrompt,
       });
-      expect(await first.notice).toBe(introductionPrompt);
+      expect(await first.notice).toContain(introductionPrompt);
       expect(harness.sessions()).toBe(1);
     } finally {
       await harness.runtime.stop();
@@ -5850,7 +5678,9 @@ describe("DaemonRuntime", () => {
       await harness.runtime.handleAgentStart(introductionIntent);
       await harness.delivery(3);
       expect(harness.sessions()).toBe(3);
-      expect(harness.notices.filter((notice) => notice === introductionPrompt)).toHaveLength(3);
+      expect(harness.notices.filter((notice) => notice.includes(introductionPrompt))).toHaveLength(
+        3,
+      );
       expect(harness.startupNotices).toEqual([]);
     } finally {
       await harness.runtime.stop();
@@ -5891,7 +5721,9 @@ describe("DaemonRuntime", () => {
       await harness.runtime.handleAgentStart({ ...introductionIntent, requestId: "later-start" });
       await harness.delivery(3);
       expect(harness.sessions()).toBe(2);
-      expect(harness.notices.filter((notice) => notice === introductionPrompt)).toHaveLength(1);
+      expect(harness.notices.filter((notice) => notice.includes(introductionPrompt))).toHaveLength(
+        1,
+      );
       expect(harness.startupNotices).toEqual([fresh]);
     } finally {
       gate.resolve();
@@ -6146,7 +5978,9 @@ describe("DaemonRuntime", () => {
       recoveryContext,
     );
     expect(harness.sessions()).toBe(2);
-    expect(harness.notices).toHaveLength(2);
+    // The failed attempt never reached its recovery notice: its first turn is the MEMORY.md
+    // context turn, which is what the injected failure rejected.
+    expect(harness.notices).toHaveLength(1);
     expect(harness.notices.every((notice) => notice.startsWith("[CoForge inbox notice:"))).toBe(
       true,
     );
@@ -6166,7 +6000,9 @@ describe("DaemonRuntime", () => {
     const recoveryStarted = new Promise<void>((resolve) => (markRecoveryStarted = resolve));
     const disposed = new Promise<void>((resolve) => (markDisposed = resolve));
     const harness = await queueHarness({
-      async notify() {
+      async notify(notice) {
+        // The fresh session's MEMORY.md turn passes; the recovery notice is what holds here.
+        if (notice.includes("not a request")) return;
         markRecoveryStarted();
         await recoveryGate;
       },

@@ -32,7 +32,15 @@ function record(sequence: number) {
 function setup(stateDb = (root: string, agentId: string) => AgentStateDb.open(root, agentId)) {
   const root = join(tmpdir(), `coforge-context-ops-${crypto.randomUUID()}`);
   roots.push(root);
-  const contexts = new AgentContexts((agentId) => stateDb(root, agentId));
+  const contexts = new AgentContexts(
+    (agentId) => stateDb(root, agentId),
+    () =>
+      ({
+        connection: { workspaceRoot: root, workspaceId: "workspace" },
+        inputDrain: { get: () => undefined },
+        session: () => undefined,
+      }) as never,
+  );
   const operations = new AgentMessageOperations({
     connection: { workspaceId: "workspace", computerId: "computer" },
     attention: new AgentMessageAttentionIndex(

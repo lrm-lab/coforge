@@ -31,7 +31,6 @@ test("the defaults are the reference client's thresholds, on", () => {
     minContextTokens: 128_000,
     minColdGapMs: 60 * MINUTE,
     panelTokens: 8_000,
-    memoryTokens: 4_000,
   });
   expect(resolveWakeRecycleSweepMs({})).toBe(10 * MINUTE);
 });
@@ -49,14 +48,12 @@ test("an Agent's variables override the process environment, and bad values fall
     COFORGE_WAKE_RECYCLE_MIN_CONTEXT_TOKENS: "50000",
     COFORGE_WAKE_RECYCLE_MIN_COLD_GAP_MS: "-5",
     COFORGE_WAKE_RECYCLE_PANEL_TOKENS: "1000",
-    COFORGE_WAKE_RECYCLE_MEMORY_TOKENS: "nonsense",
   };
   expect(resolveWakeRecycleConfig({}, processEnv)).toEqual({
     enabled: false,
     minContextTokens: 50_000,
     minColdGapMs: 60 * MINUTE,
     panelTokens: 1_000,
-    memoryTokens: 4_000,
   });
   expect(
     resolveWakeRecycleConfig(
