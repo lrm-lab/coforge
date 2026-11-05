@@ -9,6 +9,7 @@ import { readSessionSecret } from "#src/server/auth/config.server";
 import { ArtifactSandbox } from "./artifact-sandbox.server";
 import { artifactSandboxOrigin } from "./artifact-sandbox-config.server";
 import { ArtifactPublicLinks } from "./artifact-public-links.server";
+import { artifactsEnabled } from "./artifact-access.server";
 
 /** The artifact services of production: bytes in the private file bucket, each new version
  * announced over Centrifugo, the experiment read from the Workspace. */
@@ -59,6 +60,7 @@ export function productionArtifactSandbox(db: PrismaClient) {
         link.artifact.currentVersion <= 0
       )
         return null;
+      if (!(await artifactsEnabled(db, link.artifact.workspaceId))) return null;
       const version = await db.artifactVersion.findUnique({
         where: {
           artifactId_number: { artifactId: link.artifact.id, number: link.artifact.currentVersion },

@@ -144,7 +144,7 @@ export class ArtifactSandbox {
       return sandboxRefusal(404, "Not found.");
     const page = await this.deps.publicPage(token);
     if (!page) return sandboxRefusal(404, "Not found.");
-    const origins = { sandboxOrigin: this.deps.origin!, appOrigin: "none" };
+    const origins = { sandboxOrigin: this.deps.origin!, appOrigin: "'none'" };
     if (!framed) {
       const wrapper = sandboxWrapper({ pagePath: `/p/${token}/page`, ...origins });
       return request.method === "HEAD" ? new Response(null, wrapper) : wrapper;

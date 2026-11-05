@@ -67,7 +67,7 @@ export function sandboxWrapper(input: {
   appOrigin: string;
 }): Response {
   const nonce = crypto.randomUUID().replaceAll("-", "");
-  const body = `<!doctype html><html><head><meta charset="utf-8"><title>CoForge</title>
+  const body = `<!doctype html><html><head><meta charset="utf-8"><meta name="robots" content="noindex"><title>CoForge</title>
 <style nonce="${nonce}">html,body{margin:0;height:100%;background:#fff}iframe{border:0;width:100%;height:100%;display:block}p{font:14px/1.5 system-ui,sans-serif;margin:24px;color:#555}</style>
 </head><body><iframe sandbox="allow-scripts" referrerpolicy="no-referrer" src="${input.pagePath}"></iframe>
 <script nonce="${nonce}">(()=>{const f=document.querySelector("iframe");let n=0;f.addEventListener("load",()=>{if(++n<2)return;f.remove();const p=document.createElement("p");p.textContent=${JSON.stringify(NAVIGATED_NOTICE)};document.body.append(p);});})();</script>
@@ -148,8 +148,9 @@ export function sandboxRefusal(status: number, text: string): Response {
 
 const COMMON = {
   "X-Content-Type-Options": "nosniff",
+  "X-Robots-Tag": "noindex, nofollow",
   "Referrer-Policy": "no-referrer",
-  "Cache-Control": "private, no-store",
+  "Cache-Control": "no-store",
   "Permissions-Policy":
     "camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), hid=(), bluetooth=(), clipboard-read=(), display-capture=()",
 } as const;
