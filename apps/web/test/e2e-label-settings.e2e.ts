@@ -211,6 +211,11 @@ test("an owner manages the Workspace's labels on their own page; a member reads 
     // hides agent-browser's headless page, and a hidden page runs no animation to its end.
     await browser("tab", "t1");
     await browser("wait", "--fn", `${shown} === "" && ${swatches} != null`);
+    // The pointer passing over the focused swatch and off it again leaves its name closed.
+    await browser("hover", 'label:has(> span > input[aria-label="Indigo"])');
+    await browser("mouse", "move", "0", "0");
+    await Bun.sleep(300);
+    expect(await evaluate<string>(shown)).toBe("");
     await browser("press", "Escape");
     await browser("wait", "--fn", `${swatches} == null`);
     await Bun.sleep(300);

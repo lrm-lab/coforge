@@ -69,11 +69,11 @@ function Swatch({ color, desktop }: { color: string; desktop: boolean }) {
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
   // The tooltip's close request (Escape, a key on the swatch, another tooltip opening), kept
-  // until the pointer or focus leaves the swatch: held open by `hovered` or `focused` alone, it
-  // would take every Escape for itself (react-aria's tooltip stops it while open) and a popover
-  // around the swatches could never close on it. The window losing focus blurs the swatch and
-  // closes the tooltip too, but leaves the swatch the active element: that is no one's request,
-  // and the tooltip comes back with the window, as react-aria's own trigger does.
+  // until both the pointer and focus have left the swatch: held open by `hovered` or `focused`
+  // alone, it would take every Escape for itself (react-aria's tooltip stops it while open) and a
+  // popover around the swatches could never close on it. The window losing focus blurs the swatch
+  // and closes the tooltip too, but leaves the swatch the active element: that is no one's
+  // request, and the tooltip comes back with the window, as react-aria's own trigger does.
   const [dismissed, setDismissed] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const { isFocusVisible: keyboard } = useFocusVisible();
@@ -89,12 +89,12 @@ function Swatch({ color, desktop }: { color: string; desktop: boolean }) {
         aria-label={labelColorName(color)}
         onHoverChange={(next) => {
           setHovered(next);
-          if (!next) setDismissed(false);
+          if (!next && !focused) setDismissed(false);
         }}
         inputRef={input}
         onFocusChange={(next) => {
           setFocused(next);
-          if (!next && document.activeElement !== input.current) setDismissed(false);
+          if (!next && !hovered && document.activeElement !== input.current) setDismissed(false);
         }}
         className={({ isSelected, isFocusVisible: ringed }) =>
           cn(
