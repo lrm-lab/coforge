@@ -364,8 +364,8 @@ export async function discoverCodeAgentCatalogs(
         }),
       ]);
   }
-  // The model list is session/new's model select, with each model's `reasoning_effort` read in
-  // the same probe session (verified on 1.4.1).
+  // The model list is session/new's model select, efforts read in the same probe session; the
+  // probe's cwd is the host's business (Droid keeps a session per cwd and cannot delete it).
   if (usable(RUNTIME_PROVIDER.DROID)) {
     const executable = await resolveExecutable(RUNTIME_PROVIDER.DROID);
     if (executable)
@@ -373,7 +373,7 @@ export async function discoverCodeAgentCatalogs(
         RUNTIME_PROVIDER.DROID,
         discoverDroidAcpCatalog(
           commands.droid ?? [executable],
-          cwd,
+          droidAcpRuntimeHost.catalogCwd?.(options.cacheDirectory, cwd) ?? cwd,
           environment,
           droidAcpRuntimeHost,
         ).then((catalog) => ({ keyPaths: [executable], catalog })),

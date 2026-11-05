@@ -12,6 +12,9 @@ export interface DroidAcpRuntimeHost {
    * a crash or a silent exit reports only there. */
   stderrHint?(lines: readonly string[]): void;
   buildEnvironment(options: AgentSessionOptions): Record<string, string>;
+  /** The directory a catalog probe runs from. Droid records a session for every cwd it starts
+   * in and cannot delete one, so the host keeps probes out of the user's workspace. */
+  catalogCwd?(stateDirectory: string | undefined, fallback: string): string;
   createReplyIntentScanner(): {
     feed(delta: {
       callId: string;

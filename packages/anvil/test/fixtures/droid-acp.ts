@@ -16,7 +16,10 @@ if (Bun.env.DROID_ACP_FIXTURE_REQUIRE_INSTRUCTIONS) {
   }
 }
 if (log)
-  await appendFile(log, `${JSON.stringify({ argv: process.argv.slice(2), instructionsText })}\n`);
+  await appendFile(
+    log,
+    `${JSON.stringify({ argv: process.argv.slice(2), instructionsText, cwd: process.cwd() })}\n`,
+  );
 const modelOptions = [
   { value: "auto", name: "Auto Model" },
   { value: "claude-sonnet-5", name: "Sonnet 5" },
