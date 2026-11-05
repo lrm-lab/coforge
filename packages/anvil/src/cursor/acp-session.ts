@@ -28,11 +28,16 @@ const CURSOR_NOT_SIGNED_IN =
   "Agent again.";
 
 /** Whether a `-32000` answer is the sign-in refusal: the code is JSON-RPC's generic server
- * error, so only its message decides. Anything else keeps its own failure text. */
+ * error, so only the message decides — either place it can be in, with neither preferred.
+ * cursor-agent 2026.10.22 puts "Authentication required" in the error's own message and
+ * "Please run 'agent login' first…" in `data.message`; another `-32000` keeps its own failure
+ * text. */
 function isSignInRequired(error: unknown): boolean {
   if (!(error instanceof RequestError) || error.code !== CURSOR_AUTH_REQUIRED_CODE) return false;
-  const message = nonEmptyString(asRecord(error.data)?.message) ?? error.message ?? "";
-  return /authentication required/i.test(message);
+  const dataMessage = nonEmptyString(asRecord(error.data)?.message) ?? "";
+  return [dataMessage, error.message ?? ""].some((text) =>
+    /authentication required|agent login/i.test(text),
+  );
 }
 
 function cursorSignInRequired(): RuntimeLoginRequiredError {

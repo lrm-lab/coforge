@@ -143,13 +143,18 @@ for await (const line of console) {
         break;
       }
       if (Bun.env.CURSOR_ACP_FIXTURE_REQUIRE_LOGIN) {
+        // The shape cursor-agent 2026.10.22 actually answers with: the phrase is in the error's
+        // own message, while data.message names the command instead.
         write({
           jsonrpc: "2.0",
           id: request.id,
           error: {
             code: -32000,
             message: "Authentication required",
-            data: { message: "Authentication required. Please run 'agent login' first." },
+            data: {
+              message:
+                "Please run 'agent login' first, then call authenticate() with methodId 'cursor_login'.",
+            },
           },
         });
         break;
