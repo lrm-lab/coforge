@@ -226,3 +226,28 @@ test("a resume the provider actually continued is not fresh, and says so", async
       ?.properties,
   ).toMatchObject({ injected: false, reason: "resume", session_continued: true });
 });
+
+test("a server reset (stop, then a create start) reaches the new first input with the block", async () => {
+  const subject = await harness();
+  try {
+    await subject.runtime.startAgent("agent-a", config, "old-session");
+    await subject.answered;
+    expect(subject.inputs[0]).not.toContain("<memory-index");
+    // The reset chain: the stop step, then a start with no session and mode "create".
+    await subject.runtime.stopAgent("agent-a");
+    await subject.runtime.startAgent(
+      "agent-a",
+      config,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      "create",
+    );
+    for (let i = 0; i < 100 && subject.inputs.length < 2; i++) await Bun.sleep(10);
+    expect(subject.inputs).toHaveLength(2);
+    expect(subject.inputs[1]).toContain("<memory-index");
+  } finally {
+    await subject.stop();
+  }
+});

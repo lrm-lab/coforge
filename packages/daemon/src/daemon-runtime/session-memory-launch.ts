@@ -18,15 +18,24 @@ export async function openLaunchSessionMemory(input: {
   requestedSessionId?: string;
   /** The session the provider reported opening; absent when it reported none. */
   reportedSessionId?: string;
+  /** The provider explicitly said it replaced the session (a failed resume), when it says so. */
+  providerReplaced?: boolean;
   attach: () => Promise<boolean>;
 }): Promise<void> {
   const continued =
     input.requestedSessionId === undefined ||
     input.reportedSessionId === undefined ||
     input.reportedSessionId === input.requestedSessionId;
+  // A provider that reports its session only after this launch (Claude Code reports at turn end)
+  // leaves `reportedSessionId` unknown here: the launch then stays a resume and gets no block. The
+  // next fresh session carries the memory instead — better than injecting into a session that may
+  // still hold its context.
   const freshSession =
     !input.recycled &&
-    (input.sessionMode === "create" || input.requestedSessionId === undefined || !continued);
+    (input.sessionMode === "create" ||
+      input.requestedSessionId === undefined ||
+      input.providerReplaced === true ||
+      !continued);
   let injected = false;
   let errorCode: string | undefined;
   if (freshSession) {
@@ -45,9 +54,11 @@ export async function openLaunchSessionMemory(input: {
     ...(input.sessionMode ? { sessionMode: input.sessionMode } : {}),
     hadSessionId: input.requestedSessionId !== undefined,
     sessionContinued:
-      input.requestedSessionId === undefined || input.reportedSessionId === undefined
-        ? undefined
-        : continued,
+      input.providerReplaced === true
+        ? false
+        : input.requestedSessionId === undefined || input.reportedSessionId === undefined
+          ? undefined
+          : continued,
     ...(errorCode ? { errorCode } : {}),
   });
 }

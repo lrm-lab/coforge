@@ -125,6 +125,7 @@ export async function launchAgentProcess(
     // reference: whether the provider actually continued it decides "fresh" below.
     const requestedSessionId = recycled ? undefined : reference.sessionId;
     let reportedSessionId: string | undefined;
+    let driverReplacedSessionId: string | undefined;
     // The adapter's own spawn + ACP initialize complete with this call; one phase covers both.
     const runtime = await ports.agentProcessManager.start(
       agentId,
@@ -152,8 +153,9 @@ export async function launchAgentProcess(
         },
         runtimeId: launch.launchId,
         onSessionId: ports.transport().reportAgentSession
-          ? async (reported, driverReplacedSessionId) => {
+          ? async (reported, replaced) => {
               reportedSessionId = reported;
+              driverReplacedSessionId = replaced;
               return reportLaunchSession(
                 {
                   current,
@@ -219,6 +221,7 @@ export async function launchAgentProcess(
       sessionMode: reference.sessionMode,
       requestedSessionId,
       reportedSessionId,
+      providerReplaced: driverReplacedSessionId !== undefined,
       attach: () => ports.attachSessionMemory(agentId),
     });
     if (parseAssignedSkillPacks(launchConfig.assignedSkillPacks).includes("weekly-report-collect"))
