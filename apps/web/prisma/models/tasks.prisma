@@ -77,10 +77,6 @@ model Task {
   /// Workspace holds.
   @@index([projectId, status])
   @@index([ownerMemberId, status])
-  /// Added for the removed setup checklist's "has this member created a Task"; no query reads it
-  /// now. Decide with the migration that drops `setupChecklistDismissedAt` whether the creator
-  /// foreign key's delete check still needs it, then drop or keep it.
-  @@index([creatorMemberId])
   @@map("tasks")
 }
 

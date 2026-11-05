@@ -158,9 +158,6 @@ model WorkspaceMemberPreference {
   /// Chat sidebar sections top to bottom: "pinned", "channels", "agents" and custom section ids.
   /// Empty = the default order. Written with the custom sections' own `sortOrder`.
   chatSectionOrder     String[]            @default([])
-  /// No longer read or written; the sidebar setup checklist it recorded is gone. Kept until the
-  /// release after this one is live (expand-contract), then dropped.
-  setupChecklistDismissedAt DateTime?
   /// Set when first sign-in made this the member's own Workspace: the setup wizard shows, and the
   /// platform assistant does not introduce itself, until the member finishes or skips it, which
   /// clears this. NULL means no wizard (every other member, and every joiner by invite or link).
