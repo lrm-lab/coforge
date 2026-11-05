@@ -39,10 +39,19 @@ async function fixture(env: Record<string, string> = {}) {
   });
   const requests = async () => {
     try {
+      // A read can land mid-append: the last line is the only one that can still be partial,
+      // and a request a test waits on is already complete. Drop what does not parse instead of
+      // failing every request on one truncated tail.
       return (await readFile(log, "utf8"))
         .split("\n")
         .filter(Boolean)
-        .map((line) => JSON.parse(line));
+        .flatMap((line) => {
+          try {
+            return [JSON.parse(line)];
+          } catch {
+            return [];
+          }
+        });
     } catch {
       return [] as { method?: string; params?: Record<string, unknown> }[];
     }
