@@ -11,7 +11,7 @@ import type { ThreadRootLoad } from "./thread-root-state";
 import type { DirectConversationView } from "./conversation-types";
 import { threadReadThrough } from "./thread-summary-model";
 import { useConversationOpened } from "./use-conversation-open";
-import { useDocumentVisible } from "./use-document-visible";
+import { usePageAttended } from "./use-page-attended";
 
 type ConversationSyncView = Pick<
   DirectConversationView,
@@ -134,11 +134,11 @@ export function useConversationSync({
     threadInView,
     Boolean(threadInView),
   );
-  // Hidden, nothing is reported; coming back on screen runs this again (task #549), as the
-  // conversation's own read does.
-  const visible = useDocumentVisible();
+  // Nobody looking (hidden, or the window without focus), nothing is reported; coming back runs
+  // this again (task #549), as the conversation's own read does.
+  const attended = usePageAttended();
   useEffect(() => {
-    if (!threadInView || !threadInViewSequence || !threadOpened || reading.current || !visible)
+    if (!threadInView || !threadInViewSequence || !threadOpened || reading.current || !attended)
       return;
     const boundary = threadCursor(threadInView) ?? 0;
     if (threadInViewSequence <= boundary) return;
@@ -163,7 +163,7 @@ export function useConversationSync({
     threadInView,
     threadInViewSequence,
     threadOpened,
-    visible,
+    attended,
     conversation,
     queryClient,
     onReadThread,

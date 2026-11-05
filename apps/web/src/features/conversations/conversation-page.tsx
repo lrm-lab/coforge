@@ -34,7 +34,7 @@ import { useStandaloneThread } from "./standalone-thread";
 import { useChannelConversation, useDirectConversation } from "./use-conversation-data";
 import { useConversationView, useShownConversationTab } from "./use-conversation-view";
 import { useConversationOpened } from "./use-conversation-open";
-import { useDocumentVisible } from "./use-document-visible";
+import { usePageAttended } from "./use-page-attended";
 
 type ConversationPageProps = {
   search: ConversationPageSearch;
@@ -361,13 +361,13 @@ function ConversationPageMain({
     undefined,
     isMember && !threadAlone,
   );
-  // A background tab reports nothing (task #549): what arrived while it was hidden is read when
-  // the page is on screen again with this conversation open.
-  const visible = useDocumentVisible();
+  // Nobody looking, nothing is reported (task #549): a background tab, or a window without focus,
+  // reads what it loaded once it is in front with focus and this conversation still open.
+  const attended = usePageAttended();
   useEffect(() => {
-    if (!topLevelEnd || !isMember || threadAlone || !opened || !visible) return;
+    if (!topLevelEnd || !isMember || threadAlone || !opened || !attended) return;
     readThrough(topLevelEnd);
-  }, [readCursor.key, topLevelEnd, isMember, threadAlone, opened, visible]);
+  }, [readCursor.key, topLevelEnd, isMember, threadAlone, opened, attended]);
   const readLatest = (throughSequence: number) => {
     if (!isMember || !opened) return;
     advance(throughSequence, `${readCursor.key}:latest`, true);
