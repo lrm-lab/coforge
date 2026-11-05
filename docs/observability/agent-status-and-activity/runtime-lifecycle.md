@@ -47,7 +47,6 @@
 | `agent.runtime.wake_recycle_failed`    | warn       | 决定过程出错，按恢复处理                                                                                                                  |
 | `agent.runtime.wake_briefing_failed`   | warn       | provider 简报建不出来，以不带它的新 session 启动                                                                                          |
 | `agent.runtime.session_memory`         | info       | 一个 fresh session 的首条输入带上了 `MEMORY.md`/`active-context` 段（`has_memory_block`）                                                 |
-| `agent.runtime.compaction_rebrief`     | info       | 运行时报告上下文压缩完成，同一份两文件段重新排在下一条输入前（`has_memory_block`）                                                        |
 
 | 环境变量                                  | 默认                          | 含义                                                                             |
 | ----------------------------------------- | ----------------------------- | -------------------------------------------------------------------------------- |

@@ -5,7 +5,6 @@ import { join } from "node:path";
 import {
   attachSessionMemory,
   prependSessionMemory,
-  rebriefAfterCompaction,
 } from "#src/agent-runtime/session-memory-briefing";
 import { agentStartupInput } from "#src/agent-runtime/agent-startup";
 import { STARTUP_MEMORY_BUDGET_TOKENS } from "#src/agent-runtime/startup-memory-block";
@@ -83,32 +82,4 @@ test("nothing is injected without a file, for a closed queue, or a second pendin
   const closed: AgentInputQueue = { items: [starter()], closed: true };
   expect(await attachSessionMemory(closed, directory)).toBeUndefined();
   expect((closed.items[0] as { text: string }).text).not.toContain("<memory-index");
-});
-
-function prependingQueue() {
-  const items: string[] = [];
-  return {
-    items,
-    waiting: () => items.length > 0,
-    prepend: async (text: string) => {
-      items.unshift(text);
-    },
-  };
-}
-
-test("a compaction queues one block ahead of the next input, and never a second", async () => {
-  const directory = await workspace("# Agent\n\n## Role\nRuns the runtime adapters.\n");
-  const items = prependingQueue();
-  await rebriefAfterCompaction(items, "agent-a", directory);
-  await rebriefAfterCompaction(items, "agent-a", directory);
-  expect(items.items).toHaveLength(1);
-  expect(items.items[0]).toContain("<memory-index");
-  expect(items.items[0]).toContain("do not reply to it");
-});
-
-test("a compaction with no MEMORY.md queues nothing and does not throw", async () => {
-  const directory = await workspace(undefined);
-  const items = prependingQueue();
-  await expect(rebriefAfterCompaction(items, "agent-a", directory)).resolves.toBeUndefined();
-  expect(items.items).toHaveLength(0);
 });

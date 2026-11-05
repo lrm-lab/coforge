@@ -8,17 +8,9 @@ const launch = { launchId: "launch-a", clientSeq: 0, stopping: false } as Activi
 
 function subject() {
   const rebriefs: string[] = [];
-  const contexts = new AgentContexts(
-    () => {
-      throw new Error("no ledger in this test");
-    },
-    () =>
-      ({
-        connection: { workspaceRoot: "/nonexistent", workspaceId: "workspace-a" },
-        inputDrain: { get: () => undefined },
-        session: () => undefined,
-      }) as never,
-  );
+  const contexts = new AgentContexts(() => {
+    throw new Error("no ledger in this test");
+  });
   const rebrief = contexts.newContext.bind(contexts);
   const bookkeeping = new PhaseBookkeeping({
     launchFor: () => launch,

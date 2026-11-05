@@ -448,10 +448,7 @@ export class DaemonRuntime {
     inputDrain: this.#inputDrain,
     session: (agentId: string) => this.#agentProcessManager.session(agentId),
   });
-  readonly #contexts = new AgentContexts(
-    (agentId) => this.#consumedSeqs.stateDb(agentId),
-    this.#memoryHooks,
-  );
+  readonly #contexts = new AgentContexts((agentId) => this.#consumedSeqs.stateDb(agentId));
   readonly #phaseBookkeeping = new PhaseBookkeeping({
     contexts: this.#contexts,
     launchFor: (agentId) => this.#currentActivityLaunches.get(agentId),

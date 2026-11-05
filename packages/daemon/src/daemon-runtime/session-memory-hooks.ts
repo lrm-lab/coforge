@@ -3,7 +3,6 @@ import type { AgentInputDrain } from "./agent-input-drain";
 import { agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
 import {
   attachSessionMemory,
-  rebriefAfterCompaction,
   type StartupMemoryBlock,
 } from "#src/agent-runtime/session-memory-briefing";
 
@@ -30,37 +29,6 @@ export function attachFreshSessionMemory(
 ): Promise<StartupMemoryBlock | undefined> {
   return attachSessionMemory(
     hooks.inputDrain.get(agentId),
-    agentWorkspaceDirectory(hooks.connection.workspaceRoot, hooks.connection.workspaceId, agentId),
-  );
-}
-
-/**
- * A runtime reported that its context was compacted: the Agent must see its MEMORY.md again,
- * ahead of whatever comes next. Nothing is injected when no input can carry it — a stopped or
- * reaped Agent gets the block from its next fresh launch anyway.
- */
-export async function rebriefCompactedSessionMemory(
-  hooks: SessionMemoryHooks,
-  agentId: string,
-): Promise<void> {
-  if (!hooks.session(agentId)) return;
-  const queue = hooks.inputDrain.get(agentId);
-  if (queue?.closed) return;
-  await rebriefAfterCompaction(
-    {
-      waiting: () =>
-        hooks.inputDrain.get(agentId)?.items.some((item) => item.kind === "memory") ?? false,
-      prepend: async (text) => {
-        const completion = hooks.inputDrain.prepend(agentId, (done) => ({
-          kind: "memory",
-          text,
-          completion: done,
-        }));
-        completion.catch(() => {});
-        hooks.inputDrain.ensure(agentId);
-      },
-    },
-    agentId,
     agentWorkspaceDirectory(hooks.connection.workspaceRoot, hooks.connection.workspaceId, agentId),
   );
 }

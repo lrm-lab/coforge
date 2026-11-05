@@ -1,4 +1,3 @@
-import { getLogger } from "@logtape/logtape";
 import { agentStartupInput } from "#src/agent-runtime/agent-startup";
 import {
   startupMemoryBlock,
@@ -12,8 +11,6 @@ import {
   type AgentInput,
   type AgentInputQueue,
 } from "#src/daemon-runtime/runtime-launch-intent";
-
-const logger = getLogger(["coforge", "daemon", "runtime"]);
 
 /** Closes a block that stands alone as the session's first turn: a fresh session woken by a real
  * delivery, or one whose context was just compacted. It is context, never a request. */
@@ -85,35 +82,4 @@ export async function attachSessionMemory(
   const block = await startupMemoryBlock(agentWorkspaceDirectory);
   prependSessionMemory(queue, block);
   return block;
-}
-
-/** Where the runtime puts an input ahead of the ones already waiting. */
-export type SessionMemoryQueue = Readonly<{
-  /** Whether a block is already waiting for this Agent. */
-  waiting(): boolean;
-  prepend(text: string): Promise<void>;
-}>;
-
-/**
- * The same block again after a runtime reported that it compacted its context: queued ahead of
- * the next input. An Agent with no live runtime gets nothing here — its next fresh launch opens
- * with a block anyway.
- */
-export async function rebriefAfterCompaction(
-  queue: SessionMemoryQueue,
-  agentId: string,
-  agentWorkspaceDirectory: string,
-): Promise<void> {
-  if (queue.waiting()) return;
-  try {
-    const block = await startupMemoryBlock(agentWorkspaceDirectory);
-    if (!block) return;
-    await queue.prepend(memoryBlockInput(block));
-    logger.info("Agent context was compacted; its MEMORY.md block is queued again", {
-      event: "agent.runtime.compaction_rebrief",
-      agent_id: agentId,
-    });
-  } catch {
-    // A briefing is context, never a reason to fail the turn the compaction finished in.
-  }
 }

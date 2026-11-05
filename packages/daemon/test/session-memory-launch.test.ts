@@ -138,17 +138,15 @@ test("an explicit create never resumes, and opens with the block", async () => {
   }
 });
 
-test("a finished compaction queues the block again for the next input", async () => {
+test("a finished compaction queues nothing: memory arrives with the next fresh session (task #548)", async () => {
   const subject = await harness();
   try {
     await subject.runtime.startAgent("agent-a", config);
     await subject.answered;
     subject.emit({ type: "compaction-started" });
     subject.emit({ type: "compaction-finished" });
-    for (let i = 0; i < 50 && subject.inputs.length < 2; i++) await Bun.sleep(10);
-    expect(subject.inputs).toHaveLength(2);
-    expect(subject.inputs[1]).toContain("<memory-index");
-    expect(subject.inputs[1]).toContain("your next input follows");
+    for (let i = 0; i < 20; i++) await Bun.sleep(10);
+    expect(subject.inputs).toHaveLength(1);
   } finally {
     await subject.stop();
   }

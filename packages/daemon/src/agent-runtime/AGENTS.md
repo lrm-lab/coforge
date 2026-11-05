@@ -192,8 +192,8 @@ Rules for Agent lifecycle, control, Session state, and Activity in
   lent to the other file, a file with nothing to show contributes no section, and the same block
   covers every fresh session, not only a recycle.
 - `session-memory-briefing.ts` is the one assembly: a fresh session's block rides in its starter
-  when nothing else is queued, and is its own short reference turn ahead of a real delivery;
-  `rebriefAfterCompaction` queues the same block again after a runtime reports a finished
-  compaction (or one inferred from resumed output, tool use or the turn's end). Every fresh launch
-  — first start, a session the provider lost, an explicit create — and every fresh Memory Agent
-  conversation gets it; a resume never does.
+  when nothing else is queued, and is its own short reference turn ahead of a real delivery. Every
+  fresh launch — first start, a session the provider lost, an explicit create — and every fresh
+  Memory Agent conversation gets it; a resume never does.
+- A finished compaction queues nothing (task #548): the read ledger starts a new context, and the
+  files arrive with the next fresh session — as Raft 1.0.60 does.
