@@ -1,4 +1,6 @@
 import { expect, test } from "bun:test";
+import { mkdtemp, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { jobPlist } from "#src/platform/launchd-job";
 import {
@@ -7,7 +9,9 @@ import {
   computerUpgradeJobPaths,
   computerUpgradeTaskName,
   deleteWindowsComputerUpgradeTask,
+  launchComputerUpgrade,
   launchWindowsComputerUpgrade,
+  spawnDetachedUpgrade,
 } from "#src/platform/computer-upgrade-launcher";
 
 const id = "123e4567-e89b-42d3-a456-426614174000";
@@ -165,4 +169,33 @@ test("Windows upgrade cleanup deletes the Scheduled Task", async () => {
     return 0;
   });
   expect(calls).toEqual([["schtasks.exe", "/Delete", "/TN", `CoForge Upgrade ${id}`, "/F"]]);
+});
+
+test("Linux without systemd runs the same action as a detached process, logging where the other platforms do", async () => {
+  const home = await mkdtemp(join(tmpdir(), "upgrade-home-"));
+  const started: { action: string[]; logPath: string }[] = [];
+  await launchComputerUpgrade(id, "1.2.3", {
+    platform: "linux",
+    hasSystemd: false,
+    homeDirectory: home,
+    spawnDetached: (action, logPath) => started.push({ action, logPath }),
+  });
+  expect(started).toEqual([
+    {
+      action: [process.execPath, "__remote-upgrade", "--request-id", id, "--version", "1.2.3"],
+      logPath: computerUpgradeJobPaths(id, { homeDirectory: home }).logPath,
+    },
+  ]);
+});
+
+test("the detached upgrade is a real process whose output lands in the job log", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "upgrade-log-"));
+  const logPath = join(dir, "nested", "upgrade.log");
+  spawnDetachedUpgrade(["/bin/sh", "-c", "echo upgrade-ran"], logPath);
+  for (let i = 0; i < 200; i++) {
+    const text = await readFile(logPath, "utf8").catch(() => "");
+    if (text.includes("upgrade-ran")) return;
+    await Bun.sleep(25);
+  }
+  throw new Error("the detached upgrade never wrote its output");
 });

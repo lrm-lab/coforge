@@ -1,6 +1,8 @@
+import { closeSync, mkdirSync, openSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { RFC_UUID_PATTERN } from "@lrm/coforge-sdk/internal";
+import { systemdPresent } from "../daemon-host/detached";
 import { LaunchdJob, type LaunchdJobPlatform } from "./launchd-job";
 import { escapeXmlText } from "@lrm/coforge-sdk/internal";
 import {
@@ -10,6 +12,22 @@ import {
   writeUtf16XmlFile,
 } from "./windows-scheduled-task";
 
+/** What the upgrade job runs, on every platform: the Computer's own `__remote-upgrade`. */
+export function computerUpgradeAction(
+  executablePath: string,
+  requestId: string,
+  expectedVersion: string,
+): string[] {
+  return [
+    executablePath,
+    "__remote-upgrade",
+    "--request-id",
+    requestId,
+    "--version",
+    expectedVersion,
+  ];
+}
+
 export function computerUpgradeCommand(
   platform: NodeJS.Platform,
   executablePath: string,
@@ -18,14 +36,7 @@ export function computerUpgradeCommand(
 ): string[] {
   if (!RFC_UUID_PATTERN.test(requestId)) throw new Error("invalid Computer upgrade request ID");
   if (!expectedVersion) throw new Error("missing expected Computer release version");
-  const action = [
-    executablePath,
-    "__remote-upgrade",
-    "--request-id",
-    requestId,
-    "--version",
-    expectedVersion,
-  ];
+  const action = computerUpgradeAction(executablePath, requestId, expectedVersion);
   if (platform === "linux")
     return [
       "systemd-run",
@@ -97,20 +108,39 @@ export type LaunchComputerUpgradeOptions = ComputerUpgradeJobPathOptions & {
   jobPlatform?: LaunchdJobPlatform;
   /** Injectable Windows `schtasks` runner, for tests only. */
   windowsTaskRunner?: WindowsUpgradeTaskRunner;
+  /** The platform to launch for; this process's own when absent. Tests inject it. */
+  platform?: NodeJS.Platform;
+  /** Linux only: whether systemd is present; read from the machine when absent. Tests inject it. */
+  hasSystemd?: boolean;
+  /** Linux without systemd: starts the action outside this process. Tests inject it. */
+  spawnDetached?: (action: string[], logPath: string) => void;
 };
+
+/**
+ * Linux without systemd (task #538): there is no `systemd-run` to hold the upgrade outside the
+ * Coordinator's kill scope, so it runs as a process of its own - a new session (`detached`), no
+ * terminal, its output in the same log the other platforms' jobs write. The Coordinator's stop
+ * does not reach it, and the receipt it writes is read exactly as for the other platforms.
+ */
+export function spawnDetachedUpgrade(action: string[], logPath: string): void {
+  mkdirSync(dirname(logPath), { recursive: true });
+  const log = openSync(logPath, "a");
+  try {
+    const child = Bun.spawn(action, { stdin: "ignore", stdout: log, stderr: log, detached: true });
+    child.unref();
+  } finally {
+    closeSync(log);
+  }
+}
 
 export async function launchComputerUpgrade(
   requestId: string,
   expectedVersion: string,
   options: LaunchComputerUpgradeOptions = {},
 ): Promise<void> {
-  const command = computerUpgradeCommand(
-    process.platform,
-    process.execPath,
-    requestId,
-    expectedVersion,
-  );
-  if (process.platform === "darwin") {
+  const platform = options.platform ?? process.platform;
+  const command = computerUpgradeCommand(platform, process.execPath, requestId, expectedVersion);
+  if (platform === "darwin") {
     const paths = computerUpgradeJobPaths(requestId, options);
     // RunAtLoad with no KeepAlive: launchd runs the job once when bootstrapped and never
     // restarts it, whatever its exit status. That is the one-shot equivalent of the Linux
@@ -124,8 +154,16 @@ export async function launchComputerUpgrade(
     }).ensureStarted();
     return;
   }
-  if (process.platform === "win32") {
+  if (platform === "win32") {
     await launchWindowsComputerUpgrade(requestId, command, options.windowsTaskRunner);
+    return;
+  }
+  if (platform === "linux" && !(options.hasSystemd ?? systemdPresent())) {
+    const { logPath } = computerUpgradeJobPaths(requestId, options);
+    (options.spawnDetached ?? spawnDetachedUpgrade)(
+      computerUpgradeAction(process.execPath, requestId, expectedVersion),
+      logPath,
+    );
     return;
   }
   const child = Bun.spawn(command, { stdin: "ignore", stdout: "ignore", stderr: "ignore" });
