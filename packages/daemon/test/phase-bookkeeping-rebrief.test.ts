@@ -53,9 +53,10 @@ test("a finished review is no context cut", () => {
   expect(rebriefs).toEqual([]);
 });
 
-test("the third compaction failure reports a spent session instead of retrying", () => {
-  let failures = 0;
+test("the third error during a compaction reports a spent session, and kinds follow Raft", () => {
+  const kinds: string[] = [];
   const published: { kind?: string }[] = [];
+  let failures = 0;
   const bookkeeping = new PhaseBookkeeping({
     launchFor: () => launch,
     publish: (_agentId, _launch, draft) => published.push(draft as { kind?: string }),
@@ -63,9 +64,37 @@ test("the third compaction failure reports a spent session instead of retrying",
     contexts: {
       newContext: () => {},
       compactionSucceeded: () => {},
-      compactionFailed: () => {
+      compactionFailed: (_agentId, kind = "compaction_failed") => {
         failures++;
+        kinds.push(kind);
         return { consecutive: failures, terminal: failures >= 3 };
+      },
+    },
+  });
+  bookkeeping.start("compaction", "agent-a", launch, undefined);
+  bookkeeping.compactionError("agent-a", launch, "compaction failed");
+  bookkeeping.compactionError("agent-a", launch, "compaction failed again");
+  bookkeeping.compactionError("agent-a", launch, "context length exceeded");
+  expect(kinds).toEqual([
+    "compaction_failed",
+    "compaction_recovery_exhausted",
+    "compaction_input_too_large",
+  ]);
+  expect(published.filter((draft) => draft.kind === "runtime_error")).toHaveLength(1);
+});
+
+test("a cancelled compaction is not a failure, however many times it happens", () => {
+  const counted: string[] = [];
+  const bookkeeping = new PhaseBookkeeping({
+    launchFor: () => launch,
+    publish: () => {},
+    activityDraft: (_agentId, kind) => ({ kind }) as never,
+    contexts: {
+      newContext: () => {},
+      compactionSucceeded: () => {},
+      compactionFailed: () => {
+        counted.push("counted");
+        return { consecutive: 3, terminal: true };
       },
     },
   });
@@ -73,7 +102,26 @@ test("the third compaction failure reports a spent session instead of retrying",
     bookkeeping.start("compaction", "agent-a", launch, undefined);
     bookkeeping.interrupt("compaction", "agent-a", launch, undefined);
   }
-  expect(published.filter((draft) => draft.kind === "runtime_error")).toHaveLength(1);
+  expect(counted).toEqual([]);
+});
+
+test("an error outside an open compaction is not counted as a compaction failure", () => {
+  const counted: string[] = [];
+  const bookkeeping = new PhaseBookkeeping({
+    launchFor: () => launch,
+    publish: () => {},
+    activityDraft: (_agentId, kind) => ({ kind }) as never,
+    contexts: {
+      newContext: () => {},
+      compactionSucceeded: () => {},
+      compactionFailed: () => {
+        counted.push("counted");
+        return { consecutive: 1, terminal: false };
+      },
+    },
+  });
+  bookkeeping.compactionError("agent-a", launch, "unrelated launch failure");
+  expect(counted).toEqual([]);
 });
 
 test("a finished compaction logs the token numbers it started and ended with", async () => {

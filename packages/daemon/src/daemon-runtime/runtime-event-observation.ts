@@ -262,6 +262,7 @@ export function observeRuntimeEvent(
   // an intervening `completed` can report `runtime_crashed` instead of a plain `idle` exit.
   if (event.type === "error") {
     launch.crashDetail = event;
+    ports.phaseBookkeeping.compactionError(agentId, launch, event.message);
     // Classified once here: the Activity's fallback class/reason and this failure's retry
     // decision are the same reading of the same failure.
     const classification = classifyRuntimeError(event);

@@ -12,6 +12,7 @@ import {
 import type { ActivityLaunch } from "./activity-launch";
 import type { AgentContexts } from "./agent-contexts";
 import type { ActivityDraft, PublishedActivityLaunch } from "./agent-activity-publisher";
+import { compactionFailureKind } from "./compaction-failure-kind";
 
 const logger = getLogger(["coforge", "daemon", "daemon-runtime"]);
 
@@ -42,6 +43,9 @@ export class PhaseBookkeeping {
   readonly #phases: Readonly<Record<RuntimePhase, PhaseTracker>>;
   /** Where each open compaction started, in tokens, for the one line it logs when it ends. */
   readonly #compactionBefore = new Map<string, number | undefined>();
+  /** Failures seen while this compaction stayed open: the second one means its recovery did not
+   * help, and Raft counts it as exhausted. */
+  readonly #compactionAttempts = new Map<string, number>();
 
   constructor(private readonly ports: PhaseBookkeepingPorts) {
     this.#phases = {
@@ -55,6 +59,7 @@ export class PhaseBookkeeping {
   #logCompactionTokens(agentId: string, outcome: "finished" | "inferred" | "interrupted"): void {
     const tokensBefore = this.#compactionBefore.get(agentId);
     this.#compactionBefore.delete(agentId);
+    this.#compactionAttempts.delete(agentId);
     const usage = this.ports.contextUsage?.(agentId);
     logger.info("Context compaction ended", {
       event: "agent.runtime.compaction_tokens",
@@ -133,8 +138,22 @@ export class PhaseBookkeeping {
     if (phase !== "compaction") return;
     // A compaction that keeps failing leaves the session unable to make room; past the threshold
     // it is spent, and only a fresh session helps — so this says that instead of retrying.
+    // A cancelled compaction is the person (or the daemon) stopping it, not the context failing
+    // to compact; counting it would condemn a session after a few stops. Only errors count, below.
     this.#logCompactionTokens(agentId, "interrupted");
-    const { terminal } = this.ports.contexts.compactionFailed(agentId);
+  }
+
+  /** A runtime error that arrives while a compaction is open is that compaction failing. Counted
+   * once per attempt: a second failure with the compaction still open is a recovery that did not
+   * help. Past the threshold the session is spent, and only a reset helps. */
+  compactionError(agentId: string, launch: PublishedActivityLaunch, message: string): void {
+    if (!this.#phases.compaction.isActive(agentId)) return;
+    const attempts = (this.#compactionAttempts.get(agentId) ?? 0) + 1;
+    this.#compactionAttempts.set(agentId, attempts);
+    const { terminal } = this.ports.contexts.compactionFailed(
+      agentId,
+      compactionFailureKind(message, attempts),
+    );
     if (!terminal) return;
     this.ports.publish(
       agentId,
