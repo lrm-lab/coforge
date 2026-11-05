@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { acceptingConnect } from "./accepting-connect";
+import { acceptingConnect, risingConnect } from "./accepting-connect";
 import { recordingRegistrar } from "./recording-registrar";
 import { rejection } from "./rejection";
 import { systemdUserUnit, SystemdUserDaemonHost } from "@lrm/coforge-daemon";
@@ -61,7 +61,7 @@ test("an unregistered unit is registered and started once through the registrar,
     homeDirectory: "/home/alice",
     executablePath: "/install/coforge-daemon",
     socketPath: "/run/user/501/coforge/daemon.sock",
-    connect: acceptingConnect("https://coforge.test"),
+    connect: risingConnect("https://coforge.test"),
     registrar,
     run: async (command) => {
       commands.push(command);
@@ -217,7 +217,7 @@ test("restart of an unregistered unit asks the registrar and changes nothing its
     homeDirectory: "/home/alice",
     executablePath: "/install/coforge-daemon",
     socketPath: "/run/user/501/coforge/daemon.sock",
-    connect: acceptingConnect("https://coforge.test"),
+    connect: risingConnect("https://coforge.test"),
     registrar,
     run: async (command) => {
       commands.push(command);
@@ -332,4 +332,24 @@ test("the systemd service definition is the unit rendered from the host's own in
     ),
     path: "/home/alice/.config/systemd/user/coforge-daemon.service",
   });
+});
+
+test("a Computer already answering the handshake is used: no unit is started or registered", async () => {
+  const commands: string[][] = [];
+  const registrar = recordingRegistrar();
+  const service = new SystemdUserDaemonHost({
+    serverUrl: "https://coforge.test",
+    homeDirectory: "/home/alice",
+    executablePath: "/install/coforge-computer",
+    socketPath: "/run/user/501/coforge/daemon.sock",
+    connect: acceptingConnect("https://coforge.test"),
+    registrar,
+    run: async (command) => {
+      commands.push(command);
+      return loadState("not-found");
+    },
+  });
+  await service.ensureRunning();
+  expect(registrar.calls).toBe(0);
+  expect(commands).toEqual([]);
 });

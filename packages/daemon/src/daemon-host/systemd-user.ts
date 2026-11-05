@@ -89,6 +89,9 @@ export class SystemdUserDaemonHost implements DaemonLauncher {
   }
 
   async ensureRunning(): Promise<void> {
+    // A Computer already answering the local handshake (a `foreground` the person runs) is used
+    // as it is: nothing is started or registered beside it (task #538).
+    if (await this.#local.isRunning()) return;
     const supervised = await this.#supervisedUnit();
     if (supervised) await this.#supervisorVerb(supervised, "start");
     else if (await this.#unregistered()) await this.#registrar.registerAndStart();

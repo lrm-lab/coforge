@@ -15,10 +15,6 @@ const SYSTEMD_INVOCATION_ENV_VAR = "INVOCATION_ID";
 const SUPERVISOR_RECORD_FILE = "supervisor.json";
 const SYSTEMCTL_TIMEOUT_MS = 15_000;
 
-/** `KillMode` values under which the unit's main process may be replaced without the unit's
- * other processes (an upgrade job among them) being killed with it. */
-export const UPGRADE_SAFE_KILL_MODES = ["process", "mixed"] as const;
-
 export type SupervisorScope = "user" | "system";
 export type SupervisorRecord = {
   kind: "systemd";
@@ -178,7 +174,6 @@ export type SupervisorView = {
   enabledState: string | null;
   activeState: string | null;
   mainPid: number | null;
-  killMode: string | null;
   /** `systemctl` answered at all; false means it could not be used, not that the unit is gone. */
   reachable: boolean;
 };
@@ -200,8 +195,6 @@ export async function inspectSupervisor(
     "ActiveState",
     "-p",
     "MainPID",
-    "-p",
-    "KillMode",
     record.unit,
   ]);
   const gone = {
@@ -210,7 +203,6 @@ export async function inspectSupervisor(
     enabledState: null,
     activeState: null,
     mainPid: null,
-    killMode: null,
   };
   if (show.code === null) return { ...gone, reachable: false };
   const properties = new Map(
@@ -230,7 +222,6 @@ export async function inspectSupervisor(
     enabledState: enabled.stdout.trim() || null,
     activeState: properties.get("ActiveState") ?? null,
     mainPid: Number.isInteger(pid) && pid > 0 ? pid : null,
-    killMode: properties.get("KillMode") ?? null,
     reachable: true,
   };
 }

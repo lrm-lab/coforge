@@ -121,9 +121,9 @@ test("a loaded unit is reported with its state", async () => {
   const dir = await recordFor();
   const view = await inspectSupervisor(dir, {
     systemctl: runner({
-      "show -p LoadState -p ActiveState -p MainPID -p KillMode coforge-daemon.service": {
+      "show -p LoadState -p ActiveState -p MainPID coforge-daemon.service": {
         code: 0,
-        stdout: "LoadState=loaded\nActiveState=active\nMainPID=4242\nKillMode=control-group\n",
+        stdout: "LoadState=loaded\nActiveState=active\nMainPID=4242\n",
       },
       "is-enabled coforge-daemon.service": { code: 0, stdout: "enabled\n" },
     }),
@@ -134,7 +134,6 @@ test("a loaded unit is reported with its state", async () => {
     enabledState: "enabled",
     activeState: "active",
     mainPid: 4242,
-    killMode: "control-group",
   });
 });
 
@@ -142,7 +141,7 @@ test("a unit systemd no longer knows is reachable but not loaded", async () => {
   const dir = await recordFor();
   const view = await inspectSupervisor(dir, {
     systemctl: runner({
-      "show -p LoadState -p ActiveState -p MainPID -p KillMode coforge-daemon.service": {
+      "show -p LoadState -p ActiveState -p MainPID coforge-daemon.service": {
         code: 0,
         stdout: "LoadState=not-found\nActiveState=inactive\n",
       },

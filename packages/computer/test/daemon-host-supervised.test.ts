@@ -7,7 +7,7 @@ import {
   SystemdUserDaemonHost,
   writeSupervisorRecord,
 } from "@lrm/coforge-daemon";
-import { acceptingConnect } from "./accepting-connect";
+import { risingConnect } from "./accepting-connect";
 import { recordingRegistrar } from "./recording-registrar";
 
 /** A Computer under the person's own systemd unit (task #538): start and restart go to the
@@ -32,7 +32,7 @@ async function setup(answers: Record<string, { code: number | null; stdout?: str
     executablePath: "/install/coforge-computer",
     socketPath: "/run/user/501/coforge/daemon.sock",
     stateDirectory,
-    connect: acceptingConnect("https://coforge.test"),
+    connect: risingConnect("https://coforge.test"),
     registrar,
     run: async (command) => {
       calls.push(`own:${command.join(" ")}`);
@@ -47,7 +47,7 @@ async function setup(answers: Record<string, { code: number | null; stdout?: str
   return { host, calls, registrar, stateDirectory };
 }
 
-const SHOW = "show -p LoadState -p ActiveState -p MainPID -p KillMode mine.service";
+const SHOW = "show -p LoadState -p ActiveState -p MainPID mine.service";
 const LOADED = { [SHOW]: { code: 0, stdout: "LoadState=loaded\nActiveState=active\n" } };
 
 test("a loaded recorded unit is started through itself, not the registrar or our own unit", async () => {

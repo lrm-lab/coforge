@@ -1,10 +1,6 @@
 import { homedir } from "node:os";
-import { join } from "node:path";
 import {
   computerUpgradeJobPaths,
-  inspectSupervisor,
-  UPGRADE_SAFE_KILL_MODES,
-  type SupervisorView,
   launchComputerUpgrade,
   readUpgradeReceipt,
   resolveComputerInstallDirectory,
@@ -31,8 +27,6 @@ export type DetachedUpgradeOptions = {
   onLine?: (line: string) => void;
   /** A note about the operation itself (its id, or that watching stopped). */
   onNote?: (line: string) => void;
-  /** Tests inject this; production asks systemd about the recorded supervisor unit. */
-  inspectSupervisor?: (stateDirectory: string) => Promise<SupervisorView | null>;
   /** Tests inject these; production uses the Daemon's platform layer. */
   launch?: typeof launchComputerUpgrade;
   readReceipt?: typeof readUpgradeReceipt;
@@ -67,11 +61,6 @@ export async function runDetachedUpgrade(
     stateDirectory: options.stateDirectory,
     homeDirectory: home,
   }).logPath;
-
-  await assertSupervisedUnitSurvivesStop(
-    options.stateDirectory ?? join(home, ".coforge", "daemon"),
-    options.inspectSupervisor ?? inspectSupervisor,
-  );
 
   note(`Upgrade ${requestId} starts outside this process; its result is kept on this Computer.`);
   await launch(requestId, options.version, {
@@ -141,23 +130,4 @@ class UpgradeLogFollower {
     if (final && lines.length === 0 && grown.length > 0) lines.push(grown);
     for (const line of lines) if (line.trim()) this.onLine(line);
   }
-}
-
-/**
- * A Computer run by a unit of the person's own (task #538): the upgrade stops that unit, and
- * under `KillMode=control-group` systemd ends every process in the unit's control group with it,
- * the upgrade among them. `process` or `mixed` leaves the others alone. Refused up front, with the
- * fix, rather than discovered halfway through a switch.
- */
-async function assertSupervisedUnitSurvivesStop(
-  stateDirectory: string,
-  inspect: (stateDirectory: string) => Promise<SupervisorView | null>,
-): Promise<void> {
-  const view = await inspect(stateDirectory);
-  if (!view?.unitLoaded || !view.killMode) return;
-  if ((UPGRADE_SAFE_KILL_MODES as readonly string[]).includes(view.killMode)) return;
-  const { unit, scope } = view.record;
-  throw new Error(
-    `The Computer service is managed by systemd unit ${unit} (${scope} scope) with KillMode=${view.killMode}: stopping it for an upgrade would end the upgrade too. Set KillMode=process in the unit's [Service] section, run \`systemctl${scope === "user" ? " --user" : ""} daemon-reload\`, restart the unit, then retry the upgrade.`,
-  );
 }

@@ -104,9 +104,6 @@ export {
   clearSupervisorRecord,
   detectSystemdSupervisor,
   externalSupervisorOptIn,
-  inspectSupervisor,
-  UPGRADE_SAFE_KILL_MODES,
-  type SupervisorView,
   readSupervisorRecord,
   writeSupervisorRecord,
 } from "#src/daemon-host/external-supervisor";
