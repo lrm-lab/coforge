@@ -6,7 +6,7 @@ import { agentRuntimeContextEnvironment } from "#src/code-agent/environment";
 import { parseAssignedSkillPacks } from "#src/code-agent/assigned-skills";
 import { agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
 import { ProviderProgress } from "./stalled-recovery";
-import { noteSessionMemory } from "./session-memory-log";
+import { openLaunchSessionMemory } from "./session-memory-launch";
 import { LaunchPhaseTiming } from "./launch-phase-timing";
 import { reportLaunchSession } from "./launch-session-report";
 import {
@@ -121,6 +121,10 @@ export async function launchAgentProcess(
     // `reference.sessionId` is overwritten by the next report.
     const recycledSessionId = recycled ? reference.sessionId : undefined;
     if (recycled) ports.narrateUnavailable(agentId, launch, { detail: recycled.activityText });
+    // The session this launch asked to continue, kept before any report can overwrite the
+    // reference: whether the provider actually continued it decides "fresh" below.
+    const requestedSessionId = recycled ? undefined : reference.sessionId;
+    let reportedSessionId: string | undefined;
     // The adapter's own spawn + ACP initialize complete with this call; one phase covers both.
     const runtime = await ports.agentProcessManager.start(
       agentId,
@@ -148,8 +152,9 @@ export async function launchAgentProcess(
         },
         runtimeId: launch.launchId,
         onSessionId: ports.transport().reportAgentSession
-          ? async (reportedSessionId, driverReplacedSessionId) =>
-              reportLaunchSession(
+          ? async (reported, driverReplacedSessionId) => {
+              reportedSessionId = reported;
+              return reportLaunchSession(
                 {
                   current,
                   isStopping: () => ports.isStopping(),
@@ -191,7 +196,8 @@ export async function launchAgentProcess(
                   previousLaunchId,
                   timing,
                 },
-              )
+              );
+            }
           : undefined,
         sessionMode: recycled ? "create" : reference.sessionMode,
         assignedSkillPacks: parseAssignedSkillPacks(launchConfig.assignedSkillPacks),
@@ -206,23 +212,14 @@ export async function launchAgentProcess(
       },
     );
     timing.phase("provider_session");
-    // Every fresh session — a first launch, one the provider lost, an explicit create — opens with
-    // its MEMORY.md block; a recycle already put its own briefing in, and a resume needs none.
-    // Read after the provider started, so a brand-new workspace has its seeded MEMORY.md.
-    const freshSession =
-      recycled === undefined &&
-      (reference.sessionMode === "create" || reference.sessionId === undefined);
-    const memoryBlock = freshSession
-      ? await ports.attachSessionMemory(agentId).catch(() => false)
-      : false;
-    noteSessionMemory({
+    await openLaunchSessionMemory({
       agentId,
       launchId: launch.launchId,
-      freshSession,
-      injected: memoryBlock === true,
       recycled: recycled !== undefined,
       sessionMode: reference.sessionMode,
-      hadSessionId: reference.sessionId !== undefined,
+      requestedSessionId,
+      reportedSessionId,
+      attach: () => ports.attachSessionMemory(agentId),
     });
     if (parseAssignedSkillPacks(launchConfig.assignedSkillPacks).includes("weekly-report-collect"))
       ports.collectSkillAgents.add(agentId);

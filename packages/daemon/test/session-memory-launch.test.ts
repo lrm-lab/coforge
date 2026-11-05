@@ -26,7 +26,7 @@ const config: AgentRuntimeConfig = {
 };
 
 /** The runtime with a provider whose session records every input it is handed. */
-async function harness() {
+async function harness(reportsSessionId?: string) {
   const inputs: string[] = [];
   let settle: () => void = () => {};
   const answered = new Promise<void>((resolve) => (settle = resolve));
@@ -56,7 +56,9 @@ async function harness() {
     connection,
     () => ({
       provider: "pi",
-      async createAgentSession() {
+      async createAgentSession(options) {
+        // A provider that could not continue the requested session opens a new one and says so.
+        if (reportsSessionId) options.onSessionId?.(reportsSessionId);
         return session;
       },
     }),
@@ -70,6 +72,7 @@ async function harness() {
           return { agentApiKey: `sk_agent_${"a".repeat(43)}` };
         },
         async revokeAgentApiKey() {},
+        async reportAgentSession() {},
         sendAgentActivity() {},
       }),
     },
@@ -188,4 +191,38 @@ test("every launch logs its memory decision, with the branch that made it", asyn
       );
     }),
   ).toMatchObject({ injected: true, reason: "create", session_mode: "create" });
+});
+
+test("a requested session the provider no longer has is fresh, and the block goes in", async () => {
+  const { records } = await captureDaemonLogs(async () => {
+    const subject = await harness("native-fresh");
+    try {
+      await subject.runtime.startAgent("agent-a", config, "stale-session");
+      await subject.answered;
+      expect(subject.inputs[0]).toContain("<memory-index");
+    } finally {
+      await subject.stop();
+    }
+  });
+  expect(
+    records.find((record) => record.properties.event === "agent.runtime.session_memory")
+      ?.properties,
+  ).toMatchObject({ injected: true, reason: "provider_fresh", session_continued: false });
+});
+
+test("a resume the provider actually continued is not fresh, and says so", async () => {
+  const { records } = await captureDaemonLogs(async () => {
+    const subject = await harness("known-session");
+    try {
+      await subject.runtime.startAgent("agent-a", config, "known-session");
+      await subject.answered;
+      expect(subject.inputs[0]).not.toContain("<memory-index");
+    } finally {
+      await subject.stop();
+    }
+  });
+  expect(
+    records.find((record) => record.properties.event === "agent.runtime.session_memory")
+      ?.properties,
+  ).toMatchObject({ injected: false, reason: "resume", session_continued: true });
 });

@@ -16,14 +16,20 @@ export function noteSessionMemory(input: {
   recycled: boolean;
   sessionMode?: "create" | "resume";
   hadSessionId: boolean;
+  /** Whether the provider continued the requested session; absent when either side is unknown. */
+  sessionContinued?: boolean;
+  /** Why reading the memory files failed, when it did: distinct from "there was nothing to show". */
+  errorCode?: string;
 }): void {
   const reason = input.recycled
     ? "recycle"
     : !input.freshSession
       ? "resume"
-      : input.sessionMode === "create"
-        ? "create"
-        : "no_session";
+      : input.sessionContinued === false
+        ? "provider_fresh"
+        : input.sessionMode === "create"
+          ? "create"
+          : "no_session";
   logger.info("Agent session memory decision", {
     event: "agent.runtime.session_memory",
     agent_id: input.agentId,
@@ -33,5 +39,7 @@ export function noteSessionMemory(input: {
     reason,
     ...(input.sessionMode ? { session_mode: input.sessionMode } : {}),
     had_session_id: input.hadSessionId,
+    ...(input.sessionContinued !== undefined ? { session_continued: input.sessionContinued } : {}),
+    ...(input.errorCode ? { error_code: input.errorCode } : {}),
   });
 }
