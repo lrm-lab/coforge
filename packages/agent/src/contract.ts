@@ -181,7 +181,16 @@ export type AgentRuntimeEvent = { readonly conversation?: AgentConversationScope
   // Activity, if any, each one becomes - see daemon-runtime/runtime.ts and
   // agent-runtime/phase-tracker.ts.
   | { type: "compaction-started"; occurredAt?: string }
-  | { type: "compaction-finished"; occurredAt?: string }
+  // A finished compaction's own token numbers, when the runtime reports them (Pi's
+  // `CompactionResult`: `tokensBefore` and its `estimatedTokensAfter`): the daemon logs these
+  // instead of guessing, and takes `windowTokens` from the runtime's model when it knows it.
+  | {
+      type: "compaction-finished";
+      occurredAt?: string;
+      tokensBefore?: number;
+      tokensAfter?: number;
+      windowTokens?: number;
+    }
   // The service tier the runtime itself reports for this launch (Claude Code's per-turn
   // `fast_mode_state`, normalized by the adapter into the closed vocabulary). A raw observation:
   // the daemon core alone decides whether to report it and whether a mismatch with what the

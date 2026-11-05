@@ -20,7 +20,7 @@ const CONTENT_FREE_MESSAGE_EVENTS = new Set([
  * (`agent_start` after cancellation, an assistant `message_end`, `agent_settled`) report nothing
  * here and stay with the session.
  */
-export function piSessionEvents(event: PiSessionEvent): AgentRuntimeEvent[] {
+export function piSessionEvents(event: PiSessionEvent, windowTokens?: number): AgentRuntimeEvent[] {
   switch (event.type) {
     case "message_update": {
       const message = event.assistantMessageEvent;
@@ -48,8 +48,20 @@ export function piSessionEvents(event: PiSessionEvent): AgentRuntimeEvent[] {
       ];
     case "compaction_start":
       return [{ type: "compaction-started" }];
-    case "compaction_end":
-      return [event.aborted ? { type: "compaction-interrupted" } : { type: "compaction-finished" }];
+    case "compaction_end": {
+      // A compaction that produced no result failed or is queued for a retry (`willRetry`): its
+      // completion is not confirmed, so it reports what an unfinished one reports instead of a
+      // "finished" nobody can point at.
+      if (event.aborted || !event.result) return [{ type: "compaction-interrupted" }];
+      return [
+        {
+          type: "compaction-finished",
+          tokensBefore: event.result.tokensBefore,
+          tokensAfter: event.result.estimatedTokensAfter,
+          windowTokens,
+        },
+      ];
+    }
     case "tool_execution_start":
       return [
         { type: "tool-start", id: event.toolCallId, name: event.toolName, input: event.args },

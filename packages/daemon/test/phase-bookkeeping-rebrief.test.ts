@@ -158,3 +158,42 @@ test("a finished compaction logs the token numbers it started and ended with", a
     }),
   ]);
 });
+
+test("a compaction's own numbers win over our context readings", async () => {
+  // Pi reports them on its compaction result; our readings may be missing entirely, which is
+  // what the dev.1 log showed — the line carried an outcome and nothing else.
+  const bookkeeping = new PhaseBookkeeping({
+    launchFor: () => launch,
+    publish: () => {},
+    activityDraft: (_agentId, kind) => ({ kind }) as never,
+    contexts: {
+      newContext: () => {},
+      compactionSucceeded: () => {},
+      compactionFailed: () => ({ consecutive: 1, terminal: false }),
+    },
+    contextUsage: () => undefined,
+  });
+  const { records } = await captureDaemonLogs(async () => {
+    bookkeeping.start("compaction", "agent-a", launch, undefined);
+    bookkeeping.finish("compaction", "agent-a", launch, undefined, {
+      tokensBefore: 112_630,
+      tokensAfter: 40_369,
+      windowTokens: 200_000,
+    });
+  });
+  expect(
+    records
+      .filter(
+        (record: { properties: Record<string, unknown> }) =>
+          record.properties.event === "agent.runtime.compaction_tokens",
+      )
+      .map((record: { properties: Record<string, unknown> }) => record.properties),
+  ).toEqual([
+    expect.objectContaining({
+      outcome: "finished",
+      tokens_before: 112_630,
+      tokens_after: 40_369,
+      window_tokens: 200_000,
+    }),
+  ]);
+});

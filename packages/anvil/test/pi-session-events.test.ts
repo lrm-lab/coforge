@@ -35,12 +35,42 @@ describe("piSessionEvents", () => {
 
   test("reports compaction start, finish and interruption", () => {
     expect(events({ type: "compaction_start" })).toEqual([{ type: "compaction-started" }]);
-    expect(events({ type: "compaction_end", aborted: false })).toEqual([
-      { type: "compaction-finished" },
-    ]);
     expect(events({ type: "compaction_end", aborted: true })).toEqual([
       { type: "compaction-interrupted" },
     ]);
+  });
+
+  test("a finished compaction carries the numbers Pi's own result reports", () => {
+    // CompactionResult: tokensBefore, and how many tokens it estimates the context became.
+    expect(
+      events({
+        type: "compaction_end",
+        aborted: false,
+        result: { tokensBefore: 112630, estimatedTokensAfter: 40369 },
+      }),
+    ).toEqual([{ type: "compaction-finished", tokensBefore: 112630, tokensAfter: 40369 }]);
+  });
+
+  test("the model's context window rides along, for the end-of-compaction log", () => {
+    expect(
+      piSessionEvents(
+        {
+          type: "compaction_end",
+          aborted: false,
+          result: { tokensBefore: 1000, estimatedTokensAfter: 400 },
+        } as PiSessionEvent,
+        200_000,
+      ),
+    ).toEqual([
+      { type: "compaction-finished", tokensBefore: 1000, tokensAfter: 400, windowTokens: 200_000 },
+    ]);
+  });
+
+  test("a compaction that produced no result is not reported as finished", () => {
+    // A failed attempt, or one queued for a retry (`willRetry`): nothing compacted yet.
+    expect(
+      events({ type: "compaction_end", aborted: false, result: undefined, willRetry: true }),
+    ).toEqual([{ type: "compaction-interrupted" }]);
   });
 
   test.each(["auto_retry_start", "summarization_retry_scheduled"])(

@@ -74,6 +74,8 @@ class AgentSessionImpl implements AgentSession {
   readonly #pendingPrompts = new Set<Promise<void>>();
   #interrupting = false;
   #failure: string | undefined;
+  /** The current model's context window, read at the stream seam for the compaction log. */
+  #windowTokens: number | undefined;
   #disposed = false;
   #disposal: Promise<void> | undefined;
   #identity: AgentSessionIdentity;
@@ -92,6 +94,9 @@ class AgentSessionImpl implements AgentSession {
     // the provider's first stream event. Observe the public stream seam between them.
     const stream = runtime.session.agent.streamFunction.bind(runtime.session.agent);
     runtime.session.agent.streamFunction = (model, context, options) => {
+      // The window every request runs in, for the compaction log: Pi's own model entry knows it,
+      // and the compaction result itself does not carry one.
+      this.#windowTokens = model.contextWindow;
       // Summaries use this stream too; keep their more specific compaction phase.
       if (!runtime.session.isCompacting && !this.#disposed && !this.#interrupting) {
         try {
@@ -117,7 +122,7 @@ class AgentSessionImpl implements AgentSession {
         // only makes that prompt abortable once its run starts.
         void this.#trackPrompt(runtime.session.abort());
       }
-      for (const translated of piSessionEvents(event)) this.#emit(translated);
+      for (const translated of piSessionEvents(event, this.#windowTokens)) this.#emit(translated);
       for (const replyIntent of replyIntents.read(event)) this.#emit(replyIntent);
       // A failed attempt may be retried, and cancellation may surface as an error.
       // Only settlement determines the run's terminal result.

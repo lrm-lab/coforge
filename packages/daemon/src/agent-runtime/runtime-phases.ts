@@ -38,6 +38,18 @@ export const PHASE_BOUNDARY_EVENT_TYPES: ReadonlySet<AgentRuntimeEvent["type"]> 
   PHASE_EDGES.keys(),
 );
 
+/** The token numbers a compaction event carries on itself, for the one line its end logs. */
+export function compactionTokens(
+  event: AgentRuntimeEvent,
+): { tokensBefore?: number; tokensAfter?: number; windowTokens?: number } | undefined {
+  if (event.type !== "compaction-finished") return undefined;
+  return {
+    tokensBefore: event.tokensBefore,
+    tokensAfter: event.tokensAfter,
+    windowTokens: event.windowTokens,
+  };
+}
+
 /**
  * What each phase reports: its start, its explicit finish, its interruption (a provider signal
  * that does not say whether it was aborted or failed - a failure also arrives as its own error -

@@ -16,6 +16,13 @@ import { compactionFailureKind } from "./compaction-failure-kind";
 
 const logger = getLogger(["coforge", "daemon", "daemon-runtime"]);
 
+/** The token numbers a finished compaction reports for itself, when its runtime has them. */
+export type CompactionTokens = Readonly<{
+  tokensBefore?: number;
+  tokensAfter?: number;
+  windowTokens?: number;
+}>;
+
 /** The runtime supplies only where Activity goes: the current launch, its draft builder, and the
  * publisher. Providers report raw phase signals; this module decides what each becomes on the
  * wire — see `agent-runtime/phase-tracker.ts` for the watchdog semantics. */
@@ -54,10 +61,15 @@ export class PhaseBookkeeping {
     };
   }
 
-  /** One line per compaction that ends, with the token numbers the runtime last reported. A
-   * missing reading stays missing — this never invents a number to look complete. */
-  #logCompactionTokens(agentId: string, outcome: "finished" | "inferred" | "interrupted"): void {
-    const tokensBefore = this.#compactionBefore.get(agentId);
+  /** One line per compaction that ends, with the numbers the runtime itself reported for the
+   * compaction first, then our own context readings. A missing number stays missing — this never
+   * invents one to look complete. */
+  #logCompactionTokens(
+    agentId: string,
+    outcome: "finished" | "inferred" | "interrupted",
+    reported?: CompactionTokens,
+  ): void {
+    const startedAt = this.#compactionBefore.get(agentId);
     this.#compactionBefore.delete(agentId);
     this.#compactionAttempts.delete(agentId);
     const usage = this.ports.contextUsage?.(agentId);
@@ -65,9 +77,9 @@ export class PhaseBookkeeping {
       event: "agent.runtime.compaction_tokens",
       agent_id: agentId,
       outcome,
-      tokens_before: tokensBefore,
-      tokens_after: usage?.usedTokens,
-      window_tokens: usage?.windowTokens,
+      tokens_before: reported?.tokensBefore ?? startedAt,
+      tokens_after: reported?.tokensAfter ?? usage?.usedTokens,
+      window_tokens: reported?.windowTokens ?? usage?.windowTokens,
     });
   }
 
@@ -102,13 +114,14 @@ export class PhaseBookkeeping {
     agentId: string,
     launch: ActivityLaunch,
     conversation: AgentRuntimeEvent["conversation"],
+    reported?: CompactionTokens,
   ): void {
     if (this.#phases[phase].finish(agentId) !== "finished") return;
     this.#publish(agentId, launch, RUNTIME_PHASES[phase].finished, conversation);
     if (phase === "compaction") {
       this.ports.contexts.newContext(agentId);
       this.ports.contexts.compactionSucceeded(agentId);
-      this.#logCompactionTokens(agentId, "finished");
+      this.#logCompactionTokens(agentId, "finished", reported);
     }
   }
 
