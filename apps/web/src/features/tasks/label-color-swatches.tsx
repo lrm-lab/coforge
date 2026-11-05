@@ -19,6 +19,7 @@ export function LabelColorSwatches({
   onSubmit,
   onPick,
   isDisabled,
+  tooltips = true,
 }: {
   value: string;
   onChange: (color: string) => void;
@@ -26,6 +27,9 @@ export function LabelColorSwatches({
   /** A swatch clicked or tapped (not one the arrow keys moved to): for a menu that applies it. */
   onPick?: (color: string) => void;
   isDisabled?: boolean;
+  /** Each swatch's name on hover or keyboard focus. Off inside a popover: a tooltip open there
+   * takes Escape for itself, and held open by focus it would keep the popover from closing. */
+  tooltips?: boolean;
 }) {
   const desktop = useBreakpoint("md");
   return (
@@ -54,7 +58,7 @@ export function LabelColorSwatches({
         className="grid grid-cols-5 justify-items-center gap-2"
       >
         {LABEL_PALETTE.map((color) => (
-          <Swatch key={color} color={color} desktop={desktop} />
+          <Swatch key={color} color={color} desktop={desktop} tooltip={tooltips} />
         ))}
       </AriaRadioGroup>
     </div>
@@ -65,12 +69,24 @@ export function LabelColorSwatches({
  * One swatch. Its tooltip is opened by hand, from the swatch's hover and keyboard focus: a radio's
  * input is visually hidden, so the pointer never reaches the element the tooltip trigger listens on.
  */
-function Swatch({ color, desktop }: { color: string; desktop: boolean }) {
+function Swatch({
+  color,
+  desktop,
+  tooltip,
+}: {
+  color: string;
+  desktop: boolean;
+  tooltip: boolean;
+}) {
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
   const { isFocusVisible: keyboard } = useFocusVisible();
   return (
-    <Tooltip title={labelColorName(color)} isOpen={hovered || (focused && keyboard)} delay={0}>
+    <Tooltip
+      title={labelColorName(color)}
+      isOpen={tooltip && (hovered || (focused && keyboard))}
+      delay={0}
+    >
       <AriaRadio
         value={color}
         aria-label={labelColorName(color)}

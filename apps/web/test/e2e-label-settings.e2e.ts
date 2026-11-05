@@ -13,8 +13,9 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
 
 /**
  * Settings → Labels (task #508): every label, by group, with how many Tasks carry it; an owner
- * makes one, renames one (a taken name is refused, and another open page shows the new name at
- * once), recolors one, archives one that two Tasks carry (the question says so), restores it, and
+ * makes one in a new row, renames one by clicking its name (a taken name is refused, and another
+ * open page shows the new name at once), recolors one from its dot's swatches (click, arrows with
+ * Enter or Space, Escape leaving it), archives one that two Tasks carry (the question says so), restores it, and
  * deletes it for good from the archived list (it comes off both Tasks). A plain member reads the
  * same page with no menus, and the label picker offers "View all labels" instead of "Manage
  * labels". Desktop and phone, light and dark.
@@ -121,6 +122,14 @@ test("an owner manages the Workspace's labels on their own page; a member reads 
       await browser("click", '[data-e2e="item"]');
     };
     const dialogsOpen = `document.querySelectorAll('[role="dialog"], [role="alertdialog"]').length`;
+    /** A real click on what `selector` names, marked for the browser to find. */
+    const press = async (selector: string) => {
+      await browser("wait", "--fn", `${dialogsOpen} === 0 && ${selector} != null && ${settled}`);
+      await evaluate(
+        `([...document.querySelectorAll("[data-e2e]")].forEach((el) => el.removeAttribute("data-e2e")), ${selector}.setAttribute("data-e2e", "press"), true)`,
+      );
+      await browser("click", '[data-e2e="press"]');
+    };
     const until = async (check: () => Promise<boolean>) => {
       for (let i = 0; i < 60 && !(await check()); i++) await Bun.sleep(100);
       expect(await check()).toBe(true);
@@ -158,6 +167,7 @@ test("an owner manages the Workspace's labels on their own page; a member reads 
     // Make one.
     await click(button("New label"));
     await browser("fill", 'input[aria-label="Label name"]', name("Launch"));
+    await shoot("desktop-1b-new-row");
     await click(button("Create label"));
     await until(
       async () => (await db.label.count({ where: { workspaceId, name: name("Launch") } })) === 1,
@@ -171,7 +181,10 @@ test("an owner manages the Workspace's labels on their own page; a member reads 
     await other.browser("set", "viewport", "1280", "860");
     await other.browser("open", page);
     await other.browser("wait", "--fn", `${pageHydrated} && ${row(name("Docs"))} !== null`);
-    await menu(name("Docs"), "Rename");
+    // The name is the way in, as in Linear's labels.
+    await press(
+      `${row(name("Docs"))}.querySelector('button[aria-label="Rename ${name("Docs")}"]')`,
+    );
     const field = `input[aria-label="New name for ${name("Docs")}"]`;
     await browser("wait", "--fn", `document.querySelector(${JSON.stringify(field)}) !== null`);
     await browser("fill", field, name("bug"));
@@ -188,53 +201,43 @@ test("an owner manages the Workspace's labels on their own page; a member reads 
     await until(async () => (await labelRow(docs.id))!.name === name("Guides"));
     await other.browser("wait", "--fn", `${row(name("Guides"))} !== null`);
 
-    // Recolor.
-    await menu(name("Guides"), "Change color");
-    await browser(
-      "wait",
-      "--fn",
-      `${row(name("Guides"))}?.querySelector('[aria-label="Blue"]') != null`,
-    );
+    // Recolor: the dot opens the swatches; a click picks and closes them.
+    const dot = (label: string) =>
+      `${row(label)}?.querySelector('button[aria-label="Change color of ${label}"]')`;
+    const swatches = `document.querySelector('[role="dialog"] [role="radiogroup"]')`;
+    await press(dot(name("Guides")));
+    await browser("wait", "--fn", `${swatches} != null`);
     await shoot("desktop-3-color");
-    await click(`${row(name("Guides"))}.querySelector('[aria-label="Blue"]').closest("label")`);
+    await click(`${swatches}.querySelector('[aria-label="Blue"]').closest("label")`);
     await until(async () => (await labelRow(docs.id))!.color === "blue");
-    // Picking saved it and closed the swatches.
-    await browser(
-      "wait",
-      "--fn",
-      `${row(name("Guides"))}?.querySelector('[aria-label="Blue"]') == null`,
-    );
-    // Focus came back to the row's menu button, not the page.
-    const onMenuButton = (label: string) =>
-      `document.activeElement === ${row(label)}?.querySelector('button[aria-label="Actions for ${label}"]')`;
-    await browser("wait", "--fn", onMenuButton(name("Guides")));
+    await browser("wait", "--fn", `${swatches} == null`);
+    // Focus came back to the dot, not the page.
+    await browser("wait", "--fn", `document.activeElement === ${dot(name("Guides"))}`);
 
     // With the keyboard: the arrows move the pick, Enter saves it.
-    await menu(name("Guides"), "Change color");
-    const picked = `${row(name("Guides"))}?.querySelector('input[type="radio"]:checked')`;
+    const picked = `${swatches}?.querySelector('input[type="radio"]:checked')`;
+    await browser("press", "Enter");
     await browser("wait", "--fn", `${picked} != null`);
     await evaluate(`(${picked}.focus(), true)`);
     await browser("press", "ArrowRight");
     await browser("press", "Enter");
     await until(async () => (await labelRow(docs.id))!.color === "indigo");
-    await browser("wait", "--fn", onMenuButton(name("Guides")));
+    await browser("wait", "--fn", `${swatches} == null`);
     // And Space saves the one the arrows moved to.
-    await menu(name("Guides"), "Change color");
+    await press(dot(name("Guides")));
     await browser("wait", "--fn", `${picked} != null`);
     await evaluate(`(${picked}.focus(), true)`);
     await browser("press", "ArrowLeft");
     await browser("press", "Space");
     await until(async () => (await labelRow(docs.id))!.color === "blue");
-    // Space on Done closes the swatches and saves nothing, like Enter or a click on Done.
-    await browser("wait", "--fn", onMenuButton(name("Guides")));
-    await menu(name("Guides"), "Change color");
+    // Escape closes the swatches and saves nothing.
+    await browser("wait", "--fn", `${swatches} == null`);
+    await press(dot(name("Guides")));
     await browser("wait", "--fn", `${picked} != null`);
     await evaluate(`(${picked}.focus(), true)`);
     await browser("press", "ArrowRight");
-    await browser("press", "Tab");
-    await browser("wait", "--fn", `document.activeElement?.textContent?.trim() === "Done"`);
-    await browser("press", "Space");
-    await browser("wait", "--fn", `${picked} == null`);
+    await browser("press", "Escape");
+    await browser("wait", "--fn", `${swatches} == null`);
     await Bun.sleep(300);
     expect((await labelRow(docs.id))!.color).toBe("blue");
 
@@ -284,7 +287,11 @@ test("an owner manages the Workspace's labels on their own page; a member reads 
     await menu(name("Bug"), "Delete permanently");
     await browser("wait", "--fn", `${button("Delete permanently", dialog)} !== undefined`);
     await db.label.update({ where: { id: bug.id }, data: { archivedAt: null } });
-    await click(button("Delete permanently", dialog));
+    // A real click, so focus stays in the dialog and Escape below reaches it.
+    await evaluate(
+      `([...document.querySelectorAll("[data-e2e]")].forEach((el) => el.removeAttribute("data-e2e")), ${button("Delete permanently", dialog)}.setAttribute("data-e2e", "delete"), true)`,
+    );
+    await browser("click", '[data-e2e="delete"]');
     await browser(
       "wait",
       "--fn",

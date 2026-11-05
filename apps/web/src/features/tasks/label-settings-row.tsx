@@ -1,8 +1,8 @@
 import { useServerFn } from "@tanstack/react-start";
 import { DotsHorizontal } from "@untitledui/icons";
 import { useRef, useState } from "react";
+import { Button as AriaButton } from "react-aria-components";
 
-import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Input } from "#src/components/base/input/input";
@@ -10,11 +10,12 @@ import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { isAppError } from "#src/lib/app-error";
 import { formatCalendarDate } from "#src/lib/dates";
+import { cn } from "#src/lib/utils";
 import { useTimeZone } from "#src/lib/time-zone-context";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 
-import { LabelColorSwatches } from "./label-color-swatches";
+import { LabelColorPicker } from "./label-color-picker";
 import {
   LABEL_DESCRIPTION_MAX,
   LABEL_NAME_MAX_LENGTH,
@@ -24,8 +25,8 @@ import {
 import { deleteTaskLabel, updateTaskLabel } from "./labels.functions";
 import { LabelDot } from "./task-label-chip";
 
-/** What a row is doing besides showing the label. */
-type Editing = "rename" | "color" | "description" | null;
+/** What a row is editing in place. */
+type Editing = "rename" | "description" | null;
 
 /** A permanent delete refused because the label is no longer archived (restored elsewhere). */
 const notArchived = (cause: unknown) =>
@@ -40,11 +41,12 @@ function changeError(cause: unknown, name: string) {
 }
 
 /**
- * One label in Settings → Labels (task #508): its color, name and what it is for, how many Tasks
- * carry it and when it was last put on one, and, for an owner or admin, a menu to rename,
- * recolor, describe, archive, restore and (once archived) delete it for good. Every change is
- * the server's to allow; `onChanged` reads the list again. Closing an editor puts focus back on
- * the row's menu button.
+ * One label in Settings → Labels (task #508; Frank, 11-05: after Linear, "Edit label name or color
+ * by clicking on those properties in a label row", https://linear.app/docs/labels): one line of
+ * its color, name and what it is for, how many Tasks carry it and when it was last put on one.
+ * For an owner or admin the color opens its swatches and the name turns into a field; the menu,
+ * shown on hover or focus, edits what it is for, archives, restores and (once archived) deletes
+ * it for good. Every change is the server's to allow; `onChanged` reads the list again.
  */
 export function LabelSettingsRow({
   label,
@@ -61,11 +63,9 @@ export function LabelSettingsRow({
   const update = useServerFn(updateTaskLabel);
   const remove = useServerFn(deleteTaskLabel);
   const timeZone = useTimeZone();
-  const menuButton = useRef<HTMLButtonElement>(null);
+  const nameButton = useRef<HTMLButtonElement>(null);
   const [editing, setEditing] = useState<Editing>(null);
   const [draft, setDraft] = useState("");
-  // The color the swatches have selected: the arrow keys move it, Enter or Space saves it.
-  const [colorDraft, setColorDraft] = useState(label.color);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirming, setConfirming] = useState<"archive" | "delete" | null>(null);
@@ -74,11 +74,12 @@ export function LabelSettingsRow({
   const restoredMeanwhile = useRef(false);
   const archived = Boolean(label.archivedAt);
 
-  /** Closes the editor and hands focus back to the row's menu button, not to the page. */
+  /** Closes the field and hands focus back to the name it edited, not to the page. */
   function close() {
+    const was = editing;
     setEditing(null);
     setError(null);
-    requestAnimationFrame(() => menuButton.current?.focus());
+    if (was) requestAnimationFrame(() => nameButton.current?.focus());
   }
 
   async function save(change: {
@@ -108,64 +109,103 @@ export function LabelSettingsRow({
     void save({ name });
   }
 
-  const saveColor = (color: string) => (color === label.color ? close() : void save({ color }));
+  const saveColor = (color: string) => color !== label.color && void save({ color });
 
   const start = (what: Exclude<Editing, null>) => {
     setError(null);
-    setDraft(
-      what === "rename" ? label.name : what === "description" ? (label.description ?? "") : "",
-    );
-    setColorDraft(label.color);
+    setDraft(what === "rename" ? label.name : (label.description ?? ""));
     setEditing(what);
+  };
+
+  const editable = canManage && !archived;
+  const field = (what: Exclude<Editing, null>) => {
+    const commit = () =>
+      what === "rename" ? rename() : void save({ description: draft.trim() || null });
+    return (
+      // The refusal is the field's error message, which a screen reader hears with it. Enter or
+      // leaving the field saves it; Escape puts it back.
+      <Input
+        aria-label={
+          what === "rename"
+            ? m.labels_settings_rename_field({ name: label.name })
+            : m.labels_settings_description_field({ name: label.name })
+        }
+        placeholder={what === "description" ? m.labels_settings_description_placeholder() : ""}
+        size="sm"
+        value={draft}
+        maxLength={what === "rename" ? LABEL_NAME_MAX_LENGTH : LABEL_DESCRIPTION_MAX}
+        autoFocus
+        isDisabled={saving}
+        isInvalid={error !== null}
+        hint={error ?? undefined}
+        onChange={(next) => {
+          setDraft(next);
+          setError(null);
+        }}
+        onBlur={() => !saving && error === null && commit()}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") commit();
+          if (event.key === "Escape") close();
+        }}
+        wrapperClassName="min-w-0 flex-1"
+      />
+    );
   };
 
   return (
     <li
       data-label-row={label.name}
-      className="flex flex-col gap-2 px-4 py-3 sm:px-5"
+      className="group flex flex-col gap-1 px-3 py-2 hover:bg-primary_hover sm:px-4"
       aria-label={label.name}
     >
-      <div className="flex min-w-0 items-center gap-3">
-        <LabelDot color={label.color} />
-        <div className="min-w-0 flex-1">
-          {editing === "rename" ? (
-            // The refusal is the field's error message, which a screen reader hears with it.
-            <Input
-              aria-label={m.labels_settings_rename_field({ name: label.name })}
-              size="sm"
-              value={draft}
-              maxLength={LABEL_NAME_MAX_LENGTH}
-              autoFocus
-              isDisabled={saving}
-              isInvalid={error !== null}
-              hint={error ?? undefined}
-              onChange={(next) => {
-                setDraft(next);
-                setError(null);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") rename();
-                if (event.key === "Escape") close();
-              }}
-            />
-          ) : (
-            <p
-              className={
-                archived
-                  ? "truncate text-sm text-tertiary"
-                  : "truncate text-sm font-medium text-primary"
-              }
-            >
-              {label.name}
-            </p>
-          )}
-          {editing !== "rename" && label.description && editing !== "description" && (
-            <p className="truncate text-xs text-tertiary">{label.description}</p>
-          )}
-        </div>
+      <div className="flex min-h-8 min-w-0 items-center gap-2">
+        {editable ? (
+          <LabelColorPicker
+            color={label.color}
+            name={label.name}
+            onPick={saveColor}
+            isDisabled={saving}
+          />
+        ) : (
+          <span className="grid size-6 shrink-0 place-items-center">
+            <LabelDot color={label.color} className="size-2.5" />
+          </span>
+        )}
+        {editing === "rename" ? (
+          field("rename")
+        ) : (
+          <div className="flex min-w-0 flex-1 items-baseline gap-3">
+            {editable ? (
+              <AriaButton
+                ref={nameButton}
+                aria-label={m.labels_settings_rename({ name: label.name })}
+                onPress={() => start("rename")}
+                className="-mx-1.5 min-w-0 shrink cursor-text truncate rounded-md px-1.5 py-0.5 text-left text-sm font-medium text-primary outline-focus-ring hover:bg-secondary focus-visible:outline-2"
+              >
+                {label.name}
+              </AriaButton>
+            ) : (
+              <span
+                className={cn(
+                  "min-w-0 shrink truncate text-sm",
+                  archived ? "text-tertiary" : "font-medium text-primary",
+                )}
+              >
+                {label.name}
+              </span>
+            )}
+            {editing === "description"
+              ? field("description")
+              : label.description && (
+                  <span className="min-w-0 flex-1 truncate text-sm text-tertiary">
+                    {label.description}
+                  </span>
+                )}
+          </div>
+        )}
         {/* How many of them are not finished, on hover or focus. */}
         <Tooltip title={m.labels_settings_open_count({ count: label.openCount })}>
-          <TooltipTrigger className="h-auto w-auto shrink-0 rounded-sm text-sm text-secondary tabular-nums outline-focus-ring focus-visible:outline-2">
+          <TooltipTrigger className="h-auto w-20 shrink-0 rounded-sm text-right text-sm text-tertiary tabular-nums outline-focus-ring focus-visible:outline-2">
             {m.labels_settings_task_count({ count: label.taskCount })}
           </TooltipTrigger>
         </Tooltip>
@@ -177,17 +217,18 @@ export function LabelSettingsRow({
         {canManage ? (
           <Dropdown.Root>
             <ButtonUtility
-              ref={menuButton}
               tooltip={m.labels_settings_actions({ name: label.name })}
               icon={DotsHorizontal}
               size="sm"
               color="tertiary"
+              // Shown with the row's hover or focus where there is a pointer; always on touch.
+              className="pointer-fine:opacity-0 pointer-fine:group-focus-within:opacity-100 pointer-fine:group-hover:opacity-100 data-pressed:opacity-100"
             />
             <Dropdown.Popover placement="bottom end" className="w-56">
               <Dropdown.Menu
                 aria-label={m.labels_settings_actions({ name: label.name })}
                 onAction={(key) => {
-                  if (key === "rename" || key === "color" || key === "description") start(key);
+                  if (key === "description") start("description");
                   else if (key === "restore") void save({ archived: false });
                   else if (key === "archive" || key === "delete") setConfirming(key);
                 }}
@@ -202,8 +243,6 @@ export function LabelSettingsRow({
                       <Dropdown.Item key="delete" id="delete" label={m.labels_settings_delete()} />,
                     ]
                   : [
-                      <Dropdown.Item key="rename" id="rename" label={m.labels_settings_rename()} />,
-                      <Dropdown.Item key="color" id="color" label={m.labels_settings_color()} />,
                       <Dropdown.Item
                         key="description"
                         id="description"
@@ -224,75 +263,9 @@ export function LabelSettingsRow({
         )}
       </div>
 
-      {editing === "color" && (
-        // A click or tap on a swatch saves it; with the keyboard, the arrows move the pick and
-        // Enter or Space saves it. Done closes the swatches unchanged.
-        <div
-          className="flex w-fit flex-col gap-2 pl-6"
-          onKeyDownCapture={(event) => {
-            // Only on a swatch: Space on Done presses Done, which leaves the color as it was.
-            const onSwatch =
-              event.target instanceof HTMLInputElement && event.target.type === "radio";
-            if (event.key === " " && onSwatch) {
-              // Space on the swatch already picked changes nothing a radio hears: save it here.
-              event.preventDefault();
-              saveColor(colorDraft);
-            }
-            if (event.key === "Escape") close();
-          }}
-        >
-          <LabelColorSwatches
-            value={colorDraft}
-            onChange={setColorDraft}
-            onPick={saveColor}
-            onSubmit={() => saveColor(colorDraft)}
-            isDisabled={saving}
-          />
-          <div>
-            <Button color="tertiary" size="sm" onPress={close}>
-              {m.labels_settings_done()}
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {editing === "description" && (
-        <div className="flex flex-col gap-2 pl-6 sm:flex-row sm:items-center">
-          <Input
-            aria-label={m.labels_settings_description_field({ name: label.name })}
-            size="sm"
-            value={draft}
-            maxLength={LABEL_DESCRIPTION_MAX}
-            placeholder={m.labels_settings_description_placeholder()}
-            autoFocus
-            isDisabled={saving}
-            isInvalid={error !== null}
-            hint={error ?? undefined}
-            onChange={setDraft}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") void save({ description: draft.trim() || null });
-              if (event.key === "Escape") close();
-            }}
-            wrapperClassName="flex-1"
-          />
-          <div className="flex gap-2">
-            <Button color="tertiary" size="sm" onPress={close}>
-              {m.labels_settings_cancel()}
-            </Button>
-            <Button
-              size="sm"
-              isDisabled={saving}
-              onPress={() => void save({ description: draft.trim() || null })}
-            >
-              {m.labels_settings_save()}
-            </Button>
-          </div>
-        </div>
-      )}
-
       {/* A refused color, restore or other change; the fields show their own. */}
-      {error && editing !== "rename" && editing !== "description" && (
-        <p role="alert" className="pl-6 text-sm text-error-primary">
+      {error && editing === null && (
+        <p role="alert" className="pl-8 text-sm text-error-primary">
           {error}
         </p>
       )}

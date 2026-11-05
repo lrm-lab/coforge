@@ -11,7 +11,7 @@ import { workspaceConversationChannel } from "#src/features/conversations/conver
 import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime";
 import { m } from "#src/paraglide/messages";
 
-import { LabelColorSwatches } from "./label-color-swatches";
+import { LabelColorPicker } from "./label-color-picker";
 import { newLabelColor } from "./label-colors";
 import { decodeLabelChangedEvent, decodeLabelGroupChangedEvent } from "./label-realtime";
 import {
@@ -100,6 +100,44 @@ export function LabelSettings() {
     />
   );
 
+  // A new label is one more row at the top of the list: its color, its name, Create.
+  const addRow = adding && (
+    <li className="flex flex-col gap-1 px-3 py-2 sm:px-4">
+      <div className="flex min-h-8 items-center gap-2">
+        <LabelColorPicker
+          color={pickedColor}
+          name={wanted || m.labels_settings_new_name()}
+          onPick={setColor}
+        />
+        <Input
+          aria-label={m.labels_settings_new_name()}
+          placeholder={m.labels_settings_new_name()}
+          size="sm"
+          value={name}
+          maxLength={LABEL_NAME_MAX_LENGTH}
+          autoFocus
+          isInvalid={createError !== null}
+          hint={createError ?? undefined}
+          onChange={(next) => {
+            setName(next);
+            setCreateError(null);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") void add();
+            if (event.key === "Escape") setAdding(false);
+          }}
+          wrapperClassName="min-w-0 flex-1"
+        />
+        <Button color="tertiary" size="sm" onPress={() => setAdding(false)}>
+          {m.labels_settings_cancel()}
+        </Button>
+        <Button size="sm" isDisabled={!wanted} onPress={() => void add()}>
+          {m.labels_settings_create()}
+        </Button>
+      </div>
+    </li>
+  );
+
   return (
     <SettingsPage>
       <div className="flex flex-col gap-4">
@@ -114,7 +152,7 @@ export function LabelSettings() {
             wrapperClassName="sm:max-w-xs"
             className="flex-1"
           />
-          {/* Gone while the form is open: its Create label is then the one primary button. */}
+          {/* Gone while the new row is open: its Create is then the one primary button. */}
           {!adding && (
             <Button
               size="sm"
@@ -133,48 +171,6 @@ export function LabelSettings() {
           <p className="text-sm text-tertiary">{m.labels_settings_members_note()}</p>
         )}
 
-        {adding && (
-          <div className="flex flex-col gap-3 rounded-xl border border-secondary p-4">
-            <Input
-              aria-label={m.labels_settings_new_name()}
-              placeholder={m.labels_settings_new_name()}
-              size="sm"
-              value={name}
-              maxLength={LABEL_NAME_MAX_LENGTH}
-              autoFocus
-              isInvalid={createError !== null}
-              onChange={(next) => {
-                setName(next);
-                setCreateError(null);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") void add();
-                if (event.key === "Escape") setAdding(false);
-              }}
-            />
-            <div className="w-fit">
-              <LabelColorSwatches
-                value={pickedColor}
-                onChange={setColor}
-                onSubmit={() => void add()}
-              />
-            </div>
-            {createError && (
-              <p role="alert" className="text-sm text-error-primary">
-                {createError}
-              </p>
-            )}
-            <div className="flex justify-end gap-2">
-              <Button color="tertiary" size="sm" onPress={() => setAdding(false)}>
-                {m.labels_settings_cancel()}
-              </Button>
-              <Button size="sm" isDisabled={!wanted} onPress={() => void add()}>
-                {m.labels_settings_create()}
-              </Button>
-            </div>
-          </div>
-        )}
-
         {query.isPending ? (
           <p className="text-sm text-tertiary">{m.labels_settings_loading()}</p>
         ) : query.isError ? (
@@ -186,12 +182,13 @@ export function LabelSettings() {
               {m.controls_retry()}
             </Button>
           </div>
-        ) : live.length === 0 && archived.length === 0 ? (
+        ) : live.length === 0 && archived.length === 0 && !adding ? (
           <p className="text-sm text-tertiary">
             {search.trim() ? m.labels_settings_no_match() : m.labels_settings_empty()}
           </p>
         ) : (
           <div className="overflow-hidden rounded-xl border border-secondary">
+            {addRow && <ul className="border-b border-secondary last:border-b-0">{addRow}</ul>}
             {live.map((section) => (
               <section
                 key={section.group ?? ""}
@@ -199,7 +196,7 @@ export function LabelSettings() {
                 className="border-b border-secondary last:border-b-0"
               >
                 {section.group && (
-                  <h3 className="bg-secondary px-4 py-2 text-xs font-semibold text-tertiary sm:px-5">
+                  <h3 className="bg-secondary px-3 py-2 text-xs font-semibold text-tertiary sm:px-4">
                     {section.group}
                   </h3>
                 )}
@@ -214,7 +211,7 @@ export function LabelSettings() {
                   aria-expanded={showArchived}
                   iconLeading={showArchived ? ChevronDown : ChevronRight}
                   onPress={() => setShowArchived((open) => !open)}
-                  className="w-full justify-start rounded-none bg-secondary px-4 text-xs font-semibold text-tertiary sm:px-5"
+                  className="w-full justify-start rounded-none bg-secondary px-3 text-xs font-semibold text-tertiary sm:px-4"
                 >
                   {m.labels_settings_archived({ count: String(archived.length) })}
                 </Button>
