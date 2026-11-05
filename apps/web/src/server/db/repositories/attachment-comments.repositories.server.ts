@@ -147,15 +147,52 @@ export class PrismaAttachmentCommentStore implements AttachmentCommentStore {
       // A mention's row needs its target seated in the COMMENT conversation. Mentions resolved
       // against the source's roster, so seat each now; the seat is never authority.
       const mentionMemberIdByKey = new Map<string, string>();
-      for (const mention of stored.mentions) {
-        const seated = await joinDiscussion(
-          tx,
-          mention.type === "user"
-            ? { workspaceId: actor.workspaceId, userId: mention.id }
-            : { workspaceId: actor.workspaceId, agentId: mention.id },
+      if (stored.mentions.length) {
+        const userIds = [
+          ...new Set(stored.mentions.filter((mention) => mention.type === "user").map((m) => m.id)),
+        ];
+        const agentIds = [
+          ...new Set(
+            stored.mentions.filter((mention) => mention.type === "agent").map((m) => m.id),
+          ),
+        ];
+        const seatWhere = {
           conversationId,
-        );
-        mentionMemberIdByKey.set(mention.key, seated.id);
+          OR: [
+            ...(userIds.length ? [{ userId: { in: userIds } }] : []),
+            ...(agentIds.length ? [{ agentId: { in: agentIds } }] : []),
+          ],
+        };
+        await tx.conversationMember.createMany({
+          data: [
+            ...userIds.map((userId) => ({
+              workspaceId: actor.workspaceId,
+              conversationId,
+              userId,
+            })),
+            ...agentIds.map((agentId) => ({
+              workspaceId: actor.workspaceId,
+              conversationId,
+              agentId,
+            })),
+          ],
+          skipDuplicates: true,
+        });
+        await tx.conversationMember.updateMany({ data: { leftAt: null }, where: seatWhere });
+        const seats = await tx.conversationMember.findMany({
+          where: seatWhere,
+          select: { id: true, userId: true, agentId: true },
+        });
+        const seatIdByActor = new Map<string, string>();
+        for (const seat of seats) {
+          if (seat.userId) seatIdByActor.set(`user:${seat.userId}`, seat.id);
+          else if (seat.agentId) seatIdByActor.set(`agent:${seat.agentId}`, seat.id);
+        }
+        for (const mention of stored.mentions) {
+          const seatId = seatIdByActor.get(`${mention.type}:${mention.id}`);
+          if (!seatId) throw new Error("attachment comment mention seat is missing");
+          mentionMemberIdByKey.set(mention.key, seatId);
+        }
       }
       const recipients = await commentRecipients(tx, {
         workspaceId: actor.workspaceId,
