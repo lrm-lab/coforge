@@ -137,7 +137,7 @@ test("names carry their faces", async () => {
         },
       },
     });
-    // A message's @mentions: each chip opens with the face of who it names.
+    // A message's @mentions: each chip reads `@name` alone, no face (Frank, 11-05, task #533).
     const [meIn, agentIn] = await Promise.all([
       db.conversationMember.findFirstOrThrow({
         where: { conversationId: notices.id, userId: DEV_BROWSER_USER.id },
@@ -184,7 +184,13 @@ test("names carry their faces", async () => {
       expect(await evaluate<number>(`${noticeRow}.querySelectorAll("img").length`)).toBe(2);
       expect(
         await evaluate<number>(`[...${chips}].filter((chip) => chip.querySelector("img")).length`),
-      ).toBe(2);
+      ).toBe(0);
+      expect(
+        await evaluate<boolean>(
+          `[...${chips}].every((chip) => chip.textContent.trim().startsWith("@"))`,
+        ),
+      ).toBe(true);
+      expect(await evaluate<number>(`${chips}.length`)).toBe(2);
       await shoot(name);
     }
   } finally {
