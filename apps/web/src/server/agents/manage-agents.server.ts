@@ -1,3 +1,4 @@
+import { logAgentCreated } from "#src/server/conversations/direct-conversation-log.server";
 import {
   RUNTIME_PROVIDER,
   type AgentStartIntent,
@@ -167,6 +168,12 @@ export class ManageAgents {
       // A human-created Agent owes its creator an introduction (`AgentIntroduction`).
       introductionDueAt: new Date(),
       runtimeConfig: agentRuntimeConfig(selection, storedProvider),
+    });
+    logAgentCreated({
+      workspaceId: principal.workspaceId,
+      agentId,
+      creatorUserId: principal.userId,
+      computerId: input.computerId,
     });
     try {
       await this.runtimeControl.start(agentStartIntent(agent, input.computerId), principal.userId);

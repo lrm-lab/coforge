@@ -1,3 +1,7 @@
+import {
+  announceDirectConversationCreated,
+  logDirectConversationOpened,
+} from "./direct-conversation-log.server";
 import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import { workspaceAssistantWelcome } from "#src/server/agents/workspace-assistant-welcome.server";
 import type { ForwardedMessage } from "@lrm/coforge-sdk/internal";
@@ -70,13 +74,20 @@ export class DirectConversations {
     peer: { agentId: string } | { userId: string },
   ): Promise<{ conversationId: string }> {
     const { conversationId, created } = await this.openOrStart(workspaceId, viewerId, peer);
+    logDirectConversationOpened({
+      workspaceId,
+      conversationId,
+      userId: viewerId,
+      peer,
+      created: created === true,
+    });
     // A DM that did not exist before shows up in every list it belongs to (Slack's `im_created`).
     // Everyone in it: both people, one for a member's DM with themself, the viewer with an Agent.
-    const members = new Set([viewerId, "userId" in peer ? peer.userId : viewerId]);
     if (created)
-      await announceViewerEvent(this.realtime, {
-        userIds: [...members],
-        event: { type: REALTIME_EVENTS.dmCreated, workspaceId, conversationId },
+      await announceDirectConversationCreated(this.realtime, {
+        workspaceId,
+        conversationId,
+        userIds: [viewerId, "userId" in peer ? peer.userId : viewerId],
       });
     return { conversationId };
   }

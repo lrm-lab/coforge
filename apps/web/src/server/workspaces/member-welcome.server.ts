@@ -1,14 +1,12 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
+import { announceDirectConversationCreated } from "#src/server/conversations/direct-conversation-log.server";
 import { agentDirectKey } from "#src/features/conversations/direct-key";
 import { humanLabel } from "#src/lib/human-label";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { AgentDeliveryPublisher } from "#src/server/conversations/agent-delivery.server";
 import { announceMessageBestEffort } from "#src/server/conversations/conversation-activity.server";
 import { lockConversation } from "#src/server/conversations/conversation-lock.server";
-import {
-  announceViewerEvent,
-  CentrifugoConversationRealtime,
-} from "#src/server/conversations/conversation-realtime.server";
+import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
 import { errorType } from "#src/server/errors/error-type.server";
 import { onboardingAgentWhere } from "./workspace-onboarding.server";
@@ -162,13 +160,10 @@ export async function publishMemberWelcome(db: PrismaClient, welcome: MemberWelc
         },
       ]),
       welcome.conversationCreated
-        ? announceViewerEvent(realtime, {
+        ? announceDirectConversationCreated(realtime, {
+            workspaceId: welcome.workspaceId,
+            conversationId: welcome.conversationId,
             userIds: [welcome.userId],
-            event: {
-              type: "dm.created.v1",
-              workspaceId: welcome.workspaceId,
-              conversationId: welcome.conversationId,
-            },
           })
         : undefined,
       announceMessageBestEffort(db, realtime, {
