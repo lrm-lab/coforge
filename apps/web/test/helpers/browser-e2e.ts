@@ -80,7 +80,8 @@ export function pageWaiter(browserPath: string) {
           wait.kill("SIGKILL");
           const page = await run(
             "eval",
-            `location.pathname + location.search + " | " + document.querySelector("main")?.innerText.slice(0, 600)`,
+            `location.pathname + location.search + " | " + (document.querySelector("main")?.innerText ?? document.body.innerText ?? "").slice(0, 600)` +
+              ` + " || scroll: " + JSON.stringify([...document.querySelectorAll('[data-scroll-restoration-id]')].map((el) => ({ id: el.getAttribute("data-scroll-restoration-id"), top: el.scrollTop, sh: el.scrollHeight, ch: el.clientHeight })))`,
           ).catch((error: unknown) => String(error));
           throw new Error(`Timed out waiting for: ${condition}\nPage: ${page}`);
         }

@@ -6,6 +6,7 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import {
   browserSession,
+  escapeOpenMenu,
   localBrowserE2e,
   pageWaiter,
   seededUuid,
@@ -175,7 +176,8 @@ test("search filters narrow results, survive a reload, and clear together", asyn
 
     // Scope Humans contradicts an Agent sender, so the sender goes.
     await pick("Scope", "Humans");
-    await browser("press", "Escape");
+    await browser("eval", escapeOpenMenu);
+    await waitFor(`document.querySelector('[role="menu"]') === null`);
     await waitFor(`${param("scope")} === "humans" && ${param("senderId")} === ""`);
     await waitForResults(1);
     expect(await resultIds()).toEqual([humanToday.id]);
@@ -209,7 +211,8 @@ test("search filters narrow results, survive a reload, and clear together", asyn
     );
     await waitForResults(0);
     await pick("Scope", "Humans");
-    await browser("press", "Escape");
+    await browser("eval", escapeOpenMenu);
+    await waitFor(`document.querySelector('[role="menu"]') === null`);
     await waitFor(`${param("scope")} === "humans" && ${param("senderId")} === ""`);
     await waitForResults(1);
 
@@ -223,7 +226,8 @@ test("search filters narrow results, survive a reload, and clear together", asyn
 
     // @ Me: only the message that mentions the viewer.
     await pick("Scope", "@ Me");
-    await browser("press", "Escape");
+    await browser("eval", escapeOpenMenu);
+    await waitFor(`document.querySelector('[role="menu"]') === null`);
     await waitFor(`${param("scope")} === "mentioned"`);
     await waitForResults(1);
     expect(await resultIds()).toEqual([agentOld.id]);
@@ -241,7 +245,8 @@ test("search filters narrow results, survive a reload, and clear together", asyn
 
     // A reload keeps every filter and names it on its chip.
     await pick("Scope", "Humans");
-    await browser("press", "Escape");
+    await browser("eval", escapeOpenMenu);
+    await waitFor(`document.querySelector('[role="menu"]') === null`);
     await waitFor(`${param("scope")} === "humans"`);
     await browser("reload");
     await waitFor(

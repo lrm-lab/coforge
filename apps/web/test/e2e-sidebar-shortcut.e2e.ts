@@ -69,8 +69,12 @@ test("Cmd/Ctrl+B toggles the sidebar, except in a rich-text editor", async () =>
     expect(await evaluate<string | null>(`localStorage.getItem("coforge-sidebar-expanded")`)).toBe(
       "hide",
     );
+    // The collapse animates the rail's width; measuring the expand button mid-transition
+    // puts the pointer where the button was, and no tooltip ever opens.
+    await wait(`document.getAnimations().every((a) => a.playState !== "running")`);
     await hover(EXPAND);
-    await wait(`document.querySelector('[role="tooltip"]')?.textContent === "Expand Sidebar${label}"`);
+    await wait(`document.querySelector('[role="tooltip"]') !== null`);
+    expect(await tooltip()).toBe(`Expand Sidebar${label}`);
     await browser("screenshot", join(artifacts, "expand-tooltip.png"));
     await browser("focus", "textarea");
     await browser("press", press);
