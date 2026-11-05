@@ -137,7 +137,8 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
       queued: (agentId) => ports.deliveryQueue.pending(agentId),
       enqueue: (agentId, message) => ports.deliveryQueue.enqueue(agentId, message),
       busy: (agentId) => {
-        if (!ports.deliveryQueue.isBusy(agentId)) ports.launchCustody().noteTurnStarted(agentId);
+        if (!ports.deliveryQueue.isBusy(agentId))
+          ports.launchCustody().noteTurnStarted(agentId, "delivery");
         ports.deliveryQueue.busy(agentId);
       },
       noticeSettled: (agentId) => {

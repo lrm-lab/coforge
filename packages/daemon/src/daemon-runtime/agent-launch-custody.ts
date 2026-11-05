@@ -7,6 +7,7 @@ import type { AgentDeliveryQueue } from "./agent-delivery-queue";
 import type { AgentInputDrain } from "./agent-input-drain";
 import type { AgentMessageAttentionIndex } from "./agent-message-attention-index";
 import { stalledTurnObservation } from "./stalled-turn-indicator";
+import { noteTurnStarted } from "./turn-boundaries";
 import { recoveryHasContent, type AgentRecoveryContext } from "./runtime-launch-intent";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
@@ -132,11 +133,19 @@ export class AgentLaunchCustody {
       return;
     }
     if (introduction) this.ports.introducedAgents.add(agentId);
-    this.noteTurnStarted(agentId);
+    this.noteTurnStarted(agentId, "prompt");
     await session.notify(text);
   }
 
-  noteTurnStarted(agentId: string): void {
+  /** Opens the startup input's turn: the same boundary as a delivery's, labeled as the startup's. */
+  noteStartupTurn(agentId: string): void {
+    this.noteTurnStarted(agentId, "startup");
+  }
+
+  /** Marks a turn as open for `agentId`, and logs the boundary: with `agent.turn.finished` this
+   * lets a log reader measure how long an accepted notice waited before its turn started. */
+  noteTurnStarted(agentId: string, via: "delivery" | "prompt" | "startup"): void {
+    noteTurnStarted(agentId, via);
     const launch = this.ports.currentActivityLaunches.get(agentId);
     if (!launch?.progress) return;
     launch.progress.noteTurnStarted();

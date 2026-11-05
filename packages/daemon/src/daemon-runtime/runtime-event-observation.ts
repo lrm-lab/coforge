@@ -23,6 +23,7 @@ import { subagentProgressDetail } from "#src/agent-runtime/subagent-progress-act
 import { PHASE_EDGES } from "#src/agent-runtime/runtime-phases";
 import { runtimeFailureDiagnostic, safeRuntimeActivityMessage } from "./runtime-activity-text";
 import { toolStartActivity } from "#src/code-agent/tool-activity";
+import { noteTurnFinished } from "./turn-boundaries";
 import { fastModeUnavailableDetail } from "./fast-mode-activity";
 import type { ActivityLaunch } from "./activity-launch";
 import type { ActivityDraft, PublishedActivityLaunch } from "./agent-activity-publisher";
@@ -349,6 +350,9 @@ export function observeRuntimeEvent(
     return;
   }
   if (event.type !== "completed") return;
+  // The turn's boundary, paired with `agent.turn.started`: how long an accepted notice waited is
+  // measurable from the log alone, and a turn that never reports its end stands out.
+  noteTurnFinished(agentId, event.status, event.conversation?.conversationId);
   // Capture provider error text before clearing crashDetail for Activity wording.
   const collectorFailReason =
     event.status === "failed"

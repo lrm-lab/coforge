@@ -366,7 +366,7 @@ export class DaemonRuntime {
         ? this.#mentionDeliveries.deliver(message)
         : this.#messageAttention.receive(message),
     runStartup: async (agentId, session, launch, text) => {
-      this.#launchCustody.noteTurnStarted(agentId);
+      this.#launchCustody.noteStartupTurn(agentId);
       await launch.startup?.run(session.sendMessage(text));
     },
     runPrompt: (agentId, text, introduction) =>
