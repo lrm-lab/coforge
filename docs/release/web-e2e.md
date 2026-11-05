@@ -24,8 +24,20 @@ same way. `scripts/ci/web-e2e-list.test.ts` checks that every listed file exists
 drives `ego-browser`, which operates a signed-in desktop browser and cannot run on a CI runner.
 Files that need something the run does not provide stay off it: a database reset
 (`e2e-agent-direct-message`, `e2e-agent-introduction`), OIDC (`e2e-oidc-*`), a provider key
-(`e2e-openrouter-live`), a managed environment (`agent-control`, `kiro-native`). Files that fail
-for other reasons are tracked in their own task until they are fixed and added.
+(`e2e-openrouter-live`), a managed environment (`agent-control`, `kiro-native`), an artifact
+sandbox origin (`e2e-artifact-page`, which needs `COFORGE_ARTIFACT_SANDBOX_ORIGIN`). Files that
+fail for other reasons are tracked in their own task until they are fixed and added.
+
+Two things differ between a local run and the runner:
+
+- The sign-in e2es (`e2e-sign-in-harness.ts`: `e2e-first-sign-in-*`, `e2e-sign-in-flow`, and the
+  others that use it) build the Web again, into the same `apps/web/.output` a running Web serves.
+  On the runner both come from one checkout, so nothing changes. Locally, a Web started from an
+  older build then asks for asset files that are gone, and every later page stays on "Loading
+  messages…": build and restart the Web after the checkout moves.
+- The runner's Chrome has no mouse (`hover: none`), so the app takes its touch layout: a click on
+  a message's words opens its action sheet. A file that passes on a Mac can fail there for that
+  reason alone; drive a Linux Chrome over CDP (`agent-browser --cdp <port>`) to see it locally.
 
 Run one shard locally, against a PostgreSQL and Redis on the default ports, with
 `CENTRIFUGO_IMAGE` set and agent-browser installed:
