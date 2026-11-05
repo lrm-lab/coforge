@@ -12,7 +12,11 @@ export type ChatListValue<List extends ChatListRead> = Extract<
 >["value"];
 
 type Deferred = ReturnType<typeof Promise.withResolvers<unknown>>;
-type Batch = { workspace: string | undefined; lists: Map<ChatListRead, Deferred> };
+/** `grew`: a list joined since the batch last looked. */
+type Batch = { workspace: string | undefined; lists: Map<ChatListRead, Deferred>; grew: boolean };
+
+/** How many tasks more a growing batch waits before it goes out regardless. */
+const MAX_WAITS = 8;
 
 /** Runs `run` once the current task is done, as a message event: the Queries of one load start
  * their reads a few promise turns apart, and a hidden tab holds a timer back for a second, never a
@@ -34,7 +38,8 @@ const pageWorkspace = () =>
 
 /**
  * Reads Chat lists in batches, the way DataLoader batches loads: every list asked for before the
- * scheduled read starts goes into that one call, however many Queries ask (the chat loader's,
+ * scheduled read starts (a task after the last list joined, up to `MAX_WAITS` tasks) goes into
+ * that one call, however many Queries ask (the chat loader's,
  * a restored copy's own read, a burst of realtime re-reads). A list asked for twice is read once.
  * Each list settles with its own answer, so one that failed rejects alone, with the error its own
  * call would have thrown; a call that failed as a whole (signed out, offline) rejects them all, as
@@ -65,15 +70,30 @@ export function createChatListReader(
   return function read<List extends ChatListRead>(list: List): Promise<ChatListValue<List>> {
     const here = workspace();
     if (!batch || batch.workspace !== here) {
-      const next: Batch = { workspace: here, lists: new Map() };
+      const next: Batch = { workspace: here, lists: new Map(), grew: false };
       batch = next;
-      schedule(() => {
+      let waited = 0;
+      const sendOnceQuiet = () => {
+        // Each Query's read starts after its own look into the stored cache (IndexedDB), which
+        // answers in a task of its own: while the batch still grew in the task just past, another
+        // list is likely a lookup away, so it waits one task more, a few at most (task #438: a
+        // load split its seven lists into two calls about half the time).
+        if (next.grew && waited < MAX_WAITS) {
+          next.grew = false;
+          waited += 1;
+          schedule(sendOnceQuiet);
+          return;
+        }
         if (batch === next) batch = undefined;
         void send(next);
-      });
+      };
+      schedule(sendOnceQuiet);
     }
     let deferred = batch.lists.get(list);
-    if (!deferred) batch.lists.set(list, (deferred = Promise.withResolvers()));
+    if (!deferred) {
+      batch.lists.set(list, (deferred = Promise.withResolvers()));
+      batch.grew = true;
+    }
     return deferred.promise as Promise<ChatListValue<List>>;
   };
 }

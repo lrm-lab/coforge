@@ -41,6 +41,29 @@ test("lists asked for a few promise turns apart are read in one call, a list ask
   expect(calls).toEqual([["channels", "saved", "sections"]]);
 });
 
+/** A task later, as an IndexedDB answer comes: what each Query's look into the stored cache takes
+ * before its read starts. */
+const nextTask = () =>
+  new Promise<void>((resolve) => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => {
+      channel.port1.close();
+      resolve();
+    };
+    channel.port2.postMessage(undefined);
+  });
+
+test("lists asked for a task apart each, as after their stored-cache lookups, are read in one call", async () => {
+  const { calls, read } = fakeReader();
+  const asked: Promise<unknown>[] = [read("sections"), read("sectionOrder")];
+  await nextTask();
+  asked.push(read("channels"));
+  await nextTask();
+  asked.push(read("saved"), read("channelNames"));
+  await Promise.all(asked);
+  expect(calls).toEqual([["sections", "sectionOrder", "channels", "saved", "channelNames"]]);
+});
+
 test("a list asked for once the call has gone out goes into the next call", async () => {
   const { calls, read } = fakeReader();
   const first = read("channels");
