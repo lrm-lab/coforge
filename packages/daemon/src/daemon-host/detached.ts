@@ -23,6 +23,8 @@ import type {
  */
 export const DETACHED_SPEC_FILE = "detached-service.json";
 export const DETACHED_PID_FILE = "detached.pid";
+/** systemd's default `PATH` for a user service. */
+const DEFAULT_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
 const STOP_WAIT_MS = 15_000;
 const POLL_MS = 50;
 
@@ -102,8 +104,11 @@ export class DetachedDaemonHost implements DaemonLauncher {
     this.#spec = {
       program: options.executablePath,
       args: ["__daemon", "--socket", options.socketPath, "--state-directory", this.#stateDirectory],
+      // The installer starts the process from an empty environment, so what a systemd unit gets
+      // by default (a home directory and a PATH) is written out here.
       env: {
-        ...(options.runtimeHomeDirectory ? { HOME: options.runtimeHomeDirectory } : {}),
+        HOME: options.runtimeHomeDirectory ?? options.homeDirectory,
+        PATH: DEFAULT_PATH,
         ...(options.daemonConnectionEndpoint
           ? { COFORGE_DAEMON_CONNECTION_ENDPOINT: options.daemonConnectionEndpoint }
           : {}),
@@ -128,8 +133,8 @@ export class DetachedDaemonHost implements DaemonLauncher {
     return this.#local.preflight();
   }
 
-  /** What the installer runs: the unit's command and its environment (the home directory and the
-   * connection endpoint, paths and addresses only). The Daemon reads its credentials from its own
+  /** What the installer runs: the unit's command and its environment (a home directory, a PATH and the
+   * connection endpoint: paths and addresses only). The Daemon reads its credentials from its own
    * storage when it runs; none is written here. */
   serviceDefinition(): DaemonServiceDefinition {
     return {

@@ -92,7 +92,11 @@ test("Linux without systemd: the definition is the detached spec, with no creden
       "--state-directory",
       "/home/example/.coforge/daemon",
     ],
-    env: { COFORGE_DAEMON_CONNECTION_ENDPOINT: ENDPOINT },
+    env: {
+      HOME: "/home/example",
+      PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+      COFORGE_DAEMON_CONNECTION_ENDPOINT: ENDPOINT,
+    },
   });
 });
 

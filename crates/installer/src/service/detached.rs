@@ -51,8 +51,10 @@ pub trait Spawn {
     fn spawn(&self, spec: &Spec, log: &Path) -> io::Result<u32>;
 }
 
-/// The real thing: a child in its own process group, so a hang-up on the installer's terminal
-/// does not reach it.
+/// The real thing: a child in a session of its own (`setsid`, as Node's `detached: true` does), so
+/// it has no controlling terminal and a hang-up on the installer's terminal does not reach it. It
+/// starts from an empty environment holding only the spec's own variables, as a systemd unit does:
+/// nothing of the installer's shell (tokens, cloud keys, a stray `COFORGE_*`) is carried along.
 pub struct SystemSpawn;
 
 impl Spawn for SystemSpawn {
@@ -66,15 +68,25 @@ impl Spawn for SystemSpawn {
         use std::os::unix::process::CommandExt;
         let out = fs::OpenOptions::new().create(true).append(true).open(log)?;
         let err = out.try_clone()?;
-        let child = Command::new(&spec.program)
+        let mut command = Command::new(&spec.program);
+        command
             .args(&spec.args)
+            .env_clear()
             .envs(&spec.env)
             .stdin(Stdio::null())
             .stdout(out)
-            .stderr(err)
-            .process_group(0)
-            .spawn()?;
-        Ok(child.id())
+            .stderr(err);
+        // SAFETY: the closure runs in the forked child before exec and only calls setsid(2), which
+        // is async-signal-safe and touches no memory of the parent.
+        unsafe {
+            command.pre_exec(|| {
+                if libc::setsid() == -1 {
+                    return Err(io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+        Ok(command.spawn()?.id())
     }
 }
 

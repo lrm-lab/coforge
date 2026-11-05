@@ -80,7 +80,11 @@ test("the definition is the unit's command and environment, with no credential i
     "--state-directory",
     state,
   ]);
-  expect(Object.keys(spec.env).sort()).toEqual(["COFORGE_DAEMON_CONNECTION_ENDPOINT", "HOME"]);
+  expect(Object.keys(spec.env).sort()).toEqual([
+    "COFORGE_DAEMON_CONNECTION_ENDPOINT",
+    "HOME",
+    "PATH",
+  ]);
   for (const name of Object.keys(spec.env))
     expect(name).not.toMatch(/key|token|secret|password|credential|auth/i);
 });

@@ -215,3 +215,53 @@ fn a_log_past_the_limit_is_rotated_at_start() {
     assert!(!log.exists() || fs::metadata(&log).unwrap().len() == 0);
     assert!(w.state.path().join("detached.log.1").exists());
 }
+
+#[cfg(unix)]
+mod real_spawn {
+    use super::*;
+
+    fn run_sh(script: &str, env: &[(&str, &str)]) -> String {
+        let dir = Scratch::new("spawn-real");
+        let log = dir.path().join("out.log");
+        let spec = Spec {
+            program: "/bin/sh".to_owned(),
+            args: vec!["-c".to_owned(), script.to_owned()],
+            env: env
+                .iter()
+                .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+                .collect(),
+        };
+        let pid = SystemSpawn.spawn(&spec, &log).unwrap();
+        for _ in 0..200 {
+            if fs::read_to_string(&log).is_ok_and(|text| text.contains("done")) {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(25));
+        }
+        let _ = pid;
+        fs::read_to_string(&log).unwrap()
+    }
+
+    #[test]
+    fn the_process_starts_from_the_specs_environment_alone() {
+        // SAFETY: this test is the only one that sets this variable, and no thread reads it.
+        unsafe { std::env::set_var("INSTALLER_ONLY_SECRET_TOKEN", "leaked") };
+        let out = run_sh("env; echo done", &[("KEEP", "yes")]);
+        assert!(out.contains("KEEP=yes"), "{out}");
+        assert!(!out.contains("INSTALLER_ONLY_SECRET_TOKEN"), "{out}");
+        assert!(!out.contains("leaked"), "{out}");
+    }
+
+    // macOS `ps` has no session id column; the Linux run is the one that matters here.
+    #[test]
+    #[cfg_attr(not(target_os = "linux"), ignore)]
+    fn the_process_leads_a_session_of_its_own() {
+        let out = run_sh(
+            r#"echo "pid=$$ sid=$(ps -o sid= -p $$ | tr -d ' ')"; echo done"#,
+            &[("PATH", "/bin:/usr/bin")],
+        );
+        let line = out.lines().find(|l| l.starts_with("pid=")).unwrap();
+        let (pid, sid) = line.split_once(" sid=").unwrap();
+        assert_eq!(pid.trim_start_matches("pid="), sid, "{out}");
+    }
+}
