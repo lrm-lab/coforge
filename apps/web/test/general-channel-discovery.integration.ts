@@ -242,18 +242,20 @@ test("Workspace humans enrolled in general see one general channel; outsiders ca
     expect(history.messages.map((m) => [m.sequence, m.senderName, m.senderHandle, m.body])).toEqual(
       [
         [1, alice.username, alice.username, "Hello Bob"],
-        [2, alice.username, alice.username, "Muted ordinary message"],
+        // Two joins at once are one membership change: one record (task #411).
+        [2, "System", undefined, `${bob.username} joined this channel.`],
+        [3, alice.username, alice.username, "Muted ordinary message"],
         // A resolved mention is stored as an embedded-UUID token (PR #338) and carries a
         // MessageMention row; the browser renders the handle from that row, never by re-parsing
         // prose. `agentReadableBody` is what turns the token back into `@handle` for Agents.
-        [3, alice.username, alice.username, `<@human:${bob.id}> please review this`],
-        [4, bob.username, bob.username, "Hello Alice"],
+        [4, alice.username, alice.username, `<@human:${bob.id}> please review this`],
+        [5, bob.username, bob.username, "Hello Alice"],
       ],
     );
     // The token is resolved, not orphaned: the viewer gets the mention row it renders from. The
     // projection's `kind` is `user` (the browser's sender vocabulary); the token's prefix is
     // `human`.
-    expect(history.messages[2]?.mentions).toEqual([
+    expect(history.messages[3]?.mentions).toEqual([
       {
         kind: "user",
         actorId: bob.id,
@@ -263,10 +265,10 @@ test("Workspace humans enrolled in general see one general channel; outsiders ca
     ]);
     expect(history.messages[0]?.mentions).toEqual([]);
     expect(history.messages[0]?.senderMemberId).toBe(history.senderMemberId);
-    expect(history.messages[3]?.senderMemberId).not.toBe(history.senderMemberId);
+    expect(history.messages[4]?.senderMemberId).not.toBe(history.senderMemberId);
     await Promise.all([send(alice.id, "Concurrent A"), send(bob.id, "Concurrent B")]);
     const concurrentHistory = await channels.open(workspace.id, alice.id, engineering.id);
-    expect(concurrentHistory.messages.map((m) => m.sequence)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(concurrentHistory.messages.map((m) => m.sequence)).toEqual([1, 2, 3, 4, 5, 6, 7]);
     const concurrentBobMessage = concurrentHistory.messages.find(
       (message) => message.body === "Concurrent B",
     );
@@ -301,29 +303,29 @@ test("Workspace humans enrolled in general see one general channel; outsiders ca
     expect(latestPage.hasOlder).toBe(true);
     // The initial (uncursored) page is the live tail: nothing newer to fetch.
     expect(latestPage.hasNewer).toBe(false);
-    expect(latestPage.messages.map((message) => message.sequence)).toEqual([5, 6]);
+    expect(latestPage.messages.map((message) => message.sequence)).toEqual([6, 7]);
     const olderPage = await channels.open(workspace.id, alice.id, engineering.id, {
-      beforeSequence: 5,
+      beforeSequence: 6,
       limit: 2,
     });
     expect(olderPage.hasOlder).toBe(true);
     // A backward page always has newer content above it, so the bounded window knows the tail it
     // retained is no longer the live end.
     expect(olderPage.hasNewer).toBe(true);
-    expect(olderPage.messages.map((message) => message.sequence)).toEqual([3, 4]);
+    expect(olderPage.messages.map((message) => message.sequence)).toEqual([4, 5]);
     // Reading back towards the live end from the retained page recovers the tail.
     const newerPage = await channels.open(workspace.id, alice.id, engineering.id, {
-      afterSequence: 4,
+      afterSequence: 5,
       limit: 2,
     });
     expect(newerPage.hasOlder).toBe(true);
     expect(newerPage.hasNewer).toBe(false);
-    expect(newerPage.messages.map((message) => message.sequence)).toEqual([5, 6]);
+    expect(newerPage.messages.map((message) => message.sequence)).toEqual([6, 7]);
     expect(
-      (await channels.updates(workspace.id, alice.id, engineering.id, 4)).map(
+      (await channels.updates(workspace.id, alice.id, engineering.id, 5)).map(
         (message) => message.sequence,
       ),
-    ).toEqual([5, 6]);
+    ).toEqual([6, 7]);
     const direct = await db.conversation.create({
       data: { workspaceId: workspace.id, directKey: `private-${suffix}` },
     });

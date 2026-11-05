@@ -6,6 +6,7 @@ import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import { recordChannelMembersAdded } from "#src/server/app-notifications/channel-events.server";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
+import { lockConversation } from "./conversation-lock.server";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
 import { assertChannelMembersAddable } from "./channel-member-checks.server";
 import {
@@ -45,6 +46,9 @@ export async function joinChannel(
   // (Re-)joining starts already-read at the channel's current top-level end: the badge
   // counts what arrives *after* you joined, never the backlog that existed before.
   const { alreadyIn, notice } = await db.$transaction(async (tx) => {
+    // Two joins of one person at once would both count 0 and each post "joined": the second
+    // waits here and counts the first's row.
+    await lockConversation(tx, channelId);
     const active = await tx.conversationMember.count({
       where: { conversationId: channelId, userId, ...ACTIVE_MEMBER_WHERE },
     });
