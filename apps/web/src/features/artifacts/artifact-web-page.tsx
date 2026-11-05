@@ -1,8 +1,9 @@
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Browser } from "@untitledui/icons";
 
-import { ButtonGroup, ButtonGroupItem } from "#src/components/base/button-group/button-group";
+import { Button } from "#src/components/base/buttons/button";
 import { Skeleton } from "#src/components/ui/skeleton";
+import { isAppError } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import { loadArtifactSandboxLink } from "./artifact-sandbox.functions";
 import { ARTIFACTS_KEY } from "./artifact-queries";
@@ -21,62 +22,10 @@ const sandboxLinkQuery = (artifactId: string, version: number) => ({
 
 /**
  * A web page on its artifact's page (task #490, #514): the page itself, framed from the sandbox
- * origin, or its source. A person reads it; an Agent changes it, so there is no editor here.
+ * origin, filling everything under the header (Frank, 11-05: no Source view, no note over it).
+ * A person reads it; an Agent changes it, so there is nothing to edit here.
  */
 export function ArtifactWebPage({
-  artifactId,
-  version,
-  title,
-  source,
-  sourceFailed = false,
-}: {
-  artifactId: string;
-  version: number;
-  title: string;
-  /** The page's HTML at `version`, once read. */
-  source: string | undefined;
-  /** An older version's source could not be read. */
-  sourceFailed?: boolean;
-}) {
-  const [view, setView] = useState<"preview" | "source">("preview");
-  return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex shrink-0 items-center gap-3 px-4 pt-3 md:px-6">
-        <ButtonGroup
-          aria-label={m.doc_page_view()}
-          size="sm"
-          selectedKeys={[view]}
-          disallowEmptySelection
-          onSelectionChange={(keys) => {
-            const next = [...keys][0];
-            if (next === "preview" || next === "source") setView(next);
-          }}
-        >
-          <ButtonGroupItem id="preview">{m.doc_page_preview()}</ButtonGroupItem>
-          <ButtonGroupItem id="source">{m.doc_page_source()}</ButtonGroupItem>
-        </ButtonGroup>
-        <span className="ml-auto truncate text-xs text-tertiary max-sm:hidden">
-          {m.doc_page_agent_hint()}
-        </span>
-      </div>
-      <div className="flex min-h-0 flex-1 flex-col p-4 md:px-6">
-        {view === "preview" ? (
-          <Preview artifactId={artifactId} version={version} title={title} />
-        ) : sourceFailed ? (
-          <p className="text-sm text-tertiary">{m.doc_version_load_failed()}</p>
-        ) : source === undefined ? (
-          <Skeleton className="h-full w-full rounded-xl" />
-        ) : (
-          <pre className="min-h-0 flex-1 overflow-auto rounded-xl bg-secondary p-4 font-mono text-xs leading-relaxed break-all whitespace-pre-wrap text-secondary ring-1 ring-secondary">
-            {source}
-          </pre>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function Preview({
   artifactId,
   version,
   title,
@@ -86,8 +35,29 @@ function Preview({
   title: string;
 }) {
   const link = useQuery(sandboxLinkQuery(artifactId, version));
-  if (link.isError) return <p className="text-sm text-tertiary">{m.doc_page_preview_failed()}</p>;
-  if (!link.data) return <Skeleton className="h-full w-full rounded-xl" />;
+  if (link.isError) {
+    // A deployment without a sandbox origin cannot show web pages at all; anything else may pass.
+    const off = isAppError(link.error) && link.error.errorId === "artifact-sandbox-off";
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+        <Browser aria-hidden="true" className="size-6 text-fg-quaternary" />
+        <p className="text-sm text-secondary">
+          {off ? m.doc_page_preview_off() : m.doc_page_preview_failed()}
+        </p>
+        {!off && (
+          <Button
+            size="sm"
+            color="secondary"
+            isLoading={link.isFetching}
+            onPress={() => void link.refetch()}
+          >
+            {m.doc_page_preview_retry()}
+          </Button>
+        )}
+      </div>
+    );
+  }
+  if (!link.data) return <Skeleton className="m-4 flex-1 rounded-xl md:mx-6" />;
   return (
     // The sandbox's wrapper keeps its own origin (`allow-same-origin`, on the sandbox origin, not
     // ours): it frames the page itself, opaque, as `sandboxWrapper` says.
@@ -96,7 +66,7 @@ function Preview({
       src={link.data.url}
       sandbox="allow-scripts allow-same-origin"
       referrerPolicy="no-referrer"
-      className="min-h-[24rem] w-full flex-1 rounded-xl bg-white ring-1 ring-secondary"
+      className="min-h-[24rem] w-full flex-1 bg-white"
     />
   );
 }

@@ -97,11 +97,12 @@ function ArtifactPageFor({
     stays: (next) => next.pathname === router.state.location.pathname,
   });
   const old = search.version;
+  const current = editor.document.data;
+  // An older version's text, for a document; a web page shows its old version from the sandbox.
   const oldRead = useQuery({
     ...artifactDocumentQuery(artifactId, old),
-    enabled: old !== undefined,
+    enabled: old !== undefined && current !== undefined && !isWebPage(current.artifact.kind),
   });
-  const current = editor.document.data;
   const latest = current?.artifact.currentVersion ?? 0;
   const viewingOld = old !== undefined && old !== latest;
 
@@ -180,7 +181,7 @@ function ArtifactPageFor({
       <ArtifactPageHeader
         kind={kind}
         title={title}
-        status={viewingOld ? "old" : editor.status}
+        status={viewingOld ? "old" : webPage ? "page" : editor.status}
         version={viewingOld ? old! : (editor.base ?? 0)}
         home={home}
         history={Boolean(search.history)}
@@ -268,8 +269,6 @@ function ArtifactPageFor({
                 artifactId={artifactId}
                 version={viewingOld ? old! : latest}
                 title={title}
-                source={viewingOld ? oldRead.data?.text : current.text}
-                sourceFailed={viewingOld && oldRead.isError}
               />
             </>
           ) : viewingOld ? (

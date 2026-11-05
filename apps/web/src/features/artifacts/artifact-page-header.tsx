@@ -19,9 +19,8 @@ import { conversationRoute } from "#src/features/conversations/last-conversation
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { StatusLine } from "./artifact-pane-header";
+import { type ArtifactStatus, StatusLine } from "./artifact-pane-header";
 import { ArtifactIcon } from "./artifact-parts";
-import type { ArtifactEditorStatus } from "./use-artifact-editor";
 
 /** The page's title, which names its `main`. */
 export const ARTIFACT_TITLE_ID = "artifact-page-title";
@@ -51,7 +50,7 @@ export function ArtifactPageHeader({
   /** Undefined until the artifact is read: the header holds its place. */
   kind: string | undefined;
   title: string;
-  status: ArtifactEditorStatus | "old";
+  status: ArtifactStatus;
   version: number;
   home: ArtifactHome | undefined;
   history: boolean;

@@ -16,13 +16,17 @@ import { m } from "#src/paraglide/messages";
 import type { ArtifactEditorStatus } from "./use-artifact-editor";
 
 /** What the header says of the document's state, beside its title. */
-export function StatusLine({
-  status,
-  version,
-}: {
-  status: ArtifactEditorStatus | "old";
-  version: number;
-}) {
+/** What the header says of the artifact: the editor's state, an old version, or a web page's version. */
+export type ArtifactStatus = ArtifactEditorStatus | "old" | "page";
+
+export function StatusLine({ status, version }: { status: ArtifactStatus; version: number }) {
+  // A web page is never edited here: only its version, with no state dot (Frank, 11-05).
+  if (status === "page")
+    return (
+      <span role="status" className="shrink-0 text-xs text-tertiary">
+        {m.doc_version({ number: String(version) })}
+      </span>
+    );
   const [dot, label] = {
     saved: [
       "bg-fg-success-secondary",
@@ -60,7 +64,7 @@ export function ArtifactPaneHeader({
   onClose,
 }: {
   title: string;
-  status: ArtifactEditorStatus | "old";
+  status: ArtifactStatus;
   version: number;
   full: boolean;
   history?: boolean;

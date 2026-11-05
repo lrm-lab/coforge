@@ -13,7 +13,7 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
 
 /**
  * An artifact's own page beyond editing a document (task #514; editing is
- * `e2e-artifact-documents`): a web page's preview from the sandbox origin, its source, an older
+ * `e2e-artifact-documents`): a web page's preview from the sandbox origin, an older
  * version read only with the way back to the latest and no going back to it, Open in new tab on
  * the sandbox's link (and a link that cannot be had, said so), a new version an Agent saves while
  * the page shows (Share is `e2e-artifact-share`); one page for an artifact that is not there and
@@ -153,30 +153,37 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
         `document.getElementById(document.querySelector("main").getAttribute("aria-labelledby")).textContent`,
       ),
     ).toBe("Signup funnel");
+    // Only its version: a web page is not edited here.
+    expect(await evaluate<boolean>(text("Version 2"))).toBe(true);
+    expect(await evaluate<boolean>(text("Saved"))).toBe(false);
     await shoot("1-web-preview");
+    const dark = (on: boolean) =>
+      evaluate(`document.documentElement.classList.toggle("dark-mode", ${on}) ?? true`);
+    await dark(true);
+    await shoot("1-web-preview-dark");
+    await browser("set", "viewport", "390", "844");
+    await shoot("1-web-preview-phone-dark");
+    await dark(false);
+    await shoot("1-web-preview-phone");
+    await browser("set", "viewport", "1280", "860");
 
-    // Its source.
-    await click(
-      `[...document.querySelectorAll('[role="radio"], button')].find((b) => b.textContent.trim() === "Source")`,
-    );
-    await browser(
-      "wait",
-      "--fn",
-      `document.querySelector("main pre")?.textContent.includes("Signups v2")`,
-    );
+    // The page alone: no Source view and no note over it (Frank, 11-05).
+    expect(
+      await evaluate<boolean>(
+        `[...document.querySelectorAll("main button, main [role=radio]")].some((b) => b.textContent.trim() === "Source")`,
+      ),
+    ).toBe(false);
 
     // Version 1: read only, the way back to the latest, and no going back to it.
     await browser("open", pageOf(web.id, "?version=1"));
     await browser("wait", "--fn", `${pageHydrated} && ${text("Viewing version 1")}`);
     expect(await evaluate<boolean>(`${button("Back to latest")} != null`)).toBe(true);
     expect(await evaluate<boolean>(`${button("Go back to this version")} == null`)).toBe(true);
-    await click(
-      `[...document.querySelectorAll('[role="radio"], button')].find((b) => b.textContent.trim() === "Source")`,
-    );
+    // It shows version 1 itself, from a link of its own.
     await browser(
       "wait",
       "--fn",
-      `document.querySelector("main pre")?.textContent.includes("Signups v1")`,
+      `document.querySelector("main iframe") != null && document.querySelector("main iframe").src !== ${JSON.stringify(frame)}`,
     );
     await shoot("2-web-old-version");
     await click(button("Back to latest"));
