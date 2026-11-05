@@ -37,6 +37,12 @@ async function notice(conversationId: string, body: string, system: SystemNotice
   });
 }
 
+/**
+ * The page's words as one line, without the faces a notice draws before each name (task #521): a
+ * face with no picture shows an initial, which would split "assigned it to @coder" in innerText.
+ */
+const pageText = `(() => { const page = document.body.cloneNode(true); page.querySelectorAll("[data-avatar]").forEach((face) => face.remove()); return page.textContent.replace(/\\s+/g, " "); })()`;
+
 test("notices read in Chinese in the stream and the sidebar, and in English under /", async () => {
   const name = `e2e-notices-${suffix}`;
   const channelId = await fx.createChannel(name);
@@ -74,15 +80,15 @@ test("notices read in Chinese in the stream and the sidebar, and in English unde
   await evaluate(
     `[...document.querySelectorAll("button")].find((b) => /任务更新/.test(b.textContent ?? ""))?.click()`,
   );
-  await until(`document.body.innerText.includes("把任务 #4「修复登录」指派给了 @coder")`, 10_000);
+  await until(`${pageText}.includes("把任务 #4「修复登录」指派给了 @coder")`, 10_000);
   await fx.screenshot("zh-stream-expanded.png");
-  const text = await evaluate<string>("document.body.innerText");
+  const text = await evaluate<string>(pageText);
   expect(text).toContain("📋 新建了 2 个任务：#4「修复登录」、#5「Ship it」");
   expect(text).toContain("🔄 Coder 把任务 #4「修复登录」移到了进行中");
   // The sidebar row's preview is the latest notice, in Chinese too.
   expect(text).toContain(`Frank An 把 @coder 设为 #${name} 的协调员`);
 
   await fx.open(channelId);
-  await until(`document.body.innerText.includes("Frank An made @coder the coordinator")`, 60_000);
+  await until(`${pageText}.includes("Frank An made @coder the coordinator")`, 60_000);
   await fx.screenshot("en-stream.png");
 }, 240_000);
