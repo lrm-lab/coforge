@@ -105,7 +105,9 @@ test("the default CoForge runtime is elided like the Pi runtime it runs", async 
 
 test("a runtime that does not report compaction is never left short", async () => {
   const { contexts, check } = setup();
-  contexts.newContext("agent-a", "devin");
+  // A provider this build does not know: every known adapter now reports compaction, and an
+  // unknown one must never be treated as having cut its context.
+  contexts.newContext("agent-a", "future-runtime");
   for (const _ of [1, 2]) {
     const { messages } = await check();
     expect(messages.map((m) => m.senderDescription)).toEqual(["Staff engineer", "Staff engineer"]);

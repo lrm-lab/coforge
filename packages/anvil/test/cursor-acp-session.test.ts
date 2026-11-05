@@ -495,3 +495,15 @@ test("a launch against cursor-agent below the ACP floor is refused without spawn
     await f.cleanup();
   }
 });
+
+test("initialize advertises the compaction capability, so an agent may report one", async () => {
+  const f = await fixture();
+  try {
+    const session = await f.provider.createAgentSession(options(f.cwd) as never);
+    const initialize = (await f.requests()).find((request) => request.method === "initialize");
+    expect(initialize?.params?.clientCapabilities).toEqual({ session: { compaction: {} } });
+    await session.dispose();
+  } finally {
+    await f.cleanup();
+  }
+});

@@ -1,4 +1,5 @@
 export { DshProvider } from "./provider";
+export { DshTurnEvents } from "./update-events";
 export { DSH_MISSING_KEY_MESSAGE } from "./session";
 export type { DshRuntimeHost, DshProviderOptions, DshLaunchFiles } from "./host";
 export {

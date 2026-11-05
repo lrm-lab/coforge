@@ -88,6 +88,15 @@ export class DevinTurnEvents {
         }
         return events.length ? events : [{ type: "progress", source: "devin_tool_call_update" }];
       }
+      case "compaction_update":
+        // UNSTABLE in ACP: an agent sends this only after the client advertised
+        // `session.compaction` (see `acp/connection.ts`), and not every agent implements it. A
+        // repeated "in_progress" is de-duped into one episode by the daemon core.
+        if (update.status === "in_progress") return [{ type: "compaction-started" }];
+        if (update.status === "completed") return [{ type: "compaction-finished" }];
+        if (update.status === "failed" || update.status === "cancelled")
+          return [{ type: "compaction-interrupted" }];
+        return [];
       default:
         return [];
     }

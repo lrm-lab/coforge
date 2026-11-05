@@ -186,7 +186,10 @@ export class AcpConnection {
       "initialize",
       {
         protocolVersion: 1,
-        clientCapabilities: {},
+        // Clients that advertise the (UNSTABLE) compaction capability are the only ones an agent
+        // may send `compaction_update` to; an agent that does not implement it stays silent, and
+        // that silence is never read as "no compaction happened".
+        clientCapabilities: { session: { compaction: {} } },
         clientInfo: this.options.host.clientInfo,
       },
     );

@@ -31,15 +31,21 @@ async function emittingDirectories(): Promise<ReadonlySet<string>> {
   return directories;
 }
 
-test("an adapter that emits compaction-finished declares reportsCompaction, and only it does", async () => {
+test("declaring compaction reporting requires emitting it; receiving it does not require declaring", async () => {
   const emitters = await emittingDirectories();
-  const mapped = new Set(Object.values(ADAPTER_DIRS).flat());
-  // A shared-directory emitter has no adapter to declare it: fail rather than miss it.
-  for (const directory of emitters) expect(mapped.has(directory), directory).toBe(true);
   for (const provider of RUNTIME_PROVIDER_VALUES) {
     const directories = ADAPTER_DIRS[provider];
     expect(directories, `no adapter directory mapped for ${provider}`).toBeDefined();
     const emits = directories.some((directory) => emitters.has(directory));
-    expect(createCodeAgentProvider(provider).reportsCompaction, provider).toBe(emits);
+    // The declaration enables the context ledger, which lets a read leave out text this context
+    // already showed — so an adapter may claim it only when its provider is observed to emit the
+    // event. The other direction is fine: an ACP adapter maps `compaction_update` without
+    // declaring, its event still re-briefs the memory, and no ledger is enabled.
+    if (createCodeAgentProvider(provider).reportsCompaction === true)
+      expect(emits, provider).toBe(true);
   }
+  // Every ACP adapter can receive the (UNSTABLE) update only because the one shared `initialize`
+  // advertises the capability.
+  const connection = await Bun.file(join(ANVIL_SRC, "acp", "connection.ts")).text();
+  expect(connection).toContain("session: { compaction: {} }");
 }, 30_000);
