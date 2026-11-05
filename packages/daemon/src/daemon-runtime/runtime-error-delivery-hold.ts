@@ -1,3 +1,4 @@
+import { getLogger } from "@logtape/logtape";
 import {
   buildRuntimeErrorActivity,
   fingerprintRuntimeError,
@@ -55,6 +56,8 @@ export type RuntimeErrorDeliveryHoldPorts = Readonly<{
  * turn never trips it. A tripped fence takes the Agent offline: `runtime.ts` ends the process,
  * and the hold is then cleared via the delivery queue's `clearAgent` and this hold's `forget`.
  */
+const logger = getLogger(["coforge", "daemon", "runtime"]);
+
 export class RuntimeErrorDeliveryHold {
   readonly #ports: RuntimeErrorDeliveryHoldPorts;
   readonly #backoff = new RuntimeErrorDeliveryBackoff();
@@ -132,6 +135,14 @@ export class RuntimeErrorDeliveryHold {
       }
       this.#ports.deliveryQueue.hold(record.agentId, record.reason);
       this.#scheduleRelease(record.agentId, record.untilMs);
+      // A restarted Daemon says which waits it picked up: the only line that shows a usage limit
+      // surviving the process without a live failure to point at.
+      logger.info("Runtime backoff restored", {
+        event: "agent.runtime.backoff_restored",
+        agent_id: record.agentId,
+        until_ms: record.untilMs,
+        reason: record.reason,
+      });
     }
   }
 

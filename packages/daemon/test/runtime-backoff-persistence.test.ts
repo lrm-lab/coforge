@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { RUNTIME_ERROR_CLASS } from "#src/agent-runtime/runtime-error-classification";
 import { RuntimeErrorDeliveryHold } from "#src/daemon-runtime/runtime-error-delivery-hold";
 import { AgentRuntimeBackoffStore } from "#src/persistence/agent-runtime-backoff-store";
+import { captureDaemonLogs } from "./log-capture";
 import { escapePathIdentity } from "#src/persistence/path-scope";
 
 const HOUR_MS = 60 * 60_000;
@@ -81,17 +82,29 @@ function holdWith(records: Parameters<RuntimeErrorDeliveryHold["restore"]>[0]) {
   return { hold, held, cleared, saved };
 }
 
-test("restoring a live wait holds the Agent's deliveries again and re-arms its release", () => {
+test("restoring a live wait holds the Agent's deliveries again and re-arms its release", async () => {
   jest.useFakeTimers();
   const untilMs = Date.now() + HOUR_MS;
-  const { held, cleared } = holdWith([
-    { agentId: "agent-a", untilMs, reason: "rate_limit_backoff" },
-  ]);
-  expect(held.get("agent-a")).toBe("rate_limit_backoff");
-  expect(cleared).toEqual([]);
-  jest.advanceTimersByTime(HOUR_MS + 1);
-  expect(held.has("agent-a")).toBe(false);
-  expect(cleared).toEqual(["agent-a"]);
+  const { records } = await captureDaemonLogs(async () => {
+    const { held, cleared } = holdWith([
+      { agentId: "agent-a", untilMs, reason: "rate_limit_backoff" },
+    ]);
+    expect(held.get("agent-a")).toBe("rate_limit_backoff");
+    expect(cleared).toEqual([]);
+    jest.advanceTimersByTime(HOUR_MS + 1);
+    expect(held.has("agent-a")).toBe(false);
+    expect(cleared).toEqual(["agent-a"]);
+  });
+  // The one line that shows a wait survived the process without a live failure behind it.
+  expect(
+    records.find((record) => record.properties.event === "agent.runtime.backoff_restored")
+      ?.properties,
+  ).toEqual({
+    event: "agent.runtime.backoff_restored",
+    agent_id: "agent-a",
+    until_ms: untilMs,
+    reason: "rate_limit_backoff",
+  });
 });
 
 test("restoring a wait that ended while the Daemon was down clears it without holding", () => {
