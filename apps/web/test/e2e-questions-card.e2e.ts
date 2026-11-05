@@ -332,11 +332,10 @@ test("a questions card takes an answer for every question, then sends them at on
     await browser("wait", "--fn", shown("agent"));
     await browser("click", '[data-e2e="back"]');
     await browser("wait", "--fn", shown("webhook"));
-    // ← → still turn them from anywhere on the card.
-    await evaluate(
-      `(${card}.querySelector("[data-question] p").setAttribute("data-e2e", "prompt"), true)`,
-    );
-    await browser("click", '[data-e2e="prompt"]');
+    // ← → still turn them from anywhere on the card. Focus goes to the question itself rather
+    // than by a click on its words: on a runner with no mouse (`hover: none`, CI's Linux Chrome)
+    // the app takes the touch layout, where a tap on a message opens its action sheet.
+    await evaluate(`(${card}.querySelector("[data-question]").focus(), true)`);
     await browser("press", "ArrowRight");
     await browser("wait", "--fn", shown("agent"));
     await browser("press", "ArrowLeft");
