@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { AlertCircle, Pencil01 } from "@untitledui/icons";
+import type { OpenPersonProfile } from "#src/features/agents/profile-panel/open-agent-profile";
 import { FocusScope, useFocusManager } from "react-aria";
 import { Button as AriaButton } from "react-aria-components";
 import { CHOICE_OTHER_OPTION_ID, CHOICE_OTHER_TEXT_MAX_LENGTH } from "@lrm/coforge-sdk/agent";
@@ -41,6 +42,7 @@ export function ChoiceActionCard({
   cancelling,
   onPick,
   onCancel,
+  onOpenPersonProfile,
 }: {
   view: ChoiceView;
   error: string;
@@ -49,6 +51,8 @@ export function ChoiceActionCard({
    * person's own answer is `_other` with their words. */
   onPick: (optionId: string, text?: string) => Promise<void>;
   onCancel: () => void;
+  /** Opens a person's profile from the card, where the conversation can. */
+  onOpenPersonProfile?: OpenPersonProfile;
 }) {
   const [picking, setPicking] = useState<string>();
   // The last pick sent, kept so a failure can name the row it was and send it again.
@@ -146,6 +150,7 @@ export function ChoiceActionCard({
             onPick={pick}
             onRetry={retry}
             onCancel={onCancel}
+            onOpenPersonProfile={onOpenPersonProfile}
           />
         </FocusScope>
       ) : (
@@ -168,6 +173,7 @@ function PendingChoice({
   onRetry,
   onCancel,
   error,
+  onOpenPersonProfile,
 }: {
   view: ChoiceView;
   picking?: string;
@@ -179,6 +185,7 @@ function PendingChoice({
   onPick: (pick: Pick) => Promise<void>;
   onRetry: () => void;
   onCancel: () => void;
+  onOpenPersonProfile?: OpenPersonProfile;
 }) {
   const canAnswer = view.canCommit;
   // Whom it waits on, for anyone but the asked person; withdrawing is for the Agent's owner or an
@@ -308,7 +315,7 @@ function PendingChoice({
       )}
       {(waitingOn || withdrawable) && (
         <div className="flex items-center gap-3 px-2.5 pt-2 pb-1">
-          {waitingOn && <WaitingOn asked={waitingOn} />}
+          {waitingOn && <WaitingOn asked={waitingOn} onOpenPersonProfile={onOpenPersonProfile} />}
           {withdrawable && (
             <Button
               size="sm"

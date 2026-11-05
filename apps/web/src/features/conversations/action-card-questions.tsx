@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { AlertCircle, SlashCircle01 } from "@untitledui/icons";
+import type { OpenPersonProfile } from "#src/features/agents/profile-panel/open-agent-profile";
 import { CHOICE_OTHER_OPTION_ID } from "@lrm/coforge-sdk/agent";
 
 import { Button } from "#src/components/base/buttons/button";
@@ -51,6 +52,7 @@ export function QuestionsActionCard({
   cancelling,
   onSubmit,
   onCancel,
+  onOpenPersonProfile,
 }: {
   view: QuestionsView;
   error: string;
@@ -58,6 +60,8 @@ export function QuestionsActionCard({
   /** Resolves once the answers are stored (or failed); the card then shows what the server says. */
   onSubmit: (answers: QuestionsAnswer[]) => Promise<void>;
   onCancel: () => void;
+  /** Opens a person's profile from the card, where the conversation can. */
+  onOpenPersonProfile?: OpenPersonProfile;
 }) {
   // Drawn afresh (desktop to phone, the channel left and opened again), it picks up where it was.
   const [drafts, setDrafts] = useState(() => keptDrafts(view.messageId));
@@ -99,7 +103,7 @@ export function QuestionsActionCard({
     <div className="flex flex-col gap-2 px-2.5 pb-1">
       {errorLine}
       <div className="flex items-center gap-3">
-        {waitingOn && <WaitingOn asked={waitingOn} />}
+        {waitingOn && <WaitingOn asked={waitingOn} onOpenPersonProfile={onOpenPersonProfile} />}
         {withdrawable && (
           <Button
             size="sm"

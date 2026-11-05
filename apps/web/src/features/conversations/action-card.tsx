@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
+import type { OpenPersonProfile } from "#src/features/agents/profile-panel/open-agent-profile";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { m } from "#src/paraglide/messages";
@@ -63,7 +64,14 @@ const KNOWN_KINDS: Record<ActionCardView["kind"], true> = {
  * A card of a kind this page does not know (one a newer server sends to an older page): said so,
  * in gray, with nothing to press, never drawn as another kind's card (task #515).
  */
-export function ActionCard({ card }: { card: ActionCardView }) {
+export function ActionCard({
+  card,
+  onOpenPersonProfile,
+}: {
+  card: ActionCardView;
+  /** Opens a person's profile from a card that names them, where the conversation can. */
+  onOpenPersonProfile?: OpenPersonProfile;
+}) {
   if (!Object.hasOwn(KNOWN_KINDS, card.kind))
     return (
       <p
@@ -73,10 +81,16 @@ export function ActionCard({ card }: { card: ActionCardView }) {
         {m.action_card_unknown()}
       </p>
     );
-  return <KnownActionCard card={card} />;
+  return <KnownActionCard card={card} onOpenPersonProfile={onOpenPersonProfile} />;
 }
 
-function KnownActionCard({ card }: { card: ActionCardView }) {
+function KnownActionCard({
+  card,
+  onOpenPersonProfile,
+}: {
+  card: ActionCardView;
+  onOpenPersonProfile?: OpenPersonProfile;
+}) {
   const [view, setView] = useState(card);
   useEffect(() => setView(card), [card]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -326,6 +340,7 @@ function KnownActionCard({ card }: { card: ActionCardView }) {
         cancelling={cancelling}
         onSubmit={submitQuestions}
         onCancel={() => void doCancel()}
+        onOpenPersonProfile={onOpenPersonProfile}
       />
     );
   if (view.kind === "choice")
@@ -336,6 +351,7 @@ function KnownActionCard({ card }: { card: ActionCardView }) {
         cancelling={cancelling}
         onPick={pickChoice}
         onCancel={() => void doCancel()}
+        onOpenPersonProfile={onOpenPersonProfile}
       />
     );
   return (

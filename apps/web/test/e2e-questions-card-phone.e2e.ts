@@ -161,6 +161,16 @@ test("a questions card on a phone: an @mention to wait on, keys to press, the ne
     await touch("touchEnd", at.x - 120);
     await until(() => page.evaluate<boolean>(shown("checks")));
     expect(await height()).toBe(before);
+
+    // The @mention opens whom it names, as one in a message does (task #563).
+    await page.evaluate(
+      `[...${card}.querySelectorAll(".message-markdown-mention")].find((chip) => chip.textContent === "@Raft QA").click()`,
+    );
+    await until(() =>
+      page.evaluate<boolean>(
+        `new URLSearchParams(location.search).get("profile") === "user:${asked.id}"`,
+      ),
+    );
   } finally {
     await browser.close();
     await db.conversation.deleteMany({ where: { id: channel.id } }).catch(() => undefined);
