@@ -116,6 +116,7 @@ test("the runtime reports login status after its inventory, then again on demand
     "unavailable",
     "unavailable",
     "unavailable",
+    "unavailable",
   ]);
 
   // Signed in with its own CLI on the Computer: opening its page asks for one more read.
@@ -125,6 +126,7 @@ test("the runtime reports login status after its inventory, then again on demand
   expect(daemon.reports[1]!.runtimes.map((entry) => entry.state)).toEqual([
     "unavailable",
     "logged_in",
+    "unavailable",
     "unavailable",
     "unavailable",
     "unavailable",

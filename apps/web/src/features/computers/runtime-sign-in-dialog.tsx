@@ -498,6 +498,8 @@ function failureText(failure: LoginFailure, runtime: string): string {
         return m.runtime_auth_codex_start_failed({ runtime });
       if (failure.detail === "antigravity_no_desktop")
         return m.runtime_auth_antigravity_no_desktop();
+      if (failure.detail === "droid_code_unavailable")
+        return m.runtime_auth_droid_code_unavailable();
       switch (failure.reason) {
         case "timed_out":
           return m.runtime_auth_failed_timed_out();

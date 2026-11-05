@@ -212,3 +212,9 @@ test("DSH assigned skills use its native project agents root", () => {
     "/workspace/agent/.agents/skills",
   );
 });
+
+test("Droid assigned skills use its native project skills root", () => {
+  expect(assignedSkillsDirectory("droid", "/workspace/agent")).toBe(
+    "/workspace/agent/.factory/skills",
+  );
+});

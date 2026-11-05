@@ -10,6 +10,7 @@ export const RUNTIME_AUTH_PROVIDERS = [
   RUNTIME_PROVIDER.KIRO,
   RUNTIME_PROVIDER.DEVIN,
   RUNTIME_PROVIDER.ANTIGRAVITY,
+  RUNTIME_PROVIDER.DROID,
 ] as const;
 export type RuntimeAuthProvider = (typeof RUNTIME_AUTH_PROVIDERS)[number];
 export const RUNTIME_AUTH_LOGIN_FAILURE_REASONS = [
@@ -38,6 +39,8 @@ export const RUNTIME_AUTH_FAILURE_DETAIL_CODES = [
   "codex_login_start_failed",
   /** Antigravity's browser sign-in needs a desktop session the Computer does not have. */
   "antigravity_no_desktop",
+  /** Droid's interactive login printed no device code in time; the page points at the CLI. */
+  "droid_code_unavailable",
 ] as const;
 export type RuntimeAuthFailureDetailCode = (typeof RUNTIME_AUTH_FAILURE_DETAIL_CODES)[number];
 /** A login `info` event that carries a token instead of prose: the Computer page words it. */

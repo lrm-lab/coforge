@@ -30,6 +30,7 @@
   "runtime_auth_antigravity_personal": "个人 Google 账号",
   "runtime_auth_antigravity_business": "Gemini 企业版",
   "runtime_auth_antigravity_no_desktop": "这台 Computer 没有桌面会话，登录页打不开。请直接在那台 Computer 上登录。",
+  "runtime_auth_droid_code_unavailable": "Droid 没有给出验证码。请在那台 Computer 上运行 droid 并输入 /login，或在它的环境里设置 FACTORY_API_KEY。",
   "runtime_auth_codex_start_failed": "{runtime} 在那台 Computer 上没能启动登录。请重试；如果一直失败，请在那台 Computer 上用 Codex 命令行登录。",
   "runtime_auth_failed_not_logged_in": "登录流程结束了，但 {runtime} 仍未登录。",
   "runtime_auth_failed_interaction": "{runtime} 需要的操作这里无法显示，请在那台 Computer 上登录。",

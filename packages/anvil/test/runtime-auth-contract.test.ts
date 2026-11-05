@@ -16,6 +16,7 @@ test("runtime auth is limited to providers with a supported status surface", () 
     "command-code",
     "devin",
     "antigravity",
+    "droid",
   ]);
   expect(isRuntimeAuthProvider("antigravity")).toBe(true);
   expect(isRuntimeAuthProvider("claude-code")).toBe(true);
@@ -23,6 +24,7 @@ test("runtime auth is limited to providers with a supported status surface", () 
   expect(isRuntimeAuthProvider("command-code")).toBe(true);
   expect(isRuntimeAuthProvider("devin")).toBe(true);
   expect(isRuntimeAuthProvider("pi")).toBe(false);
+  expect(isRuntimeAuthProvider("droid")).toBe(true);
   expect(isRuntimeAuthProvider("unknown")).toBe(false);
 });
 

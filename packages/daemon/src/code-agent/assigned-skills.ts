@@ -35,8 +35,10 @@ export function assignedSkillsDirectory(
     case RUNTIME_PROVIDER.DSH:
     case RUNTIME_PROVIDER.ANTIGRAVITY:
     case RUNTIME_PROVIDER.DEVIN:
-    case RUNTIME_PROVIDER.DROID:
       return join(cwd, ".agents", "skills");
+    case RUNTIME_PROVIDER.DROID:
+      // Native project scope: https://docs.factory.com/docs/harness/skills
+      return join(cwd, ".factory", "skills");
     case RUNTIME_PROVIDER.COMMAND_CODE:
       // Native project root from Command Code CLI 1.87.3 `getProjectSkillsDir`
       // (`cmd skills add`). `.agents/skills` is only the compat scan location.

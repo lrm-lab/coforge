@@ -159,11 +159,11 @@ export async function listAgentSkills(options: {
         ];
       break;
     case RUNTIME_PROVIDER.DROID:
-      // Droid 1.4.1 ships built-in skills (`/skills`), and its workspace/user skill directories
-      // are not documented; the scan uses the Agent Skills standard location the other CLIs here
-      // share until the runtime's own directory is verified on a real launch.
-      locals = [local(".agents/skills")];
-      if (home) globals = [personal(".agents/skills")];
+      // https://docs.factory.com/docs/harness/skills: project `<repo>/.factory/skills`, personal
+      // `~/.factory/skills`, plus the `.agents/skills` compatibility convention in both scopes.
+      // Verified on 1.4.1: a skill in each project directory appears in the session's skill list.
+      locals = [local(".factory/skills"), local(".agents/skills")];
+      if (home) globals = [personal(".factory/skills"), personal(".agents/skills")];
       break;
     case RUNTIME_PROVIDER.PI:
       locals = [local(".pi/skills", "pi"), local(".agents/skills")];

@@ -64,6 +64,7 @@ describe("the Workspace runtime's login status reporter", () => {
       { provider: "command-code", state: "unavailable", unavailableReason: "not_installed" },
       { provider: "devin", state: "unavailable", unavailableReason: "not_installed" },
       { provider: "antigravity", state: "unavailable", unavailableReason: "not_installed" },
+      { provider: "droid", state: "unavailable", unavailableReason: "not_installed" },
     ]);
   });
 
@@ -94,6 +95,7 @@ describe("the Workspace runtime's login status reporter", () => {
       "unavailable",
       "unavailable",
       "unavailable",
+      "unavailable",
     ]);
 
     await reporter.inventoryObserved([
@@ -104,6 +106,7 @@ describe("the Workspace runtime's login status reporter", () => {
     expect(sent[2]!.runtimes.map((entry) => entry.state)).toEqual([
       "logged_out",
       "logged_out",
+      "unavailable",
       "unavailable",
       "unavailable",
       "unavailable",

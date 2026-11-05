@@ -30,8 +30,9 @@ import { CursorAcpProvider } from "@lrm/coforge-anvil/cursor";
 import { cursorAcpRuntimeHost } from "#src/code-agent/cursor/acp-host";
 import { OpenCodeAcpProvider } from "@lrm/coforge-anvil/opencode";
 import { openCodeAcpRuntimeHost } from "#src/code-agent/opencode/acp-host";
-import { DroidAcpProvider } from "@lrm/coforge-anvil/droid";
+import { DroidAcpProvider, DroidRuntimeAuthAdapter } from "@lrm/coforge-anvil/droid";
 import { droidAcpRuntimeHost } from "#src/code-agent/droid/acp-host";
+import { createDroidAuthHost } from "#src/code-agent/droid/auth-host";
 import { createKiroAuthHost } from "#src/code-agent/kiro/auth-host";
 import { KiroRuntimeAuthAdapter } from "@lrm/coforge-anvil/kiro";
 import { KiroProvider } from "@lrm/coforge-anvil/kiro";
@@ -91,6 +92,10 @@ export function createRuntimeAuthAdapter(
         createAntigravityAuthHost({ command: [executable], platform: options.platform }),
       );
     }
+    case RUNTIME_PROVIDER.DROID:
+      return new DroidRuntimeAuthAdapter({
+        host: createDroidAuthHost({ platform: options.platform }),
+      });
     case RUNTIME_PROVIDER.CLAUDE_CODE:
       return new ClaudeRuntimeAuthAdapter({
         host: claudeAuthHost,
