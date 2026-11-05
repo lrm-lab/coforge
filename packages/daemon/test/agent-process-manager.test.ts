@@ -213,13 +213,7 @@ describe("AgentProcessManager", () => {
         identity: { name: "scout", displayName: "Scout", description: "Reviews pull requests." },
       });
       const content = await readFile(join(workspace, "MEMORY.md"), "utf8");
-      expect(content).toBe(
-        buildInitialMemoryMd({
-          name: "scout",
-          displayName: "Scout",
-          description: "Reviews pull requests.",
-        }),
-      );
+      expect(content).toBe(buildInitialMemoryMd({ name: "scout", displayName: "Scout" }));
     } finally {
       await manager.shutdown();
       await rm(root, { recursive: true, force: true });

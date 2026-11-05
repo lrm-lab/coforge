@@ -51,9 +51,7 @@ test("seedAgentMemory writes MEMORY.md into the Agent workspace with owner-only 
     await seedAgentMemory(workspace, { name: "scout" });
     const memoryPath = join(workspace, "MEMORY.md");
     const content = await readFile(memoryPath, "utf8");
-    expect(content).toBe(
-      buildInitialMemoryMd({ name: "scout" }),
-    );
+    expect(content).toBe(buildInitialMemoryMd({ name: "scout" }));
     const stats = await stat(memoryPath);
     expect(stats.mode & 0o777).toBe(0o600);
     // The seed no longer creates a chronological work log: the facts live in MEMORY.md.

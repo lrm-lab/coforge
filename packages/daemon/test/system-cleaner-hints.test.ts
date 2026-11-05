@@ -19,6 +19,11 @@ import {
 
 afterEach(cleanupHarnesses);
 
+/** The inbox lists newest first; two mints in the same turn can tie or differ by a millisecond,
+ * so an assertion about content sorts instead of pinning that order. */
+const byItemId = <T extends { itemId: string }>(items: T[]): T[] =>
+  [...items].sort((left, right) => left.itemId.localeCompare(right.itemId));
+
 describe("SystemCleaner Active Context hint", () => {
   test("measures notes/active-context.md against its own limit and hints in its own words", async () => {
     const { cleaner, measured, measuredPaths, wakes, items, period, idle } = await harness();
@@ -33,7 +38,7 @@ describe("SystemCleaner Active Context hint", () => {
       join("/agents-root", OWNER, "notes", "active-context.md"),
       join("/agents-root", OWNER, "notes", "active-context.md"),
     ]);
-    expect(await items()).toEqual([
+    expect(byItemId(await items())).toEqual([
       expect.objectContaining({
         itemId: ACTIVE_CONTEXT_ITEM,
         appId: "system.cleaner",
@@ -56,7 +61,7 @@ describe("SystemCleaner Active Context hint", () => {
     measured.activeContext = 5 * KIB;
     await period();
     await idle();
-    expect((await items()).map((item) => item.itemId)).toEqual([
+    expect(byItemId(await items()).map((item) => item.itemId)).toEqual([
       ACTIVE_CONTEXT_ITEM,
       DISK_ITEM,
       MEMORY_ITEM,
@@ -65,7 +70,7 @@ describe("SystemCleaner Active Context hint", () => {
     // The Active Context is trimmed; MEMORY.md's hint must stay.
     measured.activeContext = 4 * KIB;
     await period();
-    expect((await items()).map((item) => item.itemId)).toEqual([DISK_ITEM, MEMORY_ITEM]);
+    expect(byItemId(await items()).map((item) => item.itemId)).toEqual([DISK_ITEM, MEMORY_ITEM]);
 
     // Each file's limit is its own: 5 KiB is over the Active Context's 4 KiB but under
     // MEMORY.md's 64 KiB.
@@ -73,7 +78,10 @@ describe("SystemCleaner Active Context hint", () => {
     measured.activeContext = 5 * KIB;
     await period();
     await idle();
-    expect((await items()).map((item) => item.itemId)).toEqual([ACTIVE_CONTEXT_ITEM, DISK_ITEM]);
+    expect(byItemId(await items()).map((item) => item.itemId)).toEqual([
+      ACTIVE_CONTEXT_ITEM,
+      DISK_ITEM,
+    ]);
   });
 });
 
