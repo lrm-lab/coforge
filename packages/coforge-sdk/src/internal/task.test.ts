@@ -68,6 +68,16 @@ test("validateTaskRequest accepts a relational amend and still rejects an empty 
   // A project amendment alone is an amendment too (task #562).
   expect(() => validateTaskRequest({ ...amend, project: "coforge" })).not.toThrow();
   expect(() => validateTaskRequest({ ...amend, project: null })).not.toThrow();
+  // So is a label edit: `task update --label` and `task amend --label -name` send these alone.
+  expect(() => validateTaskRequest({ ...amend, labels: ["bug"] })).not.toThrow();
+  expect(() => validateTaskRequest({ ...amend, removeLabels: ["bug"] })).not.toThrow();
+  expect(() =>
+    validateTaskRequest({ ...amend, labels: ["bug"], labelDescription: "why" }),
+  ).not.toThrow();
+  // A label description on its own edits nothing, like the server's amendTask.
+  expect(() => validateTaskRequest({ ...amend, labelDescription: "why" })).toThrow(
+    "missing Task operation argument",
+  );
   expect(() => validateTaskRequest(amend)).toThrow("missing Task operation argument");
 });
 

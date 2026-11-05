@@ -55,6 +55,18 @@ const isIsoDate = (value: unknown): value is string =>
   /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$/.test(value) &&
   Number.isFinite(Date.parse(value));
 
+/** Every `TaskCommand` field an `amend` may carry as its whole payload; the server's amendTask
+ * reads exactly these (a `labelDescription` alone edits nothing, so it is not here). */
+const amendFields = [
+  "title",
+  "description",
+  "blockedBy",
+  "parent",
+  "labels",
+  "removeLabels",
+  "project",
+] as const satisfies readonly (keyof TaskCommand)[];
+
 function validReceipt(value: unknown): value is TaskResourceReceipt {
   if (!value || typeof value !== "object") return false;
   const receipt = value as Record<string, unknown>;
@@ -218,14 +230,7 @@ export function validateTaskRequest(value: TaskRequest): void {
       value.number !== undefined &&
       value.numbers === undefined &&
       !messages &&
-      (value.title !== undefined ||
-        value.description !== undefined ||
-        // A relational amendment (`--blocked-by`, `--parent`) carries neither title nor
-        // description; the server's amendTask treats it as an amendment of its own.
-        value.blockedBy !== undefined ||
-        value.parent !== undefined ||
-        // A project amendment alone counts too: `project: null` clears it (task #562).
-        value.project !== undefined)) ||
+      amendFields.some((field) => value[field] !== undefined)) ||
     (value.operation === "receipt" &&
       value.number !== undefined &&
       value.numbers === undefined &&
