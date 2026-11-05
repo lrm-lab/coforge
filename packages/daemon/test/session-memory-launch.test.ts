@@ -8,6 +8,7 @@ import type { WorkspaceConfig } from "#src/daemon-runtime/runtime";
 import { DaemonRuntime } from "#src/daemon-runtime/runtime";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
+import { captureDaemonLogs } from "./log-capture";
 
 const workspaceRoot = join(realpathSync(tmpdir()), `coforge-session-memory-${crypto.randomUUID()}`);
 const connection: WorkspaceConfig = {
@@ -148,4 +149,43 @@ test("a finished compaction queues the block again for the next input", async ()
   } finally {
     await subject.stop();
   }
+});
+
+test("every launch logs its memory decision, with the branch that made it", async () => {
+  const decision = async (start: (runtime: DaemonRuntime) => Promise<unknown>) => {
+    const { records } = await captureDaemonLogs(async () => {
+      const subject = await harness();
+      try {
+        await start(subject.runtime);
+      } finally {
+        await subject.stop();
+      }
+    });
+    return records.find((record) => record.properties.event === "agent.runtime.session_memory")
+      ?.properties;
+  };
+
+  expect(
+    await decision(async (runtime) => {
+      await runtime.startAgent("agent-a", config);
+    }),
+  ).toMatchObject({ injected: true, reason: "no_session", had_session_id: false });
+  expect(
+    await decision(async (runtime) => {
+      await runtime.startAgent("agent-a", config, "known-session");
+    }),
+  ).toMatchObject({ injected: false, reason: "resume", had_session_id: true });
+  expect(
+    await decision(async (runtime) => {
+      await runtime.startAgent(
+        "agent-a",
+        config,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        "create",
+      );
+    }),
+  ).toMatchObject({ injected: true, reason: "create", session_mode: "create" });
 });

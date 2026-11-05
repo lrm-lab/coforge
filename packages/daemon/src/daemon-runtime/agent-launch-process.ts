@@ -6,6 +6,7 @@ import { agentRuntimeContextEnvironment } from "#src/code-agent/environment";
 import { parseAssignedSkillPacks } from "#src/code-agent/assigned-skills";
 import { agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
 import { ProviderProgress } from "./stalled-recovery";
+import { noteSessionMemory } from "./session-memory-log";
 import { LaunchPhaseTiming } from "./launch-phase-timing";
 import { reportLaunchSession } from "./launch-session-report";
 import {
@@ -214,13 +215,15 @@ export async function launchAgentProcess(
     const memoryBlock = freshSession
       ? await ports.attachSessionMemory(agentId).catch(() => false)
       : false;
-    if (freshSession)
-      logger.info("Agent fresh session memory block", {
-        event: "agent.runtime.session_memory",
-        agent_id: agentId,
-        launch_id: launch.launchId,
-        has_memory_block: memoryBlock === true,
-      });
+    noteSessionMemory({
+      agentId,
+      launchId: launch.launchId,
+      freshSession,
+      injected: memoryBlock === true,
+      recycled: recycled !== undefined,
+      sessionMode: reference.sessionMode,
+      hadSessionId: reference.sessionId !== undefined,
+    });
     if (parseAssignedSkillPacks(launchConfig.assignedSkillPacks).includes("weekly-report-collect"))
       ports.collectSkillAgents.add(agentId);
     if (ports.stops.stopping(agentId)) {
