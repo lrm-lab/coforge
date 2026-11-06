@@ -206,6 +206,13 @@ for (const width of [1440, 390])
     );
     await browser("wait", "--fn", `${scroller} != null`);
     await browser("eval", "document.fonts.ready");
+    // The feed must overflow before the scroll assertions mean anything: measured while its
+    // rows are still loading, the scroll-up is a no-op and the arriving rows pin the bottom.
+    await browser(
+      "wait",
+      "--fn",
+      `(() => { const s = ${scroller}; return s !== null && s.scrollHeight - s.clientHeight > 800; })()`,
+    );
     const opened = await settledDistance();
     await browser("screenshot", join(artifacts, `${width}-opened.png`));
 
@@ -271,6 +278,11 @@ for (const width of [1440, 390])
       );
       await browser("wait", "--fn", `${scroller} != null`);
       await browser("eval", "document.fonts.ready");
+      await browser(
+        "wait",
+        "--fn",
+        `(() => { const s = ${scroller}; return s !== null && s.scrollHeight - s.clientHeight > 800; })()`,
+      );
       await settledDistance();
       await browser(
         "eval",
@@ -300,6 +312,11 @@ test("390px: rows leaving the top of a full feed leave the row being read in pla
   );
   await browser("wait", "--fn", `${scroller} != null`);
   await browser("eval", "document.fonts.ready");
+  await browser(
+    "wait",
+    "--fn",
+    `(() => { const s = ${scroller}; return s !== null && s.scrollHeight - s.clientHeight > 800; })()`,
+  );
   await settledDistance();
   // Safari has no native scroll anchoring (caniuse: css-overflow-anchor), and Chromium's alone
   // let QA's reader drop to the bottom; switched off here as in Safari, the pane holds the row.
