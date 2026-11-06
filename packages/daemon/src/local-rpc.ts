@@ -30,7 +30,11 @@ import {
   thrownMessage,
 } from "@lrm/coforge-sdk/internal";
 import type { DaemonConfig } from "#src/daemon-runtime/runtime";
-import type { DaemonCredentialStore } from "#src/credentials/credential-store";
+import {
+  isComputerApiKey,
+  isLegacyDaemonApiKey,
+  type DaemonCredentialStore,
+} from "#src/credentials/credential-store";
 import type { DaemonConfigStore } from "#src/persistence/daemon-config";
 import { COFORGE_DAEMON_SERVER_URL } from "#src/connection/built-server";
 import { WorkspaceLifecycleSupersededError } from "#src/supervisor/lifecycle-superseded-error";
@@ -380,7 +384,13 @@ class LocalRpcDispatcher {
     const { workspaceId, computerId } = request;
     const saved = await credentials.load(workspaceId, computerId);
     const previousConfig = await configStore?.load();
-    const credentialChanged = saved !== request.daemonApiKey;
+    // A `dk_` never displaces a stored `sk_computer`: the attach env's key can already be
+    // revoked by a concurrent confirm-key, and persisting it parks the Workspace on
+    // credential_revoked for good (task #572). An `sk_computer` request still replaces —
+    // that is a rotation, not a stale attach.
+    const credentialChanged =
+      saved !== request.daemonApiKey &&
+      !(saved !== null && isComputerApiKey(saved) && isLegacyDaemonApiKey(request.daemonApiKey));
     if (credentialChanged) await credentials.save(workspaceId, computerId, request.daemonApiKey);
     const connection = {
       workspaceId,

@@ -165,6 +165,8 @@ export {
 export {
   InMemoryDaemonCredentialStore,
   FileDaemonCredentialStore,
+  isComputerApiKey,
+  isLegacyDaemonApiKey,
   type DaemonCredentialStore,
 } from "#src/credentials/credential-store";
 export type { AgentMessageHttpClient } from "#src/connection/agent-http-clients";

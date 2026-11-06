@@ -1,6 +1,7 @@
 import {
   FileBindingStore,
   FileDaemonCredentialStore,
+  isComputerApiKey,
   workspaceStateDirectory,
 } from "@lrm/coforge-daemon";
 import { CONTAINER_BINDING_ENV_KEYS } from "./container-binding-env";
@@ -27,6 +28,7 @@ export async function prepareContainerBinding(
   env: Record<string, string | undefined>,
   stateDirectory: string,
   expectedServerUrl?: string,
+  options?: { seedOnly?: boolean },
 ): Promise<boolean> {
   const present = CONTAINER_BINDING_ENV_KEYS.some((key) => text(env[key]) !== undefined);
   if (!present) return false;
@@ -60,14 +62,16 @@ export async function prepareContainerBinding(
   const credentials = new FileDaemonCredentialStore(
     workspaceStateDirectory(stateDirectory, workspaceId),
   );
-  // A re-attach arrives with a fresh `dk_` in the environment — a workspace that already swapped to
-  // its own `sk_computer` keeps it only while that key is confirmed. An unconfirmed `sk_computer`
-  // could already be revoked server-side (a lost confirmation), so it must not shield the env's
-  // `dk_` that would let `#open` re-swap (task #417).
+  // An `sk_computer` — confirmed or not — still authenticates and the child's migrateComputerKey
+  // confirms it on the next connect, so no env `dk_` may replace it: the attach's key could
+  // already be revoked by a concurrent confirm-key, and persisting it parks the Workspace on
+  // credential_revoked for good (task #572). `seedOnly` is the foreground restart: its env `dk_`
+  // is the create job's original key, dead since the first confirm, so it only fills an empty
+  // store and never displaces a credential the binding already holds.
   const stored = await credentials.load(workspaceId, computerId);
-  if (stored && (await credentials.isConfirmed(workspaceId, computerId, stored))) {
+  if (stored && (options?.seedOnly === true || isComputerApiKey(stored))) {
     console.log(
-      `[attach-workspace] workspace ${workspaceId} already holds a confirmed sk_computer; keeping it (ignored the attach's dk_)`,
+      `[attach-workspace] workspace ${workspaceId} already holds ${isComputerApiKey(stored) ? "an sk_computer" : "a credential"}; keeping it (ignored the env's dk_)`,
     );
   } else {
     await credentials.save(workspaceId, computerId, daemonApiKey);
@@ -87,14 +91,21 @@ export async function attachRunningWorkspace(
   if (!wrote) return false;
   const workspaceId = text(env.COFORGE_WORKSPACE_ID);
   const computerId = text(env.COFORGE_COMPUTER_ID);
-  const daemonApiKey = text(env.COFORGE_DAEMON_API_KEY);
+  const envKey = text(env.COFORGE_DAEMON_API_KEY);
   const serverHttpUrl = text(env.COFORGE_SERVER_URL)?.replace(/\/+$/, "");
-  if (!workspaceId || !computerId || !daemonApiKey || !serverHttpUrl) return false;
+  if (!workspaceId || !computerId || !envKey || !serverHttpUrl) return false;
+  // Configure must carry the credential the file actually holds: `prepareContainerBinding` may
+  // have kept a confirmed `sk_computer` over the env's `dk_`, and the supervisor's configure
+  // writes whatever key it is handed back over that file — an attach key confirm-key already
+  // revoked would brick the binding (task #572).
+  const stored = await new FileDaemonCredentialStore(
+    workspaceStateDirectory(stateDirectory, workspaceId),
+  ).load(workspaceId, computerId);
   await startWorkspace({
     workspaceId,
     computerId,
     workspaceRoot: CONTAINER_WORKSPACE_ROOT,
-    daemonApiKey,
+    daemonApiKey: stored ?? envKey,
     serverHttpUrl,
   });
   return true;

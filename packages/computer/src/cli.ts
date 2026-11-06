@@ -491,7 +491,9 @@ export async function runComputer(): Promise<void> {
         ),
         foreground: {
           run: async () => {
-            await prepareContainerBinding(process.env, stateDirectory, COFORGE_DAEMON_SERVER_URL);
+            await prepareContainerBinding(process.env, stateDirectory, COFORGE_DAEMON_SERVER_URL, {
+              seedOnly: true,
+            });
             await recordExternalSupervisor(stateDirectory, io.stderr);
             await runMachineSupervisor([
               "--socket",

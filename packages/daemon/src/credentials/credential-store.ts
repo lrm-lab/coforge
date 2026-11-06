@@ -5,6 +5,17 @@ import { join } from "node:path";
 /** What the `.confirmed` marker stores for a key: its hash, never the key itself. */
 const markerFor = (apiKey: string) => new Bun.CryptoHasher("sha256").update(apiKey).digest("hex");
 
+/** Key-kind prefixes a stored credential can hold: `dk_` legacy daemon keys and `sk_computer_`
+ * keys a swap-key issued. An `sk_computer_` authenticates until a later key event revokes it —
+ * confirmed or not — so no writer may replace one with a `dk_` (task #572). */
+export function isComputerApiKey(apiKey: string): boolean {
+  return apiKey.startsWith("sk_computer_");
+}
+
+export function isLegacyDaemonApiKey(apiKey: string): boolean {
+  return apiKey.startsWith("dk_");
+}
+
 /** Daemon-owned storage for the credential used by one cloud connection. */
 export interface DaemonCredentialStore {
   save(workspaceId: string, computerId: string, apiKey: string): Promise<void>;
