@@ -257,6 +257,38 @@ test("Codex reports a repeated bare system error warning once, still erroring ea
   ]);
 });
 
+const bareErrorEvent = (occurredAt: string): AgentRuntimeEvent => ({
+  type: "error",
+  message: "Codex thread entered system error state",
+  occurredAt,
+  providerErrorClass: "CodexThreadSystemError",
+});
+
+test("Codex warns again for a bare system error after the thread leaves the error state", () => {
+  const signals = new CodexTurnSignals("thread-1");
+  const status = (type: string, timestamp: string, activeFlags?: string[]) =>
+    signals.notification(
+      { method: "thread/status/changed", timestamp },
+      { threadId: "thread-1", status: { type, ...(activeFlags ? { activeFlags } : {}) } },
+    );
+  const t = "2026-11-07T00:00:00.000Z";
+  const events = [
+    ...status("systemError", t)!,
+    ...status("active", "2026-11-07T00:01:00.000Z", ["waitingOnApproval"])!,
+    ...status("systemError", "2026-11-07T00:02:00.000Z")!,
+  ];
+  expect(events).toEqual([
+    warning("Codex warning", "Codex thread entered system error state without a reason"),
+    bareErrorEvent(t),
+    warning(
+      "Codex warning",
+      "Codex thread is waiting on approval\nActive flags: waitingOnApproval",
+    ),
+    warning("Codex warning", "Codex thread entered system error state without a reason"),
+    bareErrorEvent("2026-11-07T00:02:00.000Z"),
+  ]);
+});
+
 test("Codex re-warns an identical diagnostic after the repeat window", () => {
   const signals = new CodexTurnSignals("thread-1");
   const diagnostic = (timestamp: string) =>

@@ -164,6 +164,9 @@ export class CodexTurnSignals {
       events.push(error);
       return events;
     }
+    // Any status that is not systemError ends the current error episode, so the next bare
+    // systemError warns again even when the thread only passed through a waiting state.
+    this.#bareErrorWarned = false;
     const flags = Array.isArray(status?.activeFlags)
       ? status.activeFlags.filter((flag) => typeof flag === "string" && WAITING_FLAGS.has(flag))
       : [];
@@ -176,7 +179,6 @@ export class CodexTurnSignals {
       });
     if (status?.type !== "active" || flags.length === 0) {
       this.#waitingSignature = undefined;
-      this.#bareErrorWarned = false;
       return [];
     }
     const signature = [...flags].sort().join(",");
