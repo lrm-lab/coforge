@@ -19,9 +19,8 @@ export type AgentControlExecute = (request: AgentControlRequest) => Promise<void
  * The Start/Stop/Restart/Reset-session/Full-reset state machine behind Agent control,
  * extracted out of `AgentControl` so the Agent detail page and the Agent profile panel's header
  * icon buttons and Actions section can trigger the same actions without duplicating this logic.
- * A caller renders `AgentRestartDialog` (and, for a bulk Stop, `AgentStopDialog`) once per
- * page/panel and wires trigger buttons to the functions this hook returns; one Agent's Stop asks
- * in a `Popconfirm` around its button instead.
+ * A caller renders `AgentRestartDialog` once per page/panel and wires trigger buttons to the
+ * functions this hook returns.
  */
 export function useAgentRuntimeControls({
   agentId,
@@ -96,7 +95,6 @@ export function useAgentRuntimeControls({
   const [stopPending, guardStop] = useSubmitGuard();
   const [startStopError, setStartStopError] = useState<string | null>(null);
   const [startDeferred, setStartDeferred] = useState(false);
-  const [stopConfirmOpen, setStopConfirmOpen] = useState(false);
   const startStopBusy = startPending || stopPending;
 
   function submitStart() {
@@ -115,19 +113,15 @@ export function useAgentRuntimeControls({
   }
 
   /** Stops the Agent; throws when it is refused. Shares the busy guard with Start, so one Stop
-   * runs at a time wherever it was pressed. One Agent's Stop asks first in a popconfirm that shows
-   * the refusal itself, a bulk Stop in the dialog `confirmStop` closes. */
+   * runs at a time wherever it was pressed. Start undoes it, so it does not ask (Frank, 11-06). */
   async function stop() {
     setStartStopError(null);
     setStartDeferred(false);
     await guardStop(() => onExecute({ agentId, action: "stop", requestId: crypto.randomUUID() }));
   }
 
-  function confirmStop() {
-    void stop().then(
-      () => setStopConfirmOpen(false),
-      (cause: unknown) => setStartStopError(agentControlFailureMessage(cause)),
-    );
+  function submitStop() {
+    void stop().catch((cause: unknown) => setStartStopError(agentControlFailureMessage(cause)));
   }
 
   return {
@@ -141,11 +135,8 @@ export function useAgentRuntimeControls({
     startDeferred,
     submitStart,
     stop,
-    stopConfirmOpen,
-    setStopConfirmOpen,
+    submitStop,
     /** `onOpenChange(false)` convenience for the dialog host. */
-    closeStopConfirm: () => setStopConfirmOpen(false),
-    confirmStop,
     restartOpen,
     setRestartOpen,
     /** `onOpenChange(false)` convenience for the dialog host. */

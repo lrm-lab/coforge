@@ -9,7 +9,7 @@ import { RuntimeProviderMark } from "#src/features/agents/runtime-provider-mark"
 import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
 import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
 import { useLiveAgentDisplay } from "#src/features/agents/workspace-agents-realtime";
-import { AgentRestartDialog, AgentStopDialog } from "#src/features/agents/agent-control-dialogs";
+import { AgentRestartDialog } from "#src/features/agents/agent-control-dialogs";
 import {
   useAgentRuntimeControls,
   type AgentControlExecute,
@@ -70,7 +70,7 @@ export function ComputerDetailAgentRoster({
       }
     },
   });
-  const locked = busy || control.stopConfirmOpen || control.restartOpen;
+  const locked = busy || control.restartOpen;
   return (
     <>
       <DetailGroup
@@ -134,12 +134,7 @@ export function ComputerDetailAgentRoster({
             <Button size="sm" color="secondary" isDisabled={locked} onPress={control.submitStart}>
               {m.agent_control_start()}
             </Button>
-            <Button
-              size="sm"
-              color="secondary"
-              isDisabled={locked}
-              onPress={() => control.setStopConfirmOpen(true)}
-            >
+            <Button size="sm" color="secondary" isDisabled={locked} onPress={control.submitStop}>
               {m.agent_control_stop()}
             </Button>
             <Button
@@ -209,7 +204,6 @@ export function ComputerDetailAgentRoster({
           <p className="py-2 text-sm text-tertiary">{m.computer_no_agents_on_computer()}</p>
         )}
       </DetailGroup>
-      <AgentStopDialog agentName={selectionName} control={control} />
       <AgentRestartDialog agentName={selectionName} control={control} />
     </>
   );

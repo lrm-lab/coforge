@@ -9,15 +9,11 @@ import {
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { AgentProfileActionsMenu } from "./agent-profile-actions-menu";
-import { Popconfirm } from "#src/components/ui/popconfirm";
 import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
 import type { AgentMascot } from "#src/features/agents/agent-mascot";
 import { AgentMascotAvatar } from "#src/features/agents/agent-mascot-avatar";
 import { DeletedAgentBadge } from "#src/features/agents/deleted-agent";
-import {
-  agentControlFailureMessage,
-  type AgentRuntimeControls,
-} from "#src/features/agents/agent-runtime-controls";
+import { type AgentRuntimeControls } from "#src/features/agents/agent-runtime-controls";
 import { m } from "#src/paraglide/messages";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 import { useOpenDirectConversation } from "#src/features/conversations/open-direct-conversation";
@@ -63,7 +59,7 @@ export function AgentProfileHeader({
 }) {
   const openDirectConversation = useOpenDirectConversation();
   const message = () => void openDirectConversation({ agentId: agent.id });
-  return (
+  const header = (
     // Same 20px gutter as the panel body (px-5): the bordered utility buttons align by box edge,
     // while the borderless Close pulls -mr-1.5 so its glyph lands on the gutter
     // (docs/design/page-skeleton-and-density.md §8 optical alignment).
@@ -121,26 +117,14 @@ export function AgentProfileHeader({
         )}
         {!deleted && (
           <>
-            {/* One trigger for both states, so keyboard focus stays on it when Start becomes Stop;
-                Stop asks first, Start has nothing to confirm. */}
-            <Popconfirm
-              isDisabled={!controls.isOnline}
-              title={m.agent_control_stop_dialog_title()}
-              description={m.agent_control_stop_message({ name: controls.agentName })}
-              confirmLabel={m.agent_control_stop_confirm()}
-              pendingLabel={m.agent_control_stop_pending()}
-              errorMessage={agentControlFailureMessage}
-              placement="bottom end"
-              onConfirm={controls.stop}
-            >
-              <ButtonUtility
-                icon={controls.isOnline ? Stop : Play}
-                size="sm"
-                isDisabled={controls.startStopBusy}
-                tooltip={controls.isOnline ? m.agent_control_stop_agent() : m.agent_control_start()}
-                onClick={controls.isOnline ? undefined : controls.submitStart}
-              />
-            </Popconfirm>
+            {/* One trigger for both states, so keyboard focus stays on it when Start becomes Stop. */}
+            <ButtonUtility
+              icon={controls.isOnline ? Stop : Play}
+              size="sm"
+              isDisabled={controls.startStopBusy}
+              tooltip={controls.isOnline ? m.agent_control_stop_agent() : m.agent_control_start()}
+              onClick={controls.isOnline ? controls.submitStop : controls.submitStart}
+            />
             <ButtonUtility
               icon={RotateCcw}
               size="sm"
@@ -159,5 +143,14 @@ export function AgentProfileHeader({
         onClick={onClose}
       />
     </header>
+  );
+  if (!controls?.startStopError) return header;
+  return (
+    <>
+      {header}
+      <p role="alert" className="px-5 pb-2 text-sm text-error-primary">
+        {controls.startStopError}
+      </p>
+    </>
   );
 }
