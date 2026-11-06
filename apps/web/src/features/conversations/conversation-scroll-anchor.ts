@@ -76,8 +76,11 @@ export function scrollTwice(scroll: () => void) {
  * scroll restoration can rewrite the container after this frame. A jump never scrolls smoothly:
  * a smooth scroll that pages older history in is cut short by the paging scroll anchor. The row
  * flashes instead, as Slack's jump to a message does. */
-export function scrollToMessageRow(messageId: string) {
-  scrollTwice(() =>
-    document.getElementById(`message-${messageId}`)?.scrollIntoView({ block: "center" }),
-  );
+export function scrollToMessageRow(messageId: string, landed: (row: Element) => void) {
+  scrollTwice(() => {
+    const row = document.getElementById(`message-${messageId}`);
+    if (!row) return;
+    row.scrollIntoView({ block: "center" });
+    landed(row);
+  });
 }

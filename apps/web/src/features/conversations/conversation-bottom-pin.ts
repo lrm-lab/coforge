@@ -4,10 +4,6 @@ import { ROW_TOP_GAP_PX } from "./conversation-scroll-anchor";
  * ResizeObserver). Tight on purpose: the reading position itself uses a wider tolerance. */
 export const PIN_TOLERANCE_PX = 4;
 
-/** How long a message jump's landing is re-asserted against late layout: the unread divider's
- * open read and settling rows can still move the row for a beat after the jump scrolls. */
-const JUMP_REASSERT_MS = 2_000;
-
 type HistoryPosition = Pick<HTMLElement, "scrollTop" | "scrollHeight" | "clientHeight">;
 
 /** The reader's input on the history: a wheel, a key, a touch or a press. */
@@ -31,12 +27,6 @@ type ReadingInput = {
 export class ConversationBottomPin {
   #distance = 0;
   #pinned: HistoryPosition | undefined;
-  /** The message a jump just landed on, re-centered on each resize while late layout can still
-   * move it — a scroll event that lands after such growth reads as the reader having moved away,
-   * so without this the jump can be left short of its row. */
-  #jumped: { id: string; at: number } | undefined;
-  /** The reader touched the history since the jump: their input ends the re-assert at once. */
-  #readerTookOver = false;
   /** Where the history stood when the reader asked to move up, until a scroll shows their move:
    * a row settling in between must not pull them back (task #567). Native scroll anchoring's
    * scroll, further down, is not theirs; the first scroll at or above it is, wherever it lands
@@ -52,7 +42,6 @@ export class ConversationBottomPin {
     history.scrollTop = history.scrollHeight;
     this.#distance = 0;
     this.#leavingFrom = undefined;
-    this.#jumped = undefined;
     this.#pinned = {
       scrollTop: history.scrollTop,
       scrollHeight: history.scrollHeight,
@@ -74,45 +63,34 @@ export class ConversationBottomPin {
     const offset =
       row.getBoundingClientRect().top - history.getBoundingClientRect().top + history.scrollTop;
     const top = Math.max(0, offset - ROW_TOP_GAP_PX);
-    this.#jumped = undefined;
     if (top < history.scrollHeight - history.clientHeight - PIN_TOLERANCE_PX) {
       history.scrollTo({ top });
-      return false;
+      return this.landed(history);
     }
     this.pin(history, "instant");
     return true;
   }
 
-  /** Marks a message jump's landing: for `JUMP_REASSERT_MS` each resize re-centers the row
-   * (`reassertJumped`) instead of bottom-following, until the reader touches the history. */
-  markJumped(messageId: string) {
-    this.#jumped = { id: messageId, at: Date.now() };
-    this.#readerTookOver = false;
-  }
-
-  /** Re-centers the row a fresh jump landed on, in the history it belongs to (a thread pane and
-   * the main stream can hold the same message id). Returns whether it scrolled; a stale, taken-
-   * over or gone landing clears itself and returns false so ordinary pinning resumes. */
-  reassertJumped(history: HTMLElement): boolean {
-    const jumped = this.#jumped;
-    if (!jumped) return false;
-    if (this.#readerTookOver || Date.now() - jumped.at >= JUMP_REASSERT_MS) {
-      this.#jumped = undefined;
-      return false;
+  /**
+   * The history was just scrolled to a row (an open position, a message jump): where it stands now
+   * is the reader's place. Without this the next resize judges from the distance measured before
+   * the scroll and can pull the reader back to the latest, since its scroll event can arrive after
+   * the resize (task #438). A row that could not be scrolled up that far landed at the bottom,
+   * and that is a pin like the latest's, as in `open`: returns whether it pinned.
+   */
+  landed(history: HTMLDivElement): boolean {
+    this.#leavingFrom = undefined;
+    if (distanceFromBottom(history) <= PIN_TOLERANCE_PX) {
+      this.pin(history, "instant");
+      return true;
     }
-    const row = history.querySelector<HTMLElement>(`[id="message-${jumped.id}"]`);
-    if (!row) {
-      this.#jumped = undefined;
-      return false;
-    }
-    row.scrollIntoView({ block: "center" });
-    requestAnimationFrame(() => row.scrollIntoView({ block: "center" }));
-    return true;
+    this.#pinned = undefined;
+    this.#distance = distanceFromBottom(history);
+    return false;
   }
 
   readonly read = (input?: ReadingInput) => {
     this.#pinned = undefined;
-    if (input) this.#readerTookOver = true;
     const direction = input && this.#direction(input);
     if (direction === "down") this.#leavingFrom = undefined;
     else if (direction === "up" && input && scrollsHistoryUp(input))

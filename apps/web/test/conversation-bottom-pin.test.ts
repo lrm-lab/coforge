@@ -146,3 +146,36 @@ test("moving up at the very top, or a jump to the latest, does not stop followin
   other.pin(history as never, "instant");
   expect(other.beforeResize(history)).toBe(true);
 });
+
+/**
+ * Landing away from the bottom (task #438): an open position or a message jump scrolls the
+ * history, and a resize can come before that scroll's event. It is judged from the landing.
+ */
+test("a resize after an open position away from the bottom does not pull the reader back", () => {
+  const pin = new ConversationBottomPin();
+  const history = fakeHistory({ scrollHeight: 4000, clientHeight: 577 });
+  pin.pin(history as never, "instant");
+  expect(pin.open(history as never, rowAt(1000, history) as never)).toBe(false);
+  history.scrollHeight = 4060;
+  expect(pin.beforeResize(history)).toBe(false);
+});
+
+test("a message jump's landing is where the next resize judges from", () => {
+  const pin = new ConversationBottomPin();
+  const history = fakeHistory({ scrollHeight: 4000, clientHeight: 577 });
+  pin.pin(history as never, "instant");
+  history.scrollTop = 1200;
+  expect(pin.landed(history as never)).toBe(false);
+  history.scrollHeight = 4060;
+  expect(pin.beforeResize(history)).toBe(false);
+});
+
+test("a jump to a row that lands at the bottom follows the latest from there", () => {
+  const pin = new ConversationBottomPin();
+  const history = fakeHistory({ scrollHeight: 4000, clientHeight: 577 });
+  // The last row, centered as far as the history allows: the bottom.
+  history.scrollTop = 4000 - 577;
+  expect(pin.landed(history as never)).toBe(true);
+  history.scrollHeight = 4084;
+  expect(pin.beforeResize(history)).toBe(true);
+});

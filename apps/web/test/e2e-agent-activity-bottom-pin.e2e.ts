@@ -211,23 +211,18 @@ for (const width of [1440, 390])
 
     // Scrolled up while a row is still settling (task #567): in one frame the reader's wheel moves
     // the view up and the newest row grows, so the resize is seen before the scroll is reported.
-    // The reader stays where they scrolled to. A runner whose frames land differently can swallow
-    // the first attempt whole; the feed is settled by the next one, so a repeat that still snaps
-    // back to the bottom is a real regression, not the race.
-    let scrolledUp = 0;
-    for (let attempt = 0; attempt < 3 && scrolledUp <= 300; attempt++) {
-      await browser(
-        "eval",
-        `new Promise((done) => requestAnimationFrame(() => {
-          const s = ${scroller};
-          s.dispatchEvent(new WheelEvent("wheel", { deltaY: -600, bubbles: true }));
-          s.scrollTop -= 600;
-          s.querySelector("ol > li:last-child").style.paddingBottom = "40px";
-          done(true);
-        }))`,
-      );
-      scrolledUp = await settledDistance();
-    }
+    // The reader stays where they scrolled to.
+    await browser(
+      "eval",
+      `new Promise((done) => requestAnimationFrame(() => {
+        const s = ${scroller};
+        s.dispatchEvent(new WheelEvent("wheel", { deltaY: -600, bubbles: true }));
+        s.scrollTop -= 600;
+        s.querySelector("ol > li:last-child").style.paddingBottom = "40px";
+        done(true);
+      }))`,
+    );
+    const scrolledUp = await settledDistance();
     await browser("screenshot", join(artifacts, `${width}-scrolled-up.png`));
     const topBefore = await evaluate<number>(`Math.round(${scroller}.scrollTop)`);
     await publishRow(`up-${width}-1`);
