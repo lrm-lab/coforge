@@ -78,6 +78,7 @@ model Agent {
   appInboundRequests        AppAgentInboundRequest[]
   appEvents                 AppAgentEvent[]
   appInstallationSelections AppInstallationAgent[]
+  usageLimitEventAgents     UsageLimitEventAgent[]
   /// Set for an app's bot (`systemKind = app-bot`): the installation it speaks for.
   appBot                    AppInstallationBot?
 

@@ -1,0 +1,56 @@
+/// One provider's usage limit exhausting on one Computer in a Workspace (task #611): opened by
+/// a quota_exhausted/billing_exhausted runtime_error Activity that names its runtime provider,
+/// and closed by the sweep when the reset time passes, the affected Agents recover or leave,
+/// or the event ages out. At most one open event per (workspace, computer, provider).
+model UsageLimitEvent {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  workspaceId String    @db.Uuid
+  computerId  String    @db.Uuid
+  /// The runtime provider whose quota ran out, as the reporting launch named it.
+  provider    String
+  /// open | closed
+  status      String    @default("open")
+  /// When the provider said the limit resets; null for billing_exhausted, which names none.
+  resetsAt    DateTime?
+  openedAt    DateTime  @default(now())
+  closedAt    DateTime?
+  /// reset_passed | recovered | agents_gone | aged_out
+  closeReason String?
+  workspace   Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  computer    Computer                   @relation(fields: [computerId], references: [id], onDelete: Cascade)
+  agents      UsageLimitEventAgent[]
+  views       UsageLimitEventView[]
+
+  @@unique([workspaceId, computerId, provider], map: "usage_limit_events_one_open", where: raw("\"status\" = 'open'"))
+  @@index([workspaceId, status])
+  @@map("usage_limit_events")
+}
+
+/// One Agent a UsageLimitEvent currently counts as affected; a row leaves when the Agent
+/// recovers, stops or is deleted, and the event closes when the set empties.
+model UsageLimitEventAgent {
+  eventId     String          @db.Uuid
+  agentId     String          @db.Uuid
+  workspaceId String          @db.Uuid
+  addedAt     DateTime        @default(now())
+  event       UsageLimitEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  agent       Agent           @relation(fields: [agentId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+
+  @@id([eventId, agentId])
+  @@index([agentId])
+  @@map("usage_limit_event_agents")
+}
+
+/// One Workspace owner/admin's seen and dismiss marks on a UsageLimitEvent (task #611): per
+/// person, so a dismiss hides the event only for that person until the event closes.
+model UsageLimitEventView {
+  eventId     String          @db.Uuid
+  userId      String          @db.Uuid
+  seenAt      DateTime?
+  dismissedAt DateTime?
+  event       UsageLimitEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, userId])
+  @@map("usage_limit_event_views")
+}

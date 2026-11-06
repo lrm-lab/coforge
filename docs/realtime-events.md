@@ -41,6 +41,7 @@ omitted from the receiver column; it only routes each event to the feature files
 | `label.group.changed.v1` | `server/tasks/label-signal.server.ts` | `features/tasks/label-realtime.ts` |
 | `label.changed.v1` | `server/tasks/label-signal.server.ts` | `features/tasks/label-realtime.ts` |
 | `task.changed.v1` | `server/conversations/conversation-realtime.server.ts` | `features/tasks/task-overview-collection.ts`, `features/tasks/conversation-task-subset.ts`, `features/tasks/use-finished-tasks.ts`, `features/tasks/task-realtime.ts`, `features/tasks/use-task-overview.ts`, `features/tasks/use-conversation-tasks.ts`, `features/tasks/conversation-tasks-collection.ts`, `features/conversations/use-conversation-data.ts` |
+| `usage.limit.changed.v1` | `server/usage-limits/usage-limit-publisher.server.ts` | — |
 | `workspace.deleted.v1` | `server/workspaces/deletion.server.ts` | `features/workspaces/workspace-realtime.ts`, `features/workspaces/leave-deleted-workspace.tsx` |
 | `workspace.features.changed.v1` | `server/experiments/features-signal.server.ts` | `features/settings/experiments-settings.tsx`, `features/workspaces/workspace-realtime.ts`, `features/conversations/use-drafts-on.ts` |
 

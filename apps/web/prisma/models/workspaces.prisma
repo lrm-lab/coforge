@@ -73,6 +73,7 @@ model Workspace {
   formerSlugs            WorkspaceFormerSlug[]
   agentMigrations        AgentMigration[]
   ownedApps              App[]
+  usageLimitEvents       UsageLimitEvent[]
   appInstallations       AppInstallation[]
   oauthAuthorizationCodes OAuthAuthorizationCode[]
   appConsents            UserAppConsent[]

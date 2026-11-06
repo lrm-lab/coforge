@@ -45,6 +45,27 @@ function activityKind(activity: { detailKind: string; level: string }) {
   });
 }
 
+function activityRow(input: TrustedAgentActivity) {
+  return {
+    workspaceId: input.workspaceId,
+    agentId: input.agentId,
+    computerId: input.computerId,
+    launchId: input.launchId,
+    clientSeq: input.clientSeq,
+    conversationId: input.conversationId,
+    conversationTarget: input.conversationTarget,
+    detailKind: input.detailKind,
+    level: input.level,
+    detail: input.detail,
+    entries: input.entries,
+    runtimeErrorClass: input.runtimeError?.errorClass,
+    runtimeErrorReason: input.runtimeError?.errorReason,
+    runtimeErrorFingerprint: input.runtimeError?.fingerprint,
+    runtimeErrorRetryNotBefore: input.runtimeError?.retryNotBefore,
+    occurredAt: new Date(input.observedAtMs),
+  };
+}
+
 /**
  * The conversations whose Activity the viewer may not see (task #302: a manager outside a private
  * channel sees none of what the Agent did there): the channels `visibleChannelWhere` keeps from
@@ -257,31 +278,19 @@ export class AgentActivityRepository {
     }));
   }
 
-  async record(input: TrustedAgentActivity) {
-    await this.recordMany([input]);
+  /** Stores one Activity; true when this call inserted it (a replayed frame answers false). */
+  async record(input: TrustedAgentActivity): Promise<boolean> {
+    const { count } = await this.db.agentActivity.createMany({
+      data: [activityRow(input)],
+      skipDuplicates: true,
+    });
+    return count > 0;
   }
 
   /** One insert for many rows; a row already stored (same Agent, launch, and sequence) is kept. */
   async recordMany(inputs: readonly TrustedAgentActivity[]) {
     await this.db.agentActivity.createMany({
-      data: inputs.map((input) => ({
-        workspaceId: input.workspaceId,
-        agentId: input.agentId,
-        computerId: input.computerId,
-        launchId: input.launchId,
-        clientSeq: input.clientSeq,
-        conversationId: input.conversationId,
-        conversationTarget: input.conversationTarget,
-        detailKind: input.detailKind,
-        level: input.level,
-        detail: input.detail,
-        entries: input.entries,
-        runtimeErrorClass: input.runtimeError?.errorClass,
-        runtimeErrorReason: input.runtimeError?.errorReason,
-        runtimeErrorFingerprint: input.runtimeError?.fingerprint,
-        runtimeErrorRetryNotBefore: input.runtimeError?.retryNotBefore,
-        occurredAt: new Date(input.observedAtMs),
-      })),
+      data: inputs.map(activityRow),
       skipDuplicates: true,
     });
   }

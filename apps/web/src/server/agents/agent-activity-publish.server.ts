@@ -40,6 +40,8 @@ import { cachedReplyTargetResolver } from "./reply-target-cache.server";
 import { cachedWorkspaceComputerCheck } from "./workspace-computer-cache.server";
 import { getWorkspaceComputerInvalidation } from "./workspace-computer-invalidation.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
+import { observeUsageLimitActivity } from "#src/server/usage-limits/usage-limit-events.server";
+import { createUsageLimitAnnouncer } from "#src/server/usage-limits/usage-limit-publisher.server";
 import type { AgentActivityKind } from "@lrm/coforge-sdk/internal";
 
 type AgentActivityPublicationDependencies = ReplyIntentPublicationDependencies & {
@@ -346,11 +348,17 @@ export function createAgentActivityPublicationHandler() {
       // History acceptance remains independent when the optional display path is unavailable.
     }
     const lookups = publicationAgentLookups(db);
+    // Usage-limit events (task #611) see only first-seen rows: a replayed frame
+    // must not reopen an event a recovery or the sweep already closed.
+    const announceUsageLimits = centrifugo ? createUsageLimitAnnouncer(centrifugo, db) : undefined;
     return handleAgentActivityPublication(request, {
       proxySecret: process.env.COFORGE_CENTRIFUGO_PROXY_SECRET,
       ...lookups,
       computerBelongsToWorkspace: computerInWorkspace.check,
-      observe: (observation) => activity.record(observation),
+      observe: async (observation) => {
+        if (await activity.record(observation))
+          await observeUsageLimitActivity(db, observation, announceUsageLimits);
+      },
       resolveReplyTarget: replyTargets,
       publish: centrifugo
         ? (channel, data, options) => centrifugo.publish(channel, data, options)

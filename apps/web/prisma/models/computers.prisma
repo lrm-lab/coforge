@@ -81,6 +81,7 @@ model Computer {
   weeklyReportCollectSlots      WeeklyReportCollectSlot[]
   migrationsOut                 AgentMigration[]       @relation("AgentMigrationSource")
   migrationsIn                  AgentMigration[]       @relation("AgentMigrationTarget")
+  usageLimitEvents              UsageLimitEvent[]
   owner                         User                   @relation(fields: [ownerId], references: [id])
 
   @@unique([ownerId, machineId])
