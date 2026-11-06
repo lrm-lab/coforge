@@ -1,4 +1,4 @@
-import type { OwnedProcessIdentity } from "@lrm/coforge-anvil";
+import type { OwnedProcessIdentity, OwnedProcessTreeKillReport } from "@lrm/coforge-anvil";
 import { bootClockMs, linuxProcessTable } from "./linux-process-table";
 
 export type ProcessTable = Readonly<{
@@ -63,4 +63,44 @@ export function descendantsOf(
     queue.push(...(byParent.get(process.pid) ?? []));
   }
   return descendants;
+}
+
+/**
+ * Raft's `killTurnProcesses` over a verified owned root, shared by the POSIX and launchd
+ * owners. `expectedPpid` is the parent that must still own `pid` — the daemon itself for a
+ * direct child, the launchd runner for a relayed one — so a recycled or foreign pid is never
+ * signaled. Only descendants whose start falls inside the turn's window are killed; a
+ * descendant leading its own process group takes that group with it, and a pid already gone
+ * is not an error.
+ */
+export async function killTurnDescendantsInWindow(
+  processTable: ProcessTable,
+  pid: number,
+  expectedPpid: number,
+  startedAfterMs: number,
+  startedBeforeMs: number | undefined,
+): Promise<OwnedProcessTreeKillReport> {
+  const resolutionMs = processTable.resolutionMs ?? 1_000;
+  const fenceMs = Math.floor(startedAfterMs / resolutionMs) * resolutionMs;
+  const table = await processTable.list();
+  const main = table.find((entry) => entry.pid === pid);
+  if (!main || main.ppid !== expectedPpid) return { killed: [], leftAlone: [] };
+  const killed: number[] = [];
+  const leftAlone: number[] = [];
+  for (const entry of descendantsOf(main, table)) {
+    if (
+      entry.startedAtMs < fenceMs ||
+      (startedBeforeMs !== undefined && entry.startedAtMs > startedBeforeMs)
+    ) {
+      leftAlone.push(entry.pid);
+      continue;
+    }
+    try {
+      globalThis.process.kill(entry.pgid === entry.pid ? -entry.pid : entry.pid, "SIGKILL");
+      killed.push(entry.pid);
+    } catch (error) {
+      if ((error as { code?: string }).code !== "ESRCH") throw error;
+    }
+  }
+  return { killed, leftAlone };
 }

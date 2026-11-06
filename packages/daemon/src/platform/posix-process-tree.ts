@@ -7,7 +7,12 @@ import type {
 } from "@lrm/coforge-anvil";
 import { spawnOwnedChild } from "./process-transport";
 import { spawnRuntime } from "./runtime-executable-not-found";
-import { hostProcessTable, descendantsOf, type ProcessTable } from "./process-table";
+import {
+  hostProcessTable,
+  descendantsOf,
+  killTurnDescendantsInWindow,
+  type ProcessTable,
+} from "./process-table";
 
 const emptyKillReport = (): OwnedProcessTreeKillReport => ({ killed: [], leftAlone: [] });
 
@@ -169,33 +174,16 @@ export class PosixProcessOwner implements ProcessTreeSpawner {
         return { killed, leftAlone };
       },
       killTurnDescendants: async (startedAfterMs, startedBeforeMs) => {
-        const processTable = this.options.processTable ?? hostProcessTable;
-        const resolutionMs = processTable.resolutionMs ?? 1_000;
-        const fenceMs = Math.floor(startedAfterMs / resolutionMs) * resolutionMs;
         const pid = child.pid;
         if (pid === undefined) return emptyKillReport();
-        const table = await processTable.list();
-        const main = table.find((entry) => entry.pid === pid);
         // As with terminateForTurn: only a process this daemon still parents is ours to signal.
-        if (!main || main.ppid !== globalThis.process.pid) return emptyKillReport();
-        const killed: number[] = [];
-        const leftAlone: number[] = [];
-        for (const entry of descendantsOf(main, table)) {
-          if (
-            entry.startedAtMs < fenceMs ||
-            (startedBeforeMs !== undefined && entry.startedAtMs > startedBeforeMs)
-          ) {
-            leftAlone.push(entry.pid);
-            continue;
-          }
-          try {
-            globalThis.process.kill(entry.pgid === entry.pid ? -entry.pid : entry.pid, "SIGKILL");
-            killed.push(entry.pid);
-          } catch (error) {
-            if (!this.#processGone(error)) throw error;
-          }
-        }
-        return { killed, leftAlone };
+        return killTurnDescendantsInWindow(
+          this.options.processTable ?? hostProcessTable,
+          pid,
+          globalThis.process.pid,
+          startedAfterMs,
+          startedBeforeMs,
+        );
       },
       waitForExit: async (timeoutMs) => {
         const pid = child.pid;
