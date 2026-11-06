@@ -265,6 +265,7 @@ function usageLimitError(clientSeq: number, resetsAt?: string): ActivityEntry {
       errorClass: "RateLimitError",
       errorReason: "quota_exhausted",
       fingerprint: "0123abcd",
+      ...(resetsAt ? { retryNotBefore: resetsAt } : {}),
     },
   };
 }
@@ -317,6 +318,40 @@ test("a usage-limit retry without a named reset reads reset time unknown", () =>
   const rows = presentActivityRows([usageLimitError(2), usageLimitError(1)]);
   expect(rows).toHaveLength(1);
   expect(rows[0].detail).toBe("reset time unknown · 2 attempts");
+});
+
+test("the reset prefers runtimeError.retryNotBefore and falls back to the detail suffix", () => {
+  // A daemon before 0.1.27 writes only the "(limit resets at …)" detail suffix; the
+  // structured field wins when both exist, and the suffix alone still resolves (task #601;
+  // the fallback goes away once those daemons are gone).
+  const textOnly = {
+    ...entry(2),
+    detailKind: "runtime_error",
+    level: "error",
+    detail: "Usage limit hit (limit resets at 2030-01-01T00:00:00.000Z)",
+    runtimeError: {
+      errorClass: "RateLimitError",
+      errorReason: "quota_exhausted",
+      fingerprint: "0123abcd",
+    },
+  };
+  const fieldOnly = {
+    ...entry(1),
+    detailKind: "runtime_error",
+    level: "error",
+    detail: "Usage limit hit",
+    runtimeError: {
+      errorClass: "RateLimitError",
+      errorReason: "quota_exhausted",
+      fingerprint: "0123abcd",
+      retryNotBefore: "2030-01-01T00:00:00.000Z",
+    },
+  };
+  const rows = presentActivityRows([textOnly, fieldOnly]);
+  expect(rows).toHaveLength(1);
+  expect(rows[0].detail).toMatch(/^resets .+ · 2 attempts$/);
+  const legacy = presentActivityRows([textOnly]);
+  expect(legacy[0]!.detail).toMatch(/^resets .+ · 1 attempt$/);
 });
 
 test("group activity keeps its own records while the member feed aggregates all groups", () => {

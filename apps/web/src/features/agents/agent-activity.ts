@@ -1,5 +1,8 @@
-import type { ActivityTrajectoryEntry } from "@lrm/coforge-sdk/internal";
-import type { AgentActivityKind } from "@lrm/coforge-sdk/internal";
+import type {
+  ActivityTrajectoryEntry,
+  AgentActivityKind,
+  AgentActivityRuntimeError,
+} from "@lrm/coforge-sdk/internal";
 import {
   AGENT_ACTIVITY_DETAIL_KIND,
   WORKSPACE_PROTOCOL_MAJOR,
@@ -25,7 +28,7 @@ export type ActivityEntry = {
   detail: string;
   observedAtMs: number;
   entries?: ActivityTrajectoryEntry[];
-  runtimeError?: { errorClass: string; errorReason: string; fingerprint: string };
+  runtimeError?: AgentActivityRuntimeError;
   /** The freshness-decision lineage (`freshness_decision_fact:<sha256>`); set on a
    * freshness-hold row only. */
   producerFactId?: string;

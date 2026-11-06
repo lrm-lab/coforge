@@ -439,6 +439,9 @@ message AgentActivity {
   // launch_id or client_seq, so a reader that predates it rejects the frame as invalid Activity.
   // Additive: protocol_major stays 1. Docs: docs/observability/reply-intent.md.
   ReplyIntent reply_intent = 24;
+  // The ISO time a retryable runtime failure named as its next attempt (`retryNotBefore` in the
+  // daemon's classification); empty when the failure named none. Additive: protocol_major stays 1.
+  string runtime_error_retry_not_before = 25;
 }
 
 // An Agent is about to post (`phase` "start") or no longer is ("end") for one tool call, `call_id`.

@@ -9,7 +9,9 @@ export type UsageLimitAtomMarks = {
 };
 
 /** The daemon's reset suffix on a runtime_error detail (`limitResetNote` in the daemon's
- * runtime-error-activity.ts): the ISO time the provider named, when it named one. */
+ * runtime-error-activity.ts): the ISO time the provider named, when it named one. Daemons
+ * before 0.1.27 write only this suffix — they never send `runtimeError.retryNotBefore` — so
+ * it stays as the fallback until those daemons are gone (task #601). */
 const LIMIT_RESET_SUFFIX = /\(limit resets at ([^)]+)\)\s*$/;
 
 function limitResetAt(detail: string): string | undefined {
@@ -19,7 +21,9 @@ function limitResetAt(detail: string): string | undefined {
 
 /** The usage-limit fact a runtime_error observation carries, when its classified reason is a
  * quota exhaustion the daemon keeps retrying: `quota_exhausted` covers provider limits and
- * window-limit wording alike (task #575; Raft's `noteUsageLimit`). */
+ * window-limit wording alike (task #575; Raft's `noteUsageLimit`). The reset instant is the
+ * structured `runtimeError.retryNotBefore` the daemon classified (task #601); only when it is
+ * absent does the detail suffix answer, for daemons that predate the field. */
 function observationUsageLimit(
   observation: ActivityObservation,
 ): { resetsAt?: string } | undefined {
@@ -28,7 +32,11 @@ function observationUsageLimit(
     observation.runtimeError?.errorReason !== "quota_exhausted"
   )
     return undefined;
-  const resetsAt = limitResetAt(observation.detail);
+  const structured = observation.runtimeError.retryNotBefore;
+  const resetsAt =
+    structured && Number.isFinite(Date.parse(structured))
+      ? structured
+      : limitResetAt(observation.detail);
   return resetsAt ? { resetsAt } : {};
 }
 

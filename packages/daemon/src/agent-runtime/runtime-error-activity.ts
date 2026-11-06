@@ -98,6 +98,9 @@ export function buildRuntimeErrorActivity(
     runtimeError: {
       ...reportedClassification(event, () => classified),
       fingerprint: fingerprintRuntimeError(event.message),
+      // The structured reset the suffix above only words: readers group retries by it instead
+      // of parsing the detail text (task #601).
+      ...(classified.retryNotBefore ? { retryNotBefore: classified.retryNotBefore } : {}),
     },
   };
 }

@@ -141,6 +141,7 @@ model AgentActivity {
   runtimeErrorClass       String?
   runtimeErrorReason      String?
   runtimeErrorFingerprint String?
+  runtimeErrorRetryNotBefore String?
   occurredAt              DateTime
   createdAt               DateTime  @default(now())
   agent                   Agent     @relation(fields: [agentId, workspaceId], references: [id, workspaceId], onDelete: Cascade)

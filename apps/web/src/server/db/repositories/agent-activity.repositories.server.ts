@@ -23,6 +23,7 @@ type CompactActivity = {
   runtimeErrorClass: string | null;
   runtimeErrorReason: string | null;
   runtimeErrorFingerprint: string | null;
+  runtimeErrorRetryNotBefore: string | null;
   occurredAt: Date;
   createdAt: Date;
   slot: bigint;
@@ -163,6 +164,7 @@ export class AgentActivityRepository {
             activity."runtimeErrorClass",
             activity."runtimeErrorReason",
             activity."runtimeErrorFingerprint",
+            activity."runtimeErrorRetryNotBefore",
             activity."occurredAt",
             activity."createdAt"
           FROM "agent_activities" AS activity
@@ -189,6 +191,7 @@ export class AgentActivityRepository {
         compact."runtimeErrorClass",
         compact."runtimeErrorReason",
         compact."runtimeErrorFingerprint",
+        compact."runtimeErrorRetryNotBefore",
         compact."occurredAt",
         compact."createdAt",
         compact.slot
@@ -222,6 +225,7 @@ export class AgentActivityRepository {
           runtimeErrorClass,
           runtimeErrorReason,
           runtimeErrorFingerprint,
+          runtimeErrorRetryNotBefore,
           occurredAt,
           createdAt,
         }) => ({
@@ -240,6 +244,9 @@ export class AgentActivityRepository {
                   errorClass: runtimeErrorClass,
                   errorReason: runtimeErrorReason ?? "",
                   fingerprint: runtimeErrorFingerprint ?? "",
+                  ...(runtimeErrorRetryNotBefore
+                    ? { retryNotBefore: runtimeErrorRetryNotBefore }
+                    : {}),
                 },
               }
             : {}),
@@ -272,6 +279,7 @@ export class AgentActivityRepository {
         runtimeErrorClass: input.runtimeError?.errorClass,
         runtimeErrorReason: input.runtimeError?.errorReason,
         runtimeErrorFingerprint: input.runtimeError?.fingerprint,
+        runtimeErrorRetryNotBefore: input.runtimeError?.retryNotBefore,
         occurredAt: new Date(input.observedAtMs),
       })),
       skipDuplicates: true,
@@ -308,6 +316,7 @@ export class AgentActivityRepository {
         runtimeErrorClass,
         runtimeErrorReason,
         runtimeErrorFingerprint,
+        runtimeErrorRetryNotBefore,
         ...row
       }) => ({
         ...row,
@@ -320,6 +329,9 @@ export class AgentActivityRepository {
                 errorClass: runtimeErrorClass,
                 errorReason: runtimeErrorReason ?? "",
                 fingerprint: runtimeErrorFingerprint ?? "",
+                ...(runtimeErrorRetryNotBefore
+                  ? { retryNotBefore: runtimeErrorRetryNotBefore }
+                  : {}),
               },
             }
           : {}),

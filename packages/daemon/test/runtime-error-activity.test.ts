@@ -188,6 +188,8 @@ describe("a provider's usage limit", () => {
     expect(activity.runtimeError).toMatchObject({
       errorClass: "RateLimitError",
       errorReason: "quota_exhausted",
+      // The same instant the detail suffix words, carried structurally for readers (task #601).
+      retryNotBefore: resetsAt,
     });
   });
 

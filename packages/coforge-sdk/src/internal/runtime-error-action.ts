@@ -25,6 +25,8 @@ export type AgentActivityRuntimeError = Readonly<{
   errorReason: string;
   fingerprint: string;
   requiredAction?: RuntimeErrorAction;
+  /** The ISO time a retryable failure named as its next attempt; absent when it named none. */
+  retryNotBefore?: string;
 }>;
 
 /** The wire shape it encodes into and decodes from: empty strings for absent fields. */
@@ -33,6 +35,7 @@ export type RuntimeErrorWire = Readonly<{
   runtimeErrorReason: string;
   runtimeErrorFingerprint: string;
   runtimeErrorAction: string;
+  runtimeErrorRetryNotBefore: string;
 }>;
 
 export function encodeRuntimeError(
@@ -43,6 +46,7 @@ export function encodeRuntimeError(
     runtimeErrorReason: runtimeError?.errorReason ?? "",
     runtimeErrorFingerprint: runtimeError?.fingerprint ?? "",
     runtimeErrorAction: runtimeError?.requiredAction ?? "",
+    runtimeErrorRetryNotBefore: runtimeError?.retryNotBefore ?? "",
   };
 }
 
@@ -53,5 +57,6 @@ export function decodeRuntimeError(v: RuntimeErrorWire): AgentActivityRuntimeErr
     errorReason: v.runtimeErrorReason,
     fingerprint: v.runtimeErrorFingerprint,
     ...(isRuntimeErrorAction(v.runtimeErrorAction) ? { requiredAction: v.runtimeErrorAction } : {}),
+    ...(v.runtimeErrorRetryNotBefore ? { retryNotBefore: v.runtimeErrorRetryNotBefore } : {}),
   };
 }

@@ -24,6 +24,7 @@ const activity: AgentActivity = {
     errorReason: "turn_failed",
     fingerprint: "deadbeef",
     requiredAction: "user_reauth",
+    retryNotBefore: "2026-08-29T01:00:00.000Z",
   },
 };
 

@@ -98,7 +98,7 @@ turn summary `usageLimit`；我们没有 turn summary，逐次重试的 `runtime
 本身就是每轮记录）：`runtimeError.errorReason` 为 `quota_exhausted` 的
 `runtime_error` 行计为一次限额重试；相邻两次之间只隔纯状态填充（idle、等待模型
 响应、工具/思考结束、重连中）时合并为一行 `Usage limit reached`，附注最新的重置
-时间（取 detail 末尾的 `(limit resets at <ISO>)`，无则 "reset time unknown"）与
+时间（取结构化的 `runtimeError.retryNotBefore`，无则 "reset time unknown"）与
 尝试次数。任何内容行、其他错误或生命周期行都结束这次合并；agent 卡片的
 Recent activity 走同一合成（仓库查询一并返回 runtimeError 分类列）。分类出的
 `quota_exhausted` reason 不被 provider 的自由提示（如 Codex `turn_failed`）覆盖，
