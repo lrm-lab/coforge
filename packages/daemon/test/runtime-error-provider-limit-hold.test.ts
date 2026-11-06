@@ -174,6 +174,58 @@ test("a reset time beyond the hour is retried an hour later instead of waited on
   }
 });
 
+test("a window limit with no reset holds deliveries on the ordinary backoff, never offline", async () => {
+  const { runtime, notices, acknowledged, emit, noticed, deliver } = await harness();
+  jest.useFakeTimers();
+  try {
+    // Claude's rate_limit with no reset the provider named: the window lifts on its own, so
+    // the Agent waits out the ordinary exponential backoff instead of going offline (#574).
+    emit({
+      type: "error",
+      message: "You've hit your weekly usage limit",
+      providerErrorCode: "rate_limit",
+      providerLimit: { kind: "window_limit" },
+    });
+    emit({ type: "completed", status: "failed" });
+    await deliver(1);
+    await acknowledged;
+    expect(notices).toEqual([]);
+    // The first exponential release is seconds away — not the hour-capped quota wait, and not
+    // a terminal offline: the held delivery is delivered once the backoff ends.
+    jest.advanceTimersByTime(RUNTIME_ERROR_DELIVERY_BACKOFF_MAX_MS);
+    await noticed;
+    expect(notices).toHaveLength(1);
+  } finally {
+    await runtime.stop();
+  }
+});
+
+test("a window limit with a reset waits until it, like an exhausted quota's", async () => {
+  const { runtime, notices, acknowledged, emit, noticed, deliver } = await harness();
+  jest.useFakeTimers();
+  try {
+    const resetsAt = new Date(Date.now() + 3 * HOUR_MS).toISOString();
+    emit({
+      type: "error",
+      message: "You've hit your weekly usage limit",
+      providerErrorCode: "rate_limit",
+      providerLimit: { kind: "window_limit", resetsAt },
+    });
+    emit({ type: "completed", status: "failed" });
+    await deliver(1);
+    await acknowledged;
+    expect(notices).toEqual([]);
+    jest.advanceTimersByTime(RUNTIME_ERROR_DELIVERY_BACKOFF_MAX_MS * 2);
+    await Promise.resolve();
+    expect(notices).toEqual([]);
+    jest.advanceTimersByTime(HOUR_MS);
+    await noticed;
+    expect(notices).toHaveLength(1);
+  } finally {
+    await runtime.stop();
+  }
+});
+
 test("progress and side output leave a quota wait; main-session model output ends it", async () => {
   const { runtime, notices, acknowledged, emit, noticed, deliver } = await harness();
   jest.useFakeTimers();

@@ -9,8 +9,9 @@ import {
 } from "./runtime-error-vocabulary";
 import {
   CLASSIFICATION_RULES,
-  RUNTIME_BILLING_EXHAUSTED_PATTERNS,
+  RUNTIME_BALANCE_EXHAUSTED_PATTERNS,
   RUNTIME_OFFLINE_MODEL_PATTERN,
+  RUNTIME_WINDOW_LIMIT_PATTERNS,
   extractHttpStatus,
   isRuntimePlanAccessText,
   quotaResetAt,
@@ -40,10 +41,12 @@ export { isRuntimePlanAccessText } from "./runtime-error-rules";
  * The offline rules follow the reference Computer 1.0.51 (darwin-arm64, release
  * 463fd642-65db-4902-ae9b-c22fbae0e6a0, sha256 364ec010…c78e, observed 2026-10-21): an
  * action-required failure (`requiredAction` other than `none`), an exhausted billing balance or a
- * quota with no known reset, or a sticky model-config failure
+ * plan quota with no known reset, or a sticky model-config failure
  * ends the process and reports the Agent `inactive` until a person fixes the cause and starts it
  * again. A quota or 402 that names its reset instead waits behind that time, showing it in the
- * Activity, rather than taking the Agent offline. `TimeoutError` stays terminal-but-wakeable deliberately: a timeout is handled by the
+ * Activity, rather than taking the Agent offline. A rolling window's usage cap (`window_limit`,
+ * or window wording in free text) is never offline: it waits for a named reset or backs off,
+ * because the window lifts on its own. `TimeoutError` stays terminal-but-wakeable deliberately: a timeout is handled by the
  * stall watchdog (a stuck provider needs a kill/restart, not a redelivered message), and
  * `takesAgentOffline` must not attach offline semantics to it.
  */
@@ -112,9 +115,9 @@ export function classifyRuntimeError(
 ): RuntimeErrorClassification {
   const limit = event.providerLimit;
   if (!limit) return classifyRuntimeErrorText(event.message, event.httpStatus);
-  // An exhausted quota is a wait only when its reset is known. Without one (a monthly quota, or
-  // a provider that does not say) no retry can be planned: the Agent goes offline and the user is
-  // told why, instead of being held behind a backoff that can never usefully end.
+  // An exhausted account quota is a wait only when its reset is known. Without one (a monthly
+  // quota, or a provider that does not say) no retry can be planned: the Agent goes offline and
+  // the user is told why, instead of being held behind a backoff that can never usefully end.
   if (limit.kind === "quota_exhausted")
     return limit.resetsAt
       ? {
@@ -132,6 +135,17 @@ export function classifyRuntimeError(
           requiredAction: "none",
           takesAgentOffline: true,
         };
+  // A window limit lifts on its own, reset time or not: wait for a reported reset, else the
+  // ordinary exponential backoff — never offline (task #574).
+  if (limit.kind === "window_limit")
+    return {
+      errorClass: RUNTIME_ERROR_CLASS.RATE_LIMIT,
+      errorReason: "quota_exhausted",
+      retryDecision: RETRY,
+      ...(limit.resetsAt ? { retryNotBefore: limit.resetsAt } : {}),
+      requiredAction: "none",
+      takesAgentOffline: false,
+    };
   return {
     errorClass: RUNTIME_ERROR_CLASS.RATE_LIMIT,
     errorReason: "rate_limited",
@@ -163,13 +177,27 @@ export function classifyRuntimeErrorText(
   const httpStatus = isHttpErrorStatus(providerHttpStatus)
     ? providerHttpStatus
     : extractHttpStatus(message);
-  // Billing precedes plan access and the status block (reference order): a 402, or billing
+  // Balance precedes plan access and the status block (reference order): a 402, or balance
   // wording under any status, is decided by whether the failure names a recovery time.
   if (
     httpStatus === 402 ||
-    RUNTIME_BILLING_EXHAUSTED_PATTERNS.some((pattern) => pattern.test(message))
+    RUNTIME_BALANCE_EXHAUSTED_PATTERNS.some((pattern) => pattern.test(message))
   )
     return billingClassification(httpStatus, message, now);
+  // Window-limit wording is decided next, ahead of the status block: a usage window's cap is a
+  // wait for its named reset or an ordinary backoff, never an offline balance (task #574).
+  if (RUNTIME_WINDOW_LIMIT_PATTERNS.some((pattern) => pattern.test(message))) {
+    const retryNotBefore = quotaResetAt(message, now);
+    return {
+      errorClass: RUNTIME_ERROR_CLASS.RATE_LIMIT,
+      ...(httpStatus !== null ? { httpStatus } : {}),
+      errorReason: "quota_exhausted",
+      retryDecision: RETRY,
+      ...(retryNotBefore ? { retryNotBefore } : {}),
+      requiredAction: "none",
+      takesAgentOffline: false,
+    };
+  }
   for (const rule of CLASSIFICATION_RULES) {
     if (rule.matches(message, httpStatus)) {
       const requiredAction = classifyRuntimeErrorAction(rule.errorClass, message);

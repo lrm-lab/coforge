@@ -115,6 +115,30 @@ test("restoring a wait that ended while the Daemon was down clears it without ho
   expect(cleared).toEqual(["agent-b"]);
 });
 
+test("a window limit's backoff with no reset is recorded for the next process", () => {
+  jest.useFakeTimers();
+  const { hold, saved } = holdWith([]);
+  // What classifyRuntimeError returns for providerLimit { kind: "window_limit" } with no
+  // resetsAt: a retryable rate limit with no retryNotBefore, so the delay is exponential.
+  hold.noteFailure(
+    "agent-d",
+    {
+      errorClass: RUNTIME_ERROR_CLASS.RATE_LIMIT,
+      errorReason: "quota_exhausted",
+      retryDecision: "retry",
+      requiredAction: "none",
+      takesAgentOffline: false,
+    } as never,
+    "fingerprint-d",
+  );
+  const [record] = saved;
+  expect(record?.agentId).toBe("agent-d");
+  expect(record?.reason).toBe("rate_limit_backoff");
+  // First exponential delay is ten seconds plus up to ten percent jitter.
+  expect(record?.untilMs).toBeGreaterThanOrEqual(Date.now() + 10_000);
+  expect(record?.untilMs).toBeLessThanOrEqual(Date.now() + 11_000);
+});
+
 test("a retryable failure records what it waits for, and forget clears it", () => {
   jest.useFakeTimers();
   const { hold, saved, cleared } = holdWith([]);

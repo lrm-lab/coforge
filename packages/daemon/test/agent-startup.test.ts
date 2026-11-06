@@ -440,6 +440,8 @@ const usageLimitError = (providerLimit: ProviderLimit): AgentRuntimeEvent => ({
 
 test.each<ProviderLimit>([
   { kind: "quota_exhausted", resetsAt: "2026-10-20T13:30:00.000Z" },
+  { kind: "window_limit" },
+  { kind: "window_limit", resetsAt: "2026-10-20T13:30:00.000Z" },
   { kind: "transient_rate_limit" },
 ])("a provider usage limit ($kind) is readiness, not a startup failure", async (providerLimit) => {
   const startup = new AgentStartup(() => {});

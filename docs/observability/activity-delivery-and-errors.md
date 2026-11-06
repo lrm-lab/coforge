@@ -77,14 +77,18 @@ entry，以及运行中错误的 `runtimeError`（`errorClass`/
 额外携带的 `providerErrorCode`/`providerErrorClass`/`providerErrorReason` 会被优先
 采用（例如 Codex 的 turn 失败带着原生错误码和 `turn_failed` 这个比通用分类更精确的
 reason），否则退回到通用的 `AgentRuntimeError`/`runtime_failure`。唯一的例外是
-`providerLimit`：它不是自由格式的提示，而是封闭取值的事实（`quota_exhausted` 或
-`transient_rate_limit`，可带 `resetsAt`），provider 只在确知失败是用量或限流上限时才设置
+`providerLimit`：它不是自由格式的提示，而是封闭取值的事实（`quota_exhausted`、
+`window_limit` 或 `transient_rate_limit`，可带 `resetsAt`），provider 只在确知失败是用量或限流上限时才设置
 （目前只有 Claude Code，依据 assistant 记录的 `error` 和同一会话最近的 `rate_limit_event`）。
 有它时一律按 `RateLimitError` 分类（reason 为 `quota_exhausted`/`rate_limited`）。
-`quota_exhausted` 带 `resetsAt` 时退避到该时间，退避在回合结束后仍保留，运行中错误 Activity 的
-可见文案末尾追加 ` (limit resets at <ISO>)`；不带 `resetsAt`（月度配额，或 provider 没说恢复时间）
-则不可重试、Agent 下线（见下节）。同样的分流也适用于 HTTP 402 或额度/余额措辞里带明确 ISO 重置
-时间的失败：视为等待。指纹不含重置后缀，指纹熔断和 `runtime_crashed` 的文案也只引用 provider
+`quota_exhausted` 是账户余额或套餐配额用光：带 `resetsAt` 时退避到该时间，不带则不可重试、
+Agent 下线（见下节）。`window_limit` 是滚动时间窗的用量上限（五小时、每日、每周）：
+永远可重试——带 `resetsAt` 退避到该时间，不带则走普通指数退避，绝不下线（#574）。
+退避在回合结束后仍保留，运行中错误 Activity 的可见文案在有 `resetsAt` 时末尾追加
+` (limit resets at <ISO>)`。同样的分流也适用于 HTTP 402、余额耗尽措辞，以及窗口限额措辞
+（`usage limit reached`、`you've hit your usage limit`、`weekly usage quota has been exhausted`）：
+窗口措辞带明确 ISO/时长/try-again 重置时间时视为等待，否则退避；余额措辞没有重置时间才下线。
+指纹不含重置后缀，指纹熔断和 `runtime_crashed` 的文案也只引用 provider
 原文、不带它。没有任何
 `code-agent/*/provider.ts` 文件再自行构造 `runtime_error`/`runtime_crashed`/
 `runtime_reconnecting` 的 Activity。
@@ -107,9 +111,10 @@ thinking；重试中断当前 thinking，恢复后的文本或 thinking 立即�
 与参考客户端 1.0.51 对齐：`runtime-error-classification.ts` 的分类结果带
 `requiredAction`（`user_reauth`：任何 `AuthError`；`user_model_access`：plan-access 措辞的
 `ModelConfigError`——「plan/subscription 不含该模型」，先排除限流、容量等暂态措辞）和
-`takesAgentOffline`（action-required；`BillingError`——HTTP 402 或额度/余额耗尽措辞且没有可预期
+`takesAgentOffline`（action-required；`BillingError`——HTTP 402 或余额/额度耗尽措辞且没有可预期
 的恢复时间，`billing_exhausted`；`quota_exhausted` 但没有 `resetsAt`——月度配额或 provider 没说，
-视为不可恢复；或 sticky 的「model not supported/unsupported model」）。一旦发生
+视为不可恢复；或 sticky 的「model not supported/unsupported model」）。滚动窗口的用量上限
+（`window_limit`，或窗口限额措辞）永远不在此列：它等待已知重置或退避重试。一旦发生
 ——回合中、启动输入、或启动时 `createAgentSession` 直接抛错——Daemon
 结束进程、发送 `agent:status(inactive)`，并把可见 `detail` 改写为面向人的处理提示
 （重新登录/换模型或升级套餐；billing 文案提示余额已耗尽、等待中的消息在 Agent 重启后

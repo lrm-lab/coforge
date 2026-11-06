@@ -70,10 +70,10 @@ const RUNTIME_AUTH_PATTERNS = [
   /\bapi key (?:is )?not set\b/i,
 ];
 
-/** An exhausted provider billing/credit balance — no retry can succeed until it is restored,
- * so the failure is terminal and takes the Agent offline. Mirrored from the reference
- * Computer's `RUNTIME_BILLING_EXHAUSTED_PATTERNS` (matched together with HTTP status 402). */
-export const RUNTIME_BILLING_EXHAUSTED_PATTERNS = [
+/** An exhausted provider balance, credit or monthly/organization quota — no retry can succeed
+ * until a person restores it, so the failure is terminal and takes the Agent offline. Balance
+ * wording wins over window wording when a message carries both. */
+export const RUNTIME_BALANCE_EXHAUSTED_PATTERNS = [
   /\bpayment required\b/i,
   /\b(?:usage|credit|account)\s+balance\b[^.]*\b(?:exhausted|depleted|insufficient|too low)\b/i,
   /\binsufficient\s+(?:balance|credits?|funds)\b/i,
@@ -82,12 +82,21 @@ export const RUNTIME_BILLING_EXHAUSTED_PATTERNS = [
   /\bpremium credits exhausted\b/i,
   /\bpremium requests used up\b/i,
   /\bspend limit reached\b/i,
+  // Devin's org-level cap is a monthly budget an admin set, not a rolling window: it lifts only
+  // when the month turns or the budget grows, so it is balance, not a window limit.
+  /\b(?:organization|monthly)\b[^.\n]{0,40}\busage limit\b/i,
+];
+
+/** A rolling time window's usage cap running out — a five-hour, daily or weekly window, which
+ * lifts on its own, so the failure retries (waiting for a named reset, else backing off) and
+ * never takes the Agent offline. */
+export const RUNTIME_WINDOW_LIMIT_PATTERNS = [
   /\busage limit reached\b/i,
   /\byou(?:'|’)ve reached\b[^.]{0,80}\b(?:usage limit|today's limit)\b/i,
   // Codex 0.165 prints this, not "you've reached". "You've hit your session limit" stays out.
   /\byou(?:'|’)ve hit your usage limit\b/i,
-  // Devin's session/prompt ResourceExhausted (-32011) words its account-wide weekly cap this
-  // way; the generic usage/quota wording above does not reach it.
+  // Devin's session/prompt ResourceExhausted (-32011) words its weekly window this way; its
+  // organization/monthly cap is balance wording above instead.
   /\bweekly usage quota has been exhausted\b/i,
 ];
 

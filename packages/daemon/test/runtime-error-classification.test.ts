@@ -229,6 +229,35 @@ test("an exhausted quota with a reported reset time is not retried before it", (
   );
 });
 
+test("a window limit without a reset retries on backoff and never takes the Agent offline", () => {
+  expect(
+    classifyRuntimeError({ message: "limit", providerLimit: { kind: "window_limit" } }),
+  ).toEqual({
+    errorClass: RUNTIME_ERROR_CLASS.RATE_LIMIT,
+    errorReason: "quota_exhausted",
+    retryDecision: RUNTIME_ERROR_RETRY_DECISION.RETRY,
+    requiredAction: "none",
+    takesAgentOffline: false,
+  });
+});
+
+test("a window limit with a reset waits until it, like an exhausted quota's", () => {
+  const resetsAt = "2100-01-01T00:00:00.000Z";
+  expect(
+    classifyRuntimeError({
+      message: "limit",
+      providerLimit: { kind: "window_limit", resetsAt },
+    }),
+  ).toEqual({
+    errorClass: RUNTIME_ERROR_CLASS.RATE_LIMIT,
+    errorReason: "quota_exhausted",
+    retryDecision: RUNTIME_ERROR_RETRY_DECISION.RETRY,
+    retryNotBefore: resetsAt,
+    requiredAction: "none",
+    takesAgentOffline: false,
+  });
+});
+
 test("an HTTP 402 status is an exhausted billing balance: terminal, offline, no named action", () => {
   expect(classifyRuntimeErrorText("HTTP 402: request failed")).toEqual({
     httpStatus: 402,
@@ -264,16 +293,14 @@ test.each([
   "Your credit balance is too low to access the API",
   "insufficient credits",
   "You have run out of credits",
-  // Command Code cli 1.88 submit errors. With no duration and no date these stay offline.
+  // Command Code cli 1.88 submit errors: balance and org spend cap, not the rolling windows.
   "Premium credits exhausted",
   "Premium requests used up. Pick a standard model.",
   "Spend limit reached",
-  "Usage limit reached",
-  "You've reached today's limit on grok-4",
-  "You've reached your weekly usage limit",
-  "You've hit your usage limit",
-  "Usage limit reached. You've reached your usage limit. Increase your limits to continue using codex.",
-])("billing-exhausted wording is terminal and offline, without a named action: %s", (message) => {
+  // Devin's organization-level cap is a monthly budget, not a rolling window.
+  "Organization usage limit reached",
+  "Your organization has reached its monthly usage limit.",
+])("balance-exhausted wording is terminal and offline, without a named action: %s", (message) => {
   expect(classifyRuntimeErrorText(message)).toEqual({
     errorClass: RUNTIME_ERROR_CLASS.BILLING,
     errorReason: "billing_exhausted",
@@ -282,6 +309,25 @@ test.each([
     takesAgentOffline: true,
   });
 });
+
+test.each([
+  "Usage limit reached",
+  "You've reached today's limit on grok-4",
+  "You've reached your weekly usage limit",
+  "You've hit your usage limit",
+  "Usage limit reached. You've reached your usage limit. Increase your limits to continue using codex.",
+])(
+  "window-limit wording retries instead of going offline, without a named action: %s",
+  (message) => {
+    expect(classifyRuntimeErrorText(message)).toEqual({
+      errorClass: RUNTIME_ERROR_CLASS.RATE_LIMIT,
+      errorReason: "quota_exhausted",
+      retryDecision: RUNTIME_ERROR_RETRY_DECISION.RETRY,
+      requiredAction: "none",
+      takesAgentOffline: false,
+    });
+  },
+);
 
 test("a 402 whose text names plan access is still billing: billing precedes plan access", () => {
   const result = classifyRuntimeErrorText(
@@ -393,21 +439,25 @@ test("structured status wins over contradictory error text and invalid status fa
   });
 });
 
-test("Devin's session/prompt -32011 quota error is billing-exhausted, not a generic failure", () => {
+test("Devin's session/prompt -32011 weekly-quota error waits, never offline (task #574)", () => {
   // The exact text the incident produced (devin_20261103-180029_63556.log):
   // `ACP: agent error (ResourceExhausted): Your weekly usage quota has been exhausted`,
-  // `session/prompt` JSON-RPC -32011 carrying the same sentence.
+  // `session/prompt` JSON-RPC -32011 carrying the same sentence. Devin's weekly quota is a
+  // rolling window that lifts on its own, so it backs off like any window limit.
   const incident =
     "ACP: agent error (ResourceExhausted): Your weekly usage quota has been exhausted. " +
     "JSON-RPC error -32011: Unknown error";
   const classified = classifyRuntimeErrorText(incident);
-  expect(classified.errorClass).toBe(RUNTIME_ERROR_CLASS.BILLING);
-  expect(classified.errorReason).toBe("billing_exhausted");
-  expect(classified.takesAgentOffline).toBe(true);
+  expect(classified.errorClass).toBe(RUNTIME_ERROR_CLASS.RATE_LIMIT);
+  expect(classified.errorReason).toBe("quota_exhausted");
+  expect(classified.retryDecision).toBe(RUNTIME_ERROR_RETRY_DECISION.RETRY);
+  expect(classified.takesAgentOffline).toBe(false);
 });
 
-test("Devin's quota sentence alone is billing-exhausted", () => {
+test("Devin's weekly-quota sentence alone retries without a reset wait", () => {
   const classified = classifyRuntimeErrorText("Your weekly usage quota has been exhausted");
-  expect(classified.errorReason).toBe("billing_exhausted");
-  expect(classified.takesAgentOffline).toBe(true);
+  expect(classified.errorReason).toBe("quota_exhausted");
+  expect(classified.retryDecision).toBe(RUNTIME_ERROR_RETRY_DECISION.RETRY);
+  expect(classified.retryNotBefore).toBeUndefined();
+  expect(classified.takesAgentOffline).toBe(false);
 });

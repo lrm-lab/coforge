@@ -41,9 +41,9 @@ describe("ClaudeRateLimitState: the limit a Claude error reports", () => {
     });
   });
 
-  test("rate_limit after a current rejected event is an exhausted quota until its reset", () => {
+  test("rate_limit after a current rejected event is a window limit until its reset", () => {
     expect(limitOf(rejectedState(), "rate_limit")).toEqual({
-      kind: "quota_exhausted",
+      kind: "window_limit",
       resetsAt: IN_AN_HOUR_ISO,
     });
   });
@@ -54,10 +54,10 @@ describe("ClaudeRateLimitState: the limit a Claude error reports", () => {
     expect(limitOf(limits, "rate_limit")?.resetsAt).toBe(IN_AN_HOUR_ISO);
   });
 
-  test("a rejected event without a reset is an exhausted quota with no reset time", () => {
+  test("a rejected event without a reset is a window limit with no reset time", () => {
     const limits = state();
     limits.observe(rateLimitEvent({ status: "rejected", errorCode: "credits_required" }), SESSION);
-    expect(limitOf(limits, "rate_limit")).toStrictEqual({ kind: "quota_exhausted" });
+    expect(limitOf(limits, "rate_limit")).toStrictEqual({ kind: "window_limit" });
   });
 
   test("a rejected event whose reset has passed falls back to the error text", () => {
@@ -65,7 +65,7 @@ describe("ClaudeRateLimitState: the limit a Claude error reports", () => {
     limits.observe(rateLimitEvent({ status: "rejected", resetsAt: NOW_MS / 1000 - 1 }), SESSION);
     expect(limitOf(limits, "rate_limit")).toEqual({ kind: "transient_rate_limit" });
     expect(limitOf(limits, "rate_limit", "You've hit your session limit · resets 3:45pm")).toEqual({
-      kind: "quota_exhausted",
+      kind: "window_limit",
     });
   });
 
@@ -80,8 +80,8 @@ describe("ClaudeRateLimitState: the limit a Claude error reports", () => {
     "You've hit your organization's budget",
     "You've used your included Max usage",
     "You've reached your organization's monthly extra-usage spend limit",
-  ])("rate_limit with no remembered event reads %p as an exhausted quota", (message) => {
-    expect(limitOf(state(), "rate_limit", message)).toEqual({ kind: "quota_exhausted" });
+  ])("rate_limit with no remembered event reads %p as a window limit", (message) => {
+    expect(limitOf(state(), "rate_limit", message)).toEqual({ kind: "window_limit" });
   });
 
   test.each([
@@ -110,7 +110,7 @@ describe("ClaudeRateLimitState: the limit a Claude error reports", () => {
       const limits = rejectedState();
       limits.observe(rateLimitEvent(info), SESSION);
       expect(limitOf(limits, "rate_limit")).toEqual({
-        kind: "quota_exhausted",
+        kind: "window_limit",
         resetsAt: IN_AN_HOUR_ISO,
       });
     },
@@ -189,7 +189,7 @@ describe("ClaudeRateLimitState: usage windows", () => {
   });
 });
 
-test("a Claude usage limit reaches the session as an exhausted quota with its reset", async () => {
+test("a Claude usage limit reaches the session as a window limit with its reset", async () => {
   const feed = claudeEventFeed();
   const session = await claudeFixtureProvider().createAgentSession({
     agentWorkspaceDirectory: tmpdir(),
@@ -221,7 +221,7 @@ test("a Claude usage limit reaches the session as an exhausted quota with its re
         type: "error",
         message,
         providerErrorCode: "rate_limit",
-        providerLimit: { kind: "quota_exhausted", resetsAt: "2100-01-01T00:00:00.000Z" },
+        providerLimit: { kind: "window_limit", resetsAt: "2100-01-01T00:00:00.000Z" },
         occurredAt: expect.any(String),
       },
       { type: "completed", status: "failed" },

@@ -68,13 +68,13 @@ export class ClaudeRateLimitState {
     if (code === "billing_error") return { kind: "quota_exhausted" };
     if (code !== "rate_limit") return undefined;
     const rejected = this.#rejected?.sessionId === sessionId ? this.#rejected : undefined;
-    if (rejected && (!rejected.resetsAt || rejected.resetsAt.getTime() > this.#now()))
-      return {
-        kind: "quota_exhausted",
-        ...(rejected.resetsAt ? { resetsAt: rejected.resetsAt.toISOString() } : {}),
-      };
+    // A `rate_limit` code is a usage window's cap (five-hour, weekly), never the balance:
+    // `billing_error` owns that. With or without a reset the daemon waits it out.
+    if (rejected?.resetsAt && rejected.resetsAt.getTime() > this.#now())
+      return { kind: "window_limit", resetsAt: rejected.resetsAt.toISOString() };
+    if (rejected && !rejected.resetsAt) return { kind: "window_limit" };
     return QUOTA_EXHAUSTED_TEXT.some((pattern) => pattern.test(message))
-      ? { kind: "quota_exhausted" }
+      ? { kind: "window_limit" }
       : { kind: "transient_rate_limit" };
   }
 }

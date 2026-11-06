@@ -54,7 +54,26 @@ test("a duration reset on a thrown launch waits and does not take the agent offl
   expect(current.offlineError).toBeUndefined();
 });
 
-test("a usage limit with no recovery time on a thrown launch is offline", () => {
+test("a window usage limit with no recovery time on a thrown launch keeps ordinary retries", () => {
+  const offline = residency();
+  const current = launch();
+  // A rolling window's cap lifts on its own: no named reset means the ordinary launch
+  // backoff, not the offline record a balance failure gets (task #574).
+  expect(
+    offline.thrownLaunchActivity(
+      "a",
+      current,
+      "Codex",
+      { provider: "codex", model: "gpt" } as typeof config,
+      new Error("You've hit your usage limit."),
+    ),
+  ).toBeUndefined();
+  expect(offline.has("a")).toBe(false);
+  expect(offline.hasLaunchWait("a")).toBe(false);
+  expect(current.offlineError).toBeUndefined();
+});
+
+test("an exhausted balance with no recovery time on a thrown launch is offline", () => {
   const offline = residency();
   const current = launch();
   const activity = offline.thrownLaunchActivity(
@@ -62,7 +81,7 @@ test("a usage limit with no recovery time on a thrown launch is offline", () => 
     current,
     "Codex",
     { provider: "codex", model: "gpt" } as typeof config,
-    new Error("You've hit your usage limit."),
+    new Error("insufficient credits"),
   );
   expect(activity?.detail).toContain("stopped retrying");
   expect(offline.has("a")).toBe(true);

@@ -235,9 +235,12 @@ export type AgentRuntimeEvent = { readonly conversation?: AgentConversationScope
    * reflects a provider's own "will retry" signal, if it has one.
    *
    * `providerLimit`, unlike those free-form hints, is a normalized fact from a closed vocabulary:
-   * a provider sets it only when it knows the failure is a usage or rate limit (`quota_exhausted`
-   * until the account's limit resets, at `resetsAt` (ISO) when known; `transient_rate_limit`
-   * otherwise). That is why the daemon's retry policy may honor it.
+   * a provider sets it only when it knows the failure is a usage or rate limit. `quota_exhausted`
+   * is the account's balance or plan quota running out — terminal unless `resetsAt` (ISO) names a
+   * recovery time. `window_limit` is a rolling time window's usage cap (a five-hour, daily or
+   * weekly window) running out — always retryable: the daemon waits until `resetsAt` when known
+   * and backs off when it is not, because the window lifts on its own. `transient_rate_limit`
+   * is a short throttle. That is why the daemon's retry policy may honor it.
    */
   | {
       type: "error";
@@ -249,7 +252,7 @@ export type AgentRuntimeEvent = { readonly conversation?: AgentConversationScope
       httpStatus?: number;
       providerErrorReason?: string;
       providerLimit?: {
-        kind: "quota_exhausted" | "transient_rate_limit";
+        kind: "quota_exhausted" | "window_limit" | "transient_rate_limit";
         resetsAt?: string;
       };
       occurredAt?: string;
