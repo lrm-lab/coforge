@@ -237,7 +237,7 @@ export class Artifacts {
         throw new AppError("CONFLICT", {
           errorId: input.publisher.agentId ? "artifact-agent-base-moved" : "artifact-base-moved",
           hint: input.publisher.agentId
-            ? "the artifact changed after you read it; read the newest version before saving again"
+            ? "the artifact changed after you read it; run `coforge artifact read` for the newest version, then save again"
             : undefined,
         });
 

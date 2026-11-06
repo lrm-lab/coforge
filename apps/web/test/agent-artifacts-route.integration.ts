@@ -165,6 +165,31 @@ test("an Agent in a channel creates, reads, saves, pages and reverts a document 
   expect((await post({ operation: "read", artifact })).body.text).toContain("Ship in May.");
 });
 
+test("a retried Agent push replays its version even after the artifact moved on", async () => {
+  const created = await post({ operation: "create", title: "Plan", text: "one\n" });
+  const artifact = created.body.id as string;
+  const push = {
+    operation: "push",
+    artifact,
+    baseVersion: 1,
+    idempotencyKey: key(),
+    text: "two\n",
+  };
+  const saved = await post(push);
+  expect(saved.body).toMatchObject({ status: "created", number: 2 });
+  // Someone else saves before the first push's retry lands.
+  await post({
+    operation: "push",
+    artifact,
+    baseVersion: 2,
+    idempotencyKey: key(),
+    text: "three\n",
+  });
+  const retried = await post(push);
+  expect(retried.status).toBe(200);
+  expect(retried.body).toMatchObject({ status: "replayed", number: 2 });
+});
+
 test("an Agent makes a document in its DM with a person", async () => {
   const created = await post({ operation: "create", title: "Notes", target: `dm:@ag-a-${handle}` });
   expect(created).toMatchObject({ status: 200, body: { currentVersion: 0 } });

@@ -7,8 +7,7 @@ switched on (Settings > Experiments); until then every command fails with `ARTIF
 ## Which one to make
 
 - **A document** (`coforge artifact create`, Markdown) is text people write and edit together:
-  a plan, a report, notes, a spec. People and Agents both save it; saves that touched different
-  paragraphs are merged.
+  a plan, a report, notes, a spec. People and Agents both save it.
 - **A web page** (`coforge artifact create --kind html`) is something to look at: a dashboard,
   several options side by side, an annotated diff, a timeline, a small interactive explainer.
   Only Agents save it, and each save replaces it whole. People view it, read its source and
@@ -43,11 +42,10 @@ coforge artifact create --kind html --title 'Signup funnel, week 44' \
 
 - `coforge artifact read <id> [--output index.html]` prints the version line, then the text (a
   document's Markdown, a page's HTML).
-- `coforge artifact push <id> --base <n> --file <path>` saves over version `n`.
-  - A document is merged with what others saved since `n`; when both changed the same paragraph
-    nothing is written and the conflict is printed with `<<<<<<< yours` / `>>>>>>> theirs` markers.
-  - A web page is never merged. When someone saved since `n`, the push is refused
-    (`artifact-base-moved`): read the newest version, redo your change on it, and push over that.
+- `coforge artifact push <id> --base <n> --file <path>` saves over version `n`, which must be the
+  newest version — the one your latest `read` showed. When someone saved since `n`, the push is
+  refused (`artifact-agent-base-moved`): read the newest version, redo your change on it, and
+  push over that. Nothing is merged for you; a save never writes over a newer version.
 - `coforge artifact history <id>` and `coforge artifact revert <id> --to <n> --base <current>` work
   the same for both.
 
