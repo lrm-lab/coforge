@@ -59,3 +59,25 @@ export function restoreScrollAnchor(
 
 /** The gap left above a row the pane scrolls to (`applyOpenPosition`). */
 export const ROW_TOP_GAP_PX = 12;
+
+/**
+ * Runs a scroll now and again on the next frame. The router's scroll restoration
+ * (`scrollRestoration: true` in `router.tsx`) rewrites the history's scrollTop in its
+ * `onRendered` pass, which runs after a child's layout effect, so a single pass can be
+ * overwritten by the entry cached for the pane. `data-scroll-restoration-id` on the history
+ * keeps another conversation's offset from reaching this pane in the first place.
+ */
+export function scrollTwice(scroll: () => void) {
+  scroll();
+  requestAnimationFrame(scroll);
+}
+
+/** Centers a loaded message's row at once, in two passes like the hash landing: the router's
+ * scroll restoration can rewrite the container after this frame. A jump never scrolls smoothly:
+ * a smooth scroll that pages older history in is cut short by the paging scroll anchor. The row
+ * flashes instead, as Slack's jump to a message does. */
+export function scrollToMessageRow(messageId: string) {
+  scrollTwice(() =>
+    document.getElementById(`message-${messageId}`)?.scrollIntoView({ block: "center" }),
+  );
+}

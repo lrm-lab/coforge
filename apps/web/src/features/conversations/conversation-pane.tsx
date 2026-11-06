@@ -15,10 +15,10 @@ import { OlderMessagesRow, type OlderLoad } from "./older-messages-row";
 import {
   captureScrollAnchor,
   restoreScrollAnchor,
+  scrollTwice,
   type ScrollAnchor,
 } from "./conversation-scroll-anchor";
-import { newerPageCommit, positionJumpDecision } from "./conversation-thread-search";
-import { JUMP_HIGHLIGHT_MS } from "./message-jump-highlight";
+import { newerPageCommit } from "./conversation-thread-search";
 import { latestTopLevelSequence } from "./conversation-unread";
 import { streamState } from "./stream-state";
 import { ConversationComposerFooter } from "./conversation-composer-footer";
@@ -39,6 +39,7 @@ import { useLoadedOwnMessages } from "./use-loaded-own-messages";
 import { isViewerMessage } from "./own-message";
 import { useConversationOpen } from "./use-conversation-open";
 import { useSystemMessageGroups } from "./use-system-message-groups";
+import { useMessageJump } from "./use-message-jump";
 import type { ConversationPaneProps } from "./conversation-pane-props";
 import { MESSAGE_COLUMN_CLASS } from "#src/features/settings/message-width";
 import { ConversationStreamPlaceholder } from "./conversation-stream-placeholder";
@@ -154,20 +155,6 @@ export function ConversationPane({
    * the row at the top of the viewport and its content's offset, before the change. See the
    * layout effect below for why a raw height delta is not enough once eviction is in play. */
   const historyScrollAnchorRef = useRef<ScrollAnchor | undefined>(undefined);
-  const pendingMessageIdRef = useRef<string | undefined>(undefined);
-  // The row a position jump just landed on, highlighted for a moment: `?message=` deliberately
-  // carries no hash (#713), so the landed row has no `:target` to take the anchor highlight from
-  // (message-row.tsx renders both treatments with the same classes).
-  const [jumpHighlightId, setJumpHighlightId] = useState<string | undefined>(undefined);
-  const jumpHighlightTimer = useRef<number | undefined>(undefined);
-  const flashMessageRow = useCallback((messageId: string) => {
-    setJumpHighlightId(messageId);
-    window.clearTimeout(jumpHighlightTimer.current);
-    jumpHighlightTimer.current = window.setTimeout(() => {
-      setJumpHighlightId((current) => (current === messageId ? undefined : current));
-    }, JUMP_HIGHLIGHT_MS);
-  }, []);
-  useEffect(() => () => window.clearTimeout(jumpHighlightTimer.current), []);
   // The row the pane still owes an open scroll. Rows are all in the DOM, so this is only held
   // when the container had no height to scroll within yet (a hidden branch); the pinning
   // observer retries it once the pane is laid out.
@@ -188,7 +175,6 @@ export function ConversationPane({
     { keepsCursor: keepsReadCursor, loadAround: onLoadMessageAround },
   );
   const lastSequence = conversation.messages.at(-1)?.sequence;
-  const firstSequence = conversation.messages[0]?.sequence;
   const isOwn = (message: { senderMemberId?: string | null }) =>
     isViewerMessage(message, conversation.senderMemberId);
   // Only derived from the loaded page when no indexed own-message source is wired up.
@@ -274,8 +260,16 @@ export function ConversationPane({
     toggleGroup: toggleSystemGroup,
     revealGroupMessage: revealSystemMessage,
   } = useSystemMessageGroups(streamItems);
-  const revealSystemMessageRef = useRef(revealSystemMessage);
-  revealSystemMessageRef.current = revealSystemMessage;
+  const { showMessage, jumpHighlightId } = useMessageJump({
+    messages: conversation.messages,
+    openedSystemMessages,
+    revealSystemMessage,
+    jumpMessage,
+    onJumpMessageConsumed,
+    onLoadMessageAround,
+    setFollowingLatest,
+    scrollToLatest,
+  });
   useLayoutEffect(() => {
     const firstRender = previousConversationIdRef.current === undefined;
     const changedConversation =
@@ -391,76 +385,10 @@ export function ConversationPane({
   }, [conversation.conversationId, conversation.hasNewer, conversation.messages.length]);
 
   useLayoutEffect(() => {
-    function scrollToMessageAnchor() {
-      const anchor = window.location.hash.slice(1);
-      if (!anchor.startsWith("message-")) return;
-      // Every loaded row is in the DOM and in normal flow, so the anchored row's own box is the
-      // only thing to measure — there is no estimate to settle on. The second pass covers the
-      // router's own scroll restoration, which runs after this effect.
-      const scroll = () => {
-        const message = document.getElementById(anchor);
-        if (!message) {
-          // A notice folded into a system group: open the group, and let the pending-jump pass
-          // below scroll to the row once it exists.
-          const messageId = anchor.slice("message-".length);
-          if (revealSystemMessageRef.current(messageId)) {
-            setFollowingLatest(false);
-            pendingMessageIdRef.current = messageId;
-          }
-          return;
-        }
-        setFollowingLatest(false);
-        message.scrollIntoView({ block: "center" });
-      };
-      scroll();
-      requestAnimationFrame(scroll);
-    }
-    scrollToMessageAnchor();
-    window.addEventListener("hashchange", scrollToMessageAnchor);
-    return () => window.removeEventListener("hashchange", scrollToMessageAnchor);
-  }, [firstSequence]);
-
-  useLayoutEffect(() => {
-    const messageId = pendingMessageIdRef.current;
-    if (!messageId) return;
-    const message = document.getElementById(`message-${messageId}`);
-    if (!message) {
-      // Loaded but folded into a system group: open it; this pass runs again once it is open.
-      revealSystemMessage(messageId);
-      return;
-    }
-    pendingMessageIdRef.current = undefined;
-    scrollToMessageRow(messageId);
-    flashMessageRow(messageId);
-  }, [conversation.messages, openedSystemMessages, flashMessageRow]);
-
-  useLayoutEffect(() => {
     if (!pendingLatestRef.current || conversation.hasNewer) return;
     scrollTwice(() => scrollToLatest("instant"));
     pendingLatestRef.current = false;
   }, [conversation.hasNewer, conversation.messages]);
-
-  /**
-   * Runs a scroll now and again on the next frame. The router's scroll restoration
-   * (`scrollRestoration: true` in `router.tsx`) rewrites this container's scrollTop in its
-   * `onRendered` pass, which runs after this child's layout effect, so a single pass can be
-   * overwritten by the entry cached for this pane. `data-scroll-restoration-id` below keeps
-   * another conversation's offset from reaching this pane in the first place.
-   */
-  function scrollTwice(scroll: () => void) {
-    scroll();
-    requestAnimationFrame(scroll);
-  }
-
-  /** Centers a loaded message's row at once, in two passes like the hash landing: the router's
-   * scroll restoration can rewrite the container after this frame. A jump never scrolls smoothly:
-   * a smooth scroll that pages older history in is cut short by the paging scroll anchor. The row
-   * flashes instead, as Slack's jump to a message does. */
-  function scrollToMessageRow(messageId: string) {
-    scrollTwice(() =>
-      document.getElementById(`message-${messageId}`)?.scrollIntoView({ block: "center" }),
-    );
-  }
 
   /** Scrolls to the row the pane opens on — the oldest unread, or the latest. Runs once per open;
    * the pinning observer retries it if the pane had no height to scroll within yet. */
@@ -559,63 +487,6 @@ export function ConversationPane({
     }
     scrollToLatest("smooth");
   }
-
-  /** Scrolls to a message, loading the window around it first. `opening`: the conversation opens on
-   * it, so a failed load leaves the pane at the latest instead. */
-  async function showMessage(messageId: string, { opening = false } = {}) {
-    const loaded = conversation.messages.some((message) => message.id === messageId);
-    setFollowingLatest(false);
-    if (!loaded) {
-      if (!onLoadMessageAround) return;
-      pendingMessageIdRef.current = messageId;
-      try {
-        await onLoadMessageAround(messageId);
-      } catch {
-        pendingMessageIdRef.current = undefined;
-        toast.error(m.conversation_history_load_error());
-        // A conversation that was opening on the message opens at the latest instead.
-        if (opening) {
-          setFollowingLatest(true);
-          scrollTwice(() => scrollToLatest("instant"));
-        }
-      }
-      return;
-    }
-    if (revealSystemMessage(messageId)) {
-      pendingMessageIdRef.current = messageId;
-      return;
-    }
-    scrollToMessageRow(messageId);
-    flashMessageRow(messageId);
-  }
-
-  // The Saved view's `?message=<uuid>` jump (#127 follow-up) is position-only: it lands at the
-  // message's row in the stream, never in its thread (the hash path above opens the thread). The
-  // wrapper owns the router read, so this pane stays free of router hooks and the thread-root
-  // tests can render it standalone. It is consumed once — the window around the anchor loads and
-  // `showMessage` scrolls to it — then stripped like a hash, so a later navigation cannot inherit
-  // it. A notification's hash wins outright; the rules are the pure `positionJumpDecision` table
-  // (conversation-thread-search.ts), pinned by unit tests.
-  const attemptedJumpRef = useRef<string | undefined>(undefined);
-  const showMessageRef = useRef(showMessage);
-  showMessageRef.current = showMessage;
-  useEffect(() => {
-    const decision = positionJumpDecision(
-      jumpMessage,
-      window.location.hash,
-      attemptedJumpRef.current,
-    );
-    if (decision.action === "idle") {
-      attemptedJumpRef.current = undefined;
-      return;
-    }
-    if (decision.action === "ignore") return;
-    attemptedJumpRef.current = decision.id;
-    // A jump from outside the pane: opening the conversation on a message, or another search
-    // result or link into the conversation already open.
-    if (decision.action === "show") void showMessageRef.current(decision.id, { opening: true });
-    onJumpMessageConsumed?.();
-  }, [jumpMessage, onJumpMessageConsumed]);
 
   return (
     <div data-conversation-pane className="flex min-h-0 flex-1 flex-col">

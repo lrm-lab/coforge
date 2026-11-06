@@ -19,7 +19,7 @@ import { join } from "node:path";
  */
 const REPO_ROOT = join(import.meta.dir, "..");
 const MESSAGE_ROW = join(REPO_ROOT, "src/features/conversations/message-row.tsx");
-const CONVERSATION_PANE = join(REPO_ROOT, "src/features/conversations/conversation-pane.tsx");
+const MESSAGE_JUMP = join(REPO_ROOT, "src/features/conversations/use-message-jump.ts");
 const JUMP_HIGHLIGHT = join(REPO_ROOT, "src/features/conversations/message-jump-highlight.ts");
 
 test("the landed row wears exactly the classes the :target treatment uses", async () => {
@@ -40,7 +40,7 @@ test("the landed row wears exactly the classes the :target treatment uses", asyn
 });
 
 test("both landing paths flash the row, and the duration is named", async () => {
-  const source = await readFile(CONVERSATION_PANE, "utf8");
+  const source = await readFile(MESSAGE_JUMP, "utf8");
   // One call where the message is already loaded (`showMessage`) and one in the layout effect that
   // finishes a pending `onLoadMessageAround` pass — dropping either leaves one landing path without
   // a highlight, which is exactly the half-fixed state a reviewer would miss by eye.
