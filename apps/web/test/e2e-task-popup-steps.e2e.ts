@@ -104,8 +104,11 @@ test("a Task popup opened from another steps back to it", async () => {
     const settled = () =>
       browser("wait", "--fn", `document.getAnimations().every((a) => a.playState !== "running")`);
     const dialog = `document.querySelector('[role="dialog"]')`;
-    const heading = (text: string) =>
-      `${dialog}?.querySelector("h2")?.textContent.includes(${JSON.stringify(text)})`;
+    // A related Task of another channel opens as an overlay over the page, never by navigating
+    // (OtherTaskPopup): while it is up there are two dialogs and the last is the step's.
+    const topDialog = `[...document.querySelectorAll('[role="dialog"]')].at(-1)`;
+    const heading = (text: string, within = dialog) =>
+      `${within}?.querySelector("h2")?.textContent.includes(${JSON.stringify(text)})`;
     const shoot = async (name: string) => {
       await settled();
       await browser("screenshot", join(artifacts, `${name}.png`));
@@ -131,10 +134,10 @@ test("a Task popup opened from another steps back to it", async () => {
       await browser(
         "wait",
         "--fn",
-        `location.pathname.endsWith("/channel/${launch.id}") && ${heading("服务端和命令行实现")}`,
+        `location.pathname.endsWith("/channel/${deps.id}") && ${topDialog} !== ${dialog} && ${heading("服务端和命令行实现", topDialog)}`,
       );
     };
-    const atParent = `location.pathname.endsWith("/channel/${deps.id}") && ${heading("项目任务视图")}`;
+    const atParent = `location.pathname.endsWith("/channel/${deps.id}") && ${topDialog} === ${dialog} && ${heading("项目任务视图")}`;
     await mkdir(artifacts, { recursive: true });
     const parentPage = `${origin}/zh-CN/w/${workspace.slug}/channel/${deps.id}?task=${parent}`;
 
@@ -151,9 +154,9 @@ test("a Task popup opened from another steps back to it", async () => {
 
       await intoSubtask();
       await shoot(`${label}-subtask`);
-      // Esc steps back up to the parent's popup, which Esc then closes; with focus on the dialog
-      // itself too, where it lands when a step opens (task #472).
-      await evaluate(`${dialog}.focus() ?? true`);
+      // Esc steps back up to the parent's popup, which Esc then closes; with focus on the step's
+      // dialog itself too, where it lands when a step opens (task #472).
+      await evaluate(`${topDialog}.focus() ?? true`);
       await browser("press", "Escape");
       await browser("wait", "--fn", atParent);
       await browser("press", "Escape");
@@ -164,7 +167,7 @@ test("a Task popup opened from another steps back to it", async () => {
       await browser("wait", "--fn", `${pageHydrated} && ${heading("项目任务视图")}`);
       await intoSubtask();
       await evaluate(
-        `${dialog}.querySelector("nav button").setAttribute("data-e2e-back", "") ?? true`,
+        `${topDialog}.querySelector("nav button").setAttribute("data-e2e-back", "") ?? true`,
       );
       await browser("click", "[data-e2e-back]");
       await browser("wait", "--fn", atParent);
