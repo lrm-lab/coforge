@@ -312,6 +312,27 @@ test("manual local publication always validates its complete track, regardless o
   ]);
 });
 
+test("the local gate selects only the script-contract suites a change needs", () => {
+  // The #592 gap: a deploy-script format failure reached main because no local check ran
+  // check:deploy. The local track must pick the same suite CI's changes job would.
+  expect(selectChecks(["scripts/deploy/remote-deploy.sh"], "local")).toEqual(["deploy"]);
+  expect(selectChecks(["scripts/migration-safety/migrate-deploy.sh"], "local")).toEqual(["deploy"]);
+  expect(selectChecks(["scripts/ops/acme-dns-hook.sh"], "local")).toEqual(["cdn-certs"]);
+  // Package and Web changes are already covered by `bun run check`; they select no contracts.
+  expect(selectChecks(["apps/web/src/a.tsx"], "local")).toEqual([]);
+  expect(selectChecks(["packages/daemon/src/runtime.ts"], "local")).toEqual([]);
+  // Lockfiles and CI tooling get the same full contract coverage as the changes track.
+  expect(selectChecks(["bun.lock"], "local")).toEqual([
+    "cdn-certs",
+    "ci",
+    "deploy",
+    "docs-site",
+    "oss-cdn",
+    "reference-computer",
+    "release",
+  ]);
+});
+
 test("manual installer publication validates the installer crate and only the installer crate, regardless of changed files", async () => {
   expect(selectChecks([], "installer")).toEqual(["installer-crate"]);
   expect(

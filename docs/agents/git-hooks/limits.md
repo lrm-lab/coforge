@@ -12,9 +12,13 @@ Part of [Git hooks](README.md): what the [hooks](README.md), the `mise run check
   still range-checks the commits not yet on your local `origin/main`, so a violation is reported
   before a push that follows the check. Without `origin` or `origin/main` it says so and skips
   that part; a stale `origin/main` can list others' commits, so a failure names its base and asks
-  for `git fetch origin`. It changes no config, and does nothing when `CI` is set to anything but
-  `false` or `0`, or outside a work tree. It is a convention, and `--no-verify` bypasses the
-  hooks: only CI cannot be skipped.
+  for `git fetch origin`. The same range also selects the script-contract suites
+  (`scripts/ci/selection.ts`'s `local` track, the map CI's changes job uses) and runs each as
+  `bun run test:<name>` then `bun run check:<name>`; a path that selects nothing adds only the
+  diff and selection, a few milliseconds, and a diff that cannot be computed fails the gate
+  rather than passing silently. It changes no config, and does nothing when `CI` is
+  set to anything but `false` or `0`, or outside a work tree. It is a convention, and
+  `--no-verify` bypasses the hooks: only CI cannot be skipped.
 - A maintainer or an Agent may push directly to `main` (root `AGENTS.md`); CI validates a push only
   afterwards, so a violation that got past the hook and the gate is reported once on `main`, and
   its author fixes it before pushing anything else. A PR cannot merge without "CI passed".

@@ -229,3 +229,55 @@ test("a hooks path through a symlink, or written with ~/, names .githooks too", 
     expect(runGate(), path).toMatchObject({ exitCode: 0, stderr: "" });
   }
 });
+
+/** A fixture package.json whose contract scripts echo their name, so a gate run shows which
+ * suites the selection picked without running the real ones. */
+function contractStub(scripts: Record<string, string>) {
+  repo.write({
+    "package.json": JSON.stringify({ name: "fixture", scripts }),
+  });
+}
+
+test("unpushed changes under scripts/deploy select and run the deploy contract suites", () => {
+  installed();
+  repo.seed({ "README.md": "# Repo\n" });
+  contractStub({
+    "test:deploy": "echo contract-test-deploy",
+    "check:deploy": "echo contract-check-deploy",
+  });
+  repo.ok("add", "package.json");
+  repo.ok("commit", "-q", "--no-verify", "-m", "stub", "-m", "Revert-effect: none");
+  withOrigin();
+  repo.seed({ "scripts/deploy/remote-deploy.sh": "#!/bin/sh\n" });
+
+  const result = runGate();
+
+  expect(result.exitCode).toBe(0);
+  expect(result.stdout).toContain("script-contract checks selected: deploy");
+  expect(result.stdout).toContain("contract-test-deploy");
+  expect(result.stdout).toContain("contract-check-deploy");
+});
+
+test("a failing selected contract suite fails the gate after running every suite", () => {
+  installed();
+  repo.seed({ "README.md": "# Repo\n" });
+  contractStub({
+    "test:deploy": "echo contract-test-deploy",
+    "check:deploy": "exit 1",
+    "test:release": "echo contract-test-release",
+    "check:release": "echo contract-check-release",
+  });
+  repo.ok("add", "package.json");
+  repo.ok("commit", "-q", "--no-verify", "-m", "stub", "-m", "Revert-effect: none");
+  withOrigin();
+  // scripts/ci/** selects every contract suite, like a lockfile or toolchain change does.
+  repo.seed({ "scripts/ci/selection.ts": "export {};\n" });
+
+  const result = runGate();
+
+  expect(result.exitCode).not.toBe(0);
+  expect(result.stderr).toContain("failed script-contract checks:");
+  expect(result.stderr).toContain("deploy");
+  // Suites after the failure still ran: release's stub output is on stdout.
+  expect(result.stdout).toContain("contract-test-release");
+});

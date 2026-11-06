@@ -66,14 +66,32 @@ export const nativeTestJobs: Record<string, string[]> = {
   "packages/computer/test/release-executable.test.ts": ["macos-lifecycle", "windows-release"],
 };
 
+/** The script-contract suites `validate-each.sh scripts` runs: oxfmt/oxlint/shellcheck plus the
+ * suite's tests, one `test:<name>` + `check:<name>` pair each. CI's infrastructure-contracts job
+ * and the local gate both select from this list, so a path maps to the same suites in both. */
+export const contractChecks = [
+  "cdn-certs",
+  "ci",
+  "deploy",
+  "docs-site",
+  "oss-cdn",
+  "reference-computer",
+  "release",
+];
+
 export function selectChecks(paths: string[], track: "changes" | "web" | "local" | "installer") {
   if (track === "installer") {
     // The installer's own publication, from the exact main commit: its crate on all six native
     // targets, with the supply-chain gate. Nothing else ships in it.
     return ["installer-crate"];
   }
-  if (track === "local") {
-    // Computer publication does not ship the installer crate, which has its own release.
+  if (track === "local" && paths.length === 0) {
+    // A manual local publication (ci.yml's track=local dispatch, and release-staging's gates
+    // job) validates the complete local track regardless of changed files. The script-contract
+    // suites are excluded here: push CI already ran them for the released commit, and the local
+    // gate selects them per change through the path-scoped branch below. Computer publication
+    // does not ship the installer crate, which has its own release, and the image's web job is
+    // a separate track.
     const excluded = [
       "cdn-certs",
       "deploy",
@@ -171,6 +189,12 @@ export function selectChecks(paths: string[], track: "changes" | "web" | "local"
       ? [...(checks.has("ci") ? ["ci"] : []), "deploy", "coforge-sdk", "web"]
       : [];
   }
+  if (track === "local") {
+    // The local gate's added coverage: the script-contract suites CI's
+    // infrastructure-contracts job would run for these paths. The package checks are already
+    // unconditional in `bun run check`, so they are not selected here.
+    return [...checks].filter((check) => contractChecks.includes(check)).sort();
+  }
   return [...checks].sort();
 }
 
@@ -184,11 +208,7 @@ if (import.meta.main) {
   const libraries = checks.filter((check) =>
     ["coforge-sdk", "agent", "coforge", "anvil"].includes(check),
   );
-  const contracts = checks.filter((check) =>
-    ["cdn-certs", "ci", "deploy", "docs-site", "release", "oss-cdn", "reference-computer"].includes(
-      check,
-    ),
-  );
+  const contracts = checks.filter((check) => contractChecks.includes(check));
   const jobs = [
     "changes",
     ...new Set(
