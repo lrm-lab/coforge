@@ -8,5 +8,7 @@
   "tasks_priority_high": "高",
   "tasks_priority_medium": "中",
   "tasks_priority_low": "低",
-  "tasks_priority_none": "无"
+  "tasks_priority_none": "无",
+  "tasks_priority_unset": "无优先级",
+  "tasks_change_priority": "修改优先级"
 }

@@ -1,4 +1,4 @@
-import type { TaskProjectRef, TaskView } from "@lrm/coforge-sdk/internal";
+import type { TaskPriority, TaskProjectRef, TaskView } from "@lrm/coforge-sdk/internal";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ChevronRight, XClose } from "@untitledui/icons";
@@ -15,6 +15,7 @@ import { TASK_ASSIGNMENT_MANAGER_REQUIRED } from "./task-assignment";
 import { AssigneeMenu } from "./task-assignee-menu";
 import { TaskLabelsField } from "./task-labels";
 import { TaskProjectMenu } from "./task-project-menu";
+import { TaskPriorityMenu } from "./task-priority-menu";
 import { TaskProperty } from "./task-property";
 import { TaskStatusIcon } from "./task-status-icon";
 import { useTaskAssignmentAccess } from "./use-task-assignment-access";
@@ -29,6 +30,8 @@ export type TaskDraft = {
   assignee?: string;
   /** Label names. */
   labels?: string[];
+  /** Left out for none, the server's default. */
+  priority?: TaskPriority;
   /** A Project by slug, or null for none; absent where the form offers no Project (a sub-task
    * takes its parent's). */
   project?: string | null;
@@ -134,6 +137,7 @@ export function CreateTaskDialog({
       ...(description && { description }),
       ...(draft.assignee && { assignee: draft.assignee }),
       ...(draft.labels.length > 0 && { labels: draft.labels }),
+      ...(draft.priority !== "none" && { priority: draft.priority }),
       ...(conversationId !== undefined &&
         draft.project !== undefined && { project: draft.project?.slug ?? null }),
     };
@@ -232,6 +236,13 @@ export function CreateTaskDialog({
                       />
                     </TaskProperty>
                   )}
+                  <TaskProperty label={m.tasks_priority()}>
+                    <TaskPriorityMenu
+                      priority={draft.priority}
+                      disabled={saving}
+                      onSelect={(priority) => change({ priority })}
+                    />
+                  </TaskProperty>
                   {conversationId !== undefined && (
                     <TaskProperty label={m.tasks_project()}>
                       <TaskProjectMenu
@@ -293,6 +304,7 @@ const emptyDraft = () => ({
   description: "",
   assignee: undefined as string | undefined,
   labels: [] as string[],
+  priority: "none" as TaskPriority,
   /** Undefined until the conversation's last-used Project is read. */
   project: undefined as TaskProjectRef | null | undefined,
 });

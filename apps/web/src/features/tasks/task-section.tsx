@@ -15,6 +15,7 @@ import { SubtaskPickerDialog } from "./task-subtask-picker";
 import { TaskProperty } from "./task-property";
 import { openBlockers, relationRefusal, type VisibleTaskName } from "./task-relation-edits";
 import { TaskBlockedByValue, TaskBlockingValue, TaskParentValue } from "./task-relation-lines";
+import { TaskPriorityMenu } from "./task-priority-menu";
 import { TaskProjectMenu } from "./task-project-menu";
 import { TaskLabelsField } from "./task-labels";
 import { StatusMenu } from "./task-status-menu";
@@ -167,6 +168,20 @@ export function TaskSection({
                   ? { operation: "assign", number: task.number, assignee }
                   : { operation: "unassign", number: task.number },
               )
+            }
+          />
+        </TaskProperty>
+        <TaskProperty label={m.tasks_priority()} className="[[data-layout=chips]_&]:order-2">
+          <TaskPriorityMenu
+            priority={task.priority ?? "none"}
+            disabled={pending}
+            onSelect={(priority) =>
+              void run({
+                operation: "update",
+                number: task.number,
+                priority,
+                expectedRevision: task.revision,
+              })
             }
           />
         </TaskProperty>

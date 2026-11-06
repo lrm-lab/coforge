@@ -8,5 +8,7 @@
   "tasks_priority_high": "High",
   "tasks_priority_medium": "Medium",
   "tasks_priority_low": "Low",
-  "tasks_priority_none": "None"
+  "tasks_priority_none": "None",
+  "tasks_priority_unset": "No priority",
+  "tasks_change_priority": "Change priority"
 }

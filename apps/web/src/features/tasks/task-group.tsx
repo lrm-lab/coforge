@@ -1,6 +1,13 @@
 import { type TaskStatus } from "@lrm/coforge-sdk/internal";
 import { useDroppable } from "@dnd-kit/core";
-import { Check, ChevronDown, DotsHorizontal, EyeOff, Plus } from "@untitledui/icons";
+import {
+  Check,
+  ChevronDown,
+  DotsHorizontal,
+  EyeOff,
+  Plus,
+  SwitchVertical01,
+} from "@untitledui/icons";
 import { useEffect, useState, type ReactNode } from "react";
 import { Button as AriaButton, Disclosure, DisclosurePanel, Heading } from "react-aria-components";
 
@@ -161,7 +168,7 @@ export function TaskGroup({
                 <Dropdown.Menu aria-label={m.tasks_column_menu({ status: label })}>
                   {board && onSortByPriority && (
                     <Dropdown.Item
-                      icon={sortedByPriority ? Check : undefined}
+                      icon={sortedByPriority ? Check : SwitchVertical01}
                       label={m.task_board_sort_priority()}
                       onAction={() => onSortByPriority(!sortedByPriority)}
                     />
