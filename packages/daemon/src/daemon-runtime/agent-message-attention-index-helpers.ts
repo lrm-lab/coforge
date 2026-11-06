@@ -32,3 +32,9 @@ export function containsSorted(values: readonly number[] | undefined, value: num
   const index = firstAbove(values, value - 1);
   return values[index] === value;
 }
+
+/** A card answer is news about a message the Agent authored, so the read state that already
+ * covers that message cannot also cover the answer: it always deserves a notice. */
+export function isCardAnswer(message: { reason?: string }): boolean {
+  return message.reason === "choice";
+}

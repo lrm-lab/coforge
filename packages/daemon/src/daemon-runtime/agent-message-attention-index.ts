@@ -27,6 +27,8 @@ import {
   latestCreatedAtField,
 } from "./message-attention-fields";
 import { isTrackedMention } from "./mention-delivery-tracker";
+import { isCardAnswer } from "./agent-message-attention-index-helpers";
+import { printableSender } from "./agent-notice-sender";
 import {
   acceptNotice,
   AgentWakeupUnavailableError,
@@ -85,30 +87,6 @@ const PENDING_WINDOW_LIMIT = HELD_CONTEXT_LIMIT;
  * message timestamp of their own (only the server knows when a message was written), so the
  * arrival time is what a locally built preview can honestly show. */
 export type PendingWindowEntry = { delivery: AgentMessageDelivery; receivedAt: number };
-
-/**
- * Validates a `(kind, handle)` pair before it can reach a model-visible notice:
- * the kind must be one of the closed values and the handle must match the public
- * handle grammar (or be empty for `system`). This replaces the former regex guard on a single
- * composed string — a newline can no longer reach a notice through a sender name, because the
- * handle is matched against the handle grammar and the kind against the closed set separately.
- * A rejected pair is logged by name and dropped rather than printed; it never fails the delivery
- * it came with.
- */
-function printableSender(
-  kind: MessageSenderKind | undefined,
-  handle: string | undefined,
-): { kind: MessageSenderKind; handle: string } | undefined {
-  if (kind === undefined) return undefined;
-  if (!isValidMessageSender(kind, handle ?? "")) {
-    logger.warn("rejected an unprintable message sender", {
-      event: "message.sender_rejected",
-      sender_kind: kind,
-    });
-    return undefined;
-  }
-  return { kind, handle: handle ?? "" };
-}
 
 /** Daemon-owned volatile attention and model-visible sequence index. */
 export class AgentMessageAttentionIndex {
@@ -219,7 +197,7 @@ export class AgentMessageAttentionIndex {
       if (!generation.notified.has(message.deliveryId)) {
         // The Agent read this before the server re-sent it (a lost acknowledgement): nothing to
         // announce, and the replay is acknowledged so it stops coming back.
-        if (this.#alreadyRead(message.agentId, message)) {
+        if (!isCardAnswer(message) && this.#alreadyRead(message.agentId, message)) {
           this.logDecision(message, "consumed");
           await this.acknowledge(message);
           return;
@@ -245,7 +223,7 @@ export class AgentMessageAttentionIndex {
       return;
     }
     this.#remember(generation, message.deliveryId);
-    if (this.#alreadyRead(message.agentId, message)) {
+    if (!isCardAnswer(message) && this.#alreadyRead(message.agentId, message)) {
       this.logDecision(message, "consumed");
       await this.acknowledge(message);
       return;

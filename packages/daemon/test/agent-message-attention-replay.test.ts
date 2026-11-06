@@ -38,3 +38,21 @@ test("a replayed delivery the Agent has not read still notifies once", async () 
   await index.receive(message);
   expect(notices).toHaveLength(1);
 });
+
+test("an answer to the Agent's own card notifies even though the card is already read", async () => {
+  // The server delivers an answered card as a `choice` delivery carrying the card's own
+  // sequence, and the Agent wrote (so read) that card: the read state cannot cover the answer.
+  const notices: string[] = [];
+  const index = new AgentMessageAttentionIndex(
+    "workspace-1",
+    { session: () => session((notice) => notices.push(notice)) },
+    async () => {},
+  );
+  const card = { ...delivery("card"), target: "@user", sequence: 2269, reason: "choice" };
+  index.recordModelSeen(card.agentId, card.target, card.sequence);
+  await index.receive(card);
+  expect(notices).toHaveLength(1);
+  // The answer is announced once: a replay of the same delivery adds nothing.
+  await index.receive(card);
+  expect(notices).toHaveLength(1);
+});
