@@ -3,6 +3,12 @@ export interface OwnedChildProcess {
   readonly pid: number | undefined;
   readonly exited: Promise<number>;
   readonly exitCode: number | null;
+  /**
+   * The signal that ended the process (`"SIGTERM"`, …), `null` on an ordinary exit, and
+   * `undefined` while it runs or when the owner cannot observe the cause (a relay whose
+   * counterpart reported no detail). Read only after `exited` resolves.
+   */
+  readonly exitSignal?: string | null;
   readonly stdin: { write(value: string): boolean; end(): void; flush(): Promise<void> };
   readonly stdout: AsyncIterable<Uint8Array>;
   readonly stderr: AsyncIterable<Uint8Array>;

@@ -16,6 +16,7 @@ function facts(overrides: Partial<ResumedEarlyCrashFacts> = {}): ResumedEarlyCra
     offline: false,
     deliveryHold: false,
     daemonStopping: false,
+    exit: { code: 1, signal: null },
     ...overrides,
   };
 }
@@ -35,6 +36,17 @@ test("each non-qualifying close fact excludes the exit", () => {
   expect(isResumedEarlyCrashClose(facts({ offline: true }))).toBe(false);
   expect(isResumedEarlyCrashClose(facts({ deliveryHold: true }))).toBe(false);
   expect(isResumedEarlyCrashClose(facts({ daemonStopping: true }))).toBe(false);
+});
+
+// Raft's `signal === null && code > 0 && code < 128`: only a proven self-exit in 1–127 counts.
+test("only a self-exit code in 1-127 qualifies; signals, clean exits and unknown causes do not", () => {
+  expect(isResumedEarlyCrashClose(facts({ exit: { code: 127, signal: null } }))).toBe(true);
+  expect(isResumedEarlyCrashClose(facts({ exit: { code: 0, signal: null } }))).toBe(false);
+  expect(isResumedEarlyCrashClose(facts({ exit: { code: 128, signal: null } }))).toBe(false);
+  expect(isResumedEarlyCrashClose(facts({ exit: { signal: "SIGTERM" } }))).toBe(false);
+  expect(isResumedEarlyCrashClose(facts({ exit: { signal: "SIGKILL" } }))).toBe(false);
+  expect(isResumedEarlyCrashClose(facts({ exit: { code: 1, signal: undefined } }))).toBe(false);
+  expect(isResumedEarlyCrashClose(facts({ exit: undefined }))).toBe(false);
 });
 
 test("the streak counts consecutive closes of one session and resets on another", () => {

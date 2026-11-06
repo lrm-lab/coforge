@@ -376,7 +376,7 @@ test("Claude Code rejects concurrent first notifications after process exit", as
     instructions: TEST_AGENT_INSTRUCTIONS,
   });
   try {
-    await new Promise<void>((resolve) => session.onExit(resolve));
+    await new Promise((resolve) => session.onExit(resolve));
     const results = await Promise.allSettled([session.notify!("first"), session.notify!("second")]);
     expect(results.map((result) => result.status)).toEqual(["rejected", "rejected"]);
   } finally {

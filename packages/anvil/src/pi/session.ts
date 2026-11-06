@@ -1,6 +1,7 @@
 import type {
   AgentRuntimeEvent,
   AgentSession,
+  AgentSessionExit,
   AgentSessionIdentity,
   AgentSessionOptions,
 } from "@coforge/agent";
@@ -13,6 +14,7 @@ import {
   RuntimeModelNotFoundError,
 } from "#src/contract";
 import { errorMessage } from "#src/json-record";
+import { SessionExit } from "#src/session-exit";
 import type { PiSessionHost } from "./host";
 import { PiReplyIntents } from "./reply-intents";
 import { piSessionEvents } from "./session-events";
@@ -72,7 +74,7 @@ class AgentSessionImpl implements AgentSession {
   readonly steersBusyTurn = true;
   readonly #runtime: Awaited<ReturnType<typeof createSession>>;
   readonly #listeners = new Set<(event: AgentRuntimeEvent) => void>();
-  readonly #exitListeners = new Set<() => void>();
+  readonly #exit = new SessionExit();
   readonly #pendingPrompts = new Set<Promise<void>>();
   #interrupting = false;
   #failure: string | undefined;
@@ -213,9 +215,8 @@ class AgentSessionImpl implements AgentSession {
       this.#interrupting = false;
     }
   }
-  onExit(_listener: () => void) {
-    this.#exitListeners.add(_listener);
-    return () => this.#exitListeners.delete(_listener);
+  onExit(listener: (exit?: AgentSessionExit) => void) {
+    return this.#exit.onExit(listener);
   }
   dispose(_options?: Readonly<{ cutoffAtMs?: number }>) {
     if (this.#disposal) return this.#disposal;
@@ -225,8 +226,7 @@ class AgentSessionImpl implements AgentSession {
       await this.#runtime.session.abort();
       await Promise.allSettled(this.#pendingPrompts);
       await this.#runtime.dispose();
-      for (const listener of this.#exitListeners) listener();
-      this.#exitListeners.clear();
+      this.#exit.finish();
     })();
     return this.#disposal;
   }

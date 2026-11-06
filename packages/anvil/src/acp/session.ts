@@ -3,6 +3,7 @@ import type {
   AgentNoticeOptions,
   AgentRuntimeEvent,
   AgentSession,
+  AgentSessionExit,
   AgentSessionIdentity,
   AgentSessionOptions,
   AgentTurnProcessWindow,
@@ -19,6 +20,7 @@ import {
   rememberCompletedPrompt,
 } from "./session-turn";
 import { AcpSteering } from "./steering";
+import { SessionExit } from "#src/session-exit";
 
 type Input = AcpSessionInput;
 type NativeTurn = AcpNativeTurnState;
@@ -32,7 +34,8 @@ type NativeTurn = AcpNativeTurnState;
 export class AcpSession implements AgentSession {
   #transport: AcpConnection | undefined;
   readonly #listeners = new Set<(event: AgentRuntimeEvent) => void>();
-  readonly #exitListeners = new Set<() => void>();
+  readonly #exit = new SessionExit();
+  #processExit: AgentSessionExit | undefined;
   readonly #queue: Input[] = [];
   readonly #steering: AcpSteering | undefined;
   #identity: AgentSessionIdentity | undefined;
@@ -49,7 +52,6 @@ export class AcpSession implements AgentSession {
   #disposed = false;
   #failed = false;
   #interrupting = false;
-  #exited = false;
   #dispose: Promise<void> | undefined;
   #termination: Promise<void> | undefined;
 
@@ -111,7 +113,8 @@ export class AcpSession implements AgentSession {
           },
         });
       });
-      transport.process.onClose(() => {
+      transport.process.onClose((exit) => {
+        this.#processExit = exit;
         this.#failed = true;
         // A deliberate interrupt owns the live turn's settlement and its `completed`: let the
         // turn's finally report before the process's exit disposes the session.
@@ -466,10 +469,8 @@ export class AcpSession implements AgentSession {
     return () => this.#listeners.delete(listener);
   }
 
-  onExit(listener: () => void) {
-    if (this.#exited) queueMicrotask(listener);
-    else this.#exitListeners.add(listener);
-    return () => this.#exitListeners.delete(listener);
+  onExit(listener: (exit?: AgentSessionExit) => void) {
+    return this.#exit.onExit(listener);
   }
 
   #emit(event: AgentRuntimeEvent, options?: AgentNoticeOptions) {
@@ -491,9 +492,7 @@ export class AcpSession implements AgentSession {
   }
 
   #exitedNow() {
-    this.#exited = true;
-    for (const listener of this.#exitListeners) listener();
-    this.#exitListeners.clear();
+    this.#exit.finish(this.#processExit);
   }
 
   dispose(options?: Readonly<{ cutoffAtMs?: number }>): Promise<void> {

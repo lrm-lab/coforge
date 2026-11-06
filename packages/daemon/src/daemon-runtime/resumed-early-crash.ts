@@ -1,3 +1,4 @@
+import type { AgentSessionExit } from "@coforge/agent";
 import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
 
 /**
@@ -12,9 +13,12 @@ import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
  * backoff hold) and fresh/recycled sessions never qualify; any non-qualifying close resets the
  * streak, as does a different Session id.
  *
- * `AgentSession.onExit` carries no exit code or signal, so "exited on its own" is approximated by
- * every expected ending already marking `launch.stopping` first: what reaches this check unmarked
- * is unexpected by construction.
+ * "Exited on its own" is proven by `AgentSession.onExit`'s exit detail, matching Raft's
+ * `signal === null && code > 0 && code < 128`: only a self-exit code in 1–127 qualifies. Signal
+ * deaths (daemon kills, the OOM killer, an operator's kill), clean exits, exits whose cause the
+ * adapter cannot observe and adapters that report no detail at all never qualify. The
+ * `launch.stopping` early return stays as a supplementary guard for endings the process owner
+ * cannot describe.
  */
 export const RESUMED_EARLY_CRASH_WINDOW_MS = 15_000;
 export const RESUMED_EARLY_CRASH_FALLBACK_THRESHOLD = 2;
@@ -34,6 +38,8 @@ export type ResumedEarlyCrashFacts = Readonly<{
   deliveryHold: boolean;
   /** The daemon itself is stopping; shutdown exits are not crashes. */
   daemonStopping: boolean;
+  /** How the provider process ended; undefined when the session reports no detail. */
+  exit: AgentSessionExit | undefined;
 }>;
 
 export function isResumedEarlyCrashClose(facts: ResumedEarlyCrashFacts): boolean {
@@ -44,7 +50,12 @@ export function isResumedEarlyCrashClose(facts: ResumedEarlyCrashFacts): boolean
     !facts.modelOutputObserved &&
     !facts.offline &&
     !facts.deliveryHold &&
-    !facts.daemonStopping
+    !facts.daemonStopping &&
+    facts.exit !== undefined &&
+    facts.exit.signal === null &&
+    typeof facts.exit.code === "number" &&
+    facts.exit.code > 0 &&
+    facts.exit.code < 128
   );
 }
 

@@ -334,7 +334,13 @@ export interface AgentSession {
    * tree cannot name turn descendants omit the method.
    */
   killTurnProcesses?(window: AgentTurnProcessWindow): Promise<void>;
-  onExit(listener: () => void): () => void;
+  /**
+   * Fires once when the provider runtime ends. `exit` carries how the underlying process
+   * ended when the adapter can observe it: `code` on a self-exit, `signal` on a signal
+   * death, and neither when the adapter cannot tell (embedded runtimes, expected stops).
+   * Adapters that never observe exits may call the listener with no argument.
+   */
+  onExit(listener: (exit?: AgentSessionExit) => void): () => void;
   /** Terminal stop: reject undelivered input and begin runtime cleanup without waiting for a
    * natural turn end. Resolve only after cleanup; reject if process exit cannot be confirmed. */
   dispose(options?: Readonly<{ cutoffAtMs?: number }>): Promise<void>;
@@ -345,6 +351,14 @@ export type AgentTurnProcessWindow = {
   startedAfterMs: number;
   startedBeforeMs?: number;
 };
+
+/** How a provider process ended, mirroring a Node-style `exit` event: exactly one of
+ * `code` or `signal` is set on a real process end; both absent means the adapter cannot
+ * tell (expected stop, embedded runtime, relay without signal detail). */
+export type AgentSessionExit = Readonly<{
+  code?: number | null;
+  signal?: string | null;
+}>;
 
 /** Workspace Memory identity and explicitly fenced eval Memory share conversation routing. */
 export function isMemoryAgentRuntime(config: AgentRuntimeConfig | undefined): boolean {

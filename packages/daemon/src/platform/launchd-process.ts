@@ -136,6 +136,9 @@ export class LaunchdProcessOwner implements ProcessTreeSpawner {
     let processId: number | undefined;
     let jobPid: number | undefined;
     let exitCode: number | null = null;
+    // `undefined` until the runner reports the provider child's own ending; a job stopped
+    // or failed without that report cannot prove a signal did not end it.
+    let exitSignal: string | null | undefined;
     let resolveExit!: (code: number) => void;
     const exited = new Promise<number>((resolve) => {
       resolveExit = resolve;
@@ -202,6 +205,8 @@ export class LaunchdProcessOwner implements ProcessTreeSpawner {
         finish(1);
         void forceStop().catch(() => {});
       } else if (record.type === "exit" && Number.isInteger(record.code)) {
+        exitSignal =
+          typeof record.signal === "string" || record.signal === null ? record.signal : undefined;
         finish(Number(record.code));
       } else throw new Error("invalid Agent job response");
     });
@@ -299,6 +304,9 @@ export class LaunchdProcessOwner implements ProcessTreeSpawner {
         },
         get exitCode() {
           return exitCode;
+        },
+        get exitSignal() {
+          return exitSignal;
         },
         exited,
         stdout: output,
@@ -465,7 +473,7 @@ export async function runLaunchdAgent(socketPath: string): Promise<void> {
           }
           // A descendant can retain stdio after its parent exits; never wait forever.
           await Promise.race([drained, Bun.sleep(1000)]);
-          channel.send({ type: "exit", code });
+          channel.send({ type: "exit", code, signal: child?.exitSignal });
           await channel.flush();
           process.exit(code);
         })

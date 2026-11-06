@@ -1,6 +1,7 @@
 import type {
   AgentRuntimeEvent,
   AgentSession,
+  AgentSessionExit,
   AgentSessionIdentity,
   AgentSessionOptions,
   AgentTurnProcessWindow,
@@ -321,7 +322,7 @@ class CodexAgentSession implements AgentSession {
     await this.#process.killTurnProcesses(window);
   }
 
-  onExit(listener: () => void): () => void {
+  onExit(listener: (exit?: AgentSessionExit) => void): () => void {
     return this.#process.onClose(listener);
   }
 

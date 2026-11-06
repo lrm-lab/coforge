@@ -1,6 +1,7 @@
 import type { ClaudeTurnHost } from "./host";
 import type {
   AgentSession,
+  AgentSessionExit,
   AgentSessionIdentity,
   AgentSessionOptions,
   AgentTurnProcessWindow,
@@ -18,11 +19,12 @@ import { ClaudeSubagentLineage } from "./subagent-lineage";
 import { ClaudeRateLimitState } from "./rate-limit";
 import { ClaudeSessionObservations } from "./observations";
 import { relayTaskLifecycle, taskProgressEvent, type TrackedTask } from "./task-lifecycle";
+import { SessionExit } from "#src/session-exit";
 
 export class ClaudeCodeAgentSession implements AgentSession {
   readonly steersBusyTurn = true;
   #process: JsonlProcess;
-  readonly #exitListeners = new Set<() => void>();
+  readonly #exit = new SessionExit();
   #closed = false;
   #firstInput: string | undefined;
   #progressObserved = false;
@@ -121,7 +123,7 @@ export class ClaudeCodeAgentSession implements AgentSession {
         this.#emit({ type: "error", message: error.message });
       }
     });
-    process.onClose(() => {
+    process.onClose((exit) => {
       if (this.#process !== process) return;
       if (
         missing &&
@@ -159,7 +161,7 @@ export class ClaudeCodeAgentSession implements AgentSession {
       // Fire and forget: the close path has nothing to do with a cleanup failure, and `dispose`
       // awaits the same removal and reports it.
       void this.#removePrompt().catch(() => {});
-      this.#finishClose();
+      this.#finishClose(exit);
     });
   }
 
@@ -286,13 +288,8 @@ export class ClaudeCodeAgentSession implements AgentSession {
     await this.#process.killTurnProcesses(window);
   }
 
-  onExit(listener: () => void): () => void {
-    if (this.#closed) {
-      queueMicrotask(listener);
-      return () => undefined;
-    }
-    this.#exitListeners.add(listener);
-    return () => this.#exitListeners.delete(listener);
+  onExit(listener: (exit?: AgentSessionExit) => void): () => void {
+    return this.#exit.onExit(listener);
   }
 
   async dispose(options?: Readonly<{ cutoffAtMs?: number }>): Promise<void> {
@@ -302,7 +299,7 @@ export class ClaudeCodeAgentSession implements AgentSession {
     this.#interrupt.fail(new Error("code agent process closed"));
     try {
       await this.#process.dispose(options);
-      this.#finishClose();
+      this.#finishClose(this.#process.exitInfo());
     } finally {
       await this.#removePrompt();
     }
@@ -468,11 +465,10 @@ export class ClaudeCodeAgentSession implements AgentSession {
     for (const listener of this.#listeners) listener(event);
   }
 
-  #finishClose(): void {
+  #finishClose(exit?: AgentSessionExit): void {
     if (this.#closed) return;
     this.#closed = true;
-    for (const listener of this.#exitListeners) listener();
-    this.#exitListeners.clear();
+    this.#exit.finish(exit);
   }
 
   #setIdentity(state: AgentSessionIdentity["state"]): void {

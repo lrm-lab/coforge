@@ -26,6 +26,10 @@ export function spawnOwnedChild(
       get exitCode() {
         return child.exitCode;
       },
+      get exitSignal() {
+        if (child.exitCode === null && child.signalCode == null) return undefined;
+        return child.signalCode == null ? null : String(child.signalCode);
+      },
       stdin: {
         write(value) {
           child.stdin.write(value);
@@ -83,6 +87,10 @@ export function spawnOwnedChild(
     exited: child.exited,
     get exitCode() {
       return child.exitCode;
+    },
+    get exitSignal() {
+      if (child.exitCode === null && child.signalCode == null) return undefined;
+      return child.signalCode == null ? null : String(child.signalCode);
     },
     stdin: {
       write(value) {

@@ -57,6 +57,7 @@ export type {
   AgentRuntimeEvent,
   AgentRuntimeProviderConfig,
   AgentSession,
+  AgentSessionExit,
   AgentSessionIdentity,
   AgentGitHookPlan,
   AgentSessionOptions,

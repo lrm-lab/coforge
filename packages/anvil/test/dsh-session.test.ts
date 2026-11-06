@@ -273,7 +273,7 @@ test(
     const f = await fixture();
     try {
       const exited = Promise.withResolvers<void>();
-      f.session.onExit(exited.resolve);
+      f.session.onExit(() => exited.resolve());
       await expect(f.session.notify!("exit-before-evidence")).rejects.toThrow(
         "delivery outcome is unknown",
       );
@@ -386,7 +386,7 @@ test(
     });
     try {
       const exited = Promise.withResolvers<void>();
-      f.session.onExit(exited.resolve);
+      f.session.onExit(() => exited.resolve());
       await expect(f.session.notify!("invalid-json")).rejects.toThrow(
         "delivery outcome is unknown",
       );

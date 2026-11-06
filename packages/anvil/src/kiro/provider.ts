@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import type {
   AgentNoticeOptions,
   AgentSession,
+  AgentSessionExit,
   AgentSessionOptions,
   AgentTurnProcessWindow,
   AgentRuntimeEvent,
@@ -431,7 +432,7 @@ class KiroSession implements AgentSession {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
   }
-  onExit(listener: () => void) {
+  onExit(listener: (exit?: AgentSessionExit) => void) {
     return this.#transport.process.onClose(listener);
   }
   #emit(event: AgentRuntimeEvent) {

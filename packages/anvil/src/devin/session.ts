@@ -4,6 +4,7 @@ import type {
   AgentNoticeOptions,
   AgentRuntimeEvent,
   AgentSession,
+  AgentSessionExit,
   AgentSessionOptions,
   AgentTurnProcessWindow,
 } from "@coforge/agent";
@@ -192,7 +193,7 @@ export class DevinSession implements AgentSession {
   subscribe(listener: (event: AgentRuntimeEvent) => void) {
     return this.#session.subscribe(listener);
   }
-  onExit(listener: () => void) {
+  onExit(listener: (exit?: AgentSessionExit) => void) {
     return this.#session.onExit(listener);
   }
   dispose(options?: Readonly<{ cutoffAtMs?: number }>) {

@@ -74,7 +74,7 @@ for (const mode of ["exit", "cancel", "dispose", "startup-failure"] as const) {
         else {
           session = await open;
           const exited = Promise.withResolvers<void>();
-          session.onExit(exited.resolve);
+          session.onExit(() => exited.resolve());
           if (mode === "exit") {
             await expect(session.notify!("exit-before-evidence")).rejects.toThrow(
               "delivery outcome is unknown",

@@ -3,6 +3,7 @@ import type {
   AgentNoticeOptions,
   AgentRuntimeEvent,
   AgentSession,
+  AgentSessionExit,
   AgentSessionIdentity,
   AgentSessionOptions,
 } from "@coforge/agent";
@@ -55,7 +56,8 @@ export class MemoryConversationSessions implements AgentSession {
   readonly #creating = new Set<Promise<AgentSession>>();
   readonly #writes = new Set<Promise<void>>();
   readonly #listeners = new Set<(event: AgentRuntimeEvent) => void>();
-  readonly #exits = new Set<() => void>();
+  readonly #exits = new Set<(exit?: AgentSessionExit) => void>();
+  #primaryExit: AgentSessionExit | undefined;
   readonly #waiting: PendingNotice[] = [];
   #active?: AgentSession;
   #admitting = 0;
@@ -75,7 +77,8 @@ export class MemoryConversationSessions implements AgentSession {
     this.#unsubscribe = dependencies.primary.subscribe((event) =>
       this.#observe(dependencies.primary, event),
     );
-    dependencies.primary.onExit(() => {
+    dependencies.primary.onExit((exit) => {
+      this.#primaryExit = exit;
       if (!this.#closed) void this.dispose().catch(() => {});
     });
   }
@@ -135,7 +138,7 @@ export class MemoryConversationSessions implements AgentSession {
     return () => this.#listeners.delete(listener);
   }
 
-  onExit(listener: () => void): () => void {
+  onExit(listener: (exit?: AgentSessionExit) => void): () => void {
     this.#exits.add(listener);
     return () => this.#exits.delete(listener);
   }
@@ -203,7 +206,7 @@ export class MemoryConversationSessions implements AgentSession {
     if (errors.length) throw new AggregateError(errors, "Memory Agent session cleanup failed");
     this.#conversations.clear();
     this.#listeners.clear();
-    for (const exit of this.#exits) exit();
+    for (const exit of this.#exits) exit(this.#primaryExit);
     this.#exits.clear();
   }
 

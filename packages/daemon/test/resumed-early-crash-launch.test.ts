@@ -2,14 +2,19 @@ import { expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentRuntimeEvent, AgentSession, AgentSessionOptions } from "@lrm/coforge-anvil";
+import type {
+  AgentRuntimeEvent,
+  AgentSession,
+  AgentSessionExit,
+  AgentSessionOptions,
+} from "@lrm/coforge-anvil";
 import type { AgentActivity } from "@lrm/coforge-sdk/internal";
 import { DaemonRuntime } from "#src/daemon-runtime/runtime";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 
 class FakeSession {
-  readonly #exitListeners = new Set<() => void>();
+  readonly #exitListeners = new Set<(exit?: AgentSessionExit) => void>();
   readonly #eventListeners = new Set<(event: AgentRuntimeEvent) => void>();
 
   async sendMessage() {}
@@ -19,15 +24,15 @@ class FakeSession {
     this.#eventListeners.add(listener);
     return () => this.#eventListeners.delete(listener);
   }
-  onExit(listener: () => void) {
+  onExit(listener: (exit?: AgentSessionExit) => void) {
     this.#exitListeners.add(listener);
     return () => this.#exitListeners.delete(listener);
   }
   emit(event: AgentRuntimeEvent) {
     for (const listener of this.#eventListeners) listener(event);
   }
-  crash() {
-    for (const listener of this.#exitListeners) listener();
+  crash(exit?: AgentSessionExit) {
+    for (const listener of this.#exitListeners) listener(exit);
   }
 }
 
@@ -100,11 +105,11 @@ test("two silent crashes within seconds of resuming one session invalidate it an
   const h = await harness();
   try {
     await h.runtime.startAgent("agent-a", config, "sess-1");
-    h.sessions[0]!.crash();
+    h.sessions[0]!.crash({ code: 1, signal: null });
     await settle();
     // The remembered session resumes on the next launch; it crashes the same way.
     await h.runtime.startAgent("agent-a", config);
-    h.sessions[1]!.crash();
+    h.sessions[1]!.crash({ code: 1, signal: null });
     await settle();
     // The threshold cold-starts a fresh session through the ordinary launch gate.
     await settle();
@@ -129,15 +134,15 @@ test("model output before the crash resets the streak instead of falling back", 
   const h = await harness();
   try {
     await h.runtime.startAgent("agent-a", config, "sess-1");
-    h.sessions[0]!.crash();
+    h.sessions[0]!.crash({ code: 1, signal: null });
     await settle();
     await h.runtime.startAgent("agent-a", config);
     // Text before the exit proves the resumed session itself produced output.
     h.sessions[1]!.emit({ type: "text-delta", text: "still alive" });
-    h.sessions[1]!.crash();
+    h.sessions[1]!.crash({ code: 1, signal: null });
     await settle();
     await h.runtime.startAgent("agent-a", config);
-    h.sessions[2]!.crash();
+    h.sessions[2]!.crash({ code: 1, signal: null });
     await settle();
 
     // Only the last two closes counted: one more qualifying close is still short of the
@@ -163,11 +168,41 @@ test("a fresh session's early crash never counts toward the stale session", asyn
       undefined,
       "create",
     );
-    h.sessions[0]!.crash();
+    h.sessions[0]!.crash({ code: 1, signal: null });
     await settle();
     await h.runtime.startAgent("agent-a", config);
-    h.sessions[1]!.crash();
+    h.sessions[1]!.crash({ code: 1, signal: null });
     await settle();
+
+    expect(h.invalidates).toHaveLength(0);
+  } finally {
+    await h.runtime.stop();
+    await h.cleanup();
+  }
+});
+
+// Fast exits that are not proven self-crashes must never invalidate the Session: a signal
+// death (a stop, an upgrade restart, the OOM killer), a clean exit, a shell-style code at or
+// past 128, and an adapter that reports no exit detail at all (session_in_use and login
+// failures surface through their own facts or never reach this seam).
+test("exits without proven self-crash detail never count toward invalidation", async () => {
+  const h = await harness();
+  try {
+    const endings: Array<readonly [string, AgentSessionExit | undefined]> = [
+      ["agent-signaled", { signal: "SIGTERM" }],
+      ["agent-signaled-kill", { signal: "SIGKILL" }],
+      ["agent-clean", { code: 0, signal: null }],
+      ["agent-high-code", { code: 130, signal: null }],
+      ["agent-unknown", undefined],
+    ];
+    for (const [agent, exit] of endings) {
+      await h.runtime.startAgent(agent, config, "sess-1");
+      h.sessions.at(-1)!.crash(exit);
+      await settle();
+      await h.runtime.startAgent(agent, config);
+      h.sessions.at(-1)!.crash(exit);
+      await settle();
+    }
 
     expect(h.invalidates).toHaveLength(0);
   } finally {

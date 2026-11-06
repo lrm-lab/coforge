@@ -13,6 +13,7 @@ export type {
   AgentRuntimeEvent,
   AgentRuntimeProviderConfig,
   AgentSession,
+  AgentSessionExit,
   AgentSessionOptions,
   AgentSubagentTaskKind,
   AgentTurnProcessWindow,

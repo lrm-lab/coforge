@@ -1,3 +1,4 @@
+import type { AgentSessionExit } from "@coforge/agent";
 import { getLogger } from "@logtape/logtape";
 import { redactCredentials } from "@lrm/coforge-sdk/internal";
 import { JsonlProtocolError, JsonlRequestError } from "./jsonl-error";
@@ -36,7 +37,7 @@ export class JsonlProcess {
   readonly #stdoutFinished: Promise<void>;
   readonly #outputFinished: Promise<void>;
   readonly #failureListeners = new Set<(error: Error) => void>();
-  readonly #closeListeners = new Set<() => void>();
+  readonly #closeListeners = new Set<(exit: AgentSessionExit) => void>();
   #nextRequestId = 1;
   #state: ProcessState = { type: "open" };
   #cleanupPromise: Promise<void> | undefined;
@@ -133,13 +134,25 @@ export class JsonlProcess {
     return () => this.#failureListeners.delete(listener);
   }
 
-  onClose(listener: () => void): () => void {
+  onClose(listener: (exit: AgentSessionExit) => void): () => void {
     if (this.#state.type === "closed") {
-      queueMicrotask(listener);
+      const exit = this.exitInfo();
+      queueMicrotask(() => listener(exit));
       return () => undefined;
     }
     this.#closeListeners.add(listener);
     return () => this.#closeListeners.delete(listener);
+  }
+
+  /**
+   * How the process ended, for `AgentSession.onExit`: a self-exit reports `code`, a signal
+   * death reports `signal` alone, and an owner that cannot observe the cause leaves
+   * `signal` undefined so a caller cannot mistake it for a proven ordinary exit.
+   */
+  exitInfo(): AgentSessionExit {
+    const signal = this.#child.exitSignal;
+    if (signal) return { signal };
+    return { code: this.#exitCode ?? null, signal: signal === undefined ? undefined : null };
   }
 
   async send(message: JsonRecord): Promise<void> {
@@ -438,7 +451,8 @@ export class JsonlProcess {
   }
 
   #notifyClosed(): void {
-    for (const listener of this.#closeListeners) listener();
+    const exit = this.exitInfo();
+    for (const listener of this.#closeListeners) listener(exit);
     this.#closeListeners.clear();
     this.#failureListeners.clear();
     this.#stderrListeners.clear();

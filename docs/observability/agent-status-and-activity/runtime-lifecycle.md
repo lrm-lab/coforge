@@ -69,9 +69,10 @@ session 如果每次恢复后几秒内就让 runtime 静默崩溃，说明它在
 - **判定**（`daemon-runtime/resumed-early-crash.ts`）：launch 请求恢复某个已存 session、进程在
   15 秒内自行退出、退出前没有任何模型输出（主 session 的 text/thinking/tool_start，子 agent
   的不算）、且不是 Daemon 主动收尾——stop、take-offline、任何投递 hold（退避或熔断）、daemon
-  停止都不计。
-  `AgentSession.onExit` 不带退出码或信号，所以"自行退出"由所有预期收尾都先标记
-  `launch.stopping` 来近似。非计次的退出、session id 变化都会清零连击。
+  停止都不计。"自行退出"由 `AgentSession.onExit` 带的退出详情证明，与 Raft 的
+  `signal === null && code > 0 && code < 128` 一致：只有 1–127 的自退出码计次；信号死亡
+  （stop、升级重启、OOM）、干净退出、以及适配器无法判断死因的退出都不计，
+  `launch.stopping` 标记仍作为补充闸门。非计次的退出、session id 变化都会清零连击。
 - **兜底**：同一 session 连续两次计次（`RESUMED_EARLY_CRASH_FALLBACK_THRESHOLD`）后，Daemon 发
   `agent:session:invalidate`（reason `repeated_early_crash`），清掉本地 session 引用与
   restart config 里的恢复指针，再以 `sessionMode: "create"`、无 session id 走普通 launch 通道

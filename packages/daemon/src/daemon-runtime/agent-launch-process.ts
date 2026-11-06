@@ -284,7 +284,7 @@ export async function launchAgentProcess(
       if (turnActivity && ports.reconcileIdleTurn(agentId, launch)) return;
       trajectory.accept(event);
     });
-    runtime.session.onExit(() => {
+    runtime.session.onExit((exit) => {
       ports.desktops.end(agentId);
       launch.startup?.dispose();
       trajectory.dispose();
@@ -360,6 +360,7 @@ export async function launchAgentProcess(
         offline: launch.offlineError !== undefined,
         deliveryHold: ports.deliveryQueue.explicitHold(agentId) !== undefined,
         daemonStopping: ports.isStopping(),
+        exit,
         streak: ports.resumedEarlyCrash,
         coldStart: (id, stale) => ports.coldStartResumedSession(id, launch, stale),
       });
