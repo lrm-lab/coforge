@@ -66,6 +66,27 @@ export async function resolveNewTaskProject(
   return lastUsed.lastTaskProject;
 }
 
+/**
+ * The Project a person last filed a Task under in a conversation, from their member row: what the
+ * New Task form shows picked (task #485). Null for none, or when they are not (or no longer) a
+ * member there.
+ */
+export async function lastUsedTaskProject(
+  db: Prisma.TransactionClient,
+  member: { workspaceId: string; conversationId: string; userId: string },
+): Promise<TaskProjectRef | null> {
+  const row = await db.conversationMember.findFirst({
+    where: {
+      conversationId: member.conversationId,
+      userId: member.userId,
+      conversation: { workspaceId: member.workspaceId },
+      ...ACTIVE_MEMBER_WHERE,
+    },
+    select: { lastTaskProject: { select: TASK_PROJECT_SELECT } },
+  });
+  return row?.lastTaskProject ?? null;
+}
+
 /** A person's Task Project pick is remembered on their member row (`create`, `amend`). */
 export async function rememberTaskProject(
   tx: Prisma.TransactionClient,
