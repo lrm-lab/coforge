@@ -169,7 +169,30 @@ test("a Task popup opened from another steps back to it", async () => {
       await evaluate(
         `${topDialog}.querySelector("nav button").setAttribute("data-e2e-back", "") ?? true`,
       );
+      // The back arrow steps back the same way. Its click can be spent before the step's
+      // controls finish mounting; while the step is verifiably still open a moment later the
+      // click missed, so click the arrow once more — never after a real step-back, which
+      // removes the param and unmounts the marked button.
       await browser("click", "[data-e2e-back]");
+      const stillOpen = JSON.parse(
+        await browser(
+          "eval",
+          `new Promise((done) => {
+            const started = Date.now();
+            const tick = () => {
+              if (!new URLSearchParams(location.search).has("otherTask")) done(false);
+              else if (Date.now() - started > 2000) done(true);
+              else setTimeout(tick, 50);
+            };
+            tick();
+          })`,
+        ),
+      );
+      if (
+        stillOpen &&
+        (await evaluate<boolean>(`document.querySelector("[data-e2e-back]") !== null`))
+      )
+        await browser("click", "[data-e2e-back]");
       await browser("wait", "--fn", atParent);
     }
   } finally {
