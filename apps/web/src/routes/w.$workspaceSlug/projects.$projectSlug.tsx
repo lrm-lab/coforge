@@ -2,7 +2,7 @@ import { createFileRoute, notFound } from "@tanstack/react-router";
 import { z } from "zod";
 import { PageLoadError } from "#src/features/errors/page-load-error";
 import { ProjectsPending } from "#src/features/projects/projects-pending";
-import { ProjectDetail } from "#src/features/projects/project-detail";
+import { DEFAULT_PROJECT_TAB, ProjectDetail } from "#src/features/projects/project-detail";
 import { getProject, getProjectRepository } from "#src/features/projects/projects.functions";
 import { projectTaskBoardSearchShape } from "#src/features/tasks/task-board-search";
 import { taskOverviewQuery } from "#src/features/tasks/task-overview-collection";
@@ -57,7 +57,7 @@ function ProjectPage() {
         void navigate({
           search: (previous) => ({
             ...previous,
-            tab: tab === "overview" ? undefined : tab,
+            tab: tab === DEFAULT_PROJECT_TAB ? undefined : tab,
             task: undefined,
           }),
         })

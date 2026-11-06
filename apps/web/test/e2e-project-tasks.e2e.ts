@@ -100,6 +100,19 @@ test("a Project page lists its Tasks as a tree, and a Task's popup moves it betw
       [390, 844, "phone"],
     ] as const) {
       await browser("set", "viewport", String(width), String(height));
+      // The tabs switch and the address follows; the tab a Project opens on is left out of it.
+      const tabSelected = (name: string) =>
+        `[...document.querySelectorAll('[role="tab"]')].some((tab) => tab.textContent.trim() === ${JSON.stringify(name)} && tab.getAttribute("aria-selected") === "true")`;
+      await browser("open", projectPage);
+      await browser("wait", "--fn", `${pageHydrated} && ${tabSelected("任务")}`);
+      await browser("find", "role", "tab", "click", "--name", "概览", "--exact");
+      await browser(
+        "wait",
+        "--fn",
+        `${tabSelected("概览")} && location.search.includes("tab=overview")`,
+      );
+      await browser("find", "role", "tab", "click", "--name", "任务", "--exact");
+      await browser("wait", "--fn", `${tabSelected("任务")} && !location.search.includes("tab=")`);
       await browser("open", overviewPage);
       await browser(
         "wait",

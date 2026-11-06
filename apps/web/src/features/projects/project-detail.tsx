@@ -32,6 +32,9 @@ type ProjectSearch = Parameters<typeof WorkspaceTaskBoard>[0]["search"] & { tab?
 
 export type ProjectTab = "overview" | "tasks" | "code";
 
+/** The tab a Project opens on, which its address leaves out. */
+export const DEFAULT_PROJECT_TAB: ProjectTab = "tasks";
+
 /**
  * A Project's page (task #504): Overview (what it is for, progress, people, its Tasks in three
  * groups), Tasks (its board; on a phone the groups) and, with a linked repository, Code.
@@ -51,7 +54,7 @@ export function ProjectDetail({
   const hasCode = Boolean(project.githubFullName);
   const tab: ProjectTab =
     // A Project's page opens on its board (task #596): the Tasks are the Project.
-    search.tab === "code" && !hasCode ? "tasks" : (search.tab ?? "tasks");
+    search.tab === "code" && !hasCode ? DEFAULT_PROJECT_TAB : (search.tab ?? DEFAULT_PROJECT_TAB);
   return (
     <main className="flex h-full min-w-0 flex-col bg-primary">
       <ProjectsHeader
