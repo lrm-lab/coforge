@@ -4,6 +4,9 @@ import { ROW_TOP_GAP_PX } from "./conversation-scroll-anchor";
  * ResizeObserver). Tight on purpose: the reading position itself uses a wider tolerance. */
 export const PIN_TOLERANCE_PX = 4;
 
+/** How close to the bottom counts as reading the latest. */
+export const FOLLOWING_DISTANCE_PX = 48;
+
 type HistoryPosition = Pick<HTMLElement, "scrollTop" | "scrollHeight" | "clientHeight">;
 
 /** The reader's input on the history: a wheel, a key, a touch or a press. */
@@ -166,6 +169,6 @@ function isEditing(target: EventTarget | null): boolean {
   );
 }
 
-function distanceFromBottom(history: HistoryPosition): number {
+export function distanceFromBottom(history: HistoryPosition): number {
   return history.scrollHeight - history.scrollTop - history.clientHeight;
 }

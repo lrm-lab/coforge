@@ -10,8 +10,9 @@ import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 
 import { useSavedMessages } from "./conversation-host";
-import { ConversationBottomPin } from "./conversation-bottom-pin";
-import { OlderMessagesRow, type OlderLoad } from "./older-messages-row";
+import { ConversationBottomPin, FOLLOWING_DISTANCE_PX } from "./conversation-bottom-pin";
+import { OlderMessagesRow } from "./older-messages-row";
+import { useLoadOlder } from "./use-load-older";
 import {
   captureScrollAnchor,
   restoreScrollAnchor,
@@ -139,7 +140,6 @@ export function ConversationPane({
     setFollowingLatestState(following);
     onFollowingLatestChange?.(following);
   };
-  const [olderLoad, olderLoadRef, setOlderLoad] = useStateWithRef<OlderLoad>("idle");
   const [, loadingNewerRef, setLoadingNewer] = useStateWithRef(false);
   const historyRef = useRef<HTMLDivElement>(null);
   const messageListRef = useRef<HTMLOListElement>(null);
@@ -156,6 +156,12 @@ export function ConversationPane({
    * the row at the top of the viewport and its content's offset, before the change. See the
    * layout effect below for why a raw height delta is not enough once eviction is in play. */
   const historyScrollAnchorRef = useRef<ScrollAnchor | undefined>(undefined);
+  const { olderLoad, loadOlder } = useLoadOlder({
+    historyRef,
+    anchorRef: historyScrollAnchorRef,
+    enabled: !root && conversation.hasOlder,
+    onLoadOlder,
+  });
   // The row the pane still owes an open scroll. Rows are all in the DOM, so this is only held
   // when the container had no height to scroll within yet (a hidden branch); the pinning
   // observer retries it once the pane is laid out.
@@ -324,6 +330,7 @@ export function ConversationPane({
     pendingOpenMessageIdRef,
     bottomPin,
     followingLatestRef,
+    trackReadingPosition,
     applyOpenPosition,
     scrollToLatest,
     conversationId: conversation.conversationId,
@@ -411,7 +418,7 @@ export function ConversationPane({
     // handler's.
     const distance = bottomPin.scroll(history);
     if (distance === undefined) return;
-    const followingLatest = distance <= 48;
+    const followingLatest = distance <= FOLLOWING_DISTANCE_PX;
     const wasFollowingLatest = followingLatestRef.current;
     setFollowingLatest(followingLatest);
     // A newer page is about to change both ends of the list. Keep the snapshot on the row they
@@ -423,21 +430,6 @@ export function ConversationPane({
     if (followingLatest && !wasFollowingLatest && !root) {
       const through = latestTopLevelSequence(conversation.messages);
       if (through > 0) onReadLatest?.(through);
-    }
-  }
-
-  async function loadOlder() {
-    const history = historyRef.current;
-    if (root || !history || !conversation.hasOlder || !onLoadOlder) return;
-    if (olderLoadRef.current === "loading") return;
-    setOlderLoad("loading");
-    historyScrollAnchorRef.current = captureScrollAnchor(history);
-    try {
-      await onLoadOlder();
-      setOlderLoad("idle");
-    } catch {
-      historyScrollAnchorRef.current = undefined;
-      setOlderLoad("failed");
     }
   }
 

@@ -1,5 +1,9 @@
-import { useLayoutEffect, type RefObject } from "react";
-import type { ConversationBottomPin } from "./conversation-bottom-pin";
+import { useLayoutEffect, useRef, type RefObject } from "react";
+import {
+  distanceFromBottom,
+  FOLLOWING_DISTANCE_PX,
+  type ConversationBottomPin,
+} from "./conversation-bottom-pin";
 
 /**
  * What a resize of the history means for the reading position. An open position the pane could
@@ -14,6 +18,7 @@ export function useHistoryResize({
   pendingOpenMessageIdRef,
   bottomPin,
   followingLatestRef,
+  trackReadingPosition,
   applyOpenPosition,
   scrollToLatest,
   conversationId,
@@ -24,17 +29,26 @@ export function useHistoryResize({
   pendingOpenMessageIdRef: RefObject<string | undefined>;
   bottomPin: ConversationBottomPin;
   followingLatestRef: RefObject<boolean>;
+  trackReadingPosition: () => void;
   applyOpenPosition: () => void;
   scrollToLatest: (behavior: ScrollBehavior) => void;
   conversationId: string;
   listIsEmpty: boolean;
 }) {
+  const trackRef = useRef(trackReadingPosition);
+  trackRef.current = trackReadingPosition;
   useLayoutEffect(() => {
     const history = historyRef.current;
     if (!history) return;
     const observer = new ResizeObserver(() => {
       if (pendingOpenMessageIdRef.current) {
         applyOpenPosition();
+        return;
+      }
+      // A pane that grew until the end is in view, or lost what overflowed it, sends no scroll
+      // event when its scrollTop stays: this is the only news that the reader is at the latest.
+      if (!followingLatestRef.current && distanceFromBottom(history) <= FOLLOWING_DISTANCE_PX) {
+        trackRef.current();
         return;
       }
       const wasAtBottom = bottomPin.beforeResize(history);
