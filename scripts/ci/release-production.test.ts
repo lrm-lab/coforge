@@ -150,7 +150,9 @@ test("publication waits for the staging evidence of the same commit and builds e
     );
     expect(verify, name).toBeDefined();
     expect(workflow.jobs.candidate!.permissions, name).toEqual(
-      name === "computer" ? { contents: "read", "id-token": "write" } : { contents: "read" },
+      name === "computer"
+        ? { contents: "read", actions: "read", "id-token": "write" }
+        : { contents: "read", actions: "read" },
     );
     expect(workflow.jobs.candidate!.if, name).toContain("github.ref == 'refs/heads/main'");
     expect(verify!.run, name).toContain('git merge-base --is-ancestor "$INPUT_COMMIT" HEAD');
@@ -178,6 +180,7 @@ test("a Computer candidate reads production's latest only through the reader rol
   expect(JSON.stringify(computer.jobs.candidate)).not.toContain("secrets.");
   expect(computer.jobs.candidate!.permissions).toEqual({
     contents: "read",
+    actions: "read",
     "id-token": "write",
   });
   // The installer is not ordered against the Computer's production latest.
@@ -260,5 +263,43 @@ test("skipping the staging comparison is an explicit input the run title names",
     )!;
     expect(verify.env?.WITHOUT_STAGING, name).toBe("${{ inputs.without_staging }}");
     expect(verify.run, name).toContain("--without-staging");
+  }
+});
+
+test("a without_staging release checks the commit's ci.yml verdict, bypassable only with a reason", async () => {
+  for (const [name, file] of [
+    ["computer", "release-production.yml"],
+    ["installer", "release-installer-production.yml"],
+  ] as const) {
+    const workflow = workflows[name];
+    const inputs = workflow.on.workflow_dispatch!.inputs! as Record<
+      string,
+      { type?: string; default?: unknown }
+    >;
+    expect(inputs.allow_red_main?.type, name).toBe("boolean");
+    expect(inputs.allow_red_main?.default, name).toBe(false);
+    expect(inputs.ci_override_reason?.type, name).toBe("string");
+
+    const health = workflow.jobs.candidate!.steps!.find((step) =>
+      step.run?.includes("scripts/release/release-health.ts"),
+    );
+    expect(health, name).toBeDefined();
+    expect(health!.env?.GH_TOKEN, name).toBe("${{ github.token }}");
+    expect(health!.env?.INPUT_COMMIT, name).toBe("${{ inputs.commit }}");
+    expect(health!.env?.WITHOUT_STAGING, name).toBe("${{ inputs.without_staging }}");
+    expect(health!.env?.ALLOW_RED_MAIN, name).toBe("${{ inputs.allow_red_main }}");
+    expect(health!.env?.CI_OVERRIDE_REASON, name).toBe("${{ inputs.ci_override_reason }}");
+    // The commit verdict runs only under without_staging; the suites are always recorded.
+    expect(health!.run, name).toContain('if [ "$WITHOUT_STAGING" = "true" ]');
+    expect(health!.run, name).toContain('args+=(--commit "$INPUT_COMMIT")');
+    expect(health!.run, name).toContain('args+=(--allow-red --reason "$CI_OVERRIDE_REASON")');
+
+    const raw = Bun.YAML.parse(await Bun.file(`.github/workflows/${file}`).text()) as {
+      jobs: Record<string, { steps?: { name?: string }[] }>;
+    };
+    expect(
+      raw.jobs.candidate!.steps!.some((step) => step.name === "Check the commit's CI health"),
+      name,
+    ).toBe(true);
   }
 });

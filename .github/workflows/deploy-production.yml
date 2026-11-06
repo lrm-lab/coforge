@@ -62,6 +62,24 @@ jobs:
           echo "no healthy staging deployment of $IMAGE among the last 50 successful staging runs" >&2
           exit 1
 
+      # web-e2e and web-integration never block a deploy; their latest main
+      # conclusions are context for the operator (docs/release/github-actions.md).
+      - name: Note the scheduled suites' latest conclusions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "## Scheduled suites (informational — they never block a deploy)"
+            echo ""
+            for workflow in web-e2e.yml web-integration.yml; do
+              row="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$workflow" \
+                --branch main --status completed --limit 1 \
+                --json conclusion,headSha,createdAt \
+                --jq '.[0] // empty | "\(.conclusion) at \(.headSha[0:9]) (\(.createdAt))"')"
+              echo "- \`${workflow}\`: ${row:-no completed run}"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
   deploy:
     name: Deploy and verify Web
     needs: candidate

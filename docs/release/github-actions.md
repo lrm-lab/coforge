@@ -168,7 +168,15 @@ Computer version numbering, staging and production alike, is in
 
 The production workflows take no `Validate` job: staging published that exact
 commit only after its gates, and the `candidate` job requires that evidence.
-How to run them is in
+A `without_staging` release has no staging evidence, so the candidate job
+instead checks the commit's own `ci.yml` verdict — the earliest `main` push
+run whose head descends from it — and refuses a red or still-running one;
+`allow_red_main` with a `ci_override_reason` bypasses that check and records
+the reason. Every production release also writes the latest completed
+`web-e2e` and `web-integration` conclusions to its step summary. Those two
+scheduled suites never block anything: they run after the fact, and a red
+nightly run is a signal to fix `main`, not a gate on releasing it. How to run
+the production workflows is in
 [the production release runbook](../operations/production/computer-release.md).
 
 The installer has its own manual workflow and its own version, described in

@@ -142,7 +142,11 @@ check stops the run before the approval gate.
 
 A release Frank approves without a staging publication adds
 `-f without_staging=true` to both commands and omits `staging_version`; the
-version must still be stable and in order, and the commit on `main`.
+version must still be stable and in order, and the commit on `main`. That
+path also checks the commit's own `ci.yml` run: a red or still-running
+verdict refuses the release unless `-f allow_red_main=true` and
+`-f ci_override_reason=<why>` are passed, and the reason is recorded in the
+run summary.
 
 Roll a bad installer back with
 `gh workflow run release-installer-production.yml -f pointer_only=<version>`.

@@ -27,11 +27,25 @@ on:
         type: string
       without_staging:
         description: >-
-          Skip the staging comparison and check the commit and version for shape only. For a
-          release run without a staging publication.
+          Skip the staging comparison and check the commit's ci.yml verdict and the
+          version's shape only. For a release run without a staging publication.
         required: false
         type: boolean
         default: false
+      allow_red_main:
+        description: >-
+          Let a without_staging release proceed when the commit's ci.yml run is not green;
+          requires ci_override_reason. Recorded in the run summary.
+        required: false
+        type: boolean
+        default: false
+      ci_override_reason:
+        description: >-
+          Why a without_staging release proceeds despite a non-green ci.yml run; required
+          when allow_red_main is set.
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -59,6 +73,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      actions: read
     timeout-minutes: 10
     steps:
       # The workflow's own commit (`main`), with history: the verifier is this run's, and the
@@ -84,6 +99,26 @@ jobs:
 
       - name: Generate protocol sources
         run: bun run --cwd packages/coforge-sdk generate
+
+      # without_staging skips the staging evidence, so the commit's own ci.yml verdict is
+      # checked instead; the step also records the scheduled suites' latest conclusions,
+      # which inform and never block (docs/release/github-actions.md).
+      - name: Check the commit's CI health
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_COMMIT: ${{ inputs.commit }}
+          WITHOUT_STAGING: ${{ inputs.without_staging }}
+          ALLOW_RED_MAIN: ${{ inputs.allow_red_main }}
+          CI_OVERRIDE_REASON: ${{ inputs.ci_override_reason }}
+        run: |
+          args=()
+          if [ "$WITHOUT_STAGING" = "true" ]; then
+            args+=(--commit "$INPUT_COMMIT")
+            if [ "$ALLOW_RED_MAIN" = "true" ]; then
+              args+=(--allow-red --reason "$CI_OVERRIDE_REASON")
+            fi
+          fi
+          bun scripts/release/release-health.ts "${args[@]}"
 
       # The inputs are caller-controlled text: they reach the script only through env vars. The
       # commit is checked for shape before git sees it, so it cannot be read as an option.

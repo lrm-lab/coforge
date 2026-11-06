@@ -74,9 +74,12 @@ installer goes first, because `install.sh` reads `installer/latest` from the
 same feed. The runbook is
 [`operations/production/computer-release.md`](../operations/production/computer-release.md).
 
-Their `without_staging` input skips the staging comparison and checks only the
-commit's and version's shape, and that a Computer version is newer than
-production's `latest`. It exists for a release Frank runs without a
+Their `without_staging` input skips the staging comparison and checks the
+commit's and version's shape, that a Computer version is newer than
+production's `latest`, and the commit's own `ci.yml` verdict — a red or
+still-running run refuses the release unless `allow_red_main` and a
+`ci_override_reason` bypass it (the reason lands in the run summary). It
+exists for a release Frank runs without a
 staging publication (the first production release, `0.1.0` from `main`, on
 2026-10-12); the run title names it, so the operator sees it.
 
