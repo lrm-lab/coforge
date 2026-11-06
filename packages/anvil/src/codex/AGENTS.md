@@ -35,9 +35,11 @@
 - `turn-signals.ts`: a completed turn with no evidence and a `systemError` status are errors
   (`codex_zero_evidence_turn_completed`); Codex diagnostic warnings become warning Activity system
   entries with provider-specific titles, waiting statuses become warning system entries, and blank
-  answers are logged only. Repeats collapse per session: an identical diagnostic warns once, a
-  waiting status warns once until the wait clears, and a bare `systemError` warns once until the
-  thread leaves the error state (the error event itself still reports every time).
+  answers are logged only. Repeats collapse per session — a self-defined rule; the reference
+  Computer emits every diagnostic and does not dedup. An identical diagnostic warns once per
+  ten-minute window (64 signatures kept, least-recently-warned evicted), a waiting status warns
+  once until the wait clears, and a bare `systemError` warns once per error episode (the error
+  event itself still reports every time).
 - Idle recycle reads `$CODEX_HOME/sessions/**/rollout-*-<threadId>.jsonl` through the history host.
   An absolute `CODEX_HOME` on the Agent wins; a relative one is ignored. Facts are the last
   record's timestamp and the last `event_msg` `token_count`'s `info.last_token_usage.input_tokens`.
