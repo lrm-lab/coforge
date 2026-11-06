@@ -61,7 +61,6 @@ function TaskPopupBoundary(props: OverviewTaskPopupProps) {
         }}
         onCommand={onCommand}
         conversationName={task.source.label}
-        direct={task.source.channelName === null}
         currentMemberId={task.currentMemberId ?? null}
       />
     );

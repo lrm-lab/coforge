@@ -24,7 +24,6 @@ export function DirectThreadedConversation({
     <ThreadedConversation
       {...props}
       conversationName={name}
-      direct
       threadContext={`@${name}`}
       emptyState={{
         ...emptyState,

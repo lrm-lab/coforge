@@ -93,6 +93,7 @@ export function ConversationTaskBoard({
       onCommand={run}
       conversation={{
         ...conversation,
+        conversationId,
         loading,
         error,
         // A Task made from a message opens on it in the chat; one without a message, its popup.

@@ -158,8 +158,6 @@ type TaskDetailDialogProps = {
   /** Opens a Task this one is related to, in its own channel where that is where it lives. Where
    * absent, related Tasks are named but not opened. */
   onOpenRelated?: (task: VisibleTaskName) => void;
-  /** The Task is in a direct conversation, which no Project files: no Project field. */
-  direct?: boolean;
 };
 
 /**
@@ -178,7 +176,6 @@ export function TaskDetailDialog({
   currentMemberId,
   thread,
   onOpenRelated,
-  direct = false,
 }: TaskDetailDialogProps) {
   const [deleting, setDeleting] = useState(false);
   // The relation pickers belong to the popup, not its task section: the header menu opens them too.
@@ -228,7 +225,6 @@ export function TaskDetailDialog({
   }, [open, step, router, close]);
   const section = (
     <TaskSection
-      projectField={!direct}
       layout={sidebar ? "sidebar" : "chips"}
       task={task}
       onCommand={onCommand}
