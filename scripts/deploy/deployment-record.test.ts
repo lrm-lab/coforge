@@ -1,10 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import {
-  InvalidImageError,
-  type DeploymentRecord,
-  renderAuditRecord,
-} from "./deployment";
+import { InvalidImageError, type DeploymentRecord, renderAuditRecord } from "./deployment";
 import { registryImage } from "./deploy-test-support";
 
 describe("renderAuditRecord", () => {
