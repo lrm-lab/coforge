@@ -23,10 +23,8 @@
   "tasks_label_color_indigo": "靛蓝",
   "tasks_label_color_purple": "紫",
   "tasks_label_color_pink": "粉",
-  "tasks_label_delete": "删除标签",
-  "tasks_label_delete_title": "删除标签「{name}」？",
-  "tasks_label_delete_body": "它会从标签选择器和筛选中消失，并从所有带有它的任务上移除。",
-  "tasks_label_delete_pending": "删除中…",
+  "tasks_label_archive": "归档标签",
+  "tasks_label_archived_toast": "已归档「{name}」",
   "tasks_label_delete_failed": "没能删除这个标签。",
   "tasks_labels_manage": "管理标签",
   "tasks_labels_view_all": "查看全部标签",
@@ -69,17 +67,6 @@
   "labels_settings_description_field": "{name} 的用途",
   "labels_settings_description_placeholder": "这个标签用来做什么",
   "labels_settings_archive": "归档",
-  "labels_settings_archive_title": "归档“{name}”？",
-  "labels_settings_archive_body": [
-    {
-      "declarations": ["input count", "local countPlural = count: plural"],
-      "selectors": ["countPlural"],
-      "match": {
-        "countPlural=other": "{count} 个任务正在用它。归档后它会从这些任务上隐藏，也不能再挂到新任务上；恢复后会重新显示。"
-      }
-    }
-  ],
-  "labels_settings_archive_body_unused": "归档后它不能再挂到任务上；恢复后可以继续用。",
   "labels_settings_restored_meanwhile": "它已经被恢复了，要删除请先再归档一次。",
   "labels_settings_restore": "恢复",
   "labels_settings_delete": "彻底删除",

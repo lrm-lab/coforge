@@ -154,8 +154,8 @@ test("Esc steps back to the popup a sub-task or a parent was opened from", async
 
     // What sits inside or over the popup has Esc first, on the first popup and on a step alike:
     // an input method still composing in the discussion's composer keeps it (only the IME
-    // cancels), the composer's `#` completion closes alone, and a menu or a confirmation over the
-    // popup closes alone. Only the next Esc is the popup's.
+    // cancels), the composer's `#` completion closes alone, and a menu over the popup closes alone.
+    // Only the next Esc is the popup's.
     await browser("set", "viewport", "1280", "860");
     const composer = `${dialog}.querySelector("textarea[data-composer]")`;
     const layers = `document.querySelectorAll('[role="dialog"], [role="alertdialog"], [role="menu"]').length`;
@@ -214,18 +214,6 @@ test("Esc steps back to the popup a sub-task or a parent was opened from", async
       await browser("wait", "--fn", `document.querySelector('[role="menu"]') !== null`);
       await browser("press", "Escape");
       await browser("wait", "--fn", `document.querySelector('[role="menu"]') === null`);
-      await stays(title, 1);
-
-      // A confirmation over the popup (delete): Esc closes the confirmation alone.
-      await press(`${dialog}.querySelector('button[aria-label*="的更多操作"]')`);
-      await browser("wait", "--fn", `document.querySelector('[role="menu"]') !== null`);
-      await press(
-        `[...document.querySelectorAll('[role="menuitem"]')].find((el) => el.textContent.includes("删除任务"))`,
-      );
-      await browser("wait", "--fn", `${layers} === 2`);
-      await shoot(`guard-${state}-2-confirm`);
-      await browser("press", "Escape");
-      await browser("wait", "--fn", `${layers} === 1`);
       await stays(title, 1);
 
       // Nothing over it: Esc is the popup's again. (Focus came back to the ··· button, whose

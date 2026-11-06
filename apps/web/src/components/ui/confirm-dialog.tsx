@@ -1,11 +1,10 @@
 import { useState, type ReactNode } from "react";
 import { Heading, Text } from "react-aria-components";
-import { AlertCircle, XClose as X } from "@untitledui/icons";
+import { XClose as X } from "@untitledui/icons";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
-import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { m } from "#src/paraglide/messages";
 
@@ -82,18 +81,14 @@ export function ConfirmDialog({
                   onClick={close}
                 />
               </div>
-              <div className="mx-6 mt-4 flex items-start gap-3">
-                <FeaturedIcon
-                  color={tone === "destructive" ? "error" : "gray"}
-                  theme="light"
-                  size="sm"
-                  icon={AlertCircle}
-                />
-                <Text slot="description" elementType="div" className="text-sm text-secondary">
-                  {description}
-                  {detail}
-                </Text>
-              </div>
+              <Text
+                slot="description"
+                elementType="div"
+                className="mx-6 mt-4 block text-sm text-secondary"
+              >
+                {description}
+                {detail}
+              </Text>
               {error && (
                 <p role="alert" className="px-6 pt-4 text-sm text-error-primary">
                   {error}
@@ -107,7 +102,7 @@ export function ConfirmDialog({
                     #101, a delete's included); Tab reaches Cancel. */}
                 <DialogAction
                   autoFocus
-                  color={tone === "destructive" ? "primary-destructive" : "primary"}
+                  color={tone === "destructive" ? "secondary-destructive" : "primary"}
                   isLoading={pending}
                   isDisabled={confirmDisabled}
                   showTextWhileLoading

@@ -135,7 +135,7 @@ export function AgentDeleteDialog({
                     {m.controls_cancel()}
                   </DialogCancel>
                   <DialogAction
-                    color="primary-destructive"
+                    color="secondary-destructive"
                     data-agent-delete-confirm
                     isDisabled={!confirmed || deleting}
                     isLoading={deleting}

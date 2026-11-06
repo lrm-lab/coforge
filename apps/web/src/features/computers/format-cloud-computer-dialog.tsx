@@ -1,10 +1,9 @@
 import { useState } from "react";
-import { AlertCircle, XClose as X } from "@untitledui/icons";
+import { XClose as X } from "@untitledui/icons";
 import { Heading, Text } from "react-aria-components";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
-import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { m } from "#src/paraglide/messages";
 import {
@@ -90,12 +89,9 @@ export function FormatCloudComputerDialog({
                     onClick={close}
                   />
                 </div>
-                <div className="mx-6 mt-4 flex items-start gap-3">
-                  <FeaturedIcon color="error" theme="light" size="sm" icon={AlertCircle} />
-                  <Text slot="description" className="text-sm text-secondary">
-                    {m.computer_format_description()}
-                  </Text>
-                </div>
+                <Text slot="description" className="mx-6 mt-4 block text-sm text-secondary">
+                  {m.computer_format_description()}
+                </Text>
                 <label className="grid gap-1 px-6 pt-5 text-sm font-medium">
                   {m.computer_format_confirm({ name })}
                   <Input
@@ -119,7 +115,7 @@ export function FormatCloudComputerDialog({
                     {m.controls_cancel()}
                   </DialogCancel>
                   <DialogAction
-                    color="primary-destructive"
+                    color="secondary-destructive"
                     isDisabled={!confirmed || formatting}
                     isLoading={formatting}
                     showTextWhileLoading

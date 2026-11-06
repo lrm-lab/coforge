@@ -23,10 +23,8 @@
   "tasks_label_color_indigo": "Indigo",
   "tasks_label_color_purple": "Purple",
   "tasks_label_color_pink": "Pink",
-  "tasks_label_delete": "Delete label",
-  "tasks_label_delete_title": "Delete label “{name}”?",
-  "tasks_label_delete_body": "It disappears from the label picker and the filters, and comes off every task that has it.",
-  "tasks_label_delete_pending": "Deleting…",
+  "tasks_label_archive": "Archive label",
+  "tasks_label_archived_toast": "Archived “{name}”",
   "tasks_label_delete_failed": "Couldn’t delete that label.",
   "tasks_labels_manage": "Manage labels",
   "tasks_labels_view_all": "View all labels",
@@ -71,18 +69,6 @@
   "labels_settings_description_field": "What {name} is for",
   "labels_settings_description_placeholder": "What this label is for",
   "labels_settings_archive": "Archive",
-  "labels_settings_archive_title": "Archive “{name}”?",
-  "labels_settings_archive_body": [
-    {
-      "declarations": ["input count", "local countPlural = count: plural"],
-      "selectors": ["countPlural"],
-      "match": {
-        "countPlural=one": "{count} task uses it. Archived, it is hidden on that task and can’t be put on new ones; restoring it shows it again.",
-        "countPlural=other": "{count} tasks use it. Archived, it is hidden on those tasks and can’t be put on new ones; restoring it shows it again."
-      }
-    }
-  ],
-  "labels_settings_archive_body_unused": "Archived, it can’t be put on tasks; restoring it brings it back.",
   "labels_settings_restored_meanwhile": "It has been restored. To delete it, archive it again first.",
   "labels_settings_restore": "Restore",
   "labels_settings_delete": "Delete permanently",

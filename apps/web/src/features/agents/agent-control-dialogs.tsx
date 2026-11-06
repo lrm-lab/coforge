@@ -77,7 +77,7 @@ export function AgentRestartDialog({
                 <DialogAction
                   autoFocus
                   className="min-w-28"
-                  color={control.destructive ? "primary-destructive" : "primary"}
+                  color={control.destructive ? "secondary-destructive" : "primary"}
                   data-control-submit
                   iconLeading={RotateCcw}
                   onPress={control.submitRestart}

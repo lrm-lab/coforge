@@ -112,7 +112,7 @@ export function Popconfirm({
                 {/* Enter confirms, as in every dialog (task #101). */}
                 <DialogAction
                   autoFocus
-                  color={tone === "final" ? "primary" : "primary-destructive"}
+                  color={tone === "final" ? "primary" : "secondary-destructive"}
                   isLoading={pending}
                   showTextWhileLoading
                   onPress={() => {

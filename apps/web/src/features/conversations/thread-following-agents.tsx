@@ -6,7 +6,7 @@ import { AlertCircle, XClose } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { Popconfirm } from "#src/components/ui/popconfirm";
+import { useAppToast } from "#src/components/ui/toast";
 import { AgentStackFace } from "#src/features/agents/agent-display-avatar";
 import {
   AgentListPopover,
@@ -53,6 +53,7 @@ function FollowingAgentRow({
   /** The list's dialog, where focus goes once this row is gone. */
   listFocus: () => HTMLElement | null;
 }) {
+  const toast = useAppToast();
   useWatchAgentDisplay(agent.id);
   const live = useLiveAgent(agent.id);
   return (
@@ -65,25 +66,19 @@ function FollowingAgentRow({
       onOpenProfile={onOpenProfile ? () => onOpenProfile(agent.id) : undefined}
       action={
         canUnfollow && (
-          // The popconfirm opens from inside the list's popover, which stays open under it.
-          <Popconfirm
-            title={m.conversation_thread_unfollow_agent_confirm_title({ name: agent.displayName })}
-            description={m.conversation_thread_unfollow_agent_confirm_body({
-              name: agent.displayName,
-            })}
-            confirmLabel={m.conversation_thread_unfollow_agent_confirm()}
-            errorMessage={m.conversation_thread_following_agents_unfollow_error()}
-            placement="bottom end"
-            fallbackFocus={listFocus}
-            onConfirm={() => onUnfollow(agent.id)}
-          >
-            <ButtonUtility
-              icon={XClose}
-              size="sm"
-              color="tertiary"
-              tooltip={m.conversation_thread_unfollow_agent({ name: agent.displayName })}
-            />
-          </Popconfirm>
+          <ButtonUtility
+            icon={XClose}
+            size="sm"
+            color="tertiary"
+            tooltip={m.conversation_thread_unfollow_agent({ name: agent.displayName })}
+            onClick={() =>
+              void onUnfollow(agent.id).then(
+                // The row and its button go; focus stays in the list rather than on the page.
+                () => listFocus()?.focus(),
+                () => toast.error(m.conversation_thread_following_agents_unfollow_error()),
+              )
+            }
+          />
         )
       }
     />

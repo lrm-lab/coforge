@@ -4,7 +4,6 @@ import { useServerFn } from "@tanstack/react-start";
 import { Trash01 } from "@untitledui/icons";
 
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
-import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { useAppToast } from "#src/components/ui/toast";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
@@ -21,21 +20,17 @@ export function useCanDeleteTask(task: TaskView, currentMemberId: string | null)
   return manager || (currentMemberId !== null && task.creator.memberId === currentMemberId);
 }
 
-/** Confirms, then deletes the Task by its conversation and number (never a host message, which a
- * Task need not have), through the caller's task command where there is one (the Tasks page's
- * drops the row), and drops it from the conversation's Tasks. A toast then offers Undo for a short
- * while (Frank, 11-04, task #507): the server keeps a deleted Task restorable for a minute
+/** Deletes the Task by its conversation and number (never a host message, which a Task need not
+ * have), through the caller's task command where there is one (the Tasks page's drops the row), and
+ * drops it from the conversation's Tasks. It does not ask (Frank, 11-06): a toast offers Undo for a
+ * short while (task #507), as the server keeps a deleted Task restorable for a minute
  * (`DELETED_TASK_UNDO_MS`, task #512), and Undo brings it back whole. */
-export function TaskDeleteDialog({
+export function useDeleteTask({
   task,
-  open,
-  onOpenChange,
   onCommand,
   onDeleted,
 }: {
   task: TaskView;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
   onCommand?: (command: { operation: "delete" | "restore"; number: number }) => Promise<void>;
   onDeleted?: () => void;
 }) {
@@ -68,37 +63,30 @@ export function TaskDeleteDialog({
       );
     }
   };
-  return (
-    <ConfirmDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title={m.tasks_delete_title({ number: String(task.number) })}
-      description={m.tasks_delete_description()}
-      confirmLabel={m.tasks_delete()}
-      pendingLabel={m.tasks_deleting()}
-      errorMessage={m.tasks_delete_failed()}
-      onConfirm={async () => {
-        const command = { operation: "delete", number: task.number } as const;
-        if (onCommand) await onCommand(command);
-        else
-          await execute({
-            data: {
-              ...command,
-              idempotencyKey: crypto.randomUUID(),
-              conversationId: task.conversationId,
-            },
-          });
-        writeTasks(task.conversationId, [{ tasks: [], deleted: [task.id] }]);
-        onOpenChange(false);
-        onDeleted?.();
-        toast.success(m.tasks_deleted_toast({ number: String(task.number) }), {
-          key: task.id,
-          durationMs: UNDO_WINDOW_MS,
-          action: { label: m.action_undo(), onClick: () => void restore() },
+  return async () => {
+    const command = { operation: "delete", number: task.number } as const;
+    try {
+      if (onCommand) await onCommand(command);
+      else
+        await execute({
+          data: {
+            ...command,
+            idempotencyKey: crypto.randomUUID(),
+            conversationId: task.conversationId,
+          },
         });
-      }}
-    />
-  );
+    } catch {
+      toast.error(m.tasks_delete_failed());
+      return;
+    }
+    writeTasks(task.conversationId, [{ tasks: [], deleted: [task.id] }]);
+    onDeleted?.();
+    toast.success(m.tasks_deleted_toast({ number: String(task.number) }), {
+      key: task.id,
+      durationMs: UNDO_WINDOW_MS,
+      action: { label: m.action_undo(), onClick: () => void restore() },
+    });
+  };
 }
 
 /** How long the Undo stays: about ten seconds, as Frank asked (11-04), well inside the server's

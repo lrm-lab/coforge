@@ -222,17 +222,9 @@ test("an owner manages the Workspace's labels on their own page; a member reads 
     await Bun.sleep(300);
     expect((await labelRow(docs.id))!.color).toBe("blue");
 
-    // Archive one two Tasks carry: the question says so; it moves to Archived.
+    // Archive one two Tasks carry: Settings brings it back, so it moves to Archived at once
+    // (task #coforge-ui:#7).
     await menu(name("Bug"), "Archive");
-    await browser(
-      "wait",
-      "--fn",
-      `(document.querySelector('[role="dialog"], [role="alertdialog"]')?.textContent ?? "").includes("2 tasks use it")`,
-    );
-    await shoot("desktop-4-archive");
-    await click(
-      button("Archive", `document.querySelector('[role="dialog"], [role="alertdialog"]')`),
-    );
     await until(async () => (await labelRow(bug.id))!.archivedAt !== null);
     await browser(
       "wait",
@@ -246,8 +238,6 @@ test("an owner manages the Workspace's labels on their own page; a member reads 
     const dialog = `document.querySelector('[role="dialog"], [role="alertdialog"]')`;
     const archiveBug = async () => {
       await menu(name("Bug"), "Archive");
-      await browser("wait", "--fn", `${button("Archive", dialog)} !== undefined`);
-      await click(button("Archive", dialog));
       await until(async () => (await labelRow(bug.id))!.archivedAt !== null);
       await browser(
         "wait",

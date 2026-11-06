@@ -129,7 +129,7 @@ export function RemoveMemberDialog({
                 </DialogCancel>
                 <DialogAction
                   autoFocus
-                  color="primary-destructive"
+                  color="secondary-destructive"
                   isDisabled={busy}
                   isLoading={busy}
                   showTextWhileLoading

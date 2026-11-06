@@ -62,7 +62,7 @@ test("a Task deleted from its popup comes back with Undo", async () => {
     };
     const inChannel = `${origin}/en/w/${workspace.slug}/channel/${channel.id}?task=${number}`;
     const onTasksPage = `${origin}/en/w/${workspace.slug}/tasks?task=${channel.id}:${number}`;
-    const deleteFromPopup = async (url: string, confirmShot?: string) => {
+    const deleteFromPopup = async (url: string) => {
       await browser("open", url);
       await browser(
         "wait",
@@ -81,18 +81,11 @@ test("a Task deleted from its popup comes back with Undo", async () => {
       }
       await browser("wait", "--fn", menuOpen);
       await browser("click", `[role="menuitem"][data-key="delete"]`);
-      const confirm = `[...document.querySelectorAll('[role="alertdialog"], [role="dialog"]')].find((el) => el.textContent.includes("Delete task #${number}?"))`;
-      await browser("wait", "--fn", `${confirm} != null`);
-      if (confirmShot) await shoot(confirmShot);
-      await evaluate(
-        `([...${confirm}.querySelectorAll("button")].find((el) => el.textContent.trim() === "Delete task").setAttribute("data-e2e-confirm", ""), true)`,
-      );
-      await browser("click", "[data-e2e-confirm]");
       await browser("wait", "--fn", `${toast} != null`);
     };
 
     await browser("set", "viewport", "1280", "900");
-    await deleteFromPopup(inChannel, "confirm");
+    await deleteFromPopup(inChannel);
     expect(await deletedAt()).not.toBeNull();
     expect(await evaluate<boolean>(`${toast}.textContent.includes("Undo")`)).toBe(true);
     // Over a conversation the toast leaves its composer free: nothing of it covers the field.
