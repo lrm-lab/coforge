@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { OVERLAY_LAYER } from "#src/lib/overlay-layer";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
-import { Edit01 as Edit, Settings01 as Settings } from "@untitledui/icons";
 
 import {
   Dialog as SlideoutDialog,
@@ -10,8 +9,6 @@ import {
   ModalOverlay as SlideoutOverlay,
 } from "#src/components/application/slideout-menus/slideout-menu";
 import { Button } from "#src/components/base/buttons/button";
-import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { Checkbox } from "#src/components/base/checkbox/checkbox";
 import { Input } from "#src/components/base/input/input";
 import { Select } from "#src/components/base/select/select";
 import type { AgentProfileTab } from "#src/features/agents/profile-panel/profile-panel-search";
@@ -37,11 +34,8 @@ import {
   submitWeeklyReportCollectPlan,
 } from "./records-collect.functions";
 import { collectPlanSubmitBlocked } from "./weekly-report-collect-plan";
+import { CollectComputerRow } from "./weekly-report-collect-plan-computer-row";
 import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
-
-/** Selected state uses the same neutral black fill as Records primary buttons. */
-const COLLECT_PLAN_CHECKBOX_CLASSNAME =
-  "[&[data-selected]>div]:bg-primary-solid! [&[data-selected]>div]:ring-primary-solid!";
 
 type SlotRow = Awaited<ReturnType<typeof listWeeklyReportCollectorSlots>>[number];
 
@@ -382,81 +376,34 @@ export function WeeklyReportCollectPlanCard(props: {
           {slots.length === 0 ? (
             <p className="text-sm text-tertiary">{m.records_collect_plan_no_owned()}</p>
           ) : (
-            slots.map((slot) => {
-              const checked = selected.includes(slot.computerId);
-              const lines = pathsByComputer[slot.computerId] ?? [""];
-              return (
-                <div
-                  key={slot.computerId}
-                  className={`rounded-xl border border-secondary p-3 ${checked ? "bg-secondary" : "bg-primary"}`}
-                >
-                  <div className="flex items-center gap-2 pl-6">
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-primary">
-                      {slot.displayName}
-                    </span>
-                    {!slot.ready ? (
-                      <Button
-                        size="sm"
-                        color="secondary"
-                        isDisabled={busy || props.disabled}
-                        onPress={() => void onEnsure(slot.computerId)}
-                      >
-                        {m.records_collect_plan_setup()}
-                      </Button>
-                    ) : null}
-                    {slot.collectorAgentId ? (
-                      <ButtonUtility
-                        size="sm"
-                        color="tertiary"
-                        icon={Settings}
-                        aria-label={m.records_collect_plan_gear()}
-                        isDisabled={busy || props.disabled}
-                        onClick={() => {
-                          setConfiguringComputerId(slot.computerId);
-                          openProfile(slot.collectorAgentId!);
-                        }}
-                      />
-                    ) : null}
-                  </div>
-                  <div className="mt-2 flex items-center gap-2">
-                    <Checkbox
-                      className={`${COLLECT_PLAN_CHECKBOX_CLASSNAME} self-center`}
-                      isSelected={checked}
-                      isDisabled={busy || props.disabled}
-                      onChange={(next) => {
-                        setSelected((prev) =>
-                          next
-                            ? [...new Set([...prev, slot.computerId])]
-                            : prev.filter((id) => id !== slot.computerId),
-                        );
-                      }}
-                    />
-                    <div className="min-w-0 flex-1 rounded-lg border border-secondary bg-primary px-3 py-1.5">
-                      {lines.map((line, index) => (
-                        <CollectPathRow
-                          key={`${slot.computerId}-${index}`}
-                          value={line}
-                          disabled={busy || props.disabled}
-                          canRemove={lines.length > 1}
-                          autoFocus={
-                            pathFocus?.computerId === slot.computerId && pathFocus.index === index
-                          }
-                          onChange={(next) => updatePathLine(slot.computerId, index, next)}
-                          onAdd={() => addPathLine(slot.computerId)}
-                          onRemove={() => removePathLine(slot.computerId, index)}
-                          onFocused={() => setPathFocus(null)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                  {!slot.ready ? (
-                    <p className="mt-1 pl-6 text-xs text-warning-primary">
-                      {m.records_collect_plan_not_ready()}
-                    </p>
-                  ) : null}
-                </div>
-              );
-            })
+            slots.map((slot) => (
+              <CollectComputerRow
+                key={slot.computerId}
+                slot={slot}
+                checked={selected.includes(slot.computerId)}
+                pathLines={pathsByComputer[slot.computerId] ?? [""]}
+                focusedPathIndex={
+                  pathFocus?.computerId === slot.computerId ? pathFocus.index : null
+                }
+                disabled={busy || props.disabled}
+                onToggle={(next) =>
+                  setSelected((prev) =>
+                    next
+                      ? [...new Set([...prev, slot.computerId])]
+                      : prev.filter((id) => id !== slot.computerId),
+                  )
+                }
+                onEnsure={() => void onEnsure(slot.computerId)}
+                onConfigure={() => {
+                  setConfiguringComputerId(slot.computerId);
+                  openProfile(slot.collectorAgentId!);
+                }}
+                onPathChange={(index, next) => updatePathLine(slot.computerId, index, next)}
+                onPathAdd={() => addPathLine(slot.computerId)}
+                onPathRemove={(index) => removePathLine(slot.computerId, index)}
+                onPathFocused={() => setPathFocus(null)}
+              />
+            ))
           )}
         </div>
       </div>
@@ -475,57 +422,6 @@ export function WeeklyReportCollectPlanCard(props: {
           {m.records_collect_plan_submit()}
         </Button>
       </div>
-    </div>
-  );
-}
-
-function CollectPathRow(props: {
-  value: string;
-  disabled?: boolean;
-  canRemove: boolean;
-  autoFocus: boolean;
-  onChange: (value: string) => void;
-  onAdd: () => void;
-  onRemove: () => void;
-  onFocused: () => void;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (!props.autoFocus) return;
-    inputRef.current?.focus();
-    props.onFocused();
-  }, [props.autoFocus, props.onFocused]);
-  return (
-    <div className="flex items-center gap-2 py-1">
-      <input
-        ref={inputRef}
-        value={props.value}
-        disabled={props.disabled}
-        aria-label={m.records_collect_plan_paths()}
-        onChange={(event) => props.onChange(event.target.value)}
-        onKeyDown={(event) => {
-          if (props.disabled || event.nativeEvent.isComposing) return;
-          if (event.key === "Enter") {
-            event.preventDefault();
-            props.onAdd();
-            return;
-          }
-          if (event.key === "Backspace" && props.value === "" && props.canRemove) {
-            event.preventDefault();
-            props.onRemove();
-          }
-        }}
-        className="min-w-0 flex-1 bg-transparent font-mono text-sm text-tertiary outline-none disabled:opacity-60"
-      />
-      <ButtonUtility
-        type="button"
-        size="xs"
-        color="tertiary"
-        icon={Edit}
-        aria-label={m.records_collect_plan_paths()}
-        isDisabled={props.disabled}
-        onClick={() => inputRef.current?.focus()}
-      />
     </div>
   );
 }

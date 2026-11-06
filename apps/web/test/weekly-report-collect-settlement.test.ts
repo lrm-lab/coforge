@@ -1,7 +1,9 @@
 import { expect, test } from "bun:test";
 
 test("settleStaleCollectRun marks overdue running slots stalled and closes an empty wave", async () => {
-  const { settleStaleCollectRun, COLLECT_RUN_STATUS, COLLECT_SLOT_STATUS, COLLECT_SLOT_STALL_MS } =
+  const { settleStaleCollectRun, COLLECT_SLOT_STALL_MS } =
+    await import("#src/server/records/weekly-report-collect-settlement.server");
+  const { COLLECT_RUN_STATUS, COLLECT_SLOT_STATUS } =
     await import("#src/server/records/weekly-report-collect-run.server");
 
   let slotStatus: string = COLLECT_SLOT_STATUS.running;
@@ -85,7 +87,9 @@ test("settleStaleCollectRun marks overdue running slots stalled and closes an em
 });
 
 test("settleStaleCollectRun ends a collecting wave immediately when the computer runtime is offline", async () => {
-  const { settleStaleCollectRun, COLLECT_RUN_STATUS, COLLECT_SLOT_STATUS } =
+  const { settleStaleCollectRun } =
+    await import("#src/server/records/weekly-report-collect-settlement.server");
+  const { COLLECT_RUN_STATUS, COLLECT_SLOT_STATUS } =
     await import("#src/server/records/weekly-report-collect-run.server");
 
   let slotStatus: string = COLLECT_SLOT_STATUS.running;
@@ -172,7 +176,9 @@ test("settleStaleCollectRun ends a collecting wave immediately when the computer
 });
 
 test("settleStaleCollectRun keeps collecting while the computer runtime is online", async () => {
-  const { settleStaleCollectRun, COLLECT_RUN_STATUS, COLLECT_SLOT_STATUS } =
+  const { settleStaleCollectRun } =
+    await import("#src/server/records/weekly-report-collect-settlement.server");
+  const { COLLECT_RUN_STATUS, COLLECT_SLOT_STATUS } =
     await import("#src/server/records/weekly-report-collect-run.server");
 
   const startedAt = new Date("2026-10-08T07:14:12.680Z");
@@ -224,7 +230,9 @@ test("settleStaleCollectRun keeps collecting while the computer runtime is onlin
 });
 
 test("settleStaleCollectRun checks and marks offline computers in parallel", async () => {
-  const { settleStaleCollectRun, COLLECT_RUN_STATUS, COLLECT_SLOT_STATUS } =
+  const { settleStaleCollectRun } =
+    await import("#src/server/records/weekly-report-collect-settlement.server");
+  const { COLLECT_RUN_STATUS, COLLECT_SLOT_STATUS } =
     await import("#src/server/records/weekly-report-collect-run.server");
 
   const startedAt = new Date("2026-10-08T07:14:12.680Z");

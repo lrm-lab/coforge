@@ -16,12 +16,12 @@ import {
   canSynthesizeFromSlots,
   COLLECT_RUN_STATUS,
   failRunningCollectSlotsForAgent,
-  getCollectRunWithPacks,
   startCollectRun,
   type AcceptCollectSlotReportResult,
   type CollectRunComputerInput,
   type CollectWindowKind,
 } from "./weekly-report-collect-run.server";
+import { getCollectRunWithPacks } from "./weekly-report-collect-settlement.server";
 import { loadCollectorRunMetadata } from "./weekly-report-collect-run-metadata.server";
 import { resolveCollectWindow } from "#src/features/records/weekly-report-collect-window";
 import { recordSideChat } from "./record-side-chat.server";

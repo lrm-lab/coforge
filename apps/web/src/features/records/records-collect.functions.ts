@@ -72,7 +72,7 @@ export const loadWeeklyReportCollectRun = createServerFn({ method: "GET" })
   .validator(z.object({ runId: z.uuid() }))
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     const { getCollectRunWithPacks } =
-      await import("#src/server/records/weekly-report-collect-run.server");
+      await import("#src/server/records/weekly-report-collect-settlement.server");
     return getCollectRunWithPacks(db, {
       workspaceId,
       userId: user.id,

@@ -18,8 +18,10 @@ These rules also cover `src/server/records/`.
   authorized as the assistant owner User.
   Multi-Computer collect belongs to
   `server/records/weekly-report-collector.server.ts` (per-Computer Collector
-  bindings) and `server/records/weekly-report-collect-run.server.ts` (narrow
-  Collect Run ledger). Pack submit and side-panel cards are follow-up seams;
+  bindings), `server/records/weekly-report-collect-run.server.ts` (narrow
+  Collect Run ledger) and `server/records/weekly-report-collect-settlement.server.ts`
+  (settle-on-read and slot detail views). Pack submit and side-panel cards are
+  follow-up seams;
   do not add WSS collect-result RPCs. Schema merge requires Frank approval.
 - Sidebar expand state: `records-sidebar-expand.ts` owns sessionStorage recall
   for the last entry section (`activeSection`) and week openness; remount opens
