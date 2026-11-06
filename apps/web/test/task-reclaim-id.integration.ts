@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { afterAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
@@ -288,4 +288,8 @@ test("createTasks gives the task its own id, not the message's", async () => {
     select: { id: true, messageId: true },
   });
   expect(task.id).not.toBe(task.messageId);
+});
+
+afterAll(async () => {
+  await db.$disconnect();
 });

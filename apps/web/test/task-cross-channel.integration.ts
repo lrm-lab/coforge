@@ -298,17 +298,21 @@ test("a non-member of a public channel reads a Task's detail and downstream list
 });
 
 test("a task cannot wait for its parent or its child", async () => {
-  const { run, make, refusal } = await setup();
-  const [parent] = await make("alice", 1);
-  const [child] = await make("alice", 1, { parent: { number: parent! } });
-  const upward = await refusal(
-    run("alice", { operation: "amend", number: child!, blockedBy: [{ number: parent! }] }),
-  );
-  expect(upward.code).toBe("INVALID_INPUT");
-  expect(upward.hint).toContain("ancestor");
-  const downward = await refusal(
-    run("alice", { operation: "amend", number: parent!, blockedBy: [{ number: child! }] }),
-  );
-  expect(downward.code).toBe("INVALID_INPUT");
-  expect(downward.hint).toContain("descendant");
+  const { db, run, make, refusal } = await setup();
+  try {
+    const [parent] = await make("alice", 1);
+    const [child] = await make("alice", 1, { parent: { number: parent! } });
+    const upward = await refusal(
+      run("alice", { operation: "amend", number: child!, blockedBy: [{ number: parent! }] }),
+    );
+    expect(upward.code).toBe("INVALID_INPUT");
+    expect(upward.hint).toContain("ancestor");
+    const downward = await refusal(
+      run("alice", { operation: "amend", number: parent!, blockedBy: [{ number: child! }] }),
+    );
+    expect(downward.code).toBe("INVALID_INPUT");
+    expect(downward.hint).toContain("descendant");
+  } finally {
+    await db.$disconnect();
+  }
 });

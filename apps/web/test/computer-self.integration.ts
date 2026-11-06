@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { afterAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import {
@@ -240,4 +240,8 @@ test("detach unlinks, revokes every key, notifies and reconnects after commit", 
     expect(refused).toBeInstanceOf(Response);
     expect((refused as Response).status).toBe(401);
   }
+});
+
+afterAll(async () => {
+  await db.$disconnect();
 });
