@@ -22,6 +22,6 @@
 
 两种写法共用：
 
-- 标识符类的值（主机名、版本号、ID、路径）用 `font-mono`。
+- 路径、代码、指标用 `font-mono`；其他标识符（主机名、ID）跟正文同字体（见 [界面原则](ui-principles.md)）。
 - 空值显示 `—`，不显示 "N/A"、"Unknown"、"暂无"。
 - label 要在上下文里不产生歧义：「System」下面的版本号写「CoForge version」，不写「Version」。
