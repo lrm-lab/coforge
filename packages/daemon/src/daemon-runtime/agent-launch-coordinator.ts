@@ -19,7 +19,12 @@ import { agentActivityDrafts } from "./agent-activity-drafts";
 import type { ActivityLaunch } from "./activity-launch";
 import type { AgentProxy, LaunchRequest } from "./runtime-launch-types";
 import { resolveLaunchIdentity } from "./launch-identity";
-import { runtimeDisplayName, sessionInvalidateActivityText } from "./session-invalidate-activity";
+import { ResumedEarlyCrashStreak } from "./resumed-early-crash";
+import {
+  connectionSessionInvalidate,
+  runtimeDisplayName,
+  sessionInvalidateActivityText,
+} from "./session-invalidate-activity";
 import { type AgentActivity } from "@lrm/coforge-sdk/internal";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import { launchAgentProcess } from "./agent-launch-process";
@@ -109,12 +114,17 @@ export type AgentLaunchCoordinatorPorts = {
   drainAppInboxNotices: (agentId: string) => Promise<void>;
   /** Puts the Agent's MEMORY.md block at the front of a fresh session's queued input. */
   attachSessionMemory: (agentId: string) => Promise<boolean>;
+  /** A daemon-initiated relaunch after a process exit (the resumed-session cold start): the
+   * ordinary launch gate with wake bookkeeping, fire-and-forget. */
+  relaunchResumed(agentId: string, config: AgentRuntimeConfig, request: LaunchRequest): void;
 };
 
 export class AgentLaunchCoordinator {
   /** Launches that created their native session, not resumed one: the idle reminder asks with
    * `freshSession` once per such launch, because that session has no memory of the Tasks. */
   readonly #freshLaunches = new Set<string>();
+  /** Consecutive qualifying early crashes of a resumed Session, across this runtime's launches. */
+  readonly resumedEarlyCrash = new ResumedEarlyCrashStreak();
   /** The task idle reminder's daemon side, built from this coordinator's own collaborators. */
   readonly idleNudge: TaskIdleNudge;
 
@@ -211,7 +221,13 @@ export class AgentLaunchCoordinator {
         ),
       );
     return launchAgentProcess(
-      { ...this.ports, idleNudge: this.idleNudge },
+      {
+        ...this.ports,
+        idleNudge: this.idleNudge,
+        resumedEarlyCrash: this.resumedEarlyCrash,
+        coldStartResumedSession: (id, ended, stale) =>
+          this.#coldStartResumedSession(id, ended, stale),
+      },
       agentId,
       config,
       request,
@@ -222,5 +238,36 @@ export class AgentLaunchCoordinator {
       reused,
       managedScope,
     );
+  }
+
+  /** A stored Session that crashed the runtime twice within seconds of every resume is corrupt
+   * in a way the provider cannot report: invalidate it and cold-start a fresh Session through
+   * the ordinary launch gate, so queued deliveries carry over and no later wake can pick the
+   * stale Session back up (resumed-early-crash.ts; Raft 1.0.63 `repeated_early_crash`). */
+  #coldStartResumedSession(agentId: string, launch: ActivityLaunch, staleSessionId: string): void {
+    const restart = this.ports.agentProcessManager.restartConfig(agentId);
+    if (!restart || this.ports.isStopping() || this.ports.stops.stopping(agentId)) return;
+    const reference = this.ports.sessions.sessionReference(agentId);
+    this.ports.transport().sendSessionInvalidate?.(
+      connectionSessionInvalidate(this.ports.connection, this.ports.runtimeInstanceId, {
+        agentId,
+        provider: restart.config.provider,
+        sessionId: staleSessionId,
+        launchId: reference?.launchId ?? launch.launchId,
+        reason: "repeated_early_crash",
+      }),
+    );
+    if (reference)
+      this.ports.sessions.rememberSession(agentId, {
+        ...reference,
+        sessionId: undefined,
+        sessionMode: "create",
+      });
+    this.ports.agentProcessManager.clearRestartSession(agentId);
+    this.ports.relaunchResumed(agentId, restart.config, {
+      sessionMode: "create",
+      replacedSessionId: staleSessionId,
+      invalidateReason: "repeated_early_crash",
+    });
   }
 }

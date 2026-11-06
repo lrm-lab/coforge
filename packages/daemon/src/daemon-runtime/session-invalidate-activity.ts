@@ -5,6 +5,7 @@ import {
   type AgentSessionInvalidateReason,
   type RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
+import { RESUMED_EARLY_CRASH_FALLBACK_THRESHOLD } from "./resumed-early-crash";
 
 /** Human runtime label for an invalidated-session Activity notice. */
 const RUNTIME_DISPLAY_NAME: Record<RuntimeProvider, string> = {
@@ -50,6 +51,11 @@ export function sessionInvalidateActivityText(
   staleSessionId: string,
   reason: AgentSessionInvalidateReason,
 ): { detail: string; entryText: string } {
+  if (reason === "repeated_early_crash")
+    return {
+      detail: `Stored ${runtimeLabel} session keeps crashing on resume; cold-starting a new session…`,
+      entryText: `Stored ${runtimeLabel} session ${staleSessionId} crashed right after resuming ${RESUMED_EARLY_CRASH_FALLBACK_THRESHOLD} times in a row. Falling back to a cold start; earlier runtime context may not be restored.`,
+    };
   const rejected = reason === "provider_replay_rejected";
   return {
     detail: `Stored ${runtimeLabel} session ${rejected ? "replay rejected" : "missing"}; cold-starting a new session…`,

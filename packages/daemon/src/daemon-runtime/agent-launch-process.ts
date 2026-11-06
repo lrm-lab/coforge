@@ -9,7 +9,7 @@ import { ProviderProgress } from "./stalled-recovery";
 import { openLaunchSessionMemory } from "./session-memory-launch";
 import { assertSessionNotSpent } from "./session-reset-guard";
 import { LaunchPhaseTiming } from "./launch-phase-timing";
-import { reportLaunchSession } from "./launch-session-report";
+import { sessionIdReporter } from "./launch-session-report";
 import {
   StalledTurnTracker,
   stalledTurnNotice,
@@ -21,12 +21,9 @@ import { buildRuntimeCrashedActivity } from "#src/agent-runtime/runtime-error-ac
 import { TURN_ACTIVITY_EVENT_TYPES } from "#src/agent-runtime/runtime-phases";
 import { runtimeErrorRecoverySignal } from "#src/agent-runtime/runtime-error-recovery";
 import { AGENT_ACTIVITY_DETAIL_KIND } from "@lrm/coforge-sdk/internal";
+import { ResumedEarlyCrashWatch, type ResumedEarlyCrashStreak } from "./resumed-early-crash";
 import { isBusyActivityDetailKind } from "./agent-activity-publisher";
-import {
-  connectionSessionInvalidate,
-  runtimeDisplayName,
-  sessionInvalidateActivityText,
-} from "./session-invalidate-activity";
+import { runtimeDisplayName } from "./session-invalidate-activity";
 import { ignoredAgentEnvironmentActivity } from "./agent-environment-activity";
 import { requestAgentLaunchConfig } from "./agent-launch-config";
 import { restoreSupersededAgentApiKey } from "./agent-api-key-revoke";
@@ -45,7 +42,13 @@ import type { TaskIdleNudge } from "./task-idle-nudge";
 const logger = getLogger(["coforge", "daemon", "runtime"]);
 
 export async function launchAgentProcess(
-  ports: AgentLaunchCoordinatorPorts & { idleNudge?: Pick<TaskIdleNudge, "maybeAsk"> },
+  ports: AgentLaunchCoordinatorPorts & {
+    idleNudge?: Pick<TaskIdleNudge, "maybeAsk">;
+    /** Consecutive qualifying early crashes of a resumed Session, across launches. */
+    resumedEarlyCrash: ResumedEarlyCrashStreak;
+    /** The streak hit its threshold: invalidate the stale Session and cold-start fresh. */
+    coldStartResumedSession(agentId: string, launch: ActivityLaunch, staleSessionId: string): void;
+  },
   agentId: string,
   config: AgentRuntimeConfig,
   request: LaunchRequest,
@@ -131,8 +134,21 @@ export async function launchAgentProcess(
       provider: config.provider,
       needsReset: ports.contexts.needsSessionReset(agentId),
     });
-    let reportedSessionId: string | undefined;
-    let driverReplacedSessionId: string | undefined;
+    const sessionIds = sessionIdReporter(ports, {
+      agentId,
+      provider: config.provider,
+      launch,
+      current,
+      reference,
+      request,
+      recycled: recycled !== undefined,
+      recycledSessionId,
+      previousLaunchId,
+      timing,
+    });
+    // The resumed-session early-crash clock (resumed-early-crash.ts): from the provider session
+    // request, and whether the provider produced model output before the process ended.
+    const earlyCrashWatch = new ResumedEarlyCrashWatch();
     // The adapter's own spawn + ACP initialize complete with this call; one phase covers both.
     const runtime = await ports.agentProcessManager.start(
       agentId,
@@ -159,55 +175,7 @@ export async function launchAgentProcess(
           }),
         },
         runtimeId: launch.launchId,
-        onSessionId: ports.transport().reportAgentSession
-          ? async (reported, replaced) => {
-              reportedSessionId = reported;
-              driverReplacedSessionId = replaced;
-              return reportLaunchSession(
-                {
-                  current,
-                  isStopping: () => ports.isStopping(),
-                  envelope: () => ports.envelope(),
-                  report: (report) => ports.reportAgentSession(report),
-                  invalidate: (sessionId) =>
-                    ports.transport().sendSessionInvalidate?.(
-                      connectionSessionInvalidate(ports.connection, ports.runtimeInstanceId, {
-                        agentId,
-                        provider: config.provider,
-                        sessionId,
-                        launchId: launch.launchId,
-                        reason: "missing",
-                      }),
-                    ),
-                  narrateReplaced: (sessionId) => {
-                    ports.narrateUnavailable(
-                      agentId,
-                      launch,
-                      sessionInvalidateActivityText(
-                        runtimeDisplayName(config.provider),
-                        sessionId,
-                        "missing",
-                      ),
-                    );
-                  },
-                },
-                {
-                  agentId,
-                  provider: config.provider,
-                  launchId: launch.launchId,
-                  reference,
-                  request,
-                  recycled: recycled !== undefined,
-                  recycledSessionId,
-                  reportedSessionId,
-                  daemonInstanceId: ports.runtimeInstanceId,
-                  driverReplacedSessionId,
-                  previousLaunchId,
-                  timing,
-                },
-              );
-            }
-          : undefined,
+        onSessionId: sessionIds.onSessionId,
         sessionMode: recycled ? "create" : reference.sessionMode,
         assignedSkillPacks: parseAssignedSkillPacks(launchConfig.assignedSkillPacks),
         identity: launchConfig.identity,
@@ -227,8 +195,8 @@ export async function launchAgentProcess(
       recycled: recycled !== undefined,
       sessionMode: reference.sessionMode,
       requestedSessionId,
-      reportedSessionId,
-      providerReplaced: driverReplacedSessionId !== undefined,
+      reportedSessionId: sessionIds.reportedSessionId(),
+      providerReplaced: sessionIds.driverReplacedSessionId() !== undefined,
       attach: () => ports.attachSessionMemory(agentId),
     });
     if (parseAssignedSkillPacks(launchConfig.assignedSkillPacks).includes("weekly-report-collect"))
@@ -292,6 +260,7 @@ export async function launchAgentProcess(
       progress.observe(event);
       toolCalls.observe(event);
       replyIntents.observe(event);
+      earlyCrashWatch.observe(event);
       const isCurrent = current();
       // Raw: text and thinking count before the trajectory coalesces them, and before this
       // event marks the Agent busy (a hold released while busy flushes only at the turn end).
@@ -375,6 +344,20 @@ export async function launchAgentProcess(
       );
       if (ports.currentActivityLaunches.get(agentId) === launch)
         ports.currentActivityLaunches.delete(agentId);
+      // A stored Session that keeps killing the runtime seconds after every resume is corrupt:
+      // count qualifying closes and, at the threshold, invalidate it and cold-start fresh
+      // (resumed-early-crash.ts; Raft 1.0.63 `noteResumedEarlyCrashClose` + `repeated_early_crash`).
+      earlyCrashWatch.close({
+        agentId,
+        resumedSessionId: requestedSessionId,
+        staleSessionId: reference.sessionId ?? requestedSessionId,
+        sessionModeCreate: reference.sessionMode === "create",
+        offline: launch.offlineError !== undefined,
+        deliveryHold: ports.deliveryQueue.explicitHold(agentId) !== undefined,
+        daemonStopping: ports.isStopping(),
+        streak: ports.resumedEarlyCrash,
+        coldStart: (id, stale) => ports.coldStartResumedSession(id, launch, stale),
+      });
     });
     if (reused)
       wakeReusedAgent(runtime.session, (identity) =>

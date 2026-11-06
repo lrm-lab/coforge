@@ -94,7 +94,8 @@ message AgentSessionReport {
 
 // Fire-and-forget daemon-to-cloud notice that a stored native Session is gone
 // or was rejected on replay; the daemon is cold-starting without it. Never
-// delivered as Activity. `reason` is "missing" or "provider_replay_rejected".
+// delivered as Activity. `reason` is "missing", "provider_replay_rejected"
+// or "repeated_early_crash".
 // No control-fence fields (no start_request_id/control_epoch, unlike
 // AgentSessionReport): the server's exact match is on launch_id + session_id
 // alone. This message never shipped, so its fields are numbered

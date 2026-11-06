@@ -59,3 +59,22 @@
 这两段的 token 预算不属于回收：每个 fresh session（首次启动、provider 丢失 session 后的重建、`create`、Memory Agent 的每个新 conversation）和每次上下文压缩完成后都按同样的份额注入——`MEMORY.md` 3000 token（`STARTUP_MEMORY_BUDGET_TOKENS`）、`notes/active-context.md` 1000 token（`STARTUP_ACTIVE_CONTEXT_BUDGET_TOKENS`），两份份额不互相借。
 
 除 sweep 周期外，Agent 自己的 runtime 环境变量覆盖 Daemon 的环境，两者都覆盖 provider 声明的冷却间隔；空值在两级都视为未设置，无法解析的值回落为默认。
+
+## 恢复后秒崩（resumed early crash）
+
+对齐 Raft 1.0.63 的 `noteResumedEarlyCrashClose` 与 `repeated_early_crash`：一个已存的 native
+session 如果每次恢复后几秒内就让 runtime 静默崩溃，说明它在 provider 无法上报的层面已损坏，继续
+恢复只会让每次唤醒都烧掉一次 launch 并卡住任务。
+
+- **判定**（`daemon-runtime/resumed-early-crash.ts`）：launch 请求恢复某个已存 session、进程在
+  15 秒内自行退出、退出前没有任何模型输出（主 session 的 text/thinking/tool_start，子 agent
+  的不算）、且不是 Daemon 主动收尾——stop、take-offline、任何投递 hold（退避或熔断）、daemon
+  停止都不计。
+  `AgentSession.onExit` 不带退出码或信号，所以"自行退出"由所有预期收尾都先标记
+  `launch.stopping` 来近似。非计次的退出、session id 变化都会清零连击。
+- **兜底**：同一 session 连续两次计次（`RESUMED_EARLY_CRASH_FALLBACK_THRESHOLD`）后，Daemon 发
+  `agent:session:invalidate`（reason `repeated_early_crash`），清掉本地 session 引用与
+  restart config 里的恢复指针，再以 `sessionMode: "create"`、无 session id 走普通 launch 通道
+  冷启动新 session；排队中的投递照常带进新 launch。Activity 沿用 `runtime_unavailable`
+  cold-start 文案：“Stored <Runtime> session keeps crashing on resume; cold-starting a new
+  session…”。连击状态只在内存里，daemon 重启后重新计。

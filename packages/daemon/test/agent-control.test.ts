@@ -178,7 +178,7 @@ test.each([
     const invalidations: Array<{
       sessionId: string;
       launchId: string;
-      reason: "missing" | "provider_replay_rejected";
+      reason: string;
     }> = [];
     const state = new AgentRuntimeState({
       listAgentIds: async () => [],

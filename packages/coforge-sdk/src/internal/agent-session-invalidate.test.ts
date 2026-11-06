@@ -29,6 +29,11 @@ test("round-trips the provider_replay_rejected reason", () => {
   expect(decodeAgentSessionInvalidate(encodeAgentSessionInvalidate(message))).toEqual(message);
 });
 
+test("round-trips the repeated_early_crash reason", () => {
+  const message = { ...invalidate(), reason: "repeated_early_crash" as const };
+  expect(decodeAgentSessionInvalidate(encodeAgentSessionInvalidate(message))).toEqual(message);
+});
+
 test("rejects an invalid reason, protocol, provider, and session id", () => {
   const message = invalidate();
   expect(() =>

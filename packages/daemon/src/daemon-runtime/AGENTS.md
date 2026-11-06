@@ -51,6 +51,10 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
   (task #476).
 - `agent-launch-coordinator.ts` owns launch identity and launch-state initialization; `runtime.ts` supplies lifecycle ports and start admission.
 - `agent-launch-process.ts` owns the provider process boundary and its Session, Activity, and exit cleanup callbacks for one resolved launch.
+- `resumed-early-crash.ts` owns the stored-Session early-crash streak (Raft 1.0.63
+  `noteResumedEarlyCrashClose`): a resume that exits silently inside 15 seconds counts, and the
+  second consecutive close makes `runtime.ts` invalidate the Session (`repeated_early_crash`)
+  and cold-start a fresh one through the ordinary launch gate.
 - `agent-launch-config.ts` owns the transport fallback for obtaining an Agent launch credential/config.
 - `agent-wake-control.ts` owns reused-wake identity reads and control-record wake ordering; an
   unavailable provider identity keeps the wake and preserves the last known identity.

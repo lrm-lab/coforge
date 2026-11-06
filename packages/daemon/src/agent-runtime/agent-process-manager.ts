@@ -353,6 +353,15 @@ export class AgentProcessManager {
     return this.#restartConfigs.get(agentId)?.serverLaunch;
   }
 
+  /** Drops the remembered resume pointer once its Session was invalidated, so the next wake
+   * cannot ask the provider for a Session that no longer exists. The config and server launch
+   * identity stay: only the native Session reference is gone. */
+  clearRestartSession(agentId: string): void {
+    const existing = this.#restartConfigs.get(agentId);
+    if (existing && existing.sessionId !== undefined)
+      this.#restartConfigs.set(agentId, { ...existing, sessionId: undefined });
+  }
+
   /** Records the Activity `clientSeq` just sent for this Agent, so a later wake under the same
    * (remembered) `launchId` can continue from it instead of restarting at 0. */
   recordClientSeq(agentId: string, clientSeq: number): void {

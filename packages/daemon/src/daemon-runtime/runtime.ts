@@ -526,7 +526,7 @@ export class DaemonRuntime {
       },
       recordClientSeq: (agentId, clientSeq) =>
         this.#agentProcessManager.recordClientSeq(agentId, clientSeq),
-      reconcileIdleTurn: (agentId, launch) => this.#reconcileIdleTurn(agentId, launch),
+      reconcileIdleTurn: this.#reconcileIdleTurn,
     });
     this.#connection = connection;
     this.#drafts = agentActivityDrafts(connection.workspaceId);
@@ -578,7 +578,7 @@ export class DaemonRuntime {
       sync: this.#sync,
       contexts: this.#contexts,
       memoryAgent: (agentId) => this.memoryFence(agentId),
-      reconcileIdleTurn: (agentId, launch) => this.#reconcileIdleTurn(agentId, launch),
+      reconcileIdleTurn: this.#reconcileIdleTurn,
       startAgent: (agentId, config, sessionId) =>
         this.#startAgent(agentId, config, undefined, { sessionId }),
       assertRunning: () => this.#assertRunning(),
@@ -661,7 +661,7 @@ export class DaemonRuntime {
       runtimeErrorActivity: (agentId, message) => this.#drafts.runtimeError(agentId, message),
       interruptedActivity: (agentId) => this.#drafts.interrupted(agentId),
       showQuietTurn: (agentId, launch, publish) => this.#showQuietTurn(agentId, launch, publish),
-      reconcileIdleTurn: (agentId, launch) => this.#reconcileIdleTurn(agentId, launch),
+      reconcileIdleTurn: this.#reconcileIdleTurn,
       rememberUsage: (snapshot) => rememberUsage(this.#observedUsage, snapshot),
       releaseTurnEndHolds: (agentId) => this.#releaseTurnEndHolds(agentId),
       drainAppInboxNotices: (agentId) => this.#inboxCoordinator.drainAppInboxNotices(agentId),
@@ -692,7 +692,7 @@ export class DaemonRuntime {
       deliveryQueue: this.#deliveryQueue,
       runtimeErrorHold: this.#runtimeErrorHold,
       offlineResidency: this.#offlineResidency,
-      sendAgentStatus: (agentId, status) => this.#sendAgentStatus(agentId, status),
+      sendAgentStatus: this.#sendAgentStatus,
       publishStopped: (agentId, launch) =>
         this.#activityPublisher.publish(agentId, launch, this.#drafts.stopped(agentId)),
     });
@@ -732,16 +732,16 @@ export class DaemonRuntime {
       contextFor: (agentId) => contextFor(this.#agentContexts, agentId),
       envelope: () => this.#env(),
       reportAgentSession: (report) => this.#reportAgentSession(report),
-      sendAgentStatus: (agentId, status) => this.#sendAgentStatus(agentId, status),
-      scheduleStartupFailure: (agentId, launch) => this.#scheduleStartupFailure(agentId, launch),
+      sendAgentStatus: this.#sendAgentStatus,
+      scheduleStartupFailure: this.#scheduleStartupFailure,
       observeRuntimeEvent: (agentId, launch, config, runtime, managed, event) =>
         this.#observeRuntimeEvent(agentId, launch, config, runtime, managed, event),
-      reconcileIdleTurn: (agentId, launch) => this.#reconcileIdleTurn(agentId, launch),
+      reconcileIdleTurn: this.#reconcileIdleTurn,
       activity: (agentId, detailKind, level, detail, extra) =>
         this.#activity(agentId, detailKind, level, detail, extra),
       narrateUnavailable: (agentId, launch, activity) =>
         this.#narrateUnavailable(agentId, launch, activity),
-      disposeLaunchObservations: (agentId) => this.#disposeLaunchObservations(agentId),
+      disposeLaunchObservations: this.#disposeLaunchObservations,
       revokeLocalLaunch: (agentId, context, proxyToken) =>
         revokeLocalLaunch(
           this.#agentContexts,
@@ -757,6 +757,14 @@ export class DaemonRuntime {
         this.#launchFailureActivity(agentId, provider, error),
       drainAppInboxNotices: (agentId) => this.#inboxCoordinator.drainAppInboxNotices(agentId),
       attachSessionMemory: attachFreshSessionMemoryPort(this.#memoryHooks),
+      relaunchResumed: (agentId, config, request) => {
+        void beginWakeLaunch(
+          agentId,
+          this.#startAgent(agentId, config, undefined, request),
+          this.#wakeLaunches,
+          this.#wakeLaunchFailures,
+        ).catch(() => {});
+      },
     });
     this.#startup = new RuntimeStartup({
       transport: () => this.#transport,
@@ -853,7 +861,7 @@ export class DaemonRuntime {
       processManager: this.#agentProcessManager,
       stops: this.#stopState,
       interruptIfBusy: (agentId, launch) => this.#interruptIfBusy(agentId, launch),
-      disposeLaunchObservations: (agentId) => this.#disposeLaunchObservations(agentId),
+      disposeLaunchObservations: this.#disposeLaunchObservations,
       revokeLocalLaunch: (agentId) =>
         revokeLocalLaunch(this.#agentContexts, this.#agentProxyTokens, this.#agentProxy, agentId),
       stopCoordinator: this.#stopCoordinator,
@@ -896,7 +904,7 @@ export class DaemonRuntime {
         this.#revokeAgentApiKey(agentId, apiKey, scope),
       replaceTransport: () => this.#replaceTransport(),
       consumedSeqs: this.#consumedSeqs,
-      sendAgentStatus: (agentId, status) => this.#sendAgentStatus(agentId, status),
+      sendAgentStatus: this.#sendAgentStatus,
     });
   }
 
@@ -1101,7 +1109,7 @@ export class DaemonRuntime {
       interruptIfBusy: (id: string, current: ActivityLaunch | undefined) =>
         this.#interruptIfBusy(id, current),
       activityPublisher: this.#activityPublisher,
-      disposeLaunchObservations: (id: string) => this.#disposeLaunchObservations(id),
+      disposeLaunchObservations: this.#disposeLaunchObservations,
       revokeLocalLaunch: (id: string) =>
         revokeLocalLaunch(this.#agentContexts, this.#agentProxyTokens, this.#agentProxy, id),
       offlineResidency: this.#offlineResidency,
@@ -1125,7 +1133,7 @@ export class DaemonRuntime {
         runtimeInstanceId: this.#runtimeInstanceId,
         envelope: () => this.#env(),
         reportAgentSession: (report) => this.#reportAgentSession(report),
-        sendAgentStatus: (agentId, status) => this.#sendAgentStatus(agentId, status),
+        sendAgentStatus: this.#sendAgentStatus,
       },
       intent,
       launchId,

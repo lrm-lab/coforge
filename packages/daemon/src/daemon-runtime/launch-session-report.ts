@@ -4,10 +4,17 @@ import {
   type AgentSessionReport,
   type RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
+import type { ActivityLaunch } from "./activity-launch";
+import type { AgentLaunchCoordinatorPorts } from "./agent-launch-coordinator";
 import type { SessionReference } from "./launch-identity";
 import type { LaunchPhaseTiming } from "./launch-phase-timing";
 import type { LaunchRequest } from "./runtime-launch-types";
 import { inferredReplacedSession, replacedSessionFor } from "./session-replacement";
+import {
+  connectionSessionInvalidate,
+  runtimeDisplayName,
+  sessionInvalidateActivityText,
+} from "./session-invalidate-activity";
 import { AgentSessionSupersededError } from "#src/agent-runtime/launch-failure";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
@@ -21,6 +28,97 @@ export function isSessionReportSuperseded(error: unknown): boolean {
   }
   const message = error instanceof Error ? error.message : String(error ?? "");
   return /superseded/iu.test(message);
+}
+
+export type SessionIdReporterPorts = Pick<
+  AgentLaunchCoordinatorPorts,
+  | "transport"
+  | "reportAgentSession"
+  | "envelope"
+  | "isStopping"
+  | "narrateUnavailable"
+  | "connection"
+  | "runtimeInstanceId"
+>;
+
+export type SessionIdReporterInput = Readonly<{
+  agentId: string;
+  provider: RuntimeProvider;
+  launch: ActivityLaunch;
+  current(): boolean;
+  reference: SessionReference;
+  request: LaunchRequest;
+  recycled: boolean;
+  recycledSessionId?: string;
+  previousLaunchId?: string;
+  timing?: LaunchPhaseTiming;
+}>;
+
+export type SessionIdReporter = Readonly<{
+  onSessionId: ((sessionId: string, replacedSessionId?: string) => Promise<void>) | undefined;
+  reportedSessionId(): string | undefined;
+  driverReplacedSessionId(): string | undefined;
+}>;
+
+/** The provider's `onSessionId` callback for one launch: absent when the transport cannot
+ * report sessions, and a state reader for the ids it observed once the process is up. */
+export function sessionIdReporter(
+  ports: SessionIdReporterPorts,
+  input: SessionIdReporterInput,
+): SessionIdReporter {
+  const { agentId, provider, launch, reference, request, timing } = input;
+  let reportedSessionId: string | undefined;
+  let driverReplacedSessionId: string | undefined;
+  const onSessionId = ports.transport().reportAgentSession
+    ? async (reported: string, replaced?: string) => {
+        reportedSessionId = reported;
+        driverReplacedSessionId = replaced;
+        return reportLaunchSession(
+          {
+            current: input.current,
+            isStopping: () => ports.isStopping(),
+            envelope: () => ports.envelope(),
+            report: (report) => ports.reportAgentSession(report),
+            invalidate: (sessionId) =>
+              ports.transport().sendSessionInvalidate?.(
+                connectionSessionInvalidate(ports.connection, ports.runtimeInstanceId, {
+                  agentId,
+                  provider,
+                  sessionId,
+                  launchId: launch.launchId,
+                  reason: "missing",
+                }),
+              ),
+            narrateReplaced: (sessionId) => {
+              ports.narrateUnavailable(
+                agentId,
+                launch,
+                sessionInvalidateActivityText(runtimeDisplayName(provider), sessionId, "missing"),
+              );
+            },
+          },
+          {
+            agentId,
+            provider,
+            launchId: launch.launchId,
+            reference,
+            request,
+            recycled: input.recycled,
+            recycledSessionId: input.recycledSessionId,
+            reportedSessionId,
+            daemonInstanceId: ports.runtimeInstanceId,
+            driverReplacedSessionId,
+            previousLaunchId: input.previousLaunchId,
+            timing,
+          },
+        );
+      }
+    : undefined;
+  return {
+    onSessionId,
+    reportedSessionId: () => reportedSessionId,
+    driverReplacedSessionId: () => driverReplacedSessionId,
+  };
 }
 
 export type LaunchSessionReportPorts = Readonly<{

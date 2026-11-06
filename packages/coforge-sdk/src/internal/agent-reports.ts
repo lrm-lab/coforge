@@ -96,10 +96,13 @@ export type AgentSessionReport = {
 };
 export const AGENT_SESSION_INVALIDATE_METHOD = RPC_METHODS.agentSessionInvalidate;
 /** `missing`: the stored native Session no longer exists. `provider_replay_rejected`: the
- * provider rejected replaying it. Mirrors `AgentSessionRecoveryCode`, minus `session_in_use`. */
+ * provider rejected replaying it. `repeated_early_crash`: resuming it crashed the runtime
+ * twice within seconds without model output, so the daemon cold-starts a fresh Session.
+ * Mirrors `AgentSessionRecoveryCode`, minus `session_in_use`. */
 export const AGENT_SESSION_INVALIDATE_REASONS = {
   MISSING: "missing",
   PROVIDER_REPLAY_REJECTED: "provider_replay_rejected",
+  REPEATED_EARLY_CRASH: "repeated_early_crash",
 } as const;
 export type AgentSessionInvalidateReason =
   (typeof AGENT_SESSION_INVALIDATE_REASONS)[keyof typeof AGENT_SESSION_INVALIDATE_REASONS];
