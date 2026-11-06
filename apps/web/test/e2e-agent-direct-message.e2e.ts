@@ -188,19 +188,16 @@ test("Agent runtime, status, Message Inbox, and App Inbox cross the real system"
     credentials,
     {
       create: () =>
-        new DaemonConnection(
-          "ws://127.0.0.1:8000/connection/websocket",
-          (endpoint, token, data) => {
-            const client = defaultCentrifugeWorkspaceClientFactory(endpoint, token, data);
-            daemonClient = client;
-            client.on("connected", () => {
-              daemonConnectionCount++;
-              if (daemonConnectionCount === 2) setTimeout(() => resolveDaemonReconnected?.(), 0);
-            });
-            client.on("disconnected", () => resolveDaemonDisconnected?.());
-            return client;
-          },
-        ),
+        new DaemonConnection("ws://127.0.0.1:8000/connection/websocket", (endpoint, headers) => {
+          const client = defaultCentrifugeWorkspaceClientFactory(endpoint, headers);
+          daemonClient = client;
+          client.on("connected", () => {
+            daemonConnectionCount++;
+            if (daemonConnectionCount === 2) setTimeout(() => resolveDaemonReconnected?.(), 0);
+          });
+          client.on("disconnected", () => resolveDaemonDisconnected?.());
+          return client;
+        }),
     },
     proxy,
     {

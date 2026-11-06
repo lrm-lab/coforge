@@ -39,6 +39,10 @@ client:
       enabled: true
       endpoint: http://web:3000/api/internal/centrifugo-connect
       timeout: 5s
+      # The Daemon's API key arrives as a client emulated header (connect frame), which
+      # Centrifugo redacts in its command logs; connect data would be logged verbatim.
+      emulated_headers:
+        - x-coforge-daemon-api-key
       http:
         static_headers:
           X-CoForge-Centrifugo-Proxy-Secret: ${CENTRIFUGO_VAR_RPC_PROXY_SECRET}

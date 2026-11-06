@@ -149,18 +149,15 @@ test("sends a delivery rejection through its own RPC method, never as an ACK", a
   expect(decodeAgentMessageDeliveryRejection(calls[1]!.data)).toEqual(rejection);
 });
 
-test("sends the Daemon API key as Connect Proxy data instead of a JWT token", async () => {
+test("sends the Daemon API key as a connect header Centrifugo redacts, not connect data", async () => {
   const fake = fakeClient();
-  let connection: { token: string; data?: Uint8Array } | undefined;
-  const transport = new DaemonConnection("wss://cloud.example", (_endpoint, token, data) => {
-    connection = { token, data };
+  let connection: { headers?: Record<string, string> } | undefined;
+  const transport = new DaemonConnection("wss://cloud.example", (_endpoint, headers) => {
+    connection = { headers };
     return fake.client;
   });
   await transport.start("daemon-api-key", config);
-  expect(connection?.token).toBe("");
-  expect(JSON.parse(new TextDecoder().decode(connection?.data))).toEqual({
-    daemonApiKey: "daemon-api-key",
-  });
+  expect(connection?.headers).toEqual({ "X-CoForge-Daemon-Api-Key": "daemon-api-key" });
 });
 
 test("start fails with the cloud's reason when it refuses the Workspace connection for good", async () => {

@@ -125,7 +125,12 @@ export async function authenticateCentrifugoConnect(
 ): Promise<Response> {
   try {
     const body = (await request.json()) as ConnectRequest;
-    const key = connectData(body.data).daemonApiKey;
+    // Newer Daemons send the key as an emulated connect header, which Centrifugo redacts in
+    // its command logs; connect data is logged verbatim on every failed attempt, so it stays
+    // only as the answer for Daemons released before the header existed. Remove this fallback
+    // once every online Computer runs a daemon that sends the header.
+    const key =
+      request.headers.get("x-coforge-daemon-api-key") ?? connectData(body.data).daemonApiKey;
     if (typeof key !== "string") throw new Error("Daemon API key missing");
     let principal: DaemonApiKeyClaims;
     try {

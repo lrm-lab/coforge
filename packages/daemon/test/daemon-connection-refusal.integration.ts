@@ -22,6 +22,8 @@ let proxy: ReturnType<typeof Bun.serve>;
 /** What the connect proxy answers next: accept, refuse for good, or fail the way a bad key does. */
 let answer: "accept" | "workspace_deleted" | "unauthorized" = "accept";
 let connectAttempts = 0;
+/** The API key each connect proxy call carried, proving it arrives as an emulated header. */
+const proxiedKeys: (string | null)[] = [];
 /** How many of the next connects fail the ordinary way before `answer` applies again. */
 let ordinaryFailures = 0;
 /** How many of the next connects get an error the client never retries by itself. */
@@ -32,8 +34,9 @@ beforeAll(async () => {
   proxy = Bun.serve({
     hostname: "0.0.0.0",
     port: 0,
-    fetch() {
+    fetch(request) {
       connectAttempts++;
+      proxiedKeys.push(request.headers.get("x-coforge-daemon-api-key"));
       if (givingUpFailures > 0) {
         givingUpFailures--;
         // A 200 answer with a non-temporary custom error: centrifuge-js disconnects for good.
@@ -63,7 +66,7 @@ beforeAll(async () => {
   const configPath = join(root, "centrifugo.yaml");
   await writeFile(
     configPath,
-    `health:\n  enabled: true\nlog:\n  level: error\nhttp_api:\n  key: ${API_KEY}\nclient:\n  proxy:\n    connect:\n      enabled: true\n      endpoint: http://host.docker.internal:${proxy.port}/connect\n      timeout: 5s\nchannel:\n  namespaces:\n    - name: daemon\n`,
+    `health:\n  enabled: true\nlog:\n  level: error\nhttp_api:\n  key: ${API_KEY}\nclient:\n  proxy:\n    connect:\n      enabled: true\n      endpoint: http://host.docker.internal:${proxy.port}/connect\n      timeout: 5s\n      emulated_headers:\n        - x-coforge-daemon-api-key\nchannel:\n  namespaces:\n    - name: daemon\n`,
     { mode: 0o644 },
   );
   containerName = `coforge-connection-refusal-${crypto.randomUUID()}`;
@@ -110,8 +113,8 @@ const config = { workspaceId: WORKSPACE_ID, computerId: COMPUTER_ID };
 function observedConnection() {
   const states: string[] = [];
   let client: { state: string } | undefined;
-  const connection = new DaemonConnection(endpoint(), (url, token, data) => {
-    const created = defaultCentrifugeWorkspaceClientFactory(url, token, data);
+  const connection = new DaemonConnection(endpoint(), (url, headers) => {
+    const created = defaultCentrifugeWorkspaceClientFactory(url, headers);
     client = created as unknown as { state: string };
     created.on("disconnected", () => states.push(client!.state));
     return created;
@@ -154,6 +157,8 @@ test("a refusal when a running connection reconnects reaches the refusal listene
   // The server's own disconnect (3001) was a reconnecting one; only the refusal ended it.
   expect(states).toEqual(["disconnected"]);
   expect(connectAttempts).toBe(2);
+  // Both connects carried the key as the emulated header the proxy allowlists.
+  expect(proxiedKeys.slice(-2)).toEqual(["dk_known", "dk_known"]);
   await connection.stop();
 }, 30_000);
 
@@ -174,8 +179,8 @@ test("a first connect the client gives up on is resumed until the cloud accepts"
   givingUpFailures = 1;
   connectAttempts = 0;
   const states: string[] = [];
-  const connection = new DaemonConnection(endpoint(), (url, token, data) => {
-    const created = defaultCentrifugeWorkspaceClientFactory(url, token, data);
+  const connection = new DaemonConnection(endpoint(), (url, headers) => {
+    const created = defaultCentrifugeWorkspaceClientFactory(url, headers);
     created.on("disconnected", () => states.push((created as unknown as { state: string }).state));
     return created;
   });
@@ -193,8 +198,8 @@ test("stopping during first-connect retries ends start without a refusal and sto
   connectAttempts = 0;
   let client: { state: string } | undefined;
   const failures = Promise.withResolvers<void>();
-  const connection = new DaemonConnection(endpoint(), (url, token, data) => {
-    const created = defaultCentrifugeWorkspaceClientFactory(url, token, data);
+  const connection = new DaemonConnection(endpoint(), (url, headers) => {
+    const created = defaultCentrifugeWorkspaceClientFactory(url, headers);
     client = created as unknown as { state: string };
     created.on("error", () => failures.resolve());
     return created;

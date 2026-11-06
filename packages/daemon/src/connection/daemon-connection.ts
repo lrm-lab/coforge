@@ -16,6 +16,7 @@ import {
   type CentrifugeWorkspaceClientFactory,
   defaultCentrifugeWorkspaceClientFactory,
 } from "./centrifuge-workspace-client";
+import { daemonConnectHeaders } from "./daemon-connect-headers";
 
 import {
   encodeAgentReplyIntent,
@@ -98,7 +99,6 @@ import {
 import { AgentObservationPublisher } from "./agent-observation-publisher";
 import {
   daemonConnectRejectionReason,
-  type DaemonConnectData,
   type DaemonConnectRejectionReason,
   decodeAgentWorkspaceResetRequest,
   encodeAgentControlResult,
@@ -181,7 +181,6 @@ import {
   type TaskResponse,
   type WeeklyReportRequest,
   type WeeklyReportResponse,
-  utf8Encoder,
   thrownMessage,
 } from "@lrm/coforge-sdk/internal";
 
@@ -390,11 +389,9 @@ export class DaemonConnection
     this.#token = _token;
     this.#serverHttpUrl = config.serverHttpUrl ?? "";
     if (this.#connected) return;
-    const connectData: DaemonConnectData = { daemonApiKey: _token };
     const client = this.clientFactory(
       this.endpoint,
-      "",
-      utf8Encoder.encode(JSON.stringify(connectData)),
+      daemonConnectHeaders(_token, config.workerInstanceId),
     );
     this.#client = client;
     const daemonChannel = `daemon:${config.workspaceId}:${config.computerId}`;

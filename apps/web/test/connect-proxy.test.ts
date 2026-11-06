@@ -73,6 +73,31 @@ describe("Centrifugo Connect Proxy", () => {
     });
   });
 
+  test("authenticates a daemon key sent as the emulated connect header", async () => {
+    const keys = repository();
+    keys.token = await createDaemonApiKeyFactory(keys).create({
+      principal: { userId: "user-1" },
+      workspaceId: "workspace-1",
+      computerId: "computer-1",
+    });
+    const response = await authenticateCentrifugoConnect(
+      new Request("http://backend", {
+        method: "POST",
+        headers: { "x-coforge-daemon-api-key": keys.token },
+        body: JSON.stringify({ data: {} }),
+      }),
+      {
+        daemonApiKeys: keys,
+        computerBelongsToWorkspace: async () => true,
+        revocationReason: async () => undefined,
+      },
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      result: { user: "user-1", subs: { "daemon:workspace-1:computer-1": {} } },
+    });
+  });
+
   test("refuses a valid key whose Computer is no longer linked to the Workspace for good", async () => {
     const keys = repository();
     keys.token = await createDaemonApiKeyFactory(keys).create({

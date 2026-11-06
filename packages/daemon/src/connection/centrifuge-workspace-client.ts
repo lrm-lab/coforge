@@ -18,16 +18,14 @@ export interface CentrifugeWorkspaceClient {
 
 export type CentrifugeWorkspaceClientFactory = (
   endpoint: string,
-  token: string,
-  data?: Uint8Array,
+  headers: Record<string, string>,
 ) => CentrifugeWorkspaceClient;
 
 export const defaultCentrifugeWorkspaceClientFactory: CentrifugeWorkspaceClientFactory = (
   endpoint,
-  _token,
-  data,
+  headers,
 ) =>
   new Centrifuge(endpoint, {
-    data,
+    headers,
     websocket: globalThis.WebSocket,
   }) as unknown as CentrifugeWorkspaceClient;

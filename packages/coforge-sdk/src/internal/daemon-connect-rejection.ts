@@ -1,12 +1,4 @@
 /**
- * What a Daemon sends as Centrifugo connect data. The Web connect proxy authenticates the key,
- * and answers why it stopped being valid only to the holder of that exact key.
- */
-export type DaemonConnectData = {
-  daemonApiKey: string;
-};
-
-/**
  * Why the cloud refused a Daemon's Workspace connection for good. Restarting or reconnecting
  * cannot change either answer; only attaching the Computer again (setup) can.
  */
