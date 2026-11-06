@@ -124,6 +124,13 @@ table in CI and a printed warning on pre-push; nothing fails. Commits carrying t
 silent, and merge commits are skipped. Warn-only for its first two weeks while the false-positive
 rate is measured; whether it becomes a hard rule is a later decision.
 
+**Whitespace check.** `scripts/ci/diff-check.ts` is the blocking companion (task #628), run by
+`range-checks.ts` after the hard rules: it applies the same `git diff --check` CI's "Select
+checks" step runs, from the range's merge base, so pre-push refuses the trailing whitespace and
+blank line at EOF that step would reject only after the push. It shares the hard rules' input
+contract — bad input exits 2, no base warns and passes — and can only add failures, never
+clear the hard rules' verdict.
+
 **Hook installation.** `core.hooksPath=.githooks` is set once per clone, repo-wide, by the root
 package's `prepare` script (`scripts/git-hooks/install-hooks-path.ts`) on every `bun install`;
 linked worktrees share that config and resolve `.githooks` against their own top level, so a new

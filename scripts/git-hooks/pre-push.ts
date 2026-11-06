@@ -1,6 +1,7 @@
 // The pre-push hook's check (`.githooks/pre-push` runs it): the range checks
-// (scripts/ci/range-checks.ts --range: the blocking hard rules plus the warn-only
-// Reviewed-in pass of task #593) on exactly what each pushed ref sends. Git writes one line per
+// (scripts/ci/range-checks.ts --range: the blocking hard rules and whitespace
+// check, plus the warn-only Reviewed-in pass of task #593) on exactly what each
+// pushed ref sends. Git writes one line per
 // ref on stdin, `<local ref> <local sha> <remote ref> <remote sha>`
 // (https://git-scm.com/docs/githooks#_pre_push). The file rules judge a ref from the later of its
 // fork points from the remote sha and from origin/main, so a branch that merged or rebased onto
