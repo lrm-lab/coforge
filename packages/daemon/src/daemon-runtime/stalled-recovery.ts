@@ -10,8 +10,8 @@ const LAST_STEP_MAX_CHARS = 200;
 export const STALLED_RECOVERY_SILENCE_MS = 15 * 60_000;
 
 /**
- * The longer fuse for a provider that cannot take input into a turn already in progress
- * (`RUNTIME_PROVIDER_STEERS_BUSY_TURN` false): its `NON_STDIN_ALIVE_RECOVERY_MS`. A waiting
+ * The longer fuse for a session that cannot take input into a turn already in progress (its
+ * `steersBusyTurn` is not true): its `NON_STDIN_ALIVE_RECOVERY_MS`. A waiting
  * message has no path to such a provider anyway, so a quiet turn is weaker evidence of a hang —
  * and a restart cannot deliver any sooner than the queued input's own next turn would.
  */
@@ -103,8 +103,8 @@ export type StalledRecoveryFacts = Readonly<{
    * actually running is judged on its own silence: a hold may exist while such a turn is still
    * in flight, and a genuinely hung one must stay recoverable. */
   recoveryHold?: boolean;
-  /** `RUNTIME_PROVIDER_STEERS_BUSY_TURN` for this launch's provider: input sent mid-turn reaches
-   * the model inside that turn. A queue-only provider's silent busy turn is judged against
+  /** The running session's `steersBusyTurn` declaration: input sent mid-turn reaches the model
+   * inside that turn. A queue-only session's silent busy turn is judged against
    * `STALLED_RECOVERY_SILENCE_QUEUE_ONLY_MS` instead of `STALLED_RECOVERY_SILENCE_MS`. */
   steersBusyTurn: boolean;
 }>;

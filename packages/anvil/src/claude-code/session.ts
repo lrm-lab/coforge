@@ -20,6 +20,7 @@ import { ClaudeSessionObservations } from "./observations";
 import { relayTaskLifecycle, taskProgressEvent, type TrackedTask } from "./task-lifecycle";
 
 export class ClaudeCodeAgentSession implements AgentSession {
+  readonly steersBusyTurn = true;
   #process: JsonlProcess;
   readonly #exitListeners = new Set<() => void>();
   #closed = false;

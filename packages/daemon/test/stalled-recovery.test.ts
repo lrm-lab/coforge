@@ -102,6 +102,8 @@ async function harness(
           get hasLiveTurn() {
             return options.sessionLiveTurn?.() ?? true;
           },
+          // The fake stands in for a steer-capable provider (pi): the 15-minute fuse applies.
+          steersBusyTurn: true,
           readSessionIdentity: async () => ({ sessionId: "native-1", state: "resumable" as const }),
           subscribe(listener) {
             listeners.add(listener);

@@ -162,7 +162,7 @@ test("with the real publisher, the limit notice leaves the hung turn judged stal
     launch,
     draft(AGENT_ACTIVITY_DETAIL_KIND.THINKING_STARTED, "info", "Thinking"),
   );
-  const session = { hasLiveTurn: true } as unknown as AgentSession;
+  const session = { hasLiveTurn: true, steersBusyTurn: true } as unknown as AgentSession;
   const restart: AgentRestartConfig = {
     config: { provider: "pi", model: "m", modelProvider: "anthropic", reasoning: "balanced" },
     sessionId: "native-1",

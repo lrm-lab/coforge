@@ -146,6 +146,10 @@ export class CommandCodeSession implements AgentSession {
   get hasLiveTurn() {
     return this.#session.hasLiveTurn;
   }
+  /** The wrapped ACP session declares steer support from its profile (Command Code's has none). */
+  get steersBusyTurn() {
+    return this.#session.steersBusyTurn;
+  }
   sendMessage(text: string) {
     return this.#session.sendMessage(text);
   }

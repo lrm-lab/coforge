@@ -53,6 +53,12 @@ export class AcpSession implements AgentSession {
   #dispose: Promise<void> | undefined;
   #termination: Promise<void> | undefined;
 
+  /** The profile's `steer` block is this adapter's declaration that a notice sent mid-turn
+   * reaches the model inside that turn; without one, input queues for the next turn. */
+  get steersBusyTurn(): boolean {
+    return this.profile.steer !== undefined;
+  }
+
   constructor(
     private readonly profile: AcpSessionProfile,
     private readonly options: AgentSessionOptions,

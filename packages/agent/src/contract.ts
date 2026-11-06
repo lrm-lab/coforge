@@ -292,6 +292,12 @@ export interface AgentSession {
   /** Provider-observed work, including pending admission and interruption.
    * Undefined means the adapter cannot determine it; never infer idle from silence. */
   readonly hasLiveTurn?: boolean;
+  /** Whether input sent while a turn is in progress reaches the model inside that turn — the
+   * session's steer path — rather than queueing behind it for the next turn. Each adapter
+   * declares it where its session is built (an ACP session from its profile's `steer`); an
+   * adapter without a steer path omits it, which the daemon reads as queue-only. The daemon's
+   * stalled recovery picks its silence fuse from this, never from the provider's name. */
+  readonly steersBusyTurn?: boolean;
   sendMessage(message: string): Promise<void>;
   hasLiveTurnForConversation?(conversationId: string): boolean | undefined;
   cancelPendingNotices?(): void;

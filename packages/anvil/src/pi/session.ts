@@ -68,6 +68,8 @@ function typedLaunchError(error: unknown, configuredModel: string | undefined): 
 }
 
 class AgentSessionImpl implements AgentSession {
+  /** Busy input steers the live stream (`streamingBehavior: "steer"`). */
+  readonly steersBusyTurn = true;
   readonly #runtime: Awaited<ReturnType<typeof createSession>>;
   readonly #listeners = new Set<(event: AgentRuntimeEvent) => void>();
   readonly #exitListeners = new Set<() => void>();

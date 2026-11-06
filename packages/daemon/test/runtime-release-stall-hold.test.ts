@@ -23,12 +23,14 @@ function subject(
   options: {
     provider?: RuntimeProvider;
     busyTurn?: boolean;
+    steersBusyTurn?: boolean;
   } = {},
 ) {
   setSystemTime(START);
   const launch: Launch = { stopping: false, progress: new ProviderProgress() };
   const session = {
     hasLiveTurn: options.busyTurn === true,
+    steersBusyTurn: options.steersBusyTurn,
   } as unknown as AgentSession;
   const restart: AgentRestartConfig = {
     config: {
@@ -82,9 +84,9 @@ test("a fingerprint fence does not silence the judgment: that hold never ends on
   expect(subject("fingerprint_fence").release.stalled("agent-a")).toBeDefined();
 });
 
-test("a queue-only provider's silent busy turn is judged against the hour, not 15 minutes", () => {
-  // OpenCode's ACP session queues a notice until the turn ends: no mid-turn input, so the
-  // longer fuse applies (RUNTIME_PROVIDER_STEERS_BUSY_TURN).
+test("a queue-only session's silent busy turn is judged against the hour, not 15 minutes", () => {
+  // A session that does not declare `steersBusyTurn` queues a notice until the turn ends: no
+  // mid-turn input, so the longer fuse applies.
   const queueOnly = subject(undefined, { provider: "opencode", busyTurn: true });
   queueOnly.advance(STALLED_RECOVERY_SILENCE_MS);
   expect(queueOnly.release.stalled("agent-a")).toBeUndefined();
@@ -92,8 +94,12 @@ test("a queue-only provider's silent busy turn is judged against the hour, not 1
   expect(queueOnly.release.stalled("agent-a")).toBeDefined();
 });
 
-test("a steer-capable provider's silent busy turn is still judged at 15 minutes", () => {
-  const steered = subject(undefined, { provider: "cursor", busyTurn: true });
+test("a session declaring steersBusyTurn is judged at 15 minutes whatever its provider", () => {
+  const steered = subject(undefined, {
+    provider: "opencode",
+    busyTurn: true,
+    steersBusyTurn: true,
+  });
   steered.advance(STALLED_RECOVERY_SILENCE_MS);
   expect(steered.release.stalled("agent-a")).toBeDefined();
 });

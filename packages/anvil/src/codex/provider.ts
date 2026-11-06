@@ -128,6 +128,8 @@ export class CodexProvider implements CodeAgentProvider {
 }
 
 class CodexAgentSession implements AgentSession {
+  /** Busy input steers the live turn through `turn/steer`. */
+  readonly steersBusyTurn = true;
   readonly #process: JsonlProcess;
   readonly #threadId: string;
   readonly #agentId: string | undefined;

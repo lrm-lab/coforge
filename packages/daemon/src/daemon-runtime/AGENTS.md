@@ -39,8 +39,8 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
 - `local-session-query-handlers.ts` binds owner-authorized local Session list/search/excerpt requests to the bounded catalog and current transport.
 - `agent-stop-coordinator.ts` owns process release/stop ordering after runtime admission closes; `runtime.ts` supplies launch maps and lifecycle collaborators.
 - `stalled-recovery-sweep.ts` restarts a busy turn silent past its fuse — 15
-  minutes for a provider that steers a live turn, 60 for one that only queues
-  input (`RUNTIME_PROVIDER_STEERS_BUSY_TURN`) — with no open tool call and
+  minutes for a session that declares `steersBusyTurn`, 60 for one that only queues
+  input — with no open tool call and
   a resumable session even when no message waits (task #404), but never while a background task
   runs. Such an unattended restart resumes
   with a prompt naming where the turn stopped, and at most `UNATTENDED_RECOVERY_LIMIT` run in a row

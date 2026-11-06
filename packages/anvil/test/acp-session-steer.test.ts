@@ -267,3 +267,13 @@ test("a turn still running when the session is reported is adopted", async () =>
   expect(harness.session.hasLiveTurn).toBe(false);
   await harness.session.dispose();
 });
+
+test("steersBusyTurn declares the profile's steer path to the daemon", async () => {
+  const steered = await openSession(steerProfile([]));
+  expect(steered.session.steersBusyTurn).toBe(true);
+  await steered.session.dispose();
+
+  const queued = await openSession(undefined);
+  expect(queued.session.steersBusyTurn).toBe(false);
+  await queued.session.dispose();
+});

@@ -85,6 +85,12 @@ export class MemoryConversationSessions implements AgentSession {
     return this.dependencies.primary.hasLiveTurn;
   }
 
+  /** Every conversation session comes from the primary's provider, so its steer declaration
+   * is the whole multiplexer's. */
+  get steersBusyTurn(): boolean | undefined {
+    return this.dependencies.primary.steersBusyTurn;
+  }
+
   hasLiveTurnForConversation(conversationId: string): boolean | undefined {
     const session = this.#conversations.get(conversationId)?.session;
     return session ? this.#active === session || session.hasLiveTurn : false;

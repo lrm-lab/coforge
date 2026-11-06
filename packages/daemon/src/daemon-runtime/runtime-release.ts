@@ -2,7 +2,6 @@ import { getLogger } from "@logtape/logtape";
 import { isMemoryAgentRuntime } from "@coforge/agent";
 import {
   AGENT_ACTIVITY_DETAIL_KIND,
-  RUNTIME_PROVIDER_STEERS_BUSY_TURN,
   thrownMessage,
   type AgentActivityRuntimeError,
 } from "@lrm/coforge-sdk/internal";
@@ -181,7 +180,9 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
       resumable: this.#ports.resumable(agentId),
       noticeAcceptedForMs: ageOf(this.#ports.noticeAcceptedAt?.(agentId)),
       recoveryHold: heldForRetry(this.#ports.explicitHold?.(agentId)),
-      steersBusyTurn: RUNTIME_PROVIDER_STEERS_BUSY_TURN[restart.config.provider],
+      // The running session declares whether a notice can steer its live turn; an adapter
+      // that does not declare is read as queue-only (the longer fuse).
+      steersBusyTurn: session.steersBusyTurn === true,
       lastAgentActionForMs: Math.min(
         progress.silentForMs(),
         ageOf(this.#ports.lastAgentActionAt?.(agentId)) ?? Number.POSITIVE_INFINITY,
