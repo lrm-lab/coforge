@@ -38,6 +38,13 @@ export async function reminderRequest(
   if (!response.ok) throw new Error(`agent reminder request failed (${response.status})`);
   const result = (await response.json()) as ReminderResponse;
   if (fields.operation === "ack" || fields.operation === "dismiss") return result;
+  // The daemon answers some reminder commands with a local shape — a seal/unseal result or a
+  // sealed reminder's lifecycle refusal — which is not the cloud operation response and must
+  // not go through its codec (a missing scope field would surface as "invalid reminder scope").
+  const cloudShaped =
+    Array.isArray((result as AgentReminderOperationResponse).reminders) &&
+    Array.isArray((result as AgentReminderOperationResponse).events);
+  if (!cloudShaped) return result;
   return decodeAgentReminderOperationResponse(
     encodeAgentReminderOperationResponse(result as AgentReminderOperationResponse),
   );

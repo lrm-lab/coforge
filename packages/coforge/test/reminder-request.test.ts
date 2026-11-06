@@ -47,3 +47,64 @@ test("posts validated reminders to the derived endpoint with implicit bearer con
   expect(body.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/);
   expect(body.context).toBeUndefined();
 });
+
+const reminderId = "123e4567-e89b-42d3-a456-426614174999";
+
+test("a seal answer is the daemon's local shape, not the cloud operation response", async () => {
+  const local = { accepted: true, reminderId, sealed: 2, owner: "@ada", until: "x" };
+  spyOn(globalThis, "fetch").mockResolvedValue(Response.json(local));
+  const result = await connectLocal(
+    "",
+    `sfp_${"a".repeat(43)}`,
+    proxyUrl(agentApiRoutes.local.messages),
+  ).reminder({ operation: "seal", reminderId, owner: "@ada", until: "x" });
+  expect(result).toEqual(local);
+});
+
+test("an unseal answer passes through the same way", async () => {
+  const local = { accepted: true, reminderId, sealed: 1 };
+  spyOn(globalThis, "fetch").mockResolvedValue(Response.json(local));
+  const result = await connectLocal(
+    "",
+    `sfp_${"a".repeat(43)}`,
+    proxyUrl(agentApiRoutes.local.messages),
+  ).reminder({ operation: "unseal", reminderId });
+  expect(result).toEqual(local);
+});
+
+test("a sealed reminder's cancel refusal passes through as the local shape", async () => {
+  const refusal = {
+    accepted: false,
+    reason: "sealed",
+    owner: "@ada",
+    until: "the deploy lands",
+    reminderId,
+  };
+  spyOn(globalThis, "fetch").mockResolvedValue(Response.json(refusal));
+  const result = await connectLocal(
+    "",
+    `sfp_${"a".repeat(43)}`,
+    proxyUrl(agentApiRoutes.local.messages),
+  ).reminder({ operation: "cancel", reminderId });
+  expect(result).toEqual(refusal);
+});
+
+test("a cloud-shaped reminder answer still goes through the operation codec", async () => {
+  spyOn(globalThis, "fetch").mockResolvedValue(
+    Response.json({
+      idempotencyKey: "request",
+      workspaceId: "workspace",
+      computerId: "computer",
+      agentId: "agent",
+      accepted: true,
+      reminders: [],
+      events: [],
+    }),
+  );
+  const result = await connectLocal(
+    "",
+    `sfp_${"a".repeat(43)}`,
+    proxyUrl(agentApiRoutes.local.messages),
+  ).reminder({ operation: "cancel", reminderId });
+  expect(result).toMatchObject({ accepted: true, reminders: [], events: [] });
+});
