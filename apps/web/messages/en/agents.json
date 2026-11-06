@@ -65,6 +65,8 @@
   "agent_deferred_start_notice": "Agent created. It will start when Daemon reconnects.",
   "agent_status_online": "Online",
   "agent_status_offline": "Offline",
+  "agent_status_quota_exhausted": "Quota exhausted",
+  "agent_status_quota_exhausted_detail": "The provider's quota or credits are exhausted with no reset time. Switch the model or wait for the quota to reset, then restart.",
   "agent_form_joins_channel": "Joins #{channel} automatically after it is created.",
   "agent_form_description_placeholder": "What should this Agent help with?",
   "agent_form_username": "Username",

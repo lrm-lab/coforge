@@ -58,6 +58,7 @@ local function snapshot(state, workspace_id, computer_id, agent_id, now)
   local expires_at = cjson.null
   local context_usage = cjson.null
   local fast_mode = cjson.null
+  local stop_reason = cjson.null
   if active then
     kind = "online"
     expires_at = state.process.leaseUntil
@@ -91,11 +92,14 @@ local function snapshot(state, workspace_id, computer_id, agent_id, now)
       }
     end
   end
+  -- The reason the last runtime failure stopped the Agent survives the Activity reset the
+  -- "inactive" status performs; it is only meaningful while the Agent is offline.
+  if kind == "offline" and state.stopReason then stop_reason = state.stopReason end
   return cjson.encode({
     protocolMajor = 1, workspaceId = workspace_id, computerId = computer_id,
     agentId = agent_id, revision = state.revision, activityKind = kind,
     detailKind = detail_kind, detail = detail, entries = entries, expiresAt = expires_at,
-    contextUsage = context_usage, fastMode = fast_mode
+    contextUsage = context_usage, fastMode = fast_mode, stopReason = stop_reason
   })
 end
 

@@ -34,6 +34,12 @@ export type AgentDisplaySnapshot = {
     observed: AgentServiceTierObserved;
     observedAtMs: number;
   } | null;
+  /**
+   * The `runtimeError.errorReason` of the Activity that last preceded the Agent going
+   * offline, kept until the next active process reports. `undefined` on an older server
+   * that has never written this field; `null` while no stop reason is known.
+   */
+  stopReason?: string | null;
 };
 
 const activityKinds = new Set<AgentActivityKind>([
@@ -73,6 +79,7 @@ export function parseAgentDisplaySnapshot(data: unknown): AgentDisplaySnapshot {
     throw new Error("invalid Agent display snapshot");
   const contextUsage = parseContextUsage(item.contextUsage);
   const fastMode = parseFastMode(item.fastMode);
+  const stopReason = parseStopReason(item.stopReason);
   return {
     protocolMajor: 1,
     workspaceId: item.workspaceId,
@@ -86,7 +93,18 @@ export function parseAgentDisplaySnapshot(data: unknown): AgentDisplaySnapshot {
     expiresAt: item.expiresAt,
     ...(contextUsage !== undefined ? { contextUsage } : {}),
     ...(fastMode !== undefined ? { fastMode } : {}),
+    ...(stopReason !== undefined ? { stopReason } : {}),
   } as AgentDisplaySnapshot;
+}
+
+/** Same tolerance as `parseContextUsage`: absent (older server) returns `undefined`, `null`
+ * (written, nothing to show) passes through, present values are validated. */
+function parseStopReason(value: unknown): AgentDisplaySnapshot["stopReason"] {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value !== "string" || [...value].length > 128)
+    throw new Error("invalid Agent display snapshot");
+  return value;
 }
 
 /** Tolerates a missing field (older server) by returning `undefined` — never a thrown error —

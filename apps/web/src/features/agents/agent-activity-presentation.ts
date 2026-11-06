@@ -405,10 +405,11 @@ export function presentActivityRows(activity: readonly ActivityEntry[]): Present
  *
  * `stopped` (a user-persisted intent, not a display fact) never changes `isOnline` or
  * `label` — the Start/Stop button choice and the short status word stay exactly what the Daemon
- * reports. It only adds `statusDetail`, an un-internationalized caption (AGENTS.md) reusing the
- * existing Activity "Stopped — …" sentence, shown only when the display itself is already
- * offline: a stopped Agent whose Daemon has not yet caught up is still described by its real
- * display kind, not overridden into looking offline early.
+ * reports. It only adds `statusDetail`, a caption shown only when the display itself is already
+ * offline: normally the un-internationalized "Stopped — …" sentence, or — when the cloud display
+ * carries a `billing_exhausted` stop reason — the localized quota guidance instead (which also
+ * replaces the status word). A stopped Agent whose Daemon has not yet caught up is still
+ * described by its real display kind, not overridden into looking offline early.
  */
 export function agentDisplay(display?: AgentDisplaySnapshot, options?: { stopped?: boolean }) {
   if (!display)
@@ -423,8 +424,12 @@ export function agentDisplay(display?: AgentDisplaySnapshot, options?: { stopped
     };
   const kind = display.activityKind;
   const row = presentActivity({ ...display, level: kind === "error" ? "error" : "info" }).at(-1);
-  const label =
-    kind === "online"
+  // A runtime failure that stopped the Agent with no reset (billing_exhausted) keeps its reason
+  // on the offline display; the status word names it and the caption says what to do.
+  const quotaExhausted = display.stopReason === "billing_exhausted";
+  const label = quotaExhausted
+    ? m.agent_status_quota_exhausted()
+    : kind === "online"
       ? m.agent_status_online()
       : kind === "offline"
         ? m.agent_status_offline()
@@ -443,8 +448,10 @@ export function agentDisplay(display?: AgentDisplaySnapshot, options?: { stopped
     isOnline: kind !== "offline",
     tone: kind === "online" ? ("idle" as const) : kind,
     pulse: isBusyTone(kind),
-    ...(options?.stopped === true && kind === "offline"
-      ? { statusDetail: STOPPED_STATUS_DETAIL }
-      : {}),
+    ...(quotaExhausted
+      ? { statusDetail: m.agent_status_quota_exhausted_detail() }
+      : options?.stopped === true && kind === "offline"
+        ? { statusDetail: STOPPED_STATUS_DETAIL }
+        : {}),
   };
 }

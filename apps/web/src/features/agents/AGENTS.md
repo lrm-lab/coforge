@@ -59,7 +59,7 @@ These rules apply to `src/features/agents/`.
   `observedAtMs`, and the CoForge `level` extension in the Agent-owned timeline
   in this directory.
 - Localized: model-request waiting labels and elapsed-time captions (timeline, Agent card, chat
-  header) and Online / Offline (`agentDisplay`). Other existing Activity labels remain English.
+  header), Online / Offline and the billing_exhausted stop status (`agentDisplay`); other Activity labels stay English.
   Preserve provider content in its original language. Navigation, tabs, and general UI
   remain localized.
 - The model-wait clock uses the retained request observation, never heartbeat time.
@@ -153,7 +153,7 @@ These rules apply to `src/features/agents/`.
   confirmation.
 - The profile control (`agent-runtime-controls.ts`) chooses Start or Stop by
   `agentDisplay(display).isOnline`. Start submits immediately; Stop opens a confirm dialog. The `stopped` option
-  of `agentDisplay()` only adds an un-internationalized `statusDetail` caption
+  of `agentDisplay()` only adds a `statusDetail` caption
   when the display is already offline; it never changes `isOnline` or the badge
   label.
 - Users see deleting an Agent as archiving it ("Archive", `ARCHIVED`, 已归档);

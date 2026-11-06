@@ -45,6 +45,9 @@ if current then
   end
 end
 if not accepted then return reject() end
+-- A fresh active process means the Agent runs again: the stop reason the last failure left
+-- no longer describes it. "inactive" keeps it — that is the transition the reason explains.
+if ARGV[5] == "active" then state.stopReason = nil end
 
 local preserve_provisional = not current and state.activityVisible and state.activity and
   state.activity.daemonInstanceId == ARGV[6]
@@ -88,6 +91,7 @@ if state.process then
 end
 local previous = state.activity
 local was_visible = state.activityVisible
+local previous_stop_reason = state.stopReason
 if state.retiredLaunchId == ARGV[7] then return reject() end
 if previous then
   if previous.launchId == ARGV[7] then
@@ -112,7 +116,8 @@ end
 -- realtime push) only when it actually changes what is shown.
 local is_filler = ARGV[15] == "1"
 local visible_changed = not was_visible or not previous or
-  previous.kind ~= ARGV[5] or previous.detailKind ~= ARGV[6] or previous.detail ~= ARGV[12]
+  previous.kind ~= ARGV[5] or previous.detailKind ~= ARGV[6] or previous.detail ~= ARGV[12] or
+  (ARGV[16] ~= "" and previous_stop_reason ~= ARGV[16])
 state.activity = {
   launchId = ARGV[7], daemonInstanceId = ARGV[8], sequence = tonumber(ARGV[10]),
   observedAt = tonumber(ARGV[11]), receivedAt = now, kind = ARGV[5],
@@ -121,6 +126,9 @@ state.activity = {
     now + tonumber(ARGV[14]) or cjson.null
 }
 state.activityVisible = true
+-- A runtime error's reason outlives the Activity itself: the "inactive" status that follows
+-- hides the Activity, and the snapshot keeps reporting this until the next active process.
+if ARGV[16] ~= "" then state.stopReason = ARGV[16] end
 -- Any accepted observation is real evidence from the daemon (a probe reply
 -- included), so it cancels a pending liveness probe outright.
 state.probe = nil
@@ -329,6 +337,7 @@ export class RedisAgentDisplay implements AgentDisplay {
       JSON.stringify(activity.entries ?? []),
       WORKING_LEASE_MS,
       isFiller ? "1" : "0",
+      activity.runtimeError?.errorReason ?? "",
     ]);
   }
 
