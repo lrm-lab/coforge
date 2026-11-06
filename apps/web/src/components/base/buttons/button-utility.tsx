@@ -93,6 +93,9 @@ export const ButtonUtility = ({
                 "group relative inline-flex h-max cursor-pointer items-center justify-center rounded-md p-1.5 outline-focus-ring transition duration-100 ease-linear focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
                 styles[color],
 
+                // A finger needs more than the glyph: at least 44px, without moving anything.
+                "any-pointer-coarse:after:absolute any-pointer-coarse:after:-inset-2.5",
+
                 // Icon styles
                 "*:data-icon:pointer-events-none *:data-icon:shrink-0 *:data-icon:text-current *:data-icon:transition-inherit-all",
                 size === "xs" ? "*:data-icon:size-4" : "*:data-icon:size-5",
