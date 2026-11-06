@@ -103,15 +103,22 @@ test("a Project page lists its Tasks as a tree, and a Task's popup moves it betw
       // The tabs switch and the address follows; the tab a Project opens on is left out of it.
       const tabSelected = (name: string) =>
         `[...document.querySelectorAll('[role="tab"]')].some((tab) => tab.textContent.trim() === ${JSON.stringify(name)} && tab.getAttribute("aria-selected") === "true")`;
+      // agent-browser's role locator timed out on the always-rendered tab in CI; the same
+      // predicate the waits use finds and presses it instead.
+      const clickTab = async (name: string) => {
+        const tab = `[...document.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent.trim() === ${JSON.stringify(name)})`;
+        await browser("wait", "--fn", `${tab} !== undefined`);
+        await evaluate(`${tab}.click() ?? true`);
+      };
       await browser("open", projectPage);
       await browser("wait", "--fn", `${pageHydrated} && ${tabSelected("任务")}`);
-      await browser("find", "role", "tab", "click", "--name", "概览", "--exact");
+      await clickTab("概览");
       await browser(
         "wait",
         "--fn",
         `${tabSelected("概览")} && location.search.includes("tab=overview")`,
       );
-      await browser("find", "role", "tab", "click", "--name", "任务", "--exact");
+      await clickTab("任务");
       await browser("wait", "--fn", `${tabSelected("任务")} && !location.search.includes("tab=")`);
       await browser("open", overviewPage);
       await browser(
