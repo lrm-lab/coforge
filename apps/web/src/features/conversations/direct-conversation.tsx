@@ -1,3 +1,4 @@
+import { Button as AriaButton } from "react-aria-components";
 import { useMemo } from "react";
 
 import { Button } from "#src/components/base/buttons/button";
@@ -78,7 +79,7 @@ export function DirectConversationHeader({
               noTextPadding
               aria-label={m.agent_open_profile({ name: conversation.agent.displayName })}
               onPress={openProfile}
-              className="h-auto w-auto min-w-0 rounded-full p-0 hover:bg-transparent"
+              className="h-auto w-auto shrink-0 rounded-full p-0 hover:bg-transparent"
             >
               {avatar}
             </Button>
@@ -88,15 +89,13 @@ export function DirectConversationHeader({
           {/* One line: name, then the live status as a dot and a label. */}
           <div className="flex min-w-0 flex-1 items-center gap-2">
             {openProfile ? (
-              <Button
-                color="tertiary"
-                noTextPadding
+              <AriaButton
                 onPress={openProfile}
                 aria-label={m.agent_open_profile({ name: conversation.agent.displayName })}
-                className="h-auto min-w-0 rounded p-0 text-md font-semibold text-primary hover:bg-transparent hover:text-primary hover:underline"
+                className="min-w-0 cursor-pointer rounded text-left text-md font-semibold text-primary outline-focus-ring hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
               >
                 <h1 className="truncate">{conversation.agent.displayName}</h1>
-              </Button>
+              </AriaButton>
             ) : (
               <h1 className="min-w-0 truncate text-md font-semibold">
                 {conversation.agent.displayName}
