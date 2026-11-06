@@ -82,7 +82,13 @@ export async function finishedWorkFixture() {
     where: { id: string },
     creator: string,
     title: string,
-    state: { status: string; daysAgo?: number; ownerUserId?: string; projectSlug?: string },
+    state: {
+      status: string;
+      daysAgo?: number;
+      ownerUserId?: string;
+      projectSlug?: string;
+      description?: string | null;
+    },
   ) {
     const created = await board.execute(
       { workspaceId: workspace.id, userId: creator },
@@ -92,6 +98,7 @@ export async function finishedWorkFixture() {
         conversationId: where.id,
         title,
         ...(state.projectSlug ? { project: state.projectSlug } : {}),
+        ...(state.description !== undefined ? { description: state.description } : {}),
       },
     );
     const row = created.tasks[0]!;

@@ -7,6 +7,7 @@ import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import {
   overviewConversationWhere,
+  overviewDetailSelection,
   overviewRow,
   overviewRows,
   overviewSelection,
@@ -280,7 +281,8 @@ export class TaskOverviewReads {
         number: ref.number,
         conversation: overviewConversationWhere(workspaceId, userId),
       },
-      select: overviewSelection(userId),
+      // The popup's read keeps the description the card reads leave out.
+      select: overviewDetailSelection(userId),
     });
     if (!task) return null;
     const [extras] = await viewsWithCounts(

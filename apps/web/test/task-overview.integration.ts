@@ -135,8 +135,11 @@ test("TaskBoard overview returns every visible Workspace channel task and the vi
     expect(
       (await board.overview(workspace.id, bob!.id)).tasks.map(({ title }) => title).sort(),
     ).toEqual(["Joined public", "Other direct", "Unjoined public"]);
+    // A card read carries no `description`; the create result's view does (`null` here).
+    const { description: _joinedDescription, ...joinedView } = joinedTask.tasks[0]!;
+    const { description: _unjoinedDescription, ...unjoinedView } = unjoinedTask.tasks[0]!;
     expect(result.tasks.find(({ title }) => title === "Joined public")).toEqual({
-      ...joinedTask.tasks[0],
+      ...joinedView,
       currentMemberId: expect.any(String),
       source: { channelName: joined.channelName, agentId: null, label: `#${joined.channelName}` },
       project: {
@@ -147,7 +150,7 @@ test("TaskBoard overview returns every visible Workspace channel task and the vi
       },
     });
     expect(result.tasks.find(({ title }) => title === "Unjoined public")).toEqual({
-      ...unjoinedTask.tasks[0],
+      ...unjoinedView,
       currentMemberId: null,
       source: {
         channelName: unjoined.channelName,

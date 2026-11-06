@@ -110,12 +110,14 @@ export function WorkspaceTaskBoard({
         : undefined,
     [taskRef, known],
   );
-  // A Task `task` names that the page has not read (a finished one past the opened pages, or one
-  // created since the page loaded), read on its own. It sits with the finished-work reads, so the
-  // reads after each command and announcement refresh it too.
-  const lookup = useQuery(overviewTaskQuery(workspaceId, listed ? undefined : taskRef));
-  // The Task whose popup `task` names.
-  const openTask = listed ?? (taskRef && !listed ? (lookup.data ?? undefined) : undefined);
+  // The open popup's Task is always read on its own: the board's rows carry no description, and
+  // the single read is the fresh copy the popup shows once it lands (the listed row paints first).
+  // It sits with the finished-work reads, so the reads after each command and announcement
+  // refresh it too.
+  const lookup = useQuery(overviewTaskQuery(workspaceId, taskRef));
+  // The Task whose popup `task` names: the single read once it answers, the listed row until then
+  // (and when it answers `null` — gone or unseen — the listed row still stands, as before).
+  const openTask = taskRef ? (lookup.data ?? listed) : undefined;
   const openConversationId = openTask?.conversationId;
   // Opening a popup is a history entry, so Back closes it; closing replaces in place.
   const setTask = useCallback(

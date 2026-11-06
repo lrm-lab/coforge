@@ -115,6 +115,14 @@ export const taskSelection = {
 
 export type SelectedTask = Prisma.TaskGetPayload<{ select: typeof taskSelection }>;
 
+/**
+ * The row `taskView` reads: a full `taskSelection` row, or a card read's row, which leaves
+ * `description` out — a card never renders it; the Task's own read (`overviewTask`) selects it.
+ */
+export type TaskViewSource = Omit<SelectedTask, "description"> & {
+  description?: string | null;
+};
+
 /** The message a Task started as, in its channel. Every Task made so far has one; a Task made under
  * task conversations posts none, and the code that works from the message does not take it. */
 export function hostMessageId(task: { messageId: string | null }): string {
@@ -300,7 +308,7 @@ export const emptyRelations = (): TaskRelations => ({
 export type TaskViewExtras = { relations: TaskRelations; counts?: DiscussionCounts };
 
 export function taskView(
-  task: SelectedTask,
+  task: TaskViewSource,
   reader: TaskReader,
   { relations, counts }: TaskViewExtras,
 ): TaskView {
@@ -313,7 +321,8 @@ export function taskView(
     // A title converted from a message keeps that message's stored tokens; they read back as text
     // for whoever reads the Task.
     title: readTaskText(task.title, reader, taskMentions(task)),
-    description: task.description,
+    // A card read leaves `description` out of its row; the key is absent, not undefined.
+    ...(task.description !== undefined && { description: task.description }),
     status: storedTaskStatus(task.status),
     priority: storedTaskPriority(task.priority),
     revision: task.revision,

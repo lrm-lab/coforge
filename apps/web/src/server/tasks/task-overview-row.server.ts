@@ -22,9 +22,13 @@ export function overviewConversationWhere(
   };
 }
 
+// A card never renders a Task's description, so the board's reads leave it out; the one-Task
+// read behind the popup (`overviewDetailSelection`) selects it.
+const { description: _description, ...taskCardFields } = taskSelection;
+
 export function overviewSelection(userId: string) {
   return {
-    ...taskSelection,
+    ...taskCardFields,
     project: { select: { id: true, name: true, slug: true, iconObjectKey: true } },
     conversation: {
       select: {
@@ -46,6 +50,11 @@ export function overviewSelection(userId: string) {
       },
     },
   } satisfies Prisma.TaskSelect;
+}
+
+/** The single-Task read: the card fields plus the description the popup shows. */
+export function overviewDetailSelection(userId: string) {
+  return { ...overviewSelection(userId), description: true } satisfies Prisma.TaskSelect;
 }
 
 /** The page's rows: their relations read together and their discussions counted, once for the page. */

@@ -3,9 +3,9 @@ import { taskConversationsEnabled } from "./task-conversations-gate.server";
 import { loadTaskRelations, relationsOf } from "./task-relations.server";
 import type {
   DiscussionCounts,
-  SelectedTask,
   TaskReader,
   TaskViewExtras,
+  TaskViewSource,
 } from "./task-view.server";
 
 /**
@@ -18,7 +18,7 @@ import type {
 export async function discussionCounts(
   db: PrismaClient,
   workspaceId: string,
-  tasks: readonly Pick<SelectedTask, "id" | "messageId" | "discussionConversationId">[],
+  tasks: readonly Pick<TaskViewSource, "id" | "messageId" | "discussionConversationId">[],
 ): Promise<Map<string, DiscussionCounts>> {
   // Only a Workspace with task conversations has either to count.
   if (!tasks.length || !(await taskConversationsEnabled(db, { workspaceId }))) return new Map();
@@ -67,7 +67,7 @@ export async function discussionCounts(
 }
 
 /** `taskView` for each of `tasks`: discussions counted once and relations read once for the page. */
-export async function viewsWithCounts<Task extends SelectedTask, View>(
+export async function viewsWithCounts<Task extends TaskViewSource, View>(
   db: PrismaClient,
   reader: TaskReader,
   workspaceId: string,
