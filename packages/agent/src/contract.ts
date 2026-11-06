@@ -298,6 +298,11 @@ export interface AgentSession {
    * adapter without a steer path omits it, which the daemon reads as queue-only. The daemon's
    * stalled recovery picks its silence fuse from this, never from the provider's name. */
   readonly steersBusyTurn?: boolean;
+  /** Whether a subagent that outlives its turn needs the daemon to write a wake notice once the
+   * last one finishes (Raft's `needsWakeAfterSubagents`). Codex runs delegated work on secondary
+   * threads the main turn never resumes on its own; an adapter whose own task notifications
+   * already reach a quiet session omits it, which the daemon reads as no wake needed. */
+  readonly wakesAfterSubagents?: boolean;
   sendMessage(message: string): Promise<void>;
   hasLiveTurnForConversation?(conversationId: string): boolean | undefined;
   cancelPendingNotices?(): void;

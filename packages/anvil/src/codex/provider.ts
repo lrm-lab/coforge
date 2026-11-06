@@ -130,6 +130,9 @@ export class CodexProvider implements CodeAgentProvider {
 class CodexAgentSession implements AgentSession {
   /** Busy input steers the live turn through `turn/steer`. */
   readonly steersBusyTurn = true;
+  /** Delegated work runs on secondary threads the main turn never resumes on its own, so the
+   * daemon writes the wake notice once the last subagent finishes. */
+  readonly wakesAfterSubagents = true;
   readonly #process: JsonlProcess;
   readonly #threadId: string;
   readonly #agentId: string | undefined;

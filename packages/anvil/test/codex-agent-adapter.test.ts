@@ -22,6 +22,9 @@ test(
       agentWorkspaceDirectory: tmpdir(),
       instructions: TEST_AGENT_INSTRUCTIONS,
     });
+    // Delegated work runs on secondary threads the main turn never resumes: the daemon writes
+    // the wake notice once the last subagent finishes (task #600).
+    expect(session.wakesAfterSubagents).toBe(true);
     const events: AgentRuntimeEvent[] = [];
     session.subscribe((event) => events.push(event));
     try {

@@ -9,7 +9,6 @@ import {
   type AgentRuntimeEvent,
   type UsageSnapshot,
 } from "@lrm/coforge-anvil";
-import { RUNTIME_PROVIDER_WAKES_AFTER_SUBAGENTS } from "@lrm/coforge-sdk/internal";
 import { isMemoryAgentRuntime } from "@coforge/agent";
 import type { AgentSessions } from "#src/agent-runtime/agent-session";
 import type { AgentRuntime } from "#src/agent-runtime/agent-process-manager";
@@ -240,7 +239,7 @@ export function observeRuntimeEvent(
     // Raft's wake-after-subagents: a task that ends while the turn is quiet leaves a result
     // the session never saw; when the last one ends, the daemon writes the wake notice. A
     // live turn consumes results itself, so only a strictly quiet session counts.
-    if (RUNTIME_PROVIDER_WAKES_AFTER_SUBAGENTS[config.provider]) {
+    if (runtime.session.wakesAfterSubagents === true) {
       const quiet = runtime.session.hasLiveTurn === false;
       if (quiet && event.taskStatus && event.taskId) {
         const wake = (launch.subagentWake ??= new SubagentWakeTracker());

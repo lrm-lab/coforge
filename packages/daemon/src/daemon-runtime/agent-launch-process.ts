@@ -23,10 +23,7 @@ import {
 import { buildRuntimeCrashedActivity } from "#src/agent-runtime/runtime-error-activity";
 import { TURN_ACTIVITY_EVENT_TYPES } from "#src/agent-runtime/runtime-phases";
 import { runtimeErrorRecoverySignal } from "#src/agent-runtime/runtime-error-recovery";
-import {
-  AGENT_ACTIVITY_DETAIL_KIND,
-  RUNTIME_PROVIDER_WAKES_AFTER_SUBAGENTS,
-} from "@lrm/coforge-sdk/internal";
+import { AGENT_ACTIVITY_DETAIL_KIND } from "@lrm/coforge-sdk/internal";
 import { ResumedEarlyCrashWatch, type ResumedEarlyCrashStreak } from "./resumed-early-crash";
 import { isBusyActivityDetailKind } from "./agent-activity-publisher";
 import { runtimeDisplayName } from "./session-invalidate-activity";
@@ -262,7 +259,7 @@ export async function launchAgentProcess(
     const replyIntents = ports.replyIntents.tracker(agentId, launch);
     launch.replyIntents = replyIntents;
     launch.backgroundTasks = new OutstandingBackgroundTasks();
-    if (RUNTIME_PROVIDER_WAKES_AFTER_SUBAGENTS[config.provider])
+    if (runtime.session.wakesAfterSubagents === true)
       launch.subagentWake = new SubagentWakeTracker();
     const unsubscribe = runtime.session.subscribe((event) => {
       progress.observe(event);
