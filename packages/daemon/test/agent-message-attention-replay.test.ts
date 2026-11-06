@@ -56,3 +56,16 @@ test("an answer to the Agent's own card notifies even though the card is already
   await index.receive(card);
   expect(notices).toHaveLength(1);
 });
+
+test("an expired card notifies its author too, though the card is already read", async () => {
+  const notices: string[] = [];
+  const index = new AgentMessageAttentionIndex(
+    "workspace-1",
+    { session: () => session((notice) => notices.push(notice)) },
+    async () => {},
+  );
+  const card = { ...delivery("expired"), target: "@user", sequence: 2280, reason: "expired" };
+  index.recordModelSeen(card.agentId, card.target, card.sequence);
+  await index.receive(card);
+  expect(notices).toHaveLength(1);
+});

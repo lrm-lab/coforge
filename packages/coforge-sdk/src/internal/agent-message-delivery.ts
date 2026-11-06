@@ -39,8 +39,8 @@ export type AgentMessageDelivery = {
    * launched with another value restarts before it takes the input. */
   features?: { taskConversations: boolean };
   /** Why this delivery reached the Agent: "mentioned" or "subscribed" on a target it was not
-   * subscribed to, and "choice" for the Agent's own action card that someone answered — an event
-   * about a message the Agent wrote, not new text to read. Absent on ordinary deliveries and from
+   * subscribed to, and "choice" or "expired" for the Agent's own action card that someone answered
+   * or that expired — an event about a message the Agent wrote, not new text to read. Absent on ordinary deliveries and from
    * an older server. */
   reason?: string;
   /** The message's attachment count. A delivery with one or more is never read in full from a

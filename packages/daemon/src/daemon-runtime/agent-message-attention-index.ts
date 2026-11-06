@@ -27,7 +27,7 @@ import {
   latestCreatedAtField,
 } from "./message-attention-fields";
 import { isTrackedMention } from "./mention-delivery-tracker";
-import { isCardAnswer } from "./agent-message-attention-index-helpers";
+import { isCardEvent } from "./agent-message-attention-index-helpers";
 import { printableSender } from "./agent-notice-sender";
 import {
   acceptNotice,
@@ -197,7 +197,7 @@ export class AgentMessageAttentionIndex {
       if (!generation.notified.has(message.deliveryId)) {
         // The Agent read this before the server re-sent it (a lost acknowledgement): nothing to
         // announce, and the replay is acknowledged so it stops coming back.
-        if (!isCardAnswer(message) && this.#alreadyRead(message.agentId, message)) {
+        if (!isCardEvent(message) && this.#alreadyRead(message.agentId, message)) {
           this.logDecision(message, "consumed");
           await this.acknowledge(message);
           return;
@@ -223,7 +223,7 @@ export class AgentMessageAttentionIndex {
       return;
     }
     this.#remember(generation, message.deliveryId);
-    if (!isCardAnswer(message) && this.#alreadyRead(message.agentId, message)) {
+    if (!isCardEvent(message) && this.#alreadyRead(message.agentId, message)) {
       this.logDecision(message, "consumed");
       await this.acknowledge(message);
       return;

@@ -33,8 +33,11 @@ export function containsSorted(values: readonly number[] | undefined, value: num
   return values[index] === value;
 }
 
-/** A card answer is news about a message the Agent authored, so the read state that already
- * covers that message cannot also cover the answer: it always deserves a notice. */
-export function isCardAnswer(message: { reason?: string }): boolean {
-  return message.reason === "choice";
+/** The deliveries that carry news about a message the Agent itself authored: its action card was
+ * answered (`choice`) or expired (`expired`). The read state that already covers the card cannot
+ * cover the event, so these always deserve a notice. */
+const CARD_EVENT_REASONS: ReadonlySet<string> = new Set(["choice", "expired"]);
+
+export function isCardEvent(message: { reason?: string }): boolean {
+  return message.reason !== undefined && CARD_EVENT_REASONS.has(message.reason);
 }
