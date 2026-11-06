@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { type RunnerHoldReason, thrownMessage } from "@lrm/coforge-sdk/internal";
 import { startDaemonLocalRpcServer, type DaemonHoldReport } from "#src/local-rpc";
+import { captureStopSignal } from "#src/platform/stop-signal";
 import { FileDaemonCredentialStore } from "#src/credentials/credential-store";
 import { createComputerSelfClient } from "#src/connection/computer-self-client";
 import { runWorkspaceCommand } from "./run-supervisor-command";
@@ -120,6 +121,7 @@ async function runWithSupervisorLock(
   stateDirectory: string,
   bindings: BindingStore,
 ): Promise<void> {
+  const stopRequested = captureStopSignal();
   const lockMarker = join(stateDirectory, "supervisor.lock");
   await mkdir(lockMarker, { recursive: true, mode: 0o700 });
   await writeFile(join(lockMarker, "owner"), String(process.pid), { mode: 0o600 });
@@ -546,10 +548,7 @@ async function runWithSupervisorLock(
             }),
         },
       });
-      await new Promise<void>((resolve) => {
-        process.once("SIGTERM", () => resolve());
-        process.once("SIGINT", () => resolve());
-      });
+      await stopRequested;
     } finally {
       windowsReconcile?.stop();
     }

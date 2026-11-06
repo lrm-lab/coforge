@@ -32,6 +32,7 @@ import { LocalDaemonLauncher } from "#src/daemon-host/launcher";
 import { configureDaemonLogging } from "#src/platform/daemon-logging";
 import { installerJournalExists } from "#src/platform/installer-journal";
 import { stopLaunchdAgents } from "#src/platform/launchd-process";
+import { captureStopSignal } from "#src/platform/stop-signal";
 import { startupTiming } from "#src/platform/startup-timing";
 import { refuseMissingSocket } from "#src/daemon-host/missing-socket";
 import { reapLeftoverAgentProcesses } from "#src/platform/linux-agent-processes";
@@ -183,6 +184,7 @@ export { COFORGE_DAEMON_SERVER_URL, daemonConnectionEndpoint } from "#src/connec
 const DAEMON_CATEGORY = ["coforge", "daemon"];
 
 export async function runDaemon(args: string[], computerVersion?: string): Promise<void> {
+  const stopRequested = captureStopSignal();
   const { socketPath, stateDirectoryArg, daemonStateDirectory } = daemonStartupOptions(args);
   await configureDaemonLogging(daemonStateDirectory);
   const healthJournal = new WorkspaceHealthJournal(
@@ -403,8 +405,7 @@ export async function runDaemon(args: string[], computerVersion?: string): Promi
       const shutdownRequested = new Promise<void>((resolve) => {
         resolveShutdown = resolve;
       });
-      process.once("SIGINT", () => void shutdown());
-      process.once("SIGTERM", () => void shutdown());
+      void stopRequested.then(() => void shutdown());
       const parked = parking.bindShutdown(shutdown);
       try {
         await daemon.start();

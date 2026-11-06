@@ -55,6 +55,31 @@ test.each(["daemon", "coordinator"])(
   DAEMON_START_AND_STOP_TIMEOUT_MS,
 );
 
+/** The socket is connectable before the process is ready to stop, so a stop signal right then
+ * used to take the default action: exit 143 instead of the graceful 0. Repeated because the
+ * window is short — the handler must be registered before the socket opens for any of these to
+ * pass. */
+test.each(["daemon", "coordinator"] satisfies string[])(
+  "%s stops cleanly when the signal arrives as soon as its socket is connectable",
+  async (role) => {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const directory = await mkdtemp(join(tempRoot, "coforge-daemon-stop-"));
+      const socketPath = join(directory, "daemon.sock");
+      const child = spawnDaemon(socketPath, directory, role);
+      try {
+        await waitFor(() => pathExists(socketPath));
+        child.kill("SIGTERM");
+        expect(await child.exited).toBe(0);
+      } finally {
+        if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+        await child.exited;
+        await rm(directory, { recursive: true, force: true });
+      }
+    }
+  },
+  DAEMON_START_AND_STOP_TIMEOUT_MS,
+);
+
 test.each(["daemon", "coordinator"])(
   "%s writes its startup record while it is still running",
   async (role) => {
