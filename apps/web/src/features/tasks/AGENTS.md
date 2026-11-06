@@ -15,10 +15,12 @@ These rules apply to `src/features/tasks/`.
   a conversation (`ConversationTaskBoard`) creates Tasks. Cards carry no
   Claim or Unclaim button: moving an unowned To do Task to In progress claims
   it (`getTaskMoveCommand`).
-- `/tasks` spreads `taskBoardSearchShape` and every conversation page host
-  `conversationTaskBoardSearchShape` (`task-board-search.ts`, without
-  `projects`, through `conversationPageSearchShape`) into their validated search, read with `useTaskBoardSearch`:
-  `status`, `layout`, `owners`, `projects`, `completed`. A status or layout
+- `/tasks` and every conversation page host (through
+  `conversationPageSearchShape`) spread `taskBoardSearchShape`, and a Project
+  page `projectTaskBoardSearchShape` (`task-board-search.ts`, `channels`
+  instead of `projects`), into their validated search, read with
+  `useTaskBoardSearch`: `status`, `layout`, `owners`, `labels`, `projects` or
+  `channels`, `completed`. A status or layout
   change is a history entry; picks and the window replace the address in
   place. Hidden columns and Display fields are one device preference shared
   by both boards.
