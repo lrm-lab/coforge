@@ -59,6 +59,24 @@ export class UserIdentityRepository {
     });
   }
 
+  /**
+   * Marks the User behind a provider identity as having a verified email — only ever `true`,
+   * written from a provider-confirmed event (the Authing webhook), never from anything a client
+   * sends, and skipped when already set. Answers whether a User owns the identity, so a verified
+   * event for an unknown subject is a no-op rather than an error.
+   */
+  async markEmailVerified(provider: string, providerSubject: string): Promise<boolean> {
+    const identity = await this.findIdentity(provider, providerSubject);
+    if (!identity) return false;
+    if (identity.user.emailVerified !== true) {
+      await this.db.user.update({
+        where: { id: identity.user.id },
+        data: { emailVerified: true },
+      });
+    }
+    return true;
+  }
+
   private findIdentity(provider: string, providerSubject: string) {
     return this.db.userIdentity.findUnique({
       where: { provider_providerSubject: { provider, providerSubject } },

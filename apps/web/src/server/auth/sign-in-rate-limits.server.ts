@@ -46,6 +46,15 @@ export const CODE_SEND_ADDRESS_LIMIT = 20;
  */
 export const CODE_SEND_DESTINATION_LIMIT = 10;
 
+/**
+ * Verification links sent to a signed-in account's own address: Authing allows one send per
+ * address per minute, and the account's owner clicking twice must not spend a second. One per
+ * user per minute matches Authing's own throttle, counted here so a script riding the session
+ * cannot send on the user's behalf faster than the button allows.
+ */
+export const VERIFY_EMAIL_SEND_WINDOW_MS = 60_000;
+export const VERIFY_EMAIL_SEND_USER_LIMIT = 1;
+
 export type ResetCodeRateLimits = {
   address: AppRateLimit;
   /** Per account and client address together. */
@@ -54,13 +63,18 @@ export type ResetCodeRateLimits = {
   account: AppRateLimit;
 };
 export type CodeSendRateLimits = { address: AppRateLimit; destination: AppRateLimit };
+export type VerifyEmailRateLimits = { user: AppRateLimit };
 
 /** Which limit refused an attempt. */
 export type SignInLimit = "address" | "account_address" | "account";
 export type CodeSendLimit = "address" | "destination";
+export type VerifyEmailSendLimit = "user";
 
 export type SignInAdmission = { allowed: true } | { allowed: false; limit: SignInLimit };
 export type CodeSendAdmission = { allowed: true } | { allowed: false; limit: CodeSendLimit };
+export type VerifyEmailAdmission =
+  | { allowed: true }
+  | { allowed: false; limit: VerifyEmailSendLimit };
 
 export const NO_RESET_CODE_RATE_LIMITS: ResetCodeRateLimits = {
   address: NO_RATE_LIMIT,
@@ -119,7 +133,23 @@ export async function admitCodeSend(
   return byDestination.allowed ? { allowed: true } : { allowed: false, limit: "destination" };
 }
 
-type AllLimits = { signIn: ResetCodeRateLimits; codeSend: CodeSendRateLimits };
+/**
+ * Admits or refuses one request to send the account's email-verification link, counted per user
+ * (`userId` is hashed like every other counted value, so Redis never holds it).
+ */
+export async function admitVerifyEmailSend(
+  limits: VerifyEmailRateLimits,
+  userId: string,
+): Promise<VerifyEmailAdmission> {
+  const byUser = await limits.user.admit(counted(userId));
+  return byUser.allowed ? { allowed: true } : { allowed: false, limit: "user" };
+}
+
+type AllLimits = {
+  signIn: ResetCodeRateLimits;
+  codeSend: CodeSendRateLimits;
+  verifyEmail: VerifyEmailRateLimits;
+};
 
 let limits: AllLimits | undefined;
 
@@ -139,6 +169,11 @@ export function getCodeSendRateLimits(): CodeSendRateLimits {
   return allLimits().codeSend;
 }
 
+/** The limit on sending email-verification links, over the same Redis. */
+export function getVerifyEmailRateLimits(): VerifyEmailRateLimits {
+  return allLimits().verifyEmail;
+}
+
 function createRateLimits(redisUrl: string | undefined): AllLimits {
   const outageLog = new RateLimitOutageLog();
   if (!redisUrl) {
@@ -155,6 +190,7 @@ function createRateLimits(redisUrl: string | undefined): AllLimits {
     return {
       signIn: { address: unconfigured, accountAddress: unconfigured, account: unconfigured },
       codeSend: { address: unconfigured, destination: unconfigured },
+      verifyEmail: { user: unconfigured },
     };
   }
   const redis = openRedisClient(redisUrl);
@@ -188,6 +224,13 @@ function createRateLimits(redisUrl: string | undefined): AllLimits {
         "coforge:ratelimit:sign-in-code-destination:v1",
         CODE_SEND_DESTINATION_LIMIT,
         CODE_SEND_WINDOW_MS,
+      ),
+    },
+    verifyEmail: {
+      user: limit(
+        "coforge:ratelimit:verify-email-user:v1",
+        VERIFY_EMAIL_SEND_USER_LIMIT,
+        VERIFY_EMAIL_SEND_WINDOW_MS,
       ),
     },
   };

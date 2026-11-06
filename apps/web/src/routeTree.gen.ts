@@ -41,6 +41,7 @@ import { Route as DotwellKnownOauthAuthorizationServerOidcRouteImport } from './
 import { Route as ApiAppAgentRequestsRequestIdRouteImport } from './routes/api.app-agent-requests.$requestId'
 import { Route as ApiAppInstallationsLookupRouteImport } from './routes/api.app-installations.lookup'
 import { Route as ApiAttachmentsAttachmentIdRouteImport } from './routes/api/attachments.$attachmentId'
+import { Route as ApiAuthingWebhookRouteImport } from './routes/api/authing/webhook'
 import { Route as ApiComputerAttachRouteImport } from './routes/api/computer/attach'
 import { Route as ApiComputerConfirmKeyRouteImport } from './routes/api/computer/confirm-key'
 import { Route as ApiComputerDetachRouteImport } from './routes/api/computer/detach'
@@ -350,6 +351,11 @@ const ApiAttachmentsAttachmentIdRoute =
     path: '/$attachmentId',
     getParentRoute: () => ApiAttachmentsRoute,
   } as any)
+const ApiAuthingWebhookRoute = ApiAuthingWebhookRouteImport.update({
+  id: '/api/authing/webhook',
+  path: '/api/authing/webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiComputerAttachRoute = ApiComputerAttachRouteImport.update({
   id: '/api/computer/attach',
   path: '/api/computer/attach',
@@ -1190,6 +1196,7 @@ export interface FileRoutesByFullPath {
   '/api/app-agent-requests/$requestId': typeof ApiAppAgentRequestsRequestIdRoute
   '/api/app-installations/lookup': typeof ApiAppInstallationsLookupRoute
   '/api/attachments/$attachmentId': typeof ApiAttachmentsAttachmentIdRoute
+  '/api/authing/webhook': typeof ApiAuthingWebhookRoute
   '/api/computer/attach': typeof ApiComputerAttachRouteWithChildren
   '/api/computer/confirm-key': typeof ApiComputerConfirmKeyRoute
   '/api/computer/detach': typeof ApiComputerDetachRoute
@@ -1365,6 +1372,7 @@ export interface FileRoutesByTo {
   '/api/app-agent-requests/$requestId': typeof ApiAppAgentRequestsRequestIdRoute
   '/api/app-installations/lookup': typeof ApiAppInstallationsLookupRoute
   '/api/attachments/$attachmentId': typeof ApiAttachmentsAttachmentIdRoute
+  '/api/authing/webhook': typeof ApiAuthingWebhookRoute
   '/api/computer/attach': typeof ApiComputerAttachRouteWithChildren
   '/api/computer/confirm-key': typeof ApiComputerConfirmKeyRoute
   '/api/computer/detach': typeof ApiComputerDetachRoute
@@ -1539,6 +1547,7 @@ export interface FileRoutesById {
   '/api/app-agent-requests/$requestId': typeof ApiAppAgentRequestsRequestIdRoute
   '/api/app-installations/lookup': typeof ApiAppInstallationsLookupRoute
   '/api/attachments/$attachmentId': typeof ApiAttachmentsAttachmentIdRoute
+  '/api/authing/webhook': typeof ApiAuthingWebhookRoute
   '/api/computer/attach': typeof ApiComputerAttachRouteWithChildren
   '/api/computer/confirm-key': typeof ApiComputerConfirmKeyRoute
   '/api/computer/detach': typeof ApiComputerDetachRoute
@@ -1718,6 +1727,7 @@ export interface FileRouteTypes {
     | '/api/app-agent-requests/$requestId'
     | '/api/app-installations/lookup'
     | '/api/attachments/$attachmentId'
+    | '/api/authing/webhook'
     | '/api/computer/attach'
     | '/api/computer/confirm-key'
     | '/api/computer/detach'
@@ -1893,6 +1903,7 @@ export interface FileRouteTypes {
     | '/api/app-agent-requests/$requestId'
     | '/api/app-installations/lookup'
     | '/api/attachments/$attachmentId'
+    | '/api/authing/webhook'
     | '/api/computer/attach'
     | '/api/computer/confirm-key'
     | '/api/computer/detach'
@@ -2066,6 +2077,7 @@ export interface FileRouteTypes {
     | '/api/app-agent-requests/$requestId'
     | '/api/app-installations/lookup'
     | '/api/attachments/$attachmentId'
+    | '/api/authing/webhook'
     | '/api/computer/attach'
     | '/api/computer/confirm-key'
     | '/api/computer/detach'
@@ -2242,6 +2254,7 @@ export interface RootRouteChildren {
   WorkspacesNewRoute: typeof WorkspacesNewRoute
   DotwellKnownOauthAuthorizationServerOidcRoute: typeof DotwellKnownOauthAuthorizationServerOidcRoute
   ApiAppInstallationsLookupRoute: typeof ApiAppInstallationsLookupRoute
+  ApiAuthingWebhookRoute: typeof ApiAuthingWebhookRoute
   ApiComputerAttachRoute: typeof ApiComputerAttachRouteWithChildren
   ApiComputerConfirmKeyRoute: typeof ApiComputerConfirmKeyRoute
   ApiComputerDetachRoute: typeof ApiComputerDetachRoute
@@ -2570,6 +2583,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/attachments/$attachmentId'
       preLoaderRoute: typeof ApiAttachmentsAttachmentIdRouteImport
       parentRoute: typeof ApiAttachmentsRoute
+    }
+    '/api/authing/webhook': {
+      id: '/api/authing/webhook'
+      path: '/api/authing/webhook'
+      fullPath: '/api/authing/webhook'
+      preLoaderRoute: typeof ApiAuthingWebhookRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/computer/attach': {
       id: '/api/computer/attach'
@@ -3833,6 +3853,7 @@ const rootRouteChildren: RootRouteChildren = {
   DotwellKnownOauthAuthorizationServerOidcRoute:
     DotwellKnownOauthAuthorizationServerOidcRoute,
   ApiAppInstallationsLookupRoute: ApiAppInstallationsLookupRoute,
+  ApiAuthingWebhookRoute: ApiAuthingWebhookRoute,
   ApiComputerAttachRoute: ApiComputerAttachRouteWithChildren,
   ApiComputerConfirmKeyRoute: ApiComputerConfirmKeyRoute,
   ApiComputerDetachRoute: ApiComputerDetachRoute,

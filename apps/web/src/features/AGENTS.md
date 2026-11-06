@@ -24,7 +24,7 @@ The module map of `src/features/`, split out of [`apps/web/AGENTS.md`](../../AGE
 - `features/notifications/` — browser push lifecycle and in-page notifications.
 - `features/onboarding/` — the first-sign-in setup wizard (`onboarding-wizard.tsx` and its four `onboarding-*-step.tsx`, the pure `onboarding-wizard-plan.ts`, `person-role.ts` for the closed role set; rules in `docs/design/onboarding-wizard.md`).
 - `features/panel-tabs/` — each member's saved panel tab order.
-- `features/profiles/` — current-user profile read and update, the one rule for a person's name (`person-name.ts`), and the avatar presets a person can choose (`avatar-presets.ts`, the ten cartoon people of `src/lib/person-picture.ts`, also offered on the first sign-in name step).
+- `features/profiles/` — current-user profile read and update, the one rule for a person's name (`person-name.ts`), the avatar presets a person can choose (`avatar-presets.ts`, the ten cartoon people of `src/lib/person-picture.ts`, also offered on the first sign-in name step), and the send that asks Authing for the account email's verification link (`sendEmailVerification`).
 - `features/projects/` — Projects directory, project detail, file browser, and project settings page.
 - `features/realtime/` — the one browser Centrifuge connection, and its status as the page shows it (`connection-status.ts`).
 - `features/records/` — Workspace Records (see the last section).

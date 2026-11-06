@@ -148,6 +148,12 @@ export function reportCodeSendThrottled(): void {
   console.warn(JSON.stringify({ event: "auth.code_send_throttled" }));
 }
 
+/** Logs a verification link not sent because the per-user send limit refused it, as one
+ * `auth.verify_email_rate_limited` line: neither the user nor the address is logged. */
+export function reportVerifyEmailRateLimited(): void {
+  console.warn(JSON.stringify({ event: "auth.verify_email_rate_limited" }));
+}
+
 /** Logs a password-reset code Authing would not send, as one `auth.password_reset_code_not_sent`
  * line, which the person is not told of (the answer must not say whether an account has the
  * destination): `refused` when Authing would not serve the request (it knows no such account),

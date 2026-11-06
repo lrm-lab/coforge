@@ -24,6 +24,19 @@ export async function readAuthingConfig(env: NodeJS.ProcessEnv): Promise<Authing
   };
 }
 
+/** `readAuthingConfig`, or `null` when the deployment lacks it (which the boot check already
+ * reports); a call that needs Authing then fails like any other failure. */
+export async function readAuthingConfigOrNull(
+  env: NodeJS.ProcessEnv,
+): Promise<AuthingConfig | null> {
+  try {
+    return await readAuthingConfig(env);
+  } catch (error) {
+    if (error instanceof AuthConfigError) return null;
+    throw error;
+  }
+}
+
 /** What signing in and out needs: the Authing app and the secret sessions are signed with. */
 export async function readSignInConfig(
   env: NodeJS.ProcessEnv,

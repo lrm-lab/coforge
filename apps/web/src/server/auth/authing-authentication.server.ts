@@ -165,6 +165,10 @@ export type AuthingAuthentication = {
   /** Has Authing send a sign-in verification code by SMS or email. Throws `CodeSendThrottledError`
    * when Authing was asked too often, `SignInFailure` when the code could not be sent. */
   sendSignInCode(destination: CodeDestination): Promise<void>;
+  /** Has Authing send the account's own address a link that verifies it
+   * (`CHANNEL_VERIFY_EMAIL_LINK`); the address is always the one the account already carries,
+   * never one a caller supplies. Throws as `sendSignInCode`. */
+  sendVerifyEmailLink(email: string): Promise<void>;
   /** Has Authing send the code that sets a new password, by SMS or email. As `sendSignInCode`,
    * and `CodeSendRefusedError` when Authing refused the request (it has no such account). */
   sendResetCode(destination: CodeDestination): Promise<void>;
@@ -288,10 +292,14 @@ function destinationFields(destination: CodeDestination) {
     : { phoneNumber: destination.phone, phoneCountryCode: destination.countryCode };
 }
 
-/** `POST /api/v3/send-sms` or `send-email` for one channel (what the code is for). */
+/** What a `send-email`/`send-sms` call is for: a sign-in or password-reset code, or the link that
+ * verifies an email address. */
+type SendChannel = "CHANNEL_LOGIN" | "CHANNEL_RESET_PASSWORD" | "CHANNEL_VERIFY_EMAIL_LINK";
+
+/** `POST /api/v3/send-sms` or `send-email` for one channel (what the code or link is for). */
 async function requestCodeSend(
   config: AuthingConfig,
-  channel: "CHANNEL_LOGIN" | "CHANNEL_RESET_PASSWORD",
+  channel: SendChannel,
   destination: CodeDestination,
 ): Promise<void> {
   const { ok, status, body } = await postAuthing(
@@ -348,6 +356,9 @@ export function createAuthingAuthentication(config: AuthingConfig): AuthingAuthe
     },
     sendSignInCode(destination) {
       return requestCodeSend(config, "CHANNEL_LOGIN", destination);
+    },
+    sendVerifyEmailLink(email) {
+      return requestCodeSend(config, "CHANNEL_VERIFY_EMAIL_LINK", { kind: "email", email });
     },
     sendResetCode(destination) {
       return requestCodeSend(config, "CHANNEL_RESET_PASSWORD", destination);
