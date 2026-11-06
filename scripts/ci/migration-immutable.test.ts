@@ -29,6 +29,29 @@ test("deleting a migration already on the base is blocked", () => {
   expect(result.stderr).toContain("migration-immutable");
 });
 
+test("a migration on the one-time approved deletion list may be deleted; others stay blocked", () => {
+  const exempt =
+    "apps/web/prisma/migrations/20261105144050_drop_tasks_creator_member_id_idx/migration.sql";
+  const existing = "apps/web/prisma/migrations/20260101000000_a/migration.sql";
+  repo.seed({
+    "README.md": "# Repo\n",
+    [exempt]: "DROP INDEX a;\n",
+    [existing]: "CREATE TABLE a ();\n",
+  });
+  repo.ok("rm", exempt);
+
+  const allowed = repo.commitAll();
+
+  expect(allowed.exitCode).toBe(0);
+
+  repo.ok("rm", existing);
+  const blocked = repo.commitAll();
+
+  expect(blocked.exitCode).not.toBe(0);
+  expect(blocked.stderr).toContain(existing);
+  expect(blocked.stderr).toContain("migration-immutable");
+});
+
 test("a migration not yet pushed may be edited; one on the upstream may not", () => {
   const existing = "apps/web/prisma/migrations/20260101000000_a/migration.sql";
   const added = "apps/web/prisma/migrations/20260202000000_b/migration.sql";

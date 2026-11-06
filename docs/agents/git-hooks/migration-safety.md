@@ -13,6 +13,11 @@ not yet pushed may still be edited: it has run nowhere. A migration already on t
 immutable, because an environment that ran it skips the new content by name. A branch with no
 remote falls back to `HEAD`.
 
+One exception exists, and it is a list, not a rule: `APPROVED_UNAPPLIED_DELETIONS` in
+`scripts/ci/migration-immutable.ts` names the seven drop migrations Frank approved deleting on
+2026-11-05 (tasks #494/#501) after production and staging `_prisma_migrations` were verified to
+hold none of them. The list is removed by the release that actually drops the columns.
+
 Part of [Git hooks](README.md), the rule `migration-safety` of the [hard rules](hard-rules.md).
 
 A migration that locks or rewrites a table with data can stall the running version for as long as

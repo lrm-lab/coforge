@@ -43,6 +43,20 @@ function stagedBase(): string {
   return "HEAD";
 }
 
+/** Migrations deleted without ever running, under Frank's one-time approval of 2026-11-05
+ * (tasks #494/#501): production and staging `_prisma_migrations` were re-checked empty for all
+ * seven names immediately before the deletion. The list is removed by the release that actually
+ * drops the columns (task #501 step 2); until then it would also excuse a same-path recreate. */
+const APPROVED_UNAPPLIED_DELETIONS = new Set([
+  "apps/web/prisma/migrations/20261105144050_drop_tasks_creator_member_id_idx/migration.sql",
+  "apps/web/prisma/migrations/20261105144051_drop_workspace_assistant_display_name/migration.sql",
+  "apps/web/prisma/migrations/20261105144052_drop_setup_checklist_dismissed_at/migration.sql",
+  "apps/web/prisma/migrations/20261105151638_drop_conversations_project_fk/migration.sql",
+  "apps/web/prisma/migrations/20261105151639_drop_conversations_project_idx/migration.sql",
+  "apps/web/prisma/migrations/20261105151640_drop_conversations_project_id/migration.sql",
+  "apps/web/prisma/migrations/20261105151641_drop_tasks_project_pinned/migration.sql",
+]);
+
 /** A migration file the base already had may not be edited, renamed or deleted: an environment
  * that ran it skips the new content by name, so only a new migration directory can change data. */
 export function migrationImmutabilityViolations(source: ChangeSource) {
@@ -50,8 +64,8 @@ export function migrationImmutabilityViolations(source: ChangeSource) {
   const baseLabel =
     source.kind === "staged" ? (base === "HEAD" ? "HEAD (no remote)" : "the upstream") : "the base";
   return changedFiles(source).flatMap((change) => {
-    const paths = [change.path, ...(change.from ? [change.from] : [])].filter((path) =>
-      MIGRATION_PATH.test(path),
+    const paths = [change.path, ...(change.from ? [change.from] : [])].filter(
+      (path) => MIGRATION_PATH.test(path) && !APPROVED_UNAPPLIED_DELETIONS.has(path),
     );
     const existing = paths.find((path) => existsInRevision(base, path));
     return existing
