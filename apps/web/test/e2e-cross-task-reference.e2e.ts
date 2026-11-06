@@ -15,7 +15,7 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
  * Another conversation's Task in a message (task #456, the web part of task #437) reads as its
  * label: the status icon and the title, and nothing else. Its number and where it lives — the
  * channel under its current name, a direct message as the other side from the reader's seat — are
- * in its name and its peek, with the whole title; a press opens it there. A private channel's Task
+ * in its name and its peek, with the whole title; a press opens its popup over the page. A private channel's Task
  * the reader cannot see is "a Task you can't view", without its number, status or channel. A
  * change to a referenced Task repaints its label live, from any conversation.
  *
@@ -245,19 +245,77 @@ test("another conversation's Task reads as its live label, or as a Task the read
       `${label(launchTitle)}?.getAttribute("data-task-status") === "in_progress"`,
     );
 
-    // The label opens the Task in its channel.
+    // The label opens the Task's popup over this page, which stays where it is (task #614), and
+    // the popup shows its discussion and composer as the Task's own channel does.
+    const onThisPage = `location.pathname.endsWith("/channel/${here.id}")`;
+    const popupOf = (title: string) =>
+      `[...document.querySelectorAll('[role="dialog"]')].find((el) => el.textContent.includes(${JSON.stringify(title)}))`;
+    const noPopup = `document.querySelector('[role="dialog"]') === null`;
     await browser("click", "[data-e2e-launch]");
+    await browser("wait", "--fn", `${popupOf(launchTitle)} != null && ${onThisPage}`);
+    await browser("wait", "--fn", `${popupOf(launchTitle)}.querySelector("textarea") != null`);
+    expect(await evaluate<string>(`location.search`)).toContain(
+      `otherTask=channel%3A${launch.id}%3A${launchTask}`,
+    );
+    await settled();
+    await browser("screenshot", join(artifacts, "popup.png"));
+    await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
+    await settled();
+    await browser("screenshot", join(artifacts, "popup-dark.png"));
+    await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
+
+    // Back closes it, onto the same page; a reload of an open popup keeps it.
+    await browser("back");
+    await browser("wait", "--fn", `${noPopup} && ${onThisPage} && ${chip(launchTitle)} != null`);
+    await browser("forward");
+    await browser("wait", "--fn", `${popupOf(launchTitle)} != null && ${onThisPage}`);
+    await browser("reload");
     await browser(
       "wait",
       "--fn",
-      `location.pathname.endsWith("/channel/${launch.id}") && [...document.querySelectorAll('[role="dialog"]')].some((el) => el.textContent.includes("Ship the launch page ${tail}"))`,
+      `${pageHydrated} && ${popupOf(launchTitle)} != null && ${onThisPage}`,
     );
+
+    // Its close button leaves no popup and nothing in the address.
+    await browser("click", `[role="dialog"] button[aria-label="Close"]`);
+    await browser("wait", "--fn", noPopup);
+    expect(await evaluate<string>(`location.search`)).not.toContain("otherTask");
+    expect(await evaluate<boolean>(onThisPage)).toBe(true);
+
+    // A direct message's Task opens the same way.
+    const directTitle = `Draft the release notes ${tail}`;
+    await evaluate(`${chip(directTitle)}.setAttribute("data-e2e-direct", "") ?? true`);
+    await browser("click", "[data-e2e-direct]");
+    await browser("wait", "--fn", `${popupOf(directTitle)} != null && ${onThisPage}`);
+    await browser("click", `[role="dialog"] button[aria-label="Close"]`);
+    await browser("wait", "--fn", noPopup);
+
+    // A Task whose conversation cannot be read shows no popup, and the address lets go of it.
+    await browser(
+      "open",
+      `${proxy.origin}/en/w/${workspace.slug}/channel/${here.id}?otherTask=channel:${crypto.randomUUID()}:1`,
+    );
+    await browser(
+      "wait",
+      "--fn",
+      `${pageHydrated} && !location.search.includes("otherTask") && ${chip(launchTitle)} != null`,
+    );
+    expect(await evaluate<boolean>(noPopup)).toBe(true);
 
     // Phone.
     await browser("set", "viewport", "390", "844");
     await browser("open", `${proxy.origin}/en/w/${workspace.slug}/channel/${here.id}`);
     await browser("wait", "--fn", `${pageHydrated} && ${chip(launchTitle)} != null`);
     await browser("screenshot", join(artifacts, "phone.png"));
+    await evaluate(`${chip(launchTitle)}.scrollIntoView({ block: "center" }) ?? true`);
+    await evaluate(`${chip(launchTitle)}.setAttribute("data-e2e-launch", "") ?? true`);
+    await browser("click", "[data-e2e-launch]");
+    await browser("wait", "--fn", `${popupOf(launchTitle)} != null && ${onThisPage}`);
+    await settled();
+    await browser("screenshot", join(artifacts, "popup-phone.png"));
+    await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
+    await settled();
+    await browser("screenshot", join(artifacts, "popup-phone-dark.png"));
   } finally {
     await browser("close").catch(() => undefined);
     proxy.stop();

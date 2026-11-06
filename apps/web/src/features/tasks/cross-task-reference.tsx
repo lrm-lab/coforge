@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
 import {
@@ -8,11 +7,10 @@ import {
   useLiveAgents,
 } from "#src/features/agents/workspace-agents-realtime";
 import { useConversationId } from "#src/features/conversations/conversation-id";
-import { conversationRoute } from "#src/features/conversations/last-conversation";
 import { sidebarDirectsQuery } from "#src/features/conversations/sidebar-collections";
 import { useLiveDirectRow } from "#src/features/conversations/sidebar-lists";
-import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { m } from "#src/paraglide/messages";
+import { useOpenOtherTask } from "./other-task-search";
 import { directTaskQuery } from "./referenced-task";
 import { HiddenTaskChip, TaskChip } from "./task-chip";
 import { TaskReference } from "./task-reference";
@@ -31,9 +29,9 @@ type CrossTaskReferenceProps = {
 
 /**
  * Another conversation's Task in a message body (task #437): the Task's badge under its
- * conversation's current name, its title as the tooltip, a link that opens it there. A reader who
- * cannot see that Task — a private channel they are not in, a direct message of others' — reads
- * the words the sender wrote, with no title or status and nothing to open.
+ * conversation's current name, its title as the tooltip, a press that opens its popup over the
+ * page. A reader who cannot see that Task — a private channel they are not in, a direct message of
+ * others' — reads the words the sender wrote, with no title or status and nothing to open.
  */
 export function CrossTaskReference(props: CrossTaskReferenceProps) {
   const openConversationId = useConversationId();
@@ -56,10 +54,16 @@ export function CrossTaskReference(props: CrossTaskReferenceProps) {
 function ChannelTaskReference({ conversationId, number, children }: CrossTaskReferenceProps) {
   const workspaceId = useCurrentWorkspaceId() ?? "";
   const { data: task } = useQuery(overviewTaskQuery(workspaceId, { conversationId, number }));
-  const open = useOpenTask("channel", conversationId, number);
+  const { open } = useOpenOtherTask();
   if (task === undefined) return <>{children}</>;
   if (task === null || task.source.channelName === null) return <HiddenTaskChip />;
-  return <TaskChip task={task} place={`#${task.source.channelName}`} onPress={open} />;
+  return (
+    <TaskChip
+      task={task}
+      place={`#${task.source.channelName}`}
+      onPress={() => open({ kind: "channel", conversationId, number })}
+    />
+  );
 }
 
 function DirectTaskReference({ conversationId, number, children }: CrossTaskReferenceProps) {
@@ -70,10 +74,16 @@ function DirectTaskReference({ conversationId, number, children }: CrossTaskRefe
     ...directTaskQuery(workspaceId, { conversationId, number }),
     enabled: peer !== undefined,
   });
-  const open = useOpenTask("dm", conversationId, number);
+  const { open } = useOpenOtherTask();
   if (peer !== undefined && isPending) return <>{children}</>;
   if (!task || !peer) return <HiddenTaskChip />;
-  return <TaskChip task={task} place={m.tasks_ref_dm({ peer })} onPress={open} />;
+  return (
+    <TaskChip
+      task={task}
+      place={m.tasks_ref_dm({ peer })}
+      onPress={() => open({ kind: "dm", conversationId, number })}
+    />
+  );
 }
 
 /**
@@ -136,18 +146,4 @@ function useDirectPeerHandle(conversationId: string): string | undefined {
   const agent = useLiveAgent(peer?.kind === "agent" ? peer.agentId : "");
   if (!peer) return undefined;
   return peer.kind === "people" ? peer.username : agent?.name;
-}
-
-/** Opens another conversation's Task there. */
-function useOpenTask(kind: "channel" | "dm", conversationId: string, number: number) {
-  const workspaceSlug = useWorkspaceSlug();
-  const navigate = useNavigate();
-  return () =>
-    void navigate({
-      ...conversationRoute(
-        kind === "channel" ? { channelId: conversationId } : { dmId: conversationId },
-        workspaceSlug,
-      ),
-      search: { task: number },
-    });
 }

@@ -71,6 +71,11 @@ These rules apply to `src/features/tasks/`.
   1.2.15 copies every held row into each subset's Query cache on a direct
   write (its docs describe a refetch instead): check that again when upgrading
   it.
+- A Task of another conversation (a label in a message, a related Task) opens
+  over the page it was pressed on, never on its conversation's page: the
+  Workspace layout's `otherTask` search param (`other-task-search.ts`) and its
+  one popup (`OtherTaskPopup`), so it works on every page and Back closes it.
+  It stacks over a popup already open.
 - Cards and list rows carry no status select: the column or group is the
   status. Moves go through drag or the card menu's "Move to" section, which
   both offer every move `getTaskMoveCommand` allows. That helper reads the one

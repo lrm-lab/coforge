@@ -2,6 +2,7 @@ import { Suspense, lazy, useCallback, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Outlet, createFileRoute, notFound, redirect, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
+import { z } from "zod";
 
 import { AppShell } from "#src/components/app-shell";
 import { ComputerUpgradeWatcher } from "#src/features/computers/computer-upgrade-watcher";
@@ -39,6 +40,11 @@ import { useSidebarShortcut } from "#src/features/settings/sidebar-shortcut";
 import { markShownWorkspace, shownWorkspace } from "#src/features/workspaces/shown-workspace";
 import { LeaveDeletedWorkspace } from "#src/features/workspaces/leave-deleted-workspace";
 import { ReferencedTasksRealtime } from "#src/features/tasks/referenced-task";
+import {
+  otherTaskParamSchema,
+  parseOtherTask,
+  useOtherTaskParam,
+} from "#src/features/tasks/other-task-search";
 import { getStartPage } from "#src/features/workspaces/last-location.functions";
 import { rememberQueryCache } from "#src/features/cache-persistence/browser-query-cache";
 import { nameStepRedirect } from "#src/features/auth/name-step-redirect";
@@ -51,8 +57,16 @@ const OnboardingWizard = lazy(() =>
   })),
 );
 
+// Only a press on another conversation's Task loads the conversation UI on a page without one.
+const OtherTaskPopup = lazy(() =>
+  import("#src/features/tasks/other-task-popup").then((module) => ({
+    default: module.OtherTaskPopup,
+  })),
+);
+
 export const Route = createFileRoute("/w/$workspaceSlug")({
   staleTime: Infinity,
+  validateSearch: z.object({ otherTask: otherTaskParamSchema }),
   beforeLoad: async ({ params, context, preload, location }) => {
     // A malformed slug names no Workspace; server calls would fall back to the remembered one.
     if (!isValidWorkspaceSlug(params.workspaceSlug)) throw notFound();
@@ -158,6 +172,7 @@ function AppLayout() {
   const getConnectionToken = useCallback(() => getRealtimeToken(), [getRealtimeToken]);
   const navigate = useNavigate();
   const createAndOpen = useCreateAndOpenWorkspace();
+  const otherTask = parseOtherTask(useOtherTaskParam());
   return (
     <TimeFormatProvider timeFormat={timeFormat}>
       <TimeZoneProvider saved={timeZone}>
@@ -233,6 +248,11 @@ function AppLayout() {
                       onSignOut={() => void signOut()}
                     >
                       <Outlet />
+                      {otherTask && (
+                        <Suspense fallback={null}>
+                          <OtherTaskPopup task={otherTask} />
+                        </Suspense>
+                      )}
                     </AppShell>
                   </NotificationActivationContext>
                 </PanelTabOrderProvider>
