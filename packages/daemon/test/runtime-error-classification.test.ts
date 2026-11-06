@@ -306,8 +306,8 @@ test.each([
   "Premium credits exhausted",
   "Premium requests used up. Pick a standard model.",
   "Spend limit reached",
-  // Devin's organization-level cap is a monthly budget, not a rolling window.
-  "Organization usage limit reached",
+  // Devin's organization-level cap is a monthly budget, not a rolling window; its real
+  // wording names the month. A bare "organization … usage limit" has no balance sample.
   "Your organization has reached its monthly usage limit.",
 ])("balance-exhausted wording is terminal and offline, without a named action: %s", (message) => {
   expect(classifyRuntimeErrorText(message)).toEqual({
@@ -321,6 +321,8 @@ test.each([
 
 test.each([
   "Usage limit reached",
+  // Organization-only wording has no observed balance sample, so it stays a retryable window.
+  "Organization usage limit reached",
   "You've reached today's limit on grok-4",
   "You've reached your weekly usage limit",
   "You've hit your usage limit",

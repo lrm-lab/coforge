@@ -83,8 +83,10 @@ export const RUNTIME_BALANCE_EXHAUSTED_PATTERNS = [
   /\bpremium requests used up\b/i,
   /\bspend limit reached\b/i,
   // Devin's org-level cap is a monthly budget an admin set, not a rolling window: it lifts only
-  // when the month turns or the budget grows, so it is balance, not a window limit.
-  /\b(?:organization|monthly)\b[^.\n]{0,40}\busage limit\b/i,
+  // when the month turns or the budget grows, so it is balance, not a window limit. Its real
+  // wording ("Your organization has reached its monthly usage limit.") names the month; a bare
+  // "organization … usage limit" has no observed balance sample and may be a rolling org window.
+  /\bmonthly\b[^.\n]{0,40}\busage limit\b/i,
 ];
 
 /** A rolling time window's usage cap running out — a five-hour, daily or weekly window, which
