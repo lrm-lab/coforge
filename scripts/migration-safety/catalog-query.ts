@@ -2,7 +2,7 @@
 // (the migrate image holds the Prisma CLI and Bun, nothing else). Only pg_class sizes leave the
 // database: no row, column value or connection string.
 import { SQL } from "bun";
-import type { Snapshot, TableStat } from "./snapshot";
+import { assertPlausibleTables, type Snapshot, type TableStat } from "./snapshot";
 
 export type CatalogSource = {
   /** Migrations `_prisma_migrations` records as finished; none when the table does not exist yet. */
@@ -24,10 +24,13 @@ export function liveSource(url: string): CatalogSource {
     },
     async tables() {
       // relkind r and p: ordinary and partitioned tables. reltuples is -1 until the first ANALYZE.
-      // A partitioned parent holds no data and reports 0 bytes and -1 rows: it is the sum of its
-      // leaf partitions (rows -1 when none has been analysed).
+      // pg_partition_tree returns no rows for an ordinary table, so only a partitioned parent
+      // (relkind p, which holds no data itself) is sized as the sum of its leaf partitions; every
+      // other table reports its own reltuples and total size.
       const rows = await sql`
-        SELECT n.nspname AS schema, c.relname AS name, s.rows, s.bytes
+        SELECT n.nspname AS schema, c.relname AS name,
+               CASE WHEN c.relkind = 'p' THEN s.rows ELSE c.reltuples::bigint END AS rows,
+               CASE WHEN c.relkind = 'p' THEN s.bytes ELSE pg_total_relation_size(c.oid) END AS bytes
         FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
         CROSS JOIN LATERAL (
           SELECT CASE WHEN bool_or(l.reltuples >= 0) THEN sum(greatest(l.reltuples, 0)) ELSE -1 END::bigint AS rows,
@@ -59,11 +62,13 @@ export function liveSource(url: string): CatalogSource {
 export async function liveSnapshot(url: string, environment: string, now: Date): Promise<Snapshot> {
   const source = liveSource(url);
   try {
+    const tables = await source.tables();
+    assertPlausibleTables(tables);
     return {
       version: 1,
       generatedAt: now.toISOString(),
       environment,
-      tables: await source.tables(),
+      tables,
     };
   } finally {
     await source.close();

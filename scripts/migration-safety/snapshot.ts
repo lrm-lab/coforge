@@ -70,6 +70,15 @@ export function catalogOf(snapshot: Pick<Snapshot, "tables">): Catalog {
 export const isLarge = (stat: Pick<TableStat, "approxRows" | "totalBytes">): boolean =>
   stat.approxRows >= LARGE_ROWS || stat.totalBytes >= LARGE_BYTES;
 
+/** Throws when every table reports zero bytes: the signature of a catalog read that returned
+ * nothing (a broken query or the wrong database), not of an empty database — a real schema's
+ * tables each hold at least their fork files. Such a "snapshot" must not be uploaded or judged:
+ * every table would read as small. */
+export function assertPlausibleTables(tables: TableStat[]): void {
+  if (tables.every((table) => table.totalBytes === 0))
+    throw new Error("the catalog reports every table as zero bytes");
+}
+
 export function snapshotAgeDays(snapshot: Snapshot, now: Date): number {
   return (now.getTime() - Date.parse(snapshot.generatedAt)) / 86_400_000;
 }

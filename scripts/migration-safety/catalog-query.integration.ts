@@ -27,7 +27,10 @@ test("a partitioned table is the sum of its partitions, a plain table is itself"
     CREATE TABLE part_b PARTITION OF parent FOR VALUES FROM (1000) TO (2000);
     INSERT INTO parent SELECT g, repeat('x', 100) FROM generate_series(0, 1999) g;
     CREATE TABLE plain (id int);
+    INSERT INTO plain SELECT g FROM generate_series(1, 50) g;
     ANALYZE`);
+  // Created after ANALYZE: reltuples stays -1, the "no estimate" marker.
+  await db.unsafe(`CREATE TABLE fresh (id int); INSERT INTO fresh VALUES (1);`);
   await db.close();
 
   const source = liveSource(url.toString());
@@ -38,8 +41,12 @@ test("a partitioned table is the sum of its partitions, a plain table is itself"
       byName.get("part_a")!.totalBytes + byName.get("part_b")!.totalBytes,
     );
     expect(byName.get("parent")!.totalBytes).toBeGreaterThan(0);
-    // Never analysed and empty: no row estimate (-1) and no bytes, so it is small.
-    expect(byName.get("plain")).toMatchObject({ approxRows: -1, totalBytes: 0 });
+    // An ordinary table reports its own stats: ~50 rows and real bytes. Under the old query
+    // (pg_partition_tree over an empty set) both would read -1 and 0.
+    expect(byName.get("plain")!.approxRows).toBeGreaterThan(0);
+    expect(byName.get("plain")!.totalBytes).toBeGreaterThan(0);
+    expect(byName.get("fresh")!.approxRows).toBe(-1);
+    expect(byName.get("fresh")!.totalBytes).toBeGreaterThan(0);
   } finally {
     await source.close();
   }
