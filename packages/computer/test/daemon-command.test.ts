@@ -205,7 +205,7 @@ test("starting a Workspace the cloud removed this Computer from names the setup 
     code: "COMPUTER_UNLINKED",
     message:
       "This Computer was removed from Workspace acme in CoForge (computer_unlinked). This Computer stopped connecting to it and stopped its Agents; local files are kept.",
-    hint: "Run 'coforge-computer setup --workspace acme' to attach it again.",
+    hint: "Run 'coforge-computer detach --workspace acme' to remove the stale binding, then 'coforge-computer setup --workspace acme' to attach it again.",
   });
 });
 

@@ -90,7 +90,8 @@ export function workspaceParkedRecovery(
   const selector = workspace.workspaceSlug ?? workspace.workspaceId;
   if (reason === "workspace_deleted")
     return `Run 'coforge-computer setup --workspace <workspace-slug>' to attach this Computer to another Workspace, or 'coforge-computer stop --workspace ${selector}' to stop this binding.`;
-  return `Run 'coforge-computer setup --workspace ${workspace.workspaceSlug ?? "<workspace-slug>"}' to attach it again.`;
+  const slug = workspace.workspaceSlug ?? "<workspace-slug>";
+  return `Run 'coforge-computer detach --workspace ${slug}' to remove the stale binding, then 'coforge-computer setup --workspace ${slug}' to attach it again.`;
 }
 
 /** The one sentence every surface uses to report a parked Workspace: the description, then the

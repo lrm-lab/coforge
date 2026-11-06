@@ -287,7 +287,7 @@ test("renderStatusHuman states why a Workspace is parked and the setup command t
 
   expect(text).toContain("    parked: computer_unlinked  since=2026-09-29T08:00:00.000Z");
   expect(text).toContain(
-    "      This Computer was removed from Workspace acme in CoForge (computer_unlinked). This Computer stopped connecting to it and stopped its Agents; local files are kept. Run 'coforge-computer setup --workspace acme' to attach it again.",
+    "      This Computer was removed from Workspace acme in CoForge (computer_unlinked). This Computer stopped connecting to it and stopped its Agents; local files are kept. Run 'coforge-computer detach --workspace acme' to remove the stale binding, then 'coforge-computer setup --workspace acme' to attach it again.",
   );
 });
 
