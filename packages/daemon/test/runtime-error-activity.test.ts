@@ -61,6 +61,19 @@ test("prefers provider-supplied error class/code/reason hints when present", () 
   });
 });
 
+test("a classified quota exhaustion reports its own reason over a provider hint", () => {
+  const activity = buildRuntimeErrorActivity({
+    type: "error",
+    message: "you've hit your usage limit",
+    providerErrorClass: "CodexTurnError",
+    providerErrorReason: "turn_failed",
+  });
+  expect(activity.runtimeError).toMatchObject({
+    errorClass: "CodexTurnError",
+    errorReason: "quota_exhausted",
+  });
+});
+
 test("falls back to providerErrorCode for errorClass when no providerErrorClass is given", () => {
   const activity = buildRuntimeErrorActivity({
     type: "error",

@@ -255,6 +255,70 @@ test("activity preserves its group through decoding and never merges different g
   ]);
 });
 
+function usageLimitError(clientSeq: number, resetsAt?: string): ActivityEntry {
+  return {
+    ...entry(clientSeq),
+    detailKind: "runtime_error",
+    level: "error",
+    detail: resetsAt ? `Usage limit hit (limit resets at ${resetsAt})` : "Usage limit hit",
+    runtimeError: {
+      errorClass: "RateLimitError",
+      errorReason: "quota_exhausted",
+      fingerprint: "0123abcd",
+    },
+  };
+}
+
+test("consecutive usage-limit retries present as one row with reset and attempt count", () => {
+  const rows = presentActivityRows([
+    usageLimitError(4, "2030-01-01T00:00:00.000Z"),
+    {
+      ...entry(3),
+      detailKind: "model_request_started",
+      level: "info",
+      detail: "Waiting for model response",
+    },
+    usageLimitError(2, "2030-01-01T00:00:00.000Z"),
+    usageLimitError(1, "2030-01-01T00:00:00.000Z"),
+  ]);
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toMatchObject({ label: "Usage limit reached", tone: "error" });
+  expect(rows[0].detail).toMatch(/^resets .+ · 3 attempts$/);
+});
+
+test("a non-limit row between retries closes the usage-limit run", () => {
+  const otherError = {
+    ...entry(3),
+    detailKind: "runtime_error",
+    level: "error",
+    detail: "boom",
+    runtimeError: {
+      errorClass: "AgentRuntimeError",
+      errorReason: "runtime_failure",
+      fingerprint: "fedcba98",
+    },
+  };
+  const rows = presentActivityRows([
+    usageLimitError(4),
+    otherError,
+    usageLimitError(2),
+    usageLimitError(1),
+  ]);
+  expect(rows.map((row) => row.label)).toEqual([
+    "Usage limit reached",
+    "Error",
+    "Usage limit reached",
+  ]);
+  expect(rows[0].detail).toContain("2 attempts");
+  expect(rows[2].detail).toContain("1 attempt");
+});
+
+test("a usage-limit retry without a named reset reads reset time unknown", () => {
+  const rows = presentActivityRows([usageLimitError(2), usageLimitError(1)]);
+  expect(rows).toHaveLength(1);
+  expect(rows[0].detail).toBe("reset time unknown · 2 attempts");
+});
+
 test("group activity keeps its own records while the member feed aggregates all groups", () => {
   const entries = [
     { ...entry(3), conversationId: "beta" },

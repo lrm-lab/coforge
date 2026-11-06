@@ -12,10 +12,15 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import type { StatusTone } from "#src/components/ui/status-dot";
 import { m } from "#src/paraglide/messages";
+import {
+  usageLimitAtomMarks,
+  usageLimitEpisodeRow,
+  type UsageLimitAtomMarks,
+} from "./agent-activity-usage-limit";
 
 export type ActivityObservation = Pick<
   ActivityEntry,
-  "activityKind" | "detailKind" | "detail" | "level" | "entries"
+  "activityKind" | "detailKind" | "detail" | "level" | "entries" | "runtimeError"
 >;
 /** Agent activity tones; `online` is a Computer-only presence tone (see `StatusDot`). */
 export type ActivityTone = Exclude<StatusTone, "online">;
@@ -110,7 +115,10 @@ export function activitySentenceLabel(label: string): string {
  * `send_message` tool call has no row and no `mergeGroup` — it still occupies a slot in
  * the atom sequence, so `presentActivityRows` sees it as a real boundary between two
  * separate statements even though nothing renders for it. */
-type ActivityAtom = { row?: ActivityRow; mergeGroup?: string };
+type ActivityAtom = {
+  row?: ActivityRow;
+  mergeGroup?: string;
+} & UsageLimitAtomMarks;
 
 function presentEntryItem(
   item: ActivityTrajectoryEntry,
@@ -198,6 +206,7 @@ function activityAtoms(observation: ActivityObservation): ActivityAtom[] {
           detailOnOwnLine: false,
           expandable: false,
         },
+        ...usageLimitAtomMarks(observation),
       },
     ];
   }
@@ -334,6 +343,7 @@ function activityAtoms(observation: ActivityObservation): ActivityAtom[] {
         detailOnOwnLine: false,
         expandable: false,
       },
+      ...usageLimitAtomMarks(observation),
     },
   ];
 }
@@ -351,15 +361,16 @@ export type PresentedActivityRow = ActivityRow & {
 };
 
 /**
- * `presentActivity` per activity frame, plus one merge: consecutive text (or thinking)
+ * `presentActivity` per activity frame, plus two merges: consecutive text (or thinking)
  * atoms of the same launch and subagent lineage, with nothing else between them in the
  * true entry sequence (not just the visible rows — a hidden `send_message` tool call
- * still separates them), render as one row. Its text is every fragment concatenated
- * oldest-to-newest with no separator (they are contiguous slices of one stream), its
- * timestamp and key come from the oldest fragment (stable identity while later
- * fragments stream in and extend it), and `currentLabel` reflects the newest fragment.
- * `activity` is newest-first (`orderActivity`); the rows come out oldest first, the order every
- * reader shows them in.
+ * still separates them), render as one row; and a run of usage-limit retries (with only
+ * status filler between them) renders as one "Usage limit reached" row (task #575). A
+ * merged statement's text is every fragment concatenated oldest-to-newest with no
+ * separator, its timestamp and key come from the oldest fragment (stable identity while
+ * later fragments stream in and extend it), and `currentLabel` reflects the newest
+ * fragment. `activity` is newest-first (`orderActivity`); the rows come out oldest first,
+ * the order every reader shows them in.
  */
 export function presentActivityRows(activity: readonly ActivityEntry[]): PresentedActivityRow[] {
   const chronological = [...activity].reverse().flatMap((entry) =>
@@ -370,13 +381,40 @@ export function presentActivityRows(activity: readonly ActivityEntry[]): Present
       mergeGroup: atom.mergeGroup
         ? `${entry.launchId}:${entry.conversationId ?? ""}:${atom.mergeGroup}`
         : undefined,
+      usageLimit: atom.usageLimit,
+      usageLimitFiller: atom.usageLimitFiller,
       observedAtMs: entry.observedAtMs,
       key: `${entry.launchId}:${entry.clientSeq}:${itemIndex}`,
     })),
   );
   const merged: PresentedActivityRow[] = [];
   let openGroup: string | undefined;
+  // A run of usage-limit retries and the status filler between them presents as one row;
+  // any other atom closes the run (task #575).
+  let limitEpisode: { index: number; attempts: number; resetsAt?: string } | undefined;
   for (const atom of chronological) {
+    if (atom.usageLimit) {
+      if (limitEpisode) {
+        limitEpisode.attempts += 1;
+        if (atom.usageLimit.resetsAt !== undefined)
+          limitEpisode.resetsAt = atom.usageLimit.resetsAt;
+        merged[limitEpisode.index] = usageLimitEpisodeRow(
+          merged[limitEpisode.index],
+          limitEpisode.attempts,
+          limitEpisode.resetsAt,
+        );
+      } else {
+        limitEpisode = { index: merged.length, attempts: 1, resetsAt: atom.usageLimit.resetsAt };
+        merged.push(usageLimitEpisodeRow(atom, 1, atom.usageLimit.resetsAt));
+      }
+      openGroup = atom.mergeGroup;
+      continue;
+    }
+    if (limitEpisode && atom.usageLimitFiller) {
+      openGroup = atom.mergeGroup;
+      continue;
+    }
+    limitEpisode = undefined;
     if (atom.mergeGroup && atom.mergeGroup === openGroup) {
       const last = merged[merged.length - 1];
       const detail = last.detail + (atom.row?.detail ?? "");

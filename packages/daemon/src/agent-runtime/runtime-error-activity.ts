@@ -62,9 +62,16 @@ function reportedClassification(
     const { errorClass, errorReason } = classification();
     return { errorClass, errorReason };
   }
+  const result = classification();
   return {
-    errorClass: event.providerErrorClass ?? event.providerErrorCode ?? classification().errorClass,
-    errorReason: event.providerErrorReason ?? classification().errorReason,
+    errorClass: event.providerErrorClass ?? event.providerErrorCode ?? result.errorClass,
+    // A classified quota exhaustion is the failure's reason even when the provider also hints a
+    // transport-level one ("turn_failed"): the hint would hide the limit from readers that group
+    // consecutive retries by reason (task #575).
+    errorReason:
+      result.errorReason === "quota_exhausted"
+        ? result.errorReason
+        : (event.providerErrorReason ?? result.errorReason),
   };
 }
 

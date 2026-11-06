@@ -20,6 +20,9 @@ type CompactActivity = {
   level: string;
   detail: string;
   entries: unknown;
+  runtimeErrorClass: string | null;
+  runtimeErrorReason: string | null;
+  runtimeErrorFingerprint: string | null;
   occurredAt: Date;
   createdAt: Date;
   slot: bigint;
@@ -157,6 +160,9 @@ export class AgentActivityRepository {
             activity."level",
             activity."detail",
             activity."entries",
+            activity."runtimeErrorClass",
+            activity."runtimeErrorReason",
+            activity."runtimeErrorFingerprint",
             activity."occurredAt",
             activity."createdAt"
           FROM "agent_activities" AS activity
@@ -180,6 +186,9 @@ export class AgentActivityRepository {
         compact."level",
         compact."detail",
         compact."entries",
+        compact."runtimeErrorClass",
+        compact."runtimeErrorReason",
+        compact."runtimeErrorFingerprint",
         compact."occurredAt",
         compact."createdAt",
         compact.slot
@@ -210,6 +219,9 @@ export class AgentActivityRepository {
           level,
           detail,
           entries,
+          runtimeErrorClass,
+          runtimeErrorReason,
+          runtimeErrorFingerprint,
           occurredAt,
           createdAt,
         }) => ({
@@ -222,6 +234,15 @@ export class AgentActivityRepository {
           detail,
           activityKind: activityKind({ detailKind, level }),
           entries: entries === null ? [] : parseActivityEntries(entries),
+          ...(runtimeErrorClass
+            ? {
+                runtimeError: {
+                  errorClass: runtimeErrorClass,
+                  errorReason: runtimeErrorReason ?? "",
+                  fingerprint: runtimeErrorFingerprint ?? "",
+                },
+              }
+            : {}),
           observedAtMs: occurredAt.getTime(),
           createdAt,
         }),

@@ -93,6 +93,17 @@ Agent 下线（见下节）。`window_limit` 是滚动时间窗的用量上限�
 `code-agent/*/provider.ts` 文件再自行构造 `runtime_error`/`runtime_crashed`/
 `runtime_reconnecting` 的 Activity。
 
+连续的限额重试在网页动态里合成一行（#575，对齐 Raft 1.0.63 的 `noteUsageLimit` 与
+turn summary `usageLimit`；我们没有 turn summary，逐次重试的 `runtime_error` 行
+本身就是每轮记录）：`runtimeError.errorReason` 为 `quota_exhausted` 的
+`runtime_error` 行计为一次限额重试；相邻两次之间只隔纯状态填充（idle、等待模型
+响应、工具/思考结束、重连中）时合并为一行 `Usage limit reached`，附注最新的重置
+时间（取 detail 末尾的 `(limit resets at <ISO>)`，无则 "reset time unknown"）与
+尝试次数。任何内容行、其他错误或生命周期行都结束这次合并；agent 卡片的
+Recent activity 走同一合成（仓库查询一并返回 runtimeError 分类列）。分类出的
+`quota_exhausted` reason 不被 provider 的自由提示（如 Codex `turn_failed`）覆盖，
+保证按 reason 归组的读者不会漏掉限额重试。
+
 Pi 和内置 CoForge Agent 将 SDK 的 `auto_retry_start` 与 `summarization_retry_scheduled`
 上报为 `reconnecting`，保留 attempt、maxAttempts、delayMs 与原始错误。核心在带退避事实时
 生成含重试次数和退避时长的说明，并脱敏、截断到 512 个 Unicode 码点；不把尚在重试的
