@@ -75,6 +75,8 @@ export const finishedSummaryQuery = (
   scope: FinishedTasksScope,
   window: FinishedWindow,
   labels: readonly string[] = [],
+  /** The board's Project pick, which says which sub-tasks count under their parent's card. */
+  projects: readonly string[] = [],
 ) =>
   queryOptions({
     queryKey: [
@@ -82,6 +84,7 @@ export const finishedSummaryQuery = (
       "summary",
       window,
       ...(labels.length ? [labels] : []),
+      ...(projects.length ? [{ projects }] : []),
     ],
     queryFn: () =>
       loadFinishedTaskSummary({
@@ -89,6 +92,7 @@ export const finishedSummaryQuery = (
           window,
           conversationId: scope.conversationId,
           ...(labels.length > 0 && { labels: [...labels] }),
+          ...(projects.length > 0 && { projects: [...projects] }),
         },
       }),
     staleTime: FINISHED_TASKS_STALE_MS,
@@ -140,7 +144,7 @@ export function useFinishedTasks<T extends TaskView>({
 }): FinishedTasks<T | OverviewTaskRow> {
   const queryClient = useQueryClient();
   const summary = useQuery({
-    ...finishedSummaryQuery(scope, window, filter.labels),
+    ...finishedSummaryQuery(scope, window, filter.labels, filter.projects),
     enabled,
     // Another window keeps the old counts on screen until its own arrive.
     placeholderData: keepPreviousData,

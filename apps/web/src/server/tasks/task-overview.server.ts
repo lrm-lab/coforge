@@ -39,6 +39,10 @@ export type TaskOverview = {
        * icon, null when it has none.
        */
       project: { id: string; name: string; slug: string; iconUrl: string | null } | null;
+      /** On a sub-task whose parent the reader may see (and live): that parent's Project, or null
+       * for none. A board shows the sub-task under its parent's card when the parent is within
+       * its Project pick (task #596); absent on any other Task. */
+      parentProjectId?: string | null;
       /** The Tasks waiting for this one, and its subtasks as a tree, as `show` reads them. */
       blocking?: TaskLink[];
       subtree?: TaskTreeNode[];
@@ -128,16 +132,36 @@ function finishedFilterWhere({ owners = [], projects = [], labels = [] }: Finish
       ],
     });
   }
-  if (projects.length > 0) {
-    const ids = projects.filter((id) => id !== NONE);
-    where.push({
-      OR: [
-        ...(projects.includes(NONE) ? [{ projectId: null }] : []),
-        ...(ids.length > 0 ? [{ projectId: { in: ids } }] : []),
-      ],
-    });
-  }
+  if (projects.length > 0) where.push(projectPickWhere(projects));
   return where;
+}
+
+/** The Project pick as a Task filter: the picked Projects, and no Project for `none`. */
+function projectPickWhere(projects: readonly string[]): Prisma.TaskWhereInput {
+  const ids = projects.filter((id) => id !== NONE);
+  return {
+    OR: [
+      ...(projects.includes(NONE) ? [{ projectId: null }] : []),
+      ...(ids.length > 0 ? [{ projectId: { in: ids } }] : []),
+    ],
+  };
+}
+
+/**
+ * The parent a Workspace board shows a sub-task under (task #596): a live Task the viewer may
+ * read, within the board's Project pick. A sub-task with such a parent is that card's progress;
+ * one whose parent the viewer cannot see, or that is outside the pick, is a card of its own.
+ */
+function shownParentWhere(
+  workspaceId: string,
+  userId: string,
+  projects: readonly string[] = [],
+): Prisma.TaskWhereInput {
+  return {
+    deletedAt: null,
+    conversation: overviewConversationWhere(workspaceId, userId),
+    ...(projects.length > 0 && projectPickWhere(projects)),
+  };
 }
 
 /**
@@ -174,9 +198,23 @@ export class TaskOverviewReads {
       },
       // Newest first: a group renders its first cards, and new work is what gets looked at.
       orderBy: [{ createdAt: "desc" }, { id: "asc" }],
-      select: overviewSelection(userId),
+      select: {
+        ...overviewSelection(userId),
+        parentLinks: {
+          where: { parent: shownParentWhere(workspaceId, userId) },
+          select: { parent: { select: { projectId: true } } },
+        },
+      },
     });
-    return { tasks: await overviewRows(this.db, userId, tasks) };
+    const rows = await overviewRows(this.db, userId, tasks);
+    // Which sub-tasks are cards depends on the board's Project pick, so the board decides; it
+    // reads the parent's Project here (task #596).
+    return {
+      tasks: rows.map((row, index) => {
+        const link = tasks[index]!.parentLinks[0];
+        return link ? { ...row, parentProjectId: link.parent.projectId } : row;
+      }),
+    };
   }
 
   /**
@@ -329,13 +367,12 @@ export class TaskOverviewReads {
     } & FinishedTaskFilter,
   ): Promise<FinishedTaskPage> {
     const { userId } = scope;
-    const readable = await this.finishedTaskWhere(scope);
+    const readable = await this.finishedTaskWhere(scope, query.projects);
     const limit = Math.min(query.limit ?? FINISHED_PAGE_SIZE, FINISHED_PAGE_SIZE);
     const after = query.cursor ? parseFinishedCursor(query.cursor) : null;
     const tasks = await this.db.task.findMany({
       where: {
         ...readable,
-        deletedAt: null,
         status: query.status,
         AND: [
           { updatedAt: { gte: finishedWindowStart(query.window) } },
@@ -373,10 +410,11 @@ export class TaskOverviewReads {
   async finishedSummary(
     scope: FinishedTaskScope,
     // The label pick narrows the counts; owners and Projects are counted per group, as before.
-    query: { window: FinishedTaskWindow; labels?: readonly string[] },
+    // The Project pick only says which parents' sub-tasks are under their cards (task #596).
+    query: { window: FinishedTaskWindow; labels?: readonly string[]; projects?: readonly string[] },
   ): Promise<FinishedTaskSummary> {
     const { workspaceId, userId } = scope;
-    const readable = await this.finishedTaskWhere(scope);
+    const readable = await this.finishedTaskWhere(scope, query.projects);
     const rows = await this.db.task.groupBy({
       by: ["status", "ownerMemberId", "projectId"],
       where: {
@@ -430,14 +468,24 @@ export class TaskOverviewReads {
    * The Tasks a finished-work read may cover: the Workspace Tasks page's conversations, or one
    * conversation the viewer may list the Tasks of (as `list` allows).
    */
-  private async finishedTaskWhere(scope: FinishedTaskScope): Promise<Prisma.TaskWhereInput> {
+  private async finishedTaskWhere(
+    scope: FinishedTaskScope,
+    projects?: readonly string[],
+  ): Promise<Prisma.TaskWhereInput> {
     const { workspaceId, userId, conversationId } = scope;
     if (!conversationId) {
       await requireWorkspaceMember(this.db, workspaceId, userId);
-      return { workspaceId, conversation: overviewConversationWhere(workspaceId, userId) };
+      return {
+        workspaceId,
+        deletedAt: null,
+        conversation: overviewConversationWhere(workspaceId, userId),
+        // A sub-task shown under its parent's card is neither a card nor a count (task #596).
+        parentLinks: { none: { parent: shownParentWhere(workspaceId, userId, projects) } },
+      };
     }
     return {
       workspaceId,
+      deletedAt: null,
       conversationId: await this.access.listableConversation(
         { workspaceId, userId },
         conversationId,

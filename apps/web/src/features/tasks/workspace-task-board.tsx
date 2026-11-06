@@ -54,9 +54,24 @@ export function WorkspaceTaskBoard({
   );
   const workspaceId = useCurrentWorkspaceId() ?? "";
   const router = useRouter();
+  // A sub-task is its parent's progress, not a card, when its parent is on this board too: one the
+  // viewer may read, within the board's Project pick (task #596). The server applies the same
+  // rule to Done and Closed and their counts.
+  const projectPick = useMemo(
+    () => (project ? [project] : view.filter.projects),
+    [project, view.filter.projects],
+  );
   const tasks = useMemo(
-    () => (project ? all.filter((task) => task.project?.id === project) : all),
-    [all, project],
+    () =>
+      all.filter(
+        (task) =>
+          (!project || task.project?.id === project) &&
+          !(
+            task.parentProjectId !== undefined &&
+            (projectPick.length === 0 || projectPick.includes(task.parentProjectId ?? "none"))
+          ),
+      ),
+    [all, project, projectPick],
   );
   const finished = useFinishedTasks({
     scope: { workspaceId },

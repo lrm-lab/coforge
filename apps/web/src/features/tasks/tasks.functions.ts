@@ -88,12 +88,20 @@ const finishedScope = {
 /** Finished Tasks counted by status, owner and Project for the chosen window. */
 export const loadFinishedTaskSummary = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
-  .validator(z.object(finishedScope).strict())
+  .validator(
+    z
+      .object({
+        ...finishedScope,
+        // The board's Project pick: which parents' sub-tasks count under their cards (task #596).
+        projects: z.array(z.string().min(1).max(64)).max(100).optional(),
+      })
+      .strict(),
+  )
   .handler(async ({ context, data }) => {
     const { user, db, workspaceId } = context;
     return new TaskBoard(db).finishedSummary(
       { workspaceId, userId: user.id, conversationId: data.conversationId },
-      { window: data.window, labels: data.labels },
+      { window: data.window, labels: data.labels, projects: data.projects },
     );
   });
 

@@ -128,7 +128,7 @@ export class TaskBoard {
 
   finishedSummary(
     scope: FinishedTaskScope,
-    query: { window: FinishedTaskWindow; labels?: readonly string[] },
+    query: { window: FinishedTaskWindow; labels?: readonly string[]; projects?: readonly string[] },
   ) {
     return this.overviewReads.finishedSummary(scope, query);
   }
