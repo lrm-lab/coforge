@@ -128,20 +128,15 @@ test("an owner hides #general from its panel and restores it from Settings → M
       await browser("eval", `document.querySelector('input[type="checkbox"]').checked`),
     ).toContain("true");
     await browser("screenshot", join(artifacts, "system-channels.png"));
-    // Unticking only counts once the form is dirty: a click that lands before hydration flips
-    // the DOM box but not React's draft — it snaps back on hydrate and Save stays disabled,
-    // which the saved-wait below would read as done while the setting is still hidden.
-    const saveButton = `[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Save")`;
-    const dirty = `Boolean(${saveButton} && !${saveButton}.disabled)`;
-    for (let attempt = 0; attempt < 10; attempt++) {
-      if ((await browser("eval", dirty)).includes("true")) break;
-      await browser("click", 'label:has(input[type="checkbox"])');
-      await browser("wait", "300");
-    }
-    await waitFor(dirty);
-    await clickText("button", "Save");
+    // The section's own Save: the page has other forms with a "Save" button, and while this one
+    // is saving it reads "Saving…", so a page-wide lookup would find another form's disabled Save
+    // and take the save for finished while its request is still in flight.
+    const saveButton = `[...([...document.querySelectorAll("section")].find((section) => section.querySelector("h2")?.textContent.trim() === "System channels")?.querySelectorAll("button") ?? [])].find((button) => ["Save", "Saving…"].includes(button.textContent.trim()))`;
+    await browser("click", 'label:has(input[type="checkbox"])');
+    await waitFor(`${saveButton}?.disabled === false`);
+    await browser("eval", `${saveButton}.click()`);
     // Saved once the form matches the stored setting again: the box unticked, Save disabled.
-    await waitFor(`Boolean(${saveButton}?.disabled)`);
+    await waitFor(`${saveButton}?.textContent.trim() === "Save" && ${saveButton}.disabled`);
     expect(
       (await db.conversation.findUniqueOrThrow({ where: { id: general.id } }))
         .hiddenFromWorkspaceAt,
