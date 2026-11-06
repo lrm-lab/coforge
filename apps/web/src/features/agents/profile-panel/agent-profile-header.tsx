@@ -8,6 +8,7 @@ import {
 } from "@untitledui/icons";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { AgentProfileActionsMenu } from "./agent-profile-actions-menu";
 import { Popconfirm } from "#src/components/ui/popconfirm";
 import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
 import type { AgentMascot } from "#src/features/agents/agent-mascot";
@@ -24,7 +25,8 @@ import { useOpenDirectConversation } from "#src/features/conversations/open-dire
 /**
  * The panel's first band (48px, the same height as Thread's header): the Agent's identity on the
  * left, bordered icon buttons on the right — Message, Start-or-Stop, Restart/Reset, then a plain
- * Close. Available on every tab (rendered once by the panel shell, not per tab). All four use the
+ * Close. On a narrow panel the three go in one menu (`AgentProfileActionsMenu`), so the name and
+ * the tabs keep the room (Frank, 11-06). Available on every tab (rendered once by the panel shell, not per tab). All four use the
  * official `ButtonUtility` with its `tooltip` prop.
  */
 export function AgentProfileHeader({
@@ -60,11 +62,12 @@ export function AgentProfileHeader({
   back?: { label: string; onPress: () => void };
 }) {
   const openDirectConversation = useOpenDirectConversation();
+  const message = () => void openDirectConversation({ agentId: agent.id });
   return (
     // Same 20px gutter as the panel body (px-5): the bordered utility buttons align by box edge,
     // while the borderless Close pulls -mr-1.5 so its glyph lands on the gutter
     // (docs/design/page-skeleton-and-density.md §8 optical alignment).
-    <header className="flex h-12 shrink-0 items-center gap-2 px-5 py-0">
+    <header className="@container/agent-header flex h-12 shrink-0 items-center gap-2 px-5 py-0">
       {back && (
         <ButtonUtility
           icon={ArrowLeft}
@@ -100,44 +103,53 @@ export function AgentProfileHeader({
         {agent.displayName}
       </p>
       {deleted && <DeletedAgentBadge />}
-      {canMessage && (
-        <ButtonUtility
-          icon={MessageSquare}
-          size="sm"
-          tooltip={m.agent_profile_panel_message()}
-          onClick={() => void openDirectConversation({ agentId: agent.id })}
+      {(canMessage || !deleted) && (
+        <AgentProfileActionsMenu
+          className="flex @lg/agent-header:hidden"
+          onMessage={canMessage ? message : undefined}
+          controls={deleted ? undefined : controls}
         />
       )}
-      {!deleted && (
-        <>
-          {/* One trigger for both states, so keyboard focus stays on it when Start becomes Stop;
-              Stop asks first, Start has nothing to confirm. */}
-          <Popconfirm
-            isDisabled={!controls.isOnline}
-            title={m.agent_control_stop_dialog_title()}
-            description={m.agent_control_stop_message({ name: controls.agentName })}
-            confirmLabel={m.agent_control_stop_confirm()}
-            pendingLabel={m.agent_control_stop_pending()}
-            errorMessage={agentControlFailureMessage}
-            placement="bottom end"
-            onConfirm={controls.stop}
-          >
-            <ButtonUtility
-              icon={controls.isOnline ? Stop : Play}
-              size="sm"
-              isDisabled={controls.startStopBusy}
-              tooltip={controls.isOnline ? m.agent_control_stop_agent() : m.agent_control_start()}
-              onClick={controls.isOnline ? undefined : controls.submitStart}
-            />
-          </Popconfirm>
+      <div className="hidden items-center gap-2 @lg/agent-header:flex">
+        {canMessage && (
           <ButtonUtility
-            icon={RotateCcw}
+            icon={MessageSquare}
             size="sm"
-            tooltip={m.agent_control_restart_reset_tooltip()}
-            onClick={() => controls.openRestart("restart")}
+            tooltip={m.agent_profile_panel_message()}
+            onClick={message}
           />
-        </>
-      )}
+        )}
+        {!deleted && (
+          <>
+            {/* One trigger for both states, so keyboard focus stays on it when Start becomes Stop;
+                Stop asks first, Start has nothing to confirm. */}
+            <Popconfirm
+              isDisabled={!controls.isOnline}
+              title={m.agent_control_stop_dialog_title()}
+              description={m.agent_control_stop_message({ name: controls.agentName })}
+              confirmLabel={m.agent_control_stop_confirm()}
+              pendingLabel={m.agent_control_stop_pending()}
+              errorMessage={agentControlFailureMessage}
+              placement="bottom end"
+              onConfirm={controls.stop}
+            >
+              <ButtonUtility
+                icon={controls.isOnline ? Stop : Play}
+                size="sm"
+                isDisabled={controls.startStopBusy}
+                tooltip={controls.isOnline ? m.agent_control_stop_agent() : m.agent_control_start()}
+                onClick={controls.isOnline ? undefined : controls.submitStart}
+              />
+            </Popconfirm>
+            <ButtonUtility
+              icon={RotateCcw}
+              size="sm"
+              tooltip={m.agent_control_restart_reset_tooltip()}
+              onClick={() => controls.openRestart("restart")}
+            />
+          </>
+        )}
+      </div>
       <ButtonUtility
         icon={X}
         size="sm"

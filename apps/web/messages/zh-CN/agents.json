@@ -302,5 +302,6 @@
   "agent_form_runtime_unavailable_unusable": "这个运行时在这台 Computer 上装了但不可用。",
   "agent_form_runtime_unavailable_not_shared": "这个运行时在这台 Computer 上没有共享给你。",
   "agent_form_runtime_unavailable_model_missing": "这个模型不在 Computer 的目录里。",
-  "agent_form_runtime_unavailable_fast_mode": "这个运行时不支持快速模式。"
+  "agent_form_runtime_unavailable_fast_mode": "这个运行时不支持快速模式。",
+  "agent_profile_actions": "智能体操作"
 }
