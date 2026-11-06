@@ -8,7 +8,8 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
 
 /**
  * An Agent's profile keeps Message, Start or Stop, and Restart in its header while the panel has
- * room for them, and in one menu when it does not (Frank, 11-06). Screenshots, light, dark and
+ * room for them; when it does not, Message stays and the other two go in one menu.
+ * Screenshots, light, dark and
  * phone, are written under `.amp/e2e/agent-profile-actions/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
@@ -54,11 +55,12 @@ test("a narrow profile keeps its actions in one menu", async () => {
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1100", "800");
     await browser("open", page);
-    await browser("wait", "--fn", `${pageHydrated} && ${visible("Agent actions")}`);
-    // Narrow: the menu, and none of the three buttons.
-    expect(await evaluate<boolean>(visible("Message"))).toBe(false);
+    await browser("wait", "--fn", `${pageHydrated} && ${visible("More actions")}`);
+    // Narrow: Message stays, and the menu holds the other two.
+    expect(await evaluate<boolean>(visible("Message"))).toBe(true);
+    expect(await evaluate<boolean>(visible("Restart / Reset"))).toBe(false);
     await shots("narrow");
-    await browser("click", `button[aria-label="Agent actions"]`);
+    await browser("click", `button[aria-label="More actions"]`);
     await browser("wait", "--fn", `document.querySelector('[role="menu"]') !== null`);
     await shots("narrow-menu");
     await browser("press", "Escape");
@@ -67,7 +69,7 @@ test("a narrow profile keeps its actions in one menu", async () => {
     // Phone.
     await browser("set", "viewport", "390", "844");
     await browser("open", page);
-    await browser("wait", "--fn", `${pageHydrated} && ${visible("Agent actions")}`);
+    await browser("wait", "--fn", `${pageHydrated} && ${visible("More actions")}`);
     await shots("phone");
   } finally {
     await browser("close").catch(() => undefined);

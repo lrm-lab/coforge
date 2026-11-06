@@ -301,5 +301,5 @@
   "agent_form_runtime_unavailable_not_shared": "That runtime is not shared with you on this Computer.",
   "agent_form_runtime_unavailable_model_missing": "That model is not in the Computer’s catalog.",
   "agent_form_runtime_unavailable_fast_mode": "Fast mode is not available on that runtime.",
-  "agent_profile_actions": "Agent actions"
+  "agent_profile_actions": "More actions"
 }

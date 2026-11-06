@@ -21,8 +21,8 @@ import { useOpenDirectConversation } from "#src/features/conversations/open-dire
 /**
  * The panel's first band (48px, the same height as Thread's header): the Agent's identity on the
  * left, bordered icon buttons on the right — Message, Start-or-Stop, Restart/Reset, then a plain
- * Close. On a narrow panel the three go in one menu (`AgentProfileActionsMenu`), so the name and
- * the tabs keep the room (Frank, 11-06). Available on every tab (rendered once by the panel shell, not per tab). All four use the
+ * Close. On a narrow panel Message stays and the other two go in one menu
+ * (`AgentProfileActionsMenu`), as in Raft, so the name keeps the room. Available on every tab (rendered once by the panel shell, not per tab). All four use the
  * official `ButtonUtility` with its `tooltip` prop.
  */
 export function AgentProfileHeader({
@@ -99,14 +99,7 @@ export function AgentProfileHeader({
         {agent.displayName}
       </p>
       {deleted && <DeletedAgentBadge />}
-      {(canMessage || !deleted) && (
-        <AgentProfileActionsMenu
-          className="flex @lg/agent-header:hidden"
-          onMessage={canMessage ? message : undefined}
-          controls={deleted ? undefined : controls}
-        />
-      )}
-      <div className="hidden items-center gap-2 @lg/agent-header:flex">
+      <div className="flex items-center gap-2">
         {canMessage && (
           <ButtonUtility
             icon={MessageSquare}
@@ -117,10 +110,12 @@ export function AgentProfileHeader({
         )}
         {!deleted && (
           <>
+            <AgentProfileActionsMenu className="flex @lg/agent-header:hidden" controls={controls} />
             {/* One trigger for both states, so keyboard focus stays on it when Start becomes Stop. */}
             <ButtonUtility
               icon={controls.isOnline ? Stop : Play}
               size="sm"
+              className="hidden @lg/agent-header:inline-flex"
               isDisabled={controls.startStopBusy}
               tooltip={controls.isOnline ? m.agent_control_stop_agent() : m.agent_control_start()}
               onClick={controls.isOnline ? controls.submitStop : controls.submitStart}
@@ -128,6 +123,7 @@ export function AgentProfileHeader({
             <ButtonUtility
               icon={RotateCcw}
               size="sm"
+              className="hidden @lg/agent-header:inline-flex"
               tooltip={m.agent_control_restart_reset_tooltip()}
               onClick={() => controls.openRestart("restart")}
             />
