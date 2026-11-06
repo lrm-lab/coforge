@@ -72,10 +72,12 @@ jobs:
             echo "## Scheduled suites (informational — they never block a deploy)"
             echo ""
             for workflow in web-e2e.yml web-integration.yml; do
+              # Informational only: a transient gh failure must not fail the step (bash -e).
               row="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$workflow" \
                 --branch main --status completed --limit 1 \
                 --json conclusion,headSha,createdAt \
-                --jq '.[0] // empty | "\(.conclusion) at \(.headSha[0:9]) (\(.createdAt))"')"
+                --jq '.[0] // empty | "\(.conclusion) at \(.headSha[0:9]) (\(.createdAt))"' \
+                2>/dev/null || echo "query failed")"
               echo "- \`${workflow}\`: ${row:-no completed run}"
             done
           } >> "$GITHUB_STEP_SUMMARY"
