@@ -54,8 +54,10 @@ export function WorkspaceTaskBoard({
   );
   const workspaceId = useCurrentWorkspaceId() ?? "";
   const router = useRouter();
+  // Top-level Tasks only, as the server reads them (task #596): a sub-task announced live, or one
+  // just given a parent, leaves the board too. Its popup still opens by its own read.
   const tasks = useMemo(
-    () => (project ? all.filter((task) => task.project?.id === project) : all),
+    () => all.filter((task) => !task.parent && (!project || task.project?.id === project)),
     [all, project],
   );
   const finished = useFinishedTasks({

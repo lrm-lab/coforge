@@ -1,0 +1,357 @@
+import { expect, test } from "bun:test";
+import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaClient } from "#src/generated/prisma/client";
+import { peopleDirectKey } from "#src/features/conversations/direct-key";
+import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
+import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
+import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
+import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
+import { Labels } from "#src/server/tasks/labels.server";
+import { TaskConversations } from "#src/server/tasks/task-conversations.server";
+import { TaskBoard } from "#src/server/tasks/task-board.server";
+import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+
+/**
+ * The one Task board (task #596) on a Project's Tasks tab and on All tasks, with one realistic
+ * Project seeded — two channels, three people, labels, priorities, sub-tasks, a blocked Task, a
+ * Task in the viewer's DM — and an empty Project with a very long name. Sub-tasks are their
+ * parent's progress, not cards; the DM Task is on All tasks. Screenshots at desktop (light, dark)
+ * and phone. The run's Projects, conversations and people are removed after it; the labels stay
+ * (the Workspace keeps a label once made).
+ * Screenshots are written under `.amp/e2e/project-board/`.
+ */
+const { origin, browserPath, databaseUrl } = localBrowserE2e();
+const artifacts = join(import.meta.dir, "../../../.amp/e2e/project-board");
+
+test("a Project's board and All tasks show top-level Tasks as cards, the viewer's DM Task included", async () => {
+  const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
+  const { browser, evaluate } = browserSession(browserPath, `project-board-${process.pid}`);
+  const board = new TaskBoard(db);
+  const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
+    where: { userId: DEV_BROWSER_USER.id },
+    include: { workspace: { select: { slug: true } } },
+  });
+  const tail = `${process.pid}`.slice(-5);
+  const project = await db.project.create({
+    data: {
+      workspaceId,
+      name: "Spring launch",
+      slug: `spring-launch-${tail}`,
+      description: "Ship the new site and the onboarding flow by April 20.",
+    },
+  });
+  const empty = await db.project.create({
+    data: {
+      workspaceId,
+      name: `River 2.0 工具型 Agent 的端云协同与离线推理能力建设和全链路评测体系 ${tail}`,
+      slug: `river-${tail}`,
+    },
+  });
+  const people = await Promise.all(
+    [
+      ["lin", "Lin Xia"],
+      ["dax", "Dax Moreno"],
+      ["ines", "Ines Okafor"],
+    ].map(([handle, displayName]) =>
+      db.user.create({ data: { username: `${handle}-${tail}`, displayName: displayName! } }),
+    ),
+  );
+  for (const person of people)
+    await db.workspaceMembership.create({ data: { workspaceId, userId: person.id } });
+  const everyone = [DEV_BROWSER_USER.id, ...people.map((person) => person.id)];
+  const channel = (name: string) =>
+    db.conversation.create({
+      data: {
+        workspaceId,
+        channelName: `${name}-${tail}`,
+        description: "",
+        members: { create: everyone.map((userId) => ({ userId })) },
+      },
+    });
+  const site = await channel("site");
+  const ops = await channel("ops");
+  // The viewer's DM with Lin: its Tasks show on All tasks to the two of them only.
+  const dm = await db.conversation.create({
+    data: {
+      workspaceId,
+      directKey: peopleDirectKey(DEV_BROWSER_USER.id, people[0]!.id),
+      members: { create: [{ userId: DEV_BROWSER_USER.id }, { userId: people[0]!.id }] },
+    },
+  });
+  // A Task's comments are its own conversation's messages, which Tasks v2 makes.
+  const experiments = new PrismaExperimentsRepository(db);
+  const before = (await experiments.read(workspaceId)).taskConversations;
+  await experiments.write(workspaceId, "taskConversations", true);
+  const centrifugo = createCentrifugoServerApi();
+  const talk = new TaskConversations({
+    db,
+    reader: "people",
+    dependencies: {
+      publisher: centrifugo,
+      realtime: new CentrifugoConversationRealtime(centrifugo),
+    },
+  });
+  try {
+    const labels = new Labels(db);
+    const as = DEV_BROWSER_USER.id;
+    for (const [name, color] of [
+      ["Design", "pink"],
+      ["Copy", "blue"],
+      ["Infra", "purple"],
+      ["Research", "success"],
+    ] as const)
+      await labels.create(workspaceId, as, { name, color });
+    const [lin, dax, ines] = people.map((person) => `user:${person.id}`);
+    const me = `user:${DEV_BROWSER_USER.id}`;
+    const run = (conversationId: string) => async (command: Record<string, unknown>) =>
+      (
+        await board.execute({ workspaceId, userId: DEV_BROWSER_USER.id }, {
+          idempotencyKey: crypto.randomUUID(),
+          conversationId,
+          ...command,
+        } as Parameters<TaskBoard["execute"]>[1])
+      ).tasks[0]!;
+    const inSite = run(site.id);
+    const inOps = run(ops.id);
+    type Seed = {
+      title: string;
+      status?: "todo" | "in_progress" | "in_review" | "done";
+      priority?: "urgent" | "high" | "medium" | "low";
+      labels?: string[];
+      assignee?: string;
+      steps?: { title: string; done?: boolean }[];
+      blockedBy?: { number: number }[];
+      comments?: number;
+      where?: typeof inSite;
+    };
+    const seed = async ({
+      where = inSite,
+      steps = [],
+      status,
+      priority,
+      comments = 0,
+      ...task
+    }: Seed) => {
+      const made = await where({ operation: "create", project: project.slug, ...task });
+      for (let at = 0; at < comments; at++)
+        await talk.reply(
+          { workspaceId, userId: DEV_BROWSER_USER.id },
+          { conversationId: made.conversationId, number: made.number },
+          { idempotencyKey: crypto.randomUUID(), body: `Note ${at + 1}`, mentions: [] },
+        );
+      for (const step of steps) {
+        // A Task past To do needs an owner.
+        const child = await where({
+          operation: "create",
+          title: step.title,
+          parent: { number: made.number },
+          ...(step.done && { assignee: `user:${DEV_BROWSER_USER.id}` }),
+        });
+        if (step.done) await where({ operation: "update", number: child.number, status: "done" });
+      }
+      if (status) await where({ operation: "update", number: made.number, status });
+      if (priority) await where({ operation: "update", number: made.number, priority });
+      return made;
+    };
+    const steps = (total: number, done: number) =>
+      Array.from({ length: total }, (_, index) => ({
+        title: `Step ${index + 1}`,
+        done: index < done,
+      }));
+    await seed({
+      title: "Draft the onboarding emails",
+      comments: 1,
+      labels: ["Copy"],
+      assignee: lin,
+      steps: steps(4, 0),
+      priority: "medium",
+    });
+    await seed({
+      title: "Audit the pricing page copy",
+      labels: ["Copy"],
+      priority: "low",
+      where: inSite,
+    });
+    await seed({
+      title: "Benchmark three analytics vendors",
+      labels: ["Research"],
+      assignee: dax,
+      priority: "medium",
+      steps: steps(3, 0),
+    });
+    await seed({
+      title: "Order the launch-day status page domain",
+      labels: ["Infra"],
+      priority: "low",
+      where: inOps,
+    });
+    const dns = await seed({
+      title: "Move DNS to the new provider",
+      comments: 4,
+      labels: ["Infra"],
+      status: "in_progress",
+      assignee: dax,
+      priority: "urgent",
+      steps: steps(6, 3),
+      where: inOps,
+    });
+    await seed({
+      title: "Hero illustration, final",
+      comments: 3,
+      labels: ["Design"],
+      status: "in_progress",
+      assignee: ines,
+      priority: "high",
+      steps: steps(5, 4),
+    });
+    await seed({
+      title: "Wire the signup flow to the new API",
+      labels: ["Infra"],
+      status: "in_progress",
+      assignee: me,
+      priority: "high",
+      blockedBy: [{ number: dns.number }],
+      steps: steps(4, 2),
+      where: inOps,
+    });
+    await seed({
+      title: "Launch blog post",
+      comments: 2,
+      labels: ["Copy"],
+      status: "in_review",
+      assignee: lin,
+      priority: "medium",
+      steps: steps(3, 3),
+    });
+    await seed({
+      title: "Accessibility pass on the pricing table",
+      labels: ["Design"],
+      status: "in_review",
+      assignee: ines,
+      priority: "high",
+    });
+    await seed({
+      title: "Pick the brand typeface",
+      labels: ["Design"],
+      status: "done",
+      assignee: ines,
+    });
+    await seed({
+      title: "Interview five trial users",
+      labels: ["Research"],
+      status: "done",
+      assignee: dax,
+    });
+    await seed({
+      title: "Staging environment for the new site",
+      labels: ["Infra"],
+      status: "done",
+      assignee: dax,
+      where: inOps,
+    });
+
+    await mkdir(artifacts, { recursive: true });
+    const page = `${origin}/en/w/${workspace.slug}/projects/${project.slug}?tab=tasks&layout=board`;
+    const settle = async () => {
+      await browser(
+        "wait",
+        "--fn",
+        `${pageHydrated} && document.body.textContent.includes("Move DNS to the new provider")`,
+      );
+      await browser(
+        "wait",
+        "--fn",
+        `document.getAnimations().every((animation) => !(animation instanceof CSSTransition) || animation.playState !== "running")`,
+      );
+    };
+    const shot = async (name: string) => {
+      await settle();
+      await browser("screenshot", join(artifacts, `${name}.png`));
+      await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
+      await browser("screenshot", join(artifacts, `${name}-dark.png`));
+      await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
+    };
+    const prefix = Bun.env.SHOT_PREFIX ?? "board";
+    await browser("set", "viewport", "1440", "900");
+    await browser("open", page);
+    // Done is read in its own request after the board's.
+    const doneRead = `document.body.textContent.includes("Pick the brand typeface")`;
+    await browser("wait", "--fn", doneRead);
+    await shot(`${prefix}-1440`);
+    // "New task", filled in, over the board.
+    await browser(
+      "eval",
+      `[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "New task")?.click()`,
+    );
+    await browser("wait", "--fn", `document.querySelector('[role="dialog"] input') !== null`);
+    await browser("fill", '[role="dialog"] input', "Write the launch checklist");
+    await shot(`${prefix}-dialog-1440`);
+    await browser("press", "Escape");
+    await browser("tab", "t1");
+    await browser("open", `${origin}/en/w/${workspace.slug}/projects?layout=board`);
+    await shot(`${prefix}-all-tasks-1440`);
+    await browser("set", "viewport", "390", "844");
+    await browser("open", page);
+    await browser("wait", "--fn", doneRead);
+    await shot(`${prefix}-390`);
+    await browser(
+      "eval",
+      `[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "New task")?.click()`,
+    );
+    await browser("wait", "--fn", `document.querySelector('[role="dialog"] input') !== null`);
+    await browser("fill", '[role="dialog"] input', "Write the launch checklist");
+    await shot(`${prefix}-dialog-390`);
+
+    // A Task in the viewer's own DM, filed under the Project, is on All tasks for them (only).
+    await browser("press", "Escape");
+    await browser("tab", "t1");
+    const dmTitle = "Agree the agency's contract terms";
+    await run(dm.id)({ operation: "create", title: dmTitle, project: project.slug });
+    await browser("set", "viewport", "1440", "900");
+    await browser("open", `${origin}/en/w/${workspace.slug}/projects?layout=board`);
+    await browser("wait", "--fn", `document.body.textContent.includes(${JSON.stringify(dmTitle)})`);
+    await shot(`${prefix}-all-tasks-dm`);
+    // A sub-task is its parent's progress, not a card of its own.
+    const cardTitles = await evaluate<string[]>(
+      `[...document.querySelectorAll("[data-task-board] article h3")].map((h) => h.textContent.trim())`,
+    );
+    expect(cardTitles).toContain("Move DNS to the new provider");
+    expect(cardTitles.some((title) => title.startsWith("Step "))).toBe(false);
+
+    // An empty Project with a very long name: the header's switcher truncates it.
+    await browser("open", `${origin}/en/w/${workspace.slug}/projects/${empty.slug}`);
+    await browser(
+      "wait",
+      "--fn",
+      `${pageHydrated} && document.querySelector("main")?.textContent.includes(${JSON.stringify(empty.name)}) === true`,
+    );
+    for (const [width, height, label] of [
+      ["1440", "900", "1440"],
+      ["390", "844", "390"],
+    ] as const) {
+      await browser("set", "viewport", width, height);
+      await browser("wait", "300");
+      await browser("screenshot", join(artifacts, `${prefix}-empty-long-${label}.png`));
+      await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
+      await browser("screenshot", join(artifacts, `${prefix}-empty-long-${label}-dark.png`));
+      await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
+    }
+  } finally {
+    await browser("close").catch(() => undefined);
+    await experiments.write(workspaceId, "taskConversations", before).catch(() => {});
+    await db.task.deleteMany({ where: { projectId: project.id } }).catch(() => {});
+    await db.conversation.deleteMany({ where: { id: { in: [site.id, ops.id] } } }).catch(() => {});
+    await db.task.deleteMany({ where: { conversationId: dm.id } }).catch(() => {});
+    await db.conversation.delete({ where: { id: dm.id } }).catch(() => {});
+    await db.project.deleteMany({ where: { id: { in: [project.id, empty.id] } } }).catch(() => {});
+    await db.workspaceMembership
+      .deleteMany({ where: { workspaceId, userId: { in: people.map((person) => person.id) } } })
+      .catch(() => {});
+    await db.user
+      .deleteMany({ where: { id: { in: people.map((person) => person.id) } } })
+      .catch(() => {});
+    await db.$disconnect();
+  }
+}, 300_000);

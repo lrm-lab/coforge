@@ -22,6 +22,15 @@ export function overviewConversationWhere(
   };
 }
 
+/**
+ * A Task the Workspace boards show as a card (task #596): a top-level one. A sub-task is its
+ * parent's progress instead, unless its parent is deleted. The counts use the same rule, so a
+ * column's number is its cards.
+ */
+export const TOP_LEVEL_TASK_WHERE = {
+  parentLinks: { none: { parent: { deletedAt: null } } },
+} satisfies Prisma.TaskWhereInput;
+
 export function overviewSelection(userId: string) {
   return {
     ...taskSelection,

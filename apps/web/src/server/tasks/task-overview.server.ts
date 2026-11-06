@@ -7,6 +7,7 @@ import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import {
   overviewConversationWhere,
+  TOP_LEVEL_TASK_WHERE,
   overviewRow,
   overviewRows,
   overviewSelection,
@@ -171,6 +172,7 @@ export class TaskOverviewReads {
         // Finished Tasks only grow; the board pages them through `finishedPage` instead.
         status: { in: UNFINISHED_TASK_STATUSES },
         conversation: overviewConversationWhere(workspaceId, userId),
+        ...TOP_LEVEL_TASK_WHERE,
       },
       // Newest first: a group renders its first cards, and new work is what gets looked at.
       orderBy: [{ createdAt: "desc" }, { id: "asc" }],
@@ -434,7 +436,11 @@ export class TaskOverviewReads {
     const { workspaceId, userId, conversationId } = scope;
     if (!conversationId) {
       await requireWorkspaceMember(this.db, workspaceId, userId);
-      return { workspaceId, conversation: overviewConversationWhere(workspaceId, userId) };
+      return {
+        workspaceId,
+        conversation: overviewConversationWhere(workspaceId, userId),
+        ...TOP_LEVEL_TASK_WHERE,
+      };
     }
     return {
       workspaceId,
