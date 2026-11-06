@@ -1,0 +1,444 @@
+import type {
+  AgentRuntimeEvent,
+  AgentSession,
+  AgentSessionExit,
+  AgentSessionIdentity,
+  AgentTurnProcessWindow,
+} from "@coforge/agent";
+import {
+  AGENT_RUNTIME_EVENT_TYPE,
+  JsonlRequestError,
+  asRecord,
+  eventTime,
+  nonEmptyString,
+} from "@lrm/coforge-anvil";
+import { codexContextUsage } from "./context-usage";
+import { JsonlProcess } from "@lrm/coforge-anvil/execution";
+import { CodexItemEvents } from "./item-events";
+import { CodexSubagentThreads, codexMessageThreadId } from "./subagent-threads";
+import { codexTurnOutcome } from "./turn-outcome";
+import { CodexTurnSignals } from "./turn-signals";
+import {
+  AGENT_ACTIVITY_DETAIL_KIND,
+  RUNTIME_PROVIDER,
+  utf8Encoder,
+  type AgentServiceTierObserved,
+} from "@lrm/coforge-sdk/internal";
+import { getLogger } from "@logtape/logtape";
+import { scrubError, type CodexSessionState } from "./provider-support";
+
+const logger = getLogger(["coforge", "daemon", "code-agent", RUNTIME_PROVIDER.CODEX]);
+
+export class CodexAgentSession implements AgentSession {
+  /** Busy input steers the live turn through `turn/steer`. */
+  readonly steersBusyTurn = true;
+  /** Delegated work runs on secondary threads the main turn never resumes on its own, so the
+   * daemon writes the wake notice once the last subagent finishes. */
+  readonly wakesAfterSubagents = true;
+  readonly #process: JsonlProcess;
+  readonly #threadId: string;
+  readonly #agentId: string | undefined;
+  readonly #runtimeId: string | undefined;
+  readonly #listeners = new Set<(event: AgentRuntimeEvent) => void>();
+  readonly #commandOutputBytes = new Map<string, number>();
+  readonly #itemEvents = new CodexItemEvents();
+  readonly #subagentThreads: CodexSubagentThreads;
+  readonly #signals: CodexTurnSignals;
+  #state: CodexSessionState = { type: "idle" };
+  #lastCompletedTurnId: string | undefined;
+  #starting: Promise<void> | undefined;
+  #identity: AgentSessionIdentity;
+  /** The service tier codex applied at thread/start, from its own reply. Reported on the first
+   * turn rather than in the constructor: the daemon subscribes only after
+   * `createAgentSession` returns, so an event emitted here would be dropped. */
+  readonly #serviceTier: AgentServiceTierObserved | undefined;
+  #serviceTierReported = false;
+  #replacementWarning: string | undefined;
+
+  constructor(
+    process: JsonlProcess,
+    threadId: string,
+    resumed: boolean,
+    agentId?: string,
+    runtimeId?: string,
+    serviceTier?: AgentServiceTierObserved,
+    replacementWarning?: string,
+  ) {
+    this.#process = process;
+    this.#threadId = threadId;
+    this.#subagentThreads = new CodexSubagentThreads(threadId);
+    this.#agentId = agentId;
+    this.#runtimeId = runtimeId;
+    this.#signals = new CodexTurnSignals(threadId, agentId, runtimeId);
+    this.#serviceTier = serviceTier;
+    this.#replacementWarning = replacementWarning;
+    this.#identity = {
+      sessionId: threadId,
+      state: resumed ? "resumable" : "empty",
+    };
+    process.onRecord((record) => this.#accept(record));
+    process.onStderr((text) => {
+      const match = /Reconnecting\.\.\.\s*(\d+)\s*\/\s*\d+/i.exec(text);
+      if (!match) return;
+      // Raw stderr line as the fact; the daemon core formats/redacts it into the
+      // visible `runtime_reconnecting` Activity (agent-runtime/runtime-error-activity.ts).
+      this.#emit({ type: "reconnecting", attempt: Number(match[1]), message: text });
+    });
+    // Whether an unexpected close reads as a crash is the daemon core's call, made
+    // from this fact at the moment the process actually exits.
+    process.onFailure((error) => this.#emit({ type: "error", message: error.message }));
+  }
+
+  async sendMessage(text: string): Promise<void> {
+    if (this.#state.type !== "idle") throw new Error("code agent is already running");
+    const starting = this.#startTurn(text);
+    this.#starting = starting;
+    try {
+      await starting;
+    } finally {
+      if (this.#starting === starting) this.#starting = undefined;
+    }
+  }
+
+  get hasLiveTurn(): boolean {
+    return (
+      this.#state.type === "running" ||
+      this.#state.type === "interrupting" ||
+      (this.#state.type === "starting" && this.#state.completedTurnIds.size === 0)
+    );
+  }
+
+  async #startTurn(text: string): Promise<void> {
+    if (!this.#serviceTierReported) {
+      this.#serviceTierReported = true;
+      if (this.#serviceTier) this.#emit({ type: "service-tier", state: this.#serviceTier });
+    }
+    this.#setIdentity("unknown");
+    this.#state = { type: "starting", completedTurnIds: new Set() };
+    let response: Readonly<Record<string, unknown>>;
+    try {
+      response = await this.#process.request({
+        method: "turn/start",
+        params: {
+          threadId: this.#threadId,
+          input: [{ type: "text", text }],
+        },
+      });
+    } catch (error) {
+      if (!this.#isDisposed()) this.#state = { type: "idle" };
+      throw error;
+    }
+    const turn = asRecord(asRecord(response.result)?.turn);
+    if (typeof turn?.id !== "string") {
+      if (!this.#isDisposed()) this.#state = { type: "idle" };
+      throw new Error("Codex did not create a turn");
+    }
+    this.#setIdentity("resumable");
+    if (this.#state.type !== "starting") return;
+    this.#state = this.#state.completedTurnIds.has(turn.id)
+      ? { type: "idle" }
+      : { type: "running", turnId: turn.id };
+  }
+
+  async notify(notice: string): Promise<void> {
+    await this.#acceptNotice(notice);
+    logger.info("Codex accepted inbox wakeup", {
+      event: "codex.wakeup.accepted",
+      agent_id: this.#agentId,
+      runtime_id: this.#runtimeId,
+      notice_bytes: utf8Encoder.encode(notice).byteLength,
+      outcome: "ok",
+    });
+  }
+
+  async #acceptNotice(notice: string): Promise<void> {
+    // Only retry a rejected admission when the active turn ended. Other RPC
+    // failures remain failures so the daemon retains the unacknowledged attention.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (this.#starting) await this.#starting;
+      const state = this.#state;
+      if (state.type === "idle") return this.sendMessage(notice);
+      if (state.type !== "running") throw new Error("code agent cannot accept a notification");
+      try {
+        const response = await this.#process.request({
+          method: "turn/steer",
+          params: {
+            threadId: this.#threadId,
+            expectedTurnId: state.turnId,
+            input: [{ type: "text", text: notice }],
+          },
+        });
+        if (asRecord(response.result)?.turnId !== state.turnId) {
+          throw new Error("Codex did not accept the notification for the active turn");
+        }
+        return;
+      } catch (error) {
+        const rpcError =
+          error instanceof JsonlRequestError ? asRecord(error.responseError) : undefined;
+        if (
+          attempt > 0 ||
+          rpcError?.code !== -32600 ||
+          rpcError.message !== "no active turn to steer"
+        ) {
+          throw error;
+        }
+        if (this.#state === state) this.#state = { type: "idle" };
+      }
+    }
+  }
+
+  subscribe(listener: (event: AgentRuntimeEvent) => void): () => void {
+    this.#listeners.add(listener);
+    if (this.#replacementWarning) {
+      listener({
+        type: "activity",
+        activity: {
+          detailKind: AGENT_ACTIVITY_DETAIL_KIND.SYSTEM_MESSAGE,
+          level: "info",
+          detail: "",
+          observedAtMs: Date.now(),
+          entries: [
+            {
+              kind: "system",
+              title: "Codex resume recovery",
+              text: this.#replacementWarning,
+            },
+          ],
+        },
+      });
+      this.#replacementWarning = undefined;
+    }
+    return () => this.#listeners.delete(listener);
+  }
+
+  async readSessionIdentity(): Promise<AgentSessionIdentity> {
+    return this.#identity;
+  }
+
+  async interrupt(): Promise<void> {
+    if (this.#state.type !== "running") return;
+    const turnId = this.#state.turnId;
+    this.#state = { type: "interrupting", turnId };
+    try {
+      await this.#process.request({
+        method: "turn/interrupt",
+        params: { threadId: this.#threadId, turnId },
+      });
+    } catch (error) {
+      if (!this.#isDisposed()) this.#state = { type: "running", turnId };
+      throw error;
+    }
+  }
+
+  /** A subagent's own thread takes the same `turn/interrupt` the main thread does. */
+  async interruptSubagent(taskId: string): Promise<"interrupted" | "not_running"> {
+    const turn = this.#subagentThreads.runningSubagentTurn(taskId);
+    if (!turn || this.#isDisposed()) return "not_running";
+    await this.#process.request({
+      method: "turn/interrupt",
+      params: { threadId: turn.threadId, turnId: turn.turnId },
+    });
+    return "interrupted";
+  }
+
+  async killTurnProcesses(window: AgentTurnProcessWindow): Promise<void> {
+    await this.#process.killTurnProcesses(window);
+  }
+
+  onExit(listener: (exit?: AgentSessionExit) => void): () => void {
+    return this.#process.onClose(listener);
+  }
+
+  async dispose(options?: Readonly<{ cutoffAtMs?: number }>): Promise<void> {
+    if (this.#state.type === "disposed") return;
+    this.#state = { type: "disposed" };
+    await this.#process.dispose(options);
+  }
+
+  #accept(record: Record<string, unknown>): void {
+    const params = asRecord(record.params);
+    // A subagent's own thread reports under its own id: its items and turn lifecycle are that
+    // subagent's, never the main turn's — and they still arrive after the main turn has ended,
+    // which is when the daemon counts them toward the quiet-turn wait.
+    const messageThreadId = codexMessageThreadId(record);
+    if (this.#subagentThreads.isSecondaryThreadId(messageThreadId)) {
+      this.#emitAll(this.#subagentThreads.acceptSecondary(record, messageThreadId));
+      return;
+    }
+    // Item notifications can arrive after turn/completed. They must not revive
+    // Activity for an idle session, including completion before turn/start replies.
+    if (
+      typeof record.method === "string" &&
+      (record.method.startsWith("item/") || record.method === "thread/tokenUsage/updated")
+    ) {
+      if (!this.#acceptsTurnItem(params)) return;
+      this.#signals.markEvidence();
+      if (record.method === "thread/tokenUsage/updated") {
+        const usage = codexContextUsage(params);
+        if (usage) this.#emitAll([{ type: AGENT_RUNTIME_EVENT_TYPE.CONTEXT_USAGE, ...usage }]);
+        return;
+      }
+    }
+    const signalEvents = this.#signals.notification(record, params);
+    if (signalEvents) {
+      this.#emitAll(signalEvents);
+      return;
+    }
+    if (record.method === "error") {
+      const error = asRecord(params?.error);
+      if (
+        params?.threadId !== this.#threadId ||
+        typeof params.turnId !== "string" ||
+        typeof params.willRetry !== "boolean" ||
+        typeof error?.message !== "string"
+      )
+        return;
+      if (params.willRetry) {
+        logger.debug("Codex is retrying a provider request", {
+          event: "codex.request.retrying",
+          agent_id: this.#agentId,
+          runtime_id: this.#runtimeId,
+        });
+        return;
+      }
+      this.#emit({ type: "error", message: error.message, occurredAt: eventTime(record) });
+      return;
+    }
+    if (record.method === "turn/started") {
+      const turn = asRecord(params?.turn);
+      // Same fence as an item: only this thread's live turn opens a run.
+      if (
+        typeof turn?.id !== "string" ||
+        !this.#acceptsTurnItem({ threadId: params?.threadId, turnId: turn.id })
+      )
+        return;
+      this.#signals.reset();
+      this.#emitAll(this.#itemEvents.accept(record, params));
+      return;
+    }
+    const deltas = this.#itemEvents.delta(record, params);
+    if (deltas) {
+      this.#emitAll(deltas);
+      return;
+    }
+    if (record.method === "item/started") {
+      const item = asRecord(params?.item);
+      if (item?.type === "commandExecution" && typeof item.id === "string")
+        this.#commandOutputBytes.set(item.id, 0);
+      this.#emitAll(this.#itemEvents.accept(record, params));
+      return;
+    }
+    if (
+      record.method === "item/commandExecution/outputDelta" &&
+      typeof params?.itemId === "string" &&
+      typeof params.delta === "string"
+    ) {
+      this.#commandOutputBytes.set(
+        params.itemId,
+        (this.#commandOutputBytes.get(params.itemId) ?? 0) +
+          utf8Encoder.encode(params.delta).byteLength,
+      );
+      this.#emit({
+        type: "tool-output",
+        id: params.itemId,
+        text: params.delta,
+      });
+      return;
+    }
+    if (record.method === "item/completed") {
+      const item = asRecord(params?.item);
+      if (item?.type === "commandExecution" && typeof item.id === "string") {
+        logger.info("Codex command completed", {
+          event: "codex.command.completed",
+          agent_id: this.#agentId,
+          runtime_id: this.#runtimeId,
+          exit_code: typeof item.exitCode === "number" ? item.exitCode : undefined,
+          output_bytes: this.#commandOutputBytes.get(item.id) ?? 0,
+          outcome: item.exitCode === 0 ? "ok" : "failed",
+        });
+        this.#commandOutputBytes.delete(item.id);
+      }
+      this.#emitAll(this.#itemEvents.accept(record, params));
+      // A completed collaboration call names the threads it spawned (or ended), after its own
+      // tool-end, as the reference normalizer orders them.
+      if (item && item.type === "collabAgentToolCall")
+        this.#emitAll(
+          this.#subagentThreads.noteCollabAgentStates(
+            item,
+            nonEmptyString(item.id),
+            eventTime(record),
+          ),
+        );
+      return;
+    }
+    if (record.method === "turn/completed") {
+      const turn = asRecord(params?.turn);
+      if (typeof turn?.id !== "string") return;
+      if (turn.id === this.#lastCompletedTurnId) return;
+      if (this.#state.type === "starting") this.#state.completedTurnIds.add(turn.id);
+      else if (
+        (this.#state.type === "running" || this.#state.type === "interrupting") &&
+        this.#state.turnId === turn.id
+      ) {
+        this.#state = { type: "idle" };
+      } else {
+        return;
+      }
+      this.#commandOutputBytes.clear();
+      this.#itemEvents.reset();
+      this.#lastCompletedTurnId = turn.id;
+      const { status, failure } = codexTurnOutcome(turn);
+      if (failure) {
+        // The raw message goes to the Activity (the daemon core redacts and truncates it); this
+        // local scrub only bounds what reaches the daemon's own structured log line.
+        logger.error("Codex turn failed", {
+          event: "codex.turn.failed",
+          agent_id: this.#agentId,
+          runtime_id: this.#runtimeId,
+          turn_status: turn.status,
+          error_code: failure.code,
+          error_message: scrubError(failure.message),
+          outcome: "error",
+        });
+        this.#emit({
+          type: "error",
+          message: failure.message,
+          occurredAt: eventTime(record),
+          providerErrorClass: failure.code ?? "CodexTurnError",
+          providerErrorReason: "turn_failed",
+        });
+      }
+      this.#emitAll(this.#signals.finish(record, status));
+      this.#emit({ type: "completed", status });
+    }
+  }
+
+  #emit(event: AgentRuntimeEvent): void {
+    this.#signals.observe(event);
+    for (const listener of this.#listeners) listener(event);
+  }
+
+  #emitAll(events: readonly AgentRuntimeEvent[]): void {
+    for (const event of events) this.#emit(event);
+  }
+
+  #acceptsTurnItem(params: Record<string, unknown> | undefined): boolean {
+    if (params?.threadId !== undefined && params.threadId !== this.#threadId) return false;
+    const state = this.#state;
+    if (state.type === "idle" || state.type === "disposed") return false;
+    if (typeof params?.turnId !== "string") return true;
+    if (params.turnId === this.#lastCompletedTurnId) return false;
+    if (state.type === "starting") return !state.completedTurnIds.has(params.turnId);
+    return params.turnId === state.turnId;
+  }
+
+  #setIdentity(state: AgentSessionIdentity["state"]): void {
+    if (this.#identity.state === state) return;
+    this.#identity = { sessionId: this.#threadId, state };
+    this.#emit({ type: "session", identity: this.#identity });
+  }
+
+  #isDisposed(): boolean {
+    return this.#state.type === "disposed";
+  }
+}
