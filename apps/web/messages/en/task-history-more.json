@@ -4,6 +4,7 @@
   "tasks_history_priority_changed": "Changed priority",
   "tasks_history_project_changed": "Changed project",
   "tasks_priority": "Priority",
+  "tasks_priority_mark": "Priority: {priority}",
   "tasks_priority_urgent": "Urgent",
   "tasks_priority_high": "High",
   "tasks_priority_medium": "Medium",

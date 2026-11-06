@@ -122,6 +122,25 @@ test("a Task's popup and the new Task form set its priority", async () => {
       select: { priority: true },
     });
     expect(made.priority).toBe("low");
+
+    // The mark shows on the board's cards and in its list, for the eye and for a screen reader.
+    for (const layout of ["board", "list"] as const) {
+      await browser("open", `${origin}/en/w/${workspace.slug}/tasks?layout=${layout}`);
+      await browser(
+        "wait",
+        "--fn",
+        `${pageHydrated} && [...document.querySelectorAll('[role="img"][aria-label="Priority: Low"]')].some((mark) => mark.getBoundingClientRect().width > 0)`,
+      );
+      await shots(`marks-${layout}`);
+    }
+    await browser("set", "viewport", "390", "844");
+    await browser("reload");
+    await browser(
+      "wait",
+      "--fn",
+      `${pageHydrated} && [...document.querySelectorAll('[role="img"][aria-label="Priority: Low"]')].some((mark) => mark.getBoundingClientRect().width > 0)`,
+    );
+    await shots("marks-list-phone");
   } finally {
     await browser("close").catch(() => undefined);
     await db.conversation.deleteMany({ where: { id: channel.id } }).catch(() => undefined);

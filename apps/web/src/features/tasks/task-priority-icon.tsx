@@ -14,15 +14,19 @@ const FILLED_BARS: Record<Exclude<TaskPriority, "urgent" | "none">, number> = {
  */
 export function TaskPriorityIcon({
   priority,
+  label,
   className,
 }: {
   priority: TaskPriority;
+  /** Said to assistive tech; absent where text beside the mark already says it. */
+  label?: string;
   className?: string;
 }) {
   if (priority === "none") return null;
+  const a11y = label ? { role: "img", "aria-label": label } : { "aria-hidden": true };
   if (priority === "urgent")
     return (
-      <svg viewBox="0 0 16 16" aria-hidden="true" className={cn("size-4 shrink-0", className)}>
+      <svg viewBox="0 0 16 16" {...a11y} className={cn("size-4 shrink-0", className)}>
         <rect x="1.5" y="1.5" width="13" height="13" rx="3" className="fill-fg-error-secondary" />
         <path d="M8 4.5v4.5" strokeWidth="1.75" strokeLinecap="round" className="stroke-white" />
         <circle cx="8" cy="11.5" r="1" className="fill-white" />
@@ -30,7 +34,7 @@ export function TaskPriorityIcon({
     );
   const filled = FILLED_BARS[priority];
   return (
-    <svg viewBox="0 0 16 16" aria-hidden="true" className={cn("size-4 shrink-0", className)}>
+    <svg viewBox="0 0 16 16" {...a11y} className={cn("size-4 shrink-0", className)}>
       {[0, 1, 2].map((bar) => (
         <rect
           key={bar}

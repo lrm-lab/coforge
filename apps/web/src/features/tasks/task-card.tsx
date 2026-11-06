@@ -16,6 +16,7 @@ import { openBlockers, type TaskRelations } from "./task-relation-edits";
 import { TaskParentMark, TaskSubtaskMark, TaskBlockedMark } from "./task-relations";
 import { TaskCardLabels } from "./task-labels";
 import { TaskLabelChip } from "./task-label-chip";
+import { priorityLabel } from "./task-history-more";
 import { TaskPriorityIcon } from "./task-priority-icon";
 import { TaskOwnerAvatar } from "./task-owner";
 import { TaskStatusIcon } from "./task-status-icon";
@@ -113,13 +114,24 @@ export function TaskCard({
       {menu}
     </div>
   );
+  const priorityMark = (className: string) =>
+    task.priority &&
+    task.priority !== "none" && (
+      <TaskPriorityIcon
+        priority={task.priority}
+        label={m.tasks_priority_mark({ priority: priorityLabel(task.priority) })}
+        className={className}
+      />
+    );
   if (list) {
-    // One line: number, status, title, then the pills, the owner and the row's own controls.
+    // One line: priority, number, status, title, then the pills, the owner and the row's own controls.
     return (
       <article
         onPointerEnter={onPointerEnter}
         className="relative flex min-h-10 items-center gap-3 px-4 py-1.5 transition-colors hover:bg-primary_hover"
       >
+        {/* A slot of its own, so the titles line up with or without a mark. */}
+        <span className="flex size-3.5 shrink-0">{priorityMark("size-3.5")}</span>
         <span className="w-9 shrink-0 text-xs text-tertiary tabular-nums">#{task.number}</span>
         <TaskStatusIcon status={task.status} />
         <h3 className="min-w-0 flex-1 text-sm font-medium text-primary">
@@ -161,12 +173,7 @@ export function TaskCard({
       <div className="flex h-4 items-center gap-1.5 text-xs tabular-nums">
         {source && <span className="min-w-0 truncate font-medium text-secondary">{source}</span>}
         <span className="shrink-0 text-quaternary">#{task.number}</span>
-        {task.priority && task.priority !== "none" && (
-          <TaskPriorityIcon
-            priority={task.priority}
-            className="ml-auto size-3.5 text-fg-quaternary"
-          />
-        )}
+        {priorityMark("ml-auto size-3.5 text-fg-quaternary")}
       </div>
       <h3 className="text-sm font-medium text-primary [overflow-wrap:anywhere]">
         {renderTitle(<span className="line-clamp-2">{task.title}</span>)}
