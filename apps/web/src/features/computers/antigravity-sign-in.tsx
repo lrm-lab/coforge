@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
+import { RadioButton, RadioGroup } from "#src/components/base/radio-buttons/radio-buttons";
 import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 import { m } from "#src/paraglide/messages";
+
+type AntigravityMethod = "oauth-personal" | "oauth-business";
 
 /** Antigravity's `authenticate` OAuth flow opens one of two account kinds — the person picks
  * personal or business before the daemon starts it, the same way the Kiro enterprise step asks
@@ -10,33 +13,31 @@ export function AntigravitySignIn({
   onStart,
   onClose,
 }: {
-  onStart: (methodId: "oauth-personal" | "oauth-business") => void;
+  onStart: (methodId: AntigravityMethod) => void;
   onClose: () => void;
 }) {
-  const [method, setMethod] = useState<"oauth-personal" | "oauth-business">("oauth-personal");
+  const [method, setMethod] = useState<AntigravityMethod>("oauth-personal");
   return (
-    <>
-      <DialogHeader title={m.runtime_auth_antigravity_title()} onClose={onClose} />
-      <p className="text-sm text-tertiary">{m.runtime_auth_antigravity_hint()}</p>
-      <fieldset className="flex flex-col gap-2">
-        {(["oauth-personal", "oauth-business"] as const).map((id) => (
-          <label key={id} className="flex items-center gap-2 text-sm">
-            <input
-              type="radio"
-              name="antigravity-method"
-              checked={method === id}
-              onChange={() => setMethod(id)}
-            />
-            {id === "oauth-personal"
-              ? m.runtime_auth_antigravity_personal()
-              : m.runtime_auth_antigravity_business()}
-          </label>
-        ))}
-      </fieldset>
-      <DialogActions>
+    <div className="space-y-4 p-6">
+      <DialogHeader
+        title={m.runtime_auth_antigravity_title()}
+        description={m.runtime_auth_antigravity_hint()}
+        onClose={onClose}
+        className="p-0"
+      />
+      <RadioGroup
+        aria-label={m.runtime_auth_antigravity_title()}
+        value={method}
+        onChange={(value) => setMethod(value as AntigravityMethod)}
+        className="gap-3"
+      >
+        <RadioButton value="oauth-personal" label={m.runtime_auth_antigravity_personal()} />
+        <RadioButton value="oauth-business" label={m.runtime_auth_antigravity_business()} />
+      </RadioGroup>
+      <DialogActions className="pt-1">
         <DialogCancel onPress={onClose}>{m.controls_cancel()}</DialogCancel>
         <DialogAction onPress={() => onStart(method)}>{m.runtime_auth_sign_in()}</DialogAction>
       </DialogActions>
-    </>
+    </div>
   );
 }
