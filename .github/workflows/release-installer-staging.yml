@@ -83,20 +83,7 @@ jobs:
         run: bun run --cwd packages/coforge-sdk generate
 
       - name: Request an OIDC token for Alibaba Cloud
-        env:
-          AUDIENCE: sts.aliyuncs.com
-        run: |
-          token_file="$RUNNER_TEMP/aliyun-oidc-token"
-          curl -sSf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$AUDIENCE" \
-            | jq -r '.value' > "$token_file"
-          chmod 600 "$token_file"
-          echo "ALIBABA_CLOUD_OIDC_TOKEN_FILE=$token_file" >> "$GITHUB_ENV"
-          # The RAM role's trust policy matches these three claims exactly; print them so a
-          # trust-policy mismatch is diagnosable from the run log. The payload is public run
-          # metadata; the signature (the only secret part) is never printed.
-          payload="$(cut -d. -f2 "$token_file" | tr '_-' '/+' | awk '{ n = length($0) % 4; if (n) $0 = $0 substr("==", 1, 4 - n); print }' | base64 -d)"
-          printf 'OIDC claims: %s\n' "$(printf '%s' "$payload" | jq -c '{iss, aud, sub, exp}')"
+        run: bash scripts/release/aliyun-oidc-token.sh
 
       - name: Refuse a version that is already published
         id: plan
@@ -295,20 +282,7 @@ jobs:
           path: installer-bin
 
       - name: Request an OIDC token for Alibaba Cloud
-        env:
-          AUDIENCE: sts.aliyuncs.com
-        run: |
-          token_file="$RUNNER_TEMP/aliyun-oidc-token"
-          curl -sSf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$AUDIENCE" \
-            | jq -r '.value' > "$token_file"
-          chmod 600 "$token_file"
-          echo "ALIBABA_CLOUD_OIDC_TOKEN_FILE=$token_file" >> "$GITHUB_ENV"
-          # The RAM role's trust policy matches these three claims exactly; print them so a
-          # trust-policy mismatch is diagnosable from the run log. The payload is public run
-          # metadata; the signature (the only secret part) is never printed.
-          payload="$(cut -d. -f2 "$token_file" | tr '_-' '/+' | awk '{ n = length($0) % 4; if (n) $0 = $0 substr("==", 1, 4 - n); print }' | base64 -d)"
-          printf 'OIDC claims: %s\n' "$(printf '%s' "$payload" | jq -c '{iss, aud, sub, exp}')"
+        run: bash scripts/release/aliyun-oidc-token.sh
 
       - name: Package, upload, and verify every object, write the manifest, and move installer/latest
         env:
@@ -369,20 +343,7 @@ jobs:
         run: bun run --cwd packages/coforge-sdk generate
 
       - name: Request an OIDC token for Alibaba Cloud
-        env:
-          AUDIENCE: sts.aliyuncs.com
-        run: |
-          token_file="$RUNNER_TEMP/aliyun-oidc-token"
-          curl -sSf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$AUDIENCE" \
-            | jq -r '.value' > "$token_file"
-          chmod 600 "$token_file"
-          echo "ALIBABA_CLOUD_OIDC_TOKEN_FILE=$token_file" >> "$GITHUB_ENV"
-          # The RAM role's trust policy matches these three claims exactly; print them so a
-          # trust-policy mismatch is diagnosable from the run log. The payload is public run
-          # metadata; the signature (the only secret part) is never printed.
-          payload="$(cut -d. -f2 "$token_file" | tr '_-' '/+' | awk '{ n = length($0) % 4; if (n) $0 = $0 substr("==", 1, 4 - n); print }' | base64 -d)"
-          printf 'OIDC claims: %s\n' "$(printf '%s' "$payload" | jq -c '{iss, aud, sub, exp}')"
+        run: bash scripts/release/aliyun-oidc-token.sh
 
       - name: Move installer/latest
         # inputs.pointer_only is caller-controlled text: it goes through an env var, never into the

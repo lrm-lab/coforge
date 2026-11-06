@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Requests the job's GitHub OIDC token for the sts.aliyuncs.com audience and
+# exports its file path as ALIBABA_CLOUD_OIDC_TOKEN_FILE for the job's later
+# Alibaba Cloud steps. The RAM role's trust policy matches the token's
+# iss/aud/sub/exp claims exactly; they are printed so a trust-policy mismatch
+# is diagnosable from the run log. The payload is public run metadata; the
+# signature (the only secret part) is never printed.
+set -euo pipefail
+
+token_file="$RUNNER_TEMP/aliyun-oidc-token"
+curl -sSf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+	"$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.aliyuncs.com" \
+	| jq -r '.value' > "$token_file"
+chmod 600 "$token_file"
+echo "ALIBABA_CLOUD_OIDC_TOKEN_FILE=$token_file" >> "$GITHUB_ENV"
+payload="$(cut -d. -f2 "$token_file" | tr '_-' '/+' | awk '{ n = length($0) % 4; if (n) $0 = $0 substr("==", 1, 4 - n); print }' | base64 -d)"
+printf 'OIDC claims: %s\n' "$(printf '%s' "$payload" | jq -c '{iss, aud, sub, exp}')"

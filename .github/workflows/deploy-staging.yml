@@ -355,22 +355,7 @@ jobs:
       - name: Check realtime endpoint responds
         env:
           REALTIME_URL: wss://staging.coforge.cn/connection/websocket
-        run: |
-          bun -e '
-            const socket = new WebSocket(Bun.env.REALTIME_URL);
-            const fail = () => {
-              console.error("Realtime WebSocket handshake failed");
-              process.exit(1);
-            };
-            setTimeout(fail, 10000);
-            socket.onerror = fail;
-            socket.onclose = fail;
-            socket.onopen = () => {
-              console.log("Realtime WebSocket handshake succeeded");
-              socket.close();
-              process.exit(0);
-            };
-          '
+        run: bun scripts/deploy/check-realtime-ws.ts
 
       # The snapshot the migration safety check reads (docs/agents/git-hooks/migration-safety.md).
       # A failure here never fails a deployment that is already healthy.
