@@ -201,3 +201,57 @@ test("Codex keeps a blank final answer as the answer, without an empty-turn erro
     completed,
   ]);
 });
+
+const warning = (title: string, text: string): AgentRuntimeEvent => ({
+  type: "activity",
+  activity: {
+    detailKind: "system_message",
+    level: "warning",
+    detail: "",
+    observedAtMs: expect.any(Number),
+    entries: [{ kind: "system", title, text }],
+  },
+});
+
+test("Codex reports a repeated waiting status once until the wait clears", async () => {
+  expect(await turnEvents("waiting-repeat")).toEqual([
+    started,
+    warning(
+      "Codex warning",
+      "Codex thread is waiting on approval\nActive flags: waitingOnApproval",
+    ),
+    warning(
+      "Codex warning",
+      "Codex thread is waiting on approval\nActive flags: waitingOnApproval",
+    ),
+    { type: "text-delta", text: "Done" },
+    completed,
+  ]);
+});
+
+test("Codex reports each diagnostic once per session", async () => {
+  expect(await turnEvents("diagnostics-repeat")).toEqual([
+    started,
+    warning("Codex warning", "careful"),
+    warning("Codex config warning", "Bad config"),
+    { type: "text-delta", text: "Done" },
+    completed,
+  ]);
+});
+
+test("Codex reports a repeated bare system error warning once, still erroring each time", async () => {
+  const bareError: AgentRuntimeEvent = {
+    type: "error",
+    message: "Codex thread entered system error state",
+    occurredAt: expect.any(String),
+    providerErrorClass: "CodexThreadSystemError",
+  };
+  expect(await turnEvents("system-error-bare-repeat")).toEqual([
+    started,
+    warning("Codex warning", "Codex thread entered system error state without a reason"),
+    bareError,
+    bareError,
+    { type: "text-delta", text: "Done" },
+    completed,
+  ]);
+});

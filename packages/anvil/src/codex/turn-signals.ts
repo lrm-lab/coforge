@@ -16,6 +16,7 @@ const DIAGNOSTIC_METHODS = new Set([
 ]);
 const WAITING_FLAGS = new Set(["waitingOnApproval", "waitingOnUserInput"]);
 const SUMMARY_BOUND = 1_000;
+const DIAGNOSTICS_SEEN_LIMIT = 64;
 
 /**
  * Thread health beyond turn content, after the reference Computer: a completed turn with no
@@ -29,6 +30,9 @@ export class CodexTurnSignals {
   #evidence = false;
   #assistantText = false;
   #visibleText = false;
+  #waitingSignature: string | undefined;
+  #bareErrorWarned = false;
+  #diagnosticsSeen = new Set<string>();
 
   constructor(threadId: string, agentId?: string, runtimeId?: string) {
     this.#threadId = threadId;
@@ -115,18 +119,21 @@ export class CodexTurnSignals {
     });
     const message = diagnosticMessage(method, params);
     const details = diagnosticDetails(method, params);
-    return [
-      warningActivity(
-        diagnosticTitle(method),
-        [message, ...(details && details !== message ? [details] : [])].join("\n"),
-        record,
-      ),
-    ];
+    const text = [message, ...(details && details !== message ? [details] : [])].join("\n");
+    const signature = `${method}\n${text}`;
+    if (this.#diagnosticsSeen.has(signature)) return [];
+    if (this.#diagnosticsSeen.size >= DIAGNOSTICS_SEEN_LIMIT) {
+      const oldest = this.#diagnosticsSeen.values().next().value;
+      if (oldest !== undefined) this.#diagnosticsSeen.delete(oldest);
+    }
+    this.#diagnosticsSeen.add(signature);
+    return [warningActivity(diagnosticTitle(method), text, record)];
   }
 
   #status(record: JsonRecord, params: JsonRecord): AgentRuntimeEvent[] {
     const status = asRecord(params.status);
     if (status?.type === "systemError") {
+      this.#waitingSignature = undefined;
       const message =
         nonEmptyString(status.message) ??
         nonEmptyString(asRecord(status.error)?.message) ??
@@ -139,14 +146,19 @@ export class CodexTurnSignals {
         providerErrorClass: "CodexThreadSystemError",
       };
       if (message) return [error];
-      return [
-        warningActivity(
-          "Codex warning",
-          "Codex thread entered system error state without a reason",
-          record,
-        ),
-        error,
-      ];
+      const events: AgentRuntimeEvent[] = [];
+      if (!this.#bareErrorWarned) {
+        this.#bareErrorWarned = true;
+        events.push(
+          warningActivity(
+            "Codex warning",
+            "Codex thread entered system error state without a reason",
+            record,
+          ),
+        );
+      }
+      events.push(error);
+      return events;
     }
     const flags = Array.isArray(status?.activeFlags)
       ? status.activeFlags.filter((flag) => typeof flag === "string" && WAITING_FLAGS.has(flag))
@@ -158,7 +170,14 @@ export class CodexTurnSignals {
         runtime_id: this.#runtimeId,
         flags,
       });
-    if (status?.type !== "active" || flags.length === 0) return [];
+    if (status?.type !== "active" || flags.length === 0) {
+      this.#waitingSignature = undefined;
+      this.#bareErrorWarned = false;
+      return [];
+    }
+    const signature = [...flags].sort().join(",");
+    if (signature === this.#waitingSignature) return [];
+    this.#waitingSignature = signature;
     const waitingFor =
       flags.length > 1
         ? "approval and user input"

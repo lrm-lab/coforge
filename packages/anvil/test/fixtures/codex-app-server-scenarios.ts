@@ -202,6 +202,26 @@ function turnScenario(input: string | undefined, turnId: string): void {
     write({ method: "warning", params: { threadId: "other-thread", message: "elsewhere" } });
     say("Done");
   }
+  if (input === "waiting-repeat") {
+    const waiting = { type: "active", activeFlags: ["waitingOnApproval"] };
+    notify("thread/status/changed", { status: waiting });
+    notify("thread/status/changed", { status: waiting });
+    notify("thread/status/changed", { status: { type: "active", activeFlags: [] } });
+    notify("thread/status/changed", { status: waiting });
+    say("Done");
+  }
+  if (input === "diagnostics-repeat") {
+    notify("warning", { message: "careful" });
+    notify("warning", { message: "careful" });
+    notify("configWarning", { summary: "Bad config", details: null });
+    notify("warning", { message: "careful" });
+    say("Done");
+  }
+  if (input === "system-error-bare-repeat") {
+    notify("thread/status/changed", { status: { type: "systemError" } });
+    notify("thread/status/changed", { status: { type: "systemError" } });
+    say("Done");
+  }
   const reading = {
     last: { totalTokens: 120_000 },
     total: { totalTokens: 6_900_000 },
