@@ -82,17 +82,18 @@ test("notices read in Chinese in the stream and the sidebar, and in English unde
   await evaluate(
     `[...document.querySelectorAll("button")].find((b) => /任务更新/.test(b.textContent ?? ""))?.click()`,
   );
-  await until(`${pageText}.includes("把任务 #4「修复登录」指派给了 @coder")`, 10_000);
+  // A name the notice draws as a label, its face before it, has no `@` (task #591).
+  await until(`${pageText}.includes("把任务 #4「修复登录」指派给了 coder")`, 10_000);
   await fx.screenshot("zh-stream-expanded.png");
   const text = await evaluate<string>(pageText);
   expect(text).toContain("📋 新建了 2 个任务：#4「修复登录」、#5「Ship it」");
   expect(text).toContain("🔄 Coder 把任务 #4「修复登录」移到了进行中");
   // A face with no picture shows an initial; beside a name it is not read out (task #553).
-  expect(await evaluate<string>(spokenText)).toContain("把任务 #4「修复登录」指派给了 @coder");
-  // The sidebar row's preview is the latest notice, in Chinese too.
+  expect(await evaluate<string>(spokenText)).toContain("把任务 #4「修复登录」指派给了 coder");
+  // The sidebar row's preview is the latest notice, in Chinese too; its plain text keeps the `@`.
   expect(text).toContain(`Frank An 把 @coder 设为 #${name} 的协调员`);
 
   await fx.open(channelId);
-  await until(`${pageText}.includes("Frank An made @coder the coordinator")`, 60_000);
+  await until(`${pageText}.includes("Frank An made coder the coordinator")`, 60_000);
   await fx.screenshot("en-stream.png");
 }, 240_000);
