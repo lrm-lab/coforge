@@ -92,9 +92,9 @@ function TaskTimeline({
           />
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
             <div className="text-sm font-semibold text-primary">{eventTitle(event)}</div>
-            <div className="text-xs text-tertiary">
-              {actorNode(names.actor(event.actorType, event.actorName))} ·{" "}
-              {formatDateForDisplay(event.createdAt, timeZone, locale, timeFormat)}
+            <div className="flex flex-wrap items-center gap-x-2 text-xs text-tertiary">
+              <span>{actorNode(names.actor(event.actorType, event.actorName))}</span>
+              <span>{formatDateForDisplay(event.createdAt, timeZone, locale, timeFormat)}</span>
             </div>
             <EventDetail event={event} names={names} />
           </div>

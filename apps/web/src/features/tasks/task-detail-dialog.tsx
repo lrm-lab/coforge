@@ -411,7 +411,7 @@ function TaskTrail({
   const openParent =
     parent && !parent.hidden && onOpenRelated ? () => onOpenRelated(parent) : undefined;
   const here = conversationName
-    ? `#${conversationName.replace(/^#/, "")} · #${task.number}`
+    ? `#${conversationName.replace(/^#/, "")} #${task.number}`
     : `#${task.number}`;
   return (
     <nav
