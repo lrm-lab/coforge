@@ -47,13 +47,12 @@ const start = (ratio: ShareRatio): ShareStep => ({
 });
 
 /** The tallest run of messages a page of this `ratio` holds: for a fixed one, what the card's own
- * padding and foot leave of its height. */
-function pageMaxHeight(ratio: ShareRatio, width: number, stage: HTMLElement) {
+ * padding and foot leave of its height, from the card as measured with all `rowsHeight` of rows. */
+function pageMaxHeight(ratio: ShareRatio, width: number, stage: HTMLElement, rowsHeight: number) {
   const { height } = shareRatioSize(ratio);
   const card = stage.querySelector<HTMLElement>("[data-share-page]");
-  const rows = stage.querySelector<HTMLElement>("[data-share-rows]");
-  if (height === undefined || !card || !rows) return sharePageMaxHeight(width);
-  return height - (card.offsetHeight - rows.offsetHeight);
+  if (height === undefined || !card) return sharePageMaxHeight(width);
+  return height - (card.offsetHeight - rowsHeight);
 }
 
 /**
@@ -89,7 +88,8 @@ export function MessageShareDialog({
           (row, at) =>
             (rows[at + 1]?.offsetTop ?? row.offsetTop + row.offsetHeight) - row.offsetTop,
         );
-        const split = sharePages(slots, pageMaxHeight(ratio, stageWidth, root));
+        const rowsHeight = slots.reduce((sum, slot) => sum + slot, 0);
+        const split = sharePages(slots, pageMaxHeight(ratio, stageWidth, root, rowsHeight));
         // More than one narrow page: wider, so the same words take fewer pages.
         if (split.length > 1 && ratio === "auto" && stageWidth === SHARE_CARD_WIDTH)
           setStep({ name: "measuring", ratio, width: SHARE_CARD_WIDE_WIDTH });

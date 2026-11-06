@@ -25,28 +25,22 @@ export function MessageShareCard({
   height?: number;
 }) {
   return (
-    <div
-      data-share-page
-      className="flex flex-col bg-secondary p-4"
-      style={{ width, minHeight: height }}
-    >
-      <div className="flex flex-1 flex-col rounded-2xl border border-secondary bg-primary">
-        <div data-share-rows className="flex-1 px-5 pt-5 pb-1">
-          {messages.map((message, index) => {
-            const previous = messages[index - 1];
-            const grouped = groupsWithPrevious(message, previous, false, false).grouped;
-            return (
-              <ShareRow key={message.id} message={message} grouped={grouped} first={!previous} />
-            );
-          })}
-        </div>
-        <div className="flex items-center justify-between gap-3 px-5 pt-3 pb-4">
-          <span className="flex items-center gap-1.5 text-xs font-medium text-tertiary">
-            <CoForgeMark className="h-3.5" />
-            CoForge
-          </span>
-          <span className="truncate text-xs text-quaternary">{window.location.host}</span>
-        </div>
+    <div data-share-page className="flex flex-col bg-primary" style={{ width, minHeight: height }}>
+      <div className="flex-1 px-6 pt-6 pb-2">
+        {messages.map((message, index) => {
+          const previous = messages[index - 1];
+          const grouped = groupsWithPrevious(message, previous, false, false).grouped;
+          return (
+            <ShareRow key={message.id} message={message} grouped={grouped} first={!previous} />
+          );
+        })}
+      </div>
+      <div className="flex items-center justify-between gap-3 px-6 pt-3 pb-5">
+        <span className="flex items-center gap-1.5 text-xs font-medium text-tertiary">
+          <CoForgeMark className="h-3.5" />
+          CoForge
+        </span>
+        <span className="truncate text-xs text-quaternary">{window.location.host}</span>
       </div>
     </div>
   );
