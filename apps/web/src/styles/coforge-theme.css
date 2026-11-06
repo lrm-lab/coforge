@@ -25,17 +25,18 @@
   --color-brand-950: #21134d;
 
   /* Tokens Untitled has no equivalent for. */
-  --color-sidebar: #f7f7f8;
+  --color-sidebar: #f8f7fe;
   --color-sidebar-fg: #101319;
-  --color-sidebar-accent: #ececef;
-  --color-sidebar-accent-fg: var(--color-sidebar-fg);
-  /* Expanded sidebar nav rows: the hover fill. A resting row paints nothing in either theme, so
-     the column reads as one surface rather than a list of blocks. Re-pointed under `.dark-mode`
+  --color-sidebar-accent: #ebeaf7;
+  --color-sidebar-accent-fg: #5d36dc;
+  /* Expanded sidebar nav rows: the hover fill. A resting row paints nothing in either theme: the
+     sidebar background is a gradient, so any opaque fill reads darker than it at the top of the
+     column and lighter at the bottom — a list of hard-edged blocks. Re-pointed under `.dark-mode`
      below. */
-  --color-sidebar-item-active: #f1f1f3;
+  --color-sidebar-item-active: #f3f1ff;
   /* The current left-navigation item's fill (task #222), its own token so `bg-tertiary`, which it
      used, stays put everywhere else. Re-pointed under `.dark-mode` below. */
-  --color-nav-bg-current: #ececef;
+  --color-nav-bg-current: #efeff7;
   /* A text field's focus border (task #227): one step up from its resting border, since every
      click lands here. The keyboard's focus ring says more. Re-pointed under `.dark-mode` below. */
   --color-border-input-focus: var(--color-fg-quaternary);
@@ -159,28 +160,29 @@
        modified). #a993ff remains available as brand-400 for accents, focus rings, and
        borders where white text isn't involved. See docs/design-tokens.md. */
 
-    --color-sidebar: #141518;
+    --color-sidebar: #141720;
     --color-sidebar-fg: #f4f6fb;
     /* One selected/hover fill for the rail and the expanded rows alike, light enough to read on
-       the sidebar. */
-    --color-sidebar-accent: #2e3036;
+       every stop of the sidebar gradient (1.4:1 against #21183b … #141720; the old #2b2544 was
+       1.15:1, i.e. invisible). */
+    --color-sidebar-accent: #3a3160;
     --color-sidebar-item-active: var(--color-sidebar-accent);
     /* Dark mode keeps the grey it had until the requester picks one. */
     --color-nav-bg-current: var(--color-bg-tertiary);
     --color-border-input-focus: var(--color-fg-quaternary);
-    --color-sidebar-accent-fg: var(--color-sidebar-fg);
+    --color-sidebar-accent-fg: #c5bafe;
 
     /* A resting nav item keeps the light theme's cool-grey hue, lightened for a dark column
-       (7.6:1 on the sidebar): dimmer than the row label, brighter than the light-theme value,
-       which on dark drops to 4.4:1 and reads muddy. */
+       (7.6:1 on the gradient): dimmer than the row label, brighter than the light-theme value,
+       which on dark drops to 4.4:1 and reads muddy next to the #c5bafe current icon. */
     --color-nav-fg: #a4a9b8;
 
     /* The chat list's selected card, mirroring the light values' logic (a fill one step off the
-       list background plus a slightly lighter outline) with the sidebar's selected fill, so a
+       list background plus a slightly lighter outline) with the sidebar's selected violet, so a
        selected row and the current nav item speak the same language. The light values are opaque
        and near-white, which on the dark list rendered as a white card under light-grey text. */
     --color-chat-selected-bg: var(--color-sidebar-accent);
-    --color-chat-selected-border: #43454c;
+    --color-chat-selected-border: #4c4081;
 
     /* Untitled's own opaque row hover; the light value is a near-white tuned for a white page. */
     --color-message-hover: var(--color-bg-primary_hover);
@@ -215,4 +217,22 @@
   --color-bg-brand-primary: var(--color-bg-secondary);
   --color-bg-brand-primary_alt: var(--color-bg-secondary);
   --color-bg-brand-secondary: var(--color-bg-tertiary);
+}
+
+/* Sidebar background is a gradient, which can't be expressed as a single `--color-*` token
+   (Tailwind color utilities need a flat color). Consumers that need the gradient use this custom
+   property as `bg-(image:--sidebar-gradient)`; the app shell paints it behind both the sidebar and
+   the gutter around the content card. It stays violet: the sidebar is outside the one-violet rule
+   above (Frank, 11-06). */
+:root {
+  /* Light value from the design spec: a faint brand tint over the page white. */
+  --sidebar-gradient: linear-gradient(
+    161.7deg,
+    rgba(197, 186, 254, 0.15) 0.5%,
+    rgba(197, 186, 254, 0.05) 78.18%
+  );
+}
+
+.dark-mode {
+  --sidebar-gradient: linear-gradient(155deg, #21183b 0%, #171421 52%, #141720 100%);
 }
