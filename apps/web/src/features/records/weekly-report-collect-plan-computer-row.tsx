@@ -78,8 +78,8 @@ export function CollectComputerRow(props: {
         </div>
       </div>
       {!slot.ready ? (
-        <div className="mt-1 flex items-center gap-2 pl-6">
-          <p className="text-xs text-warning-primary">
+        <div className="mt-1 flex flex-wrap items-center gap-2 pl-6">
+          <p className="min-w-0 flex-1 basis-40 text-xs text-warning-primary">
             {slot.agentIssue === "stopped"
               ? m.records_collect_plan_agent_stopped()
               : slot.agentIssue === "deleted"
