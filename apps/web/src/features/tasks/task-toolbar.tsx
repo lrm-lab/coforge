@@ -83,7 +83,8 @@ export function TaskToolbar({
   /** How far back Done and Closed reach; Display offers it, as Linear's completed issues do. */
   completedWindow: FinishedWindow;
   onWindowChange: (completedWindow: FinishedWindow) => void;
-  /** One conversation's board: every Task shares its source and Project, so neither is offered. */
+  /** One conversation's board: every Task shares its source, so none is offered; its Tasks can be
+   * under different Projects (task #484), so those are. */
   conversation?: boolean;
   /** One Project's board: every Task shares its Project, so none is offered. */
   project?: boolean;
@@ -163,8 +164,7 @@ export function TaskToolbar({
       ),
       remove: () => onFilterChange({ ...filter, owners: [] }),
     },
-    !conversation &&
-      !project &&
+    !project &&
       filter.projects.length > 0 && {
         id: "projects",
         label: m.tasks_filter_project_is({
@@ -209,7 +209,7 @@ export function TaskToolbar({
                 picked={filter.owners}
                 onChange={(picked) => onFilterChange({ ...filter, owners: picked })}
               />
-              {!conversation && !project && (
+              {!project && (
                 <FilterSubmenu
                   name={m.tasks_overview_project()}
                   options={projects}
@@ -369,8 +369,8 @@ function FilterSubmenu({
   );
 }
 
-/** A conversation's board has no source or Project to show. */
-const CONVERSATION_FIELDS: readonly TaskDisplayField[] = ["number", "owner"];
+/** A conversation's board has no source to show. */
+const CONVERSATION_FIELDS: readonly TaskDisplayField[] = ["number", "project", "owner"];
 
 /** A Project's board has no Project to show. */
 const PROJECT_FIELDS: readonly TaskDisplayField[] = ["number", "source", "owner"];

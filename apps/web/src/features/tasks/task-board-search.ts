@@ -8,12 +8,11 @@ import { filterParam, parseFilterParam, parseStatusParam, type TaskFilter } from
 import { useTaskLayout, type TaskLayout } from "./task-workflow";
 
 /**
- * A conversation's Task board view in the address: the status picks, the layout, the owner picks
- * (comma-separated User or Agent ids, `none` for nobody) and how far back Done and Closed reach
- * (a week when absent). Every conversation page host spreads it (through
- * `conversationPageSearchShape`) into its `validateSearch`.
+ * What every Task board keeps in the address: the status picks, the layout, the owner and label
+ * picks (comma-separated ids, `none` for nobody or no label) and how far back Done and Closed
+ * reach (a week when absent). Each board adds the picks it offers below.
  */
-export const conversationTaskBoardSearchShape = {
+const baseTaskBoardSearchShape = {
   /** Statuses, comma-separated (task #506); a single status is the same address as before. */
   status: z.string().optional().catch(undefined),
   layout: z.enum(["board", "list"]).optional().catch(undefined),
@@ -23,17 +22,18 @@ export const conversationTaskBoardSearchShape = {
   completed: z.enum(["month", "all"]).optional().catch(undefined),
 };
 
-/** The Tasks page's board view: a conversation's, plus the Project picks (Project ids, `none` for
- * no Project), since the page mixes Projects. */
+/** The Tasks page's and every conversation's board view: the Project picks (Project ids, `none`
+ * for no Project), since their Tasks can be under any Project (task #484). Every conversation
+ * page host spreads it (through `conversationPageSearchShape`) into its `validateSearch`. */
 export const taskBoardSearchShape = {
-  ...conversationTaskBoardSearchShape,
+  ...baseTaskBoardSearchShape,
   projects: z.string().optional().catch(undefined),
 };
 
-/** A Project page's board view: a conversation's, plus the channel picks (conversation ids) its
- * task tree offers (task #462), since a Project spans conversations. */
+/** A Project page's board view: no Project picks (the page names it), but the channel picks
+ * (conversation ids) its task tree offers (task #462), since a Project spans conversations. */
 export const projectTaskBoardSearchShape = {
-  ...conversationTaskBoardSearchShape,
+  ...baseTaskBoardSearchShape,
   channels: z.string().optional().catch(undefined),
 };
 

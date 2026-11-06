@@ -4,7 +4,7 @@ import {
   agentProfileTabParamSchema,
   profileParamSchema,
 } from "#src/features/agents/profile-panel/profile-panel-search";
-import { conversationTaskBoardSearchShape } from "#src/features/tasks/task-board-search";
+import { taskBoardSearchShape } from "#src/features/tasks/task-board-search";
 import type { ConversationPageTarget } from "./conversation-page-loader";
 import { CONVERSATION_TABS } from "./conversation-tabs";
 import { attachmentReviewSearchShape } from "./attachment-review-address";
@@ -20,7 +20,7 @@ import { artifactSearchShape } from "#src/features/artifacts/artifact-search";
  */
 export const conversationPageSearchShape = {
   view: z.enum(CONVERSATION_TABS).optional().catch(undefined),
-  ...conversationTaskBoardSearchShape,
+  ...taskBoardSearchShape,
   threadRootId: z.uuid().optional().catch(undefined),
   task: openTaskParamSchema,
   ...attachmentReviewSearchShape,
@@ -38,6 +38,7 @@ export function pickConversationPageSearch({
   layout,
   owners,
   labels,
+  projects,
   completed,
   threadRootId,
   task,
@@ -56,6 +57,7 @@ export function pickConversationPageSearch({
     layout,
     owners,
     labels,
+    projects,
     completed,
     threadRootId,
     task,

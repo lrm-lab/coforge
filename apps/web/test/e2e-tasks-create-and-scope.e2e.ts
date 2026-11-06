@@ -9,8 +9,9 @@ import { TaskBoard } from "#src/server/tasks/task-board.server";
 /**
  * The Tasks page and a channel's Tasks tab in a real browser. The Tasks page lists channel Tasks
  * and none from a direct message (not even the viewer's own), and offers no way to create a Task.
- * A channel's Tasks tab creates them: the dialog takes titles only, refuses an empty one, and
- * creates every row it holds at once in that channel.
+ * A channel's Tasks tab creates them: the dialog refuses an empty title, starts its Project at the
+ * one the viewer last filed a Task under there (task #485), and creates the Task in that channel
+ * under it.
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`, the dev user a member of
  * its Workspace (seed-dev). Each run seeds a fresh channel, Agent and direct message. Screenshots
@@ -73,12 +74,16 @@ test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates
   });
   const workspacePath = `/en/w/${membership.workspace.slug}`;
   const workspaceId = membership.workspaceId;
+  const project = await db.project.create({
+    data: { workspaceId, name: `Launch plan ${suffix}`, slug: `e2e-launch-${suffix}` },
+  });
   const channel = await db.conversation.create({
     data: {
       workspaceId,
       channelName: `e2e-tasks-${suffix}`,
       description: "",
-      members: { create: { userId: DEV_BROWSER_USER.id } },
+      // The viewer last filed a Task here under the Project, so a new one starts there.
+      members: { create: { userId: DEV_BROWSER_USER.id, lastTaskProjectId: project.id } },
     },
   });
   const agent = await db.agent.create({
@@ -162,6 +167,10 @@ test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates
         `document.querySelector('[role="dialog"]').textContent.includes("#${channel.channelName}")`,
       ),
     ).toContain("true");
+    // Its Project chip starts at the last-used one.
+    await waitFor(
+      `document.querySelector('[role="dialog"] [data-layout="chips"]')?.textContent.includes(${JSON.stringify(project.name)})`,
+    );
     // One Task per dialog: it lands with what was set, and the dialog closes.
     await browser("fill", titleField, created[0]!);
     await browser(
@@ -180,10 +189,15 @@ test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates
     await waitFor(bodyHas(created[0]!));
     const rows = await db.task.findMany({
       where: { conversationId: channel.id, title: { in: created } },
-      select: { title: true, status: true, description: true },
+      select: { title: true, status: true, description: true, projectId: true },
     });
     expect(rows).toEqual([
-      { title: created[0]!, status: "todo", description: `Notes for ${suffix}` },
+      {
+        title: created[0]!,
+        status: "todo",
+        description: `Notes for ${suffix}`,
+        projectId: project.id,
+      },
     ]);
     await browser("screenshot", join(artifacts, "created.png"));
 
@@ -205,6 +219,7 @@ test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates
       .deleteMany({ where: { id: { in: [channel.id, direct.id] } } })
       .catch(() => {});
     await db.agent.deleteMany({ where: { id: agent.id } }).catch(() => {});
+    await db.project.deleteMany({ where: { id: project.id } }).catch(() => {});
     await browser("close").catch(() => undefined);
     await db.$disconnect();
   }

@@ -332,7 +332,7 @@ function BoardTaskCard<T extends BoardTask>({
       }
       source={conversation ? undefined : task.source?.label}
       // Null for a Task outside any Project: no pill.
-      project={conversation || project ? undefined : task.project}
+      project={project ? undefined : task.project}
       controls={controls}
       menu={
         onCommand &&
