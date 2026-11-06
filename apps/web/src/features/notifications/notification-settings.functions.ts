@@ -9,6 +9,7 @@ import {
   activityReportSchema,
   notificationSettingsChangeSchema,
 } from "./notification-settings.schemas";
+import { unreachablePushService } from "#src/server/notifications/unreachable-push-services";
 
 /**
  * The Settings page's account notification settings (task #467): read them with this person's
@@ -38,6 +39,7 @@ export const getNotificationSettings = createServerFn({ method: "POST" })
         lastSuccessAt: device.lastSuccessAt?.toISOString() ?? null,
         lastFailureAt: device.lastFailureAt?.toISOString() ?? null,
         current: data.endpoint !== undefined && endpoint === data.endpoint,
+        unreachablePushService: unreachablePushService(endpoint),
       })),
     };
   });

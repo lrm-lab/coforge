@@ -34,6 +34,8 @@
   "notif_device_mobile": "手机",
   "notif_device_browser": "浏览器",
   "notif_device_last_success": "上次送达 {time}",
+  "notif_push_unreachable": "CoForge 的服务器连不上这个浏览器的推送服务，收不到桌面和锁屏通知。CoForge 开着时站内通知照常；换用 Firefox 可以收到。",
+  "notif_push_unreachable_iphone": "CoForge 的服务器连不上 Apple 的推送服务，这台设备收不到锁屏通知。CoForge 开着时站内通知照常。",
   "notif_device_never": "还没有送达过",
   "notif_test_sending": "发送中…",
   "notif_save_failed": "通知设置没能保存，请重试。",

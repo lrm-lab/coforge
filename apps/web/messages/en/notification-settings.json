@@ -34,6 +34,8 @@
   "notif_device_mobile": "Phone",
   "notif_device_browser": "Browser",
   "notif_device_last_success": "Last delivered {time}",
+  "notif_push_unreachable": "CoForge's servers can't reach this browser's push service, so it gets no desktop or lock-screen notifications. While CoForge is open, notifications still show in the app; Firefox gets them too.",
+  "notif_push_unreachable_iphone": "CoForge's servers can't reach Apple's push service, so this device gets no lock-screen notifications. While CoForge is open, notifications still show in the app.",
   "notif_device_never": "Nothing delivered yet",
   "notif_test_sending": "Sending…",
   "notif_save_failed": "Notification settings could not be saved. Try again.",

@@ -215,6 +215,13 @@ export function NotificationSettingsPanel({
               {testing ? m.notif_test_sending() : m.notif_test_send()}
             </Button>
           </SettingsField>
+          {here?.unreachablePushService && (
+            <p className="-mt-3 text-sm text-warning-primary">
+              {here.unreachablePushService === "apple" && here.deviceKind === "mobile"
+                ? m.notif_push_unreachable_iphone()
+                : m.notif_push_unreachable()}
+            </p>
+          )}
           {tested && (
             <p
               role="status"
