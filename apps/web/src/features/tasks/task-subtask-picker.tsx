@@ -1,4 +1,4 @@
-import { taskNameLabel, type TaskLink, type TaskView } from "@lrm/coforge-sdk/internal";
+import { taskNameLabel, type TaskView } from "@lrm/coforge-sdk/internal";
 import { useMemo, useState } from "react";
 import { useFilter } from "react-aria";
 import {
@@ -11,7 +11,7 @@ import { Plus, SearchLg } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
-import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
+import { DialogCancel } from "#src/components/ui/dialog-actions";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { m } from "#src/paraglide/messages";
 
@@ -36,14 +36,6 @@ function noteOf(candidate: SubtaskCandidate) {
   if (candidate.from?.hidden) return m.tasks_subtask_under_hidden();
   if (candidate.from) return m.tasks_subtask_under({ name: taskNameLabel(candidate.from) });
   return undefined;
-}
-
-/** The move's question; a parent the viewer cannot name is not named. */
-function moveBody(candidate: SubtaskCandidate, from: TaskLink, to: string) {
-  const name = taskNameLabel(candidate);
-  return from.hidden
-    ? m.tasks_subtask_move_body_hidden({ name, to })
-    : m.tasks_subtask_move_body({ name, from: taskNameLabel(from), to });
 }
 
 type Props = {
@@ -97,7 +89,7 @@ export function SubtaskPickerDialog({
   );
 }
 
-/** The list, then, for a Task under another parent, the question whether to move it. */
+/** The list. A Task under another parent moves here at once: it can be moved back. */
 function SubtaskPicker({
   task,
   currentMemberId,
@@ -108,33 +100,12 @@ function SubtaskPicker({
 }: Omit<Props, "open" | "onOpenChange"> & { onCancel: () => void }) {
   const { contains } = useFilter({ sensitivity: "base" });
   const [search, setSearch] = useState("");
-  const [moving, setMoving] = useState<SubtaskCandidate | null>(null);
   const manager = useCanSetAnyTaskStatus();
   const { tasks: rows, loading } = useUnfinishedTasks(task.conversationId);
   const candidates = useMemo(
     () => subtaskCandidates(task, rows, { memberId: currentMemberId, manager }),
     [task, rows, currentMemberId, manager],
   );
-  const here = taskNameLabel({ hidden: false, number: task.number, channel: null });
-
-  if (moving?.from) {
-    return (
-      <div className="flex flex-col gap-2 p-4">
-        <Heading slot="title" className="text-md font-semibold text-primary">
-          {m.tasks_subtask_move_title({ name: taskNameLabel(moving) })}
-        </Heading>
-        <p className="text-sm text-tertiary">{moveBody(moving, moving.from, here)}</p>
-        <DialogActions className="mt-2">
-          <DialogCancel type="button" onPress={() => setMoving(null)}>
-            {m.tasks_create_cancel()}
-          </DialogCancel>
-          <DialogAction type="button" isDisabled={disabled} onPress={() => onPick(moving)}>
-            {m.tasks_subtask_move_confirm()}
-          </DialogAction>
-        </DialogActions>
-      </div>
-    );
-  }
 
   return (
     <>
@@ -167,8 +138,7 @@ function SubtaskPicker({
           onAction={(key) => {
             const picked = candidates.find((candidate) => taskNameLabel(candidate) === key);
             if (!picked || picked.refusal !== null) return;
-            if (picked.from) setMoving(picked);
-            else onPick(picked);
+            onPick(picked);
           }}
           // Still reading, a search that matches nothing, and a conversation with nothing to offer
           // each say so differently.

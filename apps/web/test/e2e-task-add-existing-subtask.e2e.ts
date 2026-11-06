@@ -175,28 +175,12 @@ test("an existing Task is put under the open one, and one under another parent i
         await Bun.sleep(100);
       expect(await parentOf(docs!)).toBe(task);
 
-      // One under another parent asks first, then moves.
+      // One under another parent moves at once: it can be moved back.
       await openPicker();
       // Now a sub-task, it is no longer offered.
       expect(await row(name("Write the docs"))).toBeNull();
       await mark(item(name("Fix login")), "pick");
       await browser("click", '[data-e2e="pick"]');
-      await browser(
-        "wait",
-        "--fn",
-        `${dialogs}.some((el) => el.textContent.includes("Move #${login} here?")) && ${settled}`,
-      );
-      expect(
-        await evaluate<string>(
-          `${dialogs}.find((el) => el.textContent.includes("Move #${login} here?")).textContent`,
-        ),
-      ).toContain(`#${login} is a sub-task of #${old}. It will move under #${task}.`);
-      await shoot(`${label}-move`);
-      await mark(
-        `[...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "Move")`,
-        "move",
-      );
-      await browser("click", '[data-e2e="move"]');
       for (let tries = 0; (await parentOf(login!)) !== task && tries < 50; tries += 1)
         await Bun.sleep(100);
       expect(await parentOf(login!)).toBe(task);
