@@ -64,6 +64,8 @@ type ProxySocket = { path: string; protocol?: string; upstream?: WebSocket; pend
 
 function countingProxy() {
   const reads = readsOf(0);
+  /** Every counted call as it went over the wire, for calls.json. */
+  const calls: { name: Counted; lists: ChatListRead[]; status: number; search: string }[] = [];
   /** The watched channels the browser has sent a subscribe command naming. */
   const subscribing = new Set<string>();
   let watched: string[] = [];
@@ -99,6 +101,9 @@ function countingProxy() {
         duplex: "half",
       };
       const response = await fetch(upstream.origin + url.pathname + url.search, init);
+      // Every counted call's wire shape lands in calls.json: a count the per-list names cannot
+      // explain (a second loadChatLists naming no list) is debugged from here, not guessed.
+      if (name) calls.push({ name, lists, status: response.status, search: url.search });
       const body = await response.arrayBuffer();
       // The answer, read at the server already, waits here: what is published meanwhile is newer
       // than the stream position it carries.
@@ -149,6 +154,7 @@ function countingProxy() {
   return {
     origin: `http://127.0.0.1:${server.port}`,
     reads,
+    calls,
     reset() {
       Object.assign(reads, readsOf(0));
       subscribing.clear();
@@ -233,6 +239,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await writeFile(join(artifacts, "reads.json"), `${JSON.stringify(results, null, 2)}\n`);
+  await writeFile(join(artifacts, "calls.json"), `${JSON.stringify(proxy.calls, null, 2)}\n`);
   proxy.release();
   await browser("close").catch(() => undefined);
   proxy.stop();

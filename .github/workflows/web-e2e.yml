@@ -22,7 +22,9 @@ jobs:
   e2e:
     name: Browser e2e (shard ${{ matrix.shard }} of 2)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Setup (images, install, build, services) once took ~24 of the 30 minutes on a slow runner,
+    # leaving the shard's files no room; the per-file `timeout 360` still bounds each test.
+    timeout-minutes: 45
     strategy:
       # One shard's failure does not hide the other's.
       fail-fast: false
