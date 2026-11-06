@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { OVERLAY_LAYER } from "#src/lib/overlay-layer";
 import { useServerFn } from "@tanstack/react-start";
 
@@ -87,6 +87,29 @@ export function ChannelSettingsPanel({
   const info = useInfoForm(conversation, onChanged);
   // What to do once the panel has closed, held while unsaved edits are being confirmed.
   const afterClose = useRef<(() => void) | undefined>(undefined);
+  // Escape closes the panel even when a live update stranded focus outside the dialog — the
+  // overlay's own key handling only sees keys pressed inside it. An open overlay above (the
+  // unsaved prompt, a confirm, a listbox) keeps the key, as does a prevented one.
+  const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
+    if (event.key !== "Escape" || event.defaultPrevented) return;
+    const own = document.querySelector(
+      `[role="dialog"][aria-label="${m.channel_settings_open()}"]`,
+    );
+    const above = [
+      ...document.querySelectorAll(
+        '[role="dialog"], [role="alertdialog"], [role="listbox"], [role="menu"]',
+      ),
+    ].filter((element) => element !== own);
+    if (above.length > 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    requestClose();
+  });
+  useEffect(() => {
+    if (!open) return;
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
+  }, [open]);
 
   // Each opening lands on the view the opener asked for (the settings, when it asked for none).
   // Read through a ref so a parent that clears the request after close does not reopen the page.
