@@ -1,4 +1,4 @@
-import type { TaskView } from "@lrm/coforge-sdk/internal";
+import type { TaskProjectRef, TaskView } from "@lrm/coforge-sdk/internal";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
@@ -22,8 +22,8 @@ export function TaskProjectMenu({
 }: {
   task: Pick<TaskView, "project">;
   disabled: boolean;
-  /** A Project by slug, or null to file the Task under no Project. */
-  onSelect: (project: string | null) => void;
+  /** A Project, or null to file the Task under no Project. */
+  onSelect: (project: TaskProjectRef | null) => void;
 }) {
   const [wanted, setWanted] = useState(false);
   const load = useServerFn(listProjects);
@@ -68,7 +68,11 @@ export function TaskProjectMenu({
             id: project.slug,
           })),
         ]}
-        onSelect={(key) => onSelect(key === NONE ? null : key)}
+        onSelect={(key) => {
+          if (key === NONE) return onSelect(null);
+          const project = projects.data?.find((each) => each.slug === key);
+          if (project) onSelect({ id: project.id, name: project.name, slug: project.slug });
+        }}
       />
     </span>
   );

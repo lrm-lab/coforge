@@ -1,6 +1,8 @@
-import type { TaskView } from "@lrm/coforge-sdk/internal";
+import type { TaskProjectRef, TaskView } from "@lrm/coforge-sdk/internal";
+import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { ChevronRight, XClose } from "@untitledui/icons";
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Heading, Input as AriaInput, TextArea } from "react-aria-components";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -12,9 +14,11 @@ import { m } from "#src/paraglide/messages";
 import { TASK_ASSIGNMENT_MANAGER_REQUIRED } from "./task-assignment";
 import { AssigneeMenu } from "./task-assignee-menu";
 import { TaskLabelsField } from "./task-labels";
+import { TaskProjectMenu } from "./task-project-menu";
 import { TaskProperty } from "./task-property";
 import { TaskStatusIcon } from "./task-status-icon";
 import { useTaskAssignmentAccess } from "./use-task-assignment-access";
+import { loadTaskCreateDefaults } from "./tasks.functions";
 import { useWorkspaceLabels } from "./workspace-labels";
 
 /** What a new Task is made with: its title, and what else was set before it was created. */
@@ -25,14 +29,18 @@ export type TaskDraft = {
   assignee?: string;
   /** Label names. */
   labels?: string[];
+  /** A Project by slug, or null for none; absent where the form offers no Project (a sub-task
+   * takes its parent's). */
+  project?: string | null;
 };
 
 /**
  * A new Task, laid out as the Task popup lays out a Task (Frank, 11-05: "按照我们目前 task 的设计"):
  * where it goes above (the conversation, or the Task it is a step of), its title beside its To do
  * status, its owner and labels as the popup's chips, then its description. One Task per dialog
- * (Frank, 11-05: "就一次建一个吧"). The Project follows the conversation, as any new Task's does;
- * the popup changes it afterwards.
+ * (Frank, 11-05: "就一次建一个吧"). In a conversation its Project is a chip too, starting at the one
+ * the viewer last filed a Task under there, which a create naming none would take (task #485); a
+ * sub-task takes its parent's, so it offers none.
  */
 export function CreateTaskDialog({
   open,
@@ -41,6 +49,7 @@ export function CreateTaskDialog({
   describeError,
   where,
   members,
+  conversationId,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -53,6 +62,8 @@ export function CreateTaskDialog({
   /** Who may be its owner; without them, no owner is offered. Someone who may not assign others
    * is offered only themselves, as in the popup. */
   members?: readonly Mentionable[];
+  /** The conversation the Task goes in, so the form offers its Project. Absent for a sub-task. */
+  conversationId?: string;
 }) {
   const [draft, setDraft] = useState(emptyDraft);
   const [error, setError] = useState("");
@@ -66,11 +77,26 @@ export function CreateTaskDialog({
   const assignable = access.canAssignOthers
     ? members
     : members?.filter((member) => member.kind === "user" && member.id === access.userId);
+  const loadDefaults = useServerFn(loadTaskCreateDefaults);
+  const defaults = useQuery({
+    queryKey: ["task-create-defaults", conversationId],
+    queryFn: () => loadDefaults({ data: { conversationId: conversationId! } }),
+    enabled: open && conversationId !== undefined,
+    staleTime: 0,
+  });
+  // The Project starts at the last-used one, once it is read; a pick made since stays.
+  useEffect(() => {
+    if (defaults.data && draft.project === undefined)
+      setDraft((current) =>
+        current.project === undefined ? { ...current, project: defaults.data.project } : current,
+      );
+  }, [defaults.data, draft.project]);
   // A Task its creator takes on is made started, as the server makes it.
   const status = draft.assignee === `user:${access.userId}` ? "in_progress" : "todo";
 
   const owner = members?.find((member) => `${member.kind}:${member.id}` === draft.assignee);
-  const draftTask: Pick<TaskView, "owner" | "labels"> = {
+  const draftTask: Pick<TaskView, "owner" | "labels" | "project"> = {
+    project: draft.project ?? null,
     owner: owner
       ? {
           memberId: "",
@@ -108,6 +134,8 @@ export function CreateTaskDialog({
       ...(description && { description }),
       ...(draft.assignee && { assignee: draft.assignee }),
       ...(draft.labels.length > 0 && { labels: draft.labels }),
+      ...(conversationId !== undefined &&
+        draft.project !== undefined && { project: draft.project?.slug ?? null }),
     };
     const key = JSON.stringify(made);
     const request =
@@ -189,7 +217,7 @@ export function CreateTaskDialog({
                     className="min-w-0 flex-1 bg-transparent text-lg font-semibold text-primary outline-hidden placeholder:font-medium placeholder:text-placeholder"
                   />
                 </Heading>
-                {/* The popup's chips: its owner and labels, each its own control. */}
+                {/* The popup's chips: its owner, Project and labels, each its own control. */}
                 <div
                   data-layout="chips"
                   className="mt-3 flex gap-1.5 overflow-x-auto px-4 pb-0.5 [scrollbar-width:none] sm:px-6 [&::-webkit-scrollbar]:hidden"
@@ -201,6 +229,15 @@ export function CreateTaskDialog({
                         members={assignable}
                         disabled={saving}
                         onSelect={(assignee) => change({ assignee: assignee ?? undefined })}
+                      />
+                    </TaskProperty>
+                  )}
+                  {conversationId !== undefined && (
+                    <TaskProperty label={m.tasks_project()}>
+                      <TaskProjectMenu
+                        task={draftTask}
+                        disabled={saving || draft.project === undefined}
+                        onSelect={(project) => change({ project })}
                       />
                     </TaskProperty>
                   )}
@@ -256,4 +293,6 @@ const emptyDraft = () => ({
   description: "",
   assignee: undefined as string | undefined,
   labels: [] as string[],
+  /** Undefined until the conversation's last-used Project is read. */
+  project: undefined as TaskProjectRef | null | undefined,
 });

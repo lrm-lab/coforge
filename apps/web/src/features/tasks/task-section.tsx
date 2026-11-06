@@ -61,10 +61,7 @@ export function TaskSection({
   picker,
   onPickerChange,
   onOpenRelated,
-  projectField = true,
 }: {
-  /** Whether the Task can be filed under a Project: not one in a direct conversation. */
-  projectField?: boolean;
   /** One column under the title, a column beside the pages, or one row of chips (a phone). */
   layout?: "column" | "sidebar" | "chips";
   task: TaskView;
@@ -173,15 +170,15 @@ export function TaskSection({
             }
           />
         </TaskProperty>
-        {projectField && (
-          <TaskProperty label={m.tasks_project()} className="[[data-layout=chips]_&]:order-2">
-            <TaskProjectMenu
-              task={task}
-              disabled={pending}
-              onSelect={(project) => void run({ operation: "amend", number: task.number, project })}
-            />
-          </TaskProperty>
-        )}
+        <TaskProperty label={m.tasks_project()} className="[[data-layout=chips]_&]:order-2">
+          <TaskProjectMenu
+            task={task}
+            disabled={pending}
+            onSelect={(project) =>
+              void run({ operation: "amend", number: task.number, project: project?.slug ?? null })
+            }
+          />
+        </TaskProperty>
         <TaskProperty label={m.tasks_labels()} className="[[data-layout=chips]_&]:order-2">
           <TaskLabelsField
             task={task}

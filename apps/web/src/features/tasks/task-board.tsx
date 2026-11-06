@@ -40,12 +40,12 @@ export type ConversationBoard = {
   name?: string;
   /** Who the Task popup names as assignees and offers to assign. */
   members?: readonly Mentionable[];
-  /** A direct conversation's board: its Tasks are filed under no Project. */
-  direct?: boolean;
   loading?: boolean;
   error?: string;
   /** Creates a Task from the create dialog's draft. */
   onCreateTask?: (draft: TaskDraft, idempotencyKey: string) => Promise<TaskView[]>;
+  /** The conversation itself, so its New Task form offers a Project. */
+  conversationId?: string;
   /** Shows a single Task just created from the board. */
   onOpenCreated: (task: TaskView) => void | Promise<void>;
 };
@@ -228,6 +228,7 @@ export function TaskBoard<T extends BoardTask>({
           onOpenChange={setCreateOpen}
           where={conversation?.name ? { label: conversation.name } : undefined}
           members={conversation?.members}
+          conversationId={conversation?.conversationId}
           onCreate={async (draft, idempotencyKey) => {
             const created = await onCreateTask(draft, idempotencyKey);
             // The new Task opens: its message in the chat, or, made without one, its popup.
@@ -344,12 +345,6 @@ function BoardTaskCard<T extends BoardTask>({
             onOpenDetails={onOpenDetails}
             onCommand={onCommand}
             conversationName={conversation ? conversation.name : task.source?.label}
-            direct={
-              conversation
-                ? conversation.direct
-                : // The Tasks page's rows name their channel; a direct conversation's has none.
-                  (task.source as { channelName?: string | null } | undefined)?.channelName === null
-            }
             members={conversation?.members}
             currentMemberId={task.currentMemberId ?? null}
           />
