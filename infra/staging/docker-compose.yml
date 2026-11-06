@@ -62,6 +62,9 @@ services:
       AUTHING_ISSUER: https://coforge-staging.authing.cn/oidc
       AUTHING_GITHUB_CONNECTION: github-mobile
       COFORGE_GITHUB_SIGN_IN_CLIENT_ID: Ov23lig3ZSmcMqA97yAN
+      # Authing's webhook shared secret (user:email-verified); empty leaves
+      # /api/authing/webhook refusing every request.
+      COFORGE_AUTHING_WEBHOOK_SECRET_FILE: /run/secrets/coforge_authing_webhook_secret
       COFORGE_SESSION_SECRET_FILE: /run/secrets/coforge_session_secret
       COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY_FILE: /run/secrets/coforge_agent_credential_encryption_key
       COFORGE_GITHUB_APP_ID: "5261083"
@@ -174,6 +177,10 @@ services:
         gid: "1000"
         mode: 0400
       - source: coforge_github_webhook_secret
+        uid: "1000"
+        gid: "1000"
+        mode: 0400
+      - source: coforge_authing_webhook_secret
         uid: "1000"
         gid: "1000"
         mode: 0400
@@ -382,6 +389,8 @@ secrets:
     environment: COFORGE_GITHUB_CREDENTIAL_ENCRYPTION_KEY
   coforge_github_webhook_secret:
     environment: COFORGE_GITHUB_WEBHOOK_SECRET
+  coforge_authing_webhook_secret:
+    environment: COFORGE_AUTHING_WEBHOOK_SECRET
   coforge_web_push_private_key:
     environment: COFORGE_WEB_PUSH_PRIVATE_KEY
   otel_traces_endpoint:

@@ -89,6 +89,7 @@ Not yet enabled in production: OpenTelemetry tracing and Server-Timing.
 | `coforge_github_credential_encryption_key` | GitHub credential encryption key, 64 hex characters (`openssl rand -hex 32`). Never replace it. |
 | `coforge_github_app_slug` | GitHub App slug from `https://github.com/apps/<slug>`. |
 | `coforge_github_webhook_secret` | Optional: the GitHub App webhook secret (`openssl rand -hex 32`). |
+| `coforge_authing_webhook_secret` | Optional: the shared secret Authing sends as `x-authing-webhook-secret` on its `user:email-verified` webhook (`openssl rand -hex 32`, the same value entered in the Authing console). Absent or empty, `/api/authing/webhook` refuses every request. |
 | `coforge_commit_coauthor` | Optional: the Agent commit co-author, `Name <email>` of a regular GitHub user account ([runbook](github-connection.md)). Absent, Agent commits get no `Co-authored-by` trailer. |
 
 Generate the VAPID pair once in a controlled operator environment and keep it

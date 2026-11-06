@@ -17,6 +17,7 @@ Secret 和 Variable 的区别不是「重不重要」，而是**能不能读回�
 | `COFORGE_WEB_PUSH_PRIVATE_KEY`            | 稳定的 VAPID P-256 private key；只挂载到 Web 的只读 secret file |
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`      | 阿里云北京 OTLP Traces 接入地址，**含 Token**，所以是 secret 而不是 variable |
 | `COFORGE_FILE_DELIVERY_KEY`               | `files-staging.coforge.cn` 的 CDN URL 鉴权主 KEY；不是 OSS 凭据 |
+| `COFORGE_AUTHING_WEBHOOK_SECRET`          | 可选：Authing Webhook（`user:email-verified`）共享密钥，Authing 控制台里配同一个值；不设或为空时 `/api/authing/webhook` 拒绝所有请求 |
 
 | Variable（staging 环境）    | 用途                                |
 | --------------------------- | ----------------------------------- |

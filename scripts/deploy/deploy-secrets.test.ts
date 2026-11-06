@@ -266,6 +266,27 @@ describe("write_deploy_env", () => {
   });
 });
 
+describe("Authing webhook secret", () => {
+  for (const environment of ["staging", "production"]) {
+    test(`${environment} web receives the webhook secret as an environment-sourced secret file`, async () => {
+      const compose = await readCompose(environment);
+      const web = compose.services.web;
+      expect(web?.environment?.COFORGE_AUTHING_WEBHOOK_SECRET_FILE).toBe(
+        "/run/secrets/coforge_authing_webhook_secret",
+      );
+      expect(web?.secrets).toContainEqual({
+        source: "coforge_authing_webhook_secret",
+        uid: "1000",
+        gid: "1000",
+        mode: 400,
+      });
+      expect(compose.secrets.coforge_authing_webhook_secret).toEqual({
+        environment: "COFORGE_AUTHING_WEBHOOK_SECRET",
+      });
+    });
+  }
+});
+
 describe("Login with CoForge signing keyset", () => {
   test.each([
     ["production", "https://coforge.cn/oidc"],
