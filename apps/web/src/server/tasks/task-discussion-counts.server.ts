@@ -9,10 +9,11 @@ import type {
 } from "./task-view.server";
 
 /**
- * The replies in each task's own conversation, and in the thread it had before (the thread under
- * its source message), for the tasks one read returns: two grouped counts bounded by those tasks'
- * ids and the Workspace. They are not part of `taskSelection`: counting through the relation
- * groups every message of the table, once per read. Server notices are not replies.
+ * The replies in each task's own conversation, the files sent there, and the replies in the thread
+ * it had before (the thread under its source message), for the tasks one read returns: three
+ * grouped counts bounded by those tasks' ids and the Workspace. They are not part of
+ * `taskSelection`: counting through the relation groups every message of the table, once per
+ * read. Server notices are not replies; an unsent upload (no message yet) is not a file.
  */
 export async function discussionCounts(
   db: PrismaClient,
@@ -25,7 +26,7 @@ export async function discussionCounts(
     task.discussionConversationId ? [task.discussionConversationId] : [],
   );
   const roots = tasks.flatMap((task) => (task.messageId ? [task.messageId] : []));
-  const [own, earlier] = await Promise.all([
+  const [own, earlier, files] = await Promise.all([
     conversations.length
       ? db.$queryRaw<{ id: string; count: bigint }[]>`
           SELECT "conversationId"::text AS id, COUNT(*) AS count FROM "messages"
@@ -40,9 +41,17 @@ export async function discussionCounts(
             AND "threadRootId" = ANY(${roots}::uuid[]) AND "senderMemberId" IS NOT NULL
           GROUP BY "threadRootId"`
       : [],
+    conversations.length
+      ? db.$queryRaw<{ id: string; count: bigint }[]>`
+          SELECT "conversationId"::text AS id, COUNT(*) AS count FROM "attachments"
+          WHERE "workspaceId" = ${workspaceId}::uuid
+            AND "conversationId" = ANY(${conversations}::uuid[]) AND "messageId" IS NOT NULL
+          GROUP BY "conversationId"`
+      : [],
   ]);
   const ownBy = new Map(own.map((row) => [row.id, Number(row.count)]));
   const earlierBy = new Map(earlier.map((row) => [row.id, Number(row.count)]));
+  const filesBy = new Map(files.map((row) => [row.id, Number(row.count)]));
   return new Map(
     tasks.map((task) => [
       task.id,
@@ -50,6 +59,8 @@ export async function discussionCounts(
         replyCount:
           (task.discussionConversationId && ownBy.get(task.discussionConversationId)) || 0,
         earlierReplies: (task.messageId && earlierBy.get(task.messageId)) || 0,
+        fileCount:
+          (task.discussionConversationId && filesBy.get(task.discussionConversationId)) || 0,
       },
     ]),
   );

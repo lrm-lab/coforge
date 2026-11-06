@@ -214,8 +214,12 @@ export function readTaskText(
 }
 
 /** What counting a task's discussions adds to its view (`discussionCounts`); a reader that did not
- * count leaves both out, and a page keeps what it had. */
-export type DiscussionCounts = { replyCount: number; earlierReplies: number };
+ * count leaves all three out, and a page keeps what it had. */
+export type DiscussionCounts = {
+  replyCount: number;
+  earlierReplies: number;
+  fileCount: number;
+};
 
 /** What names the conversation of a Task that another Task's view, history or notice mentions. */
 export const NAMED_CONVERSATION_SELECT = {
@@ -327,7 +331,7 @@ export function taskView(
     project: task.project ?? null,
     ...(task.discussionConversationId && {
       discussionConversationId: task.discussionConversationId,
-      ...(counts && { replyCount: counts.replyCount }),
+      ...(counts && { replyCount: counts.replyCount, fileCount: counts.fileCount }),
     }),
     ...(counts?.earlierReplies && {
       earlierDiscussion: { threadRootId: task.messageId!, replyCount: counts.earlierReplies },

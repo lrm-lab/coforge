@@ -198,6 +198,9 @@ export type TaskView = {
   discussionConversationId?: string | null;
   /** The messages in that conversation. */
   replyCount?: number;
+  /** The files sent in the task's own conversation; absent reads as none (an older server does
+   * not send it). */
+  fileCount?: number;
   /** The thread under the message the task started as, from before the task had a conversation of
    * its own; new replies go to the task's conversation, not here. */
   earlierDiscussion?: { threadRootId: string; replyCount: number };

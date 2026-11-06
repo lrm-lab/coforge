@@ -23,7 +23,7 @@ import {
 } from "./task-view.server";
 import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
 import { viewsWithCounts } from "./task-discussion-counts.server";
-import { loadTaskRelations, relationsOf, showRelations } from "./task-relations.server";
+import { showRelations } from "./task-relations.server";
 
 export type TaskOverview = {
   tasks: Array<
@@ -206,7 +206,7 @@ export class TaskOverviewReads {
         },
       },
     });
-    const rows = await overviewRows(this.db, userId, tasks);
+    const rows = await overviewRows(this.db, workspaceId, userId, tasks);
     // Which sub-tasks are cards depends on the board's Project pick, so the board decides; it
     // reads the parent's Project here (task #596).
     return {
@@ -252,10 +252,9 @@ export class TaskOverviewReads {
         parentLinks: { select: { parentTaskId: true } },
       },
     });
-    const relations = await loadTaskRelations(this.db, "people", tasks);
     return {
-      tasks: tasks.map((task) => ({
-        ...overviewRow(task, userId, { relations: relationsOf(relations, task.id) }),
+      tasks: await viewsWithCounts(this.db, "people", workspaceId, tasks, (task, extras) => ({
+        ...overviewRow(task, userId, extras),
         parentTaskId: task.parentLinks[0]?.parentTaskId ?? null,
       })),
     };
@@ -398,7 +397,7 @@ export class TaskOverviewReads {
     const rows = tasks.slice(0, limit);
     const last = rows.at(-1);
     return {
-      tasks: await overviewRows(this.db, userId, rows),
+      tasks: await overviewRows(this.db, scope.workspaceId, userId, rows),
       nextCursor: tasks.length > limit && last ? finishedCursor(last.updatedAt, last.id) : null,
     };
   }

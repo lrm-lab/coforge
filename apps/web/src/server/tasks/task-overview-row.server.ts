@@ -4,7 +4,7 @@ import { humanLabel } from "#src/lib/human-label";
 import { visibleChannelWhere } from "#src/server/conversations/channel-read-access.server";
 import { viewerDirectConversationWhere } from "#src/server/conversations/viewer-direct-conversations.server";
 import { withProjectIconUrl } from "#src/server/projects/project-images.server";
-import { relationsOf, loadTaskRelations } from "./task-relations.server";
+import { viewsWithCounts } from "./task-discussion-counts.server";
 import { taskSelection, taskView, type TaskViewExtras } from "./task-view.server";
 import type { TaskOverview } from "./task-overview.server";
 
@@ -48,15 +48,16 @@ export function overviewSelection(userId: string) {
   } satisfies Prisma.TaskSelect;
 }
 
-/** The page's rows: their relations read together, their discussions not counted. */
+/** The page's rows: their relations read together and their discussions counted, once for the page. */
 export async function overviewRows(
   db: PrismaClient,
+  workspaceId: string,
   userId: string,
   tasks: Array<Prisma.TaskGetPayload<{ select: ReturnType<typeof overviewSelection> }>>,
 ) {
-  const relations = await loadTaskRelations(db, "people", tasks);
-  return tasks.map((task) =>
-    overviewRow(task, userId, { relations: relationsOf(relations, task.id) }),
+  if (!tasks.length) return [];
+  return viewsWithCounts(db, "people", workspaceId, tasks, (task, extras) =>
+    overviewRow(task, userId, extras),
   );
 }
 
