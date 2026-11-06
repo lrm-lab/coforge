@@ -487,16 +487,24 @@ export async function failRunningCollectSlotsForAgent(
 
   const reason = input.failureReason.slice(0, 2000) || "collector runtime failed";
   const accepted: AcceptCollectSlotReportResult[] = [];
-  for (const slot of slots) {
+  // A provider failure can fan out across many slots. Keep the database work
+  // bounded while avoiding one full accept round-trip per slot in series.
+  const ACCEPT_CONCURRENCY = 16;
+  for (let offset = 0; offset < slots.length; offset += ACCEPT_CONCURRENCY) {
+    const batch = slots.slice(offset, offset + ACCEPT_CONCURRENCY);
     accepted.push(
-      await acceptCollectSlotReport(db, {
-        workspaceId: input.workspaceId,
-        agentId: input.agentId,
-        requestId: collectFailRequestId(input.requestId, slot.id),
-        runId: slot.runId,
-        outcome: "failed",
-        failureReason: reason,
-      }),
+      ...(await Promise.all(
+        batch.map((slot) =>
+          acceptCollectSlotReport(db, {
+            workspaceId: input.workspaceId,
+            agentId: input.agentId,
+            requestId: collectFailRequestId(input.requestId, slot.id),
+            runId: slot.runId,
+            outcome: "failed",
+            failureReason: reason,
+          }),
+        ),
+      )),
     );
   }
   return { accepted, slotCount: slots.length };
