@@ -234,7 +234,7 @@
   "conversation_channel_suggestions": "Channel suggestions",
   "conversation_channel_archived": "Archived",
   "files_tab": "Files",
-  "files_empty": "No files have been shared in this conversation yet.",
+  "files_empty": "No files have been shared in this conversation yet. Files an Agent saves on its Computer are in its profile, under Workspace.",
   "files_download": "Download",
   "files_locate_message": "View in Chat",
   "files_loading": "Loading…",
