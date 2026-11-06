@@ -26,6 +26,8 @@ export function CollectComputerRow(props: {
   onPathAdd: () => void;
   onPathRemove: (index: number) => void;
   onPathFocused: () => void;
+  startingAgentId: string | null;
+  onStartAgent: (agentId: string) => void;
 }) {
   const { slot } = props;
   return (
@@ -76,9 +78,26 @@ export function CollectComputerRow(props: {
         </div>
       </div>
       {!slot.ready ? (
-        <p className="mt-1 pl-6 text-xs text-warning-primary">
-          {m.records_collect_plan_not_ready()}
-        </p>
+        <div className="mt-1 flex items-center gap-2 pl-6">
+          <p className="text-xs text-warning-primary">
+            {slot.agentIssue === "stopped"
+              ? m.records_collect_plan_agent_stopped()
+              : slot.agentIssue === "deleted"
+                ? m.records_collect_plan_agent_unavailable()
+                : m.records_collect_plan_not_ready()}
+          </p>
+          {slot.agentIssue === "stopped" && slot.collectorAgentId ? (
+            <Button
+              size="sm"
+              color="secondary"
+              isDisabled={props.disabled || props.startingAgentId !== null}
+              isLoading={props.startingAgentId === slot.collectorAgentId}
+              onPress={() => props.onStartAgent(slot.collectorAgentId!)}
+            >
+              {m.records_collect_plan_start_agent()}
+            </Button>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );

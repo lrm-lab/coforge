@@ -35,6 +35,7 @@ import {
 } from "./records-collect.functions";
 import { collectPlanSubmitBlocked } from "./weekly-report-collect-plan";
 import { CollectComputerRow } from "./weekly-report-collect-plan-computer-row";
+import { executeAgentControl } from "#src/features/agents/agent-control.functions";
 import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
 
 type SlotRow = Awaited<ReturnType<typeof listWeeklyReportCollectorSlots>>[number];
@@ -47,6 +48,9 @@ function collectPlanErrorMessage(error: unknown): string {
     return "当前周报不存在或已不是你的成员周报，请从周报页面重新发起采集。";
   if (message.includes("COFORGE_APP_ERROR:ACCESS_DENIED"))
     return "当前账号无权采集这份周报或所选 Computer。";
+  if (message.includes("collector_agent_stopped")) return m.records_collect_plan_agent_stopped();
+  if (message.includes("collector_agent_deleted"))
+    return m.records_collect_plan_agent_unavailable();
   if (message.includes("COFORGE_APP_ERROR:INVALID_INPUT"))
     return "采集 Agent 配置已失效，请重新打开卡片并配置 Collector。";
   return m.records_collect_plan_submit_failed();
@@ -66,6 +70,7 @@ export function WeeklyReportCollectPlanCard(props: {
   const listSlots = useServerFn(listWeeklyReportCollectorSlots);
   const ensure = useServerFn(ensureWeeklyReportCollector);
   const submit = useServerFn(submitWeeklyReportCollectPlan);
+  const startAgent = useServerFn(executeAgentControl);
   const [slots, setSlots] = useState<SlotRow[]>([]);
   const [windowKind, setWindowKind] = useState<CollectWindowKind>("week");
   const [optionId, setOptionId] = useState(`${props.year}-W${props.week}`);
@@ -76,6 +81,7 @@ export function WeeklyReportCollectPlanCard(props: {
   const [pathsByComputer, setPathsByComputer] = useState<Record<string, string[]>>({});
   const [pathFocus, setPathFocus] = useState<{ computerId: string; index: number } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [startingAgentId, setStartingAgentId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [initialized, setInitialized] = useState(false);
   const [profileAgentId, setProfileAgentId] = useState<string | null>(null);
@@ -195,6 +201,22 @@ export function WeeklyReportCollectPlanCard(props: {
       setError(m.records_collect_plan_ensure_failed());
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function onStartAgent(agentId: string) {
+    if (busy || props.disabled || startingAgentId) return;
+    setStartingAgentId(agentId);
+    setError(null);
+    try {
+      await startAgent({
+        data: { agentId, action: "start", requestId: crypto.randomUUID() },
+      });
+      setSlots(await listSlots());
+    } catch {
+      setError(m.records_collect_plan_start_failed());
+    } finally {
+      setStartingAgentId(null);
     }
   }
 
@@ -402,6 +424,8 @@ export function WeeklyReportCollectPlanCard(props: {
                 onPathAdd={() => addPathLine(slot.computerId)}
                 onPathRemove={(index) => removePathLine(slot.computerId, index)}
                 onPathFocused={() => setPathFocus(null)}
+                startingAgentId={startingAgentId}
+                onStartAgent={(agentId) => void onStartAgent(agentId)}
               />
             ))
           )}

@@ -77,6 +77,10 @@ the plan retains its fields and refreshes readiness. Pending fields and submitte
 run references are restored from browser storage after remount or refresh. Submit dispatches the existing
 Collect Run and synthesis flow. A selected unready Computer blocks submission instead
 of being silently omitted. Later plans reuse the configured collectors.
+A stopped or archived collector Agent is unready: the card offers Start for a
+stopped one, and the server refuses a submission whose wake DM can never be
+delivered. A Collect Run already collecting fails those slots at settlement
+instead of waiting out the stall ceiling.
 Do not use a generic `agent:create` card, guess collector commands, probe SSH or
 search home directories/other Agents' memory to discover collectors. Not-ready does
 not establish that the Computer daemon is missing. Agent ownership remains human;

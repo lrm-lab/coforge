@@ -204,20 +204,31 @@ export async function startCollectRun(
       workspaceId: input.workspaceId,
       id: { in: bindings.map((row) => row.collectorAgentId) },
     },
-    select: { id: true, computerId: true, runtimeConfig: true },
+    select: {
+      id: true,
+      computerId: true,
+      runtimeConfig: true,
+      stoppedAt: true,
+      deletedAt: true,
+    },
   });
   const agentById = new Map(agents.map((row) => [row.id, row]));
   for (const computerId of computerIds) {
     const binding = bindingByComputer.get(computerId);
     if (!binding) throw new AppError("INVALID_INPUT");
     const agent = agentById.get(binding.collectorAgentId);
-    if (
-      !agent ||
-      agent.computerId !== computerId ||
-      !collectorRuntimeConfigured(agent.runtimeConfig)
-    ) {
-      throw new AppError("INVALID_INPUT");
+    if (!agent || agent.computerId !== computerId) throw new AppError("INVALID_INPUT");
+    // A wake DM to a stopped or archived Agent is stored but never delivered;
+    // refuse before a Collect Run exists rather than leave it collecting forever.
+    // Archived wins: an archived Agent cannot be started, so reconfiguration is
+    // the only recovery.
+    if (agent.deletedAt) {
+      throw new AppError("CONFLICT", { details: { reason: "collector_agent_deleted" } });
     }
+    if (agent.stoppedAt) {
+      throw new AppError("CONFLICT", { details: { reason: "collector_agent_stopped" } });
+    }
+    if (!collectorRuntimeConfigured(agent.runtimeConfig)) throw new AppError("INVALID_INPUT");
   }
 
   const now = new Date();

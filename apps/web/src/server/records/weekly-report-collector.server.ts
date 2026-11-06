@@ -35,6 +35,8 @@ export type CollectorComputerSlot = {
   collectorAgentId: string | null;
   computerConfigured: boolean;
   runtimeConfigured: boolean;
+  /** Why a bound Collector Agent cannot be woken, when it cannot. */
+  agentIssue: "stopped" | "deleted" | null;
   ready: boolean;
 };
 
@@ -196,7 +198,13 @@ export async function listOwnedComputerSlots(
       workspaceId: input.workspaceId,
       id: { in: bindings.map((row) => row.collectorAgentId) },
     },
-    select: { id: true, computerId: true, runtimeConfig: true },
+    select: {
+      id: true,
+      computerId: true,
+      runtimeConfig: true,
+      stoppedAt: true,
+      deletedAt: true,
+    },
   });
   const agentById = new Map(agents.map((row) => [row.id, row]));
 
@@ -205,6 +213,11 @@ export async function listOwnedComputerSlots(
     const agent = binding ? agentById.get(binding.collectorAgentId) : undefined;
     const computerConfigured = Boolean(agent?.computerId === row.computerId);
     const runtimeOk = agent ? collectorRuntimeConfigured(agent.runtimeConfig) : false;
+    const agentIssue = agent?.deletedAt
+      ? ("deleted" as const)
+      : agent?.stoppedAt
+        ? ("stopped" as const)
+        : null;
     return {
       computerId: row.computerId,
       displayName: row.computer.displayName || row.computer.name || row.computerId,
@@ -214,7 +227,8 @@ export async function listOwnedComputerSlots(
       collectorAgentId: binding?.collectorAgentId ?? null,
       computerConfigured,
       runtimeConfigured: runtimeOk,
-      ready: Boolean(binding && computerConfigured && runtimeOk),
+      agentIssue,
+      ready: Boolean(binding && computerConfigured && runtimeOk && agentIssue === null),
     };
   });
 }

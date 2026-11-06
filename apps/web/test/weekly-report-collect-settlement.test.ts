@@ -70,6 +70,16 @@ test("settleStaleCollectRun marks overdue running slots stalled and closes an em
         return { count: 1 };
       },
     },
+    agent: {
+      findMany: async () => [
+        {
+          id: "agent-1",
+          computerId: "computer-1",
+          stoppedAt: null,
+          deletedAt: null,
+        },
+      ],
+    },
   };
 
   const now = startedAt.getTime() + COLLECT_SLOT_STALL_MS + 1;
@@ -159,6 +169,16 @@ test("settleStaleCollectRun ends a collecting wave immediately when the computer
         return { count: 1 };
       },
     },
+    agent: {
+      findMany: async () => [
+        {
+          id: "agent-1",
+          computerId: "computer-1",
+          stoppedAt: null,
+          deletedAt: null,
+        },
+      ],
+    },
   };
 
   const view = await settleStaleCollectRun(
@@ -215,6 +235,16 @@ test("settleStaleCollectRun keeps collecting while the computer runtime is onlin
       updateMany: async () => {
         throw new Error("an online computer must not fail its slot");
       },
+    },
+    agent: {
+      findMany: async () => [
+        {
+          id: "agent-1",
+          computerId: "computer-1",
+          stoppedAt: null,
+          deletedAt: null,
+        },
+      ],
     },
   };
 
@@ -295,6 +325,22 @@ test("settleStaleCollectRun checks and marks offline computers in parallel", asy
         return { count: 1 };
       },
     },
+    agent: {
+      findMany: async () => [
+        {
+          id: "agent-computer-1",
+          computerId: "computer-1",
+          stoppedAt: null,
+          deletedAt: null,
+        },
+        {
+          id: "agent-computer-2",
+          computerId: "computer-2",
+          stoppedAt: null,
+          deletedAt: null,
+        },
+      ],
+    },
   };
 
   const view = await settleStaleCollectRun(
@@ -313,4 +359,96 @@ test("settleStaleCollectRun checks and marks offline computers in parallel", asy
   expect(maxPresenceChecks).toBe(2);
   expect(maxSlotUpdates).toBe(2);
   expect(view.status).toBe(COLLECT_RUN_STATUS.cancelled);
+});
+
+test("settleStaleCollectRun fails a running slot whose collector Agent cannot be woken", async () => {
+  const { settleStaleCollectRun } =
+    await import("#src/server/records/weekly-report-collect-settlement.server");
+  const { COLLECT_RUN_STATUS, COLLECT_SLOT_STATUS } =
+    await import("#src/server/records/weekly-report-collect-run.server");
+
+  let slotStatus: string = COLLECT_SLOT_STATUS.running;
+  let slotFailure: string | null = null;
+  let slotRequestId: string | null = null;
+  let runStatus: string = COLLECT_RUN_STATUS.collecting;
+  const startedAt = new Date("2026-11-06T08:00:00.000Z");
+
+  const slotRow = () => ({
+    id: "slot-1",
+    computerId: "computer-1",
+    collectorAgentId: "agent-stopped",
+    scanPaths: ["/work"],
+    status: slotStatus,
+    retryCount: 0,
+    failureReason: slotFailure,
+    packMarkdown: null,
+    requestId: slotRequestId,
+  });
+  const runRow = () => ({
+    id: "run-1",
+    reportId: "report-1",
+    workspaceId: "ws-1",
+    userId: "user-1",
+    status: runStatus,
+    windowKind: "week",
+    windowStart: new Date("2026-11-03T00:00:00.000Z"),
+    windowEnd: new Date("2026-11-10T00:00:00.000Z"),
+    startedAt,
+    completedAt: null,
+    createdAt: startedAt,
+    slots: [slotRow()],
+  });
+
+  const db = {
+    weeklyReportCollectRun: {
+      findFirst: async () => runRow(),
+      findFirstOrThrow: async () => runRow(),
+      updateMany: async ({ data }: { data: Record<string, unknown> }) => {
+        runStatus = String(data.status);
+        return { count: 1 };
+      },
+    },
+    weeklyReportCollectSlot: {
+      updateMany: async ({
+        where,
+        data,
+      }: {
+        where: { runId: string; status: string; collectorAgentId?: string };
+        data: Record<string, unknown>;
+      }) => {
+        expect(where.status).toBe(COLLECT_SLOT_STATUS.running);
+        if (where.collectorAgentId && where.collectorAgentId !== "agent-stopped") {
+          return { count: 0 };
+        }
+        slotStatus = String(data.status);
+        slotFailure = (data.failureReason as string | null) ?? null;
+        slotRequestId = (data.requestId as string | null) ?? slotRequestId;
+        return { count: 1 };
+      },
+    },
+    agent: {
+      findMany: async () => [
+        {
+          id: "agent-stopped",
+          computerId: "computer-1",
+          stoppedAt: new Date("2026-11-06T08:58:43.000Z"),
+          deletedAt: null,
+        },
+      ],
+    },
+  };
+
+  // The computer is online; only the stopped Agent keeps the slot from settling.
+  const view = await settleStaleCollectRun(
+    db as never,
+    { workspaceId: "ws-1", userId: "user-1", runId: "run-1" },
+    startedAt.getTime() + 1_000,
+    async () => true,
+  );
+
+  expect(slotStatus).toBe(COLLECT_SLOT_STATUS.failed);
+  expect(slotFailure ?? "").toMatch(/已停止|停止/);
+  expect(slotRequestId).toBeTruthy();
+  expect(view.status).toBe(COLLECT_RUN_STATUS.cancelled);
+  expect(view.allTerminal).toBe(true);
 });
