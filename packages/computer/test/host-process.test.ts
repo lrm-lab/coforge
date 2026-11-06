@@ -31,6 +31,7 @@ const job: ClaimedContainerJob = {
   workspaceSlug: "alpha",
   name: "lab",
   daemonApiKey: daemonKey,
+  replaceCredential: false,
 };
 
 const config = {
@@ -78,6 +79,7 @@ describe("host process", () => {
             COFORGE_COMPUTER_ID: "computer-1",
             COFORGE_COMPUTER_NAME: "lab",
             COFORGE_SERVER_URL: "https://server.example",
+            COFORGE_REPLACE_CREDENTIAL: "0",
           });
           expect(JSON.stringify(input.env)).not.toContain("refresh");
           return "service-1";

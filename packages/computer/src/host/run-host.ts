@@ -32,6 +32,7 @@ export function containerEnv(job: ClaimedContainerJob, serverUrl: string): Conta
     COFORGE_COMPUTER_ID: job.computerId,
     COFORGE_COMPUTER_NAME: job.name,
     COFORGE_SERVER_URL: serverUrl.replace(/\/+$/, ""),
+    COFORGE_REPLACE_CREDENTIAL: job.replaceCredential ? "1" : "0",
   };
 }
 

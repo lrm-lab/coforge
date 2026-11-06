@@ -38,6 +38,7 @@ function hosts() {
       findByIdempotency: async (ownerId, idempotencyKey) =>
         records.find((job) => job.ownerId === ownerId && job.idempotencyKey === idempotencyKey),
       findOpenFormat: async () => undefined,
+      findOpenAttach: async () => undefined,
       insert: async (record) => {
         records.push({ ...record });
       },
@@ -138,6 +139,7 @@ describe("cloud image update job", () => {
         findByIdempotency: async (ownerId, idempotencyKey) =>
           records.find((job) => job.ownerId === ownerId && job.idempotencyKey === idempotencyKey),
         findOpenFormat: async () => undefined,
+        findOpenAttach: async () => undefined,
         insert: async (record) => {
           records.push({ ...record });
         },

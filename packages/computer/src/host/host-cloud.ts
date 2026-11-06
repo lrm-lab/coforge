@@ -14,6 +14,9 @@ export type ClaimedContainerJob = {
   workspaceSlug: string;
   name: string;
   daemonApiKey: string | null;
+  /** The cloud refused this binding's credential: the attach must replace whatever key the
+   * container stores, including an sk_computer that may itself be revoked. */
+  replaceCredential?: boolean;
 };
 
 type HostFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -94,6 +97,7 @@ function claimedJob(value: unknown): ClaimedContainerJob {
     workspaceSlug: requiredString(job.workspaceSlug),
     name: requiredString(job.name),
     daemonApiKey: job.daemonApiKey == null ? null : requiredString(job.daemonApiKey),
+    replaceCredential: job.replaceCredential === true,
   };
 }
 

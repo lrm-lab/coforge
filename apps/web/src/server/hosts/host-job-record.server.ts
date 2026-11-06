@@ -5,6 +5,23 @@ import type {
   HostJobRecord,
 } from "./host-jobs.server";
 
+export type ClaimedHostJob = {
+  jobId: string;
+  operation: HostJobOperation;
+  computerId: string;
+  workspaceId: string;
+  workspaceSlug: string;
+  name: string;
+  daemonApiKey: string | null;
+  /** The cloud refused this binding's credential: the attach must replace whatever key the
+   * container stores, including an sk_computer that may itself be revoked. */
+  replaceCredential: boolean;
+};
+
+/** Idempotency namespace of reconnect-issued attach jobs; claim() reads it as the
+ * replace-credential marker so no schema column is needed. */
+export const CLOUD_RECONNECT_IDEMPOTENCY_PREFIX = "cloud-reconnect:";
+
 export function cloudComputerView(
   computer: CloudComputer,
   jobId: string | null,

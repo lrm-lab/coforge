@@ -11,6 +11,7 @@ import { getCloudImageInventory } from "./cloud-image-inventory.server";
 import { createHostHttpHandler } from "./host-http.server";
 import { createHostJobHttpHandler } from "./host-job-http.server";
 import { HostJobs } from "./host-jobs.server";
+import { reconnectCloudHostJob } from "./host-jobs-cloud-reconnect.server";
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 
 export function clusterToken(): string | undefined {
@@ -29,18 +30,19 @@ export function productionHostHttp() {
   });
 }
 
-export function productionCloudComputers(db: PrismaClient = requireDatabaseClient()) {
+function cloudHostJobDeps(db: PrismaClient) {
   const directory = productionHostDirectory(db);
-  return new HostJobs({
+  return {
     workspaces: new PrismaWorkspaceMembers(db),
     fleet: new PrismaCloudFleet(db),
     jobs: new PrismaHostJobStore(db),
     cluster: directory,
     keys: new PrismaDaemonKeys(db),
     imageUpdatesPaused: () => getCloudImageInventory().updatesPaused,
-    imageUpdatePolicy: (computerId) => getCloudImageInventory().replacementPolicy(computerId),
+    imageUpdatePolicy: (computerId: string) =>
+      getCloudImageInventory().replacementPolicy(computerId),
     accounts: {
-      displayName: async (userId) =>
+      displayName: async (userId: string) =>
         (
           await db.user.findUnique({
             where: { id: userId },
@@ -49,7 +51,7 @@ export function productionCloudComputers(db: PrismaClient = requireDatabaseClien
         )?.displayName,
     },
     disk: {
-      clear: async (computerId) => {
+      clear: async (computerId: string) => {
         await db.agentSession.deleteMany({ where: { computerId } });
         await db.agent.updateMany({
           where: { computerId },
@@ -57,7 +59,19 @@ export function productionCloudComputers(db: PrismaClient = requireDatabaseClien
         });
       },
     },
-  });
+  };
+}
+
+export function productionCloudComputers(db: PrismaClient = requireDatabaseClient()) {
+  return new HostJobs(cloudHostJobDeps(db));
+}
+
+export function productionCloudReconnect(db: PrismaClient = requireDatabaseClient()) {
+  const deps = cloudHostJobDeps(db);
+  return {
+    reconnect: (input: Parameters<typeof reconnectCloudHostJob>[1]) =>
+      reconnectCloudHostJob(deps, input),
+  };
 }
 
 export function productionHostJobs() {

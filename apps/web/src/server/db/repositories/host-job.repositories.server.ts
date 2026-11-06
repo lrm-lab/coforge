@@ -180,6 +180,14 @@ export class PrismaHostJobStore implements ClusterJobs {
     return row ? fromRow(row) : undefined;
   }
 
+  async findOpenAttach(computerId: string, workspaceId: string) {
+    const row = await this.db.hostJob.findFirst({
+      where: { computerId, workspaceId, operation: "attach", reportedAt: null },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
+    return row ? fromRow(row) : undefined;
+  }
+
   async insert(record: HostJobRecord): Promise<void> {
     await this.db.hostJob.create({ data: toRow(record) });
   }

@@ -8,6 +8,7 @@ export const CONTAINER_BINDING_ENV_KEYS = [
   "COFORGE_SERVER_URL",
   "COFORGE_WORKSPACE_SLUG",
   "COFORGE_COMPUTER_NAME",
+  "COFORGE_REPLACE_CREDENTIAL",
 ] as const;
 
 /** The variables of one cloud Computer container, exactly `CONTAINER_BINDING_ENV_KEYS`. */

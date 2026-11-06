@@ -67,9 +67,12 @@ export async function prepareContainerBinding(
   // already be revoked by a concurrent confirm-key, and persisting it parks the Workspace on
   // credential_revoked for good (task #572). `seedOnly` is the foreground restart: its env `dk_`
   // is the create job's original key, dead since the first confirm, so it only fills an empty
-  // store and never displaces a credential the binding already holds.
+  // store and never displaces a credential the binding already holds. A reconnect attach sets
+  // COFORGE_REPLACE_CREDENTIAL because the server already refused this binding's credential —
+  // even a stored `sk_computer` may be the revoked one, so the fresh key must win.
+  const replaceCredential = text(env.COFORGE_REPLACE_CREDENTIAL) === "1";
   const stored = await credentials.load(workspaceId, computerId);
-  if (stored && (options?.seedOnly === true || isComputerApiKey(stored))) {
+  if (stored && !replaceCredential && (options?.seedOnly === true || isComputerApiKey(stored))) {
     console.log(
       `[attach-workspace] workspace ${workspaceId} already holds ${isComputerApiKey(stored) ? "an sk_computer" : "a credential"}; keeping it (ignored the env's dk_)`,
     );

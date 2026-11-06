@@ -6,6 +6,7 @@ import {
   type ClusterJobs,
   type HostJobRecord,
 } from "#src/server/hosts/host-jobs.server";
+import { reconnectCloudHostJob } from "#src/server/hosts/host-jobs-cloud-reconnect.server";
 
 export const now = new Date("2026-09-30T06:00:00.000Z");
 export const daemonKey = `dk_${"b".repeat(43)}`;
@@ -36,6 +37,28 @@ export function hostsFor(
     keys: { issue: async () => daemonKey },
     accounts,
   });
+}
+
+export function reconnectFor(
+  fleet: MemoryFleet,
+  jobs: MemoryJobs,
+  findMember: (
+    workspaceId: string,
+    userId: string,
+  ) => Promise<{ id: string; slug: string } | undefined> = async (workspaceId) =>
+    workspaceId === "workspace-2" ? { id: workspaceId, slug: "beta" } : undefined,
+) {
+  return (input: { userId: string; workspaceId: string; computerId: string; now: Date }) =>
+    reconnectCloudHostJob(
+      {
+        workspaces: { findMember },
+        fleet,
+        jobs,
+        cluster: { id: async () => "cluster-1" },
+        keys: { issue: async () => daemonKey },
+      },
+      input,
+    );
 }
 
 export class MemoryFleet {
@@ -104,6 +127,15 @@ export class MemoryJobs implements ClusterJobs {
         job.idempotencyKey.startsWith("cloud-format:"),
     );
   }
+  async findOpenAttach(computerId: string, workspaceId: string) {
+    return this.records.find(
+      (job) =>
+        job.computerId === computerId &&
+        job.workspaceId === workspaceId &&
+        job.operation === "attach" &&
+        job.reportedAt === null,
+    );
+  }
   async insert(record: HostJobRecord) {
     this.records.push({ ...record });
   }
@@ -147,13 +179,12 @@ export function harness(input?: {
   const jobs = new MemoryJobs();
   const issued: string[] = [];
   let accepting = input?.accepting !== false;
+  const findMember = async (workspaceId: string, userId: string) =>
+    input?.member === false || workspaceId !== "workspace-1" || userId !== "user-a"
+      ? undefined
+      : { id: workspaceId, slug: "alpha" };
   const hosts = new HostJobs({
-    workspaces: {
-      findMember: async (workspaceId, userId) =>
-        input?.member === false || workspaceId !== "workspace-1" || userId !== "user-a"
-          ? undefined
-          : { id: workspaceId, slug: "alpha" },
-    },
+    workspaces: { findMember },
     fleet,
     jobs,
     cluster: {
@@ -177,6 +208,7 @@ export function harness(input?: {
     fleet,
     jobs,
     issued,
+    reconnect: reconnectFor(fleet, jobs, findMember),
     setAccepting(value: boolean) {
       accepting = value;
     },

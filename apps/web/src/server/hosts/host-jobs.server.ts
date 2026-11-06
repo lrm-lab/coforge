@@ -1,5 +1,10 @@
 import { AppError } from "#src/lib/app-error";
-import { buildHostJobRecord, cloudComputerView } from "./host-job-record.server";
+import {
+  buildHostJobRecord,
+  cloudComputerView,
+  CLOUD_RECONNECT_IDEMPOTENCY_PREFIX,
+  type ClaimedHostJob,
+} from "./host-job-record.server";
 import { requestCloudRuntimeHostJob } from "./host-jobs-cloud-runtime.server";
 import { resolveHostJobWorkspace } from "./host-jobs-workspace.server";
 
@@ -65,16 +70,6 @@ export type HostJobRecord = {
   reportedAt: Date | null;
 };
 
-export type ClaimedHostJob = {
-  jobId: string;
-  operation: HostJobOperation;
-  computerId: string;
-  workspaceId: string;
-  workspaceSlug: string;
-  name: string;
-  daemonApiKey: string | null;
-};
-
 export interface WorkspaceAccess {
   findMember(
     workspaceId: string,
@@ -99,6 +94,8 @@ export interface ClusterJobs {
   findByIdempotency(ownerId: string, idempotencyKey: string): Promise<HostJobRecord | undefined>;
   /** An unreported format removal for this computer, if one is already queued. */
   findOpenFormat(ownerId: string, computerId: string): Promise<HostJobRecord | undefined>;
+  /** An unreported attach for this Computer and Workspace binding, if one is already queued. */
+  findOpenAttach(computerId: string, workspaceId: string): Promise<HostJobRecord | undefined>;
   insert(record: HostJobRecord): Promise<void>;
   /** Drops open create and attach work once the computer is being removed. */
   abandon(computerId: string, now: Date): Promise<void>;
@@ -367,6 +364,9 @@ export class HostJobs {
       workspaceSlug: job.workspaceSlug,
       name: job.name,
       daemonApiKey: job.daemonApiKey,
+      replaceCredential:
+        job.operation === "attach" &&
+        job.idempotencyKey.startsWith(CLOUD_RECONNECT_IDEMPOTENCY_PREFIX),
     };
   }
 

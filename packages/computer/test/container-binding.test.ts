@@ -172,6 +172,22 @@ test("an unconfirmed sk_computer is kept: it still authenticates and the child r
   expect(await credentials.load("workspace-1", "computer-1")).toBe(unconfirmed);
 });
 
+test("a reconnect attach replaces even a stored sk_computer with the env's fresh key", async () => {
+  const directory = await stateDirectory();
+  const credentials = new FileDaemonCredentialStore(
+    workspaceStateDirectory(directory, "workspace-1"),
+  );
+  const revoked = `sk_computer_${"r".repeat(43)}`;
+  await credentials.save("workspace-1", "computer-1", revoked);
+  await credentials.markConfirmed("workspace-1", "computer-1", revoked);
+  // The server refused this binding's credential, so the stored key may itself be the revoked
+  // one: COFORGE_REPLACE_CREDENTIAL makes the fresh attach key win over any stored credential.
+  expect(
+    await prepareContainerBinding({ ...env, COFORGE_REPLACE_CREDENTIAL: "1" }, directory),
+  ).toBe(true);
+  expect(await credentials.load("workspace-1", "computer-1")).toBe(daemonKey);
+});
+
 test("a foreground restart seeds the env key only into an empty credential store", async () => {
   const directory = await stateDirectory();
   const credentials = new FileDaemonCredentialStore(

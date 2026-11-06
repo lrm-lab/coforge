@@ -9,6 +9,7 @@ import {
   request,
   hostsFor,
   harness,
+  reconnectFor,
 } from "./support/host-jobs-harness";
 
 describe("cloud computer quota", () => {
@@ -79,6 +80,7 @@ describe("cloud computer quota", () => {
     const attach = await hosts.claim({ token: "host-token" });
     expect(attach?.operation).toBe("attach");
     expect(attach?.workspaceSlug).toBe("beta");
+    expect(attach?.replaceCredential).toBe(false);
   });
 
   test.each([
@@ -406,5 +408,90 @@ describe("host job HTTP", () => {
     const body = await claimAsHost.json();
     expect(body.job.daemonApiKey).toBe(daemonKey);
     expect(body.job.operation).toBe("create");
+  });
+});
+
+describe("cloud computer reconnect", () => {
+  async function readyComputer() {
+    const { hosts, fleet, jobs, issued, reconnect } = harness();
+    const created = await hosts.ensureDefault(request);
+    const claimed = await hosts.claim({ token: "host-token" });
+    await hosts.report({
+      token: "host-token",
+      jobId: claimed!.jobId,
+      containerId: "service-1",
+      now,
+    });
+    return { hosts, fleet, jobs, issued, reconnect, created };
+  }
+
+  test("reconnect queues an attach for the home workspace ensureDefault would skip", async () => {
+    const { hosts, jobs, issued, reconnect, created } = await readyComputer();
+    const before = jobs.records.length;
+    const view = await reconnect({
+      userId: "user-a",
+      workspaceId: "workspace-1",
+      computerId: created.computerId,
+      now,
+    });
+    expect(view.computerId).toBe(created.computerId);
+    expect(jobs.records).toHaveLength(before + 1);
+    const attach = jobs.records.at(-1);
+    expect(attach).toMatchObject({
+      operation: "attach",
+      workspaceId: "workspace-1",
+      computerId: created.computerId,
+    });
+    expect(attach?.daemonApiKey).toBe(daemonKey);
+    expect(issued.length).toBeGreaterThan(0);
+    // The reconnect marker reaches the host so the container replaces even a revoked
+    // sk_computer the credential rules would otherwise keep.
+    const claimed = await hosts.claim({ token: "host-token" });
+    expect(claimed?.replaceCredential).toBe(true);
+  });
+
+  test("reconnect dedupes while an attach for the binding is still open", async () => {
+    const { jobs, reconnect, created } = await readyComputer();
+    const input = {
+      userId: "user-a",
+      workspaceId: "workspace-1",
+      computerId: created.computerId,
+      now,
+    };
+    await reconnect(input);
+    const count = jobs.records.length;
+    await reconnect({ ...input, now: new Date(now.getTime() + 1000) });
+    expect(jobs.records).toHaveLength(count);
+  });
+
+  test("reconnect refuses an unlinked, unready, or unknown computer", async () => {
+    const { fleet, jobs, reconnect, created } = await readyComputer();
+    // A member of workspace-2 the computer is not linked to.
+    const betaReconnect = reconnectFor(fleet, jobs);
+    await expect(
+      betaReconnect({
+        userId: "user-a",
+        workspaceId: "workspace-2",
+        computerId: created.computerId,
+        now,
+      }),
+    ).rejects.toThrow(HostJobError);
+    fleet.markDeleted(created.computerId, now);
+    await expect(
+      reconnect({
+        userId: "user-a",
+        workspaceId: "workspace-1",
+        computerId: created.computerId,
+        now,
+      }),
+    ).rejects.toThrow(HostJobError);
+    await expect(
+      reconnect({
+        userId: "user-a",
+        workspaceId: "workspace-1",
+        computerId: crypto.randomUUID(),
+        now,
+      }),
+    ).rejects.toThrow(HostJobError);
   });
 });
