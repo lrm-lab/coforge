@@ -307,8 +307,9 @@ const MARK = "\u0000";
 
 /**
  * The notice as `systemNoticeText` reads, split at the people it names, so the row draws each one's
- * face before their name (Frank, 11-04, task #521). The words are the same: each person keeps the
- * text a plain notice writes for them.
+ * face before their name (Frank, 11-04, task #521). The words are the same, except that a name
+ * drawn as a label drops the `@` the plain text writes before a handle: the face already says who
+ * it is (Frank, 11-06, task #591).
  */
 export function systemNoticeParts(
   message: SystemNoticeSource,
@@ -318,7 +319,7 @@ export function systemNoticeParts(
   const marked =
     <P extends SystemPerson>(text: (person: P) => string) =>
     (person: P) => {
-      people.push({ person, text: text(person) });
+      people.push({ person, text: text(person).replace(/^@/, "") });
       return `${MARK}${people.length - 1}${MARK}`;
     };
   const notice = systemNoticeOf(message);

@@ -182,6 +182,8 @@ test("names carry their faces", async () => {
       await browser("wait", "--fn", `${pageHydrated} && ${noticeRow} != null`);
       await browser("wait", "500");
       expect(await evaluate<number>(`${noticeRow}.querySelectorAll("img").length`)).toBe(2);
+      // A name the notice draws as a label, its face before it, has no `@` (task #591).
+      expect(await evaluate<boolean>(`${noticeRow}.textContent.includes("@")`)).toBe(false);
       expect(
         await evaluate<number>(`[...${chips}].filter((chip) => chip.querySelector("img")).length`),
       ).toBe(0);

@@ -19,12 +19,12 @@ const notices: SystemNoticeSource[] = [
   { body: "Plain text from before notices had kinds.", system: undefined },
 ];
 
-test("a notice split at its people reads word for word as its text (task #521)", () => {
+test("a notice split at its people reads as its text, a label without the @ before a handle (tasks #521, #591)", () => {
   for (const notice of notices) {
     const joined = systemNoticeParts(notice, "en")
       .map((part) => (typeof part === "string" ? part : part.text))
       .join("");
-    expect(joined).toBe(systemNoticeText(notice, "en"));
+    expect(joined).toBe(systemNoticeText(notice, "en").replaceAll("@", ""));
   }
 });
 
@@ -32,6 +32,6 @@ test("each person a notice names is a part of its own, with who they are", () =>
   const people = systemNoticeParts(notices[0]!, "en").filter((part) => typeof part !== "string");
   expect(people.map((part) => [part.person.handle, part.text])).toEqual([
     ["alice", "Alice"],
-    ["dax", "@dax"],
+    ["dax", "dax"],
   ]);
 });

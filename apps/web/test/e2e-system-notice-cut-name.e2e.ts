@@ -106,10 +106,11 @@ test("a notice cut on a phone cuts inside a name, never drops it", async () => {
     })()`);
     // The phone's line is too short for the sentence: it is cut.
     expect(line.cut).toBe(true);
-    // Both names are words of that line, so its ellipsis can fall inside one.
+    // Both names are words of that line, so its ellipsis can fall inside one; as labels, with
+    // their faces, they carry no `@` (task #591).
     expect(line.names).toEqual([
-      { name: `@${actor!.name}`, display: "inline" },
-      { name: `@${added!.name}`, display: "inline" },
+      { name: actor!.name, display: "inline" },
+      { name: added!.name, display: "inline" },
     ]);
   } finally {
     await browser.close();
