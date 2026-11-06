@@ -3,6 +3,7 @@ import type {
   AgentSession,
   AgentSessionIdentity,
   AgentSessionOptions,
+  AgentTurnProcessWindow,
   AgentRuntimeEvent,
 } from "@coforge/agent";
 import { AGENT_RUNTIME_EVENT_TYPE } from "#src/contract";
@@ -16,7 +17,7 @@ import { claudeAssistantEvents, claudeToolResults } from "./message-events";
 import { ClaudeSubagentLineage } from "./subagent-lineage";
 import { ClaudeRateLimitState } from "./rate-limit";
 import { ClaudeSessionObservations } from "./observations";
-import { relayTaskLifecycle, taskProgressEvent } from "./task-lifecycle";
+import { relayTaskLifecycle, taskProgressEvent, type TrackedTask } from "./task-lifecycle";
 
 export class ClaudeCodeAgentSession implements AgentSession {
   #process: JsonlProcess;
@@ -41,10 +42,10 @@ export class ClaudeCodeAgentSession implements AgentSession {
   // A fresh Claude session becomes ready at its first result.
   #sessionReadyForNotices = false;
   #compacting = false;
-  /** Non-ambient tasks announced by `task_started` and not yet ended, by task id, with the tool
-   * call each belongs to; subagent types live in `#subagentLineage`. */
-  readonly #tasks = new Map<string, string | undefined>();
+  /** Live non-ambient tasks by id: tool call and lifecycle kind; types in `#subagentLineage`. */
+  readonly #tasks = new Map<string, TrackedTask>();
   readonly #subagentLineage = new ClaudeSubagentLineage();
+  #nextSubagentStop = 0;
   readonly #streamEvents: ClaudeStreamEvents;
   #inputFailure: Error | undefined;
   #recoveryFailed = false;
@@ -167,15 +168,16 @@ export class ClaudeCodeAgentSession implements AgentSession {
     this.#process = fresh.process;
     this.#sessionId = fresh.sessionId;
     // The old process's tasks never report again: end each one, so the daemon stops counting it.
-    for (const [taskId, toolUseId] of this.#tasks)
+    for (const [taskId, tracked] of this.#tasks)
       this.#emit(
-        taskProgressEvent(
-          "notification",
+        taskProgressEvent({
+          phase: "notification",
           taskId,
-          toolUseId,
-          this.#subagentLineage.typeOf(toolUseId),
-          "stopped",
-        ),
+          toolUseId: tracked.toolUseId,
+          subagentType: this.#subagentLineage.typeOf(tracked.toolUseId),
+          taskKind: tracked.taskKind,
+          taskStatus: "stopped",
+        }),
       );
     this.#tasks.clear();
     this.#subagentLineage.clear();
@@ -266,6 +268,21 @@ export class ClaudeCodeAgentSession implements AgentSession {
       this.#interrupt.fail(error instanceof Error ? error : new Error(String(error)));
     }
     return interrupted;
+  }
+
+  /** Claude Code's `stop_task` control request; only live tasks are sent. */
+  async interruptSubagent(taskId: string): Promise<"interrupted" | "not_running"> {
+    if (this.#state === "disposed" || !this.#tasks.has(taskId)) return "not_running";
+    await this.#process.send({
+      type: "control_request",
+      request_id: `coforge-stop-task-${this.#nextSubagentStop++}`,
+      request: { subtype: "stop_task", task_id: taskId },
+    });
+    return "interrupted";
+  }
+
+  async killTurnProcesses(window: AgentTurnProcessWindow): Promise<void> {
+    await this.#process.killTurnProcesses(window);
   }
 
   onExit(listener: () => void): () => void {

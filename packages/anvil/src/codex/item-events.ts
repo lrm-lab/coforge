@@ -153,10 +153,15 @@ export class CodexItemEvents {
   }
 }
 
-type OneCallTool = {
+export type OneCallTool = {
   start(item: JsonRecord): { name: string; input: unknown };
   failed(item: JsonRecord): boolean;
 };
+
+/** The one-call tool an item type maps to, shared by main-thread and subagent-thread items. */
+export function codexOneCallTool(item: JsonRecord): OneCallTool | undefined {
+  return ONE_CALL_TOOLS.get(item.type);
+}
 
 /**
  * Each item type that is one tool call: the name and raw input it starts with, and whether its
@@ -236,7 +241,7 @@ function fileChangeStarts(
   item: JsonRecord,
   occurredAt: ReturnType<typeof eventTime>,
 ): AgentRuntimeEvent[] {
-  return fileChanges(item).map((change, index) => ({
+  return codexFileChanges(item).map((change, index) => ({
     type: "tool-start",
     id: `${itemId}:${index}`,
     name: change.kind === "add" ? "write_file" : "edit_file",
@@ -246,7 +251,9 @@ function fileChangeStarts(
 }
 
 /** Each changed file with its kind: the official `{ type }` object, or a legacy kind string. */
-function fileChanges(item: JsonRecord): Array<{ kind: string | undefined; path: string }> {
+export function codexFileChanges(
+  item: JsonRecord,
+): Array<{ kind: string | undefined; path: string }> {
   const changes = Array.isArray(item.changes) ? item.changes : [item];
   return changes.flatMap((value) => {
     const change = asRecord(value);

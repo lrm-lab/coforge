@@ -34,6 +34,16 @@ export interface OwnedProcessTree {
    * began; this port only carries it.
    */
   terminateForTurn?(force: boolean, cutoffAtMs: number): Promise<OwnedProcessTreeKillReport>;
+  /**
+   * Raft's `killTurnProcesses`: kills only the descendants the turn started, leaving the owned
+   * main process alive. `startedAfterMs`/`startedBeforeMs` bound the turn on the host's own
+   * process clock, like `cutoffAtMs` above. Implementations without a safe process-table view
+   * omit this capability; the caller then skips the cleanup rather than guessing.
+   */
+  killTurnDescendants?(
+    startedAfterMs: number,
+    startedBeforeMs?: number,
+  ): Promise<OwnedProcessTreeKillReport>;
   waitForExit(timeoutMs: number): Promise<boolean>;
 }
 

@@ -60,6 +60,8 @@ export type {
   AgentSessionIdentity,
   AgentGitHookPlan,
   AgentSessionOptions,
+  AgentSubagentTaskKind,
+  AgentTurnProcessWindow,
   UsageOfficialBucket,
   UsageOfficialGroup,
   UsageSnapshot,

@@ -4,6 +4,7 @@ import type {
   AgentTurnInterruptResult as InterruptOutcome,
 } from "#src/agent-runtime/agent-process-manager";
 import type { ToolCallLedger } from "#src/agent-runtime/tool-call-ledger";
+import type { SubagentWakeTracker } from "#src/agent-runtime/subagent-progress-activity";
 import type { ProviderProgress } from "./stalled-recovery";
 import type { StalledTurnTracker } from "./stalled-turn-indicator";
 
@@ -19,11 +20,18 @@ export type TurnInterruptLaunch = Readonly<{
   stalled?: StalledTurnTracker;
   progress?: ProviderProgress;
   toolCalls?: ToolCallLedger;
+  /** Present on providers that wake after subagents; a user stop is remembered here. */
+  subagentWake?: Pick<SubagentWakeTracker, "noteUserStop">;
 }>;
 
 export type TurnInterruptHost<Launch extends TurnInterruptLaunch> = Readonly<{
   launch(agentId: string): Launch | undefined;
   interrupt(agentId: string, options: AgentTurnInterruptOptions): Promise<InterruptOutcome>;
+  /** Per-subagent stop; absent ports report the request as unsupported. */
+  interruptSubagent?(
+    agentId: string,
+    taskId: string,
+  ): Promise<"interrupted" | "not_running" | "unsupported">;
   /** Shows that the turn was stopped, or that the runtime restarts to stop it. */
   publish(agentId: string, launch: Launch, outcome: "interrupted" | "restarted"): void;
   report: ((result: AgentTurnInterruptResult) => Promise<void>) | undefined;
@@ -51,6 +59,16 @@ export async function interruptAgentTurn<Launch extends TurnInterruptLaunch>(
   const launch = host.launch(intent.agentId);
   if (!launch || launch.launchId !== intent.launchId) {
     await host.report?.({ ...intent, status: "not_running" });
+    return;
+  }
+  // A subagent stop touches no turn state: no reply intents to retract, no stalled turn to
+  // settle, no restart — the main turn keeps running.
+  if (intent.subagentTaskId !== undefined) {
+    const status =
+      (await host.interruptSubagent?.(intent.agentId, intent.subagentTaskId)) ?? "unsupported";
+    // A task the user stopped is not an unread result: its ending must not wake the Agent.
+    if (status === "interrupted") launch.subagentWake?.noteUserStop(intent.subagentTaskId);
+    await host.report?.({ ...intent, status });
     return;
   }
   launch.replyIntents?.clear();

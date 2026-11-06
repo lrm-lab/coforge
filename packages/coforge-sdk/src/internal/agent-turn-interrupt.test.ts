@@ -46,3 +46,19 @@ test("turn interrupt codec rejects an invalid status and unsafe tool name", () =
     }),
   ).toThrow("tool name");
 });
+
+test("a subagent stop round-trips its task id and the unsupported status", () => {
+  const subagentIntent: AgentTurnInterruptIntent = { ...intent, subagentTaskId: "task-9" };
+  const result: AgentTurnInterruptResult = {
+    ...subagentIntent,
+    status: "unsupported",
+  };
+
+  expect(decodeAgentTurnInterruptIntent(encodeAgentTurnInterruptIntent(subagentIntent))).toEqual(
+    subagentIntent,
+  );
+  expect(decodeAgentTurnInterruptResult(encodeAgentTurnInterruptResult(result))).toEqual(result);
+  expect(() => encodeAgentTurnInterruptIntent({ ...intent, subagentTaskId: "bad\nid" })).toThrow(
+    "scope",
+  );
+});

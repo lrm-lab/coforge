@@ -17,6 +17,7 @@ const RESULT_TYPE = "coforge.rpc.v1.AgentTurnInterruptResult";
 const MAX_BYTES = 32_768;
 const MAX_COUNTER = 2 ** 31 - 1;
 const MAX_TOOL_NAME = 200;
+const MAX_TASK_ID = 256;
 
 export type AgentTurnInterruptScope = {
   protocolMajor: number;
@@ -27,11 +28,13 @@ export type AgentTurnInterruptScope = {
   provider: RuntimeProvider;
   epoch: number;
   launchId: string;
+  /** The provider's task id a subagent stop names; absent interrupts the whole turn. */
+  subagentTaskId?: string;
 };
 
 export type AgentTurnInterruptIntent = AgentTurnInterruptScope;
 
-export type AgentTurnInterruptStatus = "interrupted" | "restarted" | "not_running";
+export type AgentTurnInterruptStatus = "interrupted" | "restarted" | "not_running" | "unsupported";
 
 export type AgentTurnInterruptResult = AgentTurnInterruptScope & {
   status: AgentTurnInterruptStatus;
@@ -51,14 +54,19 @@ function scope(value: AgentTurnInterruptScope): AgentTurnInterruptScope {
     value.epoch > MAX_COUNTER ||
     [value.requestId, value.workspaceId, value.computerId, value.agentId, value.launchId].some(
       (id) => !isScopeId(id),
-    )
+    ) ||
+    (value.subagentTaskId !== undefined &&
+      (!value.subagentTaskId ||
+        value.subagentTaskId.length > MAX_TASK_ID ||
+        value.subagentTaskId.includes("\n") ||
+        value.subagentTaskId.includes("\r")))
   )
     throw new Error("invalid agent turn interrupt scope");
   return { ...value };
 }
 
 function status(value: string): AgentTurnInterruptStatus {
-  if (!["interrupted", "restarted", "not_running"].includes(value))
+  if (!["interrupted", "restarted", "not_running", "unsupported"].includes(value))
     throw new Error("invalid agent turn interrupt status");
   return value as AgentTurnInterruptStatus;
 }
@@ -114,6 +122,7 @@ export function encodeAgentTurnInterruptResult(value: AgentTurnInterruptResult):
     epoch: checked.epoch,
     launchId: checked.launchId,
     status: checked.status,
+    ...(checked.subagentTaskId !== undefined ? { subagentTaskId: checked.subagentTaskId } : {}),
     ...(checked.toolName !== undefined ? { toolName: checked.toolName } : {}),
     ...(checked.silentForMs !== undefined ? { silentForMs: BigInt(checked.silentForMs) } : {}),
     messageType: RESULT_TYPE,

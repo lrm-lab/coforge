@@ -9,6 +9,10 @@ import type {
 } from "@lrm/coforge-sdk/internal";
 
 export type AgentActivityLevel = "info" | "warning" | "error";
+/** What a provider task lifecycle event is, closed vocabulary: `command` is a background
+ * shell/command task, `agent` a delegated subagent or teammate, `other` anything else (a
+ * Monitor watch, say). The daemon core alone decides which kinds earn an Activity row. */
+export type AgentSubagentTaskKind = "command" | "agent" | "other";
 export type AgentActivity = Readonly<{
   detailKind: AgentActivityDetailKind;
   level: AgentActivityLevel;
@@ -216,6 +220,7 @@ export type AgentRuntimeEvent = { readonly conversation?: AgentConversationScope
       phase: "started" | "progress" | "notification";
       taskId?: string;
       taskStatus?: "completed" | "failed" | "stopped";
+      taskKind?: AgentSubagentTaskKind;
       subagentType?: string;
       parentToolUseId?: string;
       occurredAt?: string;
@@ -303,11 +308,32 @@ export interface AgentSession {
   notify?(notice: string, options?: AgentNoticeOptions): Promise<void>;
   subscribe(listener: (event: AgentRuntimeEvent) => void): () => void;
   interrupt(): Promise<void>;
+  /**
+   * Interrupt one provider task by its `subagent-progress` `taskId`, leaving the main session
+   * running — the per-subagent counterpart of `interrupt()`. Resolves `"interrupted"` once the
+   * stop request was accepted, `"not_running"` when the task is unknown or already finished.
+   * Adapters without a per-task stop omit the method; the daemon reports that as unsupported.
+   */
+  interruptSubagent?(taskId: string): Promise<"interrupted" | "not_running">;
+  /**
+   * Kill only the descendant processes a turn started, after its native interrupt resolved —
+   * Raft's `killTurnProcesses`. The window is on the host process table's clock
+   * (`processClockMs`): `startedAfterMs` is the turn's cutoff (never converted from wall time),
+   * `startedBeforeMs` bounds the turn's end when the caller knows it. Adapters whose process
+   * tree cannot name turn descendants omit the method.
+   */
+  killTurnProcesses?(window: AgentTurnProcessWindow): Promise<void>;
   onExit(listener: () => void): () => void;
   /** Terminal stop: reject undelivered input and begin runtime cleanup without waiting for a
    * natural turn end. Resolve only after cleanup; reject if process exit cannot be confirmed. */
   dispose(options?: Readonly<{ cutoffAtMs?: number }>): Promise<void>;
 }
+
+/** The host process-table window a turn-scoped descendant kill may take (`killTurnProcesses`). */
+export type AgentTurnProcessWindow = {
+  startedAfterMs: number;
+  startedBeforeMs?: number;
+};
 
 /** Workspace Memory identity and explicitly fenced eval Memory share conversation routing. */
 export function isMemoryAgentRuntime(config: AgentRuntimeConfig | undefined): boolean {

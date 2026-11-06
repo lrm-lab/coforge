@@ -52,3 +52,38 @@ export class OutstandingBackgroundTasks {
     return count > 0 ? `Waiting for ${count} background task${count === 1 ? "" : "s"}` : undefined;
   }
 }
+
+/**
+ * One launch's subagent-wake bookkeeping (Raft's `subagentResultUnread` /
+ * `userStoppedSubagents`): a task that ended while the turn was quiet leaves a result the
+ * session never saw, so when the last task ends the daemon writes a wake notice; a task the
+ * user stopped through a per-subagent interrupt is not an unread result.
+ */
+export class SubagentWakeTracker {
+  /** A terminal notification arrived while quiet and its result is still untold. */
+  resultUnread = false;
+  readonly #userStopped = new Set<string>();
+
+  /** The daemon interrupted this task itself; its ending is the user's doing, not news. */
+  noteUserStop(taskId: string): void {
+    this.#userStopped.add(taskId);
+  }
+
+  /**
+   * Reads one terminal task notification: forgets a remembered user stop and says whether the
+   * ending was the user's own stop. Only a `"stopped"` status counts — a task that finished
+   * anyway still carries an untold result.
+   */
+  noteTerminal(taskId: string, taskStatus: string): boolean {
+    const userStopped = this.#userStopped.delete(taskId) && taskStatus === "stopped";
+    if (!userStopped) this.resultUnread = true;
+    return userStopped;
+  }
+
+  /** The last task ended with an untold result: take the one wake this launch earns. */
+  takeWake(): boolean {
+    if (!this.resultUnread) return false;
+    this.resultUnread = false;
+    return true;
+  }
+}

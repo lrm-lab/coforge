@@ -11,5 +11,6 @@
   "agent_turn_stop_upgrade": "Upgrade this Agent's Computer to stop individual turns. You can still stop the whole Agent.",
   "agent_turn_stop_offline": "This Agent's Computer is offline.",
   "agent_turn_stop_failed": "The current turn could not be stopped.",
+  "agent_turn_stop_unsupported": "This Agent's runtime does not support stopping parts of a turn.",
   "agent_turn_stop_retry": "Retry"
 }

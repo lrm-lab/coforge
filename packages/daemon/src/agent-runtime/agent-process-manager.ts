@@ -19,6 +19,7 @@ import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { isMemoryAgentRuntime, evalDisablesHostPiInjection } from "@coforge/agent";
 import { prepareCloudComputerAgentSkills } from "@coforge/agent/cloud-computer-skills";
 import { mkdir } from "node:fs/promises";
+import { processClockMs } from "#src/platform/process-tree";
 
 export type { AgentStatus } from "./agent-state-machine";
 
@@ -284,6 +285,16 @@ export class AgentProcessManager {
         options.interruptTimeoutMs,
         () => new Error(`Agent turn interrupt timed out: ${agentId}`),
       );
+      // Raft's killTurnProcesses: the native interrupt ended the turn but left the process
+      // running, so the descendants it spawned are still alive. Kill only those, bounded by the
+      // same turn fence the restart path uses; best-effort, never fails the interrupt itself.
+      if (options.cutoffAtMs !== undefined)
+        await runtime.session
+          .killTurnProcesses?.({
+            startedAfterMs: options.cutoffAtMs,
+            startedBeforeMs: processClockMs(),
+          })
+          .catch(() => undefined);
       return "interrupted";
     } catch {
       try {
@@ -296,6 +307,24 @@ export class AgentProcessManager {
     } finally {
       unsubscribe();
     }
+  }
+
+  /**
+   * Stops one provider task by its `subagent-progress` task id, leaving the turn and the
+   * process running — Raft's `interruptSubagent`. `"unsupported"` when the session has no
+   * per-task stop; `"not_running"` when the Agent or task is already gone.
+   */
+  async interruptSubagent(
+    agentId: string,
+    taskId: string,
+  ): Promise<"interrupted" | "not_running" | "unsupported"> {
+    if (this.#stopping.has(agentId) || this.#releases.has(agentId) || this.#stops.has(agentId))
+      return "not_running";
+    const runtime = this.#runtimes.get(agentId);
+    if (!runtime) return "not_running";
+    const stop = runtime.session.interruptSubagent;
+    if (!stop) return "unsupported";
+    return stop.call(runtime.session, taskId);
   }
 
   stop(agentId: string): Promise<void> {

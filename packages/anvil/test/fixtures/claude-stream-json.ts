@@ -93,6 +93,17 @@ for await (const chunk of Bun.stdin.stream()) {
 function handle(record: Record<string, unknown>): void {
   if (record.type === "control_request") {
     const request = record.request as Record<string, unknown>;
+    if (request.subtype === "stop_task") {
+      // Like Claude Code: the task ends and the session keeps running.
+      write({
+        type: "system",
+        subtype: "task_notification",
+        task_id: request.task_id,
+        status: "stopped",
+        summary: "stopped by request",
+      });
+      return;
+    }
     if (request.subtype !== "initialize") throw new Error("wrong startup request");
     if (process.argv.includes("missing-before-initialize") && process.argv.includes("--resume")) {
       const error = `No conversation found with session ID: ${process.argv[process.argv.indexOf("--resume") + 1]}`;

@@ -5,7 +5,10 @@ import type {
   buildRuntimeErrorActivity,
   RuntimeErrorEvent,
 } from "#src/agent-runtime/runtime-error-activity";
-import type { OutstandingBackgroundTasks } from "#src/agent-runtime/subagent-progress-activity";
+import type {
+  OutstandingBackgroundTasks,
+  SubagentWakeTracker,
+} from "#src/agent-runtime/subagent-progress-activity";
 import type { ToolCallLedger } from "#src/agent-runtime/tool-call-ledger";
 import type { PublishedActivityLaunch } from "./agent-activity-publisher";
 import type { ReplyIntentTracker } from "./reply-intent-tracker";
@@ -28,6 +31,8 @@ export type ActivityLaunch = PublishedActivityLaunch & {
   /** Reply intents this launch announced; a turn interrupt clears them. */
   replyIntents?: ReplyIntentTracker;
   backgroundTasks?: OutstandingBackgroundTasks;
+  /** Subagent wake bookkeeping, only for a provider that wakes after subagents (Codex). */
+  subagentWake?: SubagentWakeTracker;
   // The most recent `error` event not yet resolved by a `completed` event, if any (cleared on
   // `completed`). Read by the process-exit handler to decide `runtime_crashed` vs `idle` wording
   // — `AgentSession.onExit` itself carries no exit code or signal, so this is the only fact the

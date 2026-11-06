@@ -14,6 +14,8 @@ export type {
   AgentRuntimeProviderConfig,
   AgentSession,
   AgentSessionOptions,
+  AgentSubagentTaskKind,
+  AgentTurnProcessWindow,
 } from "@coforge/agent";
 export type {
   UsageOfficialBucket,

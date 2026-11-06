@@ -35,6 +35,12 @@ import { TaskIdleNudge } from "./task-idle-nudge";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
 
+/** Raft's `formatSubagentsFinishedRuntimeInput`, adapted: the results live on the subagent
+ * threads, so the notice names where to continue rather than claiming they are inline. */
+const SUBAGENTS_FINISHED_WAKE =
+  "Your background subagents have finished. Their results are available. " +
+  "Continue your work with them.";
+
 type Connection = { workspaceId: string; computerId: string; workspaceRoot: string };
 type Drafts = ReturnType<typeof agentActivityDrafts>;
 type UnavailableActivity = { detail: string; entryText?: string };
@@ -159,6 +165,24 @@ export class AgentLaunchCoordinator {
         await session.notify(text);
         return true;
       },
+    });
+  }
+
+  /**
+   * Writes the last-subagent wake as idle input (Raft's `sendRuntimeInput mode:idle`), under
+   * the idle nudge's delivery gates: a live turn, queued work or a delivery hold drops it.
+   */
+  wakeFinishedSubagents(agentId: string): void {
+    const session = this.ports.agentProcessManager.session(agentId);
+    if (!session?.notify || session.hasLiveTurn !== false) return;
+    if (this.ports.deliveryQueue.hasQueued(agentId) || this.ports.deliveryQueue.shouldHold(agentId))
+      return;
+    void session.notify(SUBAGENTS_FINISHED_WAKE).catch((error: unknown) => {
+      logger.info("Subagent wake notice could not be written", {
+        event: "subagent_wake:delivery_failed",
+        agent_id: agentId,
+        error_code: error instanceof Error ? error.name : "unknown",
+      });
     });
   }
 

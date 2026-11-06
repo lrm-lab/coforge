@@ -5,38 +5,23 @@ import type {
   AgentSession,
   AgentSessionIdentity,
   AgentSessionOptions,
+  AgentTurnProcessWindow,
 } from "@coforge/agent";
 import { RequestError } from "@agentclientprotocol/sdk";
 import { asRecord, nonEmptyString } from "#src/json-record";
 import { scrubRuntimeErrorText } from "#src/runtime-error-text";
 import { attachStderrExcerpt } from "#src/stderr-excerpt";
 import type { AcpConnection } from "./connection";
-import type { AcpNativeTurn, AcpSessionProfile, AcpTurnReader } from "./profile";
+import type { AcpNativeTurn, AcpSessionProfile } from "./profile";
+import {
+  type AcpNativeTurnState,
+  type AcpSessionInput,
+  rememberCompletedPrompt,
+} from "./session-turn";
 import { AcpSteering } from "./steering";
 
-type Input = {
-  text: string;
-  /** The id this session assigns the prompt, for a runtime that correlates its own updates. */
-  promptId?: string;
-  options?: AgentNoticeOptions;
-  admission: ReturnType<typeof Promise.withResolvers<void>>;
-  attempted: boolean;
-  updates: AcpTurnReader;
-};
-
-type NativeTurn = {
-  promptId: string;
-  updates: AcpTurnReader;
-  settled: ReturnType<typeof Promise.withResolvers<void>>;
-};
-
-const SEEN_LIMIT = 256;
-
-/** Adds `value`, evicting the oldest entry once the set exceeds its bound. */
-function remember(seen: Set<string>, value: string) {
-  seen.add(value);
-  if (seen.size > SEEN_LIMIT) seen.delete(seen.values().next().value!);
-}
+type Input = AcpSessionInput;
+type NativeTurn = AcpNativeTurnState;
 
 /**
  * One ACP runtime's session state machine: one native prompt at a time, the local queue that
@@ -283,7 +268,7 @@ export class AcpSession implements AgentSession {
         // the same turn that settles the admission, so an awaiting caller never sees it later.
         if (this.profile.steer?.unboundedRequest) await this.#steering?.drain();
         this.#active = undefined;
-        if (input.promptId) remember(this.#completedPrompts, input.promptId);
+        if (input.promptId) rememberCompletedPrompt(this.#completedPrompts, input.promptId);
         this.#steering?.settle();
         for (const event of input.updates.end()) this.#emit(event, input.options);
         if (!this.#disposed) this.#emit({ type: "completed", status }, input.options);
@@ -384,7 +369,7 @@ export class AcpSession implements AgentSession {
   }
 
   #finishNative(native: AcpNativeTurn) {
-    remember(this.#completedPrompts, native.promptId);
+    rememberCompletedPrompt(this.#completedPrompts, native.promptId);
     const turn = this.#native;
     if (!turn || turn.promptId !== native.promptId) return;
     this.#native = undefined;
@@ -460,6 +445,10 @@ export class AcpSession implements AgentSession {
     } finally {
       this.#interrupting = false;
     }
+  }
+
+  async killTurnProcesses(window: AgentTurnProcessWindow): Promise<void> {
+    await this.#transport?.process.killTurnProcesses(window);
   }
 
   async readSessionIdentity() {

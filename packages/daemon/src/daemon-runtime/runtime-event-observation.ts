@@ -9,6 +9,7 @@ import {
   type AgentRuntimeEvent,
   type UsageSnapshot,
 } from "@lrm/coforge-anvil";
+import { RUNTIME_PROVIDER_WAKES_AFTER_SUBAGENTS } from "@lrm/coforge-sdk/internal";
 import { isMemoryAgentRuntime } from "@coforge/agent";
 import type { AgentSessions } from "#src/agent-runtime/agent-session";
 import type { AgentRuntime } from "#src/agent-runtime/agent-process-manager";
@@ -20,6 +21,7 @@ import {
 } from "#src/agent-runtime/runtime-error-activity";
 import { runtimeDisplayName } from "./session-invalidate-activity";
 import { subagentProgressDetail } from "#src/agent-runtime/subagent-progress-activity";
+import { SubagentWakeTracker } from "#src/agent-runtime/subagent-progress-activity";
 import { compactionTokens, PHASE_EDGES } from "#src/agent-runtime/runtime-phases";
 import { runtimeFailureDiagnostic, safeRuntimeActivityMessage } from "./runtime-activity-text";
 import { toolStartActivity } from "#src/code-agent/tool-activity";
@@ -67,6 +69,8 @@ export type RuntimeEventObservationPorts = Readonly<{
   interruptedActivity(agentId: string): ActivityDraft;
   showQuietTurn(agentId: string, launch: ActivityLaunch, publish: Publish): void;
   reconcileIdleTurn(agentId: string, launch: ActivityLaunch): boolean;
+  /** Writes the last-subagent wake notice as idle input; only providers that need it call it. */
+  wakeFinishedSubagents?(agentId: string): void;
   rememberUsage(snapshot: UsageSnapshot): void;
   releaseTurnEndHolds(agentId: string): void;
   drainAppInboxNotices(agentId: string): Promise<void>;
@@ -233,11 +237,34 @@ export function observeRuntimeEvent(
   if (event.type === "subagent-progress") {
     // Counted whether or not its row is shown: a background task outlives its turn.
     launch.backgroundTasks?.observe(event);
+    // Raft's wake-after-subagents: a task that ends while the turn is quiet leaves a result
+    // the session never saw; when the last one ends, the daemon writes the wake notice. A
+    // live turn consumes results itself, so only a strictly quiet session counts.
+    if (RUNTIME_PROVIDER_WAKES_AFTER_SUBAGENTS[config.provider]) {
+      const quiet = runtime.session.hasLiveTurn === false;
+      if (quiet && event.taskStatus && event.taskId) {
+        const wake = (launch.subagentWake ??= new SubagentWakeTracker());
+        wake.noteTerminal(event.taskId, event.taskStatus);
+      }
+      if (
+        quiet &&
+        event.taskStatus &&
+        launch.backgroundTasks?.count === 0 &&
+        launch.subagentWake?.takeWake()
+      )
+        ports.wakeFinishedSubagents?.(agentId);
+    }
     // Shown only while this launch is busy: in a turn, or after one that is waiting for its
     // background tasks (`#showQuietTurn`). Anything later would wake an idle Agent. A
     // repeat of the row just shown (one per subagent tool call) adds nothing.
     const last = ports.activityPublisher.lastBusy(agentId);
     if (last?.launch !== launch) return;
+    // Raft's taskKind split: a background command or other non-agent task still counts toward
+    // the quiet-turn wait, but earns no subagent row — only delegated agents are shown.
+    if (event.taskKind === "command" || event.taskKind === "other") {
+      if (event.taskStatus) ports.reconcileIdleTurn(agentId, launch);
+      return;
+    }
     const detail = subagentProgressDetail(event);
     if (
       last.activity.detailKind !== AGENT_ACTIVITY_DETAIL_KIND.SUBAGENT_ACTIVITY ||

@@ -18,6 +18,7 @@ const OUTCOME_TEXT: Record<Outcome, () => string> = {
   interrupted: m.agent_turn_stop_interrupted,
   restarted: m.agent_turn_stop_restarted,
   not_running: m.agent_turn_stop_not_running,
+  unsupported: m.agent_turn_stop_unsupported,
   needs_upgrade: m.agent_turn_stop_upgrade,
   offline: m.agent_turn_stop_offline,
   failed: m.agent_turn_stop_failed,

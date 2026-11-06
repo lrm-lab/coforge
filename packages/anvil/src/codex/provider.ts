@@ -3,6 +3,7 @@ import type {
   AgentSession,
   AgentSessionIdentity,
   AgentSessionOptions,
+  AgentTurnProcessWindow,
   UsageSnapshot,
 } from "@coforge/agent";
 import {
@@ -11,10 +12,12 @@ import {
   JsonlRequestError,
   asRecord,
   eventTime,
+  nonEmptyString,
 } from "@lrm/coforge-anvil";
 import { codexContextUsage } from "./context-usage";
 import { JsonlProcess } from "@lrm/coforge-anvil/execution";
 import { CodexItemEvents } from "./item-events";
+import { CodexSubagentThreads, codexMessageThreadId } from "./subagent-threads";
 import { rejectServerRequests } from "./server-requests";
 import { openCodexThread } from "./thread-open";
 import { codexReasoningSummary } from "./reasoning-summary";
@@ -132,6 +135,7 @@ class CodexAgentSession implements AgentSession {
   readonly #listeners = new Set<(event: AgentRuntimeEvent) => void>();
   readonly #commandOutputBytes = new Map<string, number>();
   readonly #itemEvents = new CodexItemEvents();
+  readonly #subagentThreads: CodexSubagentThreads;
   readonly #signals: CodexTurnSignals;
   #state: CodexSessionState = { type: "idle" };
   #lastCompletedTurnId: string | undefined;
@@ -153,6 +157,7 @@ class CodexAgentSession implements AgentSession {
   ) {
     this.#process = process;
     this.#threadId = threadId;
+    this.#subagentThreads = new CodexSubagentThreads(threadId);
     this.#agentId = agentId;
     this.#runtimeId = runtimeId;
     this.#signals = new CodexTurnSignals(threadId, agentId, runtimeId);
@@ -296,6 +301,21 @@ class CodexAgentSession implements AgentSession {
     }
   }
 
+  /** A subagent's own thread takes the same `turn/interrupt` the main thread does. */
+  async interruptSubagent(taskId: string): Promise<"interrupted" | "not_running"> {
+    const turn = this.#subagentThreads.runningSubagentTurn(taskId);
+    if (!turn || this.#isDisposed()) return "not_running";
+    await this.#process.request({
+      method: "turn/interrupt",
+      params: { threadId: turn.threadId, turnId: turn.turnId },
+    });
+    return "interrupted";
+  }
+
+  async killTurnProcesses(window: AgentTurnProcessWindow): Promise<void> {
+    await this.#process.killTurnProcesses(window);
+  }
+
   onExit(listener: () => void): () => void {
     return this.#process.onClose(listener);
   }
@@ -308,6 +328,14 @@ class CodexAgentSession implements AgentSession {
 
   #accept(record: Record<string, unknown>): void {
     const params = asRecord(record.params);
+    // A subagent's own thread reports under its own id: its items and turn lifecycle are that
+    // subagent's, never the main turn's — and they still arrive after the main turn has ended,
+    // which is when the daemon counts them toward the quiet-turn wait.
+    const messageThreadId = codexMessageThreadId(record);
+    if (this.#subagentThreads.isSecondaryThreadId(messageThreadId)) {
+      this.#emitAll(this.#subagentThreads.acceptSecondary(record, messageThreadId));
+      return;
+    }
     // Item notifications can arrive after turn/completed. They must not revive
     // Activity for an idle session, including completion before turn/start replies.
     if (
@@ -402,6 +430,16 @@ class CodexAgentSession implements AgentSession {
         this.#commandOutputBytes.delete(item.id);
       }
       this.#emitAll(this.#itemEvents.accept(record, params));
+      // A completed collaboration call names the threads it spawned (or ended), after its own
+      // tool-end, as the reference normalizer orders them.
+      if (item && item.type === "collabAgentToolCall")
+        this.#emitAll(
+          this.#subagentThreads.noteCollabAgentStates(
+            item,
+            nonEmptyString(item.id),
+            eventTime(record),
+          ),
+        );
       return;
     }
     if (record.method === "turn/completed") {

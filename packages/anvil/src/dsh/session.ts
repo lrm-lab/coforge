@@ -4,6 +4,7 @@ import type {
   AgentRuntimeEvent,
   AgentSession,
   AgentSessionOptions,
+  AgentTurnProcessWindow,
 } from "@coforge/agent";
 import { RuntimeModelNotFoundError } from "#src/contract";
 import type { AcpSessionProfile } from "#src/acp/profile";
@@ -139,6 +140,10 @@ export class DshSession implements AgentSession {
   }
   interrupt() {
     return this.#session.interrupt();
+  }
+
+  killTurnProcesses(window: AgentTurnProcessWindow) {
+    return this.#session.killTurnProcesses(window);
   }
   readSessionIdentity() {
     return this.#session.readSessionIdentity();

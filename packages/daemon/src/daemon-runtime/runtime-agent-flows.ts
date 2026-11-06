@@ -39,6 +39,10 @@ export type AgentTurnInterruptPorts = {
   assertOwnIntent(intent: AgentTurnInterruptIntent): void;
   launch(agentId: string): ActivityLaunch | undefined;
   interrupt(agentId: string, options: AgentTurnInterruptOptions): Promise<InterruptOutcome>;
+  interruptSubagent?(
+    agentId: string,
+    taskId: string,
+  ): Promise<"interrupted" | "not_running" | "unsupported">;
   publish(agentId: string, launch: ActivityLaunch, draft: ActivityDraft): void;
   activity(agentId: string, detailKind: string, level: "info", detail: string): ActivityDraft;
   interruptedDraft(agentId: string): ActivityDraft;
@@ -55,6 +59,7 @@ export async function handleAgentTurnInterrupt(
     {
       launch: (agentId) => ports.launch(agentId),
       interrupt: (agentId, options) => ports.interrupt(agentId, options),
+      interruptSubagent: ports.interruptSubagent,
       publish: (agentId, launch, outcome) =>
         ports.publish(
           agentId,

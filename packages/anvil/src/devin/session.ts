@@ -5,6 +5,7 @@ import type {
   AgentRuntimeEvent,
   AgentSession,
   AgentSessionOptions,
+  AgentTurnProcessWindow,
 } from "@coforge/agent";
 import { RuntimeModelNotFoundError } from "#src/contract";
 import { asRecord } from "#src/json-record";
@@ -176,6 +177,10 @@ export class DevinSession implements AgentSession {
   }
   interrupt() {
     return this.#session.interrupt();
+  }
+
+  killTurnProcesses(window: AgentTurnProcessWindow) {
+    return this.#session.killTurnProcesses(window);
   }
   readSessionIdentity() {
     return this.#session.readSessionIdentity();

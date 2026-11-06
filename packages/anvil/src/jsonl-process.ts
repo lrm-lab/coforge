@@ -159,6 +159,27 @@ export class JsonlProcess {
     this.#child.kill("SIGINT");
   }
 
+  /**
+   * Raft's `killTurnProcesses`: SIGKILLs only the descendants the turn started and leaves this
+   * process running. Owners without a turn-scoped view make this a no-op rather than guessing.
+   */
+  async killTurnProcesses(window: {
+    startedAfterMs: number;
+    startedBeforeMs?: number;
+  }): Promise<void> {
+    const kill = this.#tree.killTurnDescendants;
+    if (!kill) return;
+    const report = await kill.call(this.#tree, window.startedAfterMs, window.startedBeforeMs);
+    if (report.killed.length > 0)
+      logger.info("Killed code agent turn descendants", {
+        event: "code_agent.process.turn_kill",
+        pid: this.#child.pid,
+        killed: report.killed.length,
+        left_alone: report.leftAlone.length,
+        outcome: "ok",
+      });
+  }
+
   async request(command: JsonRecord): Promise<JsonRecord> {
     this.#assertOpen();
     const id = `coforge-${this.#nextRequestId++}`;

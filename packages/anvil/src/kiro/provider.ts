@@ -4,6 +4,7 @@ import type {
   AgentNoticeOptions,
   AgentSession,
   AgentSessionOptions,
+  AgentTurnProcessWindow,
   AgentRuntimeEvent,
   AgentSessionIdentity,
 } from "@coforge/agent";
@@ -419,6 +420,11 @@ class KiroSession implements AgentSession {
   async readSessionIdentity() {
     return this.#identity;
   }
+
+  async killTurnProcesses(window: AgentTurnProcessWindow): Promise<void> {
+    await this.#transport.process.killTurnProcesses(window);
+  }
+
   subscribe(listener: (event: AgentRuntimeEvent) => void) {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);

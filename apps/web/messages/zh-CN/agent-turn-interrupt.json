@@ -11,5 +11,6 @@
   "agent_turn_stop_upgrade": "请升级这位 Agent 的 Computer 以支持停止单轮。你仍可停止整个 Agent。",
   "agent_turn_stop_offline": "这位 Agent 的 Computer 已离线。",
   "agent_turn_stop_failed": "未能停止本轮。",
+  "agent_turn_stop_unsupported": "这位 Agent 的运行时不支持单独停止其中的任务。",
   "agent_turn_stop_retry": "重试"
 }

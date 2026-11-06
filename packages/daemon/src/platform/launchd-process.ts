@@ -18,6 +18,7 @@ import {
   stopLaunchdJobs,
 } from "./launchd-job";
 import { ProcessChannel } from "./process-channel";
+import { descendantsOf, hostProcessTable } from "./process-table";
 import type {
   OwnedChildProcess,
   OwnedProcessTree,
@@ -342,6 +343,37 @@ export class LaunchdProcessOwner implements ProcessTreeSpawner {
       terminateForTurn: async (force) => {
         if (!closed) send({ type: "signal", signal: force ? "SIGKILL" : "SIGTERM" });
         return { killed: [], leftAlone: [] };
+      },
+      killTurnDescendants: async (startedAfterMs, startedBeforeMs) => {
+        // The agent child runs inside this job's runner, so its ppid is the runner's pid —
+        // not this daemon's. That pair, reported over the private relay, is the ownership proof.
+        const agentPid = processId;
+        const runnerPid = jobPid;
+        if (closed || agentPid === undefined || runnerPid === undefined)
+          return { killed: [], leftAlone: [] };
+        const resolutionMs = hostProcessTable.resolutionMs ?? 1_000;
+        const fenceMs = Math.floor(startedAfterMs / resolutionMs) * resolutionMs;
+        const table = await hostProcessTable.list();
+        const main = table.find((entry) => entry.pid === agentPid);
+        if (!main || main.ppid !== runnerPid) return { killed: [], leftAlone: [] };
+        const killed: number[] = [];
+        const leftAlone: number[] = [];
+        for (const entry of descendantsOf(main, table)) {
+          if (
+            entry.startedAtMs < fenceMs ||
+            (startedBeforeMs !== undefined && entry.startedAtMs > startedBeforeMs)
+          ) {
+            leftAlone.push(entry.pid);
+            continue;
+          }
+          try {
+            globalThis.process.kill(entry.pgid === entry.pid ? -entry.pid : entry.pid, "SIGKILL");
+            killed.push(entry.pid);
+          } catch (error) {
+            if ((error as { code?: string }).code !== "ESRCH") throw error;
+          }
+        }
+        return { killed, leftAlone };
       },
       waitForExit: async (timeoutMs) => {
         const deadline = Date.now() + timeoutMs;

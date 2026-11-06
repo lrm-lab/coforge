@@ -124,6 +124,28 @@ export const RUNTIME_PROVIDER_STEERS_BUSY_TURN: Record<RuntimeProvider, boolean>
   [RUNTIME_PROVIDER.DROID]: false,
 };
 
+/**
+ * Whether a subagent that outlives its turn needs the daemon to write a wake notice once the
+ * last one finishes — Raft's `needsWakeAfterSubagents`. Codex runs delegated work on secondary
+ * threads the main turn never resumes on its own; Claude's own task notifications already reach
+ * a quiet session, so only Codex asks.
+ */
+export const RUNTIME_PROVIDER_WAKES_AFTER_SUBAGENTS: Record<RuntimeProvider, boolean> = {
+  [RUNTIME_PROVIDER.COFORGE]: false,
+  [RUNTIME_PROVIDER.CODEX]: true,
+  [RUNTIME_PROVIDER.CLAUDE_CODE]: false,
+  [RUNTIME_PROVIDER.PI]: false,
+  [RUNTIME_PROVIDER.KIRO]: false,
+  [RUNTIME_PROVIDER.CURSOR]: false,
+  [RUNTIME_PROVIDER.OPENCODE]: false,
+  [RUNTIME_PROVIDER.GROK]: false,
+  [RUNTIME_PROVIDER.ANTIGRAVITY]: false,
+  [RUNTIME_PROVIDER.DSH]: false,
+  [RUNTIME_PROVIDER.COMMAND_CODE]: false,
+  [RUNTIME_PROVIDER.DEVIN]: false,
+  [RUNTIME_PROVIDER.DROID]: false,
+};
+
 /** Whether the shipped adapter implements `readUsage`. Cursor, OpenCode, Pi, and CoForge
  * are not connected yet — this table does not say the official product has no quota endpoint.
  * A connected reader may still return unsupported for a particular account.

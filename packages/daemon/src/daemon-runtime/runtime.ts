@@ -219,6 +219,10 @@ export class DaemonRuntime {
   readonly #deliveryQueue = new AgentDeliveryQueue();
   /** Launch failures of message-triggered wakes, per Agent. */
   readonly #wakeLaunchFailures = new LaunchFailureBackoff();
+  // Before the ports objects that reference them.
+  #isWorking = (agentId: string): boolean => isWorking(this.#turnPorts(), agentId);
+  #sendAgentStatus = (agentId: string, status: "active" | "inactive"): void =>
+    sendAgentStatus(this.#statusReportPorts, agentId, status);
   readonly #exitedDelivery = new AgentExitedDelivery({
     hasRuntimeErrorHold: (agentId) => this.#deliveryQueue.explicitHold(agentId) !== undefined,
     holdRuntimeErrorDelivery: (message) => this.#messageAttention.receive(message),
@@ -260,7 +264,7 @@ export class DaemonRuntime {
     closeAgentInputQueue: (agentId, error) => this.#inputDrain.close(agentId, error),
     dropMentionAsUnknown: (message) =>
       this.#mentionDeliveries.drop(message, MENTION_DELIVERY_TERMINAL_CODES.IDENTITY_UNKNOWN),
-    sendAgentStatus: (agentId, status) => this.#sendAgentStatus(agentId, status),
+    sendAgentStatus: this.#sendAgentStatus,
     sendAgentDeliveryRejection: (message, reason) =>
       this.#transport.sendAgentDeliveryRejection?.(agentDeliveryRejection(message, reason)) ??
       Promise.resolve(),
@@ -284,7 +288,7 @@ export class DaemonRuntime {
     activity: (agentId, kind, level, detail, extra) =>
       this.#activity(agentId, kind, level, detail, extra),
     inputDrain: () => this.#inputDrain,
-    working: (agentId) => this.#isWorking(agentId),
+    working: this.#isWorking,
     deliveryQueue: () => this.#deliveryQueue,
     agentLaunches: () => this.#agentLaunches,
     stopState: () => this.#stopState,
@@ -404,7 +408,7 @@ export class DaemonRuntime {
         runtimeError: built.runtimeError,
       }),
     publish: (agentId, launch, draft) => this.#activityPublisher.publish(agentId, launch, draft),
-    sendAgentStatus: (agentId, status) => this.#sendAgentStatus(agentId, status),
+    sendAgentStatus: this.#sendAgentStatus,
     sendAgentActivity: (activity) => this.#transport.sendAgentActivity?.(activity),
     stopProcess: (agentId) => this.#agentProcessManager.stop(agentId),
   });
@@ -655,15 +659,15 @@ export class DaemonRuntime {
       },
       collectSkillAgents: this.#collectSkillAgents,
       fastModeWarned: this.#fastModeWarned,
-      isWorking: (agentId) => this.#isWorking(agentId),
-      activityDraft: (agentId, kind, level, detail, extra) =>
-        this.#activity(agentId, kind, level, detail, extra),
-      runtimeErrorActivity: (agentId, message) => this.#drafts.runtimeError(agentId, message),
-      interruptedActivity: (agentId) => this.#drafts.interrupted(agentId),
-      showQuietTurn: (agentId, launch, publish) => this.#showQuietTurn(agentId, launch, publish),
+      activityDraft: this.#activity,
+      runtimeErrorActivity: this.#drafts.runtimeError,
+      interruptedActivity: this.#drafts.interrupted,
+      showQuietTurn: this.#showQuietTurn,
       reconcileIdleTurn: this.#reconcileIdleTurn,
+      wakeFinishedSubagents: (agentId) => runtime.#launchCoordinator.wakeFinishedSubagents(agentId),
       rememberUsage: (snapshot) => rememberUsage(this.#observedUsage, snapshot),
-      releaseTurnEndHolds: (agentId) => this.#releaseTurnEndHolds(agentId),
+      releaseTurnEndHolds: this.#releaseTurnEndHolds,
+      isWorking: this.#isWorking,
       drainAppInboxNotices: (agentId) => this.#inboxCoordinator.drainAppInboxNotices(agentId),
       failCollectorRunningSlots: (agentId, reason) =>
         this.#failCollectorRunningSlots(agentId, reason),
@@ -1195,6 +1199,8 @@ export class DaemonRuntime {
         assertOwnIntent: (intent) => this.#assertOwnIntent(intent),
         launch: (agentId) => this.#currentActivityLaunches.get(agentId),
         interrupt: (agentId, options) => this.#agentProcessManager.interruptTurn(agentId, options),
+        interruptSubagent: (agentId, taskId) =>
+          this.#agentProcessManager.interruptSubagent(agentId, taskId),
         publish: (agentId, launch, draft) =>
           this.#activityPublisher.publish(agentId, launch, draft),
         activity: (agentId, detailKind, level, detail) =>
@@ -1326,7 +1332,6 @@ export class DaemonRuntime {
     reconcileIdleTurn(this.#turnPorts(), agentId, launch);
   #releaseSurvivingHolds = (agentId: string): void =>
     releaseSurvivingHolds(this.#turnPorts(), agentId);
-  #isWorking = (agentId: string): boolean => isWorking(this.#turnPorts(), agentId);
   #releaseTurnEndHolds = (agentId: string): void => releaseTurnEndHolds(this.#turnPorts(), agentId);
 
   /** The Agent no longer lives on this Computer: its workspace was deleted or moved away. */
@@ -1339,9 +1344,6 @@ export class DaemonRuntime {
       featureSync: this.#sync,
     });
   };
-
-  #sendAgentStatus = (agentId: string, status: "active" | "inactive"): void =>
-    sendAgentStatus(this.#statusReportPorts, agentId, status);
 
   #cleanupUnconfirmed = (agentId: string, error: unknown): boolean =>
     cleanupUnconfirmed(agentId, error, (id) => this.#agentProcessManager.isStopping(id));

@@ -16,11 +16,17 @@ import {
   stalledTurnSilenceMs,
 } from "./stalled-turn-indicator";
 import { ToolCallLedger } from "#src/agent-runtime/tool-call-ledger";
-import { OutstandingBackgroundTasks } from "#src/agent-runtime/subagent-progress-activity";
+import {
+  OutstandingBackgroundTasks,
+  SubagentWakeTracker,
+} from "#src/agent-runtime/subagent-progress-activity";
 import { buildRuntimeCrashedActivity } from "#src/agent-runtime/runtime-error-activity";
 import { TURN_ACTIVITY_EVENT_TYPES } from "#src/agent-runtime/runtime-phases";
 import { runtimeErrorRecoverySignal } from "#src/agent-runtime/runtime-error-recovery";
-import { AGENT_ACTIVITY_DETAIL_KIND } from "@lrm/coforge-sdk/internal";
+import {
+  AGENT_ACTIVITY_DETAIL_KIND,
+  RUNTIME_PROVIDER_WAKES_AFTER_SUBAGENTS,
+} from "@lrm/coforge-sdk/internal";
 import { ResumedEarlyCrashWatch, type ResumedEarlyCrashStreak } from "./resumed-early-crash";
 import { isBusyActivityDetailKind } from "./agent-activity-publisher";
 import { runtimeDisplayName } from "./session-invalidate-activity";
@@ -256,6 +262,8 @@ export async function launchAgentProcess(
     const replyIntents = ports.replyIntents.tracker(agentId, launch);
     launch.replyIntents = replyIntents;
     launch.backgroundTasks = new OutstandingBackgroundTasks();
+    if (RUNTIME_PROVIDER_WAKES_AFTER_SUBAGENTS[config.provider])
+      launch.subagentWake = new SubagentWakeTracker();
     const unsubscribe = runtime.session.subscribe((event) => {
       progress.observe(event);
       toolCalls.observe(event);
