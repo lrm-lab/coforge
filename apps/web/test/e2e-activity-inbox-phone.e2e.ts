@@ -101,7 +101,7 @@ test("on a phone a row opens its conversation in place of the Activity list", as
     // the list's entry rather than stacking a copy of the list.
     await browser("find", "text", "E2E phone unread", "click");
     await browser("wait", "--fn", `${shownInPane(newestId)} && ${listHidden} === true`);
-    const tasksPath = JSON.stringify(`${workspacePath}/tasks`);
+    const tasksPath = JSON.stringify(`${workspacePath}/projects`);
     // The rail's link is in the closed drawer on a phone; its click still navigates in the app.
     await evaluate(`document.querySelector('a[href=${tasksPath}]').click() ?? true`);
     await browser("wait", "--fn", `location.pathname === ${tasksPath}`);

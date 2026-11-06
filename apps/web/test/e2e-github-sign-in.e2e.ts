@@ -146,11 +146,11 @@ test("signing in with GitHub", async () => {
       where: { userId: identity.userId },
       include: { workspace: true },
     });
-    const returnTo = `/w/${membership.workspace.slug}/tasks`;
+    const returnTo = `/w/${membership.workspace.slug}/projects`;
     await openSignIn(`/login?returnTo=${encodeURIComponent(returnTo)}`);
     await pressGitHub();
     await waitFor(
-      `location.origin === ${JSON.stringify(origin)} && location.pathname.endsWith("/tasks")`,
+      `location.origin === ${JSON.stringify(origin)} && location.pathname.endsWith("/projects")`,
     );
     expect(github.authorizations).toHaveLength(2);
     expect(github.authorizations[1]!.state).not.toBe(github.authorizations[0]!.state);

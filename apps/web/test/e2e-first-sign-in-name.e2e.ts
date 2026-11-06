@@ -284,14 +284,14 @@ test("a first sign-in is asked for a display name once, and the personal Workspa
       `location.pathname === "/oauth/verify" && document.body.innerText.includes("Signed in as")`,
     );
     passed("device approval (/oauth/verify) is not gated");
-    await browser("open", `${origin}/en/w/${existingSlug}/tasks`);
+    await browser("open", `${origin}/en/w/${existingSlug}/projects`);
     await waitFor(onNameStepHere);
     expect(new URL(await evaluate<string>("location.href")).searchParams.get("returnTo")).toBe(
-      `/w/${existingSlug}/tasks`,
+      `/w/${existingSlug}/projects`,
     );
     await shoot("09-existing-session-sent-to-name-step.png");
     await submitName("Existing Person");
-    await waitFor(`location.pathname.endsWith("/w/${existingSlug}/tasks")`);
+    await waitFor(`location.pathname.endsWith("/w/${existingSlug}/projects")`);
     expect((await userOf("existing")).displayName).toBe("Existing Person");
     passed("an existing session opening a Workspace page is asked once and returns to that page");
 
