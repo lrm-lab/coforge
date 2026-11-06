@@ -17,6 +17,7 @@ import {
 import { upgradeOperationsInConfig } from "#src/daemon-runtime/upgrade-result-reporter";
 import { agentApiKeyRegistry } from "#src/agent-api-key-registry";
 import { defaultCodeAgentDiscovery } from "#src/daemon-runtime/code-agent-inventory-sync";
+import { captureLoginShellEnvironment } from "#src/daemon-runtime/login-shell-env";
 import { FileDaemonCredentialStore } from "#src/credentials/credential-store";
 import { DaemonConfigStore } from "#src/persistence/daemon-config";
 import { DaemonConnection } from "#src/connection/daemon-connection";
@@ -210,6 +211,7 @@ export async function runDaemon(args: string[], computerVersion?: string): Promi
         if (!directory) throw new Error("Workspace Agent job directory is missing");
         await stopLaunchdAgents(Bun.env.COFORGE_WORKSPACE_AGENT_PREFIX, directory);
       }
+      const loginShellEnv = captureLoginShellEnvironment();
       const credentials = new FileDaemonCredentialStore();
       const configStore = new DaemonConfigStore(daemonStateDirectory, {
         serverHttpUrl: COFORGE_DAEMON_SERVER_URL,
@@ -385,6 +387,8 @@ export async function runDaemon(args: string[], computerVersion?: string): Promi
       function stampWorkspace(agents: BusyAgentReport[] = []) {
         return agents.map((agent) => ({ ...agent, workspaceId: config?.workspaceId ?? "" }));
       }
+      // In place before the Coordinator can start the runtime; sessions inherit it via Bun.env.
+      await loginShellEnv;
       // The Coordinator polls this socket for readiness within a 30s budget after spawning the
       // Workspace, so it must open before anything that can block on the network (Code Agent
       // discovery, in particular). The handshake it answers only needs pid/version/serverUrl, so

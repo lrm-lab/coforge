@@ -41,13 +41,19 @@ Rules for OS primitives in `src/platform/`. They extend
   replacement launch. When the Job Object APIs cannot be loaded, it fails
   closed.
 
-## Login-shell PATH
+## Login-shell PATH and environment
 
-- `login-shell-path.ts` reads PATH, and only PATH, from the user's login shell
+- `login-shell-path.ts` reads PATH and the allowlisted environment from the user's login shell
   (zsh, bash, sh, dash, ksh, fish) by running the Computer executable's hidden
   `__print-path <file> <nonce>` in it; the result file's nonce is the only thing
   trusted, never the shell's output. `COFORGE_LOGIN_SHELL_PATH=0` turns it off.
-  Do not import any other variable from the shell.
+  `login-shell-env.ts` decides which variables may cross: proxy and locale names plus
+  credential-shaped suffixes (`*_API_KEY`, `*_TOKEN`, …); `COFORGE_*` is always denied.
+  Never widen that allowlist without a security review.
+- The captured env lives only in the probing process's memory — each Workspace Daemon
+  re-runs the probe for itself (`daemon-runtime/login-shell-env.ts`) and fills only
+  variables its spawn environment lacks. It must never be written to
+  `login-shell-path.json` or any other state file; `writeLoginShellPath` strips it.
 - `login-shell-path-state.ts` stores the result in the Coordinator's state directory.
   A failed probe overwrites an earlier success; each retry of a transient failure
   (see `supervisor/login-shell-path-import.ts`) records its own result.

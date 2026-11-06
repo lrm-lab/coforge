@@ -97,7 +97,8 @@ if (Bun.argv[2] === "__pi-chat") {
     process.exit(1);
   }
 } else if (Bun.argv[2] === "__print-path") {
-  // Run by the login shell the Coordinator probes: records this process's PATH, nothing else.
+  // Run by the login shell the Coordinator and each Workspace Daemon probe: records this
+  // process's PATH and allowlisted environment, nothing else.
   const { writeLoginShellPathProbe } =
     await import("@lrm/coforge-daemon/src/platform/login-shell-path");
   try {

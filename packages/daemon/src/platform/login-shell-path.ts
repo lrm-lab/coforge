@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { lstat, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir, userInfo } from "node:os";
 import { basename, join, posix } from "node:path";
+import { boundedLoginShellEnv } from "./login-shell-env";
 
 /** How long the login shell has to start, run its rc files, and print its PATH. */
 export const LOGIN_SHELL_PATH_TIMEOUT_MS = 10_000;
@@ -28,7 +29,15 @@ export type LoginShellPathFailureReason =
   | "internal_error";
 
 export type LoginShellPathResult =
-  | { ok: true; path: string[]; shell: string; durationMs: number }
+  | {
+      ok: true;
+      path: string[];
+      /** Allowlisted login-shell variables (`login-shell-env.ts`); never persisted. Absent on
+       * results built before the env capture existed or by tests. */
+      env?: Record<string, string>;
+      shell: string;
+      durationMs: number;
+    }
   | { ok: false; reason: LoginShellPathFailureReason; shell?: string; durationMs: number };
 
 /** The probe's child: its exit, and a way to kill it together with everything it started. */
@@ -52,8 +61,8 @@ export type LoginShellPathProbeOptions = {
 };
 
 /**
- * Reads PATH, and only PATH, from the user's login shell. The shell runs this executable's
- * `__print-path` subcommand, which writes `{ nonce, path }` to a private file; the shell's own
+ * Reads PATH and the allowlisted environment from the user's login shell. The shell runs this executable's
+ * `__print-path` subcommand, which writes `{ nonce, path, env }` to a private file; the shell's own
  * output (rc files may print anything) is never read.
  */
 export async function probeLoginShellPath(
@@ -103,8 +112,15 @@ export async function probeLoginShellPath(
     }
     const outcome = await waitForShell(child, options.timeoutMs, options.signal);
     if (outcome.kind !== "exited") return fail(outcome.kind, shell);
-    const path = await readProbeResult(file, nonce);
-    if (path.length > 0) return { ok: true, path, shell, durationMs: now() - started };
+    const captured = await readProbeResult(file, nonce);
+    if (captured.path.length > 0)
+      return {
+        ok: true,
+        path: captured.path,
+        env: captured.env,
+        shell,
+        durationMs: now() - started,
+      };
     if (outcome.code !== 0) return fail("exit_nonzero", shell);
     return fail((await resultFileEmpty(file)) ? "no_result" : "invalid_result", shell);
   } finally {
@@ -112,14 +128,23 @@ export async function probeLoginShellPath(
   }
 }
 
-/** What `__print-path` does in the login shell: records this process's own PATH for the parent. */
+/** What `__print-path` does in the login shell: records this process's PATH and allowlisted
+ * environment for the parent. The env stays in the result file only for the probe's lifetime —
+ * callers must never persist it (`login-shell-path-state.ts` strips it). */
 export async function writeLoginShellPathProbe(
   file: string,
   nonce: string,
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ): Promise<void> {
   if (!file || !nonce) throw new Error("usage: __print-path <file> <nonce>");
-  await writeFile(file, JSON.stringify({ nonce, path: environment.PATH ?? "" }));
+  await writeFile(
+    file,
+    JSON.stringify({
+      nonce,
+      path: environment.PATH ?? "",
+      env: boundedLoginShellEnv(environment),
+    }),
+  );
 }
 
 /** Absolute directories only, each once, in order. */
@@ -210,16 +235,27 @@ async function waitForShell(
   }
 }
 
-/** The PATH entries of a result file whose nonce matches; empty for anything else. */
-async function readProbeResult(file: string, nonce: string): Promise<string[]> {
+/** The PATH entries and env of a result file whose nonce matches; empty PATH for anything else. */
+async function readProbeResult(
+  file: string,
+  nonce: string,
+): Promise<{ path: string[]; env: Record<string, string> }> {
   try {
     const parsed: unknown = JSON.parse(await readResultFile(file));
-    if (typeof parsed !== "object" || parsed === null) return [];
-    const record = parsed as { nonce?: unknown; path?: unknown };
-    if (record.nonce !== nonce || typeof record.path !== "string") return [];
-    return parsePathEntries(record.path);
+    if (typeof parsed !== "object" || parsed === null) return { path: [], env: {} };
+    const record = parsed as { nonce?: unknown; path?: unknown; env?: unknown };
+    if (record.nonce !== nonce || typeof record.path !== "string") return { path: [], env: {} };
+    const env =
+      typeof record.env === "object" && record.env !== null && !Array.isArray(record.env)
+        ? Object.fromEntries(
+            Object.entries(record.env as Record<string, unknown>).filter(
+              (entry): entry is [string, string] => typeof entry[1] === "string",
+            ),
+          )
+        : {};
+    return { path: parsePathEntries(record.path), env };
   } catch {
-    return [];
+    return { path: [], env: {} };
   }
 }
 

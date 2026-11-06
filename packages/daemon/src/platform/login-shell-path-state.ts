@@ -5,8 +5,17 @@ import { writePrivateFileAtomic } from "./private-file";
 
 export const LOGIN_SHELL_PATH_FILE = "login-shell-path.json";
 
-/** What the Coordinator last learned from the login shell, and when. */
-export type LoginShellPathRecord = LoginShellPathResult & { at: string };
+/** What the Coordinator last learned from the login shell, and when. The probe's `env` is
+ * deliberately absent: credential-shaped variables are never persisted. */
+export type LoginShellPathRecord =
+  | { ok: true; path: string[]; shell: string; durationMs: number; at: string }
+  | {
+      ok: false;
+      reason: LoginShellPathFailureReason;
+      shell?: string;
+      durationMs: number;
+      at: string;
+    };
 
 /**
  * Replaces the stored result. A failure overwrites an earlier success on purpose: a PATH the
@@ -17,7 +26,23 @@ export async function writeLoginShellPath(
   result: LoginShellPathResult,
   at: Date = new Date(),
 ): Promise<void> {
-  const record: LoginShellPathRecord = { ...result, at: at.toISOString() };
+  // `env` carries credential-shaped variables: it is handed to children in memory only and must
+  // never reach this file. The stored record keeps the PATH result shape exactly.
+  const record: LoginShellPathRecord = result.ok
+    ? {
+        ok: true,
+        path: result.path,
+        shell: result.shell,
+        durationMs: result.durationMs,
+        at: at.toISOString(),
+      }
+    : {
+        ok: false,
+        reason: result.reason,
+        ...(result.shell ? { shell: result.shell } : {}),
+        durationMs: result.durationMs,
+        at: at.toISOString(),
+      };
   await writePrivateFileAtomic(
     join(stateDirectory, LOGIN_SHELL_PATH_FILE),
     `${JSON.stringify({ version: 1, ...record })}\n`,
