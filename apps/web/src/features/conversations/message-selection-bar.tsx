@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "@tanstack/react-router";
-import { Copy01, DotsHorizontal, FlipForward, XClose } from "@untitledui/icons";
+import { Copy01, DotsHorizontal, FlipForward, Image01, XClose } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -13,13 +13,14 @@ import { useConversationHostChannels } from "./conversation-host";
 import { useOpenForward } from "./message-forward-host";
 import { useSelectionIn } from "./message-selection";
 import { selectedInOrder, selectedLinks, selectedMarkdown } from "./message-selection-model";
+import { MessageShareDialog } from "./message-share-dialog";
 
 /** How long "Copy link" reads "Copied" after a copy. */
 const COPIED_MS = 2000;
 
 /**
  * Select mode's bar, in the composer's place: how many are picked, then copy their
- * links, forward them as one card, and under "…" their Markdown; × leaves.
+ * links, forward them as one card, and under "…" an image of them or their Markdown; × leaves.
  * Everything acts on the picked messages oldest first. Copying keeps select mode; a forward that
  * reached every destination ends it.
  */
@@ -31,6 +32,7 @@ export function MessageSelectionBar({ conversationId }: { conversationId: string
   const channels = useConversationHostChannels();
   const openForward = useOpenForward();
   const [copied, setCopied] = useState(false);
+  const [sharing, setSharing] = useState(false);
   useEffect(() => {
     if (!copied) return;
     const timer = setTimeout(() => setCopied(false), COPIED_MS);
@@ -113,6 +115,11 @@ export function MessageSelectionBar({ conversationId }: { conversationId: string
           <Dropdown.Popover placement="top end" className="w-max min-w-40">
             <Dropdown.Menu aria-label={m.message_select_more()}>
               <Dropdown.Item
+                icon={Image01}
+                label={m.message_share_action()}
+                onAction={() => setSharing(true)}
+              />
+              <Dropdown.Item
                 icon={Copy01}
                 label={m.conversation_copy_as_markdown()}
                 onAction={() =>
@@ -131,6 +138,12 @@ export function MessageSelectionBar({ conversationId }: { conversationId: string
           onClick={selection.exit}
         />
       </div>
+      {sharing && (
+        <MessageShareDialog
+          messages={messages.map(({ message }) => message)}
+          onClose={() => setSharing(false)}
+        />
+      )}
     </div>
   );
 }

@@ -1,0 +1,18 @@
+{
+  "message_share_action": "生成图片",
+  "message_share_title": "分享预览",
+  "message_share_generating": "正在生成图片",
+  "message_share_page_alt": "所选消息的图片，第 {page} 页，共 {total} 页",
+  "message_share_failed": "图片生成失败。",
+  "message_share_retry": "重试",
+  "message_share_copy": "复制此页",
+  "message_share_copied": "图片已复制。",
+  "message_share_copy_failed": "这个浏览器无法复制图片，请改用下载。",
+  "message_share_download": "下载",
+  "message_share_download_all": "下载全部",
+  "message_share_previous": "上一页",
+  "message_share_next": "下一页",
+  "message_share_format": "图片版式",
+  "message_share_format_phone": "手机版",
+  "message_share_format_desktop": "电脑版"
+}
