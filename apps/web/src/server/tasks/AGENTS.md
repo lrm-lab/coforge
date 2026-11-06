@@ -101,8 +101,8 @@ contract is `packages/coforge-sdk/src/internal/tasks.ts`.
   `TaskBoard` keeps them as entry points and lends it the `list` authorization
   for a one-conversation read, so Task authorization stays in TaskBoard.
 - `TaskBoard.overview(workspaceId, userId)` is browser-only. It reads visible
-  channels only; a direct message's Tasks stay on that conversation's Tasks tab,
-  and every Workspace-page read (`overviewTask`, `finishedSummary`,
+  channels and the viewer's own direct conversations (task #596), and every
+  Workspace-page read (`overviewTask`, `finishedSummary`,
   `finishedPage` without a conversation) shares that scope. It returns
   unfinished Tasks only, newest first;
   Done and Closed are read through `finishedSummary` (counts by status, owner

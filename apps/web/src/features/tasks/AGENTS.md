@@ -134,9 +134,10 @@ workspaceId]` Query its loader fills (`task-overview-collection.ts`,
   (`features/settings/task-hidden-columns.ts`, on the shared
   `device-preference.ts` store) and a boot-script class, so a hidden column
   never flashes while hydrating and never reads its pages.
-- `/tasks` shows channel Tasks only; a direct message's Tasks, the viewer's
-  own included, stay on that conversation's Tasks tab (the server scopes every
-  Workspace-page read, so its realtime listens on the Workspace channel only).
+- The Workspace board shows the channels' Tasks the viewer may read and their
+  own direct conversations' (task #596); another person's DM never shows. The
+  server scopes every Workspace-page read; realtime applies the Workspace
+  channel's announcements and every one on the viewer's own channel.
   The page creates no Tasks: new ones start from a conversation's Tasks tab
   (`CreateTaskDialog`, laid out as the Task popup: where it goes, a To do title, owner and
   label chips, a description). One Task per dialog, which replaced several titles at once

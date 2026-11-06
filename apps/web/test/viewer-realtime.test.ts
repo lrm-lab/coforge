@@ -114,7 +114,6 @@ test("a private channel's creation, change and Tasks reach only its people's own
         ...scope,
         tasks: [],
         deleted: ["task-1"],
-        privateChannel: true,
       },
     },
   ]);

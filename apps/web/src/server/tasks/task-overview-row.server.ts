@@ -8,18 +8,12 @@ import { relationsOf, loadTaskRelations } from "./task-relations.server";
 import { taskSelection, taskView, type TaskViewExtras } from "./task-view.server";
 import type { TaskOverview } from "./task-overview.server";
 
-/** The conversations whose Tasks a Workspace-page read lists: channels the viewer may see. The
- * project page widens it with the viewer's own direct conversations (task #484). */
+/**
+ * The conversations whose Tasks a Workspace-page read lists: the channels the viewer may see and
+ * their own direct conversations. A DM's Task shows on All tasks and its Project's board only to
+ * someone in that DM (task #596); a private channel's only to its members.
+ */
 export function overviewConversationWhere(
-  workspaceId: string,
-  userId: string,
-): Prisma.ConversationWhereInput {
-  return visibleChannelWhere(workspaceId, { userId });
-}
-
-/** The same, with the viewer's own direct conversations too: a direct message's Task filed under
- * a Project shows on its page only to someone in that DM. */
-export function overviewWithDirectsWhere(
   workspaceId: string,
   userId: string,
 ): Prisma.ConversationWhereInput {
