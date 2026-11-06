@@ -11,7 +11,7 @@ import { COFORGE_DAEMON_VERSION } from "#src/version";
 /** Whether this Computer can open a browser for the `authenticate` OAuth flow — a real desktop
  * session, not a headless remote or a cloud workspace. macOS and Windows always can; Linux and
  * cloud computers need a display. */
-export function canOpenBrowser(platform: NodeJS.Platform | undefined): boolean {
+export function canOpenBrowser(platform: NodeJS.Platform = process.platform): boolean {
   if (process.env.COFORGE_COMPUTER_CLOUD === "1") return false;
   if (platform === "linux") return Boolean(process.env.DISPLAY || process.env.WAYLAND_DISPLAY);
   return true;

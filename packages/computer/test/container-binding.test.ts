@@ -249,3 +249,35 @@ test("attach starts the workspace with the credential the file actually holds", 
     },
   ]);
 });
+
+test("preparing the live container environment marks the process as a cloud computer", async () => {
+  const directory = await stateDirectory();
+  const saved = process.env.COFORGE_COMPUTER_CLOUD;
+  const savedKeys = Object.keys(env).map((key) => [key, process.env[key]] as const);
+  delete process.env.COFORGE_COMPUTER_CLOUD;
+  try {
+    Object.assign(process.env, env);
+    expect(await prepareContainerBinding(process.env, directory)).toBe(true);
+    expect(process.env.COFORGE_COMPUTER_CLOUD ?? "").toBe("1");
+  } finally {
+    if (saved === undefined) delete process.env.COFORGE_COMPUTER_CLOUD;
+    else process.env.COFORGE_COMPUTER_CLOUD = saved;
+    for (const [key, value] of savedKeys) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test("a snapshot environment does not mark the running process", async () => {
+  const directory = await stateDirectory();
+  const saved = process.env.COFORGE_COMPUTER_CLOUD;
+  delete process.env.COFORGE_COMPUTER_CLOUD;
+  try {
+    expect(await prepareContainerBinding(env, directory)).toBe(true);
+    expect(process.env.COFORGE_COMPUTER_CLOUD).toBeUndefined();
+  } finally {
+    if (saved === undefined) delete process.env.COFORGE_COMPUTER_CLOUD;
+    else process.env.COFORGE_COMPUTER_CLOUD = saved;
+  }
+});

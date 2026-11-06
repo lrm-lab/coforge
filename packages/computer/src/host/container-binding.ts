@@ -32,6 +32,10 @@ export async function prepareContainerBinding(
 ): Promise<boolean> {
   const present = CONTAINER_BINDING_ENV_KEYS.some((key) => text(env[key]) !== undefined);
   if (!present) return false;
+  // Only the container's own live environment proves this process is a cloud Computer; a
+  // snapshot passed for a dry run must not mark it. Workspace Daemons and Agents inherit the
+  // marker so they never mistake the workspace for a desktop session.
+  if (env === process.env) process.env.COFORGE_COMPUTER_CLOUD = "1";
   const daemonApiKey = text(env.COFORGE_DAEMON_API_KEY);
   const workspaceId = text(env.COFORGE_WORKSPACE_ID);
   const computerId = text(env.COFORGE_COMPUTER_ID);
