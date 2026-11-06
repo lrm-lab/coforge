@@ -91,6 +91,10 @@ export class MemoryConversationSessions implements AgentSession {
     return this.dependencies.primary.steersBusyTurn;
   }
 
+  get wakesAfterSubagents(): boolean | undefined {
+    return this.dependencies.primary.wakesAfterSubagents;
+  }
+
   hasLiveTurnForConversation(conversationId: string): boolean | undefined {
     const session = this.#conversations.get(conversationId)?.session;
     return session ? this.#active === session || session.hasLiveTurn : false;

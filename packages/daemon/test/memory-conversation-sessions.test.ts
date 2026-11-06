@@ -424,3 +424,29 @@ test("a fresh conversation opens with the Agent's MEMORY.md, a resumed one does 
     await rm(f.directory, { recursive: true, force: true });
   }
 });
+
+test("the composite forwards the primary's capability declarations", async () => {
+  const primary: AgentSession = {
+    steersBusyTurn: true,
+    wakesAfterSubagents: true,
+    sendMessage: async () => {},
+    readSessionIdentity: async () => ({ sessionId: "control", state: "resumable" }),
+    subscribe: () => () => {},
+    onExit: () => () => {},
+    interrupt: async () => {},
+    dispose: async () => {},
+  };
+  const session = new MemoryConversationSessions({
+    primary,
+    options: { agentWorkspaceDirectory: "/test/shared", instructions: "Memory" },
+    create: async () => {
+      throw new Error("unused");
+    },
+  });
+  try {
+    expect(session.steersBusyTurn).toBe(true);
+    expect(session.wakesAfterSubagents).toBe(true);
+  } finally {
+    await session.dispose();
+  }
+});
