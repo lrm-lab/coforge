@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
+import { CodexTurnSignals } from "@lrm/coforge-anvil/codex";
 import { scenarioProvider, waitForEvent } from "./codex-scenarios";
 
 let directory: string;
@@ -254,4 +255,22 @@ test("Codex reports a repeated bare system error warning once, still erroring ea
     { type: "text-delta", text: "Done" },
     completed,
   ]);
+});
+
+test("Codex re-warns an identical diagnostic after the repeat window", () => {
+  const signals = new CodexTurnSignals("thread-1");
+  const diagnostic = (timestamp: string) =>
+    signals.notification(
+      { method: "warning", timestamp },
+      { threadId: "thread-1", message: "careful" },
+    );
+  const t0 = "2026-11-07T00:00:00.000Z";
+  const inside = "2026-11-07T00:05:00.000Z";
+  const outside = "2026-11-07T00:11:00.000Z";
+  expect([
+    ...diagnostic(t0)!,
+    ...diagnostic(inside)!,
+    ...diagnostic(outside)!,
+    ...diagnostic("2026-11-07T00:12:00.000Z")!,
+  ]).toEqual([warning("Codex warning", "careful"), warning("Codex warning", "careful")]);
 });

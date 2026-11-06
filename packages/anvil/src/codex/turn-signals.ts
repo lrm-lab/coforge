@@ -17,6 +17,7 @@ const DIAGNOSTIC_METHODS = new Set([
 const WAITING_FLAGS = new Set(["waitingOnApproval", "waitingOnUserInput"]);
 const SUMMARY_BOUND = 1_000;
 const DIAGNOSTICS_SEEN_LIMIT = 64;
+const DIAGNOSTIC_REPEAT_WINDOW_MS = 10 * 60 * 1_000;
 
 /**
  * Thread health beyond turn content, after the reference Computer: a completed turn with no
@@ -32,7 +33,7 @@ export class CodexTurnSignals {
   #visibleText = false;
   #waitingSignature: string | undefined;
   #bareErrorWarned = false;
-  #diagnosticsSeen = new Set<string>();
+  #diagnosticsSeen = new Map<string, number>();
 
   constructor(threadId: string, agentId?: string, runtimeId?: string) {
     this.#threadId = threadId;
@@ -121,12 +122,15 @@ export class CodexTurnSignals {
     const details = diagnosticDetails(method, params);
     const text = [message, ...(details && details !== message ? [details] : [])].join("\n");
     const signature = `${method}\n${text}`;
-    if (this.#diagnosticsSeen.has(signature)) return [];
+    const now = Date.parse(eventTime(record)) || Date.now();
+    const seenAt = this.#diagnosticsSeen.get(signature);
+    if (seenAt !== undefined && now - seenAt < DIAGNOSTIC_REPEAT_WINDOW_MS) return [];
+    this.#diagnosticsSeen.delete(signature);
     if (this.#diagnosticsSeen.size >= DIAGNOSTICS_SEEN_LIMIT) {
-      const oldest = this.#diagnosticsSeen.values().next().value;
+      const oldest = this.#diagnosticsSeen.keys().next().value;
       if (oldest !== undefined) this.#diagnosticsSeen.delete(oldest);
     }
-    this.#diagnosticsSeen.add(signature);
+    this.#diagnosticsSeen.set(signature, now);
     return [warningActivity(diagnosticTitle(method), text, record)];
   }
 
