@@ -113,6 +113,17 @@ as known non-triggers. `Granularity-exempt: <reason>` in the message bypasses th
 rules only — `Revert-effect:` is still required — and each use is printed as a warning and
 listed in the CI step summary. Merge commits skip all three rules.
 
+**Reviewed-in warnings.** `scripts/ci/reviewed-in.ts` is the warn-only companion (task #593),
+run by `scripts/ci/range-checks.ts` — the `--range` entrypoint pre-push and ci.yml share —
+after the blocking rules:
+a commit whose diff touches a path in `scripts/ci/high-risk-paths.txt` — protocol and
+contract sources, credentials and secrets, auth, workflows, deploy and infra configuration —
+should carry a `Reviewed-in: #<channel>:#<task>` trailer naming where it was reviewed (the
+review message id may follow it). Each offending commit gets a `::warning::` and a step-summary
+table in CI and a printed warning on pre-push; nothing fails. Commits carrying the trailer are
+silent, and merge commits are skipped. Warn-only for its first two weeks while the false-positive
+rate is measured; whether it becomes a hard rule is a later decision.
+
 **Hook installation.** `core.hooksPath=.githooks` is set once per clone, repo-wide, by the root
 package's `prepare` script (`scripts/git-hooks/install-hooks-path.ts`) on every `bun install`;
 linked worktrees share that config and resolve `.githooks` against their own top level, so a new

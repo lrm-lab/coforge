@@ -100,7 +100,7 @@ jobs:
       # The same checker as the git hooks: docs/agents/git-hooks/hard-rules.md.
       - name: Check hard rules
         env: *plan
-        run: bun scripts/ci/hard-rules.ts --range "$BASE" "$HEAD" --authors-since "$BEFORE"
+        run: bun scripts/ci/range-checks.ts --range "$BASE" "$HEAD" --authors-since "$BEFORE"
 
   infrastructure-contracts:
     name: Validate scripts
