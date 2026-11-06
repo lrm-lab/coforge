@@ -6,6 +6,7 @@ import {
   type RuntimeAuthLogoutResult,
   type RuntimeAuthStatus,
   asRecord,
+  authDetail,
   runtimeAuthAccount,
   scrubRuntimeErrorText,
 } from "@lrm/coforge-anvil";
@@ -65,12 +66,6 @@ function versionAtLeast(
     (major === minimumMajor &&
       (minor > minimumMinor || (minor === minimumMinor && patch >= minimumPatch)))
   );
-}
-
-function detail(value: unknown): string | undefined {
-  const text = typeof value === "string" ? value : JSON.stringify(value);
-  if (!text) return undefined;
-  return text.replace(/[\u0000-\u001f\u007f]/gu, " ").slice(0, 512);
 }
 
 export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
@@ -134,7 +129,7 @@ export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
       return { provider: RUNTIME_PROVIDER.CODEX, state: "logged_out" };
     logger.info("Codex login status unknown: {detail}", {
       exitCode: output.exitCode,
-      detail: detail(scrubRuntimeErrorText(text.split(/\r?\n/u).at(-1) ?? "")),
+      detail: authDetail(scrubRuntimeErrorText(text.split(/\r?\n/u).at(-1) ?? "")),
     });
     return { provider: RUNTIME_PROVIDER.CODEX, state: "unknown" };
   }
@@ -237,7 +232,7 @@ export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
           return {
             status: "failed",
             reason: "interaction_failed",
-            detail: detail(error instanceof Error ? error.message : error),
+            detail: authDetail(error instanceof Error ? error.message : error),
           };
         }
       }
@@ -263,7 +258,7 @@ export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
         };
       const params = asRecord(completed.params) ?? {};
       if (params.success !== true)
-        return { status: "failed", reason: "rejected", detail: detail(params.error) };
+        return { status: "failed", reason: "rejected", detail: authDetail(params.error) };
       let account: unknown;
       try {
         account = asRecord(
@@ -309,7 +304,7 @@ export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
         detail:
           process.exitCode !== undefined
             ? `${RUNTIME_PROVIDER.CODEX} app-server exited with code ${process.exitCode}`
-            : detail(error instanceof Error ? error.message : error),
+            : authDetail(error instanceof Error ? error.message : error),
       };
     } finally {
       offRecord();
@@ -356,7 +351,7 @@ export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
       return {
         status: "failed",
         reason: "rejected",
-        detail: detail(result.stderr.split(/\r?\n/gu).filter(Boolean).at(-1)),
+        detail: authDetail(result.stderr.split(/\r?\n/gu).filter(Boolean).at(-1)),
       };
     if (result.exitCode !== 0)
       return {

@@ -1,5 +1,6 @@
 import type { ClaudeAuthHost } from "./host";
 import { getLogger } from "@logtape/logtape";
+import { authDetail } from "#src/auth-detail";
 import { scrubRuntimeErrorText } from "#src/runtime-error-text";
 import {
   normalizeRuntimeAuthCode,
@@ -65,12 +66,6 @@ function anthropicUrl(value: string): string | undefined {
   }
 }
 
-function detail(value: unknown): string | undefined {
-  const text = typeof value === "string" ? value : JSON.stringify(value);
-  if (!text) return undefined;
-  return text.replace(/\p{Cc}/gu, " ").slice(0, 512);
-}
-
 /** A child that could not even start: a missing executable is "not installed", not a failed try. */
 function notRunnable(error: unknown) {
   if ((error as { code?: string }).code === "ENOENT")
@@ -78,7 +73,7 @@ function notRunnable(error: unknown) {
   return {
     status: "failed",
     reason: "process_failed",
-    detail: detail((error as Error).message),
+    detail: authDetail((error as Error).message),
   } as const;
 }
 
@@ -223,7 +218,7 @@ export class ClaudeRuntimeAuthAdapter implements RuntimeAuthAdapter {
       .then(() => settled.resolve("exited"));
 
     const fail = (reason: string) => {
-      interactionFailed = detail(reason) ?? "interaction failed";
+      interactionFailed = authDetail(reason) ?? "interaction failed";
       process.kill();
     };
     const failMissingAuthUrl = () => {
@@ -365,14 +360,14 @@ export class ClaudeRuntimeAuthAdapter implements RuntimeAuthAdapter {
         return {
           status: "failed",
           reason: codeSent ? "rejected" : "process_failed",
-          detail: detail(loginFailure) ?? `claude exited with code ${exitCode ?? "unknown"}`,
+          detail: authDetail(loginFailure) ?? `claude exited with code ${exitCode ?? "unknown"}`,
         };
       const authStatus = await this.readStatus({ workingDirectory: options.workingDirectory });
       if (authStatus.state === "logged_in") return { status: "logged_in", authStatus };
       return {
         status: "failed",
         reason: codeSent ? "rejected" : "process_failed",
-        detail: detail(loginFailure) ?? "Claude Code did not sign in",
+        detail: authDetail(loginFailure) ?? "Claude Code did not sign in",
       };
     } finally {
       clearTimeout(timer);

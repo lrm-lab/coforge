@@ -1,4 +1,5 @@
 export * from "./src/contract";
+export * from "./src/auth-detail";
 export * from "./src/agent-activity";
 export * from "./src/runtime-error-text";
 export * from "./src/token-estimate";

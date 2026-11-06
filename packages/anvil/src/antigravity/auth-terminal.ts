@@ -1,3 +1,4 @@
+import { authDetail } from "#src/auth-detail";
 import {
   type OwnedChildProcess,
   type OwnedProcessTree,
@@ -42,11 +43,6 @@ function googleAccountsUrl(value: string): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-function detail(value: unknown): string | undefined {
-  const text = typeof value === "string" ? value : JSON.stringify(value);
-  return text ? text.replace(/\p{Cc}/gu, " ").slice(0, 512) : undefined;
 }
 
 /** Everything a short-lived auth child wrote, stdout and stderr together. */
@@ -151,7 +147,7 @@ export async function antigravityTerminalLogin(
     return {
       status: "failed",
       reason: "process_failed",
-      detail: detail((error as Error).message),
+      detail: authDetail((error as Error).message),
     };
   }
   const child = tree.child;
@@ -182,7 +178,7 @@ export async function antigravityTerminalLogin(
     .then(() => settled.resolve("exited"));
 
   const fail = (reason: string) => {
-    interactionFailed = detail(reason) ?? "interaction failed";
+    interactionFailed = authDetail(reason) ?? "interaction failed";
     terminate();
   };
   const failMissingAuthUrl = () => {
@@ -316,7 +312,8 @@ export async function antigravityTerminalLogin(
       return {
         status: "failed",
         reason: codeWrites > 0 ? "rejected" : "process_failed",
-        detail: detail(loginFailure) ?? `agy acp --login exited with code ${exitCode ?? "unknown"}`,
+        detail:
+          authDetail(loginFailure) ?? `agy acp --login exited with code ${exitCode ?? "unknown"}`,
       };
     const authStatus = await readStatus();
     if (authStatus.state === "logged_in") return { status: "logged_in", authStatus };

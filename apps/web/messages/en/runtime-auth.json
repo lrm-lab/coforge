@@ -29,7 +29,7 @@
   "runtime_auth_antigravity_hint": "Antigravity signs in through a browser on the Computer.",
   "runtime_auth_antigravity_personal": "Personal Google account",
   "runtime_auth_antigravity_business": "Gemini Enterprise",
-  "runtime_auth_antigravity_no_desktop": "This Computer has no desktop session, so the sign-in page can't open. Sign in on the Computer itself.",
+  "runtime_auth_antigravity_no_desktop": "Gemini Enterprise sign-in needs a desktop session, which this Computer doesn't have. Sign in on the Computer itself, or choose a personal Google account.",
   "runtime_auth_droid_code_unavailable": "Droid didn't give a code. On the Computer, run droid and type /login, or set FACTORY_API_KEY in its environment.",
   "runtime_auth_codex_start_failed": "{runtime} could not start the sign-in on the Computer. Try again; if it keeps failing, sign in with the Codex CLI on the Computer.",
   "runtime_auth_failed_not_logged_in": "The sign-in finished, but {runtime} is still not signed in.",
