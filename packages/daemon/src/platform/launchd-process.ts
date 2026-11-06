@@ -185,6 +185,7 @@ export class LaunchdProcessOwner implements ProcessTreeSpawner {
               cwd,
               environment,
               terminal: options?.terminal ?? false,
+              ...(options?.terminalSize ? { terminalSize: options.terminalSize } : {}),
             });
           })
           .catch(fail);
@@ -418,7 +419,14 @@ export async function runLaunchdAgent(socketPath: string): Promise<void> {
         typeof record.environment !== "object" ||
         Array.isArray(record.environment) ||
         !Object.values(record.environment).every((value) => typeof value === "string") ||
-        (record.terminal !== undefined && typeof record.terminal !== "boolean")
+        (record.terminal !== undefined && typeof record.terminal !== "boolean") ||
+        (record.terminalSize !== undefined &&
+          (typeof record.terminalSize !== "object" ||
+            record.terminalSize === null ||
+            !Number.isSafeInteger((record.terminalSize as { cols?: unknown }).cols) ||
+            !Number.isSafeInteger((record.terminalSize as { rows?: unknown }).rows) ||
+            (record.terminalSize as { cols: number }).cols <= 0 ||
+            (record.terminalSize as { rows: number }).rows <= 0))
       )
         throw new Error("invalid Agent start");
       if (record.terminal === true) {
@@ -426,7 +434,17 @@ export async function runLaunchdAgent(socketPath: string): Promise<void> {
           record.command,
           record.cwd,
           record.environment as Record<string, string>,
-          { terminal: true },
+          {
+            terminal: true,
+            ...(record.terminalSize
+              ? {
+                  terminalSize: record.terminalSize as {
+                    cols: number;
+                    rows: number;
+                  },
+                }
+              : {}),
+          },
         );
         child = terminalTree.child;
       } else

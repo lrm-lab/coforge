@@ -72,8 +72,8 @@ export function spawnOwnedChild(
     detached: options.detached ?? false,
     windowsHide: true,
     terminal: {
-      cols: 120,
-      rows: 24,
+      cols: options?.terminalSize?.cols ?? 120,
+      rows: options?.terminalSize?.rows ?? 24,
       data(_terminal, data) {
         if (!closed && !cancelled) controller.enqueue(data);
       },

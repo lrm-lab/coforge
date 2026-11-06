@@ -55,8 +55,16 @@ export interface OwnedProcessTree {
 
 export type ProcessCommandRunner = (command: readonly string[]) => Promise<void>;
 
+/** PTY dimensions in character cells; only meaningful with `terminal`. */
+export type ProcessTreeTerminalSize = Readonly<{ cols: number; rows: number }>;
+
 /** Opt-in terminal transport; omitted callers retain separate pipes. */
-export type ProcessTreeSpawnOptions = Readonly<{ terminal?: boolean }>;
+export type ProcessTreeSpawnOptions = Readonly<{
+  terminal?: boolean;
+  /** The PTY's size; the transport default applies when omitted. A full-screen provider UI
+   * whose layout needs more room (Droid's `/limits` panel) declares its own here. */
+  terminalSize?: ProcessTreeTerminalSize;
+}>;
 
 export interface ProcessTreeSpawner {
   spawn(
