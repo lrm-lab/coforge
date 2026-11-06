@@ -80,6 +80,8 @@ export function MessageActionToolbar({
         "[li:has(>[role=separator])_&]:top-0",
         "lg:[@media(hover:hover)_and_(pointer:fine)]:group-focus-within/message:pointer-events-auto lg:[@media(hover:hover)_and_(pointer:fine)]:group-focus-within/message:opacity-100",
         "lg:[@media(hover:hover)_and_(pointer:fine)]:group-hover/message:pointer-events-auto lg:[@media(hover:hover)_and_(pointer:fine)]:group-hover/message:opacity-100",
+        // A menu it opened has taken the pointer and the focus away from the row: it stays while open.
+        "lg:[@media(hover:hover)_and_(pointer:fine)]:has-[[aria-expanded=true]]:pointer-events-auto lg:[@media(hover:hover)_and_(pointer:fine)]:has-[[aria-expanded=true]]:opacity-100",
       )}
     >
       {onOpenThread && <ThreadToolbarEntry rootId={messageId} onOpen={onOpenThread} />}
