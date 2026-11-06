@@ -70,6 +70,82 @@ test("optional GitHub deployment credentials reach Compose without entering stdo
   }
 });
 
+test("compose exports the loaded secrets to the docker process environment", async () => {
+  // A docker() shell function cannot catch a broken env-prefix chain: unexported
+  // assignments still reach it. Only an external process sees what Compose gets.
+  const root = await mkdtemp(join(tmpdir(), "coforge-compose-env-"));
+  try {
+    const binDir = join(root, "bin");
+    const secretsDir = join(root, "secrets");
+    const envDump = join(root, "docker-env.txt");
+    await mkdir(binDir);
+    await mkdir(secretsDir);
+    const secrets: Record<string, string> = {
+      authing_app_id: "app-id-value",
+      authing_app_secret: "app-secret-value",
+      coforge_session_secret: "session-secret-value",
+      coforge_agent_credential_encryption_key: "credential-key-value",
+      coforge_web_push_public_key: "push-public-value",
+      coforge_web_push_private_key: "push-private-value",
+      coforge_file_delivery_key: "file-delivery-value",
+      centrifugo_token_hmac_secret_key: "hmac-value",
+      coforge_cloud_cluster_token: "cluster-token-value",
+      coforge_oidc_signing_jwks: '{"keys":[]}',
+    };
+    for (const [name, value] of Object.entries(secrets)) {
+      await writeFile(join(secretsDir, name), value);
+    }
+    await writeFile(join(binDir, "docker"), `#!/bin/sh\nenv > ${JSON.stringify(envDump)}\n`, {
+      mode: 0o700,
+    });
+    const functions = await readFile(secretsScript, "utf8");
+    const proc = Bun.spawn(
+      [
+        "bash",
+        "-c",
+        [
+          "set -euo pipefail",
+          `export PATH=${JSON.stringify(binDir)}:"$PATH"`,
+          `secrets_dir=${JSON.stringify(secretsDir)}`,
+          "COMPOSE_ARGS=(-p coforge-test)",
+          functions,
+          "load_compose_secrets",
+          "compose config --quiet",
+        ].join("\n"),
+      ],
+      { stdout: "pipe", stderr: "pipe" },
+    );
+    const [stderr, exitCode] = await Promise.all([new Response(proc.stderr).text(), proc.exited]);
+    expect(exitCode, stderr).toBe(0);
+    const env = new Map(
+      (await readFile(envDump, "utf8"))
+        .split("\n")
+        .filter((line) => line.includes("="))
+        .map((line) => {
+          const at = line.indexOf("=");
+          return [line.slice(0, at), line.slice(at + 1)] as const;
+        }),
+    );
+    const expected: Record<string, string> = {
+      AUTHING_APP_ID: "app-id-value",
+      AUTHING_APP_SECRET: "app-secret-value",
+      COFORGE_SESSION_SECRET: "session-secret-value",
+      COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY: "credential-key-value",
+      COFORGE_WEB_PUSH_PUBLIC_KEY: "push-public-value",
+      COFORGE_WEB_PUSH_PRIVATE_KEY: "push-private-value",
+      COFORGE_FILE_DELIVERY_KEY: "file-delivery-value",
+      COFORGE_CENTRIFUGO_TOKEN_HMAC_SECRET_KEY: "hmac-value",
+      COFORGE_CLOUD_CLUSTER_TOKEN: "cluster-token-value",
+      COFORGE_OIDC_SIGNING_JWKS: '{"keys":[]}',
+    };
+    for (const [name, value] of Object.entries(expected)) {
+      expect(env.get(name), name).toBe(value);
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 describe("write_deploy_env", () => {
   test("keeps Authing values out of compose .env and replaces it with mode 0600", async () => {
     const root = await mkdtemp(join(tmpdir(), "coforge-write-deploy-env-"));

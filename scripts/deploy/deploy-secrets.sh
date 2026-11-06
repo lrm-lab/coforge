@@ -46,6 +46,10 @@ run_migrations() {
 }
 
 compose() {
+	# Every assignment prefixes the Compose invocation on the last line; a
+	# comment inside that continued chain ends it early and drops them all.
+	# ${arr[@]+...} keeps an empty COMPOSE_ARGS from tripping `set -u` on
+	# bash < 4.4 (macOS's /bin/bash is 3.2; the tests run this under it).
 	AUTHING_APP_ID="$AUTHING_APP_ID" \
 		AUTHING_APP_SECRET="$AUTHING_APP_SECRET" \
 		COFORGE_SESSION_SECRET="$COFORGE_SESSION_SECRET" \
@@ -64,8 +68,6 @@ compose() {
 		COFORGE_COMMIT_COAUTHOR="$COFORGE_COMMIT_COAUTHOR" \
 		COFORGE_GITHUB_WEBHOOK_SECRET="$COFORGE_GITHUB_WEBHOOK_SECRET" \
 		COFORGE_OIDC_SIGNING_JWKS="$COFORGE_OIDC_SIGNING_JWKS" \
-		# ${arr[@]+...} keeps an empty COMPOSE_ARGS from tripping `set -u` on bash < 4.4
-		# (macOS's /bin/bash is 3.2; the tests run this under it).
 		docker compose "${COMPOSE_ARGS[@]+"${COMPOSE_ARGS[@]}"}" "$@"
 }
 
