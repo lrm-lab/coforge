@@ -37,6 +37,7 @@ const pause = (milliseconds: number) =>
   milliseconds > 0
     ? new Promise<void>((resolve) => setTimeout(resolve, milliseconds))
     : Promise.resolve();
+const STORAGE_READ_CONCURRENCY = 8;
 function bump(map: Record<string, number>, key: string) {
   map[key] = (map[key] ?? 0) + 1;
 }
@@ -75,11 +76,15 @@ export async function backfillAttachmentImageDimensions(
       limit: Math.min(options.batchSize, plan.images - summary.processed),
     });
     if (rows.length === 0) break;
-    for (const row of rows) {
-      const result: StoredImageDimensionsResult = await readStoredImageDimensionsResult(
-        storage,
-        row,
+    const results: StoredImageDimensionsResult[] = [];
+    for (let offset = 0; offset < rows.length; offset += STORAGE_READ_CONCURRENCY) {
+      const window = rows.slice(offset, offset + STORAGE_READ_CONCURRENCY);
+      results.push(
+        ...(await Promise.all(window.map((row) => readStoredImageDimensionsResult(storage, row)))),
       );
+    }
+    for (const [index, row] of rows.entries()) {
+      const result = results[index]!;
       if (result.status === "known") {
         if (
           options.dryRun ||
