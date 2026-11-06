@@ -248,7 +248,6 @@ export class CentrifugoConversationRealtime implements ConversationRealtime {
       conversationId: announced.conversationId,
       tasks: announced.tasks,
       deleted: announced.deleted,
-      ...(memberUserIds ? { privateChannel: true as const } : {}),
     };
     const people = directUserIds ?? memberUserIds;
     if (people) {

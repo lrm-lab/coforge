@@ -102,8 +102,8 @@ const APPLY_DELAY_MS = 100;
 
 /**
  * Keeps the rows live: listens for `task.changed.v1` on the Workspace channel, where public
- * channels' Tasks are announced, and on the viewer's own channel for a private channel's
- * (`privateChannel`; a direct message's go there too, and this page does not list them), the
+ * channels' Tasks are announced, and on the viewer's own channel, where a private channel's and
+ * the viewer's own direct conversations' are (task #596: those are on this page too), the
  * subscriptions the nav rail already holds, and applies each burst in one write. Every other
  * publication (every chat message) is dropped before any parsing beyond its type. Only a Task the
  * page does not list yet reads the list again, once per burst.
@@ -173,8 +173,8 @@ function useTaskOverviewRealtime(
       const data = publicationDataOrUndefined(publication.data);
       const type = publicationType(data);
       if (type === "task.changed.v1") {
-        const event = decodeTaskChangedEvent(data);
-        if (event?.privateChannel) apply(event);
+        // Only Tasks the viewer may read are announced on their own channel.
+        apply(decodeTaskChangedEvent(data));
         return;
       }
       // The viewer joined or left a channel: a private one's Tasks come or go with it, which only

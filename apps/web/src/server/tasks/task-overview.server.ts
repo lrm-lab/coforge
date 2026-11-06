@@ -10,7 +10,6 @@ import {
   overviewRow,
   overviewRows,
   overviewSelection,
-  overviewWithDirectsWhere,
 } from "./task-overview-row.server";
 import {
   FINISHED_TASK_STATUSES,
@@ -142,12 +141,6 @@ function finishedFilterWhere({ owners = [], projects = [], labels = [] }: Finish
 }
 
 /**
- * The conversations whose Tasks the Workspace Tasks page shows the viewer: every channel they may
- * read. A direct message's Tasks, the viewer's own included, stay on that conversation's Tasks tab.
- * Tasks in a channel hidden from the Workspace, or a private one the viewer is not in, are not
- * listed.
- */
-/**
  * Which one conversation's Tasks a viewer may list, as `TaskBoard`'s `list` decides it: the
  * conversation's id, or `ACCESS_DENIED`. A finished-work read scoped to one conversation asks it.
  */
@@ -213,9 +206,7 @@ export class TaskOverviewReads {
         status: { in: UNFINISHED_TASK_STATUSES },
         // A channel the reader may see, or their own direct conversation (task #484: a DM Task
         // files under a Project too; another person's DM never shows).
-        conversation: {
-          OR: [overviewWithDirectsWhere(workspaceId, userId)],
-        },
+        conversation: overviewConversationWhere(workspaceId, userId),
       },
       orderBy: [{ conversationId: "asc" }, { number: "asc" }],
       select: {
@@ -250,7 +241,7 @@ export class TaskOverviewReads {
         deletedAt: null,
         conversationId: ref.conversationId,
         number: ref.number,
-        conversation: overviewWithDirectsWhere(workspaceId, userId),
+        conversation: overviewConversationWhere(workspaceId, userId),
       },
       select: overviewSelection(userId),
     });

@@ -20,9 +20,6 @@ export type TaskChangedEvent = {
   tasks: TaskView[];
   /** Message ids of the Tasks the write deleted. */
   deleted: string[];
-  /** Set for a private channel's Tasks, which share the people's own channels with their direct
-   * messages', so the Tasks page, which lists channel Tasks only, can tell them apart. */
-  privateChannel?: true;
 };
 
 const member = z.object({
@@ -62,7 +59,6 @@ const taskChangedEvent = z.object({
   conversationId: z.string().min(1),
   tasks: z.array(taskView),
   deleted: z.array(z.string().min(1)),
-  privateChannel: z.literal(true).optional(),
 });
 
 /** The event, or undefined for any other publication on the channel (most are messages). */

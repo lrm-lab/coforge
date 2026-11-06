@@ -2,10 +2,11 @@ import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { projectIconUrl } from "#src/server/projects/project-images.server";
+import { agentDirectKey } from "#src/features/conversations/direct-key";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import { finishedWorkFixture } from "./fixtures/finished-work";
 
-test("TaskBoard overview returns every visible Workspace channel task and no direct-message task", async () => {
+test("TaskBoard overview returns every visible Workspace channel task and the viewer's own direct-message tasks", async () => {
   const connectionString = Bun.env.TASK_TEST_DATABASE_URL ?? Bun.env.DATABASE_URL;
   if (!connectionString)
     throw new Error("TASK_TEST_DATABASE_URL or DATABASE_URL must point to local PostgreSQL");
@@ -66,7 +67,7 @@ test("TaskBoard overview returns every visible Workspace channel task and no dir
       data: {
         workspaceId: data.workspaceId ?? workspace.id,
         channelName: data.channelName,
-        directKey: data.agentId ? [data.userId, data.agentId].sort().join(":") : undefined,
+        directKey: data.agentId ? agentDirectKey(data.userId, data.agentId) : undefined,
         members: {
           create: [{ userId: data.userId }, ...(data.agentId ? [{ agentId: data.agentId }] : [])],
         },
@@ -123,12 +124,17 @@ test("TaskBoard overview returns every visible Workspace channel task and no dir
     ]);
 
     const result = await board.overview(workspace.id, alice!.id);
-    // Direct-message Tasks stay on their conversation's Tasks tab, even the viewer's own.
-    expect(result.tasks).toHaveLength(2);
+    // The viewer's own DM's Task is on the board too; another person's DM never is (task #596).
+    expect(result.tasks).toHaveLength(3);
     expect(result.tasks.map(({ title }) => title).sort()).toEqual([
       "Joined public",
+      "Own direct",
       "Unjoined public",
     ]);
+    // And Bob, the other account, sees his own DM's Task and not Alice's.
+    expect(
+      (await board.overview(workspace.id, bob!.id)).tasks.map(({ title }) => title).sort(),
+    ).toEqual(["Joined public", "Other direct", "Unjoined public"]);
     expect(result.tasks.find(({ title }) => title === "Joined public")).toEqual({
       ...joinedTask.tasks[0],
       currentMemberId: expect.any(String),
@@ -231,18 +237,24 @@ test("TaskBoard pages the viewer's finished Tasks newest first within the chosen
     const titles = (result: { tasks: { title: string }[] }) =>
       result.tasks.map(({ title }) => title);
 
-    // Direct-message Tasks, the viewer's own included, are not the Tasks page's.
-    expect(titles(await page("week"))).toEqual(["Done today", "Done in unjoined channel"]);
+    // The viewer's own direct conversation's Tasks are theirs to see; someone else's never
+    // (task #596).
+    expect(titles(await page("week"))).toEqual([
+      "Done today",
+      "Done in own DM",
+      "Done in unjoined channel",
+    ]);
     expect(titles(await page("month"))).toEqual([
       "Done today",
+      "Done in own DM",
       "Done in unjoined channel",
       "Done ten days ago",
     ]);
 
-    const first = await page("all", null, 2);
-    expect(titles(first)).toEqual(["Done today", "Done in unjoined channel"]);
+    const first = await page("all", null, 3);
+    expect(titles(first)).toEqual(["Done today", "Done in own DM", "Done in unjoined channel"]);
     expect(first.nextCursor).toEqual(expect.any(String));
-    const last = await page("all", first.nextCursor, 2);
+    const last = await page("all", first.nextCursor, 3);
     expect(titles(last)).toEqual(["Done ten days ago", "Done two months ago"]);
     expect(last.nextCursor).toBeNull();
 
@@ -299,13 +311,17 @@ test("TaskBoard filters a finished page by owner and Project like the Tasks page
 
     expect(await titles({ owners: [f.viewer.id] })).toEqual([
       "Viewer's in Launch",
+      "Viewer's in own DM",
       "Viewer's without Project",
     ]);
     expect(await titles({ owners: [f.peer.id, "none"] })).toEqual([
       "Nobody's in Launch",
       "Peer's in Launch",
     ]);
-    expect(await titles({ projects: ["none"] })).toEqual(["Viewer's without Project"]);
+    expect(await titles({ projects: ["none"] })).toEqual([
+      "Viewer's in own DM",
+      "Viewer's without Project",
+    ]);
     expect(await titles({ owners: [f.viewer.id], projects: [f.project.id] })).toEqual([
       "Viewer's in Launch",
     ]);
@@ -361,6 +377,8 @@ test("TaskBoard summarizes the viewer's finished Tasks in the window by status, 
       { status: "closed", owner: null, viewerOwns: false, project: null, count: 1 },
       { status: "done", owner: f.peer.id, viewerOwns: false, project: f.project.id, count: 1 },
       { status: "done", owner: f.viewer.id, viewerOwns: true, project: f.project.id, count: 2 },
+      // The viewer's own DM counts; the peer's DM ("Hidden") does not.
+      { status: "done", owner: f.viewer.id, viewerOwns: true, project: null, count: 1 },
     ];
     expect(groups).toEqual(
       expected.sort((left, right) =>
@@ -394,7 +412,7 @@ test("TaskBoard pages and summarizes one conversation's finished Tasks for the c
       ).tasks.map(({ title }) => title);
 
     expect(await titles(f.channel.id)).toEqual(["Channel done"]);
-    // A direct message keeps its own Tasks tab, though the Tasks page leaves it out.
+    // A direct message keeps its own Tasks tab too.
     expect(await titles(f.ownDm.id)).toEqual(["DM done"]);
     // A public channel reads to every Workspace member, joined or not, as its Task list does.
     expect(await titles(f.unjoined.id)).toEqual(["Unjoined done"]);
