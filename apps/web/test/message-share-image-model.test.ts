@@ -7,6 +7,7 @@ import {
   SHARE_CANVAS_MAX_SIDE,
   SHARE_IMAGE_SCALE,
   shareFileName,
+  shareImageAddress,
   shareImageScale,
   sharePageMaxHeight,
   sharePages,
@@ -62,4 +63,19 @@ test("a narrow, extremely tall one also keeps to the longest side", () => {
   const scale = shareImageScale(480, 200_000);
   expect(200_000 * scale).toBeLessThanOrEqual(SHARE_CANVAS_MAX_SIDE);
   expect(480 * scale * (200_000 * scale)).toBeLessThanOrEqual(SHARE_CANVAS_MAX_AREA);
+});
+
+test("a CDN's attachment or avatar is read through this site, and nothing else is", () => {
+  const at = { siteOrigin: "https://coforge.cn", workspaceId: "ws" };
+  const id = "58fcf61c-3a8c-4756-9a8a-83945cfeee08";
+  const attachment = `https://files.coforge.cn/workspaces/w/attachments/${id}/original?auth_key=1`;
+  expect(shareImageAddress(attachment, at)).toBe(`/api/attachments/${id}?download`);
+  const avatar = `https://images.coforge.cn/users/${id}/avatars/${id}/original?style=a`;
+  expect(shareImageAddress(avatar, at)).toBe(`/api/workspaces/ws/users/${id}/avatar`);
+  for (const url of [
+    `https://coforge.cn/api/attachments/${id}`,
+    "https://coforge.cn/avatars/person-1-2.webp",
+    "https://images.coforge.cn/projects/icon.webp",
+  ])
+    expect(shareImageAddress(url, at)).toBeUndefined();
 });

@@ -1,4 +1,4 @@
-import { shareFileName, shareImageScale } from "./message-share-image-model";
+import { shareFileName, shareImageAddress, shareImageScale } from "./message-share-image-model";
 
 /** How long the drawing must hold still to count as done, and the longest it is waited for. */
 const STILL_MS = 150;
@@ -38,12 +38,34 @@ export async function shareContentReady(root: HTMLElement): Promise<void> {
   await layoutStill(root);
 }
 
+function dataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error ?? new Error("image read failed"));
+    reader.readAsDataURL(blob);
+  });
+}
+
+/** Reads a CDN's image through this site for the capture; `false` leaves any other image to the
+ * library. */
+async function siteImage(url: string, workspaceId: string): Promise<string | false> {
+  const address = shareImageAddress(url, { siteOrigin: window.location.origin, workspaceId });
+  if (!address) return false;
+  const response = await fetch(address);
+  return response.ok ? dataUrl(await response.blob()) : false;
+}
+
 /** One card as a PNG, as sharp as the browser's canvas allows. The library is only fetched by
  * whoever generates an image. */
-export async function shareCardPng(card: HTMLElement): Promise<Blob> {
+export async function shareCardPng(card: HTMLElement, workspaceId: string): Promise<Blob> {
   const { domToBlob } = await import("modern-screenshot");
   const scale = shareImageScale(card.offsetWidth, card.offsetHeight);
-  return domToBlob(card, { scale, type: "image/png" });
+  return domToBlob(card, {
+    scale,
+    type: "image/png",
+    fetchFn: (url) => siteImage(url, workspaceId),
+  });
 }
 
 /** Saves `blob` under `fileName` through the browser's own download. */

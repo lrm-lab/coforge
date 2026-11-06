@@ -58,3 +58,23 @@ export function shareFileName(index: number, total: number): string {
   const number = String(index + 1).padStart(String(total).length, "0");
   return `coforge-messages-${number}.png`;
 }
+
+const DELIVERED_ATTACHMENT = /\/workspaces\/[^/]+\/attachments\/([0-9a-f-]{36})\//i;
+const DELIVERED_AVATAR = /\/users\/([0-9a-f-]{36})\/avatars\//i;
+
+/**
+ * This site's own address for an image delivered from a CDN, whose address a capture cannot read:
+ * neither the attachment nor the profile image CDN sends CORS headers. An attachment's `?download`
+ * is the one form of its route that streams the bytes instead of redirecting back to the CDN.
+ * Anything else keeps its address.
+ */
+export function shareImageAddress(
+  url: string,
+  { siteOrigin, workspaceId }: { siteOrigin: string; workspaceId: string },
+): string | undefined {
+  if (url.startsWith(siteOrigin)) return undefined;
+  const attachment = DELIVERED_ATTACHMENT.exec(url)?.[1];
+  if (attachment) return `/api/attachments/${attachment}?download`;
+  const user = DELIVERED_AVATAR.exec(url)?.[1];
+  return user && `/api/workspaces/${workspaceId}/users/${user}/avatar`;
+}

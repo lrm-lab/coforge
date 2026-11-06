@@ -9,6 +9,7 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { Spinner } from "#src/components/ui/spinner";
 import { useAppToast } from "#src/components/ui/toast";
+import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import type { MessageView } from "./message-view";
@@ -50,6 +51,7 @@ export function MessageShareDialog({
   onClose: () => void;
 }) {
   const toast = useAppToast();
+  const workspaceId = useCurrentWorkspaceId() ?? "";
   const stage = useRef<HTMLDivElement>(null);
   const [step, setStep] = useState<ShareStep>(START);
   const [index, setIndex] = useState(0);
@@ -78,7 +80,7 @@ export function MessageShareDialog({
       }
       const pngs: Blob[] = [];
       for (const card of root.querySelectorAll<HTMLElement>("[data-share-page]")) {
-        pngs.push(await shareCardPng(card));
+        pngs.push(await shareCardPng(card, workspaceId));
         if (stale) return;
       }
       const pages = pngs.map((png) => ({ png, url: URL.createObjectURL(png) }));
@@ -90,7 +92,7 @@ export function MessageShareDialog({
     return () => {
       stale = true;
     };
-  }, [step]);
+  }, [step, workspaceId]);
 
   useEffect(() => {
     if (step.name !== "ready") return;
