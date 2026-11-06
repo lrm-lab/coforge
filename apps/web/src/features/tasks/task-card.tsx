@@ -194,11 +194,6 @@ export function TaskCard({
       <h3 className="text-sm font-medium text-primary [overflow-wrap:anywhere]">
         {renderTitle(<span className="line-clamp-2">{task.title}</span>)}
       </h3>
-      {task.description && (
-        <p className="-mt-1 line-clamp-2 text-sm text-tertiary [overflow-wrap:anywhere]">
-          {task.description}
-        </p>
-      )}
       {waitingOn ? (
         <p className="-mt-1 flex items-start gap-1.5 text-xs text-warning-primary">
           <span
