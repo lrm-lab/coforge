@@ -91,7 +91,6 @@
   "agent_provider_pi_builtin": "CoForge",
   "agent_optional": "可选",
   "agent_form_submit": "创建 Agent",
-  "agent_form_required_error": "名称和描述为必填项。",
   "agent_form_server_error": "无法创建 Agent，请重试。",
   "agent_form_name_taken": "此工作区中已有成员或其他 Agent 使用这个用户名，请换一个。",
   "agent_detail_tabs": "Agent 详情",

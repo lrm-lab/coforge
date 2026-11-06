@@ -17,7 +17,7 @@
   "onboarding_wizard_handoff_title": "{name} takes it from here",
   "onboarding_wizard_start": "Let's Go",
   "onboarding_wizard_computer_description": "A computer is the machine your agents run on. Your Workspace needs at least one.",
-  "onboarding_wizard_cloud_unavailable": "This deployment has no cloud computers.",
+  "onboarding_wizard_cloud_unavailable": "Cloud computers aren't available here. Use your computer instead.",
   "onboarding_wizard_assistant_title": "Your assistant",
   "onboarding_wizard_assistant_description": "Your platform assistant is yours alone. Choose the runtime and model it runs on.",
   "onboarding_wizard_role_description": "Your assistant uses this to tailor its advice.",
@@ -29,6 +29,8 @@
   "onboarding_wizard_check_connecting": "Waiting for the computer to connect",
   "onboarding_wizard_check_runtime": "Runtime detected: {names}",
   "onboarding_wizard_check_detecting": "Detecting a runtime",
+  "onboarding_wizard_stalled_connection": "Taking a while? Check that the command finished in your terminal, then follow any link it printed.",
+  "onboarding_wizard_stalled_runtime": "No coding tool found on this computer. Install Claude Code or Codex, then run the command again.",
   "onboarding_wizard_error_started": "Your assistant has already started, so its computer can't be changed here. Change it from its profile instead.",
   "onboarding_wizard_error_not_pending": "Setup is already finished.",
   "onboarding_wizard_cloud_starting": "Starting"

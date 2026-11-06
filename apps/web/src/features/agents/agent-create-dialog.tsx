@@ -27,7 +27,7 @@ import { runtimeProviderLabel } from "./runtime-provider-display";
 import { finishedAgentUsername } from "./agent-username";
 import { AgentUsernameField } from "./agent-username-field";
 import type { CreateAgentInput } from "./agent.schemas";
-import { runtimeOptionsFromRuntimes } from "./agent-runtime-options";
+import { preferredRuntimeProvider, runtimeOptionsFromRuntimes } from "./agent-runtime-options";
 import {
   AgentCreateFooter,
   AgentCreateForm,
@@ -52,6 +52,13 @@ type AgentCreateComputerOption = RuntimeSignInComputer & {
     diagnostic?: string | null;
   }[];
 };
+
+/** The form starts on what the Computer can run, not on the runtime that needs an API key. */
+function preferredRuntime(computer: AgentCreateComputerOption | undefined) {
+  const { providers } = runtimeOptionsFromRuntimes(computer?.runtimes ?? []);
+  const provider = preferredRuntimeProvider(providers);
+  return provider && { provider, modelProvider: "", model: "", reasoning: "" };
+}
 
 type LocalAgentFormOptions = {
   computers: AgentCreateComputerOption[];
@@ -124,7 +131,7 @@ export function LocalAgentForm({
     const name = finishedAgentUsername(String(form.get("name") ?? ""));
     const description = String(form.get("description") ?? "").trim();
     if (!name) {
-      setError(m.agent_form_required_error());
+      setError(m.agent_form_username_required());
       return;
     }
     await guard(async () => {
@@ -222,8 +229,8 @@ export function LocalAgentForm({
               <Select.Item
                 key={computer.id}
                 id={computer.id}
-                label={computer.displayName}
-                aria-label={`${computer.displayName}, ${computer.online ? m.computer_status_online() : m.computer_status_offline()}`}
+                label={computer.displayName.trim() || computer.name}
+                aria-label={`${computer.displayName.trim() || computer.name}, ${computer.online ? m.computer_status_online() : m.computer_status_offline()}`}
                 icon={
                   <StatusDot
                     tone={computer.online ? "online" : "offline"}
@@ -251,6 +258,7 @@ export function LocalAgentForm({
             key={computerId}
             open
             computerId={computerId}
+            initial={preferredRuntime(computer)}
             onDirtyChange={setRuntimeChanged}
             providerNotice={(provider) =>
               computer &&

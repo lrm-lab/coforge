@@ -122,7 +122,7 @@ test("a first sign-in lands in the setup wizard, and finishing or skipping it op
       await finisher.evaluate<boolean>(dialogShows("Waiting for the computer to connect")),
     ).toBe(true);
     expect(
-      await finisher.evaluate<boolean>(dialogShows("This deployment has no cloud computers")),
+      await finisher.evaluate<boolean>(dialogShows("Cloud computers aren't available here")),
     ).toBe(true);
     expect(await finisher.evaluate<boolean>(dialogShows("Starting"))).toBe(false);
     checks.push("without a cloud computer its card says so and the local install command shows");

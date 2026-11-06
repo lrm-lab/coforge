@@ -91,7 +91,6 @@
   "agent_provider_pi_builtin": "CoForge",
   "agent_optional": "Optional",
   "agent_form_submit": "Create Agent",
-  "agent_form_required_error": "Name and description are required.",
   "agent_form_server_error": "The Agent could not be created. Try again.",
   "agent_form_name_taken": "A member or another Agent in this Workspace already uses this username. Choose a different one.",
   "agent_detail_tabs": "Agent details",

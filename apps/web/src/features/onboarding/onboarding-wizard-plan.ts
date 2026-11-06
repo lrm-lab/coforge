@@ -1,8 +1,10 @@
 import { RUNTIME_PROVIDER, type RuntimeProvider } from "@lrm/coforge-sdk/internal";
 
 import type { ProgressStepStatus } from "#src/components/ui/progress-steps";
-import { runtimeOptionsFromRuntimes } from "#src/features/agents/agent-runtime-options";
-import { RUNTIME_PROVIDER_DISPLAY_ORDER } from "#src/features/agents/runtime-provider-display";
+import {
+  preferredRuntimeProvider,
+  runtimeOptionsFromRuntimes,
+} from "#src/features/agents/agent-runtime-options";
 import { computerLabel } from "#src/features/computers/computer-identity";
 import type { loadOnboardingComputers } from "./onboarding-wizard.functions";
 
@@ -78,17 +80,6 @@ export function canLeaveComputerStep(
   return chosen.online && defaultRuntimeProvider("local", usableProviders(chosen)) !== undefined;
 }
 
-/** Best first: Pi is the assistant's own default, then Claude Code, then the runtime picker's own
- * order, so a provider added later is considered without being listed here. CoForge's runtime
- * needs an API key and is not in that order, so it is never chosen for the member. */
-const RUNTIME_PREFERENCE: readonly RuntimeProvider[] = [
-  RUNTIME_PROVIDER.PI,
-  RUNTIME_PROVIDER.CLAUDE_CODE,
-  ...RUNTIME_PROVIDER_DISPLAY_ORDER.filter(
-    (provider) => provider !== RUNTIME_PROVIDER.PI && provider !== RUNTIME_PROVIDER.CLAUDE_CODE,
-  ),
-];
-
 /** The runtime the assistant step starts on: Pi on the cloud computer, the best detected one on a
  * local computer (none when nothing usable was detected). */
 export function defaultRuntimeProvider(
@@ -96,7 +87,7 @@ export function defaultRuntimeProvider(
   detected: readonly RuntimeProvider[],
 ): RuntimeProvider | undefined {
   if (choice === "cloud") return RUNTIME_PROVIDER.PI;
-  return RUNTIME_PREFERENCE.find((provider) => detected.includes(provider));
+  return preferredRuntimeProvider(detected);
 }
 
 /** One line of the live check list while a local computer connects. */

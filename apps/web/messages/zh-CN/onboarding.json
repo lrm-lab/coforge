@@ -17,7 +17,7 @@
   "onboarding_wizard_handoff_title": "{name}接手后面的事",
   "onboarding_wizard_start": "开始",
   "onboarding_wizard_computer_description": "电脑是你的 Agent 运行的机器，工作区至少需要一台。",
-  "onboarding_wizard_cloud_unavailable": "当前部署没有提供云电脑。",
+  "onboarding_wizard_cloud_unavailable": "这里没有云电脑，请用你自己的电脑。",
   "onboarding_wizard_assistant_title": "你的助手",
   "onboarding_wizard_assistant_description": "助手是只属于你的平台助手。选择它使用的运行时和模型。",
   "onboarding_wizard_role_description": "助手会据此给你合适的建议。",
@@ -29,6 +29,8 @@
   "onboarding_wizard_check_connecting": "等待电脑连接",
   "onboarding_wizard_check_runtime": "检测到运行时：{names}",
   "onboarding_wizard_check_detecting": "检测运行时",
+  "onboarding_wizard_stalled_connection": "等得有点久？看看终端里的命令是否已跑完，并打开它给出的链接。",
+  "onboarding_wizard_stalled_runtime": "这台电脑上没有找到编程工具。请先安装 Claude Code 或 Codex，再运行一次上面的命令。",
   "onboarding_wizard_error_started": "你的助手已经启动，不能再在这里更换电脑。请到它的个人资料里更换。",
   "onboarding_wizard_error_not_pending": "设置已经完成。",
   "onboarding_wizard_cloud_starting": "启动中"
