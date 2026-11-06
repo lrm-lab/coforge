@@ -330,16 +330,24 @@ async function dropKeptQueryCache() {
 
 test("with nothing published between the reads and the subscriptions, every list is read once", async () => {
   proxy.reset();
+  const callsFrom = proxy.calls.length;
   // /saved, not the Chat index: the index lands on a conversation, whose open writes read
   // cursors — publications the quiet counts would then see as re-reads.
   await browser("open", `${proxy.origin}${workspacePath}/saved`);
   await chatIsLive();
   await browser("wait", "--load", "networkidle");
   results.quiet = { ...proxy.reads };
-  // Every list is read once; the reader batches best-effort, so a list whose stored-copy lookup
-  // outlasts the batch window joins the next call (seen on the runner) — two calls at most here.
+  // Every list is read once. The reader batches best-effort, so a list whose stored-copy lookup
+  // outlasts the batch window joins the next call (the split was seen on the runner): at most two
+  // calls, and their lists must partition CHAT_LIST_READS — a call naming a list twice, or none,
+  // is a real re-read or a lost one, not the split.
+  const chatListCalls = proxy.calls
+    .slice(callsFrom)
+    .filter((call) => call.name === "loadChatLists");
+  expect(chatListCalls.length).toBeLessThanOrEqual(2);
+  expect(chatListCalls.every((call) => call.lists.length > 0)).toBe(true);
+  expect(chatListCalls.flatMap((call) => call.lists).sort()).toEqual([...CHAT_LIST_READS].sort());
   expect({ ...proxy.reads, loadChatLists: 1 }).toEqual(readsOf(1));
-  expect(proxy.reads.loadChatLists).toBeLessThanOrEqual(2);
 }, 300_000);
 
 test("a publication between the read and the subscriptions has the channel list read again", async () => {
